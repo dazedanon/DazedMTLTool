@@ -1,1 +1,3 @@
-Authorization: Bearer OPENAI_API_KEY
+{
+    "Key": "Authorization: Bearer <OPEN_AI_KEY>"
+}
