@@ -1,0 +1,1 @@
+util/ace/RPGMakerDecrypter.exe filter=lfs diff=lfs merge=lfs -text
