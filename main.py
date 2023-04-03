@@ -1,5 +1,6 @@
 import os
 import re
+import textwrap
 from googletrans import Translator
 from pathlib import Path
 import json
@@ -45,6 +46,7 @@ def parse401(data):
         translatedBatchList.append(translateGPT(batch))
     translatedText = ''.join(translatedBatchList)
     translatedTextList = translatedText.split('/p')
+    translatedTextList = wordwrapList(translatedTextList)
     translatedTextList = matchListSize(untranslatedTextList, translatedTextList)
     
     # Write to new json file
@@ -54,8 +56,11 @@ def parse401(data):
             for page in event['pages']:
                 for command in page['list']:
                     if command['code'] == 401:
-                        command['parameters'][0] = translatedTextList[i]
-                        i += 1
+                        if command['parameters'][0] == '':
+                            del command['parameters'][0]
+                        else:
+                            command['parameters'][0] = translatedTextList[i]
+                            i += 1
 
     with open('file.json', 'w') as f:
         json.dump(data, f)
@@ -98,7 +103,7 @@ def translateGPT(t):
     t = pipe.join(t)
 
     response = openai.ChatCompletion.create(
-        temperature=0.2,
+        temperature=0,
         model="gpt-3.5-turbo",
         messages=[
             {"role": "system", "content": system},
@@ -114,5 +119,13 @@ def matchListSize(list1, list2):
         list2[i] = list2[i].strip()
 
     return list2
+
+def wordwrapList(list):
+    wrappedList = []
+
+    for item in list:
+        wrappedList.append(textwrap.fill(item, width=50))
+
+    return wrappedList
 
 main()
