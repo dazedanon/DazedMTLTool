@@ -47,12 +47,10 @@ def handle(filename):
 
                     # Print Results
                     end = time.time()
-                    print(f.name + ':', end=' ')
-                    print(Fore.GREEN + str(round(end - start, 1)) + 's ' + u'\u2713' + Fore.RESET)
+                    print(f.name + ': ' + Fore.GREEN + str(round(end - start, 1)) + 's ' + u'\u2713' + Fore.RESET)
             except Exception as e:
                 end = time.time()
-                print(f.name + ':', end=' ')
-                print(Fore.RED + str(round(end - start, 1)) + 's ' + u'\u2717 ' + str(e) + Fore.RESET)
+                print(f.name + ': ' + Fore.RED + str(round(end - start, 1)) + 's ' + u'\u2717 ' + str(e) + Fore.RESET)
 
 def parseMap(data, filename):
     with ThreadPoolExecutor(max_workers=THREADS, thread_name_prefix='parseMap') as executor:
@@ -77,7 +75,6 @@ def searchCodes(page, filename):
     maxHistory = 10 # The higher this number is, the better the translation, the more money you are going to pay :)
     try:
         for i in tqdm(range(len(page['list'])), leave=False, position=0, desc=filename):
-            
             # Translating Code: 401
             if page['list'][i]['code'] == 401:
                 currentGroup.append(page['list'][i]['parameters'][0])
