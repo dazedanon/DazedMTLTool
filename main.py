@@ -1,9 +1,12 @@
 from concurrent.futures import ThreadPoolExecutor
+from colorama import Fore
+from dotenv import load_dotenv
+from tqdm import tqdm
 import os
 import re
 import textwrap
 import json
-from dotenv import load_dotenv
+import time
 import openai
 
 #Globals
@@ -15,7 +18,6 @@ THREADS = 5
 
 def main():
     # Open File (Threads)
-    test = 0
     with ThreadPoolExecutor(max_workers=THREADS, thread_name_prefix='handle') as executor:
         for filename in os.listdir("files"):
             if filename.endswith('json'):
@@ -24,35 +26,48 @@ def main():
 def handle(filename):
     with open('translated/' + filename, 'w', encoding='UTF-8') as outFile:
         with open('files/' + filename, 'r', encoding='UTF-8') as f:
-            # Map Files
-            if 'Map' in filename:
-                translatedData = parseMap(json.load(f))
-                json.dump(translatedData, outFile, ensure_ascii=False)
-                print('Translated: {0}'.format(filename))
-            
+            try:
+                # Map Files
+                if 'Map' in filename:
+                    # Start Timer
+                    start = time.time()
 
-def parseMap(data):
-    test = 0
+                    # Start Translation
+                    translatedData = parseMap(json.load(f), filename)
+                    json.dump(translatedData, outFile, ensure_ascii=False)
+
+                    # Print Results
+                    end = time.time()
+                    print(f.name + ':', end=' ')
+                    print(Fore.GREEN + str(round(end - start, 1)) + 's ' + u'\u2713' + Fore.RESET)
+            except Exception as e:
+                end = time.time()
+                print(f.name + ':', end=' ')
+                print(Fore.RED + str(round(end - start, 1)) + 's ' + u'\u2717 ' + str(e) + Fore.RESET)
+
+def parseMap(data, filename):
     with ThreadPoolExecutor(max_workers=THREADS, thread_name_prefix='parseMap') as executor:
         events = data['events']
         for event in events:
             if event is not None:
-                executor.submit(handleParseMap, event, test)    
+                for page in event['pages']:
+                    future = executor.submit(searchCodes, page, filename)
+                
+                # Verify if an exception was thrown
+                try:
+                    future.result()
+                except Exception as e:
+                    raise e
+
     return data
 
-def handleParseMap(event, test):
-    print(test)
-    test = test+1
-    for page in event['pages']:
-        searchCodes(page)
-    return page
-
-def searchCodes(page):
+def searchCodes(page, filename):
     translatedText = ''
     currentGroup = []
     textHistory = []
     try:
-        for i in range(len(page['list'])):
+        for i in tqdm(range(len(page['list'])), leave=False, position=0, desc=filename):
+            time.sleep(0.001)
             if page['list'][i]['code'] == 401:
                 currentGroup.append(page['list'][i]['parameters'][0])
 
@@ -63,16 +78,16 @@ def searchCodes(page):
                 if len(currentGroup) > 0:
                     text = ''.join(currentGroup)
                     text = text.replace('\\n', '')
-                    print('Translating' + text)
                     translatedText = translateGPT(text, ' '.join(textHistory))
                     textHistory.append(translatedText)
                     translatedText = textwrap.fill(translatedText, width=50)
                     page['list'][i-1]['parameters'][0] = translatedText
-                    if len(textHistory) > 1:
+                    if len(textHistory) > 10:
                         textHistory.pop(0)
                     currentGroup = []
     except IndexError:
-        print('End of List')     
+
+        pass     
                 
     # Append leftover groups
     if len(currentGroup) > 0:
@@ -90,14 +105,14 @@ def translateGPT(t, history):
     """Translate text using GPT"""
 
     system = "Context: " + history + "\n\n###\n\n You are a professional Japanese visual novel translator,\
-    editor, and localizer. You always manage to convey the original meaning of the Japanese text to your output,\
-    and localize it in a way that an average American would understand.\
-    The 'Context' at the top is previously translated text for the work.\
-    You translate Onomatopoeia literally.\
-    When I give you something to translate, answer with just the translation.\
-    Translation Examples:\
-    \\n<ルイ>そう、私はルイよ。= \\n<Rui> Yes, I'm Rui.\
-    \\nそう、私はルイよ。= \\nYes, I'm Rui."
+editor, and localizer. You always manages to carry all of the little nuances of the original Japanese text to your output,\
+while still making it a prose masterpiece, and localizing it in a way that an average American would understand.\
+The 'Context' at the top is previously translated text for the work.\
+You translate Onomatopoeia literally.\
+When I give you something to translate, answer with just the translation.\
+Translation Examples:\
+\\n<ルイ>そう、私はルイよ。= \\n<Rui> Yes, I'm Rui.\
+\\nそう、私はルイよ。= \\nYes, I'm Rui."
 
     response = openai.ChatCompletion.create(
         temperature=0,
