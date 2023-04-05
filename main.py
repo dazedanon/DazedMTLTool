@@ -57,7 +57,6 @@ def parse401(data):
     """
     # Extract 401 Text (Needed for Context)
     translatedText = ''
-    untranslatedTextList = []
     currentGroup = []
     textHistory = []
 
@@ -69,17 +68,21 @@ def parse401(data):
                     for i in range(len(page['list'])):
                         if page['list'][i]['code'] == 401:
                             currentGroup.append(page['list'][i]['parameters'][0])
-                            textHistory.append(page['list'][i]['parameters'][0])
+                            #textHistory.append(page['list'][i]['parameters'][0])
 
-                            while page['list'][i+1]['code'] == 401:
+                            while (page['list'][i+1]['code'] == 401):
                                 del page['list'][i]  
                                 currentGroup.append(page['list'][i]['parameters'][0])
-                                textHistory.append(page['list'][i]['parameters'][0])    
+                                #textHistory.append(page['list'][i]['parameters'][0])    
                         else:
                             if len(currentGroup) > 0:
                                 text = ''.join(currentGroup)
+                                text = text.replace('\\n', '')
                                 print('Translating' + text)
-                                translatedText = translateGPT(text, ''.join(textHistory))
+                                translatedText = translateGPT(text, ' '.join(textHistory))
+                                textHistory.append(translatedText)
+                                
+                                translatedText = textwrap.fill(translatedText, width=50)
                                 page['list'][i-1]['parameters'][0] = translatedText
                                 if len(textHistory) > 50:
                                     for i in range(len(currentGroup)):
@@ -91,6 +94,7 @@ def parse401(data):
                 # Append leftover groups
                 if len(currentGroup) > 0:
                     translatedText = translateGPT(''.join(currentGroup), ' '.join(textHistory))
+                    translatedText = textwrap.fill(translatedText, width=50)
                     page['list'][i]['parameters'][0] = translatedText
                     currentGroup = []
     
@@ -105,20 +109,18 @@ def translateGPT(t, history):
 
     """Translate text using GPT"""
 
-    system = "Context: " + history + "\n\n###\n\n You are a professional Japanese visual novel translator, editor, and localizer, \
-    with a writing style could only be described as being a mixture of \
-    John Steinbeck's, Oscar Wilde's, and Vladimir Nabokov's writing styles. \
-    You always manage to carry all of the little nuances of the original Japanese text to your output, \
-    while still making it a prose masterpiece, and localizing it in a way that an average American would understand. \
-    You read and understand the 'Context' \
-    You translate only what I give you. \
-    You include line breaks in your translation. \
-    You translate sound effects and Onomatopoeia in their romanji form. \
-    You translate anything inside '<>' as a name"
+    system = "Context: " + history + "\n\n###\n\n You are a professional Japanese visual novel translator, \
+    editor, and localizer. You always manage to convey the original meaning of the Japanese text to your output, \
+    and localize it in a way that an average American would understand. \
+    The 'Context' at the top is previously translated text for the work.\
+    You translate Onomatopoeia literally. \
+    When I give you something to translate, answer with just the translation. \
+    Translation Examples: \
+    \\n<ルイ>そう、私はルイよ。= \\n<Rui> Yes, I'm Rui. \
+    \\nそう、私はルイよ。= \\nYes, I'm Rui." \
 
     response = openai.ChatCompletion.create(
         temperature=0,
-        max_tokens = 3000,
         model="gpt-3.5-turbo",
         messages=[
             {"role": "system", "content": system},
