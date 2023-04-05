@@ -64,28 +64,35 @@ def searchCodes(page, filename):
     translatedText = ''
     currentGroup = []
     textHistory = []
+    maxHistory = 10 # The higher this number is, the better the translation, the more money you are going to pay :)
     try:
         for i in tqdm(range(len(page['list'])), leave=False, position=0, desc=filename):
-            time.sleep(0.001)
+            
+            # Translating Code: 401
             if page['list'][i]['code'] == 401:
                 currentGroup.append(page['list'][i]['parameters'][0])
-
                 while (page['list'][i+1]['code'] == 401):
                     del page['list'][i]  
                     currentGroup.append(page['list'][i]['parameters'][0])
             else:
+                # Here we will need to take the current group of 401's and translate it all at once
+                # This leads to a much much better translation
                 if len(currentGroup) > 0:
+                    # Translation
                     text = ''.join(currentGroup)
-                    text = text.replace('\\n', '')
+                    text = text.replace('\\n', '') # Improves translation but may break certain games
                     translatedText = translateGPT(text, ' '.join(textHistory))
+
+                    # TextHistory is what we use to give GPT Context, so thats appended here.
                     textHistory.append(translatedText)
                     translatedText = textwrap.fill(translatedText, width=50)
                     page['list'][i-1]['parameters'][0] = translatedText
-                    if len(textHistory) > 10:
+                    if len(textHistory) > maxHistory:
                         textHistory.pop(0)
                     currentGroup = []
-    except IndexError:
 
+    except IndexError:
+        # This is part of the logic so we just pass it.
         pass     
                 
     # Append leftover groups
@@ -97,6 +104,7 @@ def searchCodes(page, filename):
     
 def translateGPT(t, history):
 
+    # If there isn't any Japanese in the text just return it
     pattern = r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴー]+'
     if not re.search(pattern, t):
         return t
