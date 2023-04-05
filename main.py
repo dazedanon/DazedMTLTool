@@ -20,11 +20,12 @@ def main():
     with ThreadPoolExecutor(max_workers=THREADS, thread_name_prefix='handle') as executor:
         for filename in os.listdir("files"):
             if filename.endswith('json'):
-                executor.submit(handle, filename)
+                future = executor.submit(handle, filename)
     
-    choice = input('Do you want to delete JSON in /files? (y/n) ')
-    if choice == 'y':
-        deleteFolderFiles('files')
+    if future.done == True:
+        choice = input('Do you want to delete JSON in /files? (y/n) ')
+        if choice == 'y':
+            deleteFolderFiles('files')
 
 def deleteFolderFiles(folderPath):
     for filename in os.listdir(folderPath):
@@ -72,7 +73,8 @@ def searchCodes(page, filename):
     translatedText = ''
     currentGroup = []
     textHistory = []
-    maxHistory = 10 # The higher this number is, the better the translation, the more money you are going to pay :)
+    maxHistory = 30 # The higher this number is, the better the translation, the more money you are going to pay :)
+    totalTokens = 0
     try:
         for i in tqdm(range(len(page['list'])), leave=False, position=0, desc=filename):
             # Translating Code: 401
@@ -88,7 +90,14 @@ def searchCodes(page, filename):
                     # Translation
                     text = ''.join(currentGroup)
                     text = text.replace('\\n', '') # Improves translation but may break certain games
-                    translatedText = translateGPT(text, ' '.join(textHistory))
+                    response = translateGPT(text, ' '.join(textHistory))
+
+                    # Check if we got an object back or plain string
+                    if type(response) != str:
+                        totalTokens += response.usage.total_tokens
+                        translatedText = response.choices[0].message.content
+                    else:
+                        translatedText = response
 
                     # TextHistory is what we use to give GPT Context, so thats appended here.
                     textHistory.append(translatedText)
@@ -104,10 +113,23 @@ def searchCodes(page, filename):
                 
     # Append leftover groups
     if len(currentGroup) > 0:
-        translatedText = translateGPT(''.join(currentGroup), ' '.join(textHistory))
+        response = translateGPT(''.join(currentGroup), ' '.join(textHistory))
+        # Check if we got an object back or plain string
+        if type(response) != str:
+            totalTokens += response.usage.total_tokens
+            translatedText = response.choices[0].message.content
+        else:
+            translatedText = response
+        
+        #Cleanup
         translatedText = textwrap.fill(translatedText, width=50)
         page['list'][i]['parameters'][0] = translatedText
         currentGroup = []
+
+    # Calculate Cost
+    cost = .002 # Depends on the model https://openai.com/pricing
+    print('Tokens/Cost: ' + str(totalTokens) + '/${:,.4f}'.format(totalTokens * .001 * cost), end=' | ')
+
     
 def translateGPT(t, history):
 
@@ -136,6 +158,6 @@ Translation Examples:\
             {"role": "user", "content": t}
         ]
     )
-    return response.choices[0].message.content
+    return response
     
 main()
