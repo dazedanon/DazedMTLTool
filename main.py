@@ -21,6 +21,16 @@ def main():
         for filename in os.listdir("files"):
             if filename.endswith('json'):
                 executor.submit(handle, filename)
+    
+    choice = input('Do you want to delete JSON in /files? (y/n) ')
+    if choice == 'y':
+        deleteFolderFiles('files')
+
+def deleteFolderFiles(folderPath):
+    for filename in os.listdir(folderPath):
+        file_path = os.path.join(folderPath, filename)
+        if file_path.endswith('.json'):
+            os.remove(file_path)
 
 def handle(filename):
     with open('translated/' + filename, 'w', encoding='UTF-8') as outFile:
