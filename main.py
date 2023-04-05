@@ -13,7 +13,6 @@ import openai
 load_dotenv()
 openai.organization = os.getenv('org')
 openai.api_key = os.getenv('key')
-pipe = '###'
 THREADS = 5
 
 def main():
