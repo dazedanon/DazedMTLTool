@@ -1,10 +1,9 @@
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from operator import countOf
-import traceback
+from concurrent.futures import ThreadPoolExecutor
 from colorama import Fore
 from dotenv import load_dotenv
 from tqdm import tqdm
 from retry import retry
+import traceback
 import os
 import re
 import textwrap
@@ -16,7 +15,7 @@ import openai
 load_dotenv()
 openai.organization = os.getenv('org')
 openai.api_key = os.getenv('key')
-THREADS = 10
+THREADS = 20
 
 def main():
     print(Fore.BLUE + "If a file fails or gets stuck, Translated lines will remain \
@@ -31,7 +30,7 @@ start the script again. It will skip over any translated text." + Fore.RESET)
                 executor.submit(handle, filename)
     
     # This is to encourage people to grab what's in /translated instead
-    #deleteFolderFiles('files')
+    deleteFolderFiles('files')
 
 def deleteFolderFiles(folderPath):
     for filename in os.listdir(folderPath):
@@ -43,30 +42,27 @@ def handle(filename):
     with open('translated/' + filename, 'w', encoding='UTF-8') as outFile:
         with open('files/' + filename, 'r', encoding='UTF-8') as f:
             data = json.load(f)
-            try:
-                # Map Files
-                if 'Map' in filename:
-                    # Start Timer
-                    start = time.time()
+            # Map Files
+            if 'Map' in filename:
+                # Start Timer
+                start = time.time()
 
-                    # Start Translation
-                    translatedData = parseMap(data, filename)
-                    json.dump(translatedData[0], outFile, ensure_ascii=False)
+                # Start Translation
+                translatedData = parseMap(data, filename)
+                json.dump(translatedData[0], outFile, ensure_ascii=False)
 
-                    if translatedData[2] != None:
-                        raise translatedData[2]
-
-                    # Print Results
+                if translatedData[2] == None:
+                    # Success
                     cost = .002 # Depends on the model https://openai.com/pricing
                     end = time.time()
                     timeString = Fore.GREEN + str(round(end - start, 1)) + 's ' + u'\u2713' + Fore.RESET
                     tokenString = Fore.YELLOW + 'Tokens/Cost: ' + str(translatedData[1]) + '/${:,.4f}'.format(translatedData[1] * .001 * cost)
                     print(f.name + ': ' + tokenString + ' ' + timeString)
-                    
-            except Exception:
-                end = time.time()
-                e = traceback.format_exc()
-                print(f.name + ': ' + Fore.RED + str(round(end - start, 1)) + 's ' + u'\u2717 ' + str(e) + Fore.RESET)
+                else:
+                    # Fail       
+                    end = time.time()
+                    e = translatedData[2]
+                    print(f.name + ': ' + Fore.RED + str(round(end - start, 1)) + 's ' + u'\u2717 ' + str(e) + Fore.RESET)
 
 def parseMap(data, filename):
     totalTokens = 0
@@ -155,7 +151,7 @@ def searchCodes(page, pbar):
 
     return tokens
     
-@retry(tries=3, delay=1, backoff=2)
+@retry(tries=3, delay=2)
 def translateGPT(t, history):
 
     # If there isn't any Japanese in the text just return it
@@ -173,7 +169,9 @@ You translate Onomatopoeia literally.\
 When I give you something to translate, answer with just the translation.\
 Translation Examples:\
 \\n<ルイ>そう、私はルイよ。= \\n<Rui> Yes, I'm Rui.\
-\\nそう、私はルイよ。= \\nYes, I'm Rui."
+\\nそう、私はルイよ。= \\nYes, I'm Rui.\
+\\n<瑠唯>ひぎぃぃぃぃぅぅ\"ぅ\"ぅ\"っ！！！ = \\n<Rui> Higiiiiuu\"u\"u\"!!!\
+\\n<瑠唯>イヤァァァ\"ァ\"ァ\"ァ\"ァ\"っ！！？ = \\n<Rui> Iyaaa\"a\"a\"a\"a\!!?"
 
     response = openai.ChatCompletion.create(
         temperature=0,
@@ -182,7 +180,7 @@ Translation Examples:\
             {"role": "system", "content": system},
             {"role": "user", "content": t}
         ],
-        request_timeout=10,
+        request_timeout=20,
     )
     return response
     
