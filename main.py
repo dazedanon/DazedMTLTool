@@ -110,7 +110,6 @@ def searchCodes(page):
                         translatedText = response.choices[0].message.content
                     else:
                         translatedText = response
-                        tokens += 1
 
                     # TextHistory is what we use to give GPT Context, so thats appended here.
                     textHistory.append(translatedText)
@@ -133,7 +132,6 @@ def searchCodes(page):
             translatedText = response.choices[0].message.content
         else:
             translatedText = response
-            tokens += 10
         
         #Cleanup
         translatedText = textwrap.fill(translatedText, width=50)
