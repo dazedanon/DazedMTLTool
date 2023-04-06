@@ -1,7 +1,10 @@
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from operator import countOf
+import traceback
 from colorama import Fore
 from dotenv import load_dotenv
 from tqdm import tqdm
+from retry import retry
 import os
 import re
 import textwrap
@@ -16,8 +19,8 @@ openai.api_key = os.getenv('key')
 THREADS = 10
 
 def main():
-    print(Fore.YELLOW + "If a file fails or gets stuck, do not close the terminal. Instead use CTRL+C. \
-Translated lines will remain translated so you don't have to worry about being charged \
+    print(Fore.BLUE + "If a file fails or gets stuck, Translated lines will remain \
+translated so you don't have to worry about being charged \
 twice. You can simply copy the file generated in /translations back over to /files and \
 start the script again. It will skip over any translated text." + Fore.RESET)
 
@@ -27,7 +30,7 @@ start the script again. It will skip over any translated text." + Fore.RESET)
             if filename.endswith('json'):
                 executor.submit(handle, filename)
     
-    # This is to encourage people to grab what's in translated instead
+    # This is to encourage people to grab what's in /translated instead
     #deleteFolderFiles('files')
 
 def deleteFolderFiles(folderPath):
@@ -50,41 +53,49 @@ def handle(filename):
                     translatedData = parseMap(data, filename)
                     json.dump(translatedData[0], outFile, ensure_ascii=False)
 
-                    if type(translatedData[2]) != None:
+                    if translatedData[2] != None:
                         raise translatedData[2]
 
                     # Print Results
                     cost = .002 # Depends on the model https://openai.com/pricing
                     end = time.time()
                     timeString = Fore.GREEN + str(round(end - start, 1)) + 's ' + u'\u2713' + Fore.RESET
-                    tokenString = 'Tokens/Cost: ' + str(translatedData[1]) + '/${:,.4f}'.format(translatedData[1] * .001 * cost)
+                    tokenString = Fore.YELLOW + 'Tokens/Cost: ' + str(translatedData[1]) + '/${:,.4f}'.format(translatedData[1] * .001 * cost)
                     print(f.name + ': ' + tokenString + ' ' + timeString)
                     
-            except Exception as e:
+            except Exception:
                 end = time.time()
+                e = traceback.format_exc()
                 print(f.name + ': ' + Fore.RED + str(round(end - start, 1)) + 's ' + u'\u2717 ' + str(e) + Fore.RESET)
 
 def parseMap(data, filename):
     totalTokens = 0
+    total = 0
     events = data['events']
+
+    # Get total for progress bar
+    for event in events:
+        if event is not None:
+            for page in event['pages']:
+                total += len(page['list'])
     
-    with tqdm(total = len(events), leave=False, desc=filename, bar_format='{l_bar}{bar:10}{r_bar}{bar:-10b}', position=0) as pbar:
+    with tqdm(total = total, leave=False, desc=filename, bar_format='{l_bar}{bar:10}{r_bar}{bar:-10b}', position=0) as pbar:
         for event in events:
             if event is not None:
                 with ThreadPoolExecutor(max_workers=THREADS) as executor:
                     for page in event['pages']:
-                        future = executor.submit(searchCodes, page)
+                        future = executor.submit(searchCodes, page, pbar)
                         
                         # Verify if an exception was thrown
                         try:
                             totalTokens += future.result()
-                        except Exception as e:
-                            return [data, 0, e]
-            pbar.update(1)
+                        except Exception:
+                            return [data, 0, traceback.format_exc()]
+            
 
-    return [data, totalTokens]
+    return [data, totalTokens, None]
 
-def searchCodes(page):
+def searchCodes(page, pbar):
     translatedText = ''
     currentGroup = []
     textHistory = []
@@ -92,6 +103,7 @@ def searchCodes(page):
     tokens = 0
     try:
         for i in range(len(page['list'])):
+            pbar.update(1)
             # Translating Code: 401
             if page['list'][i]['code'] == 401:
                 currentGroup.append(page['list'][i]['parameters'][0])
@@ -143,6 +155,7 @@ def searchCodes(page):
 
     return tokens
     
+@retry(tries=3, delay=1, backoff=2)
 def translateGPT(t, history):
 
     # If there isn't any Japanese in the text just return it
@@ -168,7 +181,8 @@ Translation Examples:\
         messages=[
             {"role": "system", "content": system},
             {"role": "user", "content": t}
-        ]
+        ],
+        request_timeout=10,
     )
     return response
     
