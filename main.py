@@ -13,7 +13,7 @@ import openai
 load_dotenv()
 openai.organization = os.getenv('org')
 openai.api_key = os.getenv('key')
-THREADS = 5
+THREADS = 10
 
 def main():
     print(Fore.YELLOW + "If a file fails or gets stuck, do not close the terminal. Instead use CTRL+C. \
@@ -39,6 +39,7 @@ def deleteFolderFiles(folderPath):
 def handle(filename):
     with open('translated/' + filename, 'w', encoding='UTF-8') as outFile:
         with open('files/' + filename, 'r', encoding='UTF-8') as f:
+            data = json.load(f)
             try:
                 # Map Files
                 if 'Map' in filename:
@@ -46,8 +47,11 @@ def handle(filename):
                     start = time.time()
 
                     # Start Translation
-                    translatedData = parseMap(json.load(f), filename)
+                    translatedData = parseMap(data, filename)
                     json.dump(translatedData[0], outFile, ensure_ascii=False)
+
+                    if type(translatedData[2]) != None:
+                        raise translatedData[2]
 
                     # Print Results
                     cost = .002 # Depends on the model https://openai.com/pricing
@@ -75,7 +79,7 @@ def parseMap(data, filename):
                         try:
                             totalTokens += future.result()
                         except Exception as e:
-                            raise e
+                            return [data, 0, e]
             pbar.update(1)
 
     return [data, totalTokens]
@@ -84,11 +88,10 @@ def searchCodes(page):
     translatedText = ''
     currentGroup = []
     textHistory = []
-    maxHistory = 30 # The higher this number is, the better the translation, the more money you are going to pay :)
+    maxHistory = 20 # The higher this number is, the better the translation, the more money you are going to pay :)
     tokens = 0
     try:
         for i in range(len(page['list'])):
-            time.sleep(0.001)
             # Translating Code: 401
             if page['list'][i]['code'] == 401:
                 currentGroup.append(page['list'][i]['parameters'][0])
