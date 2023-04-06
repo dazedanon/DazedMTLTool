@@ -1,4 +1,4 @@
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from colorama import Fore
 from dotenv import load_dotenv
 from tqdm import tqdm
@@ -16,16 +16,19 @@ openai.api_key = os.getenv('key')
 THREADS = 5
 
 def main():
+    print(Fore.YELLOW + "If a file fails or gets stuck, do not close the terminal. Instead use CTRL+C. \
+Translated lines will remain translated so you don't have to worry about being charged \
+twice. You can simply copy the file generated in /translations back over to /files and \
+start the script again. It will skip over any translated text." + Fore.RESET)
+
     # Open File (Threads)
-    with ThreadPoolExecutor(max_workers=THREADS, thread_name_prefix='handle') as executor:
+    with ThreadPoolExecutor(max_workers=THREADS) as executor:
         for filename in os.listdir("files"):
             if filename.endswith('json'):
-                future = executor.submit(handle, filename)
+                executor.submit(handle, filename)
     
-    if future.done == True:
-        choice = input('Do you want to delete JSON in /files? (y/n) ')
-        if choice == 'y':
-            deleteFolderFiles('files')
+    # This is to encourage people to grab what's in translated instead
+    #deleteFolderFiles('files')
 
 def deleteFolderFiles(folderPath):
     for filename in os.listdir(folderPath):
@@ -44,39 +47,48 @@ def handle(filename):
 
                     # Start Translation
                     translatedData = parseMap(json.load(f), filename)
-                    json.dump(translatedData, outFile, ensure_ascii=False)
+                    json.dump(translatedData[0], outFile, ensure_ascii=False)
 
                     # Print Results
+                    cost = .002 # Depends on the model https://openai.com/pricing
                     end = time.time()
-                    print(f.name + ': ' + Fore.GREEN + str(round(end - start, 1)) + 's ' + u'\u2713' + Fore.RESET)
+                    timeString = Fore.GREEN + str(round(end - start, 1)) + 's ' + u'\u2713' + Fore.RESET
+                    tokenString = 'Tokens/Cost: ' + str(translatedData[1]) + '/${:,.4f}'.format(translatedData[1] * .001 * cost)
+                    print(f.name + ': ' + tokenString + ' ' + timeString)
+                    
             except Exception as e:
                 end = time.time()
                 print(f.name + ': ' + Fore.RED + str(round(end - start, 1)) + 's ' + u'\u2717 ' + str(e) + Fore.RESET)
 
 def parseMap(data, filename):
-    with ThreadPoolExecutor(max_workers=THREADS, thread_name_prefix='parseMap') as executor:
-        events = data['events']
+    totalTokens = 0
+    events = data['events']
+    
+    with tqdm(total = len(events), leave=False, desc=filename, bar_format='{l_bar}{bar:10}{r_bar}{bar:-10b}', position=0) as pbar:
         for event in events:
             if event is not None:
-                for page in event['pages']:
-                    future = executor.submit(searchCodes, page, filename)
-                
-                # Verify if an exception was thrown
-                try:
-                    future.result()
-                except Exception as e:
-                    raise e
+                with ThreadPoolExecutor(max_workers=THREADS) as executor:
+                    for page in event['pages']:
+                        future = executor.submit(searchCodes, page)
+                        
+                        # Verify if an exception was thrown
+                        try:
+                            totalTokens += future.result()
+                        except Exception as e:
+                            raise e
+            pbar.update(1)
 
-    return data
+    return [data, totalTokens]
 
-def searchCodes(page, filename):
+def searchCodes(page):
     translatedText = ''
     currentGroup = []
     textHistory = []
     maxHistory = 30 # The higher this number is, the better the translation, the more money you are going to pay :)
-    totalTokens = 0
+    tokens = 0
     try:
-        for i in tqdm(range(len(page['list'])), leave=False, position=0, desc=filename):
+        for i in range(len(page['list'])):
+            time.sleep(0.001)
             # Translating Code: 401
             if page['list'][i]['code'] == 401:
                 currentGroup.append(page['list'][i]['parameters'][0])
@@ -94,10 +106,11 @@ def searchCodes(page, filename):
 
                     # Check if we got an object back or plain string
                     if type(response) != str:
-                        totalTokens += response.usage.total_tokens
+                        tokens += response.usage.total_tokens
                         translatedText = response.choices[0].message.content
                     else:
                         translatedText = response
+                        tokens += 1
 
                     # TextHistory is what we use to give GPT Context, so thats appended here.
                     textHistory.append(translatedText)
@@ -116,20 +129,18 @@ def searchCodes(page, filename):
         response = translateGPT(''.join(currentGroup), ' '.join(textHistory))
         # Check if we got an object back or plain string
         if type(response) != str:
-            totalTokens += response.usage.total_tokens
+            tokens += response.usage.total_tokens
             translatedText = response.choices[0].message.content
         else:
             translatedText = response
+            tokens += 10
         
         #Cleanup
         translatedText = textwrap.fill(translatedText, width=50)
         page['list'][i]['parameters'][0] = translatedText
         currentGroup = []
 
-    # Calculate Cost
-    cost = .002 # Depends on the model https://openai.com/pricing
-    print('Tokens/Cost: ' + str(totalTokens) + '/${:,.4f}'.format(totalTokens * .001 * cost), end=' | ')
-
+    return tokens
     
 def translateGPT(t, history):
 
