@@ -5,6 +5,7 @@ Currently in development. Goal is to eventually have ChatGPT nicely translate al
 ### Required:
  * API Key: https://platform.openai.com/account/api-keys
  * Organization Key: https://platform.openai.com/account/org-settings
+ * Python3: https://www.python.org/downloads/
 
 ### Setup:
 1. Add you API key and Organization Key to a .env file. An example can be found in the repo.
