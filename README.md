@@ -1,6 +1,6 @@
 # GPT4-TL
 
-Current in development. Goal is to eventually have ChatGPT nicely translate all dialogue when given an RPGMaker JSON file.
+Currently in development. Goal is to eventually have ChatGPT nicely translate all dialogue when given an RPGMaker JSON file.
 
 ### Required:
  * API Key: https://platform.openai.com/account/api-keys
