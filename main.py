@@ -16,7 +16,7 @@ import openai
 load_dotenv()
 openai.organization = os.getenv('org')
 openai.api_key = os.getenv('key')
-SYSTEM = os.getenv('system')
+PROMPT = os.getenv('prompt')
 THREADS = 20
 COST = .002 # Depends on the model https://openai.com/pricing
 
@@ -45,32 +45,46 @@ def handle(filename):
     with open('translated/' + filename, 'w', encoding='UTF-8') as outFile:
         with open('files/' + filename, 'r', encoding='UTF-8') as f:
             data = json.load(f)
+
             # Map Files
             if 'Map' in filename:
                 # Start Timer
                 start = time.time()
 
-                # Start Translation
+                 # Start Translation
                 translatedData = parseMap(data, filename)
                 end = time.time()
                 json.dump(translatedData[0], outFile, ensure_ascii=False)
+                printString(translatedData, end - start, f)
 
-                # Strings
-                tokenString = Fore.YELLOW + '[' + str(translatedData[1]) + \
-                    ' Tokens/${:,.4f}'.format(translatedData[1] * .001 * COST) + ']'
-                timeString = Fore.BLUE + '[' + str(round(end - start, 1)) + 's]'
+            # CommonEvents Files
+            if 'CommonEvents' in filename:
+                # Start Timer
+                start = time.time()
 
-                if translatedData[2] == None:
-                    # Success
-                    print(f.name + ': ' + tokenString + timeString + Fore.GREEN + u' \u2713 ' + Fore.RESET)
-                else:
-                    # Fail
-                    try:
-                        raise translatedData[2]
-                    except Exception as e:
-                        errorString = str(e) + Fore.RED + ' Line: ' + str(traceback.extract_tb(sys.exc_info()[2])[-1].lineno)
-                        print(f.name + ': ' + tokenString + timeString + Fore.RED + u' \u2717 ' +\
-                            errorString + Fore.RESET)
+                 # Start Translation
+                translatedData = parseCommonEvents(data, filename)
+                end = time.time()
+                json.dump(translatedData[0], outFile, ensure_ascii=False)
+                printString(translatedData, end - start, f)
+
+def printString(translatedData, translationTime, f):
+    # Strings
+    tokenString = Fore.YELLOW + '[' + str(translatedData[1]) + \
+        ' Tokens/${:,.4f}'.format(translatedData[1] * .001 * COST) + ']'
+    timeString = Fore.BLUE + '[' + str(round(translationTime, 1)) + 's]'
+
+    if translatedData[2] == None:
+        # Success
+        print(f.name + ': ' + tokenString + timeString + Fore.GREEN + u' \u2713 ' + Fore.RESET)
+    else:
+        # Fail
+        try:
+            raise translatedData[2]
+        except Exception as e:
+            errorString = str(e) + Fore.RED + ' Line: ' + str(traceback.extract_tb(sys.exc_info()[2])[-1].lineno)
+            print(f.name + ': ' + tokenString + timeString + Fore.RED + u' \u2717 ' +\
+                errorString + Fore.RESET)
 
 def parseMap(data, filename):
     totalTokens = 0
@@ -95,7 +109,29 @@ def parseMap(data, filename):
                             totalTokens += future.result()
                         except Exception as e:
                             return [data, totalTokens, e]
-            
+
+    return [data, totalTokens, None]
+
+def parseCommonEvents(data, filename):
+    totalTokens = 0
+    totalLines = 0
+
+    # Get total for progress bar
+    for page in data:
+        if page is not None:
+            totalLines += len(page['list'])
+
+    with tqdm(total = totalLines, leave=False, desc=filename, bar_format='{l_bar}{bar:10}{r_bar}{bar:-10b}', position=0) as pbar:
+        with ThreadPoolExecutor(max_workers=THREADS) as executor:
+            for page in data:
+                if page is not None:
+                    future = executor.submit(searchCodes, page, pbar)
+
+                    # Verify if an exception was thrown
+                    try:
+                        totalTokens += future.result()
+                    except Exception as e:
+                        return [data, totalTokens, e]
 
     return [data, totalTokens, None]
 
@@ -108,6 +144,7 @@ def searchCodes(page, pbar):
     try:
         for i in range(len(page['list'])):
             pbar.update(1)
+
             # Translating Code: 401
             if page['list'][i]['code'] == 401:
                 currentGroup.append(page['list'][i]['parameters'][0])
@@ -121,6 +158,7 @@ def searchCodes(page, pbar):
                     # Translation
                     text = ''.join(currentGroup)
                     text = text.replace('\\n', '') # Improves translation but may break certain games
+                    text = text.replace('”', '')
                     response = translateGPT(text, ' '.join(textHistory))
 
                     # Check if we got an object back or plain string
@@ -171,7 +209,7 @@ def translateGPT(t, history):
 
     """Translate text using GPT"""
 
-    system = "Context: " + history + system
+    system = "Context: " + history + PROMPT
     response = openai.ChatCompletion.create(
         temperature=0,
         model="gpt-3.5-turbo",
