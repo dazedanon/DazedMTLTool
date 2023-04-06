@@ -1,4 +1,5 @@
 from concurrent.futures import ThreadPoolExecutor
+import sys
 from colorama import Fore
 from dotenv import load_dotenv
 from tqdm import tqdm
@@ -16,6 +17,7 @@ load_dotenv()
 openai.organization = os.getenv('org')
 openai.api_key = os.getenv('key')
 THREADS = 20
+COST = .002 # Depends on the model https://openai.com/pricing
 
 def main():
     print(Fore.BLUE + "If a file fails or gets stuck, Translated lines will remain \
@@ -49,33 +51,38 @@ def handle(filename):
 
                 # Start Translation
                 translatedData = parseMap(data, filename)
+                end = time.time()
                 json.dump(translatedData[0], outFile, ensure_ascii=False)
+
+                # Strings
+                tokenString = Fore.YELLOW + '[' + str(translatedData[1]) + \
+                    ' Tokens/${:,.4f}'.format(translatedData[1] * .001 * COST) + ']'
+                timeString = Fore.BLUE + '[' + str(round(end - start, 1)) + 's]'
 
                 if translatedData[2] == None:
                     # Success
-                    cost = .002 # Depends on the model https://openai.com/pricing
-                    end = time.time()
-                    timeString = Fore.GREEN + str(round(end - start, 1)) + 's ' + u'\u2713' + Fore.RESET
-                    tokenString = Fore.YELLOW + 'Tokens/Cost: ' + str(translatedData[1]) + '/${:,.4f}'.format(translatedData[1] * .001 * cost)
-                    print(f.name + ': ' + tokenString + ' ' + timeString)
+                    print(f.name + ': ' + tokenString + timeString + Fore.GREEN + u' \u2713 ' + Fore.RESET)
                 else:
-                    # Fail       
-                    end = time.time()
-                    e = translatedData[2]
-                    print(f.name + ': ' + Fore.RED + str(round(end - start, 1)) + 's ' + u'\u2717 ' + str(e) + Fore.RESET)
+                    # Fail
+                    try:
+                        raise translatedData[2]
+                    except Exception as e:
+                        errorString = str(e) + Fore.RED + ' Line: ' + str(traceback.extract_tb(sys.exc_info()[2])[-1].lineno)
+                        print(f.name + ': ' + tokenString + timeString + Fore.RED + u' \u2717 ' +\
+                            errorString + Fore.RESET)
 
 def parseMap(data, filename):
     totalTokens = 0
-    total = 0
+    totalLines = 0
     events = data['events']
 
     # Get total for progress bar
     for event in events:
         if event is not None:
             for page in event['pages']:
-                total += len(page['list'])
+                totalLines += len(page['list'])
     
-    with tqdm(total = total, leave=False, desc=filename, bar_format='{l_bar}{bar:10}{r_bar}{bar:-10b}', position=0) as pbar:
+    with tqdm(total = totalLines, leave=False, desc=filename, bar_format='{l_bar}{bar:10}{r_bar}{bar:-10b}', position=0) as pbar:
         for event in events:
             if event is not None:
                 with ThreadPoolExecutor(max_workers=THREADS) as executor:
@@ -85,8 +92,8 @@ def parseMap(data, filename):
                         # Verify if an exception was thrown
                         try:
                             totalTokens += future.result()
-                        except Exception:
-                            return [data, 0, traceback.format_exc()]
+                        except Exception as e:
+                            return [data, totalTokens, e]
             
 
     return [data, totalTokens, None]
@@ -132,7 +139,9 @@ def searchCodes(page, pbar):
 
     except IndexError:
         # This is part of the logic so we just pass it.
-        pass     
+        pass
+    except Exception:
+        raise TimeoutError('Failed to translate: ' + text)  
                 
     # Append leftover groups
     if len(currentGroup) > 0:
@@ -151,7 +160,7 @@ def searchCodes(page, pbar):
 
     return tokens
     
-@retry(tries=3, delay=2)
+@retry(tries=5, delay=2)
 def translateGPT(t, history):
 
     # If there isn't any Japanese in the text just return it
@@ -170,9 +179,8 @@ When I give you something to translate, answer with just the translation.\
 Translation Examples:\
 \\n<ルイ>そう、私はルイよ。= \\n<Rui> Yes, I'm Rui.\
 \\nそう、私はルイよ。= \\nYes, I'm Rui.\
-\\n<瑠唯>ひぎぃぃぃぃぅぅ\"ぅ\"ぅ\"っ！！！ = \\n<Rui> Higiiiiuu\"u\"u\"!!!\
-\\n<瑠唯>イヤァァァ\"ァ\"ァ\"ァ\"ァ\"っ！！？ = \\n<Rui> Iyaaa\"a\"a\"a\"a\!!?"
-
+\\n<瑠唯>イヤァァァ\"ァ\"ァ\"ァ\"ァ\"っ！！？ = \\n<Rui> Iyaaa\"a\"a\"a\"a\!!?\
+\\nイグぅぅぅぅぅぅぅゥゥゥゥゥゥっ！！！♡♡♡ = \\nIguuuuuuuuuuuuu!!!♡♡♡"
     response = openai.ChatCompletion.create(
         temperature=0,
         model="gpt-3.5-turbo",
@@ -180,7 +188,7 @@ Translation Examples:\
             {"role": "system", "content": system},
             {"role": "user", "content": t}
         ],
-        request_timeout=20,
+        request_timeout=60,
     )
     return response
     
