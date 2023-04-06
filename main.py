@@ -82,13 +82,14 @@ def parseMap(data, filename):
             for page in event['pages']:
                 totalLines += len(page['list'])
     
-    with tqdm(total = totalLines, leave=False, desc=filename, bar_format='{l_bar}{bar:10}{r_bar}{bar:-10b}', position=0) as pbar:
+    with tqdm(total = totalLines, leave=False, desc=filename, bar_format='{l_bar}{bar:10}{r_bar}{bar:-10b}', position=0, delay=10) as pbar:
         for event in events:
             if event is not None:
                 with ThreadPoolExecutor(max_workers=THREADS) as executor:
                     for page in event['pages']:
-                        future = executor.submit(searchCodes, page, pbar)
-                        
+                        future = executor.submit(searchCodes, page, pbar)   
+                        pbar.close()
+                     
                         # Verify if an exception was thrown
                         try:
                             totalTokens += future.result()
@@ -179,7 +180,7 @@ When I give you something to translate, answer with just the translation.\
 Translation Examples:\
 \\n<ルイ>そう、私はルイよ。= \\n<Rui> Yes, I'm Rui.\
 \\nそう、私はルイよ。= \\nYes, I'm Rui.\
-\\n<瑠唯>イヤァァァ\"ァ\"ァ\"ァ\"ァ\"っ！！？ = \\n<Rui> Iyaaa\"a\"a\"a\"a\!!?\
+\\n<瑠唯>イヤァァァ\"ァ\"ァ\"ァ\"ァ\"っ！！？ = \\n<Rui> Iyaaaaaaa\!!?\
 \\nイグぅぅぅぅぅぅぅゥゥゥゥゥゥっ！！！♡♡♡ = \\nIguuuuuuuuuuuuu!!!♡♡♡"
     response = openai.ChatCompletion.create(
         temperature=0,
