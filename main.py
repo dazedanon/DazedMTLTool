@@ -1,5 +1,5 @@
 from concurrent.futures import ThreadPoolExecutor, as_completed
-import random
+from pathlib import Path
 import sys
 import threading
 from colorama import Fore
@@ -18,23 +18,23 @@ import openai
 load_dotenv()
 openai.organization = os.getenv('org')
 openai.api_key = os.getenv('key')
-PROMPT = os.getenv('prompt')
 THREADS = 20
 COST = .002 # Depends on the model https://openai.com/pricing
 LOCK = threading.Lock()
+PROMPT = Path('prompt.txt').read_text()
 
-def main():
-    print(Fore.BLUE + "Do not close while translation is in progress. If a file fails or gets stuck, \
-Translated lines will remain \
-translated so you don't have to worry about being charged \
+# Info Message
+print(Fore.BLUE + "Do not close while translation is in progress. If a file fails or gets stuck, \
+Translated lines will remain translated so you don't have to worry about being charged \
 twice. You can simply copy the file generated in /translations back over to /files and \
 start the script again. It will skip over any translated text." + Fore.RESET)
 
+def main():
     # Open File (Threads)
     with ThreadPoolExecutor(max_workers=THREADS) as executor:
         for filename in os.listdir("files"):
             if filename.endswith('json'):
-                executor.submit(handle, filename)
+                executor.submit(handleFiles, filename)
     
     # This is to encourage people to grab what's in /translated instead
     deleteFolderFiles('files')
@@ -45,7 +45,7 @@ def deleteFolderFiles(folderPath):
         if file_path.endswith('.json'):
             os.remove(file_path)
 
-def handle(filename):
+def handleFiles(filename):
     with open('translated/' + filename, 'w', encoding='UTF-8') as outFile:
         with open('files/' + filename, 'r', encoding='UTF-8') as f:
             data = json.load(f)
@@ -63,12 +63,17 @@ def handle(filename):
             # Actor File
             if 'Actors' in filename:
                 start = time.time()
-                translatedData = parseActors(data, filename)
+                translatedData = parseNames(data, filename)
             
-            # Actor File
-            if 'Armors' in filename:
+            # Classes File
+            if 'Classes' in filename:
                 start = time.time()
-                translatedData = parseArmors(data, filename)
+                translatedData = parseNames(data, filename)
+
+            # Classes File
+            if 'Items' in filename:
+                start = time.time()
+                translatedData = parseNames(data, filename)
 
         end = time.time()
         json.dump(translatedData[0], outFile, ensure_ascii=False)
@@ -133,27 +138,26 @@ def parseCommonEvents(data, filename):
                     return [data, totalTokens, e]
     return [data, totalTokens, None]
     
-def parseActors(data, filename):
+def parseNames(data, filename):
     totalTokens = 0
     totalLines = 0
-
     totalLines += len(data)
                 
     with tqdm(total = totalLines, leave=False, desc=filename, bar_format='{l_bar}{bar:10}{r_bar}{bar:-10b}', position=0,) as pbar:
-            for actor in data:
-                if actor is not None:
+            for name in data:
+                if name is not None:
                     try:
-                        result = translateActors(actor, pbar)       
+                        result = searchNames(name, pbar)       
                         totalTokens += result
                     except Exception as e:
                         return [data, totalTokens, e]
     return [data, totalTokens, None]
 
-def translateActors(actor, pbar):
+def searchNames(name, pbar):
     translatedText = ''
     tokens = 0
 
-    response = translateGPT(actor['name'], '')
+    response = translateGPT(name['name'], 'What i give you are a list of names')
 
     # Check if we got an object back or plain string
     if type(response) != str:
@@ -163,42 +167,7 @@ def translateActors(actor, pbar):
         translatedText = response
 
     translatedText = translatedText.strip('.')   # Since GPT loves his periods
-    actor['name'] = translatedText
-    pbar.update(1)
-
-    return tokens
-
-def parseArmors(data, filename):
-    totalTokens = 0
-    totalLines = 0
-
-    totalLines += len(data)
-                
-    with tqdm(total = totalLines, leave=False, desc=filename, bar_format='{l_bar}{bar:10}{r_bar}{bar:-10b}', position=0,) as pbar:
-            for armor in data:
-                if armor is not None:
-                    try:
-                        result = translateArmors(armor, pbar)       
-                        totalTokens += result
-                    except Exception as e:
-                        return [data, totalTokens, e]
-    return [data, totalTokens, None]
-
-def translateArmors(armor, pbar):
-    translatedText = ''
-    tokens = 0
-
-    response = translateGPT(armor['name'], '')
-
-    # Check if we got an object back or plain string
-    if type(response) != str:
-        tokens += response.usage.total_tokens
-        translatedText = response.choices[0].message.content
-    else:
-        translatedText = response
-
-    translatedText = translatedText.strip('.')   # Since GPT loves his periods
-    armor['name'] = translatedText
+    name['name'] = translatedText
     pbar.update(1)
 
     return tokens
@@ -272,6 +241,7 @@ def searchCodes(page, pbar):
 
     return tokens
     
+@retry(tries=5, delay=5)
 def translateGPT(t, history):
     # If there isn't any Japanese in the text just return it
     pattern = r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴー]+'
