@@ -27,7 +27,7 @@ PROMPT = Path('prompt.txt').read_text()
 print(Fore.BLUE + "Do not close while translation is in progress. If a file fails or gets stuck, \
 Translated lines will remain translated so you don't have to worry about being charged \
 twice. You can simply copy the file generated in /translations back over to /files and \
-start the script again. It will skip over any translated text." + Fore.RESET)
+start the script again. It will skip over any translated text." + Fore.RESET, end='\n\n')
 
 def main():
     # Open File (Threads)
@@ -94,6 +94,11 @@ def handleFiles(filename):
             if 'States' in filename:
                 start = time.time()
                 translatedData = parseSS(data, filename)
+
+            # System File
+            if 'System' in filename:
+                start = time.time()
+                translatedData = parseSystem(data, filename)
 
         end = time.time()
         json.dump(translatedData[0], outFile, ensure_ascii=False)
@@ -188,30 +193,44 @@ def parseSS(data, filename):
                         return [data, totalTokens, e]
     return [data, totalTokens, None]
 
+def parseSystem(data, filename):
+    totalTokens = 0
+    totalLines = 0
+
+    # Calculate Total Lines
+    for term in data['terms']:
+        termList = data['terms'][term]
+        totalLines += len(termList)
+    totalLines += len(data['gameTitle'])
+    totalLines += len(data['terms']['messages'])
+                
+    with tqdm(total = totalLines, leave=False, desc=filename, bar_format='{l_bar}{bar:10}{r_bar}{bar:-10b}', position=0,) as pbar:
+        try:
+            result = searchSystem(data, pbar)       
+            totalTokens += result
+        except Exception as e:
+            return [data, totalTokens, e]
+    return [data, totalTokens, None]
+
 def searchNames(name, pbar, context):
     translatedText = ''
     tokens = 0
 
     # Set the context of what we are translating
     if 'Actors' in context:
-        context = 'What I give you are a list of Actor Names.'
+        context = 'What I give you is a Actor Name.'
     if 'Armors' in context:
-        context = 'What I give you are a list of Armor Names.'
+        context = 'What I give you is a Armor Name.'
     if 'Classes' in context:
-        context = 'What I give you are a list of Class Names.'
+        context = 'What I give you is a Class Name.'
     if 'Items' in context:
-        context = 'What I give you are a list of Item Names.'
+        context = 'What I give you is a Item Name.'
     if 'MapInfos' in context:
-        context = 'What I give you are a list of Map Names.'
+        context = 'What I give you is a Map Name.'
 
     response = translateGPT(name['name'], context)
-
-    # Check if we got an object back or plain string
-    if type(response) != str:
-        tokens += response.usage.total_tokens
-        translatedText = response.choices[0].message.content
-    else:
-        translatedText = response
+    tokens += response[1]
+    translatedText = response[0]
 
     translatedText = translatedText.strip('.')   # Since GPT loves his periods
     name['name'] = translatedText
@@ -239,22 +258,16 @@ def searchCodes(page, pbar):
                 while (page['list'][i+1]['code'] == 401):
                     del page['list'][i]  
                     currentGroup.append(page['list'][i]['parameters'][0])
+
+            # Unlisted Code
             else:
-                # Here we will need to take the current group of 401's and translate it all at once
-                # This leads to a much much better translation
                 if len(currentGroup) > 0:
-                    # Translation
                     text = ''.join(currentGroup)
                     text = text.replace('\\n', '') # Improves translation but may break certain games
                     text = text.replace('”', '')
                     response = translateGPT(text, ' '.join(textHistory))
-
-                    # Check if we got an object back or plain string
-                    if type(response) != str:
-                        tokens += response.usage.total_tokens
-                        translatedText = response.choices[0].message.content
-                    else:
-                        translatedText = response
+                    tokens += response[1]
+                    translatedText = response[0]
 
                     # TextHistory is what we use to give GPT Context, so thats appended here.
                     # translatedText = startString + translatedText + endString
@@ -274,13 +287,9 @@ def searchCodes(page, pbar):
     # Append leftover groups
     if len(currentGroup) > 0:
         response = translateGPT(''.join(currentGroup), ' '.join(textHistory))
-        # Check if we got an object back or plain string
-        if type(response) != str:
-            tokens += response.usage.total_tokens
-            translatedText = response.choices[0].message.content
-        else:
-            translatedText = response
-        
+        tokens += response[1]
+        translatedText = response[0]
+
         #Cleanup
         translatedText = textwrap.fill(translatedText, width=50)
         page['list'][i]['parameters'][0] = translatedText
@@ -300,13 +309,12 @@ def searchSS(state, pbar):
     responseList[4] = (translateGPT(state['name'], 'What I give you is a State Name.'))
     responseList[5] = (translateGPT(state['note'], 'What I give you is a Note.'))
 
-    # Check if we got an object back or plain string
+    # Put all our translations in a list
     for i in range(len(responseList)):
-        if type(responseList[i]) != str:
-            tokens += responseList[i].usage.total_tokens
-            responseList[i] = responseList[i].choices[0].message.content
-        else:
-            responseList[i] = responseList[i]
+        tokens += responseList[i][1]
+        responseList[i] = responseList[i][0]
+    
+    # Set Data
     state['message1'] = responseList[0]
     state['message2'] = responseList[1]
     if responseList[2] != '':
@@ -319,12 +327,44 @@ def searchSS(state, pbar):
     pbar.update(1)
     return tokens
 
+def searchSystem(data, pbar):
+    tokens = 0
+    context = 'What I give you is an menu item.'
+
+    # Title
+    response = translateGPT(data['gameTitle'], context)
+    tokens += response[1]
+    data['gameTitle'] = response[0].strip('.')
+    pbar.update(1)
+    
+    # Terms
+    for term in data['terms']:
+        if term != 'messages':
+            termList = data['terms'][term]
+            for i in range(len(termList)):  # Last item is a messages object
+                if termList[i] is not None:
+                    response = translateGPT(termList[i], context)
+                    tokens += response[1]
+                    termList[i] = response[0].strip('.\"')
+                    pbar.update(1)
+
+    # Messages
+    messages = (data['terms']['messages'])
+    for key, value in messages.items():
+        response = translateGPT(value, 'What I give you is a message.')
+        tokens += response[1]
+        messages[key] = response[0]
+        pbar.update(1)
+    
+    return tokens
+    
+
 @retry(tries=5, delay=5)
 def translateGPT(t, history):
     # If there isn't any Japanese in the text just return it
     pattern = r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴー]+'
     if not re.search(pattern, t):
-        return t
+        return [t, 0]
 
     """Translate text using GPT"""
     system = "Context: " + history + PROMPT
@@ -337,6 +377,8 @@ def translateGPT(t, history):
         ],
         request_timeout=60,
     )
-    return response
+
+    return [response.choices[0].message.content, response.usage.total_tokens]
+    
     
 main()
