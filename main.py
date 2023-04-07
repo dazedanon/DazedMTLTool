@@ -51,7 +51,7 @@ def handleFiles(filename):
             data = json.load(f)
 
             # Map Files
-            if 'Map' in filename:
+            if 'Map' in filename and filename != 'MapInfos.json':
                 start = time.time()
                 translatedData = parseMap(data, filename)
 
@@ -80,10 +80,20 @@ def handleFiles(filename):
                 start = time.time()
                 translatedData = parseNames(data, filename, 'Items')
 
+            # MapInfo File
+            if 'MapInfos' in filename:
+                start = time.time()
+                translatedData = parseNames(data, filename, 'MapInfos')
+
             # Skills File
             if 'Skills' in filename:
                 start = time.time()
-                translatedData = parseSkills(data, filename)
+                translatedData = parseSS(data, filename)
+
+            # States File
+            if 'States' in filename:
+                start = time.time()
+                translatedData = parseSS(data, filename)
 
         end = time.time()
         json.dump(translatedData[0], outFile, ensure_ascii=False)
@@ -163,16 +173,16 @@ def parseNames(data, filename, context):
                         return [data, totalTokens, e]
     return [data, totalTokens, None]
 
-def parseSkills(data, filename):
+def parseSS(data, filename):
     totalTokens = 0
     totalLines = 0
     totalLines += len(data)
                 
     with tqdm(total = totalLines, leave=False, desc=filename, bar_format='{l_bar}{bar:10}{r_bar}{bar:-10b}', position=0,) as pbar:
-            for skill in data:
-                if skill is not None:
+            for ss in data:
+                if ss is not None:
                     try:
-                        result = searchSkills(skill, pbar)       
+                        result = searchSS(ss, pbar)       
                         totalTokens += result
                     except Exception as e:
                         return [data, totalTokens, e]
@@ -191,8 +201,8 @@ def searchNames(name, pbar, context):
         context = 'What I give you are a list of Class Names.'
     if 'Items' in context:
         context = 'What I give you are a list of Item Names.'
-
-    context += 'If the word is made up then translate to romanji.'
+    if 'MapInfos' in context:
+        context = 'What I give you are a list of Map Names.'
 
     response = translateGPT(name['name'], context)
 
@@ -278,15 +288,17 @@ def searchCodes(page, pbar):
 
     return tokens
 
-def searchSkills(skill, pbar):
-    translatedText = ''
+def searchSS(state, pbar):
+    '''Searches skills and states json files'''
     tokens = 0
-    responseList = [0] * 4
+    responseList = [0] * 6
 
-    responseList[0] = (translateGPT(skill['message1'], 'What I give you is a Message.'))
-    responseList[1] = (translateGPT(skill['message2'], 'What I give you is a Message.'))
-    responseList[2] = (translateGPT(skill['name'], 'What I give you is a Skill Name.'))
-    responseList[3] = (translateGPT(skill['note'], 'What I give you is a Note.'))
+    responseList[0] = (translateGPT(state['message1'], 'What I give you is a Message.'))
+    responseList[1] = (translateGPT(state['message2'], 'What I give you is a Message.'))
+    responseList[2] = (translateGPT(state.get('message3', ''), 'What I give you is a Message.'))
+    responseList[3] = (translateGPT(state.get('message4', ''), 'What I give you is a Message.'))
+    responseList[4] = (translateGPT(state['name'], 'What I give you is a State Name.'))
+    responseList[5] = (translateGPT(state['note'], 'What I give you is a Note.'))
 
     # Check if we got an object back or plain string
     for i in range(len(responseList)):
@@ -295,10 +307,14 @@ def searchSkills(skill, pbar):
             responseList[i] = responseList[i].choices[0].message.content
         else:
             responseList[i] = responseList[i]
-    skill['message1'] = responseList[0]
-    skill['message2'] = responseList[1]
-    skill['name'] = responseList[2].strip('.')
-    skill['note'] = responseList[3]
+    state['message1'] = responseList[0]
+    state['message2'] = responseList[1]
+    if responseList[2] != '':
+        state['message3'] = responseList[2]
+    if responseList[3] != '':
+        state['message4'] = responseList[3]
+    state['name'] = responseList[4].strip('.')
+    state['note'] = responseList[5]
 
     pbar.update(1)
     return tokens
