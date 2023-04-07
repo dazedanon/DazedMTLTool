@@ -1,5 +1,7 @@
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import random
 import sys
+import threading
 from colorama import Fore
 from dotenv import load_dotenv
 from tqdm import tqdm
@@ -19,9 +21,11 @@ openai.api_key = os.getenv('key')
 PROMPT = os.getenv('prompt')
 THREADS = 20
 COST = .002 # Depends on the model https://openai.com/pricing
+LOCK = threading.Lock()
 
 def main():
-    print(Fore.BLUE + "If a file fails or gets stuck, Translated lines will remain \
+    print(Fore.BLUE + "Do not close while translation is in progress. If a file fails or gets stuck, \
+Translated lines will remain \
 translated so you don't have to worry about being charged \
 twice. You can simply copy the file generated in /translations back over to /files and \
 start the script again. It will skip over any translated text." + Fore.RESET)
@@ -51,7 +55,7 @@ def handle(filename):
                 # Start Timer
                 start = time.time()
 
-                 # Start Translation
+                # Start Translation
                 translatedData = parseMap(data, filename)
                 end = time.time()
                 json.dump(translatedData[0], outFile, ensure_ascii=False)
@@ -97,7 +101,7 @@ def parseMap(data, filename):
             for page in event['pages']:
                 totalLines += len(page['list'])
     
-    with tqdm(total = totalLines, leave=False, desc=filename, bar_format='{l_bar}{bar:10}{r_bar}{bar:-10b}', position=0) as pbar:
+    with tqdm(total = totalLines, leave=False, desc=filename, bar_format='{l_bar}{bar:10}{r_bar}{bar:-10b}', position=1, mininterval=1) as pbar:
         for event in events:
             if event is not None:
                 with ThreadPoolExecutor(max_workers=THREADS) as executor:
@@ -121,17 +125,15 @@ def parseCommonEvents(data, filename):
         if page is not None:
             totalLines += len(page['list'])
 
-    with tqdm(total = totalLines, leave=False, desc=filename, bar_format='{l_bar}{bar:10}{r_bar}{bar:-10b}', position=0) as pbar:
+    with tqdm(total = totalLines, leave=False, desc=filename, bar_format='{l_bar}{bar:10}{r_bar}{bar:-10b}', position=0,) as pbar:
         with ThreadPoolExecutor(max_workers=THREADS) as executor:
-            for page in data:
-                if page is not None:
-                    future = executor.submit(searchCodes, page, pbar)
-
-                    # Verify if an exception was thrown
-                    try:
-                        totalTokens += future.result()
-                    except Exception as e:
-                        return [data, totalTokens, e]
+            futures = [executor.submit(searchCodes, page, pbar) for page in data if page is not None]
+            for future in as_completed(futures):
+                try:
+                    totalTokens += future.result()
+                except Exception as e:
+                    return [data, totalTokens, e]
+                
 
     return [data, totalTokens, None]
 
@@ -141,13 +143,20 @@ def searchCodes(page, pbar):
     textHistory = []
     maxHistory = 20 # The higher this number is, the better the translation, the more money you are going to pay :)
     tokens = 0
+    global LOCK
+
     try:
         for i in range(len(page['list'])):
+            LOCK.acquire()
             pbar.update(1)
+            LOCK.release()
 
             # Translating Code: 401
             if page['list'][i]['code'] == 401:
+                # Remove repeating characters because it confuses ChatGPT
+                page['list'][i]['parameters'][0] = re.sub(r'(.)\1{2,}', r'\1\1\1\1', page['list'][i]['parameters'][0])    # Remove repeating characters
                 currentGroup.append(page['list'][i]['parameters'][0])
+                
                 while (page['list'][i+1]['code'] == 401):
                     del page['list'][i]  
                     currentGroup.append(page['list'][i]['parameters'][0])
@@ -169,6 +178,7 @@ def searchCodes(page, pbar):
                         translatedText = response
 
                     # TextHistory is what we use to give GPT Context, so thats appended here.
+                    # translatedText = startString + translatedText + endString
                     textHistory.append(translatedText)
                     translatedText = textwrap.fill(translatedText, width=50)
                     page['list'][i-1]['parameters'][0] = translatedText
@@ -199,8 +209,8 @@ def searchCodes(page, pbar):
 
     return tokens
     
-@retry(tries=5, delay=2)
 def translateGPT(t, history):
+    global LOCK
 
     # If there isn't any Japanese in the text just return it
     pattern = r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴー]+'
@@ -208,7 +218,6 @@ def translateGPT(t, history):
         return t
 
     """Translate text using GPT"""
-
     system = "Context: " + history + PROMPT
     response = openai.ChatCompletion.create(
         temperature=0,
