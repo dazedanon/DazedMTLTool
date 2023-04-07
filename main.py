@@ -210,8 +210,6 @@ def searchCodes(page, pbar):
     return tokens
     
 def translateGPT(t, history):
-    global LOCK
-
     # If there isn't any Japanese in the text just return it
     pattern = r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴー]+'
     if not re.search(pattern, t):
