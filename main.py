@@ -80,6 +80,11 @@ def handleFiles(filename):
                 start = time.time()
                 translatedData = parseNames(data, filename, 'Items')
 
+            # Skills File
+            if 'Skills' in filename:
+                start = time.time()
+                translatedData = parseSkills(data, filename)
+
         end = time.time()
         json.dump(translatedData[0], outFile, ensure_ascii=False)
         printString(translatedData, end - start, f)
@@ -153,6 +158,21 @@ def parseNames(data, filename, context):
                 if name is not None:
                     try:
                         result = searchNames(name, pbar, context)       
+                        totalTokens += result
+                    except Exception as e:
+                        return [data, totalTokens, e]
+    return [data, totalTokens, None]
+
+def parseSkills(data, filename):
+    totalTokens = 0
+    totalLines = 0
+    totalLines += len(data)
+                
+    with tqdm(total = totalLines, leave=False, desc=filename, bar_format='{l_bar}{bar:10}{r_bar}{bar:-10b}', position=0,) as pbar:
+            for skill in data:
+                if skill is not None:
+                    try:
+                        result = searchSkills(skill, pbar)       
                         totalTokens += result
                     except Exception as e:
                         return [data, totalTokens, e]
@@ -257,7 +277,32 @@ def searchCodes(page, pbar):
         currentGroup = []
 
     return tokens
-    
+
+def searchSkills(skill, pbar):
+    translatedText = ''
+    tokens = 0
+    responseList = [0] * 4
+
+    responseList[0] = (translateGPT(skill['message1'], 'What I give you is a Message.'))
+    responseList[1] = (translateGPT(skill['message2'], 'What I give you is a Message.'))
+    responseList[2] = (translateGPT(skill['name'], 'What I give you is a Skill Name.'))
+    responseList[3] = (translateGPT(skill['note'], 'What I give you is a Note.'))
+
+    # Check if we got an object back or plain string
+    for i in range(len(responseList)):
+        if type(responseList[i]) != str:
+            tokens += responseList[i].usage.total_tokens
+            responseList[i] = responseList[i].choices[0].message.content
+        else:
+            responseList[i] = responseList[i]
+    skill['message1'] = responseList[0]
+    skill['message2'] = responseList[1]
+    skill['name'] = responseList[2].strip('.')
+    skill['note'] = responseList[3]
+
+    pbar.update(1)
+    return tokens
+
 @retry(tries=5, delay=5)
 def translateGPT(t, history):
     # If there isn't any Japanese in the text just return it
