@@ -63,17 +63,22 @@ def handleFiles(filename):
             # Actor File
             if 'Actors' in filename:
                 start = time.time()
-                translatedData = parseNames(data, filename)
+                translatedData = parseNames(data, filename, 'Actors')
+
+            # Armor File
+            if 'Actors' in filename:
+                start = time.time()
+                translatedData = parseNames(data, filename, 'Armor')
             
             # Classes File
             if 'Classes' in filename:
                 start = time.time()
-                translatedData = parseNames(data, filename)
+                translatedData = parseNames(data, filename, 'Classes')
 
             # Classes File
             if 'Items' in filename:
                 start = time.time()
-                translatedData = parseNames(data, filename)
+                translatedData = parseNames(data, filename, 'Items')
 
         end = time.time()
         json.dump(translatedData[0], outFile, ensure_ascii=False)
@@ -138,7 +143,7 @@ def parseCommonEvents(data, filename):
                     return [data, totalTokens, e]
     return [data, totalTokens, None]
     
-def parseNames(data, filename):
+def parseNames(data, filename, context):
     totalTokens = 0
     totalLines = 0
     totalLines += len(data)
@@ -147,17 +152,29 @@ def parseNames(data, filename):
             for name in data:
                 if name is not None:
                     try:
-                        result = searchNames(name, pbar)       
+                        result = searchNames(name, pbar, context)       
                         totalTokens += result
                     except Exception as e:
                         return [data, totalTokens, e]
     return [data, totalTokens, None]
 
-def searchNames(name, pbar):
+def searchNames(name, pbar, context):
     translatedText = ''
     tokens = 0
 
-    response = translateGPT(name['name'], 'What i give you are a list of names')
+    # Set the context of what we are translating
+    if 'Actors' in context:
+        context = 'What I give you are a list of Actor Names.'
+    if 'Armors' in context:
+        context = 'What I give you are a list of Armor Names.'
+    if 'Classes' in context:
+        context = 'What I give you are a list of Class Names.'
+    if 'Items' in context:
+        context = 'What I give you are a list of Item Names.'
+
+    context += 'If the word is made up then translate to romanji.'
+
+    response = translateGPT(name['name'], context)
 
     # Check if we got an object back or plain string
     if type(response) != str:
