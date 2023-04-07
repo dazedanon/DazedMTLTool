@@ -52,25 +52,27 @@ def handle(filename):
 
             # Map Files
             if 'Map' in filename:
-                # Start Timer
                 start = time.time()
-
-                # Start Translation
                 translatedData = parseMap(data, filename)
-                end = time.time()
-                json.dump(translatedData[0], outFile, ensure_ascii=False)
-                printString(translatedData, end - start, f)
 
             # CommonEvents Files
             if 'CommonEvents' in filename:
-                # Start Timer
                 start = time.time()
-
-                 # Start Translation
                 translatedData = parseCommonEvents(data, filename)
-                end = time.time()
-                json.dump(translatedData[0], outFile, ensure_ascii=False)
-                printString(translatedData, end - start, f)
+
+            # Actor File
+            if 'Actors' in filename:
+                start = time.time()
+                translatedData = parseActors(data, filename)
+            
+            # Actor File
+            if 'Armors' in filename:
+                start = time.time()
+                translatedData = parseArmors(data, filename)
+
+        end = time.time()
+        json.dump(translatedData[0], outFile, ensure_ascii=False)
+        printString(translatedData, end - start, f)
 
 def printString(translatedData, translationTime, f):
     # Strings
@@ -101,18 +103,14 @@ def parseMap(data, filename):
             for page in event['pages']:
                 totalLines += len(page['list'])
     
-    with tqdm(total = totalLines, leave=False, desc=filename, bar_format='{l_bar}{bar:10}{r_bar}{bar:-10b}', position=1, mininterval=1) as pbar:
-        for event in events:
-            if event is not None:
-                with ThreadPoolExecutor(max_workers=THREADS) as executor:
-                    for page in event['pages']:
-                        future = executor.submit(searchCodes, page, pbar)   
-                     
-                        # Verify if an exception was thrown
-                        try:
-                            totalTokens += future.result()
-                        except Exception as e:
-                            return [data, totalTokens, e]
+    with tqdm(total = totalLines, leave=False, desc=filename, bar_format='{l_bar}{bar:10}{r_bar}{bar:-10b}', position=0,) as pbar:
+        with ThreadPoolExecutor(max_workers=THREADS) as executor:
+            futures = [executor.submit(searchCodes, page, pbar) for page in data if page is not None]
+            for future in as_completed(futures):
+                try:
+                    totalTokens += future.result()
+                except Exception as e:
+                    return [data, totalTokens, e]
 
     return [data, totalTokens, None]
 
@@ -133,9 +131,77 @@ def parseCommonEvents(data, filename):
                     totalTokens += future.result()
                 except Exception as e:
                     return [data, totalTokens, e]
-                
-
     return [data, totalTokens, None]
+    
+def parseActors(data, filename):
+    totalTokens = 0
+    totalLines = 0
+
+    totalLines += len(data)
+                
+    with tqdm(total = totalLines, leave=False, desc=filename, bar_format='{l_bar}{bar:10}{r_bar}{bar:-10b}', position=0,) as pbar:
+            for actor in data:
+                if actor is not None:
+                    try:
+                        result = translateActors(actor, pbar)       
+                        totalTokens += result
+                    except Exception as e:
+                        return [data, totalTokens, e]
+    return [data, totalTokens, None]
+
+def translateActors(actor, pbar):
+    translatedText = ''
+    tokens = 0
+
+    response = translateGPT(actor['name'], '')
+
+    # Check if we got an object back or plain string
+    if type(response) != str:
+        tokens += response.usage.total_tokens
+        translatedText = response.choices[0].message.content
+    else:
+        translatedText = response
+
+    translatedText = translatedText.strip('.')   # Since GPT loves his periods
+    actor['name'] = translatedText
+    pbar.update(1)
+
+    return tokens
+
+def parseArmors(data, filename):
+    totalTokens = 0
+    totalLines = 0
+
+    totalLines += len(data)
+                
+    with tqdm(total = totalLines, leave=False, desc=filename, bar_format='{l_bar}{bar:10}{r_bar}{bar:-10b}', position=0,) as pbar:
+            for armor in data:
+                if armor is not None:
+                    try:
+                        result = translateArmors(armor, pbar)       
+                        totalTokens += result
+                    except Exception as e:
+                        return [data, totalTokens, e]
+    return [data, totalTokens, None]
+
+def translateArmors(armor, pbar):
+    translatedText = ''
+    tokens = 0
+
+    response = translateGPT(armor['name'], '')
+
+    # Check if we got an object back or plain string
+    if type(response) != str:
+        tokens += response.usage.total_tokens
+        translatedText = response.choices[0].message.content
+    else:
+        translatedText = response
+
+    translatedText = translatedText.strip('.')   # Since GPT loves his periods
+    armor['name'] = translatedText
+    pbar.update(1)
+
+    return tokens
 
 def searchCodes(page, pbar):
     translatedText = ''
@@ -143,13 +209,10 @@ def searchCodes(page, pbar):
     textHistory = []
     maxHistory = 20 # The higher this number is, the better the translation, the more money you are going to pay :)
     tokens = 0
-    global LOCK
 
     try:
         for i in range(len(page['list'])):
-            LOCK.acquire()
             pbar.update(1)
-            LOCK.release()
 
             # Translating Code: 401
             if page['list'][i]['code'] == 401:
