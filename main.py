@@ -273,34 +273,45 @@ def searchCodes(page, pbar):
             with LOCK:
                 pbar.update(1)
 
-            # Translating Code: 401
+            # Event Code: 401 Show Text
             if page['list'][i]['code'] == 401:
                 # Remove repeating characters because it confuses ChatGPT
-                page['list'][i]['parameters'][0] = re.sub(r'(.)\1{2,}', r'\1\1\1\1', page['list'][i]['parameters'][0])    # Remove repeating characters
-                currentGroup.append(page['list'][i]['parameters'][0])
+                page['list'][i]['parameters'][0] = re.sub(r'(.)\1{2,}', r'\1\1\1\1', page['list'][i]['parameters'][0])
                 
+                # Using this to keep track of 401's in a row. Throws IndexError at EndOfList (Expected Behavior)
+                currentGroup.append(page['list'][i]['parameters'][0])
                 while (page['list'][i+1]['code'] == 401):
                     del page['list'][i]  
                     currentGroup.append(page['list'][i]['parameters'][0])
 
-            # Unlisted Code
-            else:
+                # Join up 401 groups for better translation.
                 if len(currentGroup) > 0:
                     text = ''.join(currentGroup)
-                    text = text.replace('\\n', '') # Improves translation but may break certain games
+
+                    # Improves translation but may break certain games
+                    text = text.replace('\\n', '') 
                     text = text.replace('”', '')
+
+                    # Translate
                     response = translateGPT(text, ' '.join(textHistory))
                     tokens += response[1]
                     translatedText = response[0]
 
                     # TextHistory is what we use to give GPT Context, so thats appended here.
-                    # translatedText = startString + translatedText + endString
                     textHistory.append(translatedText)
                     translatedText = textwrap.fill(translatedText, width=50)
-                    page['list'][i-1]['parameters'][0] = translatedText
+                    page['list'][i]['parameters'][0] = translatedText
                     if len(textHistory) > maxHistory:
                         textHistory.pop(0)
                     currentGroup = []
+
+            # Event Code: 102 Show Choice
+            if (list['code'] == 102):
+                for i, choice in enumerate(list['parameters'][0]):
+                    list['parameters'][0][i] = checkLine(choice)
+
+            # Unlisted Code
+            else:
 
     except IndexError:
         # This is part of the logic so we just pass it.
