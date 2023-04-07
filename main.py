@@ -21,7 +21,7 @@ openai.api_key = os.getenv('key')
 THREADS = 20
 COST = .002 # Depends on the model https://openai.com/pricing
 LOCK = threading.Lock()
-PROMPT = Path('prompt.txt').read_text()
+PROMPT = Path('prompt.txt').read_text(encoding='utf-8')
 
 #tqdm Globals
 BAR_FORMAT='{l_bar}{bar:10}{r_bar}{bar:-10b}'
@@ -143,15 +143,14 @@ def parseMap(data, filename):
         pbar.desc=filename
         pbar.total=totalLines
         with ThreadPoolExecutor(max_workers=THREADS) as executor:
-            futures = [executor.submit(searchCodes, page, pbar) for page in event['pages'] if page is not None]
-            for future in as_completed(futures):
-                try:
-                    with LOCK:
-                        pbar.close()
-                    totalTokens += future.result()
-                except Exception as e:
-                    return [data, totalTokens, e]
-
+            for event in events:
+                if event is not None:
+                    futures = [executor.submit(searchCodes, page, pbar) for page in event['pages'] if page is not None]
+                    for future in as_completed(futures):
+                        try:
+                            totalTokens += future.result()
+                        except Exception as e:
+                            return [data, totalTokens, e]
     return [data, totalTokens, None]
 
 def parseCommonEvents(data, filename):
@@ -171,8 +170,6 @@ def parseCommonEvents(data, filename):
             futures = [executor.submit(searchCodes, page, pbar) for page in data if page is not None]
             for future in as_completed(futures):
                 try:
-                    with LOCK:
-                        pbar.close()
                     totalTokens += future.result()
                 except Exception as e:
                     return [data, totalTokens, e]
@@ -299,19 +296,28 @@ def searchCodes(page, pbar):
 
                     # TextHistory is what we use to give GPT Context, so thats appended here.
                     textHistory.append(translatedText)
+
+                    # Textwrap
                     translatedText = textwrap.fill(translatedText, width=50)
+
+                    # Set Data
                     page['list'][i]['parameters'][0] = translatedText
+
+                    # Keep textHistory list at length maxHistory
                     if len(textHistory) > maxHistory:
                         textHistory.pop(0)
                     currentGroup = []
 
             # Event Code: 102 Show Choice
-            if (list['code'] == 102):
-                for i, choice in enumerate(list['parameters'][0]):
-                    list['parameters'][0][i] = checkLine(choice)
+            if page['list'][i]['code'] == 102:
+                for choice in range(len(page['list'][i]['parameters'][0])):
+                    response = translateGPT(page['list'][i]['parameters'][0][choice], ' '.join(textHistory))
+
+                # Set Data
+                    tokens += response[1]
+                    page['list'][i]['parameters'][0][choice] = response[0]
 
             # Unlisted Code
-            else:
 
     except IndexError:
         # This is part of the logic so we just pass it.
