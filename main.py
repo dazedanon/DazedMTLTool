@@ -23,6 +23,11 @@ COST = .002 # Depends on the model https://openai.com/pricing
 LOCK = threading.Lock()
 PROMPT = Path('prompt.txt').read_text()
 
+#tqdm Globals
+BAR_FORMAT='{l_bar}{bar:10}{r_bar}{bar:-10b}'
+POSITION=0
+LEAVE=False
+
 # Info Message
 print(Fore.BLUE + "Do not close while translation is in progress. If a file fails or gets stuck, \
 Translated lines will remain translated so you don't have to worry about being charged \
@@ -112,20 +117,21 @@ def printString(translatedData, translationTime, f):
 
     if translatedData[2] == None:
         # Success
-        print(f.name + ': ' + tokenString + timeString + Fore.GREEN + u' \u2713 ' + Fore.RESET)
+        tqdm.write(f.name + ': ' + tokenString + timeString + Fore.GREEN + u' \u2713 ' + Fore.RESET)
     else:
         # Fail
         try:
             raise translatedData[2]
         except Exception as e:
-            errorString = str(e) + Fore.RED + ' Line: ' + str(traceback.extract_tb(sys.exc_info()[2])[-1].lineno)
-            print(f.name + ': ' + tokenString + timeString + Fore.RED + u' \u2717 ' +\
+            errorString = str(e) + Fore.RED
+            tqdm.write(f.name + ': ' + tokenString + timeString + Fore.RED + u' \u2717 ' +\
                 errorString + Fore.RESET)
 
 def parseMap(data, filename):
     totalTokens = 0
     totalLines = 0
     events = data['events']
+    global LOCK
 
     # Get total for progress bar
     for event in events:
@@ -133,11 +139,15 @@ def parseMap(data, filename):
             for page in event['pages']:
                 totalLines += len(page['list'])
     
-    with tqdm(total = totalLines, leave=False, desc=filename, bar_format='{l_bar}{bar:10}{r_bar}{bar:-10b}', position=0,) as pbar:
+    with tqdm(bar_format=BAR_FORMAT, position=POSITION, total=totalLines, leave=LEAVE) as pbar:
+        pbar.desc=filename
+        pbar.total=totalLines
         with ThreadPoolExecutor(max_workers=THREADS) as executor:
-            futures = [executor.submit(searchCodes, page, pbar) for page in data if page is not None]
+            futures = [executor.submit(searchCodes, page, pbar) for page in event['pages'] if page is not None]
             for future in as_completed(futures):
                 try:
+                    with LOCK:
+                        pbar.close()
                     totalTokens += future.result()
                 except Exception as e:
                     return [data, totalTokens, e]
@@ -147,17 +157,22 @@ def parseMap(data, filename):
 def parseCommonEvents(data, filename):
     totalTokens = 0
     totalLines = 0
+    global LOCK
 
     # Get total for progress bar
     for page in data:
         if page is not None:
             totalLines += len(page['list'])
 
-    with tqdm(total = totalLines, leave=False, desc=filename, bar_format='{l_bar}{bar:10}{r_bar}{bar:-10b}', position=0,) as pbar:
+    with tqdm(bar_format=BAR_FORMAT, position=POSITION, total=totalLines, leave=LEAVE) as pbar:
+        pbar.desc=filename
+        pbar.total=totalLines
         with ThreadPoolExecutor(max_workers=THREADS) as executor:
             futures = [executor.submit(searchCodes, page, pbar) for page in data if page is not None]
             for future in as_completed(futures):
                 try:
+                    with LOCK:
+                        pbar.close()
                     totalTokens += future.result()
                 except Exception as e:
                     return [data, totalTokens, e]
@@ -168,7 +183,9 @@ def parseNames(data, filename, context):
     totalLines = 0
     totalLines += len(data)
                 
-    with tqdm(total = totalLines, leave=False, desc=filename, bar_format='{l_bar}{bar:10}{r_bar}{bar:-10b}', position=0,) as pbar:
+    with tqdm(bar_format=BAR_FORMAT, position=POSITION, total=totalLines, leave=LEAVE) as pbar:
+            pbar.desc=filename
+            pbar.total=totalLines
             for name in data:
                 if name is not None:
                     try:
@@ -183,7 +200,9 @@ def parseSS(data, filename):
     totalLines = 0
     totalLines += len(data)
                 
-    with tqdm(total = totalLines, leave=False, desc=filename, bar_format='{l_bar}{bar:10}{r_bar}{bar:-10b}', position=0,) as pbar:
+    with tqdm(bar_format=BAR_FORMAT, position=POSITION, total=totalLines, leave=LEAVE) as pbar:
+            pbar.desc=filename
+            pbar.total=totalLines
             for ss in data:
                 if ss is not None:
                     try:
@@ -204,7 +223,9 @@ def parseSystem(data, filename):
     totalLines += len(data['gameTitle'])
     totalLines += len(data['terms']['messages'])
                 
-    with tqdm(total = totalLines, leave=False, desc=filename, bar_format='{l_bar}{bar:10}{r_bar}{bar:-10b}', position=0,) as pbar:
+    with tqdm(bar_format=BAR_FORMAT, position=POSITION, total=totalLines, leave=LEAVE) as pbar:
+        pbar.desc=filename
+        pbar.total=totalLines
         try:
             result = searchSystem(data, pbar)       
             totalTokens += result
@@ -239,15 +260,18 @@ def searchNames(name, pbar, context):
     return tokens
 
 def searchCodes(page, pbar):
+    text = ''
     translatedText = ''
     currentGroup = []
     textHistory = []
     maxHistory = 20 # The higher this number is, the better the translation, the more money you are going to pay :)
     tokens = 0
+    global LOCK
 
     try:
         for i in range(len(page['list'])):
-            pbar.update(1)
+            with LOCK:
+                pbar.update(1)
 
             # Translating Code: 401
             if page['list'][i]['code'] == 401:
@@ -281,8 +305,9 @@ def searchCodes(page, pbar):
     except IndexError:
         # This is part of the logic so we just pass it.
         pass
-    except Exception:
-        raise TimeoutError('Failed to translate: ' + text)  
+    except Exception as e:
+        tracebackLineNo = str(traceback.extract_tb(sys.exc_info()[2])[-1].lineno)
+        raise Exception(str(e) + '|Line:' + tracebackLineNo + '| Failed to translate: ' + text)  
                 
     # Append leftover groups
     if len(currentGroup) > 0:
