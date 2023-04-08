@@ -273,7 +273,10 @@ def searchCodes(page, pbar):
             # Event Code: 401 Show Text
             if page['list'][i]['code'] == 401:
                 # Remove repeating characters because it confuses ChatGPT
-                page['list'][i]['parameters'][0] = re.sub(r'(.)\1{2,}', r'\1\1\1\1', page['list'][i]['parameters'][0])
+                page['list'][i]['parameters'][0] = re.sub(r'(.)\1{2,}', r'\1\1', page['list'][i]['parameters'][0])
+
+                if '<Charai Otoko> ちょっと待ってくれよ。媚薬でドハマりしたアヘ顔を見たいん' in page['list'][i]['parameters'][0]:
+                    print('')
                 
                 # Using this to keep track of 401's in a row. Throws IndexError at EndOfList (Expected Behavior)
                 currentGroup.append(page['list'][i]['parameters'][0])
@@ -310,12 +313,14 @@ def searchCodes(page, pbar):
 
             # Event Code: 102 Show Choice
             if page['list'][i]['code'] == 102:
+                testList = ['']
                 for choice in range(len(page['list'][i]['parameters'][0])):
-                    response = translateGPT(page['list'][i]['parameters'][0][choice], ' '.join(textHistory))
+                    testList.append(page['list'][i]['parameters'][0][choice])
+                    response = translateGPT(page['list'][i]['parameters'][0][choice], 'Answer to the last question')
 
                 # Set Data
                     tokens += response[1]
-                    page['list'][i]['parameters'][0][choice] = response[0]
+                    page['list'][i]['parameters'][0][choice] = response[0].strip('.')
 
             # Unlisted Code
 
@@ -409,7 +414,7 @@ def translateGPT(t, history):
         return [t, 0]
 
     """Translate text using GPT"""
-    system = "Context: " + history + PROMPT
+    system = PROMPT + "\nPrevious Text: " + history 
     response = openai.ChatCompletion.create(
         temperature=0,
         model="gpt-3.5-turbo",
