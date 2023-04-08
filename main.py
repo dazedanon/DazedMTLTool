@@ -274,9 +274,6 @@ def searchCodes(page, pbar):
             if page['list'][i]['code'] == 401:
                 # Remove repeating characters because it confuses ChatGPT
                 page['list'][i]['parameters'][0] = re.sub(r'(.)\1{2,}', r'\1\1', page['list'][i]['parameters'][0])
-
-                if '<Charai Otoko> ちょっと待ってくれよ。媚薬でドハマりしたアヘ顔を見たいん' in page['list'][i]['parameters'][0]:
-                    print('')
                 
                 # Using this to keep track of 401's in a row. Throws IndexError at EndOfList (Expected Behavior)
                 currentGroup.append(page['list'][i]['parameters'][0])
@@ -316,7 +313,7 @@ def searchCodes(page, pbar):
                 testList = ['']
                 for choice in range(len(page['list'][i]['parameters'][0])):
                     testList.append(page['list'][i]['parameters'][0][choice])
-                    response = translateGPT(page['list'][i]['parameters'][0][choice], 'Answer to the last question')
+                    response = translateGPT(page['list'][i]['parameters'][0][choice], 'This is a reply to a question')
 
                 # Set Data
                     tokens += response[1]
@@ -425,7 +422,6 @@ def translateGPT(t, history):
         request_timeout=60,
     )
 
-    return [response.choices[0].message.content, response.usage.total_tokens]
-    
+    return [response.choices[0].message.content, response.usage.total_tokens]   
     
 main()
