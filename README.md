@@ -1,6 +1,6 @@
-# GPT4-TL
+# DazedMTLTool - A Script that translated RPGMaker MV JSON files using ChatGPT
 
-Currently in development. Goal is to eventually have ChatGPT nicely translate all dialogue when given an RPGMaker JSON file.
+Currently in development. Goal is to eventually have ChatGPT nicely translate all dialogue when given an RPGMaker JSON file. Right now its only tested on MV but hopeful to add more engines in the future.
 
 ### Required:
  * API Key: https://platform.openai.com/account/api-keys
