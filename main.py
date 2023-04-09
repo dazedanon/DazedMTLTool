@@ -270,20 +270,67 @@ def searchCodes(page, pbar):
             with LOCK:
                 pbar.update(1)
 
-            # Event Code: 401 Show Text or 355 Show Scrolling Text
-            if page['list'][i]['code'] == 401 or page['list'][i]['code'] == 355 or page['list'][i]['code'] == 655:
+            ### Event Code: 401 Show Text
+            if page['list'][i]['code'] == 401:    
                 jaString = page['list'][i]['parameters'][0]
+
+                # If there isn't any Japanese in the text just skip
+                if not re.search(r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴー]+', jaString):
+                    continue
+
+                # Remove repeating characters because it confuses ChatGPT
+                jaString = re.sub(r'(.)\1{2,}', r'\1\1', jaString)
+                   
+                # Using this to keep track of 401's in a row. Throws IndexError at EndOfList (Expected Behavior)
+                currentGroup.append(jaString)
+                while (page['list'][i+1]['code'] == 401):
+                    del page['list'][i]  
+                    jaString = page['list'][i]['parameters'][0]
+                    jaString = re.sub(r'(.)\1{2,}', r'\1\1', jaString)
+                    currentGroup.append(jaString)
+
+                # Join up 401 groups for better translation.
+                if len(currentGroup) > 0:
+                    finalJAString = ''.join(currentGroup)
+
+                    # Improves translation but may break certain games
+                    finalJAString = finalJAString.replace('\\n', '') 
+                    finalJAString = finalJAString.replace('”', '')
+
+                    # Translate
+                    response = translateGPT(finalJAString, ' '.join(textHistory))
+                    tokens += response[1]
+                    translatedText = response[0]
+
+                    # TextHistory is what we use to give GPT Context, so thats appended here.
+                    textHistory.append(translatedText)
+
+                    # Textwrap
+                    translatedText = textwrap.fill(translatedText, width=50)
+
+                    # Set Data
+                    page['list'][i]['parameters'][0] = translatedText
+
+                    # Keep textHistory list at length maxHistory
+                    if len(textHistory) > maxHistory:
+                        textHistory.pop(0)
+                    currentGroup = []
+
+            ### Event Code: 355 or 655 Scripts
+            if page['list'][i]['code'] == 355 or page['list'][i]['code'] == 655:
+                jaString = page['list'][i]['parameters'][0]
+
+                # If there isn't any Japanese in the text just skip
+                if not re.search(r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴー]+', jaString):
+                    continue
 
                 # Want to translate this script
                 if page['list'][i]['code'] == 355 and 'this.BLogAdd' not in jaString:
                     continue
 
                 # Don't want to touch certain scripts
-                if 'this.S' in jaString:
+                if page['list'][i]['code'] == 655 and 'this.' in jaString:
                     continue
-
-                # # Remove repeating characters because it confuses ChatGPT
-                jaString = re.sub(r'(.)\1{2,}', r'\1\1', jaString)
 
                 # Need to remove outside code and put it back later
                 startString = re.search(r'^[^ぁ-んァ-ン一-龯\<\>【】]+', jaString)
@@ -294,42 +341,16 @@ def searchCodes(page, pbar):
                 else:  startString = startString.group()
                 if endString is None: endString = ''
                 else: endString = endString.group()
-                   
-                # Using this to keep track of 401's in a row. Throws IndexError at EndOfList (Expected Behavior)
-                currentGroup.append(jaString)
-                while (page['list'][i+1]['code'] == 401):
-                    del page['list'][i]  
-                    currentGroup.append(jaString)
 
-                # Join up 401 groups for better translation.
-                if len(currentGroup) > 0:
-                    text = ''.join(currentGroup)
+                # Translate
+                response = translateGPT(jaString, '')
+                tokens += response[1]
+                translatedText = response[0]
 
-                    # Improves translation but may break certain games
-                    text = text.replace('\\n', '') 
-                    text = text.replace('”', '')
+                # Set Data
+                page['list'][i]['parameters'][0] = startString + translatedText.strip('.') + endString
 
-                    # Translate
-                    response = translateGPT(text, ' '.join(textHistory))
-                    tokens += response[1]
-                    translatedText = response[0]
-
-                    # TextHistory is what we use to give GPT Context, so thats appended here.
-                    textHistory.append(translatedText)
-
-                    # Textwrap (Doesn't work on scripts)
-                    if page['list'][i]['code'] == 401:
-                        translatedText = textwrap.fill(translatedText, width=50)
-
-                    # Set Data
-                    page['list'][i]['parameters'][0] = startString + translatedText.strip('.') + endString
-
-                    # Keep textHistory list at length maxHistory
-                    if len(textHistory) > maxHistory:
-                        textHistory.pop(0)
-                    currentGroup = []
-
-            # Event Code: 102 Show Choice
+            ### Event Code: 102 Show Choice
             if page['list'][i]['code'] == 102:
                 testList = ['']
                 for choice in range(len(page['list'][i]['parameters'][0])):
@@ -340,8 +361,6 @@ def searchCodes(page, pbar):
                     tokens += response[1]
                     page['list'][i]['parameters'][0][choice] = response[0].strip('.')
 
-            # Unlisted Code
-
     except IndexError:
         # This is part of the logic so we just pass it.
         pass
@@ -349,7 +368,7 @@ def searchCodes(page, pbar):
         tracebackLineNo = str(traceback.extract_tb(sys.exc_info()[2])[-1].lineno)
         raise Exception(str(e) + '|Line:' + tracebackLineNo + '| Failed to translate: ' + text)  
                 
-    # Append leftover groups
+    # Append leftover groups in 401
     if len(currentGroup) > 0:
         response = translateGPT(''.join(currentGroup), ' '.join(textHistory))
         tokens += response[1]
@@ -359,7 +378,7 @@ def searchCodes(page, pbar):
         # TextHistory is what we use to give GPT Context, so thats appended here.
         textHistory.append(translatedText)
 
-        # Textwrap (Doesn't work on scripts)
+        # Textwrap
         if page['list'][i]['code'] == 401:
             translatedText = textwrap.fill(translatedText, width=50)
 
@@ -439,11 +458,6 @@ def searchSystem(data, pbar):
 
 @retry(tries=5, delay=5)
 def translateGPT(t, history):
-    # If there isn't any Japanese in the text just return it
-    pattern = r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴー]+'
-    if not re.search(pattern, t):
-        return [t, 0]
-
     """Translate text using GPT"""
     system = PROMPT + "\nPrevious Text: " + history 
     response = openai.ChatCompletion.create(
