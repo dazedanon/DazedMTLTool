@@ -42,7 +42,7 @@ def main():
                 executor.submit(handleFiles, filename)
     
     # This is to encourage people to grab what's in /translated instead
-    deleteFolderFiles('files')
+    #deleteFolderFiles('files')
 
 def deleteFolderFiles(folderPath):
     for filename in os.listdir(folderPath):
@@ -274,10 +274,6 @@ def searchCodes(page, pbar):
             if page['list'][i]['code'] == 401:    
                 jaString = page['list'][i]['parameters'][0]
 
-                # If there isn't any Japanese in the text just skip
-                if not re.search(r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴー]+', jaString):
-                    continue
-
                 # Remove repeating characters because it confuses ChatGPT
                 jaString = re.sub(r'(.)\1{2,}', r'\1\1', jaString)
                    
@@ -352,14 +348,19 @@ def searchCodes(page, pbar):
 
             ### Event Code: 102 Show Choice
             if page['list'][i]['code'] == 102:
-                testList = ['']
                 for choice in range(len(page['list'][i]['parameters'][0])):
-                    testList.append(page['list'][i]['parameters'][0][choice])
-                    response = translateGPT(page['list'][i]['parameters'][0][choice], 'This is a reply to a question')
+                    choiceText = page['list'][i]['parameters'][0][choice]
+                    # Need to remove outside code and put it back later
+                    startString = re.search(r'^[^ぁ-んァ-ン一-龯\<\>【】]+', choiceText)
+                    choiceText = re.sub(r'^[^ぁ-んァ-ン一-龯\<\>【】]+', '', choiceText)
+                    if startString is None: startString = ''
+                    else:  startString = startString.group()
+    
+                    response = translateGPT(choiceText, 'Context: This is a reply to a question')
 
-                # Set Data
+                    # Set Data
                     tokens += response[1]
-                    page['list'][i]['parameters'][0][choice] = response[0].strip('.')
+                    page['list'][i]['parameters'][0][choice] = startString + response[0].strip('.')
 
     except IndexError:
         # This is part of the logic so we just pass it.
@@ -448,7 +449,7 @@ def searchSystem(data, pbar):
     # Messages
     messages = (data['terms']['messages'])
     for key, value in messages.items():
-        response = translateGPT(value, 'What I give you is a message.')
+        response = translateGPT(value, 'Translate this multiple choice answer')
         tokens += response[1]
         messages[key] = response[0]
         pbar.update(1)
@@ -458,8 +459,12 @@ def searchSystem(data, pbar):
 
 @retry(tries=5, delay=5)
 def translateGPT(t, history):
+    # If there isn't any Japanese in the text just skip
+    if not re.search(r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴー]+', t):
+        return(t, 0)
+
     """Translate text using GPT"""
-    system = PROMPT + "\nPrevious Text: " + history 
+    system = PROMPT + "\nPrevious Text for context: " + history 
     response = openai.ChatCompletion.create(
         temperature=0,
         model="gpt-3.5-turbo",
