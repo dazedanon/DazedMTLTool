@@ -1,8 +1,10 @@
 # Event codes 
 #     case 401 : return 'Show Text';              break;
+#     case 402 : return 'When *';                 break;
 #     case 102 : return 'Show Choices';           break;
 #     case 103 : return 'Input Number';           break;
 #     case 104 : return 'Select Item';            break;
+#       108 and 408 are event comments
 #     case 405 : return 'Show Scrolling Text';    break;
 #     case 111 : return 'Conditional Branch';     break;
 #     case 119 : return 'Common Event';           break;
