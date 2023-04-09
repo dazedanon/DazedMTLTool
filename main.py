@@ -80,7 +80,7 @@ def handleFiles(filename):
                 start = time.time()
                 translatedData = parseNames(data, filename, 'Classes')
 
-            # Classes File
+            # Items File
             if 'Items' in filename:
                 start = time.time()
                 translatedData = parseNames(data, filename, 'Items')
