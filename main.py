@@ -270,16 +270,36 @@ def searchCodes(page, pbar):
             with LOCK:
                 pbar.update(1)
 
-            # Event Code: 401 Show Text
-            if page['list'][i]['code'] == 401:
-                # Remove repeating characters because it confuses ChatGPT
-                page['list'][i]['parameters'][0] = re.sub(r'(.)\1{2,}', r'\1\1', page['list'][i]['parameters'][0])
-                
+            # Event Code: 401 Show Text or 355 Show Scrolling Text
+            if page['list'][i]['code'] == 401 or page['list'][i]['code'] == 355 or page['list'][i]['code'] == 655:
+                jaString = page['list'][i]['parameters'][0]
+
+                # Want to translate this script
+                if page['list'][i]['code'] == 355 and 'this.BLogAdd' not in jaString:
+                    continue
+
+                # Don't want to touch certain scripts
+                if 'this.S' in jaString:
+                    continue
+
+                # # Remove repeating characters because it confuses ChatGPT
+                jaString = re.sub(r'(.)\1{2,}', r'\1\1', jaString)
+
+                # Need to remove outside code and put it back later
+                startString = re.search(r'^[^ぁ-んァ-ン一-龯\<\>【】]+', jaString)
+                jaString = re.sub(r'^[^ぁ-んァ-ン一-龯\<\>【】]+', '', jaString)
+                endString = re.search(r'[^ぁ-んァ-ン一-龯\<\>【】]+$', jaString)
+                jaString = re.sub(r'[^ぁ-んァ-ン一-龯\<\>【】]+$', '', jaString)
+                if startString is None: startString = ''
+                else:  startString = startString.group()
+                if endString is None: endString = ''
+                else: endString = endString.group()
+                   
                 # Using this to keep track of 401's in a row. Throws IndexError at EndOfList (Expected Behavior)
-                currentGroup.append(page['list'][i]['parameters'][0])
+                currentGroup.append(jaString)
                 while (page['list'][i+1]['code'] == 401):
                     del page['list'][i]  
-                    currentGroup.append(page['list'][i]['parameters'][0])
+                    currentGroup.append(jaString)
 
                 # Join up 401 groups for better translation.
                 if len(currentGroup) > 0:
@@ -297,11 +317,12 @@ def searchCodes(page, pbar):
                     # TextHistory is what we use to give GPT Context, so thats appended here.
                     textHistory.append(translatedText)
 
-                    # Textwrap
-                    translatedText = textwrap.fill(translatedText, width=50)
+                    # Textwrap (Doesn't work on scripts)
+                    if page['list'][i]['code'] == 401:
+                        translatedText = textwrap.fill(translatedText, width=50)
 
                     # Set Data
-                    page['list'][i]['parameters'][0] = translatedText
+                    page['list'][i]['parameters'][0] = startString + translatedText.strip('.') + endString
 
                     # Keep textHistory list at length maxHistory
                     if len(textHistory) > maxHistory:
@@ -335,7 +356,20 @@ def searchCodes(page, pbar):
         translatedText = response[0]
 
         #Cleanup
-        translatedText = textwrap.fill(translatedText, width=50)
+        # TextHistory is what we use to give GPT Context, so thats appended here.
+        textHistory.append(translatedText)
+
+        # Textwrap (Doesn't work on scripts)
+        if page['list'][i]['code'] == 401:
+            translatedText = textwrap.fill(translatedText, width=50)
+
+        # Set Data
+        page['list'][i]['parameters'][0] = startString + translatedText.strip('.') + endString
+
+        # Keep textHistory list at length maxHistory
+        if len(textHistory) > maxHistory:
+            textHistory.pop(0)
+        currentGroup = []
         page['list'][i]['parameters'][0] = translatedText
         currentGroup = []
 
