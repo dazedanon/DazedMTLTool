@@ -343,14 +343,21 @@ def searchCodes(page, pbar):
                 tokens += response[1]
                 translatedText = response[0]
 
+                # Remove characters that may break scripts
+                charList = ['.', '\"', '\\n']
+                for char in charList:
+                    translatedText = translatedText.replace(char, '')
+
                 # Set Data
-                page['list'][i]['parameters'][0] = startString + translatedText.strip('.') + endString
+                page['list'][i]['parameters'][0] = startString + translatedText + endString
 
             ### Event Code: 102 Show Choice
             if page['list'][i]['code'] == 102:
                 for choice in range(len(page['list'][i]['parameters'][0])):
                     choiceText = page['list'][i]['parameters'][0][choice]
-                    # Need to remove outside code and put it back later
+                    translatedText = translatedText.replace(' 。', '.')
+
+                    # Need to remove outside non-japanese text and put it back later
                     startString = re.search(r'^[^ぁ-んァ-ン一-龯\<\>【】]+', choiceText)
                     choiceText = re.sub(r'^[^ぁ-んァ-ン一-龯\<\>【】]+', '', choiceText)
                     if startString is None: startString = ''
