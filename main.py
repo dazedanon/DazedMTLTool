@@ -42,10 +42,10 @@ def main():
                 executor.submit(handleFiles, filename)
     
     # This is to encourage people to grab what's in /translated instead
-    #deleteFolderFiles('files')
+    deleteFolderFiles('files')
 
     # Prevent immediately closing of CLI
-    input('Done! Press any button to close.')
+    input('Done! Press Enter to close.')
 
 def deleteFolderFiles(folderPath):
     for filename in os.listdir(folderPath):
