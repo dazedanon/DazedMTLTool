@@ -17,6 +17,6 @@ Currently in development. Goal is to eventually have ChatGPT nicely translate al
 
 ## ChatGPT Prompt:
 
-`prompt.txt` will decide what and how chatgpt translates the text. This is where you can customize it's output. This is extremely useful for when ChatGPT gives you a translation that you don't want. You can use this to tell him what to do, give examples of how you want things translated, etc. The example included is what I use currently, but you should tailor it to the game you are trying to translate.
+`prompt.txt` will decide what and how ChatGPT translates the text. This is where you can customize it's output. This is extremely useful for when ChatGPT gives you a translation that you don't want. You can use this to tell him what to do, give examples of how you want things translated, etc. The example included is what I use currently, but you should tailor it to the game you are trying to translate.
 
 Note that the bigger the prompt, the more $$$ its going to cost to translate.
