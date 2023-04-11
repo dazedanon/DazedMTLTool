@@ -22,6 +22,7 @@ THREADS = 20
 COST = .002 # Depends on the model https://openai.com/pricing
 LOCK = threading.Lock()
 PROMPT = Path('prompt.txt').read_text(encoding='utf-8')
+WIDTH = 75
 
 #tqdm Globals
 BAR_FORMAT='{l_bar}{bar:10}{r_bar}{bar:-10b}'
@@ -76,7 +77,7 @@ def handleFiles(filename):
             # Armor File
             if 'Actors' in filename:
                 start = time.time()
-                translatedData = parseNames(data, filename, 'Armor')
+                translatedData = parseThings(data, filename, 'Armor')
             
             # Classes File
             if 'Classes' in filename:
@@ -86,7 +87,7 @@ def handleFiles(filename):
             # Items File
             if 'Items' in filename:
                 start = time.time()
-                translatedData = parseNames(data, filename, 'Items')
+                translatedData = parseThings(data, filename, 'Items')
 
             # MapInfo File
             if 'MapInfos' in filename:
@@ -195,6 +196,23 @@ def parseNames(data, filename, context):
                         return [data, totalTokens, e]
     return [data, totalTokens, None]
 
+def parseThings(data, filename, context):
+    totalTokens = 0
+    totalLines = 0
+    totalLines += len(data)
+                
+    with tqdm(bar_format=BAR_FORMAT, position=POSITION, total=totalLines, leave=LEAVE) as pbar:
+            pbar.desc=filename
+            pbar.total=totalLines
+            for name in data:
+                if name is not None:
+                    try:
+                        result = searchThings(name, pbar, context)       
+                        totalTokens += result
+                    except Exception as e:
+                        return [data, totalTokens, e]
+    return [data, totalTokens, None]
+
 def parseSS(data, filename):
     totalTokens = 0
     totalLines = 0
@@ -233,28 +251,53 @@ def parseSystem(data, filename):
             return [data, totalTokens, e]
     return [data, totalTokens, None]
 
+def searchThings(name, pbar, context):
+    tokens = 0
+
+    # Set the context of what we are translating
+    responseList = []
+    responseList.append(translateGPT(name['name'], 'Reply with only the menu item name.'))
+    responseList.append(translateGPT(name['description'], 'Reply with only the description.'))
+    responseList.append(translateGPT(name['note'], 'Reply with only the note.'))
+
+    # Extract all our translations in a list from response
+    for i in range(len(responseList)):
+        tokens += responseList[i][1]
+        responseList[i] = responseList[i][0]
+
+    # Set Data
+    name['name'] = responseList[0].strip('.')
+    name['description'] = responseList[1]
+    name['note'] = responseList[2]
+    pbar.update(1)
+
+    return tokens
+
 def searchNames(name, pbar, context):
-    translatedText = ''
     tokens = 0
 
     # Set the context of what we are translating
     if 'Actors' in context:
-        context = 'What I give you is a Actor Name.'
-    if 'Armors' in context:
-        context = 'What I give you is a Armor Name.'
+        context = 'Reply with only the actor name'
     if 'Classes' in context:
-        context = 'What I give you is a Class Name.'
-    if 'Items' in context:
-        context = 'What I give you is a Item Name.'
+        context = 'Reply with only the class name'
     if 'MapInfos' in context:
-        context = 'What I give you is a Map Name.'
+        context = 'Reply with only the map name'
 
-    response = translateGPT(name['name'], context)
-    tokens += response[1]
-    translatedText = response[0]
+    responseList = []
+    responseList[0].append(translateGPT(name['name'], context))
+    responseList[1].append(translateGPT(name['description'], context))
+    responseList[2].append(translateGPT(name['note'], context))
 
-    translatedText = translatedText.strip('.')   # Since GPT loves his periods
-    name['name'] = translatedText
+    # Extract all our translations in a list from response
+    for i in range(len(responseList)):
+        tokens += responseList[i][1]
+        responseList[i] = responseList[i][0]
+
+    # Set Data
+    name['name'] = responseList[0].strip('.')
+    name['description'] = responseList[1]
+    name['note'] = responseList[2]
     pbar.update(1)
 
     return tokens
@@ -273,7 +316,7 @@ def searchCodes(page, pbar):
             with LOCK:
                 pbar.update(1)
 
-            ### Event Code: 401 Show Text
+            ## Event Code: 401 Show Text
             if page['list'][i]['code'] == 401:    
                 jaString = page['list'][i]['parameters'][0]
 
@@ -305,7 +348,7 @@ def searchCodes(page, pbar):
                     textHistory.append(translatedText)
 
                     # Textwrap
-                    translatedText = textwrap.fill(translatedText, width=50)
+                    translatedText = textwrap.fill(translatedText, width=WIDTH)
 
                     # Set Data
                     page['list'][i]['parameters'][0] = translatedText
@@ -316,43 +359,43 @@ def searchCodes(page, pbar):
                     currentGroup = []
 
             ### Event Code: 355 or 655 Scripts
-            if page['list'][i]['code'] == 355 or page['list'][i]['code'] == 655:
-                jaString = page['list'][i]['parameters'][0]
+            # if page['list'][i]['code'] == 355 or page['list'][i]['code'] == 655:
+            #     jaString = page['list'][i]['parameters'][0]
 
-                # If there isn't any Japanese in the text just skip
-                if not re.search(r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴー]+', jaString):
-                    continue
+            #     # If there isn't any Japanese in the text just skip
+            #     if not re.search(r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴー]+', jaString):
+            #         continue
 
-                # Want to translate this script
-                if page['list'][i]['code'] == 355 and 'this.BLogAdd' not in jaString:
-                    continue
+            #     # Want to translate this script
+            #     if page['list'][i]['code'] == 355 and 'this.BLogAdd' not in jaString:
+            #         continue
 
-                # Don't want to touch certain scripts
-                if page['list'][i]['code'] == 655 and 'this.' in jaString:
-                    continue
+            #     # Don't want to touch certain scripts
+            #     if page['list'][i]['code'] == 655 and 'this.' in jaString:
+            #         continue
 
-                # Need to remove outside code and put it back later
-                startString = re.search(r'^[^ぁ-んァ-ン一-龯\<\>【】]+', jaString)
-                jaString = re.sub(r'^[^ぁ-んァ-ン一-龯\<\>【】]+', '', jaString)
-                endString = re.search(r'[^ぁ-んァ-ン一-龯\<\>【】]+$', jaString)
-                jaString = re.sub(r'[^ぁ-んァ-ン一-龯\<\>【】]+$', '', jaString)
-                if startString is None: startString = ''
-                else:  startString = startString.group()
-                if endString is None: endString = ''
-                else: endString = endString.group()
+            #     # Need to remove outside code and put it back later
+            #     startString = re.search(r'^[^ぁ-んァ-ン一-龯\<\>【】]+', jaString)
+            #     jaString = re.sub(r'^[^ぁ-んァ-ン一-龯\<\>【】]+', '', jaString)
+            #     endString = re.search(r'[^ぁ-んァ-ン一-龯\<\>【】]+$', jaString)
+            #     jaString = re.sub(r'[^ぁ-んァ-ン一-龯\<\>【】]+$', '', jaString)
+            #     if startString is None: startString = ''
+            #     else:  startString = startString.group()
+            #     if endString is None: endString = ''
+            #     else: endString = endString.group()
 
-                # Translate
-                response = translateGPT(jaString, '')
-                tokens += response[1]
-                translatedText = response[0]
+            #     # Translate
+            #     response = translateGPT(jaString, '')
+            #     tokens += response[1]
+            #     translatedText = response[0]
 
-                # Remove characters that may break scripts
-                charList = ['.', '\"', '\\n']
-                for char in charList:
-                    translatedText = translatedText.replace(char, '')
+            #     # Remove characters that may break scripts
+            #     charList = ['.', '\"', '\\n']
+            #     for char in charList:
+            #         translatedText = translatedText.replace(char, '')
 
-                # Set Data
-                page['list'][i]['parameters'][0] = startString + translatedText + endString
+            #     # Set Data
+            #     page['list'][i]['parameters'][0] = startString + translatedText + endString
 
             ### Event Code: 102 Show Choice
             if page['list'][i]['code'] == 102:
@@ -366,18 +409,24 @@ def searchCodes(page, pbar):
                     if startString is None: startString = ''
                     else:  startString = startString.group()
     
-                    response = translateGPT(choiceText, 'Context: This is a reply to a question')
+                    response = translateGPT(choiceText, 'Reply with only the english translated answer')
+                    translatedText = response[0]
+
+                    # Remove characters that may break scripts
+                    charList = ['.', '\"', '\\n']
+                    for char in charList:
+                        translatedText = translatedText.replace(char, '')
 
                     # Set Data
                     tokens += response[1]
-                    page['list'][i]['parameters'][0][choice] = startString + response[0].strip('.')
+                    page['list'][i]['parameters'][0][choice] = startString + translatedText
 
     except IndexError:
         # This is part of the logic so we just pass it.
         pass
     except Exception as e:
         tracebackLineNo = str(traceback.extract_tb(sys.exc_info()[2])[-1].lineno)
-        raise Exception(str(e) + '|Line:' + tracebackLineNo + '| Failed to translate: ' + text)  
+        raise Exception(str(e) + '|Line:' + tracebackLineNo + '| Failed to translate: ' + jaString)  
                 
     # Append leftover groups in 401
     if len(currentGroup) > 0:
@@ -391,10 +440,10 @@ def searchCodes(page, pbar):
 
         # Textwrap
         if page['list'][i]['code'] == 401:
-            translatedText = textwrap.fill(translatedText, width=50)
+            translatedText = textwrap.fill(translatedText, width=WIDTH)
 
         # Set Data
-        page['list'][i]['parameters'][0] = startString + translatedText.strip('.') + endString
+        page['list'][i]['parameters'][0] = translatedText
 
         # Keep textHistory list at length maxHistory
         if len(textHistory) > maxHistory:
@@ -410,12 +459,12 @@ def searchSS(state, pbar):
     tokens = 0
     responseList = [0] * 6
 
-    responseList[0] = (translateGPT(state['message1'], 'What I give you is a Message.'))
-    responseList[1] = (translateGPT(state['message2'], 'What I give you is a Message.'))
-    responseList[2] = (translateGPT(state.get('message3', ''), 'What I give you is a Message.'))
-    responseList[3] = (translateGPT(state.get('message4', ''), 'What I give you is a Message.'))
-    responseList[4] = (translateGPT(state['name'], 'What I give you is a State Name.'))
-    responseList[5] = (translateGPT(state['note'], 'What I give you is a Note.'))
+    responseList[0] = (translateGPT(state['message1'], 'Reply with only the message.'))
+    responseList[1] = (translateGPT(state['message2'], 'Reply with only the message.'))
+    responseList[2] = (translateGPT(state.get('message3', ''), 'Reply with only the message.'))
+    responseList[3] = (translateGPT(state.get('message4', ''), 'Reply with only the message.'))
+    responseList[4] = (translateGPT(state['name'], 'Reply with only the state name.'))
+    responseList[5] = (translateGPT(state['note'], 'Reply with only the note.'))
 
     # Put all our translations in a list
     for i in range(len(responseList)):
@@ -437,7 +486,7 @@ def searchSS(state, pbar):
 
 def searchSystem(data, pbar):
     tokens = 0
-    context = 'What I give you is an menu item.'
+    context = 'What I give you is a menu item.'
 
     # Title
     response = translateGPT(data['gameTitle'], context)
@@ -460,21 +509,28 @@ def searchSystem(data, pbar):
     messages = (data['terms']['messages'])
     for key, value in messages.items():
         response = translateGPT(value, 'Translate this multiple choice answer')
+        translatedText = response[0]
+
+        # Remove characters that may break scripts
+        charList = ['.', '\"', '\\n']
+        for char in charList:
+            translatedText = translatedText.replace(char, '')
+
         tokens += response[1]
-        messages[key] = response[0]
+        messages[key] = translatedText
         pbar.update(1)
     
     return tokens
     
 
-@retry(tries=5, delay=5)
+@retry(exceptions=Exception, tries=5, delay=5)
 def translateGPT(t, history):
     # If there isn't any Japanese in the text just skip
     if not re.search(r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴー]+', t):
         return(t, 0)
 
     """Translate text using GPT"""
-    system = PROMPT + "\nPrevious Text for context: " + history 
+    system = PROMPT + 'Previous Text: ' + history 
     response = openai.ChatCompletion.create(
         temperature=0,
         model="gpt-3.5-turbo",
@@ -482,7 +538,7 @@ def translateGPT(t, history):
             {"role": "system", "content": system},
             {"role": "user", "content": t}
         ],
-        request_timeout=60,
+        request_timeout=30,
     )
 
     return [response.choices[0].message.content, response.usage.total_tokens]   
