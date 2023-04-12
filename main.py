@@ -358,7 +358,73 @@ def searchCodes(page, pbar):
                         textHistory.pop(0)
                     currentGroup = []
 
-            ### Event Code: 355 or 655 Scripts
+            ## Event Code: 122 [Control Variables] [Optional]
+            if page['list'][i]['code'] == 122:    
+                jaString = page['list'][i]['parameters'][4]
+                if type(jaString) != str:
+                    continue
+                
+                # Definitely don't want to mess with files
+                if '_' in jaString:
+                    continue
+
+                # If there isn't any Japanese in the text just skip
+                if not re.search(r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴー]+', jaString):
+                    continue
+
+                # Remove repeating characters because it confuses ChatGPT
+                jaString = re.sub(r'(.)\1{2,}', r'\1\1', jaString)
+
+                # Sub Vars
+                jaString = re.sub(r'\\+([a-zA-Z]+)\[([0-9]+)\]', r'[\1\2]', jaString)
+
+                # Translate
+                response = translateGPT(jaString, '')
+                tokens += response[1]
+                translatedText = response[0]
+
+                # Remove characters that may break scripts
+                charList = ['.', '\"', '\\n', '\\']
+                for char in charList:
+                    translatedText = translatedText.replace(char, '')
+
+                # ReSub Vars
+                translatedText = re.sub(r'\[([a-zA-Z]+)([0-9]+)]', r'\\\\\1[\2]', translatedText)
+
+                # Set Data
+                page['list'][i]['parameters'][4] = '\"' + translatedText + '\"'
+
+        ## Event Code: 101 [Name] [Optional]
+            if page['list'][i]['code'] == 101:    
+                jaString = page['list'][i]['parameters'][4]
+                if type(jaString) != str:
+                    continue
+                
+                # Definitely don't want to mess with files
+                if '_' in jaString:
+                    continue
+
+                # If there isn't any Japanese in the text just skip
+                if not re.search(r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴー]+', jaString):
+                    continue
+
+                # Remove repeating characters because it confuses ChatGPT
+                jaString = re.sub(r'(.)\1{2,}', r'\1\1', jaString)
+
+                # Translate
+                response = translateGPT(jaString, 'Reply with only the english translated name')
+                tokens += response[1]
+                translatedText = response[0]
+
+                # Remove characters that may break scripts
+                charList = ['.', '\"', '\\n']
+                for char in charList:
+                    translatedText = translatedText.replace(char, '')
+
+                # Set Data
+                page['list'][i]['parameters'][4] = translatedText
+
+            ### Event Code: 355 or 655 Scripts [Optional]
             # if page['list'][i]['code'] == 355 or page['list'][i]['code'] == 655:
             #     jaString = page['list'][i]['parameters'][0]
 
