@@ -13,3 +13,13 @@ You MUST keep formatting the same.
 Translation Examples:
 
 [User Prompt] >> [Your Answer]
+
+「 >> 「
+
+」 >>  」
+
+if(v[62]>=130) = if(v[62]>=130)
+
+\\I[87] >> \\I[87]
+
+Text String[N12] >> Text String[N12]
