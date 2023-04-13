@@ -316,6 +316,9 @@ def searchCodes(page, pbar):
             with LOCK:
                 pbar.update(1)
 
+            ### All the codes are here which translate specific functions in the MAP files.
+            ### IF these crash or fail your game will do the same. Just comment out anything not needed.
+
             ## Event Code: 401 Show Text
             if page['list'][i]['code'] == 401:    
                 jaString = page['list'][i]['parameters'][0]
@@ -393,6 +396,52 @@ def searchCodes(page, pbar):
 
                 # Set Data
                 page['list'][i]['parameters'][4] = '\"' + translatedText + '\"'
+
+        ## Event Code: 357 [Picture Text] [Optional]
+            if page['list'][i]['code'] == 357:    
+                if 'text' in page['list'][i]['parameters'][3]:
+                    jaString = page['list'][i]['parameters'][3]['text']
+                    if type(jaString) != str:
+                        continue
+                    
+                    # Definitely don't want to mess with files
+                    if '_' in jaString:
+                        continue
+
+                    # If there isn't any Japanese in the text just skip
+                    if not re.search(r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴー]+', jaString):
+                        continue
+
+                    # Need to remove outside non-japanese text and put it back later
+                    startString = re.search(r'^[^ぁ-んァ-ン一-龯\<\>【】]+', jaString)
+                    jaString = re.sub(r'^[^ぁ-んァ-ン一-龯\<\>【】]+', '', jaString)
+                    if startString is None: startString = ''
+                    else:  startString = startString.group()
+
+                    # Remove repeating characters because it confuses ChatGPT
+                    jaString = re.sub(r'(.)\1{2,}', r'\1\1', jaString)
+
+                    # Sub Vars
+                    jaString = re.sub(r'\\+([a-zA-Z]+)\[([0-9]+)\]', r'[\1\2]', jaString)
+
+                    # Translate
+                    response = translateGPT(jaString, '')
+                    tokens += response[1]
+                    translatedText = response[0]
+
+                    # Remove characters that may break scripts
+                    charList = ['\"', '\\', '\\n']
+                    for char in charList:
+                        translatedText = translatedText.replace(char, '')
+
+                    # Textwrap
+                    translatedText = textwrap.fill(translatedText, width=50)
+
+                    # ReSub Vars
+                    translatedText = re.sub(r'\[([a-zA-Z]+)([0-9]+)]', r'\\\\\1[\2]', translatedText)
+
+                    # Set Data
+                    page['list'][i]['parameters'][3]['text'] = startString + translatedText
 
         ## Event Code: 101 [Name] [Optional]
             if page['list'][i]['code'] == 101:    
