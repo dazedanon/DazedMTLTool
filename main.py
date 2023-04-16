@@ -37,7 +37,7 @@ start the script again. It will skip over any translated text." + Fore.RESET, en
 
 # Flags
 CODE401 = True
-CODE102 = False
+CODE102 = True
 CODE122 = False
 CODE101 = False
 CODE355655 = False
@@ -351,15 +351,15 @@ def searchCodes(page, pbar):
                     finalJAString = finalJAString.replace('”', '')
 
                     # Sub Vars
-                    finalJAString = re.sub(r'\\+([a-zA-Z]+)\[([0-9]+)\]', r'[\1\2]', finalJAString)
+                    finalJAString = re.sub(r'(\\+[a-zA-Z]+)\[([0-9]+)\]', r'[\1\2]', finalJAString)
 
                     # Translate
-                    response = translateGPT(finalJAString, ' '.join(textHistory))
+                    response = translateGPT(finalJAString, 'Previous text for context: ' + ' '.join(textHistory))
                     tokens += response[1]
                     translatedText = response[0]
 
                     # ReSub Vars
-                    translatedText = re.sub(r'\[([a-zA-Z]+)([0-9]+)]', r'\\\\\1[\2]', translatedText)
+                    translatedText = re.sub(r'\[([\\a-zA-Z]+)([0-9]+)]', r'\1[\2]', translatedText)
 
                     # TextHistory is what we use to give GPT Context, so thats appended here.
                     textHistory.append(translatedText)
@@ -538,7 +538,7 @@ def searchCodes(page, pbar):
                     if startString is None: startString = ''
                     else:  startString = startString.group()
     
-                    response = translateGPT(choiceText, 'Reply with only the english translated answer')
+                    response = translateGPT(choiceText, 'Reply with the english translation for the answer to this question: ' + textHistory[-1])
                     translatedText = response[0]
 
                     # Remove characters that may break scripts
@@ -655,11 +655,11 @@ def searchSystem(data, pbar):
 @retry(exceptions=Exception, tries=5, delay=5)
 def translateGPT(t, history):
     # If there isn't any Japanese in the text just skip
-    if not re.search(r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴー]+', t):
+    if not re.search(r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴ]+', t):
         return(t, 0)
 
     """Translate text using GPT"""
-    system = PROMPT + 'Previous Text: ' + history 
+    system = PROMPT + history 
     response = openai.ChatCompletion.create(
         temperature=0,
         model="gpt-3.5-turbo",
