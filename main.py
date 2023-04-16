@@ -601,7 +601,7 @@ def searchSS(state, pbar):
 
 def searchSystem(data, pbar):
     tokens = 0
-    context = 'What I give you is a menu item.'
+    context = 'Reply with only the menu item.'
 
     # Title
     response = translateGPT(data['gameTitle'], context)
@@ -623,7 +623,7 @@ def searchSystem(data, pbar):
     # Messages
     messages = (data['terms']['messages'])
     for key, value in messages.items():
-        response = translateGPT(value, 'Translate this multiple choice answer')
+        response = translateGPT(value, 'Reply with only the answer.')
         translatedText = response[0]
 
         # Remove characters that may break scripts
