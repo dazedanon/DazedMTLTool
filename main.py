@@ -22,7 +22,7 @@ THREADS = 20
 COST = .002 # Depends on the model https://openai.com/pricing
 LOCK = threading.Lock()
 PROMPT = Path('prompt.txt').read_text(encoding='utf-8')
-WIDTH = 75
+WIDTH = 60
 
 #tqdm Globals
 BAR_FORMAT='{l_bar}{bar:10}{r_bar}{bar:-10b}'
@@ -34,6 +34,14 @@ print(Fore.BLUE + "Do not close while translation is in progress. If a file fail
 Translated lines will remain translated so you don't have to worry about being charged \
 twice. You can simply copy the file generated in /translations back over to /files and \
 start the script again. It will skip over any translated text." + Fore.RESET, end='\n\n')
+
+# Flags
+CODE401 = True
+CODE102 = False
+CODE122 = False
+CODE101 = False
+CODE355655 = False
+CODE357 = False
 
 def main():
     # Open File (Threads)
@@ -320,7 +328,7 @@ def searchCodes(page, pbar):
             ### IF these crash or fail your game will do the same. Just comment out anything not needed.
 
             ## Event Code: 401 Show Text
-            if page['list'][i]['code'] == 401:    
+            if page['list'][i]['code'] == 401 and CODE401 == True:    
                 jaString = page['list'][i]['parameters'][0]
 
                 # Remove repeating characters because it confuses ChatGPT
@@ -342,10 +350,16 @@ def searchCodes(page, pbar):
                     finalJAString = finalJAString.replace('\\n', '') 
                     finalJAString = finalJAString.replace('”', '')
 
+                    # Sub Vars
+                    finalJAString = re.sub(r'\\+([a-zA-Z]+)\[([0-9]+)\]', r'[\1\2]', finalJAString)
+
                     # Translate
                     response = translateGPT(finalJAString, ' '.join(textHistory))
                     tokens += response[1]
                     translatedText = response[0]
+
+                    # ReSub Vars
+                    translatedText = re.sub(r'\[([a-zA-Z]+)([0-9]+)]', r'\\\\\1[\2]', translatedText)
 
                     # TextHistory is what we use to give GPT Context, so thats appended here.
                     textHistory.append(translatedText)
@@ -362,7 +376,7 @@ def searchCodes(page, pbar):
                     currentGroup = []
 
             ## Event Code: 122 [Control Variables] [Optional]
-            if page['list'][i]['code'] == 122:    
+            if page['list'][i]['code'] == 122 and CODE122 == True:    
                 jaString = page['list'][i]['parameters'][4]
                 if type(jaString) != str:
                     continue
@@ -398,7 +412,7 @@ def searchCodes(page, pbar):
                 page['list'][i]['parameters'][4] = '\"' + translatedText + '\"'
 
         ## Event Code: 357 [Picture Text] [Optional]
-            if page['list'][i]['code'] == 357:    
+            if page['list'][i]['code'] == 357 and CODE357 == True:    
                 if 'text' in page['list'][i]['parameters'][3]:
                     jaString = page['list'][i]['parameters'][3]['text']
                     if type(jaString) != str:
@@ -444,7 +458,7 @@ def searchCodes(page, pbar):
                     page['list'][i]['parameters'][3]['text'] = startString + translatedText
 
         ## Event Code: 101 [Name] [Optional]
-            if page['list'][i]['code'] == 101:    
+            if page['list'][i]['code'] == 101 and CODE101 == True:    
                 jaString = page['list'][i]['parameters'][4]
                 if type(jaString) != str:
                     continue
@@ -473,47 +487,47 @@ def searchCodes(page, pbar):
                 # Set Data
                 page['list'][i]['parameters'][4] = translatedText
 
-            ### Event Code: 355 or 655 Scripts [Optional]
-            # if page['list'][i]['code'] == 355 or page['list'][i]['code'] == 655:
-            #     jaString = page['list'][i]['parameters'][0]
+            ## Event Code: 355 or 655 Scripts [Optional]
+            if (page['list'][i]['code'] == 355 or page['list'][i]['code'] == 655) and CODE355655 == True:
+                jaString = page['list'][i]['parameters'][0]
 
-            #     # If there isn't any Japanese in the text just skip
-            #     if not re.search(r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴー]+', jaString):
-            #         continue
+                # If there isn't any Japanese in the text just skip
+                if not re.search(r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴー]+', jaString):
+                    continue
 
-            #     # Want to translate this script
-            #     if page['list'][i]['code'] == 355 and 'this.BLogAdd' not in jaString:
-            #         continue
+                # Want to translate this script
+                if page['list'][i]['code'] == 355 and 'this.BLogAdd' not in jaString:
+                    continue
 
-            #     # Don't want to touch certain scripts
-            #     if page['list'][i]['code'] == 655 and 'this.' in jaString:
-            #         continue
+                # Don't want to touch certain scripts
+                if page['list'][i]['code'] == 655 and 'this.' in jaString:
+                    continue
 
-            #     # Need to remove outside code and put it back later
-            #     startString = re.search(r'^[^ぁ-んァ-ン一-龯\<\>【】]+', jaString)
-            #     jaString = re.sub(r'^[^ぁ-んァ-ン一-龯\<\>【】]+', '', jaString)
-            #     endString = re.search(r'[^ぁ-んァ-ン一-龯\<\>【】]+$', jaString)
-            #     jaString = re.sub(r'[^ぁ-んァ-ン一-龯\<\>【】]+$', '', jaString)
-            #     if startString is None: startString = ''
-            #     else:  startString = startString.group()
-            #     if endString is None: endString = ''
-            #     else: endString = endString.group()
+                # Need to remove outside code and put it back later
+                startString = re.search(r'^[^ぁ-んァ-ン一-龯\<\>【】]+', jaString)
+                jaString = re.sub(r'^[^ぁ-んァ-ン一-龯\<\>【】]+', '', jaString)
+                endString = re.search(r'[^ぁ-んァ-ン一-龯\<\>【】]+$', jaString)
+                jaString = re.sub(r'[^ぁ-んァ-ン一-龯\<\>【】]+$', '', jaString)
+                if startString is None: startString = ''
+                else:  startString = startString.group()
+                if endString is None: endString = ''
+                else: endString = endString.group()
 
-            #     # Translate
-            #     response = translateGPT(jaString, '')
-            #     tokens += response[1]
-            #     translatedText = response[0]
+                # Translate
+                response = translateGPT(jaString, '')
+                tokens += response[1]
+                translatedText = response[0]
 
-            #     # Remove characters that may break scripts
-            #     charList = ['.', '\"', '\\n']
-            #     for char in charList:
-            #         translatedText = translatedText.replace(char, '')
+                # Remove characters that may break scripts
+                charList = ['.', '\"', '\\n']
+                for char in charList:
+                    translatedText = translatedText.replace(char, '')
 
-            #     # Set Data
-            #     page['list'][i]['parameters'][0] = startString + translatedText + endString
+                # Set Data
+                page['list'][i]['parameters'][0] = startString + translatedText + endString
 
             ### Event Code: 102 Show Choice
-            if page['list'][i]['code'] == 102:
+            if page['list'][i]['code'] == 102 and CODE102 == True:
                 for choice in range(len(page['list'][i]['parameters'][0])):
                     choiceText = page['list'][i]['parameters'][0][choice]
                     translatedText = translatedText.replace(' 。', '.')
@@ -623,7 +637,7 @@ def searchSystem(data, pbar):
     # Messages
     messages = (data['terms']['messages'])
     for key, value in messages.items():
-        response = translateGPT(value, 'Reply with only the answer.')
+        response = translateGPT(value, 'Reply with only the english translated answer')
         translatedText = response[0]
 
         # Remove characters that may break scripts
