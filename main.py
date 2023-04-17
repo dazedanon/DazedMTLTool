@@ -23,6 +23,7 @@ COST = .002 # Depends on the model https://openai.com/pricing
 LOCK = threading.Lock()
 PROMPT = Path('prompt.txt').read_text(encoding='utf-8')
 WIDTH = 60
+MAXHISTORY = 10
 
 #tqdm Globals
 BAR_FORMAT='{l_bar}{bar:10}{r_bar}{bar:-10b}'
@@ -315,7 +316,7 @@ def searchCodes(page, pbar):
     translatedText = ''
     currentGroup = []
     textHistory = []
-    maxHistory = 20 # The higher this number is, the better the translation, the more money you are going to pay :)
+    maxHistory = MAXHISTORY
     tokens = 0
     global LOCK
 
@@ -538,7 +539,7 @@ def searchCodes(page, pbar):
                     if startString is None: startString = ''
                     else:  startString = startString.group()
     
-                    response = translateGPT(choiceText, 'Reply with the english translation for the answer to this question: ' + textHistory[-1])
+                    response = translateGPT(choiceText, 'Reply with the english translation for the answer. QUESTION: ' + textHistory[-1])
                     translatedText = response[0]
 
                     # Remove characters that may break scripts
