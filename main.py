@@ -40,7 +40,7 @@ start the script again. It will skip over any translated text." + Fore.RESET, en
 CODE401 = True
 CODE102 = True
 CODE122 = False
-CODE101 = False
+CODE101 = True
 CODE355655 = False
 CODE357 = False
 
@@ -352,7 +352,7 @@ def searchCodes(page, pbar):
                     finalJAString = finalJAString.replace('”', '')
 
                     # Sub Vars
-                    finalJAString = re.sub(r'(\\+[a-zA-Z]+)\[([0-9]+)\]', r'[\1\2]', finalJAString)
+                    finalJAString = re.sub(r'(\\+[a-zA-Z]+)\[([a-zA-Z0-9]+)\]', r'[\1|\2]', finalJAString)
 
                     # Translate
                     response = translateGPT(finalJAString, 'Previous text for context: ' + ' '.join(textHistory))
@@ -360,7 +360,7 @@ def searchCodes(page, pbar):
                     translatedText = response[0]
 
                     # ReSub Vars
-                    translatedText = re.sub(r'\[([\\a-zA-Z]+)([0-9]+)]', r'\1[\2]', translatedText)
+                    translatedText = re.sub(r'\[([\\a-zA-Z]+)\|([a-zA-Z0-9]+)]', r'\1[\2]', translatedText)
 
                     # TextHistory is what we use to give GPT Context, so thats appended here.
                     textHistory.append(translatedText)
@@ -470,6 +470,7 @@ def searchCodes(page, pbar):
 
                 # If there isn't any Japanese in the text just skip
                 if not re.search(r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴー]+', jaString):
+                    textHistory.append(jaString + ':')
                     continue
 
                 # Remove repeating characters because it confuses ChatGPT
@@ -486,6 +487,7 @@ def searchCodes(page, pbar):
                     translatedText = translatedText.replace(char, '')
 
                 # Set Data
+                textHistory.append(translatedText + ':')
                 page['list'][i]['parameters'][4] = translatedText
 
             ## Event Code: 355 or 655 Scripts [Optional]
