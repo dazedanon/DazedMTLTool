@@ -318,6 +318,7 @@ def searchCodes(page, pbar):
     textHistory = []
     maxHistory = MAXHISTORY
     tokens = 0
+    speaker = ''
     global LOCK
 
     try:
@@ -333,7 +334,7 @@ def searchCodes(page, pbar):
                 jaString = page['list'][i]['parameters'][0]
 
                 # Remove repeating characters because it confuses ChatGPT
-                jaString = re.sub(r'(.)\1{6,}', r'\1\1\1\1\1\1', jaString)
+                jaString = re.sub(r'([\u3000-\uffef])\1{2,}', r'\1\1', jaString)
                    
                 # Using this to keep track of 401's in a row. Throws IndexError at EndOfList (Expected Behavior)
                 currentGroup.append(jaString)
@@ -355,7 +356,7 @@ def searchCodes(page, pbar):
                     finalJAString = re.sub(r'(\\+[a-zA-Z]+)\[([a-zA-Z0-9]+)\]', r'[\1|\2]', finalJAString)
 
                     # Translate
-                    response = translateGPT(finalJAString, 'Previous text for context: ' + ' '.join(textHistory))
+                    response = translateGPT(finalJAString, 'Previous text for context: ' + ' '.join(textHistory) + '\n\n\n###\n\n\nCurrent Speaker: ' + speaker)
                     tokens += response[1]
                     translatedText = response[0]
 
@@ -363,7 +364,7 @@ def searchCodes(page, pbar):
                     translatedText = re.sub(r'\[([\\a-zA-Z]+)\|([a-zA-Z0-9]+)]', r'\1[\2]', translatedText)
 
                     # TextHistory is what we use to give GPT Context, so thats appended here.
-                    textHistory.append(translatedText)
+                    textHistory.append(speaker + ': ' + translatedText)
 
                     # Textwrap
                     translatedText = textwrap.fill(translatedText, width=WIDTH)
@@ -391,7 +392,7 @@ def searchCodes(page, pbar):
                     continue
 
                 # Remove repeating characters because it confuses ChatGPT
-                jaString = re.sub(r'(.)\1{2,}', r'\1\1', jaString)
+                jaString = re.sub(r'([\u3000-\uffef])\1{2,}', r'\1\1', jaString)
 
                 # Sub Vars
                 jaString = re.sub(r'\\+([a-zA-Z]+)\[([0-9]+)\]', r'[\1\2]', jaString)
@@ -433,9 +434,6 @@ def searchCodes(page, pbar):
                     if startString is None: startString = ''
                     else:  startString = startString.group()
 
-                    # Remove repeating characters because it confuses ChatGPT
-                    jaString = re.sub(r'(.)\1{2,}', r'\1\1', jaString)
-
                     # Sub Vars
                     jaString = re.sub(r'\\+([a-zA-Z]+)\[([0-9]+)\]', r'[\1\2]', jaString)
 
@@ -470,11 +468,8 @@ def searchCodes(page, pbar):
 
                 # If there isn't any Japanese in the text just skip
                 if not re.search(r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴー]+', jaString):
-                    textHistory.append(jaString + ':')
+                    speaker = jaString
                     continue
-
-                # Remove repeating characters because it confuses ChatGPT
-                jaString = re.sub(r'(.)\1{2,}', r'\1\1', jaString)
 
                 # Translate
                 response = translateGPT(jaString, 'Reply with only the english translated name')
@@ -487,7 +482,7 @@ def searchCodes(page, pbar):
                     translatedText = translatedText.replace(char, '')
 
                 # Set Data
-                textHistory.append(translatedText + ':')
+                speaker = translatedText
                 page['list'][i]['parameters'][4] = translatedText
 
             ## Event Code: 355 or 655 Scripts [Optional]
