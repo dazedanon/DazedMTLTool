@@ -333,7 +333,7 @@ def searchCodes(page, pbar):
                 jaString = page['list'][i]['parameters'][0]
 
                 # Remove repeating characters because it confuses ChatGPT
-                jaString = re.sub(r'(.)\1{2,}', r'\1\1', jaString)
+                jaString = re.sub(r'(.)\1{6,}', r'\1\1\1\1\1\1', jaString)
                    
                 # Using this to keep track of 401's in a row. Throws IndexError at EndOfList (Expected Behavior)
                 currentGroup.append(jaString)
