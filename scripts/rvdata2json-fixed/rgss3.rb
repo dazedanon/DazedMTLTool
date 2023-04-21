@@ -301,6 +301,13 @@ class RPG::EventCommand
   attr_accessor :indent
   attr_accessor :parameters
 end
+class Symbol
+  include Jsonable
+  def initialize
+    s = "none"
+  end
+  attr_accessor :s
+end
 class RPG::MoveRoute
   include Jsonable
   def initialize
