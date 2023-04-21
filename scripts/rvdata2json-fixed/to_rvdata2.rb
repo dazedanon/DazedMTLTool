@@ -14,6 +14,7 @@ require_relative 'rgss3'
 
 #追加メソッド
 def restore_rvdata2(list)
+	return unless list.is_a?(Hash)
 	return unless list.has_key?("json_class")
 	obj = nil
 	case list["json_class"]
