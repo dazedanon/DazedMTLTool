@@ -1,4 +1,6 @@
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import sys
+import traceback
 from colorama import Fore
 import os
 
@@ -29,14 +31,15 @@ def main():
         case '1':
             # Open File (Threads)
             with ThreadPoolExecutor(max_workers=THREADS) as executor:
-                for filename in os.listdir("files"):
-                    if filename.endswith('json'):
-                        future = executor.submit(handleMVMZ, filename, estimate)
-
-                        try:
-                            totalCost = future.result()
-                        except Exception as e:
-                            print(Fore.RED + str(e))
+                futures = [executor.submit(handleMVMZ, filename, estimate) \
+                            for filename in os.listdir("files") if filename.endswith('json')]
+                
+                for future in as_completed(futures):
+                    try:
+                        totalCost = future.result()
+                    except Exception as e:
+                        tracebackLineNo = str(traceback.extract_tb(sys.exc_info()[2])[-1].lineno)
+                        print(Fore.RED + str(e) + '|' + tracebackLineNo + Fore.RESET)
 
         case '2':
              # Open File (Threads)

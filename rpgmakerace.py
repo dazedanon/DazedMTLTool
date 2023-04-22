@@ -8,6 +8,7 @@ import textwrap
 import threading
 import time
 import traceback
+import tiktoken
 
 from colorama import Fore
 from dotenv import load_dotenv
@@ -27,8 +28,8 @@ LOCK = threading.Lock()
 WIDTH = 60
 MAXHISTORY = 10
 ESTIMATE = ''
-CHARACTERS = 0
 TOTALCOST = 0
+TOKENS = 0
 TOTALTOKENS = 0
 
 #tqdm Globals
@@ -38,97 +39,93 @@ LEAVE=False
 
 # Flags
 CODE401 = True
-CODE102 = True
+CODE102 = False
 CODE122 = False
 CODE101 = False
 CODE355655 = False
 CODE357 = False
 
 def handleACE(filename, estimate):
-    global ESTIMATE 
+    global ESTIMATE, TOKENS, TOTALTOKENS, TOTALCOST
     ESTIMATE = estimate
-    totalStart = time.time()
 
-    with open('translated/' + filename, 'w', encoding='UTF-8') as outFile:
-        with open('files/' + filename, 'r', encoding='UTF-8') as f:
-            data = json.load(f)
-
-            # Map Files
-            if 'Map' in filename and filename != 'MapInfos.json':
-                start = time.time()
-                translatedData = parseMap(data, filename)
-
-            # CommonEvents Files
-            if 'CommonEvents' in filename:
-                start = time.time()
-                translatedData = parseCommonEvents(data, filename)
-
-            # Actor File
-            if 'Actors' in filename:
-                start = time.time()
-                translatedData = parseNames(data, filename, 'Actors')
-
-            # Armor File
-            if 'Actors' in filename:
-                start = time.time()
-                translatedData = parseThings(data, filename, 'Armor')
-            
-            # Classes File
-            if 'Classes' in filename:
-                start = time.time()
-                translatedData = parseNames(data, filename, 'Classes')
-
-            # Items File
-            if 'Items' in filename:
-                start = time.time()
-                translatedData = parseThings(data, filename, 'Items')
-
-            # MapInfo File
-            if 'MapInfos' in filename:
-                start = time.time()
-                translatedData = parseNames(data, filename, 'MapInfos')
-
-            # Skills File
-            if 'Skills' in filename:
-                start = time.time()
-                translatedData = parseSS(data, filename)
-
-            # States File
-            if 'States' in filename:
-                start = time.time()
-                translatedData = parseSS(data, filename)
-
-            # System File
-            if 'System' in filename:
-                start = time.time()
-                translatedData = parseSystem(data, filename)
-
-        end = time.time()
-        json.dump(translatedData[0], outFile, ensure_ascii=False)
+    if estimate:
+        start = time.time()
+        translatedData = openFiles(filename)
 
         # Print Result
-        if estimate:
-            global CHARACTERS
-            print('CHARACTERS Total: ' + str(CHARACTERS))
-            printString(['', round(CHARACTERS/.325, 1), None], end - start, f.name)
-            
-            # Reset CHARACTERS*
-            CHARACTERS = 0
-        else:
-            printString(translatedData, end - start, f.name)
+        end = time.time()
+        tqdm.write(getResultString(['', TOKENS, None], end - start, filename))
+        TOTALCOST += TOKENS * .001 * APICOST
+        TOTALTOKENS += TOKENS
+        TOKENS = 0
+
+        return getResultString(['', TOTALTOKENS, None], end - start, 'TOTAL')
     
-    # Final Output
-    totalEnd = time.time()
-    printString(['', round(TOTALTOKENS, 1), None], totalEnd - totalStart, 'TOTAL')
+    else:
+        with open('translated/' + filename, 'w', encoding='UTF-8') as outFile:
+            start = time.time()
+            translatedData = openFiles(filename)
 
-def printString(translatedData, translationTime, filename):
-    global TOTALCOST, TOTALTOKENS
+            # Print Result
+            end = time.time()
+            json.dump(translatedData[0], outFile, ensure_ascii=False)
+            tqdm.write(getResultString(translatedData, end - start, filename))
+            TOTALCOST += translatedData[1] * .001 * APICOST
+            TOTALTOKENS += translatedData[1]
 
-    # Cost Estimation
-    cost = translatedData[1] * .001 * APICOST
-    TOTALCOST += cost
-    TOTALTOKENS += translatedData[1]
+    return getResultString(['', TOTALTOKENS, None], end - start, 'TOTAL')
 
+def openFiles(filename):
+    with open('files/' + filename, 'r', encoding='UTF-8') as f:
+        data = json.load(f)
+
+        # Map Files
+        if 'Map' in filename and filename != 'MapInfos.json':
+            translatedData = parseMap(data, filename)
+
+        # CommonEvents Files
+        elif 'CommonEvents' in filename:
+            translatedData = parseCommonEvents(data, filename)
+
+        # Actor File
+        elif 'Actors' in filename:
+            translatedData = parseNames(data, filename, 'Actors')
+
+        # Armor File
+        elif 'Actors' in filename:
+            translatedData = parseThings(data, filename, 'Armor')
+        
+        # Classes File
+        elif 'Classes' in filename:
+            translatedData = parseNames(data, filename, 'Classes')
+
+        # Items File
+        elif 'Items' in filename:
+            translatedData = parseThings(data, filename, 'Items')
+
+        # MapInfo File
+        elif 'MapInfos' in filename:
+            translatedData = parseNames(data, filename, 'MapInfos')
+
+        # Skills File
+        elif 'Skills' in filename:
+            translatedData = parseSS(data, filename)
+
+        # States File
+        elif 'States' in filename:
+            translatedData = parseSS(data, filename)
+
+        # System File
+        elif 'System' in filename:
+            translatedData = parseSystem(data, filename)
+
+        else:
+            raise NameError(filename + ' Not Supported')
+    
+    return translatedData
+
+def getResultString(translatedData, translationTime, filename):
     # File Print String
     tokenString = Fore.YELLOW + '[' + str(translatedData[1]) + \
         ' Tokens/${:,.4f}'.format(translatedData[1] * .001 * APICOST) + ']'
@@ -136,15 +133,16 @@ def printString(translatedData, translationTime, filename):
 
     if translatedData[2] == None:
         # Success
-        tqdm.write(filename + ': ' + tokenString + timeString + Fore.GREEN + u' \u2713 ' + Fore.RESET)
+        return filename + ': ' + tokenString + timeString + Fore.GREEN + u' \u2713 ' + Fore.RESET
+
     else:
         # Fail
         try:
             raise translatedData[2]
         except Exception as e:
             errorString = str(e) + Fore.RED
-            tqdm.write(filename + ': ' + tokenString + timeString + Fore.RED + u' \u2717 ' +\
-                errorString + Fore.RESET)
+            return filename + ': ' + tokenString + timeString + Fore.RED + u' \u2717 ' +\
+                errorString + Fore.RESET
 
 def parseMap(data, filename):
     totalTokens = 0
@@ -670,11 +668,13 @@ def searchSystem(data, pbar):
 
 @retry(exceptions=Exception, tries=5, delay=5)
 def translateGPT(t, history):
-    # If ESTIMATE is True just count this as an execution and return.
-    if ESTIMATE:
-        global CHARACTERS
-        CHARACTERS += len(t) + len(history)
-        return (t, 0)
+    with LOCK:
+        # If ESTIMATE is True just count this as an execution and return.
+        if ESTIMATE:
+            global TOKENS
+            enc = tiktoken.encoding_for_model("gpt-3.5-turbo")
+            TOKENS += len(enc.encode(t)) * 2 + len(enc.encode(history)) + len(enc.encode(PROMPT))
+            return (t, 0)
     
     # If there isn't any Japanese in the text just skip
     if not re.search(r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴ]+', t):
