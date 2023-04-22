@@ -20,12 +20,16 @@ load_dotenv()
 openai.organization = os.getenv('org')
 openai.api_key = os.getenv('key')
 
-COST = .002 # Depends on the model https://openai.com/pricing
+APICOST = .002 # Depends on the model https://openai.com/pricing
 PROMPT = Path('prompt.txt').read_text(encoding='utf-8')
 THREADS = 20
 LOCK = threading.Lock()
 WIDTH = 60
 MAXHISTORY = 10
+ESTIMATE = ''
+CHARACTERS = 0
+TOTALCOST = 0
+TOTALTOKENS = 0
 
 #tqdm Globals
 BAR_FORMAT='{l_bar}{bar:10}{r_bar}{bar:-10b}'
@@ -40,7 +44,11 @@ CODE101 = False
 CODE355655 = False
 CODE357 = False
 
-def handleACE(filename):
+def handleACE(filename, estimate):
+    global ESTIMATE 
+    ESTIMATE = estimate
+    totalStart = time.time()
+
     with open('translated/' + filename, 'w', encoding='UTF-8') as outFile:
         with open('files/' + filename, 'r', encoding='UTF-8') as f:
             data = json.load(f)
@@ -97,24 +105,45 @@ def handleACE(filename):
 
         end = time.time()
         json.dump(translatedData[0], outFile, ensure_ascii=False)
-        printString(translatedData, end - start, f)
 
-def printString(translatedData, translationTime, f):
-    # Strings
+        # Print Result
+        if estimate:
+            global CHARACTERS
+            print('CHARACTERS Total: ' + str(CHARACTERS))
+            printString(['', round(CHARACTERS/.325, 1), None], end - start, f.name)
+            
+            # Reset CHARACTERS*
+            CHARACTERS = 0
+        else:
+            printString(translatedData, end - start, f.name)
+    
+    # Final Output
+    totalEnd = time.time()
+    printString(['', round(TOTALTOKENS, 1), None], totalEnd - totalStart, 'TOTAL')
+
+def printString(translatedData, translationTime, filename):
+    global TOTALCOST, TOTALTOKENS
+
+    # Cost Estimation
+    cost = translatedData[1] * .001 * APICOST
+    TOTALCOST += cost
+    TOTALTOKENS += translatedData[1]
+
+    # File Print String
     tokenString = Fore.YELLOW + '[' + str(translatedData[1]) + \
-        ' Tokens/${:,.4f}'.format(translatedData[1] * .001 * COST) + ']'
+        ' Tokens/${:,.4f}'.format(translatedData[1] * .001 * APICOST) + ']'
     timeString = Fore.BLUE + '[' + str(round(translationTime, 1)) + 's]'
 
     if translatedData[2] == None:
         # Success
-        tqdm.write(f.name + ': ' + tokenString + timeString + Fore.GREEN + u' \u2713 ' + Fore.RESET)
+        tqdm.write(filename + ': ' + tokenString + timeString + Fore.GREEN + u' \u2713 ' + Fore.RESET)
     else:
         # Fail
         try:
             raise translatedData[2]
         except Exception as e:
             errorString = str(e) + Fore.RED
-            tqdm.write(f.name + ': ' + tokenString + timeString + Fore.RED + u' \u2717 ' +\
+            tqdm.write(filename + ': ' + tokenString + timeString + Fore.RED + u' \u2717 ' +\
                 errorString + Fore.RESET)
 
 def parseMap(data, filename):
@@ -641,6 +670,12 @@ def searchSystem(data, pbar):
 
 @retry(exceptions=Exception, tries=5, delay=5)
 def translateGPT(t, history):
+    # If ESTIMATE is True just count this as an execution and return.
+    if ESTIMATE:
+        global CHARACTERS
+        CHARACTERS += len(t) + len(history)
+        return (t, 0)
+    
     # If there isn't any Japanese in the text just skip
     if not re.search(r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴ]+', t):
         return(t, 0)
@@ -658,4 +693,3 @@ def translateGPT(t, history):
     )
 
     return [response.choices[0].message.content, response.usage.total_tokens]
-    
