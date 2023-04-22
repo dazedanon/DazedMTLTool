@@ -14,44 +14,49 @@ twice. You can simply copy the file generated in /translations back over to /fil
 start the script again. It will skip over any translated text." + Fore.RESET, end='\n\n')
 
 def main():
+    estimate = ''
+    while estimate == '':
+        estimate = input('Select Translation or Cost Estimation:\n\n1. Translate\n2. Estimate\n')
+        match estimate:
+            case '1': estimate = False
+            case '2': estimate = True
+            case _: estimate = ''
+    
     version = input('Select the RPGMaker Version:\n\n1. MV/MZ\n2. ACE\n')
 
+    totalCost = 0
     match version:
         case '1':
             # Open File (Threads)
             with ThreadPoolExecutor(max_workers=THREADS) as executor:
                 for filename in os.listdir("files"):
                     if filename.endswith('json'):
-                        future = executor.submit(handleMVMZ, filename)
+                        future = executor.submit(handleMVMZ, filename, estimate)
 
                         try:
-                            future.result()
+                            totalCost = future.result()
                         except Exception as e:
                             print(Fore.RED + str(e))
-        
-            # This is to encourage people to grab what's in /translated instead
-            deleteFolderFiles('files')
-
-            # Prevent immediately closing of CLI
-            input('Done! Press Enter to close.')
 
         case '2':
              # Open File (Threads)
             with ThreadPoolExecutor(max_workers=THREADS) as executor:
                 for filename in os.listdir("files"):
                     if filename.endswith('json'):
-                        future = executor.submit(handleACE, filename)
+                        future = executor.submit(handleACE, filename, estimate)
 
                         try:
-                            future.result()
+                            totalCost = future.result()
                         except Exception as e:
                             print(Fore.RED + str(e))
         
-            # This is to encourage people to grab what's in /translated instead
-            deleteFolderFiles('files')
+    if estimate == False:
+        # This is to encourage people to grab what's in /translated instead
+        deleteFolderFiles('files')
 
-            # Prevent immediately closing of CLI
-            input('Done! Press Enter to close.')
+    # Prevent immediately closing of CLI
+    print(totalCost)
+    input('Done! Press Enter to close.')
 
 def deleteFolderFiles(folderPath):
     for filename in os.listdir(folderPath):

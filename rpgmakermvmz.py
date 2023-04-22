@@ -8,6 +8,7 @@ import textwrap
 import threading
 import time
 import traceback
+import tiktoken
 
 from colorama import Fore
 from dotenv import load_dotenv
@@ -20,12 +21,16 @@ load_dotenv()
 openai.organization = os.getenv('org')
 openai.api_key = os.getenv('key')
 
-COST = .002 # Depends on the model https://openai.com/pricing
+APICOST = .002 # Depends on the model https://openai.com/pricing
 PROMPT = Path('prompt.txt').read_text(encoding='utf-8')
 THREADS = 20
 LOCK = threading.Lock()
 WIDTH = 60
 MAXHISTORY = 10
+ESTIMATE = ''
+TOTALCOST = 0
+TOKENS = 0
+TOTALTOKENS = 0
 
 #tqdm Globals
 BAR_FORMAT='{l_bar}{bar:10}{r_bar}{bar:-10b}'
@@ -40,7 +45,10 @@ CODE101 = False
 CODE355655 = False
 CODE357 = False
 
-def handleMVMZ(filename):
+def handleMVMZ(filename, estimate):
+    global ESTIMATE, TOKENS, TOTALTOKENS, TOTALCOST
+    ESTIMATE = estimate
+
     with open('translated/' + filename, 'w', encoding='UTF-8') as outFile:
         with open('files/' + filename, 'r', encoding='UTF-8') as f:
             data = json.load(f)
@@ -97,25 +105,40 @@ def handleMVMZ(filename):
 
         end = time.time()
         json.dump(translatedData[0], outFile, ensure_ascii=False)
-        printString(translatedData, end - start, f)
 
-def printString(translatedData, translationTime, f):
-    # Strings
+        # Print Result
+        if estimate:
+            tqdm.write(getResultString(['', TOKENS, None], end - start, f.name))
+
+            TOTALCOST += TOKENS * .001 * APICOST
+            TOTALTOKENS += TOKENS
+            TOKENS = 0
+        else:
+            tqdm.write(getResultString(translatedData, end - start, f.name))
+
+            TOTALCOST += translatedData[1] * .001 * APICOST
+            TOTALTOKENS += translatedData[1]
+
+    return getResultString(['', TOTALTOKENS, None], end - start, 'TOTAL')
+
+def getResultString(translatedData, translationTime, filename):
+    # File Print String
     tokenString = Fore.YELLOW + '[' + str(translatedData[1]) + \
-        ' Tokens/${:,.4f}'.format(translatedData[1] * .001 * COST) + ']'
+        ' Tokens/${:,.4f}'.format(translatedData[1] * .001 * APICOST) + ']'
     timeString = Fore.BLUE + '[' + str(round(translationTime, 1)) + 's]'
 
     if translatedData[2] == None:
         # Success
-        tqdm.write(f.name + ': ' + tokenString + timeString + Fore.GREEN + u' \u2713 ' + Fore.RESET)
+        return filename + ': ' + tokenString + timeString + Fore.GREEN + u' \u2713 ' + Fore.RESET
+
     else:
         # Fail
         try:
             raise translatedData[2]
         except Exception as e:
             errorString = str(e) + Fore.RED
-            tqdm.write(f.name + ': ' + tokenString + timeString + Fore.RED + u' \u2717 ' +\
-                errorString + Fore.RESET)
+            return filename + ': ' + tokenString + timeString + Fore.RED + u' \u2717 ' +\
+                errorString + Fore.RESET
 
 def parseMap(data, filename):
     totalTokens = 0
@@ -637,6 +660,13 @@ def searchSystem(data, pbar):
 
 @retry(exceptions=Exception, tries=5, delay=5)
 def translateGPT(t, history):
+    # If ESTIMATE is True just count this as an execution and return.
+    if ESTIMATE:
+        global TOKENS
+        enc = tiktoken.encoding_for_model("gpt-3.5-turbo")
+        TOKENS += len(enc.encode(t) + enc.encode(history) + enc.encode(PROMPT))
+        return (t, 0)
+    
     # If there isn't any Japanese in the text just skip
     if not re.search(r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴ]+', t):
         return(t, 0)
