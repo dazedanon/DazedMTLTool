@@ -4,7 +4,7 @@
 
 Currently in development. Goal is to eventually have ChatGPT nicely translate all dialogue when given an RPGMaker JSON file.
 
-Currently Supported:
+## Currently Supported:
 * RPGMaker MV & MZ
 * RPGMaker VX ACE (Mostly, still a WIP)
 * CSV Files
