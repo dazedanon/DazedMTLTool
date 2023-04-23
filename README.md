@@ -14,10 +14,14 @@ RPGMaker VX ACE (Mostly, still a WIP)
  * Python3: https://www.python.org/downloads/
 
 ## Setup:
-1. Add your API key and Organization Key to a .env file. An example can be found in the repo.
-2. Add a prompt.txt file using prompt.example as a template. (See ChatGPT Prompt Section)
-2. Untranslated JSON files go in `/files`. Anything translated will end up in `/translated`
-3. Run the script either with VSCode or by running .\main.py in a CLI.
+1. `cd` to the project folder and install the dependencies.
+
+`pip install -r requirements.txt`
+
+2. Add your API key and Organization Key to a .env file. An example can be found in the repo.
+3. Add a prompt.txt file using prompt.example as a template. (See ChatGPT Prompt Section)
+4. Untranslated JSON files go in `/files`. Anything translated will end up in `/translated`
+5. Run `main.py` script either with VSCode or by running `.\main.py` in a CLI.
 
 ## ChatGPT Prompt:
 
