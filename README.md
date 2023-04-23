@@ -4,9 +4,10 @@
 
 Currently in development. Goal is to eventually have ChatGPT nicely translate all dialogue when given an RPGMaker JSON file.
 
-Currently Supported Engines:
-RPGMaker MV & MZ
-RPGMaker VX ACE (Mostly, still a WIP)
+## Currently Supported:
+* RPGMaker MV & MZ
+* RPGMaker VX ACE (Mostly, still a WIP)
+* CSV Files
 
 ## Required:
  * API Key: https://platform.openai.com/account/api-keys
