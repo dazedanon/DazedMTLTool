@@ -4,17 +4,17 @@ import traceback
 from colorama import Fore
 import os
 
-from rpgmakermvmz import handleMVMZ
-from rpgmakerace import handleACE
-from csvtl import handleCSV
+from src.rpgmakermvmz import handleMVMZ
+from src.rpgmakerace import handleACE
+from src.csvtl import handleCSV
 
 THREADS = 20
 
 # Info Message
-print(Fore.LIGHTYELLOW_EX + "Do not close while translation is in progress. If a file fails or gets stuck, \
-Translated lines will remain translated so you don't have to worry about being charged \
-twice. You can simply copy the file generated in /translations back over to /files and \
-start the script again. It will skip over any translated text." + Fore.RESET, end='\n\n')
+print(Fore.LIGHTYELLOW_EX + "WARNING: Once a translation starts do not close it unless you want to lose your\
+translated data. If a file fails or gets stuck, translated lines will remain translated so you don't have \
+to worry about being charged twice. You can simply copy the file generated in /translations back over to \
+/files and start the script again. It will skip over any translated text." + Fore.RESET, end='\n\n')
 
 def main():
     estimate = ''
@@ -65,6 +65,7 @@ def main():
                     for future in as_completed(futures):
                         try:
                             totalCost = future.result()
+                            
                         except Exception as e:
                             tracebackLineNo = str(traceback.extract_tb(sys.exc_info()[2])[-1].lineno)
                             print(Fore.RED + str(e) + '|' + tracebackLineNo + Fore.RESET)
@@ -85,5 +86,3 @@ def deleteFolderFiles(folderPath):
         file_path = os.path.join(folderPath, filename)
         if file_path.endswith('.json'):
             os.remove(file_path)   
-    
-main()

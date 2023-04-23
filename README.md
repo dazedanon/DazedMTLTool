@@ -22,7 +22,7 @@ Currently in development. Goal is to eventually have ChatGPT nicely translate al
 2. Add your API key and Organization Key to a .env file. An example can be found in the repo.
 3. Add a prompt.txt file using prompt.example as a template. (See ChatGPT Prompt Section)
 4. Untranslated JSON files go in `/files`. Anything translated will end up in `/translated`
-5. Run `main.py` script either with VSCode or by running `.\main.py` in a CLI.
+5. Run `start.py` script either with VSCode or by running `python .\start.py` in a CLI.
 
 ## ChatGPT Prompt:
 
