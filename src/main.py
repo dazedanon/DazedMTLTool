@@ -6,7 +6,7 @@ import os
 
 from rpgmakermvmz import handleMVMZ
 from rpgmakerace import handleACE
-from csv import handleCSV
+from csvtl import handleCSV
 
 THREADS = 20
 
@@ -24,12 +24,11 @@ def main():
             case '1': estimate = False
             case '2': estimate = True
             case _: estimate = ''
-    
-    version = input('Select the RPGMaker Version:\n\n1. MV/MZ\n2. ACE\n')
 
     totalCost = 0
     version = ''
     while version == '':
+        version = input('Select the RPGMaker Version:\n\n1. MV/MZ\n2. ACE\n')
         match version:
             case '1':
                 # Open File (Threads)
@@ -61,7 +60,7 @@ def main():
                 # Open File (Threads)
                 with ThreadPoolExecutor(max_workers=THREADS) as executor:
                     futures = [executor.submit(handleCSV, filename, estimate) \
-                                for filename in os.listdir("files") if filename.endswith('json')]
+                                for filename in os.listdir("files") if filename.endswith('csv')]
                     
                     for future in as_completed(futures):
                         try:
