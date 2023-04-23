@@ -91,6 +91,7 @@ def getResultString(translatedData, translationTime, filename):
 def parseCSV(readFile, writeFile, filename):
     totalTokens = 0
     totalLines = 0
+    textHistory = []
     global LOCK
 
     # Get total for progress bar
@@ -103,20 +104,17 @@ def parseCSV(readFile, writeFile, filename):
     with tqdm(bar_format=BAR_FORMAT, position=POSITION, total=totalLines, leave=LEAVE) as pbar:
         pbar.desc=filename
         pbar.total=totalLines
-        with ThreadPoolExecutor(max_workers=THREADS) as executor:
-            futures = [executor.submit(translateCSV, row, pbar, writer) for row in reader]
 
-            for future in as_completed(futures):
-                try:
-                    totalTokens += future.result()
-                except Exception as e:
-                    tracebackLineNo = str(traceback.extract_tb(sys.exc_info()[2])[-1].lineno)
-                    return [reader, totalTokens, e, tracebackLineNo]
+        for row in reader:
+            try:
+                totalTokens += translateCSV(row, pbar, writer, textHistory)
+            except Exception as e:
+                tracebackLineNo = str(traceback.extract_tb(sys.exc_info()[2])[-1].lineno)
+                return [reader, totalTokens, e, tracebackLineNo]
     return [reader, totalTokens, None]
 
-def translateCSV(row, pbar, writer):
+def translateCSV(row, pbar, writer, textHistory):
     translatedText = ''
-    textHistory = []
     maxHistory = MAXHISTORY
     tokens = 0
     global LOCK, ESTIMATE
@@ -154,13 +152,11 @@ def translateCSV(row, pbar, writer):
         row[1] = translatedText
 
         # Keep textHistory list at length maxHistory
-        if len(textHistory) > maxHistory:
-            textHistory.pop(0)
-
-        if not ESTIMATE:
-            writer.writerow(row)
-
         with LOCK:
+            if len(textHistory) > maxHistory:
+                textHistory.pop(0)
+            if not ESTIMATE:
+                writer.writerow(row)
             pbar.update(1)
 
     except Exception as e:
