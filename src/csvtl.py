@@ -20,8 +20,8 @@ from tqdm import tqdm
 load_dotenv()
 openai.organization = os.getenv('org')
 openai.api_key = os.getenv('key')
-APICOST = .002 # Depends on the model https://openai.com/pricing
 
+APICOST = .002 # Depends on the model https://openai.com/pricing
 PROMPT = Path('prompt.txt').read_text(encoding='utf-8')
 THREADS = 20
 LOCK = threading.Lock()
