@@ -1,5 +1,4 @@
 from concurrent.futures import ThreadPoolExecutor, as_completed
-import json
 import os
 from pathlib import Path
 import re
@@ -42,36 +41,31 @@ def handleCSV(filename, estimate):
     global ESTIMATE, TOKENS, TOTALTOKENS, TOTALCOST
     ESTIMATE = estimate
 
-    if estimate:
+    with open('translated/' + filename, 'w+t', newline='', encoding='UTF-8') as writeFile:
         start = time.time()
-        translatedData = openFiles(filename)
+        translatedData = openFiles(filename, writeFile)
 
+    if estimate:
         # Print Result
         end = time.time()
         tqdm.write(getResultString(['', TOKENS, None], end - start, filename))
         TOTALCOST += TOKENS * .001 * APICOST
         TOTALTOKENS += TOKENS
         TOKENS = 0
-
-        return getResultString(['', TOTALTOKENS, None], end - start, 'TOTAL')
+        os.remove('translated/' + filename)
     
     else:
-        with open('translated/' + filename, 'w', encoding='UTF-8') as outFile:
-            start = time.time()
-            translatedData = openFiles(filename)
-
-            # Print Result
-            end = time.time()
-            csv.dump(translatedData[0], outFile, ensure_ascii=False)
-            tqdm.write(getResultString(translatedData, end - start, filename))
-            TOTALCOST += translatedData[1] * .001 * APICOST
-            TOTALTOKENS += translatedData[1]
+        # Print Result
+        end = time.time()
+        tqdm.write(getResultString(translatedData, end - start, filename))
+        TOTALCOST += translatedData[1] * .001 * APICOST
+        TOTALTOKENS += translatedData[1]
 
     return getResultString(['', TOTALTOKENS, None], end - start, 'TOTAL')
 
-def openFiles(filename):
-    with open('files/' + filename, 'r', encoding='UTF-8') as f:
-        translatedData = parseCSV(f, filename)
+def openFiles(filename, writeFile):
+    with open('files/' + filename, 'r', encoding='UTF-8') as readFile, writeFile:
+        translatedData = parseCSV(readFile, writeFile, filename)
 
     return translatedData
 
@@ -90,42 +84,42 @@ def getResultString(translatedData, translationTime, filename):
         try:
             raise translatedData[2]
         except Exception as e:
-            errorString = str(e) + Fore.RED
+            errorString = str(e) + '|' + translatedData[3] + Fore.RED
             return filename + ': ' + tokenString + timeString + Fore.RED + u' \u2717 ' +\
                 errorString + Fore.RESET
         
-def parseCSV(data, filename):
+def parseCSV(readFile, writeFile, filename):
     totalTokens = 0
     totalLines = 0
     global LOCK
 
     # Get total for progress bar
-    totalLines = len(data.readlines())
-    data.seek(0)
+    totalLines = len(readFile.readlines())
+    readFile.seek(0)
 
-    # Read File
-    reader = csv.reader(data, delimiter=',', quotechar='"')
+    reader = csv.reader(readFile, delimiter=',')
+    writer = csv.writer(writeFile, delimiter=',', quoting=csv.QUOTE_NONNUMERIC)
 
     with tqdm(bar_format=BAR_FORMAT, position=POSITION, total=totalLines, leave=LEAVE) as pbar:
         pbar.desc=filename
         pbar.total=totalLines
         with ThreadPoolExecutor(max_workers=THREADS) as executor:
-            futures = [executor.submit(translateCSV, row, pbar) for row in reader]
+            futures = [executor.submit(translateCSV, row, pbar, writer) for row in reader]
 
             for future in as_completed(futures):
                 try:
                     totalTokens += future.result()
                 except Exception as e:
-                    return [data, totalTokens, e]
-    return [data, totalTokens, None]
+                    tracebackLineNo = str(traceback.extract_tb(sys.exc_info()[2])[-1].lineno)
+                    return [reader, totalTokens, e, tracebackLineNo]
+    return [reader, totalTokens, None]
 
-def translateCSV(row, pbar):
+def translateCSV(row, pbar, writer):
     translatedText = ''
     textHistory = []
     maxHistory = MAXHISTORY
     tokens = 0
-    speaker = ''
-    global LOCK
+    global LOCK, ESTIMATE
 
     try:
         jaString = row[0]
@@ -139,14 +133,19 @@ def translateCSV(row, pbar):
         # Translate
         response = translateGPT(jaString, 'Previous text for context: ' + ' '.join(textHistory))
 
+        # Check if there is an actual difference first
+        if response[0] != row[0]:
+            translatedText = response[0]
+        else:
+            translatedText = row[1]
         tokens += response[1]
-        translatedText = response[0]
 
         # ReSub Vars
         translatedText = re.sub(r'\[([\\a-zA-Z]+)\|([a-zA-Z0-9]+)]', r'\1[\2]', translatedText)
+        translatedText = re.sub('"', "'", translatedText)
 
         # TextHistory is what we use to give GPT Context, so thats appended here.
-        textHistory.append(speaker + ': ' + translatedText)
+        textHistory.append(': ' + translatedText)
 
         # Textwrap
         translatedText = textwrap.fill(translatedText, width=WIDTH)
@@ -158,12 +157,17 @@ def translateCSV(row, pbar):
         if len(textHistory) > maxHistory:
             textHistory.pop(0)
 
+        if not ESTIMATE:
+            writer.writerow(row)
+
         with LOCK:
             pbar.update(1)
 
     except Exception as e:
         tracebackLineNo = str(traceback.extract_tb(sys.exc_info()[2])[-1].lineno)
         raise Exception(str(e) + '|Line:' + tracebackLineNo + '| Failed to translate: ' + jaString) 
+    
+    return tokens
     
 
 @retry(exceptions=Exception, tries=5, delay=5)
