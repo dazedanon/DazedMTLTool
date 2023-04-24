@@ -140,7 +140,7 @@ def getResultString(translatedData, translationTime, filename):
         try:
             raise translatedData[2]
         except Exception as e:
-            errorString = str(e) + Fore.RED
+            errorString = str(e) + '|' + translatedData[3] + Fore.RED
             return filename + ': ' + tokenString + timeString + Fore.RED + u' \u2717 ' +\
                 errorString + Fore.RESET
 
