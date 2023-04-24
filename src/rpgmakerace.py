@@ -645,26 +645,11 @@ def searchSystem(data, pbar):
         if term != '@messages':
             termList = data['@terms'][term]
             for i in range(len(termList)):  # Last item is a messages object
-                if termList[i] is not None:
+                if termList[i] is not None and 'json' not in term:
                     response = translateGPT(termList[i], context)
                     tokens += response[1]
                     termList[i] = response[0].strip('.\"')
                     pbar.update(1)
-
-    # Messages
-    messages = (data['@terms']['@messages'])
-    for key, value in messages.items():
-        response = translateGPT(value, 'Reply with only the english translated answer')
-        translatedText = response[0]
-
-        # Remove characters that may break scripts
-        charList = ['.', '\"', '\\n']
-        for char in charList:
-            translatedText = translatedText.replace(char, '')
-
-        tokens += response[1]
-        messages[key] = translatedText
-        pbar.update(1)
     
     return tokens
 
