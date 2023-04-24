@@ -286,7 +286,7 @@ def parseSystem(data, filename):
             return [data, totalTokens, e]
     return [data, totalTokens, None]
 
-def searchThings(name, pbar, context):
+def searchThings(name, pbar):
     tokens = 0
 
     # Set the context of what we are translating
