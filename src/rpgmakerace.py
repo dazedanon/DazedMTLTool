@@ -46,7 +46,7 @@ CODE355655 = False
 CODE357 = False
 
 def handleACE(filename, estimate):
-    global ESTIMATE, TOKENS, TOTALTOKENS, TOTALCOST
+    global ESTIMATE, TOTALTOKENS, TOTALCOST, LOCK
     ESTIMATE = estimate
 
     if estimate:
@@ -55,12 +55,11 @@ def handleACE(filename, estimate):
 
         # Print Result
         end = time.time()
-        tqdm.write(getResultString(['', TOKENS, None], end - start, filename))
-        TOTALCOST += TOKENS * .001 * APICOST
-        TOTALTOKENS += TOKENS
-        TOKENS = 0
+        tqdm.write(getResultString(translatedData, end - start, filename))
 
-        return getResultString(['', TOTALTOKENS, None], end - start, 'TOTAL')
+        with LOCK:
+            TOTALCOST += translatedData[1] * .001 * APICOST
+            TOTALTOKENS += translatedData[1]
     
     else:
         with open('translated/' + filename, 'w', encoding='UTF-8') as outFile:
@@ -71,6 +70,8 @@ def handleACE(filename, estimate):
             end = time.time()
             json.dump(translatedData[0], outFile, ensure_ascii=False)
             tqdm.write(getResultString(translatedData, end - start, filename))
+
+        with LOCK:
             TOTALCOST += translatedData[1] * .001 * APICOST
             TOTALTOKENS += translatedData[1]
 
@@ -92,8 +93,8 @@ def openFiles(filename):
         elif 'Actors' in filename:
             translatedData = parseNames(data, filename, 'Actors')
 
-        # Armor File
-        elif 'Actors' in filename:
+        # Armors File
+        elif 'Armors' in filename:
             translatedData = parseThings(data, filename, 'Armor')
         
         # Classes File
@@ -103,6 +104,8 @@ def openFiles(filename):
         # Items File
         elif 'Items' in filename:
             translatedData = parseThings(data, filename, 'Items')
+
+        # Enemies File
 
         # MapInfo File
         elif 'MapInfos' in filename:
@@ -255,8 +258,8 @@ def parseSystem(data, filename):
     for term in data['@terms']:
         termList = data['@terms'][term]
         totalLines += len(termList)
-    totalLines += len(data['@gameTitle'])
-    totalLines += len(data['@terms']['@messages'])
+    totalLines += len(data['@game_title'])
+    totalLines += len(data['@terms']['@params'])
                 
     with tqdm(bar_format=BAR_FORMAT, position=POSITION, total=totalLines, leave=LEAVE) as pbar:
         pbar.desc=filename
@@ -323,7 +326,6 @@ def searchNames(name, pbar, context):
     return tokens
 
 def searchCodes(page, pbar):
-    text = ''
     translatedText = ''
     currentGroup = []
     textHistory = []
@@ -603,12 +605,12 @@ def searchSS(state, pbar):
     tokens = 0
     responseList = [0] * 6
 
-    responseList[0] = (translateGPT(state['message1'], 'Reply with only the message.'))
-    responseList[1] = (translateGPT(state['message2'], 'Reply with only the message.'))
-    responseList[2] = (translateGPT(state.get('message3', ''), 'Reply with only the message.'))
-    responseList[3] = (translateGPT(state.get('message4', ''), 'Reply with only the message.'))
-    responseList[4] = (translateGPT(state['name'], 'Reply with only the state name.'))
-    responseList[5] = (translateGPT(state['note'], 'Reply with only the note.'))
+    responseList[0] = (translateGPT(state['@message1'], 'Reply with only the message.'))
+    responseList[1] = (translateGPT(state['@message2'], 'Reply with only the message.'))
+    responseList[2] = (translateGPT(state.get('@message3', ''), 'Reply with only the message.'))
+    responseList[3] = (translateGPT(state.get('@message4', ''), 'Reply with only the message.'))
+    responseList[4] = (translateGPT(state['@name'], 'Reply with only the state name.'))
+    responseList[5] = (translateGPT(state['@note'], 'Reply with only the note.'))
 
     # Put all our translations in a list
     for i in range(len(responseList)):
@@ -616,14 +618,14 @@ def searchSS(state, pbar):
         responseList[i] = responseList[i][0]
     
     # Set Data
-    state['message1'] = responseList[0]
-    state['message2'] = responseList[1]
+    state['@message1'] = responseList[0]
+    state['@message2'] = responseList[1]
     if responseList[2] != '':
-        state['message3'] = responseList[2]
+        state['@message3'] = responseList[2]
     if responseList[3] != '':
-        state['message4'] = responseList[3]
-    state['name'] = responseList[4].strip('.')
-    state['note'] = responseList[5]
+        state['@message4'] = responseList[3]
+    state['@name'] = responseList[4].strip('.')
+    state['@note'] = responseList[5]
 
     pbar.update(1)
     return tokens
@@ -633,9 +635,9 @@ def searchSystem(data, pbar):
     context = 'Reply with only the menu item.'
 
     # Title
-    response = translateGPT(data['@gameTitle'], context)
+    response = translateGPT(data['@game_title'], context)
     tokens += response[1]
-    data['@gameTitle'] = response[0].strip('.')
+    data['@game_title'] = response[0].strip('.')
     pbar.update(1)
     
     # Terms
@@ -671,10 +673,9 @@ def translateGPT(t, history):
     with LOCK:
         # If ESTIMATE is True just count this as an execution and return.
         if ESTIMATE:
-            global TOKENS
             enc = tiktoken.encoding_for_model("gpt-3.5-turbo")
-            TOKENS += len(enc.encode(t)) * 2 + len(enc.encode(history)) + len(enc.encode(PROMPT))
-            return (t, 0)
+            tokens = len(enc.encode(t)) * 2 + len(enc.encode(history)) + len(enc.encode(PROMPT))
+            return (t, tokens)
     
     # If there isn't any Japanese in the text just skip
     if not re.search(r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴ]+', t):
