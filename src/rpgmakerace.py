@@ -105,11 +105,9 @@ def openFiles(filename):
         elif 'Items' in filename:
             translatedData = parseThings(data, filename, 'Items')
 
-        # Enemies File
-
         # MapInfo File
         elif 'MapInfos' in filename:
-            translatedData = parseNames(data, filename, 'MapInfos')
+            translatedData = parseMapInfos(data, filename)
 
         # Skills File
         elif 'Skills' in filename:
@@ -175,6 +173,23 @@ def parseMap(data, filename):
                                     totalTokens += future.result()
                                 except Exception as e:
                                     return [data, totalTokens, e]
+    return [data, totalTokens, None]
+
+def parseMapInfos(data, filename):
+    totalTokens = 0
+    totalLines = 0
+    totalLines += len(data)
+                
+    with tqdm(bar_format=BAR_FORMAT, position=POSITION, total=totalLines, leave=LEAVE) as pbar:
+            pbar.desc=filename
+            pbar.total=totalLines
+            for name in data.items():
+                if name is not None:
+                    try:
+                        result = searchMapInfos(name, pbar)       
+                        totalTokens += result
+                    except Exception as e:
+                        return [data, totalTokens, e]
     return [data, totalTokens, None]
 
 def parseCommonEvents(data, filename):
@@ -293,6 +308,15 @@ def searchThings(name, pbar, context):
 
     return tokens
 
+def searchMapInfos(name, pbar):
+    response = translateGPT(name[1]['@name'], 'Reply with only the map name.')
+    tokens = response[1]
+    translatedText = response[0]
+    name[1]['@name'] = translatedText
+    pbar.update(1)
+
+    return tokens
+
 def searchNames(name, pbar, context):
     tokens = 0
 
@@ -301,8 +325,6 @@ def searchNames(name, pbar, context):
         newContext = 'Reply with only the actor name'
     if 'Classes' in context:
         newContext = 'Reply with only the class name'
-    if 'MapInfos' in context:
-        newContext = 'Reply with only the map name'
 
     responseList = []
     responseList.append(translateGPT(name['@name'], newContext))
