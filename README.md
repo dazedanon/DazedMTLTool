@@ -2,7 +2,7 @@
 
 ![image](https://user-images.githubusercontent.com/96628874/230908699-adacb5e1-1548-4116-a0ea-a33297cdafa4.png)
 
-Currently in development. Goal is to eventually have ChatGPT nicely translate all dialogue when given an RPGMaker JSON file.
+Currently in development. Goal is to eventually have ChatGPT nicely translate all dialogue when given a specific file or list of files.
 
 ## Currently Supported:
 * RPGMaker MV & MZ
