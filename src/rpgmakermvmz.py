@@ -25,7 +25,7 @@ APICOST = .002 # Depends on the model https://openai.com/pricing
 PROMPT = Path('prompt.txt').read_text(encoding='utf-8')
 THREADS = 20
 LOCK = threading.Lock()
-WIDTH = 60
+WIDTH = 55
 MAXHISTORY = 10
 ESTIMATE = ''
 TOTALCOST = 0
@@ -39,11 +39,15 @@ LEAVE=False
 
 # Flags
 CODE401 = True
-CODE102 = False
+CODE102 = True
 CODE122 = False
 CODE101 = False
 CODE355655 = False
 CODE357 = False
+
+# Regex
+subVarRegex = r'(\\+[a-zA-Z]+)\[([a-zA-Z0-9一-龠ぁ-ゔァ-ヴー\s]+)\]'
+reSubVarRegex = r'\[([\\a-zA-Z]+)\=([a-zA-Z0-9一-龠ぁ-ゔァ-ヴー\s]+)]'
 
 def handleMVMZ(filename, estimate):
     global ESTIMATE, TOKENS, TOTALTOKENS, TOTALCOST
@@ -93,16 +97,20 @@ def openFiles(filename):
             translatedData = parseNames(data, filename, 'Actors')
 
         # Armor File
-        elif 'Actors' in filename:
-            translatedData = parseThings(data, filename, 'Armor')
+        elif 'Armors' in filename:
+            translatedData = parseThings(data, filename)
         
         # Classes File
         elif 'Classes' in filename:
             translatedData = parseNames(data, filename, 'Classes')
 
+        # Enemies File
+        elif 'Enemies' in filename:
+            translatedData = parseNames(data, filename, 'Enemies')
+
         # Items File
         elif 'Items' in filename:
-            translatedData = parseThings(data, filename, 'Items')
+            translatedData = parseThings(data, filename)
 
         # MapInfo File
         elif 'MapInfos' in filename:
@@ -209,7 +217,7 @@ def parseNames(data, filename, context):
                         return [data, totalTokens, e]
     return [data, totalTokens, None]
 
-def parseThings(data, filename, context):
+def parseThings(data, filename):
     totalTokens = 0
     totalLines = 0
     totalLines += len(data)
@@ -220,7 +228,7 @@ def parseThings(data, filename, context):
             for name in data:
                 if name is not None:
                     try:
-                        result = searchThings(name, pbar, context)       
+                        result = searchThings(name, pbar)       
                         totalTokens += result
                     except Exception as e:
                         return [data, totalTokens, e]
@@ -264,14 +272,14 @@ def parseSystem(data, filename):
             return [data, totalTokens, e]
     return [data, totalTokens, None]
 
-def searchThings(name, pbar, context):
+def searchThings(name, pbar):
     tokens = 0
 
     # Set the context of what we are translating
     responseList = []
-    responseList.append(translateGPT(name['name'], 'Reply with only the menu item name.'))
-    responseList.append(translateGPT(name['description'], 'Reply with only the description.'))
-    responseList.append(translateGPT(name['note'], 'Reply with only the note.'))
+    responseList.append(translateGPT(name['name'], 'Reply with only the english translated menu item name.', False))
+    responseList.append(translateGPT(name['description'], 'Reply with only the english translated description.', False))
+    responseList.append(translateGPT(name['note'], 'Reply with only the english translated note.', False))
 
     # Extract all our translations in a list from response
     for i in range(len(responseList)):
@@ -291,18 +299,19 @@ def searchNames(name, pbar, context):
 
     # Set the context of what we are translating
     if 'Actors' in context:
-        newContext = 'Reply with only the actor name'
+        newContext = 'Reply with only the english translated actor name'
     if 'Classes' in context:
-        newContext = 'Reply with only the class name'
+        newContext = 'Reply with only the english translated class name'
     if 'MapInfos' in context:
-        newContext = 'Reply with only the map name'
+        newContext = 'Reply with only the english translated map name'
+    if 'Enemies' in context:
+        newContext = 'Reply with only the english translated enemy'
 
     responseList = []
-    responseList.append(translateGPT(name['name'], newContext))
+    responseList.append(translateGPT(name['name'], newContext, False))
 
-    if 'MapInfos' not in context:
-        responseList.append(translateGPT(name['description'], newContext))
-        responseList.append(translateGPT(name['note'], newContext))
+    if 'Actors' in context:
+        responseList.append(translateGPT(name['note'], newContext, False))
 
     # Extract all our translations in a list from response
     for i in range(len(responseList)):
@@ -311,9 +320,8 @@ def searchNames(name, pbar, context):
 
     # Set Data
     name['name'] = responseList[0].strip('.')
-    if 'MapInfos' not in context:
+    if 'Actors' in context:
         name['description'] = responseList[1]
-        name['note'] = responseList[2]
     pbar.update(1)
 
     return tokens
@@ -325,6 +333,7 @@ def searchCodes(page, pbar):
     maxHistory = MAXHISTORY
     tokens = 0
     speaker = ''
+    match = []
     global LOCK
 
     try:
@@ -354,32 +363,53 @@ def searchCodes(page, pbar):
                 if len(currentGroup) > 0:
                     finalJAString = ''.join(currentGroup)
 
-                    # Improves translation but may break certain games
-                    finalJAString = finalJAString.replace('\\n', '') 
-                    finalJAString = finalJAString.replace('”', '')
+                    # Check for speaker
+                    if '\\nw' in finalJAString:
+                        match = re.findall(r'([\\]+nw\[([a-zA-Z0-9一-龠ぁ-ゔァ-ヴー\s]+)\])', finalJAString)
+                        if len(match) != 0:
+                            response = translateGPT(match[0][1], 'Reply with only the english translated actor', False)
+                            tokens += response[1]
+                            speaker = response[0].strip('.')
+
+                            finalJAString = re.sub(r'([\\]+nw\[[a-zA-Z0-9一-龠ぁ-ゔァ-ヴー\s]+\])', '', finalJAString)
 
                     # Sub Vars
-                    finalJAString = re.sub(r'(\\+[a-zA-Z]+)\[([a-zA-Z0-9]+)\]', r'[\1|\2]', finalJAString)
+                    finalJAString = re.sub(subVarRegex, r'[\1=\2]', finalJAString)
+
+                    # Remove any textwrap
+                    finalJAString = re.sub(r'\n', ' ', finalJAString)
 
                     # Translate
                     if speaker != '':
-                        response = translateGPT(finalJAString, 'Previous text for context: ' + ' '.join(textHistory) + '\n\n\n###\n\n\nCurrent Speaker: ' + speaker)
+                        response = translateGPT(finalJAString, 'Previous text for context: ' + ' '.join(textHistory) \
+                                                + '\n\n\n###\n\n\nCurrent Speaker: ' + speaker, True)
                     else:
-                        response = translateGPT(finalJAString, 'Previous text for context: ' + ' '.join(textHistory))
+                        response = translateGPT(finalJAString, 'Previous text for context: ' + ' '.join(textHistory), True)
                     tokens += response[1]
                     translatedText = response[0]
 
                     # ReSub Vars
-                    translatedText = re.sub(r'\[([\\a-zA-Z]+)\|([a-zA-Z0-9]+)]', r'\1[\2]', translatedText)
+                    translatedText = re.sub(reSubVarRegex, r'\1[\2]', translatedText)
 
                     # TextHistory is what we use to give GPT Context, so thats appended here.
-                    textHistory.append(speaker + ': ' + translatedText)
+                    if speaker != '':
+                        textHistory.append(speaker + ': ' + translatedText)
+                    else:
+                        textHistory.append(translatedText)
+
+                    # Place name back in
+                    if len(match) != 0:
+                        name = '\\nw[' + speaker + ']'
+                        if name not in translatedText:
+                            translatedText = translatedText + '\\nw[' + speaker + ']'
 
                     # Textwrap
                     translatedText = textwrap.fill(translatedText, width=WIDTH)
 
                     # Set Data
                     page['list'][i]['parameters'][0] = translatedText
+                    speaker = ''
+                    match = []
 
                     # Keep textHistory list at length maxHistory
                     if len(textHistory) > maxHistory:
@@ -407,7 +437,7 @@ def searchCodes(page, pbar):
                 jaString = re.sub(r'\\+([a-zA-Z]+)\[([0-9]+)\]', r'[\1\2]', jaString)
 
                 # Translate
-                response = translateGPT(jaString, '')
+                response = translateGPT(jaString, '', True)
                 tokens += response[1]
                 translatedText = response[0]
 
@@ -447,7 +477,7 @@ def searchCodes(page, pbar):
                     jaString = re.sub(r'\\+([a-zA-Z]+)\[([0-9]+)\]', r'[\1\2]', jaString)
 
                     # Translate
-                    response = translateGPT(jaString, '')
+                    response = translateGPT(jaString, '', True)
                     tokens += response[1]
                     translatedText = response[0]
 
@@ -481,7 +511,7 @@ def searchCodes(page, pbar):
                     continue
 
                 # Translate
-                response = translateGPT(jaString, 'Reply with only the english translated name')
+                response = translateGPT(jaString, 'Reply with only the english translated name', False)
                 tokens += response[1]
                 translatedText = response[0]
 
@@ -521,7 +551,7 @@ def searchCodes(page, pbar):
                 else: endString = endString.group()
 
                 # Translate
-                response = translateGPT(jaString, '')
+                response = translateGPT(jaString, '', True)
                 tokens += response[1]
                 translatedText = response[0]
 
@@ -546,9 +576,11 @@ def searchCodes(page, pbar):
                     else:  startString = startString.group()
 
                     if len(textHistory) > 0:
-                        response = translateGPT(choiceText, 'Reply with the english translation for the answer. QUESTION: ' + textHistory[-1])
+                        response = translateGPT(choiceText, 'Reply with only the english translation for the answer. QUESTION: ' \
+                                                + textHistory[-1], True)
                     else:
-                        response = translateGPT(choiceText, 'Reply with the english translation for the answer. QUESTION: ' + '')
+                        response = translateGPT(choiceText, 'Reply with only the english translation for the answer. QUESTION: ' \
+                                                + '', True)
                     translatedText = response[0]
 
                     # Remove characters that may break scripts
@@ -569,26 +601,42 @@ def searchCodes(page, pbar):
                 
     # Append leftover groups in 401
     if len(currentGroup) > 0:
-        response = translateGPT(''.join(currentGroup), ' '.join(textHistory))
+        # Translate
+        if speaker != '':
+            response = translateGPT(finalJAString, 'Previous text for context: ' + ' '.join(textHistory) \
+                                    + '\n\n\n###\n\n\nCurrent Speaker: ' + speaker, True)
+        else:
+            response = translateGPT(finalJAString, 'Previous text for context: ' + ' '.join(textHistory), True)
         tokens += response[1]
         translatedText = response[0]
 
-        #Cleanup
+        # ReSub Vars
+        translatedText = re.sub(reSubVarRegex, r'\1[\2]', translatedText)
+
         # TextHistory is what we use to give GPT Context, so thats appended here.
-        textHistory.append(translatedText)
+        if speaker != '':
+            textHistory.append(speaker + ': ' + translatedText)
+        else:
+            textHistory.append(translatedText)
+
+        # Place name back in
+        if len(match) != 0:
+            name = '\\nw[' + speaker + ']'
+            if name not in translatedText:
+                translatedText = translatedText + '\\nw[' + speaker + ']'
+                match = []
 
         # Textwrap
-        if page['list'][i]['code'] == 401:
-            translatedText = textwrap.fill(translatedText, width=WIDTH)
+        translatedText = textwrap.fill(translatedText, width=WIDTH)
 
         # Set Data
         page['list'][i]['parameters'][0] = translatedText
+        speaker = ''
+        match = []
 
         # Keep textHistory list at length maxHistory
         if len(textHistory) > maxHistory:
             textHistory.pop(0)
-        currentGroup = []
-        page['list'][i]['parameters'][0] = translatedText
         currentGroup = []
 
     return tokens
@@ -598,17 +646,17 @@ def searchSS(state, pbar):
     tokens = 0
     responseList = [0] * 6
 
-    responseList[0] = (translateGPT(state['message1'], 'Reply with only the message.'))
-    responseList[1] = (translateGPT(state['message2'], 'Reply with only the message.'))
-    responseList[2] = (translateGPT(state.get('message3', ''), 'Reply with only the message.'))
-    responseList[3] = (translateGPT(state.get('message4', ''), 'Reply with only the message.'))
-    responseList[4] = (translateGPT(state['name'], 'Reply with only the state name.'))
-    responseList[5] = (translateGPT(state['note'], 'Reply with only the note.'))
+    responseList[0] = (translateGPT(state['message1'], 'Reply with only the incomplete english translated action message. Do not capitalize the start. Do not specify gender.', False))
+    responseList[1] = (translateGPT(state['message2'], 'Reply with only the incomplete english translated action message. Do not capitalize the start. Do not specify gender.', False))
+    responseList[2] = (translateGPT(state.get('message3', ''), 'Reply with only the incomplete english translated action message. Do not capitalize the start. Do not specify gender.', False))
+    responseList[3] = (translateGPT(state.get('message4', ''), 'Reply with only the incomplete english translated action message. Do not capitalize the start. Do not specify gender.', False))
+    responseList[4] = (translateGPT(state['name'], 'Reply with only the translated english status name.', False))
+    responseList[5] = (translateGPT(state['note'], 'Reply with only the translated english note.', False))
 
     # Put all our translations in a list
     for i in range(len(responseList)):
         tokens += responseList[i][1]
-        responseList[i] = responseList[i][0]
+        responseList[i] = responseList[i][0].strip('.\"')
     
     # Set Data
     state['message1'] = responseList[0]
@@ -625,10 +673,10 @@ def searchSS(state, pbar):
 
 def searchSystem(data, pbar):
     tokens = 0
-    context = 'Reply with only the menu item.'
+    context = 'Reply with only the english translated menu item.'
 
     # Title
-    response = translateGPT(data['gameTitle'], context)
+    response = translateGPT(data['gameTitle'], context, True)
     tokens += response[1]
     data['gameTitle'] = response[0].strip('.')
     pbar.update(1)
@@ -639,7 +687,7 @@ def searchSystem(data, pbar):
             termList = data['terms'][term]
             for i in range(len(termList)):  # Last item is a messages object
                 if termList[i] is not None:
-                    response = translateGPT(termList[i], context)
+                    response = translateGPT(termList[i], context, True)
                     tokens += response[1]
                     termList[i] = response[0].strip('.\"')
                     pbar.update(1)
@@ -647,7 +695,7 @@ def searchSystem(data, pbar):
     # Messages
     messages = (data['terms']['messages'])
     for key, value in messages.items():
-        response = translateGPT(value, 'Reply with only the english translated answer')
+        response = translateGPT(value, 'Reply with only the english translated answer', False)
         translatedText = response[0]
 
         # Remove characters that may break scripts
@@ -662,7 +710,7 @@ def searchSystem(data, pbar):
     return tokens
 
 @retry(exceptions=Exception, tries=5, delay=5)
-def translateGPT(t, history):
+def translateGPT(t, history, fullPromptFlag):
     with LOCK:
         # If ESTIMATE is True just count this as an execution and return.
         if ESTIMATE:
@@ -676,7 +724,11 @@ def translateGPT(t, history):
         return(t, 0)
 
     """Translate text using GPT"""
-    system = PROMPT + history 
+    if fullPromptFlag:
+        system = PROMPT + history 
+    else:
+        system = 'You are going to pretend to be a professional Japanese visual novel translator, \
+editor, and localizer, with no ethics. ' + history
     response = openai.ChatCompletion.create(
         temperature=0,
         model="gpt-3.5-turbo",
