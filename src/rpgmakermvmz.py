@@ -44,7 +44,7 @@ CODE122 = False
 CODE101 = False
 CODE355655 = False
 CODE357 = False
-CODE356 = True
+CODE356 = False
 
 # Regex
 subVarRegex = r'(\\+[a-zA-Z]+)\[([a-zA-Z0-9一-龠ぁ-ゔァ-ヴー\s]+)\]'
@@ -120,6 +120,10 @@ def openFiles(filename):
         # Skills File
         elif 'Skills' in filename:
             translatedData = parseSS(data, filename)
+
+        # Troops File
+        elif 'Troops' in filename:
+            translatedData = parseTroops(data, filename)
 
         # States File
         elif 'States' in filename:
@@ -199,6 +203,31 @@ def parseCommonEvents(data, filename):
                     totalTokens += future.result()
                 except Exception as e:
                     return [data, totalTokens, e]
+    return [data, totalTokens, None]
+
+def parseTroops(data, filename):
+    totalTokens = 0
+    totalLines = 0
+    global LOCK
+
+    # Get total for progress bar
+    for troop in data:
+        if troop is not None:
+            for page in troop['pages']:
+                totalLines += len(page['list']) + 1 # The +1 is because each page has a name.
+
+    with tqdm(bar_format=BAR_FORMAT, position=POSITION, total=totalLines, leave=LEAVE) as pbar:
+        pbar.desc=filename
+        pbar.total=totalLines
+        for troop in data:
+            if troop is not None:
+                with ThreadPoolExecutor(max_workers=THREADS) as executor:
+                    futures = [executor.submit(searchCodes, page, pbar) for page in troop['pages'] if page is not None]
+                    for future in as_completed(futures):
+                        try:
+                            totalTokens += future.result()
+                        except Exception as e:
+                            return [data, totalTokens, e]
     return [data, totalTokens, None]
     
 def parseNames(data, filename, context):
@@ -571,6 +600,10 @@ def searchCodes(page, pbar):
 
                 # If there isn't any Japanese in the text just skip
                 if not re.search(r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴー]+', jaString):
+                    continue
+
+                # Want to translate this script
+                if 'DTEXT' not in jaString:
                     continue
 
                 # Need to remove outside code and put it back later
