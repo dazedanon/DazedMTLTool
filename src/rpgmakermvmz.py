@@ -44,6 +44,7 @@ CODE122 = False
 CODE101 = False
 CODE355655 = False
 CODE357 = False
+CODE356 = True
 
 # Regex
 subVarRegex = r'(\\+[a-zA-Z]+)\[([a-zA-Z0-9一-龠ぁ-ゔァ-ヴー\s]+)\]'
@@ -311,6 +312,7 @@ def searchNames(name, pbar, context):
     responseList.append(translateGPT(name['name'], newContext, False))
 
     if 'Actors' in context:
+        responseList.append(translateGPT(name['characterName'], newContext, False))
         responseList.append(translateGPT(name['note'], newContext, False))
 
     # Extract all our translations in a list from response
@@ -321,7 +323,7 @@ def searchNames(name, pbar, context):
     # Set Data
     name['name'] = responseList[0].strip('.')
     if 'Actors' in context:
-        name['description'] = responseList[1]
+        name['characterName'] = responseList[1]
     pbar.update(1)
 
     return tokens
@@ -538,6 +540,37 @@ def searchCodes(page, pbar):
 
                 # Don't want to touch certain scripts
                 if page['list'][i]['code'] == 655 and 'this.' in jaString:
+                    continue
+
+                # Need to remove outside code and put it back later
+                startString = re.search(r'^[^ぁ-んァ-ン一-龯\<\>【】]+', jaString)
+                jaString = re.sub(r'^[^ぁ-んァ-ン一-龯\<\>【】]+', '', jaString)
+                endString = re.search(r'[^ぁ-んァ-ン一-龯\<\>【】]+$', jaString)
+                jaString = re.sub(r'[^ぁ-んァ-ン一-龯\<\>【】]+$', '', jaString)
+                if startString is None: startString = ''
+                else:  startString = startString.group()
+                if endString is None: endString = ''
+                else: endString = endString.group()
+
+                # Translate
+                response = translateGPT(jaString, '', True)
+                tokens += response[1]
+                translatedText = response[0]
+
+                # Remove characters that may break scripts
+                charList = ['.', '\"', '\\n']
+                for char in charList:
+                    translatedText = translatedText.replace(char, '')
+
+                # Set Data
+                page['list'][i]['parameters'][0] = startString + translatedText + endString
+
+            ## Event Code: 356 DTEXT
+            if page['list'][i]['code'] == 356 and CODE356 == True:
+                jaString = page['list'][i]['parameters'][0]
+
+                # If there isn't any Japanese in the text just skip
+                if not re.search(r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴー]+', jaString):
                     continue
 
                 # Need to remove outside code and put it back later
