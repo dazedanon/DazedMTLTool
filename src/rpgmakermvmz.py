@@ -646,11 +646,11 @@ def searchSS(state, pbar):
     tokens = 0
     responseList = [0] * 6
 
-    responseList[0] = (translateGPT(state['message1'], 'Reply with only the incomplete english translated action message. Do not capitalize the start. Do not specify gender.', False))
+    responseList[0] = (translateGPT(state['message1'], 'Reply with only the english translated action message. The sentence is incomplete do not assume a subject. Do not specify gender.', False))
     responseList[1] = (translateGPT(state['message2'], 'Reply with only the incomplete english translated action message. Do not capitalize the start. Do not specify gender.', False))
     responseList[2] = (translateGPT(state.get('message3', ''), 'Reply with only the incomplete english translated action message. Do not capitalize the start. Do not specify gender.', False))
     responseList[3] = (translateGPT(state.get('message4', ''), 'Reply with only the incomplete english translated action message. Do not capitalize the start. Do not specify gender.', False))
-    responseList[4] = (translateGPT(state['name'], 'Reply with only the translated english status name.', False))
+    responseList[4] = (translateGPT(state['name'], 'Reply with only the translated english status name.', True))
     responseList[5] = (translateGPT(state['note'], 'Reply with only the translated english note.', False))
 
     # Put all our translations in a list
@@ -659,7 +659,9 @@ def searchSS(state, pbar):
         responseList[i] = responseList[i][0].strip('.\"')
     
     # Set Data
-    state['message1'] = responseList[0]
+    if responseList[0] != '':
+        if responseList[0][0] != ' ':
+            state['message1'] = ' ' + responseList[0][0].lower() + responseList[0][1:]
     state['message2'] = responseList[1]
     if responseList[2] != '':
         state['message3'] = responseList[2]
