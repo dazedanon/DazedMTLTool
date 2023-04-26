@@ -99,7 +99,7 @@ def openFiles(filename):
 
         # Armor File
         elif 'Armors' in filename:
-            translatedData = parseThings(data, filename)
+            translatedData = parseNames(data, filename, 'Armors')
         
         # Classes File
         elif 'Classes' in filename:
@@ -330,6 +330,8 @@ def searchNames(name, pbar, context):
     # Set the context of what we are translating
     if 'Actors' in context:
         newContext = 'Reply with only the english translated actor name'
+    if 'Armors' in context:
+        newContext = 'Reply with only the english translated armor name'
     if 'Classes' in context:
         newContext = 'Reply with only the english translated class name'
     if 'MapInfos' in context:
@@ -707,7 +709,7 @@ def searchCodes(page, pbar):
 def searchSS(state, pbar):
     '''Searches skills and states json files'''
     tokens = 0
-    responseList = [0] * 6
+    responseList = [0] * 7
 
     responseList[0] = (translateGPT(state['message1'], 'Reply with the english translated Action being performed and no subject.', False))
     responseList[1] = (translateGPT(state['message2'], 'Reply with the english translated Action being performed and no subject.', False))
@@ -715,6 +717,7 @@ def searchSS(state, pbar):
     responseList[3] = (translateGPT(state.get('message4', ''), 'Reply with the english translated Action being performed and no subject..', False))
     responseList[4] = (translateGPT(state['name'], 'Reply with only the english translated RPG status effect name', True))
     responseList[5] = (translateGPT(state['note'], 'Reply with only the translated english note.', False))
+    responseList[6] = (translateGPT(state['description'], 'Reply with the english translated skill description.', False))
 
     # Put all our translations in a list
     for i in range(len(responseList)):
@@ -732,6 +735,9 @@ def searchSS(state, pbar):
         state['message4'] = responseList[3]
     state['name'] = responseList[4].strip('.')
     state['note'] = responseList[5]
+    if responseList[6] != '':
+        state['description'] = responseList[6]
+
 
     pbar.update(1)
     return tokens
@@ -756,6 +762,20 @@ def searchSystem(data, pbar):
                     tokens += response[1]
                     termList[i] = response[0].strip('.\"')
                     pbar.update(1)
+
+    # Armor Types
+    for i in range(len(data['armorTypes'])):
+        response = translateGPT(data['armorTypes'][i], 'Reply with only the english translate armor type', False)
+        tokens += response[1]
+        data['armorTypes'][i] = response[0].strip('.\"')
+        pbar.update(1)
+
+    # Skill Types
+    for i in range(len(data['skillTypes'])):
+        response = translateGPT(data['skillTypes'][i], 'Reply with only the english translate armor type', False)
+        tokens += response[1]
+        data['skillTypes'][i] = response[0].strip('.\"')
+        pbar.update(1)
 
     # Messages
     messages = (data['terms']['messages'])
