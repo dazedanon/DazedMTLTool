@@ -44,7 +44,7 @@ CODE122 = False
 CODE101 = False
 CODE355655 = False
 CODE357 = False
-CODE356 = False
+CODE356 = True
 
 # Regex
 subVarRegex = r'(\\+[a-zA-Z]+)\[([a-zA-Z0-9一-龠ぁ-ゔァ-ヴー\s]+)\]'
@@ -341,7 +341,6 @@ def searchNames(name, pbar, context):
     responseList.append(translateGPT(name['name'], newContext, False))
 
     if 'Actors' in context:
-        responseList.append(translateGPT(name['characterName'], newContext, False))
         responseList.append(translateGPT(name['note'], newContext, False))
 
     # Extract all our translations in a list from response
@@ -351,8 +350,6 @@ def searchNames(name, pbar, context):
 
     # Set Data
     name['name'] = responseList[0].strip('.')
-    if 'Actors' in context:
-        name['characterName'] = responseList[1]
     pbar.update(1)
 
     return tokens
@@ -594,7 +591,7 @@ def searchCodes(page, pbar):
                 # Set Data
                 page['list'][i]['parameters'][0] = startString + translatedText + endString
 
-            ## Event Code: 356 DTEXT
+            ## Event Code: 356 D_TEXT
             if page['list'][i]['code'] == 356 and CODE356 == True:
                 jaString = page['list'][i]['parameters'][0]
 
@@ -603,7 +600,7 @@ def searchCodes(page, pbar):
                     continue
 
                 # Want to translate this script
-                if 'DTEXT' not in jaString:
+                if 'D_TEXT' not in jaString:
                     continue
 
                 # Need to remove outside code and put it back later
@@ -712,11 +709,11 @@ def searchSS(state, pbar):
     tokens = 0
     responseList = [0] * 6
 
-    responseList[0] = (translateGPT(state['message1'], 'Reply with only the english translated action message. The sentence is incomplete do not assume a subject. Do not specify gender.', False))
-    responseList[1] = (translateGPT(state['message2'], 'Reply with only the incomplete english translated action message. Do not capitalize the start. Do not specify gender.', False))
-    responseList[2] = (translateGPT(state.get('message3', ''), 'Reply with only the incomplete english translated action message. Do not capitalize the start. Do not specify gender.', False))
-    responseList[3] = (translateGPT(state.get('message4', ''), 'Reply with only the incomplete english translated action message. Do not capitalize the start. Do not specify gender.', False))
-    responseList[4] = (translateGPT(state['name'], 'Reply with only the translated english status name.', True))
+    responseList[0] = (translateGPT(state['message1'], 'Reply with the english translated Action being performed and no subject.', False))
+    responseList[1] = (translateGPT(state['message2'], 'Reply with the english translated Action being performed and no subject.', False))
+    responseList[2] = (translateGPT(state.get('message3', ''), 'Reply with the english translated Action being performed and no subject..', False))
+    responseList[3] = (translateGPT(state.get('message4', ''), 'Reply with the english translated Action being performed and no subject..', False))
+    responseList[4] = (translateGPT(state['name'], 'Reply with only the english translated RPG status effect name', True))
     responseList[5] = (translateGPT(state['note'], 'Reply with only the translated english note.', False))
 
     # Put all our translations in a list
