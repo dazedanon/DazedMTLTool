@@ -347,7 +347,7 @@ def searchNames(name, pbar, context):
     responseList = []
     responseList.append(translateGPT(name['name'], newContext, False))
     if 'Armors' in context:
-        responseList.append(translateGPT(name['description'], newContext, False))
+        responseList.append(translateGPT(name['description'], newContext, True))
 
 
     # Extract all our translations in a list from response
@@ -358,7 +358,7 @@ def searchNames(name, pbar, context):
     # Set Data
     name['name'] = responseList[0].strip('.')
     if 'Armors' in context:
-        responseList.append(translateGPT(name['description'], newContext, False))
+        name['description'] = responseList[1]
     pbar.update(1)
 
     return tokens
