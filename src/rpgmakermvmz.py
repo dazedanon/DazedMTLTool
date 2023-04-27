@@ -44,7 +44,7 @@ CODE122 = False
 CODE101 = False
 CODE355655 = False
 CODE357 = False
-CODE356 = True
+CODE356 = False
 
 # Regex
 subVarRegex = r'(\\+[a-zA-Z]+)\[([a-zA-Z0-9一-龠ぁ-ゔァ-ヴー\s]+)\]'
@@ -61,9 +61,10 @@ def handleMVMZ(filename, estimate):
         # Print Result
         end = time.time()
         tqdm.write(getResultString(['', TOKENS, None], end - start, filename))
-        TOTALCOST += TOKENS * .001 * APICOST
-        TOTALTOKENS += TOKENS
-        TOKENS = 0
+        with LOCK:
+            TOTALCOST += TOKENS * .001 * APICOST
+            TOTALTOKENS += TOKENS
+            TOKENS = 0
 
         return getResultString(['', TOTALTOKENS, None], end - start, 'TOTAL')
     
@@ -76,8 +77,9 @@ def handleMVMZ(filename, estimate):
             end = time.time()
             json.dump(translatedData[0], outFile, ensure_ascii=False)
             tqdm.write(getResultString(translatedData, end - start, filename))
-            TOTALCOST += translatedData[1] * .001 * APICOST
-            TOTALTOKENS += translatedData[1]
+            with LOCK:
+                TOTALCOST += translatedData[1] * .001 * APICOST
+                TOTALTOKENS += translatedData[1]
 
     return getResultString(['', TOTALTOKENS, None], end - start, 'TOTAL')
 
