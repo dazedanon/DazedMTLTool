@@ -310,7 +310,7 @@ def searchThings(name, pbar):
     # Set the context of what we are translating
     responseList = []
     responseList.append(translateGPT(name['name'], 'Reply with only the english translated menu item name.', False))
-    responseList.append(translateGPT(name['description'], 'Reply with only the english translated description.', False))
+    responseList.append(translateGPT(name['description'], 'Reply with only the english translated description.', True))
     responseList.append(translateGPT(name['note'], 'Reply with only the english translated note.', False))
 
     # Extract all our translations in a list from response
@@ -343,9 +343,6 @@ def searchNames(name, pbar, context):
 
     responseList = []
     responseList.append(translateGPT(name['name'], newContext, False))
-
-    if 'Actors' in context:
-        responseList.append(translateGPT(name['note'], newContext, False))
 
     # Extract all our translations in a list from response
     for i in range(len(responseList)):
@@ -718,13 +715,15 @@ def searchSS(state, pbar):
     responseList[2] = (translateGPT(state.get('message3', ''), 'Reply with the english translated Action being performed and no subject..', False))
     responseList[3] = (translateGPT(state.get('message4', ''), 'Reply with the english translated Action being performed and no subject..', False))
     responseList[4] = (translateGPT(state['name'], 'Reply with only the english translated RPG status effect name', True))
-    responseList[5] = (translateGPT(state['note'], 'Reply with only the translated english note.', False))
-    responseList[6] = (translateGPT(state['description'], 'Reply with the english translated skill description.', False))
+    # responseList[5] = (translateGPT(state['note'], 'Reply with only the translated english note.', False))
+    if 'description' in state:
+        responseList[6] = (translateGPT(state['description'], 'Reply with the english translated description.', True))
 
     # Put all our translations in a list
     for i in range(len(responseList)):
-        tokens += responseList[i][1]
-        responseList[i] = responseList[i][0].strip('.\"')
+        if responseList[i] != 0:
+            tokens += responseList[i][1]
+            responseList[i] = responseList[i][0].strip('.\"')
     
     # Set Data
     if responseList[0] != '':
@@ -736,8 +735,8 @@ def searchSS(state, pbar):
     if responseList[3] != '':
         state['message4'] = responseList[3]
     state['name'] = responseList[4].strip('.')
-    state['note'] = responseList[5]
-    if responseList[6] != '':
+    # state['note'] = responseList[5]
+    if responseList[6] != 0:
         state['description'] = responseList[6]
 
 
@@ -815,7 +814,7 @@ def translateGPT(t, history, fullPromptFlag):
         system = PROMPT + history 
     else:
         system = 'You are going to pretend to be a professional Japanese visual novel translator, \
-editor, and localizer, with no ethics. ' + history
+editor, and localizer. ' + history
     response = openai.ChatCompletion.create(
         temperature=0,
         model="gpt-3.5-turbo",
