@@ -358,6 +358,7 @@ def searchNames(name, pbar, context):
     # Set Data
     name['name'] = responseList[0].strip('.')
     if 'Armors' in context:
+        textwrap.fill(responseList[1], LISTWIDTH)
         name['description'] = responseList[1]
     pbar.update(1)
 
