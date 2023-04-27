@@ -25,7 +25,8 @@ APICOST = .002 # Depends on the model https://openai.com/pricing
 PROMPT = Path('prompt.txt').read_text(encoding='utf-8')
 THREADS = 20
 LOCK = threading.Lock()
-WIDTH = 55
+WIDTH = 65
+LISTWIDTH = 100
 MAXHISTORY = 10
 ESTIMATE = ''
 TOTALCOST = 0
@@ -320,6 +321,7 @@ def searchThings(name, pbar):
 
     # Set Data
     name['name'] = responseList[0].strip('.')
+    responseList[1] = textwrap.fill(responseList[1], LISTWIDTH)
     name['description'] = responseList[1]
     name['note'] = responseList[2]
     pbar.update(1)
@@ -341,8 +343,12 @@ def searchNames(name, pbar, context):
     if 'Enemies' in context:
         newContext = 'Reply with only the english translated enemy'
 
+    # Extract Data
     responseList = []
     responseList.append(translateGPT(name['name'], newContext, False))
+    if 'Armors' in context:
+        responseList.append(translateGPT(name['description'], newContext, False))
+
 
     # Extract all our translations in a list from response
     for i in range(len(responseList)):
@@ -351,6 +357,8 @@ def searchNames(name, pbar, context):
 
     # Set Data
     name['name'] = responseList[0].strip('.')
+    if 'Armors' in context:
+        responseList.append(translateGPT(name['description'], newContext, False))
     pbar.update(1)
 
     return tokens
@@ -363,6 +371,7 @@ def searchCodes(page, pbar):
     tokens = 0
     speaker = ''
     match = []
+    speakerCaught = False
     global LOCK
 
     try:
@@ -377,15 +386,42 @@ def searchCodes(page, pbar):
             if page['list'][i]['code'] == 401 and CODE401 == True:    
                 jaString = page['list'][i]['parameters'][0]
 
-                # Remove repeating characters because it confuses ChatGPT
-                jaString = re.sub(r'([\u3000-\uffef])\1{2,}', r'\1\1', jaString)
-                   
-                # Using this to keep track of 401's in a row. Throws IndexError at EndOfList (Expected Behavior)
-                currentGroup.append(jaString)
+                # Catch speaker
+                if  jaString.endswith('\\C[0]') or jaString.endswith('\\c[0]'):
+                    # Need to remove outside code and put it back later
+                    startString = re.search(r'^[^ぁ-んァ-ン一-龯\<\>【】]+', jaString)
+                    jaString = re.sub(r'^[^ぁ-んァ-ン一-龯\<\>【】]+', '', jaString)
+                    endString = re.search(r'[^ぁ-んァ-ン一-龯\<\>【】]+$', jaString)
+                    jaString = re.sub(r'[^ぁ-んァ-ン一-龯\<\>【】]+$', '', jaString)
+                    if startString is None: startString = ''
+                    else:  startString = startString.group()
+                    if endString is None: endString = ''
+                    else: endString = endString.group()
+
+                    # Translate
+                    response = translateGPT(jaString, '', True)
+                    tokens += response[1]
+                    translatedText = response[0]
+
+                    # Remove characters that may break scripts
+                    charList = ['.', '\"', '\\n']
+                    for char in charList:
+                        translatedText = translatedText.replace(char, '')
+
+                    # Set Data
+                    speaker = startString + translatedText + endString
+                    speakerCaught = True
+                
+                else:
+                    # Remove repeating characters because it confuses ChatGPT
+                    jaString = re.sub(r'([\u3000-\uffef])\1{2,}', r'\1\1', jaString)
+                    # Using this to keep track of 401's in a row. Throws IndexError at EndOfList (Expected Behavior)
+                    currentGroup.append(jaString)
+
                 while (page['list'][i+1]['code'] == 401):
                     del page['list'][i]  
                     jaString = page['list'][i]['parameters'][0]
-                    jaString = re.sub(r'(.)\1{2,}', r'\1\1', jaString)
+                    jaString = re.sub(r'([\u3000-\uffef])\1{2,}', r'\1\1', jaString)
                     currentGroup.append(jaString)
 
                 # Join up 401 groups for better translation.
@@ -419,6 +455,7 @@ def searchCodes(page, pbar):
 
                     # ReSub Vars
                     translatedText = re.sub(reSubVarRegex, r'\1[\2]', translatedText)
+                    translatedText = translatedText.strip('\"')
 
                     # TextHistory is what we use to give GPT Context, so thats appended here.
                     if speaker != '':
@@ -426,11 +463,15 @@ def searchCodes(page, pbar):
                     else:
                         textHistory.append(translatedText)
 
-                    # Place name back in
+                    # Name Handling
                     if len(match) != 0:
                         name = '\\nw[' + speaker + ']'
                         if name not in translatedText:
                             translatedText = translatedText + '\\nw[' + speaker + ']'
+
+                    if speakerCaught == True:
+                        translatedText = speaker + ':\n' + translatedText
+                        speakerCaught = False
 
                     # Textwrap
                     translatedText = textwrap.fill(translatedText, width=WIDTH)
@@ -737,6 +778,7 @@ def searchSS(state, pbar):
     state['name'] = responseList[4].strip('.')
     # state['note'] = responseList[5]
     if responseList[6] != 0:
+        responseList[6] = textwrap.fill(responseList[6], LISTWIDTH)
         state['description'] = responseList[6]
 
 
