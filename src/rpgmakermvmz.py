@@ -399,54 +399,59 @@ def searchCodes(page, pbar):
                 jaString = page['list'][i]['parameters'][0]
 
                 # Catch speaker (Disable this if no names)
-                if  jaString.startswith('\\'):
+                # if  jaString.startswith('\\'):
 
-                    # If there isn't any Japanese in the text just skip
-                    if not re.search(r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴ]+', jaString):
-                        # TextHistory is what we use to give GPT Context, so thats appended here.
-                        rawJAString = re.sub(r'[\\<>]+[a-zA-Z]+\[[0-9]+\]', '', jaString)
-                        textHistory.append(rawJAString)
-                        continue
+                #     # If there isn't any Japanese in the text just skip
+                #     if not re.search(r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴ]+', jaString):
+                #         # TextHistory is what we use to give GPT Context, so thats appended here.
+                #         rawJAString = re.sub(r'[\\<>]+[a-zA-Z]+\[[0-9]+\]', '', jaString)
+                #         textHistory.append(rawJAString)
+                #         continue
                     
-                    # Need to remove outside code and put it back later
-                    startString = re.search(r'^[^ぁ-んァ-ン一-龯【】]+', jaString)
-                    jaString = re.sub(r'^[^ぁ-んァ-ン一-龯【】]+', '', jaString)
-                    endString = re.search(r'[^ぁ-んァ-ン一-龯【】]+$', jaString)
-                    jaString = re.sub(r'[^ぁ-んァ-ン一-龯【】]+$', '', jaString)
-                    if startString is None: startString = ''
-                    else:  startString = startString.group()
-                    if endString is None: endString = ''
-                    else: endString = endString.group()
+                #     # Need to remove outside code and put it back later
+                #     startString = re.search(r'^[^ぁ-んァ-ン一-龯【】]+', jaString)
+                #     jaString = re.sub(r'^[^ぁ-んァ-ン一-龯【】]+', '', jaString)
+                #     endString = re.search(r'[^ぁ-んァ-ン一-龯【】]+$', jaString)
+                #     jaString = re.sub(r'[^ぁ-んァ-ン一-龯【】]+$', '', jaString)
+                #     if startString is None: startString = ''
+                #     else:  startString = startString.group()
+                #     if endString is None: endString = ''
+                #     else: endString = endString.group()
 
-                    # Sub Vars
-                    jaString = re.sub(subVarRegex, r'<\1\2>', jaString)
+                #     # Sub Vars
+                #     jaString = re.sub(subVarRegex, r'<\1\2>', jaString)
 
-                    # Translate
-                    response = translateGPT(jaString, '', True)
-                    tokens += response[1]
-                    translatedText = response[0]
+                #     # Translate
+                #     response = translateGPT(jaString, '', True)
+                #     tokens += response[1]
+                #     translatedText = response[0]
 
-                    # ReSub Vars
-                    translatedText = re.sub(reSubVarRegex, r'\1[\2]', translatedText)
-                    translatedText = translatedText.strip('\"')
+                #     # ReSub Vars
+                #     translatedText = re.sub(reSubVarRegex, r'\1[\2]', translatedText)
+                #     translatedText = translatedText.strip('\"')
 
-                    # Remove characters that may break scripts
-                    charList = ['.', '\"', '\\n']
-                    for char in charList:
-                        translatedText = translatedText.replace(char, '')
+                #     # Remove characters that may break scripts
+                #     charList = ['.', '\"', '\\n']
+                #     for char in charList:
+                #         translatedText = translatedText.replace(char, '')
 
-                    # Set Data
-                    speaker = translatedText
-                    speakerRaw = startString + translatedText + endString
-                    startString = ''
-                    endString = ''
-                    speakerCaught = True
+                #     # Set Data
+                #     speaker = translatedText
+                #     speakerRaw = startString + translatedText + endString
+                #     startString = ''
+                #     endString = ''
+                #     speakerCaught = True
                 
-                else:
-                    # Remove repeating characters because it confuses ChatGPT
-                    jaString = re.sub(r'([\u3000-\uffef])\1{2,}', r'\1\1', jaString)
-                    # Using this to keep track of 401's in a row. Throws IndexError at EndOfList (Expected Behavior)
-                    currentGroup.append(jaString)
+                # else:
+                #     # Remove repeating characters because it confuses ChatGPT
+                #     jaString = re.sub(r'([\u3000-\uffef])\1{2,}', r'\1\1', jaString)
+                #     # Using this to keep track of 401's in a row. Throws IndexError at EndOfList (Expected Behavior)
+                #     currentGroup.append(jaString)
+
+                # Remove repeating characters because it confuses ChatGPT
+                jaString = re.sub(r'([\u3000-\uffef])\1{2,}', r'\1\1', jaString)
+                # Using this to keep track of 401's in a row. Throws IndexError at EndOfList (Expected Behavior)
+                currentGroup.append(jaString)
 
                 while (page['list'][i+1]['code'] == 401):
                     del page['list'][i]  
