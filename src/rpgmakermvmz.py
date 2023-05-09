@@ -166,6 +166,12 @@ def parseMap(data, filename):
     events = data['events']
     global LOCK
 
+    # Translate displayName for Map files
+    if 'Map' in filename:
+        response = translateGPT(data['displayName'], 'Reply with only the english translated name', False)
+        totalTokens += response[1]
+        data['displayName'] = response[0].strip('.\"')
+
     # Get total for progress bar
     for event in events:
         if event is not None:
@@ -359,8 +365,8 @@ def searchNames(name, pbar, context):
     # Set Data
     name['name'] = responseList[0].strip('.\"')
     if 'Armors' in context or 'Weapons' in context:
-        textwrap.fill(responseList[1], LISTWIDTH)
-        name['description'] = responseList[1].strip('\"')
+        translatedText = textwrap.fill(responseList[1], LISTWIDTH)
+        name['description'] = translatedText.strip('\"')
     pbar.update(1)
 
     return tokens
