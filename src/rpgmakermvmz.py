@@ -874,16 +874,23 @@ def searchSystem(data, pbar):
 
     # Armor Types
     for i in range(len(data['armorTypes'])):
-        response = translateGPT(data['armorTypes'][i], 'Reply with only the english translate armor type', False)
+        response = translateGPT(data['armorTypes'][i], 'Reply with only the english translated armor type', False)
         tokens += response[1]
         data['armorTypes'][i] = response[0].strip('.\"')
         pbar.update(1)
 
     # Skill Types
     for i in range(len(data['skillTypes'])):
-        response = translateGPT(data['skillTypes'][i], 'Reply with only the english translate armor type', False)
+        response = translateGPT(data['skillTypes'][i], 'Reply with only the english translated skill type', False)
         tokens += response[1]
         data['skillTypes'][i] = response[0].strip('.\"')
+        pbar.update(1)
+
+    # Equip Types
+    for i in range(len(data['equipTypes'])):
+        response = translateGPT(data['equipTypes'][i], 'Reply with only the english translated equipment type. No disclaimers.', False)
+        tokens += response[1]
+        data['equipTypes'][i] = response[0].strip('.\"')
         pbar.update(1)
 
     # Messages
