@@ -25,7 +25,7 @@ APICOST = .002 # Depends on the model https://openai.com/pricing
 PROMPT = Path('prompt.txt').read_text(encoding='utf-8')
 THREADS = 20
 LOCK = threading.Lock()
-WIDTH = 60
+WIDTH = 55
 LISTWIDTH = 75
 MAXHISTORY = 10
 ESTIMATE = ''
@@ -443,10 +443,10 @@ def searchCodes(page, pbar):
 
                     # Translate
                     if speaker != '':
-                        response = translateGPT(finalJAString, 'Previous text for context: ' + ' '.join(textHistory) \
+                        response = translateGPT(finalJAString, 'Previous Text for Context: ' + ' '.join(textHistory) \
                                                 + '\n\n\n###\n\n\nCurrent Speaker: ' + speaker, True)
                     else:
-                        response = translateGPT(finalJAString, 'Previous text for context: ' + ' '.join(textHistory), True)
+                        response = translateGPT(finalJAString, 'Previous Text for Context: ' + ' '.join(textHistory), True)
                     tokens += response[1]
                     translatedText = response[0]
 

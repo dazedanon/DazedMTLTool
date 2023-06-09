@@ -7,6 +7,7 @@ import os
 from src.rpgmakermvmz import handleMVMZ
 from src.rpgmakerace import handleACE
 from src.csvtl import handleCSV
+from src.textfile import handleTextfile
 
 THREADS = 20
 
@@ -28,7 +29,7 @@ def main():
     totalCost = 0
     version = ''
     while version == '':
-        version = input('Select the RPGMaker Version:\n\n1. MV/MZ\n2. ACE\n3. CSV (From Translator++)\n')
+        version = input('Select the RPGMaker Version:\n\n1. MV/MZ\n2. ACE\n3. CSV (From Translator++)\n4. Text (Custom)\n')
         match version:
             case '1':
                 # Open File (Threads)
@@ -61,6 +62,20 @@ def main():
                 with ThreadPoolExecutor(max_workers=THREADS) as executor:
                     futures = [executor.submit(handleCSV, filename, estimate) \
                                 for filename in os.listdir("files") if filename.endswith('csv')]
+                    
+                    for future in as_completed(futures):
+                        try:
+                            totalCost = future.result()
+                            
+                        except Exception as e:
+                            tracebackLineNo = str(traceback.extract_tb(sys.exc_info()[2])[-1].lineno)
+                            print(Fore.RED + str(e) + '|' + tracebackLineNo + Fore.RESET)
+
+            case '4':
+                # Open File (Threads)
+                with ThreadPoolExecutor(max_workers=THREADS) as executor:
+                    futures = [executor.submit(handleTextfile, filename, estimate) \
+                                for filename in os.listdir("files") if filename.endswith('txt')]
                     
                     for future in as_completed(futures):
                         try:
