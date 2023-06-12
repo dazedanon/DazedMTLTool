@@ -25,7 +25,7 @@ APICOST = .002 # Depends on the model https://openai.com/pricing
 PROMPT = Path('prompt.txt').read_text(encoding='utf-8')
 THREADS = 20
 LOCK = threading.Lock()
-WIDTH = 55
+WIDTH = 50
 LISTWIDTH = 75
 MAXHISTORY = 10
 ESTIMATE = ''
@@ -343,7 +343,7 @@ def searchNames(name, pbar, context):
     if 'Actors' in context:
         newContext = 'Reply with only the english translation. The original text is a menu item.'
     if 'Armors' in context:
-        newContext = 'Reply with only the english translated armor name'
+        newContext = 'Reply with only the english translation.'
     if 'Classes' in context:
         newContext = 'Reply with only the english translated class name'
     if 'MapInfos' in context:
@@ -430,8 +430,8 @@ def searchCodes(page, pbar):
                             finalJAString = re.sub(r'([\\]+nw\[[a-zA-Z0-9一-龠ぁ-ゔァ-ヴー\s]+\])', '', finalJAString)
 
                     # Need to remove outside code and put it back later
-                    startString = re.search(r'^[^ぁ-んァ-ン一-龯【】（）「」a-zA-Z]+', finalJAString)
-                    finalJAString = re.sub(r'^[^ぁ-んァ-ン一-龯【】（）「」a-zA-Z]+', '', finalJAString)
+                    startString = re.search(r'^[^ぁ-んァ-ン一-龯【】（）「」a-zA-ZＡ-Ｚ０-９\\]+', finalJAString)
+                    finalJAString = re.sub(r'^[^ぁ-んァ-ン一-龯【】（）「」a-zA-ZＡ-Ｚ０-９\\]+', '', finalJAString)
                     if startString is None: startString = ''
                     else:  startString = startString.group()
                     
@@ -443,10 +443,10 @@ def searchCodes(page, pbar):
 
                     # Translate
                     if speaker != '':
-                        response = translateGPT(finalJAString, 'Previous Text for Context: ' + ' '.join(textHistory) \
+                        response = translateGPT(finalJAString, 'Previously Translated Text for Context: ' + ' '.join(textHistory) \
                                                 + '\n\n\n###\n\n\nCurrent Speaker: ' + speaker, True)
                     else:
-                        response = translateGPT(finalJAString, 'Previous Text for Context: ' + ' '.join(textHistory), True)
+                        response = translateGPT(finalJAString, 'Previous Translated Text for Context: ' + ' '.join(textHistory), True)
                     tokens += response[1]
                     translatedText = response[0]
 
@@ -836,7 +836,7 @@ def searchSS(state, pbar):
     responseList[1] = (translateGPT(state['message2'], 'Reply with the english translated Action being performed and no subject.', False))
     responseList[2] = (translateGPT(state.get('message3', ''), 'Reply with the english translated Action being performed and no subject..', False))
     responseList[3] = (translateGPT(state.get('message4', ''), 'Reply with the english translated Action being performed and no subject..', False))
-    responseList[4] = (translateGPT(state['name'], 'Reply with only the english translated RPG status effect name', True))
+    responseList[4] = (translateGPT(state['name'], 'Reply with only the english translation', True))
     # responseList[5] = (translateGPT(state['note'], 'Reply with only the translated english note.', False))
     if 'description' in state:
         responseList[6] = (translateGPT(state['description'], 'Reply with the english translated description.', True))
@@ -941,7 +941,7 @@ def translateGPT(t, history, fullPromptFlag):
 
     """Translate text using GPT"""
     if fullPromptFlag:
-        system = PROMPT + history 
+        system = "###\n" + history + PROMPT 
     else:
         system = 'You are going to pretend to be Japanese visual novel translator, \
 editor, and localizer. ' + history
