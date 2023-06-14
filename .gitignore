@@ -1,5 +1,7 @@
 .env
 *.json
+*.yaml
+*.yml
 *.txt
 !requirements.txt
 *.csv

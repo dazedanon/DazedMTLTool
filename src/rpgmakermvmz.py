@@ -25,7 +25,7 @@ APICOST = .002 # Depends on the model https://openai.com/pricing
 PROMPT = Path('prompt.txt').read_text(encoding='utf-8')
 THREADS = 20
 LOCK = threading.Lock()
-WIDTH = 50
+WIDTH = 70
 LISTWIDTH = 75
 MAXHISTORY = 10
 ESTIMATE = ''
@@ -355,9 +355,12 @@ def searchNames(name, pbar, context):
 
     # Extract Data
     responseList = []
-    responseList.append(translateGPT(name['name'], newContext, False))
+    responseList.append(translateGPT(name['name'], newContext, True))
+    if 'Actors' in context:
+        responseList.append(translateGPT(name['profile'], '', True))
+
     if 'Armors' in context or 'Weapons' in context:
-        responseList.append(translateGPT(name['description'], newContext, True))
+        responseList.append(translateGPT(name['description'], '', True))
 
     # Extract all our translations in a list from response
     for i in range(len(responseList)):
@@ -366,6 +369,10 @@ def searchNames(name, pbar, context):
 
     # Set Data
     name['name'] = responseList[0].strip('.\"')
+    if 'Actors' in context:
+        translatedText = textwrap.fill(responseList[1], LISTWIDTH)
+        name['profile'] = translatedText.strip('\"')
+
     if 'Armors' in context or 'Weapons' in context:
         translatedText = textwrap.fill(responseList[1], LISTWIDTH)
         name['description'] = translatedText.strip('\"')
@@ -692,16 +699,16 @@ def searchCodes(page, pbar):
                     translatedText = translatedText.replace(' 。', '.')
 
                     # Need to remove outside code and put it back later
-                    startString = re.search(r'^[^ぁ-んァ-ン一-龯\<\>【】]+', jaString)
-                    jaString = re.sub(r'^[^ぁ-んァ-ン一-龯\<\>【】]+', '', jaString)
-                    endString = re.search(r'[^ぁ-んァ-ン一-龯【】 。！？]+$', jaString)
-                    jaString = re.sub(r'[^ぁ-んァ-ン一-龯【】 。！？]+$', '', jaString)
+                    startString = re.search(r'^[^ぁ-んァ-ン一-龯\<\>【】（）Ａ-Ｚ０-９]+', jaString)
+                    jaString = re.sub(r'^[^ぁ-んァ-ン一-龯\<\>【】（）Ａ-Ｚ０-９]+', '', jaString)
+                    endString = re.search(r'[^ぁ-んァ-ン一-龯【】 。！？（）Ａ-Ｚ０-９]+$', jaString)
+                    jaString = re.sub(r'[^ぁ-んァ-ン一-龯【】 。！？（）Ａ-Ｚ０-９]+$', '', jaString)
                     if startString is None: startString = ''
                     else:  startString = startString.group()
                     if endString is None: endString = ''
                     else: endString = endString.group()
 
-                    response = translateGPT(jaString, 'Reply with only the english translation. NEVER reply in anything other than English. I repeat, only reply with the english translation of the original text. The original text is a dialogue choice.', True)
+                    response = translateGPT(jaString, 'Keep your reply prompt.', True)
                     translatedText = response[0]
 
                     # Remove characters that may break scripts
@@ -896,7 +903,7 @@ def searchSystem(data, pbar):
 
     # Skill Types
     for i in range(len(data['skillTypes'])):
-        response = translateGPT(data['skillTypes'][i], 'Reply with only the english translated skill type', False)
+        response = translateGPT(data['skillTypes'][i], 'Reply with only the english translation', False)
         tokens += response[1]
         data['skillTypes'][i] = response[0].strip('.\"')
         pbar.update(1)
@@ -931,7 +938,7 @@ def translateGPT(t, history, fullPromptFlag):
         # If ESTIMATE is True just count this as an execution and return.
         if ESTIMATE:
             global TOKENS
-            enc = tiktoken.encoding_for_model("gpt-3.5-turbo")
+            enc = tiktoken.encoding_for_model("gpt-3.5-turbo-0613")
             TOKENS += len(enc.encode(t)) * 2 + len(enc.encode(history)) + len(enc.encode(PROMPT))
             return (t, 0)
     
