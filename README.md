@@ -7,7 +7,6 @@ Currently in development. Goal is to eventually have ChatGPT nicely translate al
 
 ## Currently Supported:
 * RPGMaker MV & MZ
-* RPGMaker VX ACE (Mostly, still a WIP)
 * CSV Files
 
 ## Required:
