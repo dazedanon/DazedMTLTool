@@ -48,7 +48,7 @@ def main():
                 # Open File (Threads)
                 with ThreadPoolExecutor(max_workers=THREADS) as executor:
                     futures = [executor.submit(handleACE, filename, estimate) \
-                                for filename in os.listdir("files") if filename.endswith('json')]
+                                for filename in os.listdir("files") if filename.endswith('yaml')]
                     
                     for future in as_completed(futures):
                         try:
