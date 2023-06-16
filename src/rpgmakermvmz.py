@@ -409,7 +409,7 @@ def searchCodes(page, pbar):
                 oldjaString = jaString
                 jaString = jaString.replace('ﾞ', '')
                 jaString = jaString.replace('。', '.')
-                jaString = re.sub(r'([\u3000-\uffef])\1{1,}', r'\1', jaString)
+                # jaString = re.sub(r'([\u3000-\uffef])\1{1,}', r'\1', jaString)
 
                 # Using this to keep track of 401's in a row. Throws IndexError at EndOfList (Expected Behavior)
                 currentGroup.append(jaString)
@@ -419,7 +419,7 @@ def searchCodes(page, pbar):
                     jaString = page['list'][i]['parameters'][0]
                     jaString = jaString.replace('ﾞ', '')
                     jaString = jaString.replace('。', '.')
-                    jaString = re.sub(r'([\u3000-\uffef])\1{1,}', r'\1', jaString)
+                    # jaString = re.sub(r'([\u3000-\uffef])\1{1,}', r'\1', jaString)
                     currentGroup.append(jaString)
 
                 # Join up 401 groups for better translation.
@@ -948,7 +948,7 @@ def translateGPT(t, history, fullPromptFlag):
 
     """Translate text using GPT"""
     if fullPromptFlag:
-        system = "###\n" + history + PROMPT 
+        system = PROMPT 
     else:
         system = 'You are going to pretend to be Japanese visual novel translator, \
 editor, and localizer. ' + history
@@ -957,7 +957,7 @@ editor, and localizer. ' + history
         model="gpt-3.5-turbo",
         messages=[
             {"role": "system", "content": system},
-            {"role": "user", "content": t}
+            {"role": "user", "content": history + "Text to Translate: " + t}
         ],
         request_timeout=30,
     )
