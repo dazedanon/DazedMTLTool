@@ -162,6 +162,26 @@ As you can see this is a custom menu option added by the plugin. Lets go ahead a
 
 Yup! That did the trick. Now we can move onto the next one.
 
+![image](https://github.com/dazedanon/DazedMTLTool/assets/96628874/f5bfa278-4f2b-4189-a23b-a0e914f8b49a)
+
+10. Starting the game, there are still a couple of menu options to translate. None of these are in System.json so they must be in /js. Go ahead and manually fix those using the same method as before. Since I've already done this game, I'm going to go ahead and skip this step.
+
+11. Lets try doing list items. This means Actors, Armors, Classes, Enemies, Items, Skills, States, Weapons. No need to think to hard for these, move them out of the /data folder and into the files folder in the project. Then simply start the translation up like you did with System.json.
+
+![image](https://github.com/dazedanon/DazedMTLTool/assets/96628874/b9950e35-a5a4-4e78-b1de-6e58b1905990)
+
+12. Once again repeat the process of checking for mistakes /translated, moving them back to /files, and trying to hit the goal of getting a 0 for every file. You can make whatever improvments you like to the prompts, you can find them scattered around in the different functions of the code. For example
+
+![image](https://github.com/dazedanon/DazedMTLTool/assets/96628874/9b3bfd57-0e2f-49ba-981c-a047961e8518)
+
+Adjusting these when you get bad responses helps.
+
+13. 
+
+
+
+
+
 
 
 
