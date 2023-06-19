@@ -47,7 +47,7 @@ You'll need VSCode or something similar:
 * Place a breakpoint on this line `return [response.choices[0].message.content, response.usage.total_tokens]` and run the code in debugging mode. Everytime a request comes back you should be able to view the response object to see what text got translated and what the response was.
 
 ## How I Translate Games
-The goal of this section is to get you learnt and ready to translate the game of your choice. I'll be walking you through every step of my process so that you can get an idea of what I do to get things working. This is not go over setup, go do the setup steps at the top to make sure everything works. 
+The goal of this section is to get you learnt and ready to translate the game of your choice. I'll be walking you through every step of my process so that you can get an idea of what I do to get things working. This will not go over setup, go do the setup steps at the top to make sure everything works. 
 
 A couple of requirements.
 
@@ -95,9 +95,32 @@ Rule of thumb, **always backup the game folder**. When you mess something up its
 
 ![image](https://github.com/dazedanon/DazedMTLTool/assets/96628874/9cff0041-134c-4c9c-b31c-f8ce7548f2a4)
 
-6. Now we are ready to translate System.json. In VSCode Click Terminal > New Terminal to open up the terminal. Open up `start.py` by double clicking it. Then press `F5` and select Python file to startup the program. Then in the tool select `Translate` and `MV/MZ` to start the translation. The tool will begin translating everything inside.
+6. Now we are ready to translate System.json. But wait, before you do a tip.
 
 ![image](https://github.com/dazedanon/DazedMTLTool/assets/96628874/9076e82d-4436-408b-b34c-ea0ac581d50c)
+
+PRO TIP: Sometimes, you want to make sure that things are getting translated RIGHT before you invest into the translation. To do this, open up `rpgmakermvmz.py` in VSCode. There's a lot of code in here, ignore it and scroll all the way down until you find the function `def translateGPT(t, history, fullPromptFlag):`. This is what actually sends text to the API for translation.
+
+* t - Text that is going to be translated
+* history - Previously translated text OR context (Improves translation)
+* fullPromptFlag - Decides whether to use prompt.txt (True) or to ignore it (False). Ignore this for now.
+
+In order to check what is getting translated, click LEFT of the line number with the following text `return [translatedText, tokens]`
+
+![image](https://github.com/dazedanon/DazedMTLTool/assets/96628874/f00c88e4-3eb9-4ade-85dc-76d77e4e33ea)
+
+This tells the program "Hey, when you get to this line STOP everything and show me the goods.". We are going to use this to check text after it's translated. Now we can start the translation. 
+
+In VSCode Click Terminal > New Terminal to open up the terminal. Open up `start.py` by double clicking it. Then press `F5` and select Python file to startup the program. Then in the tool select `Translate` and `MV/MZ` to start the translation. The tool will begin translating everything inside. As soon as it hits that line it will stop like so.
+
+![image](https://github.com/dazedanon/DazedMTLTool/assets/96628874/91735200-98d7-4aa9-85b6-fbe613e2dd37)
+
+Couple of things to notice here. 
+* At the top right are your debug options. Press play to have the program continue, F5 also works.
+* At the bottom left is your text thats being translated. `t` is the original text and `translatedText` is your translated text. This is how I QA to mak sure translation looks good before I continue.
+
+Anyway, if you are satisfied with the results, click the breakpoint again to remove it and press F5 to continue with the translation.
+
 
 
 
