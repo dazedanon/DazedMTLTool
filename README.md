@@ -45,3 +45,35 @@ You'll need VSCode or something similar:
 
 #### See what text is being translated
 * Place a breakpoint on this line `return [response.choices[0].message.content, response.usage.total_tokens]` and run the code in debugging mode. Everytime a request comes back you should be able to view the response object to see what text got translated and what the response was.
+
+## How I Translate Games
+The goal of this section is to get you learnt and ready to translate the game of your choice. I'll be walking you through every step of my process so that you can get an idea of what I do to get things working. First a couple of requirements.
+
+* [VSCode](https://code.visualstudio.com/) (It's going to be be your main tool for running the scripts. When installing make sure you enable the context menu options)
+* [Python 3](https://www.python.org/downloads/)
+* [API Key](https://platform.openai.com/account/api-keys)
+
+1. First download the repository. You can do this by just downloading the zip on the main page or using Git to clone it, either works.
+2. Right click on the project folder and click `Open with Code`.
+
+![image](https://github.com/dazedanon/DazedMTLTool/assets/96628874/df6adca7-1d6f-44a2-aab7-dfffeab91b02)
+
+3. Here is where the magic happens. This will be your main workspace which you can use to do everything you need to MTL a game.
+
+![image](https://github.com/dazedanon/DazedMTLTool/assets/96628874/68aedaf7-c915-4531-b76b-291a5d1487ff)
+
+A breakdown of what all the different files are, this is important.
+* /files - Where you place files that need to be translated.
+* /translated - Where files go after they are translated.
+* /scripts - ignore
+* /src - The script files, the cogs of the machine, what creates the translation.
+  * main.py - Responsible for determining what engine gets run based on user choices
+  * rpgmakermvmz.py - Translation Script for the RPGMaker MV/MZ Engine.
+  * rpgmakerace.py - Translation Script for the RPGMaker MV/MZ Engine. (WIP)
+  * csvtl.py - Translation Script for CSV Files. Requires at least 2 columns to work.
+  * textfile.py - Translation Script for Other game engines. (More of a custom script I change depending on the game)
+
+
+
+
+
