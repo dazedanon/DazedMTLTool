@@ -47,7 +47,7 @@ You'll need VSCode or something similar:
 * Place a breakpoint on this line `return [response.choices[0].message.content, response.usage.total_tokens]` and run the code in debugging mode. Everytime a request comes back you should be able to view the response object to see what text got translated and what the response was.
 
 # How I Translate Games
-The goal of this section is to get you learnt and ready to translate the game of your choice. I'll be walking you through every step of my process so that you can get an idea of what I do to get things working. This will not go over setup, go do the setup steps at the top to make sure everything works. 
+The goal of this section is to get you learnt and ready to translate the game of your choice. I'll be walking you through every step of my process so that you can get an idea of what I do to get things working. This will not go over setup, go do the setup steps at the top to make sure the tool works properly before continuing.
 
 A couple of requirements.
 
