@@ -170,13 +170,90 @@ Yup! That did the trick. Now we can move onto the next one.
 
 ![image](https://github.com/dazedanon/DazedMTLTool/assets/96628874/b9950e35-a5a4-4e78-b1de-6e58b1905990)
 
-12. Once again repeat the process of checking for mistakes /translated, moving them back to /files, and trying to hit the goal of getting a 0 for every file. You can make whatever improvments you like to the prompts, you can find them scattered around in the different functions of the code. For example
+12. Once again repeat the process of checking for mistakes in /translated results, moving them back to /files, and trying to hit the goal of getting a 0 for every file. You can make whatever improvments you like to the prompts, you can find them scattered around in the different functions of the code. For example
 
 ![image](https://github.com/dazedanon/DazedMTLTool/assets/96628874/9b3bfd57-0e2f-49ba-981c-a047961e8518)
 
 Adjusting these when you get bad responses helps.
+![image](https://github.com/dazedanon/DazedMTLTool/assets/96628874/16fb648e-42a1-4b3e-b37e-c04aa805a1d0)
 
-13. 
+13. Now to move onto the hard part. Map Files and the Common Events File.
+
+* Map Files - Contain all the maps and random NPC conversation you run into. Usually has majority of common text.
+* Common Event Files - Contains all the event files (H-Scenes and such).
+
+There are two things to know when translating these types of files. In each of them, the type of text contained in each one is ususally designated by a specific RPG code. For example, dialogue uses code 401, Choices use code 102, names use code 101, etc. This is useful for translating ONLY the text we need to translate.
+
+Usually you can get the game 95% translated by just translating the 401 and 102 codes. So that's what we are going to focus on in this guide. Let's start small, first go into the game and scan the first text you see.
+
+![image](https://github.com/dazedanon/DazedMTLTool/assets/96628874/4b8f2a46-f355-49a9-a808-c35701a4200a)
+
+As you can see Map117.json is the first encounter for text so lets start with that. Move it on over to files.
+
+14. First we have to enable a code for translation. They are disabled by default to avoid accidentally translating things when you aren't ready. Look at the top of `rpgmakermvmz.py` for the flags section.
+
+![image](https://github.com/dazedanon/DazedMTLTool/assets/96628874/904af926-58f2-4d8b-8053-b3af1d6e4840)
+
+Let's start with dialogue, enable the 401 by setting it to `True`. Then you can go ahead and start the translation process like before.
+
+![image](https://github.com/dazedanon/DazedMTLTool/assets/96628874/4ad27ccb-52e9-424b-8a35-b176e76783a3)
+
+Afterwards, simple shoot for that 0 and move the translated file back to game folder to test it.
+
+![image](https://github.com/dazedanon/DazedMTLTool/assets/96628874/154a9565-466e-439b-8afd-0e4a29034cce)
+
+15. Yay! It's translated! but wait, I can't see shit. We are going to have to adjust the wordwrap (and maybe the font size but more on that later).
+
+    Wordwrap is controlle by two variables `WIDTH` and `LISTWIDTH`.
+
+    * WIDTH - Wordwrap for dialogue and most text
+    * LISTWIDTH - Wordwrap for item descriptions and help text.
+   
+   In this case we are interested in WIDTH, go ahead and go to the top of the rpgmakermvmz.py script file to find it.
+
+![image](https://github.com/dazedanon/DazedMTLTool/assets/96628874/1c0a8a73-0b05-4354-97d2-be9a3eae778b)
+
+Right now its at 60 characters. Clearly this is to big so lets shrink it down to 50. After that move your translated Map117 file back into /files and run it through the machine once more. Then place it back into the game folder for another test.
+
+![image](https://github.com/dazedanon/DazedMTLTool/assets/96628874/f9a717f8-d08e-47b8-91d0-01e4e28cc67e)
+
+16. Looks good to me! But maybe you don't like the size of the text or maybe you want it bigger. This can be adjusted in the script files in /js. Let's open them up.
+
+![image](https://github.com/dazedanon/DazedMTLTool/assets/96628874/35193c23-6714-42c4-8d8a-f6f15f414951)
+
+Hmm, lots to unpack here. Changing the font size for a game can either be easy or hard. It varies from game to game, the first place I like to look is `rmmz_windows.js` since this is the file that handles all the code for dialogue windows.
+
+Doing a CTRL+F for fontSize gives me the following.
+
+![image](https://github.com/dazedanon/DazedMTLTool/assets/96628874/1bbc017d-873b-4fad-9e4e-88f8ac233c8a)
+
+That looks like a good place set the font size. Lets go ahead and change that value of that and see what happens.
+
+![image](https://github.com/dazedanon/DazedMTLTool/assets/96628874/ea395b12-febc-4c89-8847-f42d2d1d3b3d)
+![image](https://github.com/dazedanon/DazedMTLTool/assets/96628874/a9e8e3cf-d0c6-454c-af92-a6b179b32250)
+
+Yup, beautiful tiny text made for ants. Perfect.
+
+17. At this point, you've pretty much learned all you need to learn in order to translate a game.
+   
+    TLDR:
+    * You bring data files into /files.
+    * Translate them until you hit 0.
+    * Enable 401 and 102 codes for Map and CommonEvent files.
+    * Use breakpoints to QA the translations
+    * Use Powertoys to scan text and find out where it needs to be changed in the files.
+    * Adjust wordwrap with the global variables WIDTH and LISTWIDTH
+    * Edit JS files to adjust game behavior like font size, or window size, etc.
+   
+   Sometimes you'll run into crashes or bugs, but that comes with the territory. Knowing how these files work is essential to creating these translations. But if you stick to just translating codes 401 and 102 and other game files, crashes will be minimal if non-existent.
+
+   If you do wish to translate more advanced text hidden in other codes, its setup so that you can enable them and give it a try. It may break your game though so make sure to QA the text you are translating thouroughly.
+
+   Anyway thats about it for now. If you do have any questions feel free to PM me. I am more than willing to help you along with the tool and giving other tips.
+
+
+
+
 
 
 
