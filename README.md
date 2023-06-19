@@ -47,7 +47,9 @@ You'll need VSCode or something similar:
 * Place a breakpoint on this line `return [response.choices[0].message.content, response.usage.total_tokens]` and run the code in debugging mode. Everytime a request comes back you should be able to view the response object to see what text got translated and what the response was.
 
 ## How I Translate Games
-The goal of this section is to get you learnt and ready to translate the game of your choice. I'll be walking you through every step of my process so that you can get an idea of what I do to get things working. First a couple of requirements.
+The goal of this section is to get you learnt and ready to translate the game of your choice. I'll be walking you through every step of my process so that you can get an idea of what I do to get things working. This is not go over setup, go do the setup steps at the top to make sure everything works. 
+
+A couple of requirements.
 
 * [VSCode](https://code.visualstudio.com/) (It's going to be be your main tool for running the scripts. When installing make sure you enable the context menu options)
 * [Python 3](https://www.python.org/downloads/)
@@ -65,13 +67,42 @@ The goal of this section is to get you learnt and ready to translate the game of
 A breakdown of what all the different files are, this is important.
 * /files - Where you place files that need to be translated.
 * /translated - Where files go after they are translated.
-* /scripts - ignore
+* /scripts - ignore (This is old stuff and will be deleted soon)
 * /src - The script files, the cogs of the machine, what creates the translation.
   * main.py - Responsible for determining what engine gets run based on user choices
   * rpgmakermvmz.py - Translation Script for the RPGMaker MV/MZ Engine.
   * rpgmakerace.py - Translation Script for the RPGMaker MV/MZ Engine. (WIP)
   * csvtl.py - Translation Script for CSV Files. Requires at least 2 columns to work.
   * textfile.py - Translation Script for Other game engines. (More of a custom script I change depending on the game)
+* .env.example - An example env file. This gets renamed to .env and holds your PRIVATE API and Organization key. Do not EVER upload this information.
+* RPGMakerEventCodes.info - Information on the various types of event codes in RPGMaker. More on this later.
+* prompt.example - Holds an example prompt ChatGPT uses to determine what to do with text you give it. Change this as you please.
+* requirements.txt - Used for setup, ignore.
+* start.py - Used as a starting point for running the script. This is what you run to start everything up.
+
+4. Now that you have an idea of what each file does, lets decide on a game to translate. For this guide I'm going to stick with a game I've done before to make things easy. Bounty Hunter Kyouka.
+
+![image](https://github.com/dazedanon/DazedMTLTool/assets/96628874/a9a11955-b975-4f71-a75d-804cc75cf368)
+
+First lets analyze what type of game this is. It's made using RPGMaker MZ which is basically the same as MV. You can tell by the game.exe icon. The two main folders we care about for MTL purposes are `data` and `js`.
+
+* data - Will have all the main text files where majority of stuff will need to be translated.
+* js - Will have the scripts the game uses to run. This is how you can change certain things like the font, size of windows, etc.
+
+Rule of thumb, **always backup the game folder**. When you mess something up its nice to be able to go back and reference the original files. It will also be helpful when something breaks to have something to fallback on.
+
+5. So the first thing I always translate with a new game are the menus. To do this go into /data and find System.json. (Sort by name while you are at it too.) Copy this file, and place it in your project `/files` folder. Then open VSCode and look to see that its there. **I like to translate things step by step. It will make it way easier to debug when things break.**
+
+![image](https://github.com/dazedanon/DazedMTLTool/assets/96628874/9cff0041-134c-4c9c-b31c-f8ce7548f2a4)
+
+6. Now we are ready to translate System.json. In VSCode Click Terminal > New Terminal to open up the terminal. Open up `start.py` by double clicking it. Then press `F5` and select Python file to startup the program. Then in the tool select `Translate` and `MV/MZ` to start the translation. The tool will begin translating everything inside.
+
+![image](https://github.com/dazedanon/DazedMTLTool/assets/96628874/9076e82d-4436-408b-b34c-ea0ac581d50c)
+
+
+
+
+
 
 
 
