@@ -55,6 +55,7 @@ A couple of requirements.
 * [Python 3](https://www.python.org/downloads/)
 * [API Key](https://platform.openai.com/account/api-keys)
 * [PowerToys](https://f95zone.to/threads/windows-supported-ocr-tool-microsoft-powertoys.163509/) (Very useful for non-japanese speakers)
+* Willingness to learn (No programming experience required)
 
 1. First download the repository. You can do this by just downloading the zip on the main page or using Git to clone it, either works.
 2. Right click on the project folder and click `Open with Code`.
