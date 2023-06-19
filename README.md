@@ -187,6 +187,8 @@ Adjusting these when you get bad responses helps.
 
 There are two things to know when translating these types of files. In each of them, the type of text contained in each one is ususally designated by a specific RPG code. For example, dialogue uses code 401, Choices use code 102, names use code 101, etc. This is useful for translating ONLY the text we need to translate.
 
+![image](https://github.com/dazedanon/DazedMTLTool/assets/96628874/1c2de0f0-5ad5-4162-86a7-505079913d1c)
+
 Usually you can get the game 95% translated by just translating the 401 and 102 codes. So that's what we are going to focus on in this guide. Let's start small, first go into the game and scan the first text you see.
 
 ![image](https://github.com/dazedanon/DazedMTLTool/assets/96628874/4b8f2a46-f355-49a9-a808-c35701a4200a)
