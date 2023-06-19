@@ -1,4 +1,4 @@
-[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/A0A7KP6Z5)
+![image](https://github.com/dazedanon/DazedMTLTool/assets/96628874/7d503725-5fb7-45f2-b88a-76bbb25af4c0)[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/A0A7KP6Z5)
 # DazedMTLTool - A script that translates RPGMaker JSON files using ChatGPT API
 
 ![image](https://user-images.githubusercontent.com/96628874/230908699-adacb5e1-1548-4116-a0ea-a33297cdafa4.png)
@@ -54,6 +54,7 @@ A couple of requirements.
 * [VSCode](https://code.visualstudio.com/) (It's going to be be your main tool for running the scripts. When installing make sure you enable the context menu options)
 * [Python 3](https://www.python.org/downloads/)
 * [API Key](https://platform.openai.com/account/api-keys)
+* [PowerToys](https://f95zone.to/threads/windows-supported-ocr-tool-microsoft-powertoys.163509/) (Very useful for non-japanese speakers)
 
 1. First download the repository. You can do this by just downloading the zip on the main page or using Git to clone it, either works.
 2. Right click on the project folder and click `Open with Code`.
@@ -117,9 +118,53 @@ In VSCode Click Terminal > New Terminal to open up the terminal. Open up `start.
 
 Couple of things to notice here. 
 * At the top right are your debug options. Press play to have the program continue, F5 also works.
-* At the bottom left is your text thats being translated. `t` is the original text and `translatedText` is your translated text. This is how I QA to mak sure translation looks good before I continue.
+* At the bottom left is your text thats being translated. `t` is the original text and `translatedText` is your translated text. This is how I QA to make sure translation looks good before I continue.
 
-Anyway, if you are satisfied with the results, click the breakpoint again to remove it and press F5 to continue with the translation.
+Anyway, if you are satisfied with the results, click the breakpoint again to remove it and press F5 to continue with the translation. You can add that breakpoing anywhere in the code at anytime, its very helpful for learning what does what.
+
+7. Now that System.json is finished translating, I like to go through it and fix any obvious issues I see. It will be in `/translated`. Lets open it up in VSCode and take a look.
+
+![image](https://github.com/dazedanon/DazedMTLTool/assets/96628874/7ac3311a-575f-4398-8371-68e7321fad6e)
+
+You can see that some things didn't translate. This happens sometimes as a safe guard when the API returns something that is clearly wrong. You can either manually fix these or adjust to prompt. I'm just going to manually fix them. Also notice `Translation:` and `Translated Text:` which we don't want. You can use CTRL+F to find how many instances of this issue we have and fix them.
+
+![image](https://github.com/dazedanon/DazedMTLTool/assets/96628874/ed0e41f8-5fac-4dea-9f6c-4b0fdaf41be4)
+
+8. After you fix everything, move System.json back to /files and add the breakpoint. This time add two like so.
+
+![image](https://github.com/dazedanon/DazedMTLTool/assets/96628874/c01a65e9-260a-4861-955c-3c38e75ddf3c)
+
+This will ensure that no matter what translation pops up the program stops first so you can check it. `return [t, response.usage.total_tokens]` essentially runs IF the API returns some garbage. Our goal for rerunning System.json is to have it finish with a cost of 0.00 so that we know everything is translated.
+
+![image](https://github.com/dazedanon/DazedMTLTool/assets/96628874/9cb74fa8-3781-4921-bd30-f84fc368f7e8)
+
+As you can see that's exactly what I got when I tried running it again, which tells me there isn't anymore untranslated text in the file. This one is good to go and you can go ahead and copy it back to the /data folder in the game project. Restart the game by either closing it, or hitting F5 while it's open.
+
+![image](https://github.com/dazedanon/DazedMTLTool/assets/96628874/e536db7f-8d8b-48c8-82ae-c8af62453dbc)
+
+9. Tadah! Translated text. Baby Steps... Baby Steps... However notice that piece of text that isn't translated? That means that text is located somewhere other than System.json. We have to find it, but there are so many files... how are we supposed to find something like that? The easiest way to do this is using a Text Scanner like [PowerToys](https://f95zone.to/threads/windows-supported-ocr-tool-microsoft-powertoys.163509/).
+
+Using this, we can simply use Windows+Shift+T to scan the text. But first, in your game folder, right click on the /data folder and click Open in VSCode. Then Click Search at the top left and now scan the text in the game. Paste that text into the search bar.
+
+![image](https://github.com/dazedanon/DazedMTLTool/assets/96628874/9242cbd7-3931-4f83-bb61-bf78b058c3df)
+
+Uh oh, no results found means its not anywhere in data either. Usually that means there's only one other place it could be. Right click on the /js folder and open in VSCode. Follow the same steps.
+
+![image](https://github.com/dazedanon/DazedMTLTool/assets/96628874/396265d2-6f34-40bb-a550-22a1cfe883c5)
+
+2 results! Much better. Check them both to see which one is the culprit. Usually it's the one in plugins.js (Which holds the settings for all of the plugins in the game).
+
+![image](https://github.com/dazedanon/DazedMTLTool/assets/96628874/51b6f05e-88ea-463e-8453-9347da99ad80)
+
+As you can see this is a custom menu option added by the plugin. Lets go ahead and translate that and see if it changes.
+
+![image](https://github.com/dazedanon/DazedMTLTool/assets/96628874/9ae7b27c-8c53-4e88-b5d9-64e6a7b417e0)
+
+Yup! That did the trick. Now we can move onto the next one.
+
+
+
+
 
 
 
