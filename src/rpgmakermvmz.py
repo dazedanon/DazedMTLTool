@@ -25,7 +25,7 @@ APICOST = .002 # Depends on the model https://openai.com/pricing
 PROMPT = Path('prompt.txt').read_text(encoding='utf-8')
 THREADS = 20
 LOCK = threading.Lock()
-WIDTH = 60
+WIDTH = 70
 LISTWIDTH = 90
 MAXHISTORY = 10
 ESTIMATE = ''
@@ -39,8 +39,8 @@ POSITION=0
 LEAVE=False
 
 # Flags
-CODE401 = False
-CODE102 = False
+CODE401 = True
+CODE102 = True
 CODE122 = False
 CODE101 = False
 CODE355655 = False
@@ -50,7 +50,7 @@ CODE356 = False
 CODE320 = False
 CODE324 = False
 CODE111 = False
-CODE408 = True
+CODE408 = False
 
 def handleMVMZ(filename, estimate):
     global ESTIMATE, TOKENS, TOTALTOKENS, TOTALCOST
@@ -379,24 +379,24 @@ def searchNames(name, pbar, context):
 
     # Set the context of what we are translating
     if 'Actors' in context:
-        newContext = 'Reply with only the english translation.'
+        newContext = 'Reply with only the english translation of the NPC name'
     if 'Armors' in context:
-        newContext = 'Reply with only the english translation of the armor/clothing name'
+        newContext = 'Reply with only the english translation of the RPG armor/clothing name'
     if 'Classes' in context:
-        newContext = 'Reply with only the english translation of the class name'
+        newContext = 'Reply with only the english translation of the RPG class name'
     if 'MapInfos' in context:
-        newContext = 'Reply with only the english translation of the map name'
+        newContext = 'Reply with only the english translation of the location name'
     if 'Enemies' in context:
-        newContext = 'Reply with only the english translation of the enemy'
+        newContext = 'Reply with only the english translation of the enemy NPC name'
     if 'Weapons' in context:
-        newContext = 'Reply with only the english translation of the weapon name'
+        newContext = 'Reply with only the english translation of the RPG weapon name'
 
     # Extract Data
     responseList = []
-    responseList.append(translateGPT(name['name'], newContext, True))
+    responseList.append(translateGPT(name['name'], newContext, False))
     if 'Actors' in context:
         responseList.append(translateGPT(name['profile'], '', True))
-        responseList.append(translateGPT(name['nickname'], 'Reply with ONLY the english translation of the item name', True))
+        responseList.append(translateGPT(name['nickname'], 'Reply with ONLY the english translation of the NPC nickname', False))
 
     if 'Armors' in context or 'Weapons' in context:
         responseList.append(translateGPT(name['description'], '', True))
@@ -481,7 +481,7 @@ def searchCodes(page, pbar):
                     if '\\nw' in finalJAString:
                         match = re.findall(r'([\\]+nw\[([a-zA-Z0-9一-龠ぁ-ゔァ-ヴー\s]+)\])', finalJAString)
                         if len(match) != 0:
-                            response = translateGPT(match[0][1], 'Reply with only the english translation of the actor', False)
+                            response = translateGPT(match[0][1], 'Reply with only the english translation of the NPC name', False)
                             tokens += response[1]
                             speaker = response[0].strip('.')
 
@@ -1015,10 +1015,10 @@ def searchSS(state, pbar):
 
 def searchSystem(data, pbar):
     tokens = 0
-    context = 'Reply with only the english translation of the menu item.'
+    context = 'Reply with only the english translation of the UI button name'
 
     # Title
-    response = translateGPT(data['gameTitle'], context, True)
+    response = translateGPT(data['gameTitle'], context, False)
     tokens += response[1]
     data['gameTitle'] = response[0].strip('.')
     pbar.update(1)
@@ -1029,7 +1029,7 @@ def searchSystem(data, pbar):
             termList = data['terms'][term]
             for i in range(len(termList)):  # Last item is a messages object
                 if termList[i] is not None:
-                    response = translateGPT(termList[i], context, True)
+                    response = translateGPT(termList[i], context, False)
                     tokens += response[1]
                     termList[i] = response[0].strip('.\"')
                     pbar.update(1)
@@ -1128,7 +1128,7 @@ def translateGPT(t, history, fullPromptFlag):
         user = t
     response = openai.ChatCompletion.create(
         temperature=0,
-        model="gpt-3.5-turbo",
+        model="gpt-3.5-turbo-16k",
         messages=[
             {"role": "system", "content": system},
             {"role": "user", "content": user}
