@@ -26,7 +26,7 @@ PROMPT = Path('prompt.txt').read_text(encoding='utf-8')
 THREADS = 20
 LOCK = threading.Lock()
 WIDTH = 70
-LISTWIDTH = 90
+LISTWIDTH = 60
 MAXHISTORY = 10
 ESTIMATE = ''
 TOTALCOST = 0
@@ -40,6 +40,7 @@ LEAVE=False
 
 # Flags
 CODE401 = True
+CODE405 = True
 CODE102 = True
 CODE122 = False
 CODE101 = False
@@ -441,7 +442,6 @@ def searchCodes(page, pbar):
     tokens = 0
     speaker = ''
     match = []
-    speakerCaught = False
     global LOCK
 
     
@@ -455,22 +455,22 @@ def searchCodes(page, pbar):
             ### IF these crash or fail your game will do the same. Use the flags to skip codes.
 
             ## Event Code: 401 Show Text
-            if page['list'][i]['code'] == 401 and CODE401 == True:    
+            if page['list'][i]['code'] == 401 and CODE401 == True or page['list'][i]['code'] == 405 and CODE405:    
                 jaString = page['list'][i]['parameters'][0]
                 oldjaString = jaString
                 jaString = jaString.replace('ﾞ', '')
                 jaString = jaString.replace('。', '.')
-                jaString = re.sub(r'([\u3000-\uffef])\1{3,}', r'\1\1\1', jaString)
+                # jaString = re.sub(r'([\u3000-\uffef])\1{3,}', r'\1\1\1', jaString)
 
                 # Using this to keep track of 401's in a row. Throws IndexError at EndOfList (Expected Behavior)
                 currentGroup.append(jaString)
 
-                while (page['list'][i+1]['code'] == 401):
+                while (page['list'][i+1]['code'] == 401 or page['list'][i+1]['code'] == 405):
                     del page['list'][i]  
                     jaString = page['list'][i]['parameters'][0]
                     jaString = jaString.replace('ﾞ', '')
                     jaString = jaString.replace('。', '.')
-                    jaString = re.sub(r'([\u3000-\uffef])\1{3,}', r'\1\1\1', jaString)
+                    # jaString = re.sub(r'([\u3000-\uffef])\1{3,}', r'\1\1\1', jaString)
                     currentGroup.append(jaString)
 
                 # Join up 401 groups for better translation.
@@ -488,8 +488,8 @@ def searchCodes(page, pbar):
                             finalJAString = re.sub(r'([\\]+nw\[[a-zA-Z0-9一-龠ぁ-ゔァ-ヴー\s]+\])', '', finalJAString)
 
                     # Need to remove outside code and put it back later
-                    startString = re.search(r'^[^一-龠ぁ-ゔァ-ヴー【】（）「」a-zA-ZＡ-Ｚ０-９\\]+', finalJAString)
-                    finalJAString = re.sub(r'^[^一-龠ぁ-ゔァ-ヴー【】（）「」a-zA-ZＡ-Ｚ０-９\\]+', '', finalJAString)
+                    startString = re.search(r'^[^一-龠ぁ-ゔァ-ヴー【】（）「」a-zA-Z0-9Ａ-Ｚ０-９\\]+', finalJAString)
+                    finalJAString = re.sub(r'^[^一-龠ぁ-ゔァ-ヴー【】（）「」a-zA-Z0-9Ａ-Ｚ０-９\\]+', '', finalJAString)
                     if startString is None: startString = ''
                     else:  startString = startString.group()
 
@@ -1080,13 +1080,13 @@ def searchSystem(data, pbar):
     return tokens
 
 def subVars(jaString):
-    varRegex = r'\\+[a-zA-Z]+\[[0-9a-zA-Z\\\[\]]+\]'
+    varRegex = r'\\+[a-zA-Z]+\[[0-9a-zA-Z\\\[\]]+\]|[\<\>\\]+[a-zA-Z]+\<\w+\>|[\\\{\}]+'
     count = 0
 
     varList = re.findall(varRegex, jaString)
     if len(varList) != 0:
         for var in varList:
-            jaString = jaString.replace(var, '[' + str(count) + ']')
+            jaString = jaString.replace(var, '[x' + str(count) + ']')
             count += 1
 
     return [jaString, varList]
@@ -1096,7 +1096,7 @@ def resubVars(translatedText, varList):
     
     if len(varList) != 0:
         for var in varList:
-            translatedText = translatedText.replace('[' + str(count) + ']', var)
+            translatedText = translatedText.replace('[x' + str(count) + ']', var)
             count += 1
 
     return translatedText
@@ -1111,24 +1111,24 @@ def translateGPT(t, history, fullPromptFlag):
             TOKENS += len(enc.encode(t)) * 2 + len(enc.encode(history)) + len(enc.encode(PROMPT))
             return (t, 0)
     
-    # If there isn't any Japanese in the text just skip
-    if not re.search(r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴー]+', t):
-        return(t, 0)
-    
     # Sub Vars
     varResponse = subVars(t)
-    t = varResponse[0]
+    subbedT = varResponse[0]
+
+    # If there isn't any Japanese in the text just skip
+    if not re.search(r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴー]+', subbedT):
+        return(t, 0)
 
     """Translate text using GPT"""
     if fullPromptFlag:
         system = PROMPT 
-        user = history + '\n\n\nText to Translate: ' + t
+        user = history + '\n\n\nText to Translate: ' + subbedT
     else:
         system = history
-        user = t
+        user = subbedT
     response = openai.ChatCompletion.create(
         temperature=0,
-        model="gpt-3.5-turbo-16k",
+        model="gpt-3.5-turbo-0613",
         messages=[
             {"role": "system", "content": system},
             {"role": "user", "content": user}
@@ -1141,7 +1141,7 @@ def translateGPT(t, history, fullPromptFlag):
 
     # Make sure translation didn't wonk out
     mlen=len(response.choices[0].message.content)
-    elnt=10*len(t)
+    elnt=10*len(subbedT)
 
     #Resub Vars
     translatedText = resubVars(translatedText, varResponse[1])
