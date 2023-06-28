@@ -4,10 +4,10 @@ import traceback
 from colorama import Fore
 import os
 
-from src.rpgmakermvmz import handleMVMZ
-from src.rpgmakerace import handleACE
-from src.csvtl import handleCSV
-from src.textfile import handleTextfile
+from modules.rpgmakermvmz import handleMVMZ
+from modules.rpgmakerace import handleACE
+from modules.csvtl import handleCSV
+from modules.textfile import handleTextfile
 
 THREADS = 20
 

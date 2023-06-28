@@ -40,7 +40,7 @@ LEAVE=False
 
 # Flags
 CODE401 = True
-CODE405 = True
+CODE405 = False
 CODE102 = True
 CODE122 = False
 CODE101 = False
@@ -358,8 +358,8 @@ def searchThings(name, pbar):
     responseList.append(translateGPT(name['name'], 'Reply with only the English translation of the RPG Item name.', False))
     responseList.append(translateGPT(name['description'], 'Reply with only the English translation of the description.', False))
 
-    # if '<quest>' in name['note']:
-        # tokens += translateNote(name, r'<SG説明:([\s\S]*?)\\ROC>')
+    if '<SG説明:' in name['note']:
+        tokens += translateNote(name, r'<SG説明:([\s\S]*?)>')
 
     # Extract all our translations in a list from response
     for i in range(len(responseList)):
@@ -460,7 +460,11 @@ def searchCodes(page, pbar):
                 oldjaString = jaString
                 jaString = jaString.replace('ﾞ', '')
                 jaString = jaString.replace('。', '.')
-                # jaString = re.sub(r'([\u3000-\uffef])\1{3,}', r'\1\1\1', jaString)
+                jaString = jaString.replace('・', '.')
+                jaString = jaString.replace('‶', '')
+                jaString = jaString.replace('”', '')
+                jaString = jaString.replace('ー', '-')
+                jaString = re.sub(r'([\u3000-\uffef])\1{3,}', r'\1\1\1', jaString)
 
                 # Using this to keep track of 401's in a row. Throws IndexError at EndOfList (Expected Behavior)
                 currentGroup.append(jaString)
@@ -470,7 +474,11 @@ def searchCodes(page, pbar):
                     jaString = page['list'][i]['parameters'][0]
                     jaString = jaString.replace('ﾞ', '')
                     jaString = jaString.replace('。', '.')
-                    # jaString = re.sub(r'([\u3000-\uffef])\1{3,}', r'\1\1\1', jaString)
+                    jaString = jaString.replace('・', '.')
+                    jaString = jaString.replace('‶', '')
+                    jaString = jaString.replace('”', '')
+                    jaString = jaString.replace('ー', '-')
+                    jaString = re.sub(r'([\u3000-\uffef])\1{3,}', r'\1\1\1', jaString)
                     currentGroup.append(jaString)
 
                 # Join up 401 groups for better translation.
@@ -488,8 +496,8 @@ def searchCodes(page, pbar):
                             finalJAString = re.sub(r'([\\]+nw\[[a-zA-Z0-9一-龠ぁ-ゔァ-ヴー\s]+\])', '', finalJAString)
 
                     # Need to remove outside code and put it back later
-                    startString = re.search(r'^[^一-龠ぁ-ゔァ-ヴー【】（）「」a-zA-Z0-9Ａ-Ｚ０-９\\]+', finalJAString)
-                    finalJAString = re.sub(r'^[^一-龠ぁ-ゔァ-ヴー【】（）「」a-zA-Z0-9Ａ-Ｚ０-９\\]+', '', finalJAString)
+                    startString = re.search(r'^[^一-龠ぁ-ゔァ-ヴー【】（）「」『』a-zA-Z0-9Ａ-Ｚ０-９\\]+', finalJAString)
+                    finalJAString = re.sub(r'^[^一-龠ぁ-ゔァ-ヴー【】（）「」『』a-zA-Z0-9Ａ-Ｚ０-９\\]+', '', finalJAString)
                     if startString is None: startString = ''
                     else:  startString = startString.group()
 
