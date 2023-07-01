@@ -26,7 +26,7 @@ PROMPT = Path('prompt.txt').read_text(encoding='utf-8')
 THREADS = 20
 LOCK = threading.Lock()
 WIDTH = 70
-LISTWIDTH = 60
+LISTWIDTH = 80
 MAXHISTORY = 10
 ESTIMATE = ''
 TOTALCOST = 0
@@ -358,8 +358,8 @@ def searchThings(name, pbar):
     responseList.append(translateGPT(name['name'], 'Reply with only the English translation of the RPG Item name.', False))
     responseList.append(translateGPT(name['description'], 'Reply with only the English translation of the description.', False))
 
-    if '<SG説明:' in name['note']:
-        tokens += translateNote(name, r'<SG説明:([\s\S]*?)>')
+    # if '<SG説明:' in name['note']:
+        # tokens += translateNote(name, r'<SG説明:([\s\S]*?)>')
 
     # Extract all our translations in a list from response
     for i in range(len(responseList)):
@@ -547,7 +547,7 @@ def searchCodes(page, pbar):
                     continue
                 
                 # Definitely don't want to mess with files
-                if '_' in jaString:
+                if '■' in jaString or '_' in jaString:
                     continue
 
                 # If there isn't any Japanese in the text just skip
@@ -570,21 +570,21 @@ def searchCodes(page, pbar):
                 else: endString = endString.group()
 
                 # Translate
-                response = translateGPT(jaString, 'Reply with only the english translation', False)
+                response = translateGPT(jaString, '', True)
                 tokens += response[1]
                 translatedText = response[0]
 
                 # Remove characters that may break scripts
-                charList = ['.', '\"']
+                charList = ['.', '\"', "\'"]
                 for char in charList:
                     translatedText = translatedText.replace(char, '')
 
                 # Proper Formatting
-                translatedText = translatedText
                 translatedText = translatedText.replace('"', '\"')
 
                 # Set Data
-                page['list'][i]['parameters'][4] = startString + translatedText + endString
+                translatedText = startString + translatedText + endString
+                page['list'][i]['parameters'][4] = translatedText
 
         ## Event Code: 357 [Picture Text] [Optional]
             if page['list'][i]['code'] == 357 and CODE357 == True:    
@@ -711,7 +711,7 @@ def searchCodes(page, pbar):
                 page['list'][i]['parameters'][4] = translatedText
 
             ## Event Code: 355 or 655 Scripts [Optional]
-            if (page['list'][i]['code'] == 655) and CODE355655 == True:
+            if (page['list'][i]['code'] == 355) and CODE355655 == True:
                 jaString = page['list'][i]['parameters'][0]
 
                 # If there isn't any Japanese in the text just skip
@@ -719,7 +719,7 @@ def searchCodes(page, pbar):
                     continue
 
                 # Want to translate this script
-                if page['list'][i]['code'] == 655 and 'var name = \"' not in jaString:
+                if page['list'][i]['code'] == 355 and '_logWindow.push' not in jaString:
                     continue
 
                 # Don't want to touch certain scripts
@@ -727,30 +727,27 @@ def searchCodes(page, pbar):
                     continue
 
                 # Need to remove outside code and put it back later
-                startString = re.search(r'^[^一-龠ぁ-ゔァ-ヴー\<\>【】]+', jaString)
-                jaString = re.sub(r'^[^一-龠ぁ-ゔァ-ヴー\<\>【】]+', '', jaString)
-                endString = re.search(r'[^一-龠ぁ-ゔァ-ヴー\<\>【】。！？]+$', jaString)
-                jaString = re.sub(r'[^一-龠ぁ-ゔァ-ヴー\<\>【】。！？]+$', '', jaString)
+                startString = re.search(r'^[^一-龠ぁ-ゔァ-ヴー\<\>【】（）「」『』]+', jaString)
+                jaString = re.sub(r'^[^一-龠ぁ-ゔァ-ヴー\<\>【】（）「」『』]+', '', jaString)
+                endString = re.search(r'[^一-龠ぁ-ゔァ-ヴー\<\>【】（）「」『』。！？]+$', jaString)
+                jaString = re.sub(r'[^一-龠ぁ-ゔァ-ヴー\<\>【】（）「」『』。！？]+$', '', jaString)
                 if startString is None: startString = ''
                 else:  startString = startString.group()
                 if endString is None: endString = ''
                 else: endString = endString.group()
 
                 # Translate
-                response = translateGPT(jaString, 'Reply with the English NPC name.', False)
+                response = translateGPT(jaString, 'Reply with the English Translation of the text.', True)
                 tokens += response[1]
                 translatedText = response[0]
 
                 # Remove characters that may break scripts
-                charList = ['\"']
+                charList = ['\"', "\'"]
                 for char in charList:
                     translatedText = translatedText.replace(char, '')
-
-                translatedText = startString + translatedText + endString
-
-                translatedText = translatedText.replace('"', '\"')
-
+                
                 # Set Data
+                translatedText = startString + translatedText + endString
                 page['list'][i]['parameters'][0] = translatedText
 
         ## Event Code: 408 (Script)
@@ -801,21 +798,21 @@ def searchCodes(page, pbar):
                     continue
 
                 # Want to translate this script
-                if 'PSM_SHOW_POPUP' not in jaString:
+                if 'addLog' not in jaString:
                     continue
 
                 # Need to remove outside code and put it back later
-                startString = re.search(r'^[^一-龠ぁ-ゔァ-ヴー【】（）「」]+-1 ', jaString)
-                jaString = re.sub(r'^[^一-龠ぁ-ゔァ-ヴー【】（）「」]+-1 ', '', jaString)
-                endString = re.search(r' [^一-龠ぁ-ゔァ-ヴー\<\>【】 。！？]+$', jaString)
-                jaString = re.sub(r' [^一-龠ぁ-ゔァ-ヴー\<\>【】 。！？]+$', '', jaString)
+                startString = re.search(r'^[^一-龠ぁ-ゔァ-ヴー【】（）「」『』]+', jaString)
+                jaString = re.sub(r'^[^一-龠ぁ-ゔァ-ヴー【】（）「」『』]+', '', jaString)
+                endString = re.search(r' [^一-龠ぁ-ゔァ-ヴー\<\>【】（）「」『』 。！？]+$', jaString)
+                jaString = re.sub(r' [^一-龠ぁ-ゔァ-ヴー\<\>【】（）「」『』 。！？]+$', '', jaString)
                 if startString is None: startString = ''
                 else:  startString = startString.group()
                 if endString is None: endString = ''
                 else: endString = endString.group()
 
                 # Translate
-                response = translateGPT(jaString, 'Reply with only the English Translation.', True)
+                response = translateGPT(jaString, 'Reply with only the English Translation of the text.', True)
                 tokens += response[1]
                 translatedText = response[0]
 
@@ -826,6 +823,9 @@ def searchCodes(page, pbar):
 
                 # Cant have spaces?
                 translatedText = translatedText.replace(' ', '　')
+
+                # Textwrap
+                translatedText = textwrap.fill(translatedText, width=1000)
 
                 # Set Data
                 page['list'][i]['parameters'][0] = startString + translatedText + endString
@@ -965,17 +965,17 @@ def searchSS(state, pbar):
     tokens = 0
     responseList = [0] * 7
 
-    responseList[0] = (translateGPT(state['message1'], 'reply with only the english translation of the Action being performed and no subject.', False))
-    responseList[1] = (translateGPT(state['message2'], 'reply with only the english translation of the Action being performed and no subject.', False))
-    responseList[2] = (translateGPT(state.get('message3', ''), 'reply with only the english translation of the Action being performed and no subject..', False))
-    responseList[3] = (translateGPT(state.get('message4', ''), 'reply with only the english translation of the Action being performed and no subject..', False))
+    responseList[0] = (translateGPT(state['message1'], 'reply with only the english translation of the text.', False))
+    responseList[1] = (translateGPT(state['message2'], 'reply with only the english translation of the text.', False))
+    responseList[2] = (translateGPT(state.get('message3', ''), 'reply with only the english translation of the text.', False))
+    responseList[3] = (translateGPT(state.get('message4', ''), 'reply with only the english translation of the text.', False))
     responseList[4] = (translateGPT(state['name'], 'Reply with only the english translation of the RPG item name.', False))
     if 'description' in state:
         responseList[6] = (translateGPT(state['description'], 'reply with only the english translation of the description.', False))
 
-    if 'note' in state:
-        if 'raceDesc' in state['note']:
-            tokens += translateNote(state, r'<raceDesc:([^>]*)>')
+    # if 'note' in state:
+    #     if 'raceDesc' in state['note']:
+    #         tokens += translateNote(state, r'<raceDesc:([^>]*)>')
 
     # Put all our translations in a list
     for i in range(len(responseList)):
@@ -1004,7 +1004,7 @@ def searchSS(state, pbar):
 
 def searchSystem(data, pbar):
     tokens = 0
-    context = 'Reply with only the english translation of the UI button text'
+    context = 'Reply with only the english translation of the UI textbox'
 
     # Title
     response = translateGPT(data['gameTitle'], ' Reply with the English translation of the game title name', False)
@@ -1046,7 +1046,7 @@ def searchSystem(data, pbar):
 
     # Variables
     for i in range(len(data['variables'])):
-        response = translateGPT(data['variables'][i], 'Reply with only the english translation of the item name.', False)
+        response = translateGPT(data['variables'][i], 'Reply with only the english translation of the variable name.', False)
         tokens += response[1]
         data['variables'][i] = response[0].strip('.\"')
         pbar.update(1)
@@ -1054,7 +1054,7 @@ def searchSystem(data, pbar):
     # Messages
     messages = (data['terms']['messages'])
     for key, value in messages.items():
-        response = translateGPT(value, 'Reply with only the english translation', False)
+        response = translateGPT(value, 'Reply with only the english translation of the text.', False)
         translatedText = response[0]
 
         # Remove characters that may break scripts
@@ -1069,7 +1069,7 @@ def searchSystem(data, pbar):
     return tokens
 
 def subVars(jaString):
-    varRegex = r'\\+[a-zA-Z]+\[[0-9a-zA-Z\\\[\]]+\]|[\\]+[a-zA-Z]'
+    varRegex = r'\\+[a-zA-Z]+\[[0-9a-zA-Z\\\[\]]+\]|[\\]+[#a-zA-Z]'
     count = 0
 
     varList = re.findall(varRegex, jaString)
@@ -1111,7 +1111,7 @@ def translateGPT(t, history, fullPromptFlag):
     """Translate text using GPT"""
     if fullPromptFlag:
         system = PROMPT 
-        user = 'Reply Only with English Translated Text and maintain any other text: ' + subbedT
+        user = 'Reply only with the English Translation of the following text maintaining any code: ' + subbedT
     else:
         system = history
         user = subbedT
