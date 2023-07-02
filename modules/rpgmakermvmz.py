@@ -41,7 +41,7 @@ LEAVE=False
 # Flags
 CODE401 = True
 CODE405 = False
-CODE102 = False
+CODE102 = True
 CODE122 = False
 CODE101 = False
 CODE355655 = False
@@ -444,8 +444,6 @@ def searchCodes(page, pbar):
     match = []
     global LOCK
 
-    
-
     try:
         for i in range(len(page['list'])):
             with LOCK:
@@ -457,6 +455,8 @@ def searchCodes(page, pbar):
             ## Event Code: 401 Show Text
             if page['list'][i]['code'] == 401 and CODE401 == True or page['list'][i]['code'] == 405 and CODE405:    
                 jaString = page['list'][i]['parameters'][0]
+                if "peek inside" in jaString:
+                    print('hi')
                 oldjaString = jaString
                 jaString = jaString.replace('ﾞ', '')
                 jaString = jaString.replace('。', '.')
@@ -834,20 +834,24 @@ def searchCodes(page, pbar):
             if page['list'][i]['code'] == 102 and CODE102 == True:
                 for choice in range(len(page['list'][i]['parameters'][0])):
                     jaString = page['list'][i]['parameters'][0][choice]
-                    translatedText = translatedText.replace(' 。', '.')
+                    jaString = jaString.replace(' 。', '.')
 
                     # Need to remove outside code and put it back later
-                    startString = re.search(r'^[^一-龠ぁ-ゔァ-ヴー\<\>【】（）Ａ-Ｚ０-９]+', jaString)
-                    jaString = re.sub(r'^[^一-龠ぁ-ゔァ-ヴー\<\>【】（）Ａ-Ｚ０-９]+', '', jaString)
-                    endString = re.search(r'[^一-龠ぁ-ゔァ-ヴー【】。！？（）Ａ-Ｚ０-９]+$', jaString)
-                    jaString = re.sub(r'[^一-龠ぁ-ゔァ-ヴー【】。！？（）Ａ-Ｚ０-９]+$', '', jaString)
+                    startString = re.search(r'^[^一-龠ぁ-ゔァ-ヴー【】（）Ａ-Ｚ０-９]+', jaString)
+                    jaString = re.sub(r'^[^一-龠ぁ-ゔァ-ヴー【】（）Ａ-Ｚ０-９]+', '', jaString)
+                    endString = re.search(r'[^一-龠ぁ-ゔァ-ヴー【】。！？（）Ａ-Ｚ０-９ 。！？]+$', jaString)
+                    jaString = re.sub(r'[^一-龠ぁ-ゔァ-ヴー【】。！？（）Ａ-Ｚ０-９ 。！？]+$', '', jaString)
                     if startString is None: startString = ''
                     else:  startString = startString.group()
                     if endString is None: endString = ''
                     else: endString = endString.group()
 
-                    response = translateGPT(jaString, 'Reply with only the english translation of the choice name.', True)
-                    translatedText = response[0]
+                    if len(textHistory) > 0:
+                        response = translateGPT(jaString, 'Previous text for context: ' + textHistory[len(textHistory)-1], False)
+                        translatedText = response[0]
+                    else:
+                        response = translateGPT(jaString, '', False)
+                        translatedText = response[0]
 
                     # Remove characters that may break scripts
                     charList = ['.', '\"', '\\n']
@@ -1111,13 +1115,13 @@ def translateGPT(t, history, fullPromptFlag):
     """Translate text using GPT"""
     if fullPromptFlag:
         system = PROMPT 
-        user = 'Reply only with the English Translation of the following text maintaining any code: ' + subbedT
+        user = 'Reply only the English Translation of the following text maintaining any code: ' + subbedT
     else:
-        system = history
-        user = subbedT
+        system = 'Reply only with the English translation of the text. ' 
+        user = 'Reply only the English Translation of this text: ' + subbedT
     response = openai.ChatCompletion.create(
         temperature=0,
-        model="gpt-3.5-turbo",
+        model="gpt-3.5-turbo-16k",
         messages=[
             {"role": "system", "content": system},
             {"role": "user", "content": history},
