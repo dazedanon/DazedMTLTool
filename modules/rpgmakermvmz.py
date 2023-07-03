@@ -39,15 +39,15 @@ POSITION=0
 LEAVE=False
 
 # Flags
-CODE401 = True
+CODE401 = False
 CODE405 = False
-CODE102 = True
+CODE102 = False
 CODE122 = False
 CODE101 = False
 CODE355655 = False
 CODE357 = False
 CODE657 = False
-CODE356 = False
+CODE356 = True
 CODE320 = False
 CODE324 = False
 CODE111 = False
@@ -792,6 +792,7 @@ def searchCodes(page, pbar):
             ## Event Code: 356 D_TEXT
             if page['list'][i]['code'] == 356 and CODE356 == True:
                 jaString = page['list'][i]['parameters'][0]
+                oldjaString = jaString
 
                 # If there isn't any Japanese in the text just skip
                 if not re.search(r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴー]+', jaString):
@@ -839,8 +840,8 @@ def searchCodes(page, pbar):
                     # Need to remove outside code and put it back later
                     startString = re.search(r'^[^一-龠ぁ-ゔァ-ヴー【】（）Ａ-Ｚ０-９]+', jaString)
                     jaString = re.sub(r'^[^一-龠ぁ-ゔァ-ヴー【】（）Ａ-Ｚ０-９]+', '', jaString)
-                    endString = re.search(r'[^一-龠ぁ-ゔァ-ヴー【】。！？（）Ａ-Ｚ０-９ 。！？]+$', jaString)
-                    jaString = re.sub(r'[^一-龠ぁ-ゔァ-ヴー【】。！？（）Ａ-Ｚ０-９ 。！？]+$', '', jaString)
+                    endString = re.search(r'[^一-龠ぁ-ゔァ-ヴー【】（）Ａ-Ｚ０-９ 。！？]+$', jaString)
+                    jaString = re.sub(r'[^一-龠ぁ-ゔァ-ヴー【】（）Ａ-Ｚ０-９ 。！？]+$', '', jaString)
                     if startString is None: startString = ''
                     else:  startString = startString.group()
                     if endString is None: endString = ''
@@ -1115,10 +1116,10 @@ def translateGPT(t, history, fullPromptFlag):
     """Translate text using GPT"""
     if fullPromptFlag:
         system = PROMPT 
-        user = 'Reply only the English Translation of the following text maintaining any code: ' + subbedT
+        user = 'Reply with only the English Translation of the following text maintaining any code: ' + subbedT
     else:
-        system = 'Reply only with the English translation of the text. ' 
-        user = 'Reply only the English Translation of this text: ' + subbedT
+        system = 'Reply with only the English translation of the text.' 
+        user = 'Reply with only the English translation of this dialogue menu option: ' + subbedT
     response = openai.ChatCompletion.create(
         temperature=0,
         model="gpt-3.5-turbo-16k",
