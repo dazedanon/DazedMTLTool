@@ -173,24 +173,24 @@ def parseMap(data, filename):
     global LOCK
 
     # Translate displayName for Map files
-    if 'Map' in filename:
-        response = translateGPT(data['displayName'], 'Reply with only the english translated name', False)
-        totalTokens += response[1]
-        data['displayName'] = response[0].strip('.\"')
+    # if 'Map' in filename:
+    #     response = translateGPT(data['displayName'], 'Reply with only the english translated name', False)
+    #     totalTokens += response[1]
+    #     data['displayName'] = response[0].strip('.\"')
 
     # Get total for progress bar
-    for event in events:
-        if event is not None:
-            for page in event['pages']:
+    for eventKey in events:
+        if eventKey is not None:
+            for page in events[eventKey]['pages']:
                 totalLines += len(page['list'])
     
     with tqdm(bar_format=BAR_FORMAT, position=POSITION, total=totalLines, leave=LEAVE) as pbar:
         pbar.desc=filename
         pbar.total=totalLines
         with ThreadPoolExecutor(max_workers=THREADS) as executor:
-            for event in events:
-                if event is not None:
-                    futures = [executor.submit(searchCodes, page, pbar) for page in event['pages'] if page is not None]
+            for eventKey in events:
+                if eventKey is not None:
+                    futures = [executor.submit(searchCodes, page, pbar) for page in events[eventKey]['pages'] if page is not None]
                     for future in as_completed(futures):
                         try:
                             totalTokens += future.result()
@@ -410,8 +410,8 @@ def searchCodes(page, pbar):
             ### IF these crash or fail your game will do the same. Use the flags to skip codes.
 
             ## Event Code: 401 Show Text
-            if page['list'][i]['code'] == 401 and CODE401 == True:    
-                jaString = page['list'][i]['parameters'][0]
+            if page['list'][i]['c'] == 401 and CODE401 == True:    
+                jaString = page['list'][i]['p'][0]
                 oldjaString = jaString
                 jaString = jaString.replace('ﾞ', '')
                 jaString = jaString.replace('。', '.')
@@ -420,9 +420,9 @@ def searchCodes(page, pbar):
                 # Using this to keep track of 401's in a row. Throws IndexError at EndOfList (Expected Behavior)
                 currentGroup.append(jaString)
 
-                while (page['list'][i+1]['code'] == 401):
+                while (page['list'][i+1]['c'] == 401):
                     del page['list'][i]  
-                    jaString = page['list'][i]['parameters'][0]
+                    jaString = page['list'][i]['p'][0]
                     jaString = jaString.replace('ﾞ', '')
                     jaString = jaString.replace('。', '.')
                     jaString = re.sub(r'([\u3000-\uffef])\1{1,}', r'\1', jaString)
@@ -490,7 +490,7 @@ def searchCodes(page, pbar):
                     translatedText = startString + translatedText
 
                     # Set Data
-                    page['list'][i]['parameters'][0] = translatedText.replace('\"', '')
+                    page['list'][i]['p'][0] = translatedText.replace('\"', '')
                     speaker = ''
                     match = []
 
@@ -500,8 +500,8 @@ def searchCodes(page, pbar):
                     currentGroup = []              
 
             ## Event Code: 122 [Control Variables] [Optional]
-            if page['list'][i]['code'] == 122 and CODE122 == True:    
-                jaString = page['list'][i]['parameters'][4]
+            if page['list'][i]['c'] == 122 and CODE122 == True:    
+                jaString = page['list'][i]['p'][4]
                 if type(jaString) != str:
                     continue
                 
@@ -547,12 +547,12 @@ def searchCodes(page, pbar):
                 translatedText = re.sub(reSubVarRegex, r'\1[\2]', translatedText)
 
                 # Set Data
-                page['list'][i]['parameters'][4] = startString + translatedText + endString
+                page['list'][i]['p'][4] = startString + translatedText + endString
 
         ## Event Code: 357 [Picture Text] [Optional]
-            if page['list'][i]['code'] == 357 and CODE357 == True:    
-                if 'text' in page['list'][i]['parameters'][3]:
-                    jaString = page['list'][i]['parameters'][3]['text']
+            if page['list'][i]['c'] == 357 and CODE357 == True:    
+                if 'text' in page['list'][i]['p'][3]:
+                    jaString = page['list'][i]['p'][3]['text']
                     if type(jaString) != str:
                         continue
                     
@@ -590,11 +590,11 @@ def searchCodes(page, pbar):
                     translatedText = re.sub(r'\[([a-zA-Z]+)([0-9]+)]', r'\\\\\1[\2]', translatedText)
 
                     # Set Data
-                    page['list'][i]['parameters'][3]['text'] = startString + translatedText
+                    page['list'][i]['p'][3]['text'] = startString + translatedText
 
         ## Event Code: 101 [Name] [Optional]
-            if page['list'][i]['code'] == 101 and CODE101 == True:    
-                jaString = page['list'][i]['parameters'][4]
+            if page['list'][i]['c'] == 101 and CODE101 == True:    
+                jaString = page['list'][i]['p'][4]
                 if type(jaString) != str:
                     continue
                 
@@ -619,22 +619,22 @@ def searchCodes(page, pbar):
 
                 # Set Data
                 speaker = translatedText
-                page['list'][i]['parameters'][4] = translatedText
+                page['list'][i]['p'][4] = translatedText
 
             ## Event Code: 355 or 655 Scripts [Optional]
-            if (page['list'][i]['code'] == 355 or page['list'][i]['code'] == 655) and CODE355655 == True:
-                jaString = page['list'][i]['parameters'][0]
+            if (page['list'][i]['c'] == 355 or page['list'][i]['c'] == 655) and CODE355655 == True:
+                jaString = page['list'][i]['p'][0]
 
                 # If there isn't any Japanese in the text just skip
                 if not re.search(r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴー]+', jaString):
                     continue
 
                 # Want to translate this script
-                if page['list'][i]['code'] == 355 and '.setName' not in jaString:
+                if page['list'][i]['c'] == 355 and '.setName' not in jaString:
                     continue
 
                 # Don't want to touch certain scripts
-                if page['list'][i]['code'] == 655 and 'this.' in jaString:
+                if page['list'][i]['c'] == 655 and 'this.' in jaString:
                     continue
 
                 # Need to remove outside code and put it back later
@@ -658,11 +658,11 @@ def searchCodes(page, pbar):
                     translatedText = translatedText.replace(char, '')
 
                 # Set Data
-                page['list'][i]['parameters'][0] = startString + translatedText + endString
+                page['list'][i]['p'][0] = startString + translatedText + endString
 
             ## Event Code: 356 D_TEXT
-            if page['list'][i]['code'] == 356 and CODE356 == True:
-                jaString = page['list'][i]['parameters'][0]
+            if page['list'][i]['c'] == 356 and CODE356 == True:
+                jaString = page['list'][i]['p'][0]
 
                 # If there isn't any Japanese in the text just skip
                 if not re.search(r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴー]+', jaString):
@@ -696,12 +696,12 @@ def searchCodes(page, pbar):
                 translatedText = translatedText.replace(' ', '　')
 
                 # Set Data
-                page['list'][i]['parameters'][0] = startString + translatedText + endString
+                page['list'][i]['p'][0] = startString + translatedText + endString
 
             ### Event Code: 102 Show Choice
-            if page['list'][i]['code'] == 102 and CODE102 == True:
-                for choice in range(len(page['list'][i]['parameters'][0])):
-                    jaString = page['list'][i]['parameters'][0][choice]
+            if page['list'][i]['c'] == 102 and CODE102 == True:
+                for choice in range(len(page['list'][i]['p'][0])):
+                    jaString = page['list'][i]['p'][0][choice]
                     translatedText = translatedText.replace(' 。', '.')
 
                     # Need to remove outside code and put it back later
@@ -724,12 +724,12 @@ def searchCodes(page, pbar):
 
                     # Set Data
                     tokens += response[1]
-                    page['list'][i]['parameters'][0][choice] = startString + translatedText + endString
+                    page['list'][i]['p'][0][choice] = startString + translatedText + endString
 
             ### Event Code: 111 Script
-            if page['list'][i]['code'] == 111 and CODE111 == True:
-                for j in range(len(page['list'][i]['parameters'])):
-                    jaString = page['list'][i]['parameters'][j]
+            if page['list'][i]['c'] == 111 and CODE111 == True:
+                for j in range(len(page['list'][i]['p'])):
+                    jaString = page['list'][i]['p'][j]
 
                     # Check if String
                     if type(jaString) != str:
@@ -755,11 +755,11 @@ def searchCodes(page, pbar):
 
                     # Set Data
                     tokens += response[1]
-                    page['list'][i]['parameters'][j] = startString + translatedText + endString
+                    page['list'][i]['p'][j] = startString + translatedText + endString
 
             ### Event Code: 320 Set Variable
-            if page['list'][i]['code'] == 320 and CODE320 == True:
-                jaString = page['list'][i]['parameters'][1]
+            if page['list'][i]['c'] == 320 and CODE320 == True:
+                jaString = page['list'][i]['p'][1]
                 translatedText = translatedText.replace(' 。', '.')
 
                 # Need to remove outside code and put it back later
@@ -782,7 +782,7 @@ def searchCodes(page, pbar):
 
                 # Set Data
                 tokens += response[1]
-                page['list'][i]['parameters'][1] = startString + translatedText + endString
+                page['list'][i]['p'][1] = startString + translatedText + endString
 
     except IndexError:
         # This is part of the logic so we just pass it.
@@ -829,7 +829,7 @@ def searchCodes(page, pbar):
         translatedText = startString + translatedText
 
         # Set Data
-        page['list'][i]['parameters'][0] = translatedText.replace('\"', '')
+        page['list'][i]['p'][0] = translatedText.replace('\"', '')
         speaker = ''
         match = []
 
