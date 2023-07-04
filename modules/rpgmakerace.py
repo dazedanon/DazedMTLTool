@@ -26,7 +26,7 @@ APICOST = .002 # Depends on the model https://openai.com/pricing
 PROMPT = Path('prompt.txt').read_text(encoding='utf-8')
 THREADS = 20
 LOCK = threading.Lock()
-WIDTH = 70
+WIDTH = 60
 LISTWIDTH = 80
 MAXHISTORY = 10
 ESTIMATE = ''
@@ -54,8 +54,6 @@ CODE324 = False
 CODE111 = False
 CODE408 = False
 
-yaml=YAML()   # default, if not specfied, is 'rt' (round-trip)
-
 def handleACE(filename, estimate):
     global ESTIMATE, TOKENS, TOTALTOKENS, TOTALCOST
     ESTIMATE = estimate
@@ -81,6 +79,9 @@ def handleACE(filename, estimate):
 
             # Print Result
             end = time.time()
+            yaml=YAML(pure=True)
+            yaml.width = 4096
+            yaml.default_style = "'"
             yaml.dump(translatedData[0], outFile)
             tqdm.write(getResultString(translatedData, end - start, filename))
             with LOCK:
@@ -90,6 +91,10 @@ def handleACE(filename, estimate):
     return getResultString(['', TOTALTOKENS, None], end - start, 'TOTAL')
 
 def openFiles(filename):
+    yaml=YAML(pure=True)   # Need a yaml instance per thread.
+    yaml.width = 4096
+    yaml.default_style = "'"
+
     with open('files/' + filename, 'r', encoding='UTF-8') as f:
         data = yaml.load(f)
 
@@ -330,12 +335,10 @@ def parseSystem(data, filename):
     for term in data['terms']:
         termList = data['terms'][term]
         totalLines += len(termList)
-    totalLines += len(data['gameTitle'])
-    totalLines += len(data['terms']['messages'])
-    totalLines += len(data['variables'])
-    totalLines += len(data['equipTypes'])
-    totalLines += len(data['armorTypes'])
-    totalLines += len(data['skillTypes'])
+    totalLines += len(data['game_title'])
+    totalLines += len(data['weapon_types'])
+    totalLines += len(data['armor_types'])
+    totalLines += len(data['skill_types'])
                 
     with tqdm(bar_format=BAR_FORMAT, position=POSITION, total=totalLines, leave=LEAVE) as pbar:
         pbar.desc=filename
@@ -452,18 +455,19 @@ def searchCodes(page, pbar):
             ## Event Code: 401 Show Text
             if page['list'][i]['c'] == 401 and CODE401 == True or page['list'][i]['c'] == 405 and CODE405:    
                 jaString = page['list'][i]['p'][0]
-                if "peek inside" in jaString:
-                    print('hi')
                 oldjaString = jaString
                 jaString = jaString.replace('ﾞ', '')
                 jaString = jaString.replace('。', '.')
+                jaString = jaString.replace('？', '?')
+                jaString = jaString.replace('！', '!')
                 jaString = jaString.replace('・', '.')
+                jaString = jaString.replace('.', '.')
                 jaString = jaString.replace('‶', '')
                 jaString = jaString.replace('”', '')
                 jaString = jaString.replace('ー', '-')
                 jaString = jaString.replace('―', '-')
                 jaString = jaString.replace('…', '...')
-                jaString = re.sub(r'([\u3000-\uffef])\1{3,}', r'\1\1\1', jaString)
+                jaString = re.sub(r'([一-龠ぁ-ゔァ-ヴー])\1{3,}', r'\1\1\1', jaString)
 
                 # Using this to keep track of 401's in a row. Throws IndexError at EndOfList (Expected Behavior)
                 currentGroup.append(jaString)
@@ -473,13 +477,16 @@ def searchCodes(page, pbar):
                     jaString = page['list'][i]['p'][0]
                     jaString = jaString.replace('ﾞ', '')
                     jaString = jaString.replace('。', '.')
+                    jaString = jaString.replace('？', '?')
+                    jaString = jaString.replace('！', '!')
                     jaString = jaString.replace('・', '.')
+                    jaString = jaString.replace('.', '.')
                     jaString = jaString.replace('‶', '')
                     jaString = jaString.replace('”', '')
                     jaString = jaString.replace('ー', '-')
                     jaString = jaString.replace('―', '-')
                     jaString = jaString.replace('…', '...')
-                    jaString = re.sub(r'([\u3000-\uffef])\1{3,}', r'\1\1\1', jaString)
+                    jaString = re.sub(r'([一-龠ぁ-ゔァ-ヴー.])\1{3,}', r'\1\1\1', jaString)
                     currentGroup.append(jaString)
 
                 # Join up 401 groups for better translation.
@@ -497,8 +504,8 @@ def searchCodes(page, pbar):
                             finalJAString = finalJAString.replace(match[0], speaker)
 
                     # Need to remove outside code and put it back later
-                    startString = re.search(r'^[^一-龠ぁ-ゔァ-ヴー【】（）「」『』a-zA-Z0-9Ａ-Ｚ０-９\\]+', finalJAString)
-                    finalJAString = re.sub(r'^[^一-龠ぁ-ゔァ-ヴー【】（）「」『』a-zA-Z0-9Ａ-Ｚ０-９\\]+', '', finalJAString)
+                    startString = re.search(r'^[^一-龠ぁ-ゔァ-ヴー【】（）「」『』a-zA-Z0-9Ａ-Ｚ０-９?]+', finalJAString)
+                    finalJAString = re.sub(r'^[^一-龠ぁ-ゔァ-ヴー【】（）「」『』a-zA-Z0-9Ａ-Ｚ０-９?]+', '', finalJAString)
                     if startString is None: startString = ''
                     else:  startString = startString.group()
 
@@ -506,13 +513,10 @@ def searchCodes(page, pbar):
                     finalJAString = re.sub(r'\n', ' ', finalJAString)
 
                     # Translate
-                    response = translateGPT(finalJAString, 'Previous Text for Context: ' + '\n\n'.join(textHistory), True)
+                    response = translateGPT(finalJAString, 'Previous Text for Context: ' + '['.join(textHistory) + ']', True)
                     tokens += response[1]
                     translatedText = response[0]
-
-                    # TextHistory is what we use to give GPT Context, so thats appended here.
-                    # rawTranslatedText = re.sub(r'[\\<>]+[a-zA-Z]+\[[a-zA-Z0-9]+\]', '', translatedText)
-                    textHistory.append('\"' + translatedText + '\"')
+                    textHistory.append(translatedText)
 
                     # if speakerCaught == True:
                     #     translatedText = speakerRaw + ':\n' + translatedText
@@ -527,7 +531,6 @@ def searchCodes(page, pbar):
                     # Set Data
                     translatedText = translatedText.replace('ッ', '')
                     translatedText = translatedText.replace('っ', '')
-                    translatedText = translatedText.replace('\"', '')
                     page['list'][i]['p'][0] = translatedText
                     speaker = ''
                     match = []
@@ -932,10 +935,7 @@ def searchCodes(page, pbar):
         response = translateGPT(finalJAString, 'Previous Translated Text for Context: ' + '\n\n'.join(textHistory), True)
         tokens += response[1]
         translatedText = response[0]
-
-        # TextHistory is what we use to give GPT Context, so thats appended here.
-        # rawTranslatedText = re.sub(r'[\\<>]+[a-zA-Z]+\[[a-zA-Z0-9]+\]', '', translatedText)
-        textHistory.append('\"' + translatedText + '\"')
+        textHistory.append(translatedText)
 
         # if speakerCaught == True:
         #     translatedText = speakerRaw + ':\n' + translatedText
@@ -950,7 +950,6 @@ def searchCodes(page, pbar):
         # Set Data
         translatedText = translatedText.replace('ッ', '')
         translatedText = translatedText.replace('っ', '')
-        translatedText = translatedText.replace('\"', '')
         page['list'][i]['p'][0] = translatedText
         speaker = ''
         match = []
@@ -1009,9 +1008,9 @@ def searchSystem(data, pbar):
     context = 'Reply with only the english translation of the UI textbox'
 
     # Title
-    response = translateGPT(data['gameTitle'], ' Reply with the English translation of the game title name', False)
+    response = translateGPT(data['game_title'], ' Reply with the English translation of the game title name', False)
     tokens += response[1]
-    data['gameTitle'] = response[0].strip('.')
+    data['game_title'] = response[0].strip('.')
     pbar.update(1)
     
     # Terms
@@ -1026,52 +1025,30 @@ def searchSystem(data, pbar):
                     pbar.update(1)
 
     # Armor Types
-    for i in range(len(data['armorTypes'])):
-        response = translateGPT(data['armorTypes'][i], 'Reply with only the english translation of the armor type', False)
+    for i in range(len(data['armor_types'])):
+        response = translateGPT(data['armor_types'][i], 'Reply with only the english translation of the armor type', False)
         tokens += response[1]
-        data['armorTypes'][i] = response[0].strip('.\"')
+        data['armor_types'][i] = response[0].strip('.\"')
+        pbar.update(1)
+
+    # Weapon Types
+    for i in range(len(data['weapon_types'])):
+        response = translateGPT(data['weapon_types'][i], 'Reply with only the english translation of the weapon type', False)
+        tokens += response[1]
+        data['weapon_types'][i] = response[0].strip('.\"')
         pbar.update(1)
 
     # Skill Types
-    for i in range(len(data['skillTypes'])):
-        response = translateGPT(data['skillTypes'][i], 'Reply with only the english translation', False)
+    for i in range(len(data['skill_types'])):
+        response = translateGPT(data['skill_types'][i], 'Reply with only the english translation of the skill type', False)
         tokens += response[1]
-        data['skillTypes'][i] = response[0].strip('.\"')
-        pbar.update(1)
-
-    # Equip Types
-    for i in range(len(data['equipTypes'])):
-        response = translateGPT(data['equipTypes'][i], 'Reply with only the english translation of the equipment type. No disclaimers.', False)
-        tokens += response[1]
-        data['equipTypes'][i] = response[0].strip('.\"')
-        pbar.update(1)
-
-    # Variables
-    for i in range(len(data['variables'])):
-        response = translateGPT(data['variables'][i], 'Reply with only the english translation of the variable name.', False)
-        tokens += response[1]
-        data['variables'][i] = response[0].strip('.\"')
-        pbar.update(1)
-
-    # Messages
-    messages = (data['terms']['messages'])
-    for key, value in messages.items():
-        response = translateGPT(value, 'Reply with only the english translation of the text.', False)
-        translatedText = response[0]
-
-        # Remove characters that may break scripts
-        charList = ['.', '\"', '\\n']
-        for char in charList:
-            translatedText = translatedText.replace(char, '')
-
-        tokens += response[1]
-        messages[key] = translatedText
+        data['skill_types'][i] = response[0].strip('.\"')
         pbar.update(1)
     
     return tokens
 
 def subVars(jaString):
-    varRegex = r'\\+[a-zA-Z]+\[[0-9a-zA-Z\\\[\]]+\]|[\\]+[#a-zA-Z]'
+    varRegex = r'[\\a-zA-Z]+\[[0-9a-zA-Z\\\[\]]+\]|[\\]+[#a-zA-Z]'
     count = 0
 
     varList = re.findall(varRegex, jaString)
@@ -1115,8 +1092,8 @@ def translateGPT(t, history, fullPromptFlag):
         system = PROMPT 
         user = 'Reply with only the English Translation of the following text maintaining any code: ' + subbedT
     else:
-        system = 'Reply with only the English translation of the text.' 
-        user = 'Reply with only the English translation of this dialogue menu option: ' + subbedT
+        system = 'Reply with only the English Translation of the text.' 
+        user = subbedT
     response = openai.ChatCompletion.create(
         temperature=0,
         model="gpt-3.5-turbo-16k",

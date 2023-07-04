@@ -99,5 +99,5 @@ def main():
 def deleteFolderFiles(folderPath):
     for filename in os.listdir(folderPath):
         file_path = os.path.join(folderPath, filename)
-        if file_path.endswith('.json'):
+        if file_path.endswith('.json') or file_path.endswith('.yaml'):
             os.remove(file_path)   

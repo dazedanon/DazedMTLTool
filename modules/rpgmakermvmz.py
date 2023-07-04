@@ -39,9 +39,9 @@ POSITION=0
 LEAVE=False
 
 # Flags
-CODE401 = False
+CODE401 = True
 CODE405 = False
-CODE102 = False
+CODE102 = True
 CODE122 = False
 CODE101 = False
 CODE355655 = False
@@ -1116,10 +1116,10 @@ def translateGPT(t, history, fullPromptFlag):
     """Translate text using GPT"""
     if fullPromptFlag:
         system = PROMPT 
-        user = 'Reply with only the English Translation of the following text maintaining any code: ' + subbedT
+        user = 'Reply with only the English Translation of this text maintaining any code: ' + subbedT
     else:
         system = 'Reply with only the English translation of the text.' 
-        user = 'Reply with only the English translation of this dialogue menu option: ' + subbedT
+        user = 'Reply with only the English Translation of this dialogue menu option: ' + subbedT
     response = openai.ChatCompletion.create(
         temperature=0,
         model="gpt-3.5-turbo-16k",
