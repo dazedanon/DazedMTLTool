@@ -27,7 +27,7 @@ PROMPT = Path('prompt.txt').read_text(encoding='utf-8')
 THREADS = 20
 LOCK = threading.Lock()
 WIDTH = 60
-LISTWIDTH = 80
+LISTWIDTH = 70
 MAXHISTORY = 10
 ESTIMATE = ''
 TOTALCOST = 0
@@ -42,7 +42,7 @@ LEAVE=False
 # Flags
 CODE401 = True
 CODE405 = False
-CODE102 = False
+CODE102 = True
 CODE122 = False
 CODE101 = False
 CODE355655 = False
@@ -396,7 +396,7 @@ def searchNames(name, pbar, context):
     responseList = []
     responseList.append(translateGPT(name['name'], newContext, False))
     if 'Actors' in context:
-        responseList.append(translateGPT(name['profile'], '', True))
+        responseList.append(translateGPT(name['description'], '', True))
         responseList.append(translateGPT(name['nickname'], 'Reply with ONLY the english translation of the NPC nickname', False))
 
     if 'Armors' in context or 'Weapons' in context:
@@ -1090,10 +1090,10 @@ def translateGPT(t, history, fullPromptFlag):
     """Translate text using GPT"""
     if fullPromptFlag:
         system = PROMPT 
-        user = 'Reply with only the English Translation of the following text maintaining any code: ' + subbedT
+        user = 'Translate Text: ' + subbedT
     else:
-        system = 'Reply with only the English Translation of the text.' 
-        user = subbedT
+        system = 'Reply with only the Translation of the text.' 
+        user = 'Translate Text: ' + subbedT
     response = openai.ChatCompletion.create(
         temperature=0,
         model="gpt-3.5-turbo-16k",
@@ -1115,8 +1115,9 @@ def translateGPT(t, history, fullPromptFlag):
     #Resub Vars
     translatedText = resubVars(translatedText, varResponse[1])
 
-    if len(response.choices[0].message.content) > 10 * len(t):
+    if len(translatedText) > 10 * len(t):
         return [t, response.usage.total_tokens]
     else:
+        translatedText = translatedText.replace('Translation: ', '')
         return [translatedText, tokens]
     
