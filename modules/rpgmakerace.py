@@ -40,15 +40,15 @@ POSITION=0
 LEAVE=False
 
 # Flags
-CODE401 = True
-CODE405 = False
-CODE102 = True
+CODE401 = False
+CODE405 = True
+CODE102 = False
 CODE122 = False
 CODE101 = False
 CODE355655 = False
 CODE357 = False
 CODE657 = False
-CODE356 = True
+CODE356 = False
 CODE320 = False
 CODE324 = False
 CODE111 = False
@@ -719,7 +719,7 @@ def searchCodes(page, pbar):
                     continue
 
                 # Want to translate this script
-                if page['list'][i]['c'] == 355 and '_logWindow.push' not in jaString:
+                if page['list'][i]['c'] == 355 and '$game_actors[1].nickname' not in jaString:
                     continue
 
                 # Don't want to touch certain scripts
@@ -737,7 +737,7 @@ def searchCodes(page, pbar):
                 else: endString = endString.group()
 
                 # Translate
-                response = translateGPT(jaString, 'Reply with the English Translation of the text.', True)
+                response = translateGPT(jaString, '', True)
                 tokens += response[1]
                 translatedText = response[0]
 
@@ -756,10 +756,6 @@ def searchCodes(page, pbar):
 
                 # If there isn't any Japanese in the text just skip
                 if not re.search(r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴー]+', jaString):
-                    continue
-
-                # Want to translate this script
-                if page['list'][i]['c'] == 408 and '\\>' not in jaString:
                     continue
 
                 # Need to remove outside code and put it back later
@@ -848,7 +844,7 @@ def searchCodes(page, pbar):
                     else: endString = endString.group()
 
                     if len(textHistory) > 0:
-                        response = translateGPT(jaString, 'Previous text for context: ' + textHistory[len(textHistory)-1], False)
+                        response = translateGPT(jaString, 'Previous text for context: ' + textHistory[len(textHistory)-1], True)
                         translatedText = response[0]
                     else:
                         response = translateGPT(jaString, '', False)
@@ -1090,10 +1086,10 @@ def translateGPT(t, history, fullPromptFlag):
     """Translate text using GPT"""
     if fullPromptFlag:
         system = PROMPT 
-        user = 'Translate Text: ' + subbedT
+        user = 'Text to Translate: ' + subbedT
     else:
-        system = 'Reply with only the Translation of the text.' 
-        user = 'Translate Text: ' + subbedT
+        system = 'Reply with only the English Translation of the text.' 
+        user = 'Text to Translate: ' + subbedT
     response = openai.ChatCompletion.create(
         temperature=0,
         model="gpt-3.5-turbo-16k",
@@ -1115,9 +1111,10 @@ def translateGPT(t, history, fullPromptFlag):
     #Resub Vars
     translatedText = resubVars(translatedText, varResponse[1])
 
-    if len(translatedText) > 10 * len(t):
+    if len(translatedText) > 13 * len(t):
         return [t, response.usage.total_tokens]
     else:
         translatedText = translatedText.replace('Translation: ', '')
+        translatedText = translatedText.replace('Text to Translate: ', '')
         return [translatedText, tokens]
     
