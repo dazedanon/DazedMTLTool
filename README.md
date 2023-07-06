@@ -6,7 +6,7 @@
 Currently in development. Goal is to eventually have ChatGPT nicely translate all dialogue when given a specific file or list of files.
 
 ## Currently Supported:
-* RPGMaker MV & MZ
+* RPGMaker MZ, MV, ACE
 * CSV Files
 
 ## Required:
