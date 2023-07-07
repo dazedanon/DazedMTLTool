@@ -47,7 +47,7 @@ CODE101 = False
 CODE355655 = False
 CODE357 = False
 CODE657 = False
-CODE356 = True
+CODE356 = False
 CODE320 = False
 CODE324 = False
 CODE111 = False
@@ -358,8 +358,8 @@ def searchThings(name, pbar):
     responseList.append(translateGPT(name['name'], 'Reply with only the English translation of the RPG Item name.', False))
     responseList.append(translateGPT(name['description'], 'Reply with only the English translation of the description.', False))
 
-    # if '<SG説明:' in name['note']:
-        # tokens += translateNote(name, r'<SG説明:([\s\S]*?)>')
+    if '<SG説明:' in name['note']:
+        tokens += translateNote(name, r'<SG説明:([\s\S]*?)>')
 
     # Extract all our translations in a list from response
     for i in range(len(responseList)):
@@ -1116,10 +1116,10 @@ def translateGPT(t, history, fullPromptFlag):
     """Translate text using GPT"""
     if fullPromptFlag:
         system = PROMPT 
-        user = 'Reply with only the English Translation of this text maintaining any code: ' + subbedT
+        user = 'Text to Translate: ' + subbedT
     else:
-        system = 'Reply with only the English translation of the text.' 
-        user = 'Reply with only the English Translation of this dialogue menu option: ' + subbedT
+        system = 'Reply with only the English Translation of the text.' 
+        user = 'Text to Translate: ' + subbedT
     response = openai.ChatCompletion.create(
         temperature=0,
         model="gpt-3.5-turbo-16k",
@@ -1141,8 +1141,11 @@ def translateGPT(t, history, fullPromptFlag):
     #Resub Vars
     translatedText = resubVars(translatedText, varResponse[1])
 
-    if len(response.choices[0].message.content) > 10 * len(t):
+    if len(translatedText) > 13 * len(t) or "I'm sorry, but I'm unable to assist with that translation" in translatedText:
         return [t, response.usage.total_tokens]
     else:
+        translatedText = translatedText.replace('English Translation: ', '')
+        translatedText = translatedText.replace('Translation: ', '')
+        translatedText = translatedText.replace('Text to Translate: ', '')
         return [translatedText, tokens]
     
