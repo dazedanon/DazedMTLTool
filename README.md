@@ -72,7 +72,7 @@ A breakdown of what all the different files are, this is important.
 * /src - The script files, the cogs of the machine, what creates the translation.
   * main.py - Responsible for determining what engine gets run based on user choices
   * rpgmakermvmz.py - Translation Script for the RPGMaker MV/MZ Engine.
-  * rpgmakerace.py - Translation Script for the RPGMaker MV/MZ Engine. (WIP)
+  * rpgmakerace.py - Translation Script for the RPGMaker ACE Engine. (Requires rvpacker to unpack rvdata files)
   * csvtl.py - Translation Script for CSV Files. Requires at least 2 columns to work.
   * textfile.py - Translation Script for Other game engines. (More of a custom script I change depending on the game)
 * .env.example - An example env file. This gets renamed to .env and holds your PRIVATE API and Organization key. Do not EVER upload this information.
