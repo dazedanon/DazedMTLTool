@@ -69,7 +69,7 @@ A breakdown of what all the different files are, this is important.
 * /files - Where you place files that need to be translated.
 * /translated - Where files go after they are translated.
 * /scripts - ignore (This is old stuff and will be deleted soon)
-* /src - The script files, the cogs of the machine, what creates the translation.
+* /modules - The script files, the cogs of the machine, what creates the translation.
   * main.py - Responsible for determining what engine gets run based on user choices
   * rpgmakermvmz.py - Translation Script for the RPGMaker MV/MZ Engine.
   * rpgmakerace.py - Translation Script for the RPGMaker ACE Engine. (Requires rvpacker to unpack rvdata files)
