@@ -45,9 +45,6 @@ If the ChatGPT times out or hits any other error, what has already been translat
 ### General Debugging:
 You'll need VSCode or something similar:
 
-#### See what text is being translated
-* Place a breakpoint on this line `return [response.choices[0].message.content, response.usage.total_tokens]` and run the code in debugging mode. Everytime a request comes back you should be able to view the response object to see what text got translated and what the response was.
-
 # How I Translate Games
 The goal of this section is to get you learnt and ready to translate the game of your choice. I'll be walking you through every step of my process so that you can get an idea of what I do to get things working. This will not go over setup, go do the setup steps at the top to make sure the tool works properly before continuing.
 
@@ -72,10 +69,10 @@ A breakdown of what all the different files are, this is important.
 * /files - Where you place files that need to be translated.
 * /translated - Where files go after they are translated.
 * /scripts - ignore (This is old stuff and will be deleted soon)
-* /src - The script files, the cogs of the machine, what creates the translation.
+* /modules - The script files, the cogs of the machine, what creates the translation.
   * main.py - Responsible for determining what engine gets run based on user choices
   * rpgmakermvmz.py - Translation Script for the RPGMaker MV/MZ Engine.
-  * rpgmakerace.py - Translation Script for the RPGMaker MV/MZ Engine. (WIP)
+  * rpgmakerace.py - Translation Script for the RPGMaker ACE Engine. (Requires rvpacker to unpack rvdata files)
   * csvtl.py - Translation Script for CSV Files. Requires at least 2 columns to work.
   * textfile.py - Translation Script for Other game engines. (More of a custom script I change depending on the game)
 * .env.example - An example env file. This gets renamed to .env and holds your PRIVATE API and Organization key. Do not EVER upload this information.
