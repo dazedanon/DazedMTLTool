@@ -39,15 +39,15 @@ POSITION=0
 LEAVE=False
 
 # Flags
-CODE401 = False
+CODE401 = True
 CODE405 = False
-CODE102 = False
-CODE122 = True
+CODE102 = True
+CODE122 = False
 CODE101 = False
 CODE355655 = False
 CODE357 = False
 CODE657 = False
-CODE356 = False
+CODE356 = True
 CODE320 = False
 CODE324 = False
 CODE111 = False
@@ -551,9 +551,9 @@ def searchCodes(page, pbar):
 
             ## Event Code: 122 [Set Variables]
             if page['list'][i]['code'] == 122 and CODE122 == True:  
-                # This is going to be the var being set.
+                # This is going to be the var being set. (IMPORTANT)
                 varNum = page['list'][i]['parameters'][0]
-                if varNum != 1178:
+                if varNum != 1142:
                     continue
                   
                 jaString = page['list'][i]['parameters'][4]
@@ -839,37 +839,30 @@ def searchCodes(page, pbar):
                     continue
 
                 # Want to translate this script
-                if 'ShowInfo' not in jaString:
+                if 'D_TEXT' not in jaString:
                     continue
 
                 # Need to remove outside code and put it back later
-                startString = re.search(r'^[^一-龠ぁ-ゔァ-ヴー【】（）「」『』\\]+', jaString)
-                jaString = re.sub(r'^[^一-龠ぁ-ゔァ-ヴー【】（）「」『』\\]+', '', jaString)
-                endString = re.search(r' [^一-龠ぁ-ゔァ-ヴー\<\>【】（）「」『』 。！？]+$', jaString)
-                jaString = re.sub(r' [^一-龠ぁ-ゔァ-ヴー\<\>【】（）「」『』 。！？]+$', '', jaString)
-                if startString is None: startString = ''
-                else:  startString = startString.group()
-                if endString is None: endString = ''
-                else: endString = endString.group()
+                matchList = re.findall(r'(?<=\s)(.*?)(?=\s)', jaString)
+                
+                for match in matchList:
+                    response = translateGPT(match, '', True)
+                    translatedText = response[0]
+                    tokens += response[1]
 
-                # Translate
-                response = translateGPT(jaString, '', True)
-                tokens += response[1]
-                translatedText = response[0]
+                    # Remove characters that may break scripts
+                    charList = ['.', '\"', '\\n']
+                    for char in charList:
+                        translatedText = translatedText.replace(char, '')
 
-                # Remove characters that may break scripts
-                charList = ['.', '\"', '\\n']
-                for char in charList:
-                    translatedText = translatedText.replace(char, '')
+                    jaString = jaString.replace(match, translatedText)
 
                 # Cant have spaces?
-                translatedText = translatedText.replace(' ', ' ')
-
-                # Textwrap
-                translatedText = textwrap.fill(translatedText, width=1000)
+                translatedText = translatedText.replace(' ', ' ')
 
                 # Set Data
-                page['list'][i]['parameters'][0] = startString + translatedText + endString
+                translatedText = jaString
+                page['list'][i]['parameters'][0] = translatedText
 
             ### Event Code: 102 Show Choice
             if page['list'][i]['code'] == 102 and CODE102 == True:
