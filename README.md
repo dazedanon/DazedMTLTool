@@ -12,7 +12,7 @@ Currently in development. Goal is to eventually have a tool that utilizes ChatGP
 ## Required:
  * API Key: https://platform.openai.com/account/api-keys
  * Organization Key: https://platform.openai.com/account/org-settings
- * Python3: https://www.python.org/downloads/
+ * Python3.11+: https://www.python.org/downloads/
 
 ## Setup:
 1. Navigate to the project folder and open a terminal by Shift+Right Clicking the background. Install the dependencies with `pip install -r requirements.txt`
