@@ -1042,41 +1042,44 @@ def searchCodes(page, pbar):
 def searchSS(state, pbar):
     '''Searches skills and states json files'''
     tokens = 0
-    responseList = [0] * 7
 
-    responseList[0] = (translateGPT(state['message1'], 'reply with only the english translation of the text.', False))
-    responseList[1] = (translateGPT(state['message2'], 'reply with only the english translation of the text.', False))
-    responseList[2] = (translateGPT(state.get('message3', ''), 'reply with only the english translation of the text.', False))
-    responseList[3] = (translateGPT(state.get('message4', ''), 'reply with only the english translation of the text.', False))
-    responseList[4] = (translateGPT(state['name'], 'Reply with only the english translation of the RPG item name.', False))
-    if 'description' in state:
-        responseList[6] = (translateGPT(state['description'], 'reply with only the english translation of the description.', False))
+    # Name
+    nameResponse = translateGPT(state['name'], 'Reply with only the english translation of the RPG item name.', False) if 'name' in state else ''
+
+    # Description
+    descriptionResponse = translateGPT(state['description'], 'Reply with only the english translation of the description.', False) if 'description' in state else ''
+
+    # Messages
+    message1Response = translateGPT(state['message1'], 'reply with only the english translation of the text.', False) if 'message1' in state else ''
+    message2Response = translateGPT(state['message2'], 'reply with only the english translation of the text.', False) if 'message2' in state else ''
+    message3Response = translateGPT(state['message3'], 'reply with only the english translation of the text.', False) if 'message3' in state else ''
+    message4Response = translateGPT(state['message4'], 'reply with only the english translation of the text.', False) if 'message4' in state else ''
 
     # if 'note' in state:
     #     if 'raceDesc' in state['note']:
     #         tokens += translateNote(state, r'<raceDesc:([^>]*)>')
-
-    # Put all our translations in a list
-    for i in range(len(responseList)):
-        if responseList[i] != 0:
-            tokens += responseList[i][1]
-            responseList[i] = responseList[i][0].strip('.\"')
     
-    # Set Data
-    if responseList[0] != '':
-        if responseList[0][0] != ' ':
-            state['message1'] = ' ' + responseList[0][0].lower() + responseList[0][1:]
-    state['message2'] = responseList[1]
-    if responseList[2] != '':
-        state['message3'] = responseList[2]
-    if responseList[3] != '':
-        state['message4'] = responseList[3]
-    state['name'] = responseList[4].strip('.')
-    # state['note'] = responseList[5]
-    if responseList[6] != 0:
-        responseList[6] = textwrap.fill(responseList[6], LISTWIDTH)
-        state['description'] = responseList[6].strip('\"')
+    # Count Tokens
+    tokens += nameResponse[1] if nameResponse != '' else 0
+    tokens += descriptionResponse[1] if descriptionResponse != '' else 0
+    tokens += message1Response[1] if message1Response != '' else 0
+    tokens += message2Response[1] if message2Response != '' else 0
+    tokens += message3Response[1] if message3Response != '' else 0
+    tokens += message4Response[1] if message4Response != '' else 0
 
+    # Set Data
+    if 'name' in state:
+        state['name'] = nameResponse[0].strip('\"')
+    if 'description' in state:
+        state['description'] = descriptionResponse[0].strip('\"')
+    if 'message1' in state:
+        state['message1'] = message1Response[0].strip('\"')
+    if 'message2' in state:
+        state['message2'] = message2Response[0].strip('\"')
+    if 'message3' in state:
+        state['message3'] = message3Response[0].strip('\"')
+    if 'message4' in state:
+        state['message4'] = message4Response[0].strip('\"')
 
     pbar.update(1)
     return tokens
