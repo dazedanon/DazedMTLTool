@@ -448,6 +448,7 @@ def searchCodes(page, pbar):
     maxHistory = MAXHISTORY
     tokens = 0
     speaker = ''
+    speakerVar = ''
     match = []
     global LOCK
 
@@ -490,14 +491,14 @@ def searchCodes(page, pbar):
                     oldjaString = finalJAString
 
                     # Check for speaker
-                    if '\\N' in finalJAString:
-                        match = re.findall(r'[\\]+N<([一-龠ぁ-ゔァ-ヴー]+)>', finalJAString)
+                    if '\\N' in finalJAString or '\\n' in finalJAString:
+                        match = re.findall(r'([\\]+[Nn]<([一-龠ぁ-ゔァ-ヴー]+)>)', finalJAString)
                         if len(match) != 0:
-                            response = translateGPT(match[0], 'Reply with only the english translation of the NPC name', False)
+                            response = translateGPT(match[0][1], 'Reply with only the english translation of the NPC name', True)
                             tokens += response[1]
                             speaker = response[0].strip('.')
-
-                            finalJAString = finalJAString.replace(match[0], speaker)
+                            speakerVar = match[0][0].replace(match[0][1], response[0])
+                            finalJAString = finalJAString.replace(match[0][0], '')
 
                     # Need to remove outside code and put it back later
                     startString = re.search(r'^[^一-龠ぁ-ゔァ-ヴー【】（）[]<>「」『』a-zA-Z0-9Ａ-Ｚ０-９\\]+', finalJAString)
@@ -507,7 +508,6 @@ def searchCodes(page, pbar):
 
                     # Remove any textwrap
                     finalJAString = re.sub(r'\n', ' ', finalJAString)
-
                     finalJAString = finalJAString.replace('ﾞ', '')
                     finalJAString = finalJAString.replace('。', '.')
                     finalJAString = finalJAString.replace('・', '.')
@@ -528,12 +528,13 @@ def searchCodes(page, pbar):
                         tokens += response[1]
                         translatedText = response[0]
                         textHistory.append('\"' + translatedText + '\"')
-                    else:
-                        translatedText = finalJAString
 
                         # Remove added speaker
-                        translatedText = translatedText.replace(speaker + ': ', '')
-                        speaker = ''                     
+                        translatedText = translatedText.replace(speaker + ': ', speakerVar)
+                        speaker = ''                
+                        speakerVar = '' 
+                    else:
+                        translatedText = finalJAString    
 
                     # Textwrap
                     translatedText = textwrap.fill(translatedText, width=WIDTH)
