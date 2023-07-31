@@ -94,12 +94,21 @@ def parseCSV(readFile, writeFile, filename):
     textHistory = []
     global LOCK
 
+    format = ''
+    while format == '':
+        format = input('\n\nSelect the CSV Format:\n\n1. Translator++\n2. Translate All\n')
+        match format:
+            case '1':
+                format = '1'
+            case '2':
+                format = '2'
+
     # Get total for progress bar
     totalLines = len(readFile.readlines())
     readFile.seek(0)
 
-    reader = csv.reader(readFile, delimiter=',')
-    writer = csv.writer(writeFile, delimiter=',', quoting=csv.QUOTE_NONNUMERIC)
+    reader = csv.reader(readFile, delimiter=',',)
+    writer = csv.writer(writeFile, delimiter=',', doublequote=None)
 
     with tqdm(bar_format=BAR_FORMAT, position=POSITION, total=totalLines, leave=LEAVE) as pbar:
         pbar.desc=filename
@@ -107,57 +116,78 @@ def parseCSV(readFile, writeFile, filename):
 
         for row in reader:
             try:
-                totalTokens += translateCSV(row, pbar, writer, textHistory)
+                totalTokens += translateCSV(row, pbar, writer, textHistory, format)
             except Exception as e:
                 tracebackLineNo = str(traceback.extract_tb(sys.exc_info()[2])[-1].lineno)
                 return [reader, totalTokens, e, tracebackLineNo]
     return [reader, totalTokens, None]
 
-def translateCSV(row, pbar, writer, textHistory):
+def translateCSV(row, pbar, writer, textHistory, format):
     translatedText = ''
     maxHistory = MAXHISTORY
     tokens = 0
     global LOCK, ESTIMATE
 
     try:
-        jaString = row[0]
+        match format:
+            # Japanese Text on column 1. English on Column 2
+            case '1':
+                jaString = row[0]
 
-        # Remove repeating characters because it confuses ChatGPT
-        jaString = re.sub(r'([\u3000-\uffef])\1{2,}', r'\1\1', jaString)
+                # Remove repeating characters because it confuses ChatGPT
+                jaString = re.sub(r'([\u3000-\uffef])\1{2,}', r'\1\1', jaString)
 
-        # Sub Vars
-        jaString = re.sub(r'(\\+[a-zA-Z]+)\[([a-zA-Z0-9]+)\]', r'[\1|\2]', jaString)
+                # Translate
+                response = translateGPT(jaString, 'Previous text for context: ' + ' '.join(textHistory), True)
 
-        # Translate
-        response = translateGPT(jaString, 'Previous text for context: ' + ' '.join(textHistory))
+                # Check if there is an actual difference first
+                if response[0] != row[0]:
+                    translatedText = response[0]
+                else:
+                    translatedText = row[1]
+                tokens += response[1]
 
-        # Check if there is an actual difference first
-        if response[0] != row[0]:
-            translatedText = response[0]
-        else:
-            translatedText = row[1]
-        tokens += response[1]
+                # Textwrap
+                translatedText = textwrap.fill(translatedText, width=WIDTH)
 
-        # ReSub Vars
-        translatedText = re.sub(r'\[([\\a-zA-Z]+)\|([a-zA-Z0-9]+)]', r'\1[\2]', translatedText)
-        translatedText = re.sub('"', "'", translatedText)
+                # Set Data
+                row[1] = translatedText
 
-        # TextHistory is what we use to give GPT Context, so thats appended here.
-        textHistory.append(': ' + translatedText)
+                # Keep textHistory list at length maxHistory
+                with LOCK:
+                    if len(textHistory) > maxHistory:
+                        textHistory.pop(0)
+                    if not ESTIMATE:
+                        writer.writerow(row)
+                    pbar.update(1)
 
-        # Textwrap
-        translatedText = textwrap.fill(translatedText, width=WIDTH)
+                # TextHistory is what we use to give GPT Context, so thats appended here.
+                textHistory.append(': ' + translatedText)
+                
+            # Translate Everything
+            case '2':
+                for i in range(len(row)):
+                    if i not in [1, 3]:
+                        continue
+                    jaString = row[i]
+                    if '_' in jaString:
+                        continue
 
-        # Set Data
-        row[1] = translatedText
+                    #Translate
+                    response = translateGPT(jaString, 'Reply with only the English translation of the location name.', True)
+                    translatedText = response[0]
+                    tokens += response[1]
 
-        # Keep textHistory list at length maxHistory
-        with LOCK:
-            if len(textHistory) > maxHistory:
-                textHistory.pop(0)
-            if not ESTIMATE:
+                    # Textwrap
+                    translatedText = textwrap.fill(translatedText, width=WIDTH)
+
+                    # Set Data
+                    translatedText = translatedText.replace('\"', '')
+                    translatedText = translatedText.replace('\'', '')
+                    translatedText = translatedText.replace(',', '')
+                    row[i] = translatedText
                 writer.writerow(row)
-            pbar.update(1)
+                pbar.update(1)
 
     except Exception as e:
         tracebackLineNo = str(traceback.extract_tb(sys.exc_info()[2])[-1].lineno)
@@ -166,30 +196,87 @@ def translateCSV(row, pbar, writer, textHistory):
     return tokens
     
 
+def subVars(jaString):
+    varRegex = r'\\+[a-zA-Z]+\[[0-9a-zA-Z\\\[\]]+\]+|[\\]+[#|]+|\\+[\.<>a-zA-Z]+'
+    count = 0
+
+    varList = re.findall(varRegex, jaString)
+    if len(varList) != 0:
+        for var in varList:
+            jaString = jaString.replace(var, '[v' + str(count) + ']')
+            count += 1
+
+    return [jaString, varList]
+
+def resubVars(translatedText, varList):
+    count = 0
+    
+    if len(varList) != 0:
+        for var in varList:
+            translatedText = translatedText.replace('[v' + str(count) + ']', var)
+            count += 1
+
+    # Remove Color Variables Spaces
+    if '\\c' in translatedText:
+        translatedText = re.sub(r'\s*(\\+c\[[1-9]+\])\s*', r'\1', translatedText)
+        translatedText = re.sub(r'\s*(\\+c\[0+\])', r'\1', translatedText)
+    return translatedText
+
 @retry(exceptions=Exception, tries=5, delay=5)
-def translateGPT(t, history):
+def translateGPT(t, history, fullPromptFlag):
     with LOCK:
         # If ESTIMATE is True just count this as an execution and return.
         if ESTIMATE:
             global TOKENS
-            enc = tiktoken.encoding_for_model("gpt-3.5-turbo")
+            enc = tiktoken.encoding_for_model("gpt-3.5-turbo-0613")
             TOKENS += len(enc.encode(t)) * 2 + len(enc.encode(history)) + len(enc.encode(PROMPT))
             return (t, 0)
     
+    # Sub Vars
+    varResponse = subVars(t)
+    subbedT = varResponse[0]
+
     # If there isn't any Japanese in the text just skip
-    if not re.search(r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴ]+', t):
+    if not re.search(r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴー]+', subbedT):
         return(t, 0)
 
     """Translate text using GPT"""
-    system = PROMPT + history 
+    context = 'Character Context: クレア == Clea | Female, ノラ == Nora | Female, リルム == Relm | Female, ソフィア == Sophia | Female, セリス == Celis | Female, ピステ == Piste | Female, イクト == Ect | Female, カロン == Caron | Female, エモニ == Emoni | Female, アミナ == Amina | Female, アルマダ == Armada | Female, フォニ == Phoni | Female, エレオ == Eleo | Female, ペルノ == Perno | Female'
+    if fullPromptFlag:
+        system = PROMPT 
+        user = 'Text to Translate: ' + subbedT
+    else:
+        system = 'You are an expert translator who translates everything to English. Reply with only the English Translation of the text.' 
+        user = 'Text to Translate: ' + subbedT
     response = openai.ChatCompletion.create(
         temperature=0,
         model="gpt-3.5-turbo",
         messages=[
             {"role": "system", "content": system},
-            {"role": "user", "content": t}
+            {"role": "user", "content": context},
+            {"role": "user", "content": history},
+            {"role": "user", "content": user}
         ],
         request_timeout=30,
     )
 
-    return [response.choices[0].message.content, response.usage.total_tokens]
+    # Save Translated Text
+    translatedText = response.choices[0].message.content
+    tokens = response.usage.total_tokens
+
+    # Resub Vars
+    translatedText = resubVars(translatedText, varResponse[1])
+
+    # Remove Placeholder Text
+    translatedText = translatedText.replace('English Translation: ', '')
+    translatedText = translatedText.replace('Translation: ', '')
+    translatedText = translatedText.replace('Text to Translate: ', '')
+    translatedText = translatedText.replace('English Translation:', '')
+    translatedText = translatedText.replace('Translation:', '')
+    translatedText = translatedText.replace('Text to Translate:', '')
+
+    # Return Translation
+    if len(translatedText) > 15 * len(t) or "I'm sorry, but I'm unable to assist with that translation" in translatedText:
+        return [t, response.usage.total_tokens]
+    else:
+        return [translatedText, tokens]
