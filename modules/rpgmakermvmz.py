@@ -371,7 +371,8 @@ def searchThings(name, pbar):
     if 'name' in name:
         name['name'] = nameResponse[0].strip('\"')
     if 'description' in name:
-        name['description'] = descriptionResponse[0].strip('\"')
+        description = textwrap.fill(descriptionResponse[0], LISTWIDTH)
+        name['description'] = description.strip('\"')
 
     pbar.update(1)
     return tokens
@@ -479,6 +480,7 @@ def searchCodes(page, pbar):
 
                 while (page['list'][i+1]['code'] == 401 or page['list'][i+1]['code'] == 405):
                     page['list'][i]['parameters'][0] = ''
+                    page['list'][i]['code'] = 0
                     i += 1
 
                     jaString = page['list'][i]['parameters'][0]
@@ -550,7 +552,9 @@ def searchCodes(page, pbar):
                     translatedText = translatedText.replace('\\CL ', '\\CL')
                     translatedText = translatedText.replace('\\CL', '\\CL ')
                     page['list'][i]['parameters'][0] = ''
+                    page['list'][i]['code'] = 0
                     page['list'][j]['parameters'][0] = translatedText
+                    page['list'][j]['code'] = 401
                     speaker = ''
                     match = []
 
@@ -1202,7 +1206,7 @@ def translateGPT(t, history, fullPromptFlag):
         return(t, 0)
 
     """Translate text using GPT"""
-    context = 'Character Context: クレア == Clea | Female, ノラ == Nora | Female, リルム == Relm | Female, ソフィア == Sophia | Female, セリス == Celis | Female, ピステ == Piste | Female, イクト == Ect | Female, カロン == Caron | Female, エモニ == Emoni | Female, アミナ == Amina | Female, アルマダ == Armada | Female, フォニ == Phoni | Female, エレオ == Eleo | Female, ペルノ == Perno | Female'
+    context = 'Eroge Characters Context: クレア == Clea | Female, ノラ == Nora | Female, リルム == Relm | Female, ソフィア == Sophia | Female, セリス == Celis | Female, ピステ == Piste | Female, イクト == Ect | Female, カロン == Caron | Female, エモニ == Emoni | Female, アミナ == Amina | Female, アルマダ == Armada | Female, フォニ == Phoni | Female, エレオ == Eleo | Female, ペルノ == Perno | Female'
     if fullPromptFlag:
         system = PROMPT 
         user = 'Text to Translate: ' + subbedT

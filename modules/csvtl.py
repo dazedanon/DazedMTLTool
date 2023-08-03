@@ -167,14 +167,14 @@ def translateCSV(row, pbar, writer, textHistory, format):
             # Translate Everything
             case '2':
                 for i in range(len(row)):
-                    if i not in [1, 3]:
+                    if i not in [2,3,4,5,6,7,8,9,10]:
                         continue
                     jaString = row[i]
                     if '_' in jaString:
                         continue
 
                     #Translate
-                    response = translateGPT(jaString, 'Reply with only the English translation of the location name.', True)
+                    response = translateGPT(jaString, '', True)
                     translatedText = response[0]
                     tokens += response[1]
 
