@@ -41,7 +41,7 @@ def handleCSV(filename, estimate):
     global ESTIMATE, TOKENS, TOTALTOKENS, TOTALCOST
     ESTIMATE = estimate
 
-    with open('translated/' + filename, 'w+t', newline='', encoding='UTF-8') as writeFile:
+    with open('translated/' + filename, 'w+t', newline='', encoding='utf-16-le') as writeFile:
         start = time.time()
         translatedData = openFiles(filename, writeFile)
 
@@ -64,7 +64,7 @@ def handleCSV(filename, estimate):
     return getResultString(['', TOTALTOKENS, None], end - start, 'TOTAL')
 
 def openFiles(filename, writeFile):
-    with open('files/' + filename, 'r', encoding='shift-jis') as readFile, writeFile:
+    with open('files/' + filename, 'r', encoding='utf-16-le') as readFile, writeFile:
         translatedData = parseCSV(readFile, writeFile, filename)
 
     return translatedData
@@ -171,7 +171,7 @@ def translateCSV(row, pbar, writer, textHistory, format):
                         continue
                     jaString = row[i]
 
-                    matchList = re.findall(r':name\[(.+?),.+?\](.+?[」）]+?)', jaString)
+                    matchList = re.findall(r':name\[(.+?),.+?\](.+?[」）\"。]+)', jaString)
 
                     for match in matchList:
                         speaker = match[0]
@@ -183,7 +183,8 @@ def translateCSV(row, pbar, writer, textHistory, format):
                         tokens += response[1]
 
                         # Translate Line
-                        response = translateGPT(translatedSpeaker + ': ' + text, 'Previous Translated Text: ' + '|'.join(textHistory), True)
+                        jaText = re.sub(r'([\u3000-\uffef])\1{3,}', r'\1\1\1', text)
+                        response = translateGPT(translatedSpeaker + ': ' + jaText, 'Previous Translated Text: ' + '|'.join(textHistory), True)
                         translatedText = response[0]
                         tokens += response[1]
 
@@ -194,29 +195,32 @@ def translateCSV(row, pbar, writer, textHistory, format):
                         translatedText = re.sub(r'.+?: ', '', translatedText)
 
                         # Set Data
+                        translatedSpeaker = translatedSpeaker.replace('\"', '')
                         translatedText = translatedText.replace('\"', '')
                         translatedText = translatedText.replace('「', '')
                         translatedText = translatedText.replace('」', '')
-                        translatedText = translatedText.replace('\n', '')
+                        row[i] = row[i].replace('\n', ' ')
 
                         # Textwrap
                         translatedText = textwrap.fill(translatedText, width=WIDTH)
 
-                        translatedText = '「' + translatedText + '」\n'
-                        row[i] = re.sub(rf'\b{re.escape(speaker)}\b', translatedSpeaker, row[i])
+                        translatedText = '「' + translatedText + '」'
+                        row[i] = re.sub(rf':name\[({re.escape(speaker)}),', f':name[{translatedSpeaker},', row[i])
                         row[i] = row[i].replace(text, translatedText)
 
-                    # Keep textHistory list at length maxHistory
+                        # Keep History at fixed length.
+                        with LOCK:
+                            if len(textHistory) > maxHistory:
+                                textHistory.pop(0)
+
                     with LOCK:
-                        if len(textHistory) > maxHistory:
-                            textHistory.pop(0)
                         if not ESTIMATE:
                             writer.writerow(row)
                 pbar.update(1)
 
     except Exception as e:
         tracebackLineNo = str(traceback.extract_tb(sys.exc_info()[2])[-1].lineno)
-        raise Exception(str(e) + '|Line:' + tracebackLineNo + '| Failed to translate: ' + jaString) 
+        raise Exception(str(e) + '|Line:' + tracebackLineNo + '| Failed to translate: ' + text) 
     
     return tokens
     
