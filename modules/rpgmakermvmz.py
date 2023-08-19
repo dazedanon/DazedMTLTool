@@ -25,7 +25,7 @@ APICOST = .002 # Depends on the model https://openai.com/pricing
 PROMPT = Path('prompt.txt').read_text(encoding='utf-8')
 THREADS = 20 # For GPT4 rate limit will be hit if you have more than 1 thread.
 LOCK = threading.Lock()
-WIDTH = 60
+WIDTH = 50
 LISTWIDTH = 60
 MAXHISTORY = 10
 ESTIMATE = ''
@@ -44,7 +44,7 @@ CODE401 = True
 CODE405 = False
 CODE102 = True
 CODE122 = False
-CODE101 = False
+CODE101 = True
 CODE355655 = False
 CODE357 = False
 CODE657 = False
@@ -216,22 +216,19 @@ def translateNote(event, regex):
 
     match = re.findall(regex, jaString, re.DOTALL)
     if match:
-        jaString = match[0]
-        # Need to remove outside code
-        jaString = re.sub(r'^[^一-龠ぁ-ゔァ-ヴー\<\>【】]+', '', jaString)
-        jaString = re.sub(r'[^一-龠ぁ-ゔァ-ヴー\<\>【】。！？]+$', '', jaString)
-        oldjaString = jaString
-
+        oldJAString = match[0]
         # Remove any textwrap
-        jaString = re.sub(r'\n', ' ', jaString)
-        
-        response = translateGPT(jaString, '', True)
+        jaString = re.sub(r'\n', ' ', oldJAString)
+
+        # Translate
+        response = translateGPT(jaString, 'Reply with the English translation of the NPC name.', True)
         translatedText = response[0]
 
         # Textwrap
         translatedText = textwrap.fill(translatedText, width=LISTWIDTH)
 
-        event['note'] = event['note'].replace(oldjaString, translatedText)
+        translatedText = translatedText.replace('\"', '')
+        event['note'] = event['note'].replace(oldJAString, translatedText)
         return response[1]
     return 0
 
@@ -434,10 +431,12 @@ def searchNames(name, pbar, context):
             responseList.append(translateGPT(name['description'], '', True))
         else:
             responseList.append(['', 0])
+        if 'hint' in name['note']:
+            tokens += translateNote(name, r'<hint:([^>]*)>')
 
     if 'Enemies' in context:
-        if 'desc1' in name['note']:
-            tokens += translateNote(name, r'<desc1:([^>]*)>')
+        if 'taneoya' in name['note']:
+            tokens += translateNote(name, r'<taneoya:([^>]*)>')
 
         if 'desc2' in name['note']:
             tokens += translateNote(name, r'<desc2:([^>]*)>')
@@ -506,8 +505,6 @@ def searchCodes(page, pbar):
                 # if jaString.startswith('　'):
                 #     jaString = jaString + ': '
 
-                jaString = re.sub(r'([\u3000-\uffef])\1{3,}', r'\1\1\1', jaString)
-
                 # Using this to keep track of 401's in a row. Throws IndexError at EndOfList (Expected Behavior)
                 currentGroup.append(jaString)
 
@@ -517,7 +514,6 @@ def searchCodes(page, pbar):
                     i += 1
 
                     jaString = codeList[i]['parameters'][0]
-                    jaString = re.sub(r'([\u3000-\uffef])\1{3,}', r'\1\1\1', jaString)
                     currentGroup.append(jaString)
 
                 # Join up 401 groups for better translation.
@@ -532,7 +528,6 @@ def searchCodes(page, pbar):
                             response = translateGPT(match[0][1], 'Reply with only the english translation of the NPC name', True)
                             tokens += response[1]
                             speaker = response[0].strip('.')
-                            speakerVar = match[0][0].replace(match[0][1], response[0])
                             finalJAString = finalJAString.replace(match[0][0], '')
                             
                             # Put names in list
@@ -571,7 +566,7 @@ def searchCodes(page, pbar):
                         textHistory.append('\"' + translatedText + '\"')
 
                         # Remove added speaker
-                        translatedText = translatedText.replace(speaker + ': ', speakerVar)
+                        translatedText = re.sub(r'^.+?:\s', '', translatedText)
                         speaker = ''                
                         speakerVar = '' 
                     else:
@@ -763,6 +758,9 @@ def searchCodes(page, pbar):
                 # Set Data
                 speaker = translatedText
                 codeList[i]['parameters'][4] = translatedText
+                if NAMES == True and speaker not in NAMESLIST:
+                    with LOCK:
+                        NAMESLIST.append(speaker)
 
             ## Event Code: 355 or 655 Scripts [Optional]
             if (codeList[i]['code'] == 355) and CODE355655 == True:
@@ -1089,16 +1087,16 @@ def searchSS(state, pbar):
     tokens = 0
 
     # Name
-    nameResponse = translateGPT(state['name'], 'Reply with only the english translation of the RPG Skill name.', False) if 'name' in state else ''
+    nameResponse = translateGPT(state['name'], 'Reply with only the english translation of the RPG Skill name.', True) if 'name' in state else ''
 
     # Description
-    descriptionResponse = translateGPT(state['description'], 'Reply with only the english translation of the description.', False) if 'description' in state else ''
+    descriptionResponse = translateGPT(state['description'], 'Reply with only the english translation of the description.', True) if 'description' in state else ''
 
     # Messages
-    message1Response = translateGPT('Taro' + state['message1'], 'reply with only the gender neutral english translation of the text.', False) if 'message1' in state else ''
-    message2Response = translateGPT(state['message2'], 'reply with only the english translation of the text.', False) if 'message2' in state else ''
-    message3Response = translateGPT(state['message3'], 'reply with only the english translation of the text.', False) if 'message3' in state else ''
-    message4Response = translateGPT(state['message4'], 'reply with only the english translation of the text.', False) if 'message4' in state else ''
+    message1Response = translateGPT('Taro' + state['message1'], 'reply with only the gender neutral english translation of the action.', True) if 'message1' in state else ''
+    message2Response = translateGPT(state['message2'], 'reply with only the english translation of the text.', True) if 'message2' in state else ''
+    message3Response = translateGPT(state['message3'], 'reply with only the english translation of the text.', True) if 'message3' in state else ''
+    message4Response = translateGPT(state['message4'], 'reply with only the english translation of the text.', True) if 'message4' in state else ''
 
     # if 'note' in state:
     if 'DOBBY' in state['note']:
@@ -1243,15 +1241,16 @@ def translateGPT(t, history, fullPromptFlag):
         return(t, 0)
 
     """Translate text using GPT"""
-    context = 'Eroge Names Context: ミカエル == Mikael | Female, ミカ == Mika | Female, ベルゼビュート == Beelzebuth | Female, ベル == Bel | Female, アズラエル == Azriel | Female, アズ == Az | Female, フレイア == Freya | Female'
+    context = 'Eroge Names Context: カレン == Karen | Female, エリス == Eris | Female, コレット == Colette | Female, テオ == Teo | Male, メイヴィス == Mavis | Female, '
     if fullPromptFlag:
         system = PROMPT 
-        user = 'Current Text to Translate: ' + subbedT
+        user = 'Line to Translate: ' + subbedT
     else:
         system = 'You are an expert translator who translates everything to English. Reply with only the English Translation of the text.' 
-        user = 'Current Text to Translate: ' + subbedT
+        user = 'Line to Translate: ' + subbedT
     response = openai.ChatCompletion.create(
         temperature=0,
+        frequency_penalty=1,
         model="gpt-3.5-turbo",
         messages=[
             {"role": "system", "content": system},
@@ -1272,10 +1271,10 @@ def translateGPT(t, history, fullPromptFlag):
     # Remove Placeholder Text
     translatedText = translatedText.replace('English Translation: ', '')
     translatedText = translatedText.replace('Translation: ', '')
-    translatedText = translatedText.replace('Current Text to Translate: ', '')
+    translatedText = translatedText.replace('Line to Translate: ', '')
     translatedText = translatedText.replace('English Translation:', '')
     translatedText = translatedText.replace('Translation:', '')
-    translatedText = translatedText.replace('Current Text to Translate:', '')
+    translatedText = translatedText.replace('Line to Translate:', '')
 
     # Return Translation
     if len(translatedText) > 15 * len(t) or "I'm sorry, but I'm unable to assist with that translation" in translatedText:

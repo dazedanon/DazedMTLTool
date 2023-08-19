@@ -131,40 +131,47 @@ def translateText(data, pbar):
     tokens = 0
     speaker = ''
     speakerFlag = False
+    currentGroup = []
+    syncIndex = 0
 
     for i in range(len(data)):
-        if '◆' in data[i]:
-            jaString = data[i]
+        if i != syncIndex:
+            continue
+
+        match = re.findall(r'm\[[0-9]+\] = \"(.+?)\"', data[i])
+        if len(match) > 0:
+            jaString = match[0]
 
             ### Translate
             # Remove any textwrap
             jaString = re.sub(r'\\n', ' ', jaString)
 
-            # Check if speaker
-            if '◆A' in jaString:
-                speakerFlag = True
+            # Grab Speaker
+            speakerMatch = re.findall(r's\[[0-9]+\] = \"(.+?)[／\"]', data[i-1])
+            if len(match) != 0:
+                response = translateGPT(speakerMatch[0], 'Reply with only the english translation of the NPC name', True)
+                tokens += response[1]
+                speaker = response[0].strip('.')
 
-            # Need to remove outside code and put it back later
-            startString = re.search(r'^◆[a-zA-Z0-9]+◆', jaString)
-            jaString = re.sub(r'^◆[a-zA-Z0-9]+◆', '', jaString)
-            endString = re.search(r'\n$', jaString)
-            jaString = re.sub(r'\n$', '', jaString)
-            if startString is None: startString = ''
-            else:  startString = startString.group()
-            if endString is None: endString = ''
-            else: endString = endString.group()
-
-            # Remove Repeating Chars
-            jaString = re.sub(r'([\u3000-\uffef])\1{1,}', r'\1', jaString)
+            # Grab rest of the messages
+            currentGroup.append(jaString)
+            start = i
+            while (re.search(r'm\[[0-9]+\] = \"(.+?)\"', data[i+1]) != None):
+                i+=1
+                match = re.findall(r'm\[[0-9]+\] = \"(.+?)\"', data[i])
+                currentGroup.append(match[0])
+            finalJAString = ''.join(currentGroup)
             
             # Translate
             if speaker != '':
-                response = translateGPT(jaString, 'Previous Text for Context: ' + ' '.join(textHistory) \
-                                        + '\n\n\n###\n\n\nCurrent Speaker: ' + speaker, True)
+                response = translateGPT(f'{speaker}: {finalJAString}', 'Previous Text for Context: ' + ' '.join(textHistory), True)
             else:
-                response = translateGPT(jaString, 'Previous Text for Context: ' + ' '.join(textHistory), True)
+                response = translateGPT(finalJAString, 'Previous Text for Context: ' + ' '.join(textHistory), True)
             tokens += response[1]
             translatedText = response[0]
+            
+            # Remove added speaker
+            translatedText = re.sub(r'^.+?:\s', '', translatedText)
 
             # TextHistory is what we use to give GPT Context, so thats appended here.
             # rawTranslatedText = re.sub(r'[\\<>]+[a-zA-Z]+\[[a-zA-Z0-9]+\]', '', translatedText)
@@ -176,6 +183,7 @@ def translateText(data, pbar):
             # Keep textHistory list at length maxHistory
             if len(textHistory) > maxHistory:
                 textHistory.pop(0)
+            currentGroup = []  
 
             # Textwrap
             translatedText = textwrap.fill(translatedText, width=WIDTH)
@@ -193,45 +201,93 @@ def translateText(data, pbar):
                 speakerFlag = False
 
             # Write
-            data[i] = startString + translatedText + endString
+            data[i] = translatedText
+        syncIndex = i + 1
         pbar.update()
     return [data, tokens]
         
+def subVars(jaString):
+    varRegex = r'\\+[a-zA-Z]+\[[0-9a-zA-Z\\\[\]]+\]+|[\\]+[#|]+|\\+[\\\[\]\.<>a-zA-Z0-9]+'
+    count = 0
+
+    varList = re.findall(varRegex, jaString)
+    if len(varList) != 0:
+        for var in varList:
+            jaString = jaString.replace(var, '<x' + str(count) + '>')
+            count += 1
+
+    return [jaString, varList]
+
+def resubVars(translatedText, varList):
+    count = 0
+    
+    if len(varList) != 0:
+        for var in varList:
+            translatedText = translatedText.replace('<x' + str(count) + '>', var)
+            count += 1
+
+    # Remove Color Variables Spaces
+    if '\\c' in translatedText:
+        translatedText = re.sub(r'\s*(\\+c\[[1-9]+\])\s*', r'\1', translatedText)
+        translatedText = re.sub(r'\s*(\\+c\[0+\])', r'\1', translatedText)
+    return translatedText
+
 @retry(exceptions=Exception, tries=5, delay=5)
 def translateGPT(t, history, fullPromptFlag):
     with LOCK:
         # If ESTIMATE is True just count this as an execution and return.
         if ESTIMATE:
             global TOKENS
-            enc = tiktoken.encoding_for_model("gpt-3.5-turbo")
+            enc = tiktoken.encoding_for_model("gpt-3.5-turbo-0613")
             TOKENS += len(enc.encode(t)) * 2 + len(enc.encode(history)) + len(enc.encode(PROMPT))
             return (t, 0)
     
+    # Sub Vars
+    varResponse = subVars(t)
+    subbedT = varResponse[0]
+
     # If there isn't any Japanese in the text just skip
-    if not re.search(r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴ]+', t):
+    if not re.search(r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴー]+', subbedT):
         return(t, 0)
 
     """Translate text using GPT"""
+    context = 'Eroge Names Context: カレン == Karen | Female, エリス == Eris | Female, コレット == Colette | Female, テオ == Teo | Male, メイヴィス == Mavis | Female, '
     if fullPromptFlag:
-        system = PROMPT + history 
+        system = PROMPT 
+        user = 'Line to Translate: ' + subbedT
     else:
-        system = 'You are going to pretend to be Japanese visual novel translator, \
-editor, and localizer. ' + history
+        system = 'You are an expert translator who translates everything to English. Reply with only the English Translation of the text.' 
+        user = 'Line to Translate: ' + subbedT
     response = openai.ChatCompletion.create(
         temperature=0,
+        frequency_penalty=1,
         model="gpt-3.5-turbo",
         messages=[
             {"role": "system", "content": system},
-            {"role": "user", "content": "Text to Translate: " + t}
+            {"role": "user", "content": context},
+            {"role": "user", "content": history},
+            {"role": "user", "content": user}
         ],
         request_timeout=30,
     )
 
-    # Make sure translation didn't wonk out
-    mlen=len(response.choices[0].message.content)
-    elnt=10*len(t)
-    if len(response.choices[0].message.content) > 9 * len(t):
+    # Save Translated Text
+    translatedText = response.choices[0].message.content
+    tokens = response.usage.total_tokens
+
+    # Resub Vars
+    translatedText = resubVars(translatedText, varResponse[1])
+
+    # Remove Placeholder Text
+    translatedText = translatedText.replace('English Translation: ', '')
+    translatedText = translatedText.replace('Translation: ', '')
+    translatedText = translatedText.replace('Line to Translate: ', '')
+    translatedText = translatedText.replace('English Translation:', '')
+    translatedText = translatedText.replace('Translation:', '')
+    translatedText = translatedText.replace('Line to Translate:', '')
+
+    # Return Translation
+    if len(translatedText) > 15 * len(t) or "I'm sorry, but I'm unable to assist with that translation" in translatedText:
         return [t, response.usage.total_tokens]
     else:
-        return [response.choices[0].message.content, response.usage.total_tokens]
- 
+        return [translatedText, tokens]
