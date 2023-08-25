@@ -41,10 +41,10 @@ LEAVE=False
 
 # Flags
 CODE401 = True
-CODE405 = False
-CODE102 = True
+CODE405 = True
+CODE102 = False
 CODE122 = False
-CODE101 = True
+CODE101 = False
 CODE355655 = False
 CODE357 = False
 CODE657 = False
@@ -221,7 +221,7 @@ def translateNote(event, regex):
         jaString = re.sub(r'\n', ' ', oldJAString)
 
         # Translate
-        response = translateGPT(jaString, 'Reply with the English translation of the NPC name.', True)
+        response = translateGPT(jaString, 'Reply with the English translation of the description.', True)
         translatedText = response[0]
 
         # Textwrap
@@ -477,7 +477,9 @@ def searchCodes(page, pbar):
     tokens = 0
     speaker = ''
     speakerVar = ''
+    nametag = ''
     match = []
+    syncIndext = 0
     global LOCK
     global NAMESLIST
 
@@ -501,10 +503,6 @@ def searchCodes(page, pbar):
                 # Grab String  
                 jaString = codeList[i]['parameters'][0]
 
-                # # Catch Speaker
-                # if jaString.startswith('　'):
-                #     jaString = jaString + ': '
-
                 # Using this to keep track of 401's in a row. Throws IndexError at EndOfList (Expected Behavior)
                 currentGroup.append(jaString)
 
@@ -523,24 +521,69 @@ def searchCodes(page, pbar):
 
                     # Check for speaker
                     if '\\N' in finalJAString or '\\n' in finalJAString:
-                        match = re.findall(r'([\\]+[Nn]<(.+)>)', finalJAString)
+                        match = re.findall(r'(.+[Nn]<(.+)>)', finalJAString)
                         if len(match) != 0:
                             response = translateGPT(match[0][1], 'Reply with only the english translation of the NPC name', True)
                             tokens += response[1]
                             speaker = response[0].strip('.')
+                            nametag = match[0][0].replace(match[0][1], speaker)
                             finalJAString = finalJAString.replace(match[0][0], '')
                             
                             # Put names in list
                             if NAMES == True and speaker not in NAMESLIST:
                                 with LOCK:
                                     NAMESLIST.append(speaker)
+                    elif '\\kw' in finalJAString:
+                        match = re.findall(r'\\+kw\[[0-9]+\]', finalJAString)
+                        if len(match) != 0:
+                            if '1' in match[0]:
+                                speaker = 'Ayako Nagatsuki'
+                            if '2' in match[0]:
+                                speaker = 'Rei'
+                            
+                            # Set name var to top of list
+                            codeList[j]['parameters'][0] = match[0]
+                            codeList[j]['code'] = 401
 
+                            # Set next item as dialogue
+                            j += 1
+                            codeList[j]['parameters'][0] = match[0]
+                            codeList[j]['code'] = 401
+
+                            # Remove from final string
+                            finalJAString = finalJAString.replace(match[0], '')
+                    elif '【' in finalJAString:
+                        if '\\z' in finalJAString:
+                            match = re.findall(r'(.+?【(.+?)】.+?\\z\[[0-9]+\])', finalJAString)
+                        else:
+                            match = re.findall(r'(.+?【(.+?)】)', finalJAString)
+                        
+                        if len(match) != 0:
+                            response = translateGPT(match[0][1], 'Reply with only the english translation of the NPC name', True)
+                            tokens += response[1]
+                            speaker = response[0].strip('.')
+                            nametag = match[0][0].replace(match[0][1], speaker)
+                            finalJAString = finalJAString.replace(match[0][0], '')
+
+                            # Set name var to top of list
+                            codeList[j]['parameters'][0] = nametag
+                            codeList[j]['code'] = 401
+
+                            # Set next item as dialogue
+                            j += 1
+                            codeList[j]['parameters'][0] = finalJAString
+                            codeList[j]['code'] = 401
+                            
+                            # Put names in list
+                            if NAMES == True and speaker not in NAMESLIST:
+                                with LOCK:
+                                    NAMESLIST.append(speaker)
                                     
                     # Need to remove outside code and put it back later
                     startString = re.search(r'^[^一-龠ぁ-ゔァ-ヴー【】（）[]<>「」『』a-zA-Z0-9Ａ-Ｚ０-９\\]+', finalJAString)
                     finalJAString = re.sub(r'^[^一-龠ぁ-ゔァ-ヴー【】（）[]<>「」『』a-zA-Z0-9Ａ-Ｚ０-９\\]+', '', finalJAString)
                     if startString is None: startString = ''
-                    else:  startString = startString.group()
+                    else:  startString = startString.group()                    
 
                     # Remove any textwrap
                     finalJAString = re.sub(r'\n', ' ', finalJAString)
@@ -565,17 +608,18 @@ def searchCodes(page, pbar):
                         translatedText = response[0]
                         textHistory.append('\"' + translatedText + '\"')
 
-                        # Remove added speaker
+                        # Remove added speaker and add nametag
                         translatedText = re.sub(r'^.+?:\s', '', translatedText)
+                        translatedText = nametag + translatedText
                         speaker = ''                
-                        speakerVar = '' 
+                        nametag = ''
                     else:
                         translatedText = finalJAString    
 
                     # Textwrap
                     translatedText = textwrap.fill(translatedText, width=WIDTH)
 
-                    # Resub start and end
+                    # Start String
                     translatedText = startString + translatedText
 
                     # Set Data
@@ -601,7 +645,7 @@ def searchCodes(page, pbar):
             if codeList[i]['code'] == 122 and CODE122 == True:  
                 # This is going to be the var being set. (IMPORTANT)
                 varNum = codeList[i]['parameters'][0]
-                if varNum != 1238:
+                if varNum != 53:
                     continue
                   
                 jaString = codeList[i]['parameters'][4]
@@ -620,7 +664,7 @@ def searchCodes(page, pbar):
                 matchList = re.findall(r"\'(.*?)\'", jaString)
                 
                 for match in matchList:
-                    response = translateGPT(match, 'Sex Positions', True)
+                    response = translateGPT(match, '', True)
                     translatedText = response[0]
                     tokens += response[1]
 
@@ -850,7 +894,7 @@ def searchCodes(page, pbar):
                     continue
 
                 # Want to translate this script
-                if 'ask:' not in jaString:
+                if 'event_text :' not in jaString:
                     continue
 
                 # Need to remove outside code and put it back later
@@ -864,7 +908,7 @@ def searchCodes(page, pbar):
                 else: endString = endString.group()
 
                 # Translate
-                response = translateGPT(jaString, '', True)
+                response = translateGPT(jaString, 'Reply with the English translation of the Event Title', True)
                 tokens += response[1]
                 translatedText = response[0]
 
@@ -1045,11 +1089,11 @@ def searchCodes(page, pbar):
 
     except IndexError as e:
         # This is part of the logic so we just pass it
-        tracebackLineNo = str(traceback.extract_tb(sys.exc_info()[2])[-1].lineno)
+        traceback.print_exc()
         # raise Exception(str(e) + '|Line:' + tracebackLineNo)  
     except Exception as e:
-        tracebackLineNo = str(traceback.extract_tb(sys.exc_info()[2])[-1].lineno)
-        raise Exception(str(e) + '|Line:' + tracebackLineNo + '| Failed to translate: ' + oldjaString)  
+        traceback.print_exc()
+        raise Exception(str(e) + 'Failed to translate: ' + oldjaString)  
                 
     # Append leftover groups in 401
     if len(currentGroup) > 0:
@@ -1099,8 +1143,8 @@ def searchSS(state, pbar):
     message4Response = translateGPT(state['message4'], 'reply with only the english translation of the text.', True) if 'message4' in state else ''
 
     # if 'note' in state:
-    if 'DOBBY' in state['note']:
-        tokens += translateNote(state, r'<DOBBY_SKILLINFO>\n(.+)\n</DOBBY_SKILLINFO>')
+    if 'Extended Description' in state['note']:
+        tokens += translateNote(state, r'<Extended Description:([^>]*)>')
     
     # Count Tokens
     tokens += nameResponse[1] if nameResponse != '' else 0
@@ -1203,7 +1247,7 @@ def subVars(jaString):
     varList = re.findall(varRegex, jaString)
     if len(varList) != 0:
         for var in varList:
-            jaString = jaString.replace(var, '<x' + str(count) + '>')
+            jaString = jaString.replace(var, '{x' + str(count) + '}')
             count += 1
 
     return [jaString, varList]
@@ -1213,12 +1257,12 @@ def resubVars(translatedText, varList):
     
     if len(varList) != 0:
         for var in varList:
-            translatedText = translatedText.replace('<x' + str(count) + '>', var)
+            translatedText = translatedText.replace('{x' + str(count) + '}', var)
             count += 1
 
     # Remove Color Variables Spaces
     if '\\c' in translatedText:
-        translatedText = re.sub(r'\s*(\\+c\[[1-9]+\])\s*', r'\1', translatedText)
+        translatedText = re.sub(r'\s*(\\+c\[[1-9]+\])\s*', r' \1', translatedText)
         translatedText = re.sub(r'\s*(\\+c\[0+\])', r'\1', translatedText)
     return translatedText
 
@@ -1241,7 +1285,7 @@ def translateGPT(t, history, fullPromptFlag):
         return(t, 0)
 
     """Translate text using GPT"""
-    context = 'Eroge Names Context: カレン == Karen | Female, エリス == Eris | Female, コレット == Colette | Female, テオ == Teo | Male, メイヴィス == Mavis | Female, '
+    context = 'Eroge Names Context: レイン == Rain | Female, フィルス == Phils | Female, メイル == Meryl | Female, ジャス == Jazz | Male'
     if fullPromptFlag:
         system = PROMPT 
         user = 'Line to Translate: ' + subbedT
