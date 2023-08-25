@@ -25,7 +25,7 @@ APICOST = .002 # Depends on the model https://openai.com/pricing
 PROMPT = Path('prompt.txt').read_text(encoding='utf-8')
 THREADS = 20
 LOCK = threading.Lock()
-WIDTH = 72
+WIDTH = 75
 LISTWIDTH = 75
 MAXHISTORY = 10
 ESTIMATE = ''
@@ -122,6 +122,7 @@ def parseText(data, filename):
         try:
             response = translateText(linesList, pbar)
         except Exception as e:
+            traceback.print_exc()
             return [linesList, 0, e]
     return [response[0], response[1], None]
 
@@ -138,7 +139,7 @@ def translateText(data, pbar):
         if i != syncIndex:
             continue
 
-        match = re.findall(r'm\[[0-9]+\] = \"(.+?)\"', data[i])
+        match = re.findall(r'm\[[0-9]+\] = \"(.*)\"', data[i])
         if len(match) > 0:
             jaString = match[0]
 
@@ -148,19 +149,25 @@ def translateText(data, pbar):
 
             # Grab Speaker
             speakerMatch = re.findall(r's\[[0-9]+\] = \"(.+?)[／\"]', data[i-1])
-            if len(match) != 0:
-                response = translateGPT(speakerMatch[0], 'Reply with only the english translation of the NPC name', True)
-                tokens += response[1]
-                speaker = response[0].strip('.')
+            if len(speakerMatch) > 0:
+                # If there isn't any Japanese in the text just skip
+                if re.search(r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴー]+', jaString) and '_' not in speakerMatch[0]:
+                    speaker = ''
+                else:
+                    speaker = ''
+            else:
+                speaker = ''
 
             # Grab rest of the messages
             currentGroup.append(jaString)
             start = i
-            while (re.search(r'm\[[0-9]+\] = \"(.+?)\"', data[i+1]) != None):
+            data[i] = re.sub(r'(m\[[0-9]+\]) = \"(.+)\"', rf'\1 = ""', data[i])
+            while (len(data) > i+1 and re.search(r'm\[[0-9]+\] = \"(.*)\"', data[i+1]) != None):
                 i+=1
-                match = re.findall(r'm\[[0-9]+\] = \"(.+?)\"', data[i])
+                match = re.findall(r'm\[[0-9]+\] = \"(.*)\"', data[i])
                 currentGroup.append(match[0])
-            finalJAString = ''.join(currentGroup)
+                data[i] = re.sub(r'(m\[[0-9]+\]) = \"(.+)\"', rf'\1 = ""', data[i])
+            finalJAString = ' '.join(currentGroup)
             
             # Translate
             if speaker != '':
@@ -170,7 +177,7 @@ def translateText(data, pbar):
             tokens += response[1]
             translatedText = response[0]
             
-            # Remove added speaker
+            # Remove added speaker and quotes
             translatedText = re.sub(r'^.+?:\s', '', translatedText)
 
             # TextHistory is what we use to give GPT Context, so thats appended here.
@@ -186,22 +193,15 @@ def translateText(data, pbar):
             currentGroup = []  
 
             # Textwrap
+            translatedText = translatedText.replace('\"', '\\"')
             translatedText = textwrap.fill(translatedText, width=WIDTH)
-            translatedText = translatedText.replace('\n','\\n')
-            speaker = ''
-
-            # Setup Speaker
-            if speakerFlag == True:
-            # Remove characters that may break scripts
-                charList = ['.', '\"']
-                for char in charList:
-                    translatedText = translatedText.replace(char, '')
-
-                speaker = translatedText
-                speakerFlag = False
 
             # Write
-            data[i] = translatedText
+            textList = translatedText.split("\n")
+            for t in textList:
+                data[start] = re.sub(r'(m\[[0-9]+\]) = \"(.*)\"', rf'\1 = "{t}"', data[start])
+                start+=1
+                
         syncIndex = i + 1
         pbar.update()
     return [data, tokens]
@@ -247,11 +247,12 @@ def translateGPT(t, history, fullPromptFlag):
     subbedT = varResponse[0]
 
     # If there isn't any Japanese in the text just skip
+    return (t,0)
     if not re.search(r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴー]+', subbedT):
         return(t, 0)
 
     """Translate text using GPT"""
-    context = 'Eroge Names Context: カレン == Karen | Female, エリス == Eris | Female, コレット == Colette | Female, テオ == Teo | Male, メイヴィス == Mavis | Female, '
+    context = 'Eroge Names Context: 夏樹 明人 == Natsuki Akito | Male, 朝露 砂夜子 == Asatsuyu Sayoko | Female, 神野 藍 == Jinno Ai | Female, 神野 菫 | Jinno Sumire | Female, 夏樹 海夕里 == Natsuki Miyuri | Female, 水森 陽太 == Mizumori Youta | Male, 夏樹 和人 == Natsuki Kazuto | Male, 野崎 博也 == Nozaki Hiroya | Male, 大菊 ジュン == Oogiku Jun | Male, 酒井 絹代 == Sakai Kinuyo | Female, 酒井 豊 == Sakai Yutaka | Male, 竜生 春義 == Tatsuki Haruyoshi | Male, 竜生 潤 == Tatsuki Jun | Male, 吉沢 英玄 == Yoshizawa Eigen | Male, 吉沢 武雄 == Yoshizawa Takeo | Male'
     if fullPromptFlag:
         system = PROMPT 
         user = 'Line to Translate: ' + subbedT
