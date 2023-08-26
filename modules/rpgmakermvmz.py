@@ -40,7 +40,7 @@ POSITION=0
 LEAVE=False
 
 # Flags
-CODE401 = True
+CODE401 = False
 CODE405 = False
 CODE102 = False
 CODE122 = False
@@ -53,7 +53,7 @@ CODE320 = False
 CODE324 = False
 CODE111 = False
 CODE408 = False
-CODE108 = False
+CODE108 = True
 NAMES = True # Output a list of all the character names found
 
 def handleMVMZ(filename, estimate):
@@ -894,35 +894,28 @@ def searchCodes(page, pbar):
                     continue
 
                 # Want to translate this script
-                if 'event_text :' not in jaString:
+                if 'ActiveMessage:' not in jaString:
                     continue
 
                 # Need to remove outside code and put it back later
-                startString = re.search(r'^[^一-龠ぁ-ゔァ-ヴー【】]+', jaString)
-                jaString = re.sub(r'^[^一-龠ぁ-ゔァ-ヴー【】]+', '', jaString)
-                endString = re.search(r'[^一-龠ぁ-ゔァ-ヴー【】。、…！？]+$', jaString)
-                jaString = re.sub(r'[^一-龠ぁ-ゔァ-ヴー【】。、…！？]+$', '', jaString)
-                if startString is None: startString = ''
-                else:  startString = startString.group()
-                if endString is None: endString = ''
-                else: endString = endString.group()
+                matchList = re.findall(r'<ActiveMessage:(.+?)>', jaString)
 
                 # Translate
-                response = translateGPT(jaString, 'Reply with the English translation of the Event Title', True)
-                tokens += response[1]
-                translatedText = response[0]
+                if len(matchList) > 0:
+                    response = translateGPT(matchList[0], 'Reply with the English translation of the Location Title', True)
+                    tokens += response[1]
+                    translatedText = response[0]
 
-                # Remove characters that may break scripts
-                charList = ['.', '\"']
-                for char in charList:
-                    translatedText = translatedText.replace(char, '')
+                    # Remove characters that may break scripts
+                    charList = ['.', '\"']
+                    for char in charList:
+                        translatedText = translatedText.replace(char, '')
 
-                translatedText = startString + translatedText + endString
+                    translatedText = jaString.replace(matchList[0], translatedText)
+                    translatedText = translatedText.replace('"', '\"')
 
-                translatedText = translatedText.replace('"', '\"')
-
-                # Set Data
-                codeList[i]['parameters'][0] = translatedText
+                    # Set Data
+                    codeList[i]['parameters'][0] = translatedText
 
             ## Event Code: 356 D_TEXT
             if codeList[i]['code'] == 356 and CODE356 == True:
