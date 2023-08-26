@@ -40,20 +40,20 @@ POSITION=0
 LEAVE=False
 
 # Flags
-CODE401 = False
+CODE401 = True
 CODE405 = False
-CODE102 = False
+CODE102 = True
 CODE122 = False
 CODE101 = False
 CODE355655 = False
 CODE357 = False
 CODE657 = False
-CODE356 = True
+CODE356 = False
 CODE320 = False
 CODE324 = False
 CODE111 = False
 CODE408 = False
-CODE108 = True
+CODE108 = False
 NAMES = True # Output a list of all the character names found
 
 def handleMVMZ(filename, estimate):
@@ -502,7 +502,7 @@ def searchCodes(page, pbar):
                 j = i
 
                 # Grab String  
-                jaString = '\\OC[5]\\N<玉座に座っている男>「そういうわけではありませんが、<冷剣>という二つ名は魔族間でも有名でしてね。'
+                jaString = codeList[i]['parameters'][0]
 
                 # Using this to keep track of 401's in a row. Throws IndexError at EndOfList (Expected Behavior)
                 currentGroup.append(jaString)
@@ -645,8 +645,8 @@ def searchCodes(page, pbar):
             if codeList[i]['code'] == 122 and CODE122 == True:  
                 # This is going to be the var being set. (IMPORTANT)
                 varNum = codeList[i]['parameters'][0]
-                if varNum != 1:
-                    continue
+                # if varNum != 1:
+                    # continue
                   
                 jaString = codeList[i]['parameters'][4]
                 if type(jaString) != str:
@@ -661,10 +661,10 @@ def searchCodes(page, pbar):
                     continue
 
                 # Need to remove outside code and put it back later
-                matchList = re.findall(r"\'(.*?)\'", jaString)
+                matchList = re.findall(r"[\'\"](.*?)[\'\"]", jaString)
                 
                 for match in matchList:
-                    response = translateGPT(match, 'Reply with the English translation of the quest objective.', True)
+                    response = translateGPT(match, 'Reply with the English translation of the location Title.', True)
                     translatedText = response[0]
                     tokens += response[1]
 
@@ -1011,7 +1011,7 @@ def searchCodes(page, pbar):
                     else: endString = endString.group()
 
                     if len(textHistory) > 0:
-                        response = translateGPT(jaString, 'Previous text for context: ' + textHistory[len(textHistory)-1], True)
+                        response = translateGPT(jaString, 'Keep you translation as brief as possible. Previous text for context: ' + textHistory[len(textHistory)-1], True)
                         translatedText = response[0]
                     else:
                         response = translateGPT(jaString, '', True)
