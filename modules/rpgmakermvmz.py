@@ -479,7 +479,7 @@ def searchCodes(page, pbar):
     speakerVar = ''
     nametag = ''
     match = []
-    syncIndext = 0
+    syncIndex = 0
     global LOCK
     global NAMESLIST
 
@@ -489,7 +489,9 @@ def searchCodes(page, pbar):
         else:
             codeList = page
         for i in range(len(codeList)):
-            with LOCK:
+            with LOCK:  
+                if syncIndex > i:
+                    i = syncIndex
                 pbar.update(1)
 
             ### All the codes are here which translate specific functions in the MAP files.
@@ -552,32 +554,34 @@ def searchCodes(page, pbar):
 
                             # Remove from final string
                             finalJAString = finalJAString.replace(match[0], '')
-                    elif '【' in finalJAString:
-                        if '\\z' in finalJAString:
-                            match = re.findall(r'(.+?【(.+?)】.+?\\z\[[0-9]+\])', finalJAString)
-                        else:
-                            match = re.findall(r'(.+?【(.+?)】)', finalJAString)
-                        
-                        if len(match) != 0:
-                            response = translateGPT(match[0][1], 'Reply with only the english translation of the NPC name', True)
-                            tokens += response[1]
-                            speaker = response[0].strip('.')
-                            nametag = match[0][0].replace(match[0][1], speaker)
-                            finalJAString = finalJAString.replace(match[0][0], '')
 
+                    matchList = re.findall(r'^([\\]+[cC]\[[0-9]\]+(.+?)[\\]+[cC]\[[0]\])', finalJAString)
+                    if len(matchList) > 0:  
+                        response = translateGPT(matchList[0][1], 'Reply with only the english translation of the NPC name', True)
+                        tokens += response[1]
+                        speaker = response[0].strip('.')
+                        nametag = matchList[0][0].replace(matchList[0][1], speaker)
+                        finalJAString = finalJAString.replace(matchList[0][0], '')
+
+                        # Set next item as dialogue
+                        if codeList[j + 1]['code'] == 0 or codeList[j + 1]['code'] == 401:
                             # Set name var to top of list
                             codeList[j]['parameters'][0] = nametag
                             codeList[j]['code'] = code
 
-                            # Set next item as dialogue
                             j += 1
                             codeList[j]['parameters'][0] = finalJAString
                             codeList[j]['code'] = code
-                            
-                            # Put names in list
-                            if NAMES == True and speaker not in NAMESLIST:
-                                with LOCK:
-                                    NAMESLIST.append(speaker)
+                            nametag = ''
+                        else:
+                            # Set name var to top of list
+                            codeList[j]['parameters'][0] = nametag + finalJAString
+                            codeList[j]['code'] = code
+                        
+                        # Put names in list
+                        if NAMES == True and speaker not in NAMESLIST:
+                            with LOCK:
+                                NAMESLIST.append(speaker)
                                     
                     # Need to remove outside code and put it back later
                     startString = re.search(r'^[^一-龠ぁ-ゔァ-ヴー【】（）[]<>「」『』a-zA-Z0-9Ａ-Ｚ０-９\\]+', finalJAString)
@@ -635,6 +639,7 @@ def searchCodes(page, pbar):
                     codeList[j]['code'] = code
                     speaker = ''
                     match = []
+                    syncIndex = i + 1
 
                     # Keep textHistory list at length maxHistory
                     if len(textHistory) > maxHistory:
@@ -1302,7 +1307,7 @@ def translateGPT(t, history, fullPromptFlag):
         return(t, 0)
 
     """Translate text using GPT"""
-    context = 'Eroge Names Context: レイン == Rain | Female, フィルス == Phils | Female, メイル == Meryl | Female, ジャス == Jazz | Male'
+    context = 'Eroge Names Context: コノハ == Konoha | Female'
     if fullPromptFlag:
         system = PROMPT 
         user = 'Line to Translate: ' + subbedT
