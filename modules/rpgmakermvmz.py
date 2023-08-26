@@ -386,7 +386,7 @@ def searchThings(name, pbar):
     descriptionResponse = translateGPT(name['description'], 'Reply with only the english translation of the description.', False) if 'description' in name else ''
 
     if '<SG説明:' in name['note']:
-        tokens += translateNote(name, r'<SGカテゴリ:([\s\S]*?)>')
+        tokens += translateNote(name, r'<SG説明:([\s\S]*?)>')
 
     # Count Tokens
     tokens += nameResponse[1] if nameResponse != '' else 0
@@ -1011,10 +1011,10 @@ def searchCodes(page, pbar):
                     else: endString = endString.group()
 
                     if len(textHistory) > 0:
-                        response = translateGPT(jaString, 'Keep you translation as brief as possible. Previous text for context: ' + textHistory[len(textHistory)-1], True)
+                        response = translateGPT(jaString, 'Keep your translation as brief as possible. Previous text for context: ' + textHistory[len(textHistory)-1], True)
                         translatedText = response[0]
                     else:
-                        response = translateGPT(jaString, '', True)
+                        response = translateGPT(jaString, 'Keep your translation as brief as possible.', True)
                         translatedText = response[0]
 
                     # Remove characters that may break scripts
@@ -1242,10 +1242,12 @@ def searchSystem(data, pbar):
     return tokens
 
 def subVars(jaString):
+    jaString = jaString.replace('\u3000', ' ')
     varRegex = r'\\+[a-zA-Z]+\[[0-9a-zA-Z\\\[\]]+\]+|[\\]+[#|]+|\\+[\\\[\]\.<>a-zA-Z0-9]+'
     count = 0
 
     varList = re.findall(varRegex, jaString)
+    varList = set(varList)
     if len(varList) != 0:
         for var in varList:
             jaString = jaString.replace(var, '{x' + str(count) + '}')
@@ -1255,6 +1257,20 @@ def subVars(jaString):
 
 def resubVars(translatedText, varList):
     count = 0
+
+    # Fix Spacing and ChatGPT Nonsense
+    matchList = re.findall(r'{[x0-9\s]+?}', translatedText)
+    if len(matchList) > 0:
+        for match in matchList:
+            text = match.replace(' ', '')
+            translatedText = translatedText.replace(match, text)
+    matchList = re.findall(r'\([x0-9\s]+?\)', translatedText)
+    if len(matchList) > 0:
+        for match in matchList:
+            text = match.replace('(', '{')
+            text = text.replace(')', '}')
+            text = text.replace(' ', '')
+            translatedText = translatedText.replace(match, text)
     
     if len(varList) != 0:
         for var in varList:
@@ -1295,7 +1311,7 @@ def translateGPT(t, history, fullPromptFlag):
         user = 'Line to Translate: ' + subbedT
     response = openai.ChatCompletion.create(
         temperature=0,
-        frequency_penalty=1,
+        frequency_penalty=0.2,
         model="gpt-3.5-turbo",
         messages=[
             {"role": "system", "content": system},
