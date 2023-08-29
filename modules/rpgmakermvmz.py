@@ -222,7 +222,7 @@ def translateNote(event, regex):
         jaString = re.sub(r'\n', ' ', oldJAString)
 
         # Translate
-        response = translateGPT(jaString, 'Reply with the English translation of the description.', True)
+        response = translateGPT(jaString, 'Reply with the English translation of the NPC name.', True)
         translatedText = response[0]
 
         # Textwrap
@@ -386,6 +386,7 @@ def searchThings(name, pbar):
     # Description
     descriptionResponse = translateGPT(name['description'], 'Reply with only the english translation of the description.', False) if 'description' in name else ''
 
+    # Note
     if '<SG説明:' in name['note']:
         tokens += translateNote(name, r'<Info Text Bottom>\n([\s\S]*?)\n</Info Text Bottom>')
 
@@ -397,7 +398,11 @@ def searchThings(name, pbar):
     if 'name' in name:
         name['name'] = nameResponse[0].strip('\"')
     if 'description' in name:
-        description = textwrap.fill(descriptionResponse[0], LISTWIDTH)
+        description = descriptionResponse[0]
+
+        # Remove Textwrap
+        description = description.replace('\n', ' ')
+        # description = textwrap.fill(descriptionResponse[0], LISTWIDTH)
         name['description'] = description.strip('\"')
 
     pbar.update(1)
@@ -436,8 +441,8 @@ def searchNames(name, pbar, context):
             tokens += translateNote(name, r'<Info Text Bottom>\n([\s\S]*?)\n</Info Text Bottom>')
 
     if 'Enemies' in context:
-        if 'taneoya' in name['note']:
-            tokens += translateNote(name, r'<taneoya:([^>]*)>')
+        if 'variable_update_skill' in name['note']:
+            tokens += translateNote(name, r'111:(.+?)\n')
 
         if 'desc2' in name['note']:
             tokens += translateNote(name, r'<desc2:([^>]*)>')
@@ -1153,10 +1158,29 @@ def searchSS(state, pbar):
     descriptionResponse = translateGPT(state['description'], 'Reply with only the english translation of the description.', True) if 'description' in state else ''
 
     # Messages
-    message1Response = translateGPT('Taro' + state['message1'], 'reply with only the gender neutral english translation of the action.', True) if 'message1' in state else ''
-    message2Response = translateGPT(state['message2'], 'reply with only the english translation of the text.', True) if 'message2' in state else ''
-    message3Response = translateGPT(state['message3'], 'reply with only the english translation of the text.', True) if 'message3' in state else ''
-    message4Response = translateGPT(state['message4'], 'reply with only the english translation of the text.', True) if 'message4' in state else ''
+    if 'message1' in state:
+        if len(state['message1']) > 0 and state['message1'][0] in ['は', 'を', 'の']:
+            message1Response = translateGPT('Taro' + state['message1'], 'reply with only the gender neutral english translation of the action. Always start the sentence with Taro.', True)
+        else:
+            message1Response = translateGPT(state['message1'], 'reply with only the gender neutral english translation', True)
+
+    if 'message2' in state:
+        if len(state['message2']) > 0 and state['message2'][0] in ['は', 'を', 'の']:
+            message2Response = translateGPT('Taro' + state['message2'], 'reply with only the gender neutral english translation of the action. Always start the sentence with Taro.', True)
+        else:
+            message2Response = translateGPT(state['message2'], 'reply with only the gender neutral english translation', True)
+
+    if 'message3' in state:
+        if len(state['message3']) > 0 and state['message3'][0] in ['は', 'を', 'の']:
+            message3Response = translateGPT('Taro' + state['message3'], 'reply with only the gender neutral english translation of the action. Always start the sentence with Taro.', True)
+        else:
+            message3Response = translateGPT(state['message3'], 'reply with only the gender neutral english translation', True)
+
+    if 'message4' in state:
+        if len(state['message4']) > 0 and state['message4'][0] in ['は', 'を', 'の']:
+            message4Response = translateGPT('Taro' + state['message4'], 'reply with only the gender neutral english translation of the action. Always start the sentence with Taro.', True)
+        else:
+            message4Response = translateGPT(state['message4'], 'reply with only the gender neutral english translation', True)
 
     # if 'note' in state:
     if 'help' in state['note']:
@@ -1181,11 +1205,11 @@ def searchSS(state, pbar):
     if 'message1' in state:
         state['message1'] = message1Response[0].strip('\"').replace('Taro', '')
     if 'message2' in state:
-        state['message2'] = message2Response[0].strip('\"')
+        state['message2'] = message2Response[0].strip('\"').replace('Taro', '')
     if 'message3' in state:
-        state['message3'] = message3Response[0].strip('\"')
+        state['message3'] = message3Response[0].strip('\"').replace('Taro', '')
     if 'message4' in state:
-        state['message4'] = message4Response[0].strip('\"')
+        state['message4'] = message4Response[0].strip('\"').replace('Taro', '')
 
     pbar.update(1)
     return tokens
