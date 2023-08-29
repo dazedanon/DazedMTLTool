@@ -42,7 +42,7 @@ LEAVE=False
 # Flags
 CODE401 = True
 CODE405 = False
-CODE102 = False
+CODE102 = True
 CODE122 = False
 CODE101 = False
 CODE355655 = False
@@ -199,8 +199,8 @@ def parseMap(data, filename):
             for event in events:
                 if event is not None:
                     # This translates ID of events.
-                    response = translateGPT(event['name'], 'Reply with the English translation of the quest title.', True)
-                    event['name'] = response[0]
+                    response = translateGPT(event['name'], 'Reply with the English translation of the Title.', True)
+                    event['name'] = response[0].replace('\"', '')
                     totalTokens += response[1]
 
                     futures = [executor.submit(searchCodes, page, pbar) for page in event['pages'] if page is not None]
@@ -555,7 +555,7 @@ def searchCodes(page, pbar):
                             codeList[j]['parameters'][0] = match[0]
                             codeList[j]['code'] = code
 
-                            # Remove from final string
+                            # Remove nametag from final string
                             finalJAString = finalJAString.replace(match[0], '')
 
                     matchList = re.findall(r'^([\\]+[cC]\[[0-9]\]+(.+?)[\\]+[cC]\[[0]\])', finalJAString)
@@ -567,7 +567,7 @@ def searchCodes(page, pbar):
                         finalJAString = finalJAString.replace(matchList[0][0], '')
 
                         # Set next item as dialogue
-                        if codeList[j + 1]['code'] == 0 or codeList[j + 1]['code'] == 401:
+                        if (codeList[j + 1]['code'] == 0 and len(codeList[j + 1]['parameters']) > 0) or codeList[j + 1]['code'] == 401:
                             # Set name var to top of list
                             codeList[j]['parameters'][0] = nametag
                             codeList[j]['code'] = code
@@ -616,8 +616,10 @@ def searchCodes(page, pbar):
                         textHistory.append('\"' + translatedText + '\"')
 
                         # Remove added speaker
-                        translatedText = re.sub(r'^.+?:\s', '', translatedText)
+                        translatedText = re.sub(r'^.+[:\]]\s?', '', translatedText)
                         speaker = ''                
+                        if ':' in translatedText:
+                            print('test')
                     else:
                         translatedText = finalJAString    
 
@@ -1231,11 +1233,11 @@ def searchSystem(data, pbar):
         pbar.update(1)
 
     # Variables (Optional ususally)
-    # for i in range(len(data['variables'])):
-    #     response = translateGPT(data['variables'][i], 'Reply with only the english translation of the name', False)
-    #     tokens += response[1]
-    #     data['variables'][i] = response[0].strip('.\"')
-    #     pbar.update(1)
+    for i in range(len(data['variables'])):
+        response = translateGPT(data['variables'][i], 'Reply with only the english translation of the title', False)
+        tokens += response[1]
+        data['variables'][i] = response[0].strip('.\"')
+        pbar.update(1)
 
     # Messages
     messages = (data['terms']['messages'])
