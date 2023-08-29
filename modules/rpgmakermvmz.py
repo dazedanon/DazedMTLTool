@@ -48,7 +48,7 @@ CODE101 = False
 CODE355655 = False
 CODE357 = False
 CODE657 = False
-CODE356 = True
+CODE356 = False
 CODE320 = False
 CODE324 = False
 CODE111 = False
@@ -198,10 +198,10 @@ def parseMap(data, filename):
         with ThreadPoolExecutor(max_workers=THREADS) as executor:
             for event in events:
                 if event is not None:
-                    # This translates ID of events.
-                    response = translateGPT(event['name'], 'Reply with the English translation of the Title.', True)
-                    event['name'] = response[0].replace('\"', '')
-                    totalTokens += response[1]
+                    # This translates ID of events. (May break the game)
+                    # response = translateGPT(event['name'], 'Reply with the English translation of the Title.', True)
+                    # event['name'] = response[0].replace('\"', '')
+                    # totalTokens += response[1]
 
                     futures = [executor.submit(searchCodes, page, pbar) for page in event['pages'] if page is not None]
                     for future in as_completed(futures):
@@ -513,6 +513,8 @@ def searchCodes(page, pbar):
 
                 # Grab String  
                 jaString = codeList[i]['parameters'][0]
+                if 'I got it, if we a' in jaString:
+                    print('')
 
                 # Using this to keep track of 401's in a row. Throws IndexError at EndOfList (Expected Behavior)
                 currentGroup.append(jaString)
@@ -621,7 +623,7 @@ def searchCodes(page, pbar):
                         textHistory.append('\"' + translatedText + '\"')
 
                         # Remove added speaker
-                        translatedText = re.sub(r'^.+[:\]]\s?', '', translatedText)
+                        translatedText = re.sub(r'^.+?:\s?', '', translatedText)
                         speaker = ''                
                         if ':' in translatedText:
                             print('test')
@@ -660,7 +662,7 @@ def searchCodes(page, pbar):
             if codeList[i]['code'] == 122 and CODE122 == True:  
                 # This is going to be the var being set. (IMPORTANT)
                 varNum = codeList[i]['parameters'][0]
-                if varNum != 111:
+                if varNum != 328:
                     continue
                   
                 jaString = codeList[i]['parameters'][4]
@@ -672,13 +674,13 @@ def searchCodes(page, pbar):
                     continue
 
                 # Need to remove outside code and put it back later
-                matchList = re.findall(r"[\'\"](.*?)[\'\"]", jaString)
+                matchList = re.findall(r"[\'\"\`](.*?)[\'\"\`]", jaString)
                 
                 for match in matchList:
                     # Remove Textwrap
                     match = match.replace('\\n', '')
                     match = match.replace('\'', '')
-                    response = translateGPT(match, 'Reply with the English translation of the NPC name.', True)
+                    response = translateGPT(match, 'Reply with the English translation.', True)
                     translatedText = response[0]
                     tokens += response[1]
 
@@ -1348,7 +1350,7 @@ def translateGPT(t, history, fullPromptFlag):
         return(t, 0)
 
     """Translate text using GPT"""
-    context = 'Eroge Names Context: "コノハ" == "Konoha" | Female, "ルディア" == "Rudia" | Female, "エイミ" == "Amy" | Female, "バレッタ" == "Baretta" | Female'
+    context = 'Eroge Names Context: レイン == Rain | Female, フィルス == Phils | Female, メイル == Meryl | Female, ジャス == Jazz | Male'
     if fullPromptFlag:
         system = PROMPT 
         user = 'Line to Translate: ' + subbedT
