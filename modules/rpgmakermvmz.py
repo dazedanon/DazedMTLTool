@@ -42,13 +42,13 @@ LEAVE=False
 # Flags
 CODE401 = True
 CODE405 = False
-CODE102 = True
+CODE102 = False
 CODE122 = False
 CODE101 = False
 CODE355655 = False
 CODE357 = False
 CODE657 = False
-CODE356 = False
+CODE356 = True
 CODE320 = False
 CODE324 = False
 CODE111 = False
@@ -198,9 +198,10 @@ def parseMap(data, filename):
         with ThreadPoolExecutor(max_workers=THREADS) as executor:
             for event in events:
                 if event is not None:
-                    # This translates text above items on the map.
-                    # if 'LB:' in event['note']:
-                        # totalTokens += translateNote(event, r'(?<=LB:)[^u0000-u0080]+')
+                    # This translates ID of events.
+                    response = translateGPT(event['name'], 'Reply with the English translation of the quest title.', True)
+                    event['name'] = response[0]
+                    totalTokens += response[1]
 
                     futures = [executor.submit(searchCodes, page, pbar) for page in event['pages'] if page is not None]
                     for future in as_completed(futures):
@@ -225,7 +226,7 @@ def translateNote(event, regex):
         translatedText = response[0]
 
         # Textwrap
-        translatedText = textwrap.fill(translatedText, width=LISTWIDTH)
+        # translatedText = textwrap.fill(translatedText, width=LISTWIDTH)
 
         translatedText = translatedText.replace('\"', '')
         event['note'] = event['note'].replace(oldJAString, translatedText)
@@ -386,7 +387,7 @@ def searchThings(name, pbar):
     descriptionResponse = translateGPT(name['description'], 'Reply with only the english translation of the description.', False) if 'description' in name else ''
 
     if '<SG説明:' in name['note']:
-        tokens += translateNote(name, r'<SG説明:([\s\S]*?)>')
+        tokens += translateNote(name, r'<Info Text Bottom>\n([\s\S]*?)\n</Info Text Bottom>')
 
     # Count Tokens
     tokens += nameResponse[1] if nameResponse != '' else 0
@@ -432,7 +433,7 @@ def searchNames(name, pbar, context):
         else:
             responseList.append(['', 0])
         if 'hint' in name['note']:
-            tokens += translateNote(name, r'<hint:([^>]*)>')
+            tokens += translateNote(name, r'<Info Text Bottom>\n([\s\S]*?)\n</Info Text Bottom>')
 
     if 'Enemies' in context:
         if 'taneoya' in name['note']:
@@ -464,7 +465,7 @@ def searchNames(name, pbar, context):
         if 'description' in name:
             name['description'] = translatedText.strip('\"')
             if '<SG説明:' in name['note']:
-                tokens += translateNote(name, r'<SG説明:([^>]*)>')
+                tokens += translateNote(name, r'<Info Text Bottom>\n([\s\S]*?)\n</Info Text Bottom>')
     pbar.update(1)
 
     return tokens
@@ -482,6 +483,8 @@ def searchCodes(page, pbar):
     syncIndex = 0
     global LOCK
     global NAMESLIST
+
+    
 
     try:
         if 'list' in page:
@@ -650,8 +653,8 @@ def searchCodes(page, pbar):
             if codeList[i]['code'] == 122 and CODE122 == True:  
                 # This is going to be the var being set. (IMPORTANT)
                 varNum = codeList[i]['parameters'][0]
-                # if varNum != 1:
-                    # continue
+                if varNum != 111:
+                    continue
                   
                 jaString = codeList[i]['parameters'][4]
                 if type(jaString) != str:
@@ -661,27 +664,32 @@ def searchCodes(page, pbar):
                 if '■' in jaString or '_' in jaString:
                     continue
 
-                # If there isn't any Japanese in the text just skip
-                if not re.search(r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴー]+', jaString):
-                    continue
-
                 # Need to remove outside code and put it back later
                 matchList = re.findall(r"[\'\"](.*?)[\'\"]", jaString)
                 
                 for match in matchList:
-                    response = translateGPT(match, 'Reply with the English translation of the location Title.', True)
+                    # Remove Textwrap
+                    match = match.replace('\\n', '')
+                    match = match.replace('\'', '')
+                    response = translateGPT(match, 'Reply with the English translation of the NPC name.', True)
                     translatedText = response[0]
                     tokens += response[1]
 
+                    # Replace
+                    translatedText = jaString.replace(jaString, translatedText)
+
                     # Remove characters that may break scripts
-                    charList = ['.', '\"', '\'', '\\n']
+                    charList = ['.', '\"', '\\n']
                     for char in charList:
                         translatedText = translatedText.replace(char, '')
-
-                    jaString = jaString.replace(match, translatedText)
+                
+                # Textwrap
+                translatedText = textwrap.fill(translatedText, width=30)
+                translatedText = translatedText.replace('\n', '\\n')
+                translatedText = translatedText.replace('\'', '\\\'')
+                translatedText = '\'' + translatedText + '\''
 
                 # Set Data
-                translatedText = jaString
                 codeList[i]['parameters'][4] = translatedText
 
         ## Event Code: 357 [Picture Text] [Optional]
@@ -899,11 +907,11 @@ def searchCodes(page, pbar):
                     continue
 
                 # Want to translate this script
-                if 'ActiveMessage:' not in jaString:
+                if 'text_indicator : ' not in jaString:
                     continue
 
                 # Need to remove outside code and put it back later
-                matchList = re.findall(r'<ActiveMessage:(.+?)>', jaString)
+                matchList = re.findall(r'text_indicator : (.+)', jaString)
 
                 # Translate
                 if len(matchList) > 0:
@@ -1149,8 +1157,8 @@ def searchSS(state, pbar):
     message4Response = translateGPT(state['message4'], 'reply with only the english translation of the text.', True) if 'message4' in state else ''
 
     # if 'note' in state:
-    if 'Extended Description' in state['note']:
-        tokens += translateNote(state, r'<Extended Description:([^>]*)>')
+    if 'help' in state['note']:
+        tokens += translateNote(state, r'<help:([^>]*)>')
     
     # Count Tokens
     tokens += nameResponse[1] if nameResponse != '' else 0
@@ -1276,6 +1284,13 @@ def resubVars(translatedText, varList):
             text = text.replace(')', '}')
             text = text.replace(' ', '')
             translatedText = translatedText.replace(match, text)
+    matchList = re.findall(r'\[[x0-9\s]+?\]', translatedText)
+    if len(matchList) > 0:
+        for match in matchList:
+            text = match.replace('[', '{')
+            text = text.replace(']', '}')
+            text = text.replace(' ', '')
+            translatedText = translatedText.replace(match, text)
     
     if len(varList) != 0:
         for var in varList:
@@ -1307,7 +1322,7 @@ def translateGPT(t, history, fullPromptFlag):
         return(t, 0)
 
     """Translate text using GPT"""
-    context = 'Eroge Names Context: コノハ == Konoha | Female'
+    context = 'Eroge Names Context: "コノハ" == "Konoha" | Female, "ルディア" == "Rudia" | Female, "エイミ" == "Amy" | Female, "バレッタ" == "Baretta" | Female'
     if fullPromptFlag:
         system = PROMPT 
         user = 'Line to Translate: ' + subbedT
