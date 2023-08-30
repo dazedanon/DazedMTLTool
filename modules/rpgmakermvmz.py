@@ -489,8 +489,6 @@ def searchCodes(page, pbar):
     global LOCK
     global NAMESLIST
 
-    
-
     try:
         if 'list' in page:
             codeList = page['list']
@@ -513,33 +511,49 @@ def searchCodes(page, pbar):
 
                 # Grab String  
                 jaString = codeList[i]['parameters'][0]
-                if 'I got it, if we a' in jaString:
-                    print('')
+                firstJAString = jaString
 
                 # Using this to keep track of 401's in a row. Throws IndexError at EndOfList (Expected Behavior)
                 currentGroup.append(jaString)
 
-                while (codeList[i+1]['code'] == 401 or codeList[i+1]['code'] == 405):
-                    codeList[i]['parameters'][0] = ''
-                    codeList[i]['code'] = 0
-                    i += 1
+                if len(codeList) > i+1:
+                    print(f'{len(codeList)} | {i+1}')
+                    while (codeList[i+1]['code'] == 401 or codeList[i+1]['code'] == 405):
+                        codeList[i]['parameters'][0] = ''
+                        codeList[i]['code'] = 0
+                        i += 1
 
-                    jaString = codeList[i]['parameters'][0]
-                    currentGroup.append(jaString)
+                        jaString = codeList[i]['parameters'][0]
+                        currentGroup.append(jaString)
 
                 # Join up 401 groups for better translation.
                 if len(currentGroup) > 0:
                     finalJAString = ''.join(currentGroup)
                     oldjaString = finalJAString
 
-                    # Check for speaker
-                    match = re.findall(r'(.+?<(.+?)>)', finalJAString)
-                    if len(match) != 0:
-                        response = translateGPT(match[0][1], 'Reply with only the english translation of the NPC name', True)
+                    # Color Regex: ^([\\]+[cC]\[[0-9]\]+(.+?)[\\]+[cC]\[[0]\])
+                    matchList = re.findall(r'(.*?([\\]+[nN]<(.+?)>).*)', finalJAString)
+                    if len(matchList) > 0:  
+                        response = translateGPT(matchList[0][2], 'Reply with only the english translation of the NPC name', True)
                         tokens += response[1]
                         speaker = response[0].strip('.')
-                        nametag = match[0][0].replace(match[0][1], speaker)
-                        finalJAString = finalJAString.replace(match[0][0], '')
+                        nametag = matchList[0][1].replace(matchList[0][2], speaker)
+                        finalJAString = finalJAString.replace(matchList[0][1], '')
+
+                        # Set next item as dialogue
+                        if (codeList[j + 1]['code'] == 0 and len(codeList[j + 1]['parameters']) > 0) or codeList[j + 1]['code'] == 401:
+                            # Set name var to top of list
+                            codeList[j]['parameters'][0] = nametag
+                            codeList[j]['code'] = code
+
+                            j += 1
+                            codeList[j]['parameters'][0] = finalJAString
+                            codeList[j]['code'] = code
+                            nametag = ''
+                        else:
+                            # Set nametag in string
+                            codeList[j]['parameters'][0] = nametag + finalJAString
+                            codeList[j]['code'] = code
                         
                         # Put names in list
                         if NAMES == True and speaker not in NAMESLIST:
@@ -564,34 +578,6 @@ def searchCodes(page, pbar):
 
                             # Remove nametag from final string
                             finalJAString = finalJAString.replace(match[0], '')
-
-                    matchList = re.findall(r'^([\\]+[cC]\[[0-9]\]+(.+?)[\\]+[cC]\[[0]\])', finalJAString)
-                    if len(matchList) > 0:  
-                        response = translateGPT(matchList[0][1], 'Reply with only the english translation of the NPC name', True)
-                        tokens += response[1]
-                        speaker = response[0].strip('.')
-                        nametag = matchList[0][0].replace(matchList[0][1], speaker)
-                        finalJAString = finalJAString.replace(matchList[0][0], '')
-
-                        # Set next item as dialogue
-                        if (codeList[j + 1]['code'] == 0 and len(codeList[j + 1]['parameters']) > 0) or codeList[j + 1]['code'] == 401:
-                            # Set name var to top of list
-                            codeList[j]['parameters'][0] = nametag
-                            codeList[j]['code'] = code
-
-                            j += 1
-                            codeList[j]['parameters'][0] = finalJAString
-                            codeList[j]['code'] = code
-                            nametag = ''
-                        else:
-                            # Set name var to top of list
-                            codeList[j]['parameters'][0] = nametag + finalJAString
-                            codeList[j]['code'] = code
-                        
-                        # Put names in list
-                        if NAMES == True and speaker not in NAMESLIST:
-                            with LOCK:
-                                NAMESLIST.append(speaker)
                                     
                     # Need to remove outside code and put it back later
                     startString = re.search(r'^[^一-龠ぁ-ゔァ-ヴー【】（）[]<>「」『』a-zA-Z0-9Ａ-Ｚ０-９\\]+', finalJAString)
@@ -612,12 +598,12 @@ def searchCodes(page, pbar):
 
                     # Translate
                     if speaker == '' and finalJAString != '':
-                        response = translateGPT(finalJAString, 'Previous Translated Text: ' + '|'.join(textHistory), True)
+                        response = translateGPT(finalJAString, 'Previously Translated Text: ' + '|\n\n'.join(textHistory), True)
                         tokens += response[1]
                         translatedText = response[0]
                         textHistory.append('\"' + translatedText + '\"')
                     elif finalJAString != '':
-                        response = translateGPT(speaker + ': ' + finalJAString, 'Previous Translated Text: ' + '|'.join(textHistory), True)
+                        response = translateGPT(speaker + ': ' + finalJAString, 'Previously Translated Text: ' + '|\n\n'.join(textHistory), True)
                         tokens += response[1]
                         translatedText = response[0]
                         textHistory.append('\"' + translatedText + '\"')
@@ -1350,7 +1336,7 @@ def translateGPT(t, history, fullPromptFlag):
         return(t, 0)
 
     """Translate text using GPT"""
-    context = 'Eroge Names Context: レイン == Rain | Female, フィルス == Phils | Female, メイル == Meryl | Female, ジャス == Jazz | Male'
+    context = 'Eroge Names Context: セレナ == Serena | Female, エリカ == Erika | Female, シシリア == Cecilia | Female, マリルー == Marilou | Female, '
     if fullPromptFlag:
         system = PROMPT 
         user = 'Line to Translate: ' + subbedT
@@ -1360,6 +1346,7 @@ def translateGPT(t, history, fullPromptFlag):
     response = openai.ChatCompletion.create(
         temperature=0,
         frequency_penalty=0.2,
+        presence_penalty=0.2,
         model="gpt-3.5-turbo",
         messages=[
             {"role": "system", "content": system},
