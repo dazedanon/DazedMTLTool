@@ -517,7 +517,6 @@ def searchCodes(page, pbar):
                 currentGroup.append(jaString)
 
                 if len(codeList) > i+1:
-                    print(f'{len(codeList)} | {i+1}')
                     while (codeList[i+1]['code'] == 401 or codeList[i+1]['code'] == 405):
                         codeList[i]['parameters'][0] = ''
                         codeList[i]['code'] = 0
@@ -541,7 +540,7 @@ def searchCodes(page, pbar):
                         finalJAString = finalJAString.replace(matchList[0][1], '')
 
                         # Set next item as dialogue
-                        if (codeList[j + 1]['code'] == 0 and len(codeList[j + 1]['parameters']) > 0) or codeList[j + 1]['code'] == 401:
+                        if (codeList[j + 1]['code'] == -1 and len(codeList[j + 1]['parameters']) > 0) or codeList[j + 1]['code'] == -1:
                             # Set name var to top of list
                             codeList[j]['parameters'][0] = nametag
                             codeList[j]['code'] = code
@@ -611,8 +610,6 @@ def searchCodes(page, pbar):
                         # Remove added speaker
                         translatedText = re.sub(r'^.+?:\s?', '', translatedText)
                         speaker = ''                
-                        if ':' in translatedText:
-                            print('test')
                     else:
                         translatedText = finalJAString    
 
@@ -1277,7 +1274,7 @@ def subVars(jaString):
     varList = set(varList)
     if len(varList) != 0:
         for var in varList:
-            jaString = jaString.replace(var, '{x' + str(count) + '}')
+            jaString = jaString.replace(var, '{var' + str(count) + '}')
             count += 1
 
     return [jaString, varList]
@@ -1308,7 +1305,7 @@ def resubVars(translatedText, varList):
     
     if len(varList) != 0:
         for var in varList:
-            translatedText = translatedText.replace('{x' + str(count) + '}', var)
+            translatedText = translatedText.replace('{var' + str(count) + '}', var)
             count += 1
 
     # Remove Color Variables Spaces
