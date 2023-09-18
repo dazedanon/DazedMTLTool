@@ -26,7 +26,7 @@ PROMPT = Path('prompt.txt').read_text(encoding='utf-8')
 THREADS = 10 # For GPT4 rate limit will be hit if you have more than 1 thread.
 LOCK = threading.Lock()
 WIDTH = 40
-LISTWIDTH = 70
+LISTWIDTH = 60
 MAXHISTORY = 10
 ESTIMATE = ''
 TOTALCOST = 0
@@ -67,7 +67,8 @@ def handleMVMZ(filename, estimate):
         # Print Result
         end = time.time()
         tqdm.write(getResultString(['', TOKENS, None], end - start, filename))
-        tqdm.write(str(NAMESLIST))
+        if NAMES == True:
+            tqdm.write(str(NAMESLIST))
         with LOCK:
             TOTALCOST += TOKENS * .001 * APICOST
             TOTALTOKENS += TOKENS
@@ -559,7 +560,7 @@ def searchCodes(page, pbar):
                             codeList[j]['code'] = code
                         
                         # Put names in list
-                        if NAMES == True and speaker not in NAMESLIST:
+                        if speaker not in NAMESLIST:
                             with LOCK:
                                 NAMESLIST.append(speaker)
                     elif '\\kw' in finalJAString:
@@ -821,7 +822,7 @@ def searchCodes(page, pbar):
                 # Set Data
                 speaker = translatedText
                 codeList[i]['parameters'][4] = translatedText
-                if NAMES == True and speaker not in NAMESLIST:
+                if speaker not in NAMESLIST:
                     with LOCK:
                         NAMESLIST.append(speaker)
 
