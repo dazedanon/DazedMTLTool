@@ -9,7 +9,7 @@ from modules.rpgmakerace import handleACE
 from modules.csvtl import handleCSV
 from modules.textfile import handleTextfile
 
-THREADS = 10 # For GPT4 rate limit will be hit if you have more than 1 thread.
+THREADS = 20 # For GPT4 rate limit will be hit if you have more than 1 thread.
 
 # Info Message
 print(Fore.LIGHTYELLOW_EX + "WARNING: Once a translation starts do not close it unless you want to lose your\
@@ -88,9 +88,10 @@ def main():
             case _:
                 version = ''
         
-    if estimate == False and totalCost != 'Fail':
-        # This is to encourage people to grab what's in /translated instead
-        deleteFolderFiles('files')
+    if totalCost != 'Fail':
+        if estimate == False:
+            # This is to encourage people to grab what's in /translated instead
+            deleteFolderFiles('files')
 
         # Prevent immediately closing of CLI
         print(totalCost)
