@@ -8,6 +8,7 @@ from modules.rpgmakermvmz import handleMVMZ
 from modules.rpgmakerace import handleACE
 from modules.csvtl import handleCSV
 from modules.textfile import handleTextfile
+from modules.tyrano import handleTyrano
 
 THREADS = 10 # For GPT4 rate limit will be hit if you have more than 1 thread.
 
@@ -29,7 +30,7 @@ def main():
     totalCost = 0
     version = ''
     while version == '':
-        version = input('Select the RPGMaker Version:\n\n1. MV/MZ\n2. ACE\n3. CSV (From Translator++)\n4. Text (Custom)\n')
+        version = input('Select the RPGMaker Version:\n\n1. MV/MZ\n2. ACE\n3. CSV (From Translator++)\n4. Text (Custom)\n5. Tyrano\n')
         match version:
             case '1':
                 # Open File (Threads)
@@ -76,6 +77,20 @@ def main():
                 with ThreadPoolExecutor(max_workers=THREADS) as executor:
                     futures = [executor.submit(handleTextfile, filename, estimate) \
                                 for filename in os.listdir("files") if filename.endswith('txt')]
+                    
+                    for future in as_completed(futures):
+                        try:
+                            totalCost = future.result()
+                            
+                        except Exception as e:
+                            tracebackLineNo = str(traceback.extract_tb(sys.exc_info()[2])[-1].lineno)
+                            print(Fore.RED + str(e) + '|' + tracebackLineNo + Fore.RESET)
+
+            case '5':
+                # Open File (Threads)
+                with ThreadPoolExecutor(max_workers=THREADS) as executor:
+                    futures = [executor.submit(handleTyrano, filename, estimate) \
+                                for filename in os.listdir("files") if filename.endswith('ks')]
                     
                     for future in as_completed(futures):
                         try:
