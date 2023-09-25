@@ -71,7 +71,7 @@ def handleTyrano(filename, estimate):
                 translatedData = openFiles(filename, outFile)
 
                 # Print Result
-                outFile.writeLines(translatedData[0])
+                outFile.writelines(translatedData[0])
                 end = time.time()
                 tqdm.write(getResultString(translatedData, end - start, filename))
                 with LOCK:
@@ -107,7 +107,7 @@ def parseTyrano(readFile, outFile, filename):
         except Exception as e:
             traceback.print_exc()
             return [data, totalTokens, e]
-    return [readFile, totalTokens, None]
+    return [data, totalTokens, None]
 
 def translateTyrano(data, outFile, pbar):
     textHistory = []
@@ -128,7 +128,7 @@ def translateTyrano(data, outFile, pbar):
                 response = translateGPT(matchList[0], 'Reply with only the english translation of the NPC name', True)
                 speaker = response[0]
                 tokens += response[1]
-                data[i] = '#' + speaker
+                data[i] = '#' + speaker + '\n'
             else:
                 speaker = ''
 
@@ -169,11 +169,14 @@ def translateTyrano(data, outFile, pbar):
 
             # Set Data
             translatedText = translatedText.replace('\"', '')
-            data[i] = translatedText + '[p]'
+            data[i] = translatedText + '[p]\n'
 
         currentGroup = [] 
         pbar.update(1)
-        syncIndex = i + 1
+        if len(data) > i+1:
+            syncIndex = i+1
+        else:
+            break
 
     return [tokens, data]
             
