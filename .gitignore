@@ -5,4 +5,5 @@
 *.txt
 !requirements.txt
 *.csv
+*.ks
 __pycache__
