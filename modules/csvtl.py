@@ -253,13 +253,11 @@ def resubVars(translatedText, varList):
 
 @retry(exceptions=Exception, tries=5, delay=5)
 def translateGPT(t, history, fullPromptFlag):
-    with LOCK:
-        # If ESTIMATE is True just count this as an execution and return.
-        if ESTIMATE:
-            global TOKENS
-            enc = tiktoken.encoding_for_model("gpt-3.5-turbo-0613")
-            TOKENS += len(enc.encode(t)) * 2 + len(enc.encode(history)) + len(enc.encode(PROMPT))
-            return (t, 0)
+    # If ESTIMATE is True just count this as an execution and return.
+    if ESTIMATE:
+        enc = tiktoken.encoding_for_model("gpt-3.5-turbo-0613")
+        TOKENS = len(enc.encode(t)) * 2 + len(enc.encode(history)) + len(enc.encode(PROMPT))
+        return (t, 0)
     
     # Sub Vars
     varResponse = subVars(t)
