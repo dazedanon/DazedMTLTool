@@ -86,6 +86,13 @@ def handleTyrano(filename, estimate):
 def openFiles(filename, outFile):
     with open('files/' + filename, 'r', encoding='utf-8') as readFile:
         translatedData = parseTyrano(readFile, outFile, filename)
+
+        # Delete lines marked for deletion
+        finalData = []
+        for line in translatedData[0]:
+            if line != '\\d\n':
+                finalData.append(line)
+        translatedData[0] = finalData
     
     return translatedData
 
@@ -103,7 +110,7 @@ def parseTyrano(readFile, outFile, filename):
         pbar.total=totalLines
 
         try:
-            final = translateTyrano(data, outFile, pbar)
+            totalTokens += translateTyrano(data, outFile, pbar)
         except Exception as e:
             traceback.print_exc()
             return [data, totalTokens, e]
@@ -141,6 +148,7 @@ def translateTyrano(data, outFile, pbar):
                 currentGroup.append(matchList[0])
                 if len(data) > i+1:
                     while '[p]' in data[i+1]:
+                        data[i] = '\d\n'
                         i += 1
                         matchList = re.findall(r'(.+?)\[p\]', data[i])
                         if len(matchList) > 0:
@@ -169,7 +177,19 @@ def translateTyrano(data, outFile, pbar):
 
             # Set Data
             translatedText = translatedText.replace('\"', '')
-            data[i] = translatedText + '[p]\n'
+
+            # Format Text
+            matchList = re.findall(r'(.+?[\.\?\!]+)', translatedText)
+            translatedText = re.sub(r'(.+?[\.\?\!]+)', '', translatedText)
+            if len(matchList) > 0:
+                del data[i]
+                for line in matchList:
+                    data.insert(i, line.strip() + '[p]\n')
+                    i+=1
+            else:
+                print ('SUS')
+            if translatedText != '':
+                data[i] = translatedText.strip() + '[p]\n'
 
         currentGroup = [] 
         pbar.update(1)
@@ -178,7 +198,7 @@ def translateTyrano(data, outFile, pbar):
         else:
             break
 
-    return [tokens, data]
+    return tokens
             
 def getResultString(translatedData, translationTime, filename):
     # File Print String
