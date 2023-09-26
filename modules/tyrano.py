@@ -40,7 +40,7 @@ POSITION=0
 LEAVE=False
 
 # Flags
-NAMES = True    # Output a list of all the character names found
+NAMES = False    # Output a list of all the character names found
 BRFLAG = False   # If the game uses <br> instead
 FIXTEXTWRAP = False
 
@@ -54,13 +54,10 @@ def handleTyrano(filename, estimate):
 
         # Print Result
         end = time.time()
-        tqdm.write(getResultString(['', TOKENS, None], end - start, filename))
-        if NAMES == True:
-            tqdm.write(str(NAMESLIST))
+        tqdm.write(getResultString(translatedData, end - start, filename))
         with LOCK:
-            TOTALCOST += TOKENS * .001 * APICOST
-            TOTALTOKENS += TOKENS
-            TOKENS = 0
+            TOTALCOST += translatedData[1] * .001 * APICOST
+            TOTALTOKENS += translatedData[1]
 
         return getResultString(['', TOTALTOKENS, None], end - start, 'TOTAL')
     
@@ -68,7 +65,7 @@ def handleTyrano(filename, estimate):
         try:
             with open('translated/' + filename, 'w', encoding='UTF-8') as outFile:
                 start = time.time()
-                translatedData = openFiles(filename, outFile)
+                translatedData = openFiles(filename)
 
                 # Print Result
                 outFile.writelines(translatedData[0])
@@ -83,9 +80,9 @@ def handleTyrano(filename, estimate):
 
     return getResultString(['', TOTALTOKENS, None], end - start, 'TOTAL')
 
-def openFiles(filename, outFile):
+def openFiles(filename):
     with open('files/' + filename, 'r', encoding='utf-8') as readFile:
-        translatedData = parseTyrano(readFile, outFile, filename)
+        translatedData = parseTyrano(readFile, filename)
 
         # Delete lines marked for deletion
         finalData = []
@@ -96,10 +93,9 @@ def openFiles(filename, outFile):
     
     return translatedData
 
-def parseTyrano(readFile, outFile, filename):
+def parseTyrano(readFile, filename):
     totalTokens = 0
     totalLines = 0
-    global LOCK
 
     # Get total for progress bar
     data = readFile.readlines()
@@ -110,18 +106,19 @@ def parseTyrano(readFile, outFile, filename):
         pbar.total=totalLines
 
         try:
-            totalTokens += translateTyrano(data, outFile, pbar)
+            totalTokens += translateTyrano(data, pbar)
         except Exception as e:
             traceback.print_exc()
             return [data, totalTokens, e]
     return [data, totalTokens, None]
 
-def translateTyrano(data, outFile, pbar):
+def translateTyrano(data, pbar):
     textHistory = []
     maxHistory = MAXHISTORY
     tokens = 0
     currentGroup = []
     syncIndex = 0
+    speaker = ''
     global LOCK, ESTIMATE
 
     for i in range(len(data)):
@@ -179,17 +176,22 @@ def translateTyrano(data, outFile, pbar):
             translatedText = translatedText.replace('\"', '')
 
             # Format Text
-            matchList = re.findall(r'(.+?[\.\?\!]+)', translatedText)
-            translatedText = re.sub(r'(.+?[\.\?\!]+)', '', translatedText)
+            matchList = re.findall(r'(.+?[\.\?\!）。・]+)', translatedText)
+            translatedText = re.sub(r'(.+?[\.\?\!）。・]+)', '', translatedText)
             if len(matchList) > 0:
                 del data[i]
                 for line in matchList:
                     data.insert(i, line.strip() + '[p]\n')
                     i+=1
-            else:
-                print ('SUS')
+            # else:
+                # print ('No Matches')
             if translatedText != '':
                 data[i] = translatedText.strip() + '[p]\n'
+
+            # Keep textHistory list at length maxHistory
+            if len(textHistory) > maxHistory:
+                textHistory.pop(0)
+            currentGroup = [] 
 
         currentGroup = [] 
         pbar.update(1)
@@ -255,13 +257,13 @@ def resubVars(translatedText, varList):
 
 @retry(exceptions=Exception, tries=5, delay=5)
 def translateGPT(t, history, fullPromptFlag):
+    global LOCK, TOKENS
     with LOCK:
         # If ESTIMATE is True just count this as an execution and return.
         if ESTIMATE:
-            global TOKENS
             enc = tiktoken.encoding_for_model("gpt-3.5-turbo")
-            TOKENS += len(enc.encode(t)) * 2 + len(enc.encode(history)) + len(enc.encode(PROMPT))
-            return (t, 0)
+            tokens = len(enc.encode(t)) * 2 + len(enc.encode(history)) + len(enc.encode(PROMPT))
+            return (t, tokens)
     
     # Sub Vars
     varResponse = subVars(t)

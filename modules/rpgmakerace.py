@@ -31,7 +31,6 @@ LISTWIDTH = 70
 MAXHISTORY = 10
 ESTIMATE = ''
 TOTALCOST = 0
-TOKENS = 0
 TOTALTOKENS = 0
 NAMESLIST = []
 
@@ -58,7 +57,7 @@ CODE108 = False
 NAMES = False # Output a list of all the character names found
 
 def handleACE(filename, estimate):
-    global ESTIMATE, TOKENS, TOTALTOKENS, TOTALCOST
+    global ESTIMATE, TOTALTOKENS, TOTALCOST
     ESTIMATE = estimate
 
     if estimate:
@@ -67,13 +66,12 @@ def handleACE(filename, estimate):
 
         # Print Result
         end = time.time()
-        tqdm.write(getResultString(['', TOKENS, None], end - start, filename))
+        tqdm.write(getResultString(translatedData, end - start, filename))
         if NAMES is True:
             tqdm.write(str(NAMESLIST))
         with LOCK:
-            TOTALCOST += TOKENS * .001 * APICOST
-            TOTALTOKENS += TOKENS
-            TOKENS = 0
+            TOTALCOST += translatedData[1] * .001 * APICOST
+            TOTALTOKENS += translatedData[1]
 
         return getResultString(['', TOTALTOKENS, None], end - start, 'TOTAL')
     
@@ -1318,13 +1316,11 @@ def resubVars(translatedText, varList):
 
 @retry(exceptions=Exception, tries=5, delay=5)
 def translateGPT(t, history, fullPromptFlag):
-    with LOCK:
-        # If ESTIMATE is True just count this as an execution and return.
-        if ESTIMATE:
-            global TOKENS
-            enc = tiktoken.encoding_for_model("gpt-3.5-turbo")
-            TOKENS += len(enc.encode(t)) * 2 + len(enc.encode(history)) + len(enc.encode(PROMPT))
-            return (t, 0)
+    # If ESTIMATE is True just count this as an execution and return.
+    if ESTIMATE:
+        enc = tiktoken.encoding_for_model("gpt-3.5-turbo")
+        tokens = len(enc.encode(t)) * 2 + len(enc.encode(history)) + len(enc.encode(PROMPT))
+        return (t, tokens)
     
     # Sub Vars
     varResponse = subVars(t)
