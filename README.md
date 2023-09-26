@@ -5,7 +5,7 @@
 Currently in development. Goal is to eventually have a tool that utilizes ChatGPT API to translate text. I've deemed a fully automatic process impossible for production of quality MTLs since games are so different. Instead, this should be used to translated large masses of text (Dialogue, Choices, Battle Text, Etc) that would require months of work. Then the translator can focus on editing, fixing, and formatting instead to release a quality MTL. It is not meant to be used as an easy 'Translate Everything' and forget about it option since this results in a poor buggy translation.
 
 ## Currently Supported:
-* RPGMaker MZ, MV, ACE
+* RPGMaker MZ, MV, ACE, TyranoBuilder
 * CSV Files
 
 ## Required:
