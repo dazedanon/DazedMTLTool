@@ -183,6 +183,7 @@ def translateTyrano(data, pbar):
                 for line in matchList:
                     data.insert(i, line.strip() + '[p]\n')
                     i+=1
+                i-=1
             # else:
                 # print ('No Matches')
             if translatedText != '':
@@ -316,4 +317,5 @@ def translateGPT(t, history, fullPromptFlag):
     if len(translatedText) > 15 * len(t) or "I'm sorry, but I'm unable to assist with that translation" in translatedText:
         return [t, response.usage.total_tokens]
     else:
+
         return [translatedText, tokens]
