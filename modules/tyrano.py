@@ -153,9 +153,8 @@ def translateTyrano(data, pbar):
                     translatedText = translatedText.replace(char, '')
 
                 # Set Data
-                translatedText = translatedText.replace(' ', ' ')
-                data[i] = re.sub(r'(text=)\"(.+?)\"', rf'\1{translatedText}', data[i])
-                
+                translatedText = 'text=\"' + translatedText.replace(' ', ' ') + '\"'
+                data[i] = re.sub(r'text=\"(.+?)\"', translatedText, data[i])                
 
         # Lines
         elif '[p]' in data[i]:
@@ -211,6 +210,8 @@ def translateTyrano(data, pbar):
                 while len(matchList[j]) < 100 and len(matchList) > j:
                     matchList[j:j+2] = [' '.join(matchList[j:j+2])]
                     if len(matchList) == j+1:
+                        matchList[j] = matchList[j] + ' ' + translatedText
+                        translatedText = ''
                         break
                 j+=1
                 
