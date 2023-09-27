@@ -136,6 +136,27 @@ def translateTyrano(data, pbar):
             else:
                 speaker = ''
 
+        # Choices
+        elif 'glink' in data[i]:
+            matchList = re.findall(r'text=\"(.+?)\"', data[i])
+            if len(matchList) != 0:
+                if len(textHistory) > 0:
+                    response = translateGPT(matchList[0], 'Past Translated Text: ' + textHistory[len(textHistory)-1] + '\n\nReply in the style of a dialogue option.', True)
+                else:
+                    response = translateGPT(matchList[0], '', False)
+                translatedText = response[0]
+                tokens += response[1]
+
+                # Remove characters that may break scripts
+                charList = ['.', '\"', '\\n']
+                for char in charList:
+                    translatedText = translatedText.replace(char, '')
+
+                # Set Data
+                translatedText = translatedText.replace(' ', ' ')
+                data[i] = re.sub(r'(text=)\"(.+?)\"', rf'\1{translatedText}', data[i])
+                
+
         # Lines
         elif '[p]' in data[i]:
             matchList = re.findall(r'(.+?)\[p\]', data[i])
@@ -170,20 +191,34 @@ def translateTyrano(data, pbar):
                 textHistory.append('\"' + translatedText + '\"')
 
                 # Remove added speaker
-                translatedText = translatedText.replace(speaker + ': ', '')
+                translatedText = re.sub(r'^.+:\s?', '', translatedText)
 
             # Set Data
+            translatedText = translatedText.replace('ッ', '')
+            translatedText = translatedText.replace('っ', '')
+            translatedText = translatedText.replace('ー', '')
             translatedText = translatedText.replace('\"', '')
 
             # Format Text
-            matchList = re.findall(r'(.+?[\.\?\!）。・]+)', translatedText)
-            translatedText = re.sub(r'(.+?[\.\?\!）。・]+)', '', translatedText)
+            matchList = re.findall(r'(.+?[)\.\?\!）。・]+)', translatedText)
+            translatedText = re.sub(r'(.+?[)\.\?\!）。・]+)', '', translatedText)
+
+            # Combine Lists
+            for k in range(len(matchList)):
+                matchList[k] = matchList[k].strip()
+            j=0
+            while(len(matchList) > j+1):
+                while len(matchList[j]) < 100 and len(matchList) > j:
+                    matchList[j:j+2] = [' '.join(matchList[j:j+2])]
+                    if len(matchList) == j+1:
+                        break
+                j+=1
+                
             if len(matchList) > 0:
-                del data[i]
+                data[i] = '\d\n'
                 for line in matchList:
                     data.insert(i, line.strip() + '[p]\n')
                     i+=1
-                i-=1
             # else:
                 # print ('No Matches')
             if translatedText != '':
