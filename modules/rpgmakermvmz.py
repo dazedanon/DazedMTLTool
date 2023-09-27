@@ -1054,10 +1054,10 @@ def searchCodes(page, pbar):
                     else: endString = endString.group()
 
                     if len(textHistory) > 0:
-                        response = translateGPT(jaString, 'Keep your translation as brief as possible. Previous text for context: ' + textHistory[len(textHistory)-1], True)
+                        response = translateGPT(jaString, 'Keep your translation as brief as possible. Previous text for context: ' + textHistory[len(textHistory)-1] + '\n\nReply in the style of a dialogue option.', True)
                         translatedText = response[0]
                     else:
-                        response = translateGPT(jaString, 'Keep your translation as brief as possible.', True)
+                        response = translateGPT(jaString, 'Keep your translation as brief as possible.\n\nReply in the style of a dialogue option.', True)
                         translatedText = response[0]
 
                     # Remove characters that may break scripts
