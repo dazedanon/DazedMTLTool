@@ -41,7 +41,7 @@ def handleCSV(filename, estimate):
     global ESTIMATE, TOKENS, TOTALTOKENS, TOTALCOST
     ESTIMATE = estimate
 
-    with open('translated/' + filename, 'w+t', newline='', encoding='utf-16-le') as writeFile:
+    with open('translated/' + filename, 'w+t', newline='', encoding='utf-8') as writeFile:
         start = time.time()
         translatedData = openFiles(filename, writeFile)
 
@@ -64,7 +64,7 @@ def handleCSV(filename, estimate):
     return getResultString(['', TOTALTOKENS, None], end - start, 'TOTAL')
 
 def openFiles(filename, writeFile):
-    with open('files/' + filename, 'r', encoding='utf-16-le') as readFile, writeFile:
+    with open('files/' + filename, 'r', encoding='utf-8') as readFile, writeFile:
         translatedData = parseCSV(readFile, writeFile, filename)
 
     return translatedData
@@ -167,12 +167,13 @@ def translateCSV(row, pbar, writer, textHistory, format):
             # Translate Everything
             case '2':
                 for i in range(len(row)):
+                    # This will allow you to ignore certain columns
                     if i not in [1]:
                         continue
                     jaString = row[i]
-
                     matchList = re.findall(r':name\[(.+?),.+?\](.+?[」）\"。]+)', jaString)
 
+                    # Start Translation
                     for match in matchList:
                         speaker = match[0]
                         text = match[1]
