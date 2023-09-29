@@ -25,7 +25,7 @@ APICOST = .002 # Depends on the model https://openai.com/pricing
 PROMPT = Path('prompt.txt').read_text(encoding='utf-8')
 THREADS = 10 # For GPT4 rate limit will be hit if you have more than 1 thread.
 LOCK = threading.Lock()
-WIDTH = 60
+WIDTH = 50
 LISTWIDTH = 60
 MAXHISTORY = 10
 ESTIMATE = ''
@@ -55,7 +55,7 @@ CODE408 = False
 CODE108 = False
 NAMES = False    # Output a list of all the character names found
 BRFLAG = False   # If the game uses <br> instead
-FIXTEXTWRAP = False
+FIXTEXTWRAP = True
 
 def handleMVMZ(filename, estimate):
     global ESTIMATE, TOKENS, TOTALTOKENS, TOTALCOST
@@ -1357,7 +1357,7 @@ def translateGPT(t, history, fullPromptFlag):
         return(t, 0)
 
     """Translate text using GPT"""
-    context = 'Eroge Names Context: 圭 == Kei | Female, レヴァンティア == Levantia | Female, カシューナッツ == Cashew Nut | Male, レイナ == Reina | Female, ピンクキャンディー == Pink Candy | Female, ルーシャーベット == Lusha Sorbet | Female, ブラックマッスル == Black Muscle | Male, ミスターヒプノシス == Mr. Hypnosis | Male, リリス == Lilith | Female, 侵食体 == Invasoid | Female'
+    context = 'Eroge Names Context: アサギ == Asagi | Female, ウィップ == Whip | Female, ウラ == Ura | Female, ブレイド == Blade | Female'
     if fullPromptFlag:
         system = PROMPT 
         user = 'Line to Translate: ' + subbedT

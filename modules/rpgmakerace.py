@@ -26,7 +26,7 @@ APICOST = .002 # Depends on the model https://openai.com/pricing
 PROMPT = Path('prompt.txt').read_text(encoding='utf-8')
 THREADS = 20
 LOCK = threading.Lock()
-WIDTH = 60
+WIDTH = 30
 LISTWIDTH = 70
 MAXHISTORY = 10
 ESTIMATE = ''
@@ -529,7 +529,7 @@ def searchCodes(page, pbar):
 
                 # Join up 401 groups for better translation.
                 if len(currentGroup) > 0:
-                    finalJAString = ''.join(currentGroup)
+                    finalJAString = ' '.join(currentGroup)
                     oldjaString = finalJAString
 
                     # Color Regex: ^([\\]+[cC]\[[0-9]\]+(.+?)[\\]+[cC]\[[0]\])
