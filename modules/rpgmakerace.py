@@ -9,6 +9,7 @@ import threading
 import time
 import traceback
 import tiktoken
+from ruamel.yaml import YAML
 
 from colorama import Fore
 from dotenv import load_dotenv
