@@ -6,9 +6,10 @@ import os
 
 from modules.rpgmakermvmz import handleMVMZ
 from modules.rpgmakerace import handleACE
-from modules.csvtl import handleCSV
-from modules.textfile import handleTextfile
+from modules.csv import handleCSV
+from modules.txt import handleTXT
 from modules.tyrano import handleTyrano
+from modules.json import handleJSON
 
 THREADS = 10 # For GPT4 rate limit will be hit if you have more than 1 thread.
 
@@ -30,7 +31,7 @@ def main():
     totalCost = 0
     version = ''
     while version == '':
-        version = input('Select the RPGMaker Version:\n\n1. MV/MZ\n2. ACE\n3. CSV (From Translator++)\n4. Text (Custom)\n5. Tyrano\n')
+        version = input('Select the RPGMaker Version:\n\n1. MV/MZ\n2. ACE\n3. CSV (From Translator++)\n4. Text (Custom)\n5. Tyrano\n6. JSON\n')
         match version:
             case '1':
                 # Open File (Threads)
@@ -75,7 +76,7 @@ def main():
             case '4':
                 # Open File (Threads)
                 with ThreadPoolExecutor(max_workers=THREADS) as executor:
-                    futures = [executor.submit(handleTextfile, filename, estimate) \
+                    futures = [executor.submit(handleTXT, filename, estimate) \
                                 for filename in os.listdir("files") if filename.endswith('txt')]
                     
                     for future in as_completed(futures):
@@ -100,6 +101,20 @@ def main():
                             tracebackLineNo = str(traceback.extract_tb(sys.exc_info()[2])[-1].lineno)
                             print(Fore.RED + str(e) + '|' + tracebackLineNo + Fore.RESET)
 
+            case '6':
+                # Open File (Threads)
+                with ThreadPoolExecutor(max_workers=THREADS) as executor:
+                    futures = [executor.submit(handleJSON, filename, estimate) \
+                                for filename in os.listdir("files") if filename.endswith('json')]
+                    
+                    for future in as_completed(futures):
+                        try:
+                            totalCost = future.result()
+                            
+                        except Exception as e:
+                            tracebackLineNo = str(traceback.extract_tb(sys.exc_info()[2])[-1].lineno)
+                            print(Fore.RED + str(e) + '|' + tracebackLineNo + Fore.RESET)
+
             case _:
                 version = ''
         
@@ -110,7 +125,7 @@ def main():
 
         # Prevent immediately closing of CLI
         print(totalCost)
-        input('Done! Press Enter to close.')
+        # input('Done! Press Enter to close.')
 
 def deleteFolderFiles(folderPath):
     for filename in os.listdir(folderPath):

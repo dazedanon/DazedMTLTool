@@ -54,9 +54,10 @@ CODE324 = False
 CODE111 = False
 CODE408 = False
 CODE108 = False
-NAMES = False    # Output a list of all the character names found
+NAMES = False   # Output a list of all the character names found
 BRFLAG = False   # If the game uses <br> instead
-FIXTEXTWRAP = True
+FIXTEXTWRAP = True  # Adjust wordwrap of text (IGNORETLTEXT must be False)
+IGNORETLTEXT = True     # Leave this False if you need to adjust the wordwrap
 
 def handleACE(filename, estimate):
     global ESTIMATE, TOTALTOKENS, TOTALCOST
@@ -192,12 +193,6 @@ def parseMap(data, filename):
     totalLines = 0
     events = data['events']
     global LOCK
-
-    # Translate displayName for Map files
-    if 'Map' in filename:
-        response = translateGPT(data['displayName'], 'Reply with only the english translation of the RPG location name', False)
-        totalTokens += response[1]
-        data['displayName'] = response[0].replace('\"', '')
 
     # Get total for progress bar
     for key in events:
@@ -522,6 +517,12 @@ def searchCodes(page, pbar):
                 # Grab String  
                 jaString = codeList[i]['p'][0]
                 firstJAString = jaString
+
+                # If there isn't any Japanese in the text just skip
+                if IGNORETLTEXT == True:
+                    if not re.search(r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴー]+', jaString):
+                        textHistory.append('\"' + jaString + '\"')
+                        continue
 
                 # Using this to keep track of 401's in a row. Throws IndexError at EndOfList (Expected Behavior)
                 currentGroup.append(jaString)
@@ -1362,7 +1363,7 @@ def translateGPT(t, history, fullPromptFlag):
         return(t, 0)
 
     """Translate text using GPT"""
-    context = 'Eroge Names Context: アサギ == Asagi | Female, ウィップ == Whip | Female, ウラ == Ura | Female, ブレイド == Blade | Female'
+    context = 'Eroge Character Names Context: アサギ == Asagi | Female, ウィップ == Whip | Female, ウラ == Ura | Female, ブレイド == Blade | Female'
     if fullPromptFlag:
         system = PROMPT 
         user = 'Line to Translate: ' + subbedT

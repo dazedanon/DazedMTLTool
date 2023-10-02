@@ -49,7 +49,7 @@ CODE356 = False
 CODE320 = False
 CODE111 = False
 
-def handleTextfile(filename, estimate):
+def handleTXT(filename, estimate):
     global ESTIMATE, TOKENS, TOTALTOKENS, TOTALCOST
     ESTIMATE = estimate
 
