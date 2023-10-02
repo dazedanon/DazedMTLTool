@@ -73,7 +73,7 @@ A breakdown of what all the different files are, this is important.
   * rpgmakermvmz.py - Translation Script for the RPGMaker MV/MZ Engine.
   * rpgmakerace.py - Translation Script for the RPGMaker ACE Engine. (Requires rvpacker to unpack rvdata files)
   * csvtl.py - Translation Script for CSV Files. Requires at least 2 columns to work.
-  * textfile.py - Translation Script for Other game engines. (More of a custom script I change depending on the game)
+  * TXT.py - Translation Script for Other game engines. (More of a custom script I change depending on the game)
 * .env.example - An example env file. This gets renamed to .env and holds your PRIVATE API and Organization key. Do not EVER upload this information.
 * RPGMakerEventCodes.info - Information on the various types of event codes in RPGMaker. More on this later.
 * prompt.example - Holds an example prompt ChatGPT uses to determine what to do with text you give it. Change this as you please.
