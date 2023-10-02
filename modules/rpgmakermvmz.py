@@ -598,6 +598,33 @@ def searchCodes(page, pbar):
 
                             # Remove nametag from final string
                             finalJAString = finalJAString.replace(nametag, '')
+                    elif '【' in finalJAString:
+                        matchList = re.findall(r'(.+?【(.+?)】.+?)(「.+)', finalJAString)    
+                        if len(matchList) != 0:    
+                            response = translateGPT(matchList[0][1], 'Reply with only the english translation of the NPC name', True)
+                        else:
+                            print('wtf')
+                        tokens += response[1]
+                        speaker = response[0].strip('.')
+
+                        # Set Nametag and Remove from Final String
+                        nametag = matchList[0][0].replace(matchList[0][1], speaker)
+                        finalJAString = finalJAString.replace(matchList[0][0], '')
+
+                        # Set next item as dialogue
+                        if (codeList[j + 1]['c'] == 401 and len(codeList[j + 1]['p']) > 0) or codeList[j + 1]['c'] == 0:
+                            # Set name var to top of list
+                            codeList[j]['p'][0] = nametag
+                            codeList[j]['c'] = code
+
+                            j += 1
+                            codeList[j]['p'][0] = finalJAString
+                            codeList[j]['c'] = code
+                            nametag = ''
+                        else:
+                            # Set nametag in string
+                            codeList[j]['p'][0] = nametag + finalJAString
+                            codeList[j]['c'] = code
 
                     # Remove any textwrap
                     if FIXTEXTWRAP == True:
