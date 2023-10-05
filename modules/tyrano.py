@@ -260,30 +260,82 @@ def getResultString(translatedData, translationTime, filename):
                 errorString + Fore.RESET
         
 def subVars(jaString):
-    varRegex = r'\\+[a-zA-Z]+\[[0-9a-zA-Z\\\[\]]+\]+|[\\]+[#a-zA-Z]+|[\\.<>]+'
-    count = 0
+    jaString = jaString.replace('\u3000', ' ')
 
-    varList = re.findall(varRegex, jaString)
-    if len(varList) != 0:
-        for var in varList:
-            jaString = jaString.replace(var, '[v' + str(count) + ']')
+    # Icons
+    count = 0
+    iconList = re.findall(r'[\\]+[iI]\[[0-9]+\]', jaString)
+    iconList = set(iconList)
+    if len(iconList) != 0:
+        for icon in iconList:
+            jaString = jaString.replace(icon, '<I' + str(count) + '>')
             count += 1
 
-    return [jaString, varList]
-    
-def resubVars(translatedText, varList):
+    # Colors
     count = 0
+    colorList = re.findall(r'[\\]+[cC]\[[0-9]+\]', jaString)
+    colorList = set(colorList)
+    if len(iconList) != 0:
+        for color in colorList:
+            jaString = jaString.replace(color, '<C' + str(count) + '>')
+            count += 1
 
+    # Names
+    count = 0
+    nameList = re.findall(r'[\\]+[nN]\[[0-9]+\]', jaString)
+    nameList = set(nameList)
+    if len(iconList) != 0:
+        for name in nameList:
+            jaString = jaString.replace(name, '<N' + str(count) + '>')
+            count += 1
+
+    # Variables
+    count = 0
+    varList = re.findall(r'[\\]+[vV]\[[0-9]+\]', jaString)
+    varList = set(varList)
+    if len(iconList) != 0:
+        for var in varList:
+            jaString = jaString.replace(var, '<V' + str(count) + '>')
+            count += 1
+
+    # Put all lists in list and return
+    allList = [iconList, colorList, nameList, varList]
+    return [jaString, allList]
+
+def resubVars(translatedText, allList):
     # Fix Spacing and ChatGPT Nonsense
-    matchList = re.findall(r'@\s?[0-9]+?', translatedText)
+    matchList = re.findall(r'<\s?.+?\s?>', translatedText)
     if len(matchList) > 0:
         for match in matchList:
             text = match.replace(' ', '')
             translatedText = translatedText.replace(match, text)
-    
-    if len(varList) != 0:
-        for var in varList:
-            translatedText = translatedText.replace('@' + str(count) + '', var)
+
+    # Icons
+    count = 0
+    if len(allList[0]) != 0:
+        for var in allList[0]:
+            translatedText = translatedText.replace('<I' + str(count) + '>', var)
+            count += 1
+
+    # Colors
+    count = 0
+    if len(allList[1]) != 0:
+        for var in allList[1]:
+            translatedText = translatedText.replace('<C' + str(count) + '>', var)
+            count += 1
+
+    # Names
+    count = 0
+    if len(allList[1]) != 0:
+        for var in allList[2]:
+            translatedText = translatedText.replace('<N' + str(count) + '>', var)
+            count += 1
+
+    # Vars
+    count = 0
+    if len(allList[1]) != 0:
+        for var in allList[3]:
+            translatedText = translatedText.replace('<V' + str(count) + '>', var)
             count += 1
 
     # Remove Color Variables Spaces
