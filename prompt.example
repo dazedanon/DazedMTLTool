@@ -14,6 +14,11 @@ Output it in this format:
 * Use "Eroge Character Names Context:" to know the names, nicknames, and gender of characters.
 * Pay attention to the subject speakers are referencing in the conversation.
 * Pay attention to the gender of the subjects and characters. Avoid misgendering them.
+* <I> is an emoji icon. Maintain any in the translation.
+* <C> is code to color text. Maintain any in the translation.
+* <N> is the name of a character. Maintain any in the translation.
+* <V> is an unknown variable. Maintain any in the translation.
 * Translate 'おまんこ' as 'pussy'.
 * Translate 'お尻' as 'butt'
 * Translate 'お股' as 'crotch'
+* Tranlsate '秘部' as 'genitals'
