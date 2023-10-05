@@ -54,7 +54,7 @@ CODE324 = False
 CODE111 = False
 CODE408 = False
 CODE108 = False
-NAMES = False   # Output a list of all the character names found
+NAMES = True   # Output a list of all the character names found
 BRFLAG = False   # If the game uses <br> instead
 FIXTEXTWRAP = True  # Adjust wordwrap of text (IGNORETLTEXT must be False)
 IGNORETLTEXT = True     # Leave this False if you need to adjust the wordwrap
@@ -605,11 +605,11 @@ def searchCodes(page, pbar):
                             # Remove nametag from final string
                             finalJAString = finalJAString.replace(nametag, '')
                     elif '【' in finalJAString:
-                        matchList = re.findall(r'(.+?【(.+?)】.+?)(「.+)', finalJAString)    
+                        matchList = re.findall(r'(.+?【(.+?)】.+?\])(.+)', finalJAString)    
                         if len(matchList) != 0:    
                             response = translateGPT(matchList[0][1], 'Reply with only the english translation of the NPC name', True)
                         else:
-                            print('wtf')
+                            print('Regex Failed')
                         tokens += response[1]
                         speaker = response[0].strip('.')
 
@@ -631,6 +631,11 @@ def searchCodes(page, pbar):
                             # Set nametag in string
                             codeList[j]['p'][0] = nametag + finalJAString
                             codeList[j]['c'] = code
+
+                        # Add Name
+                        if speaker not in NAMESLIST:
+                            with LOCK:
+                                NAMESLIST.append(speaker)
 
                     # Remove any textwrap
                     if FIXTEXTWRAP == True:
@@ -1390,7 +1395,7 @@ def translateGPT(t, history, fullPromptFlag):
         return(t, 0)
 
     """Translate text using GPT"""
-    context = 'Eroge Character Names Context: アサギ == Asagi | Female, ウィップ == Whip | Female, ウラ == Ura | Female, ブレイド == Blade | Female'
+    context = 'Eroge Names Context: Name: ゆう == Yuu\nGender: Male,\nName: エミル == Emiru\nGender: Female,\nName: ハルカ == Haruka\nGender: Female,\nName: マリア == Maria\nGender: Female,\nName: ナギサ == Nagisa\nGender: Female,\nName: レア == Rhea\nGender: Female\n Name: リサ == Risa\nGender: Female'
     if fullPromptFlag:
         system = PROMPT 
         user = 'Line to Translate: ' + subbedT

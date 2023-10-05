@@ -612,19 +612,19 @@ def searchCodes(page, pbar):
                         finalJAString = finalJAString.replace(matchList[0][0], '')
 
                         # Set next item as dialogue
-                        if (codeList[j + 1]['c'] == 401 and len(codeList[j + 1]['p']) > 0) or codeList[j + 1]['c'] == 0:
+                        if (codeList[j + 1]['code'] == 401 and len(codeList[j + 1]['parameters']) > 0) or codeList[j + 1]['code'] == 0:
                             # Set name var to top of list
-                            codeList[j]['p'][0] = nametag
-                            codeList[j]['c'] = code
+                            codeList[j]['parameters'][0] = nametag
+                            codeList[j]['code'] = code
 
                             j += 1
-                            codeList[j]['p'][0] = finalJAString
-                            codeList[j]['c'] = code
+                            codeList[j]['parameters'][0] = finalJAString
+                            codeList[j]['code'] = code
                             nametag = ''
                         else:
                             # Set nametag in string
-                            codeList[j]['p'][0] = nametag + finalJAString
-                            codeList[j]['c'] = code
+                            codeList[j]['parameters'][0] = nametag + finalJAString
+                            codeList[j]['code'] = code
 
                     # Remove any textwrap
                     if FIXTEXTWRAP == True:
