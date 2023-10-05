@@ -56,8 +56,8 @@ CODE408 = False
 CODE108 = False
 NAMES = True   # Output a list of all the character names found
 BRFLAG = False   # If the game uses <br> instead
-FIXTEXTWRAP = True  # Adjust wordwrap of text (IGNORETLTEXT must be False)
-IGNORETLTEXT = True     # Leave this False if you need to adjust the wordwrap
+FIXTEXTWRAP = False  # Adjust wordwrap of text (IGNORETLTEXT must be False)
+IGNORETLTEXT = False     # Leave this False if you need to adjust the wordwrap
 
 def handleACE(filename, estimate):
     global ESTIMATE, TOTALTOKENS, TOTALCOST
@@ -184,6 +184,7 @@ def getResultString(translatedData, translationTime, filename):
         try:
             raise translatedData[2]
         except Exception as e:
+            traceback.print_exc()
             errorString = str(e) + Fore.RED
             return filename + ': ' + tokenString + timeString + Fore.RED + u' \u2717 ' +\
                 errorString + Fore.RESET
@@ -215,6 +216,7 @@ def parseMap(data, filename):
                         try:
                             totalTokens += future.result()
                         except Exception as e:
+                            traceback.print_exc()
                             return [data, totalTokens, e]
     return [data, totalTokens, None]
 
@@ -259,6 +261,7 @@ def parseCommonEvents(data, filename):
                 try:
                     totalTokens += future.result()
                 except Exception as e:
+                    traceback.print_exc()
                     return [data, totalTokens, e]
     return [data, totalTokens, None]
 
@@ -284,6 +287,7 @@ def parseTroops(data, filename):
                         try:
                             totalTokens += future.result()
                         except Exception as e:
+                            traceback.print_exc()
                             return [data, totalTokens, e]
     return [data, totalTokens, None]
     
@@ -301,6 +305,7 @@ def parseNames(data, filename, context):
                         result = searchNames(name, pbar, context)       
                         totalTokens += result
                     except Exception as e:
+                        traceback.print_exc()
                         return [data, totalTokens, e]
     return [data, totalTokens, None]
 
@@ -318,6 +323,7 @@ def parseThings(data, filename):
                         result = searchThings(name, pbar)       
                         totalTokens += result
                     except Exception as e:
+                        traceback.print_exc()
                         return [data, totalTokens, e]
     return [data, totalTokens, None]
 
@@ -335,6 +341,7 @@ def parseSS(data, filename):
                         result = searchSS(ss, pbar)       
                         totalTokens += result
                     except Exception as e:
+                        traceback.print_exc()
                         return [data, totalTokens, e]
     return [data, totalTokens, None]
 
@@ -358,6 +365,7 @@ def parseSystem(data, filename):
             result = searchSystem(data, pbar)       
             totalTokens += result
         except Exception as e:
+            traceback.print_exc()
             return [data, totalTokens, e]
     return [data, totalTokens, None]
 
@@ -379,6 +387,7 @@ def parseScenario(data, filename):
                 try:
                     totalTokens += future.result()
                 except Exception as e:
+                    traceback.print_exc()
                     return [data, totalTokens, e]
     return [data, totalTokens, None]
 
@@ -605,7 +614,7 @@ def searchCodes(page, pbar):
                             # Remove nametag from final string
                             finalJAString = finalJAString.replace(nametag, '')
                     elif '【' in finalJAString:
-                        matchList = re.findall(r'(.+?【(.+?)】.+?\])(.+)', finalJAString)    
+                        matchList = re.findall(r'(.+?【(.+?)】.+?\])(.*)', finalJAString)    
                         if len(matchList) != 0:    
                             response = translateGPT(matchList[0][1], 'Reply with only the english translation of the NPC name', True)
                         else:
@@ -707,6 +716,7 @@ def searchCodes(page, pbar):
                     speaker = ''
                     match = []
                     syncIndex = i + 1
+                    
 
                     # Keep textHistory list at length maxHistory
                     if len(textHistory) > maxHistory:
@@ -1312,64 +1322,92 @@ def searchSystem(data, pbar):
         data['skill_types'][i] = response[0].replace('\"', '')
         pbar.update(1)
 
-    # Equip Types
-    for i in range(len(data['equip_types'])):
-        response = translateGPT(data['equip_types'][i], 'Reply with only the english translation of the equipment type. No disclaimers.', False)
-        tokens += response[1]
-        data['equip_types'][i] = response[0].replace('\"', '')
-        pbar.update(1)
-
     # Variables (Optional ususally)
-    for i in range(len(data['variables'])):
-        response = translateGPT(data['variables'][i], 'Reply with only the english translation of the title', False)
-        tokens += response[1]
-        data['variables'][i] = response[0].replace('\"', '')
-        pbar.update(1)
-
-    # Messages
-    messages = (data['terms']['messages'])
-    for key, value in messages.items():
-        response = translateGPT(value, 'Reply with only the english translation of the battle text.', False)
-        translatedText = response[0]
-
-        # Remove characters that may break scripts
-        charList = ['.', '\"', '\\n']
-        for char in charList:
-            translatedText = translatedText.replace(char, '')
-
-        tokens += response[1]
-        messages[key] = translatedText
-        pbar.update(1)
+    # for i in range(len(data['variables'])):
+    #     response = translateGPT(data['variables'][i], 'Reply with only the english translation of the title', False)
+    #     tokens += response[1]
+    #     data['variables'][i] = response[0].replace('\"', '')
+    #     pbar.update(1)
     
     return tokens
 
 def subVars(jaString):
     jaString = jaString.replace('\u3000', ' ')
-    varRegex = r'[\\]+[\w.\\\s]+?\[.+?\]]?|[\\]+[\w.\\]+?\<.+?\>\>?|[\\]+[#{}<>.]'
-    count = 0
 
-    varList = re.findall(varRegex, jaString)
-    varList = set(varList)
-    if len(varList) != 0:
-        for var in varList:
-            jaString = jaString.replace(var, '@' + str(count) + '')
+    # Icons
+    count = 0
+    iconList = re.findall(r'[\\]+[iI]\[[0-9]+\]', jaString)
+    iconList = set(iconList)
+    if len(iconList) != 0:
+        for icon in iconList:
+            jaString = jaString.replace(icon, '<I' + str(count) + '>')
             count += 1
 
-    return [jaString, varList]
-
-def resubVars(translatedText, varList):
+    # Colors
     count = 0
+    colorList = re.findall(r'[\\]+[cC]\[[0-9]+\]', jaString)
+    colorList = set(colorList)
+    if len(iconList) != 0:
+        for color in colorList:
+            jaString = jaString.replace(color, '<C' + str(count) + '>')
+            count += 1
 
+    # Names
+    count = 0
+    nameList = re.findall(r'[\\]+[nN]\[[0-9]+\]', jaString)
+    nameList = set(nameList)
+    if len(iconList) != 0:
+        for name in nameList:
+            jaString = jaString.replace(name, '<N' + str(count) + '>')
+            count += 1
+
+    # Variables
+    count = 0
+    varList = re.findall(r'[\\]+[vV]\[[0-9]+\]', jaString)
+    varList = set(varList)
+    if len(iconList) != 0:
+        for var in varList:
+            jaString = jaString.replace(var, '<V' + str(count) + '>')
+            count += 1
+
+    # Put all lists in list and return
+    allList = [iconList, colorList, nameList, varList]
+    return [jaString, allList]
+
+def resubVars(translatedText, allList):
     # Fix Spacing and ChatGPT Nonsense
-    matchList = re.findall(r'@\s?[0-9]+?', translatedText)
+    matchList = re.findall(r'<\s?.+?\s?>', translatedText)
     if len(matchList) > 0:
         for match in matchList:
             text = match.replace(' ', '')
             translatedText = translatedText.replace(match, text)
-    
-    if len(varList) != 0:
-        for var in varList:
-            translatedText = translatedText.replace('@' + str(count) + '', var)
+
+    # Icons
+    count = 0
+    if len(allList[0]) != 0:
+        for var in allList[0]:
+            translatedText = translatedText.replace('<I' + str(count) + '>', var)
+            count += 1
+
+    # Colors
+    count = 0
+    if len(allList[1]) != 0:
+        for var in allList[1]:
+            translatedText = translatedText.replace('<C' + str(count) + '>', var)
+            count += 1
+
+    # Names
+    count = 0
+    if len(allList[1]) != 0:
+        for var in allList[2]:
+            translatedText = translatedText.replace('<N' + str(count) + '>', var)
+            count += 1
+
+    # Vars
+    count = 0
+    if len(allList[1]) != 0:
+        for var in allList[3]:
+            translatedText = translatedText.replace('<V' + str(count) + '>', var)
             count += 1
 
     # Remove Color Variables Spaces
