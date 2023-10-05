@@ -598,33 +598,34 @@ def searchCodes(page, pbar):
 
                             # Remove nametag from final string
                             finalJAString = finalJAString.replace(nametag, '')
-                    elif '【' in finalJAString:
-                        matchList = re.findall(r'(.+?【(.+?)】.+?)(「.+)', finalJAString)    
-                        if len(matchList) != 0:    
-                            response = translateGPT(matchList[0][1], 'Reply with only the english translation of the NPC name', True)
-                        else:
-                            print('wtf')
-                        tokens += response[1]
-                        speaker = response[0].strip('.')
+                    ### Only for Specific games where name is surrounded by brackets.
+                    # elif '【' in finalJAString:
+                    #     matchList = re.findall(r'(.+?【(.+?)】.+?)(「.+)', finalJAString)    
+                    #     if len(matchList) != 0:    
+                    #         response = translateGPT(matchList[0][1], 'Reply with only the english translation of the NPC name', True)
+                    #     else:
+                    #         print('wtf')
+                    #     tokens += response[1]
+                    #     speaker = response[0].strip('.')
 
-                        # Set Nametag and Remove from Final String
-                        nametag = matchList[0][0].replace(matchList[0][1], speaker)
-                        finalJAString = finalJAString.replace(matchList[0][0], '')
+                    #     # Set Nametag and Remove from Final String
+                    #     nametag = matchList[0][0].replace(matchList[0][1], speaker)
+                    #     finalJAString = finalJAString.replace(matchList[0][0], '')
 
-                        # Set next item as dialogue
-                        if (codeList[j + 1]['code'] == 401 and len(codeList[j + 1]['parameters']) > 0) or codeList[j + 1]['code'] == 0:
-                            # Set name var to top of list
-                            codeList[j]['parameters'][0] = nametag
-                            codeList[j]['code'] = code
+                    #     # Set next item as dialogue
+                    #     if (codeList[j + 1]['code'] == 401 and len(codeList[j + 1]['parameters']) > 0) or codeList[j + 1]['code'] == 0:
+                    #         # Set name var to top of list
+                    #         codeList[j]['parameters'][0] = nametag
+                    #         codeList[j]['code'] = code
 
-                            j += 1
-                            codeList[j]['parameters'][0] = finalJAString
-                            codeList[j]['code'] = code
-                            nametag = ''
-                        else:
-                            # Set nametag in string
-                            codeList[j]['parameters'][0] = nametag + finalJAString
-                            codeList[j]['code'] = code
+                    #         j += 1
+                    #         codeList[j]['parameters'][0] = finalJAString
+                    #         codeList[j]['code'] = code
+                    #         nametag = ''
+                    #     else:
+                    #         # Set nametag in string
+                    #         codeList[j]['parameters'][0] = nametag + finalJAString
+                    #         codeList[j]['code'] = code
 
                     # Remove any textwrap
                     if FIXTEXTWRAP == True:
