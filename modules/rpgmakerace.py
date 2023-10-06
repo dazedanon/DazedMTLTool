@@ -57,7 +57,7 @@ CODE108 = False
 NAMES = True   # Output a list of all the character names found
 BRFLAG = False   # If the game uses <br> instead
 FIXTEXTWRAP = False  # Adjust wordwrap of text (IGNORETLTEXT must be False)
-IGNORETLTEXT = False     # Leave this False if you need to adjust the wordwrap
+IGNORETLTEXT = True     # Leave this False if you need to adjust the wordwrap
 
 def handleACE(filename, estimate):
     global ESTIMATE, TOTALTOKENS, TOTALCOST
@@ -661,6 +661,7 @@ def searchCodes(page, pbar):
                     finalJAString = finalJAString.replace('…', '...')
                     finalJAString = finalJAString.replace('　', '')
                     finalJAString = finalJAString.replace('\\#', '')
+                    finalJAString = finalJAString.strip()
 
                     # Remove any RPGMaker Code at start
                     startStringMatch = re.findall(r'^[\\]+[^一-龠ぁ-ゔァ-ヴーcnv]+\]', finalJAString)
@@ -1433,7 +1434,7 @@ def translateGPT(t, history, fullPromptFlag):
         return(t, 0)
 
     """Translate text using GPT"""
-    context = 'Eroge Names Context: Name: ゆう == Yuu\nGender: Male,\nName: エミル == Emiru\nGender: Female,\nName: ハルカ == Haruka\nGender: Female,\nName: マリア == Maria\nGender: Female,\nName: ナギサ == Nagisa\nGender: Female,\nName: レア == Rhea\nGender: Female\n Name: リサ == Risa\nGender: Female'
+    context = 'Eroge Names Context: Name: アサギ == Asagi\n Gender: Female, \nName: ウィップ == Whip\n Gender: Female, \nName: ウラ == Ura\n Gender: Female, \nName: ブレイド == Blade\n Gender: Female'
     if fullPromptFlag:
         system = PROMPT 
         user = 'Line to Translate: ' + subbedT
