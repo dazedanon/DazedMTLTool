@@ -43,7 +43,7 @@ CODE401 = True
 CODE405 = False
 CODE102 = True
 CODE122 = False
-CODE101 = False
+CODE101 = True
 CODE355655 = False
 CODE357 = False
 CODE657 = False
@@ -598,6 +598,33 @@ def searchCodes(page, pbar):
 
                             # Remove nametag from final string
                             finalJAString = finalJAString.replace(nametag, '')
+                    elif '\\nw' in finalJAString or '\\NW' in finalJAString:
+                        matchList = re.findall(r'([\\]+[nN][wW]\[(.+?)\])(.+)', finalJAString)    
+                        if len(matchList) != 0:    
+                            response = translateGPT(matchList[0][1], 'Reply with only the english translation of the NPC name', True)
+                        else:
+                            print('wtf')
+                        tokens += response[1]
+                        speaker = response[0].strip('.')
+
+                        # Set Nametag and Remove from Final String
+                        nametag = matchList[0][0].replace(matchList[0][1], speaker)
+                        finalJAString = finalJAString.replace(matchList[0][0], '')
+
+                        # Set next item as dialogue
+                        if (codeList[j + 1]['code'] == 401 and len(codeList[j + 1]['parameters']) > 0) or (codeList[j + 1]['code'] == 0 and len(codeList[j + 1]['parameters']) > 0):
+                            # Set name var to top of list
+                            codeList[j]['parameters'][0] = nametag
+                            codeList[j]['code'] = code
+
+                            j += 1
+                            codeList[j]['parameters'][0] = finalJAString
+                            codeList[j]['code'] = code
+                            nametag = ''
+                        else:
+                            # Set nametag in string
+                            codeList[j]['parameters'][0] = nametag + finalJAString
+                            codeList[j]['code'] = code
                     ### Only for Specific games where name is surrounded by brackets.
                     # elif '【' in finalJAString:
                     #     matchList = re.findall(r'(.+?【(.+?)】.+?)(「.+)', finalJAString)    
@@ -644,12 +671,10 @@ def searchCodes(page, pbar):
                     finalJAString = finalJAString.replace('\\#', '')
 
                     # Remove any RPGMaker Code at start
-                    startStringMatch = re.findall(r'^[\\]+[^一-龠ぁ-ゔァ-ヴーcnv]+\]', finalJAString)
-                    if len(startStringMatch) > 0:
-                        startString = startStringMatch[0]
-                        finalJAString = finalJAString.replace(startString, '')
-                    else:
-                        startString = ''
+                    ffMatchList = re.findall(r'[\\]+[fF]+\[.+?\]', finalJAString)
+                    if len(ffMatchList) > 0:
+                        finalJAString = finalJAString.replace(ffMatchList[0], '')
+                        nametag += ffMatchList[0]
 
                     # Remove \\r codes (Display furigana instead of kanji)
                     rcodeMatch = re.findall(r'([\\]+r\[(.+?),.+?\])', finalJAString)
@@ -682,7 +707,6 @@ def searchCodes(page, pbar):
                             translatedText = translatedText.replace('\n', '<br>')   
 
                     # Add Beginning Text
-                    translatedText = startString + translatedText
                     translatedText = nametag + translatedText
                     nametag = ''
 
@@ -835,12 +859,24 @@ def searchCodes(page, pbar):
 
         ## Event Code: 101 [Name] [Optional]
             if codeList[i]['code'] == 101 and CODE101 == True:    
-                jaString = codeList[i]['parameters'][4]
+                jaString = codeList[i]['parameters'][0]
                 if type(jaString) != str:
                     continue
                 
                 # Definitely don't want to mess with files
                 if '_' in jaString:
+                    if 'natu' in jaString:
+                        speaker = 'Natu'
+                    elif 'kotohana' in jaString:
+                        speaker = 'Kotohana'
+                    elif 'aoi' in jaString:
+                        speaker = 'Aoi'
+                    elif 'misaki' in jaString:
+                        speaker = 'Misaki'
+                    elif 'koume' in jaString:
+                        speaker = 'Koume'
+                    elif 'titose' in jaString:
+                        speaker = 'Chitose'
                     continue
 
                 # If there isn't any Japanese in the text just skip
@@ -1435,7 +1471,7 @@ def translateGPT(t, history, fullPromptFlag):
         return(t, 0)
 
     """Translate text using GPT"""
-    context = 'Eroge Names Context: アサギ == Asagi | Female, ウィップ == Whip | Female, ウラ == Ura | Female, ブレイド == Blade | Female'
+    context = 'Eroge Names Context: Name: なつ == Natsu\nGender: Male,\nName: 琴花 == Kotohana\nGender: Female,\nName: 葵 == Aoi\nGender: Female,\nName: 美咲 == Misaki\nGender: Female,\nName: 小梅 == Koume\nGender: Female,\nName: 千歳 == Chitose\nGender: Female\n'
     if fullPromptFlag:
         system = PROMPT 
         user = 'Line to Translate: ' + subbedT
