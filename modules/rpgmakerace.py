@@ -1348,7 +1348,7 @@ def subVars(jaString):
     count = 0
     colorList = re.findall(r'[\\]+[cC]\[[0-9]+\]', jaString)
     colorList = set(colorList)
-    if len(iconList) != 0:
+    if len(colorList) != 0:
         for color in colorList:
             jaString = jaString.replace(color, '<C' + str(count) + '>')
             count += 1
@@ -1357,7 +1357,7 @@ def subVars(jaString):
     count = 0
     nameList = re.findall(r'[\\]+[nN]\[[0-9]+\]', jaString)
     nameList = set(nameList)
-    if len(iconList) != 0:
+    if len(nameList) != 0:
         for name in nameList:
             jaString = jaString.replace(name, '<N' + str(count) + '>')
             count += 1
@@ -1366,7 +1366,7 @@ def subVars(jaString):
     count = 0
     varList = re.findall(r'[\\]+[vV]\[[0-9]+\]', jaString)
     varList = set(varList)
-    if len(iconList) != 0:
+    if len(varList) != 0:
         for var in varList:
             jaString = jaString.replace(var, '<V' + str(count) + '>')
             count += 1

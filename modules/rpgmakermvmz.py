@@ -862,21 +862,31 @@ def searchCodes(page, pbar):
                 jaString = codeList[i]['parameters'][0]
                 if type(jaString) != str:
                     continue
+
+                # Force Speaker
+                if 'natu' in jaString:
+                    speaker = 'Natsu'
+                    continue
+                elif 'kotohana' in jaString:
+                    speaker = 'Kotohana'
+                    continue
+                elif 'aoi' in jaString:
+                    speaker = 'Aoi'
+                    continue
+                elif 'misaki' in jaString:
+                    speaker = 'Misaki'
+                    continue
+                elif 'koume' in jaString:
+                    speaker = 'Koume'
+                    continue
+                elif 'titose' in jaString:
+                    speaker = 'Chitose'
+                    continue
+                else:
+                    speaker = 'Unknown'
                 
                 # Definitely don't want to mess with files
                 if '_' in jaString:
-                    if 'natu' in jaString:
-                        speaker = 'Natu'
-                    elif 'kotohana' in jaString:
-                        speaker = 'Kotohana'
-                    elif 'aoi' in jaString:
-                        speaker = 'Aoi'
-                    elif 'misaki' in jaString:
-                        speaker = 'Misaki'
-                    elif 'koume' in jaString:
-                        speaker = 'Koume'
-                    elif 'titose' in jaString:
-                        speaker = 'Chitose'
                     continue
 
                 # If there isn't any Japanese in the text just skip
@@ -1385,7 +1395,7 @@ def subVars(jaString):
     count = 0
     colorList = re.findall(r'[\\]+[cC]\[[0-9]+\]', jaString)
     colorList = set(colorList)
-    if len(iconList) != 0:
+    if len(colorList) != 0:
         for color in colorList:
             jaString = jaString.replace(color, '<C' + str(count) + '>')
             count += 1
@@ -1394,7 +1404,7 @@ def subVars(jaString):
     count = 0
     nameList = re.findall(r'[\\]+[nN]\[[0-9]+\]', jaString)
     nameList = set(nameList)
-    if len(iconList) != 0:
+    if len(nameList) != 0:
         for name in nameList:
             jaString = jaString.replace(name, '<N' + str(count) + '>')
             count += 1
@@ -1403,7 +1413,7 @@ def subVars(jaString):
     count = 0
     varList = re.findall(r'[\\]+[vV]\[[0-9]+\]', jaString)
     varList = set(varList)
-    if len(iconList) != 0:
+    if len(varList) != 0:
         for var in varList:
             jaString = jaString.replace(var, '<V' + str(count) + '>')
             count += 1
@@ -1467,7 +1477,7 @@ def translateGPT(t, history, fullPromptFlag):
     subbedT = varResponse[0]
 
     # If there isn't any Japanese in the text just skip
-    if not re.search(r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴー]+', subbedT):
+    if not re.search(r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴ]+', subbedT):
         return(t, 0)
 
     """Translate text using GPT"""
