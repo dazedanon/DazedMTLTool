@@ -530,7 +530,11 @@ def searchCodes(page, pbar):
                 # If there isn't any Japanese in the text just skip
                 if IGNORETLTEXT == True:
                     if not re.search(r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴー]+', jaString):
+                        # Keep textHistory list at length maxHistory
                         textHistory.append('\"' + jaString + '\"')
+                        if len(textHistory) > maxHistory:
+                            textHistory.pop(0)
+                        currentGroup = []  
                         continue
 
                 # Using this to keep track of 401's in a row. Throws IndexError at EndOfList (Expected Behavior)
@@ -1371,8 +1375,17 @@ def subVars(jaString):
             jaString = jaString.replace(var, '<V' + str(count) + '>')
             count += 1
 
+    # Formatting
+    count = 0
+    formatList = re.findall(r'[\\]+[!.]', jaString)
+    formatList = set(formatList)
+    if len(formatList) != 0:
+        for format in formatList:
+            jaString = jaString.replace(format, '<F' + str(count) + '>')
+            count += 1
+
     # Put all lists in list and return
-    allList = [iconList, colorList, nameList, varList]
+    allList = [iconList, colorList, nameList, varList, formatList]
     return [jaString, allList]
 
 def resubVars(translatedText, allList):
@@ -1399,18 +1412,25 @@ def resubVars(translatedText, allList):
 
     # Names
     count = 0
-    if len(allList[1]) != 0:
+    if len(allList[2]) != 0:
         for var in allList[2]:
             translatedText = translatedText.replace('<N' + str(count) + '>', var)
             count += 1
 
     # Vars
     count = 0
-    if len(allList[1]) != 0:
+    if len(allList[3]) != 0:
         for var in allList[3]:
             translatedText = translatedText.replace('<V' + str(count) + '>', var)
             count += 1
-
+    
+    # Formatting
+    count = 0
+    if len(allList[4]) != 0:
+        for var in allList[4]:
+            translatedText = translatedText.replace('<F' + str(count) + '>', var)
+            count += 1
+    
     # Remove Color Variables Spaces
     # if '\\c' in translatedText:
     #     translatedText = re.sub(r'\s*(\\+c\[[1-9]+\])\s*', r' \1', translatedText)

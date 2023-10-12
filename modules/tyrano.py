@@ -298,52 +298,61 @@ def subVars(jaString):
             jaString = jaString.replace(var, '<V' + str(count) + '>')
             count += 1
 
+    # Formatting
+    count = 0
+    formatList = re.findall(r'[\\]+[!.]', jaString)
+    formatList = set(formatList)
+    if len(formatList) != 0:
+        for format in formatList:
+            jaString = jaString.replace(format, '<F' + str(count) + '>')
+            count += 1
+
     # Put all lists in list and return
-    allList = [iconList, colorList, nameList, varList]
+    allList = [iconList, colorList, nameList, varList, formatList]
     return [jaString, allList]
 
-def subVars(jaString):
-    jaString = jaString.replace('\u3000', ' ')
+def resubVars(translatedText, allList):
+    # Fix Spacing and ChatGPT Nonsense
+    matchList = re.findall(r'<\s?.+?\s?>', translatedText)
+    if len(matchList) > 0:
+        for match in matchList:
+            text = match.replace(' ', '')
+            translatedText = translatedText.replace(match, text)
 
     # Icons
     count = 0
-    iconList = re.findall(r'[\\]+[iI]\[[0-9]+\]', jaString)
-    iconList = set(iconList)
-    if len(iconList) != 0:
-        for icon in iconList:
-            jaString = jaString.replace(icon, '<I' + str(count) + '>')
+    if len(allList[0]) != 0:
+        for var in allList[0]:
+            translatedText = translatedText.replace('<I' + str(count) + '>', var)
             count += 1
 
     # Colors
     count = 0
-    colorList = re.findall(r'[\\]+[cC]\[[0-9]+\]', jaString)
-    colorList = set(colorList)
-    if len(colorList) != 0:
-        for color in colorList:
-            jaString = jaString.replace(color, '<C' + str(count) + '>')
+    if len(allList[1]) != 0:
+        for var in allList[1]:
+            translatedText = translatedText.replace('<C' + str(count) + '>', var)
             count += 1
 
     # Names
     count = 0
-    nameList = re.findall(r'[\\]+[nN]\[[0-9]+\]', jaString)
-    nameList = set(nameList)
-    if len(nameList) != 0:
-        for name in nameList:
-            jaString = jaString.replace(name, '<N' + str(count) + '>')
+    if len(allList[2]) != 0:
+        for var in allList[2]:
+            translatedText = translatedText.replace('<N' + str(count) + '>', var)
             count += 1
 
-    # Variables
+    # Vars
     count = 0
-    varList = re.findall(r'[\\]+[vV]\[[0-9]+\]', jaString)
-    varList = set(varList)
-    if len(varList) != 0:
-        for var in varList:
-            jaString = jaString.replace(var, '<V' + str(count) + '>')
+    if len(allList[3]) != 0:
+        for var in allList[3]:
+            translatedText = translatedText.replace('<V' + str(count) + '>', var)
             count += 1
-
-    # Put all lists in list and return
-    allList = [iconList, colorList, nameList, varList]
-    return [jaString, allList]
+    
+    # Formatting
+    count = 0
+    if len(allList[4]) != 0:
+        for var in allList[4]:
+            translatedText = translatedText.replace('<F' + str(count) + '>', var)
+            count += 1
 
 @retry(exceptions=Exception, tries=5, delay=5)
 def translateGPT(t, history, fullPromptFlag):

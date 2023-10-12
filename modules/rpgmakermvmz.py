@@ -43,11 +43,11 @@ CODE401 = True
 CODE405 = False
 CODE102 = True
 CODE122 = False
-CODE101 = True
+CODE101 = False
 CODE355655 = False
 CODE357 = False
 CODE657 = False
-CODE356 = False
+CODE356 = True
 CODE320 = False
 CODE324 = False
 CODE111 = False
@@ -56,6 +56,7 @@ CODE108 = False
 NAMES = False    # Output a list of all the character names found
 BRFLAG = False   # If the game uses <br> instead
 FIXTEXTWRAP = True
+IGNORETLTEXT = False
 
 def handleMVMZ(filename, estimate):
     global ESTIMATE, TOKENS, TOTALTOKENS, TOTALCOST
@@ -504,6 +505,8 @@ def searchCodes(page, pbar):
                 if syncIndex > i:
                     i = syncIndex
                 pbar.update(1)
+                if len(codeList) <= i:
+                    break
 
             ### All the codes are here which translate specific functions in the MAP files.
             ### IF these crash or fail your game will do the same. Use the flags to skip codes.
@@ -518,6 +521,16 @@ def searchCodes(page, pbar):
                 jaString = codeList[i]['parameters'][0]
                 firstJAString = jaString
 
+                # If there isn't any Japanese in the text just skip
+                if IGNORETLTEXT == True:
+                    if not re.search(r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴー]+', jaString):
+                        # Keep textHistory list at length maxHistory
+                        textHistory.append('\"' + jaString + '\"')
+                        if len(textHistory) > maxHistory:
+                            textHistory.pop(0)
+                        currentGroup = []  
+                        continue
+
                 # Using this to keep track of 401's in a row. Throws IndexError at EndOfList (Expected Behavior)
                 currentGroup.append(jaString)
 
@@ -529,6 +542,10 @@ def searchCodes(page, pbar):
 
                         jaString = codeList[i]['parameters'][0]
                         currentGroup.append(jaString)
+
+                        # Make sure not the end of the list.
+                        if len(codeList) <= i+1:
+                            break
 
                 # Join up 401 groups for better translation.
                 if len(currentGroup) > 0:
@@ -676,11 +693,20 @@ def searchCodes(page, pbar):
                         finalJAString = finalJAString.replace(ffMatchList[0], '')
                         nametag += ffMatchList[0]
 
-                    # Remove \\r codes (Display furigana instead of kanji)
+                    ### Remove format codes
+                    # Furigana
                     rcodeMatch = re.findall(r'([\\]+r\[(.+?),.+?\])', finalJAString)
                     if len(rcodeMatch) > 0:
                         for match in rcodeMatch:
                             finalJAString = finalJAString.replace(match[0],match[1])
+                    # # Formatting Codes
+                    if finalJAString == 'あ、\\!あんな風に、おちんちん入ってるんだ...':
+                        print('t')
+                    formatMatch = re.findall(r'[\\]+[!><.]', finalJAString)
+                    if len(formatMatch) > 0:
+                        for match in formatMatch:
+                            finalJAString = finalJAString.replace(match, '')
+
 
                     # Translate
                     if speaker == '' and finalJAString != '':
@@ -1039,6 +1065,21 @@ def searchCodes(page, pbar):
                 jaString = codeList[i]['parameters'][0]
                 oldjaString = jaString
 
+                # Grab Speaker
+                if 'Tachie showName' in jaString:
+                    matchList = re.findall(r'Tachie showName (.+)', jaString)
+                    if len(matchList) > 0:
+                        # Translate
+                        response = translateGPT(matchList[0], 'Reply with the English translation of the NPC name.', True)
+                        translatedText = response[0]
+                        tokens += response[1]
+
+                        # Set Text
+                        speaker = translatedText
+                        speaker = speaker.replace(' ', ' ')
+                        codeList[i]['parameters'][0] = jaString.replace(matchList[0], speaker)
+                    continue
+
                 # If there isn't any Japanese in the text just skip
                 if not re.search(r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴー]+', jaString):
                     continue
@@ -1208,6 +1249,8 @@ def searchCodes(page, pbar):
     except IndexError as e:
         # This is part of the logic so we just pass it
         traceback.print_exc()
+        print(len(codeList))
+        print(i+1)
         # raise Exception(str(e) + '|Line:' + tracebackLineNo)  
     except Exception as e:
         traceback.print_exc()
@@ -1446,14 +1489,14 @@ def resubVars(translatedText, allList):
 
     # Names
     count = 0
-    if len(allList[1]) != 0:
+    if len(allList[2]) != 0:
         for var in allList[2]:
             translatedText = translatedText.replace('<N' + str(count) + '>', var)
             count += 1
 
     # Vars
     count = 0
-    if len(allList[1]) != 0:
+    if len(allList[3]) != 0:
         for var in allList[3]:
             translatedText = translatedText.replace('<V' + str(count) + '>', var)
             count += 1
@@ -1481,7 +1524,7 @@ def translateGPT(t, history, fullPromptFlag):
         return(t, 0)
 
     """Translate text using GPT"""
-    context = 'Eroge Names Context: Name: なつ == Natsu\nGender: Male,\nName: 琴花 == Kotohana\nGender: Female,\nName: 葵 == Aoi\nGender: Female,\nName: 美咲 == Misaki\nGender: Female,\nName: 小梅 == Koume\nGender: Female,\nName: 千歳 == Chitose\nGender: Female\n'
+    context = 'Eroge Names Context: Name: セレナ == Selena\nGender: Female,\nName: リン == Rin\nGender: Female,\nName: ロナ == Rona\nGender: Female,\nName: ソフィア == Sophia\nGender: Female,\nName: ジュリア == Julia\nGender: Female,\nName: グルカ == Guruka\nGender: Male,\nName: シン == Shin\nGender: Male'
     if fullPromptFlag:
         system = PROMPT 
         user = 'Line to Translate: ' + subbedT
@@ -1518,6 +1561,7 @@ def translateGPT(t, history, fullPromptFlag):
     translatedText = translatedText.replace('Line to Translate:', '')
     translatedText = re.sub(r'\n\nPast Translated Text:.*', '', translatedText, 0, re.DOTALL)
     translatedText = re.sub(r'Note:.*', '', translatedText)
+    translatedText = translatedText.replace('っ', '')
 
     # Return Translation
     if len(translatedText) > 15 * len(t) or "I'm sorry, but I'm unable to assist with that translation" in translatedText:
