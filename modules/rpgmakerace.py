@@ -195,12 +195,6 @@ def parseMap(data, filename):
     events = data['events']
     global LOCK
 
-    # Translate displayName for Map files
-    if 'Map' in filename:
-        response = translateGPT(data['displayName'], 'Reply with only the english translation of the RPG location name', False)
-        totalTokens += response[1]
-        data['displayName'] = response[0].replace('\"', '')
-
     # Get total for progress bar
     for key in events:
         if key is not None:

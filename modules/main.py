@@ -11,7 +11,7 @@ from modules.txt import handleTXT
 from modules.tyrano import handleTyrano
 from modules.json import handleJSON
 
-THREADS = 10 # For GPT4 rate limit will be hit if you have more than 1 thread.
+THREADS = 9 # For GPT4 rate limit will be hit if you have more than 1 thread.
 
 # Info Message
 print(Fore.LIGHTYELLOW_EX + "WARNING: Once a translation starts do not close it unless you want to lose your\
