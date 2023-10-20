@@ -39,7 +39,7 @@ POSITION=0
 LEAVE=False
 
 # Flags
-CODE401 = False
+CODE401 = True
 CODE405 = False
 CODE102 = True
 CODE122 = False
@@ -56,7 +56,7 @@ CODE108 = False
 NAMES = False    # Output a list of all the character names found
 BRFLAG = False   # If the game uses <br> instead
 FIXTEXTWRAP = True
-IGNORETLTEXT = True
+IGNORETLTEXT = False
 
 def handleMVMZ(filename, estimate):
     global ESTIMATE, TOKENS, TOTALTOKENS, TOTALCOST
@@ -580,25 +580,25 @@ def searchCodes(page, pbar):
                         if speaker not in NAMESLIST:
                             with LOCK:
                                 NAMESLIST.append(speaker)
-                    elif '\\kw' in finalJAString:
-                        match = re.findall(r'\\+kw\[[0-9]+\]', finalJAString)
-                        if len(match) != 0:
-                            if '1' in match[0]:
-                                speaker = 'Ayako Nagatsuki'
-                            if '2' in match[0]:
-                                speaker = 'Rei'
+                    # elif '\\kw' in finalJAString:
+                    #     match = re.findall(r'\\+kw\[[0-9]+\]', finalJAString)
+                    #     if len(match) != 0:
+                    #         if '1' in match[0]:
+                    #             speaker = 'Ayako Nagatsuki'
+                    #         if '2' in match[0]:
+                    #             speaker = 'Rei'
                             
-                            # Set name var to top of list
-                            codeList[j]['parameters'][0] = match[0]
-                            codeList[j]['code'] = code
+                    #         # Set name var to top of list
+                    #         codeList[j]['parameters'][0] = match[0]
+                    #         codeList[j]['code'] = code
 
-                            # Set next item as dialogue
-                            j += 1
-                            codeList[j]['parameters'][0] = match[0]
-                            codeList[j]['code'] = code
+                    #         # Set next item as dialogue
+                    #         j += 1
+                    #         codeList[j]['parameters'][0] = match[0]
+                    #         codeList[j]['code'] = code
 
-                            # Remove nametag from final string
-                            finalJAString = finalJAString.replace(match[0], '')  
+                    #         # Remove nametag from final string
+                    #         finalJAString = finalJAString.replace(match[0], '')  
                     elif '\\nc' in finalJAString:     
                         matchList = re.findall(r'(\\+nc<(.*?)>)(.+)?', finalJAString)    
                         if len(matchList) != 0:    
@@ -710,12 +710,12 @@ def searchCodes(page, pbar):
 
                     # Translate
                     if speaker == '' and finalJAString != '':
-                        response = translateGPT(finalJAString, 'Past Translated Text: ' + '|\n\n'.join(textHistory), True)
+                        response = translateGPT(finalJAString, 'Past Translated Text: (' + ' || '.join(textHistory) + ')', True)
                         tokens += response[1]
                         translatedText = response[0]
                         textHistory.append('\"' + translatedText + '\"')
                     elif finalJAString != '':
-                        response = translateGPT(speaker + ': ' + finalJAString, 'Past Translated Text: ' + '|\n\n'.join(textHistory), True)
+                        response = translateGPT(speaker + ': ' + finalJAString, 'Past Translated Text: (' + ' || '.join(textHistory) + ')', True)
                         tokens += response[1]
                         translatedText = response[0]
                         textHistory.append('\"' + translatedText + '\"')
@@ -1152,6 +1152,68 @@ def searchCodes(page, pbar):
                     else:
                         continue
 
+                if 'ShowInfo ' in jaString:
+                    # Remove any textwrap
+                    jaString = re.sub(r'\n', '_', jaString)
+
+                    # Capture Arguments and text
+                    infoList = re.findall(r'ShowInfo (.+)', jaString)
+                    if len(infoList) > 0:
+                        info = infoList[0]
+                        originalInfo = info
+
+                        # Remove underscores
+                        info = re.sub(r'_', ' ', info)
+
+                        # Using this to keep track of 401's in a row. Throws IndexError at EndOfList (Expected Behavior)
+                        currentGroup.append(info)
+
+                        while (codeList[i+1]['code'] == 356):
+                            # Want to translate this script
+                            if 'ShowInfo ' not in codeList[i+1]['parameters'][0]:
+                                break
+
+                            codeList[i]['parameters'][0] = ''
+                            i += 1
+                            jaString = codeList[i]['parameters'][0]
+                            infoList = re.findall(r'ShowInfo (.+)', jaString)
+                            if len(infoList) > 0:
+                                dtext = infoList[0]
+                                currentGroup.append(info)
+
+                        # Join up 356 groups for better translation.
+                        if len(currentGroup) > 0:
+                            finalJAString = ' '.join(currentGroup)
+                        else:
+                            finalJAString = info
+
+                        # Clear Group
+                        currentGroup = [] 
+                    
+                        # Remove any textwrap
+                        jaString = re.sub(r'\n', '_', jaString)
+
+                        # Translate
+                        response = translateGPT(finalJAString, 'Reply with the English Translation.', True)
+                        translatedText = response[0]
+                        tokens += response[1]
+
+                        # Remove characters that may break scripts
+                        charList = ['.', '\"']
+                        for char in charList:
+                            translatedText = translatedText.replace(char, '')
+                        
+                        # Cant have spaces?
+                        translatedText = translatedText.replace(' ', '_')
+                    
+                        # Put Args Back
+                        translatedText = jaString.replace(originalInfo, translatedText)
+
+                        # Set Data
+                        codeList[i]['parameters'][0] = translatedText
+                    else:
+                        continue
+
             ### Event Code: 102 Show Choice
             if codeList[i]['code'] == 102 and CODE102 == True:
                 for choice in range(len(codeList[i]['parameters'][0])):
@@ -1358,7 +1420,7 @@ def searchSS(state, pbar):
 
 def searchSystem(data, pbar):
     tokens = 0
-    context = 'Reply with only the english translation of the UI textbox'
+    context = 'Reply with only the english translation of the UI textbox.\nTranslate "逃げる" as "Escape".\nTranslate"大事なもの" as "Key Items.\nTranslate "最強装備" as "Optimize".\nTranslate "攻撃力" as "Attack".\nTranslate "回避率" as "Evasion".\nTranslate "最大ＨＰ" as "Max HP".\nTranslate "経験値" as "EXP".\n Translate "購入する" as "Buy"'
 
     # Title
     response = translateGPT(data['gameTitle'], ' Reply with the English translation of the game title name', False)
@@ -1427,11 +1489,11 @@ def subVars(jaString):
 
     # Icons
     count = 0
-    iconList = re.findall(r'[\\]+[iI]\[[0-9]+\]', jaString)
+    iconList = re.findall(r'[\\]+[iIkKwW]+\[[0-9]+\]', jaString)
     iconList = set(iconList)
     if len(iconList) != 0:
         for icon in iconList:
-            jaString = jaString.replace(icon, '<I' + str(count) + '>')
+            jaString = jaString.replace(icon, '[Icon' + str(count) + ']')
             count += 1
 
     # Colors
@@ -1440,7 +1502,7 @@ def subVars(jaString):
     colorList = set(colorList)
     if len(colorList) != 0:
         for color in colorList:
-            jaString = jaString.replace(color, '<C' + str(count) + '>')
+            jaString = jaString.replace(color, '[Color' + str(count) + ']')
             count += 1
 
     # Names
@@ -1449,7 +1511,7 @@ def subVars(jaString):
     nameList = set(nameList)
     if len(nameList) != 0:
         for name in nameList:
-            jaString = jaString.replace(name, '<N' + str(count) + '>')
+            jaString = jaString.replace(name, '[Name' + str(count) + ']')
             count += 1
 
     # Variables
@@ -1458,7 +1520,7 @@ def subVars(jaString):
     varList = set(varList)
     if len(varList) != 0:
         for var in varList:
-            jaString = jaString.replace(var, '<V' + str(count) + '>')
+            jaString = jaString.replace(var, '[Var' + str(count) + ']')
             count += 1
 
     # Put all lists in list and return
@@ -1467,7 +1529,7 @@ def subVars(jaString):
 
 def resubVars(translatedText, allList):
     # Fix Spacing and ChatGPT Nonsense
-    matchList = re.findall(r'<\s?.+?\s?>', translatedText)
+    matchList = re.findall(r'\[\s?.+?\s?\]', translatedText)
     if len(matchList) > 0:
         for match in matchList:
             text = match.replace(' ', '')
@@ -1477,28 +1539,28 @@ def resubVars(translatedText, allList):
     count = 0
     if len(allList[0]) != 0:
         for var in allList[0]:
-            translatedText = translatedText.replace('<I' + str(count) + '>', var)
+            translatedText = translatedText.replace('[Icon' + str(count) + ']', var)
             count += 1
 
     # Colors
     count = 0
     if len(allList[1]) != 0:
         for var in allList[1]:
-            translatedText = translatedText.replace('<C' + str(count) + '>', var)
+            translatedText = translatedText.replace('[Color' + str(count) + ']', var)
             count += 1
 
     # Names
     count = 0
     if len(allList[2]) != 0:
         for var in allList[2]:
-            translatedText = translatedText.replace('<N' + str(count) + '>', var)
+            translatedText = translatedText.replace('[Name' + str(count) + ']', var)
             count += 1
 
     # Vars
     count = 0
     if len(allList[3]) != 0:
         for var in allList[3]:
-            translatedText = translatedText.replace('<V' + str(count) + '>', var)
+            translatedText = translatedText.replace('[Var' + str(count) + ']', var)
             count += 1
 
     # Remove Color Variables Spaces
@@ -1524,7 +1586,7 @@ def translateGPT(t, history, fullPromptFlag):
         return(t, 0)
 
     """Translate text using GPT"""
-    context = 'Eroge Names Context: Name: セレナ == Serena\nGender: Female,\n\nName: カトリーヌ == Catherine\nGender: Female'
+    context = 'Eroge Names Context: (Name: サクラ == Sakura\nGender: Female,\n\nName: ルリカ == Rurika\nGender: Female,\n\nName: ケンイチ == Kenichi\nGender: Male)'
     if fullPromptFlag:
         system = PROMPT 
         user = 'Line to Translate: ' + subbedT
@@ -1565,6 +1627,6 @@ def translateGPT(t, history, fullPromptFlag):
 
     # Return Translation
     if len(translatedText) > 15 * len(t) or "I'm sorry, but I'm unable to assist with that translation" in translatedText:
-        return [t, response.usage.total_tokens]
+        raise Exception
     else:
         return [translatedText, tokens]
