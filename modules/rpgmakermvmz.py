@@ -710,7 +710,7 @@ def searchCodes(page, pbar):
 
                     # Translate
                     if speaker == '' and finalJAString != '':
-                        response = translateGPT(finalJAString, 'Past Translated Text: (' + ' || '.join(textHistory) + ')', True)
+                        response = translateGPT(finalJAString, 'Past Translated Text: (' + ', '.join(textHistory) + ')', True)
                         tokens += response[1]
                         translatedText = response[0]
                         textHistory.append('\"' + translatedText + '\"')
@@ -1420,7 +1420,7 @@ def searchSS(state, pbar):
 
 def searchSystem(data, pbar):
     tokens = 0
-    context = 'Reply with only the english translation of the UI textbox.\nTranslate "逃げる" as "Escape".\nTranslate"大事なもの" as "Key Items.\nTranslate "最強装備" as "Optimize".\nTranslate "攻撃力" as "Attack".\nTranslate "回避率" as "Evasion".\nTranslate "最大ＨＰ" as "Max HP".\nTranslate "経験値" as "EXP".\n Translate "購入する" as "Buy"'
+    context = 'Reply with only the english translation of the UI textbox.\nTranslate "逃げる" as "Escape".\nTranslate"大事なもの" as "Key Items.\nTranslate "最強装備" as "Optimize".\nTranslate "攻撃力" as "Attack".\nTranslate "最大ＨＰ" as "Max HP".\nTranslate "経験値" as "EXP".\n Translate "購入する" as "Buy"'
 
     # Title
     response = translateGPT(data['gameTitle'], ' Reply with the English translation of the game title name', False)
@@ -1470,7 +1470,7 @@ def searchSystem(data, pbar):
     # Messages
     messages = (data['terms']['messages'])
     for key, value in messages.items():
-        response = translateGPT(value, 'Reply with only the english translation of the battle text.', False)
+        response = translateGPT(value, 'Reply with only the english translation of the battle text.\nTranslate "常時ダッシュ" as "Always Dash".', False)
         translatedText = response[0]
 
         # Remove characters that may break scripts
@@ -1582,7 +1582,7 @@ def translateGPT(t, history, fullPromptFlag):
     subbedT = varResponse[0]
 
     # If there isn't any Japanese in the text just skip
-    if not re.search(r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴ]+', subbedT):
+    if not re.search(r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴ]+|[\uFF00-\uFFEF]', subbedT):
         return(t, 0)
 
     """Translate text using GPT"""

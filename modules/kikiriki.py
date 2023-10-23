@@ -1,10 +1,7 @@
 from concurrent.futures import ThreadPoolExecutor, as_completed
-import json
 import os
 from pathlib import Path
 import re
-import sys
-import textwrap
 import threading
 import time
 import traceback
@@ -44,7 +41,7 @@ NAMES = False    # Output a list of all the character names found
 BRFLAG = False   # If the game uses <br> instead
 FIXTEXTWRAP = False
 
-def handleTyrano(filename, estimate):
+def handleKikiriki(filename, estimate):
     global ESTIMATE, TOKENS, TOTALTOKENS, TOTALCOST
     ESTIMATE = estimate
 
@@ -63,7 +60,7 @@ def handleTyrano(filename, estimate):
     
     else:
         try:
-            with open('translated/' + filename, 'w', encoding='UTF-8') as outFile:
+            with open('translated/' + filename, 'w', encoding='shift-jis') as outFile:
                 start = time.time()
                 translatedData = openFiles(filename)
 
@@ -81,7 +78,7 @@ def handleTyrano(filename, estimate):
     return getResultString(['', TOTALTOKENS, None], end - start, 'TOTAL')
 
 def openFiles(filename):
-    with open('files/' + filename, 'r', encoding='utf-8') as readFile:
+    with open('files/' + filename, 'r', encoding='shift-jis') as readFile:
         translatedData = parseTyrano(readFile, filename)
 
         # Delete lines marked for deletion
@@ -126,7 +123,7 @@ def translateTyrano(data, pbar):
             i = syncIndex
 
         # Speaker
-        if '#' in data[i]:
+        if '[ns]' in data[i]:
             matchList = re.findall(r'#(.+)', data[i])
             if len(matchList) != 0:
                 response = translateGPT(matchList[0], 'Reply with only the english translation of the NPC name', True)
@@ -157,17 +154,17 @@ def translateTyrano(data, pbar):
                 data[i] = re.sub(r'text=\"(.+?)\"', translatedText, data[i])                
 
         # Lines
-        elif '[p]' in data[i]:
-            matchList = re.findall(r'(.+?)\[p\]', data[i])
+        elif '[r]' in data[i]:
+            matchList = re.findall(r'(.+?)\[r\]', data[i])
             if len(matchList) > 0:
                 matchList[0] = matchList[0].replace('「', '')
                 matchList[0] = matchList[0].replace('」', '')
                 currentGroup.append(matchList[0])
                 if len(data) > i+1:
-                    while '[p]' in data[i+1]:
+                    while '[r]' in data[i+1]:
                         data[i] = '\d\n'
                         i += 1
-                        matchList = re.findall(r'(.+?)\[p\]', data[i])
+                        matchList = re.findall(r'(.+?)\[r\]', data[i])
                         if len(matchList) > 0:
                             matchList[0] = matchList[0].replace('「', '')
                             matchList[0] = matchList[0].replace('」', '')
@@ -218,12 +215,12 @@ def translateTyrano(data, pbar):
             if len(matchList) > 0:
                 data[i] = '\d\n'
                 for line in matchList:
-                    data.insert(i, line.strip() + '[p]\n')
+                    data.insert(i, line.strip() + '[r]\n')
                     i+=1
             # else:
                 # print ('No Matches')
             if translatedText != '':
-                data[i] = translatedText.strip() + '[p]\n'
+                data[i] = translatedText.strip() + '[r]\n'
 
             # Keep textHistory list at length maxHistory
             if len(textHistory) > maxHistory:
