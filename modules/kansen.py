@@ -2,6 +2,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import os
 from pathlib import Path
 import re
+import textwrap
 import threading
 import time
 import traceback
@@ -38,10 +39,10 @@ LEAVE=False
 
 # Flags
 NAMES = False    # Output a list of all the character names found
-BRFLAG = False   # If the game uses <br> instead
-FIXTEXTWRAP = False
+FIXTEXTWRAP = True
+IGNORETLTEXT = True
 
-def handleKikiriki(filename, estimate):
+def handleKansen(filename, estimate):
     global ESTIMATE, TOKENS, TOTALTOKENS, TOTALCOST
     ESTIMATE = estimate
 
@@ -60,7 +61,7 @@ def handleKikiriki(filename, estimate):
     
     else:
         try:
-            with open('translated/' + filename, 'w', encoding='shift-jis') as outFile:
+            with open('translated/' + filename, 'w', encoding='shift_jis', errors='ignore') as outFile:
                 start = time.time()
                 translatedData = openFiles(filename)
 
@@ -78,7 +79,7 @@ def handleKikiriki(filename, estimate):
     return getResultString(['', TOTALTOKENS, None], end - start, 'TOTAL')
 
 def openFiles(filename):
-    with open('files/' + filename, 'r', encoding='shift-jis') as readFile:
+    with open('files/' + filename, 'r', encoding='cp932') as readFile:
         translatedData = parseTyrano(readFile, filename)
 
         # Delete lines marked for deletion
@@ -124,20 +125,21 @@ def translateTyrano(data, pbar):
 
         # Speaker
         if '[ns]' in data[i]:
-            matchList = re.findall(r'#(.+)', data[i])
+            matchList = re.findall(r'\[ns\](.+?)\[', data[i])
             if len(matchList) != 0:
                 response = translateGPT(matchList[0], 'Reply with only the english translation of the NPC name', True)
                 speaker = response[0]
                 tokens += response[1]
-                data[i] = '#' + speaker + '\n'
+                data[i] = '[ns]' + speaker + '[nse]\n'
             else:
                 speaker = ''
 
         # Choices
-        elif 'glink' in data[i]:
-            matchList = re.findall(r'text=\"(.+?)\"', data[i])
+        elif '[eval exp="f.seltext' in data[i]:
+            matchList = re.findall(r'\[eval exp=.+?\'(.+)\'', data[i])
             if len(matchList) != 0:
                 if len(textHistory) > 0:
+                    originalText = matchList[0]
                     response = translateGPT(matchList[0], 'Past Translated Text: ' + textHistory[len(textHistory)-1] + '\n\nReply in the style of a dialogue option.', True)
                 else:
                     response = translateGPT(matchList[0], '', False)
@@ -149,30 +151,45 @@ def translateTyrano(data, pbar):
                 for char in charList:
                     translatedText = translatedText.replace(char, '')
 
+                # Escape all '
+                translatedText = translatedText.replace('\\', '')
+                translatedText = translatedText.replace("'", "\\\'")
+
                 # Set Data
-                translatedText = 'text=\"' + translatedText.replace(' ', ' ') + '\"'
-                data[i] = re.sub(r'text=\"(.+?)\"', translatedText, data[i])                
+                translatedText = data[i].replace(originalText, translatedText)
+                data[i] = translatedText                
 
         # Lines
-        elif '[r]' in data[i]:
-            matchList = re.findall(r'(.+?)\[r\]', data[i])
-            if len(matchList) > 0:
-                matchList[0] = matchList[0].replace('「', '')
-                matchList[0] = matchList[0].replace('」', '')
-                currentGroup.append(matchList[0])
-                if len(data) > i+1:
-                    while '[r]' in data[i+1]:
-                        data[i] = '\d\n'
-                        i += 1
-                        matchList = re.findall(r'(.+?)\[r\]', data[i])
-                        if len(matchList) > 0:
-                            matchList[0] = matchList[0].replace('「', '')
-                            matchList[0] = matchList[0].replace('」', '')
-                            currentGroup.append(matchList[0])
+        matchList = re.findall(r'(.+?)\[r\]$', data[i])
+        if len(matchList) > 0:
+            matchList[0] = matchList[0].replace('「', '')
+            matchList[0] = matchList[0].replace('」', '')
+            currentGroup.append(matchList[0])
+            if len(data) > i+1:
+                while '[r]' in data[i+1]:
+                    data[i] = '\d\n'    # \d Marks line for deletion
+                    i += 1
+                    matchList = re.findall(r'(.+?)\[r\]', data[i])
+                    if len(matchList) > 0:
+                        matchList[0] = matchList[0].replace('「', '')
+                        matchList[0] = matchList[0].replace('」', '')
+                        currentGroup.append(matchList[0])
+                while '[pcms]' in data[i+1]:
+                    data[i] = '\d\n'
+                    i += 1
+                    matchList = re.findall(r'(.+?)\[pcms\]', data[i])
+                    if len(matchList) > 0:
+                        matchList[0] = matchList[0].replace('「', '')
+                        matchList[0] = matchList[0].replace('」', '')
+                        currentGroup.append(matchList[0])
             # Join up 401 groups for better translation.
             if len(currentGroup) > 0:
                 finalJAString = ''.join(currentGroup)
                 oldjaString = finalJAString
+
+            # Remove any textwrap
+            if FIXTEXTWRAP == True:
+                finalJAString = re.sub(r'[r]', ' ', finalJAString)
 
             #Check Speaker
             if speaker == '':
@@ -194,6 +211,8 @@ def translateTyrano(data, pbar):
             translatedText = translatedText.replace('っ', '')
             translatedText = translatedText.replace('ー', '')
             translatedText = translatedText.replace('\"', '')
+            translatedText = translatedText.replace('[', '')
+            translatedText = translatedText.replace(']', '')
 
             # Format Text
             matchList = re.findall(r'(.+?[)\.\?\!）。・]+)', translatedText)
@@ -204,7 +223,7 @@ def translateTyrano(data, pbar):
                 matchList[k] = matchList[k].strip()
             j=0
             while(len(matchList) > j+1):
-                while len(matchList[j]) < 100 and len(matchList) > j:
+                while len(matchList[j]) < 30 and len(matchList) > j:
                     matchList[j:j+2] = [' '.join(matchList[j:j+2])]
                     if len(matchList) == j+1:
                         matchList[j] = matchList[j] + ' ' + translatedText
@@ -215,17 +234,114 @@ def translateTyrano(data, pbar):
             if len(matchList) > 0:
                 data[i] = '\d\n'
                 for line in matchList:
-                    data.insert(i, line.strip() + '[r]\n')
+                    # Wordwrap Text
+                    if '[r]' not in line:
+                        line = textwrap.fill(line, width=WIDTH)
+                        line = line.replace('\n', '[r]')
+                    
+                    # Set
+                    data.insert(i, line.strip() + '[l][er]\n')
                     i+=1
+                data[i-1] = data[i-1].replace('[l][er]', '[pcms]')
             # else:
                 # print ('No Matches')
             if translatedText != '':
-                data[i] = translatedText.strip() + '[r]\n'
+                # Wordwrap Text
+                if '[r]' not in translatedText:
+                    translatedText = textwrap.fill(translatedText, width=WIDTH)
+                    translatedText = translatedText.replace('\n', '[r]')
+
+                # Set Backup
+                data[i] = translatedText.strip() + '[l][er]\n'
 
             # Keep textHistory list at length maxHistory
             if len(textHistory) > maxHistory:
                 textHistory.pop(0)
             currentGroup = [] 
+            speaker = ''
+        
+        matchList = re.findall(r'(.+?)\[pcms\]$', data[i])
+        if len(matchList) > 0:
+            matchList[0] = matchList[0].replace('「', '')
+            matchList[0] = matchList[0].replace('」', '')
+            finalJAString = matchList[0]
+
+            # Remove any textwrap
+            if FIXTEXTWRAP == True:
+                finalJAString = finalJAString.replace('[r]', ' ')
+            
+            #Check Speaker
+            if speaker == '':
+                response = translateGPT(finalJAString, 'Previous Dialogue: ' + '\n\n'.join(textHistory), True)
+                tokens += response[1]
+                translatedText = response[0]
+                textHistory.append('\"' + translatedText + '\"')
+            else:
+                response = translateGPT(speaker + ': ' + finalJAString, 'Previous Dialogue: ' + '\n\n'.join(textHistory), True)
+                tokens += response[1]
+                translatedText = response[0]
+                textHistory.append('\"' + translatedText + '\"')
+
+                # Remove added speaker
+                translatedText = re.sub(r'^.+:\s?', '', translatedText)
+
+            # Set Data
+            translatedText = translatedText.replace('ッ', '')
+            translatedText = translatedText.replace('っ', '')
+            translatedText = translatedText.replace('ー', '')
+            translatedText = translatedText.replace('\"', '')
+            translatedText = translatedText.replace('[', '')
+            translatedText = translatedText.replace(']', '')
+
+            # Format Text
+            matchList = re.findall(r'(.+?[)\.\?\!）。・]+)', translatedText)
+            translatedText = re.sub(r'(.+?[)\.\?\!）。・]+)', '', translatedText)
+
+            # Get rid of whitespace for each item and add wordwrap
+            for k in range(len(matchList)):
+                matchList[k] = matchList[k].strip()
+
+            # Combine Sentences with a max limit (Wordwrap basically)
+            j=0
+            while(len(matchList) > j+1):
+                while len(matchList[j]) < 30 and len(matchList) > j:
+                    matchList[j:j+2] = [' '.join(matchList[j:j+2])]
+                    if len(matchList) == j+1:
+                        matchList[j] = matchList[j] + ' ' + translatedText
+                        translatedText = ''
+                        break
+                j+=1
+                
+            # Set Data
+            if len(matchList) > 0:
+                data[i] = '\d\n'
+                for line in matchList:
+                    # Wordwrap Text
+                    if '[r]' not in line:
+                        line = textwrap.fill(line, width=WIDTH)
+                        line = line.replace('\n', '[r]')
+                    
+                    # Set
+                    data.insert(i, line.strip() + '[l][er]\n')
+                    i+=1
+                # Set last line as [pcms] instead of [r]
+                data[i-1] = data[i-1].replace('[l][er]', '[pcms]')
+            # else:
+                # print ('No Matches')
+            if translatedText != '':
+                # Wordwrap Text
+                if '[r]' not in translatedText:
+                    translatedText = textwrap.fill(translatedText, width=WIDTH)
+                    translatedText = translatedText.replace('\n', '[r]')
+
+                # Set Backup
+                data[i] = translatedText.strip() + '[l][er]\n'
+
+            # Keep textHistory list at length maxHistory
+            if len(textHistory) > maxHistory:
+                textHistory.pop(0)
+            currentGroup = [] 
+            speaker = ''
 
         currentGroup = [] 
         pbar.update(1)
@@ -358,10 +474,10 @@ def translateGPT(t, history, fullPromptFlag):
         return(t, 0)
 
     """Translate text using GPT"""
-    context = 'Eroge Names Context: (Name: サクラ == Sakura\nGender: Female,\n\nName: ルリカ == Rurika\nGender: Female,\n\nName: ケンイチ == Kenichi\nGender: Male)'
+    context = 'Eroge Names Context: (Name: 佐伯 瞳 == Saeki Hitomi\nGender: Female, Name: 山岸 優 == Yamagishi Yuu Gender: Female, Name: 五十嵐 朋美 == Igarashi Tomomi Gender: Female, Name: 新道 リサ == Shindou Risa Gender: Female, Name: 岸田 聡 == Kishida Satoshi Gender: Male, Name: 竹内 真也 == Takeuchi Shinya Gender: Male, Name: 田中 祐二 == Tanaka Yuuji Gender: Male)'
     if fullPromptFlag:
         system = PROMPT 
-        user = 'Line to Translate: ' + subbedT
+        user = 'Line to Translate = ' + subbedT
     else:
         system = 'You are an expert translator who translates everything to English. Reply with only the English Translation of the text.' 
         user = 'Line to Translate: ' + subbedT
