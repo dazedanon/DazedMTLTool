@@ -81,7 +81,7 @@ def openFiles(filename):
         data = json.load(f)
 
         # Map Files
-        if 'script' in filename:
+        if 'test' in filename:
             translatedData = parseJSON(data, filename)
 
         else:
@@ -128,19 +128,20 @@ def translateJSON(data, pbar):
     maxHistory = MAXHISTORY
     tokens = 0
 
-    for key, value in data.items():
+    for item in data:
         # Remove any textwrap
         if FIXTEXTWRAP == True:
-            value = re.sub(r'@b', ' ', value)
+            jaString = item['value']
+            jaString = jaString.replace('\n', '')
 
         # Translate
-        if value == '':
-            response = translateGPT(key, 'Past Translated Text: ' + '|\n\n'.join(textHistory), True)
+        if jaString != '':
+            response = translateGPT(jaString, 'Past Translated Text: ' + '|\n\n'.join(textHistory), True)
             tokens += response[1]
             translatedText = response[0]
             textHistory.append('\"' + translatedText + '\"')  
         else:
-            translatedText = value
+            translatedText = jaString
             textHistory.append('\"' + translatedText + '\"')  
 
         # Textwrap
@@ -148,7 +149,7 @@ def translateJSON(data, pbar):
         translatedText = translatedText.replace('\n', '@b')
 
         # Set Data
-        data[key] = translatedText
+        item['value'] = translatedText
 
         # Keep textHistory list at length maxHistory
         if len(textHistory) > maxHistory:
