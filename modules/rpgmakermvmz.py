@@ -27,6 +27,7 @@ THREADS = 10
 LOCK = threading.Lock()
 WIDTH = 50
 LISTWIDTH = 90
+NOTEWIDTH = 50
 MAXHISTORY = 10
 ESTIMATE = ''
 TOTALCOST = 0
@@ -39,9 +40,9 @@ POSITION=0
 LEAVE=False
 
 # Flags
-CODE401 = True
+CODE401 = False
 CODE405 = False
-CODE102 = True
+CODE102 = False
 CODE122 = False
 CODE101 = False
 CODE355655 = False
@@ -52,7 +53,7 @@ CODE320 = False
 CODE324 = False
 CODE111 = False
 CODE408 = False
-CODE108 = False
+CODE108 = True
 NAMES = False    # Output a list of all the character names found
 BRFLAG = False   # If the game uses <br> instead
 FIXTEXTWRAP = True
@@ -164,7 +165,7 @@ def openFiles(filename):
 def getResultString(translatedData, translationTime, filename):
     # File Print String
     tokenString = Fore.YELLOW + '[' + str(translatedData[1]) + \
-        ' Tokens/${:,.4f}'.format(translatedData[1] * .001 * APICOST) + ']'
+        ' Tokens/${:,.4f}'.format(translatedData[1] * .001 * APICOST)
     timeString = Fore.BLUE + '[' + str(round(translationTime, 1)) + 's]'
 
     if translatedData[2] == None:
@@ -228,11 +229,11 @@ def translateNote(event, regex):
         jaString = re.sub(r'\n', ' ', oldJAString)
 
         # Translate
-        response = translateGPT(jaString, 'Reply with the English translation of the hint.', True)
+        response = translateGPT(jaString, 'Reply with the English translation of the note.', True)
         translatedText = response[0]
 
         # Textwrap
-        translatedText = textwrap.fill(translatedText, width=LISTWIDTH)
+        translatedText = textwrap.fill(translatedText, width=NOTEWIDTH)
 
         translatedText = translatedText.replace('\"', '')
         event['note'] = event['note'].replace(oldJAString, translatedText)
@@ -395,6 +396,8 @@ def searchThings(name, pbar):
     # Note
     if '<SG説明:' in name['note']:
         tokens += translateNote(name, r'<SG説明:(.*?)>')
+    if '<SGカテゴリ':
+        tokens += translateNote(name, r'<SGカテゴリ:(.*?)>')
 
     # Count Tokens
     tokens += nameResponse[1] if nameResponse != '' else 0
@@ -686,6 +689,7 @@ def searchCodes(page, pbar):
                     finalJAString = finalJAString.replace('―', '-')
                     finalJAString = finalJAString.replace('…', '...')
                     finalJAString = finalJAString.replace('　', '')
+                    # finalJAString = finalJAString.replace('〇', '*')
 
                     # Remove any RPGMaker Code at start
                     ffMatchList = re.findall(r'[\\]+[fF]+\[.+?\]', finalJAString)
@@ -695,7 +699,7 @@ def searchCodes(page, pbar):
 
                     ### Remove format codes
                     # Furigana
-                    rcodeMatch = re.findall(r'([\\]+r\[(.+?),.+?\])', finalJAString)
+                    rcodeMatch = re.findall(r'([\\]+[r][b]?\[.+?,(.+?)\])', finalJAString)
                     if len(rcodeMatch) > 0:
                         for match in rcodeMatch:
                             finalJAString = finalJAString.replace(match[0],match[1])
@@ -716,12 +720,18 @@ def searchCodes(page, pbar):
                         response = translateGPT(finalJAString, 'Past Translated Text: (' + ', '.join(textHistory) + ')', True)
                         tokens += response[1]
                         translatedText = response[0]
-                        textHistory.append('\"' + translatedText + '\"')
+                        # Sub Vars
+                        varResponse = subVars(translatedText)
+                        subbedT = varResponse[0]
+                        textHistory.append('\"' + varResponse[0] + '\"')
                     elif finalJAString != '':
                         response = translateGPT(speaker + ': ' + finalJAString, 'Past Translated Text: (' + ' || '.join(textHistory) + ')', True)
                         tokens += response[1]
                         translatedText = response[0]
-                        textHistory.append('\"' + translatedText + '\"')
+                        # Sub Vars
+                        varResponse = subVars(translatedText)
+                        subbedT = varResponse[0]
+                        textHistory.append('\"' + varResponse[0] + '\"')
 
                         # Remove added speaker
                         translatedText = re.sub(r'^.+?:\s?', '', translatedText)
@@ -1039,11 +1049,11 @@ def searchCodes(page, pbar):
                     continue
 
                 # Want to translate this script
-                if 'text_indicator : ' not in jaString:
+                if '<namePop:' not in jaString:
                     continue
 
                 # Need to remove outside code and put it back later
-                matchList = re.findall(r'text_indicator : (.+)', jaString)
+                matchList = re.findall(r'namePop:(.+)\s-.+', jaString)
 
                 # Translate
                 if len(matchList) > 0:
@@ -1485,7 +1495,19 @@ def searchSS(state, pbar):
 
 def searchSystem(data, pbar):
     tokens = 0
-    context = '\nTranslate "逃げる" as "Escape".\nTranslate"大事なもの" as "Key Items.\nTranslate "最強装備" as "Optimize".\nTranslate "攻撃力" as "Attack".\nTranslate "最大ＨＰ" as "Max HP".\nTranslate "経験値" as "EXP".\n Translate "購入する" as "Buy".\nReply with only the english translation of the UI textbox."'
+    context = 'UI Text Items:\
+    "逃げる" == "Escape"\
+    "大事なもの" == "Key Items"\
+    "最強装備" == "Optimize"\
+    "攻撃力" == "Attack"\
+    "最大ＨＰ" == "Max HP"\
+    "経験値" == "EXP"\
+    "購入する" == "Buy"\
+    "魔力攻撃" == "M. Attack\
+    "魔力防御" == "M. Defense\
+    "%1 の%2を獲得！" == "Gained %1 %2"\
+    "お金を %1\\G 手に入れた！" == ""\
+    Reply with only the english translation of the UI textbox."'
 
     # Title
     response = translateGPT(data['gameTitle'], ' Reply with the English translation of the game title name', False)
@@ -1501,35 +1523,35 @@ def searchSystem(data, pbar):
                 if termList[i] is not None:
                     response = translateGPT(termList[i], context, False)
                     tokens += response[1]
-                    termList[i] = response[0].replace('\"', '')
+                    termList[i] = response[0].replace('\"', '').strip()
                     pbar.update(1)
 
     # Armor Types
     for i in range(len(data['armorTypes'])):
         response = translateGPT(data['armorTypes'][i], 'Reply with only the english translation of the armor type', False)
         tokens += response[1]
-        data['armorTypes'][i] = response[0].replace('\"', '')
+        data['armorTypes'][i] = response[0].replace('\"', '').strip()
         pbar.update(1)
 
     # Skill Types
     for i in range(len(data['skillTypes'])):
         response = translateGPT(data['skillTypes'][i], 'Reply with only the english translation', False)
         tokens += response[1]
-        data['skillTypes'][i] = response[0].replace('\"', '')
+        data['skillTypes'][i] = response[0].replace('\"', '').strip()
         pbar.update(1)
 
     # Equip Types
     for i in range(len(data['equipTypes'])):
         response = translateGPT(data['equipTypes'][i], 'Reply with only the english translation of the equipment type. No disclaimers.', False)
         tokens += response[1]
-        data['equipTypes'][i] = response[0].replace('\"', '')
+        data['equipTypes'][i] = response[0].replace('\"', '').strip()
         pbar.update(1)
 
     # Variables (Optional ususally)
     for i in range(len(data['variables'])):
         response = translateGPT(data['variables'][i], 'Reply with only the english translation of the title', False)
         tokens += response[1]
-        data['variables'][i] = response[0].replace('\"', '')
+        data['variables'][i] = response[0].replace('\"', '').strip()
         pbar.update(1)
 
     # Messages
@@ -1558,7 +1580,7 @@ def subVars(jaString):
     iconList = set(iconList)
     if len(iconList) != 0:
         for icon in iconList:
-            jaString = jaString.replace(icon, '[Icon' + str(count) + ']')
+            jaString = jaString.replace(icon, '[Ascii_' + str(count) + ']')
             count += 1
 
     # Colors
@@ -1567,7 +1589,7 @@ def subVars(jaString):
     colorList = set(colorList)
     if len(colorList) != 0:
         for color in colorList:
-            jaString = jaString.replace(color, '[Color' + str(count) + ']')
+            jaString = jaString.replace(color, '[Color_' + str(count) + ']')
             count += 1
 
     # Names
@@ -1576,7 +1598,7 @@ def subVars(jaString):
     nameList = set(nameList)
     if len(nameList) != 0:
         for name in nameList:
-            jaString = jaString.replace(name, '[N' + str(count) + ']')
+            jaString = jaString.replace(name, '[Char_' + str(count) + ']')
             count += 1
 
     # Variables
@@ -1585,7 +1607,7 @@ def subVars(jaString):
     varList = set(varList)
     if len(varList) != 0:
         for var in varList:
-            jaString = jaString.replace(var, '[Var' + str(count) + ']')
+            jaString = jaString.replace(var, '[Var_' + str(count) + ']')
             count += 1
 
     # Formatting
@@ -1596,7 +1618,7 @@ def subVars(jaString):
     formatList = set(formatList)
     if len(formatList) != 0:
         for var in formatList:
-            jaString = jaString.replace(var, '[FCode' + str(count) + ']')
+            jaString = jaString.replace(var, '[FCode_' + str(count) + ']')
             count += 1
 
     # Put all lists in list and return
@@ -1615,35 +1637,35 @@ def resubVars(translatedText, allList):
     count = 0
     if len(allList[0]) != 0:
         for var in allList[0]:
-            translatedText = translatedText.replace('[Icon' + str(count) + ']', var)
+            translatedText = translatedText.replace('[Ascii_' + str(count) + ']', var)
             count += 1
 
     # Colors
     count = 0
     if len(allList[1]) != 0:
         for var in allList[1]:
-            translatedText = translatedText.replace('[Color' + str(count) + ']', var)
+            translatedText = translatedText.replace('[Color_' + str(count) + ']', var)
             count += 1
 
     # Names
     count = 0
     if len(allList[2]) != 0:
         for var in allList[2]:
-            translatedText = translatedText.replace('[N' + str(count) + ']', var)
+            translatedText = translatedText.replace('[Char_' + str(count) + ']', var)
             count += 1
 
     # Vars
     count = 0
     if len(allList[3]) != 0:
         for var in allList[3]:
-            translatedText = translatedText.replace('[Var' + str(count) + ']', var)
+            translatedText = translatedText.replace('[Var_' + str(count) + ']', var)
             count += 1
     
     # Formatting
     count = 0
     if len(allList[4]) != 0:
         for var in allList[4]:
-            translatedText = translatedText.replace('[FCode' + str(count) + ']', var)
+            translatedText = translatedText.replace('[FCode_' + str(count) + ']', var)
             count += 1
 
     # Remove Color Variables Spaces
@@ -1671,28 +1693,28 @@ def translateGPT(t, history, fullPromptFlag):
     """Translate text using GPT"""
     context = '```\
         Character Names Context:\
-        Name: クノ == Kuno - Gender: Female\
-        Name: ノンナ == Nonna - Gender: Female\
-        Name: フロス == Fross - Gender: Female\
-        Name: シア == Shia - Gender: Female\
-        Name: ウカ == Uka - Gender: Female\
-        Name: プラエ == Plae - Gender: Female\
-        Name: サナ == Sana - Gender: Female\
-        Name: サリア == Saria - Gender: Female\
-        Name: 太郎 == Taro - Gender: Male\
+        Character: クノ == Kuno - Gender: Female\
+        Character: ノンナ == Nonna - Gender: Female\
+        Character: フロス == Fross - Gender: Female\
+        Character: シア == Shia - Gender: Female\
+        Character: ウカ == Uka - Gender: Female\
+        Character: プラエ == Prae - Gender: Female\
+        Character: サナ == Sana - Gender: Female\
+        Character: サリア == Saria - Gender: Female\
+        Character: 太郎 == Taro - Gender: Male\
         ```'
 
     if fullPromptFlag:
-        system = PROMPT.replace('\n', '')
+        system = PROMPT
         user = 'Line to Translate = ' + subbedT
     else:
-        system = 'You are an expert translator who translates everything to English. Reply with only the English Translation of the text.' 
+        system = 'Output ONLY the english translation in the following format: `Translation: <ENGLISH_TRANSLATION>`' 
         user = 'Line to Translate = ' + subbedT
     response = openai.ChatCompletion.create(
         temperature=0,
         frequency_penalty=0.2,
         presence_penalty=0.2,
-        model="gpt-3.5-turbo",
+        model="gpt-4",
         messages=[
             {"role": "system", "content": system},
             {"role": "user", "content": context},
@@ -1713,9 +1735,13 @@ def translateGPT(t, history, fullPromptFlag):
     translatedText = translatedText.replace('English Translation: ', '')
     translatedText = translatedText.replace('Translation: ', '')
     translatedText = translatedText.replace('Line to Translate = ', '')
+    translatedText = translatedText.replace('Translation = ', '')
+    translatedText = translatedText.replace('Translate = ', '')
     translatedText = translatedText.replace('English Translation:', '')
     translatedText = translatedText.replace('Translation:', '')
-    translatedText = translatedText.replace('Line to Translate = ', '')
+    translatedText = translatedText.replace('Line to Translate =', '')
+    translatedText = translatedText.replace('Translation =', '')
+    translatedText = translatedText.replace('Translate =', '')
     translatedText = re.sub(r'\n\nPast Translated Text:.*', '', translatedText, 0, re.DOTALL)
     translatedText = re.sub(r'Note:.*', '', translatedText)
     translatedText = translatedText.replace('っ', '')
