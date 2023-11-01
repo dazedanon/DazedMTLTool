@@ -40,9 +40,9 @@ POSITION=0
 LEAVE=False
 
 # Flags
-CODE401 = False
+CODE401 = True
 CODE405 = False
-CODE102 = False
+CODE102 = True
 CODE122 = False
 CODE101 = False
 CODE355655 = False
@@ -53,7 +53,7 @@ CODE320 = False
 CODE324 = False
 CODE111 = False
 CODE408 = False
-CODE108 = True
+CODE108 = False
 NAMES = False    # Output a list of all the character names found
 BRFLAG = False   # If the game uses <br> instead
 FIXTEXTWRAP = True
@@ -725,17 +725,18 @@ def searchCodes(page, pbar):
                         subbedT = varResponse[0]
                         textHistory.append('\"' + varResponse[0] + '\"')
                     elif finalJAString != '':
-                        response = translateGPT(speaker + ': ' + finalJAString, 'Past Translated Text: (' + ' || '.join(textHistory) + ')', True)
+                        response = translateGPT(speaker + ': ' + finalJAString, 'Past Translated Text: (' + ', '.join(textHistory) + ')', True)
                         tokens += response[1]
                         translatedText = response[0]
+                        
+                        # Remove added speaker
+                        translatedText = re.sub(r'^.+?:\s?', '', translatedText)
+
                         # Sub Vars
                         varResponse = subVars(translatedText)
                         subbedT = varResponse[0]
-                        textHistory.append('\"' + varResponse[0] + '\"')
-
-                        # Remove added speaker
-                        translatedText = re.sub(r'^.+?:\s?', '', translatedText)
-                        speaker = ''                
+                        textHistory.append('\"' + speaker + ': ' + varResponse[0] + '\"')   
+                        speaker = ''             
                     else:
                         translatedText = finalJAString    
 
@@ -771,7 +772,7 @@ def searchCodes(page, pbar):
             if codeList[i]['code'] == 122 and CODE122 == True:  
                 # This is going to be the var being set. (IMPORTANT)
                 varNum = codeList[i]['parameters'][0]
-                if varNum != 11:
+                if varNum not in [906, 907, 908, 909]:
                     continue
                   
                 jaString = codeList[i]['parameters'][4]
@@ -805,7 +806,7 @@ def searchCodes(page, pbar):
                         translatedText = translatedText.replace(char, '')
                 
                 # Textwrap
-                translatedText = textwrap.fill(translatedText, width=70)
+                translatedText = textwrap.fill(translatedText, width=LISTWIDTH)
                 translatedText = translatedText.replace('\n', '\\n')
                 # translatedText = translatedText.replace('\'', '\\\'')
                 translatedText = '\"' + translatedText + '\"'
@@ -969,37 +970,36 @@ def searchCodes(page, pbar):
                 if not re.search(r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴー]+', jaString):
                     continue
 
-                # Want to translate this script
-                if codeList[i]['code'] == 355 and '.setProfile' not in jaString:
+                if '<' in jaString:
                     continue
 
-                # Don't want to touch certain scripts
-                if codeList[i]['code'] == 655 and '.setProfile' not in jaString:
+                # Want to translate this script
+                if 'var str =' not in jaString:
                     continue
 
                 # Need to remove outside code and put it back later
-                startString = re.search(r'^[^一-龠ぁ-ゔァ-ヴー\<\>【】（）「」『』]+', jaString)
-                jaString = re.sub(r'^[^一-龠ぁ-ゔァ-ヴー\<\>【】（）「」『』]+', '', jaString)
-                endString = re.search(r'[^一-龠ぁ-ゔァ-ヴー\<\>【】（）「」『』。！？]+$', jaString)
-                jaString = re.sub(r'[^一-龠ぁ-ゔァ-ヴー\<\>【】（）「」『』。！？]+$', '', jaString)
-                if startString is None: startString = ''
-                else:  startString = startString.group()
-                if endString is None: endString = ''
-                else: endString = endString.group()
+                matchList = re.findall(r'var str ="(.+)"', jaString)
 
                 # Translate
-                response = translateGPT(jaString, 'Reply with the English Translation of the text.', True)
-                tokens += response[1]
-                translatedText = response[0]
+                if len(matchList) > 0:
+                    # If there isn't any Japanese in the text just skip
+                    if not re.search(r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴー]+', matchList[0]):
+                        continue
 
-                # Remove characters that may break scripts
-                charList = ['\"', "\'"]
-                for char in charList:
-                    translatedText = translatedText.replace(char, '')
-                
-                # Set Data
-                translatedText = startString + translatedText + endString
-                codeList[i]['parameters'][0] = translatedText
+                    response = translateGPT(matchList[0], 'Reply with the English translation Stat Title. Keep it brief.', True)
+                    tokens += response[1]
+                    translatedText = response[0]
+
+                    # Remove characters that may break scripts
+                    charList = ['.', '\"']
+                    for char in charList:
+                        translatedText = translatedText.replace(char, '')
+                    translatedText = translatedText.replace('"', '\"')
+                    translatedText = translatedText.replace("'", '\'')
+                    translatedText = jaString.replace(matchList[0], translatedText)
+
+                    # Set Data
+                    codeList[i]['parameters'][0] = translatedText
 
         ## Event Code: 408 (Script)
             if (codeList[i]['code'] == 408) and CODE408 == True:
@@ -1049,11 +1049,11 @@ def searchCodes(page, pbar):
                     continue
 
                 # Want to translate this script
-                if '<namePop:' not in jaString:
+                if '<ActiveMessage:' not in jaString:
                     continue
 
                 # Need to remove outside code and put it back later
-                matchList = re.findall(r'namePop:(.+)\s-.+', jaString)
+                matchList = re.findall(r'<ActiveMessage:(.+)>', jaString)
 
                 # Translate
                 if len(matchList) > 0:
@@ -1065,9 +1065,9 @@ def searchCodes(page, pbar):
                     charList = ['.', '\"']
                     for char in charList:
                         translatedText = translatedText.replace(char, '')
-
-                    translatedText = jaString.replace(matchList[0], translatedText)
                     translatedText = translatedText.replace('"', '\"')
+                    translatedText = translatedText.replace(' ', '_')
+                    translatedText = jaString.replace(matchList[0], translatedText)
 
                     # Set Data
                     codeList[i]['parameters'][0] = translatedText
@@ -1438,25 +1438,25 @@ def searchSS(state, pbar):
     message3Response = ''
     
     if 'message1' in state:
-        if len(state['message1']) > 0 and state['message1'][0] in ['は', 'を', 'の']:
+        if len(state['message1']) > 0 and state['message1'][0] in ['は', 'を', 'の', 'に', 'が']:
             message1Response = translateGPT('Taro' + state['message1'], 'reply with only the gender neutral english translation of the action. Always start the sentence with Taro.', True)
         else:
             message1Response = translateGPT(state['message1'], 'reply with only the gender neutral english translation', True)
 
     if 'message2' in state:
-        if len(state['message2']) > 0 and state['message2'][0] in ['は', 'を', 'の']:
+        if len(state['message2']) > 0 and state['message2'][0] in ['は', 'を', 'の', 'に', 'が']:
             message2Response = translateGPT('Taro' + state['message2'], 'reply with only the gender neutral english translation of the action. Always start the sentence with Taro.', True)
         else:
             message2Response = translateGPT(state['message2'], 'reply with only the gender neutral english translation', True)
 
     if 'message3' in state:
-        if len(state['message3']) > 0 and state['message3'][0] in ['は', 'を', 'の']:
+        if len(state['message3']) > 0 and state['message3'][0] in ['は', 'を', 'の', 'に', 'が']:
             message3Response = translateGPT('Taro' + state['message3'], 'reply with only the gender neutral english translation of the action. Always start the sentence with Taro.', True)
         else:
             message3Response = translateGPT(state['message3'], 'reply with only the gender neutral english translation', True)
 
     if 'message4' in state:
-        if len(state['message4']) > 0 and state['message4'][0] in ['は', 'を', 'の']:
+        if len(state['message4']) > 0 and state['message4'][0] in ['は', 'を', 'の', 'に', 'が']:
             message4Response = translateGPT('Taro' + state['message4'], 'reply with only the gender neutral english translation of the action. Always start the sentence with Taro.', True)
         else:
             message4Response = translateGPT(state['message4'], 'reply with only the gender neutral english translation', True)
@@ -1714,7 +1714,7 @@ def translateGPT(t, history, fullPromptFlag):
         temperature=0,
         frequency_penalty=0.2,
         presence_penalty=0.2,
-        model="gpt-4",
+        model="gpt-3.5-turbo",
         messages=[
             {"role": "system", "content": system},
             {"role": "user", "content": context},
