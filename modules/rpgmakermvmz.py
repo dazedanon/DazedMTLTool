@@ -675,6 +675,13 @@ def searchCodes(page, pbar):
                     #         codeList[j]['parameters'][0] = nametag + finalJAString
                     #         codeList[j]['code'] = code
 
+                    # Special Effects
+                    soundEffectString = ''
+                    matchList = re.findall(r'(.+\\SE\[.+?\])', finalJAString)    
+                    if len(matchList) != 0:
+                        soundEffectString = matchList[0]
+                        finalJAString = finalJAString.replace(matchList[0], '')
+
                     # Remove any textwrap
                     if FIXTEXTWRAP == True:
                         finalJAString = re.sub(r'\n', ' ', finalJAString)
@@ -752,6 +759,7 @@ def searchCodes(page, pbar):
                         CLFlag = False
                     translatedText = nametag + translatedText
                     nametag = ''
+                    translatedText = soundEffectString + translatedText
 
                     # Set Data
                     translatedText = translatedText.replace('\"', '')
@@ -1598,7 +1606,7 @@ def subVars(jaString):
     nameList = set(nameList)
     if len(nameList) != 0:
         for name in nameList:
-            jaString = jaString.replace(name, '[Char_' + str(count) + ']')
+            jaString = jaString.replace(name, '[N_' + str(count) + ']')
             count += 1
 
     # Variables
@@ -1651,7 +1659,7 @@ def resubVars(translatedText, allList):
     count = 0
     if len(allList[2]) != 0:
         for var in allList[2]:
-            translatedText = translatedText.replace('[Char_' + str(count) + ']', var)
+            translatedText = translatedText.replace('[N_' + str(count) + ']', var)
             count += 1
 
     # Vars
@@ -1692,16 +1700,15 @@ def translateGPT(t, history, fullPromptFlag):
 
     """Translate text using GPT"""
     context = '```\
-        Character Names Context:\
-        Character: クノ == Kuno - Gender: Female\
-        Character: ノンナ == Nonna - Gender: Female\
-        Character: フロス == Fross - Gender: Female\
-        Character: シア == Shia - Gender: Female\
-        Character: ウカ == Uka - Gender: Female\
-        Character: プラエ == Prae - Gender: Female\
-        Character: サナ == Sana - Gender: Female\
-        Character: サリア == Saria - Gender: Female\
-        Character: 太郎 == Taro - Gender: Male\
+        Game Characters:\
+        Character: 如月亜里愛 == Kisaragi Aria - Nickname: Aria - Gender: Female\
+        Character: 愛洲美彌子 == Aisu Miyako - Gender: Female\
+        Character: 喜遊名心 == Cocoa Kiyuna - Gender: Female\
+        Character: 柵瀬愛色 == Ai Sakurai - Gender: Female\
+        Character: 陰平小鞠 == Komari Kagehira - Gender: Female\
+        Character: 訓覇一縷 == Ichiru Kurube - Gender: Female\
+        Character: 緋皇月 == Luna Hisube - Gender: Female\
+        Character: 刑事 == Detective - Gender: Male\
         ```'
 
     if fullPromptFlag:

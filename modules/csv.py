@@ -40,21 +40,11 @@ LEAVE=False
 def handleCSV(filename, estimate):
     global ESTIMATE, TOKENS, TOTALTOKENS, TOTALCOST
     ESTIMATE = estimate
-
+    
     with open('translated/' + filename, 'w+t', newline='', encoding='utf-8') as writeFile:
         start = time.time()
         translatedData = openFiles(filename, writeFile)
-
-    if estimate:
-        # Print Result
-        end = time.time()
-        tqdm.write(getResultString(['', TOKENS, None], end - start, filename))
-        TOTALCOST += TOKENS * .001 * APICOST
-        TOTALTOKENS += TOKENS
-        TOKENS = 0
-        os.remove('translated/' + filename)
-    
-    else:
+        
         # Print Result
         end = time.time()
         tqdm.write(getResultString(translatedData, end - start, filename))
@@ -220,6 +210,7 @@ def translateCSV(row, pbar, writer, textHistory, format):
                 pbar.update(1)
 
     except Exception as e:
+        traceback.print_exc()
         tracebackLineNo = str(traceback.extract_tb(sys.exc_info()[2])[-1].lineno)
         raise Exception(str(e) + '|Line:' + tracebackLineNo + '| Failed to translate: ' + text) 
     
@@ -321,13 +312,15 @@ def resubVars(translatedText, allList):
             translatedText = translatedText.replace('<F' + str(count) + '>', var)
             count += 1
 
+    return translatedText
+
 @retry(exceptions=Exception, tries=5, delay=5)
 def translateGPT(t, history, fullPromptFlag):
     # If ESTIMATE is True just count this as an execution and return.
     if ESTIMATE:
-        enc = tiktoken.encoding_for_model("gpt-3.5-turbo-0613")
-        TOKENS = len(enc.encode(t)) * 2 + len(enc.encode(history)) + len(enc.encode(PROMPT))
-        return (t, 0)
+        enc = tiktoken.encoding_for_model("gpt-3.5-turbo")
+        tokens = len(enc.encode(t)) * 2 + len(enc.encode(history)) + len(enc.encode(PROMPT))
+        return (t, tokens)
     
     # Sub Vars
     varResponse = subVars(t)
