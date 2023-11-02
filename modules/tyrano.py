@@ -123,6 +123,9 @@ def translateTyrano(data, pbar):
         if syncIndex > i:
             i = syncIndex
 
+        if '… …… ………[pcm]' in data[i]:
+            print('test')
+
         # Speaker
         if '[ns]' in data[i]:
             matchList = re.findall(r'\[ns\](.+?)\[', data[i])
@@ -160,7 +163,7 @@ def translateTyrano(data, pbar):
                 data[i] = translatedText                
 
         # Lines
-        matchList = re.findall(r'(.+?)\[r\]$', data[i])
+        matchList = re.findall(r'(.+?)\[r\]', data[i])
         if len(matchList) > 0:
             matchList[0] = matchList[0].replace('「', '')
             matchList[0] = matchList[0].replace('」', '')
@@ -264,7 +267,7 @@ def translateTyrano(data, pbar):
             speaker = ''
         
         # pcm Line
-        matchList = re.findall(r'(.+?)\[pcm\]$', data[i])
+        matchList = re.findall(r'(.+?)\[pcm\]', data[i])
         if len(matchList) > 0:
             matchList[0] = matchList[0].replace('「', '')
             matchList[0] = matchList[0].replace('」', '')
@@ -339,7 +342,7 @@ def translateTyrano(data, pbar):
                     translatedText = translatedText.replace('\n', '[r]')
 
                 # Set Backup
-                data[i] = translatedText.strip() + '[pcm]'
+                data[i] = translatedText.strip() + '[pcm]\n'
 
             # Keep textHistory list at length maxHistory
             if len(textHistory) > maxHistory:
