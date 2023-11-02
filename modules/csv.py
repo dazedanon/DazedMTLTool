@@ -122,37 +122,39 @@ def translateCSV(row, pbar, writer, textHistory, format):
         match format:
             # Japanese Text on column 1. English on Column 2
             case '1':
-                jaString = row[0]
+                # Skip already translated lines
+                if row[1] == '' or re.search(r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴ]+|[\uFF00-\uFFEF]', row[1]):
+                    jaString = row[0]
 
-                # Remove repeating characters because it confuses ChatGPT
-                jaString = re.sub(r'([\u3000-\uffef])\1{2,}', r'\1\1', jaString)
+                    # Remove repeating characters because it confuses ChatGPT
+                    jaString = re.sub(r'([\u3000-\uffef])\1{2,}', r'\1\1', jaString)
 
-                # Translate
-                response = translateGPT(jaString, 'Previous text for context: ' + ' '.join(textHistory), True)
+                    # Translate
+                    response = translateGPT(jaString, 'Previous text for context: ' + ' '.join(textHistory), True)
 
-                # Check if there is an actual difference first
-                if response[0] != row[0]:
-                    translatedText = response[0]
-                else:
-                    translatedText = row[1]
-                tokens += response[1]
+                    # Check if there is an actual difference first
+                    if response[0] != row[0]:
+                        translatedText = response[0]
+                    else:
+                        translatedText = row[1]
+                    tokens += response[1]
 
-                # Textwrap
-                translatedText = textwrap.fill(translatedText, width=WIDTH)
+                    # Textwrap
+                    translatedText = textwrap.fill(translatedText, width=WIDTH)
 
-                # Set Data
-                row[1] = translatedText
+                    # Set Data
+                    row[1] = translatedText
 
-                # Keep textHistory list at length maxHistory
-                with LOCK:
-                    if len(textHistory) > maxHistory:
-                        textHistory.pop(0)
-                    if not ESTIMATE:
-                        writer.writerow(row)
-                    pbar.update(1)
+                    # Keep textHistory list at length maxHistory
+                    with LOCK:
+                        if len(textHistory) > maxHistory:
+                            textHistory.pop(0)
+                        if not ESTIMATE:
+                            writer.writerow(row)
+                        pbar.update(1)
 
-                # TextHistory is what we use to give GPT Context, so thats appended here.
-                textHistory.append('\"' + translatedText + '\"')
+                    # TextHistory is what we use to give GPT Context, so thats appended here.
+                    textHistory.append('\"' + translatedText + '\"')
                 
             # Translate Everything
             case '2':
