@@ -11,6 +11,7 @@ from modules.txt import handleTXT
 from modules.tyrano import handleTyrano
 from modules.json import handleJSON
 from modules.kansen import handleKansen
+from modules.lune import handleLune
 
 THREADS = 5 # For GPT4 rate limit will be hit if you have more than 1 thread.
 
@@ -32,7 +33,7 @@ def main():
     totalCost = 0
     version = ''
     while version == '':
-        version = input('Select the RPGMaker Version:\n\n1. MV/MZ\n2. ACE\n3. CSV (From Translator++)\n4. Text (Custom)\n5. Tyrano\n6. JSON\n7. Kansen\n')
+        version = input('Select the RPGMaker Version:\n\n1. MV/MZ\n2. ACE\n3. CSV (From Translator++)\n4. Text (Custom)\n5. Tyrano\n6. JSON\n7. Kansen\n8. Lune\n')
         match version:
             case '1':
                 # Open File (Threads)
@@ -121,6 +122,20 @@ def main():
                 with ThreadPoolExecutor(max_workers=THREADS) as executor:
                     futures = [executor.submit(handleKansen, filename, estimate) \
                                 for filename in os.listdir("files") if filename.endswith('ks')]
+                    
+                    for future in as_completed(futures):
+                        try:
+                            totalCost = future.result()
+                            
+                        except Exception as e:
+                            tracebackLineNo = str(traceback.extract_tb(sys.exc_info()[2])[-1].lineno)
+                            print(Fore.RED + str(e) + '|' + tracebackLineNo + Fore.RESET)
+
+            case '8':
+                # Open File (Threads)
+                with ThreadPoolExecutor(max_workers=THREADS) as executor:
+                    futures = [executor.submit(handleLune, filename, estimate) \
+                                for filename in os.listdir("files") if filename.endswith('txt')]
                     
                     for future in as_completed(futures):
                         try:
