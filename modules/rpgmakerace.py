@@ -1367,10 +1367,10 @@ def searchSystem(data, pbar):
     context = 'Reply with only the english translation of the UI textbox'
 
     # Title
-    response = translateGPT(data['game_title'], ' Reply with the English translation of the game title name', False)
-    tokens += response[1]
-    data['game_title'] = response[0].strip('.')
-    pbar.update(1)
+    # response = translateGPT(data['game_title'], ' Reply with the English translation of the game title name', False)
+    # tokens += response[1]
+    # data['game_title'] = response[0].strip('.')
+    # pbar.update(1)
     
     # Terms
     for term in data['terms']:
