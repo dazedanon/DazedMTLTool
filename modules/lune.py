@@ -25,7 +25,7 @@ APICOST = .002 # Depends on the model https://openai.com/pricing
 PROMPT = Path('prompt.txt').read_text(encoding='utf-8')
 THREADS = 20
 LOCK = threading.Lock()
-WIDTH = 75
+WIDTH = 60
 LISTWIDTH = 75
 MAXHISTORY = 10
 ESTIMATE = ''
@@ -129,7 +129,6 @@ def translateText(data, pbar):
     tokens = 0
     speaker = ''
     speakerFlag = False
-    currentGroup = []
     syncIndex = 0
 
     ### Translation
@@ -143,6 +142,7 @@ def translateText(data, pbar):
 
         # Remove newlines
         jaString = data[i]
+        jaString = jaString.replace('\\n', '')
         jaString = jaString.replace('\n', '')
 
         # Reset Speaker
@@ -179,6 +179,11 @@ def translateText(data, pbar):
         
         # Translate
         finalJAString = data[i]
+
+        # Remove Textwrap
+        finalJAString = finalJAString.replace('\\n', ' ')
+        finalJAString = finalJAString.replace('\n', ' ')
+
         if speaker != '':
             response = translateGPT(f'{speaker}: {finalJAString}', 'Previous Text for Context: ' + ' '.join(textHistory), True)
         else:
@@ -201,8 +206,10 @@ def translateText(data, pbar):
         currentGroup = []  
 
         # Textwrap
-        translatedText = textwrap.fill(translatedText, width=40)
+        translatedText = textwrap.fill(translatedText, width=WIDTH)
+        translatedText = translatedText.replace(',\n', ', \n')
         translatedText = translatedText.replace('\n', '\\n')
+        translatedText = translatedText.replace(',\\n', ', \\n')
 
         # Set Data
         data[i] = translatedText + '\n'
