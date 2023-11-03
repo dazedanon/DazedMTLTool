@@ -21,7 +21,7 @@ load_dotenv()
 openai.organization = os.getenv('org')
 openai.api_key = os.getenv('key')
 
-APICOST = .002 # Depends on the model https://openai.com/pricing
+APICOST = .03 # Depends on the model https://openai.com/pricing
 PROMPT = Path('prompt.txt').read_text(encoding='utf-8')
 THREADS = 20
 LOCK = threading.Lock()
@@ -148,12 +148,14 @@ def translateText(data, pbar):
         # Reset Speaker
         if '00000000' == jaString:
             i += 1
+            pbar.update(1)
             speaker = ''
             jaString = data[i]
 
         # Grab and Translate Speaker
         elif re.search(r'^0000[1-9]000$', jaString):
             i += 1
+            pbar.update(1)
             jaString = data[i].replace('\n', '')
             jaString = jaString.replace('拓海', 'Takumi')
             jaString = jaString.replace('こはる', 'Koharu')
@@ -169,8 +171,10 @@ def translateText(data, pbar):
 
             # Set index to line
             i += 1
+            pbar.update(1)
 
         else:
+            pbar.update(1)
             continue
         
         # Translate
@@ -213,7 +217,7 @@ def translateText(data, pbar):
         # Set Data
         data[i] = translatedText + '\n'
         syncIndex = i + 1
-        pbar.update()
+        pbar.update(1)
     return [data, tokens]
         
 def subVars(jaString):
@@ -324,7 +328,7 @@ def translateGPT(t, history, fullPromptFlag):
     # If ESTIMATE is True just count this as an execution and return.
     if ESTIMATE:
         enc = tiktoken.encoding_for_model("gpt-4")
-        tokens = len(enc.encode(t)) * 2 + len(enc.encode(history)) + len(enc.encode(PROMPT))
+        tokens = len(enc.encode(t)) * 2 + len(enc.encode(str(history))) + len(enc.encode(PROMPT))
         return (t, tokens)
     
     # Sub Vars

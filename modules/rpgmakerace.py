@@ -1505,7 +1505,7 @@ def translateGPT(t, history, fullPromptFlag):
     # If ESTIMATE is True just count this as an execution and return.
     if ESTIMATE:
         enc = tiktoken.encoding_for_model("gpt-4")
-        tokens = len(enc.encode(t)) * 2 + len(enc.encode(history)) + len(enc.encode(PROMPT))
+        tokens = len(enc.encode(t)) * 2 + len(enc.encode(str(history))) + len(enc.encode(PROMPT))
         return (t, tokens)
     
     # Sub Vars
