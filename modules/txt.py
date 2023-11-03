@@ -303,41 +303,55 @@ def resubVars(translatedText, allList):
 
 @retry(exceptions=Exception, tries=5, delay=5)
 def translateGPT(t, history, fullPromptFlag):
-    with LOCK:
-        # If ESTIMATE is True just count this as an execution and return.
-        if ESTIMATE:
-            global TOKENS
-            enc = tiktoken.encoding_for_model("gpt-3.5-turbo-0613")
-            TOKENS += len(enc.encode(t)) * 2 + len(enc.encode(history)) + len(enc.encode(PROMPT))
-            return (t, 0)
+    # If ESTIMATE is True just count this as an execution and return.
+    if ESTIMATE:
+        enc = tiktoken.encoding_for_model("gpt-4")
+        tokens = len(enc.encode(t)) * 2 + len(enc.encode(history)) + len(enc.encode(PROMPT))
+        return (t, tokens)
     
     # Sub Vars
     varResponse = subVars(t)
     subbedT = varResponse[0]
 
     # If there isn't any Japanese in the text just skip
-    return (t,0)
-    if not re.search(r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴー]+', subbedT):
+    if not re.search(r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴ]+|[\uFF00-\uFFEF]', subbedT):
         return(t, 0)
 
-    """Translate text using GPT"""
-    context = 'Eroge Names Context: 夏樹 明人 == Natsuki Akito | Male, 朝露 砂夜子 == Asatsuyu Sayoko | Female, 神野 藍 == Jinno Ai | Female, 神野 菫 | Jinno Sumire | Female, 夏樹 海夕里 == Natsuki Miyuri | Female, 水森 陽太 == Mizumori Youta | Male, 夏樹 和人 == Natsuki Kazuto | Male, 野崎 博也 == Nozaki Hiroya | Male, 大菊 ジュン == Oogiku Jun | Male, 酒井 絹代 == Sakai Kinuyo | Female, 酒井 豊 == Sakai Yutaka | Male, 竜生 春義 == Tatsuki Haruyoshi | Male, 竜生 潤 == Tatsuki Jun | Male, 吉沢 英玄 == Yoshizawa Eigen | Male, 吉沢 武雄 == Yoshizawa Takeo | Male'
+    # Characters
+    context = '```\
+        Game Characters:\
+        Character: 池ノ上 拓海 == Ikenoue Takumi - Gender: Male\
+        Character: 福永 こはる == Fukunaga Koharu - Gender: Female\
+        Character: 神泉 理央 == Kamiizumi Rio - Gender: Female\
+        Character: 吉祥寺 アリサ == Kisshouji Arisa - Gender: Female\
+        Character: 久我 友里子 == Kuga Yuriko - Gender: Female\
+        ```'
+
+    # Prompt
     if fullPromptFlag:
-        system = PROMPT 
-        user = 'Line to Translate: ' + subbedT
+        system = PROMPT
+        user = 'Line to Translate = ' + subbedT
     else:
-        system = 'You are an expert translator who translates everything to English. Reply with only the English Translation of the text.' 
-        user = 'Line to Translate: ' + subbedT
+        system = 'Output ONLY the english translation in the following format: `Translation: <ENGLISH_TRANSLATION>`' 
+        user = 'Line to Translate = ' + subbedT
+
+     # Create Message List
+    msg = []
+    msg.append({"role": "system", "content": system})
+    msg.append({"role": "user", "content": context})
+    if isinstance(history, list):
+        for line in history:
+            msg.append({"role": "user", "content": line})
+    else:
+        msg.append({"role": "user", "content": history})
+    msg.append({"role": "user", "content": user})
+
     response = openai.ChatCompletion.create(
-        temperature=0,
-        frequency_penalty=1,
+        temperature=0.1,
+        frequency_penalty=0.2,
+        presence_penalty=0.2,
         model="gpt-3.5-turbo",
-        messages=[
-            {"role": "system", "content": system},
-            {"role": "user", "content": context},
-            {"role": "user", "content": history},
-            {"role": "user", "content": user}
-        ],
+        messages=msg,
         request_timeout=30,
     )
 
@@ -351,13 +365,19 @@ def translateGPT(t, history, fullPromptFlag):
     # Remove Placeholder Text
     translatedText = translatedText.replace('English Translation: ', '')
     translatedText = translatedText.replace('Translation: ', '')
-    translatedText = translatedText.replace('Line to Translate: ', '')
+    translatedText = translatedText.replace('Line to Translate = ', '')
+    translatedText = translatedText.replace('Translation = ', '')
+    translatedText = translatedText.replace('Translate = ', '')
     translatedText = translatedText.replace('English Translation:', '')
     translatedText = translatedText.replace('Translation:', '')
-    translatedText = translatedText.replace('Line to Translate:', '')
+    translatedText = translatedText.replace('Line to Translate =', '')
+    translatedText = translatedText.replace('Translation =', '')
+    translatedText = translatedText.replace('Translate =', '')
+    translatedText = re.sub(r'Note:.*', '', translatedText)
+    translatedText = translatedText.replace('っ', '')
 
     # Return Translation
     if len(translatedText) > 15 * len(t) or "I'm sorry, but I'm unable to assist with that translation" in translatedText:
-        return [t, response.usage.total_tokens]
+        raise Exception
     else:
         return [translatedText, tokens]

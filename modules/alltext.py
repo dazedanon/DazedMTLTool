@@ -90,3 +90,83 @@ def getResultString(translatedData, translationTime, filename):
             return filename + ': ' + tokenString + timeString + Fore.RED + u' \u2717 ' +\
                 errorString + Fore.RESET
         
+@retry(exceptions=Exception, tries=5, delay=5)
+def translateGPT(t, history, fullPromptFlag):
+    # If ESTIMATE is True just count this as an execution and return.
+    if ESTIMATE:
+        enc = tiktoken.encoding_for_model("gpt-4")
+        tokens = len(enc.encode(t)) * 2 + len(enc.encode(history)) + len(enc.encode(PROMPT))
+        return (t, tokens)
+    
+    # Sub Vars
+    varResponse = subVars(t)
+    subbedT = varResponse[0]
+
+    # If there isn't any Japanese in the text just skip
+    if not re.search(r'[ˆê-ê]+|[‚Ÿ-?]+|[ƒ@-ƒ”]+|[\uFF00-\uFFEF]', subbedT):
+        return(t, 0)
+
+    # Characters
+    context = '```\
+        Game Characters:\
+        Character: ’rƒmã ‘ñŠC == Ikenoue Takumi - Gender: Male\
+        Character: •Ÿ‰i ‚±‚Í‚é == Fukunaga Koharu - Gender: Female\
+        Character: _ò —‰› == Kamiizumi Rio - Gender: Female\
+        Character: ‹gË› ƒAƒŠƒT == Kisshouji Arisa - Gender: Female\
+        Character: ‹v‰ä —F—¢q == Kuga Yuriko - Gender: Female\
+        ```'
+
+    # Prompt
+    if fullPromptFlag:
+        system = PROMPT
+        user = 'Line to Translate = ' + subbedT
+    else:
+        system = 'Output ONLY the english translation in the following format: `Translation: <ENGLISH_TRANSLATION>`' 
+        user = 'Line to Translate = ' + subbedT
+
+    # Create Message List
+    msg = []
+    msg.append({"role": "system", "content": system})
+    msg.append({"role": "user", "content": context})
+    if isinstance(history, list):
+        for line in history:
+            msg.append({"role": "user", "content": line})
+    else:
+        msg.append({"role": "user", "content": history})
+    msg.append({"role": "user", "content": user})
+
+    response = openai.ChatCompletion.create(
+        temperature=0.1,
+        frequency_penalty=0.2,
+        presence_penalty=0.2,
+        model="gpt-3.5-turbo",
+        messages=msg,
+        request_timeout=30,
+    )
+
+    # Save Translated Text
+    translatedText = response.choices[0].message.content
+    tokens = response.usage.total_tokens
+
+    # Resub Vars
+    translatedText = resubVars(translatedText, varResponse[1])
+
+    # Remove Placeholder Text
+    translatedText = translatedText.replace('English Translation: ', '')
+    translatedText = translatedText.replace('Translation: ', '')
+    translatedText = translatedText.replace('Line to Translate = ', '')
+    translatedText = translatedText.replace('Translation = ', '')
+    translatedText = translatedText.replace('Translate = ', '')
+    translatedText = translatedText.replace('English Translation:', '')
+    translatedText = translatedText.replace('Translation:', '')
+    translatedText = translatedText.replace('Line to Translate =', '')
+    translatedText = translatedText.replace('Translation =', '')
+    translatedText = translatedText.replace('Translate =', '')
+    translatedText = re.sub(r'Note:.*', '', translatedText)
+    translatedText = translatedText.replace('‚Á', '')
+
+    # Return Translation
+    if len(translatedText) > 15 * len(t) or "I'm sorry, but I'm unable to assist with that translation" in translatedText:
+        raise Exception
+    else:
+        return [translatedText, tokens]
