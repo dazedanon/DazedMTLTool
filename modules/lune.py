@@ -65,7 +65,7 @@ def handleLune(filename, estimate):
             TOTALTOKENS += translatedData[1]
     
     else:
-        with open('translated/' + filename, 'w', encoding='shiftjis') as outFile:
+        with open('translated/' + filename, 'w', encoding='shiftjis', newline='\n') as outFile:
             start = time.time()
             translatedData = openFiles(filename)
 
@@ -152,18 +152,14 @@ def translateText(data, pbar):
             jaString = data[i]
 
         # Grab and Translate Speaker
-        elif '00003000' == jaString or '00002000' == jaString:
+        elif re.search(r'^0000[1-9]000$', jaString):
             i += 1
             jaString = data[i].replace('\n', '')
-            # Known Speakers
-            namesList = [
-            "John",
-            "Bob",
-            "Tom",
-            "女教師"
-            ]
-            if jaString in namesList:
-                jaString = jaString.replace('女教師', 'Female Teacher')
+            jaString = jaString.replace('拓海', 'Takumi')
+            jaString = jaString.replace('こはる', 'Koharu')
+            jaString = jaString.replace('理央', 'Rio')
+            jaString = jaString.replace('アリサ', 'Arisa')
+            jaString = jaString.replace('友里子', 'Yuriko')
             
             # Translate Speaker
             response = translateGPT(jaString, 'Reply with only the english translation of the NPC name', True)
@@ -184,12 +180,15 @@ def translateText(data, pbar):
         finalJAString = finalJAString.replace('\\n', ' ')
         finalJAString = finalJAString.replace('\n', ' ')
 
-        if speaker != '':
-            response = translateGPT(f'{speaker}: {finalJAString}', 'Previous Text for Context: ' + ' '.join(textHistory), True)
-        else:
-            response = translateGPT(finalJAString, 'Previous Text for Context: ' + ' '.join(textHistory), True)
+        if speaker == '':
+            speaker = 'Takumi'
+        response = translateGPT(speaker + ': ' + finalJAString, textHistory, True)
         tokens += response[1]
         translatedText = response[0]
+
+        # Remove Textwrap
+        translatedText = translatedText.replace('\\n', ' ')
+        translatedText = translatedText.replace('\n', ' ')
         
         # Remove added speaker and quotes
         translatedText = re.sub(r'^.+?:\s', '', translatedText)
@@ -324,7 +323,7 @@ def resubVars(translatedText, allList):
 def translateGPT(t, history, fullPromptFlag):
     # If ESTIMATE is True just count this as an execution and return.
     if ESTIMATE:
-        enc = tiktoken.encoding_for_model("gpt-3.5-turbo")
+        enc = tiktoken.encoding_for_model("gpt-4")
         tokens = len(enc.encode(t)) * 2 + len(enc.encode(history)) + len(enc.encode(PROMPT))
         return (t, tokens)
     
@@ -336,36 +335,38 @@ def translateGPT(t, history, fullPromptFlag):
     if not re.search(r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴ]+|[\uFF00-\uFFEF]', subbedT):
         return(t, 0)
 
-    """Translate text using GPT"""
+    # Characters
     context = '```\
         Game Characters:\
-        Character: 如月亜里愛 == Kisaragi Aria - Nickname: Aria - Gender: Female\
-        Character: 愛洲美彌子 == Aisu Miyako - Gender: Female\
-        Character: 喜遊名心 == Cocoa Kiyuna - Gender: Female\
-        Character: 柵瀬愛色 == Ai Sakurai - Gender: Female\
-        Character: 陰平小鞠 == Komari Kagehira - Gender: Female\
-        Character: 訓覇一縷 == Ichiru Kurube - Gender: Female\
-        Character: 緋皇月 == Luna Hisube - Gender: Female\
-        Character: 刑事 == Detective - Gender: Male\
+        Character: 池ノ上 拓海 == Ikenoue Takumi - Gender: Male\
+        Character: 福永 こはる == Fukunaga Koharu - Gender: Female\
+        Character: 神泉 理央 == Kamiizumi Rio - Gender: Female\
+        Character: 吉祥寺 アリサ == Kisshouji Arisa - Gender: Female\
+        Character: 久我 友里子 == Kuga Yuriko - Gender: Female\
         ```'
 
+    # Prompt
     if fullPromptFlag:
         system = PROMPT
         user = 'Line to Translate = ' + subbedT
     else:
         system = 'Output ONLY the english translation in the following format: `Translation: <ENGLISH_TRANSLATION>`' 
         user = 'Line to Translate = ' + subbedT
+
+    # Create Message List
+    msg = []
+    msg.append({"role": "system", "content": system})
+    msg.append({"role": "user", "content": context})
+    for line in history:
+        msg.append({"role": "user", "content": line})
+    msg.append({"role": "user", "content": user})
+
     response = openai.ChatCompletion.create(
-        temperature=0,
+        temperature=0.1,
         frequency_penalty=0.2,
         presence_penalty=0.2,
-        model="gpt-3.5-turbo",
-        messages=[
-            {"role": "system", "content": system},
-            {"role": "user", "content": context},
-            {"role": "user", "content": history},
-            {"role": "user", "content": user}
-        ],
+        model="gpt-4",
+        messages=msg,
         request_timeout=30,
     )
 
