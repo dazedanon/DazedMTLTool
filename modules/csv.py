@@ -320,7 +320,7 @@ def resubVars(translatedText, allList):
 def translateGPT(t, history, fullPromptFlag):
     # If ESTIMATE is True just count this as an execution and return.
     if ESTIMATE:
-        enc = tiktoken.encoding_for_model("gpt-3.5-turbo")
+        enc = tiktoken.encoding_for_model("gpt-4")
         tokens = len(enc.encode(t)) * 2 + len(enc.encode(history)) + len(enc.encode(PROMPT))
         return (t, tokens)
     
@@ -329,26 +329,44 @@ def translateGPT(t, history, fullPromptFlag):
     subbedT = varResponse[0]
 
     # If there isn't any Japanese in the text just skip
-    if not re.search(r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴー]+', subbedT):
+    if not re.search(r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴ]+|[\uFF00-\uFFEF]', subbedT):
         return(t, 0)
 
-    """Translate text using GPT"""
-    context = 'Eroge Names Context: ミカエル == Mikael | Female, ミカ == Mika | Female, ベルゼビュート == Beelzebuth | Female, ベル == Bel | Female, アズラエル == Azriel | Female, アズ == Az | Female, フレイア == Freya | Female'
+    # Characters
+    context = '```\
+        Game Characters:\
+        Character: 池ノ上 拓海 == Ikenoue Takumi - Gender: Male\
+        Character: 福永 こはる == Fukunaga Koharu - Gender: Female\
+        Character: 神泉 理央 == Kamiizumi Rio - Gender: Female\
+        Character: 吉祥寺 アリサ == Kisshouji Arisa - Gender: Female\
+        Character: 久我 友里子 == Kuga Yuriko - Gender: Female\
+        ```'
+
+    # Prompt
     if fullPromptFlag:
-        system = PROMPT 
-        user = 'Current Text to Translate: ' + subbedT
+        system = PROMPT
+        user = 'Line to Translate = ' + subbedT
     else:
-        system = 'You are an expert translator who translates everything to English. Reply with only the English Translation of the text.' 
-        user = 'Current Text to Translate: ' + subbedT
+        system = 'Output ONLY the english translation in the following format: `Translation: <ENGLISH_TRANSLATION>`' 
+        user = 'Line to Translate = ' + subbedT
+
+    # Create Message List
+    msg = []
+    msg.append({"role": "system", "content": system})
+    msg.append({"role": "user", "content": context})
+    if isinstance(history, list):
+        for line in history:
+            msg.append({"role": "user", "content": line})
+    else:
+        msg.append({"role": "user", "content": history})
+    msg.append({"role": "user", "content": user})
+
     response = openai.ChatCompletion.create(
-        temperature=0,
+        temperature=0.1,
+        frequency_penalty=0.2,
+        presence_penalty=0.2,
         model="gpt-3.5-turbo",
-        messages=[
-            {"role": "system", "content": system},
-            {"role": "user", "content": context},
-            {"role": "user", "content": history},
-            {"role": "user", "content": user}
-        ],
+        messages=msg,
         request_timeout=30,
     )
 
@@ -362,13 +380,19 @@ def translateGPT(t, history, fullPromptFlag):
     # Remove Placeholder Text
     translatedText = translatedText.replace('English Translation: ', '')
     translatedText = translatedText.replace('Translation: ', '')
-    translatedText = translatedText.replace('Current Text to Translate: ', '')
+    translatedText = translatedText.replace('Line to Translate = ', '')
+    translatedText = translatedText.replace('Translation = ', '')
+    translatedText = translatedText.replace('Translate = ', '')
     translatedText = translatedText.replace('English Translation:', '')
     translatedText = translatedText.replace('Translation:', '')
-    translatedText = translatedText.replace('Current Text to Translate:', '')
+    translatedText = translatedText.replace('Line to Translate =', '')
+    translatedText = translatedText.replace('Translation =', '')
+    translatedText = translatedText.replace('Translate =', '')
+    translatedText = re.sub(r'Note:.*', '', translatedText)
+    translatedText = translatedText.replace('っ', '')
 
     # Return Translation
     if len(translatedText) > 15 * len(t) or "I'm sorry, but I'm unable to assist with that translation" in translatedText:
-        return [t, response.usage.total_tokens]
+        raise Exception
     else:
         return [translatedText, tokens]

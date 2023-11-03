@@ -1686,7 +1686,7 @@ def resubVars(translatedText, allList):
 def translateGPT(t, history, fullPromptFlag):
     # If ESTIMATE is True just count this as an execution and return.
     if ESTIMATE:
-        enc = tiktoken.encoding_for_model("gpt-3.5-turbo")
+        enc = tiktoken.encoding_for_model("gpt-4")
         tokens = len(enc.encode(t)) * 2 + len(enc.encode(history)) + len(enc.encode(PROMPT))
         return (t, tokens)
     
@@ -1698,36 +1698,41 @@ def translateGPT(t, history, fullPromptFlag):
     if not re.search(r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴ]+|[\uFF00-\uFFEF]', subbedT):
         return(t, 0)
 
-    """Translate text using GPT"""
+    # Characters
     context = '```\
         Game Characters:\
-        Character: 如月亜里愛 == Kisaragi Aria - Nickname: Aria - Gender: Female\
-        Character: 愛洲美彌子 == Aisu Miyako - Gender: Female\
-        Character: 喜遊名心 == Cocoa Kiyuna - Gender: Female\
-        Character: 柵瀬愛色 == Ai Sakurai - Gender: Female\
-        Character: 陰平小鞠 == Komari Kagehira - Gender: Female\
-        Character: 訓覇一縷 == Ichiru Kurube - Gender: Female\
-        Character: 緋皇月 == Luna Hisube - Gender: Female\
-        Character: 刑事 == Detective - Gender: Male\
+        Character: 池ノ上 拓海 == Ikenoue Takumi - Gender: Male\
+        Character: 福永 こはる == Fukunaga Koharu - Gender: Female\
+        Character: 神泉 理央 == Kamiizumi Rio - Gender: Female\
+        Character: 吉祥寺 アリサ == Kisshouji Arisa - Gender: Female\
+        Character: 久我 友里子 == Kuga Yuriko - Gender: Female\
         ```'
 
+    # Prompt
     if fullPromptFlag:
         system = PROMPT
         user = 'Line to Translate = ' + subbedT
     else:
         system = 'Output ONLY the english translation in the following format: `Translation: <ENGLISH_TRANSLATION>`' 
         user = 'Line to Translate = ' + subbedT
+
+    # Create Message List
+    msg = []
+    msg.append({"role": "system", "content": system})
+    msg.append({"role": "user", "content": context})
+    if isinstance(history, list):
+        for line in history:
+            msg.append({"role": "user", "content": line})
+    else:
+        msg.append({"role": "user", "content": history})
+    msg.append({"role": "user", "content": user})
+
     response = openai.ChatCompletion.create(
-        temperature=0,
+        temperature=0.1,
         frequency_penalty=0.2,
         presence_penalty=0.2,
         model="gpt-3.5-turbo",
-        messages=[
-            {"role": "system", "content": system},
-            {"role": "user", "content": context},
-            {"role": "user", "content": history},
-            {"role": "user", "content": user}
-        ],
+        messages=msg,
         request_timeout=30,
     )
 
@@ -1749,7 +1754,6 @@ def translateGPT(t, history, fullPromptFlag):
     translatedText = translatedText.replace('Line to Translate =', '')
     translatedText = translatedText.replace('Translation =', '')
     translatedText = translatedText.replace('Translate =', '')
-    translatedText = re.sub(r'\n\nPast Translated Text:.*', '', translatedText, 0, re.DOTALL)
     translatedText = re.sub(r'Note:.*', '', translatedText)
     translatedText = translatedText.replace('っ', '')
 

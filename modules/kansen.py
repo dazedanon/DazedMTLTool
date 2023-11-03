@@ -461,7 +461,7 @@ def resubVars(translatedText, allList):
 def translateGPT(t, history, fullPromptFlag):
     # If ESTIMATE is True just count this as an execution and return.
     if ESTIMATE:
-        enc = tiktoken.encoding_for_model("gpt-3.5-turbo")
+        enc = tiktoken.encoding_for_model("gpt-4")
         tokens = len(enc.encode(t)) * 2 + len(enc.encode(history)) + len(enc.encode(PROMPT))
         return (t, tokens)
     
@@ -473,25 +473,41 @@ def translateGPT(t, history, fullPromptFlag):
     if not re.search(r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴ]+|[\uFF00-\uFFEF]', subbedT):
         return(t, 0)
 
-    """Translate text using GPT"""
-    context = 'Eroge Names Context: (Name: 佐伯 瞳 == Saeki Hitomi\nGender: Female, Name: 山岸 優 == Yamagishi Yuu Gender: Female, Name: 五十嵐 朋美 == Igarashi Tomomi Gender: Female, Name: 新道 リサ == Shindou Risa Gender: Female, Name: 岸田 聡 == Kishida Satoshi Gender: Male, Name: 竹内 真也 == Takeuchi Shinya Gender: Male, Name: 田中 祐二 == Tanaka Yuuji Gender: Male)'
+    # Characters
+    context = '```\
+        Game Characters:\
+        Character: 池ノ上 拓海 == Ikenoue Takumi - Gender: Male\
+        Character: 福永 こはる == Fukunaga Koharu - Gender: Female\
+        Character: 神泉 理央 == Kamiizumi Rio - Gender: Female\
+        Character: 吉祥寺 アリサ == Kisshouji Arisa - Gender: Female\
+        Character: 久我 友里子 == Kuga Yuriko - Gender: Female\
+        ```'
+
+    # Prompt
     if fullPromptFlag:
-        system = PROMPT 
+        system = PROMPT
         user = 'Line to Translate = ' + subbedT
     else:
-        system = 'You are an expert translator who translates everything to English. Reply with only the English Translation of the text.' 
-        user = 'Line to Translate: ' + subbedT
+        system = 'Output ONLY the english translation in the following format: `Translation: <ENGLISH_TRANSLATION>`' 
+        user = 'Line to Translate = ' + subbedT
+
+    # Create Message List
+    msg = []
+    msg.append({"role": "system", "content": system})
+    msg.append({"role": "user", "content": context})
+    if isinstance(history, list):
+        for line in history:
+            msg.append({"role": "user", "content": line})
+    else:
+        msg.append({"role": "user", "content": history})
+    msg.append({"role": "user", "content": user})
+
     response = openai.ChatCompletion.create(
-        temperature=0,
+        temperature=0.1,
         frequency_penalty=0.2,
         presence_penalty=0.2,
         model="gpt-3.5-turbo",
-        messages=[
-            {"role": "system", "content": system},
-            {"role": "user", "content": context},
-            {"role": "user", "content": history},
-            {"role": "user", "content": user}
-        ],
+        messages=msg,
         request_timeout=30,
     )
 
@@ -505,11 +521,14 @@ def translateGPT(t, history, fullPromptFlag):
     # Remove Placeholder Text
     translatedText = translatedText.replace('English Translation: ', '')
     translatedText = translatedText.replace('Translation: ', '')
-    translatedText = translatedText.replace('Line to Translate: ', '')
+    translatedText = translatedText.replace('Line to Translate = ', '')
+    translatedText = translatedText.replace('Translation = ', '')
+    translatedText = translatedText.replace('Translate = ', '')
     translatedText = translatedText.replace('English Translation:', '')
     translatedText = translatedText.replace('Translation:', '')
-    translatedText = translatedText.replace('Line to Translate:', '')
-    translatedText = re.sub(r'\n\nPast Translated Text:.*', '', translatedText, 0, re.DOTALL)
+    translatedText = translatedText.replace('Line to Translate =', '')
+    translatedText = translatedText.replace('Translation =', '')
+    translatedText = translatedText.replace('Translate =', '')
     translatedText = re.sub(r'Note:.*', '', translatedText)
     translatedText = translatedText.replace('っ', '')
 

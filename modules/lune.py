@@ -357,8 +357,11 @@ def translateGPT(t, history, fullPromptFlag):
     msg = []
     msg.append({"role": "system", "content": system})
     msg.append({"role": "user", "content": context})
-    for line in history:
-        msg.append({"role": "user", "content": line})
+    if isinstance(history, list):
+        for line in history:
+            msg.append({"role": "user", "content": line})
+    else:
+        msg.append({"role": "user", "content": history})
     msg.append({"role": "user", "content": user})
 
     response = openai.ChatCompletion.create(
@@ -388,7 +391,6 @@ def translateGPT(t, history, fullPromptFlag):
     translatedText = translatedText.replace('Line to Translate =', '')
     translatedText = translatedText.replace('Translation =', '')
     translatedText = translatedText.replace('Translate =', '')
-    translatedText = re.sub(r'\n\nPast Translated Text:.*', '', translatedText, 0, re.DOTALL)
     translatedText = re.sub(r'Note:.*', '', translatedText)
     translatedText = translatedText.replace('っ', '')
 
