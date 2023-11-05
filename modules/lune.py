@@ -21,7 +21,7 @@ load_dotenv()
 openai.organization = os.getenv('org')
 openai.api_key = os.getenv('key')
 
-APICOST = .03 # Depends on the model https://openai.com/pricing
+APICOST = .002 # Depends on the model https://openai.com/pricing
 PROMPT = Path('prompt.txt').read_text(encoding='utf-8')
 THREADS = 20
 LOCK = threading.Lock()
@@ -145,6 +145,27 @@ def translateText(data, pbar):
         jaString = jaString.replace('\\n', '')
         jaString = jaString.replace('\n', '')
 
+
+        # Choices
+        if '0100410000000' in jaString:
+            decodedBITCH = bytes.fromhex(jaString).decode('shiftjis')
+
+            matchList = re.findall(r'd(.+?),', decodedBITCH)
+            if len(matchList) > 0:
+                for match in matchList:
+                    response = translateGPT(match, 'Keep your translation as brief as possible. Previous text: ' + textHistory[len(textHistory)-1] + '\n\nReply in the style of a dialogue option.', True)
+                    tokens += response[1]
+                    translatedText = response[0]
+
+                    # Remove characters that may break scripts
+                    charList = ['.', '\"', '\\n']
+                    for char in charList:
+                        translatedText = translatedText.replace(char, '')
+                        
+                    decodedBITCH = decodedBITCH.replace(match, translatedText.replace(' ', '\u3000'))
+                data[i] = decodedBITCH.encode('shift-jis').hex() + '\n'
+                continue
+
         # Reset Speaker
         if '00000000' == jaString:
             i += 1
@@ -171,7 +192,6 @@ def translateText(data, pbar):
 
             # Set index to line
             i += 1
-            pbar.update(1)
 
         else:
             pbar.update(1)
@@ -372,7 +392,7 @@ def translateGPT(t, history, fullPromptFlag):
         temperature=0.1,
         frequency_penalty=0.2,
         presence_penalty=0.2,
-        model="gpt-4",
+        model="gpt-3.5-turbo",
         messages=msg,
         request_timeout=30,
     )
