@@ -160,7 +160,7 @@ def translateTyrano(data, pbar):
                 data[i] = translatedText                
 
         # Lines
-        matchList = re.findall(r'(.+?)\[p\]\[cm\]', data[i])
+        matchList = re.findall(r'(.+?)\[p\]', data[i])
         if len(matchList) > 0:
             matchList[0] = matchList[0].replace('「', '')
             matchList[0] = matchList[0].replace('」', '')
@@ -169,7 +169,7 @@ def translateTyrano(data, pbar):
                 while '[r]' in data[i+1]:
                     data[i] = '\d\n'    # \d Marks line for deletion
                     i += 1
-                    matchList = re.findall(r'(.+?)\[p\]\[cm\]', data[i])
+                    matchList = re.findall(r'(.+?)\[p\]', data[i])
                     if len(matchList) > 0:
                         matchList[0] = matchList[0].replace('「', '')
                         matchList[0] = matchList[0].replace('」', '')
@@ -177,7 +177,7 @@ def translateTyrano(data, pbar):
                 while '[p][cm]' in data[i+1]:
                     data[i] = '\d\n'
                     i += 1
-                    matchList = re.findall(r'(.+?)\[p\]\[cm\]', data[i])
+                    matchList = re.findall(r'(.+?)\[p\]', data[i])
                     if len(matchList) > 0:
                         matchList[0] = matchList[0].replace('「', '')
                         matchList[0] = matchList[0].replace('」', '')
@@ -218,9 +218,10 @@ def translateTyrano(data, pbar):
             matchList = re.findall(r'(.+?[)\.\?\!）。・]+)', translatedText)
             translatedText = re.sub(r'(.+?[)\.\?\!）。・]+)', '', translatedText)
             for l in range(len(matchList)):
-                if re.search(r'[M][rs]\.$', matchList[l]):
-                    matchList[l+1] = matchList[l].strip() + matchList[l+1].strip()
-                    matchList[l] = ''
+                if any(t in matchList[l] for t in ['Mr.', 'Ms.', 'Mrs.']):
+                    if len(matchList) > l+1:
+                        matchList[l] = matchList[l] + matchList[l+1]
+                        matchList[l+1] = ''
 
             # Combine Lists
             for k in range(len(matchList)):
