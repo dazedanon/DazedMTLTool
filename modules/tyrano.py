@@ -123,23 +123,20 @@ def translateTyrano(data, pbar):
         if syncIndex > i:
             i = syncIndex
 
-        if '… …… ………[pcm]' in data[i]:
-            print('test')
-
         # Speaker
-        if '[ns]' in data[i]:
-            matchList = re.findall(r'\[ns\](.+?)\[', data[i])
+        if '#' in data[i]:
+            matchList = re.findall(r'#(.+)', data[i])
             if len(matchList) != 0:
                 response = translateGPT(matchList[0], 'Reply with only the english translation of the NPC name', True)
                 speaker = response[0]
                 tokens += response[1]
-                data[i] = '[ns]' + speaker + '[nse]\n'
+                data[i] = '#' + speaker + '\n'
             else:
                 speaker = ''
 
         # Choices
-        elif '[eval exp="f.seltext' in data[i]:
-            matchList = re.findall(r'\[eval exp=.+?\'(.+)\'', data[i])
+        elif 'glink' in data[i]:
+            matchList = re.findall(r'\[glink.+text=\"(.+?)\".+', data[i])
             if len(matchList) != 0:
                 if len(textHistory) > 0:
                     originalText = matchList[0]
@@ -159,11 +156,11 @@ def translateTyrano(data, pbar):
                 translatedText = translatedText.replace("'", "\\\'")
 
                 # Set Data
-                translatedText = data[i].replace(originalText, translatedText)
+                translatedText = data[i].replace(matchList[0], translatedText.replace(' ', '\u00A0'))
                 data[i] = translatedText                
 
         # Lines
-        matchList = re.findall(r'(.+?)\[r\]', data[i])
+        matchList = re.findall(r'(.+?)\[p\]\[cm\]', data[i])
         if len(matchList) > 0:
             matchList[0] = matchList[0].replace('「', '')
             matchList[0] = matchList[0].replace('」', '')
@@ -172,15 +169,15 @@ def translateTyrano(data, pbar):
                 while '[r]' in data[i+1]:
                     data[i] = '\d\n'    # \d Marks line for deletion
                     i += 1
-                    matchList = re.findall(r'(.+?)\[r\]', data[i])
+                    matchList = re.findall(r'(.+?)\[p\]\[cm\]', data[i])
                     if len(matchList) > 0:
                         matchList[0] = matchList[0].replace('「', '')
                         matchList[0] = matchList[0].replace('」', '')
                         currentGroup.append(matchList[0])
-                while '[pcm]' in data[i+1]:
+                while '[p][cm]' in data[i+1]:
                     data[i] = '\d\n'
                     i += 1
-                    matchList = re.findall(r'(.+?)\[pcm\]', data[i])
+                    matchList = re.findall(r'(.+?)\[p\]\[cm\]', data[i])
                     if len(matchList) > 0:
                         matchList[0] = matchList[0].replace('「', '')
                         matchList[0] = matchList[0].replace('」', '')
@@ -196,12 +193,12 @@ def translateTyrano(data, pbar):
 
             #Check Speaker
             if speaker == '':
-                response = translateGPT(finalJAString, 'Previous Dialogue: ' + '\n\n'.join(textHistory), True)
+                response = translateGPT(finalJAString, textHistory, True)
                 tokens += response[1]
                 translatedText = response[0]
                 textHistory.append('\"' + translatedText + '\"')
             else:
-                response = translateGPT(speaker + ': ' + finalJAString, 'Previous Dialogue: ' + '\n\n'.join(textHistory), True)
+                response = translateGPT(speaker + ': ' + finalJAString, textHistory, True)
                 tokens += response[1]
                 translatedText = response[0]
                 textHistory.append('\"' + translatedText + '\"')
@@ -220,6 +217,10 @@ def translateTyrano(data, pbar):
             # Split final string into full sentences.
             matchList = re.findall(r'(.+?[)\.\?\!）。・]+)', translatedText)
             translatedText = re.sub(r'(.+?[)\.\?\!）。・]+)', '', translatedText)
+            for l in range(len(matchList)):
+                if re.search(r'[M][rs]\.$', matchList[l]):
+                    matchList[l+1] = matchList[l].strip() + matchList[l+1].strip()
+                    matchList[l] = ''
 
             # Combine Lists
             for k in range(len(matchList)):
@@ -244,9 +245,9 @@ def translateTyrano(data, pbar):
                         line = line.replace('\n', '[r]')
                     
                     # Set
-                    data.insert(i, line.strip() + '[l][er]\n')
+                    data.insert(i, line.strip() + '[p][cm]\n')
                     i+=1
-                data[i-1] = data[i-1].replace('[l][er]', '[pcm]')
+                data[i-1] = data[i-1].replace('[l][er]', '[p][cm]')
             # else:
                 # print ('No Matches')
 
@@ -258,7 +259,7 @@ def translateTyrano(data, pbar):
                     translatedText = translatedText.replace('\n', '[r]')
 
                 # Set Last Line
-                data[i] = translatedText.strip() + '[pcm]\n'
+                data[i] = translatedText.strip() + '[p][cm]\n'
 
             # Keep textHistory list at length maxHistory
             if len(textHistory) > maxHistory:
@@ -267,7 +268,7 @@ def translateTyrano(data, pbar):
             speaker = ''
         
         # pcm Line
-        matchList = re.findall(r'(.+?)\[pcm\]', data[i])
+        matchList = re.findall(r'(.+?)\[p\]\[cm\]', data[i])
         if len(matchList) > 0:
             matchList[0] = matchList[0].replace('「', '')
             matchList[0] = matchList[0].replace('」', '')
@@ -300,9 +301,14 @@ def translateTyrano(data, pbar):
             translatedText = translatedText.replace('[', '')
             translatedText = translatedText.replace(']', '')
 
-            # Format Text
+            # Split final string into full sentences.
             matchList = re.findall(r'(.+?[)\.\?\!）。・]+)', translatedText)
             translatedText = re.sub(r'(.+?[)\.\?\!）。・]+)', '', translatedText)
+            for l in range(len(matchList)):
+                if any(t in matchList[l] for t in ['Mr.', 'Ms.', 'Mrs.']):
+                    if len(matchList) > l+1:
+                        matchList[l] = matchList[l] + matchList[l+1]
+                        matchList[l+1] = ''
 
             # Get rid of whitespace for each item and add wordwrap
             for k in range(len(matchList)):
@@ -329,10 +335,10 @@ def translateTyrano(data, pbar):
                         line = line.replace('\n', '[r]')
                     
                     # Set
-                    data.insert(i, line.strip() + '[l][er]\n')
+                    data.insert(i, line.strip() + '[p][cm]\n')
                     i+=1
                 # Set last line as [pcm] instead of [r]
-                data[i-1] = data[i-1].replace('[l][er]', '[pcm]')
+                data[i-1] = data[i-1].replace('[l][er]', '[p][cm]')
             # else:
                 # print ('No Matches')
             if translatedText != '':
@@ -342,7 +348,7 @@ def translateTyrano(data, pbar):
                     translatedText = translatedText.replace('\n', '[r]')
 
                 # Set Backup
-                data[i] = translatedText.strip() + '[pcm]\n'
+                data[i] = translatedText.strip() + '[p][cm]\n'
 
             # Keep textHistory list at length maxHistory
             if len(textHistory) > maxHistory:
@@ -468,7 +474,7 @@ def resubVars(translatedText, allList):
 def translateGPT(t, history, fullPromptFlag):
     # If ESTIMATE is True just count this as an execution and return.
     if ESTIMATE:
-        enc = tiktoken.encoding_for_model("gpt-4")
+        enc = tiktoken.encoding_for_model("gpt-3.5-turbo")
         tokens = len(enc.encode(t)) * 2 + len(enc.encode(str(history))) + len(enc.encode(PROMPT))
         return (t, tokens)
     
@@ -483,11 +489,8 @@ def translateGPT(t, history, fullPromptFlag):
     # Characters
     context = '```\
         Game Characters:\
-        Character: 池ノ上 拓海 == Ikenoue Takumi - Gender: Male\
-        Character: 福永 こはる == Fukunaga Koharu - Gender: Female\
-        Character: 神泉 理央 == Kamiizumi Rio - Gender: Female\
-        Character: 吉祥寺 アリサ == Kisshouji Arisa - Gender: Female\
-        Character: 久我 友里子 == Kuga Yuriko - Gender: Female\
+        Character: 亜紀子 == Akiko - Gender: Female\
+        Character: 明日香 == Asuka - Gender: Female\
         ```'
 
     # Prompt
