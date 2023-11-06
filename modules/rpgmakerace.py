@@ -60,7 +60,7 @@ BRFLAG = False   # If the game uses <br> instead
 FIXTEXTWRAP = True
 IGNORETLTEXT = False
 
-def handleAce(filename, estimate):
+def handleACE(filename, estimate):
     global ESTIMATE, totalTokens
     ESTIMATE = estimate
 
