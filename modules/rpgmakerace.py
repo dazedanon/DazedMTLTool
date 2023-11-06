@@ -60,7 +60,7 @@ BRFLAG = False   # If the game uses <br> instead
 FIXTEXTWRAP = True
 IGNORETLTEXT = False
 
-def handleMVMZ(filename, estimate):
+def handleAce(filename, estimate):
     global ESTIMATE, totalTokens
     ESTIMATE = estimate
 
