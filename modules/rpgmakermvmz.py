@@ -637,7 +637,7 @@ def searchCodes(page, pbar):
                         matchList = re.findall(r'(\\+nc<(.*?)>)(.+)?', finalJAString)    
                         if len(matchList) != 0:    
                             # Translate Speaker  
-                            response = translateGPT(matchList[0][1], 'Reply with only the english translation of the NPC name', True)
+                            response = translateGPT(matchList[0][1], 'Reply with only the english translation of the NPC name', False)
                             totalTokens[0] += response[1][0]
                             totalTokens[1] += response[1][1]
                             speaker = response[0].strip('.')
@@ -653,7 +653,7 @@ def searchCodes(page, pbar):
                     elif '\\nw' in finalJAString or '\\NW' in finalJAString:
                         matchList = re.findall(r'([\\]+[nN][wW]\[(.+?)\]+)(.+)', finalJAString)    
                         if len(matchList) != 0:    
-                            response = translateGPT(matchList[0][1], 'Reply with only the english translation of the NPC name', True)
+                            response = translateGPT(matchList[0][1], 'Reply with only the english translation of the NPC name', False)
                             totalTokens[0] += response[1][0]
                             totalTokens[1] += response[1][1]
                             speaker = response[0].strip('.')
@@ -1134,7 +1134,7 @@ def searchCodes(page, pbar):
                     matchList = re.findall(r'Tachie showName (.+)', jaString)
                     if len(matchList) > 0:
                         # Translate
-                        response = translateGPT(matchList[0], 'Reply with the English translation of the NPC name.', True)
+                        response = translateGPT(matchList[0], 'Reply with the English translation of the NPC name.', False)
                         translatedText = response[0]
                         totalTokens[0] += response[1][0]
                         totalTokens[1] += response[1][1]
@@ -1429,7 +1429,7 @@ def searchCodes(page, pbar):
                 if not re.search(r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴー]+', jaString):
                     continue
                 
-                response = translateGPT(jaString, 'Reply with the English translation of the NPC name.', True)
+                response = translateGPT(jaString, 'Reply with the English translation of the NPC name.', False)
                 translatedText = response[0]
                 totalTokens[0] += response[1][0]
                 totalTokens[1] += response[1][1]
@@ -1776,11 +1776,10 @@ def translateGPT(t, history, fullPromptFlag):
     # Characters
     context = '```\
         Game Characters:\
-        Character: 池ノ上 拓海 == Ikenoue Takumi - Gender: Male\
-        Character: 福永 こはる == Fukunaga Koharu - Gender: Female\
+        Character: ソル == Sol - Gender: Female\
+        Character: ェニ先生 == Eni-sensei - Gender: Female\
         Character: 神泉 理央 == Kamiizumi Rio - Gender: Female\
         Character: 吉祥寺 アリサ == Kisshouji Arisa - Gender: Female\
-        Character: 久我 友里子 == Kuga Yuriko - Gender: Female\
         ```'
 
     # Prompt
@@ -1806,7 +1805,7 @@ def translateGPT(t, history, fullPromptFlag):
         temperature=0.1,
         frequency_penalty=0.2,
         presence_penalty=0.2,
-        model="gpt-3.5-turbo",
+        model="gpt-3.5-turbo-1106",
         messages=msg,
         request_timeout=30,
     )
