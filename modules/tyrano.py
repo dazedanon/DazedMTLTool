@@ -159,7 +159,7 @@ def translateTyrano(data, pbar):
                 translatedText = data[i].replace(matchList[0], translatedText.replace(' ', '\u00A0'))
                 data[i] = translatedText                
 
-        # Lines
+        # Grab Lines
         matchList = re.findall(r'(.+?)\[p\]', data[i])
         if len(matchList) > 0:
             matchList[0] = matchList[0].replace('「', '')
@@ -203,8 +203,8 @@ def translateTyrano(data, pbar):
                 translatedText = response[0]
                 textHistory.append('\"' + translatedText + '\"')
 
-                # Remove added speaker
-                translatedText = re.sub(r'^.+:\s?', '', translatedText)
+            # Remove added speaker
+            translatedText = re.sub(r'^.+:\s?', '', translatedText)
 
             # Set Data
             translatedText = translatedText.replace('ッ', '')
@@ -268,7 +268,7 @@ def translateTyrano(data, pbar):
             currentGroup = [] 
             speaker = ''
         
-        # pcm Line
+        # Grab Lines [p][cm]
         matchList = re.findall(r'(.+?)\[p\]\[cm\]', data[i])
         if len(matchList) > 0:
             matchList[0] = matchList[0].replace('「', '')
@@ -291,8 +291,8 @@ def translateTyrano(data, pbar):
                 translatedText = response[0]
                 textHistory.append('\"' + translatedText + '\"')
 
-                # Remove added speaker
-                translatedText = re.sub(r'^.+:\s?', '', translatedText)
+            # Remove added speaker
+            translatedText = re.sub(r'^.+:\s?', '', translatedText)
 
             # Set Data
             translatedText = translatedText.replace('ッ', '')
