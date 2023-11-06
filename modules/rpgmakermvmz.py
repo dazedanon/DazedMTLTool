@@ -559,7 +559,7 @@ def searchCodes(page, pbar):
                     # Color Regex: ^([\\]+[cC]\[[0-9]\]+(.+?)[\\]+[cC]\[[0]\])
                     matchList = re.findall(r'(.*?([\\]+[nN]<(.+?)>).*)', finalJAString)
                     if len(matchList) > 0:  
-                        response = translateGPT(matchList[0][2], 'Reply with only the english translation of the NPC name', True)
+                        response = translateGPT(matchList[0][2], 'Reply with only the english translation of the NPC name', False)
                         tokens += response[1]
                         speaker = response[0].strip('.')
                         nametag = matchList[0][1].replace(matchList[0][2], speaker)
@@ -724,15 +724,19 @@ def searchCodes(page, pbar):
 
                     # Translate
                     if speaker == '' and finalJAString != '':
-                        response = translateGPT(finalJAString, 'Past Translated Text: (' + ', '.join(textHistory) + ')', True)
+                        response = translateGPT(finalJAString, textHistory, True)
                         tokens += response[1]
                         translatedText = response[0]
+
+                        # Remove added speaker
+                        translatedText = re.sub(r'^.+?:\s?', '', translatedText)
+
                         # Sub Vars
                         varResponse = subVars(translatedText)
                         subbedT = varResponse[0]
                         textHistory.append('\"' + varResponse[0] + '\"')
                     elif finalJAString != '':
-                        response = translateGPT(speaker + ': ' + finalJAString, 'Past Translated Text: (' + ', '.join(textHistory) + ')', True)
+                        response = translateGPT(speaker + ': ' + finalJAString, textHistory, True)
                         tokens += response[1]
                         translatedText = response[0]
                         
