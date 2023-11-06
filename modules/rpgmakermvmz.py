@@ -661,8 +661,6 @@ def searchCodes(page, pbar):
                             # Set Nametag and Remove from Final String
                             nametag = matchList[0][0].replace(matchList[0][1], speaker)
                             finalJAString = finalJAString.replace(matchList[0][0], '')
-                        else:
-                            print('wtf')
 
                         # Set next item as dialogue
                         # if (codeList[j + 1]['code'] == 401 and len(codeList[j + 1]['parameters']) > 0) or (codeList[j + 1]['code'] == 0 and len(codeList[j + 1]['parameters']) > 0):
@@ -1622,12 +1620,12 @@ def searchSystem(data, pbar):
         pbar.update(1)
 
     # Variables (Optional ususally)
-    for i in range(len(data['variables'])):
-        response = translateGPT(data['variables'][i], 'Reply with only the english translation of the title', False)
-        totalTokens[0] += response[1][0]
-        totalTokens[1] += response[1][1]
-        data['variables'][i] = response[0].replace('\"', '').strip()
-        pbar.update(1)
+    # for i in range(len(data['variables'])):
+    #     response = translateGPT(data['variables'][i], 'Reply with only the english translation of the title', False)
+    #     totalTokens[0] += response[1][0]
+    #     totalTokens[1] += response[1][1]
+    #     data['variables'][i] = response[0].replace('\"', '').strip()
+    #     pbar.update(1)
 
     # Messages
     messages = (data['terms']['messages'])
