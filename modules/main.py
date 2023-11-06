@@ -3,6 +3,7 @@ import sys
 import traceback
 from colorama import Fore
 import os
+from tqdm import tqdm
 
 from modules.rpgmakermvmz import handleMVMZ
 from modules.rpgmakerace import handleACE
@@ -16,7 +17,7 @@ from modules.lune import handleLune
 THREADS = 5 # For GPT4 rate limit will be hit if you have more than 1 thread.
 
 # Info Message
-print(Fore.LIGHTYELLOW_EX + "WARNING: Once a translation starts do not close it unless you want to lose your\
+tqdm.write(Fore.LIGHTYELLOW_EX + "WARNING: Once a translation starts do not close it unless you want to lose your\
 translated data. If a file fails or gets stuck, translated lines will remain translated so you don't have \
 to worry about being charged twice. You can simply copy the file generated in /translations back over to \
 /files and start the script again. It will skip over any translated text." + Fore.RESET, end='\n\n')
@@ -46,7 +47,7 @@ def main():
                             totalCost = future.result()
                         except Exception as e:
                             tracebackLineNo = str(traceback.extract_tb(sys.exc_info()[2])[-1].lineno)
-                            print(Fore.RED + str(e) + '|' + tracebackLineNo + Fore.RESET)
+                            tqdm.write(Fore.RED + str(e) + '|' + tracebackLineNo + Fore.RESET)
 
             case '2':
                 # Open File (Threads)
@@ -59,7 +60,7 @@ def main():
                             totalCost = future.result()
                         except Exception as e:
                             tracebackLineNo = str(traceback.extract_tb(sys.exc_info()[2])[-1].lineno)
-                            print(Fore.RED + str(e) + '|' + tracebackLineNo + Fore.RESET)
+                            tqdm.write(Fore.RED + str(e) + '|' + tracebackLineNo + Fore.RESET)
 
             case '3':
                 # Open File (Threads)
@@ -73,7 +74,7 @@ def main():
                             
                         except Exception as e:
                             tracebackLineNo = str(traceback.extract_tb(sys.exc_info()[2])[-1].lineno)
-                            print(Fore.RED + str(e) + '|' + tracebackLineNo + Fore.RESET)
+                            tqdm.write(Fore.RED + str(e) + '|' + tracebackLineNo + Fore.RESET)
 
             case '4':
                 # Open File (Threads)
@@ -87,7 +88,7 @@ def main():
                             
                         except Exception as e:
                             tracebackLineNo = str(traceback.extract_tb(sys.exc_info()[2])[-1].lineno)
-                            print(Fore.RED + str(e) + '|' + tracebackLineNo + Fore.RESET)
+                            tqdm.write(Fore.RED + str(e) + '|' + tracebackLineNo + Fore.RESET)
 
             case '5':
                 # Open File (Threads)
@@ -101,7 +102,7 @@ def main():
                             
                         except Exception as e:
                             tracebackLineNo = str(traceback.extract_tb(sys.exc_info()[2])[-1].lineno)
-                            print(Fore.RED + str(e) + '|' + tracebackLineNo + Fore.RESET)
+                            tqdm.write(Fore.RED + str(e) + '|' + tracebackLineNo + Fore.RESET)
 
             case '6':
                 # Open File (Threads)
@@ -115,7 +116,7 @@ def main():
                             
                         except Exception as e:
                             tracebackLineNo = str(traceback.extract_tb(sys.exc_info()[2])[-1].lineno)
-                            print(Fore.RED + str(e) + '|' + tracebackLineNo + Fore.RESET)
+                            tqdm.write(Fore.RED + str(e) + '|' + tracebackLineNo + Fore.RESET)
 
             case '7':
                 # Open File (Threads)
@@ -129,7 +130,7 @@ def main():
                             
                         except Exception as e:
                             tracebackLineNo = str(traceback.extract_tb(sys.exc_info()[2])[-1].lineno)
-                            print(Fore.RED + str(e) + '|' + tracebackLineNo + Fore.RESET)
+                            tqdm.write(Fore.RED + str(e) + '|' + tracebackLineNo + Fore.RESET)
 
             case '8':
                 # Open File (Threads)
@@ -143,7 +144,7 @@ def main():
                             
                         except Exception as e:
                             tracebackLineNo = str(traceback.extract_tb(sys.exc_info()[2])[-1].lineno)
-                            print(Fore.RED + str(e) + '|' + tracebackLineNo + Fore.RESET)
+                            tqdm.write(Fore.RED + str(e) + '|' + tracebackLineNo + Fore.RESET)
 
             case _:
                 version = ''
@@ -154,7 +155,7 @@ def main():
             deleteFolderFiles('files')
 
         # Prevent immediately closing of CLI
-        print(totalCost)
+        tqdm.write(totalCost)
         # input('Done! Press Enter to close.')
 
 def deleteFolderFiles(folderPath):
