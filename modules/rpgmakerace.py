@@ -950,11 +950,11 @@ def searchCodes(page, pbar):
                     codeList[i]['p'][0] = translatedText
 
         ## Event Code: 101 [Name] [Optional]
-            if codeList[i]['code'] == 101 and CODE101 == True:  
+            if codeList[i]['c'] == 101 and CODE101 == True:  
                 # Grab String
                 jaString = ''  
-                if len(codeList[i]['parameters']) > 4:
-                    jaString = codeList[i]['parameters'][4]
+                if len(codeList[i]['p']) > 4:
+                    jaString = codeList[i]['p'][4]
                 if type(jaString) != str:
                     continue
 
@@ -963,15 +963,15 @@ def searchCodes(page, pbar):
                 if len(matchList) > 0:
                     if 'エスカ' in jaString:
                         speaker = 'Esuka'
-                        codeList[i]['parameters'][4] = jaString.replace(matchList[0], speaker)
+                        codeList[i]['p'][4] = jaString.replace(matchList[0], speaker)
                         continue
                     elif 'シュウ' in jaString:
                         speaker = 'Shuu'
-                        codeList[i]['parameters'][4] = jaString.replace(matchList[0], speaker)
+                        codeList[i]['p'][4] = jaString.replace(matchList[0], speaker)
                         continue
                     elif 'ワルチン総統' in jaString:
                         speaker = 'President Waltin'
-                        codeList[i]['parameters'][4] = jaString.replace(matchList[0], speaker)
+                        codeList[i]['p'][4] = jaString.replace(matchList[0], speaker)
                         continue
                     else:
                         speaker = ''
@@ -1016,8 +1016,8 @@ def searchCodes(page, pbar):
                         NAMESLIST.append(speaker)
 
             ## Event Code: 355 or 655 Scripts [Optional]
-            if (codeList[i]['code'] == 355 or codeList[i]['code'] == 655) and CODE355655 == True:
-                jaString = codeList[i]['parameters'][0]
+            if (codeList[i]['c'] == 355 or codeList[i]['c'] == 655) and CODE355655 == True:
+                jaString = codeList[i]['p'][0]
 
                 # If there isn't any Japanese in the text just skip
                 if not re.search(r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴー]+', jaString):
@@ -1053,7 +1053,7 @@ def searchCodes(page, pbar):
                     translatedText = jaString.replace(matchList[0], translatedText)
 
                     # Set Data
-                    codeList[i]['parameters'][0] = translatedText
+                    codeList[i]['p'][0] = translatedText
 
         ## Event Code: 408 (Script)
             if (codeList[i]['c'] == 408) and CODE408 == True:
@@ -1171,14 +1171,14 @@ def searchCodes(page, pbar):
                         # Using this to keep track of 401's in a row. Throws IndexError at EndOfList (Expected Behavior)
                         currentGroup.append(dtext)
 
-                        while (codeList[i+1]['code'] == 356):
+                        while (codeList[i+1]['c'] == 356):
                             # Want to translate this script
-                            if 'D_TEXT ' not in codeList[i+1]['parameters'][0]:
+                            if 'D_TEXT ' not in codeList[i+1]['p'][0]:
                                 break
 
-                            codeList[i]['parameters'][0] = ''
+                            codeList[i]['p'][0] = ''
                             i += 1
-                            jaString = codeList[i]['parameters'][0]
+                            jaString = codeList[i]['p'][0]
                             dtextList = re.findall(r'D_TEXT\s(.+)\s|D_TEXT\s(.+)', jaString)
                             if len(dtextList) > 0:
                                 if dtextList[0][0] != '':
@@ -1220,7 +1220,7 @@ def searchCodes(page, pbar):
                         translatedText = jaString.replace(originalDTEXT, translatedText)
 
                         # Set Data
-                        codeList[i]['parameters'][0] = translatedText
+                        codeList[i]['p'][0] = translatedText
                     else:
                         continue
 
@@ -1240,14 +1240,14 @@ def searchCodes(page, pbar):
                         # Using this to keep track of 401's in a row. Throws IndexError at EndOfList (Expected Behavior)
                         currentGroup.append(info)
 
-                        while (codeList[i+1]['code'] == 356):
+                        while (codeList[i+1]['c'] == 356):
                             # Want to translate this script
-                            if 'ShowInfo ' not in codeList[i+1]['parameters'][0]:
+                            if 'ShowInfo ' not in codeList[i+1]['p'][0]:
                                 break
 
-                            codeList[i]['parameters'][0] = ''
+                            codeList[i]['p'][0] = ''
                             i += 1
-                            jaString = codeList[i]['parameters'][0]
+                            jaString = codeList[i]['p'][0]
                             infoList = re.findall(r'ShowInfo (.+)', jaString)
                             if len(infoList) > 0:
                                 dtext = infoList[0]
@@ -1283,7 +1283,7 @@ def searchCodes(page, pbar):
                         translatedText = jaString.replace(originalInfo, translatedText)
 
                         # Set Data
-                        codeList[i]['parameters'][0] = translatedText
+                        codeList[i]['p'][0] = translatedText
                     else:
                         continue
 
@@ -1303,14 +1303,14 @@ def searchCodes(page, pbar):
                         # Using this to keep track of 401's in a row. Throws IndexError at EndOfList (Expected Behavior)
                         currentGroup.append(info)
 
-                        while (codeList[i+1]['code'] == 356):
+                        while (codeList[i+1]['c'] == 356):
                             # Want to translate this script
-                            if 'PushGab ' not in codeList[i+1]['parameters'][0]:
+                            if 'PushGab ' not in codeList[i+1]['p'][0]:
                                 break
 
-                            codeList[i]['parameters'][0] = ''
+                            codeList[i]['p'][0] = ''
                             i += 1
-                            jaString = codeList[i]['parameters'][0]
+                            jaString = codeList[i]['p'][0]
                             infoList = re.findall(r'PushGab [0-9]+ (.+)', jaString)
                             if len(infoList) > 0:
                                 dtext = infoList[0]
@@ -1346,14 +1346,14 @@ def searchCodes(page, pbar):
                         translatedText = jaString.replace(originalInfo, translatedText)
 
                         # Set Data
-                        codeList[i]['parameters'][0] = translatedText
+                        codeList[i]['p'][0] = translatedText
                     else:
                         continue
 
             ### Event Code: 102 Show Choice
-            if codeList[i]['code'] == 102 and CODE102 == True:
-                for choice in range(len(codeList[i]['parameters'][0])):
-                    jaString = codeList[i]['parameters'][0][choice]
+            if codeList[i]['c'] == 102 and CODE102 == True:
+                for choice in range(len(codeList[i]['p'][0])):
+                    jaString = codeList[i]['p'][0][choice]
                     jaString = jaString.replace(' 。', '.')
 
                     # Need to remove outside code and put it back later
@@ -1381,7 +1381,7 @@ def searchCodes(page, pbar):
                     # Set Data
                     totalTokens[0] += response[1][0]
                     totalTokens[1] += response[1][1]
-                    codeList[i]['parameters'][0][choice] = startString + translatedText + endString
+                    codeList[i]['p'][0][choice] = startString + translatedText + endString
 
             ### Event Code: 111 Script
             if codeList[i]['c'] == 111 and CODE111 == True:
