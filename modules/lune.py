@@ -156,7 +156,7 @@ def translateJSON(data, pbar):
 
                 # Remove any textwrap
                 if FIXTEXTWRAP == True:
-                    jaString = jaString.replace('\n', '')
+                    jaString = jaString.replace('\n', ' ')
 
                 # Translate
                 if jaString != '':
@@ -182,7 +182,7 @@ def translateJSON(data, pbar):
                 if len(textHistory) > maxHistory:
                     textHistory.pop(0)
                 currentGroup = []  
-                pbar.update(1)
+        pbar.update(1)
 
     return tokens           
 
@@ -245,7 +245,7 @@ def resubVars(translatedText, allList):
     matchList = re.findall(r'\[\s?.+?\s?\]', translatedText)
     if len(matchList) > 0:
         for match in matchList:
-            text = match.replace(' ', '')
+            text = match.strip()
             translatedText = translatedText.replace(match, text)
 
     # Icons
