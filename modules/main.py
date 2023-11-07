@@ -138,7 +138,7 @@ def main():
                 # Open File (Threads)
                 with ThreadPoolExecutor(max_workers=THREADS) as executor:
                     futures = [executor.submit(handleLune, filename, estimate) \
-                                for filename in os.listdir("files") if filename.endswith('txt')]
+                                for filename in os.listdir("files") if filename.endswith('json')]
                     
                     for future in as_completed(futures):
                         try:

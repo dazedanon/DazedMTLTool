@@ -1,4 +1,3 @@
-from concurrent.futures import ThreadPoolExecutor, as_completed
 import json
 import os
 from pathlib import Path
@@ -21,36 +20,29 @@ load_dotenv()
 openai.organization = os.getenv('org')
 openai.api_key = os.getenv('key')
 
-APICOST = .002 # Depends on the model https://openai.com/pricing
+INPUTAPICOST = .002 # Depends on the model https://openai.com/pricing
+OUTPUTAPICOST = .002
 PROMPT = Path('prompt.txt').read_text(encoding='utf-8')
-THREADS = 20
+THREADS = 10    # Controls how many threads are working on a single file (May have to drop this)
 LOCK = threading.Lock()
-WIDTH = 60
-LISTWIDTH = 75
+WIDTH = 50
+LISTWIDTH = 90
+NOTEWIDTH = 50
 MAXHISTORY = 10
 ESTIMATE = ''
-TOTALCOST = 0
-TOKENS = 0
-TOTALTOKENS = 0
+totalTokens = [0, 0]
+NAMESLIST = []
 
 #tqdm Globals
 BAR_FORMAT='{l_bar}{bar:10}{r_bar}{bar:-10b}'
 POSITION=0
 LEAVE=False
-
-# Flags
-CODE401 = True
-CODE102 = True
-CODE122 = False
-CODE101 = False
-CODE355655 = False
-CODE357 = False
-CODE356 = False
-CODE320 = False
-CODE111 = False
+BRFLAG = False   # If the game uses <br> instead
+FIXTEXTWRAP = True
+IGNORETLTEXT = False
 
 def handleLune(filename, estimate):
-    global ESTIMATE, TOKENS, TOTALTOKENS, TOTALCOST
+    global ESTIMATE, totalTokens
     ESTIMATE = estimate
 
     if estimate:
@@ -61,185 +53,139 @@ def handleLune(filename, estimate):
         end = time.time()
         tqdm.write(getResultString(translatedData, end - start, filename))
         with LOCK:
-            TOTALCOST += translatedData[1] * .001 * APICOST
-            TOTALTOKENS += translatedData[1]
+            totalTokens[0] += translatedData[1][0]
+            totalTokens[1] += translatedData[1][1]
+
+        return getResultString(['', totalTokens, None], end - start, 'TOTAL')
     
     else:
-        with open('translated/' + filename, 'w', encoding='shiftjis', newline='\n') as outFile:
-            start = time.time()
-            translatedData = openFiles(filename)
+        try:
+            with open('translated/' + filename, 'w', encoding='UTF-8') as outFile:
+                start = time.time()
+                translatedData = openFiles(filename)
 
-            # Print Result
-            end = time.time()
-            outFile.writelines(translatedData[0])
-            tqdm.write(getResultString(translatedData, end - start, filename))
-            with LOCK:
-                TOTALCOST += translatedData[1] * .001 * APICOST
-                TOTALTOKENS += translatedData[1]
+                # Print Result
+                end = time.time()
+                json.dump(translatedData[0], outFile, ensure_ascii=False)
+                tqdm.write(getResultString(translatedData, end - start, filename))
+                with LOCK:
+                    totalTokens[0] += translatedData[1][0]
+                    totalTokens[1] += translatedData[1][1]
+        except Exception as e:
+            return 'Fail'
 
-    return getResultString(['', TOTALTOKENS, None], end - start, 'TOTAL')
+    return getResultString(['', totalTokens, None], end - start, 'TOTAL')
 
 def openFiles(filename):
-    with open('files/' + filename, 'r', encoding='shiftjis') as f:
-        translatedData = parseText(f, filename)
+    with open('files/' + filename, 'r', encoding='UTF-8-sig') as f:
+        data = json.load(f)
+
+        # Map Files
+        if '.json' in filename:
+            translatedData = parseJSON(data, filename)
+
+        else:
+            raise NameError(filename + ' Not Supported')
     
     return translatedData
 
 def getResultString(translatedData, translationTime, filename):
     # File Print String
-    tokenString = Fore.YELLOW + '[' + str(translatedData[1]) + \
-        ' Tokens/${:,.4f}'.format(translatedData[1] * .001 * APICOST) + ']'
+    totalTokenstring =\
+        Fore.YELLOW +\
+        '[Input: ' + str(translatedData[1][0]) + ']'\
+        '[Output: ' + str(translatedData[1][1]) + ']'\
+        '[Cost: ${:,.4f}'.format((translatedData[1][0] * .001 * INPUTAPICOST) +\
+        (translatedData[1][1] * .001 * OUTPUTAPICOST)) + ']'
     timeString = Fore.BLUE + '[' + str(round(translationTime, 1)) + 's]'
 
     if translatedData[2] == None:
         # Success
-        return filename + ': ' + tokenString + timeString + Fore.GREEN + u' \u2713 ' + Fore.RESET
+        return filename + ': ' + totalTokenstring + timeString + Fore.GREEN + u' \u2713 ' + Fore.RESET
 
     else:
         # Fail
         try:
             raise translatedData[2]
         except Exception as e:
+            traceback.print_exc()
             errorString = str(e) + Fore.RED
-            return filename + ': ' + tokenString + timeString + Fore.RED + u' \u2717 ' +\
+            return filename + ': ' + totalTokenstring + timeString + Fore.RED + u' \u2717 ' +\
                 errorString + Fore.RESET
         
-def parseText(data, filename):
-    totalTokens = 0
+def parseJSON(data, filename):
+    totalTokens = [0, 0]
     totalLines = 0
+    totalLines = len(data)
     global LOCK
-
-    # Get total for progress bar
-    linesList = data.readlines()
-    totalLines = len(linesList)
     
     with tqdm(bar_format=BAR_FORMAT, position=POSITION, total=totalLines, leave=LEAVE) as pbar:
         pbar.desc=filename
         pbar.total=totalLines
         try:
-            response = translateText(linesList, pbar)
+            result = translateJSON(data, pbar)
+            totalTokens[0] += result[0]
+            totalTokens[1] += result[1]
         except Exception as e:
             traceback.print_exc()
-            return [linesList, 0, e]
-    return [response[0], response[1], None]
+            return [data, totalTokens, e]
+    return [data, totalTokens, None]
 
-def translateText(data, pbar):
+def translateJSON(data, pbar):
     textHistory = []
     maxHistory = MAXHISTORY
-    tokens = 0
-    speaker = ''
-    speakerFlag = False
-    syncIndex = 0
+    tokens = [0, 0]
+    speaker = 'None'
 
-    ### Translation
-    for i in range(len(data)):
-        if syncIndex > i:
-            i = syncIndex
+    for item in data:
+        # Speaker
+        if 'name' in item:
+            if item['name'] not in [None, '-']:
+                response = translateGPT(item['name'], 'Reply with only the english translation of the NPC name', False)
+                speaker = response[0]
+                tokens[0] += response[1][0]
+                tokens[1] += response[1][1]
+                item['name'] = speaker
+            else:
+                speaker = 'None'
 
-        # Finish if at end
-        if i+1 > len(data):
-            return [data, tokens]
+        # Text
+        if 'message' in item:
+            if item['message'] != None:
+                jaString = item['message']
 
-        # Remove newlines
-        jaString = data[i]
-        jaString = jaString.replace('\\n', '')
-        jaString = jaString.replace('\n', '')
+                # Remove any textwrap
+                if FIXTEXTWRAP == True:
+                    jaString = jaString.replace('\n', '')
 
-
-        # Choices
-        if '0100410000000' in jaString:
-            decodedBITCH = bytes.fromhex(jaString).decode('shiftjis')
-
-            matchList = re.findall(r'd(.+?),', decodedBITCH)
-            if len(matchList) > 0:
-                for match in matchList:
-                    response = translateGPT(match, 'Keep your translation as brief as possible. Previous text: ' + textHistory[len(textHistory)-1] + '\n\nReply in the style of a dialogue option.', True)
-                    tokens += response[1]
+                # Translate
+                if jaString != '':
+                    response = translateGPT(f'{speaker} | {jaString}', textHistory, True)
+                    tokens[0] += response[1][0]
+                    tokens[1] += response[1][1]
                     translatedText = response[0]
+                    textHistory.append('\"' + translatedText + '\"')  
+                else:
+                    translatedText = jaString
+                    textHistory.append('\"' + translatedText + '\"')
 
-                    # Remove characters that may break scripts
-                    charList = ['.', '\"', '\\n']
-                    for char in charList:
-                        translatedText = translatedText.replace(char, '')
-                        
-                    decodedBITCH = decodedBITCH.replace(match, translatedText.replace(' ', '\u3000'))
-                data[i] = decodedBITCH.encode('shift-jis').hex() + '\n'
-                continue
+                # Remove added speaker
+                translatedText = re.sub(r'^.+?\s\|\s?', '', translatedText)
 
-        # Reset Speaker
-        if '00000000' == jaString:
-            i += 1
-            pbar.update(1)
-            speaker = ''
-            jaString = data[i]
+                # Textwrap
+                translatedText = textwrap.fill(translatedText, width=WIDTH)
 
-        # Grab and Translate Speaker
-        elif re.search(r'^0000[1-9]000$', jaString):
-            i += 1
-            pbar.update(1)
-            jaString = data[i].replace('\n', '')
-            jaString = jaString.replace('拓海', 'Takumi')
-            jaString = jaString.replace('こはる', 'Koharu')
-            jaString = jaString.replace('理央', 'Rio')
-            jaString = jaString.replace('アリサ', 'Arisa')
-            jaString = jaString.replace('友里子', 'Yuriko')
-            
-            # Translate Speaker
-            response = translateGPT(jaString, 'Reply with only the english translation of the NPC name', True)
-            tokens += response[1]
-            speaker = response[0].strip('.')
-            data[i] = speaker + '\n'
+                # Set Data
+                item['message'] = translatedText
 
-            # Set index to line
-            i += 1
+                # Keep textHistory list at length maxHistory
+                if len(textHistory) > maxHistory:
+                    textHistory.pop(0)
+                currentGroup = []  
+                pbar.update(1)
 
-        else:
-            pbar.update(1)
-            continue
-        
-        # Translate
-        finalJAString = data[i]
+    return tokens           
 
-        # Remove Textwrap
-        finalJAString = finalJAString.replace('\\n', ' ')
-        finalJAString = finalJAString.replace('\n', ' ')
-
-        if speaker == '':
-            speaker = 'Takumi'
-        response = translateGPT(speaker + ': ' + finalJAString, textHistory, True)
-        tokens += response[1]
-        translatedText = response[0]
-
-        # Remove Textwrap
-        translatedText = translatedText.replace('\\n', ' ')
-        translatedText = translatedText.replace('\n', ' ')
-        
-        # Remove added speaker and quotes
-        translatedText = re.sub(r'^.+?:\s', '', translatedText)
-
-        # TextHistory is what we use to give GPT Context, so thats appended here.
-        if speaker != '':
-            textHistory.append(speaker + ': ' + translatedText)
-        elif speakerFlag == False:
-            textHistory.append('\"' + translatedText + '\"')
-
-        # Keep textHistory list at length maxHistory
-        if len(textHistory) > maxHistory:
-            textHistory.pop(0)
-        currentGroup = []  
-
-        # Textwrap
-        translatedText = textwrap.fill(translatedText, width=WIDTH)
-        translatedText = translatedText.replace(',\n', ', \n')
-        translatedText = translatedText.replace('\n', '\\n')
-        translatedText = translatedText.replace(',\\n', ', \\n')
-
-        # Set Data
-        data[i] = translatedText + '\n'
-        syncIndex = i + 1
-        pbar.update(1)
-    return [data, tokens]
-        
 def subVars(jaString):
     jaString = jaString.replace('\u3000', ' ')
 
@@ -347,9 +293,18 @@ def resubVars(translatedText, allList):
 def translateGPT(t, history, fullPromptFlag):
     # If ESTIMATE is True just count this as an execution and return.
     if ESTIMATE:
-        enc = tiktoken.encoding_for_model("gpt-4")
-        tokens = len(enc.encode(t)) * 2 + len(enc.encode(str(history))) + len(enc.encode(PROMPT))
-        return (t, tokens)
+        enc = tiktoken.encoding_for_model("gpt-3.5-turbo")
+        historyRaw = ''
+        if isinstance(history, list):
+            for line in history:
+                historyRaw += line
+        else:
+            historyRaw = history
+
+        inputTotalTokens = len(enc.encode(historyRaw)) + len(enc.encode(PROMPT))
+        outputTotalTokens = len(enc.encode(t)) * 2   # Estimating 2x the size of the original text
+        totalTokens = [inputTotalTokens, outputTotalTokens]
+        return (t, totalTokens)
     
     # Sub Vars
     varResponse = subVars(t)
@@ -357,16 +312,15 @@ def translateGPT(t, history, fullPromptFlag):
 
     # If there isn't any Japanese in the text just skip
     if not re.search(r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴ]+|[\uFF00-\uFFEF]', subbedT):
-        return(t, 0)
+        return(t, [0,0])
 
     # Characters
     context = '```\
         Game Characters:\
-        Character: 池ノ上 拓海 == Ikenoue Takumi - Gender: Male\
-        Character: 福永 こはる == Fukunaga Koharu - Gender: Female\
+        Character: ソル == Sol - Gender: Female\
+        Character: ェニ先生 == Eni-sensei - Gender: Female\
         Character: 神泉 理央 == Kamiizumi Rio - Gender: Female\
         Character: 吉祥寺 アリサ == Kisshouji Arisa - Gender: Female\
-        Character: 久我 友里子 == Kuga Yuriko - Gender: Female\
         ```'
 
     # Prompt
@@ -392,14 +346,14 @@ def translateGPT(t, history, fullPromptFlag):
         temperature=0.1,
         frequency_penalty=0.2,
         presence_penalty=0.2,
-        model="gpt-3.5-turbo",
+        model="gpt-3.5-turbo-1106",
         messages=msg,
         request_timeout=30,
     )
 
     # Save Translated Text
     translatedText = response.choices[0].message.content
-    tokens = response.usage.total_tokens
+    totalTokens = [response.usage.prompt_tokens, response.usage.completion_tokens]
 
     # Resub Vars
     translatedText = resubVars(translatedText, varResponse[1])
@@ -422,4 +376,4 @@ def translateGPT(t, history, fullPromptFlag):
     if len(translatedText) > 15 * len(t) or "I'm sorry, but I'm unable to assist with that translation" in translatedText:
         raise Exception
     else:
-        return [translatedText, tokens]
+        return [translatedText, totalTokens]
