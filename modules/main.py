@@ -14,7 +14,9 @@ from modules.json import handleJSON
 from modules.kansen import handleKansen
 from modules.lune import handleLune
 
-THREADS = 5 # For GPT4 rate limit will be hit if you have more than 1 thread.
+# For GPT4 rate limit will be hit if you have more than 1 thread.
+# 1 Thread for each file. Controls how many files are worked on at once.
+THREADS = 5
 
 # Info Message
 tqdm.write(Fore.LIGHTYELLOW_EX + "WARNING: Once a translation starts do not close it unless you want to lose your\
