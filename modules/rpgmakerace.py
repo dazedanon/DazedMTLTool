@@ -25,7 +25,7 @@ openai.api_key = os.getenv('key')
 INPUTAPICOST = .002 # Depends on the model https://openai.com/pricing
 OUTPUTAPICOST = .002
 PROMPT = Path('prompt.txt').read_text(encoding='utf-8')
-THREADS = 10
+THREADS = 10    # Controls how many threads are working on a single file (May have to drop this)
 LOCK = threading.Lock()
 WIDTH = 50
 LISTWIDTH = 90
