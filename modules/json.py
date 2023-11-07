@@ -149,39 +149,40 @@ def translateJSON(data, pbar):
                 speaker = 'None'
 
         # Text
-        if 'text' in item[1]:
-            if item[1]['text'] != None:
-                jaString = item[1]['text']
+        for text in ['text', 'help1', 'help2', 'help3', 'like', 'message']:
+            if text in item[1]:
+                if item[1][text] != None:
+                    jaString = item[1][text]
 
-                # Remove any textwrap
-                if FIXTEXTWRAP == True:
-                    jaString = jaString.replace('\n', '')
+                    # Remove any textwrap
+                    if FIXTEXTWRAP == True:
+                        jaString = jaString.replace('\n', ' ')
 
-                # Translate
-                if jaString != '':
-                    response = translateGPT(f'{speaker} | {jaString}', textHistory, True)
-                    tokens[0] += response[1][0]
-                    tokens[1] += response[1][1]
-                    translatedText = response[0]
-                    textHistory.append('\"' + translatedText + '\"')  
-                else:
-                    translatedText = jaString
-                    textHistory.append('\"' + translatedText + '\"')
+                    # Translate
+                    if jaString != '':
+                        response = translateGPT(f'{speaker} | {jaString}', textHistory, True)
+                        tokens[0] += response[1][0]
+                        tokens[1] += response[1][1]
+                        translatedText = response[0]
+                        textHistory.append('\"' + translatedText + '\"')  
+                    else:
+                        translatedText = jaString
+                        textHistory.append('\"' + translatedText + '\"')
 
-                # Remove added speaker
-                translatedText = re.sub(r'^.+?\s\|\s?', '', translatedText)
+                    # Remove added speaker
+                    translatedText = re.sub(r'^.+?\s\|\s?', '', translatedText)
 
-                # Textwrap
-                translatedText = textwrap.fill(translatedText, width=WIDTH)
+                    # Textwrap
+                    translatedText = textwrap.fill(translatedText, width=WIDTH)
 
-                # Set Data
-                item[1]['text'] = translatedText
+                    # Set Data
+                    item[1][text] = translatedText
 
-                # Keep textHistory list at length maxHistory
-                if len(textHistory) > maxHistory:
-                    textHistory.pop(0)
-                currentGroup = []  
-                pbar.update(1)
+                    # Keep textHistory list at length maxHistory
+                    if len(textHistory) > maxHistory:
+                        textHistory.pop(0)
+                    currentGroup = []  
+        pbar.update(1)
 
     return tokens           
 
@@ -244,7 +245,7 @@ def resubVars(translatedText, allList):
     matchList = re.findall(r'\[\s?.+?\s?\]', translatedText)
     if len(matchList) > 0:
         for match in matchList:
-            text = match.replace(' ', '')
+            text = match.strip()
             translatedText = translatedText.replace(match, text)
 
     # Icons

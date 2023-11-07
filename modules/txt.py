@@ -263,7 +263,7 @@ def resubVars(translatedText, allList):
     matchList = re.findall(r'<\s?.+?\s?>', translatedText)
     if len(matchList) > 0:
         for match in matchList:
-            text = match.replace(' ', '')
+            text = match.strip()
             translatedText = translatedText.replace(match, text)
 
     # Icons
