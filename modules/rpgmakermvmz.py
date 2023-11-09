@@ -26,9 +26,9 @@ OUTPUTAPICOST = .002
 PROMPT = Path('prompt.txt').read_text(encoding='utf-8')
 THREADS = 10    # Controls how many threads are working on a single file (May have to drop this)
 LOCK = threading.Lock()
-WIDTH = 50
-LISTWIDTH = 90
-NOTEWIDTH = 50
+WIDTH = 40
+LISTWIDTH = 50
+NOTEWIDTH = 40
 MAXHISTORY = 10
 ESTIMATE = ''
 totalTokens = [0, 0]
@@ -56,8 +56,8 @@ CODE408 = False
 CODE108 = False
 NAMES = False    # Output a list of all the character names found
 BRFLAG = False   # If the game uses <br> instead
-FIXTEXTWRAP = True
-IGNORETLTEXT = False
+FIXTEXTWRAP = False
+IGNORETLTEXT = True
 
 def handleMVMZ(filename, estimate):
     global ESTIMATE, totalTokens
