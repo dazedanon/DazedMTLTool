@@ -149,7 +149,7 @@ def translateJSON(data, pbar):
                 speaker = 'None'
 
         # Text
-        for text in ['text', 'help1', 'help2', 'help3', 'like', 'message']:
+        for text in ['text', 'text2', 'help1', 'help2', 'help3', 'like', 'message']:
             if text in item[1]:
                 if item[1][text] != None:
                     jaString = item[1][text]
