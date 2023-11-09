@@ -13,6 +13,7 @@ from modules.tyrano import handleTyrano
 from modules.json import handleJSON
 from modules.kansen import handleKansen
 from modules.lune import handleLune
+from modules.lune2 import handleLuneTxt
 
 # For GPT4 rate limit will be hit if you have more than 1 thread.
 # 1 Thread for each file. Controls how many files are worked on at once.
@@ -137,8 +138,8 @@ def main():
             case '8':
                 # Open File (Threads)
                 with ThreadPoolExecutor(max_workers=THREADS) as executor:
-                    futures = [executor.submit(handleLune, filename, estimate) \
-                                for filename in os.listdir("files") if filename.endswith('json')]
+                    futures = [executor.submit(handleLuneTxt, filename, estimate) \
+                                for filename in os.listdir("files") if filename.endswith('txt')]
                     
                     for future in as_completed(futures):
                         try:
