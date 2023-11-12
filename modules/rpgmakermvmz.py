@@ -405,6 +405,12 @@ def parseScenario(data, filename):
 def searchThings(name, pbar):
     totalTokens = [0, 0]
 
+    # If there isn't any Japanese in the text just skip
+    if IGNORETLTEXT == True:
+        if not re.search(r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴー]+', name['name']) and re.search(r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴー]+', name['description']):
+            pbar.update(1)
+            return totalTokens
+
     # Name
     nameResponse = translateGPT(name['name'], 'Reply with only the english translation of the RPG item name.', False) if 'name' in name else ''
 
@@ -1654,7 +1660,7 @@ def subVars(jaString):
     iconList = set(iconList)
     if len(iconList) != 0:
         for icon in iconList:
-            jaString = jaString.replace(icon, '[Ascii_' + str(count) + ']')
+            jaString = jaString.replace(icon, '{Ascii_' + str(count) + '}')
             count += 1
 
     # Colors
@@ -1663,7 +1669,7 @@ def subVars(jaString):
     colorList = set(colorList)
     if len(colorList) != 0:
         for color in colorList:
-            jaString = jaString.replace(color, '[Color_' + str(count) + ']')
+            jaString = jaString.replace(color, '{Color_' + str(count) + '}')
             count += 1
 
     # Names
@@ -1672,7 +1678,7 @@ def subVars(jaString):
     nameList = set(nameList)
     if len(nameList) != 0:
         for name in nameList:
-            jaString = jaString.replace(name, '[N_' + str(count) + ']')
+            jaString = jaString.replace(name, '{N_' + str(count) + '}')
             count += 1
 
     # Variables
@@ -1681,7 +1687,7 @@ def subVars(jaString):
     varList = set(varList)
     if len(varList) != 0:
         for var in varList:
-            jaString = jaString.replace(var, '[Var_' + str(count) + ']')
+            jaString = jaString.replace(var, '{Var_' + str(count) + '}')
             count += 1
 
     # Formatting
@@ -1692,7 +1698,7 @@ def subVars(jaString):
     formatList = set(formatList)
     if len(formatList) != 0:
         for var in formatList:
-            jaString = jaString.replace(var, '[FCode_' + str(count) + ']')
+            jaString = jaString.replace(var, '{FCode_' + str(count) + '}')
             count += 1
 
     # Put all lists in list and return
@@ -1711,35 +1717,35 @@ def resubVars(translatedText, allList):
     count = 0
     if len(allList[0]) != 0:
         for var in allList[0]:
-            translatedText = translatedText.replace('[Ascii_' + str(count) + ']', var)
+            translatedText = translatedText.replace('{Ascii_' + str(count) + '}', var)
             count += 1
 
     # Colors
     count = 0
     if len(allList[1]) != 0:
         for var in allList[1]:
-            translatedText = translatedText.replace('[Color_' + str(count) + ']', var)
+            translatedText = translatedText.replace('{Color_' + str(count) + '}', var)
             count += 1
 
     # Names
     count = 0
     if len(allList[2]) != 0:
         for var in allList[2]:
-            translatedText = translatedText.replace('[N_' + str(count) + ']', var)
+            translatedText = translatedText.replace('{N_' + str(count) + '}', var)
             count += 1
 
     # Vars
     count = 0
     if len(allList[3]) != 0:
         for var in allList[3]:
-            translatedText = translatedText.replace('[Var_' + str(count) + ']', var)
+            translatedText = translatedText.replace('{Var_' + str(count) + '}', var)
             count += 1
     
     # Formatting
     count = 0
     if len(allList[4]) != 0:
         for var in allList[4]:
-            translatedText = translatedText.replace('[FCode_' + str(count) + ']', var)
+            translatedText = translatedText.replace('{FCode_' + str(count) + '}', var)
             count += 1
 
     # Remove Color Variables Spaces
@@ -1774,13 +1780,15 @@ def translateGPT(t, history, fullPromptFlag):
         return(t, [0,0])
 
     # Characters
-    context = '```\
-        Game Characters:\
-        Character: ソル == Sol - Gender: Female\
-        Character: ェニ先生 == Eni-sensei - Gender: Female\
-        Character: 神泉 理央 == Kamiizumi Rio - Gender: Female\
-        Character: 吉祥寺 アリサ == Kisshouji Arisa - Gender: Female\
-        ```'
+    context = 'Game Characters:\
+        Character: 莉音 == Rio - Gender: Female\
+        Character: 結衣 == Yui - Gender: Female\
+        Character: 美雪 == Miyuki - Gender: Female\
+        Character: あかり == Akari - Gender: Female\
+        Character: カガミ == Kagami - Gender: Female\
+        Character: ミズキ == Mizuki - Gender: Female\
+        Character: スズカ == Suzuka - Gender: Female\
+        Character: シズク == Shizuku - Gender: Female'
 
     # Prompt
     if fullPromptFlag:
