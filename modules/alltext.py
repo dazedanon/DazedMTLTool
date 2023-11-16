@@ -28,8 +28,8 @@ APICOST = .002 # Depends on the model https://openai.com/pricing
 PROMPT = Path('prompt.txt').read_text(encoding='utf-8')
 THREADS = int(os.getenv('threads')) # For GPT4 rate limit will be hit if you have more than 1 thread.
 LOCK = threading.Lock()
-WIDTH = 60
-LISTWIDTH = 60
+WIDTH = int(os.getenv('width'))
+LISTWIDTH = int(os.getenv('listWidth'))
 MAXHISTORY = 10
 ESTIMATE = ''
 TOTALCOST = 0

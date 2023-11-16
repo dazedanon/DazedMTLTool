@@ -29,8 +29,8 @@ OUTPUTAPICOST = .002
 PROMPT = Path('prompt.txt').read_text(encoding='utf-8')
 THREADS = int(os.getenv('threads')) # Controls how many threads are working on a single file (May have to drop this)
 LOCK = threading.Lock()
-WIDTH = 40
-LISTWIDTH = 50
+WIDTH = int(os.getenv('width'))
+LISTWIDTH = int(os.getenv('listWidth'))
 NOTEWIDTH = 40
 MAXHISTORY = 10
 ESTIMATE = ''
