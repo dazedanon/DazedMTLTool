@@ -16,12 +16,15 @@ from tqdm import tqdm
 
 #Globals
 load_dotenv()
+openai.api_base = os.getenv('proxy')
 openai.organization = os.getenv('org')
 openai.api_key = os.getenv('key')
+MODEL = os.getenv('model')
+TIMEOUT = int(os.getenv('timeout'))
 
 APICOST = .002 # Depends on the model https://openai.com/pricing
 PROMPT = Path('prompt.txt').read_text(encoding='utf-8')
-THREADS = 10 # For GPT4 rate limit will be hit if you have more than 1 thread.
+THREADS = int(os.getenv('threads')) # For GPT4 rate limit will be hit if you have more than 1 thread.
 LOCK = threading.Lock()
 WIDTH = 60
 LISTWIDTH = 60
@@ -461,7 +464,7 @@ def resubVars(translatedText, allList):
 def translateGPT(t, history, fullPromptFlag):
     # If ESTIMATE is True just count this as an execution and return.
     if ESTIMATE:
-        enc = tiktoken.encoding_for_model("gpt-4")
+        enc = tiktoken.encoding_for_model(MODEL)
         tokens = len(enc.encode(t)) * 2 + len(enc.encode(str(history))) + len(enc.encode(PROMPT))
         return (t, tokens)
     
@@ -506,9 +509,9 @@ def translateGPT(t, history, fullPromptFlag):
         temperature=0.1,
         frequency_penalty=0.2,
         presence_penalty=0.2,
-        model="gpt-3.5-turbo",
+        model=MODEL,
         messages=msg,
-        request_timeout=30,
+        request_timeout=TIMEOUT,
     )
 
     # Save Translated Text

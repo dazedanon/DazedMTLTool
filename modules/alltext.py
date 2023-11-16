@@ -18,12 +18,15 @@ from tqdm import tqdm
 
 #Globals
 load_dotenv()
+openai.api_base = os.getenv('proxy')
 openai.organization = os.getenv('org')
 openai.api_key = os.getenv('key')
+MODEL = os.getenv('model')
+TIMEOUT = int(os.getenv('timeout'))
 
 APICOST = .002 # Depends on the model https://openai.com/pricing
 PROMPT = Path('prompt.txt').read_text(encoding='utf-8')
-THREADS = 10 # For GPT4 rate limit will be hit if you have more than 1 thread.
+THREADS = int(os.getenv('threads')) # For GPT4 rate limit will be hit if you have more than 1 thread.
 LOCK = threading.Lock()
 WIDTH = 60
 LISTWIDTH = 60
@@ -94,7 +97,7 @@ def getResultString(translatedData, translationTime, filename):
 def translateGPT(t, history, fullPromptFlag):
     # If ESTIMATE is True just count this as an execution and return.
     if ESTIMATE:
-        enc = tiktoken.encoding_for_model("gpt-4")
+        enc = tiktoken.encoding_for_model(MODEL)
         tokens = len(enc.encode(t)) * 2 + len(enc.encode(str(history))) + len(enc.encode(PROMPT))
         return (t, tokens)
     
@@ -103,17 +106,17 @@ def translateGPT(t, history, fullPromptFlag):
     subbedT = varResponse[0]
 
     # If there isn't any Japanese in the text just skip
-    if not re.search(r'[ˆê-êž]+|[‚Ÿ-?]+|[ƒ@-ƒ”]+|[\uFF00-\uFFEF]', subbedT):
+    if not re.search(r'[ï¿½ï¿½-ï¿½]+|[ï¿½ï¿½-?]+|[ï¿½@-ï¿½ï¿½]+|[\uFF00-\uFFEF]', subbedT):
         return(t, 0)
 
     # Characters
     context = '```\
         Game Characters:\
-        Character: ’rƒmã ‘ñŠC == Ikenoue Takumi - Gender: Male\
-        Character: •Ÿ‰i ‚±‚Í‚é == Fukunaga Koharu - Gender: Female\
-        Character: _ò —‰› == Kamiizumi Rio - Gender: Female\
-        Character: ‹gËŽ› ƒAƒŠƒT == Kisshouji Arisa - Gender: Female\
-        Character: ‹v‰ä —F—¢Žq == Kuga Yuriko - Gender: Female\
+        Character: ï¿½rï¿½mï¿½ï¿½ ï¿½ï¿½C == Ikenoue Takumi - Gender: Male\
+        Character: ï¿½ï¿½ï¿½i ï¿½ï¿½ï¿½Í‚ï¿½ == Fukunaga Koharu - Gender: Female\
+        Character: ï¿½_ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ == Kamiizumi Rio - Gender: Female\
+        Character: ï¿½gï¿½ËŽï¿½ ï¿½Aï¿½ï¿½ï¿½T == Kisshouji Arisa - Gender: Female\
+        Character: ï¿½vï¿½ï¿½ ï¿½Fï¿½ï¿½ï¿½q == Kuga Yuriko - Gender: Female\
         ```'
 
     # Prompt
@@ -139,9 +142,9 @@ def translateGPT(t, history, fullPromptFlag):
         temperature=0.1,
         frequency_penalty=0.2,
         presence_penalty=0.2,
-        model="gpt-3.5-turbo",
+        model=MODEL,
         messages=msg,
-        request_timeout=30,
+        request_timeout=TIMEOUT,
     )
 
     # Save Translated Text
@@ -163,7 +166,7 @@ def translateGPT(t, history, fullPromptFlag):
     translatedText = translatedText.replace('Translation =', '')
     translatedText = translatedText.replace('Translate =', '')
     translatedText = re.sub(r'Note:.*', '', translatedText)
-    translatedText = translatedText.replace('‚Á', '')
+    translatedText = translatedText.replace('ï¿½ï¿½', '')
 
     # Return Translation
     if len(translatedText) > 15 * len(t) or "I'm sorry, but I'm unable to assist with that translation" in translatedText:
