@@ -28,7 +28,7 @@ APICOST = .002 # Depends on the model https://openai.com/pricing
 PROMPT = Path('prompt.txt').read_text(encoding='utf-8')
 THREADS = int(os.getenv('threads'))
 LOCK = threading.Lock()
-WIDTH = 60
+WIDTH = int(os.getenv('width'))
 MAXHISTORY = 10
 ESTIMATE = ''
 TOTALCOST = 0
