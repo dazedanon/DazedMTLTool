@@ -109,12 +109,11 @@ def translateGPT(t, history, fullPromptFlag):
 
     # Characters
     context = '```\
-        Game Characters:\
-        Character: �r�m�� ��C == Ikenoue Takumi - Gender: Male\
-        Character: ���i ���͂� == Fukunaga Koharu - Gender: Female\
-        Character: �_�� ���� == Kamiizumi Rio - Gender: Female\
-        Character: �g�ˎ� �A���T == Kisshouji Arisa - Gender: Female\
-        Character: �v�� �F���q == Kuga Yuriko - Gender: Female\
+        Character: 池ノ上 拓海 == Ikenoue Takumi - Gender: Male\
+        Character: 福永 こはる == Fukunaga Koharu - Gender: Female\
+        Character: 神泉 理央 == Kamiizumi Rio - Gender: Female\
+        Character: 吉祥寺 アリサ == Kisshouji Arisa - Gender: Female\
+        Character: 久我 友里子 == Kuga Yuriko - Gender: Female\
         ```'
 
     # Prompt
@@ -159,7 +158,7 @@ def translateGPT(t, history, fullPromptFlag):
     translatedText = translatedText.replace(LANGUAGE + ' Translation = ', '')
     translatedText = translatedText.replace('Translate = ', '')
     translatedText = re.sub(r'Note:.*', '', translatedText)
-    translatedText = translatedText.replace('��', '')
+    translatedText = translatedText.replace('っ', '')
 
     # Return Translation
     if len(translatedText) > 15 * len(t) or "I'm sorry, but I'm unable to assist with that translation" in translatedText:
