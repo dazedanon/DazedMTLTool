@@ -104,7 +104,7 @@ def translateGPT(t, history, fullPromptFlag):
     subbedT = varResponse[0]
 
     # If there isn't any Japanese in the text just skip
-    if not re.search(r'[��-�]+|[��-?]+|[�@-��]+|[\uFF00-\uFFEF]', subbedT):
+    if not re.search(r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴ]+|[\uFF00-\uFFEF]', subbedT):
         return (t, 0)
 
     # Characters
