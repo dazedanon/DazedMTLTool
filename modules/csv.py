@@ -23,6 +23,7 @@ openai.organization = os.getenv('org')
 openai.api_key = os.getenv('key')
 MODEL = os.getenv('model')
 TIMEOUT = int(os.getenv('timeout'))
+LANGUAGE=os.getenv('language').capitalize()
 
 APICOST = .002 # Depends on the model https://openai.com/pricing
 PROMPT = Path('prompt.txt').read_text(encoding='utf-8')
@@ -174,7 +175,7 @@ def translateCSV(row, pbar, writer, textHistory, format):
                         text = match[1]
 
                         # Translate Speaker
-                        response = translateGPT (speaker, 'Reply with the English translation of the NPC name.', True)
+                        response = translateGPT (speaker, 'Reply with the '+ LANGUAGE +' translation of the NPC name.', True)
                         translatedSpeaker = response[0]
                         tokens += response[1]
 
@@ -350,7 +351,7 @@ def translateGPT(t, history, fullPromptFlag):
         system = PROMPT
         user = 'Line to Translate = ' + subbedT
     else:
-        system = 'Output ONLY the english translation in the following format: `Translation: <ENGLISH_TRANSLATION>`' 
+        system = 'Output ONLY the '+ LANGUAGE +' translation in the following format: `Translation: <'+ LANGUAGE.upper() +'_TRANSLATION>`' 
         user = 'Line to Translate = ' + subbedT
 
     # Create Message List
@@ -381,12 +382,12 @@ def translateGPT(t, history, fullPromptFlag):
     translatedText = resubVars(translatedText, varResponse[1])
 
     # Remove Placeholder Text
-    translatedText = translatedText.replace('English Translation: ', '')
+    translatedText = translatedText.replace(LANGUAGE +' Translation: ', '')
     translatedText = translatedText.replace('Translation: ', '')
     translatedText = translatedText.replace('Line to Translate = ', '')
     translatedText = translatedText.replace('Translation = ', '')
     translatedText = translatedText.replace('Translate = ', '')
-    translatedText = translatedText.replace('English Translation:', '')
+    translatedText = translatedText.replace(LANGUAGE +' Translation:', '')
     translatedText = translatedText.replace('Translation:', '')
     translatedText = translatedText.replace('Line to Translate =', '')
     translatedText = translatedText.replace('Translation =', '')
