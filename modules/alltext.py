@@ -16,15 +16,16 @@ import openai
 from retry import retry
 from tqdm import tqdm
 
-#Globals
+# Globals
 load_dotenv()
 openai.api_base = os.getenv('proxy')
 openai.organization = os.getenv('org')
 openai.api_key = os.getenv('key')
 MODEL = os.getenv('model')
 TIMEOUT = int(os.getenv('timeout'))
+LANGUAGE = os.getenv('language').capitalize()
 
-APICOST = .002 # Depends on the model https://openai.com/pricing
+APICOST = .002  # Depends on the model https://openai.com/pricing
 PROMPT = Path('prompt.txt').read_text(encoding='utf-8')
 THREADS = int(os.getenv('threads')) # For GPT4 rate limit will be hit if you have more than 1 thread.
 LOCK = threading.Lock()
@@ -37,10 +38,10 @@ TOKENS = 0
 TOTALTOKENS = 0
 NAMESLIST = []
 
-#tqdm Globals
-BAR_FORMAT='{l_bar}{bar:10}{r_bar}{bar:-10b}'
-POSITION=0
-LEAVE=False
+# tqdm Globals
+BAR_FORMAT = '{l_bar}{bar:10}{r_bar}{bar:-10b}'
+POSITION = 0
+LEAVE = False
 
 def handleAllText(filename, estimate):
     global ESTIMATE, TOKENS, TOTALTOKENS, TOTALCOST
@@ -58,7 +59,7 @@ def handleAllText(filename, estimate):
         TOTALTOKENS += TOKENS
         TOKENS = 0
         os.remove('translated/' + filename)
-    
+
     else:
         # Print Result
         end = time.time()
@@ -77,7 +78,7 @@ def openFiles(filename, writeFile):
 def getResultString(translatedData, translationTime, filename):
     # File Print String
     tokenString = Fore.YELLOW + '[' + str(translatedData[1]) + \
-        ' Tokens/${:,.4f}'.format(translatedData[1] * .001 * APICOST) + ']'
+                  ' Tokens/${:,.4f}'.format(translatedData[1] * .001 * APICOST) + ']'
     timeString = Fore.BLUE + '[' + str(round(translationTime, 1)) + 's]'
 
     if translatedData[2] == None:
@@ -90,9 +91,9 @@ def getResultString(translatedData, translationTime, filename):
             raise translatedData[2]
         except Exception as e:
             errorString = str(e) + '|' + translatedData[3] + Fore.RED
-            return filename + ': ' + tokenString + timeString + Fore.RED + u' \u2717 ' +\
-                errorString + Fore.RESET
-        
+            return filename + ': ' + tokenString + timeString + Fore.RED + u' \u2717 ' + \
+                   errorString + Fore.RESET
+
 @retry(exceptions=Exception, tries=5, delay=5)
 def translateGPT(t, history, fullPromptFlag):
     # If ESTIMATE is True just count this as an execution and return.
@@ -100,23 +101,22 @@ def translateGPT(t, history, fullPromptFlag):
         enc = tiktoken.encoding_for_model(MODEL)
         tokens = len(enc.encode(t)) * 2 + len(enc.encode(str(history))) + len(enc.encode(PROMPT))
         return (t, tokens)
-    
+
     # Sub Vars
     varResponse = subVars(t)
     subbedT = varResponse[0]
 
     # If there isn't any Japanese in the text just skip
-    if not re.search(r'[��-�]+|[��-?]+|[�@-��]+|[\uFF00-\uFFEF]', subbedT):
-        return(t, 0)
+    if not re.search(r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴ]+|[\uFF00-\uFFEF]', subbedT):
+        return (t, 0)
 
     # Characters
     context = '```\
-        Game Characters:\
-        Character: �r�m�� ��C == Ikenoue Takumi - Gender: Male\
-        Character: ���i ���͂� == Fukunaga Koharu - Gender: Female\
-        Character: �_�� ���� == Kamiizumi Rio - Gender: Female\
-        Character: �g�ˎ� �A���T == Kisshouji Arisa - Gender: Female\
-        Character: �v�� �F���q == Kuga Yuriko - Gender: Female\
+        Character: 池ノ上 拓海 == Ikenoue Takumi - Gender: Male\
+        Character: 福永 こはる == Fukunaga Koharu - Gender: Female\
+        Character: 神泉 理央 == Kamiizumi Rio - Gender: Female\
+        Character: 吉祥寺 アリサ == Kisshouji Arisa - Gender: Female\
+        Character: 久我 友里子 == Kuga Yuriko - Gender: Female\
         ```'
 
     # Prompt
@@ -124,7 +124,7 @@ def translateGPT(t, history, fullPromptFlag):
         system = PROMPT
         user = 'Line to Translate = ' + subbedT
     else:
-        system = 'Output ONLY the english translation in the following format: `Translation: <ENGLISH_TRANSLATION>`' 
+        system = 'Output ONLY the ' + LANGUAGE + ' translation in the following format: `Translation: <' + LANGUAGE.upper() + '_TRANSLATION>`'
         user = 'Line to Translate = ' + subbedT
 
     # Create Message List
@@ -155,18 +155,13 @@ def translateGPT(t, history, fullPromptFlag):
     translatedText = resubVars(translatedText, varResponse[1])
 
     # Remove Placeholder Text
-    translatedText = translatedText.replace('English Translation: ', '')
+    translatedText = translatedText.replace(LANGUAGE + ' Translation: ', '')
     translatedText = translatedText.replace('Translation: ', '')
     translatedText = translatedText.replace('Line to Translate = ', '')
-    translatedText = translatedText.replace('Translation = ', '')
+    translatedText = translatedText.replace(LANGUAGE + ' Translation = ', '')
     translatedText = translatedText.replace('Translate = ', '')
-    translatedText = translatedText.replace('English Translation:', '')
-    translatedText = translatedText.replace('Translation:', '')
-    translatedText = translatedText.replace('Line to Translate =', '')
-    translatedText = translatedText.replace('Translation =', '')
-    translatedText = translatedText.replace('Translate =', '')
     translatedText = re.sub(r'Note:.*', '', translatedText)
-    translatedText = translatedText.replace('��', '')
+    translatedText = translatedText.replace('っ', '')
 
     # Return Translation
     if len(translatedText) > 15 * len(t) or "I'm sorry, but I'm unable to assist with that translation" in translatedText:
