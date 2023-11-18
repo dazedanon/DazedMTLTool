@@ -1,18 +1,3 @@
-This is a modified version of dazedanon's DazedMTLTool indended for use with proxies and self hosted LLM APIs. There are also some "quality of life" changes.
-
-In the .env file there are a few new variables to play with:
-<p>proxy - The link to the API you want to use</p>
-<p>model - The model name of the LLM</p>
-<p>timeout - The timeout before disconnect error (30 to 120 recommended)</p>
-<p>fileThreads - The number of files to translate at the same time (1 recommended for free or self hosted API)</p>
-<p>threads - The number of threads per file (1 recommended for free or self hosted API)</p>
-<p>width - The wordwrap of dialogue text</p>
-<p>listWidth - The wordwap of items and help text</p>
-<br>
-<p>Depending on the API a key or organization won't be needed. You can just set those to something random.</p>
-<p>Start scripts have been added to streamline the process.</p>
-
-All credit goes to dazedanon for creating this marvelous tool.
 # DazedMTLTool - A script that translates RPGMaker JSON files using ChatGPT API
 
 ![image](https://user-images.githubusercontent.com/96628874/230908699-adacb5e1-1548-4116-a0ea-a33297cdafa4.png)
