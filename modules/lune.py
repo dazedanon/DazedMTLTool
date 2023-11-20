@@ -17,17 +17,25 @@ from tqdm import tqdm
 
 #Globals
 load_dotenv()
+if not os.getenv('api').replace(" ", ""):
+    print('No API given, defaulting to OpenAI API')
+else:
+    openai.api_base = os.getenv('api')
+    print('Using ' + os.getenv('api') + ' as API')
+
 openai.organization = os.getenv('org')
 openai.api_key = os.getenv('key')
+MODEL = os.getenv('model')
+TIMEOUT = int(os.getenv('timeout'))
 LANGUAGE=os.getenv('language').capitalize()
 
 INPUTAPICOST = .002 # Depends on the model https://openai.com/pricing
 OUTPUTAPICOST = .002
 PROMPT = Path('prompt.txt').read_text(encoding='utf-8')
-THREADS = 10    # Controls how many threads are working on a single file (May have to drop this)
+THREADS = int(os.getenv('threads')) # Controls how many threads are working on a single file (May have to drop this)
 LOCK = threading.Lock()
-WIDTH = 50
-LISTWIDTH = 90
+WIDTH = int(os.getenv('width'))
+LISTWIDTH = int(os.getenv('listWidth'))
 NOTEWIDTH = 50
 MAXHISTORY = 10
 ESTIMATE = ''
@@ -294,7 +302,7 @@ def resubVars(translatedText, allList):
 def translateGPT(t, history, fullPromptFlag):
     # If ESTIMATE is True just count this as an execution and return.
     if ESTIMATE:
-        enc = tiktoken.encoding_for_model("gpt-3.5-turbo")
+        enc = tiktoken.encoding_for_model(MODEL)
         historyRaw = ''
         if isinstance(history, list):
             for line in history:
@@ -347,9 +355,9 @@ def translateGPT(t, history, fullPromptFlag):
         temperature=0.1,
         frequency_penalty=0.2,
         presence_penalty=0.2,
-        model="gpt-3.5-turbo-1106",
+        model=MODEL,
         messages=msg,
-        request_timeout=30,
+        request_timeout=TIMEOUT,
     )
 
     # Save Translated Text
