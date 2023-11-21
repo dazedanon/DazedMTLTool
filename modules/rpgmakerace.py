@@ -19,11 +19,6 @@ from tqdm import tqdm
 
 #Globals
 load_dotenv()
-if not os.getenv('api').replace(" ", ""):
-    print('No API given, defaulting to OpenAI API')
-else:
-    openai.api_base = os.getenv('api')
-    print('Using ' + os.getenv('api') + ' as API')
 
 openai.organization = os.getenv('org')
 openai.api_key = os.getenv('key')
