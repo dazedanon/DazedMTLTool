@@ -16,7 +16,7 @@ from tqdm import tqdm
 
 #Globals
 load_dotenv()
-if os.getenv('api') != ''.replace(' ', ''):
+if os.getenv('api').replace(' ', '') != '':
     openai.api_base = os.getenv('api')
 
 openai.organization = os.getenv('org')
