@@ -12,8 +12,8 @@ from modules.txt import handleTXT
 from modules.tyrano import handleTyrano
 from modules.json import handleJSON
 from modules.kansen import handleKansen
-from modules.lune import handleLune
 from modules.lune2 import handleLuneTxt
+from modules.atelier import handleAtelier
 
 # For GPT4 rate limit will be hit if you have more than 1 thread.
 # 1 Thread for each file. Controls how many files are worked on at once.
@@ -30,14 +30,17 @@ def main():
     while estimate == '':
         estimate = input('Select Translation or Cost Estimation:\n\n1. Translate\n2. Estimate\n')
         match estimate:
-            case '1': estimate = False
-            case '2': estimate = True
-            case _: estimate = ''
+            case '1':
+                estimate = False
+            case '2':
+                estimate = True
+            case _:
+                estimate = ''
 
     totalCost = 0
     version = ''
     while version == '':
-        version = input('Select the RPGMaker Version:\n\n1. MV/MZ\n2. ACE\n3. CSV (From Translator++)\n4. Text (Custom)\n5. Tyrano\n6. JSON\n7. Kansen\n8. Lune\n')
+        version = input('Select the RPGMaker Version:\n\n1. MV/MZ\n2. ACE\n3. CSV (From Translator++)\n4. Text (Custom)\n5. Tyrano\n6. JSON\n7. Kansen\n8. Lune\n9. Atelier\n')
         match version:
             case '1':
                 # Open File (Threads)
@@ -149,11 +152,25 @@ def main():
                             tracebackLineNo = str(traceback.extract_tb(sys.exc_info()[2])[-1].lineno)
                             tqdm.write(Fore.RED + str(e) + '|' + tracebackLineNo + Fore.RESET)
 
+            case '9':
+                # Open File (Threads)
+                with ThreadPoolExecutor(max_workers=THREADS) as executor:
+                    futures = [executor.submit(handleAtelier, filename, estimate) \
+                                for filename in os.listdir("files") if filename.endswith('txt')]
+
+                    for future in as_completed(futures):
+                        try:
+                            totalCost = future.result()
+
+                        except Exception as e:
+                            tracebackLineNo = str(traceback.extract_tb(sys.exc_info()[2])[-1].lineno)
+                            tqdm.write(Fore.RED + str(e) + '|' + tracebackLineNo + Fore.RESET)
+
             case _:
                 version = ''
         
     if totalCost != 'Fail':
-        if estimate == False:
+        if estimate is False:
             # This is to encourage people to grab what's in /translated instead
             deleteFolderFiles('files')
 
