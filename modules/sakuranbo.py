@@ -51,7 +51,7 @@ FIXTEXTWRAP = True
 IGNORETLTEXT = False
 
 
-def handleTyrano(filename, estimate):
+def handleSakuranbo(filename, estimate):
     global ESTIMATE
     totalTokens = [0, 0]
     ESTIMATE = estimate
