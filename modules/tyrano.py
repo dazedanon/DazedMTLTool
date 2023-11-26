@@ -227,7 +227,7 @@ def translateTyrano(data, pbar):
                     + " translation of the NPC name",
                     True,
                 )
-                speaker = response[0]
+                # speaker = response[0]
                 tokens[0] += response[1][0]
                 tokens[1] += response[1][1]
                 # data[i] = '#' + speaker + '\n'
@@ -274,11 +274,16 @@ def translateTyrano(data, pbar):
                 matchList = re.findall(r"(.+)\[[rpcm]+\]$", data[i + 1])
                 while len(matchList) > 0:
                     delFlag = True
-                    data[i] = "\d\n"  # \d Marks line for deletion
-                    i += 1
-                    matchList = re.findall(r"(.+)\[[rpcm]+\]$", data[i])
-                    if len(matchList) > 0:
-                        currentGroup.append(matchList[0])
+                    data[i] = "\d\n"  # \d Marks line for deletion               
+
+                    # Check Next
+                    if i + 1 < (len(data)):
+                        i += 1
+                        matchList = re.findall(r"(.+)\[[rpcm]+\]$", data[i])
+                        if len(matchList) > 0:
+                            currentGroup.append(matchList[0])
+                    else:
+                        matchList = []
 
             # Join up 401 groups for better translation.
             if len(currentGroup) > 0:
@@ -304,9 +309,6 @@ def translateTyrano(data, pbar):
                 translatedText = response[0]
                 textHistory.append('"' + translatedText + '"')
 
-            # Remove added speaker
-            translatedText = re.sub(r"^.+:\s?", "", translatedText)
-
             # Set Data
             translatedText = translatedText.replace("ッ", "")
             translatedText = translatedText.replace("っ", "")
@@ -315,21 +317,42 @@ def translateTyrano(data, pbar):
             translatedText = translatedText.replace("[", "")
             translatedText = translatedText.replace("]", "")
 
-            # Wordwrap Text
-            if "[r]" not in translatedText:
-                translatedTextList = textwrap.wrap(translatedText, width=WIDTH)
-                for j in range(len(translatedTextList)):
-                    translatedTextList[j] = translatedTextList[j] + '[r]\n'
-                    j += 1
-                translatedTextList[j - 1] = translatedTextList[j - 1].replace('[r]\n', '[pcm]\n')
-                translatedText = ''.join(translatedTextList)
+            # Split final string into full sentences.
+            matchList = re.findall(r'(.+?[)\.\?\!）。・]+)', translatedText)
+            translatedText = re.sub(r'(.+?[)\.\?\!）。・]+)', '', translatedText)
+            for l in range(len(matchList)):
+                if any(t in matchList[l] for t in ['Mr.', 'Ms.', 'Mrs.']):
+                    if len(matchList) > l+1:
+                        matchList[l] = matchList[l] + matchList[l+1]
+                        matchList[l+1] = ''
 
-            # Set
-            if delFlag is True:
-                data.insert(i, translatedText.strip() + '\n')
-                delFlag = False
-            else:
-                data[i] = translatedText.strip() + '\n'
+            # Get rid of whitespace for each item and add wordwrap
+            for k in range(len(matchList)):
+                matchList[k] = matchList[k].strip()
+
+            # Combine Sentences with a max limit (Wordwrap for sentences basically)
+            j=0
+            while(len(matchList) > j+1):
+                while len(matchList[j]) < 30 and len(matchList) > j:
+                    matchList[j:j+2] = [' '.join(matchList[j:j+2])]
+                    if len(matchList) == j+1:
+                        matchList[j] = matchList[j] + ' ' + translatedText
+                        translatedText = ''
+                        break
+                j+=1
+
+            # Set Data
+            if len(matchList) > 0:
+                data[i] = '\d\n'
+                for line in matchList:
+                    # Wordwrap Text
+                    if '[r]' not in line:
+                        line = textwrap.fill(line, width=WIDTH)
+                        line = line.replace('\n', '[r]')
+                    
+                    # Insert Line
+                    data.insert(i, line.strip() + '[p][cm]\n')
+                    i+=1
 
             # Keep textHistory list at length maxHistory
             if len(textHistory) > maxHistory:
@@ -342,83 +365,6 @@ def translateTyrano(data, pbar):
             syncIndex = i + 1
         else:
             break
-
-        # Grab Lines
-        matchList = re.findall(r"(^\[.+\sstorage=.+\](.+)\[/.+\])", data[i])
-        if len(matchList) > 0:
-            originalLine = matchList[0][0]
-            originalText = matchList[0][1]
-            currentGroup.append(matchList[0][1])
-            if len(data) > i + 1:
-                matchList = re.findall(r"(.+)\[[rpcm]+\]$", data[i + 1])
-                while len(matchList) > 0:
-                    delFlag = True
-                    data[i] = "\d\n"  # \d Marks line for deletion
-                    i += 1
-                    matchList = re.findall(r"(.+)\[[rpcm]+\]$", data[i])
-                    if len(matchList) > 0:
-                        currentGroup.append(matchList[0])
-
-            # Join up 401 groups for better translation.
-            if len(currentGroup) > 0:
-                finalJAString = " ".join(currentGroup)
-
-            # Remove any textwrap
-            if FIXTEXTWRAP is True:
-                finalJAString = finalJAString.replace("_", " ")
-
-            # Check Speaker
-            if speaker == "":
-                response = translateGPT(finalJAString, textHistory, True)
-                tokens[0] += response[1][0]
-                tokens[1] += response[1][1]
-                translatedText = response[0]
-                textHistory.append('"' + translatedText + '"')
-            else:
-                response = translateGPT(
-                    speaker + ": " + finalJAString, textHistory, True
-                )
-                tokens[0] += response[1][0]
-                tokens[1] += response[1][1]
-                translatedText = response[0]
-                textHistory.append('"' + translatedText + '"')
-
-            # Remove added speaker
-            translatedText = re.sub(r"^.+:\s?", "", translatedText)
-
-            # Set Data
-            translatedText = translatedText.replace("ッ", "")
-            translatedText = translatedText.replace("っ", "")
-            translatedText = translatedText.replace("ー", "")
-            translatedText = translatedText.replace('"', "")
-            translatedText = translatedText.replace("[", "")
-            translatedText = translatedText.replace("]", "")
-
-            # Wordwrap Text
-            if "_" not in translatedText:
-                translatedText = textwrap.fill(translatedText, width=WIDTH)
-                translatedText = translatedText.replace("\n", "_")
-                translatedText = originalLine.replace(originalText, translatedText)
-
-            # Set
-            if delFlag is True:
-                data.insert(i, translatedText.strip() + '\n')
-                delFlag = False
-            else:
-                data[i] = translatedText.strip() + '\n'
-
-            # Keep textHistory list at length maxHistory
-            if len(textHistory) > maxHistory:
-                textHistory.pop(0)
-            currentGroup = []
-            speaker = ""
-
-        pbar.update(1)
-        if len(data) > i + 1:
-            syncIndex = i + 1
-        else:
-            break
-
     return tokens
 
 def subVars(jaString):
