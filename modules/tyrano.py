@@ -73,7 +73,7 @@ def handleTyrano(filename, estimate):
 
     else:
         try:
-            with open("translated/" + filename, "w", encoding="utf-16") as outFile:
+            with open("translated/" + filename, "w", encoding="utf-8") as outFile:
                 start = time.time()
                 translatedData = openFiles(filename)
                 outFile.writelines(translatedData[0])
@@ -135,7 +135,7 @@ def getResultString(translatedData, translationTime, filename):
 
 
 def openFiles(filename):
-    with open("files/" + filename, "r", encoding="utf-16") as readFile:
+    with open("files/" + filename, "r", encoding="utf-8") as readFile:
         translatedData = parseTyrano(readFile, filename)
 
         # Delete lines marked for deletion
@@ -203,9 +203,7 @@ def translateTyrano(data, pbar):
                 continue
 
         # Speaker
-        matchList = re.findall(r"^\[(.+)\sstorage=.+\]", data[i])
-        if len(matchList) == 0:
-            matchList = re.findall(r"^\[([^/].+)\]$", data[i])
+        matchList = re.findall(r"^\[([^=\".,!?>]+?)\]$", data[i])
         if len(matchList) > 0:
             if "主人公" in matchList[0]:
                 speaker = "Protagonist"
@@ -268,16 +266,17 @@ def translateTyrano(data, pbar):
                 data[i] = translatedText
 
         # Grab Lines
-        matchList = re.findall(r"^([^\n;@*\{\[].+[^;'{}\[]$)", data[i])
-        if len(matchList) > 0 and (re.search(r'^\[(.+)\sstorage=.+\],', data[i-1]) or re.search(r'^\[(.+)\]$', data[i-1]) or re.search(r'^《(.+)》', data[i-1])):
+        matchList = re.findall(r"(.+)\[[rpcm]+\]$", data[i])
+        if len(matchList) > 0:
             currentGroup.append(matchList[0])
+            # Grab All Lines in a Row
             if len(data) > i + 1:
-                matchList = re.findall(r"^([^\n;@*\{\[].+[^;'{}\[]$)", data[i + 1])
+                matchList = re.findall(r"(.+)\[[rpcm]+\]$", data[i + 1])
                 while len(matchList) > 0:
                     delFlag = True
                     data[i] = "\d\n"  # \d Marks line for deletion
                     i += 1
-                    matchList = re.findall(r"^([^\n;@*\{\[].+[^;'{}\[]$)", data[i])
+                    matchList = re.findall(r"(.+)\[[rpcm]+\]$", data[i])
                     if len(matchList) > 0:
                         currentGroup.append(matchList[0])
 
@@ -287,7 +286,7 @@ def translateTyrano(data, pbar):
 
             # Remove any textwrap
             if FIXTEXTWRAP is True:
-                finalJAString = finalJAString.replace("_", " ")
+                finalJAString = finalJAString.replace("[r]", " ")
 
             # Check Speaker
             if speaker == "":
@@ -317,9 +316,13 @@ def translateTyrano(data, pbar):
             translatedText = translatedText.replace("]", "")
 
             # Wordwrap Text
-            if "_" not in translatedText:
-                translatedText = textwrap.fill(translatedText, width=WIDTH)
-                translatedText = translatedText.replace("\n", "_")
+            if "[r]" not in translatedText:
+                translatedTextList = textwrap.wrap(translatedText, width=WIDTH)
+                for j in range(len(translatedTextList)):
+                    translatedTextList[j] = translatedTextList[j] + '[r]\n'
+                    j += 1
+                translatedTextList[j - 1] = translatedTextList[j - 1].replace('[r]\n', '[pcm]\n')
+                translatedText = ''.join(translatedTextList)
 
             # Set
             if delFlag is True:
@@ -347,12 +350,12 @@ def translateTyrano(data, pbar):
             originalText = matchList[0][1]
             currentGroup.append(matchList[0][1])
             if len(data) > i + 1:
-                matchList = re.findall(r"^([^\n;@*\{\[].+[^;'{}\[]$)", data[i + 1])
+                matchList = re.findall(r"(.+)\[[rpcm]+\]$", data[i + 1])
                 while len(matchList) > 0:
                     delFlag = True
                     data[i] = "\d\n"  # \d Marks line for deletion
                     i += 1
-                    matchList = re.findall(r"^([^\n;@*\{\[].+[^;'{}\[]$)", data[i])
+                    matchList = re.findall(r"(.+)\[[rpcm]+\]$", data[i])
                     if len(matchList) > 0:
                         currentGroup.append(matchList[0])
 

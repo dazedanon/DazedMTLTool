@@ -1,28 +1,31 @@
+import json
 import os
 from pathlib import Path
 import re
+import sys
 import textwrap
 import threading
 import time
 import traceback
 import tiktoken
+
 from colorama import Fore
 from dotenv import load_dotenv
 import openai
 from retry import retry
 from tqdm import tqdm
 
-# Open AI
+#Globals
 load_dotenv()
 if os.getenv('api').replace(' ', '') != '':
     openai.api_base = os.getenv('api')
+
 openai.organization = os.getenv('org')
 openai.api_key = os.getenv('key')
-
-#Globals
 MODEL = os.getenv('model')
 TIMEOUT = int(os.getenv('timeout'))
 LANGUAGE=os.getenv('language').capitalize()
+
 INPUTAPICOST = .002 # Depends on the model https://openai.com/pricing
 OUTPUTAPICOST = .002
 PROMPT = Path('prompt.txt').read_text(encoding='utf-8')
@@ -30,7 +33,7 @@ THREADS = int(os.getenv('threads')) # Controls how many threads are working on a
 LOCK = threading.Lock()
 WIDTH = int(os.getenv('width'))
 LISTWIDTH = int(os.getenv('listWidth'))
-NOTEWIDTH = 40
+NOTEWIDTH = 50
 MAXHISTORY = 10
 ESTIMATE = ''
 totalTokens = [0, 0]
@@ -40,12 +43,11 @@ NAMESLIST = []
 BAR_FORMAT='{l_bar}{bar:10}{r_bar}{bar:-10b}'
 POSITION=0
 LEAVE=False
-
-# Translation Flags
+BRFLAG = False   # If the game uses <br> instead
 FIXTEXTWRAP = True
 IGNORETLTEXT = True
 
-def handleAtelier(filename, estimate):
+def handleAnim(filename, estimate):
     global ESTIMATE, totalTokens
     ESTIMATE = estimate
 
@@ -61,28 +63,35 @@ def handleAtelier(filename, estimate):
             totalTokens[1] += translatedData[1][1]
 
         return getResultString(['', totalTokens, None], end - start, 'TOTAL')
-
+    
     else:
         try:
-            with open('translated/' + filename, 'w', encoding='utf-8') as outFile:
+            with open('translated/' + filename, 'w', encoding='UTF-8') as outFile:
                 start = time.time()
                 translatedData = openFiles(filename)
-                outFile.writelines(translatedData[0])
 
                 # Print Result
                 end = time.time()
+                json.dump(translatedData[0], outFile, ensure_ascii=False)
                 tqdm.write(getResultString(translatedData, end - start, filename))
                 with LOCK:
                     totalTokens[0] += translatedData[1][0]
                     totalTokens[1] += translatedData[1][1]
-        except Exception:
+        except Exception as e:
             return 'Fail'
 
     return getResultString(['', totalTokens, None], end - start, 'TOTAL')
 
 def openFiles(filename):
-    with open('files/' + filename, 'r', encoding='UTF-8') as f:
-        translatedData = parseText(f, filename)
+    with open('files/' + filename, 'r', encoding='UTF-8-sig') as f:
+        data = json.load(f)
+
+        # Map Files
+        if '.json' in filename:
+            translatedData = parseJSON(data, filename)
+
+        else:
+            raise NameError(filename + ' Not Supported')
     
     return translatedData
 
@@ -96,7 +105,7 @@ def getResultString(translatedData, translationTime, filename):
         (translatedData[1][1] * .001 * OUTPUTAPICOST)) + ']'
     timeString = Fore.BLUE + '[' + str(round(translationTime, 1)) + 's]'
 
-    if translatedData[2] is None:
+    if translatedData[2] == None:
         # Success
         return filename + ': ' + totalTokenstring + timeString + Fore.GREEN + u' \u2713 ' + Fore.RESET
 
@@ -105,70 +114,80 @@ def getResultString(translatedData, translationTime, filename):
         try:
             raise translatedData[2]
         except Exception as e:
+            traceback.print_exc()
             errorString = str(e) + Fore.RED
             return filename + ': ' + totalTokenstring + timeString + Fore.RED + u' \u2717 ' +\
                 errorString + Fore.RESET
         
-def parseText(data, filename):
+def parseJSON(data, filename):
+    totalTokens = [0, 0]
     totalLines = 0
+    totalLines = len(data)
     global LOCK
-
-    # Get total for progress bar
-    linesList = data.readlines()
-    totalLines = len(linesList)
     
     with tqdm(bar_format=BAR_FORMAT, position=POSITION, total=totalLines, leave=LEAVE) as pbar:
         pbar.desc=filename
         pbar.total=totalLines
         try:
-            response = translateText(linesList, pbar)
+            result = translateJSON(data, pbar)
+            totalTokens[0] += result[0]
+            totalTokens[1] += result[1]
         except Exception as e:
-            traceback.print_exc()
-            return [linesList, 0, e]
-    return [response[0], response[1], None]
+            return [data, totalTokens, e]
+    return [data, totalTokens, None]
 
-def translateText(data, pbar):
+def translateJSON(data, pbar):
     textHistory = []
     maxHistory = MAXHISTORY
-    totalTokens = [0,0]
-    syncIndex = 0
+    tokens = [0, 0]
 
-    for i in range(len(data)):
-        if syncIndex > i:
-            i = syncIndex
+    for key, value in data.items():
+        # Text
+        if value == "":
+            jaString = key
+        else:
+            jaString = value
 
-        match = re.findall(r'◆.+◆(.+)', data[i])
-        if len(match) > 0:
-            jaString = match[0]
+        # Check if TLed
+        # If there isn't any Japanese in the text just skip
+        if IGNORETLTEXT is True:
+            if not re.search(r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴー]+', jaString):
+                pbar.update(1)
+                continue
 
-            ### Translate
-            # Remove any textwrap
-            finalJAString = re.sub(r'\\n', ' ', jaString)
-            
-            # Translate
-            response = translateGPT(finalJAString, 'Previous Text for Context: ' + ' '.join(textHistory), True)
-            totalTokens[0] += response[1][0]
-            totalTokens[1] += response[1][1]
+        # Remove any textwrap
+        if FIXTEXTWRAP == True:
+            jaString = jaString.replace('\n', ' ')
+
+        # Translate
+        if jaString != '':
+            response = translateGPT(f'{jaString}', textHistory, True)
+            tokens[0] += response[1][0]
+            tokens[1] += response[1][1]
             translatedText = response[0]
-            
-            # TextHistory is what we use to give GPT Context, so thats appended here.
+            textHistory.append('\"' + translatedText + '\"')  
+        else:
+            translatedText = jaString
             textHistory.append('\"' + translatedText + '\"')
 
-            # Keep textHistory list at length maxHistory
-            if len(textHistory) > maxHistory:
-                textHistory.pop(0)
+        # Remove added speaker
+        translatedText = re.sub(r'^.+?\s\|\s?', '', translatedText)
 
-            # Textwrap
+        # Textwrap
+        if '\n' not in translatedText:
             translatedText = textwrap.fill(translatedText, width=WIDTH)
-            translatedText = translatedText.replace('\n', '\\n')
 
-            # Write
-            data[i] = data[i].replace(match[0], translatedText)
-                
-        syncIndex = i + 1
-        pbar.update()
-    return [data, totalTokens]
-        
+        # Set Data
+        data[key] = translatedText
+
+        # Keep textHistory list at length maxHistory
+        if len(textHistory) > maxHistory:
+            textHistory.pop(0)
+        currentGroup = []  
+        pbar.update(1)
+
+    return tokens           
+
 def subVars(jaString):
     jaString = jaString.replace('\u3000', ' ')
 
@@ -297,7 +316,7 @@ def translateGPT(t, history, fullPromptFlag):
     # If there isn't any Japanese in the text just skip
     if not re.search(r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴ]+|[\uFF00-\uFFEF]', subbedT):
         return(t, [0,0])
-    
+
     # If ESTIMATE is True just count this as an execution and return.
     if ESTIMATE:
         enc = tiktoken.encoding_for_model(MODEL)
@@ -315,12 +334,10 @@ def translateGPT(t, history, fullPromptFlag):
 
     # Characters
     context = 'Game Characters:\
-        Character: Surname:久高 Name:有史 == Surname:Kudaka Name:Yuushi - Gender: Male\
-        Character: Surname:葛城 Name:碧璃 == Surname:Katsuragi Name:Midori - Gender: Female\
-        Character: Surname:葛城 Name:依理子 == Surname:Katsuragi Name:Yoriko - Gender: Female\
-        Character: Surname:桐乃木 Name:奏 == Surname:Kirinogi Name:Kanade - Gender: Female\
-        Character: Surname:葛城 Name:光男 == Surname:Katsuragi Name:Mitsuo - Gender: Male\
-        Character: Surname:尾木 Name:優真 == Surname:Ogi Name:Yuuma - Gender: Male'
+        Character: リッカ == Ricca - Gender: Female\
+        Character: シーナ == Sina - Gender: Female\
+        Character: ヘレナ == Helena - Gender: Female\
+        Character: Miko == Miko - Gender: Female'
 
     # Prompt
     if fullPromptFlag:
@@ -375,6 +392,7 @@ def translateGPT(t, history, fullPromptFlag):
     translatedText = translatedText.replace('、', ',')
     translatedText = translatedText.replace('？', '?')
     translatedText = translatedText.replace('！', '!')
+    translatedText = translatedText.replace('\n', '')
 
     # Return Translation
     if len(translatedText) > 15 * len(t) or "I'm sorry, but I'm unable to assist with that translation" in translatedText:

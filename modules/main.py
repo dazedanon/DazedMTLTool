@@ -14,6 +14,7 @@ from modules.json import handleJSON
 from modules.kansen import handleKansen
 from modules.lune2 import handleLuneTxt
 from modules.atelier import handleAtelier
+from modules.anim import handleAnim
 
 # For GPT4 rate limit will be hit if you have more than 1 thread.
 # 1 Thread for each file. Controls how many files are worked on at once.
@@ -40,7 +41,18 @@ def main():
     totalCost = 0
     version = ''
     while version == '':
-        version = input('Select the RPGMaker Version:\n\n1. MV/MZ\n2. ACE\n3. CSV (From Translator++)\n4. Text (Custom)\n5. Tyrano\n6. JSON\n7. Kansen\n8. Lune\n9. Atelier\n')
+        version = input('Select the RPGMaker Version:\n\n\
+1. MV/MZ\n\
+2. ACE\n\
+3. CSV (From Translator++)\n\
+4. Text (Custom)\n\
+5. Tyrano\n\
+6. JSON\n\
+7. Kansen\n\
+8. Lune\n\
+9. Atelier\n\
+10. Anim\n'
+        )
         match version:
             case '1':
                 # Open File (Threads)
@@ -157,6 +169,20 @@ def main():
                 with ThreadPoolExecutor(max_workers=THREADS) as executor:
                     futures = [executor.submit(handleAtelier, filename, estimate) \
                                 for filename in os.listdir("files") if filename.endswith('txt')]
+
+                    for future in as_completed(futures):
+                        try:
+                            totalCost = future.result()
+
+                        except Exception as e:
+                            tracebackLineNo = str(traceback.extract_tb(sys.exc_info()[2])[-1].lineno)
+                            tqdm.write(Fore.RED + str(e) + '|' + tracebackLineNo + Fore.RESET)
+
+            case '10':
+                # Open File (Threads)
+                with ThreadPoolExecutor(max_workers=THREADS) as executor:
+                    futures = [executor.submit(handleAnim, filename, estimate) \
+                                for filename in os.listdir("files") if filename.endswith('json')]
 
                     for future in as_completed(futures):
                         try:
