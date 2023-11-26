@@ -269,21 +269,21 @@ def translateTyrano(data, pbar):
         matchList = re.findall(r"(.+)\[[rpcm]+\]$", data[i])
         if len(matchList) > 0:
             currentGroup.append(matchList[0])
+            data[i] = "\d\n"
+            
             # Grab All Lines in a Row
-            if len(data) > i + 1:
-                matchList = re.findall(r"(.+)\[[rpcm]+\]$", data[i + 1])
-                while len(matchList) > 0:
-                    delFlag = True
-                    data[i] = "\d\n"  # \d Marks line for deletion               
-
-                    # Check Next
-                    if i + 1 < (len(data)):
-                        i += 1
-                        matchList = re.findall(r"(.+)\[[rpcm]+\]$", data[i])
-                        if len(matchList) > 0:
-                            currentGroup.append(matchList[0])
-                    else:
-                        matchList = []
+            while len(matchList) > 0 and i + 1 < len(data):                  
+                i += 1
+                # Skip Blank Lines
+                if data[i] == '\n':
+                    data[i] = "\d\n"
+                    continue
+                    
+                # Append line to list if match
+                matchList = re.findall(r"(.+)\[[rpcm]+\]$", data[i])
+                if len(matchList) > 0:
+                    currentGroup.append(matchList[0])
+                    data[i] = "\d\n"
 
             # Join up 401 groups for better translation.
             if len(currentGroup) > 0:
@@ -313,37 +313,40 @@ def translateTyrano(data, pbar):
             translatedText = translatedText.replace("ッ", "")
             translatedText = translatedText.replace("っ", "")
             translatedText = translatedText.replace("ー", "")
-            translatedText = translatedText.replace('"', "")
+            translatedText = translatedText.replace('"', "\"")
             translatedText = translatedText.replace("[", "")
             translatedText = translatedText.replace("]", "")
 
             # Split final string into full sentences.
-            matchList = re.findall(r'(.+?[)\.\?\!）。・]+)', translatedText)
-            translatedText = re.sub(r'(.+?[)\.\?\!）。・]+)', '', translatedText)
+            matchList = re.findall(r'(.+?[\".?!）。・\n]+)[\s]?', translatedText)
             for l in range(len(matchList)):
-                if any(t in matchList[l] for t in ['Mr.', 'Ms.', 'Mrs.']):
+                if any(t in matchList[l] for t in ['Mr.', 'Ms.', 'Mrs.', '...']):
                     if len(matchList) > l+1:
-                        matchList[l] = matchList[l] + matchList[l+1]
-                        matchList[l+1] = ''
+                        matchList[l] = matchList[l] + ' ' + matchList[l+1]
+                        matchList[l+1] = '\d'
+
+            # Delete lines marked for deletion
+            finalData = []
+            for line in matchList:
+                if line != "\\d":
+                    finalData.append(line)
+            matchList = finalData
 
             # Get rid of whitespace for each item and add wordwrap
             for k in range(len(matchList)):
                 matchList[k] = matchList[k].strip()
 
             # Combine Sentences with a max limit (Wordwrap for sentences basically)
-            j=0
+            j = 0
             while(len(matchList) > j+1):
-                while len(matchList[j]) < 30 and len(matchList) > j:
+                if len(matchList[j]) + len(matchList[j+1]) < WIDTH * 2 and len(matchList) > j:
                     matchList[j:j+2] = [' '.join(matchList[j:j+2])]
-                    if len(matchList) == j+1:
-                        matchList[j] = matchList[j] + ' ' + translatedText
-                        translatedText = ''
-                        break
-                j+=1
+                else:
+                    j += 1
+                
 
             # Set Data
             if len(matchList) > 0:
-                data[i] = '\d\n'
                 for line in matchList:
                     # Wordwrap Text
                     if '[r]' not in line:
