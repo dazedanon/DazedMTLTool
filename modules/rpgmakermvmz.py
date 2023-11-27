@@ -61,7 +61,7 @@ CODE108 = False
 NAMES = False    # Output a list of all the character names found
 BRFLAG = False   # If the game uses <br> instead
 FIXTEXTWRAP = True
-IGNORETLTEXT = True
+IGNORETLTEXT = False
 
 def handleMVMZ(filename, estimate):
     global ESTIMATE, totalTokens
@@ -616,6 +616,7 @@ def searchCodes(page, pbar):
                 # Join up 401 groups for better translation.
                 if len(currentGroup) > 0:
                     finalJAString = ''.join(currentGroup)
+                    finalJAString = finalJAString.replace('？', '?')
                     oldjaString = finalJAString
 
                     # Color Regex: ^([\\]+[cC]\[[0-9]\]+(.+?)[\\]+[cC]\[[0]\])
@@ -653,10 +654,9 @@ def searchCodes(page, pbar):
                         matchList = re.findall(r'(\\+nc<(.*?)>)(.+)?', finalJAString)    
                         if len(matchList) != 0:    
                             # Translate Speaker  
-                            response = translateGPT(matchList[0][1], 'Reply with only the '+ LANGUAGE +' translation of the NPC name', False)
-                            totalTokens[0] += response[1][0]
-                            totalTokens[1] += response[1][1]
-                            speaker = response[0].strip('.')
+                            speaker = getSpeaker(matchList[0][1])
+
+                            # Set Nametag and Remove from Final String
                             nametag = matchList[0][0].replace(matchList[0][1], speaker)
                             finalJAString = finalJAString.replace(matchList[0][0], '')
 
@@ -671,10 +671,8 @@ def searchCodes(page, pbar):
                     elif '\\nw' in finalJAString or '\\NW' in finalJAString:
                         matchList = re.findall(r'([\\]+[nN][wW]\[(.+?)\]+)(.+)', finalJAString)    
                         if len(matchList) != 0:    
-                            response = translateGPT(matchList[0][1], 'Reply with only the '+ LANGUAGE +' translation of the NPC name', False)
-                            totalTokens[0] += response[1][0]
-                            totalTokens[1] += response[1][1]
-                            speaker = response[0].strip('.')
+                            # Translate Speaker
+                            speaker = getSpeaker(matchList[0][1])
 
                             # Set Nametag and Remove from Final String
                             nametag = matchList[0][0].replace(matchList[0][1], speaker)
@@ -696,17 +694,14 @@ def searchCodes(page, pbar):
                                 match1 = matchList[0][3]
 
                             # Translate Speaker
-                            response = translateGPT(match1, 'Reply with only the '+ LANGUAGE +' translation of the NPC name', True)
-                            totalTokens[0] += response[1][0]
-                            totalTokens[1] += response[1][1]
-                            speaker = response[0].strip('.')
+                            speaker = getSpeaker(match1)
 
                             # Set Nametag and Remove from Final String
                             nametag = match0.replace(match1, speaker)
                             finalJAString = finalJAString.replace(match0, '')
 
                             # Set next item as dialogue
-                            if (codeList[j + 1]['code'] == 401 and len(codeList[j + 1]['parameters']) > 0):
+                            if codeList[j + 1]['code'] == 401 or codeList[j + 1]['code'] == -1:
                                 # Set name var to top of list
                                 codeList[j]['parameters'] = [nametag]
                                 codeList[j]['code'] = code
@@ -740,6 +735,7 @@ def searchCodes(page, pbar):
                     finalJAString = finalJAString.replace('―', '-')
                     finalJAString = finalJAString.replace('ー', '-')
                     finalJAString = finalJAString.replace('…', '...')
+                    finalJAString = re.sub(r'(\.{3}\.+)', '...', finalJAString)
                     finalJAString = finalJAString.replace('　', '')
                     # finalJAString = finalJAString.replace('〇', '*')
 
@@ -781,7 +777,7 @@ def searchCodes(page, pbar):
                         varResponse = subVars(translatedText)
                         textHistory.append('\"' + varResponse[0] + '\"')
                     elif finalJAString != '':
-                        response = translateGPT(speaker + ' | ' + finalJAString, textHistory, True)
+                        response = translateGPT(speaker + ': ' + finalJAString, textHistory, True)
                         totalTokens[0] += response[1][0]
                         totalTokens[1] += response[1][1]
                         translatedText = response[0]
@@ -791,7 +787,7 @@ def searchCodes(page, pbar):
 
                         # Sub Vars
                         varResponse = subVars(translatedText)
-                        textHistory.append('\"' + speaker + ' | ' + varResponse[0] + '\"')   
+                        textHistory.append('\"' + speaker + ': ' + varResponse[0] + '\"')   
                         speaker = ''             
                     else:
                         translatedText = finalJAString    
@@ -1735,6 +1731,27 @@ def searchSystem(data, pbar):
     
     return totalTokens
 
+# Save some money and enter the character before translation
+def getSpeaker(speaker):
+    match speaker:
+        case 'アイル':
+            return 'Aeru'
+        case 'リラ':
+            return 'Lira'
+        case 'アザミ':
+            return 'Azami'
+        case 'マーガレット':
+            return 'Margaret'
+        case 'ミール':
+            return 'Miiru'
+        case 'ライト':
+            return 'Light'
+        case _:
+            response = translateGPT(speaker, 'Reply with only the '+ LANGUAGE +' translation of the NPC name', False)
+            totalTokens[0] += response[1][0]
+            totalTokens[1] += response[1][1]
+            return response[0].strip('.')
+
 def subVars(jaString):
     jaString = jaString.replace('\u3000', ' ')
 
@@ -1881,10 +1898,12 @@ def translateGPT(t, history, fullPromptFlag):
 
     # Characters
     context = 'Game Characters:\
-        Character: リッカ == Ricca - Gender: Female\
-        Character: シーナ == Sina - Gender: Female\
-        Character: ヘレナ == Helena - Gender: Female\
-        Character: Miko == Miko - Gender: Female'
+        Character: アイル == Aeru - Gender: Male\
+        Character: リラ == Lira - Gender: Female\
+        Character: アザミ == Azami - Gender: Female\
+        Character: マーガレット == Margaret - Gender: Female\
+        Character: ミール == Miiru - Gender: Female\
+        Character: ライト == Light - Gender: Male'
 
     # Prompt
     if fullPromptFlag:
