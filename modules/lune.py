@@ -166,7 +166,7 @@ def translateJSON(data, pbar):
 
                 # Translate
                 if jaString != '':
-                    response = translateGPT(f'{speaker} | {jaString}', textHistory, True)
+                    response = translateGPT(f'{speaker}: {jaString}', textHistory, True)
                     tokens[0] += response[1][0]
                     tokens[1] += response[1][1]
                     translatedText = response[0]

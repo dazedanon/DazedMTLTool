@@ -793,7 +793,7 @@ def searchCodes(page, pbar):
                         subbedT = varResponse[0]
                         textHistory.append('\"' + varResponse[0] + '\"')
                     elif finalJAString != '':
-                        response = translateGPT(speaker + ' | ' + finalJAString, textHistory, True)
+                        response = translateGPT(speaker + ': ' + finalJAString, textHistory, True)
                         totalTokens[0] += response[1][0]
                         totalTokens[1] += response[1][1]
                         translatedText = response[0]
@@ -804,7 +804,7 @@ def searchCodes(page, pbar):
                         # Sub Vars
                         varResponse = subVars(translatedText)
                         subbedT = varResponse[0]
-                        textHistory.append('\"' + speaker + ' | ' + varResponse[0] + '\"')   
+                        textHistory.append('\"' + speaker + ': ' + varResponse[0] + '\"')   
                         speaker = ''             
                     else:
                         translatedText = finalJAString    
