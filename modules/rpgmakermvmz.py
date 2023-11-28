@@ -771,7 +771,7 @@ def searchCodes(page, pbar):
                         translatedText = response[0]
 
                         # Change added speaker
-                        translatedText = re.sub(r'(^.+?)\s?[|:]\s?', '\g<1>: ', translatedText)
+                        translatedText = re.sub(r'(^.+?)\s?[|:]\s?', '\g<1>||| ', translatedText)
 
                         # Sub Vars
                         varResponse = subVars(translatedText)
@@ -1585,25 +1585,29 @@ def searchSS(state, pbar):
     
     if 'message1' in state:
         if len(state['message1']) > 0 and state['message1'][0] in ['は', 'を', 'の', 'に', 'が']:
-            message1Response = translateGPT('Taro' + state['message1'], 'reply with only the gender neutral '+ LANGUAGE +' translation of the action. Always start the sentence with Taro.', True)
+            message1Response = translateGPT('Taro' + state['message1'], 'reply with only the gender neutral '+ LANGUAGE +' translation of the action log. Always start the sentence with Taro. For example,\
+Translate \'Taroを倒した！\' as \'Taro was defeated!\'', True)
         else:
             message1Response = translateGPT(state['message1'], 'reply with only the gender neutral '+ LANGUAGE +' translation', True)
 
     if 'message2' in state:
         if len(state['message2']) > 0 and state['message2'][0] in ['は', 'を', 'の', 'に', 'が']:
-            message2Response = translateGPT('Taro' + state['message2'], 'reply with only the gender neutral '+ LANGUAGE +' translation of the action. Always start the sentence with Taro.', True)
+            message2Response = translateGPT('Taro' + state['message2'], 'reply with only the gender neutral '+ LANGUAGE +' translation of the action log. Always start the sentence with Taro. For example,\
+Translate \'Taroを倒した！\' as \'Taro was defeated!\'', True)
         else:
             message2Response = translateGPT(state['message2'], 'reply with only the gender neutral '+ LANGUAGE +' translation', True)
 
     if 'message3' in state:
         if len(state['message3']) > 0 and state['message3'][0] in ['は', 'を', 'の', 'に', 'が']:
-            message3Response = translateGPT('Taro' + state['message3'], 'reply with only the gender neutral '+ LANGUAGE +' translation of the action. Always start the sentence with Taro.', True)
+            message3Response = translateGPT('Taro' + state['message3'], 'reply with only the gender neutral '+ LANGUAGE +' translation of the action log. Always start the sentence with Taro. For example,\
+Translate \'Taroを倒した！\' as \'Taro was defeated!\'', True)
         else:
             message3Response = translateGPT(state['message3'], 'reply with only the gender neutral '+ LANGUAGE +' translation', True)
 
     if 'message4' in state:
         if len(state['message4']) > 0 and state['message4'][0] in ['は', 'を', 'の', 'に', 'が']:
-            message4Response = translateGPT('Taro' + state['message4'], 'reply with only the gender neutral '+ LANGUAGE +' translation of the action. Always start the sentence with Taro.', True)
+            message4Response = translateGPT('Taro' + state['message4'], 'reply with only the gender neutral '+ LANGUAGE +' translation of the action log. Always start the sentence with Taro. For example,\
+Translate \'Taroを倒した！\' as \'Taro was defeated!\'', True)
         else:
             message4Response = translateGPT(state['message4'], 'reply with only the gender neutral '+ LANGUAGE +' translation', True)
 
