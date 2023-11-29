@@ -46,7 +46,7 @@ LEAVE=False
 # Flags
 CODE401 = True
 CODE405 = False
-CODE102 = True
+CODE102 = False
 CODE122 = False
 CODE101 = False
 CODE355655 = False
@@ -96,6 +96,7 @@ def handleMVMZ(filename, estimate):
                     totalTokens[0] += translatedData[1][0]
                     totalTokens[1] += translatedData[1][1]
         except Exception:
+            traceback.print_exc()
             return 'Fail'
 
     return getResultString(['', totalTokens, None], end - start, 'TOTAL')
@@ -184,6 +185,7 @@ def getResultString(translatedData, translationTime, filename):
         try:
             raise translatedData[2]
         except Exception as e:
+            traceback.print_exc()
             errorString = str(e) + Fore.RED
             return filename + ': ' + totalTokenstring + timeString + Fore.RED + u' \u2717 ' +\
                 errorString + Fore.RESET
@@ -218,7 +220,7 @@ def parseMap(data, filename):
                         totalTokens[0] += translateNoteOmitSpace(event, r'<namePop:(.*?) [\d]+>')[0]
                         totalTokens[1] += translateNoteOmitSpace(event, r'<namePop:(.*?) [\d]+>')[1]
 
-                    futures = [executor.submit(searchCodes, page, pbar) for page in event['pages'] if page is not None]
+                    futures = [executor.submit(searchCodes, page, pbar, []) for page in event['pages'] if page is not None]
                     for future in as_completed(futures):
                         try:
                             totalTokensFuture = future.result()
@@ -284,13 +286,14 @@ def parseCommonEvents(data, filename):
         pbar.desc=filename
         pbar.total=totalLines
         with ThreadPoolExecutor(max_workers=THREADS) as executor:
-            futures = [executor.submit(searchCodes, page, pbar) for page in data if page is not None]
+            futures = [executor.submit(searchCodes, page, pbar, []) for page in data if page is not None]
             for future in as_completed(futures):
                 try:
                     totalTokensFuture = future.result()
                     totalTokens[0] += totalTokensFuture[0]
                     totalTokens[1] += totalTokensFuture[1]
                 except Exception as e:
+                    traceback.print_exc()
                     return [data, totalTokens, e]
     return [data, totalTokens, None]
 
@@ -311,13 +314,14 @@ def parseTroops(data, filename):
         for troop in data:
             if troop is not None:
                 with ThreadPoolExecutor(max_workers=THREADS) as executor:
-                    futures = [executor.submit(searchCodes, page, pbar) for page in troop['pages'] if page is not None]
+                    futures = [executor.submit(searchCodes, page, pbar, []) for page in troop['pages'] if page is not None]
                     for future in as_completed(futures):
                         try:
                             totalTokensFuture = future.result()
                             totalTokens[0] += totalTokensFuture[0]
                             totalTokens[1] += totalTokensFuture[1]
                         except Exception as e:
+                            traceback.print_exc()
                             return [data, totalTokens, e]
     return [data, totalTokens, None]
     
@@ -355,6 +359,7 @@ def parseThings(data, filename):
                         totalTokens[0] += result[0]
                         totalTokens[1] += result[1]
                     except Exception as e:
+                        traceback.print_exc()
                         return [data, totalTokens, e]
     return [data, totalTokens, None]
 
@@ -373,6 +378,7 @@ def parseSS(data, filename):
                         totalTokens[0] += result[0]
                         totalTokens[1] += result[1]
                     except Exception as e:
+                        traceback.print_exc()
                         return [data, totalTokens, e]
     return [data, totalTokens, None]
 
@@ -399,6 +405,7 @@ def parseSystem(data, filename):
             totalTokens[0] += result[0]
             totalTokens[1] += result[1]
         except Exception as e:
+            traceback.print_exc()
             return [data, totalTokens, e]
     return [data, totalTokens, None]
 
@@ -415,7 +422,7 @@ def parseScenario(data, filename):
         pbar.desc=filename
         pbar.total=totalLines
         with ThreadPoolExecutor(max_workers=THREADS) as executor:
-            futures = [executor.submit(searchCodes, page[1], pbar) for page in data.items() if page[1] is not None]
+            futures = [executor.submit(searchCodes, page[1], pbar, []) for page in data.items() if page[1] is not None]
             for future in as_completed(futures):
                 try:
                     totalTokensFuture = future.result()
@@ -542,7 +549,8 @@ def searchNames(name, pbar, context):
 
     return totalTokens
 
-def searchCodes(page, pbar):
+def searchCodes(page, pbar, fillList):
+    docList = []
     translatedText = ''
     currentGroup = []
     textHistory = []
@@ -565,7 +573,8 @@ def searchCodes(page, pbar):
             with LOCK:  
                 if syncIndex > i:
                     i = syncIndex
-                pbar.update(1)
+                if fillList == []:
+                    pbar.update(1)
                 if len(codeList) <= i:
                     break
 
@@ -599,7 +608,7 @@ def searchCodes(page, pbar):
                 currentGroup.append(jaString)
 
                 if len(codeList) > i+1:
-                    while (codeList[i+1]['code'] == 401 or codeList[i+1]['code'] == 405):
+                    while codeList[i+1]['code'] in [401, 405, -1]:
                         codeList[i]['parameters'] = []
                         codeList[i]['code'] = -1
                         i += 1
@@ -763,63 +772,113 @@ def searchCodes(page, pbar):
                         finalJAString = finalJAString.replace('\\CL', '')
                         CLFlag = True
 
-                    # Translate
-                    if speaker == '' and finalJAString != '':
-                        response = translateGPT(finalJAString, textHistory, True)
-                        totalTokens[0] += response[1][0]
-                        totalTokens[1] += response[1][1]
-                        translatedText = response[0]
+                    # Save to list
+                    if len(fillList) > 0:
+                        translatedText = fillList[0]
 
-                        # Change added speaker
-                        translatedText = re.sub(r'(^.+?)\s?[|:]\s?', '\g<1>||| ', translatedText)
+                        # Textwrap
+                        if FIXTEXTWRAP is True:
+                            translatedText = textwrap.fill(translatedText, width=WIDTH)
+                            if BRFLAG is True:
+                                translatedText = translatedText.replace('\n', '<br>')   
 
-                        # Sub Vars
-                        varResponse = subVars(translatedText)
-                        textHistory.append('\"' + varResponse[0] + '\"')
-                    elif finalJAString != '':
-                        response = translateGPT(speaker + ': ' + finalJAString, textHistory, True)
-                        totalTokens[0] += response[1][0]
-                        totalTokens[1] += response[1][1]
-                        translatedText = response[0]
+                        # Add Beginning Text
+                        if CLFlag:
+                            translatedText = '\\CL' + translatedText
+                            CLFlag = False
+                        translatedText = nametag + translatedText
+                        nametag = ''
+                        translatedText = soundEffectString + translatedText
 
-                        # Remove added speaker
-                        translatedText = re.sub(r'(^.+?)\s?[|:]\s?', '', translatedText)
-
-                        # Sub Vars
-                        varResponse = subVars(translatedText)
-                        textHistory.append('\"' + speaker + ': ' + varResponse[0] + '\"')   
-                        speaker = ''             
+                        # Set Data
+                        translatedText = translatedText.replace('\"', '')
+                        codeList[i]['parameters'] = []
+                        codeList[i]['code'] = -1
+                        codeList[j]['parameters'] = [translatedText]
+                        codeList[j]['code'] = code
+                        speaker = ''
+                        match = []
+                        currentGroup = []
+                        syncIndex = i + 1
+                        fillList.pop(0)
+                        
+                        if len(fillList) == 0:
+                            fillList = ''
+                        
                     else:
-                        translatedText = finalJAString    
+                        if speaker == '' and finalJAString != '':
+                            docList.append(finalJAString)
+                            speaker = ''
+                            match = []
+                            syncIndex = i + 1
+                        elif finalJAString != '':
+                            docList.append(f'{speaker}: {finalJAString}')
+                            
+                            # Remove added speaker
+                            translatedText = re.sub(r'(^.+?)\s?[|:]\s?', '', translatedText)
+                            speaker = ''
+                            match = []
+                            syncIndex = i + 1
+                        currentGroup = []
+                        syncIndex = i + 1 
 
-                    # Textwrap
-                    if FIXTEXTWRAP is True:
-                        translatedText = textwrap.fill(translatedText, width=WIDTH)
-                        if BRFLAG is True:
-                            translatedText = translatedText.replace('\n', '<br>')   
+                    # # Translate
+                    # if speaker == '' and finalJAString != '':
+                    #     response = translateGPT(finalJAString, textHistory, True)
+                    #     totalTokens[0] += response[1][0]
+                    #     totalTokens[1] += response[1][1]
+                    #     translatedText = response[0]
 
-                    # Add Beginning Text
-                    if CLFlag:
-                        translatedText = '\\CL' + translatedText
-                        CLFlag = False
-                    translatedText = nametag + translatedText
-                    nametag = ''
-                    translatedText = soundEffectString + translatedText
+                    #     # Change added speaker
+                    #     translatedText = re.sub(r'(^.+?)\s?[|:]\s?', '\g<1>||| ', translatedText)
 
-                    # Set Data
-                    translatedText = translatedText.replace('\"', '')
-                    codeList[i]['parameters'] = []
-                    codeList[i]['code'] = -1
-                    codeList[j]['parameters'] = [translatedText]
-                    codeList[j]['code'] = code
-                    speaker = ''
-                    match = []
-                    syncIndex = i + 1
+                    #     # Sub Vars
+                    #     varResponse = subVars(translatedText)
+                    #     textHistory.append('\"' + varResponse[0] + '\"')
+                    # elif finalJAString != '':
+                    #     response = translateGPT(speaker + ': ' + finalJAString, textHistory, True)
+                    #     totalTokens[0] += response[1][0]
+                    #     totalTokens[1] += response[1][1]
+                    #     translatedText = response[0]
 
-                    # Keep textHistory list at length maxHistory
-                    if len(textHistory) > maxHistory:
-                        textHistory.pop(0)
-                    currentGroup = []              
+                    #     # Remove added speaker
+                    #     translatedText = re.sub(r'(^.+?)\s?[|:]\s?', '', translatedText)
+
+                    #     # Sub Vars
+                    #     varResponse = subVars(translatedText)
+                    #     textHistory.append('\"' + speaker + ': ' + varResponse[0] + '\"')   
+                    #     speaker = ''             
+                    # else:
+                    #     translatedText = finalJAString    
+
+                    # # Textwrap
+                    # if FIXTEXTWRAP is True:
+                    #     translatedText = textwrap.fill(translatedText, width=WIDTH)
+                    #     if BRFLAG is True:
+                    #         translatedText = translatedText.replace('\n', '<br>')   
+
+                    # # Add Beginning Text
+                    # if CLFlag:
+                    #     translatedText = '\\CL' + translatedText
+                    #     CLFlag = False
+                    # translatedText = nametag + translatedText
+                    # nametag = ''
+                    # translatedText = soundEffectString + translatedText
+
+                    # # Set Data
+                    # translatedText = translatedText.replace('\"', '')
+                    # codeList[i]['parameters'] = []
+                    # codeList[i]['code'] = -1
+                    # codeList[j]['parameters'] = [translatedText]
+                    # codeList[j]['code'] = code
+                    # speaker = ''
+                    # match = []
+                    # syncIndex = i + 1
+
+                    # # Keep textHistory list at length maxHistory
+                    # if len(textHistory) > maxHistory:
+                    #     textHistory.pop(0)
+                    # currentGroup = []              
 
             ## Event Code: 122 [Set Variables]
             if codeList[i]['code'] == 122 and CODE122 is True:
@@ -1522,6 +1581,15 @@ def searchCodes(page, pbar):
                 # Set Data
                 codeList[i]['parameters'][1] = translatedText
 
+        # End of the line
+        if docList != [] and fillList != '':
+            response = translateGPT(docList, textHistory, True)
+            fillList = response[0]
+            totalTokens[0] += response[1][0]
+            totalTokens[1] += response[1][1]
+            docList = []
+            searchCodes(page, pbar, fillList)
+
         # Delete all -1 codes
         codeListFinal = []
         for i in range(len(codeList)):
@@ -1537,34 +1605,7 @@ def searchCodes(page, pbar):
         # raise Exception(str(e) + '|Line:' + tracebackLineNo)  
     except Exception as e:
         traceback.print_exc()
-        raise Exception(str(e) + 'Failed to translate: ' + oldjaString) from None
-                
-    # Append leftover groups in 401
-    if len(currentGroup) > 0:
-        # Translate
-        response = translateGPT(finalJAString, 'Previous Translated Text for Context: ' + '\n\n'.join(textHistory), True)
-        totalTokens[0] += response[1][0]
-        totalTokens[1] += response[1][1]
-        translatedText = response[0]
-
-        # TextHistory is what we use to give GPT Context, so thats appended here.
-        textHistory.append('\"' + translatedText + '\"')
-
-        # Textwrap
-        translatedText = textwrap.fill(translatedText, width=WIDTH)
-
-        # Set Data
-        translatedText = translatedText.replace('ッ', '')
-        translatedText = translatedText.replace('っ', '')
-        translatedText = translatedText.replace('\"', '')
-        codeList[i]['parameters'][0] = translatedText
-        speaker = ''
-        match = []
-
-        # Keep textHistory list at length maxHistory
-        if len(textHistory) > maxHistory:
-            textHistory.pop(0)
-        currentGroup = []    
+        raise Exception(str(e) + 'Failed to translate: ' + oldjaString) from None   
 
     return totalTokens
 
@@ -1877,9 +1918,19 @@ def resubVars(translatedText, allList):
 
 @retry(exceptions=Exception, tries=5, delay=5)
 def translateGPT(t, history, fullPromptFlag):
-    # Sub Vars
-    varResponse = subVars(t)
-    subbedT = varResponse[0]
+    if isinstance(t, list):
+        lineList = []
+        responseList = []
+        for i in range(len(t)):
+            responseList.append(subVars(t[i]))
+            lineList.append(responseList[i][0])
+            subbedT = ''
+            for i in range(len(lineList)):
+                subbedT = subbedT + f'L{i} - {lineList[i]}\n'
+    else:
+        # Sub Vars
+        varResponse = subVars(t)
+        subbedT = varResponse[0]
 
     # If there isn't any Japanese in the text just skip
     if not re.search(r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴ]+|[\uFF00-\uFFEF]', subbedT):
@@ -1942,7 +1993,11 @@ def translateGPT(t, history, fullPromptFlag):
     totalTokens = [response.usage.prompt_tokens, response.usage.completion_tokens]
 
     # Resub Vars
-    translatedText = resubVars(translatedText, varResponse[1])
+    if isinstance(t, list):
+        for i in range(len(t)):
+            translatedText = resubVars(translatedText, responseList[i][1])
+    else:
+        translatedText = resubVars(translatedText, varResponse[1])
 
     # Remove Placeholder Text
     translatedText = translatedText.replace(LANGUAGE +' Translation: ', '')
@@ -1962,9 +2017,15 @@ def translateGPT(t, history, fullPromptFlag):
     translatedText = translatedText.replace('、', ',')
     translatedText = translatedText.replace('？', '?')
     translatedText = translatedText.replace('！', '!')
+    translatedTextList = translatedText.split('\n')
+    translatedTextList = list(filter(None, translatedTextList))
 
     # Return Translation
-    if len(translatedText) > 15 * len(t) or "I'm sorry, but I'm unable to assist with that translation" in translatedText:
-        raise Exception
+    if isinstance(t, list):
+        for i in range(len(translatedTextList)):
+            matchList = re.findall(r'.*L[0-9]+ - (.+)', translatedTextList[i])
+            if len(matchList) > 0:
+                translatedTextList[i] = matchList[0]
+        return [translatedTextList, totalTokens]
     else:
         return [translatedText, totalTokens]
