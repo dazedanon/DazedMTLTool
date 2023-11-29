@@ -553,6 +553,7 @@ def searchCodes(page, pbar, fillList):
     totalTokens = [0, 0]
     translatedText = ''
     speaker = ''
+    speakerID = None
     nametag = ''
     syncIndex = 0
     CLFlag = False
@@ -633,6 +634,7 @@ def searchCodes(page, pbar, fillList):
                     matchList = re.findall(r'(.*?([\\]+[nN][wWcC]?<(.+?)>).*)', finalJAString)
                     if len(matchList) > 0:  
                         # Translate Speaker  
+                        speakerID = i
                         response = getSpeaker(matchList[0][1])
                         speaker = response[0]
                         totalTokens[0] += response[1][0]
@@ -653,6 +655,7 @@ def searchCodes(page, pbar, fillList):
                     matchList = re.findall(r'(.*?([\\]+[nN][wWcC]\[(.+?)\]).*)', finalJAString)
                     if len(matchList) > 0:  
                         # Translate Speaker  
+                        speakerID = i
                         response = getSpeaker(matchList[0][1])
                         speaker = response[0]
                         totalTokens[0] += response[1][0]
@@ -669,7 +672,7 @@ def searchCodes(page, pbar, fillList):
                         # Remove nametag from final string
                         finalJAString = finalJAString.replace(nametag, '')
 
-                    ### Only for Specific games where name is surrounded by brackets.
+                    ### Brackets
                     matchList = re.findall\
                         (r'^([\\]+[cC]\[[0-9]+\]【?(.+?)】?[\\]+[cC]\[[0-9]+\])|^(【(.+)】)', finalJAString)  
                     
@@ -683,27 +686,27 @@ def searchCodes(page, pbar, fillList):
                             match1 = matchList[0][3]
 
                         # Translate Speaker
+                        speakerID = j
                         response = getSpeaker(match1)
                         speaker = response[0]
                         totalTokens[0] += response[1][0]
                         totalTokens[1] += response[1][1]
 
                         # Set Nametag and Remove from Final String
-                        nametag = match0.replace(match1, speaker)
+                        fullSpeaker = match0.replace(match1, speaker)
                         finalJAString = finalJAString.replace(match0, '')
 
                         # Set next item as dialogue
                         if codeList[j + 1]['code'] == 401 or codeList[j + 1]['code'] == -1:
                             # Set name var to top of list
-                            codeList[j]['parameters'] = [nametag]
+                            codeList[j]['parameters'] = [fullSpeaker]
                             codeList[j]['code'] = code
                             j += 1
                             codeList[j]['parameters'] = [finalJAString]
                             codeList[j]['code'] = code
-                            nametag = ''
                         else:
                             # Set nametag in string
-                            codeList[j]['parameters'] = [nametag + finalJAString]
+                            codeList[j]['parameters'] = [fullSpeaker + finalJAString]
                             codeList[j]['code'] = code
 
                     # Special Effects
@@ -787,9 +790,14 @@ def searchCodes(page, pbar, fillList):
 
                         # Remove added speaker
                         if speaker != '':
+                            matchSpeakerList = re.findall(r'(^.+?)\s?[|:]\s?', translatedText)
+                            if len(matchSpeakerList) > 0:
+                                fullSpeaker = matchSpeakerList[0]
                             translatedText = re.sub(r'(^.+?)\s?[|:]\s?', '', translatedText)
 
                         # Set Data
+                        if speakerID != None:
+                            codeList[speakerID]['parameters'] = [fullSpeaker]
                         codeList[i]['parameters'] = []
                         codeList[i]['code'] = -1
                         codeList[j]['parameters'] = [translatedText]
@@ -1720,7 +1728,7 @@ def getSpeaker(speaker):
         case 'ライト':
             return 'Light'
         case _:
-                return translateGPT(speaker, 'Reply with only the '+ LANGUAGE +' translation of the NPC name', False)
+            return [speaker, [0,0]]
 
 def subVars(jaString):
     jaString = jaString.replace('\u3000', ' ')
@@ -1869,14 +1877,12 @@ def translateGPT(t, history, fullPromptFlag):
         if isinstance(t, list):
             for line in t:
                 textRaw += line
-        else:
-            textRaw = t
-        if isinstance(history, list):
             for line in history:
                 historyRaw += line
         else:
+            textRaw = t
             historyRaw = history
-
+            
         # Calculate Estimate
         inputTotalTokens = len(enc.encode(historyRaw)) + len(enc.encode(PROMPT))
         outputTotalTokens = len(enc.encode(textRaw)) * 2   # Estimating 2x the size of the original text
