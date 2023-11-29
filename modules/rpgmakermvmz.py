@@ -35,7 +35,7 @@ LISTWIDTH = int(os.getenv('listWidth'))
 NOTEWIDTH = 40
 MAXHISTORY = 10
 ESTIMATE = ''
-totalTokens = [0, 0]
+TOKENS = [0, 0]
 NAMESLIST = []
 
 #tqdm Globals
@@ -64,7 +64,7 @@ FIXTEXTWRAP = True
 IGNORETLTEXT = False
 
 def handleMVMZ(filename, estimate):
-    global ESTIMATE, totalTokens
+    global ESTIMATE, TOKENS
     ESTIMATE = estimate
 
     if estimate:
@@ -77,10 +77,10 @@ def handleMVMZ(filename, estimate):
         if NAMES is True:
             tqdm.write(str(NAMESLIST))
         with LOCK:
-            totalTokens[0] += translatedData[1][0]
-            totalTokens[1] += translatedData[1][1]
+            TOKENS[0] += translatedData[1][0]
+            TOKENS[1] += translatedData[1][1]
 
-        return getResultString(['', totalTokens, None], end - start, 'TOTAL')
+        return getResultString(['', TOKENS, None], end - start, 'TOTAL')
     
     else:
         try:
@@ -93,13 +93,13 @@ def handleMVMZ(filename, estimate):
                 json.dump(translatedData[0], outFile, ensure_ascii=False)
                 tqdm.write(getResultString(translatedData, end - start, filename))
                 with LOCK:
-                    totalTokens[0] += translatedData[1][0]
-                    totalTokens[1] += translatedData[1][1]
+                    TOKENS[0] += translatedData[1][0]
+                    TOKENS[1] += translatedData[1][1]
         except Exception:
             traceback.print_exc()
             return 'Fail'
 
-    return getResultString(['', totalTokens, None], end - start, 'TOTAL')
+    return getResultString(['', TOKENS, None], end - start, 'TOTAL')
 
 def openFiles(filename):
     with open('files/' + filename, 'r', encoding='utf-8-sig') as f:
@@ -551,11 +551,10 @@ def searchNames(name, pbar, context):
 
 def searchCodes(page, pbar, fillList):
     docList = []
-    translatedText = ''
     currentGroup = []
     textHistory = []
-    maxHistory = MAXHISTORY
-    totalTokens = [0, 0]
+    totalTokens = [0,0]
+    translatedText = ''
     speaker = ''
     nametag = ''
     match = []
@@ -563,6 +562,7 @@ def searchCodes(page, pbar, fillList):
     CLFlag = False
     global LOCK
     global NAMESLIST
+    maxHistory = MAXHISTORY
 
     try:
         if 'list' in page:
@@ -663,7 +663,10 @@ def searchCodes(page, pbar, fillList):
                         matchList = re.findall(r'(\\+nc<(.*?)>)(.+)?', finalJAString)    
                         if len(matchList) != 0:    
                             # Translate Speaker  
-                            speaker = getSpeaker(matchList[0][1])
+                            response = getSpeaker(matchList[0][1])
+                            speaker = response[0]
+                            totalTokens[0] += response[1][0]
+                            totalTokens[1] += response[1][1]
 
                             # Set Nametag and Remove from Final String
                             nametag = matchList[0][0].replace(matchList[0][1], speaker)
@@ -681,7 +684,10 @@ def searchCodes(page, pbar, fillList):
                         matchList = re.findall(r'([\\]+[nN][wW]\[(.+?)\]+)(.+)', finalJAString)    
                         if len(matchList) != 0:    
                             # Translate Speaker
-                            speaker = getSpeaker(matchList[0][1])
+                            response = getSpeaker(matchList[0][1])
+                            speaker = response[0]
+                            totalTokens[0] += response[1][0]
+                            totalTokens[1] += response[1][1]
 
                             # Set Nametag and Remove from Final String
                             nametag = matchList[0][0].replace(matchList[0][1], speaker)
@@ -703,7 +709,10 @@ def searchCodes(page, pbar, fillList):
                                 match1 = matchList[0][3]
 
                             # Translate Speaker
-                            speaker = getSpeaker(match1)
+                            response = getSpeaker(match1)
+                            speaker = response[0]
+                            totalTokens[0] += response[1][0]
+                            totalTokens[1] += response[1][1]
 
                             # Set Nametag and Remove from Final String
                             nametag = match0.replace(match1, speaker)
@@ -790,6 +799,10 @@ def searchCodes(page, pbar, fillList):
                         nametag = ''
                         translatedText = soundEffectString + translatedText
 
+                        # Remove added speaker
+                        if speaker != '':
+                            translatedText = re.sub(r'(^.+?)\s?[|:]\s?', '', translatedText)
+
                         # Set Data
                         translatedText = translatedText.replace('\"', '')
                         codeList[i]['parameters'] = []
@@ -813,72 +826,11 @@ def searchCodes(page, pbar, fillList):
                             syncIndex = i + 1
                         elif finalJAString != '':
                             docList.append(f'{speaker}: {finalJAString}')
-                            
-                            # Remove added speaker
-                            translatedText = re.sub(r'(^.+?)\s?[|:]\s?', '', translatedText)
                             speaker = ''
                             match = []
                             syncIndex = i + 1
                         currentGroup = []
-                        syncIndex = i + 1 
-
-                    # # Translate
-                    # if speaker == '' and finalJAString != '':
-                    #     response = translateGPT(finalJAString, textHistory, True)
-                    #     totalTokens[0] += response[1][0]
-                    #     totalTokens[1] += response[1][1]
-                    #     translatedText = response[0]
-
-                    #     # Change added speaker
-                    #     translatedText = re.sub(r'(^.+?)\s?[|:]\s?', '\g<1>||| ', translatedText)
-
-                    #     # Sub Vars
-                    #     varResponse = subVars(translatedText)
-                    #     textHistory.append('\"' + varResponse[0] + '\"')
-                    # elif finalJAString != '':
-                    #     response = translateGPT(speaker + ': ' + finalJAString, textHistory, True)
-                    #     totalTokens[0] += response[1][0]
-                    #     totalTokens[1] += response[1][1]
-                    #     translatedText = response[0]
-
-                    #     # Remove added speaker
-                    #     translatedText = re.sub(r'(^.+?)\s?[|:]\s?', '', translatedText)
-
-                    #     # Sub Vars
-                    #     varResponse = subVars(translatedText)
-                    #     textHistory.append('\"' + speaker + ': ' + varResponse[0] + '\"')   
-                    #     speaker = ''             
-                    # else:
-                    #     translatedText = finalJAString    
-
-                    # # Textwrap
-                    # if FIXTEXTWRAP is True:
-                    #     translatedText = textwrap.fill(translatedText, width=WIDTH)
-                    #     if BRFLAG is True:
-                    #         translatedText = translatedText.replace('\n', '<br>')   
-
-                    # # Add Beginning Text
-                    # if CLFlag:
-                    #     translatedText = '\\CL' + translatedText
-                    #     CLFlag = False
-                    # translatedText = nametag + translatedText
-                    # nametag = ''
-                    # translatedText = soundEffectString + translatedText
-
-                    # # Set Data
-                    # translatedText = translatedText.replace('\"', '')
-                    # codeList[i]['parameters'] = []
-                    # codeList[i]['code'] = -1
-                    # codeList[j]['parameters'] = [translatedText]
-                    # codeList[j]['code'] = code
-                    # speaker = ''
-                    # match = []
-                    # syncIndex = i + 1
-
-                    # # Keep textHistory list at length maxHistory
-                    # if len(textHistory) > maxHistory:
-                    #     textHistory.pop(0)
-                    # currentGroup = []              
+                        syncIndex = i + 1           
 
             ## Event Code: 122 [Set Variables]
             if codeList[i]['code'] == 122 and CODE122 is True:
@@ -1587,6 +1539,8 @@ def searchCodes(page, pbar, fillList):
             fillList = response[0]
             totalTokens[0] += response[1][0]
             totalTokens[1] += response[1][1]
+            if len(fillList) != len(docList):
+                print('WARNING. LENGTH MISMATCH')
             docList = []
             searchCodes(page, pbar, fillList)
 
@@ -1792,10 +1746,7 @@ def getSpeaker(speaker):
         case 'ライト':
             return 'Light'
         case _:
-            response = translateGPT(speaker, 'Reply with only the '+ LANGUAGE +' translation of the NPC name', False)
-            totalTokens[0] += response[1][0]
-            totalTokens[1] += response[1][1]
-            return response[0].strip('.')
+                return translateGPT(speaker, 'Reply with only the '+ LANGUAGE +' translation of the NPC name', False)
 
 def subVars(jaString):
     jaString = jaString.replace('\u3000', ' ')
@@ -1939,15 +1890,15 @@ def translateGPT(t, history, fullPromptFlag):
     # If ESTIMATE is True just count this as an execution and return.
     if ESTIMATE:
         enc = tiktoken.encoding_for_model(MODEL)
-        historyRaw = ''
-        if isinstance(history, list):
-            for line in history:
-                historyRaw += line
+        textRaw = ''
+        if isinstance(t, list):
+            for line in t:
+                textRaw += line
         else:
             historyRaw = history
 
-        inputTotalTokens = len(enc.encode(historyRaw)) + len(enc.encode(PROMPT))
-        outputTotalTokens = len(enc.encode(t)) * 2   # Estimating 2x the size of the original text
+        inputTotalTokens = len(enc.encode(PROMPT))
+        outputTotalTokens = len(enc.encode(textRaw)) * 2   # Estimating 2x the size of the original text
         totalTokens = [inputTotalTokens, outputTotalTokens]
         return (t, totalTokens)
 
