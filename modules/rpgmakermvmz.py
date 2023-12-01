@@ -23,7 +23,7 @@ THREADS = int(os.getenv('threads')) # Controls how many threads are working on a
 LOCK = threading.Lock()
 WIDTH = int(os.getenv('width'))
 LISTWIDTH = int(os.getenv('listWidth'))
-NOTEWIDTH = 40
+NOTEWIDTH = 70
 MAXHISTORY = 10
 ESTIMATE = ''
 TOKENS = [0, 0]
@@ -52,7 +52,6 @@ CODE405 = False
 
 # Choices
 CODE102 = True
-CODE408 = False
 
 # Variables
 CODE122 = False
@@ -60,7 +59,7 @@ CODE122 = False
 # Names
 CODE101 = False
 
-# Script
+# Other
 CODE355655 = False
 CODE357 = False
 CODE657 = False
@@ -69,6 +68,7 @@ CODE320 = False
 CODE324 = False
 CODE111 = False
 CODE108 = False
+CODE408 = False
 
 def handleMVMZ(filename, estimate):
     global ESTIMATE, TOKENS
@@ -236,7 +236,7 @@ def translateNote(event, regex):
         jaString = re.sub(r'\n', ' ', oldJAString)
 
         # Translate
-        response = translateGPT(jaString, 'Reply with the '+ LANGUAGE +' translation of the location name.', True)
+        response = translateGPT(jaString, 'Reply with the '+ LANGUAGE +' translation.', False)
         translatedText = response[0]
 
         # Textwrap
@@ -651,27 +651,6 @@ def searchCodes(page, pbar, fillList):
                         # Remove nametag from final string
                         finalJAString = finalJAString.replace(nametag, '')
 
-                    # \\nw[Speaker]
-                    matchList = re.findall(r'(.*?([\\]+[nN][wWcC]\[(.+?)\]).*)', finalJAString)
-                    if len(matchList) > 0:  
-                        # Translate Speaker  
-                        speakerID = i
-                        response = getSpeaker(matchList[0][1])
-                        speaker = response[0]
-                        totalTokens[0] += response[1][0]
-                        totalTokens[1] += response[1][1]
-
-                        # Set Nametag and Remove from Final String
-                        nametag = matchList[0][0].replace(matchList[0][1], speaker)
-                        finalJAString = finalJAString.replace(matchList[0][0], '')
-
-                        # Set dialogue
-                        codeList[j]['parameters'][0] = matchList[0][2]
-                        codeList[j]['code'] = 401
-
-                        # Remove nametag from final string
-                        finalJAString = finalJAString.replace(nametag, '')
-
                     ### Brackets
                     matchList = re.findall\
                         (r'^([\\]+[cC]\[[0-9]+\]【?(.+?)】?[\\]+[cC]\[[0-9]+\])|^(【(.+)】)', finalJAString)  
@@ -1028,11 +1007,11 @@ def searchCodes(page, pbar, fillList):
                     continue
 
                 # Want to translate this script
-                if 'var str =' not in jaString:
+                if '_logWindow.push' not in jaString:
                     continue
 
                 # Need to remove outside code and put it back later
-                matchList = re.findall(r'var str ="(.+)"', jaString)
+                matchList = re.findall(r'_logWindow.push\(.addText\', \'\\(.+)\'\)', jaString)
 
                 # Translate
                 if len(matchList) > 0:
@@ -1065,7 +1044,7 @@ def searchCodes(page, pbar, fillList):
                     continue
 
                 # Want to translate this script
-                # if 'ans:' not in jaString:
+                # if 'title:' not in jaString:
                 #     continue
 
                 # Need to remove outside code and put it back later
@@ -1079,7 +1058,7 @@ def searchCodes(page, pbar, fillList):
                 else: endString = endString.group()
 
                 # Translate
-                response = translateGPT(jaString, '', True)
+                response = translateGPT(jaString, 'Reply with the English translation of the achievement.', True)
                 totalTokens[0] += response[1][0]
                 totalTokens[1] += response[1][1]
                 translatedText = response[0]
@@ -1521,7 +1500,7 @@ def searchCodes(page, pbar, fillList):
             totalTokens[0] += response[1][0]
             totalTokens[1] += response[1][1]
             if len(fillList) != len(docList):
-                print('WARNING. LENGTH MISMATCH')
+                pbar.write('WARNING. LENGTH MISMATCH')
             else:
                 docList = []
                 searchCodes(page, pbar, fillList)
@@ -1852,12 +1831,15 @@ def translateGPT(t, history, fullPromptFlag):
         history = ''
         lineList = []
         responseList = []
+
+        # Combine List into payload
+        payload = ''
         for i in range(len(t)):
-            responseList.append(subVars(t[i]))
-            lineList.append(responseList[i][0])
-            subbedT = ''
-            for i in range(len(lineList)):
-                subbedT = subbedT + f'L{i} - {lineList[i]}\n'
+            payload = payload + f'L{i} - {t[i]}\n'
+
+        varResponse = subVars(payload)
+        subbedT = varResponse[0]
+        
     else:
         # Sub Vars
         varResponse = subVars(t)
@@ -1891,13 +1873,9 @@ def translateGPT(t, history, fullPromptFlag):
 
     # Characters
     context = 'Game Characters:\
-        Character: アイル == Aeru - Gender: Male\
-        Character: リラ == Lira - Gender: Female\
-        Character: アザミ == Azami - Gender: Female\
-        Character: マーガレット == Margaret - Gender: Female\
-        Character: ミール == Miiru - Gender: Female\
-        Character: ライト == Light - Gender: Male'
-
+        Character: フローラ == Flora - Gender: Female\
+        Character: リーゼ == Liese - Gender: Female'
+    
     # Prompt
     if fullPromptFlag:
         system = PROMPT
@@ -1931,11 +1909,7 @@ def translateGPT(t, history, fullPromptFlag):
     totalTokens = [response.usage.prompt_tokens, response.usage.completion_tokens]
 
     # Resub Vars
-    if isinstance(t, list):
-        for i in range(len(t)):
-            translatedText = resubVars(translatedText, responseList[i][1])
-    else:
-        translatedText = resubVars(translatedText, varResponse[1])
+    translatedText = resubVars(translatedText, varResponse[1])
 
     # Remove Placeholder Text
     translatedText = translatedText.replace(LANGUAGE +' Translation: ', '')
@@ -1951,10 +1925,14 @@ def translateGPT(t, history, fullPromptFlag):
     translatedText = translatedText.replace('っ', '')
     translatedText = translatedText.replace('ッ', '')
     translatedText = translatedText.replace('ぁ', '')
+    translatedText = translatedText.replace('～', '~')
     translatedText = translatedText.replace('。', '.')
     translatedText = translatedText.replace('、', ',')
     translatedText = translatedText.replace('？', '?')
     translatedText = translatedText.replace('！', '!')
+    translatedText = translatedText.replace('「', '\"')
+    translatedText = translatedText.replace('」', '\"')
+
     translatedTextList = translatedText.split('\n')
     translatedTextList = list(filter(None, translatedTextList))
 
