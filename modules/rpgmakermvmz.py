@@ -1835,6 +1835,7 @@ def translateGPT(text, history, fullPromptFlag):
     # Batch
     if isinstance(text, list):
         tList = batch_list(text, 30)
+        history = ''    # We don't need history for lists
     else:
         tList = [text]
 
@@ -1842,9 +1843,6 @@ def translateGPT(text, history, fullPromptFlag):
     for index in range(len(tList)):
         tItem = tList[index]
         if isinstance(tItem, list):
-            # We don't need history for lists
-            history = ''
-
             # Combine List into payload
             payload = ''
             for i in range(len(tItem)):
@@ -1960,6 +1958,7 @@ def translateGPT(text, history, fullPromptFlag):
                 if len(matchList) > 0:
                     translatedTextList[i] = matchList[0]
             tList[index] = translatedTextList
+            history = translatedTextList[-10:]  # Going to need this for the next batch
         else:
             matchList = re.findall(r'.*L[0-9]+\s?-\s?(.+)', translatedText)
             if len(matchList) > 0:
