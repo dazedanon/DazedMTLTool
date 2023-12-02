@@ -1745,7 +1745,7 @@ def subVars(jaString):
     nameList = set(nameList)
     if len(nameList) != 0:
         for name in nameList:
-            jaString = jaString.replace(name, '{N_' + str(count) + '}')
+            jaString = jaString.replace(name, '{Noun_' + str(count) + '}')
             count += 1
 
     # Variables
@@ -1759,9 +1759,7 @@ def subVars(jaString):
 
     # Formatting
     count = 0
-    if '笑えるよね.' in jaString:
-        print('t')
-    formatList = re.findall(r'[\\]+[\w]+\[.+?\]', jaString)
+    formatList = re.findall(r'[\\]+.+', jaString)
     formatList = set(formatList)
     if len(formatList) != 0:
         for var in formatList:
@@ -1805,7 +1803,7 @@ def resubVars(translatedText, allList):
     count = 0
     if len(allList[3]) != 0:
         for var in allList[3]:
-            translatedText = translatedText.replace('{N_' + str(count) + '}', var)
+            translatedText = translatedText.replace('{Noun_' + str(count) + '}', var)
             count += 1
 
     # Vars
@@ -1871,6 +1869,7 @@ def translateGPT(t, history, fullPromptFlag):
         totalTokens = [inputTotalTokens, outputTotalTokens]
         return (t, totalTokens)
 
+    # Characters
     # Characters
     context = 'Game Characters:\
         Character: フローラ == Flora - Gender: Female\
@@ -1939,12 +1938,12 @@ def translateGPT(t, history, fullPromptFlag):
     # Return Translation
     if isinstance(t, list):
         for i in range(len(translatedTextList)):
-            matchList = re.findall(r'.*L[0-9]+ - (.+)', translatedTextList[i])
+            matchList = re.findall(r'.*L[0-9]+\s?-\s?(.+)', translatedTextList[i])
             if len(matchList) > 0:
                 translatedTextList[i] = matchList[0]
         return [translatedTextList, totalTokens]
     else:
-        matchList = re.findall(r'.*L[0-9]+ - (.+)', translatedText)
+        matchList = re.findall(r'.*L[0-9]+\s?-\s?(.+)', translatedText)
         if len(matchList) > 0:
             translatedText = matchList[0]
         return [translatedText, totalTokens]
