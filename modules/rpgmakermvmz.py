@@ -935,8 +935,6 @@ def searchCodes(page, pbar, fillList):
                     translatedText = startString + translatedText + endString
 
                     # Set Data
-                    if '\\' in jaString:
-                        print('Hi')
                     codeList[i]['parameters'][0] = translatedText
 
         ## Event Code: 101 [Name] [Optional]
@@ -1512,8 +1510,6 @@ def searchCodes(page, pbar, fillList):
             if len(fillList) != len(docList):
                 pbar.write('WARNING. LENGTH MISMATCH')
             else:
-                if '氷の洞窟に' in str(docList):
-                    print('t')
                 docList = []
                 searchCodes(page, pbar, fillList)
 
@@ -1525,11 +1521,8 @@ def searchCodes(page, pbar, fillList):
         page['list'] = codeListFinal
 
     except IndexError as e:
-        # This is part of the logic so we just pass it
         traceback.print_exc()
-        print(len(codeList))
-        print(i+1)
-        # raise Exception(str(e) + '|Line:' + tracebackLineNo)  
+        raise Exception(str(e) + 'Failed to translate: ' + oldjaString) from None
     except Exception as e:
         traceback.print_exc()
         raise Exception(str(e) + 'Failed to translate: ' + oldjaString) from None   
