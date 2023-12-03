@@ -31,7 +31,7 @@ NAMESLIST = []
 NAMES = False    # Output a list of all the character names found
 BRFLAG = False   # If the game uses <br> instead
 FIXTEXTWRAP = True  # Overwrites textwrap
-IGNORETLTEXT = False    # Ignores all translated text.
+IGNORETLTEXT = True    # Ignores all translated text.
 MISMATCH = []   # Lists files that throw a mismatch error (Length of GPT list response is wrong)
 
 # Pricing - Depends on the model https://openai.com/pricing
@@ -1847,7 +1847,7 @@ def createContext(fullPromptFlag, subbedT):
         ルル == Lulu - Female\
         クラウディア == Claudia - Female\
         サティア == Satya - Female\
-        ラヴィ == Lavie - Female\
+        ラヴィ == Rabi - Female\
         ララ == Lala - Female'
     system = PROMPT if fullPromptFlag else \
         f'Output ONLY the {LANGUAGE} translation in the following format: `Translation: <{LANGUAGE.upper()}_TRANSLATION>`'
@@ -1893,7 +1893,7 @@ def cleanTranslatedText(translatedText, varResponse):
     return [line for line in translatedText.split('\n') if line]
 
 def extractTranslation(translatedTextList, is_list):
-    pattern = r'L(\d+) - (.+)'
+    pattern = r'L(\d+) - (.*)'
     # If it's a batch (i.e., list), extract with tags; otherwise, return the single item.
     if is_list:
         return [re.findall(pattern, line)[0][1] for line in translatedTextList if re.search(pattern, line)]
