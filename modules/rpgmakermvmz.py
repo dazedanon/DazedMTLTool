@@ -32,6 +32,7 @@ NAMES = False    # Output a list of all the character names found
 BRFLAG = False   # If the game uses <br> instead
 FIXTEXTWRAP = True  # Overwrites textwrap
 IGNORETLTEXT = False    # Ignores all translated text.
+MISMATCH = []   # Lists files that throw a mismatch error (Length of GPT list response is wrong)
 
 # Pricing - Depends on the model https://openai.com/pricing
 if 'gpt-3.5' in MODEL:
@@ -44,7 +45,7 @@ elif 'gpt-4' in MODEL:
 # Batch Size - GPT 3.5 Struggles past 15 lines per request. GPT4 struggles past 50 lines per request
 # If you are getting a MISMATCH LENGTH error, lower the batch size.
 if 'gpt-3.5' in MODEL:
-    BATCHSIZE = 15
+    BATCHSIZE = 10
 elif 'gpt-4' in MODEL:
     BATCHSIZE = 50
 
@@ -102,7 +103,13 @@ def handleMVMZ(filename, estimate):
         TOKENS[1] += translatedData[1][1]
 
     # Print Total
-    return getResultString(['', TOKENS, None], end - start, 'TOTAL')
+    totalString = getResultString(['', TOKENS, None], end - start, 'TOTAL')
+
+    # Print any errors on maps
+    if len(MISMATCH) > 0:
+        return totalString + Fore.RED + f'\nMismatch Errors: {MISMATCH}' + Fore.RESET
+    else:
+        return totalString
 
 def openFiles(filename):
     with open('files/' + filename, 'r', encoding='utf-8-sig') as f:
@@ -223,7 +230,7 @@ def parseMap(data, filename):
                         totalTokens[0] += translateNoteOmitSpace(event, r'<namePop:(.*?) [\d]+>')[0]
                         totalTokens[1] += translateNoteOmitSpace(event, r'<namePop:(.*?) [\d]+>')[1]
 
-                    futures = [executor.submit(searchCodes, page, pbar, []) for page in event['pages'] if page is not None]
+                    futures = [executor.submit(searchCodes, page, pbar, [], filename) for page in event['pages'] if page is not None]
                     for future in as_completed(futures):
                         try:
                             totalTokensFuture = future.result()
@@ -289,7 +296,7 @@ def parseCommonEvents(data, filename):
         pbar.desc=filename
         pbar.total=totalLines
         with ThreadPoolExecutor(max_workers=THREADS) as executor:
-            futures = [executor.submit(searchCodes, page, pbar, []) for page in data if page is not None]
+            futures = [executor.submit(searchCodes, page, pbar, [], filename) for page in data if page is not None]
             for future in as_completed(futures):
                 try:
                     totalTokensFuture = future.result()
@@ -317,7 +324,7 @@ def parseTroops(data, filename):
         for troop in data:
             if troop is not None:
                 with ThreadPoolExecutor(max_workers=THREADS) as executor:
-                    futures = [executor.submit(searchCodes, page, pbar, []) for page in troop['pages'] if page is not None]
+                    futures = [executor.submit(searchCodes, page, pbar, [], filename) for page in troop['pages'] if page is not None]
                     for future in as_completed(futures):
                         try:
                             totalTokensFuture = future.result()
@@ -425,7 +432,7 @@ def parseScenario(data, filename):
         pbar.desc=filename
         pbar.total=totalLines
         with ThreadPoolExecutor(max_workers=THREADS) as executor:
-            futures = [executor.submit(searchCodes, page[1], pbar, []) for page in data.items() if page[1] is not None]
+            futures = [executor.submit(searchCodes, page[1], pbar, [], filename) for page in data.items() if page[1] is not None]
             for future in as_completed(futures):
                 try:
                     totalTokensFuture = future.result()
@@ -552,7 +559,7 @@ def searchNames(name, pbar, context):
 
     return totalTokens
 
-def searchCodes(page, pbar, fillList):
+def searchCodes(page, pbar, fillList, filename):
     docList = []
     currentGroup = []
     textHistory = []
@@ -1508,10 +1515,12 @@ def searchCodes(page, pbar, fillList):
             totalTokens[0] += response[1][0]
             totalTokens[1] += response[1][1]
             if len(fillList) != len(docList):
-                pbar.write('WARNING. LENGTH MISMATCH')
+                global MISMATCH
+                with LOCK:
+                    MISMATCH.append(filename)
             else:
                 docList = []
-                searchCodes(page, pbar, fillList)
+                searchCodes(page, pbar, fillList, filename)
 
         # Delete all -1 codes
         codeListFinal = []
@@ -1834,19 +1843,35 @@ def batchList(input_list, batch_size):
     return [input_list[i:i + batch_size] for i in range(0, len(input_list), batch_size)]
 
 def createContext(fullPromptFlag, subbedT):
+    characters = 'Game Characters:\
+        ザラキエル == Zerachiel - Female\
+        エフィー == Effie - Female\
+        アリエス == Ariel - Female\
+        ルル == Lulu - Female\
+        クラウディア == Claudia - Female\
+        サティア == Satya - Female\
+        ラヴィ == Lavie - Female\
+        ララ == Lala - Female'
     system = PROMPT if fullPromptFlag else \
         f'Output ONLY the {LANGUAGE} translation in the following format: `Translation: <{LANGUAGE.upper()}_TRANSLATION>`'
     user = f'Line to Translate = {subbedT}'
-    return system, user
+    return characters, system, user
 
 def translateText(subbedT, history, fullPromptFlag):
-    system, user = createContext(fullPromptFlag, subbedT)
-    # Creating message list
+    characters, system, user = createContext(fullPromptFlag, subbedT)
+    # Prompt
     msg = [{"role": "system", "content": system}]
+
+    # Characters
+    msg.append({"role": "user", "content": characters})
+
+    # History
     if isinstance(history, list):
         msg.extend([{"role": "user", "content": h} for h in history])
     else:
         msg.append({"role": "user", "content": history})
+    
+    # Content to TL
     msg.append({"role": "user", "content": user})
     response = openai.ChatCompletion.create(
         temperature=0,
