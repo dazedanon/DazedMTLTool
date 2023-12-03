@@ -41,6 +41,13 @@ elif 'gpt-4' in MODEL:
     INPUTAPICOST = .01
     OUTPUTAPICOST = .03
 
+# Batch Size - GPT 3.5 Struggles past 15 lines per request. GPT4 struggles past 50 lines per request
+# If you are getting a MISMATCH LENGTH error, lower the batch size.
+if 'gpt-3.5' in MODEL:
+    BATCHSIZE = 15
+elif 'gpt-4' in MODEL:
+    BATCHSIZE = 50
+
 #tqdm Globals
 BAR_FORMAT='{l_bar}{bar:10}{r_bar}{bar:-10b}'
 POSITION = 0
@@ -743,6 +750,9 @@ def searchCodes(page, pbar, fillList):
                         elif finalJAString != '':
                             docList.append(f'{speaker}: {finalJAString}')
                             textHistory.append(finalJAString)
+                        else:
+                            docList.append(speaker)
+                            textHistory.append(speaker)
                         speaker = ''
                         match = []
                         currentGroup = []
@@ -1502,6 +1512,8 @@ def searchCodes(page, pbar, fillList):
             if len(fillList) != len(docList):
                 pbar.write('WARNING. LENGTH MISMATCH')
             else:
+                if '氷の洞窟に' in str(docList):
+                    print('t')
                 docList = []
                 searchCodes(page, pbar, fillList)
 
@@ -1822,155 +1834,113 @@ def resubVars(translatedText, allList):
 
     return translatedText
 
-def batch_list(input_list, batch_size):
+def batchList(input_list, batch_size):
     if not isinstance(batch_size, int) or batch_size <= 0:
         raise ValueError("batch_size must be a positive integer")
         
     return [input_list[i:i + batch_size] for i in range(0, len(input_list), batch_size)]
 
+def createContext(fullPromptFlag, subbedT):
+    system = PROMPT if fullPromptFlag else \
+        f'Output ONLY the {LANGUAGE} translation in the following format: `Translation: <{LANGUAGE.upper()}_TRANSLATION>`'
+    user = f'Line to Translate = {subbedT}'
+    return system, user
+
+def translateText(subbedT, history, fullPromptFlag):
+    system, user = createContext(fullPromptFlag, subbedT)
+    # Creating message list
+    msg = [{"role": "system", "content": system}]
+    if isinstance(history, list):
+        msg.extend([{"role": "user", "content": h} for h in history])
+    else:
+        msg.append({"role": "user", "content": history})
+    msg.append({"role": "user", "content": user})
+    response = openai.ChatCompletion.create(
+        temperature=0,
+        frequency_penalty=0,
+        presence_penalty=0,
+        model=MODEL,
+        messages=msg,
+        request_timeout=TIMEOUT,
+    )
+    return response
+
+def cleanTranslatedText(translatedText, varResponse):
+    placeholders = {
+        f'{LANGUAGE} Translation: ': '',
+        'Translation: ': '',
+        # Add more replacements as needed
+    }
+    for target, replacement in placeholders.items():
+        translatedText = translatedText.replace(target, replacement)
+
+    translatedText = resubVars(translatedText, varResponse[1])
+    return [line for line in translatedText.split('\n') if line]
+
+def extractTranslation(translatedTextList, is_list):
+    pattern = r'L(\d+) - (.+)'
+    # If it's a batch (i.e., list), extract with tags; otherwise, return the single item.
+    if is_list:
+        return [re.findall(pattern, line)[0][1] for line in translatedTextList if re.search(pattern, line)]
+    else:
+        matchList = re.findall(pattern, translatedTextList)
+        return matchList[0][1] if matchList else translatedTextList
+
+def countTokens(tItem, history):
+    enc = tiktoken.encoding_for_model(MODEL)
+    encode_count = lambda item: sum(len(enc.encode(line)) for line in (item if isinstance(item, list) else [item]))
+    inputTotalTokens = encode_count(history) + encode_count(PROMPT)
+    outputTotalTokens = encode_count(tItem) * 2  # Estimated
+    return inputTotalTokens + outputTotalTokens
+
+def combineList(tlist, text):
+    if isinstance(text, list):
+        return [t for sublist in tlist for t in sublist]
+    return tlist[0]
 
 @retry(exceptions=Exception, tries=5, delay=5)
 def translateGPT(text, history, fullPromptFlag):
-    totalTokens = [0,0]
-    # Batch
+    totalTokens = [0, 0]
     if isinstance(text, list):
-        tList = batch_list(text, 30)
-        history = ''    # We don't need history for lists
+        tList = batchList(text, BATCHSIZE)
+        history = ''
     else:
         tList = [text]
 
-    # Translate
-    for index in range(len(tList)):
-        tItem = tList[index]
+    for index, tItem in enumerate(tList):
+        # Before sending to translation, if we have a list of items, add the formatting
         if isinstance(tItem, list):
-            # Combine List into payload
-            payload = ''
-            for i in range(len(tItem)):
-                payload = payload + f'L{i} - {tItem[i]}\n'
-
+            payload = '\n'.join([f'L{i} - {item}' for i, item in enumerate(tItem)])
             varResponse = subVars(payload)
             subbedT = varResponse[0]
-            
         else:
-            # Sub Vars
             varResponse = subVars(tItem)
             subbedT = varResponse[0]
 
-        # If there isn't any Japanese in the text just skip
-        if not re.search(r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴ]+|[\uFF00-\uFFEF]', subbedT):
-            tList[index] = tItem
+        # Things to Check before starting translation
+        if not re.search(r'[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９]+', subbedT):
             continue
 
-        # If ESTIMATE is True just count this as an execution and return.
         if ESTIMATE:
-            enc = tiktoken.encoding_for_model(MODEL)
-            textRaw = ''
-            historyRaw = ''
-
-            # Check Lists
-            if isinstance(tItem, list):
-                for line in tItem:
-                    textRaw += line
-                for line in history:
-                    historyRaw += line
-            else:
-                textRaw = tItem
-                historyRaw = history
-                
-            # Calculate Estimate
-            inputTotalTokens = len(enc.encode(historyRaw)) + len(enc.encode(PROMPT))
-            outputTotalTokens = len(enc.encode(textRaw)) * 2   # Estimating 2x the size of the original text
-            totalTokens += inputTotalTokens
-            totalTokens += outputTotalTokens
-            tList[index] = tItem
+            totalTokens[0] += countTokens(tItem, history)
             continue
 
-        # Characters
-        context = 'Game Characters:\
-            Character: フローラ == Flora - Gender: Female\
-            Character: リーゼ == Liese - Gender: Female'
-        
-        # Prompt
-        if fullPromptFlag:
-            system = PROMPT
-            user = 'Line to Translate = ' + subbedT
-        else:
-            system = 'Output ONLY the '+ LANGUAGE +' translation in the following format: `Translation: <'+ LANGUAGE.upper() +'_TRANSLATION>`' 
-            user = 'Line to Translate = ' + subbedT
-
-        # Create Message List
-        msg = []
-        msg.append({"role": "system", "content": system})
-        msg.append({"role": "user", "content": context})
-        if isinstance(history, list):
-            for line in history:
-                msg.append({"role": "user", "content": line})
-        else:
-            msg.append({"role": "user", "content": history})
-        msg.append({"role": "user", "content": user})
-
-        response = openai.ChatCompletion.create(
-            temperature=0,
-            frequency_penalty=0,
-            presence_penalty=0,
-            model=MODEL,
-            messages=msg,
-            request_timeout=TIMEOUT,
-        )
-
-        # Save Translated Text
+        # Translating
+        response = translateText(subbedT, history, fullPromptFlag)
         translatedText = response.choices[0].message.content
         totalTokens[0] += response.usage.prompt_tokens
         totalTokens[1] += response.usage.completion_tokens
 
-        # Resub Vars
-        translatedText = resubVars(translatedText, varResponse[1])
-
-        # Remove Placeholder Text
-        translatedText = translatedText.replace(LANGUAGE +' Translation: ', '')
-        translatedText = translatedText.replace('Translation: ', '')
-        translatedText = translatedText.replace('Line to Translate = ', '')
-        translatedText = translatedText.replace('Translation = ', '')
-        translatedText = translatedText.replace('Translate = ', '')
-        translatedText = translatedText.replace(LANGUAGE +' Translation:', '')
-        translatedText = translatedText.replace('Translation:', '')
-        translatedText = translatedText.replace('Line to Translate =', '')
-        translatedText = translatedText.replace('Translation =', '')
-        translatedText = translatedText.replace('Translate =', '')
-        translatedText = translatedText.replace('っ', '')
-        translatedText = translatedText.replace('ッ', '')
-        translatedText = translatedText.replace('ぁ', '')
-        translatedText = translatedText.replace('～', '~')
-        translatedText = translatedText.replace('。', '.')
-        translatedText = translatedText.replace('、', ',')
-        translatedText = translatedText.replace('？', '?')
-        translatedText = translatedText.replace('！', '!')
-        translatedText = translatedText.replace('「', '\"')
-        translatedText = translatedText.replace('」', '\"')
-
-        translatedTextList = translatedText.split('\n')
-        translatedTextList = list(filter(None, translatedTextList))
-
-        # Return Translation
+        # Formatting
+        translatedTextList = cleanTranslatedText(translatedText, varResponse)
         if isinstance(tItem, list):
-            for i in range(len(translatedTextList)):
-                matchList = re.findall(r'.*L[0-9]+\s?-\s?(.+)', translatedTextList[i])
-                if len(matchList) > 0:
-                    translatedTextList[i] = matchList[0]
-            tList[index] = translatedTextList
-            history = translatedTextList[-10:]  # Going to need this for the next batch
+            extractedTranslations = extractTranslation(translatedTextList, True)
+            tList[index] = extractedTranslations
+            history = extractedTranslations[-10:]  # Update history if we have a list
         else:
-            matchList = re.findall(r'.*L[0-9]+\s?-\s?(.+)', translatedText)
-            if len(matchList) > 0:
-                translatedText = matchList[0]
-            tList[index] = translatedText
-        
-    # Combine Lists
-    if isinstance(text, list):
-        finalList = []
-        for l in tList:
-            finalList = finalList + l
-    else:
-        finalList = tList[0]
+            # Ensure we're passing a single string to extractTranslation
+            extractedTranslations = extractTranslation('\n'.join(translatedTextList), False)
+            tList[index] = extractedTranslations
 
+    finalList = combineList(tList, text)
     return [finalList, totalTokens]
