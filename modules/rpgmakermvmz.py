@@ -35,19 +35,16 @@ IGNORETLTEXT = False    # Ignores all translated text.
 MISMATCH = []   # Lists files that throw a mismatch error (Length of GPT list response is wrong)
 
 # Pricing - Depends on the model https://openai.com/pricing
-if 'gpt-3.5' in MODEL:
-    INPUTAPICOST = .002 
-    OUTPUTAPICOST = .002
-elif 'gpt-4' in MODEL:
-    INPUTAPICOST = .01
-    OUTPUTAPICOST = .03
-
 # Batch Size - GPT 3.5 Struggles past 15 lines per request. GPT4 struggles past 50 lines per request
 # If you are getting a MISMATCH LENGTH error, lower the batch size.
 if 'gpt-3.5' in MODEL:
+    INPUTAPICOST = .002 
+    OUTPUTAPICOST = .002
     BATCHSIZE = 10
 elif 'gpt-4' in MODEL:
-    BATCHSIZE = 50
+    INPUTAPICOST = .01
+    OUTPUTAPICOST = .03
+    BATCHSIZE = 50  
 
 #tqdm Globals
 BAR_FORMAT='{l_bar}{bar:10}{r_bar}{bar:-10b}'
