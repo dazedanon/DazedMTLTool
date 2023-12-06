@@ -30,7 +30,7 @@ NAMESLIST = []
 NAMES = False    # Output a list of all the character names found
 BRFLAG = False   # If the game uses <br> instead
 FIXTEXTWRAP = True  # Overwrites textwrap
-IGNORETLTEXT = False    # Ignores all translated text.
+IGNORETLTEXT = True    # Ignores all translated text.
 MISMATCH = []   # Lists files that throw a mismatch error (Length of GPT list response is wrong)
 
 #tqdm Globals
@@ -152,7 +152,12 @@ def translateJSON(keys, data, pbar):
 
         # If there isn't any Japanese in the text just skip
         if IGNORETLTEXT is True:
-            if not re.search(r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴー]+', str(batch)):
+            needTL = False
+            for i in range(len(batch)):
+                t = data[batch[i]]
+                if t == "":
+                    needTL = True
+            if needTL is False:
                 pbar.update(1)
                 continue
 
