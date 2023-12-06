@@ -31,7 +31,7 @@ NAMESLIST = []
 NAMES = False    # Output a list of all the character names found
 BRFLAG = False   # If the game uses <br> instead
 FIXTEXTWRAP = True  # Overwrites textwrap
-IGNORETLTEXT = True    # Ignores all translated text.
+IGNORETLTEXT = False    # Ignores all translated text.
 MISMATCH = []   # Lists files that throw a mismatch error (Length of GPT list response is wrong)
 
 # Pricing - Depends on the model https://openai.com/pricing
@@ -52,11 +52,11 @@ POSITION = 0
 LEAVE = False
 
 # Dialogue / Scroll
-CODE401 = True
+CODE401 = False
 CODE405 = False
 
 # Choices
-CODE102 = True
+CODE102 = False
 
 # Variables
 CODE122 = False
@@ -72,7 +72,7 @@ CODE356 = False
 CODE320 = False
 CODE324 = False
 CODE111 = False
-CODE108 = False
+CODE108 = True
 CODE408 = False
 
 def handleMVMZ(filename, estimate):
@@ -1096,11 +1096,11 @@ def searchCodes(page, pbar, fillList, filename):
                     continue
 
                 # Want to translate this script
-                if '<ActiveMessage:' not in jaString:
+                if '<namePop:' not in jaString:
                     continue
 
                 # Need to remove outside code and put it back later
-                matchList = re.findall(r'<ActiveMessage:(.+)>', jaString)
+                matchList = re.findall(r'<namePop:(.+)>', jaString)
 
                 # Translate
                 if len(matchList) > 0:
@@ -1841,14 +1841,16 @@ def batchList(input_list, batch_size):
 
 def createContext(fullPromptFlag, subbedT):
     characters = 'Game Characters:\
-        ザラキエル == Zerachiel - Female\
-        エフィー == Effie - Female\
-        アリエス == Ariel - Female\
-        ルル == Lulu - Female\
-        クラウディア == Claudia - Female\
-        サティア == Satya - Female\
-        ラヴィ == Rabi - Female\
-        ララ == Lala - Female'
+        ボク == Boku - Male\
+        ユイ == Yui - Female\
+        ヒロミ == Hiromi - Female\
+        ミヤビ == Miyabi - Female\
+        ショウコ == Shoko - Female\
+        リリ == Riri - Female\
+        ララ == Rara - Female\
+        ミユキ == Miyuki - Female\
+        ナギサ == Nagisa - Female\
+        タケル == Takeru - Male'
     system = PROMPT if fullPromptFlag else \
         f'Output ONLY the {LANGUAGE} translation in the following format: `Translation: <{LANGUAGE.upper()}_TRANSLATION>`'
     user = f'Line to Translate = {subbedT}'
