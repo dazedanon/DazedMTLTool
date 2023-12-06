@@ -44,7 +44,7 @@ if 'gpt-3.5' in MODEL:
 elif 'gpt-4' in MODEL:
     INPUTAPICOST = .01
     OUTPUTAPICOST = .03
-    BATCHSIZE = 50  
+    BATCHSIZE = 40  
 
 #tqdm Globals
 BAR_FORMAT='{l_bar}{bar:10}{r_bar}{bar:-10b}'
@@ -1880,6 +1880,7 @@ def cleanTranslatedText(translatedText, varResponse):
     placeholders = {
         f'{LANGUAGE} Translation: ': '',
         'Translation: ': '',
+        'っ': '',
         # Add more replacements as needed
     }
     for target, replacement in placeholders.items():
@@ -1889,7 +1890,7 @@ def cleanTranslatedText(translatedText, varResponse):
     return [line for line in translatedText.split('\n') if line]
 
 def extractTranslation(translatedTextList, is_list):
-    pattern = r'L(\d+) - (.*)'
+    pattern = r'<Line(\d+)>(.*)</Line\d+>'
     # If it's a batch (i.e., list), extract with tags; otherwise, return the single item.
     if is_list:
         return [re.findall(pattern, line)[0][1] for line in translatedTextList if re.search(pattern, line)]
@@ -1933,7 +1934,7 @@ def translateGPT(text, history, fullPromptFlag):
     for index, tItem in enumerate(tList):
         # Before sending to translation, if we have a list of items, add the formatting
         if isinstance(tItem, list):
-            payload = '\n'.join([f'L{i} - {item}' for i, item in enumerate(tItem)])
+            payload = '\n'.join([f'<Line{i}>{item}</Line{i}>' for i, item in enumerate(tItem)])
             varResponse = subVars(payload)
             subbedT = varResponse[0]
         else:
