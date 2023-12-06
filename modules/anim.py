@@ -30,7 +30,7 @@ NAMESLIST = []
 NAMES = False    # Output a list of all the character names found
 BRFLAG = False   # If the game uses <br> instead
 FIXTEXTWRAP = True  # Overwrites textwrap
-IGNORETLTEXT = True    # Ignores all translated text.
+IGNORETLTEXT = False    # Ignores all translated text.
 MISMATCH = []   # Lists files that throw a mismatch error (Length of GPT list response is wrong)
 
 #tqdm Globals
@@ -66,7 +66,14 @@ def handleAnim(filename, estimate):
             totalTokens[0] += translatedData[1][0]
             totalTokens[1] += translatedData[1][1]
 
-        return getResultString(['', totalTokens, None], end - start, 'TOTAL')
+        # Print Total
+        totalString = getResultString(['', TOKENS, None], end - start, 'TOTAL')
+
+        # Print any errors on maps
+        if len(MISMATCH) > 0:
+            return totalString + Fore.RED + f'\nMismatch Errors: {MISMATCH}' + Fore.RESET
+        else:
+            return totalString
     
     else:
         try:
@@ -139,38 +146,50 @@ def parseJSON(data, filename):
             totalTokens[0] += result[0]
             totalTokens[1] += result[1]
         except Exception as e:
+            traceback.print_exc()
             return [data, totalTokens, e]
     return [data, totalTokens, None]
 
 def translateJSON(keys, data, pbar):
+    translatedBatch = []
     textHistory = []
     tokens = [0, 0]
 
     for batch in keys:
         # Save Batch
-        originalBatch = batch
+        originalBatch = batch.copy()
 
         # If there isn't any Japanese in the text just skip
-        if IGNORETLTEXT is True:
-            needTL = False
-            for i in range(len(batch)):
-                t = data[batch[i]]
-                if t == "":
-                    needTL = True
-            if needTL is False:
-                pbar.update(1)
-                continue
+        needTL = False
+        for i in range(len(batch)):
+            t = data[batch[i]]
+            if re.search(r'[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９]+', t) or t == '':
+                needTL = True
+        if needTL is False and IGNORETLTEXT is True:
+            pbar.update(1)
+            continue            
 
-        # Remove any textwrap
-        if FIXTEXTWRAP == True:
-            for i in range(len(batch)):
-                data[originalBatch[i]] = data[originalBatch[i]].replace('\n', ' ')
+        # Remove any textwrap and Furigana
+        for i in range(len(batch)):
+            if FIXTEXTWRAP == True:
+                # Textwrap
+                data[originalBatch[i]] = data[originalBatch[i]].replace('@b', ' ')
+
+            # Furigana
+            rcodeMatch = re.findall(r'(@\[(.+?):.+?\])', batch[i])
+            if len(rcodeMatch) > 0:
+                for match in rcodeMatch:
+                    batch[i] = batch[i].replace(match[0], match[1])
 
         # Translate
-        response = translateGPT(batch, textHistory, True)
-        tokens[0] += response[1][0]
-        tokens[1] += response[1][1]
-        translatedBatch = response[0]
+        if needTL is True:
+            response = translateGPT(batch, textHistory, True)
+            tokens[0] += response[1][0]
+            tokens[1] += response[1][1]
+            translatedBatch = response[0]
+        else:
+            for i in range(len(originalBatch)):
+                translatedBatch.append(data[originalBatch[i]])
 
         # Format and Set Text
         if len(batch) == len(translatedBatch):
@@ -181,12 +200,14 @@ def translateJSON(keys, data, pbar):
                 translatedText = re.sub(r'^.+?\s\|\s?', '', translatedText)
 
                 # Textwrap
-                if '\n' not in translatedText:
+                if '@b' not in translatedText:
                     translatedText = textwrap.fill(translatedText, width=WIDTH)
+                    translatedText = translatedText.replace('\n', '@b')
 
                 # Set Data
                 data[originalBatch[i]] = translatedText
                 textHistory = translatedBatch
+            translatedBatch.clear()
         # Mismatch, Skip Batch
         else:
             MISMATCH.append(batch)
@@ -356,6 +377,7 @@ def cleanTranslatedText(translatedText, varResponse):
     placeholders = {
         f'{LANGUAGE} Translation: ': '',
         'Translation: ': '',
+        'っ': '',
         # Add more replacements as needed
     }
     for target, replacement in placeholders.items():
@@ -365,7 +387,7 @@ def cleanTranslatedText(translatedText, varResponse):
     return [line for line in translatedText.split('\n') if line]
 
 def extractTranslation(translatedTextList, is_list):
-    pattern = r'L(\d+) - (.*)'
+    pattern = r'<Line(\d+)>(.*)</Line\d+>'
     # If it's a batch (i.e., list), extract with tags; otherwise, return the single item.
     if is_list:
         return [re.findall(pattern, line)[0][1] for line in translatedTextList if re.search(pattern, line)]
@@ -409,7 +431,7 @@ def translateGPT(text, history, fullPromptFlag):
     for index, tItem in enumerate(tList):
         # Before sending to translation, if we have a list of items, add the formatting
         if isinstance(tItem, list):
-            payload = '\n'.join([f'L{i} - {item}' for i, item in enumerate(tItem)])
+            payload = '\n'.join([f'<Line{i}>{item}</Line{i}>' for i, item in enumerate(tItem)])
             varResponse = subVars(payload)
             subbedT = varResponse[0]
         else:
