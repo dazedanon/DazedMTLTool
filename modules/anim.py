@@ -1,51 +1,54 @@
-import json
-import os
+# Libraries
+import json, os, re, textwrap, threading, time, traceback, tiktoken, openai
 from pathlib import Path
-import re
-import sys
-import textwrap
-import threading
-import time
-import traceback
-import tiktoken
-
 from colorama import Fore
 from dotenv import load_dotenv
-import openai
 from retry import retry
 from tqdm import tqdm
 
-#Globals
+# Open AI
 load_dotenv()
 if os.getenv('api').replace(' ', '') != '':
     openai.api_base = os.getenv('api')
-
 openai.organization = os.getenv('org')
 openai.api_key = os.getenv('key')
+
+#Globals
 MODEL = os.getenv('model')
 TIMEOUT = int(os.getenv('timeout'))
-LANGUAGE=os.getenv('language').capitalize()
-
-INPUTAPICOST = .002 # Depends on the model https://openai.com/pricing
-OUTPUTAPICOST = .002
+LANGUAGE = os.getenv('language').capitalize()
 PROMPT = Path('prompt.txt').read_text(encoding='utf-8')
-THREADS = int(os.getenv('threads')) # Controls how many threads are working on a single file (May have to drop this)
+THREADS = int(os.getenv('threads'))
 LOCK = threading.Lock()
 WIDTH = int(os.getenv('width'))
 LISTWIDTH = int(os.getenv('listWidth'))
-NOTEWIDTH = 50
+NOTEWIDTH = 70
 MAXHISTORY = 10
 ESTIMATE = ''
-totalTokens = [0, 0]
+TOKENS = [0, 0]
 NAMESLIST = []
+NAMES = False    # Output a list of all the character names found
+BRFLAG = False   # If the game uses <br> instead
+FIXTEXTWRAP = True  # Overwrites textwrap
+IGNORETLTEXT = False    # Ignores all translated text.
+MISMATCH = []   # Lists files that throw a mismatch error (Length of GPT list response is wrong)
 
 #tqdm Globals
 BAR_FORMAT='{l_bar}{bar:10}{r_bar}{bar:-10b}'
-POSITION=0
-LEAVE=False
-BRFLAG = False   # If the game uses <br> instead
-FIXTEXTWRAP = True
-IGNORETLTEXT = True
+POSITION = 0
+LEAVE = False
+
+# Pricing - Depends on the model https://openai.com/pricing
+# Batch Size - GPT 3.5 Struggles past 15 lines per request. GPT4 struggles past 50 lines per request
+# If you are getting a MISMATCH LENGTH error, lower the batch size.
+if 'gpt-3.5' in MODEL:
+    INPUTAPICOST = .002 
+    OUTPUTAPICOST = .002
+    BATCHSIZE = 10
+elif 'gpt-4' in MODEL:
+    INPUTAPICOST = .01
+    OUTPUTAPICOST = .03
+    BATCHSIZE = 50  
 
 def handleAnim(filename, estimate):
     global ESTIMATE, totalTokens
@@ -129,64 +132,61 @@ def parseJSON(data, filename):
         pbar.desc=filename
         pbar.total=totalLines
         try:
-            result = translateJSON(data, pbar)
+            keys = list(data.keys())
+            batches = [keys[i:i + 20] for i in range(0, len(keys), 20)]
+            result = translateJSON(batches, data, pbar)
             totalTokens[0] += result[0]
             totalTokens[1] += result[1]
         except Exception as e:
             return [data, totalTokens, e]
     return [data, totalTokens, None]
 
-def translateJSON(data, pbar):
+def translateJSON(keys, data, pbar):
     textHistory = []
-    maxHistory = MAXHISTORY
     tokens = [0, 0]
 
-    for key, value in data.items():
-        # Text
-        if value == "":
-            jaString = key
-        else:
-            jaString = value
+    for batch in keys:
+        # Save Batch
+        originalBatch = batch
 
-        # Check if TLed
         # If there isn't any Japanese in the text just skip
         if IGNORETLTEXT is True:
-            if not re.search(r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴー]+', jaString):
+            if not re.search(r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴー]+', str(batch)):
                 pbar.update(1)
                 continue
 
         # Remove any textwrap
         if FIXTEXTWRAP == True:
-            jaString = jaString.replace('\n', ' ')
+            for i in range(len(batch)):
+                data[originalBatch[i]] = data[originalBatch[i]].replace('\n', ' ')
 
         # Translate
-        if jaString != '':
-            response = translateGPT(f'{jaString}', textHistory, True)
-            tokens[0] += response[1][0]
-            tokens[1] += response[1][1]
-            translatedText = response[0]
-            textHistory.append('\"' + translatedText + '\"')  
+        response = translateGPT(batch, textHistory, True)
+        tokens[0] += response[1][0]
+        tokens[1] += response[1][1]
+        translatedBatch = response[0]
+
+        # Format and Set Text
+        if len(batch) == len(translatedBatch):
+            for i in range(len(translatedBatch)):
+
+                # Remove added speaker
+                translatedText = translatedBatch[i]
+                translatedText = re.sub(r'^.+?\s\|\s?', '', translatedText)
+
+                # Textwrap
+                if '\n' not in translatedText:
+                    translatedText = textwrap.fill(translatedText, width=WIDTH)
+
+                # Set Data
+                data[originalBatch[i]] = translatedText
+                pbar.update(1)
+        # Mismatch, Skip Batch
         else:
-            translatedText = jaString
-            textHistory.append('\"' + translatedText + '\"')
+            MISMATCH.append(batch)
+            continue
 
-        # Remove added speaker
-        translatedText = re.sub(r'^.+?\s\|\s?', '', translatedText)
-
-        # Textwrap
-        if '\n' not in translatedText:
-            translatedText = textwrap.fill(translatedText, width=WIDTH)
-
-        # Set Data
-        data[key] = translatedText
-
-        # Keep textHistory list at length maxHistory
-        if len(textHistory) > maxHistory:
-            textHistory.pop(0)
-        currentGroup = []  
-        pbar.update(1)
-
-    return tokens           
+    return tokens  
 
 def subVars(jaString):
     jaString = jaString.replace('\u3000', ' ')
