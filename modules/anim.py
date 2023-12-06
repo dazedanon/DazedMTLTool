@@ -51,7 +51,8 @@ elif 'gpt-4' in MODEL:
     BATCHSIZE = 50  
 
 def handleAnim(filename, estimate):
-    global ESTIMATE, totalTokens
+    global ESTIMATE
+    totalTokens = [0,0]
     ESTIMATE = estimate
 
     if estimate:
@@ -123,17 +124,17 @@ def getResultString(translatedData, translationTime, filename):
                 errorString + Fore.RESET
         
 def parseJSON(data, filename):
+    keys = list(data.keys())
+    batches = [keys[i:i + BATCHSIZE] for i in range(0, len(keys), BATCHSIZE)]
     totalTokens = [0, 0]
     totalLines = 0
-    totalLines = len(data)
+    totalLines = len(batches)
     global LOCK
     
     with tqdm(bar_format=BAR_FORMAT, position=POSITION, total=totalLines, leave=LEAVE) as pbar:
         pbar.desc=filename
         pbar.total=totalLines
         try:
-            keys = list(data.keys())
-            batches = [keys[i:i + 20] for i in range(0, len(keys), 20)]
             result = translateJSON(batches, data, pbar)
             totalTokens[0] += result[0]
             totalTokens[1] += result[1]
@@ -180,11 +181,13 @@ def translateJSON(keys, data, pbar):
 
                 # Set Data
                 data[originalBatch[i]] = translatedText
-                pbar.update(1)
+                textHistory = translatedBatch
         # Mismatch, Skip Batch
         else:
             MISMATCH.append(batch)
+            pbar.update(1)
             continue
+        pbar.update(1)
 
     return tokens  
 
@@ -309,23 +312,17 @@ def batchList(input_list, batch_size):
 
 def createContext(fullPromptFlag, subbedT):
     characters = 'Game Characters:\
-        ボク == Boku - Male\
-        ユイ == Yui - Female\
-        ヒロミ == Hiromi - Female\
-        ミヤビ == Miyabi - Female\
-        ショウコ == Shoko - Female\
-        リリ == Riri - Female\
-        ララ == Rara - Female\
-        ミユキ == Miyuki - Female\
-        ナギサ == Nagisa - Female\
-        タケル == Takeru - Male'
+        篠崎 誠一 == Shinozaki Seiichi - Male\
+        宮前 遥奈 == Miyamae Haruna - Female\
+        榛名 悠真 == Haruna Yuuma - Male\
+        浪川 時宗 == Namikawa Tokimune - Male\
+        高嶋 美雪 == Takashima Miyuki - Female'
     system = PROMPT if fullPromptFlag else \
         f'Output ONLY the {LANGUAGE} translation in the following format: `Translation: <{LANGUAGE.upper()}_TRANSLATION>`'
-    user = f'Line to Translate = {subbedT}'
+    user = f'{subbedT}'
     return characters, system, user
 
-def translateText(subbedT, history, fullPromptFlag):
-    characters, system, user = createContext(fullPromptFlag, subbedT)
+def translateText(characters, system, user, history):
     # Prompt
     msg = [{"role": "system", "content": system}]
 
@@ -371,12 +368,25 @@ def extractTranslation(translatedTextList, is_list):
         matchList = re.findall(pattern, translatedTextList)
         return matchList[0][1] if matchList else translatedTextList
 
-def countTokens(tItem, history):
+def countTokens(characters, system, user, history):
+    inputTotalTokens = 0
+    outputTotalTokens = 0
     enc = tiktoken.encoding_for_model(MODEL)
-    encode_count = lambda item: sum(len(enc.encode(line)) for line in (item if isinstance(item, list) else [item]))
-    inputTotalTokens = encode_count(history) + encode_count(PROMPT)
-    outputTotalTokens = encode_count(tItem) * 2  # Estimated
-    return inputTotalTokens + outputTotalTokens
+    
+    # Input
+    if isinstance(history, list):
+        for line in history:
+            inputTotalTokens += len(enc.encode(line))
+    else:
+        inputTotalTokens += len(enc.encode(history))
+    inputTotalTokens += len(enc.encode(system))
+    inputTotalTokens += len(enc.encode(characters))
+    inputTotalTokens += len(enc.encode(user))
+
+    # Output
+    outputTotalTokens += round(len(enc.encode(user))/1.7)
+
+    return [inputTotalTokens, outputTotalTokens]
 
 def combineList(tlist, text):
     if isinstance(text, list):
@@ -388,7 +398,6 @@ def translateGPT(text, history, fullPromptFlag):
     totalTokens = [0, 0]
     if isinstance(text, list):
         tList = batchList(text, BATCHSIZE)
-        history = ''
     else:
         tList = [text]
 
@@ -406,12 +415,18 @@ def translateGPT(text, history, fullPromptFlag):
         if not re.search(r'[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９]+', subbedT):
             continue
 
+        # Create Message
+        characters, system, user = createContext(fullPromptFlag, subbedT)
+
+        # Calculate Estimate
         if ESTIMATE:
-            totalTokens[0] += countTokens(tItem, history)
+            estimate = countTokens(characters, system, user, history)
+            totalTokens[0] += estimate[0]
+            totalTokens[1] += estimate[1]
             continue
 
         # Translating
-        response = translateText(subbedT, history, fullPromptFlag)
+        response = translateText(characters, system, user, history)
         translatedText = response.choices[0].message.content
         totalTokens[0] += response.usage.prompt_tokens
         totalTokens[1] += response.usage.completion_tokens
