@@ -127,36 +127,35 @@ def parseText(data, filename):
     # Get total for progress bar
     linesList = data.readlines()
     totalTokens = [0, 0]
-    batches = [linesList[i:i + BATCHSIZE] for i in range(0, len(linesList), BATCHSIZE)]
-    totalLines = len(batches)
+    totalLines = len(linesList)
     global LOCK
     
     with tqdm(bar_format=BAR_FORMAT, position=POSITION, total=totalLines, leave=LEAVE) as pbar:
         pbar.desc=filename
         pbar.total=totalLines
         try:
-            result = translateLines(linesList, data, pbar)
-            totalTokens[0] += result[0]
-            totalTokens[1] += result[1]
+            result = translateLines(linesList, pbar)
+            totalTokens[0] += result[1][0]
+            totalTokens[1] += result[1][1]
         except Exception as e:
             traceback.print_exc()
             return [data, totalTokens, e]
-    return [data, totalTokens, None]
+    return [linesList, totalTokens, None]
 
 # Grab scenario data from text file
-def translateLines(linesList, data, pbar):
+def translateLines(linesList, pbar):
     currentGroup = []
     batch = []
     textHistory = []
     tokens = [0, 0]
-    syncIndex = 0
     batchStartIndex = 0
     insertBool = False
+    firstRun = True
+    multiLine = False
+    i = 0
 
-    for i in range(len(linesList)):
-        # Sync Index of List
-        i = syncIndex
-
+    while i < len(linesList):
+        # Check if Proper Message
         match = re.findall(r'm\[[0-9]+\] = \"(.*)\"', linesList[i])
         if len(match) > 0:
             jaString = match[0]
@@ -178,21 +177,16 @@ def translateLines(linesList, data, pbar):
 
             # Grab rest of the messages
             currentGroup.append(jaString)
-            start = i
-
-            # Empty Only if Inserting
-            if insertBool == True:
+            if insertBool is True:
                 linesList[i] = re.sub(r'(m\[[0-9]+\]) = \"(.+)\"', rf'\1 = ""', linesList[i])
-
-            # Next Lines
-            while (len(linesList) > i+1 and re.search(r'm\[[0-9]+\] = \"(.*)\"', linesList[i+1]) != None):
-                i += 1
-                match = re.findall(r'm\[[0-9]+\] = \"(.*)\"', linesList[i])
+            start = i
+            while (len(linesList) > i+1 and re.search(r'm\[[0-9]+\] = \"\s(.*)\"', linesList[i+1]) != None):
+                multiLine = True
+                i+=1
+                match = re.findall(r'm\[[0-9]+\] = \"\s(.*)\"', linesList[i])
                 currentGroup.append(match[0])
-
-                # Empty Only if Inserting
-                if insertBool == True:
-                    linesList[i] = re.sub(r'(m\[[0-9]+\]) = \"(.+)\"', rf'\1 = ""', linesList[i])
+                if insertBool is True:
+                    linesList[i] = re.sub(r'(m\[[0-9]+\]) = \"\s(.+)\"', rf'\1 = ""', linesList[i])
 
             # Combine Groups and Add Speaker
             finalJAString = ' '.join(currentGroup)
@@ -203,7 +197,6 @@ def translateLines(linesList, data, pbar):
             if insertBool is False:
                 # Append to List and Clear Values
                 batch.append(finalJAString)
-                syncIndex = i + 1
 
                 # Translate Batch if Full
                 if len(batch) == BATCHSIZE:
@@ -216,9 +209,8 @@ def translateLines(linesList, data, pbar):
 
                     # Set Values
                     if len(batch) == len(translatedBatch):
-                        syncIndex = batchStartIndex
+                        i = batchStartIndex
                         insertBool = True
-                        batch.clear()
 
                     # Mismatch
                     else:
@@ -226,14 +218,15 @@ def translateLines(linesList, data, pbar):
                         MISMATCH.append(batch)
                         batch.clear()
                         batchStartIndex = i
-                        pbar.update(1)
-                        continue
+
+                multiLine = False
+                currentGroup = []
+                i += 1
 
             # [Passthrough 2] Setting Data
             else:
                 # Get Text
                 translatedText = translatedBatch[0]
-                translatedBatch.pop(0)
 
                 # Remove added speaker and quotes
                 translatedText = re.sub(r'^.+?:\s', '', translatedText)
@@ -242,22 +235,41 @@ def translateLines(linesList, data, pbar):
                 translatedText = translatedText.replace('\"', '\\"')
                 translatedText = textwrap.fill(translatedText, width=WIDTH)
 
-                # Write
-                textList = translatedText.split("\n")
-                for t in textList:
-                    linesList[start] = re.sub(r'(m\[[0-9]+\]) = \"(.*)\"', rf'\1 = "{t}"', linesList[start])
-                    start += 1
-                syncIndex = i + 1
+                # Write (Skip First)
+                if firstRun is True:
+                    i = batchStartIndex
+                    firstRun = False
+                else:
+                    if multiLine:
+                        if start > 100:
+                            print('t')
+                        textList = translatedText.split("\n")
+                        for t in textList:
+                            linesList[start] = re.sub(r'(m\[[0-9]+\]) = \"(.*)\"', rf'\1 = "{t}"', linesList[start])
+                            start+=1
+                        multiLine = False
+                        i += 1
+                        translatedBatch.pop(0)           
+                    else:
+                        # Remove any textwrap
+                        translatedText = re.sub(r'\\n', ' ', translatedText)
+                        linesList[i] = re.sub(r'(m\[[0-9]+\]) = \"(.*)\"', rf'\1 = "{translatedText}"', linesList[i])
+                        i += 1
+                        translatedBatch.pop(0)     
 
                 # If Batch is empty. Move on.
                 if len(translatedBatch) == 0:
                     insertBool = False
+                    firstRun = True
                     batchStartIndex = i
-                    pbar.update(1)
+                    batch.clear()
+                
+                currentGroup = []
         else:
-            syncIndex = i + 1
-        currentGroup = []
-    return tokens
+            pbar.update(1)
+            i += 1
+
+    return [linesList, tokens]
 
 # def translateLines(batches, data, pbar):
 #     translatedBatch = []
