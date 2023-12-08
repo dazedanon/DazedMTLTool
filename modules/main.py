@@ -8,7 +8,7 @@ from tqdm import tqdm
 from modules.rpgmakermvmz import handleMVMZ
 from modules.rpgmakerace import handleACE
 from modules.csv import handleCSV
-from modules.txt import handleTXT
+from modules.alice import handleAlice
 from modules.tyrano import handleTyrano
 from modules.json import handleJSON
 from modules.kansen import handleKansen
@@ -45,7 +45,7 @@ def main():
 1. MV/MZ\n\
 2. ACE\n\
 3. CSV (From Translator++)\n\
-4. Text (Custom)\n\
+4. Alice\n\
 5. Tyrano\n\
 6. JSON\n\
 7. Kansen\n\
@@ -97,7 +97,7 @@ def main():
             case '4':
                 # Open File (Threads)
                 with ThreadPoolExecutor(max_workers=THREADS) as executor:
-                    futures = [executor.submit(handleTXT, filename, estimate) \
+                    futures = [executor.submit(handleAlice, filename, estimate) \
                                 for filename in os.listdir("files") if filename.endswith('txt')]
                     
                     for future in as_completed(futures):
