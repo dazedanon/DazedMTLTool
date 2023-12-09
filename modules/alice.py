@@ -48,7 +48,7 @@ if 'gpt-3.5' in MODEL:
 elif 'gpt-4' in MODEL:
     INPUTAPICOST = .01
     OUTPUTAPICOST = .03
-    BATCHSIZE = 50  
+    BATCHSIZE = 10  
 
 def handleAlice(filename, estimate):
     global ESTIMATE
@@ -222,12 +222,14 @@ def translateLines(linesList, pbar):
                         else:
                             pbar.write(f'Mismatch: {batchStartIndex} - {i}')
                             MISMATCH.append(batch)
+                            i += 1
                             batchStartIndex = i
                             batch.clear()
+                    else:
+                        i += 1
 
                     multiLine = False
                     currentGroup = []
-                    i += 1
                     pbar.update(1)
 
                 # [Passthrough 2] Setting Data
