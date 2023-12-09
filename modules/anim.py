@@ -67,7 +67,7 @@ def handleAnim(filename, estimate):
             totalTokens[1] += translatedData[1][1]
 
         # Print Total
-        totalString = getResultString(['', TOKENS, None], end - start, 'TOTAL')
+        totalString = getResultString(['', totalTokens, None], end - start, 'TOTAL')
 
         # Print any errors on maps
         if len(MISMATCH) > 0:
