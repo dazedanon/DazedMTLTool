@@ -67,7 +67,7 @@ def handleAlice(filename, estimate):
             totalTokens[1] += translatedData[1][1]
 
         # Print Total
-        totalString = getResultString(['', TOKENS, None], end - start, 'TOTAL')
+        totalString = getResultString(['', totalTokens, None], end - start, 'TOTAL')
 
         # Print any errors on maps
         if len(MISMATCH) > 0:
@@ -139,7 +139,7 @@ def parseText(data, filename):
             totalTokens[1] += result[1][1]
         except Exception as e:
             traceback.print_exc()
-            return [data, totalTokens, e]
+            return [linesList, totalTokens, e]
     return [linesList, totalTokens, None]
 
 # Grab scenario data from text file
@@ -154,189 +154,134 @@ def translateLines(linesList, pbar):
     multiLine = False
     i = 0
 
-    while i < len(linesList):
-        # Check if Proper Message
-        match = re.findall(r'm\[[0-9]+\] = \"(.*)\"', linesList[i])
-        if len(match) > 0:
-            jaString = match[0]
+    try:
+        while i < len(linesList):
+            # Check if Proper Message
+            match = re.findall(r'm\[[0-9]+\] = \"(.*)\"', linesList[i])
+            if len(match) > 0:
+                jaString = match[0]
 
-            ### Translate
-            # Remove any textwrap
-            jaString = re.sub(r'\\n', ' ', jaString)
+                ### Translate
+                # Remove any textwrap
+                jaString = re.sub(r'\\n', ' ', jaString)
 
-            # Grab Speaker
-            speakerMatch = re.findall(r's\[[0-9]+\] = \"(.+?)[／\"]', linesList[i-1])
-            if len(speakerMatch) > 0:
-                # If there isn't any Japanese in the text just skip
-                if re.search(r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴー]+', jaString) and '_' not in speakerMatch[0]:
-                    speaker = speakerMatch[0]
+                # Grab Speaker
+                speakerMatch = re.findall(r's\[[0-9]+\] = \"([^／]+)\"', linesList[i-1])
+                if len(speakerMatch) > 0:
+                    # If there isn't any Japanese in the text just skip
+                    if re.search(r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴー]+', jaString) and '_' not in speakerMatch[0]:
+                        speaker = speakerMatch[0]
+                    else:
+                        speaker = ''
                 else:
                     speaker = ''
-            else:
-                speaker = ''
 
-            # Grab rest of the messages
-            currentGroup.append(jaString)
-            if insertBool is True:
-                linesList[i] = re.sub(r'(m\[[0-9]+\]) = \"(.+)\"', rf'\1 = ""', linesList[i])
-            start = i
-            while (len(linesList) > i+1 and re.search(r'm\[[0-9]+\] = \"\s(.*)\"', linesList[i+1]) != None):
-                multiLine = True
-                i+=1
-                match = re.findall(r'm\[[0-9]+\] = \"\s(.*)\"', linesList[i])
-                currentGroup.append(match[0])
+                # Grab rest of the messages
+                currentGroup.append(jaString)
                 if insertBool is True:
-                    linesList[i] = re.sub(r'(m\[[0-9]+\]) = \"\s(.+)\"', rf'\1 = ""', linesList[i])
+                    linesList[i] = re.sub(r'(m\[[0-9]+\]) = \"(.+)\"', rf'\1 = ""', linesList[i])
+                    linesList[i] = linesList[i].replace(';', '')
+                start = i
+                while (len(linesList) > i+1 and re.search(r'm\[[0-9]+\] = \"\s(.*)\"', linesList[i+1]) != None):
+                    multiLine = True
+                    i += 1
+                    match = re.findall(r'm\[[0-9]+\] = \"\s(.*)\"', linesList[i])
+                    currentGroup.append(match[0])
+                    if insertBool is True:
+                        pbar.update(1)
+                        linesList[i] = re.sub(r'(m\[[0-9]+\]) = \"\s(.+)\"', rf'\1 = ""', linesList[i])
+                        linesList[i] = linesList[i].replace(';', '')
 
-            # Combine Groups and Add Speaker
-            finalJAString = ' '.join(currentGroup)
-            if speaker != '':
-                finalJAString = f'{speaker}: {finalJAString}'
+                # Combine Groups and Add Speaker
+                finalJAString = ' '.join(currentGroup)
+                if speaker != '':
+                    finalJAString = f'{speaker}: {finalJAString}'
+                else:
+                    finalJAString = f'{finalJAString}'
 
-            # [Passthrough 1] Pulling From File
-            if insertBool is False:
-                # Append to List and Clear Values
-                batch.append(finalJAString)
+                # [Passthrough 1] Pulling From File
+                if insertBool is False:
+                    # Append to List and Clear Values
+                    batch.append(finalJAString)
 
-                # Translate Batch if Full
-                if len(batch) == BATCHSIZE:
-                    # Translate
-                    response = translateGPT(batch, textHistory, True)
-                    tokens[0] += response[1][0]
-                    tokens[1] += response[1][1]
-                    translatedBatch = response[0]
-                    textHistory = translatedBatch
+                    # Translate Batch if Full
+                    if len(batch) == BATCHSIZE or i >= len(linesList) - 1:
+                        # Translate
+                        response = translateGPT(batch, textHistory, True)
+                        tokens[0] += response[1][0]
+                        tokens[1] += response[1][1]
+                        translatedBatch = response[0]
+                        textHistory = translatedBatch[-10:]
 
-                    # Set Values
-                    if len(batch) == len(translatedBatch):
+                        # Set Values
+                        if len(batch) == len(translatedBatch):
+                            i = batchStartIndex
+                            insertBool = True
+
+                        # Mismatch
+                        else:
+                            pbar.write(f'Mismatch: {batchStartIndex} - {i}')
+                            MISMATCH.append(batch)
+                            batchStartIndex = i
+                            batch.clear()
+
+                    multiLine = False
+                    currentGroup = []
+                    i += 1
+                    pbar.update(1)
+
+                # [Passthrough 2] Setting Data
+                else:
+                    # Get Text
+                    translatedText = translatedBatch[0]
+
+                    # Remove added speaker and quotes
+                    translatedText = re.sub(r'^.+?:\s', '', translatedText)
+
+                    # Textwrap
+                    translatedText = translatedText.replace('\"', '\\"')
+                    translatedText = textwrap.fill(translatedText, width=WIDTH)
+
+                    # Write (Skip First)
+                    if firstRun is True:
                         i = batchStartIndex
-                        insertBool = True
-
-                    # Mismatch
+                        firstRun = False
                     else:
-                        pbar.write(f'Mismatch: {batchStartIndex} - {i}')
-                        MISMATCH.append(batch)
-                        batch.clear()
-                        batchStartIndex = i
+                        if multiLine:
+                            textList = translatedText.split("\n")
+                            for t in textList:
+                                translatedText = translatedText.replace(';', '')
+                                translatedText = re.sub(r'(m\[[0-9]+\]) = \"(.*)\"', rf'\1 = "{t}"', linesList[start])
+                                translatedText = translatedText.replace(';', '')
+                                linesList[start] = translatedText
+                                start+=1
+                                i += 1
+                            multiLine = False
+                            translatedText = translatedText.replace(';', '')
+                            translatedBatch.pop(0)           
+                        else:
+                            # Remove any textwrap
+                            translatedText = translatedText.replace('\n', ' ')
+                            translatedText = re.sub(r'(m\[[0-9]+\]) = \"(.*)\"', rf'\1 = "{translatedText}"', linesList[i])
+                            translatedText = translatedText.replace(';', '')
+                            linesList[i] = translatedText
+                            i += 1
+                            translatedBatch.pop(0)     
 
-                multiLine = False
-                currentGroup = []
+                    # If Batch is empty. Move on.
+                    if len(translatedBatch) == 0:
+                        insertBool = False
+                        firstRun = True
+                        batchStartIndex = i
+                        batch.clear()
+                    
+                    currentGroup = []
+            else:
                 i += 1
 
-            # [Passthrough 2] Setting Data
-            else:
-                # Get Text
-                translatedText = translatedBatch[0]
-
-                # Remove added speaker and quotes
-                translatedText = re.sub(r'^.+?:\s', '', translatedText)
-
-                # Textwrap
-                translatedText = translatedText.replace('\"', '\\"')
-                translatedText = textwrap.fill(translatedText, width=WIDTH)
-
-                # Write (Skip First)
-                if firstRun is True:
-                    i = batchStartIndex
-                    firstRun = False
-                else:
-                    if multiLine:
-                        if start > 100:
-                            print('t')
-                        textList = translatedText.split("\n")
-                        for t in textList:
-                            linesList[start] = re.sub(r'(m\[[0-9]+\]) = \"(.*)\"', rf'\1 = "{t}"', linesList[start])
-                            start+=1
-                        multiLine = False
-                        i += 1
-                        translatedBatch.pop(0)           
-                    else:
-                        # Remove any textwrap
-                        translatedText = re.sub(r'\\n', ' ', translatedText)
-                        linesList[i] = re.sub(r'(m\[[0-9]+\]) = \"(.*)\"', rf'\1 = "{translatedText}"', linesList[i])
-                        i += 1
-                        translatedBatch.pop(0)     
-
-                # If Batch is empty. Move on.
-                if len(translatedBatch) == 0:
-                    insertBool = False
-                    firstRun = True
-                    batchStartIndex = i
-                    batch.clear()
-                
-                currentGroup = []
-        else:
-            pbar.update(1)
-            i += 1
-
-    return [linesList, tokens]
-
-# def translateLines(batches, data, pbar):
-#     translatedBatch = []
-#     textHistory = []
-#     tokens = [0, 0]
-
-#     for batch in batches:
-#         # Save Batch
-#         originalBatch = batch.copy()
-
-#         # If there isn't any Japanese in the text just skip
-#         needTL = False
-#         for i in range(len(batch)):
-#             t = data[batch[i]]
-#             if re.search(r'[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９]+', t) or t == '':
-#                 needTL = True
-#         if needTL is False and IGNORETLTEXT is True:
-#             pbar.update(1)
-#             continue            
-
-#         # Remove any textwrap and Furigana
-#         for i in range(len(batch)):
-#             if FIXTEXTWRAP == True:
-#                 # Textwrap
-#                 data[originalBatch[i]] = data[originalBatch[i]].replace('@b', ' ')
-
-#             # Furigana
-#             rcodeMatch = re.findall(r'(@\[(.+?):.+?\])', batch[i])
-#             if len(rcodeMatch) > 0:
-#                 for match in rcodeMatch:
-#                     batch[i] = batch[i].replace(match[0], match[1])
-
-#         # Translate
-#         if needTL is True:
-#             response = translateGPT(batch, textHistory, True)
-#             tokens[0] += response[1][0]
-#             tokens[1] += response[1][1]
-#             translatedBatch = response[0]
-#         else:
-#             for i in range(len(originalBatch)):
-#                 translatedBatch.append(data[originalBatch[i]])
-
-#         # Format and Set Text
-#         if len(batch) == len(translatedBatch):
-#             for i in range(len(translatedBatch)):
-
-#                 # Remove added speaker
-#                 translatedText = translatedBatch[i]
-#                 translatedText = re.sub(r'^.+?\s\|\s?', '', translatedText)
-
-#                 # Textwrap
-#                 if '@b' not in translatedText:
-#                     translatedText = textwrap.fill(translatedText, width=WIDTH)
-#                     translatedText = translatedText.replace('\n', '@b')
-
-#                 # Set Data
-#                 data[originalBatch[i]] = translatedText
-#                 textHistory = translatedBatch
-#             translatedBatch.clear()
-#         # Mismatch, Skip Batch
-#         else:
-#             MISMATCH.append(batch)
-#             pbar.update(1)
-#             continue
-#         pbar.update(1)
-
-#     return tokens  
+        return [linesList, tokens]
+    except Exception:
+        return [linesList, tokens]
 
 def subVars(jaString):
     jaString = jaString.replace('\u3000', ' ')
@@ -458,12 +403,22 @@ def batchList(input_list, batch_size):
     return [input_list[i:i + batch_size] for i in range(0, len(input_list), batch_size)]
 
 def createContext(fullPromptFlag, subbedT):
-    characters = 'Game Characters:\
-        篠崎 誠一 == Shinozaki Seiichi - Male\
-        宮前 遥奈 == Miyamae Haruna - Female\
-        榛名 悠真 == Haruna Yuuma - Male\
-        浪川 時宗 == Namikawa Tokimune - Male\
-        高嶋 美雪 == Takashima Miyuki - Female'
+    characters = 'Game Characters (Format: Last Name, First Name - Gender):\
+        護 == Mamoru - Male\
+        神代 一騎 == Kamishiro, Ikki - Male\
+        神代 琴音 == Kamishiro, Kotone - Female\
+        神代 莉々子 == Kamishiro, Ririko - Female\
+        神代 紗夜 == Kamishiro, Saya - Female\
+        篠原漣 == Shinohara, Ren - Male\
+        藪井 == Yabui - Male\
+        舟木 == Funaki - Male\
+        貞二 == Jouji - Male\
+        兼田 響子 == Kaneda, Kyouko - Female\
+        兼田 真人 == Kaneda, Masato - Male\
+        小出 == Koide - Male\
+        進士 == Shinji - Male\
+        雪乃 == Yukino - Male'
+    
     system = PROMPT if fullPromptFlag else \
         f'Output ONLY the {LANGUAGE} translation in the following format: `Translation: <{LANGUAGE.upper()}_TRANSLATION>`'
     user = f'{subbedT}'
@@ -485,7 +440,8 @@ def translateText(characters, system, user, history):
     # Content to TL
     msg.append({"role": "user", "content": user})
     response = openai.ChatCompletion.create(
-        temperature=0,
+        temperature=0.1,
+        top_p = 0.2,
         frequency_penalty=0,
         presence_penalty=0,
         model=MODEL,
