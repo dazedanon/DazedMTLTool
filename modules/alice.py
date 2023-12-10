@@ -48,7 +48,7 @@ if 'gpt-3.5' in MODEL:
 elif 'gpt-4' in MODEL:
     INPUTAPICOST = .01
     OUTPUTAPICOST = .03
-    BATCHSIZE = 10  
+    BATCHSIZE = 5  
 
 def handleAlice(filename, estimate):
     global ESTIMATE
@@ -89,6 +89,7 @@ def handleAlice(filename, estimate):
                     totalTokens[0] += translatedData[1][0]
                     totalTokens[1] += translatedData[1][1]
         except Exception as e:
+            traceback.print_exc()
             return 'Fail'
 
     return getResultString(['', totalTokens, None], end - start, 'TOTAL')
@@ -178,19 +179,22 @@ def translateLines(linesList, pbar):
 
                 # Grab rest of the messages
                 currentGroup.append(jaString)
+
+                # Check if next line should be merged
                 if insertBool is True:
                     linesList[i] = re.sub(r'(m\[[0-9]+\]) = \"(.+)\"', rf'\1 = ""', linesList[i])
                     linesList[i] = linesList[i].replace(';', '')
                 start = i
-                while (len(linesList) > i+1 and re.search(r'm\[[0-9]+\] = \"\s(.*)\"', linesList[i+1]) != None):
+                while (len(linesList) > i+1 and re.search(r'm\[[0-9]+\] = \"\s+(.*)\"', linesList[i+1]) != None):
                     multiLine = True
                     i += 1
-                    match = re.findall(r'm\[[0-9]+\] = \"\s(.*)\"', linesList[i])
+                    match = re.findall(r'm\[[0-9]+\] = \"\s+(.*)\"', linesList[i])
                     currentGroup.append(match[0])
                     if insertBool is True:
                         pbar.update(1)
-                        linesList[i] = re.sub(r'(m\[[0-9]+\]) = \"\s(.+)\"', rf'\1 = ""', linesList[i])
+                        linesList[i] = re.sub(r'(m\[[0-9]+\]) = \"\s+(.+)\"', rf'\1 = ""', linesList[i])
                         linesList[i] = linesList[i].replace(';', '')
+                i += 1
 
                 # Combine Groups and Add Speaker
                 finalJAString = ' '.join(currentGroup)
@@ -222,11 +226,8 @@ def translateLines(linesList, pbar):
                         else:
                             pbar.write(f'Mismatch: {batchStartIndex} - {i}')
                             MISMATCH.append(batch)
-                            i += 1
                             batchStartIndex = i
                             batch.clear()
-                    else:
-                        i += 1
 
                     multiLine = False
                     currentGroup = []
@@ -243,6 +244,9 @@ def translateLines(linesList, pbar):
                     # Textwrap
                     translatedText = translatedText.replace('\"', '\\"')
                     translatedText = textwrap.fill(translatedText, width=WIDTH)
+                    
+                    if 'the village women...' in translatedText:
+                        print('t')
 
                     # Write (Skip First)
                     if firstRun is True:
@@ -257,7 +261,6 @@ def translateLines(linesList, pbar):
                                 translatedText = translatedText.replace(';', '')
                                 linesList[start] = translatedText
                                 start+=1
-                                i += 1
                             multiLine = False
                             translatedText = translatedText.replace(';', '')
                             translatedBatch.pop(0)           
@@ -267,7 +270,6 @@ def translateLines(linesList, pbar):
                             translatedText = re.sub(r'(m\[[0-9]+\]) = \"(.*)\"', rf'\1 = "{translatedText}"', linesList[i])
                             translatedText = translatedText.replace(';', '')
                             linesList[i] = translatedText
-                            i += 1
                             translatedBatch.pop(0)     
 
                     # If Batch is empty. Move on.
@@ -283,6 +285,7 @@ def translateLines(linesList, pbar):
 
         return [linesList, tokens]
     except Exception:
+        traceback.print_exc()
         return [linesList, tokens]
 
 def subVars(jaString):
@@ -431,24 +434,23 @@ def translateText(characters, system, user, history):
     msg = [{"role": "system", "content": system}]
 
     # Characters
-    msg.append({"role": "user", "content": characters})
+    msg.append({"role": "system", "content": characters})
 
     # History
     if isinstance(history, list):
-        msg.extend([{"role": "user", "content": h} for h in history])
+        msg.extend([{"role": "system", "content": h} for h in history])
     else:
-        msg.append({"role": "user", "content": history})
+        msg.append({"role": "system", "content": history})
     
     # Content to TL
-    msg.append({"role": "user", "content": user})
-    response = openai.ChatCompletion.create(
+    msg.append({"role": "user", "content": f'{user}'})
+    response = openai.chat.completions.create(
         temperature=0.1,
         top_p = 0.2,
         frequency_penalty=0,
         presence_penalty=0,
         model=MODEL,
         messages=msg,
-        request_timeout=TIMEOUT,
     )
     return response
 
