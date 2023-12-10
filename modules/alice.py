@@ -48,7 +48,7 @@ if 'gpt-3.5' in MODEL:
 elif 'gpt-4' in MODEL:
     INPUTAPICOST = .01
     OUTPUTAPICOST = .03
-    BATCHSIZE = 5  
+    BATCHSIZE = 5
 
 def handleAlice(filename, estimate):
     global ESTIMATE
@@ -151,7 +151,6 @@ def translateLines(linesList, pbar):
     tokens = [0, 0]
     batchStartIndex = 0
     insertBool = False
-    firstRun = True
     multiLine = False
     i = 0
 
@@ -191,7 +190,6 @@ def translateLines(linesList, pbar):
                     match = re.findall(r'm\[[0-9]+\] = \"\s+(.*)\"', linesList[i])
                     currentGroup.append(match[0])
                     if insertBool is True:
-                        pbar.update(1)
                         linesList[i] = re.sub(r'(m\[[0-9]+\]) = \"\s+(.+)\"', rf'\1 = ""', linesList[i])
                         linesList[i] = linesList[i].replace(';', '')
                 i += 1
@@ -231,7 +229,6 @@ def translateLines(linesList, pbar):
 
                     multiLine = False
                     currentGroup = []
-                    pbar.update(1)
 
                 # [Passthrough 2] Setting Data
                 else:
@@ -244,43 +241,39 @@ def translateLines(linesList, pbar):
                     # Textwrap
                     translatedText = translatedText.replace('\"', '\\"')
                     translatedText = textwrap.fill(translatedText, width=WIDTH)
-                    
-                    if 'the village women...' in translatedText:
-                        print('t')
 
-                    # Write (Skip First)
-                    if firstRun is True:
-                        i = batchStartIndex
-                        firstRun = False
+                    # Set Data
+                    if multiLine:
+                        textList = translatedText.split("\n")
+                        for t in textList:
+                            translatedText = translatedText.replace(';', '')
+                            translatedText = re.sub(r'(m\[[0-9]+\]) = \"(.*)\"', rf'\1 = "{t}"', linesList[start])
+                            translatedText = translatedText.replace(';', '')
+                            linesList[start] = translatedText
+                            pbar.update(1)
+                            start += 1
+                        multiLine = False
+                        translatedText = translatedText.replace(';', '')
+                        translatedBatch.pop(0)           
                     else:
-                        if multiLine:
-                            textList = translatedText.split("\n")
-                            for t in textList:
-                                translatedText = translatedText.replace(';', '')
-                                translatedText = re.sub(r'(m\[[0-9]+\]) = \"(.*)\"', rf'\1 = "{t}"', linesList[start])
-                                translatedText = translatedText.replace(';', '')
-                                linesList[start] = translatedText
-                                start+=1
-                            multiLine = False
-                            translatedText = translatedText.replace(';', '')
-                            translatedBatch.pop(0)           
-                        else:
-                            # Remove any textwrap
-                            translatedText = translatedText.replace('\n', ' ')
-                            translatedText = re.sub(r'(m\[[0-9]+\]) = \"(.*)\"', rf'\1 = "{translatedText}"', linesList[i])
-                            translatedText = translatedText.replace(';', '')
-                            linesList[i] = translatedText
-                            translatedBatch.pop(0)     
+                        # Remove any textwrap
+                        translatedText = translatedText.replace('\n', ' ')
+                        translatedText = re.sub(r'(m\[[0-9]+\]) = \"(.*)\"', rf'\1 = "{translatedText}"', linesList[start])
+                        translatedText = translatedText.replace(';', '')
+                        linesList[start] = translatedText
+                        pbar.update(1)
+                        translatedBatch.pop(0)     
 
                     # If Batch is empty. Move on.
                     if len(translatedBatch) == 0:
                         insertBool = False
-                        firstRun = True
                         batchStartIndex = i
                         batch.clear()
                     
                     currentGroup = []
             else:
+                if insertBool is True:
+                    pbar.update(1)
                 i += 1
 
         return [linesList, tokens]
