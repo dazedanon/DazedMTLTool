@@ -7,7 +7,7 @@ from tqdm import tqdm
 # upon import, in which case if they are unset the script will crash before we can output these messages.
 envMissing = False
 for env in ['api','key','organization','model','language','timeout','fileThreads','threads','width','listWidth']:
-    if os.getenv(env) is None or str(os.getenv(env))[0] == '<':
+    if os.getenv(env) is None or str(os.getenv(env))[:1] == '<':
         tqdm.write(Fore.RED + f'Environment variable {env} is not set!')
         envMissing = True
 if envMissing:
