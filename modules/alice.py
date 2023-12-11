@@ -268,6 +268,7 @@ def translateLines(linesList, pbar):
                     if len(translatedBatch) == 0:
                         insertBool = False
                         batchStartIndex = i
+                        pbar.update(1)
                         batch.clear()
                     
                     currentGroup = []
@@ -424,7 +425,7 @@ def createContext(fullPromptFlag, subbedT):
 
 def translateText(characters, system, user, history):
     # Prompt
-    msg = [{"role": "system", "content": system}]
+    msg = [{"role": "system", "content": system + characters}]
 
     # Characters
     msg.append({"role": "system", "content": characters})
