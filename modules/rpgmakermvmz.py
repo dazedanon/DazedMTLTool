@@ -41,10 +41,12 @@ if 'gpt-3.5' in MODEL:
     INPUTAPICOST = .002 
     OUTPUTAPICOST = .002
     BATCHSIZE = 10
+    FREQUENCY_PENALTY = 0.2
 elif 'gpt-4' in MODEL:
     INPUTAPICOST = .01
     OUTPUTAPICOST = .03
     BATCHSIZE = 40  
+    FREQUENCY_PENALTY = 0
 
 #tqdm Globals
 BAR_FORMAT='{l_bar}{bar:10}{r_bar}{bar:-10b}'
@@ -1876,8 +1878,8 @@ def translateText(characters, system, user, history):
     response = openai.chat.completions.create(
         temperature=0.1,
         top_p = 0.2,
-        frequency_penalty=0.1,
-        presence_penalty=0.1,
+        frequency_penalty=FREQUENCY_PENALTY,
+        presence_penalty=FREQUENCY_PENALTY,
         model=MODEL,
         messages=msg,
     )
