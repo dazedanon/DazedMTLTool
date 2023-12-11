@@ -1,9 +1,18 @@
+import sys, os, traceback
 from concurrent.futures import ThreadPoolExecutor, as_completed
-import sys
-import traceback
 from colorama import Fore
-import os
 from tqdm import tqdm
+
+# This needs to be before the module imports as some of them currently try to read and use some of these values
+# upon import, in which case if they are unset the script will crash before we can output these messages.
+envMissing = False
+for env in ['api','key','organization','model','language','timeout','fileThreads','threads','width','listWidth']:
+    if os.getenv(env) is None or str(os.getenv(env))[0] == '<':
+        tqdm.write(Fore.RED + f'Environment variable {env} is not set!')
+        envMissing = True
+if envMissing:
+    tqdm.write(Fore.RED + f'Some of the required environment values may not be set correctly. You can set \
+these values using an .env file, for an example see .env.example')
 
 from modules.rpgmakermvmz import handleMVMZ
 from modules.rpgmakerace import handleACE
@@ -35,7 +44,7 @@ MODULES = [
 ]
 
 # Info Message
-tqdm.write(Fore.LIGHTYELLOW_EX + "WARNING: Once a translation starts do not close it unless you want to lose your\
+tqdm.write(Fore.LIGHTYELLOW_EX + "WARNING: Once the translation starts do not close it unless you want to lose your \
 translated data. If a file fails or gets stuck, translated lines will remain translated so you don't have \
 to worry about being charged twice. You can simply copy the file generated in /translations back over to \
 /files and start the script again. It will skip over any translated text." + Fore.RESET, end='\n\n')
@@ -65,7 +74,8 @@ def main():
         if version in range(len(MODULES)):
             break    
 
-    totalCost = 0
+    totalCost = Fore.RED + 'Translation module didn\'t return the total cost. Make sure the \
+files to translate are in the /files folder and that you picked the right game engine.'
 
     # Open File (Threads)
     with ThreadPoolExecutor(max_workers=THREADS) as executor:
@@ -84,9 +94,7 @@ def main():
             # This is to encourage people to grab what's in /translated instead
             deleteFolderFiles('files')
 
-        # Prevent immediately closing of CLI
         tqdm.write(str(totalCost))
-        # input('Done! Press Enter to close.')
 
 def deleteFolderFiles(folderPath):
     for filename in os.listdir(folderPath):
