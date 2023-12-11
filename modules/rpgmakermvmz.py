@@ -1516,7 +1516,8 @@ def searchCodes(page, pbar, fillList, filename):
             if len(fillList) != len(docList):
                 global MISMATCH
                 with LOCK:
-                    MISMATCH.append(filename)
+                    if filename not in MISMATCH:
+                        MISMATCH.append(filename)
             else:
                 docList = []
                 searchCodes(page, pbar, fillList, filename)
