@@ -427,6 +427,9 @@ def translateText(characters, system, user, history):
     # Prompt
     msg = [{"role": "system", "content": system + characters}]
 
+    # Characters
+    msg.append({"role": "system", "content": characters})
+
     # History
     if isinstance(history, list):
         msg.extend([{"role": "assistant", "content": h} for h in history])
