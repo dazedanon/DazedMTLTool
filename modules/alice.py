@@ -459,10 +459,10 @@ def cleanTranslatedText(translatedText, varResponse):
         translatedText = translatedText.replace(target, replacement)
 
     translatedText = resubVars(translatedText, varResponse[1])
-    return [line for line in translatedText.split('\n') if line]
+    return [line for line in translatedText.split('\\n') if line]
 
 def extractTranslation(translatedTextList, is_list):
-    pattern = r'<Line(\d+)>(.*)</Line\d+>'
+    pattern = r'<Line(\d+)>[\\]*`?(.*?)[\\]*?`?</Line\d+>'
     # If it's a batch (i.e., list), extract with tags; otherwise, return the single item.
     if is_list:
         return [re.findall(pattern, line)[0][1] for line in translatedTextList if re.search(pattern, line)]
@@ -506,7 +506,7 @@ def translateGPT(text, history, fullPromptFlag):
     for index, tItem in enumerate(tList):
         # Before sending to translation, if we have a list of items, add the formatting
         if isinstance(tItem, list):
-            payload = '\n'.join([f'<Line{i}>{item}</Line{i}>' for i, item in enumerate(tItem)])
+            payload = '\\n'.join([f'<Line{i}>\`{item}\`</Line{i}>' for i, item in enumerate(tItem)])
             varResponse = subVars(payload)
             subbedT = varResponse[0]
         else:
@@ -538,10 +538,12 @@ def translateGPT(text, history, fullPromptFlag):
         if isinstance(tItem, list):
             extractedTranslations = extractTranslation(translatedTextList, True)
             tList[index] = extractedTranslations
+            if len(tList[index]) != len(translatedTextList):
+                print('Test')
             history = extractedTranslations[-10:]  # Update history if we have a list
         else:
             # Ensure we're passing a single string to extractTranslation
-            extractedTranslations = extractTranslation('\n'.join(translatedTextList), False)
+            extractedTranslations = extractTranslation('\\n'.join(translatedTextList), False)
             tList[index] = extractedTranslations
 
     finalList = combineList(tList, text)
