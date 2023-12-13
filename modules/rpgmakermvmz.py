@@ -41,10 +41,12 @@ if 'gpt-3.5' in MODEL:
     INPUTAPICOST = .002 
     OUTPUTAPICOST = .002
     BATCHSIZE = 10
+    FREQUENCY_PENALTY = 0.2
 elif 'gpt-4' in MODEL:
     INPUTAPICOST = .01
     OUTPUTAPICOST = .03
     BATCHSIZE = 40  
+    FREQUENCY_PENALTY = 0
 
 #tqdm Globals
 BAR_FORMAT='{l_bar}{bar:10}{r_bar}{bar:-10b}'
@@ -52,11 +54,11 @@ POSITION = 0
 LEAVE = False
 
 # Dialogue / Scroll
-CODE401 = False
+CODE401 = True
 CODE405 = False
 
 # Choices
-CODE102 = False
+CODE102 = True
 
 # Variables
 CODE122 = False
@@ -72,7 +74,7 @@ CODE356 = False
 CODE320 = False
 CODE324 = False
 CODE111 = False
-CODE108 = True
+CODE108 = False
 CODE408 = False
 
 def handleMVMZ(filename, estimate):
@@ -1514,7 +1516,8 @@ def searchCodes(page, pbar, fillList, filename):
             if len(fillList) != len(docList):
                 global MISMATCH
                 with LOCK:
-                    MISMATCH.append(filename)
+                    if filename not in MISMATCH:
+                        MISMATCH.append(filename)
             else:
                 docList = []
                 searchCodes(page, pbar, fillList, filename)
@@ -1840,12 +1843,22 @@ def batchList(input_list, batch_size):
     return [input_list[i:i + batch_size] for i in range(0, len(input_list), batch_size)]
 
 def createContext(fullPromptFlag, subbedT):
-    characters = 'Game Characters:\
-        篠崎 誠一 == Shinozaki Seiichi - Male\
-        宮前 遥奈 == Miyamae Haruna - Female\
-        榛名 悠真 == Haruna Yuuma - Male\
-        浪川 時宗 == Namikawa Tokimune - Male\
-        高嶋 美雪 == Takashima Miyuki - Female'
+    characters = 'Game Characters (Format: Last Name, First Name - Gender):\
+        護 == Mamoru - Male\
+        神代 一騎 == Kamishiro, Ikki - Male\
+        神代 琴音 == Kamishiro, Kotone - Female\
+        神代 莉々子 == Kamishiro, Ririko - Female\
+        神代 紗夜 == Kamishiro, Saya - Female\
+        篠原漣 == Shinohara, Ren - Male\
+        藪井 == Yabui - Male\
+        舟木 == Funaki - Male\
+        貞二 == Jouji - Male\
+        兼田 響子 == Kaneda, Kyouko - Female\
+        兼田 真人 == Kaneda, Masato - Male\
+        小出 == Koide - Male\
+        進士 == Shinji - Male\
+        雪乃 == Yukino - Male'
+    
     system = PROMPT if fullPromptFlag else \
         f'Output ONLY the {LANGUAGE} translation in the following format: `Translation: <{LANGUAGE.upper()}_TRANSLATION>`'
     user = f'{subbedT}'
@@ -1853,26 +1866,23 @@ def createContext(fullPromptFlag, subbedT):
 
 def translateText(characters, system, user, history):
     # Prompt
-    msg = [{"role": "system", "content": system}]
-
-    # Characters
-    msg.append({"role": "user", "content": characters})
+    msg = [{"role": "system", "content": system + characters}]
 
     # History
     if isinstance(history, list):
-        msg.extend([{"role": "user", "content": h} for h in history])
+        msg.extend([{"role": "assistant", "content": h} for h in history])
     else:
-        msg.append({"role": "user", "content": history})
+        msg.append({"role": "assistant", "content": history})
     
     # Content to TL
-    msg.append({"role": "user", "content": user})
-    response = openai.ChatCompletion.create(
-        temperature=0,
-        frequency_penalty=0,
-        presence_penalty=0,
+    msg.append({"role": "user", "content": f'{user}'})
+    response = openai.chat.completions.create(
+        temperature=0.1,
+        top_p = 0.2,
+        frequency_penalty=FREQUENCY_PENALTY,
+        presence_penalty=FREQUENCY_PENALTY,
         model=MODEL,
         messages=msg,
-        request_timeout=TIMEOUT,
     )
     return response
 
@@ -1890,7 +1900,7 @@ def cleanTranslatedText(translatedText, varResponse):
     return [line for line in translatedText.split('\n') if line]
 
 def extractTranslation(translatedTextList, is_list):
-    pattern = r'<Line(\d+)>(.*)</Line\d+>'
+    pattern = r'<Line(\d+)>?(.*)</Line\d+>'
     # If it's a batch (i.e., list), extract with tags; otherwise, return the single item.
     if is_list:
         return [re.findall(pattern, line)[0][1] for line in translatedTextList if re.search(pattern, line)]
@@ -1966,6 +1976,8 @@ def translateGPT(text, history, fullPromptFlag):
         if isinstance(tItem, list):
             extractedTranslations = extractTranslation(translatedTextList, True)
             tList[index] = extractedTranslations
+            if len(tList[index]) != len(translatedTextList):
+                print('Test')
             history = extractedTranslations[-10:]  # Update history if we have a list
         else:
             # Ensure we're passing a single string to extractTranslation

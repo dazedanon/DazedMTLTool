@@ -1,9 +1,18 @@
+import sys, os, traceback
 from concurrent.futures import ThreadPoolExecutor, as_completed
-import sys
-import traceback
 from colorama import Fore
-import os
 from tqdm import tqdm
+
+# This needs to be before the module imports as some of them currently try to read and use some of these values
+# upon import, in which case if they are unset the script will crash before we can output these messages.
+envMissing = False
+for env in ['api','key','organization','model','language','timeout','fileThreads','threads','width','listWidth']:
+    if os.getenv(env) is None or str(os.getenv(env))[:1] == '<':
+        tqdm.write(Fore.RED + f'Environment variable {env} is not set!')
+        envMissing = True
+if envMissing:
+    tqdm.write(Fore.RED + f'Some of the required environment values may not be set correctly. You can set \
+these values using an .env file, for an example see .env.example')
 
 from modules.rpgmakermvmz import handleMVMZ
 from modules.rpgmakerace import handleACE
@@ -20,8 +29,22 @@ from modules.anim import handleAnim
 # 1 Thread for each file. Controls how many files are worked on at once.
 THREADS = int(os.getenv('fileThreads'))
 
+# [Display name, file extension, handle function]
+MODULES = [
+    ["RPGMaker MV/MZ", "json", handleMVMZ],
+    ["RPGMaker ACE", "yaml", handleACE],
+    ["CSV (From Translator++)", "csv", handleCSV],
+    ["Alice", "txt", handleAlice],
+    ["Tyrano", "ks", handleTyrano],
+    ["JSON", "json", handleJSON],
+    ["Kansen", "ks", handleKansen],
+    ["Lune", "txt", handleLuneTxt],
+    ["Atelier", "txt", handleAtelier],
+    ["Anim", "json", handleAnim],
+]
+
 # Info Message
-tqdm.write(Fore.LIGHTYELLOW_EX + "WARNING: Once a translation starts do not close it unless you want to lose your\
+tqdm.write(Fore.LIGHTYELLOW_EX + "WARNING: Once the translation starts do not close it unless you want to lose your \
 translated data. If a file fails or gets stuck, translated lines will remain translated so you don't have \
 to worry about being charged twice. You can simply copy the file generated in /translations back over to \
 /files and start the script again. It will skip over any translated text." + Fore.RESET, end='\n\n')
@@ -29,7 +52,7 @@ to worry about being charged twice. You can simply copy the file generated in /t
 def main():
     estimate = ''
     while estimate == '':
-        estimate = input('Select Translation or Cost Estimation:\n\n1. Translate\n2. Estimate\n')
+        estimate = input('Select Translation or Cost Estimation:\n\n 1. Translate\n 2. Estimate\n')
         match estimate:
             case '1':
                 estimate = False
@@ -37,172 +60,41 @@ def main():
                 estimate = True
             case _:
                 estimate = ''
-
-    totalCost = 0
+    
     version = ''
-    while version == '':
-        version = input('Select the RPGMaker Version:\n\n\
-1. MV/MZ\n\
-2. ACE\n\
-3. CSV (From Translator++)\n\
-4. Alice\n\
-5. Tyrano\n\
-6. JSON\n\
-7. Kansen\n\
-8. Lune\n\
-9. Atelier\n\
-10. Anim\n'
-        )
-        match version:
-            case '1':
-                # Open File (Threads)
-                with ThreadPoolExecutor(max_workers=THREADS) as executor:
-                    futures = [executor.submit(handleMVMZ, filename, estimate) \
-                                for filename in os.listdir("files") if filename.endswith('json')]
+    while True:
+        tqdm.write("Select game engine:\n")
+        for position, module in enumerate(MODULES):
+            tqdm.write(f'{str(position + 1).rjust(2)}. {module[0]} (.{module[1]})')
+        version = input()
+        try:
+            version = int(version) - 1
+        except:
+            continue
+        if version in range(len(MODULES)):
+            break    
+
+    totalCost = Fore.RED + 'Translation module didn\'t return the total cost. Make sure the \
+files to translate are in the /files folder and that you picked the right game engine.'
+
+    # Open File (Threads)
+    with ThreadPoolExecutor(max_workers=THREADS) as executor:
+        futures = [executor.submit(MODULES[version][2], filename, estimate) \
+                    for filename in os.listdir("files") if filename.endswith(MODULES[version][1])]
                     
-                    for future in as_completed(futures):
-                        try:
-                            totalCost = future.result()
-                        except Exception as e:
-                            tracebackLineNo = str(traceback.extract_tb(sys.exc_info()[2])[-1].lineno)
-                            tqdm.write(Fore.RED + str(e) + '|' + tracebackLineNo + Fore.RESET)
+        for future in as_completed(futures):
+            try:
+                totalCost = future.result()
+            except Exception as e:
+                tracebackLineNo = str(traceback.extract_tb(sys.exc_info()[2])[-1].lineno)
+                tqdm.write(Fore.RED + str(e) + '|' + tracebackLineNo + Fore.RESET)
 
-            case '2':
-                # Open File (Threads)
-                with ThreadPoolExecutor(max_workers=THREADS) as executor:
-                    futures = [executor.submit(handleACE, filename, estimate) \
-                                for filename in os.listdir("files") if filename.endswith('yaml')]
-                    
-                    for future in as_completed(futures):
-                        try:
-                            totalCost = future.result()
-                        except Exception as e:
-                            tracebackLineNo = str(traceback.extract_tb(sys.exc_info()[2])[-1].lineno)
-                            tqdm.write(Fore.RED + str(e) + '|' + tracebackLineNo + Fore.RESET)
-
-            case '3':
-                # Open File (Threads)
-                with ThreadPoolExecutor(max_workers=THREADS) as executor:
-                    futures = [executor.submit(handleCSV, filename, estimate) \
-                                for filename in os.listdir("files") if filename.endswith('csv')]
-                    
-                    for future in as_completed(futures):
-                        try:
-                            totalCost = future.result()
-                            
-                        except Exception as e:
-                            tracebackLineNo = str(traceback.extract_tb(sys.exc_info()[2])[-1].lineno)
-                            tqdm.write(Fore.RED + str(e) + '|' + tracebackLineNo + Fore.RESET)
-
-            case '4':
-                # Open File (Threads)
-                with ThreadPoolExecutor(max_workers=THREADS) as executor:
-                    futures = [executor.submit(handleAlice, filename, estimate) \
-                                for filename in os.listdir("files") if filename.endswith('txt')]
-                    
-                    for future in as_completed(futures):
-                        try:
-                            totalCost = future.result()
-                            
-                        except Exception as e:
-                            tracebackLineNo = str(traceback.extract_tb(sys.exc_info()[2])[-1].lineno)
-                            tqdm.write(Fore.RED + str(e) + '|' + tracebackLineNo + Fore.RESET)
-
-            case '5':
-                # Open File (Threads)
-                with ThreadPoolExecutor(max_workers=THREADS) as executor:
-                    futures = [executor.submit(handleTyrano, filename, estimate) \
-                                for filename in os.listdir("files") if filename.endswith('ks')]
-                    
-                    for future in as_completed(futures):
-                        try:
-                            totalCost = future.result()
-                            
-                        except Exception as e:
-                            tracebackLineNo = str(traceback.extract_tb(sys.exc_info()[2])[-1].lineno)
-                            tqdm.write(Fore.RED + str(e) + '|' + tracebackLineNo + Fore.RESET)
-
-            case '6':
-                # Open File (Threads)
-                with ThreadPoolExecutor(max_workers=THREADS) as executor:
-                    futures = [executor.submit(handleJSON, filename, estimate) \
-                                for filename in os.listdir("files") if filename.endswith('json')]
-                    
-                    for future in as_completed(futures):
-                        try:
-                            totalCost = future.result()
-                            
-                        except Exception as e:
-                            tracebackLineNo = str(traceback.extract_tb(sys.exc_info()[2])[-1].lineno)
-                            tqdm.write(Fore.RED + str(e) + '|' + tracebackLineNo + Fore.RESET)
-
-            case '7':
-                # Open File (Threads)
-                with ThreadPoolExecutor(max_workers=THREADS) as executor:
-                    futures = [executor.submit(handleKansen, filename, estimate) \
-                                for filename in os.listdir("files") if filename.endswith('ks')]
-                    
-                    for future in as_completed(futures):
-                        try:
-                            totalCost = future.result()
-                            
-                        except Exception as e:
-                            tracebackLineNo = str(traceback.extract_tb(sys.exc_info()[2])[-1].lineno)
-                            tqdm.write(Fore.RED + str(e) + '|' + tracebackLineNo + Fore.RESET)
-
-            case '8':
-                # Open File (Threads)
-                with ThreadPoolExecutor(max_workers=THREADS) as executor:
-                    futures = [executor.submit(handleLuneTxt, filename, estimate) \
-                                for filename in os.listdir("files") if filename.endswith('txt')]
-                    
-                    for future in as_completed(futures):
-                        try:
-                            totalCost = future.result()
-                            
-                        except Exception as e:
-                            tracebackLineNo = str(traceback.extract_tb(sys.exc_info()[2])[-1].lineno)
-                            tqdm.write(Fore.RED + str(e) + '|' + tracebackLineNo + Fore.RESET)
-
-            case '9':
-                # Open File (Threads)
-                with ThreadPoolExecutor(max_workers=THREADS) as executor:
-                    futures = [executor.submit(handleAtelier, filename, estimate) \
-                                for filename in os.listdir("files") if filename.endswith('txt')]
-
-                    for future in as_completed(futures):
-                        try:
-                            totalCost = future.result()
-
-                        except Exception as e:
-                            tracebackLineNo = str(traceback.extract_tb(sys.exc_info()[2])[-1].lineno)
-                            tqdm.write(Fore.RED + str(e) + '|' + tracebackLineNo + Fore.RESET)
-
-            case '10':
-                # Open File (Threads)
-                with ThreadPoolExecutor(max_workers=THREADS) as executor:
-                    futures = [executor.submit(handleAnim, filename, estimate) \
-                                for filename in os.listdir("files") if filename.endswith('json')]
-
-                    for future in as_completed(futures):
-                        try:
-                            totalCost = future.result()
-
-                        except Exception as e:
-                            tracebackLineNo = str(traceback.extract_tb(sys.exc_info()[2])[-1].lineno)
-                            tqdm.write(Fore.RED + str(e) + '|' + tracebackLineNo + Fore.RESET)
-
-            case _:
-                version = ''
-        
     if totalCost != 'Fail':
         if estimate is False:
             # This is to encourage people to grab what's in /translated instead
             deleteFolderFiles('files')
 
-        # Prevent immediately closing of CLI
-        tqdm.write(totalCost)
-        # input('Done! Press Enter to close.')
+        tqdm.write(str(totalCost))
 
 def deleteFolderFiles(folderPath):
     for filename in os.listdir(folderPath):
