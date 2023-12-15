@@ -1843,21 +1843,21 @@ def batchList(input_list, batch_size):
     return [input_list[i:i + batch_size] for i in range(0, len(input_list), batch_size)]
 
 def createContext(fullPromptFlag, subbedT):
-    characters = 'Game Characters (Format: Last Name, First Name - Gender):\
-        護 == Mamoru - Male\
-        神代 一騎 == Kamishiro, Ikki - Male\
-        神代 琴音 == Kamishiro, Kotone - Female\
-        神代 莉々子 == Kamishiro, Ririko - Female\
-        神代 紗夜 == Kamishiro, Saya - Female\
-        篠原漣 == Shinohara, Ren - Male\
-        藪井 == Yabui - Male\
-        舟木 == Funaki - Male\
-        貞二 == Jouji - Male\
-        兼田 響子 == Kaneda, Kyouko - Female\
-        兼田 真人 == Kaneda, Masato - Male\
-        小出 == Koide - Male\
-        進士 == Shinji - Male\
-        雪乃 == Yukino - Male'
+    characters = 'Game Characters:\
+        護 == Name: Mamoru - Male\
+        神代 一騎 == Last Name: Kamishiro, First Name: Ikki - Male\
+        神代 琴音 == Last Name: Kamishiro, First Name: Kotone - Female\
+        神代 莉々子 == Last Name: Kamishiro, First Name: Ririko - Female\
+        神代 紗夜 == Last Name: Kamishiro, First Name: Saya - Female\
+        篠原漣 == Last Name: Shinohara, First Name: Ren - Male\
+        藪井 == Name: Yabui - Male\
+        舟木 == Name: Funaki - Male\
+        貞二 == Name: Jouji - Male\
+        兼田 響子 == Last Name: Kaneda, First Name: Kyouko - Female\
+        兼田 真人 == Last Name: Kaneda, First Name: Masato - Male\
+        小出 == Name: Koide - Male\
+        進士 == Name: Shinji - Male\
+        雪乃 == Name: Yukino - Female'
     
     system = PROMPT if fullPromptFlag else \
         f'Output ONLY the {LANGUAGE} translation in the following format: `Translation: <{LANGUAGE.upper()}_TRANSLATION>`'
@@ -1882,8 +1882,8 @@ def translateText(characters, system, user, history):
     response = openai.chat.completions.create(
         temperature=0.1,
         top_p = 0.2,
-        frequency_penalty=FREQUENCY_PENALTY,
-        presence_penalty=FREQUENCY_PENALTY,
+        frequency_penalty=0.1,
+        presence_penalty=0.1,
         model=MODEL,
         messages=msg,
     )
@@ -1894,6 +1894,9 @@ def cleanTranslatedText(translatedText, varResponse):
         f'{LANGUAGE} Translation: ': '',
         'Translation: ': '',
         'っ': '',
+        '〜': '~',
+        'ー': '-',
+        'ッ': ''
         # Add more replacements as needed
     }
     for target, replacement in placeholders.items():
