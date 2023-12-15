@@ -45,8 +45,8 @@ if 'gpt-3.5' in MODEL:
 elif 'gpt-4' in MODEL:
     INPUTAPICOST = .01
     OUTPUTAPICOST = .03
-    BATCHSIZE = 40  
-    FREQUENCY_PENALTY = 0
+    BATCHSIZE = 50  
+    FREQUENCY_PENALTY = 0.1
 
 #tqdm Globals
 BAR_FORMAT='{l_bar}{bar:10}{r_bar}{bar:-10b}'
@@ -460,9 +460,12 @@ def searchThings(name, pbar):
     if '<SG説明:' in name['note']:
         totalTokens[0] += translateNote(name, r'<SG説明:(.*?)>')[0]
         totalTokens[1] += translateNote(name, r'<SG説明:(.*?)>')[1]
-    if '<SGカテゴリ':
+    if '<SGカテゴリ:' in name['note']:
         totalTokens[0] += translateNote(name, r'<SGカテゴリ:(.*?)>')[0]
         totalTokens[1] += translateNote(name, r'<SGカテゴリ:(.*?)>')[1]
+    if '<ExtendDesc:' in name['note']:
+        totalTokens[0] += translateNote(name, r'<ExtendDesc:(.*?)>')[0]
+        totalTokens[1] += translateNote(name, r'<ExtendDesc:(.*?)>')[1]
 
     # Count totalTokens
     totalTokens[0] += nameResponse[1][0] if nameResponse != '' else 0
@@ -503,14 +506,14 @@ def searchNames(name, pbar, context):
 
     # Extract Data
     responseList = []
-    responseList.append(translateGPT(name['name'], newContext, True))
+    responseList.append(translateGPT(name['name'], newContext, False))
     if 'Actors' in context:
-        responseList.append(translateGPT(name['profile'], '', True))
-        responseList.append(translateGPT(name['nickname'], 'Reply with ONLY the '+ LANGUAGE +' translation of the NPC nickname', True))
+        responseList.append(translateGPT(name['profile'], '', False))
+        responseList.append(translateGPT(name['nickname'], 'Reply with ONLY the '+ LANGUAGE +' translation of the NPC nickname', False))
 
     if 'Armors' in context or 'Weapons' in context:
         if 'description' in name:
-            responseList.append(translateGPT(name['description'], '', True))
+            responseList.append(translateGPT(name['description'], '', False))
         else:
             responseList.append(['', 0])
         if 'hint' in name['note']:
@@ -621,7 +624,7 @@ def searchCodes(page, pbar, fillList, filename):
                 # Using this to keep track of 401's in a row.
                 currentGroup.append(jaString)
 
-                # Check the next code in the list
+                # Join Up 401's into single string
                 if len(codeList) > i+1:
                     while codeList[i+1]['code'] in [401, 405, -1]:
                         codeList[i]['parameters'] = []
@@ -637,33 +640,45 @@ def searchCodes(page, pbar, fillList, filename):
                         if len(codeList) <= i+1:
                             break
 
-                # Join up 401 groups for better translation.
+                # Format String
                 if len(currentGroup) > 0:
                     finalJAString = ''.join(currentGroup).replace('？', '?')
                     oldjaString = finalJAString
                        
                     # Check for speakers in String
                     # \\n<Speaker>
-                    matchList = re.findall(r'(.*?([\\]+[nN][wWcC]?<(.+?)>).*)', finalJAString)
+                    nCase = None
+                    if finalJAString[0] != '\\':
+                        regex = r'(.*?)([\\]+[nN][wWcC]?<(.*?)>.*)'
+                        nCase = 0
+                    else:
+                        regex = r'(.*[\\]+[nN][wWcC]?<(.*?)>)(.*)'
+                        nCase = 1
+                    matchList = re.findall(regex, finalJAString)
                     if len(matchList) > 0:  
+                        if nCase == 0:
+                            nametag = matchList[0][1]
+                            speaker = matchList[0][2]
+                        elif nCase == 1:
+                            nametag = matchList[0][0]
+                            speaker = matchList[0][1]
+
                         # Translate Speaker  
-                        speakerID = i
-                        response = getSpeaker(matchList[0][1])
-                        speaker = response[0]
+                        response = getSpeaker(speaker)
+                        tledSpeaker = response[0]
                         totalTokens[0] += response[1][0]
                         totalTokens[1] += response[1][1]
 
                         # Set Nametag and Remove from Final String
-                        nametag = matchList[0][0].replace(matchList[0][1], speaker)
-                        finalJAString = finalJAString.replace(matchList[0][0], '')
+                        finalJAString = finalJAString.replace(nametag, '')
+                        nametag = nametag.replace(speaker, tledSpeaker)
 
                         # Set dialogue
-                        codeList[j]['parameters'][0] = matchList[0][2]
-                        codeList[j]['code'] = 401
-
-                        # Remove nametag from final string
-                        finalJAString = finalJAString.replace(nametag, '')
-
+                        if nCase == 0:
+                            codeList[i]['parameters'] = [finalJAString + nametag]
+                        elif nCase == 1:
+                            codeList[i]['parameters'] = [nametag + finalJAString]
+                            
                     ### Brackets
                     matchList = re.findall\
                         (r'^([\\]+[cC]\[[0-9]+\]【?(.+?)】?[\\]+[cC]\[[0-9]+\])|^(【(.+)】)', finalJAString)  
@@ -768,6 +783,13 @@ def searchCodes(page, pbar, fillList, filename):
                     else:
                         # Grab Translated String
                         translatedText = fillList[0]
+                        
+                        # Remove added speaker
+                        if speaker != '':
+                            matchSpeakerList = re.findall(r'(^.+?)\s?[|:]\s?', translatedText)
+                            if len(matchSpeakerList) > 0:
+                                fullSpeaker = matchSpeakerList[0]
+                            translatedText = re.sub(r'(^.+?)\s?[|:]\s?', '', translatedText)
 
                         # Textwrap
                         if FIXTEXTWRAP is True:
@@ -775,20 +797,21 @@ def searchCodes(page, pbar, fillList, filename):
                             if BRFLAG is True:
                                 translatedText = translatedText.replace('\n', '<br>')   
 
-                        # Add Beginning Text
+                        ### Add Var Strings
+                        # CL Flag
                         if CLFlag:
                             translatedText = '\\CL' + translatedText
                             CLFlag = False
-                        translatedText = nametag + translatedText
-                        nametag = ''
-                        translatedText = soundEffectString + translatedText
 
-                        # Remove added speaker
-                        if speaker != '':
-                            matchSpeakerList = re.findall(r'(^.+?)\s?[|:]\s?', translatedText)
-                            if len(matchSpeakerList) > 0:
-                                fullSpeaker = matchSpeakerList[0]
-                            translatedText = re.sub(r'(^.+?)\s?[|:]\s?', '', translatedText)
+                        # Nametag
+                        if nCase == 0:
+                            translatedText = translatedText + nametag
+                        else:
+                            translatedText = nametag + translatedText
+                        nametag = ''
+
+                        # //SE[#]
+                        translatedText = soundEffectString + translatedText
 
                         # Set Data
                         if speakerID != None:
@@ -832,7 +855,7 @@ def searchCodes(page, pbar, fillList, filename):
                 for match in matchList:
                     # Remove Textwrap
                     match = match.replace('\\n', ' ')
-                    response = translateGPT(match, 'Reply with the '+ LANGUAGE +' translation of the NPC name.', True)
+                    response = translateGPT(match, 'Reply with the '+ LANGUAGE +' translation of the NPC name.', False)
                     translatedText = response[0]
                     totalTokens[0] += response[1][0]
                     totalTokens[1] += response[1][1]
@@ -1556,30 +1579,30 @@ def searchSS(state, pbar):
     if 'message1' in state:
         if len(state['message1']) > 0 and state['message1'][0] in ['は', 'を', 'の', 'に', 'が']:
             message1Response = translateGPT('Taro' + state['message1'], 'reply with only the gender neutral '+ LANGUAGE +' translation of the action log. Always start the sentence with Taro. For example,\
-Translate \'Taroを倒した！\' as \'Taro was defeated!\'', True)
+Translate \'Taroを倒した！\' as \'Taro was defeated!\'', False)
         else:
-            message1Response = translateGPT(state['message1'], 'reply with only the gender neutral '+ LANGUAGE +' translation', True)
+            message1Response = translateGPT(state['message1'], 'reply with only the gender neutral '+ LANGUAGE +' translation', False)
 
     if 'message2' in state:
         if len(state['message2']) > 0 and state['message2'][0] in ['は', 'を', 'の', 'に', 'が']:
             message2Response = translateGPT('Taro' + state['message2'], 'reply with only the gender neutral '+ LANGUAGE +' translation of the action log. Always start the sentence with Taro. For example,\
-Translate \'Taroを倒した！\' as \'Taro was defeated!\'', True)
+Translate \'Taroを倒した！\' as \'Taro was defeated!\'', False)
         else:
-            message2Response = translateGPT(state['message2'], 'reply with only the gender neutral '+ LANGUAGE +' translation', True)
+            message2Response = translateGPT(state['message2'], 'reply with only the gender neutral '+ LANGUAGE +' translation', False)
 
     if 'message3' in state:
         if len(state['message3']) > 0 and state['message3'][0] in ['は', 'を', 'の', 'に', 'が']:
             message3Response = translateGPT('Taro' + state['message3'], 'reply with only the gender neutral '+ LANGUAGE +' translation of the action log. Always start the sentence with Taro. For example,\
-Translate \'Taroを倒した！\' as \'Taro was defeated!\'', True)
+Translate \'Taroを倒した！\' as \'Taro was defeated!\'', False)
         else:
-            message3Response = translateGPT(state['message3'], 'reply with only the gender neutral '+ LANGUAGE +' translation', True)
+            message3Response = translateGPT(state['message3'], 'reply with only the gender neutral '+ LANGUAGE +' translation', False)
 
     if 'message4' in state:
         if len(state['message4']) > 0 and state['message4'][0] in ['は', 'を', 'の', 'に', 'が']:
             message4Response = translateGPT('Taro' + state['message4'], 'reply with only the gender neutral '+ LANGUAGE +' translation of the action log. Always start the sentence with Taro. For example,\
-Translate \'Taroを倒した！\' as \'Taro was defeated!\'', True)
+Translate \'Taroを倒した！\' as \'Taro was defeated!\'', False)
         else:
-            message4Response = translateGPT(state['message4'], 'reply with only the gender neutral '+ LANGUAGE +' translation', True)
+            message4Response = translateGPT(state['message4'], 'reply with only the gender neutral '+ LANGUAGE +' translation', False)
 
     # if 'note' in state:
     if 'help' in state['note']:
@@ -1708,20 +1731,10 @@ def searchSystem(data, pbar):
 # Save some money and enter the character before translation
 def getSpeaker(speaker):
     match speaker:
-        case 'アイル':
-            return 'Aeru'
-        case 'リラ':
-            return 'Lira'
-        case 'アザミ':
-            return 'Azami'
-        case 'マーガレット':
-            return 'Margaret'
-        case 'ミール':
-            return 'Miiru'
-        case 'ライト':
-            return 'Light'
+        case '雪音':
+            return ['Yukine', [0,0]]
         case _:
-            return [speaker, [0,0]]
+            return translateGPT(speaker, 'Reply with only the '+ LANGUAGE +' translation of the NPC name.', False)
 
 def subVars(jaString):
     jaString = jaString.replace('\u3000', ' ')
@@ -1844,23 +1857,11 @@ def batchList(input_list, batch_size):
 
 def createContext(fullPromptFlag, subbedT):
     characters = 'Game Characters:\
-        護 == Name: Mamoru - Male\
-        神代 一騎 == Last Name: Kamishiro, First Name: Ikki - Male\
-        神代 琴音 == Last Name: Kamishiro, First Name: Kotone - Female\
-        神代 莉々子 == Last Name: Kamishiro, First Name: Ririko - Female\
-        神代 紗夜 == Last Name: Kamishiro, First Name: Saya - Female\
-        篠原漣 == Last Name: Shinohara, First Name: Ren - Male\
-        藪井 == Name: Yabui - Male\
-        舟木 == Name: Funaki - Male\
-        貞二 == Name: Jouji - Male\
-        兼田 響子 == Last Name: Kaneda, First Name: Kyouko - Female\
-        兼田 真人 == Last Name: Kaneda, First Name: Masato - Male\
-        小出 == Name: Koide - Male\
-        進士 == Name: Shinji - Male\
-        雪乃 == Name: Yukino - Female'
+        雪音 == Yukine - Female\
+        少女 == Name: Girl, Gender: Female'
     
     system = PROMPT if fullPromptFlag else \
-        f'Output ONLY the {LANGUAGE} translation in the following format: `Translation: <{LANGUAGE.upper()}_TRANSLATION>`'
+        f'Output ONLY the {LANGUAGE} translation in the following format: `Translation: <{LANGUAGE.upper()}_TRANSLATION>`\nNever include any notes, explanations, dislaimers, or anything similar in your response\n- "Game Characters" - The names, nicknames, and genders of the game characters. Reference this to know the names, nicknames, and gender of characters in the game.\n'
     user = f'{subbedT}'
     return characters, system, user
 
@@ -1930,7 +1931,7 @@ def countTokens(characters, system, user, history):
     inputTotalTokens += len(enc.encode(user))
 
     # Output
-    outputTotalTokens += round(len(enc.encode(user))/1.7)
+    outputTotalTokens += round(len(enc.encode(user))/2)
 
     return [inputTotalTokens, outputTotalTokens]
 
@@ -1983,7 +1984,7 @@ def translateGPT(text, history, fullPromptFlag):
             extractedTranslations = extractTranslation(translatedTextList, True)
             tList[index] = extractedTranslations
             if len(tList[index]) != len(translatedTextList):
-                print('Test')
+                mismatch = True     # Just here so breakpoint can be set
             history = extractedTranslations[-10:]  # Update history if we have a list
         else:
             # Ensure we're passing a single string to extractTranslation
