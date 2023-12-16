@@ -54,11 +54,11 @@ POSITION = 0
 LEAVE = False
 
 # Dialogue / Scroll
-CODE401 = True
+CODE401 = False
 CODE405 = False
 
 # Choices
-CODE102 = True
+CODE102 = False
 
 # Variables
 CODE122 = False
@@ -70,7 +70,7 @@ CODE101 = False
 CODE355655 = False
 CODE357 = False
 CODE657 = False
-CODE356 = False
+CODE356 = True
 CODE320 = False
 CODE324 = False
 CODE111 = False
@@ -1213,7 +1213,7 @@ def searchCodes(page, pbar, fillList, filename):
                         currentGroup = [] 
 
                         # Translate
-                        response = translateGPT(finalJAString, 'Reply with the '+ LANGUAGE +' Translation.', True)
+                        response = translateGPT(finalJAString, 'Reply with the '+ LANGUAGE +' Translation.', False)
                         translatedText = response[0]
                         totalTokens[0] += response[1][0]
                         totalTokens[1] += response[1][1]
@@ -1353,7 +1353,7 @@ def searchCodes(page, pbar, fillList, filename):
                         jaString = re.sub(r'\n', '_', jaString)
 
                         # Translate
-                        response = translateGPT(finalJAString, 'Reply with the '+ LANGUAGE +' Translation.', True)
+                        response = translateGPT(finalJAString, 'Reply with the '+ LANGUAGE +' Translation.', False)
                         translatedText = response[0]
                         totalTokens[0] += response[1][0]
                         totalTokens[1] += response[1][1]
@@ -1416,7 +1416,7 @@ def searchCodes(page, pbar, fillList, filename):
                         jaString = re.sub(r'\n', '_', jaString)
 
                         # Translate
-                        response = translateGPT(finalJAString, 'Reply with the '+ LANGUAGE +' Translation.', True)
+                        response = translateGPT(finalJAString, 'Reply with the '+ LANGUAGE +' Translation.', False)
                         translatedText = response[0]
                         totalTokens[0] += response[1][0]
                         totalTokens[1] += response[1][1]
@@ -1491,7 +1491,7 @@ def searchCodes(page, pbar, fillList, filename):
                     matchList = re.findall(r"'(.*?)'", jaString)
                     
                     for match in matchList:
-                        response = translateGPT(match, '', True)
+                        response = translateGPT(match, '', False)
                         translatedText = response[0]
                         totalTokens[0] += response[1][0]
                         totalTokens[1] += response[1][1]
@@ -1865,7 +1865,17 @@ def createContext(fullPromptFlag, subbedT):
         少女 == Name: Girl, Gender: Female'
     
     system = PROMPT if fullPromptFlag else \
-        f'Output ONLY the {LANGUAGE} translation in the following format: `Translation: <{LANGUAGE.upper()}_TRANSLATION>`\nNever include any notes, explanations, dislaimers, or anything similar in your response\n- "Game Characters" - The names, nicknames, and genders of the game characters. Reference this to know the names, nicknames, and gender of characters in the game.\n'
+        f'Output ONLY the {LANGUAGE} translation in the following format: \
+        `Translation: <{LANGUAGE.upper()}_TRANSLATION>`\n\
+        Never include any notes, explanations, dislaimers, or anything similar in your response\n\
+        - "Game Characters" - The names, nicknames, and genders of the game characters.\
+        Reference this to know the names, nicknames, and gender of characters in the game.\n\
+        Sometimes, the text may contain "tags" in the format of "TAGNAME_TAGNUMBER".\
+        Maintain these tags only if they exist in the untranslated text.\n\
+        * Color_# - A tag that colors the wrapped text.\n\
+        * Noun_# - A tag that holds a noun. Maintain as is.\n\
+        * FCode_# - A tag that formats the text in a unique way.\n'
+    
     user = f'{subbedT}'
     return characters, system, user
 
