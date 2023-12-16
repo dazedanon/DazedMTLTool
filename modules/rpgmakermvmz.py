@@ -644,6 +644,10 @@ def searchCodes(page, pbar, fillList, filename):
                 if len(currentGroup) > 0:
                     finalJAString = ''.join(currentGroup).replace('？', '?')
                     oldjaString = finalJAString
+
+                    # Check if Empty
+                    if finalJAString == '':
+                        continue
                        
                     # Check for speakers in String
                     # \\n<Speaker>
