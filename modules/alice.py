@@ -547,7 +547,7 @@ def translateGPT(text, history, fullPromptFlag):
             extractedTranslations = extractTranslation(translatedTextList, True)
             tList[index] = extractedTranslations
             if len(tList[index]) != len(translatedTextList):
-                print('Test')
+                mismatch = True     # Just here so breakpoint can be set
             history = extractedTranslations[-10:]  # Update history if we have a list
         else:
             # Ensure we're passing a single string to extractTranslation

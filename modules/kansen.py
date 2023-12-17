@@ -52,10 +52,10 @@ elif 'gpt-4' in MODEL:
 
 def handleKansen(filename, estimate):
     global ESTIMATE
-    totalTokens = [0,0]
     ESTIMATE = estimate
+    totalTokens = [0,0]
 
-    if estimate:
+    if ESTIMATE:
         start = time.time()
         translatedData = openFiles(filename)
 
@@ -63,11 +63,11 @@ def handleKansen(filename, estimate):
         end = time.time()
         tqdm.write(getResultString(translatedData, end - start, filename))
         with LOCK:
-            totalTokens[0] += translatedData[1][0]
-            totalTokens[1] += translatedData[1][1]
+            TOKENS[0] += translatedData[1][0]
+            TOKENS[1] += translatedData[1][1]
 
         # Print Total
-        totalString = getResultString(['', totalTokens, None], end - start, 'TOTAL')
+        totalString = getResultString(['', TOKENS, None], end - start, 'TOTAL')
 
         # Print any errors on maps
         if len(MISMATCH) > 0:
@@ -171,7 +171,8 @@ def translateTyrano(data, pbar, totalLines):
             if len(matchList) != 0:
                 response = translateGPT(matchList[0], 'Reply with only the '+ LANGUAGE +' translation of the NPC name', True)
                 speaker = response[0]
-                tokens += response[1]
+                tokens[0] += response[1][0]
+                tokens[1] += response[1][1]
                 data[i] = '[ns]' + speaker + '[nse]\n'
             else:
                 speaker = ''
@@ -186,7 +187,8 @@ def translateTyrano(data, pbar, totalLines):
                 else:
                     response = translateGPT(matchList[0], '\n\nReply in the style of a dialogue option.', False)
                 translatedText = response[0]
-                tokens += response[1]
+                tokens[0] += response[1][0]
+                tokens[1] += response[1][1]
 
                 # Remove characters that may break scripts
                 charList = ['.', '\"', '\\n']
@@ -204,8 +206,6 @@ def translateTyrano(data, pbar, totalLines):
         # Lines
         matchList = re.findall(r'(.+?)\[[rpcms]+\]$', data[i])
         if len(matchList) > 0:
-            matchList[0] = matchList[0].replace('「', '')
-            matchList[0] = matchList[0].replace('」', '')
             currentGroup.append(matchList[0])
             if len(data) > i+1:
                 while '[r]' in data[i+1]:
@@ -226,12 +226,28 @@ def translateTyrano(data, pbar, totalLines):
                         currentGroup.append(matchList[0])
             # Join up 401 groups for better translation.
             if len(currentGroup) > 0:
-                finalJAString = ''.join(currentGroup)
+                finalJAString = ' '.join(currentGroup)
                 oldjaString = finalJAString
 
             # Remove any textwrap
             if FIXTEXTWRAP == True:
-                finalJAString = re.sub(r'[r]', ' ', finalJAString)
+                finalJAString = finalJAString.replace('[r]', ' ')
+
+            # Remove Extra Stuff bad for translation.
+            finalJAString = finalJAString.replace('ﾞ', '')
+            finalJAString = finalJAString.replace('・', '.')
+            finalJAString = finalJAString.replace('‶', '')
+            finalJAString = finalJAString.replace('”', '')
+            finalJAString = finalJAString.replace('―', '-')
+            finalJAString = finalJAString.replace('ー', '-')
+            finalJAString = finalJAString.replace('…', '...')
+            finalJAString = re.sub(r'(\.{3}\.+)', '...', finalJAString)
+            finalJAString = finalJAString.replace('　', ' ')
+
+            # Furigana Removal
+            matchList = re.findall(r'(\[ruby\stext=.+text=\"(.+)\"\])', finalJAString)
+            if len(matchList) > 0:
+                finalJAString = finalJAString.replace(matchList[0][0], matchList[0][1])
 
             # Add Speaker (If there is one)
             if speaker != '':
@@ -241,6 +257,7 @@ def translateTyrano(data, pbar, totalLines):
             if insertBool is False:
                 # Append to List and Clear Values
                 batch.append(finalJAString)
+                speaker = ''
 
                 # Translate Batch if Full
                 if len(batch) == BATCHSIZE:
@@ -272,12 +289,12 @@ def translateTyrano(data, pbar, totalLines):
             else:
                 # Get Text
                 translatedText = translatedBatch[0]
+                translatedText = translatedText.replace('\\"', '\"')
 
-                # Remove added speaker and quotes
+                # Remove added speaker
                 translatedText = re.sub(r'^.+?:\s', '', translatedText)
 
                 # Textwrap
-                translatedText = translatedText.replace('\"', '\\"')
                 translatedText = textwrap.fill(translatedText, width=WIDTH)
                 textList = translatedText.split('\n')
                     
@@ -294,6 +311,8 @@ def translateTyrano(data, pbar, totalLines):
                     i+=1
                 data[i-1] = data[i-1].replace('[r]', '[pcms]')
                 translatedBatch.pop(0)
+                speaker = ''
+                currentGroup = []
 
                 # If Batch is empty. Move on.
                 if len(translatedBatch) == 0:
@@ -452,20 +471,14 @@ def batchList(input_list, batch_size):
 
 def createContext(fullPromptFlag, subbedT):
     characters = 'Game Characters:\
-        護 == Name: Mamoru - Male\
-        神代 一騎 == Last Name: Kamishiro, First Name: Ikki - Male\
-        神代 琴音 == Last Name: Kamishiro, First Name: Kotone - Female\
-        神代 莉々子 == Last Name: Kamishiro, First Name: Ririko - Female\
-        神代 紗夜 == Last Name: Kamishiro, First Name: Saya - Female\
-        篠原漣 == Last Name: Shinohara, First Name: Ren - Male\
-        藪井 == Name: Yabui - Male\
-        舟木 == Name: Funaki - Male\
-        貞二 == Name: Jouji - Male\
-        兼田 響子 == Last Name: Kaneda, First Name: Kyouko - Female\
-        兼田 真人 == Last Name: Kaneda, First Name: Masato - Male\
-        小出 == Name: Koide - Male\
-        進士 == Name: Shinji - Male\
-        雪乃 == Name: Yukino - Female'
+        大倉 (Ookura) 浩 (Hiroshi) - Male\
+        速水 (Hayami) ありす (Arisu) - Female\
+        神宮寺 (Jinguuji) 摩耶 (Maya) - Female\
+        小林 (Kobayashi) 裕樹 (Yuuki) - Female\
+        安西 (Anzai) みき (Mikki) - Female\
+        長崎 (Nagasaki) 千尋 (Chihiro) - Female\
+        菅生 (Sugou) 竜也 (Ryuuya) - Male\
+        鶴田 (Tsuruta) 直美 (Naomi) - Female'
     
     system = PROMPT if fullPromptFlag else \
         f'Output ONLY the {LANGUAGE} translation in the following format: `Translation: <{LANGUAGE.upper()}_TRANSLATION>`'
@@ -504,7 +517,8 @@ def cleanTranslatedText(translatedText, varResponse):
         'っ': '',
         '〜': '~',
         'ー': '-',
-        'ッ': ''
+        'ッ': '',
+        '。': '.'
         # Add more replacements as needed
     }
     for target, replacement in placeholders.items():
@@ -591,7 +605,7 @@ def translateGPT(text, history, fullPromptFlag):
             extractedTranslations = extractTranslation(translatedTextList, True)
             tList[index] = extractedTranslations
             if len(tList[index]) != len(translatedTextList):
-                print('Test')
+                mismatch = True     # Just here so breakpoint can be set
             history = extractedTranslations[-10:]  # Update history if we have a list
         else:
             # Ensure we're passing a single string to extractTranslation
