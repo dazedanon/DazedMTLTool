@@ -23,7 +23,7 @@ THREADS = int(os.getenv('threads'))
 LOCK = threading.Lock()
 WIDTH = int(os.getenv('width'))
 LISTWIDTH = int(os.getenv('listWidth'))
-NOTEWIDTH = 70
+NOTEWIDTH = int(os.getenv('noteWidth'))
 MAXHISTORY = 10
 ESTIMATE = ''
 TOKENS = [0, 0]
@@ -1436,6 +1436,19 @@ def searchCodes(page, pbar, fillList, filename):
                         codeList[i]['parameters'][0] = translatedText
                     else:
                         continue
+                if 'namePop' in jaString:
+                    matchList = re.findall(r'namePop\s\d+\s(.+?)\s.+', jaString)
+                    if len(matchList) > 0:
+                        # Translate
+                        text = matchList[0]
+                        response = translateGPT(text, 'Reply with the '+ LANGUAGE +' Translation', False)
+                        translatedText = response[0]
+                        totalTokens[0] += response[1][0]
+                        totalTokens[1] += response[1][1]
+
+                        # Set Data
+                        translatedText = jaString.replace(text, translatedText)
+                        codeList[i]['parameters'][0] = translatedText
 
             ### Event Code: 102 Show Choice
             if codeList[i]['code'] == 102 and CODE102 is True:
