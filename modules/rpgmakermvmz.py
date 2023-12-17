@@ -45,7 +45,7 @@ if 'gpt-3.5' in MODEL:
 elif 'gpt-4' in MODEL:
     INPUTAPICOST = .01
     OUTPUTAPICOST = .03
-    BATCHSIZE = 50  
+    BATCHSIZE = 40  
     FREQUENCY_PENALTY = 0.1
 
 #tqdm Globals
@@ -54,11 +54,11 @@ POSITION = 0
 LEAVE = False
 
 # Dialogue / Scroll
-CODE401 = False
+CODE401 = True
 CODE405 = False
 
 # Choices
-CODE102 = False
+CODE102 = True
 
 # Variables
 CODE122 = False
@@ -1874,9 +1874,8 @@ def batchList(input_list, batch_size):
 
 def createContext(fullPromptFlag, subbedT):
     characters = 'Game Characters:\
-        雪音 == Yukine - Female\
-        少女 == Name: Girl, Gender: Female'
-    
+        雪音 (Yukine) - Female\
+        朔 (Saku) - Female'
     system = PROMPT if fullPromptFlag else \
         f'Output ONLY the {LANGUAGE} translation in the following format: \
         `Translation: <{LANGUAGE.upper()}_TRANSLATION>`\n\
