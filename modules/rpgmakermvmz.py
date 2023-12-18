@@ -33,6 +33,7 @@ BRFLAG = False   # If the game uses <br> instead
 FIXTEXTWRAP = True  # Overwrites textwrap
 IGNORETLTEXT = False    # Ignores all translated text.
 MISMATCH = []   # Lists files that throw a mismatch error (Length of GPT list response is wrong)
+BRACKETNAMES = False
 
 # Pricing - Depends on the model https://openai.com/pricing
 # Batch Size - GPT 3.5 Struggles past 15 lines per request. GPT4 struggles past 50 lines per request
@@ -45,7 +46,7 @@ if 'gpt-3.5' in MODEL:
 elif 'gpt-4' in MODEL:
     INPUTAPICOST = .01
     OUTPUTAPICOST = .03
-    BATCHSIZE = 40  
+    BATCHSIZE = 50  
     FREQUENCY_PENALTY = 0.1
 
 #tqdm Globals
@@ -688,7 +689,7 @@ def searchCodes(page, pbar, fillList, filename):
                         (r'^([\\]+[cC]\[[0-9]+\]【?(.+?)】?[\\]+[cC]\[[0-9]+\])|^(【(.+)】)', finalJAString)  
                     
                     # Handle both cases of the regex  
-                    if len(matchList) != 0:
+                    if len(matchList) != 0 and BRACKETNAMES is True:
                         if matchList[0][0] != '':
                             match0 = matchList[0][0]
                             match1 = matchList[0][1]
