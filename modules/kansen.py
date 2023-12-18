@@ -86,13 +86,13 @@ def handleKansen(filename, estimate):
                 outFile.writelines(translatedData[0])
                 tqdm.write(getResultString(translatedData, end - start, filename))
                 with LOCK:
-                    totalTokens[0] += translatedData[1][0]
-                    totalTokens[1] += translatedData[1][1]
+                    TOKENS[0] += translatedData[1][0]
+                    TOKENS[1] += translatedData[1][1]
         except Exception as e:
             traceback.print_exc()
             return 'Fail'
 
-    return getResultString(['', totalTokens, None], end - start, 'TOTAL')
+    return getResultString(['', TOKENS, None], end - start, 'TOTAL')
 
 def getResultString(translatedData, translationTime, filename):
     # File Print String
@@ -169,7 +169,7 @@ def translateTyrano(data, pbar, totalLines):
         if '[ns]' in data[i]:
             matchList = re.findall(r'\[ns\](.+?)\[', data[i])
             if len(matchList) != 0:
-                response = translateGPT(matchList[0], 'Reply with only the '+ LANGUAGE +' translation of the NPC name', True)
+                response = translateGPT(matchList[0], 'Reply with only the '+ LANGUAGE +' translation of the NPC name', False)
                 speaker = response[0]
                 tokens[0] += response[1][0]
                 tokens[1] += response[1][1]
