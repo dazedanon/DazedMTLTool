@@ -7,6 +7,8 @@ Currently in development. Goal is to eventually have a tool that utilizes ChatGP
 ## Currently Supported:
 * RPGMaker MZ, MV, ACE, TyranoBuilder
 * CSV Files
+* JSON Files
+* TXT Files
 
 ## Required:
  * API Key: https://platform.openai.com/account/api-keys
