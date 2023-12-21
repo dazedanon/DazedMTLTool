@@ -29,7 +29,7 @@ TOKENS = [0, 0]
 NAMESLIST = []
 NAMES = False    # Output a list of all the character names found
 BRFLAG = False   # If the game uses <br> instead
-FIXTEXTWRAP = True  # Overwrites textwrap
+FIXTEXTWRAP = False  # Overwrites textwrap
 IGNORETLTEXT = False    # Ignores all translated text.
 MISMATCH = []   # Lists files that throw a mismatch error (Length of GPT list response is wrong)
 
@@ -48,12 +48,11 @@ if 'gpt-3.5' in MODEL:
 elif 'gpt-4' in MODEL:
     INPUTAPICOST = .01
     OUTPUTAPICOST = .03
-    BATCHSIZE = 50
+    BATCHSIZE = 5
 
 def handleKansen(filename, estimate):
     global ESTIMATE
     ESTIMATE = estimate
-    totalTokens = [0,0]
 
     if ESTIMATE:
         start = time.time()
@@ -169,7 +168,7 @@ def translateTyrano(data, pbar, totalLines):
         if '[ns]' in data[i]:
             matchList = re.findall(r'\[ns\](.+?)\[', data[i])
             if len(matchList) != 0:
-                response = translateGPT(matchList[0], 'Reply with only the '+ LANGUAGE +' translation of the NPC name', False)
+                response = getSpeaker(matchList[0])
                 speaker = response[0]
                 tokens[0] += response[1][0]
                 tokens[1] += response[1][1]
@@ -290,6 +289,8 @@ def translateTyrano(data, pbar, totalLines):
                 # Get Text
                 translatedText = translatedBatch[0]
                 translatedText = translatedText.replace('\\"', '\"')
+                translatedText = translatedText.replace('[', '(')
+                translatedText = translatedText.replace(']', ')')
 
                 # Remove added speaker
                 translatedText = re.sub(r'^.+?:\s', '', translatedText)
@@ -349,6 +350,46 @@ def translateTyrano(data, pbar, totalLines):
 
             currentGroup = []
     return tokens
+
+# Save some money and enter the character before translation
+def getSpeaker(speaker):
+    match speaker:
+        case '航':
+            return ['Wataru', [0,0]]
+        case '悠帆':
+            return ['Yuuho', [0,0]]
+        case '穂村':
+            return ['Homura', [0,0]]
+        case 'マリー':
+            return ['Marie', [0,0]]
+        case 'マル子':
+            return ['Maruko', [0,0]]
+        case '瑞樹':
+            return ['Mizuki', [0,0]]
+        case '壬':
+            return ['Jin', [0,0]]
+        case '緒織':
+            return ['Inori', [0,0]]
+        case '浩助':
+            return ['Kousuke', [0,0]]
+        case '太宰':
+            return ['Dazai', [0,0]]
+        case '大嶋':
+            return ['Oshimi', [0,0]]
+        case 'セスカ':
+            return ['Sesuka', [0,0]]
+        case '重吉':
+            return ['Shigeyoshi', [0,0]]
+        case '忠彦':
+            return ['Tadahiko', [0,0]]
+        case '和歌':
+            return ['Waka', [0,0]]
+        case '吉野':
+            return ['Yoshino', [0,0]]
+        case '忠彦':
+            return ['Tadahiko', [0,0]]
+        case _:
+            return translateGPT(speaker, 'Reply with only the '+ LANGUAGE +' translation of the NPC name.', False)
         
 def subVars(jaString):
     jaString = jaString.replace('\u3000', ' ')
@@ -470,15 +511,25 @@ def batchList(input_list, batch_size):
     return [input_list[i:i + batch_size] for i in range(0, len(input_list), batch_size)]
 
 def createContext(fullPromptFlag, subbedT):
-    characters = 'Game Characters:\
-        大倉 (Ookura) 浩 (Hiroshi) - Male\
-        速水 (Hayami) ありす (Arisu) - Female\
-        神宮寺 (Jinguuji) 摩耶 (Maya) - Female\
-        小林 (Kobayashi) 裕樹 (Yuuki) - Female\
-        安西 (Anzai) みき (Mikki) - Female\
-        長崎 (Nagasaki) 千尋 (Chihiro) - Female\
-        菅生 (Sugou) 竜也 (Ryuuya) - Male\
-        鶴田 (Tsuruta) 直美 (Naomi) - Female'
+    characters = 'Game Characters:\n\
+航 (Wataru) - Male\n\
+漣 (Ren) - Female\n\
+悠帆 (Yuuho) - Female\n\
+穂村 (Homura) - Female\n,\
+マリー (Marie) - Female\n,\
+マル子 (Maruko) - Female\n\
+瑞樹 (Mizuki) - Female\n\
+壬 (Jin) - Male\n\
+緒織 (Inori) - Female\n\
+浩助 (Kousuke) - Male\n\
+太宰 (Dazai) - Male\n\
+大嶋 (Oshima) - Male\n\
+セスカ (Sesuka) - Female\n\
+重吉 (Shigeyoshi) - Male\n\
+忠彦 (Tadahiko) - Male\n\
+和歌 (Waka) - Female\n\
+吉野 (Yoshino) - Female\n\
+'
     
     system = PROMPT if fullPromptFlag else \
         f'Output ONLY the {LANGUAGE} translation in the following format: `Translation: <{LANGUAGE.upper()}_TRANSLATION>`'
@@ -552,7 +603,7 @@ def countTokens(characters, system, user, history):
     inputTotalTokens += len(enc.encode(user))
 
     # Output
-    outputTotalTokens += round(len(enc.encode(user))/1.7)
+    outputTotalTokens += round(len(enc.encode(user))/2)
 
     return [inputTotalTokens, outputTotalTokens]
 
