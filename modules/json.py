@@ -219,32 +219,45 @@ def translateJSON(data, pbar):
 
                             # Textwrap
                             translatedText = textwrap.fill(translatedText, width=WIDTH)
-                            textList = translatedText.split('\n')
                                 
                             # Set Text
                             item[text] = translatedText
                             translatedBatch.pop(0)
                             speaker = ''
                             currentGroup = []
+                            i += 1
 
                             # If Batch is empty. Move on.
                             if len(translatedBatch) == 0:
                                 insertBool = False
                                 batchStartIndex = i
                                 batch.clear()
-
-                            # Remove added speaker
-                            translatedText = re.sub(r'^.+?\s\|\s?', '', translatedText)
-
-                            # Textwrap
-                            translatedText = textwrap.fill(translatedText, width=WIDTH)
-
-                            # Set Data
-                            item[text] = translatedText
-                            i += 1
         else:
             i += 1
             pbar.update(1)
+
+        # Translate Batch if not empty and EOF
+        if len(batch) != 0 and i >= len(data):
+            # Translate
+            response = translateGPT(batch, textHistory, True)
+            tokens[0] += response[1][0]
+            tokens[1] += response[1][1]
+            translatedBatch = response[0]
+            textHistory = translatedBatch[-10:]
+
+            # Set Values
+            if len(batch) == len(translatedBatch):
+                i = batchStartIndex
+                insertBool = True
+
+            # Mismatch
+            else:
+                pbar.write(f'Mismatch: {batchStartIndex} - {i}')
+                MISMATCH.append(batch)
+                batchStartIndex = i
+                batch.clear()
+
+            currentGroup = []
     return tokens           
 
 def subVars(jaString):
@@ -420,7 +433,8 @@ def cleanTranslatedText(translatedText, varResponse):
         '〜': '~',
         'ー': '-',
         'ッ': '',
-        '。': '.'
+        '。': '.',
+        'This is a line of text': ''
         # Add more replacements as needed
     }
     for target, replacement in placeholders.items():
@@ -454,7 +468,7 @@ def countTokens(characters, system, user, history):
     inputTotalTokens += len(enc.encode(user))
 
     # Output
-    outputTotalTokens += round(len(enc.encode(user))/1.7)
+    outputTotalTokens += round(len(enc.encode(user))/2)
 
     return [inputTotalTokens, outputTotalTokens]
 
@@ -475,6 +489,7 @@ def translateGPT(text, history, fullPromptFlag):
         # Before sending to translation, if we have a list of items, add the formatting
         if isinstance(tItem, list):
             payload = '\\n'.join([f'<Line{i}>\`{item}\`</Line{i}>' for i, item in enumerate(tItem)])
+            payload = payload.replace('\`\`', '\`This is a line of text\`')
             varResponse = subVars(payload)
             subbedT = varResponse[0]
         else:
@@ -506,7 +521,7 @@ def translateGPT(text, history, fullPromptFlag):
         if isinstance(tItem, list):
             extractedTranslations = extractTranslation(translatedTextList, True)
             tList[index] = extractedTranslations
-            if len(tList[index]) != len(translatedTextList):
+            if len(tItem) != len(translatedTextList):
                 mismatch = True     # Just here so breakpoint can be set
             history = extractedTranslations[-10:]  # Update history if we have a list
         else:
