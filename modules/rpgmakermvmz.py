@@ -1874,21 +1874,23 @@ def batchList(input_list, batch_size):
     return [input_list[i:i + batch_size] for i in range(0, len(input_list), batch_size)]
 
 def createContext(fullPromptFlag, subbedT):
-    characters = 'Game Characters:\
-        雪音 (Yukine) - Female\
-        朔 (Saku) - Female'
-    system = PROMPT if fullPromptFlag else \
-        f'Output ONLY the {LANGUAGE} translation in the following format: \
-        `Translation: <{LANGUAGE.upper()}_TRANSLATION>`\n\
-        Never include any notes, explanations, dislaimers, or anything similar in your response\n\
-        - "Game Characters" - The names, nicknames, and genders of the game characters.\
-        Reference this to know the names, nicknames, and gender of characters in the game.\n\
-        Sometimes, the text may contain "tags" in the format of "TAGNAME_TAGNUMBER".\
-        Maintain these tags only if they exist in the untranslated text.\n\
-        * Color_# - A tag that colors the wrapped text.\n\
-        * Noun_# - A tag that holds a noun. Maintain as is.\n\
-        * FCode_# - A tag that formats the text in a unique way.\n'
+    characters = 'Game Characters:\n\
+林つかさ (Tsukasa Hayashi) - Female\n\
+山田美兎 (Miyato Yamada) - Female\n\
+鈴木赤音 (Akane Suzuki) - Female\n\
+佐藤莉伊南 (Riina Satou) - Female\n\
+佐々木万梨美 (Marimi Sasaki) - Female\n\
+渡辺登樹子 (Tokiko Watanabe) - Female\n\
+桃乃夢 (Yume Momono) - Female\n\
+吉浦美雪 (Miyuki Yoshiura) - Female\n\
+三ツ門まあな (Maana Mitsukado) - Female\n\
+モリー・ボイド (Molly Boyd) - Female\n\
+オルガ・ブヤチッチ (Olga Buyachich) - Female\n\
+アッチャラー ギッティ (Atchara Gitti) - Female\n\
+'
     
+    system = PROMPT if fullPromptFlag else \
+        f'Output ONLY the {LANGUAGE} translation in the following format: `Translation: <{LANGUAGE.upper()}_TRANSLATION>`'
     user = f'{subbedT}'
     return characters, system, user
 
@@ -1909,9 +1911,8 @@ def translateText(characters, system, user, history):
     msg.append({"role": "user", "content": f'{user}'})
     response = openai.chat.completions.create(
         temperature=0.1,
-        top_p = 0.2,
-        frequency_penalty=0.1,
-        presence_penalty=0.1,
+        frequency_penalty=0,
+        presence_penalty=0,
         model=MODEL,
         messages=msg,
     )
@@ -1924,7 +1925,9 @@ def cleanTranslatedText(translatedText, varResponse):
         'っ': '',
         '〜': '~',
         'ー': '-',
-        'ッ': ''
+        'ッ': '',
+        '。': '.',
+        'Placeholder Text': ''
         # Add more replacements as needed
     }
     for target, replacement in placeholders.items():
@@ -1958,7 +1961,7 @@ def countTokens(characters, system, user, history):
     inputTotalTokens += len(enc.encode(user))
 
     # Output
-    outputTotalTokens += round(len(enc.encode(user))/2)
+    outputTotalTokens += round(len(enc.encode(user))/1.5)
 
     return [inputTotalTokens, outputTotalTokens]
 
@@ -1978,7 +1981,8 @@ def translateGPT(text, history, fullPromptFlag):
     for index, tItem in enumerate(tList):
         # Before sending to translation, if we have a list of items, add the formatting
         if isinstance(tItem, list):
-            payload = '\\n'.join([f'<Line{i}>\`{item}\`</Line{i}>' for i, item in enumerate(tItem)])
+            payload = '\\n'.join([f'<Line{i}>`{item}`</Line{i}>' for i, item in enumerate(tItem)])
+            payload = payload.replace('``', '`Placeholder Text`')
             varResponse = subVars(payload)
             subbedT = varResponse[0]
         else:
@@ -2010,7 +2014,7 @@ def translateGPT(text, history, fullPromptFlag):
         if isinstance(tItem, list):
             extractedTranslations = extractTranslation(translatedTextList, True)
             tList[index] = extractedTranslations
-            if len(tList[index]) != len(translatedTextList):
+            if len(tItem) != len(translatedTextList):
                 mismatch = True     # Just here so breakpoint can be set
             history = extractedTranslations[-10:]  # Update history if we have a list
         else:

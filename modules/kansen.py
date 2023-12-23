@@ -512,23 +512,18 @@ def batchList(input_list, batch_size):
 
 def createContext(fullPromptFlag, subbedT):
     characters = 'Game Characters:\n\
-航 (Wataru) - Male\n\
-漣 (Ren) - Female\n\
-悠帆 (Yuuho) - Female\n\
-穂村 (Homura) - Female\n,\
-マリー (Marie) - Female\n,\
-マル子 (Maruko) - Female\n\
-瑞樹 (Mizuki) - Female\n\
-壬 (Jin) - Male\n\
-緒織 (Inori) - Female\n\
-浩助 (Kousuke) - Male\n\
-太宰 (Dazai) - Male\n\
-大嶋 (Oshima) - Male\n\
-セスカ (Sesuka) - Female\n\
-重吉 (Shigeyoshi) - Male\n\
-忠彦 (Tadahiko) - Male\n\
-和歌 (Waka) - Female\n\
-吉野 (Yoshino) - Female\n\
+林つかさ (Tsukasa Hayashi) - Female\n\
+山田美兎 (Miyato Yamada) - Female\n\
+鈴木赤音 (Akane Suzuki) - Female\n\
+佐藤莉伊南 (Riina Satou) - Female\n\
+佐々木万梨美 (Marimi Sasaki) - Female\n\
+渡辺登樹子 (Tokiko Watanabe) - Female\n\
+桃乃夢 (Yume Momono) - Female\n\
+吉浦美雪 (Miyuki Yoshiura) - Female\n\
+三ツ門まあな (Maana Mitsukado) - Female\n\
+モリー・ボイド (Molly Boyd) - Female\n\
+オルガ・ブヤチッチ (Olga Buyachich) - Female\n\
+アッチャラー ギッティ (Atchara Gitti) - Female\n\
 '
     
     system = PROMPT if fullPromptFlag else \
@@ -553,9 +548,8 @@ def translateText(characters, system, user, history):
     msg.append({"role": "user", "content": f'{user}'})
     response = openai.chat.completions.create(
         temperature=0.1,
-        top_p = 0.2,
-        frequency_penalty=0.1,
-        presence_penalty=0.1,
+        frequency_penalty=0,
+        presence_penalty=0,
         model=MODEL,
         messages=msg,
     )
@@ -569,7 +563,8 @@ def cleanTranslatedText(translatedText, varResponse):
         '〜': '~',
         'ー': '-',
         'ッ': '',
-        '。': '.'
+        '。': '.',
+        'Placeholder Text': ''
         # Add more replacements as needed
     }
     for target, replacement in placeholders.items():
@@ -603,7 +598,7 @@ def countTokens(characters, system, user, history):
     inputTotalTokens += len(enc.encode(user))
 
     # Output
-    outputTotalTokens += round(len(enc.encode(user))/2)
+    outputTotalTokens += round(len(enc.encode(user))/1.5)
 
     return [inputTotalTokens, outputTotalTokens]
 
@@ -623,7 +618,8 @@ def translateGPT(text, history, fullPromptFlag):
     for index, tItem in enumerate(tList):
         # Before sending to translation, if we have a list of items, add the formatting
         if isinstance(tItem, list):
-            payload = '\\n'.join([f'<Line{i}>\`{item}\`</Line{i}>' for i, item in enumerate(tItem)])
+            payload = '\\n'.join([f'<Line{i}>`{item}`</Line{i}>' for i, item in enumerate(tItem)])
+            payload = payload.replace('``', '`Placeholder Text`')
             varResponse = subVars(payload)
             subbedT = varResponse[0]
         else:
@@ -655,7 +651,7 @@ def translateGPT(text, history, fullPromptFlag):
         if isinstance(tItem, list):
             extractedTranslations = extractTranslation(translatedTextList, True)
             tList[index] = extractedTranslations
-            if len(tList[index]) != len(translatedTextList):
+            if len(tItem) != len(translatedTextList):
                 mismatch = True     # Just here so breakpoint can be set
             history = extractedTranslations[-10:]  # Update history if we have a list
         else:
