@@ -1911,8 +1911,7 @@ def translateText(characters, system, user, history):
     msg.append({"role": "user", "content": f'{user}'})
     response = openai.chat.completions.create(
         temperature=0.1,
-        frequency_penalty=0,
-        presence_penalty=0,
+        frequency_penalty=0.1,
         model=MODEL,
         messages=msg,
     )
@@ -1934,7 +1933,10 @@ def cleanTranslatedText(translatedText, varResponse):
         translatedText = translatedText.replace(target, replacement)
 
     translatedText = resubVars(translatedText, varResponse[1])
-    return [line for line in translatedText.split('\\n') if line]
+    if '\n' in translatedText:
+        return [line for line in translatedText.split('\n') if line]
+    else:
+        return [line for line in translatedText.split('\\n') if line]
 
 def extractTranslation(translatedTextList, is_list):
     pattern = r'<Line(\d+)>[\\]*`?(.*?)[\\]*?`?</Line\d+>'
@@ -1981,7 +1983,7 @@ def translateGPT(text, history, fullPromptFlag):
     for index, tItem in enumerate(tList):
         # Before sending to translation, if we have a list of items, add the formatting
         if isinstance(tItem, list):
-            payload = '\\n'.join([f'<Line{i}>`{item}`</Line{i}>' for i, item in enumerate(tItem)])
+            payload = '\n'.join([f'<Line{i}>`{item}`</Line{i}>' for i, item in enumerate(tItem)])
             payload = payload.replace('``', '`Placeholder Text`')
             varResponse = subVars(payload)
             subbedT = varResponse[0]
@@ -2019,7 +2021,7 @@ def translateGPT(text, history, fullPromptFlag):
             history = extractedTranslations[-10:]  # Update history if we have a list
         else:
             # Ensure we're passing a single string to extractTranslation
-            extractedTranslations = extractTranslation('\\n'.join(translatedTextList), False)
+            extractedTranslations = extractTranslation('\n'.join(translatedTextList), False)
             tList[index] = extractedTranslations
 
     finalList = combineList(tList, text)
