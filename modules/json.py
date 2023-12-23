@@ -417,7 +417,6 @@ def translateText(characters, system, user, history):
     msg.append({"role": "user", "content": f'{user}'})
     response = openai.chat.completions.create(
         temperature=0.1,
-        top_p = 0.2,
         frequency_penalty=0,
         presence_penalty=0,
         model=MODEL,
@@ -434,7 +433,7 @@ def cleanTranslatedText(translatedText, varResponse):
         'ー': '-',
         'ッ': '',
         '。': '.',
-        'This is a line of text': ''
+        'Placeholder Text': ''
         # Add more replacements as needed
     }
     for target, replacement in placeholders.items():
@@ -468,7 +467,7 @@ def countTokens(characters, system, user, history):
     inputTotalTokens += len(enc.encode(user))
 
     # Output
-    outputTotalTokens += round(len(enc.encode(user))/2)
+    outputTotalTokens += round(len(enc.encode(user))/1.5)
 
     return [inputTotalTokens, outputTotalTokens]
 
@@ -488,8 +487,8 @@ def translateGPT(text, history, fullPromptFlag):
     for index, tItem in enumerate(tList):
         # Before sending to translation, if we have a list of items, add the formatting
         if isinstance(tItem, list):
-            payload = '\\n'.join([f'<Line{i}>\`{item}\`</Line{i}>' for i, item in enumerate(tItem)])
-            payload = payload.replace('\`\`', '\`This is a line of text\`')
+            payload = '\\n'.join([f'<Line{i}>`{item}`</Line{i}>' for i, item in enumerate(tItem)])
+            payload = payload.replace('``', '`Placeholder Text`')
             varResponse = subVars(payload)
             subbedT = varResponse[0]
         else:
