@@ -46,7 +46,7 @@ if 'gpt-3.5' in MODEL:
 elif 'gpt-4' in MODEL:
     INPUTAPICOST = .01
     OUTPUTAPICOST = .03
-    BATCHSIZE = 50  
+    BATCHSIZE = 50 
     FREQUENCY_PENALTY = 0.1
 
 #tqdm Globals
@@ -55,14 +55,14 @@ POSITION = 0
 LEAVE = False
 
 # Dialogue / Scroll
-CODE401 = True
+CODE401 = False
 CODE405 = False
 
 # Choices
-CODE102 = True
+CODE102 = False
 
 # Variables
-CODE122 = False
+CODE122 = True
 
 # Names
 CODE101 = False
@@ -839,19 +839,15 @@ def searchCodes(page, pbar, fillList, filename):
             ## Event Code: 122 [Set Variables]
             if codeList[i]['code'] == 122 and CODE122 is True:
                 # This is going to be the var being set. (IMPORTANT)
-                # if varNum not in [1178]:
-                #     continue
+                if codeList[i]['parameters'][0] not in [327]:
+                    continue
                   
                 jaString = codeList[i]['parameters'][4]
-                if isinstance(jaString, str):
+                if not isinstance(jaString, str):
                     continue
                 
                 # Definitely don't want to mess with files
                 if '■' in jaString or '_' in jaString:
-                    continue
-
-                # Definitely don't want to mess with files
-                if '\'' not in jaString:
                     continue
 
                 # Need to remove outside code and put it back later
@@ -1583,10 +1579,10 @@ def searchSS(state, pbar):
     totalTokens = [0, 0]
 
     # Name
-    nameResponse = translateGPT(state['name'], 'Reply with only the '+ LANGUAGE +' translation of the RPG Skill name.', True) if 'name' in state else ''
+    nameResponse = translateGPT(state['name'], 'Reply with only the '+ LANGUAGE +' translation of the RPG Skill name.', False) if 'name' in state else ''
 
     # Description
-    descriptionResponse = translateGPT(state['description'], 'Reply with only the '+ LANGUAGE +' translation of the description.', True) if 'description' in state else ''
+    descriptionResponse = translateGPT(state['description'], 'Reply with only the '+ LANGUAGE +' translation of the description.', False) if 'description' in state else ''
 
     # Messages
     message1Response = ''
@@ -1749,8 +1745,14 @@ def searchSystem(data, pbar):
 # Save some money and enter the character before translation
 def getSpeaker(speaker):
     match speaker:
-        case '雪音':
-            return ['Yukine', [0,0]]
+        case 'リオ':
+            return ['Rio', [0,0]]
+        case 'ラビ':
+            return ['Rabi', [0,0]]
+        case 'フィルス':
+            return ['Phils', [0,0]]
+        case 'レイン':
+            return ['Meryl', [0,0]]
         case _:
             return translateGPT(speaker, 'Reply with only the '+ LANGUAGE +' translation of the NPC name.', False)
 
@@ -1875,22 +1877,16 @@ def batchList(input_list, batch_size):
 
 def createContext(fullPromptFlag, subbedT):
     characters = 'Game Characters:\n\
-林つかさ (Tsukasa Hayashi) - Female\n\
-山田美兎 (Miyato Yamada) - Female\n\
-鈴木赤音 (Akane Suzuki) - Female\n\
-佐藤莉伊南 (Riina Satou) - Female\n\
-佐々木万梨美 (Marimi Sasaki) - Female\n\
-渡辺登樹子 (Tokiko Watanabe) - Female\n\
-桃乃夢 (Yume Momono) - Female\n\
-吉浦美雪 (Miyuki Yoshiura) - Female\n\
-三ツ門まあな (Maana Mitsukado) - Female\n\
-モリー・ボイド (Molly Boyd) - Female\n\
-オルガ・ブヤチッチ (Olga Buyachich) - Female\n\
-アッチャラー ギッティ (Atchara Gitti) - Female\n\
+リオ (Rio) - Female\n\
+ラビ (Rabi) - Female\n\
 '
     
     system = PROMPT if fullPromptFlag else \
-        f'Output ONLY the {LANGUAGE} translation in the following format: `Translation: <{LANGUAGE.upper()}_TRANSLATION>`'
+        f'\
+You are an expert Eroge Game translator who translates Japanese text to English.\n\
+You are going to be translating text from a videogame.\n\
+I will give you lines of text, and you must translate each line to the best of your ability.\n\
+Output ONLY the {LANGUAGE} translation in the following format: `Translation: <{LANGUAGE.upper()}_TRANSLATION>`'
     user = f'{subbedT}'
     return characters, system, user
 
@@ -1912,6 +1908,7 @@ def translateText(characters, system, user, history):
     response = openai.chat.completions.create(
         temperature=0.1,
         frequency_penalty=0.1,
+        presence_penalty=0.1,
         model=MODEL,
         messages=msg,
     )
@@ -1933,10 +1930,7 @@ def cleanTranslatedText(translatedText, varResponse):
         translatedText = translatedText.replace(target, replacement)
 
     translatedText = resubVars(translatedText, varResponse[1])
-    if '\n' in translatedText:
-        return [line for line in translatedText.split('\n') if line]
-    else:
-        return [line for line in translatedText.split('\\n') if line]
+    return [line for line in translatedText.split('\n') if line]
 
 def extractTranslation(translatedTextList, is_list):
     pattern = r'<Line(\d+)>[\\]*`?(.*?)[\\]*?`?</Line\d+>'
