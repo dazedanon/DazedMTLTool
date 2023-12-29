@@ -48,7 +48,7 @@ if 'gpt-3.5' in MODEL:
 elif 'gpt-4' in MODEL:
     INPUTAPICOST = .01
     OUTPUTAPICOST = .03
-    BATCHSIZE = 5
+    BATCHSIZE = 40
 
 def handleKansen(filename, estimate):
     global ESTIMATE
@@ -354,18 +354,18 @@ def translateTyrano(data, pbar, totalLines):
 # Save some money and enter the character before translation
 def getSpeaker(speaker):
     match speaker:
-        case '航':
-            return ['Wataru', [0,0]]
-        case '悠帆':
-            return ['Yuuho', [0,0]]
-        case '穂村':
-            return ['Homura', [0,0]]
-        case 'マリー':
-            return ['Marie', [0,0]]
-        case 'マル子':
-            return ['Maruko', [0,0]]
-        case '瑞樹':
-            return ['Mizuki', [0,0]]
+        case '大介':
+            return ['Daisuke', [0,0]]
+        case '眞琴':
+            return ['Makoto', [0,0]]
+        case '翔':
+            return ['Shou', [0,0]]
+        case '冴子':
+            return ['Saeko', [0,0]]
+        case '絢':
+            return ['Aya', [0,0]]
+        case '梢':
+            return ['Kozue', [0,0]]
         case '壬':
             return ['Jin', [0,0]]
         case '緒織':
@@ -512,18 +512,12 @@ def batchList(input_list, batch_size):
 
 def createContext(fullPromptFlag, subbedT):
     characters = 'Game Characters:\n\
-林つかさ (Tsukasa Hayashi) - Female\n\
-山田美兎 (Miyato Yamada) - Female\n\
-鈴木赤音 (Akane Suzuki) - Female\n\
-佐藤莉伊南 (Riina Satou) - Female\n\
-佐々木万梨美 (Marimi Sasaki) - Female\n\
-渡辺登樹子 (Tokiko Watanabe) - Female\n\
-桃乃夢 (Yume Momono) - Female\n\
-吉浦美雪 (Miyuki Yoshiura) - Female\n\
-三ツ門まあな (Maana Mitsukado) - Female\n\
-モリー・ボイド (Molly Boyd) - Female\n\
-オルガ・ブヤチッチ (Olga Buyachich) - Female\n\
-アッチャラー ギッティ (Atchara Gitti) - Female\n\
+仙道 大介 (Sendou Daisuke) - Male\n\
+鐙 眞琴 (Abumi Makoto) - Female\n\
+石郷岡 翔 (Ishigooka Shou) - Male\n\
+桐越 冴子 (Kirikoshi Saeko) - Female\n\
+真坂 絢 (Masaka Aya) - Female\n\
+能登屋 梢 (Notoya Kozue) - Female\n\
 '
     
     system = PROMPT if fullPromptFlag else \
