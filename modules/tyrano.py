@@ -48,7 +48,7 @@ if 'gpt-3.5' in MODEL:
 elif 'gpt-4' in MODEL:
     INPUTAPICOST = .01
     OUTPUTAPICOST = .03
-    BATCHSIZE = 40
+    BATCHSIZE = 1
 
 def handleTyrano(filename, estimate):
     global ESTIMATE
@@ -177,8 +177,8 @@ def translateTyrano(data, pbar, totalLines):
                 speaker = ''
 
         # Choices
-        elif '[eval exp="f.seltext' in data[i]:
-            matchList = re.findall(r'\[eval exp=.+?\'(.+)\'', data[i])
+        elif 'glink' in data[i]:
+            matchList = re.findall(r'\[glink.+text=\"(.+?)\".+', data[i])
             if len(matchList) != 0:
                 originalText = matchList[0]
                 if len(textHistory) > 0:
@@ -197,6 +197,7 @@ def translateTyrano(data, pbar, totalLines):
                 # Escape all '
                 translatedText = translatedText.replace('\\', '')
                 translatedText = translatedText.replace("'", "\\\'")
+                translatedText = translatedText.replace(' ', '\u00A0')
 
                 # Set Data
                 translatedText = data[i].replace(originalText, translatedText)
@@ -360,7 +361,7 @@ def getSpeaker(speaker):
         case '小虎':
             return ['Kotora', [0,0]]
         case '玫瑰 ':
-            return ['Meigui', [0,0]]
+            return ['Rose', [0,0]]
         case '創 ':
             return ['So', [0,0]]
         case '葛生':
@@ -518,7 +519,11 @@ def createContext(fullPromptFlag, subbedT):
 '
     
     system = PROMPT if fullPromptFlag else \
-        f'Output ONLY the {LANGUAGE} translation in the following format: `Translation: <{LANGUAGE.upper()}_TRANSLATION>`'
+        f'\
+You are an expert Eroge Game translator who translates Japanese text to English.\n\
+You are going to be translating text from a videogame.\n\
+I will give you lines of text, and you must translate each line to the best of your ability.\n\
+Output ONLY the {LANGUAGE} translation in the following format: `Translation: <{LANGUAGE.upper()}_TRANSLATION>`'
     user = f'{subbedT}'
     return characters, system, user
 
@@ -540,6 +545,7 @@ def translateText(characters, system, user, history):
     response = openai.chat.completions.create(
         temperature=0.1,
         frequency_penalty=0.1,
+        presence_penalty=0.1,
         model=MODEL,
         messages=msg,
     )
@@ -561,10 +567,7 @@ def cleanTranslatedText(translatedText, varResponse):
         translatedText = translatedText.replace(target, replacement)
 
     translatedText = resubVars(translatedText, varResponse[1])
-    if '\n' in translatedText:
-        return [line for line in translatedText.split('\n') if line]
-    else:
-        return [line for line in translatedText.split('\\n') if line]
+    return [line for line in translatedText.split('\n') if line]
 
 def extractTranslation(translatedTextList, is_list):
     pattern = r'<Line(\d+)>[\\]*`?(.*?)[\\]*?`?</?Line\d+>'
@@ -654,3 +657,4 @@ def translateGPT(text, history, fullPromptFlag):
 
     finalList = combineList(tList, text)
     return [finalList, totalTokens]
+
