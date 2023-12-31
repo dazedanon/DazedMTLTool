@@ -354,36 +354,36 @@ def translateTyrano(data, pbar, totalLines):
 # Save some money and enter the character before translation
 def getSpeaker(speaker):
     match speaker:
-        case '大介':
-            return ['Daisuke', [0,0]]
-        case '眞琴':
+        case '誠':
             return ['Makoto', [0,0]]
-        case '翔':
-            return ['Shou', [0,0]]
-        case '冴子':
-            return ['Saeko', [0,0]]
-        case '絢':
-            return ['Aya', [0,0]]
-        case '梢':
-            return ['Kozue', [0,0]]
-        case '壬':
-            return ['Jin', [0,0]]
-        case '緒織':
-            return ['Inori', [0,0]]
-        case '浩助':
-            return ['Kousuke', [0,0]]
-        case '太宰':
-            return ['Dazai', [0,0]]
-        case '大嶋':
-            return ['Oshimi', [0,0]]
-        case 'セスカ':
-            return ['Sesuka', [0,0]]
-        case '重吉':
-            return ['Shigeyoshi', [0,0]]
-        case '忠彦':
-            return ['Tadahiko', [0,0]]
-        case '和歌':
-            return ['Waka', [0,0]]
+        case '夏都':
+            return ['Natsu', [0,0]]
+        case '宗一郎':
+            return ['Souichirou', [0,0]]
+        case '彩月':
+            return ['Satsuki', [0,0]]
+        case '茜梨':
+            return ['Akari', [0,0]]
+        case 'ポホヨネン':
+            return ['Pohjonen', [0,0]]
+        case '荒井':
+            return ['Arai', [0,0]]
+        case '愛梨':
+            return ['Airi', [0,0]]
+        case '朋美':
+            return ['Tomomi', [0,0]]
+        case '玄治郎':
+            return ['Genjirou', [0,0]]
+        case '稼津央':
+            return ['Kazuo', [0,0]]
+        case '美沙緒':
+            return ['Misao', [0,0]]
+        case '怜':
+            return ['Sato', [0,0]]
+        case 'オス':
+            return ['Oz', [0,0]]
+        case '穂村':
+            return ['Homura', [0,0]]
         case '吉野':
             return ['Yoshino', [0,0]]
         case '忠彦':
@@ -512,12 +512,17 @@ def batchList(input_list, batch_size):
 
 def createContext(fullPromptFlag, subbedT):
     characters = 'Game Characters:\n\
-仙道 大介 (Sendou Daisuke) - Male\n\
-鐙 眞琴 (Abumi Makoto) - Female\n\
-石郷岡 翔 (Ishigooka Shou) - Male\n\
-桐越 冴子 (Kirikoshi Saeko) - Female\n\
-真坂 絢 (Masaka Aya) - Female\n\
-能登屋 梢 (Notoya Kozue) - Female\n\
+中澤 誠 (Nakazawa Makoto) - Male\n\
+日向 夏都 (Hyuuga Natsu) - Female\n\
+出渕 宗一郎 (Izubuchi Souichirou) - Male\n\
+南 彩月 (Minami Satsuki) - Female\n\
+越智 茜梨 (Ochi Akari) - Female\n\
+ターヤ ポホヨネン (Tarja Pohjonen) - Female\n\
+マルガリータ バスクェス 穂村 (Margarita Vasquez Homura) - Female\n\
+花沢 愛梨 (Hanazawa Airi) - Female\n\
+五十嵐 朋美 (Igarashi Tomomi) - Female\n\
+前田 美沙緒 (Maeda Misao) - Female\n\
+村上 怜 (Murakami Sato) - Female\n\
 '
     
     system = PROMPT if fullPromptFlag else \
