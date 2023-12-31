@@ -445,7 +445,7 @@ def cleanTranslatedText(translatedText, varResponse):
         return [line for line in translatedText.split('\\n') if line]
 
 def extractTranslation(translatedTextList, is_list):
-    pattern = r'<Line(\d+)>[\\]*`?(.*?)[\\]*?`?</Line\d+>'
+    pattern = r'<Line(\d+)>[\\]*`?(.*?)[\\]*?`?</?Line\d+>'
     # If it's a batch (i.e., list), extract with tags; otherwise, return the single item.
     if is_list:
         return [re.findall(pattern, line)[0][1] for line in translatedTextList if re.search(pattern, line)]

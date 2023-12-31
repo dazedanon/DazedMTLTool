@@ -76,7 +76,7 @@ def handleTyrano(filename, estimate):
     
     else:
         try:
-            with open('translated/' + filename, 'w', encoding='shift_jis', errors='ignore') as outFile:
+            with open('translated/' + filename, 'w', encoding='utf8', errors='ignore') as outFile:
                 start = time.time()
                 translatedData = openFiles(filename)
 
@@ -118,7 +118,7 @@ def getResultString(translatedData, translationTime, filename):
                 errorString + Fore.RESET
 
 def openFiles(filename):
-    with open('files/' + filename, 'r', encoding='cp932') as readFile:
+    with open('files/' + filename, 'r', encoding='utf8') as readFile:
         translatedData = parseTyrano(readFile, filename)
 
         # Delete lines marked for deletion
@@ -165,14 +165,14 @@ def translateTyrano(data, pbar, totalLines):
 
     while i < len(data):
         # Speaker
-        if '[ns]' in data[i]:
-            matchList = re.findall(r'\[ns\](.+?)\[', data[i])
+        if '#' in data[i]:
+            matchList = re.findall(r'#【(.+)】', data[i])
             if len(matchList) != 0:
                 response = getSpeaker(matchList[0])
                 speaker = response[0]
                 tokens[0] += response[1][0]
                 tokens[1] += response[1][1]
-                data[i] = '[ns]' + speaker + '[nse]\n'
+                data[i] = '#【' + speaker + '】\n'
             else:
                 speaker = ''
 
@@ -205,22 +205,19 @@ def translateTyrano(data, pbar, totalLines):
         # Lines
         matchList = re.findall(r'(.+?)\[[rpcms]+\]$', data[i])
         if len(matchList) > 0:
+            # Skip if comment
+            if matchList[0][0] == ';':
+                continue
+
+            # Grab Text
             currentGroup.append(matchList[0])
             if len(data) > i+1:
-                while '[r]' in data[i+1]:
+                while re.search(r'(.+?)\[[rpcms]+\]$', data[i+1]) is not None:
                     if insertBool is True:
                         data[i] = '\d\n'
                         pbar.update(1)
                     i += 1
-                    matchList = re.findall(r'(.+?)\[r\]', data[i])
-                    if len(matchList) > 0:
-                        currentGroup.append(matchList[0])
-                while '[pcms]' in data[i+1]:
-                    if insertBool is True:
-                        data[i] = '\d\n'
-                        pbar.update(1)
-                    i += 1
-                    matchList = re.findall(r'(.+?)\[pcms\]', data[i])
+                    matchList = re.findall(r'(.+?)\[[rpcms]+\]$', data[i])
                     if len(matchList) > 0:
                         currentGroup.append(matchList[0])
             # Join up 401 groups for better translation.
@@ -310,7 +307,7 @@ def translateTyrano(data, pbar, totalLines):
                     # Set
                     data.insert(i, line.strip() + '[r]\n')
                     i+=1
-                data[i-1] = data[i-1].replace('[r]', '[pcms]')
+                data[i-1] = data[i-1].replace('[r]', '[p]')
                 translatedBatch.pop(0)
                 speaker = ''
                 currentGroup = []
@@ -354,20 +351,20 @@ def translateTyrano(data, pbar, totalLines):
 # Save some money and enter the character before translation
 def getSpeaker(speaker):
     match speaker:
-        case '誠':
-            return ['Makoto', [0,0]]
-        case '夏都':
-            return ['Natsu', [0,0]]
-        case '宗一郎':
-            return ['Souichirou', [0,0]]
-        case '彩月':
-            return ['Satsuki', [0,0]]
-        case '茜梨':
-            return ['Akari', [0,0]]
-        case 'ポホヨネン':
-            return ['Pohjonen', [0,0]]
-        case '荒井':
-            return ['Arai', [0,0]]
+        case '瞳':
+            return ['Hitomi', [0,0]]
+        case 'アイ ':
+            return ['Ai', [0,0]]
+        case 'リン':
+            return ['Rin', [0,0]]
+        case '小虎':
+            return ['Kotora', [0,0]]
+        case '玫瑰 ':
+            return ['Meigui', [0,0]]
+        case '創 ':
+            return ['So', [0,0]]
+        case '葛生':
+            return ['Kuzu', [0,0]]
         case '愛梨':
             return ['Airi', [0,0]]
         case '朋美':
@@ -512,17 +509,12 @@ def batchList(input_list, batch_size):
 
 def createContext(fullPromptFlag, subbedT):
     characters = 'Game Characters:\n\
-中澤 誠 (Nakazawa Makoto) - Male\n\
-日向 夏都 (Hyuuga Natsu) - Female\n\
-出渕 宗一郎 (Izubuchi Souichirou) - Male\n\
-南 彩月 (Minami Satsuki) - Female\n\
-越智 茜梨 (Ochi Akari) - Female\n\
-ターヤ ポホヨネン (Tarja Pohjonen) - Female\n\
-マルガリータ バスクェス 穂村 (Margarita Vasquez Homura) - Female\n\
-花沢 愛梨 (Hanazawa Airi) - Female\n\
-五十嵐 朋美 (Igarashi Tomomi) - Female\n\
-前田 美沙緒 (Maeda Misao) - Female\n\
-村上 怜 (Murakami Sato) - Female\n\
+瞳 (Hitomi) - Female\n\
+リン (Rin) - Female\n\
+アイ (Ai) - Female\n\
+玫瑰 (Meigui) - Male\n\
+創 (So) - Male\n\
+小虎 (Kotora) - Female\n\
 '
     
     system = PROMPT if fullPromptFlag else \
@@ -575,7 +567,7 @@ def cleanTranslatedText(translatedText, varResponse):
         return [line for line in translatedText.split('\\n') if line]
 
 def extractTranslation(translatedTextList, is_list):
-    pattern = r'<Line(\d+)>[\\]*`?(.*?)[\\]*?`?</Line\d+>'
+    pattern = r'<Line(\d+)>[\\]*`?(.*?)[\\]*?`?</?Line\d+>'
     # If it's a batch (i.e., list), extract with tags; otherwise, return the single item.
     if is_list:
         return [re.findall(pattern, line)[0][1] for line in translatedTextList if re.search(pattern, line)]
