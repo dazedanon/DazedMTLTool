@@ -46,7 +46,7 @@ if 'gpt-3.5' in MODEL:
 elif 'gpt-4' in MODEL:
     INPUTAPICOST = .01
     OUTPUTAPICOST = .03
-    BATCHSIZE = 50 
+    BATCHSIZE = 40 
     FREQUENCY_PENALTY = 0.1
 
 #tqdm Globals
@@ -62,7 +62,7 @@ CODE405 = False
 CODE102 = False
 
 # Variables
-CODE122 = True
+CODE122 = False
 
 # Names
 CODE101 = False
@@ -76,7 +76,7 @@ CODE320 = False
 CODE324 = False
 CODE111 = False
 CODE108 = False
-CODE408 = False
+CODE408 = True
 
 def handleMVMZ(filename, estimate):
     global ESTIMATE, TOKENS
@@ -1077,41 +1077,38 @@ def searchCodes(page, pbar, fillList, filename):
             if (codeList[i]['code'] == 408) and CODE408 is True:
                 jaString = codeList[i]['parameters'][0]
 
-                # If there isn't any Japanese in the text just skip
-                if not re.search(r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴー]+', jaString):
-                    continue
+                # # If there isn't any Japanese in the text just skip
+                # if not re.search(r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴー]+', jaString):
+                #     continue
 
                 # Want to translate this script
-                # if 'title:' not in jaString:
+                # if 'secretText:' not in jaString:
                 #     continue
 
                 # Need to remove outside code and put it back later
-                startString = re.search(r'^[^一-龠ぁ-ゔァ-ヴー【】]+', jaString)
-                jaString = re.sub(r'^[^一-龠ぁ-ゔァ-ヴー【】]+', '', jaString)
-                endString = re.search(r'[^一-龠ぁ-ゔァ-ヴー【】。、…！？]+$', jaString)
-                jaString = re.sub(r'[^一-龠ぁ-ゔァ-ヴー【】。、…！？]+$', '', jaString)
-                if startString is None: startString = ''
-                else:  startString = startString.group()
-                if endString is None: endString = ''
-                else: endString = endString.group()
+                matchList = re.findall(r"(.+)", jaString)
+                
+                for match in matchList:
+                    # Remove Textwrap
+                    match = match.replace('\n', ' ')
+                    response = translateGPT(match, 'Reply with the '+ LANGUAGE +' translation of the achievement title.', False)
+                    translatedText = response[0]
+                    totalTokens[0] += response[1][0]
+                    totalTokens[1] += response[1][1]
 
-                # Translate
-                response = translateGPT(jaString, 'Reply with the English translation of the achievement.', True)
-                totalTokens[0] += response[1][0]
-                totalTokens[1] += response[1][1]
-                translatedText = response[0]
+                    # Replace
+                    translatedText = jaString.replace(match, translatedText)
 
-                # Remove characters that may break scripts
-                charList = ['.', '\"']
-                for char in charList:
-                    translatedText = translatedText.replace(char, '')
+                    # Remove characters that may break scripts
+                    charList = ['.', '\"', '\\n']
+                    for char in charList:
+                        translatedText = translatedText.replace(char, '')
 
-                translatedText = startString + translatedText + endString
+                    # Textwrap
+                    translatedText = textwrap.fill(translatedText, width=LISTWIDTH)
 
-                translatedText = translatedText.replace('"', '\"')
-
-                # Set Data
-                codeList[i]['parameters'][0] = translatedText
+                    # Set Data
+                    codeList[i]['parameters'][0] = translatedText
 
             ## Event Code: 108 (Script)
             if (codeList[i]['code'] == 108) and CODE108 is True:
@@ -1130,7 +1127,7 @@ def searchCodes(page, pbar, fillList, filename):
 
                 # Translate
                 if len(matchList) > 0:
-                    response = translateGPT(matchList[0], 'Reply with the '+ LANGUAGE +' translation of the Location Title', True)
+                    response = translateGPT(matchList[0], 'Reply with the '+ LANGUAGE +' translation of the Location Title', False)
                     totalTokens[0] += response[1][0]
                     totalTokens[1] += response[1][1]
                     translatedText = response[0]
@@ -1478,7 +1475,7 @@ def searchCodes(page, pbar, fillList, filename):
                     # Set Data
                     totalTokens[0] += response[1][0]
                     totalTokens[1] += response[1][1]
-                    codeList[i]['parameters'][0][choice] = startString + translatedText + endString
+                    codeList[i]['parameters'][0][choice] = startString + translatedText.capitalize() + endString
 
             ### Event Code: 111 Script
             if codeList[i]['code'] == 111 and CODE111 is True:
@@ -1877,20 +1874,31 @@ def batchList(input_list, batch_size):
 
 def createContext(fullPromptFlag, subbedT):
     characters = 'Game Characters:\n\
-瞳 (Hitomi) - Female\n\
-リン (Rin) - Female\n\
-アイ (Ai) - Female\n\
-玫瑰 (Meigui) - Male\n\
-創 (So) - Male\n\
-小虎 (Kotora) - Female\n\
+守崎 ユイ (Morisaki Yui) - Female\n\
+ポニーセレス (Pony Celes)) - Female\n\
+天沢 ギンガ (Amasawa Ginga) - Male\n\
+西園寺 カレン (Saionji Karen) - Female\n\
+鮫島 タクミ (Samejima Takumi) - Male\n\
 '
     
     system = PROMPT if fullPromptFlag else \
-        f'\
+        f"\
 You are an expert Eroge Game translator who translates Japanese text to English.\n\
 You are going to be translating text from a videogame.\n\
 I will give you lines of text, and you must translate each line to the best of your ability.\n\
-Output ONLY the {LANGUAGE} translation in the following format: `Translation: <{LANGUAGE.upper()}_TRANSLATION>`'
+- Translate 'マンコ' as 'pussy'\n\
+- Translate 'おまんこ' as 'pussy'\n\
+- Translate 'お尻' as 'butt'\n\
+- Translate '尻' as 'ass'\n\
+- Translate 'お股' as 'crotch'\n\
+- Translate '秘部' as 'genitals'\n\
+- Translate 'チンポ' as 'dick'\n\
+- Translate 'チンコ' as 'cock'\n\
+- Translate 'ショーツ' as 'panties\n\
+- Translate 'おねショタ' as 'Onee-shota'\n\
+- Translate 'よかった' as 'thank goodness'\n\
+Output ONLY the {LANGUAGE} translation in the following format: `Translation: <{LANGUAGE.upper()}_TRANSLATION>`\
+"
     user = f'{subbedT}'
     return characters, system, user
 
