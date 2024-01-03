@@ -46,7 +46,7 @@ if 'gpt-3.5' in MODEL:
 elif 'gpt-4' in MODEL:
     INPUTAPICOST = .01
     OUTPUTAPICOST = .03
-    BATCHSIZE = 5
+    BATCHSIZE = 40
     FREQUENCY_PENALTY = 0.1
 
 #tqdm Globals
@@ -640,16 +640,6 @@ def searchCodes(page, pbar, fillList, filename):
                     if finalJAString == '':
                         continue
 
-                    # If there isn't any Japanese in the text just skip
-                    if IGNORETLTEXT is True:
-                        if not re.search(r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴー]+', finalJAString):
-                            # Keep textHistory list at length maxHistory
-                            textHistory.append('\"' + finalJAString + '\"')
-                            if len(textHistory) > maxHistory:
-                                textHistory.pop(0)
-                            currentGroup = []  
-                            continue
-                       
                     # Check for speakers in String
                     # \\n<Speaker>
                     nCase = None
@@ -768,6 +758,16 @@ def searchCodes(page, pbar, fillList, filename):
                         finalJAString = finalJAString.replace('\\CL', '')
                         CLFlag = True
 
+                    # If there isn't any Japanese in the text just skip
+                    if IGNORETLTEXT is True:
+                        if not re.search(r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴー]+', finalJAString):
+                            # Keep textHistory list at length maxHistory
+                            textHistory.append('\"' + finalJAString + '\"')
+                            if len(textHistory) > maxHistory:
+                                textHistory.pop(0)
+                            currentGroup = []  
+                            continue
+
                     # 1st Passthrough (Grabbing Data)
                     if len(fillList) == 0:
                         if speaker == '' and finalJAString != '':
@@ -821,8 +821,6 @@ def searchCodes(page, pbar, fillList, filename):
                         # Set Data
                         if speakerID != None:
                             codeList[speakerID]['parameters'] = [fullSpeaker]
-                        codeList[i]['parameters'] = []
-                        codeList[i]['code'] = -1
                         codeList[j]['parameters'] = [translatedText]
                         codeList[j]['code'] = code
                         speaker = ''
