@@ -31,7 +31,7 @@ NAMESLIST = []
 NAMES = False    # Output a list of all the character names found
 BRFLAG = False   # If the game uses <br> instead
 FIXTEXTWRAP = True  # Overwrites textwrap
-IGNORETLTEXT = False    # Ignores all translated text.
+IGNORETLTEXT = True    # Ignores all translated text.
 MISMATCH = []   # Lists files that throw a mismatch error (Length of GPT list response is wrong)
 BRACKETNAMES = False
 
@@ -46,7 +46,7 @@ if 'gpt-3.5' in MODEL:
 elif 'gpt-4' in MODEL:
     INPUTAPICOST = .01
     OUTPUTAPICOST = .03
-    BATCHSIZE = 40 
+    BATCHSIZE = 5
     FREQUENCY_PENALTY = 0.1
 
 #tqdm Globals
@@ -55,11 +55,11 @@ POSITION = 0
 LEAVE = False
 
 # Dialogue / Scroll
-CODE401 = False
+CODE401 = True
 CODE405 = False
 
 # Choices
-CODE102 = False
+CODE102 = True
 
 # Variables
 CODE122 = False
@@ -71,12 +71,12 @@ CODE101 = False
 CODE355655 = False
 CODE357 = False
 CODE657 = False
-CODE356 = True
+CODE356 = False
 CODE320 = False
 CODE324 = False
 CODE111 = False
 CODE108 = False
-CODE408 = True
+CODE408 = False
 
 def handleMVMZ(filename, estimate):
     global ESTIMATE, TOKENS
@@ -612,16 +612,6 @@ def searchCodes(page, pbar, fillList, filename):
                     codeList[i]['code'] = -1
                     continue
 
-                # If there isn't any Japanese in the text just skip
-                if IGNORETLTEXT is True:
-                    if not re.search(r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴー]+', jaString):
-                        # Keep textHistory list at length maxHistory
-                        textHistory.append('\"' + jaString + '\"')
-                        if len(textHistory) > maxHistory:
-                            textHistory.pop(0)
-                        currentGroup = []  
-                        continue
-
                 # Using this to keep track of 401's in a row.
                 currentGroup.append(jaString)
 
@@ -649,6 +639,16 @@ def searchCodes(page, pbar, fillList, filename):
                     # Check if Empty
                     if finalJAString == '':
                         continue
+
+                    # If there isn't any Japanese in the text just skip
+                    if IGNORETLTEXT is True:
+                        if not re.search(r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴー]+', finalJAString):
+                            # Keep textHistory list at length maxHistory
+                            textHistory.append('\"' + finalJAString + '\"')
+                            if len(textHistory) > maxHistory:
+                                textHistory.pop(0)
+                            currentGroup = []  
+                            continue
                        
                     # Check for speakers in String
                     # \\n<Speaker>
@@ -1742,10 +1742,10 @@ def searchSystem(data, pbar):
 # Save some money and enter the character before translation
 def getSpeaker(speaker):
     match speaker:
-        case 'リオ':
-            return ['Rio', [0,0]]
-        case 'ラビ':
-            return ['Rabi', [0,0]]
+        case 'セレナ':
+            return ['Serena', [0,0]]
+        case 'レナ':
+            return ['Rena', [0,0]]
         case 'フィルス':
             return ['Phils', [0,0]]
         case 'レイン':
@@ -1874,11 +1874,8 @@ def batchList(input_list, batch_size):
 
 def createContext(fullPromptFlag, subbedT):
     characters = 'Game Characters:\n\
-守崎 ユイ (Morisaki Yui) - Female\n\
-ポニーセレス (Pony Celes)) - Female\n\
-天沢 ギンガ (Amasawa Ginga) - Male\n\
-西園寺 カレン (Saionji Karen) - Female\n\
-鮫島 タクミ (Samejima Takumi) - Male\n\
+セレナ (Serena) - Female\n\
+レナ (Rena) - Female\n\
 '
     
     system = PROMPT if fullPromptFlag else \
