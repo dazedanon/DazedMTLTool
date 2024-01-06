@@ -65,7 +65,7 @@ CODE102 = True
 CODE122 = False
 
 # Names
-CODE101 = False
+CODE101 = True
 
 # Other
 CODE355655 = False
@@ -667,6 +667,7 @@ def searchCodes(page, pbar, fillList, filename):
                         # Set Nametag and Remove from Final String
                         finalJAString = finalJAString.replace(nametag, '')
                         nametag = nametag.replace(speaker, tledSpeaker)
+                        speaker = tledSpeaker
 
                         # Set dialogue
                         if nCase == 0:
@@ -793,7 +794,8 @@ def searchCodes(page, pbar, fillList, filename):
                         if speaker != '':
                             matchSpeakerList = re.findall(r'(^.+?)\s?[|:]\s?', translatedText)
                             if len(matchSpeakerList) > 0:
-                                fullSpeaker = matchSpeakerList[0]
+                                newSpeaker = matchSpeakerList[0]
+                                nametag = nametag.replace(speaker, newSpeaker)
                             translatedText = re.sub(r'(^.+?)\s?[|:]\s?', '', translatedText)
 
                         # Textwrap
@@ -975,22 +977,16 @@ def searchCodes(page, pbar, fillList, filename):
                     continue
 
                 # Force Speaker
-                matchList = re.findall(r'(\w+)\\?', jaString)
-                if len(matchList) > 0:
-                    if 'エスカ' in jaString:
-                        speaker = 'Esuka'
-                        codeList[i]['parameters'][4] = jaString.replace(matchList[0], speaker)
-                        continue
-                    elif 'シュウ' in jaString:
-                        speaker = 'Shuu'
-                        codeList[i]['parameters'][4] = jaString.replace(matchList[0], speaker)
-                        continue
-                    elif 'ワルチン総統' in jaString:
-                        speaker = 'President Waltin'
-                        codeList[i]['parameters'][4] = jaString.replace(matchList[0], speaker)
-                        continue
-                    else:
-                        speaker = ''
+                response = getSpeaker(jaString)
+                totalTokens[0] += response[1][0]
+                totalTokens[1] += response[1][1]
+                speaker = response[0]
+                
+                if len(speaker) > 0:
+                    codeList[i]['parameters'][4] = speaker
+                    continue
+                else:
+                    speaker = ''
                 
                 # Definitely don't want to mess with files
                 if '_' in jaString:
@@ -1559,7 +1555,14 @@ def searchCodes(page, pbar, fillList, filename):
         for i in range(len(codeList)):
             if codeList[i]['code'] != -1:
                 codeListFinal.append(codeList[i])
-        page['list'] = codeListFinal
+
+        # Normal Format
+        if 'list' in page:
+            page['list'] = codeListFinal
+
+        # Special Format (Scenario)
+        else:
+            page = codeListFinal
 
     except IndexError as e:
         traceback.print_exc()
@@ -1740,17 +1743,47 @@ def searchSystem(data, pbar):
 # Save some money and enter the character before translation
 def getSpeaker(speaker):
     match speaker:
-        case 'セレナ':
-            return ['Serena', [0,0]]
+        case 'レイラ':
+            return ['Layla', [0,0]]
+        case 'ターニャ':
+            return ['Tania', [0,0]]
+        case 'ミオリ':
+            return ['Miori', [0,0]]
+        case 'ディーナ':
+            return ['Deena', [0,0]]
+        case 'ネル':
+            return ['Nell', [0,0]]
         case 'レナ':
             return ['Rena', [0,0]]
-        case 'フィルス':
-            return ['Phils', [0,0]]
-        case 'レイン':
-            return ['Meryl', [0,0]]
+        case 'シャルル':
+            return ['Charles', [0,0]]
+        case 'サーシャ':
+            return ['Sasha', [0,0]]
+        case 'ヒルダ':
+            return ['Hilda', [0,0]]
+        case 'サラ':
+            return ['Sara', [0,0]]
+        case 'リン':
+            return ['Lyn', [0,0]]
+        case 'アイリス':
+            return ['Iris', [0,0]]
+        case '大臣':
+            return ['Minister', [0,0]]
+        case 'アードリアン':
+            return ['Adrian', [0,0]]
+        case '蛮族':
+            return ['Barbarian', [0,0]]
+        case 'グレイ':
+            return ['Gray', [0,0]]
+        case 'グルングム':
+            return ['Grungum', [0,0]]
+        case 'ンガロ':
+            return ['Ngaro', [0,0]]
+        case 'ルリエル':
+            return ['Ruliel', [0,0]]
         case _:
-            return translateGPT(speaker, 'Reply with only the '+ LANGUAGE +' translation of the NPC name.', False)
-
+            return [speaker, [0,0]]
+            
 def subVars(jaString):
     jaString = jaString.replace('\u3000', ' ')
 
@@ -1872,8 +1905,7 @@ def batchList(input_list, batch_size):
 
 def createContext(fullPromptFlag, subbedT):
     characters = 'Game Characters:\n\
-セレナ (Serena) - Female\n\
-レナ (Rena) - Female\n\
+ミオリ (Miori) - Female\n\
 '
     
     system = PROMPT if fullPromptFlag else \
