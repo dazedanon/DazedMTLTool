@@ -16,7 +16,7 @@ You output only the English translation of each line and its speaker. For exampl
 Notes:
 - "Game Characters" - The names, nicknames, and genders of the game characters. Reference this to know the names, nicknames, and gender of characters in the game.
 - Always include both the start and end xml tag in your translation.
-- Make sure you translate the speaker in the line to English.
+- Make sure you always translate the speaker in the line to English.
 - All text in the output must be in English even if it may be hard to translate.
 - Leave 'Placeholder Text' as is and include it in your response.
 - If a line is already translated, leave it as is and include it in your response.
