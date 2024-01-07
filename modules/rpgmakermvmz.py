@@ -46,7 +46,7 @@ if 'gpt-3.5' in MODEL:
 elif 'gpt-4' in MODEL:
     INPUTAPICOST = .01
     OUTPUTAPICOST = .03
-    BATCHSIZE = 40
+    BATCHSIZE = 10
     FREQUENCY_PENALTY = 0.1
 
 #tqdm Globals
@@ -59,7 +59,7 @@ CODE401 = True
 CODE405 = False
 
 # Choices
-CODE102 = True
+CODE102 = False
 
 # Variables
 CODE122 = False
@@ -1782,8 +1782,8 @@ def getSpeaker(speaker):
         case 'ルリエル':
             return ['Ruliel', [0,0]]
         case _:
-            return [speaker, [0,0]]
-            
+            return translateGPT(speaker, 'Reply with only the '+ LANGUAGE +' translation of the NPC name.', False)
+
 def subVars(jaString):
     jaString = jaString.replace('\u3000', ' ')
 
@@ -1905,7 +1905,11 @@ def batchList(input_list, batch_size):
 
 def createContext(fullPromptFlag, subbedT):
     characters = 'Game Characters:\n\
-ミオリ (Miori) - Female\n\
+守崎 ユイ (Morisaki Yui) - Female\n\
+ポニーセレス (Pony Celes)) - Female\n\
+天沢 ギンガ (Amasawa Ginga) - Male\n\
+西園寺 カレン (Saionji Karen) - Female\n\
+鮫島 タクミ (Samejima Takumi) - Male\n\
 '
     
     system = PROMPT if fullPromptFlag else \
