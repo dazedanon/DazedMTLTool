@@ -569,13 +569,10 @@ def cleanTranslatedText(translatedText, varResponse):
         translatedText = translatedText.replace(target, replacement)
 
     translatedText = resubVars(translatedText, varResponse[1])
-    if '\n' in translatedText:
-        return [line for line in translatedText.split('\n') if line]
-    else:
-        return [line for line in translatedText.split('\\n') if line]
+    return [line for line in translatedText.replace('\\n', '\n').split('\n') if line]
 
 def extractTranslation(translatedTextList, is_list):
-    pattern = r'<Line(\d+)>[\\]*`?(.*?)[\\]*?`?</?Line\d+>'
+    pattern = r'`?<Line(\d+)>[\\]*(.*?)[\\]*?<\/?Line\d+>`?'
     # If it's a batch (i.e., list), extract with tags; otherwise, return the single item.
     if is_list:
         return [re.findall(pattern, line)[0][1] for line in translatedTextList if re.search(pattern, line)]
@@ -619,7 +616,7 @@ def translateGPT(text, history, fullPromptFlag):
     for index, tItem in enumerate(tList):
         # Before sending to translation, if we have a list of items, add the formatting
         if isinstance(tItem, list):
-            payload = '\n'.join([f'<Line{i}>`{item}`</Line{i}>' for i, item in enumerate(tItem)])
+            payload = '\n'.join([f'`<Line{i}>{item}</Line{i}>`' for i, item in enumerate(tItem)])
             payload = payload.replace('``', '`Placeholder Text`')
             varResponse = subVars(payload)
             subbedT = varResponse[0]
