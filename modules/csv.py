@@ -1,64 +1,83 @@
+# Libraries
+import json, os, re, textwrap, threading, time, traceback, tiktoken, openai, csv
 from concurrent.futures import ThreadPoolExecutor, as_completed
-import os
 from pathlib import Path
-import re
-import sys
-import textwrap
-import threading
-import time
-import traceback
-import tiktoken
-import csv
-
 from colorama import Fore
 from dotenv import load_dotenv
-import openai
 from retry import retry
 from tqdm import tqdm
 
-#Globals
+# Open AI
 load_dotenv()
 if os.getenv('api').replace(' ', '') != '':
     openai.api_base = os.getenv('api')
-
 openai.organization = os.getenv('org')
 openai.api_key = os.getenv('key')
+
+#Globals
 MODEL = os.getenv('model')
 TIMEOUT = int(os.getenv('timeout'))
-LANGUAGE=os.getenv('language').capitalize()
-
-APICOST = .002 # Depends on the model https://openai.com/pricing
+LANGUAGE = os.getenv('language').capitalize()
 PROMPT = Path('prompt.txt').read_text(encoding='utf-8')
 THREADS = int(os.getenv('threads'))
 LOCK = threading.Lock()
 WIDTH = int(os.getenv('width'))
+LISTWIDTH = int(os.getenv('listWidth'))
+NOTEWIDTH = int(os.getenv('noteWidth'))
 MAXHISTORY = 10
 ESTIMATE = ''
-TOTALCOST = 0
-TOKENS = 0
-TOTALTOKENS = 0
-BATCHSIZE = 40
+TOKENS = [0, 0]
+NAMESLIST = []
+NAMES = False    # Output a list of all the character names found
+BRFLAG = False   # If the game uses <br> instead
+FIXTEXTWRAP = True  # Overwrites textwrap
+IGNORETLTEXT = True    # Ignores all translated text.
+MISMATCH = []   # Lists files that throw a mismatch error (Length of GPT list response is wrong)
+BRACKETNAMES = False
+
+# Pricing - Depends on the model https://openai.com/pricing
+# Batch Size - GPT 3.5 Struggles past 15 lines per request. GPT4 struggles past 50 lines per request
+# If you are getting a MISMATCH LENGTH error, lower the batch size.
+if 'gpt-3.5' in MODEL:
+    INPUTAPICOST = .002 
+    OUTPUTAPICOST = .002
+    BATCHSIZE = 10
+    FREQUENCY_PENALTY = 0.2
+elif 'gpt-4' in MODEL:
+    INPUTAPICOST = .01
+    OUTPUTAPICOST = .03
+    BATCHSIZE = 10
+    FREQUENCY_PENALTY = 0.1
 
 #tqdm Globals
 BAR_FORMAT='{l_bar}{bar:10}{r_bar}{bar:-10b}'
-POSITION=0
-LEAVE=False
+POSITION = 0
+LEAVE = False
 
 def handleCSV(filename, estimate):
-    global ESTIMATE, TOKENS, TOTALTOKENS, TOTALCOST
+    global ESTIMATE, TOKENS
     ESTIMATE = estimate
-    
+
     with open('translated/' + filename, 'w+t', newline='', encoding='utf-8') as writeFile:
+        # Translate
         start = time.time()
         translatedData = openFiles(filename, writeFile)
         
         # Print Result
         end = time.time()
         tqdm.write(getResultString(translatedData, end - start, filename))
-        TOTALCOST += translatedData[1] * .001 * APICOST
-        TOTALTOKENS += translatedData[1]
+        with LOCK:
+            TOKENS[0] += translatedData[1][0]
+            TOKENS[1] += translatedData[1][1]
 
-    return getResultString(['', TOTALTOKENS, None], end - start, 'TOTAL')
+    # Print Total
+    totalString = getResultString(['', TOKENS, None], end - start, 'TOTAL')
+
+    # Print any errors on maps
+    if len(MISMATCH) > 0:
+        return totalString + Fore.RED + f'\nMismatch Errors: {MISMATCH}' + Fore.RESET
+    else:
+        return totalString
 
 def openFiles(filename, writeFile):
     with open('files/' + filename, 'r', encoding='utf-8') as readFile, writeFile:
@@ -68,25 +87,29 @@ def openFiles(filename, writeFile):
 
 def getResultString(translatedData, translationTime, filename):
     # File Print String
-    tokenString = Fore.YELLOW + '[' + str(translatedData[1]) + \
-        ' Tokens/${:,.4f}'.format(translatedData[1] * .001 * APICOST) + ']'
+    totalTokenstring =\
+        Fore.YELLOW +\
+        '[Input: ' + str(translatedData[1][0]) + ']'\
+        '[Output: ' + str(translatedData[1][1]) + ']'\
+        '[Cost: ${:,.4f}'.format((translatedData[1][0] * .001 * INPUTAPICOST) +\
+        (translatedData[1][1] * .001 * OUTPUTAPICOST)) + ']'
     timeString = Fore.BLUE + '[' + str(round(translationTime, 1)) + 's]'
 
-    if translatedData[2] == None:
+    if translatedData[2] is None:
         # Success
-        return filename + ': ' + tokenString + timeString + Fore.GREEN + u' \u2713 ' + Fore.RESET
-
+        return filename + ': ' + totalTokenstring + timeString + Fore.GREEN + u' \u2713 ' + Fore.RESET
     else:
         # Fail
         try:
             raise translatedData[2]
         except Exception as e:
-            errorString = str(e) + '|' + translatedData[3] + Fore.RED
-            return filename + ': ' + tokenString + timeString + Fore.RED + u' \u2717 ' +\
+            traceback.print_exc()
+            errorString = str(e) + Fore.RED
+            return filename + ': ' + totalTokenstring + timeString + Fore.RED + u' \u2717 ' +\
                 errorString + Fore.RESET
         
 def parseCSV(readFile, writeFile, filename):
-    totalTokens = 0
+    totalTokens = [0,0]
     totalLines = 0
     textHistory = []
     global LOCK
@@ -113,16 +136,17 @@ def parseCSV(readFile, writeFile, filename):
 
         for row in reader:
             try:
-                totalTokens += translateCSV(row, pbar, writer, textHistory, format)
+                response = translateCSV(row, pbar, writer, textHistory, format)
+                totalTokens[0] = response[0]
+                totalTokens[1] = response[1]
             except Exception as e:
-                tracebackLineNo = str(traceback.extract_tb(sys.exc_info()[2])[-1].lineno)
-                return [reader, totalTokens, e, tracebackLineNo]
+                traceback.print_exc()
     return [reader, totalTokens, None]
 
 def translateCSV(row, pbar, writer, textHistory, format):
     translatedText = ''
     maxHistory = MAXHISTORY
-    tokens = 0
+    totalTokens = [0,0]
     global LOCK, ESTIMATE
 
     try:
@@ -144,7 +168,8 @@ def translateCSV(row, pbar, writer, textHistory, format):
                         translatedText = response[0]
                     else:
                         translatedText = row[1]
-                    tokens += response[1]
+                    totalTokens[0] += response[1][0]
+                    totalTokens[1] += response[1][1]
 
                     # Textwrap
                     translatedText = textwrap.fill(translatedText, width=WIDTH)
@@ -180,13 +205,15 @@ def translateCSV(row, pbar, writer, textHistory, format):
                         # Translate Speaker
                         response = translateGPT (speaker, 'Reply with the '+ LANGUAGE +' translation of the NPC name.', True)
                         translatedSpeaker = response[0]
-                        tokens += response[1]
+                        totalTokens += response[1][0]
+                        totalTokens += response[1][1]
 
                         # Translate Line
                         jaText = re.sub(r'([\u3000-\uffef])\1{3,}', r'\1\1\1', text)
                         response = translateGPT(translatedSpeaker + ': ' + jaText, 'Previous Translated Text: ' + '|'.join(textHistory), True)
                         translatedText = response[0]
-                        tokens += response[1]
+                        totalTokens[0] += response[1][0]
+                        totalTokens[1] += response[1][1]
 
                         # TextHistory is what we use to give GPT Context, so thats appended here.
                         textHistory.append(translatedText)
@@ -220,10 +247,8 @@ def translateCSV(row, pbar, writer, textHistory, format):
 
     except Exception as e:
         traceback.print_exc()
-        tracebackLineNo = str(traceback.extract_tb(sys.exc_info()[2])[-1].lineno)
-        raise Exception(str(e) + '|Line:' + tracebackLineNo + '| Failed to translate: ' + text) 
     
-    return tokens
+    return totalTokens
     
 
 def subVars(jaString):
