@@ -32,7 +32,7 @@ NAMES = False    # Output a list of all the character names found
 BRFLAG = False   # If the game uses <br> instead
 FIXTEXTWRAP = True  # Overwrites textwrap
 IGNORETLTEXT = True    # Ignores all translated text.
-MISMATCH = []   # Lists files that throw a mismatch error (Length of GPT list response is wrong)
+MISMATCH = []   # Lists files that thdata a mismatch error (Length of GPT list response is wrong)
 BRACKETNAMES = False
 
 # Pricing - Depends on the model https://openai.com/pricing
@@ -46,7 +46,7 @@ if 'gpt-3.5' in MODEL:
 elif 'gpt-4' in MODEL:
     INPUTAPICOST = .01
     OUTPUTAPICOST = .03
-    BATCHSIZE = 10
+    BATCHSIZE = 40
     FREQUENCY_PENALTY = 0.1
 
 #tqdm Globals
@@ -116,7 +116,7 @@ def parseCSV(readFile, writeFile, filename):
 
     format = ''
     while format == '':
-        format = input('\n\nSelect the CSV Format:\n\n1. Translator++\n2. Translate All\n')
+        format = input('\n\nSelect the CSV Format:\n\n1. Translator++\n2. Translate All (Depreciated)\n')
         match format:
             case '1':
                 format = '1'
@@ -133,117 +133,168 @@ def parseCSV(readFile, writeFile, filename):
     with tqdm(bar_format=BAR_FORMAT, position=POSITION, total=totalLines, leave=LEAVE) as pbar:
         pbar.desc=filename
         pbar.total=totalLines
-
-        for row in reader:
-            try:
-                response = translateCSV(row, pbar, writer, textHistory, format)
-                totalTokens[0] = response[0]
-                totalTokens[1] = response[1]
-            except Exception as e:
-                traceback.print_exc()
+        try:
+            response = translateCSV(reader, pbar, writer, textHistory, format)
+            totalTokens[0] = response[0]
+            totalTokens[1] = response[1]
+        except Exception as e:
+            traceback.print_exc()
     return [reader, totalTokens, None]
 
-def translateCSV(row, pbar, writer, textHistory, format):
+def translateCSV(reader, pbar, writer, textHistory, format):
     translatedText = ''
     maxHistory = MAXHISTORY
     totalTokens = [0,0]
     global LOCK, ESTIMATE
+    data = []
+    batch = []
+    i = 0
 
     try:
-        match format:
-            # Japanese Text on column 1. English on Column 2
-            case '1':
-                # Skip already translated lines
-                if row[1] == '' or re.search(r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴ]+|[\uFF00-\uFFEF]', row[1]):
-                    jaString = row[0]
+        # Grab All Rows
+        for row in reader:
+            data.append(row)
 
-                    # Remove repeating characters because it confuses ChatGPT
-                    jaString = re.sub(r'([\u3000-\uffef])\1{2,}', r'\1\1', jaString)
+        # Batch
+        while i < len(data):
+            if len(batch) < BATCHSIZE:
+                if 'Original Text' not in data[i]:
+                    batch.append(data[i])
+                pbar.update(1)
+                i += 1
+            else:
+                match format:
+                    # T++ Format: Japanese Text on column 1. English on Column 2
+                    case '1':
+                        # Put in Payload
+                        payload = []
+                        for row in batch:
+                            if row[1] == "":
+                                jaString = row[0]
+                            else:
+                                jaString = row[1]
 
-                    # Translate
-                    response = translateGPT(jaString, 'Previous text for context: ' + ' '.join(textHistory), True)
+                            # Remove Textwrap
+                            jaString = jaString.replace('\n', ' ')
+                            payload.append(jaString)
 
-                    # Check if there is an actual difference first
-                    if response[0] != row[0]:
-                        translatedText = response[0]
-                    else:
-                        translatedText = row[1]
-                    totalTokens[0] += response[1][0]
-                    totalTokens[1] += response[1][1]
+                        # Translate
+                        response = translateGPT(payload, textHistory, True)
+                        translatedTextList = response[0]
+                        totalTokens[0] = response[1][0]
+                        totalTokens[1] = response[1][1]
 
-                    # Textwrap
-                    translatedText = textwrap.fill(translatedText, width=WIDTH)
-
-                    # Set Data
-                    row[1] = translatedText
-
-                    # Keep textHistory list at length maxHistory
-                    with LOCK:
-                        if len(textHistory) > maxHistory:
-                            textHistory.pop(0)
-                        if not ESTIMATE:
-                            writer.writerow(row)
-                        pbar.update(1)
-
-                    # TextHistory is what we use to give GPT Context, so thats appended here.
-                    textHistory.append('\"' + translatedText + '\"')
-                
-            # Translate Everything
-            case '2':
-                for i in range(len(row)):
-                    # This will allow you to ignore certain columns
-                    if i not in [1]:
-                        continue
-                    jaString = row[i]
-                    matchList = re.findall(r':name\[(.+?),.+?\](.+?[」）\"。]+)', jaString)
-
-                    # Start Translation
-                    for match in matchList:
-                        speaker = match[0]
-                        text = match[1]
-
-                        # Translate Speaker
-                        response = translateGPT (speaker, 'Reply with the '+ LANGUAGE +' translation of the NPC name.', True)
-                        translatedSpeaker = response[0]
-                        totalTokens += response[1][0]
-                        totalTokens += response[1][1]
-
-                        # Translate Line
-                        jaText = re.sub(r'([\u3000-\uffef])\1{3,}', r'\1\1\1', text)
-                        response = translateGPT(translatedSpeaker + ': ' + jaText, 'Previous Translated Text: ' + '|'.join(textHistory), True)
-                        translatedText = response[0]
-                        totalTokens[0] += response[1][0]
-                        totalTokens[1] += response[1][1]
-
-                        # TextHistory is what we use to give GPT Context, so thats appended here.
-                        textHistory.append(translatedText)
-
-                        # Remove Speaker from translated text
-                        translatedText = re.sub(r'.+?: ', '', translatedText)
+                        # MISMATCH
+                        if len(translatedTextList) != len(payload):
+                            pbar.write(f'Mismatch Error: {i-len(batch)}-{i}')
+                            batch.clear()
+                            continue
 
                         # Set Data
-                        translatedSpeaker = translatedSpeaker.replace('\"', '')
-                        translatedText = translatedText.replace('\"', '')
-                        translatedText = translatedText.replace('「', '')
-                        translatedText = translatedText.replace('」', '')
-                        row[i] = row[i].replace('\n', ' ')
+                        j = i - BATCHSIZE
+                        for row in translatedTextList:
+                            row = row.replace('"', '\\"')
+                            row = row.replace(',', '\,')
+                            data[j][1] = row
+                            j += 1
+                        batch.clear()
+                        
+                    # Translate Everything
+                    case '2':
+                        for i in range(len(data)):
+                            # This will allow you to ignore certain columns
+                            if i not in [1]:
+                                continue
+                            jaString = data[i]
+                            matchList = re.findall(r':name\[(.+?),.+?\](.+?[」）\"。]+)', jaString)
 
-                        # Textwrap
-                        translatedText = textwrap.fill(translatedText, width=WIDTH)
+                            # Start Translation
+                            for match in matchList:
+                                speaker = match[0]
+                                text = match[1]
 
-                        translatedText = '「' + translatedText + '」'
-                        row[i] = re.sub(rf':name\[({re.escape(speaker)}),', f':name[{translatedSpeaker},', row[i])
-                        row[i] = row[i].replace(text, translatedText)
+                                # Translate Speaker
+                                response = translateGPT (speaker, 'Reply with the '+ LANGUAGE +' translation of the NPC name.', True)
+                                translatedSpeaker = response[0]
+                                totalTokens += response[1][0]
+                                totalTokens += response[1][1]
 
-                        # Keep History at fixed length.
-                        with LOCK:
-                            if len(textHistory) > maxHistory:
-                                textHistory.pop(0)
+                                # Translate Line
+                                jaText = re.sub(r'([\u3000-\uffef])\1{3,}', r'\1\1\1', text)
+                                response = translateGPT(translatedSpeaker + ': ' + jaText, 'Previous Translated Text: ' + '|'.join(textHistory), True)
+                                translatedText = response[0]
+                                totalTokens[0] += response[1][0]
+                                totalTokens[1] += response[1][1]
 
-                    with LOCK:
-                        if not ESTIMATE:
-                            writer.writerow(row)
-                pbar.update(1)
+                                # TextHistory is what we use to give GPT Context, so thats appended here.
+                                textHistory.append(translatedText)
+
+                                # Remove Speaker from translated text
+                                translatedText = re.sub(r'.+?: ', '', translatedText)
+
+                                # Set Data
+                                translatedSpeaker = translatedSpeaker.replace('\"', '')
+                                translatedText = translatedText.replace('\"', '')
+                                translatedText = translatedText.replace('「', '')
+                                translatedText = translatedText.replace('」', '')
+                                data[i] = data[i].replace('\n', ' ')
+
+                                # Textwrap
+                                translatedText = textwrap.fill(translatedText, width=WIDTH)
+
+                                translatedText = '「' + translatedText + '」'
+                                data[i] = re.sub(rf':name\[({re.escape(speaker)}),', f':name[{translatedSpeaker},', data[i])
+                                data[i] = data[i].replace(text, translatedText)
+
+                                # Keep History at fixed length.
+                                with LOCK:
+                                    if len(textHistory) > maxHistory:
+                                        textHistory.pop(0)
+
+                            with LOCK:
+                                if not ESTIMATE:
+                                    writer.writerow(data)
+                        pbar.update(1)
+
+        # Leftovers
+        if format == '1':
+            # Put in Payload
+            payload = []
+            for row in batch:
+                if row[1] == "":
+                    jaString = row[0]
+                else:
+                    jaString = row[1]
+
+                # Remove Textwrap
+                jaString = jaString.replace('\n', ' ')
+                payload.append(jaString)
+
+            # Translate
+            response = translateGPT(payload, textHistory, True)
+            translatedTextList = response[0]
+            totalTokens[0] = response[1][0]
+            totalTokens[1] = response[1][1]
+
+            # MISMATCH
+            if len(translatedTextList) != len(payload):
+                pbar.write(f'Mismatch Error: {i-BATCHSIZE}-{i}')
+                batch.clear()
+            
+            # Set Data
+            j = i - len(batch)
+            for row in translatedTextList:
+                row = row.replace('"', '\\"')
+                row = row.replace(',', '\,')
+                data[j][1] = row
+                j += 1
+            batch.clear()
+
+        # Write all Data
+        with LOCK:
+            if not ESTIMATE:
+                for row in data:
+                    writer.writerow(row)
 
     except Exception as e:
         traceback.print_exc()
@@ -436,7 +487,7 @@ def cleanTranslatedText(translatedText, varResponse):
         translatedText = translatedText.replace(target, replacement)
 
     translatedText = resubVars(translatedText, varResponse[1])
-    return [line for line in translatedText.split('\n') if line]
+    return [line for line in translatedText.replace('\\n', '\n').split('\n') if line]
 
 def extractTranslation(translatedTextList, is_list):
     pattern = r'`?<Line(\d+)>[\\]*(.*?)[\\]*?<\/?Line\d+>`?'
