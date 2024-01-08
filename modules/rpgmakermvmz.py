@@ -1973,7 +1973,7 @@ def cleanTranslatedText(translatedText, varResponse):
         translatedText = translatedText.replace(target, replacement)
 
     translatedText = resubVars(translatedText, varResponse[1])
-    return [line for line in translatedText.split('\n') if line]
+    return [line for line in translatedText.replace('\\n', '\n').split('\n') if line]
 
 def extractTranslation(translatedTextList, is_list):
     pattern = r'`?<Line(\d+)>[\\]*(.*?)[\\]*?<\/?Line\d+>`?'
