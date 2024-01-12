@@ -48,7 +48,7 @@ if 'gpt-3.5' in MODEL:
 elif 'gpt-4' in MODEL:
     INPUTAPICOST = .01
     OUTPUTAPICOST = .03
-    BATCHSIZE = 40
+    BATCHSIZE = 4
     FREQUENCY_PENALTY = 0.1
 
 #tqdm Globals
@@ -95,7 +95,7 @@ def handleACE(filename, estimate):
                 yaml=YAML(pure=True)
                 yaml.width = 4096
                 yaml.default_style = "'"
-                yaml.dump(translatedData[0], outFile, ensure_ascii=False)
+                yaml.dump(translatedData[0], outFile)
         except Exception:
             traceback.print_exc()
             return 'Fail'
@@ -1483,67 +1483,87 @@ def searchCodes(page, pbar, fillList, filename):
 
             ### Event Code: 111 Script
             if codeList[i]['c'] == 111 and CODE111 is True:
-                for j in range(len(codeList[i]['p'])):
-                    jaString = codeList[i]['p'][j]
+                # Specific Length
+                if len(codeList[i]['p']) < 4:
+                    continue
 
-                    # Check if String
-                    if not isinstance(jaString, str):
-                        continue
+                # Save Vars
+                varNum = codeList[i]['p'][1]
+                jaString = codeList[i]['p'][3]
+                
+                # Check if String
+                if not isinstance(jaString, str):
+                    continue
 
-                    # Only TL the Game Variable
-                    if '$gameVariables' not in jaString:
-                        continue
+                # Only TL the Game Variable
+                # if '$gameVariables' not in jaString:
+                #     continue
 
-                    # This is going to be the var being set. (IMPORTANT)
-                    if '1045' not in jaString:
-                        continue
+                # This is going to be the var being set. (IMPORTANT)
+                if varNum not in [6]:
+                    continue
 
-                    # Need to remove outside code and put it back later
-                    matchList = re.findall(r"'(.*?)'", jaString)
-                    
-                    for match in matchList:
-                        response = translateGPT(match, '', False)
-                        translatedText = response[0]
-                        totalTokens[0] += response[1][0]
-                        totalTokens[1] += response[1][1]
+                # Need to remove outside code and put it back later
+                matchList = re.findall(r"(.*)", jaString)
+                
+                for match in matchList:
+                    response = translateGPT(match, 'Reply with the English translation of the NPC name', False)
+                    translatedText = response[0]
+                    totalTokens[0] += response[1][0]
+                    totalTokens[1] += response[1][1]
 
-                        # Remove characters that may break scripts
-                        charList = ['.', '\"', '\'', '\\n']
-                        for char in charList:
-                            translatedText = translatedText.replace(char, '')
+                    # Remove characters that may break scripts
+                    charList = ['.', '\"', '\'', '\\n']
+                    for char in charList:
+                        translatedText = translatedText.replace(char, '')
 
-                        jaString = jaString.replace(match, translatedText)
+                    jaString = jaString.replace(match, translatedText)
 
                     # Set Data
                     translatedText = jaString
-                    codeList[i]['p'][j] = translatedText
+                    codeList[i]['p'][3] = translatedText
 
-            ### Event Code: 320 Set Variable
+            ### Event Code: 320 Script
             if codeList[i]['c'] == 320 and CODE320 is True:
+                # Specific Length
+                if len(codeList[i]['p']) < 2:
+                    continue
+
+                # Save Vars
+                varNum = codeList[i]['p'][0]
                 jaString = codeList[i]['p'][1]
+                
+                # Check if String
                 if not isinstance(jaString, str):
                     continue
-                
-                # Definitely don't want to mess with files
-                if '■' in jaString or '_' in jaString:
+
+                # Only TL the Game Variable
+                # if '$gameVariables' not in jaString:
+                #     continue
+
+                # This is going to be the var being set. (IMPORTANT)
+                if varNum not in [6]:
                     continue
 
-                # If there isn't any Japanese in the text just skip
-                if not re.search(r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴー]+', jaString):
-                    continue
+                # Need to remove outside code and put it back later
+                matchList = re.findall(r"(.*)", jaString)
                 
-                response = translateGPT(jaString, 'Reply with the '+ LANGUAGE +' translation of the NPC name.', False)
-                translatedText = response[0]
-                totalTokens[0] += response[1][0]
-                totalTokens[1] += response[1][1]
+                for match in matchList:
+                    response = translateGPT(match, 'Reply with the English translation of the NPC name', False)
+                    translatedText = response[0]
+                    totalTokens[0] += response[1][0]
+                    totalTokens[1] += response[1][1]
 
-                # Remove characters that may break scripts
-                charList = ['.', '\"', '\'', '\\n']
-                for char in charList:
-                    translatedText = translatedText.replace(char, '')
+                    # Remove characters that may break scripts
+                    charList = ['.', '\"', '\'', '\\n']
+                    for char in charList:
+                        translatedText = translatedText.replace(char, '')
 
-                # Set Data
-                codeList[i]['p'][1] = translatedText
+                    jaString = jaString.replace(match, translatedText)
+
+                    # Set Data
+                    translatedText = jaString
+                    codeList[i]['p'][1] = translatedText
 
         # End of the line
         if docList != [] and fillList != '':
@@ -1854,8 +1874,20 @@ def batchList(input_list, batch_size):
 
 def createContext(fullPromptFlag, subbedT):
     characters = 'Game Characters:\n\
-セレナ (Serena) - Female\n\
-レナ (Rena) - Female\n\
+ルナリア (Lunaria) - Female\n\
+ソニア (Sonia) - Female\n\
+マナ (Mana) - Female\n\
+マリアナ (Mariana) - Female\n\
+ディアナ (Diana) - Female\n\
+シャーリー (Shirley) - Female\n\
+エスティア (Estia) - Female\n\
+エレノア (Eleanor) - Female\n\
+メリス (Meris) - Female\n\
+サルビア (Salvia) - Female\n\
+リリ (Lili) - Female\n\
+ツキハ (Tsukiha) - Female\n\
+フィリカ (Filica) - Female\n\
+レノ (Renno) - Female\n\
 '
     
     system = PROMPT if fullPromptFlag else \
@@ -1922,7 +1954,7 @@ def cleanTranslatedText(translatedText, varResponse):
     return [line for line in translatedText.split('\n') if line]
 
 def extractTranslation(translatedTextList, is_list):
-    pattern = r'`?<Line(\d+)>[\\]*(.*?)[\\]*?<\/?Line\d+>`?'
+    pattern = r'`?<Line(\d+)>([\\]*.*?[\\]*?)<\/?Line\d+>`?'
     # If it's a batch (i.e., list), extract with tags; otherwise, return the single item.
     if is_list:
         return [re.findall(pattern, line)[0][1] for line in translatedTextList if re.search(pattern, line)]
