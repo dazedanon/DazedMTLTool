@@ -21,7 +21,7 @@ from modules.alice import handleAlice
 from modules.tyrano import handleTyrano
 from modules.json import handleJSON
 from modules.kansen import handleKansen
-from modules.lune2 import handleLuneTxt
+from modules.lune import handleLune
 from modules.atelier import handleAtelier
 from modules.anim import handleAnim
 
@@ -38,7 +38,7 @@ MODULES = [
     ["Tyrano", "ks", handleTyrano],
     ["JSON", "json", handleJSON],
     ["Kansen", "ks", handleKansen],
-    ["Lune", "txt", handleLuneTxt],
+    ["Lune", "json", handleLune],
     ["Atelier", "txt", handleAtelier],
     ["Anim", "json", handleAnim],
 ]
