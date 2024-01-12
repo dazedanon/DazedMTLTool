@@ -280,15 +280,15 @@ def translateCSV(reader, pbar, writer, textHistory, format):
             if len(translatedTextList) != len(payload):
                 pbar.write(f'Mismatch Error: {i-BATCHSIZE}-{i}')
                 batch.clear()
-            
-            # Set Data
-            j = i - len(batch)
-            for row in translatedTextList:
-                row = row.replace('"', '\\"')
-                row = row.replace(',', '\,')
-                data[j][1] = row
-                j += 1
-            batch.clear()
+            else:
+                # Set Data
+                j = i - len(batch)
+                for row in translatedTextList:
+                    row = row.replace('"', '\\"')
+                    row = row.replace(',', '\,')
+                    data[j][1] = row
+                    j += 1
+                batch.clear()
 
         # Write all Data
         with LOCK:
