@@ -154,7 +154,7 @@ def translateJSON(data, pbar):
         # Speaker
         if 'name' in item:
             if item['name'] not in [None, '-']:
-                response = translateGPT(item['name'], 'Reply with only the '+ LANGUAGE +' translation of the NPC name', False)
+                response = getSpeaker(item['name'])
                 speaker = response[0]
                 tokens[0] += response[1][0]
                 tokens[1] += response[1][1]
@@ -258,7 +258,22 @@ def translateJSON(data, pbar):
                 batch.clear()
 
             currentGroup = []
-    return tokens           
+    return tokens   
+
+# Save some money and enter the character before translation
+def getSpeaker(speaker):
+    match speaker:
+        case 'セレナ':
+            return ['Serena', [0,0]]
+        case 'レナ':
+            return ['Rena', [0,0]]
+        case 'フィルス':
+            return ['Phils', [0,0]]
+        case 'レイン':
+            return ['Meryl', [0,0]]
+        case _:
+            return translateGPT(speaker, 'Reply with only the '+ LANGUAGE +' translation of the NPC name.', False)
+
 
 def subVars(jaString):
     jaString = jaString.replace('\u3000', ' ')
@@ -381,22 +396,40 @@ def batchList(input_list, batch_size):
 
 def createContext(fullPromptFlag, subbedT):
     characters = 'Game Characters:\n\
-林つかさ (Tsukasa Hayashi) - Female\n\
-山田美兎 (Miyato Yamada) - Female\n\
-鈴木赤音 (Akane Suzuki) - Female\n\
-佐藤莉伊南 (Riina Satou) - Female\n\
-佐々木万梨美 (Marimi Sasaki) - Female\n\
-渡辺登樹子 (Tokiko Watanabe) - Female\n\
-桃乃夢 (Yume Momono) - Female\n\
-吉浦美雪 (Miyuki Yoshiura) - Female\n\
-三ツ門まあな (Maana Mitsukado) - Female\n\
-モリー・ボイド (Molly Boyd) - Female\n\
-オルガ・ブヤチッチ (Olga Buyachich) - Female\n\
-アッチャラー ギッティ (Atchara Gitti) - Female\n\
+ルナリア (Lunaria) - Female\n\
+ソニア (Sonia) - Female\n\
+マナ (Mana) - Female\n\
+マリアナ (Mariana) - Female\n\
+ディアナ (Diana) - Female\n\
+シャーリー (Shirley) - Female\n\
+エスティア (Estia) - Female\n\
+エレノア (Eleanor) - Female\n\
+メリス (Meris) - Female\n\
+サルビア (Salvia) - Female\n\
+リリ (Lili) - Female\n\
+ツキハ (Tsukiha) - Female\n\
+フィリカ (Filica) - Female\n\
+レノ (Renno) - Female\n\
 '
     
     system = PROMPT if fullPromptFlag else \
-        f'Output ONLY the {LANGUAGE} translation in the following format: `Translation: <{LANGUAGE.upper()}_TRANSLATION>`'
+        f"\
+You are an expert Eroge Game translator who translates Japanese text to English.\n\
+You are going to be translating text from a videogame.\n\
+I will give you lines of text, and you must translate each line to the best of your ability.\n\
+- Translate 'マンコ' as 'pussy'\n\
+- Translate 'おまんこ' as 'pussy'\n\
+- Translate 'お尻' as 'butt'\n\
+- Translate '尻' as 'ass'\n\
+- Translate 'お股' as 'crotch'\n\
+- Translate '秘部' as 'genitals'\n\
+- Translate 'チンポ' as 'dick'\n\
+- Translate 'チンコ' as 'cock'\n\
+- Translate 'ショーツ' as 'panties\n\
+- Translate 'おねショタ' as 'Onee-shota'\n\
+- Translate 'よかった' as 'thank goodness'\n\
+Output ONLY the {LANGUAGE} translation in the following format: `Translation: <{LANGUAGE.upper()}_TRANSLATION>`\
+"
     user = f'{subbedT}'
     return characters, system, user
 
@@ -418,6 +451,7 @@ def translateText(characters, system, user, history):
     response = openai.chat.completions.create(
         temperature=0.1,
         frequency_penalty=0.1,
+        presence_penalty=0.1,
         model=MODEL,
         messages=msg,
     )
@@ -439,13 +473,10 @@ def cleanTranslatedText(translatedText, varResponse):
         translatedText = translatedText.replace(target, replacement)
 
     translatedText = resubVars(translatedText, varResponse[1])
-    if '\n' in translatedText:
-        return [line for line in translatedText.split('\n') if line]
-    else:
-        return [line for line in translatedText.split('\\n') if line]
+    return [line for line in translatedText.split('\n') if line]
 
 def extractTranslation(translatedTextList, is_list):
-    pattern = r'<Line(\d+)>[\\]*`?(.*?)[\\]*?`?</?Line\d+>'
+    pattern = r'`?<Line(\d+)>([\\]*.*?[\\]*?)<\/?Line\d+>`?'
     # If it's a batch (i.e., list), extract with tags; otherwise, return the single item.
     if is_list:
         return [re.findall(pattern, line)[0][1] for line in translatedTextList if re.search(pattern, line)]
@@ -489,7 +520,7 @@ def translateGPT(text, history, fullPromptFlag):
     for index, tItem in enumerate(tList):
         # Before sending to translation, if we have a list of items, add the formatting
         if isinstance(tItem, list):
-            payload = '\n'.join([f'<Line{i}>`{item}`</Line{i}>' for i, item in enumerate(tItem)])
+            payload = '\n'.join([f'`<Line{i}>{item}</Line{i}>`' for i, item in enumerate(tItem)])
             payload = payload.replace('``', '`Placeholder Text`')
             varResponse = subVars(payload)
             subbedT = varResponse[0]
