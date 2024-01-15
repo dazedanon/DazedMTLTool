@@ -245,20 +245,25 @@ def translateNote(event, regex):
     jaString = event['note']
     match = re.findall(regex, jaString, re.DOTALL)
     if match:
-        oldJAString = match[0]
-        # Remove any textwrap
-        jaString = re.sub(r'\n', ' ', oldJAString)
+        tokens = [0,0]
+        i = 0
+        while i < len(match):
+            oldJAString = match[i]
+            # Remove any textwrap
+            jaString = re.sub(r'\n', ' ', oldJAString)
 
-        # Translate
-        response = translateGPT(jaString, 'Reply with the '+ LANGUAGE +' translation.', False)
-        translatedText = response[0]
+            # Translate
+            response = translateGPT(jaString, 'Reply with only the '+ LANGUAGE +' translation of the RPG Skill name.', False)
+            translatedText = response[0]
+            tokens[0] += response[1][0]
+            tokens[1] += response[1][1]
 
-        # Textwrap
-        translatedText = textwrap.fill(translatedText, width=NOTEWIDTH)
-
-        translatedText = translatedText.replace('\"', '')
-        event['note'] = event['note'].replace(oldJAString, translatedText)
-        return response[1]
+            # Textwrap
+            translatedText = textwrap.fill(translatedText, width=NOTEWIDTH)
+            translatedText = translatedText.replace('\"', '')
+            event['note'] = event['note'].replace(oldJAString, translatedText)
+            i += 1
+        return tokens
     return [0,0]
 
 # For notes that can't have spaces.
