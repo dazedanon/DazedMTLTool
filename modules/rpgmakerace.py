@@ -33,7 +33,7 @@ NAMESLIST = []
 NAMES = False    # Output a list of all the character names found
 BRFLAG = False   # If the game uses <br> instead
 FIXTEXTWRAP = True  # Overwrites textwrap
-IGNORETLTEXT = True    # Ignores all translated text.
+IGNORETLTEXT = False    # Ignores all translated text.
 MISMATCH = []   # Lists files that throw a mismatch error (Length of GPT list response is wrong)
 BRACKETNAMES = False
 
@@ -48,7 +48,7 @@ if 'gpt-3.5' in MODEL:
 elif 'gpt-4' in MODEL:
     INPUTAPICOST = .01
     OUTPUTAPICOST = .03
-    BATCHSIZE = 40
+    BATCHSIZE = 4
     FREQUENCY_PENALTY = 0.1
 
 #tqdm Globals
@@ -253,20 +253,25 @@ def translateNote(event, regex):
     jaString = event['note']
     match = re.findall(regex, jaString, re.DOTALL)
     if match:
-        oldJAString = match[0]
-        # Remove any textwrap
-        jaString = re.sub(r'\n', ' ', oldJAString)
+        tokens = [0,0]
+        i = 0
+        while i < len(match):
+            oldJAString = match[i]
+            # Remove any textwrap
+            jaString = re.sub(r'\n', ' ', oldJAString)
 
-        # Translate
-        response = translateGPT(jaString, 'Reply with the '+ LANGUAGE +' translation.', False)
-        translatedText = response[0]
+            # Translate
+            response = translateGPT(jaString, 'Reply with only the '+ LANGUAGE +' translation of the RPG Skill name.', False)
+            translatedText = response[0]
+            tokens[0] += response[1][0]
+            tokens[1] += response[1][1]
 
-        # Textwrap
-        translatedText = textwrap.fill(translatedText, width=NOTEWIDTH)
-
-        translatedText = translatedText.replace('\"', '')
-        event['note'] = event['note'].replace(oldJAString, translatedText)
-        return response[1]
+            # Textwrap
+            translatedText = textwrap.fill(translatedText, width=NOTEWIDTH)
+            translatedText = translatedText.replace('\"', '')
+            event['note'] = event['note'].replace(oldJAString, translatedText)
+            i += 1
+        return tokens
     return [0,0]
 
 # For notes that can't have spaces.
@@ -473,6 +478,12 @@ def searchThings(name, pbar):
     if '<ExtendDesc:' in name['note']:
         totalTokens[0] += translateNote(name, r'<ExtendDesc:(.*?)>')[0]
         totalTokens[1] += translateNote(name, r'<ExtendDesc:(.*?)>')[1]
+    if '追加説明A' in name['note']:
+        totalTokens[0] += translateNote(name, r'<追加説明A:(.*?)>')[0]
+        totalTokens[1] += translateNote(name, r'<追加説明B:(.*?)>')[1]
+    if '追加説明B' in name['note']:
+        totalTokens[0] += translateNote(name, r'<追加説明A:(.*?)>')[0]
+        totalTokens[1] += translateNote(name, r'<追加説明B:(.*?)>')[1]
 
     # Count totalTokens
     totalTokens[0] += nameResponse[1][0] if nameResponse != '' else 0
@@ -526,6 +537,13 @@ def searchNames(name, pbar, context):
         if 'hint' in name['note']:
             totalTokens[0] += translateNote(name, r'<hint:(.*?)>')[0]
             totalTokens[1] += translateNote(name, r'<hint:(.*?)>')[1]
+        if '追加説明A' in name['note']:
+            totalTokens[0] += translateNote(name, r'<追加説明A:(.*?)>')[0]
+            totalTokens[1] += translateNote(name, r'<追加説明B:(.*?)>')[1]
+
+        if '追加説明B' in name['note']:
+            totalTokens[0] += translateNote(name, r'<追加説明A:(.*?)>')[0]
+            totalTokens[1] += translateNote(name, r'<追加説明B:(.*?)>')[1]
 
     if 'Enemies' in context:
         if 'variable_update_skill' in name['note']:
@@ -540,6 +558,20 @@ def searchNames(name, pbar, context):
             totalTokens[0] += translateNote(name, r'<desc3:([^>]*)>')[0]
             totalTokens[1] += translateNote(name, r'<desc3:([^>]*)>')[1]
 
+        if '追加説明A' in name['note']:
+            totalTokens[0] += translateNote(name, r'<追加説明A:(.*?)>')[0]
+            totalTokens[1] += translateNote(name, r'<追加説明B:(.*?)>')[1]
+
+        if '追加説明B' in name['note']:
+            totalTokens[0] += translateNote(name, r'<追加説明A:(.*?)>')[0]
+            totalTokens[1] += translateNote(name, r'<追加説明B:(.*?)>')[1]
+
+    if 'Classes' in context:
+        if 'スキル連結:' in name['note']:
+            response = translateNote(name, r'<スキル連結:(.*?)>')
+            totalTokens[0] += response[0]
+            totalTokens[1] += response[1]
+
     # Extract all our translations in a list from response
     for i in range(len(responseList)):
         totalTokens[0] += responseList[i][1][0]
@@ -550,7 +582,7 @@ def searchNames(name, pbar, context):
     name['name'] = responseList[0].replace('\"', '')
     if 'Actors' in context:
         translatedText = textwrap.fill(responseList[1], LISTWIDTH)
-        name['profile'] = translatedText.replace('\"', '')
+        name['description'] = translatedText.replace('\"', '')
         translatedText = textwrap.fill(responseList[2], LISTWIDTH)
         name['nickname'] = translatedText.replace('\"', '')
         if '<特徴1:' in name['note']:
@@ -561,9 +593,6 @@ def searchNames(name, pbar, context):
         translatedText = textwrap.fill(responseList[1], LISTWIDTH)
         if 'description' in name:
             name['description'] = translatedText.replace('\"', '')
-            if '<SG説明:' in name['note']:
-                totalTokens[0] += translateNote(name, r'<Info Text Bottom>\n([\s\S]*?)\n</Info Text Bottom>')[0]
-                totalTokens[1] += translateNote(name, r'<Info Text Bottom>\n([\s\S]*?)\n</Info Text Bottom>')[1]
     pbar.update(1)
 
     return totalTokens
@@ -1643,6 +1672,10 @@ Translate \'Taroを倒した！\' as \'Taro was defeated!\'', False)
     if 'help' in state['note']:
         totalTokens[0] += translateNote(state, r'<help:([^>]*)>')[0]
         totalTokens[1] += translateNote(state, r'<help:([^>]*)>')[1]
+    if '必須技能:' in state['note']:
+        response = translateNote(state, r'<必須技能:(.*?)>')
+        totalTokens[0] += response[0]
+        totalTokens[1] += response[1]
     
     # Count totalTokens
     totalTokens[0] += nameResponse[1][0] if nameResponse != '' else 0
