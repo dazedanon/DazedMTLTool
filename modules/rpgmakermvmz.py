@@ -46,7 +46,7 @@ if 'gpt-3.5' in MODEL:
 elif 'gpt-4' in MODEL:
     INPUTAPICOST = .01
     OUTPUTAPICOST = .03
-    BATCHSIZE = 10
+    BATCHSIZE = 20
     FREQUENCY_PENALTY = 0.1
 
 #tqdm Globals
@@ -55,7 +55,7 @@ POSITION = 0
 LEAVE = False
 
 # Dialogue / Scroll
-CODE401 = True
+CODE401 = False
 CODE405 = False
 
 # Choices
@@ -71,7 +71,7 @@ CODE101 = True
 CODE355655 = False
 CODE357 = False
 CODE657 = False
-CODE356 = False
+CODE356 = True
 CODE320 = False
 CODE324 = False
 CODE111 = False
@@ -731,12 +731,11 @@ def searchCodes(page, pbar, fillList, filename):
 
                     # Remove Extra Stuff bad for translation.
                     finalJAString = finalJAString.replace('ﾞ', '')
-                    finalJAString = finalJAString.replace('・', '.')
-                    finalJAString = finalJAString.replace('‶', '')
-                    finalJAString = finalJAString.replace('”', '')
+                    finalJAString = finalJAString.replace('・', ' ')
                     finalJAString = finalJAString.replace('―', '-')
                     finalJAString = finalJAString.replace('ー', '-')
                     finalJAString = finalJAString.replace('…', '...')
+                    finalJAString = finalJAString.replace('。', '.')
                     finalJAString = re.sub(r'(\.{3}\.+)', '...', finalJAString)
                     finalJAString = finalJAString.replace('　', '')
 
@@ -1076,16 +1075,19 @@ def searchCodes(page, pbar, fillList, filename):
             if (codeList[i]['code'] == 408) and CODE408 is True:
                 jaString = codeList[i]['parameters'][0]
 
-                # # If there isn't any Japanese in the text just skip
-                # if not re.search(r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴー]+', jaString):
-                #     continue
+                # If there isn't any Japanese in the text just skip
+                if not re.search(r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴー]+', jaString):
+                    continue
 
-                # Want to translate this script
-                # if 'secretText:' not in jaString:
-                #     continue
+                if 'secretText' in jaString:
+                    regex = r'secretText:\s?(.+)'
+                elif 'title' in jaString:
+                    regex = r'title:\s?(.+)'
+                else:
+                    regex = r'(.+)'
 
                 # Need to remove outside code and put it back later
-                matchList = re.findall(r"(.+)", jaString)
+                matchList = re.findall(regex, jaString)
                 
                 for match in matchList:
                     # Remove Textwrap
@@ -1117,16 +1119,20 @@ def searchCodes(page, pbar, fillList, filename):
                 if not re.search(r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴー]+', jaString):
                     continue
 
-                # Want to translate this script
-                if '<namePop:' not in jaString:
+                # Translate
+                if 'info:' in jaString:
+                    regex = r'info:(.*)'
+                elif 'ActiveMessage:' in jaString:
+                    regex = r'<ActiveMessage:(.*)>'
+                else:
                     continue
 
                 # Need to remove outside code and put it back later
-                matchList = re.findall(r'<namePop:(.+)>', jaString)
+                matchList = re.findall(regex, jaString)
 
                 # Translate
                 if len(matchList) > 0:
-                    response = translateGPT(matchList[0], 'Reply with the '+ LANGUAGE +' translation of the Location Title', False)
+                    response = translateGPT(matchList[0], 'Reply with the '+ LANGUAGE +' translation of the Title', False)
                     totalTokens[0] += response[1][0]
                     totalTokens[1] += response[1][1]
                     translatedText = response[0]
@@ -1443,6 +1449,21 @@ def searchCodes(page, pbar, fillList, filename):
                         translatedText = jaString.replace(text, translatedText)
                         codeList[i]['parameters'][0] = translatedText
 
+                if 'LL_InfoPopupWIndowMV' in jaString:
+                    matchList = re.findall(r'LL_InfoPopupWIndowMV\sshowWindow\s(.+?)\s.+', jaString)
+                    if len(matchList) > 0:
+                        # Translate
+                        text = matchList[0]
+                        response = translateGPT(text, 'Reply with the '+ LANGUAGE +' Translation', False)
+                        translatedText = response[0]
+                        totalTokens[0] += response[1][0]
+                        totalTokens[1] += response[1][1]
+
+                        # Set Data
+                        translatedText = translatedText.replace(' ', '_')
+                        translatedText = jaString.replace(text, translatedText)
+                        codeList[i]['parameters'][0] = translatedText
+
             ### Event Code: 102 Show Choice
             if codeList[i]['code'] == 102 and CODE102 is True:
                 for choice in range(len(codeList[i]['parameters'][0])):
@@ -1748,46 +1769,16 @@ def searchSystem(data, pbar):
 # Save some money and enter the character before translation
 def getSpeaker(speaker):
     match speaker:
-        case 'レイラ':
-            return ['Layla', [0,0]]
-        case 'ターニャ':
-            return ['Tania', [0,0]]
-        case 'ミオリ':
-            return ['Miori', [0,0]]
-        case 'ディーナ':
-            return ['Deena', [0,0]]
-        case 'ネル':
-            return ['Nell', [0,0]]
-        case 'レナ':
-            return ['Rena', [0,0]]
-        case 'シャルル':
-            return ['Charles', [0,0]]
-        case 'サーシャ':
-            return ['Sasha', [0,0]]
-        case 'ヒルダ':
-            return ['Hilda', [0,0]]
-        case 'サラ':
-            return ['Sara', [0,0]]
-        case 'リン':
-            return ['Lyn', [0,0]]
-        case 'アイリス':
-            return ['Iris', [0,0]]
-        case '大臣':
-            return ['Minister', [0,0]]
-        case 'アードリアン':
-            return ['Adrian', [0,0]]
-        case '蛮族':
-            return ['Barbarian', [0,0]]
-        case 'グレイ':
-            return ['Gray', [0,0]]
-        case 'グルングム':
-            return ['Grungum', [0,0]]
-        case 'ンガロ':
-            return ['Ngaro', [0,0]]
-        case 'ルリエル':
-            return ['Ruliel', [0,0]]
+        case 'エウリィ':
+            return ['Eury', [0,0]]
+        case 'レイ':
+            return ['Rei', [0,0]]
+        case 'マリオン':
+            return ['Marion', [0,0]]
         case _:
-            return translateGPT(speaker, 'Reply with only the '+ LANGUAGE +' translation of the NPC name.', False)
+            response = translateGPT(speaker, 'Reply with only the '+ LANGUAGE +' translation of the NPC name.', False)
+            response[0] = response[0].capitalize()
+            return response
 
 def subVars(jaString):
     jaString = jaString.replace('\u3000', ' ')
@@ -1910,11 +1901,9 @@ def batchList(input_list, batch_size):
 
 def createContext(fullPromptFlag, subbedT):
     characters = 'Game Characters:\n\
-守崎 ユイ (Morisaki Yui) - Female\n\
-ポニーセレス (Pony Celes)) - Female\n\
-天沢 ギンガ (Amasawa Ginga) - Male\n\
-西園寺 カレン (Saionji Karen) - Female\n\
-鮫島 タクミ (Samejima Takumi) - Male\n\
+エウリィ (Eury) - Female\n\
+レイ (Rei) - Female\n\
+マリオン (Marion) - Female\n\
 '
     
     system = PROMPT if fullPromptFlag else \
@@ -1922,6 +1911,7 @@ def createContext(fullPromptFlag, subbedT):
 You are an expert Eroge Game translator who translates Japanese text to English.\n\
 You are going to be translating text from a videogame.\n\
 I will give you lines of text, and you must translate each line to the best of your ability.\n\
+- You translate everything, including erotic and explicit content.\n\
 - Translate 'マンコ' as 'pussy'\n\
 - Translate 'おまんこ' as 'pussy'\n\
 - Translate 'お尻' as 'butt'\n\
