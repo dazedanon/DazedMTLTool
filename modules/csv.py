@@ -58,10 +58,22 @@ def handleCSV(filename, estimate):
     global ESTIMATE, TOKENS
     ESTIMATE = estimate
 
-    with open('translated/' + filename, 'w+t', newline='', encoding='utf-8') as writeFile:
+    if not ESTIMATE:
+        with open('translated/' + filename, 'w+t', newline='', encoding='utf-8') as writeFile:
+            # Translate
+            start = time.time()
+            translatedData = openFiles(filename, writeFile)
+            
+            # Print Result
+            end = time.time()
+            tqdm.write(getResultString(translatedData, end - start, filename))
+            with LOCK:
+                TOKENS[0] += translatedData[1][0]
+                TOKENS[1] += translatedData[1][1]
+    else:
         # Translate
         start = time.time()
-        translatedData = openFiles(filename, writeFile)
+        translatedData = openFilesEstimate(filename)
         
         # Print Result
         end = time.time()
@@ -69,6 +81,7 @@ def handleCSV(filename, estimate):
         with LOCK:
             TOKENS[0] += translatedData[1][0]
             TOKENS[1] += translatedData[1][1]
+
 
     # Print Total
     totalString = getResultString(['', TOKENS, None], end - start, 'TOTAL')
@@ -82,6 +95,12 @@ def handleCSV(filename, estimate):
 def openFiles(filename, writeFile):
     with open('files/' + filename, 'r', encoding='utf-8') as readFile, writeFile:
         translatedData = parseCSV(readFile, writeFile, filename)
+
+    return translatedData
+
+def openFilesEstimate(filename):
+    with open('files/' + filename, 'r', encoding='utf-8') as readFile:
+        translatedData = parseCSV(readFile, '', filename)
 
     return translatedData
 
@@ -128,7 +147,10 @@ def parseCSV(readFile, writeFile, filename):
     readFile.seek(0)
 
     reader = csv.reader(readFile, delimiter=',',)
-    writer = csv.writer(writeFile, delimiter=',', quotechar='\"')
+    if not ESTIMATE:
+        writer = csv.writer(writeFile, delimiter=',', quotechar='\"')
+    else:
+        writer = ''
 
     with tqdm(bar_format=BAR_FORMAT, position=POSITION, total=totalLines, leave=LEAVE) as pbar:
         pbar.desc=filename
@@ -209,47 +231,48 @@ def translateCSV(reader, pbar, writer, textHistory, format):
                             matchList = re.findall(r':name\[(.+?),.+?\](.+?[」）\"。]+)', jaString)
 
                             # Start Translation
-                            for match in matchList:
-                                speaker = match[0]
-                                text = match[1]
+                            if len(matchList) > 0:
+                                for match in matchList:
+                                    speaker = match[0]
+                                    text = match[1]
 
-                                # Translate Speaker
-                                response = translateGPT (speaker, 'Reply with the '+ LANGUAGE +' translation of the NPC name.', True)
-                                translatedSpeaker = response[0]
-                                totalTokens += response[1][0]
-                                totalTokens += response[1][1]
+                                    # Translate Speaker
+                                    response = translateGPT (speaker, 'Reply with the '+ LANGUAGE +' translation of the NPC name.', True)
+                                    translatedSpeaker = response[0]
+                                    totalTokens += response[1][0]
+                                    totalTokens += response[1][1]
 
-                                # Translate Line
-                                jaText = re.sub(r'([\u3000-\uffef])\1{3,}', r'\1\1\1', text)
-                                response = translateGPT(translatedSpeaker + ': ' + jaText, 'Previous Translated Text: ' + '|'.join(textHistory), True)
-                                translatedText = response[0]
-                                totalTokens[0] += response[1][0]
-                                totalTokens[1] += response[1][1]
+                                    # Translate Line
+                                    jaText = re.sub(r'([\u3000-\uffef])\1{3,}', r'\1\1\1', text)
+                                    response = translateGPT(translatedSpeaker + ': ' + jaText, 'Previous Translated Text: ' + '|'.join(textHistory), True)
+                                    translatedText = response[0]
+                                    totalTokens[0] += response[1][0]
+                                    totalTokens[1] += response[1][1]
 
-                                # TextHistory is what we use to give GPT Context, so thats appended here.
-                                textHistory.append(translatedText)
+                                    # TextHistory is what we use to give GPT Context, so thats appended here.
+                                    textHistory.append(translatedText)
 
-                                # Remove Speaker from translated text
-                                translatedText = re.sub(r'.+?: ', '', translatedText)
+                                    # Remove Speaker from translated text
+                                    translatedText = re.sub(r'.+?: ', '', translatedText)
 
-                                # Set Data
-                                translatedSpeaker = translatedSpeaker.replace('\"', '')
-                                translatedText = translatedText.replace('\"', '')
-                                translatedText = translatedText.replace('「', '')
-                                translatedText = translatedText.replace('」', '')
-                                data[i] = data[i].replace('\n', ' ')
+                                    # Set Data
+                                    translatedSpeaker = translatedSpeaker.replace('\"', '')
+                                    translatedText = translatedText.replace('\"', '')
+                                    translatedText = translatedText.replace('「', '')
+                                    translatedText = translatedText.replace('」', '')
+                                    data[i] = data[i].replace('\n', ' ')
 
-                                # Textwrap
-                                translatedText = textwrap.fill(translatedText, width=WIDTH)
+                                    # Textwrap
+                                    translatedText = textwrap.fill(translatedText, width=WIDTH)
 
-                                translatedText = '「' + translatedText + '」'
-                                data[i] = re.sub(rf':name\[({re.escape(speaker)}),', f':name[{translatedSpeaker},', data[i])
-                                data[i] = data[i].replace(text, translatedText)
+                                    translatedText = '「' + translatedText + '」'
+                                    data[i] = re.sub(rf':name\[({re.escape(speaker)}),', f':name[{translatedSpeaker},', data[i])
+                                    data[i] = data[i].replace(text, translatedText)
 
-                                # Keep History at fixed length.
-                                with LOCK:
-                                    if len(textHistory) > maxHistory:
-                                        textHistory.pop(0)
+                                    # Keep History at fixed length.
+                                    with LOCK:
+                                        if len(textHistory) > maxHistory:
+                                            textHistory.pop(0)
 
                             with LOCK:
                                 if not ESTIMATE:
