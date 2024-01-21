@@ -796,7 +796,7 @@ def searchCodes(page, pbar, fillList, filename):
                     break
 
             ## Event Code: 401 Show Text
-            if codeList[i]['code'] in [401, 405] and (CODE401 or CODE405):
+            if codeList[i]['code'] in [401, 405, -1] and (CODE401 or CODE405):
                 # Save Code and starting index (j)
                 code = codeList[i]['code']
                 j = i
@@ -835,6 +835,9 @@ def searchCodes(page, pbar, fillList, filename):
                     # Check if Empty
                     if finalJAString == '':
                         continue
+
+                    # Set Back
+                    codeList[i]['parameters'] = [finalJAString]
 
                     # Check for speakers in String
                     # \\n<Speaker>
@@ -1075,8 +1078,8 @@ def searchCodes(page, pbar, fillList, filename):
 
             ## Event Code: 357 [Picture Text] [Optional]
             if codeList[i]['code'] == 357 and CODE357 is True:
-                if 'message' in codeList[i]['parameters'][3]:
-                    jaString = codeList[i]['parameters'][3]['message']
+                if 'text' in codeList[i]['parameters'][3]:
+                    jaString = codeList[i]['parameters'][3]['text']
                     if not isinstance(jaString, str):
                         continue
                     
@@ -1101,7 +1104,7 @@ def searchCodes(page, pbar, fillList, filename):
                     finalJAString = re.sub(r'\n', ' ', finalJAString)
 
                     # Translate
-                    response = translateGPT(finalJAString, '', True)
+                    response = translateGPT(finalJAString, '', False)
                     totalTokens[0] += response[1][0]
                     totalTokens[1] += response[1][1]
                     translatedText = response[0]
@@ -2127,9 +2130,9 @@ def translateText(characters, system, user, history):
 
     # History
     if isinstance(history, list):
-        msg.extend([{"role": "assistant", "content": h} for h in history])
+        msg.extend([{"role": "system", "content": h} for h in history])
     else:
-        msg.append({"role": "assistant", "content": history})
+        msg.append({"role": "system", "content": history})
     
     # Content to TL
     msg.append({"role": "user", "content": f'{user}'})
