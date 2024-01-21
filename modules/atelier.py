@@ -26,6 +26,7 @@ LANGUAGE=os.getenv('language').capitalize()
 INPUTAPICOST = .002 # Depends on the model https://openai.com/pricing
 OUTPUTAPICOST = .002
 PROMPT = Path('prompt.txt').read_text(encoding='utf-8')
+VOCAB = Path('vocab.txt').read_text(encoding='utf-8')
 THREADS = int(os.getenv('threads')) # Controls how many threads are working on a single file (May have to drop this)
 LOCK = threading.Lock()
 WIDTH = int(os.getenv('width'))
