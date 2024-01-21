@@ -146,7 +146,7 @@ def openFiles(filename):
 
         # Items File
         elif 'Items' in filename:
-            translatedData = parseThings(data, filename)
+            translatedData = parseNames(data, filename, 'Items')
 
         # MapInfo File
         elif 'MapInfos' in filename:
@@ -154,7 +154,7 @@ def openFiles(filename):
 
         # Skills File
         elif 'Skills' in filename:
-            translatedData = parseSS(data, filename)
+            translatedData = parseNames(data, filename, 'Skills')
 
         # Troops File
         elif 'Troops' in filename:
@@ -517,6 +517,10 @@ def searchNames(data, pbar, context):
         newContext = 'Reply with only the '+ LANGUAGE +' translation of the enemy NPC name'
     if 'Weapons' in context:
         newContext = 'Reply with only the '+ LANGUAGE +' translation of the RPG weapon name'
+    if 'Items' in context:
+        newContext = 'Reply with only the '+ LANGUAGE +' translation of the RPG item name'
+    if 'Skills' in context:
+        newContext = 'Reply with only the '+ LANGUAGE +' translation of the RPG skill name'
 
     # Names
     while i < len(data) or filling == True:
@@ -537,12 +541,40 @@ def searchNames(data, pbar, context):
                     i += 1
                 else:
                     batchFull = True
-            if context in ['Armors', 'Weapons']:
+            if context in ['Armors', 'Weapons', 'Items']:
                 if len(nameList) < BATCHSIZE:
                     nameList.append(data[i]['name'])
                     descriptionList.append(data[i]['description'].replace('\n', ' '))
                     if 'hint' in data[i]['note']:
                         noteList.append(data[i]['note'])
+                    pbar.update(1)
+                    i += 1
+                else:
+                    batchFull = True
+            if context in ['Skills']:
+                if len(nameList) < BATCHSIZE:
+                    nameList.append(data[i]['name'])
+                    descriptionList.append(data[i]['description'].replace('\n', ' '))
+                    
+                    # Messages
+                    number = 1
+                    while number < 5:
+                        if f'message{number}' in data[i]:
+                            if len(data[i][f'message{number}']) > 0 and data[i][f'message{number}'][0] in ['は', 'を', 'の', 'に', 'が']:
+                                msgResponse = translateGPT('Taro' + data[i][f'message{number}'], 'reply with only the gender neutral '+ LANGUAGE +' translation of the action log. Always start the sentence with Taro. For example, Translate \'Taroを倒した！\' as \'Taro was defeated!\'', False)
+                                data[i][f'message{number}'] = msgResponse[0]
+                                totalTokens[0] += msgResponse[1][0]
+                                totalTokens[1] += msgResponse[1][1]
+                                number += 1
+
+                            else:
+                                msgResponse = translateGPT(data[i][f'message{number}'], 'reply with only the gender neutral '+ LANGUAGE +' translation', False)
+                                data[i][f'message{number}'] = msgResponse[0]
+                                totalTokens[0] += msgResponse[1][0]
+                                totalTokens[1] += msgResponse[1][1]
+                                number += 1
+                        else:
+                            number += 1
                     pbar.update(1)
                     i += 1
                 else:
@@ -594,7 +626,7 @@ def searchNames(data, pbar, context):
                 else:
                     mismatch = True
 
-            if context in ['Armors', 'Weapons']:
+            if context in ['Armors', 'Weapons', 'Items', 'Skills']:
                 # Name
                 response = translateGPT(nameList, newContext, True)
                 translatedNameBatch = response[0]
