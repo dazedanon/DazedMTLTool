@@ -47,7 +47,7 @@ if 'gpt-3.5' in MODEL:
 elif 'gpt-4' in MODEL:
     INPUTAPICOST = .01
     OUTPUTAPICOST = .03
-    BATCHSIZE = 50
+    BATCHSIZE = 40
     FREQUENCY_PENALTY = 0.1
 
 #tqdm Globals
@@ -529,20 +529,27 @@ def searchNames(data, pbar, context):
 
             # Filling up Batch
             filling = True
-            if 'Actors' in context:
-                if len(nameList < BATCHSIZE):
+            if context in 'Actors':
+                if len(nameList) < BATCHSIZE:
                     nameList.append(data[i]['name'])
-                    profileList.append(data[i]['profile'])
+                    profileList.append(data[i]['profile'].replace('\n', ' '))
                     pbar.update(1)
                     i += 1
                 else:
                     batchFull = True
-            if 'Armors' in context:
+            if context in ['Armors', 'Weapons']:
                 if len(nameList) < BATCHSIZE:
                     nameList.append(data[i]['name'])
-                    descriptionList.append(data[i]['description'])
+                    descriptionList.append(data[i]['description'].replace('\n', ' '))
                     if 'hint' in data[i]['note']:
                         noteList.append(data[i]['note'])
+                    pbar.update(1)
+                    i += 1
+                else:
+                    batchFull = True
+            if context in ['Enemies', 'Classes', 'MapInfos']:
+                if len(nameList) < BATCHSIZE:
+                    nameList.append(data[i]['name'])
                     pbar.update(1)
                     i += 1
                 else:
@@ -551,7 +558,7 @@ def searchNames(data, pbar, context):
         # Batch Full
         if batchFull == True or i >= len(data):
             k = j   # Original Index
-            if 'Actors' in context:
+            if context in 'Actors':
                 # Name
                 response = translateGPT(nameList, newContext, True)
                 translatedNameBatch = response[0]
@@ -564,9 +571,8 @@ def searchNames(data, pbar, context):
                 totalTokens[0] += response[1][0]
                 totalTokens[1] += response[1][1]
 
-                # Set Names
+                # Set Data
                 if len(nameList) == len(translatedNameBatch):
-                    # Set Data
                     j = k
                     while j < i:
                         # Empty Data
@@ -576,7 +582,7 @@ def searchNames(data, pbar, context):
                         else:
                             # Get Text
                             data[j]['name'] = translatedNameBatch[0]
-                            data[j]['profile'] = translatedProfileBatch[0]
+                            data[j]['profile'] = textwrap.fill(translatedProfileBatch[0], LISTWIDTH)
                             translatedNameBatch.pop(0)
                             translatedProfileBatch.pop(0)
 
@@ -585,8 +591,10 @@ def searchNames(data, pbar, context):
                                 nameList.clear()
                                 filling = False
                             j += 1
+                else:
+                    mismatch = True
 
-            if 'Armors' in context:
+            if context in ['Armors', 'Weapons']:
                 # Name
                 response = translateGPT(nameList, newContext, True)
                 translatedNameBatch = response[0]
@@ -599,9 +607,8 @@ def searchNames(data, pbar, context):
                 totalTokens[0] += response[1][0]
                 totalTokens[1] += response[1][1]
 
-                # Set Names
+                # Set Data
                 if len(nameList) == len(translatedNameBatch):
-                    # Set Data
                     j = k
                     while j < i:
                         # Empty Data
@@ -611,7 +618,7 @@ def searchNames(data, pbar, context):
                         else:
                             # Get Text
                             data[j]['name'] = translatedNameBatch[0]
-                            data[j]['description'] = translatedDescriptionBatch[0]
+                            data[j]['description'] = textwrap.fill(translatedDescriptionBatch[0], LISTWIDTH)
                             translatedNameBatch.pop(0)
                             translatedDescriptionBatch.pop(0)
 
@@ -622,6 +629,35 @@ def searchNames(data, pbar, context):
                                 batchFull = False
                                 filling = False
                             j += 1
+                else:
+                    mismatch = True
+            if context in ['Enemies', 'Classes', 'MapInfos']:
+                response = translateGPT(nameList, newContext, True)
+                translatedNameBatch = response[0]
+                totalTokens[0] += response[1][0]
+                totalTokens[1] += response[1][1]
+
+                # Set Data
+                if len(nameList) == len(translatedNameBatch):
+                    j = k
+                    while j < i:
+                        # Empty Data
+                        if data[j] is None or data[j]['name'] == "":
+                            j += 1
+                            continue 
+                        else:
+                            # Get Text
+                            data[j]['name'] = translatedNameBatch[0]
+                            translatedNameBatch.pop(0)
+
+                            # If Batch is empty. Move on.
+                            if len(translatedNameBatch) == 0:
+                                nameList.clear()
+                                batchFull = False
+                                filling = False
+                            j += 1
+                else:
+                    mismatch = True
 
             # Mismatch
             if mismatch == True:
@@ -630,6 +666,7 @@ def searchNames(data, pbar, context):
                 profileList.clear()
                 descriptionList.clear()
                 filling = False
+                mismatch = False
                 pbar.update(1)
                 i += 1
 
