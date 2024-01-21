@@ -29,6 +29,7 @@ LANGUAGE=os.getenv('language').capitalize()
 
 APICOST = .002 # Depends on the model https://openai.com/pricing
 PROMPT = Path('prompt.txt').read_text(encoding='utf-8')
+VOCAB = Path('vocab.txt').read_text(encoding='utf-8')
 THREADS = int(os.getenv('threads'))
 LOCK = threading.Lock()
 WIDTH = int(os.getenv('width'))

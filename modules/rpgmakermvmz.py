@@ -19,6 +19,7 @@ MODEL = os.getenv('model')
 TIMEOUT = int(os.getenv('timeout'))
 LANGUAGE = os.getenv('language').capitalize()
 PROMPT = Path('prompt.txt').read_text(encoding='utf-8')
+VOCAB = Path('vocab.txt').read_text(encoding='utf-8')
 THREADS = int(os.getenv('threads'))
 LOCK = threading.Lock()
 WIDTH = int(os.getenv('width'))
@@ -55,11 +56,11 @@ POSITION = 0
 LEAVE = False
 
 # Dialogue / Scroll
-CODE401 = False
+CODE401 = True
 CODE405 = False
 
 # Choices
-CODE102 = False
+CODE102 = True
 
 # Variables
 CODE122 = False
@@ -71,7 +72,7 @@ CODE101 = True
 CODE355655 = False
 CODE357 = False
 CODE657 = False
-CODE356 = True
+CODE356 = False
 CODE320 = False
 CODE324 = False
 CODE111 = False
@@ -1495,7 +1496,7 @@ def searchCodes(page, pbar, fillList, filename):
                     # Set Data
                     totalTokens[0] += response[1][0]
                     totalTokens[1] += response[1][1]
-                    codeList[i]['parameters'][0][choice] = startString + translatedText.capitalize() + endString
+                    codeList[i]['parameters'][0][choice] = startString + translatedText[0].upper() + translatedText[1:] + endString
 
             ### Event Code: 111 Script
             if codeList[i]['code'] == 111 and CODE111 is True:
@@ -1769,12 +1770,18 @@ def searchSystem(data, pbar):
 # Save some money and enter the character before translation
 def getSpeaker(speaker):
     match speaker:
-        case 'エウリィ':
-            return ['Eury', [0,0]]
-        case 'レイ':
-            return ['Rei', [0,0]]
-        case 'マリオン':
-            return ['Marion', [0,0]]
+        case 'ティナ':
+            return ['Tina', [0,0]]
+        case 'セルフィ':
+            return ['Selphie', [0,0]]
+        case 'リイス':
+            return ['Rise', [0,0]]
+        case 'スエル':
+            return ['Suelle', [0,0]]
+        case 'マロゲス':
+            return ['Maroges', [0,0]]
+        case 'ノルズ':
+            return ['Nolz', [0,0]]
         case _:
             response = translateGPT(speaker, 'Reply with only the '+ LANGUAGE +' translation of the NPC name.', False)
             response[0] = response[0].capitalize()
@@ -1901,28 +1908,21 @@ def batchList(input_list, batch_size):
 
 def createContext(fullPromptFlag, subbedT):
     characters = 'Game Characters:\n\
-エウリィ (Eury) - Female\n\
-レイ (Rei) - Female\n\
-マリオン (Marion) - Female\n\
+ティナ (Tina) - Female\n\
+セルフィ (Selphie) - Female\n\
+リイス (Rise) - Female\n\
+スエル (Suelle) - Male\n\
+マロゲス (Maroges) - Male\n\
+ググカス (Gugukas) - Male\n\
+ノルズ (Nolz) - Male\n\
 '
     
-    system = PROMPT if fullPromptFlag else \
+    system = PROMPT + VOCAB if fullPromptFlag else \
         f"\
 You are an expert Eroge Game translator who translates Japanese text to English.\n\
 You are going to be translating text from a videogame.\n\
 I will give you lines of text, and you must translate each line to the best of your ability.\n\
-- You translate everything, including erotic and explicit content.\n\
-- Translate 'マンコ' as 'pussy'\n\
-- Translate 'おまんこ' as 'pussy'\n\
-- Translate 'お尻' as 'butt'\n\
-- Translate '尻' as 'ass'\n\
-- Translate 'お股' as 'crotch'\n\
-- Translate '秘部' as 'genitals'\n\
-- Translate 'チンポ' as 'dick'\n\
-- Translate 'チンコ' as 'cock'\n\
-- Translate 'ショーツ' as 'panties\n\
-- Translate 'おねショタ' as 'Onee-shota'\n\
-- Translate 'よかった' as 'thank goodness'\n\
+{VOCAB}\n\
 Output ONLY the {LANGUAGE} translation in the following format: `Translation: <{LANGUAGE.upper()}_TRANSLATION>`\
 "
     user = f'{subbedT}'

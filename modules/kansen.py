@@ -18,6 +18,7 @@ MODEL = os.getenv('model')
 TIMEOUT = int(os.getenv('timeout'))
 LANGUAGE = os.getenv('language').capitalize()
 PROMPT = Path('prompt.txt').read_text(encoding='utf-8')
+VOCAB = Path('vocab.txt').read_text(encoding='utf-8')
 THREADS = int(os.getenv('threads'))
 LOCK = threading.Lock()
 WIDTH = int(os.getenv('width'))
@@ -512,17 +513,13 @@ def batchList(input_list, batch_size):
 
 def createContext(fullPromptFlag, subbedT):
     characters = 'Game Characters:\n\
-中澤 誠 (Nakazawa Makoto) - Male\n\
+妹尾 克己 (Senoo Kazumi) - Male\n\
+千住 静 (Senju Shizuka) - Female\n\
+妹尾 丞実 (Senoo Tsugumi) - Female\n\
+本間 奈緒子 (Honma Naoko) - Female\n\
 日向 夏都 (Hyuuga Natsu) - Female\n\
-出渕 宗一郎 (Izubuchi Souichirou) - Male\n\
-南 彩月 (Minami Satsuki) - Female\n\
-越智 茜梨 (Ochi Akari) - Female\n\
-ターヤ ポホヨネン (Tarja Pohjonen) - Female\n\
+近藤 美樹 (Kondou Miki) - Female\n\
 マルガリータ バスクェス 穂村 (Margarita Vasquez Homura) - Female\n\
-花沢 愛梨 (Hanazawa Airi) - Female\n\
-五十嵐 朋美 (Igarashi Tomomi) - Female\n\
-前田 美沙緒 (Maeda Misao) - Female\n\
-村上 怜 (Murakami Sato) - Female\n\
 '
     
     system = PROMPT if fullPromptFlag else \
