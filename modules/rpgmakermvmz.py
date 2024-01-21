@@ -47,7 +47,7 @@ if 'gpt-3.5' in MODEL:
 elif 'gpt-4' in MODEL:
     INPUTAPICOST = .01
     OUTPUTAPICOST = .03
-    BATCHSIZE = 20
+    BATCHSIZE = 50
     FREQUENCY_PENALTY = 0.1
 
 #tqdm Globals
@@ -349,15 +349,13 @@ def parseNames(data, filename, context):
     with tqdm(bar_format=BAR_FORMAT, position=POSITION, total=totalLines, leave=LEAVE) as pbar:
             pbar.desc=filename
             pbar.total=totalLines
-            for name in data:
-                if name is not None:
-                    try:
-                        result = searchNames(name, pbar, context)       
-                        totalTokens[0] += result[0]
-                        totalTokens[1] += result[1]
-                    except Exception as e:
-                        traceback.print_exc()
-                        return [data, totalTokens, e]
+            try:
+                result = searchNames(data, pbar, context)       
+                totalTokens[0] += result[0]
+                totalTokens[1] += result[1]
+            except Exception as e:
+                traceback.print_exc()
+                return [data, totalTokens, e]
     return [data, totalTokens, None]
 
 def parseThings(data, filename):
@@ -494,8 +492,17 @@ def searchThings(name, pbar):
     pbar.update(1)
     return totalTokens
 
-def searchNames(name, pbar, context):
+def searchNames(data, pbar, context):
     totalTokens = [0, 0]
+    nameList = []
+    profileList = []
+    descriptionList = []
+    noteList = []
+    i = 0 # Counter
+    j = 0 # Counter 2
+    filling = False
+    mismatch = False
+    batchFull = False
 
     # Set the context of what we are translating
     if 'Actors' in context:
@@ -511,60 +518,174 @@ def searchNames(name, pbar, context):
     if 'Weapons' in context:
         newContext = 'Reply with only the '+ LANGUAGE +' translation of the RPG weapon name'
 
-    # Extract Data
-    responseList = []
-    responseList.append(translateGPT(name['name'], newContext, False))
-    if 'Actors' in context:
-        responseList.append(translateGPT(name['profile'], '', False))
-        responseList.append(translateGPT(name['nickname'], 'Reply with ONLY the '+ LANGUAGE +' translation of the NPC nickname', False))
+    # Names
+    while i < len(data) or filling == True:
+        if i < len(data):
+            # Empty Data
+            if data[i] is None or data[i]['name'] == "":
+                i += 1
+                pbar.update(1)
+                continue  
 
-    if 'Armors' in context or 'Weapons' in context:
-        if 'description' in name:
-            responseList.append(translateGPT(name['description'], '', False))
-        else:
-            responseList.append(['', 0])
-        if 'hint' in name['note']:
-            totalTokens[0] += translateNote(name, r'<hint:(.*?)>')[0]
-            totalTokens[1] += translateNote(name, r'<hint:(.*?)>')[1]
+            # Filling up Batch
+            filling = True
+            if 'Actors' in context:
+                if len(nameList < BATCHSIZE):
+                    nameList.append(data[i]['name'])
+                    profileList.append(data[i]['profile'])
+                    pbar.update(1)
+                    i += 1
+                else:
+                    batchFull = True
+            if 'Armors' in context:
+                if len(nameList) < BATCHSIZE:
+                    nameList.append(data[i]['name'])
+                    descriptionList.append(data[i]['description'])
+                    if 'hint' in data[i]['note']:
+                        noteList.append(data[i]['note'])
+                    pbar.update(1)
+                    i += 1
+                else:
+                    batchFull = True
 
-    if 'Enemies' in context:
-        if 'variable_update_skill' in name['note']:
-            totalTokens[0] += translateNote(name, r'111:(.+?)\n')[0]
-            totalTokens[1] += translateNote(name, r'111:(.+?)\n')[1]
+        # Batch Full
+        if batchFull == True or i >= len(data):
+            k = j   # Original Index
+            if 'Actors' in context:
+                # Name
+                response = translateGPT(nameList, newContext, True)
+                translatedNameBatch = response[0]
+                totalTokens[0] += response[1][0]
+                totalTokens[1] += response[1][1]
 
-        if 'desc2' in name['note']:
-            totalTokens[0] += translateNote(name, r'<desc2:([^>]*)>')[0]
-            totalTokens[1] += translateNote(name, r'<desc2:([^>]*)>')[1]
+                # Profile
+                response = translateGPT(profileList, '', True)
+                translatedProfileBatch = response[0]
+                totalTokens[0] += response[1][0]
+                totalTokens[1] += response[1][1]
 
-        if 'desc3' in name['note']:
-            totalTokens[0] += translateNote(name, r'<desc3:([^>]*)>')[0]
-            totalTokens[1] += translateNote(name, r'<desc3:([^>]*)>')[1]
+                # Set Names
+                if len(nameList) == len(translatedNameBatch):
+                    # Set Data
+                    j = k
+                    while j < i:
+                        # Empty Data
+                        if data[j] is None or data[j]['name'] == "":
+                            j += 1
+                            continue 
+                        else:
+                            # Get Text
+                            data[j]['name'] = translatedNameBatch[0]
+                            data[j]['profile'] = translatedProfileBatch[0]
+                            translatedNameBatch.pop(0)
+                            translatedProfileBatch.pop(0)
 
-    # Extract all our translations in a list from response
-    for i in range(len(responseList)):
-        totalTokens[0] += responseList[i][1][0]
-        totalTokens[1] += responseList[i][1][1]
-        responseList[i] = responseList[i][0]
+                            # If Batch is empty. Move on.
+                            if len(translatedNameBatch) == 0:
+                                nameList.clear()
+                                filling = False
+                            j += 1
 
-    # Set Data
-    name['name'] = responseList[0].replace('\"', '')
-    if 'Actors' in context:
-        translatedText = textwrap.fill(responseList[1], LISTWIDTH)
-        name['profile'] = translatedText.replace('\"', '')
-        translatedText = textwrap.fill(responseList[2], LISTWIDTH)
-        name['nickname'] = translatedText.replace('\"', '')
-        if '<特徴1:' in name['note']:
-            totalTokens[0] += translateNote(name, r'<特徴1:([^>]*)>')[0]
-            totalTokens[1] += translateNote(name, r'<特徴1:([^>]*)>')[1]
+            if 'Armors' in context:
+                # Name
+                response = translateGPT(nameList, newContext, True)
+                translatedNameBatch = response[0]
+                totalTokens[0] += response[1][0]
+                totalTokens[1] += response[1][1]
 
-    if 'Armors' in context or 'Weapons' in context:
-        translatedText = textwrap.fill(responseList[1], LISTWIDTH)
-        if 'description' in name:
-            name['description'] = translatedText.replace('\"', '')
-            if '<SG説明:' in name['note']:
-                totalTokens[0] += translateNote(name, r'<Info Text Bottom>\n([\s\S]*?)\n</Info Text Bottom>')[0]
-                totalTokens[1] += translateNote(name, r'<Info Text Bottom>\n([\s\S]*?)\n</Info Text Bottom>')[1]
-    pbar.update(1)
+                # Description
+                response = translateGPT(descriptionList, '', True)
+                translatedDescriptionBatch = response[0]
+                totalTokens[0] += response[1][0]
+                totalTokens[1] += response[1][1]
+
+                # Set Names
+                if len(nameList) == len(translatedNameBatch):
+                    # Set Data
+                    j = k
+                    while j < i:
+                        # Empty Data
+                        if data[j] is None or data[j]['name'] == "":
+                            j += 1
+                            continue 
+                        else:
+                            # Get Text
+                            data[j]['name'] = translatedNameBatch[0]
+                            data[j]['description'] = translatedDescriptionBatch[0]
+                            translatedNameBatch.pop(0)
+                            translatedDescriptionBatch.pop(0)
+
+                            # If Batch is empty. Move on.
+                            if len(translatedNameBatch) == 0:
+                                nameList.clear()
+                                descriptionList.clear()
+                                batchFull = False
+                                filling = False
+                            j += 1
+
+            # Mismatch
+            if mismatch == True:
+                MISMATCH.append(nameList)
+                nameList.clear()
+                profileList.clear()
+                descriptionList.clear()
+                filling = False
+                pbar.update(1)
+                i += 1
+
+    # responseList = []
+    # responseList.append(translateGPT(name['name'], newContext, False))
+    # if 'Actors' in context:
+    #     responseList.append(translateGPT(name['profile'], '', False))
+    #     responseList.append(translateGPT(name['nickname'], 'Reply with ONLY the '+ LANGUAGE +' translation of the NPC nickname', False))
+
+    # if 'Armors' in context or 'Weapons' in context:
+    #     if 'description' in name:
+    #         responseList.append(translateGPT(name['description'], '', False))
+    #     else:
+    #         responseList.append(['', 0])
+    #     if 'hint' in name['note']:
+    #         totalTokens[0] += translateNote(name, r'<hint:(.*?)>')[0]
+    #         totalTokens[1] += translateNote(name, r'<hint:(.*?)>')[1]
+
+    # if 'Enemies' in context:
+    #     if 'variable_update_skill' in name['note']:
+    #         totalTokens[0] += translateNote(name, r'111:(.+?)\n')[0]
+    #         totalTokens[1] += translateNote(name, r'111:(.+?)\n')[1]
+
+    #     if 'desc2' in name['note']:
+    #         totalTokens[0] += translateNote(name, r'<desc2:([^>]*)>')[0]
+    #         totalTokens[1] += translateNote(name, r'<desc2:([^>]*)>')[1]
+
+    #     if 'desc3' in name['note']:
+    #         totalTokens[0] += translateNote(name, r'<desc3:([^>]*)>')[0]
+    #         totalTokens[1] += translateNote(name, r'<desc3:([^>]*)>')[1]
+
+    # # Extract all our translations in a list from response
+    # for i in range(len(responseList)):
+    #     totalTokens[0] += responseList[i][1][0]
+    #     totalTokens[1] += responseList[i][1][1]
+    #     responseList[i] = responseList[i][0]
+
+    # # Set Data
+    # name['name'] = responseList[0].replace('\"', '')
+    # if 'Actors' in context:
+    #     translatedText = textwrap.fill(responseList[1], LISTWIDTH)
+    #     name['profile'] = translatedText.replace('\"', '')
+    #     translatedText = textwrap.fill(responseList[2], LISTWIDTH)
+    #     name['nickname'] = translatedText.replace('\"', '')
+    #     if '<特徴1:' in name['note']:
+    #         totalTokens[0] += translateNote(name, r'<特徴1:([^>]*)>')[0]
+    #         totalTokens[1] += translateNote(name, r'<特徴1:([^>]*)>')[1]
+
+    # if 'Armors' in context or 'Weapons' in context:
+    #     translatedText = textwrap.fill(responseList[1], LISTWIDTH)
+    #     if 'description' in name:
+    #         name['description'] = translatedText.replace('\"', '')
+    #         if '<SG説明:' in name['note']:
+    #             totalTokens[0] += translateNote(name, r'<Info Text Bottom>\n([\s\S]*?)\n</Info Text Bottom>')[0]
+    #             totalTokens[1] += translateNote(name, r'<Info Text Bottom>\n([\s\S]*?)\n</Info Text Bottom>')[1]
+    # pbar.update(1)
 
     return totalTokens
 
