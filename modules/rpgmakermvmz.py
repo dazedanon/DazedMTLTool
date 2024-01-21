@@ -70,7 +70,7 @@ CODE101 = True
 
 # Other
 CODE355655 = False
-CODE357 = False
+CODE357 = True
 CODE657 = False
 CODE356 = False
 CODE320 = False
@@ -1113,7 +1113,7 @@ def searchCodes(page, pbar, fillList, filename):
                     translatedText = textwrap.fill(translatedText, width=WIDTH)
 
                     # Set Data
-                    codeList[i]['parameters'][3]['message'] = startString + translatedText
+                    codeList[i]['parameters'][3]['text'] = startString + translatedText
             
             ## Event Code: 657 [Picture Text] [Optional]
             if codeList[i]['code'] == 657 and CODE657 is True:
@@ -1877,19 +1877,7 @@ Translate \'Taroを倒した！\' as \'Taro was defeated!\'', False)
 
 def searchSystem(data, pbar):
     totalTokens = [0, 0]
-    context = 'UI Text Items:\
-    "逃げる" == "Escape"\
-    "大事なもの" == "Key Items"\
-    "最強装備" == "Optimize"\
-    "攻撃力" == "Attack"\
-    "最大ＨＰ" == "Max HP"\
-    "経験値" == "EXP"\
-    "購入する" == "Buy"\
-    "魔力攻撃" == "M. Attack\
-    "魔力防御" == "M. Defense\
-    "%1 の%2を獲得！" == "Gained %1 %2"\
-    "お金を %1\\G 手に入れた！" == ""\
-    Reply with only the '+ LANGUAGE +' translation of the UI textbox."'
+    context = 'Reply with only the '+ LANGUAGE +' translation of the UI textbox."'
 
     # Title
     response = translateGPT(data['gameTitle'], ' Reply with the '+ LANGUAGE +' translation of the game title name', False)

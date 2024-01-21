@@ -3,6 +3,7 @@
 *.yaml
 *.yml
 *.txt
+!vocab.txt
 !requirements.txt
 *.csv
 *.ks
