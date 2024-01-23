@@ -49,7 +49,7 @@ if 'gpt-3.5' in MODEL:
 elif 'gpt-4' in MODEL:
     INPUTAPICOST = .01
     OUTPUTAPICOST = .03
-    BATCHSIZE = 40
+    BATCHSIZE = 10
 
 def handleKansen(filename, estimate):
     global ESTIMATE
@@ -178,8 +178,8 @@ def translateTyrano(data, pbar, totalLines):
                 speaker = ''
 
         # Choices
-        elif '[eval exp="f.seltext' in data[i]:
-            matchList = re.findall(r'\[eval exp=.+?\'(.+)\'', data[i])
+        elif '[sel' in data[i]:
+            matchList = re.findall(r'\[sel.+text="(.+?)".+', data[i])
             if len(matchList) != 0:
                 originalText = matchList[0]
                 if len(textHistory) > 0:
@@ -197,15 +197,18 @@ def translateTyrano(data, pbar, totalLines):
 
                 # Escape all '
                 translatedText = translatedText.replace('\\', '')
-                translatedText = translatedText.replace("'", "\\\'")
+                # translatedText = translatedText.replace("'", "\\\'")
 
                 # Set Data
                 translatedText = data[i].replace(originalText, translatedText)
                 data[i] = translatedText                
 
         # Lines
-        matchList = re.findall(r'(.+?)\[[rpcms]+\]$', data[i])
+        matchList = re.findall(r'(.+?)\[[rpcms_sel]+\]$', data[i]) 
         if len(matchList) > 0:
+            if 'hisout' in matchList[0]:
+                i += 1
+                continue
             currentGroup.append(matchList[0])
             if len(data) > i+1:
                 while '[r]' in data[i+1]:
@@ -222,6 +225,14 @@ def translateTyrano(data, pbar, totalLines):
                         pbar.update(1)
                     i += 1
                     matchList = re.findall(r'(.+?)\[pcms\]', data[i])
+                    if len(matchList) > 0:
+                        currentGroup.append(matchList[0])
+                while '[pcms_sel]' in data[i+1]:
+                    if insertBool is True:
+                        data[i] = '\d\n'
+                        pbar.update(1)
+                    i += 1
+                    matchList = re.findall(r'(.+?)\[pcms_sel\]', data[i])
                     if len(matchList) > 0:
                         currentGroup.append(matchList[0])
             # Join up 401 groups for better translation.
@@ -355,40 +366,22 @@ def translateTyrano(data, pbar, totalLines):
 # Save some money and enter the character before translation
 def getSpeaker(speaker):
     match speaker:
-        case '誠':
-            return ['Makoto', [0,0]]
-        case '夏都':
-            return ['Natsu', [0,0]]
-        case '宗一郎':
-            return ['Souichirou', [0,0]]
-        case '彩月':
-            return ['Satsuki', [0,0]]
-        case '茜梨':
-            return ['Akari', [0,0]]
-        case 'ポホヨネン':
-            return ['Pohjonen', [0,0]]
-        case '荒井':
-            return ['Arai', [0,0]]
-        case '愛梨':
-            return ['Airi', [0,0]]
-        case '朋美':
-            return ['Tomomi', [0,0]]
-        case '玄治郎':
-            return ['Genjirou', [0,0]]
-        case '稼津央':
-            return ['Kazuo', [0,0]]
-        case '美沙緒':
-            return ['Misao', [0,0]]
-        case '怜':
-            return ['Sato', [0,0]]
-        case 'オス':
-            return ['Oz', [0,0]]
-        case '穂村':
-            return ['Homura', [0,0]]
-        case '吉野':
-            return ['Yoshino', [0,0]]
-        case '忠彦':
-            return ['Tadahiko', [0,0]]
+        case '央':
+            return ['Akira', [0,0]]
+        case '累':
+            return ['Rui', [0,0]]
+        case '梨里':
+            return ['Riri', [0,0]]
+        case '純':
+            return ['Jun', [0,0]]
+        case '美鈴':
+            return ['Misuzu', [0,0]]
+        case '須田':
+            return ['Suda', [0,0]]
+        case '高橋':
+            return ['Takahashi', [0,0]]
+        case '勇二':
+            return ['Yuuji', [0,0]]
         case _:
             return translateGPT(speaker, 'Reply with only the '+ LANGUAGE +' translation of the NPC name.', False)
         
@@ -513,17 +506,24 @@ def batchList(input_list, batch_size):
 
 def createContext(fullPromptFlag, subbedT):
     characters = 'Game Characters:\n\
-妹尾 克己 (Senoo Kazumi) - Male\n\
-千住 静 (Senju Shizuka) - Female\n\
-妹尾 丞実 (Senoo Tsugumi) - Female\n\
-本間 奈緒子 (Honma Naoko) - Female\n\
-日向 夏都 (Hyuuga Natsu) - Female\n\
-近藤 美樹 (Kondou Miki) - Female\n\
-マルガリータ バスクェス 穂村 (Margarita Vasquez Homura) - Female\n\
+渋江 央 (Shibue Akira) - Male\n\
+蘆名 累 (Ashina Rui) - Female\n\
+清原 梨里 (Kiyohara Riri) - Female\n\
+五十嵐 純 (Igarashi Jun) - Female\n\
+子野日 美鈴 (Nenohi Misuzu) - Female\n\
+須田 (Suda) - Male\n\
+高橋 (Takahashi) - Female\n\
+勇二 (Yuuji) - Male\n\
 '
     
-    system = PROMPT if fullPromptFlag else \
-        f'Output ONLY the {LANGUAGE} translation in the following format: `Translation: <{LANGUAGE.upper()}_TRANSLATION>`'
+    system = PROMPT + VOCAB if fullPromptFlag else \
+        f"\
+You are an expert Eroge Game translator who translates Japanese text to English.\n\
+You are going to be translating text from a videogame.\n\
+I will give you lines of text, and you must translate each line to the best of your ability.\n\
+{VOCAB}\n\
+Output ONLY the {LANGUAGE} translation in the following format: `Translation: <{LANGUAGE.upper()}_TRANSLATION>`\
+"
     user = f'{subbedT}'
     return characters, system, user
 
@@ -536,15 +536,16 @@ def translateText(characters, system, user, history):
 
     # History
     if isinstance(history, list):
-        msg.extend([{"role": "assistant", "content": h} for h in history])
+        msg.extend([{"role": "system", "content": h} for h in history])
     else:
-        msg.append({"role": "assistant", "content": history})
+        msg.append({"role": "system", "content": history})
     
     # Content to TL
     msg.append({"role": "user", "content": f'{user}'})
     response = openai.chat.completions.create(
         temperature=0.1,
         frequency_penalty=0.1,
+        presence_penalty=0.1,
         model=MODEL,
         messages=msg,
     )
