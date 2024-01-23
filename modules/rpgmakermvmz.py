@@ -925,7 +925,7 @@ def searchCodes(page, pbar, fillList, filename):
 
                     # Remove Extra Stuff bad for translation.
                     finalJAString = finalJAString.replace('ﾞ', '')
-                    finalJAString = finalJAString.replace('・', ' ')
+                    finalJAString = finalJAString.replace('・', '.')
                     finalJAString = finalJAString.replace('―', '-')
                     finalJAString = finalJAString.replace('ー', '-')
                     finalJAString = finalJAString.replace('…', '...')
@@ -1951,18 +1951,22 @@ def searchSystem(data, pbar):
 # Save some money and enter the character before translation
 def getSpeaker(speaker):
     match speaker:
-        case 'ティナ':
-            return ['Tina', [0,0]]
-        case 'セルフィ':
-            return ['Selphie', [0,0]]
-        case 'リイス':
-            return ['Rise', [0,0]]
-        case 'スエル':
-            return ['Suelle', [0,0]]
-        case 'マロゲス':
-            return ['Maroges', [0,0]]
-        case 'ノルズ':
-            return ['Nolz', [0,0]]
+        case '央':
+            return ['Akira', [0,0]]
+        case '累':
+            return ['Rui', [0,0]]
+        case '梨里':
+            return ['Riri', [0,0]]
+        case '純':
+            return ['Jun', [0,0]]
+        case '美鈴':
+            return ['Misuzu', [0,0]]
+        case '須田':
+            return ['Suda', [0,0]]
+        case '高橋':
+            return ['Takahashi', [0,0]]
+        case '勇二':
+            return ['Yuuji', [0,0]]
         case _:
             response = translateGPT(speaker, 'Reply with only the '+ LANGUAGE +' translation of the NPC name.', False)
             response[0] = response[0].capitalize()
@@ -2089,13 +2093,14 @@ def batchList(input_list, batch_size):
 
 def createContext(fullPromptFlag, subbedT):
     characters = 'Game Characters:\n\
-ティナ (Tina) - Female\n\
-セルフィ (Selphie) - Female\n\
-リイス (Rise) - Female\n\
-スエル (Suelle) - Male\n\
-マロゲス (Maroges) - Male\n\
-ググカス (Gugukas) - Male\n\
-ノルズ (Nolz) - Male\n\
+渋江 央 (Shibue Akira) - Male\n\
+蘆名 累 (Ashina Rui) - Female\n\
+清原 梨里 (Kiyohara Riri) - Female\n\
+五十嵐 純 (Igarashi Jun) - Female\n\
+子野日 美鈴 (Nenohi Misuzu) - Female\n\
+須田 (Suda) - Male\n\
+高橋 (Takahashi) - Female\n\
+勇二 (Yuuji) - Male\n\
 '
     
     system = PROMPT + VOCAB if fullPromptFlag else \
