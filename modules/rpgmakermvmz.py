@@ -2110,7 +2110,7 @@ You are going to be translating text from a videogame.\n\
 I will give you lines of text, and you must translate each line to the best of your ability.\n\
 {VOCAB}\n\
 Output ONLY the {LANGUAGE} translation in the following format: `Translation: <{LANGUAGE.upper()}_TRANSLATION>`\n\
-- Maintain Japanese Honorifics. For example: 'サクラねえちゃん' == 'Sakura Onee-san'
+- Maintain Japanese Honorifics. For example: 'サクラねえちゃん' == 'Sakura Onee-san'\
 "
     user = f'{subbedT}'
     return characters, system, user
