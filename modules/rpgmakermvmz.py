@@ -32,7 +32,7 @@ NAMESLIST = []
 NAMES = False    # Output a list of all the character names found
 BRFLAG = False   # If the game uses <br> instead
 FIXTEXTWRAP = True  # Overwrites textwrap
-IGNORETLTEXT = True    # Ignores all translated text.
+IGNORETLTEXT = False    # Ignores all translated text.
 MISMATCH = []   # Lists files that throw a mismatch error (Length of GPT list response is wrong)
 BRACKETNAMES = False
 
@@ -546,7 +546,9 @@ def searchNames(data, pbar, context):
                     nameList.append(data[i]['name'])
                     descriptionList.append(data[i]['description'].replace('\n', ' '))
                     if 'hint' in data[i]['note']:
-                        noteList.append(data[i]['note'])
+                        tokensResponse = translateNote(data[i], r'<hint:(.+?)>')
+                        totalTokens[0] += tokensResponse[0]
+                        totalTokens[1] += tokensResponse[1]
                     pbar.update(1)
                     i += 1
                 else:
@@ -1951,26 +1953,29 @@ def searchSystem(data, pbar):
 # Save some money and enter the character before translation
 def getSpeaker(speaker):
     match speaker:
-        case '央':
-            return ['Akira', [0,0]]
-        case '累':
-            return ['Rui', [0,0]]
-        case '梨里':
-            return ['Riri', [0,0]]
-        case '純':
-            return ['Jun', [0,0]]
-        case '美鈴':
-            return ['Misuzu', [0,0]]
-        case '須田':
-            return ['Suda', [0,0]]
-        case '高橋':
-            return ['Takahashi', [0,0]]
-        case '勇二':
-            return ['Yuuji', [0,0]]
+        case 'レオ':
+            return ['Leo', [0,0]]
+        case 'シェリー':
+            return ['Shelly', [0,0]]
+        case 'ノア':
+            return ['Noah', [0,0]]
+        case '':
+            return ['', [0,0]]
         case _:
-            response = translateGPT(speaker, 'Reply with only the '+ LANGUAGE +' translation of the NPC name.', False)
-            response[0] = response[0].capitalize()
-            return response
+            # Store Speaker
+            if speaker not in str(NAMESLIST):
+                response = translateGPT(speaker, 'Reply with only the '+ LANGUAGE +' translation of the NPC name.', False)
+                response[0] = response[0].capitalize()
+                speakerList = [speaker, response[0]]
+                NAMESLIST.append(speakerList)
+                return response
+            # Find Speaker
+            else:
+                for i in range(len(NAMESLIST)):
+                    if speaker == NAMESLIST[i][0]:
+                        return [NAMESLIST[i][1],[0,0]]
+                               
+    return [speaker,[0,0]]
 
 def subVars(jaString):
     jaString = jaString.replace('\u3000', ' ')
@@ -2093,14 +2098,9 @@ def batchList(input_list, batch_size):
 
 def createContext(fullPromptFlag, subbedT):
     characters = 'Game Characters:\n\
-渋江 央 (Shibue Akira) - Male\n\
-蘆名 累 (Ashina Rui) - Female\n\
-清原 梨里 (Kiyohara Riri) - Female\n\
-五十嵐 純 (Igarashi Jun) - Female\n\
-子野日 美鈴 (Nenohi Misuzu) - Female\n\
-須田 (Suda) - Male\n\
-高橋 (Takahashi) - Female\n\
-勇二 (Yuuji) - Male\n\
+レオ (Leo) - Male\n\
+シェリー (Shelly) - Female\n\
+ノア (Noah) - Male\n\
 '
     
     system = PROMPT + VOCAB if fullPromptFlag else \
@@ -2109,7 +2109,8 @@ You are an expert Eroge Game translator who translates Japanese text to English.
 You are going to be translating text from a videogame.\n\
 I will give you lines of text, and you must translate each line to the best of your ability.\n\
 {VOCAB}\n\
-Output ONLY the {LANGUAGE} translation in the following format: `Translation: <{LANGUAGE.upper()}_TRANSLATION>`\
+Output ONLY the {LANGUAGE} translation in the following format: `Translation: <{LANGUAGE.upper()}_TRANSLATION>`\n\
+- Maintain Japanese Honorifics. For example: 'サクラねえちゃん' == 'Sakura Onee-san'
 "
     user = f'{subbedT}'
     return characters, system, user

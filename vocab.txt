@@ -11,15 +11,12 @@ Here are some vocabulary and terms so that you know the proper spelling and tran
 チンコ (cock)
 ショーツ (panties)
 
-# Random
-おねショタ (Onee-shota)
-よかった (thank goodness)
-
 # System
 逃げる (Escape)
 大事なもの (Key Items)
 最強装備 (Optimize)
 攻撃力 (Attack)
+回避率 (Evasion)
 最大ＨＰ (Max HP)
 経験値 (EXP)
 購入する (Buy)
