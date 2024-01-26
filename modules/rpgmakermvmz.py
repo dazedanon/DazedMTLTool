@@ -564,7 +564,7 @@ def searchNames(data, pbar, context):
                         if f'message{number}' in data[i]:
                             if len(data[i][f'message{number}']) > 0 and data[i][f'message{number}'][0] in ['は', 'を', 'の', 'に', 'が']:
                                 msgResponse = translateGPT('Taro' + data[i][f'message{number}'], 'reply with only the gender neutral '+ LANGUAGE +' translation of the action log. Always start the sentence with Taro. For example, Translate \'Taroを倒した！\' as \'Taro was defeated!\'', False)
-                                data[i][f'message{number}'] = msgResponse[0]
+                                data[i][f'message{number}'] = msgResponse[0].replace('Taro', '')
                                 totalTokens[0] += msgResponse[1][0]
                                 totalTokens[1] += msgResponse[1][1]
                                 number += 1
@@ -1953,19 +1953,23 @@ def searchSystem(data, pbar):
 # Save some money and enter the character before translation
 def getSpeaker(speaker):
     match speaker:
-        case 'レオ':
-            return ['Leo', [0,0]]
-        case 'シェリー':
-            return ['Shelly', [0,0]]
-        case 'ノア':
-            return ['Noah', [0,0]]
+        case 'ローゼリッテ':
+            return ['Roselitte', [0,0]]
+        case 'リリック':
+            return ['Lyric', [0,0]]
+        case 'アメリア':
+            return ['Ameria', [0,0]]
+        case 'ジゼル':
+            return ['Giselle', [0,0]]
+        case 'ルエール':
+            return ['Luerre', [0,0]]
         case '':
             return ['', [0,0]]
         case _:
             # Store Speaker
             if speaker not in str(NAMESLIST):
                 response = translateGPT(speaker, 'Reply with only the '+ LANGUAGE +' translation of the NPC name.', False)
-                response[0] = response[0].capitalize()
+                response[0] = response[0].title()
                 speakerList = [speaker, response[0]]
                 NAMESLIST.append(speakerList)
                 return response
@@ -2098,9 +2102,11 @@ def batchList(input_list, batch_size):
 
 def createContext(fullPromptFlag, subbedT):
     characters = 'Game Characters:\n\
-レオ (Leo) - Male\n\
-シェリー (Shelly) - Female\n\
-ノア (Noah) - Male\n\
+ローゼリッテ (Roselitte) - Female\n\
+リリック (Lyric) - Female\n\
+アメリア (Ameria) - Female\n\
+ジゼル (Giselle) - Female\n\
+ルエール (Luerre) - Female\n\
 '
     
     system = PROMPT + VOCAB if fullPromptFlag else \
@@ -2155,16 +2161,17 @@ def cleanTranslatedText(translatedText, varResponse):
         translatedText = translatedText.replace(target, replacement)
 
     translatedText = resubVars(translatedText, varResponse[1])
-    return [line for line in translatedText.replace('\\n', '\n').split('\n') if line]
+    return translatedText
 
 def extractTranslation(translatedTextList, is_list):
-    pattern = r'`?<Line(\d+)>([\\]*.*?[\\]*?)<\/?Line\d+>`?'
+    pattern = r'`?<Line\d+>([\\]*.*?[\\]*?)<\/?Line\d+>`?'
     # If it's a batch (i.e., list), extract with tags; otherwise, return the single item.
     if is_list:
-        return [re.findall(pattern, line)[0][1] for line in translatedTextList if re.search(pattern, line)]
+        matchList = re.findall(pattern, translatedTextList)
+        return matchList
     else:
         matchList = re.findall(pattern, translatedTextList)
-        return matchList[0][1] if matchList else translatedTextList
+        return matchList[0][0] if matchList else translatedTextList
 
 def countTokens(characters, system, user, history):
     inputTotalTokens = 0
@@ -2203,7 +2210,7 @@ def translateGPT(text, history, fullPromptFlag):
         # Before sending to translation, if we have a list of items, add the formatting
         if isinstance(tItem, list):
             payload = '\n'.join([f'`<Line{i}>{item}</Line{i}>`' for i, item in enumerate(tItem)])
-            payload = payload.replace('``', '`Placeholder Text`')
+            payload = payload.replace('><', '>Placeholder Text<')
             varResponse = subVars(payload)
             subbedT = varResponse[0]
         else:
@@ -2231,16 +2238,16 @@ def translateGPT(text, history, fullPromptFlag):
         totalTokens[1] += response.usage.completion_tokens
 
         # Formatting
-        translatedTextList = cleanTranslatedText(translatedText, varResponse)
+        translatedText = cleanTranslatedText(translatedText, varResponse)
         if isinstance(tItem, list):
-            extractedTranslations = extractTranslation(translatedTextList, True)
+            extractedTranslations = extractTranslation(translatedText, True)
             tList[index] = extractedTranslations
-            if len(tItem) != len(translatedTextList):
+            if len(tItem) != len(extractedTranslations):
                 mismatch = True     # Just here so breakpoint can be set
             history = extractedTranslations[-10:]  # Update history if we have a list
         else:
             # Ensure we're passing a single string to extractTranslation
-            extractedTranslations = extractTranslation('\n'.join(translatedTextList), False)
+            extractedTranslations = extractTranslation(translatedText, False)
             tList[index] = extractedTranslations
 
     finalList = combineList(tList, text)
