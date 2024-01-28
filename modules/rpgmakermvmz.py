@@ -73,7 +73,7 @@ CODE355655 = False
 CODE357 = True
 CODE657 = False
 CODE356 = False
-CODE320 = False
+CODE320 = True
 CODE324 = False
 CODE111 = False
 CODE108 = False
@@ -1666,6 +1666,10 @@ def searchCodes(page, pbar, fillList, filename):
                     jaString = codeList[i]['parameters'][0][choice]
                     jaString = jaString.replace(' 。', '.')
 
+                    # Avoid Empty Strings
+                    if jaString == '':
+                        continue
+
                     # Need to remove outside code and put it back later
                     startString = re.search(r'^en.+\)\s|^en.+\)|^if.+\)\s|^if.+\)', jaString)
                     jaString = re.sub(r'^en.+\)\s|^en.+\)|^if.+\)\s|^if.+\)', '', jaString)
@@ -2102,15 +2106,12 @@ def batchList(input_list, batch_size):
 
 def createContext(fullPromptFlag, subbedT):
     characters = 'Game Characters:\n\
-ピュアフレイム (Pure Flame) - Female\n\
-エリザ (Eliza) - Female\n\
-ブラックキュート (Black Cute) - Female\n\
-ピュアダーク (Pure Dark) - Female\n\
-ケンジ (Kenji) - Male\n\
-ギドウ (Guido) - Male\n\
-ダークソルジャー (Dark Soldier) - Male\n\
-ザコーズ (The Cores) - Male\n\
-フレア (Flare)\n\
+朱雀　紅 (Akane Suzaku) - Female\n\
+白虎　撫子 (Shiratora Nadeshiko) - Female\n\
+鬼塚　百合花 (Onizuka Yurika) - Female\n\
+犬飼・アンナ・メープル (Inukai Anna Maple) - Female\n\
+鈴懸いるか (Suzukake Iruka) - Female\n\
+宇宙 (Sora) - Female\n\
 '
     
     system = PROMPT + VOCAB if fullPromptFlag else \
