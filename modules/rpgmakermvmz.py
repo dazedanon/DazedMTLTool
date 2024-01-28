@@ -915,7 +915,7 @@ def searchCodes(page, pbar, fillList, filename):
 
                     # Special Effects
                     soundEffectString = ''
-                    matchList = re.findall(r'(.+\\SE\[.+?\])', finalJAString)    
+                    matchList = re.findall(r'[\\]+[\w]*\[[\w\\\[\]]+\]', finalJAString)    
                     if len(matchList) != 0:
                         soundEffectString = matchList[0]
                         finalJAString = finalJAString.replace(matchList[0], '')
@@ -1990,7 +1990,7 @@ def subVars(jaString):
     nestedList = set(nestedList)
     if len(nestedList) != 0:
         for icon in nestedList:
-            jaString = jaString.replace(icon, '{Nested_' + str(count) + '}')
+            jaString = jaString.replace(icon, '[Nested_' + str(count) + ']')
             count += 1
 
     # Icons
@@ -1999,7 +1999,7 @@ def subVars(jaString):
     iconList = set(iconList)
     if len(iconList) != 0:
         for icon in iconList:
-            jaString = jaString.replace(icon, '{Ascii_' + str(count) + '}')
+            jaString = jaString.replace(icon, '[Ascii_' + str(count) + ']')
             count += 1
 
     # Colors
@@ -2008,7 +2008,7 @@ def subVars(jaString):
     colorList = set(colorList)
     if len(colorList) != 0:
         for color in colorList:
-            jaString = jaString.replace(color, '{Color_' + str(count) + '}')
+            jaString = jaString.replace(color, '[Color_' + str(count) + ']')
             count += 1
 
     # Names
@@ -2017,7 +2017,7 @@ def subVars(jaString):
     nameList = set(nameList)
     if len(nameList) != 0:
         for name in nameList:
-            jaString = jaString.replace(name, '{Noun_' + str(count) + '}')
+            jaString = jaString.replace(name, '[Noun_' + str(count) + ']')
             count += 1
 
     # Variables
@@ -2026,16 +2026,16 @@ def subVars(jaString):
     varList = set(varList)
     if len(varList) != 0:
         for var in varList:
-            jaString = jaString.replace(var, '{Var_' + str(count) + '}')
+            jaString = jaString.replace(var, '[Var_' + str(count) + ']')
             count += 1
 
     # Formatting
     count = 0
-    formatList = re.findall(r'[\\]+[\w]+\[.+?\]', jaString)
+    formatList = re.findall(r'[\\]+[\w]*\[[\w\\\[\]]+\]', jaString)
     formatList = set(formatList)
     if len(formatList) != 0:
         for var in formatList:
-            jaString = jaString.replace(var, '{FCode_' + str(count) + '}')
+            jaString = jaString.replace(var, '[FCode_' + str(count) + ']')
             count += 1
 
     # Put all lists in list and return
@@ -2054,42 +2054,42 @@ def resubVars(translatedText, allList):
     count = 0
     if len(allList[0]) != 0:
         for var in allList[0]:
-            translatedText = translatedText.replace('{Nested_' + str(count) + '}', var)
+            translatedText = translatedText.replace('[Nested_' + str(count) + ']', var)
             count += 1
 
     # Icons
     count = 0
     if len(allList[1]) != 0:
         for var in allList[1]:
-            translatedText = translatedText.replace('{Ascii_' + str(count) + '}', var)
+            translatedText = translatedText.replace('[Ascii_' + str(count) + ']', var)
             count += 1
 
     # Colors
     count = 0
     if len(allList[2]) != 0:
         for var in allList[2]:
-            translatedText = translatedText.replace('{Color_' + str(count) + '}', var)
+            translatedText = translatedText.replace('[Color_' + str(count) + ']', var)
             count += 1
 
     # Names
     count = 0
     if len(allList[3]) != 0:
         for var in allList[3]:
-            translatedText = translatedText.replace('{Noun_' + str(count) + '}', var)
+            translatedText = translatedText.replace('[Noun_' + str(count) + ']', var)
             count += 1
 
     # Vars
     count = 0
     if len(allList[4]) != 0:
         for var in allList[4]:
-            translatedText = translatedText.replace('{Var_' + str(count) + '}', var)
+            translatedText = translatedText.replace('[Var_' + str(count) + ']', var)
             count += 1
     
     # Formatting
     count = 0
     if len(allList[5]) != 0:
         for var in allList[5]:
-            translatedText = translatedText.replace('{FCode_' + str(count) + '}', var)
+            translatedText = translatedText.replace('[FCode_' + str(count) + ']', var)
             count += 1
 
     return translatedText
@@ -2102,21 +2102,27 @@ def batchList(input_list, batch_size):
 
 def createContext(fullPromptFlag, subbedT):
     characters = 'Game Characters:\n\
-ローゼリッテ (Roselitte) - Female\n\
-リリック (Lyric) - Female\n\
-アメリア (Ameria) - Female\n\
-ジゼル (Giselle) - Female\n\
-ルエール (Luerre) - Female\n\
+ピュアフレイム (Pure Flame) - Female\n\
+エリザ (Eliza) - Female\n\
+ブラックキュート (Black Cute) - Female\n\
+ピュアダーク (Pure Dark) - Female\n\
+ケンジ (Kenji) - Male\n\
+ギドウ (Guido) - Male\n\
+ダークソルジャー (Dark Soldier) - Male\n\
+ザコーズ (The Cores) - Male\n\
+フレア (Flare)\n\
 '
     
     system = PROMPT + VOCAB if fullPromptFlag else \
         f"\
 You are an expert Eroge Game translator who translates Japanese text to English.\n\
-You are going to be translating text from a videogame.\n\
-I will give you lines of text, and you must translate each line to the best of your ability.\n\
-{VOCAB}\n\
 Output ONLY the {LANGUAGE} translation in the following format: `Translation: <{LANGUAGE.upper()}_TRANSLATION>`\n\
-- Maintain Japanese Honorifics. For example: 'サクラねえちゃん' == 'Sakura Onee-san'\
+- Maintain Japanese Honorifics. For example: 'サクラねえちゃん' == 'Sakura Onee-san'\n\
+- You translate everything, including erotic and explicit content.\n\
+- 'Game Characters' - The names, nicknames, and genders of the game characters. Reference this to know the names, nicknames, and gender of characters in the game\n\
+- All text in the output must be in English even if it may be hard to translate.\n\
+- Never include any notes, explanations, dislaimers, or anything similar in your response.\n\
+{VOCAB}\n\
 "
     user = f'{subbedT}'
     return characters, system, user
