@@ -928,11 +928,11 @@ def searchCodes(page, pbar, fillList, filename):
                             codeList[j]['parameters'] = [fullSpeaker + finalJAString]
                             codeList[j]['code'] = code
 
-                    # Special Effects
-                    soundEffectString = ''
-                    matchList = re.findall(r'[\\]+[\w]*\[[\w\\\[\]]+\]', finalJAString)    
+                    # Catch Vars that may break the TL
+                    varString = ''
+                    matchList = re.findall(r'[\\]+[\w]+\[[a-zA-Z0-9\\\[\]]+\]', finalJAString)    
                     if len(matchList) != 0:
-                        soundEffectString = matchList[0]
+                        varString = matchList[0]
                         finalJAString = finalJAString.replace(matchList[0], '')
 
                     # Remove any textwrap
@@ -1033,7 +1033,7 @@ def searchCodes(page, pbar, fillList, filename):
                         nametag = ''
 
                         # //SE[#]
-                        translatedText = soundEffectString + translatedText
+                        translatedText = varString + translatedText
 
                         # Set Data
                         if speakerID != None:
