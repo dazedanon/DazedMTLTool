@@ -47,7 +47,7 @@ if 'gpt-3.5' in MODEL:
 elif 'gpt-4' in MODEL:
     INPUTAPICOST = .01
     OUTPUTAPICOST = .03
-    BATCHSIZE = 40
+    BATCHSIZE = 10
     FREQUENCY_PENALTY = 0.1
 
 #tqdm Globals
@@ -810,6 +810,22 @@ def searchCodes(page, pbar, fillList, filename):
                     codeList[i]['code'] = -1
                     continue
 
+                # Check for Speaker
+                coloredSpeakerList = re.findall(r'^[\\]+[cC]\[[\d]+\](.+?)[\\]+[Cc]\[[\d]\]$', jaString)
+                if len(coloredSpeakerList) != 0 and len(codeList[i+1]['parameters']) > 0:
+                    # Get Speaker
+                    response = getSpeaker(coloredSpeakerList[0])
+                    speaker = response[0]
+                    totalTokens[0] += response[1][0]
+                    totalTokens[1] += response[1][1]
+
+                    #Set Data
+                    codeList[i]['parameters'][0] = jaString.replace(coloredSpeakerList[0], speaker)
+
+                    i += 1
+                    j = i
+                    jaString = codeList[i]['parameters'][0]
+
                 # Using this to keep track of 401's in a row.
                 currentGroup.append(jaString)
 
@@ -841,8 +857,7 @@ def searchCodes(page, pbar, fillList, filename):
                     # Set Back
                     codeList[i]['parameters'] = [finalJAString]
 
-                    # Check for speakers in String
-                    # \\n<Speaker>
+                    ### \\n<Speaker>
                     nCase = None
                     if finalJAString[0] != '\\':
                         regex = r'(.*?)([\\]+[nN][wWcC]?<(.*?)>.*)'
