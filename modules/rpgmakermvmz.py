@@ -930,7 +930,7 @@ def searchCodes(page, pbar, fillList, filename):
 
                     # Catch Vars that may break the TL
                     varString = ''
-                    matchList = re.findall(r'[\\]+[\w]+\[[a-zA-Z0-9\\\[\]]+\]', finalJAString)    
+                    matchList = re.findall(r'[\\]+[\w]+\[[a-zA-Z0-9\\\[\]\_]+\]', finalJAString)    
                     if len(matchList) != 0:
                         varString = matchList[0]
                         finalJAString = finalJAString.replace(matchList[0], '')
