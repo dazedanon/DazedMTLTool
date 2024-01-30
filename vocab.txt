@@ -11,6 +11,15 @@ Here are some vocabulary and terms so that you know the proper spelling and tran
 チンコ (cock)
 ショーツ (panties)
 
+# Honorifics
+さん (san)
+様, さま (sama)
+君, くん (kun)
+ちゃん (chan)
+たん (tan)
+先輩, せんぱい (senpai)
+先生, せんせい (sensei)
+
 # System
 逃げる (Escape)
 大事なもの (Key Items)

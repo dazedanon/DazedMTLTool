@@ -47,7 +47,7 @@ if 'gpt-3.5' in MODEL:
 elif 'gpt-4' in MODEL:
     INPUTAPICOST = .01
     OUTPUTAPICOST = .03
-    BATCHSIZE = 10
+    BATCHSIZE = 40
     FREQUENCY_PENALTY = 0.1
 
 #tqdm Globals
@@ -56,24 +56,24 @@ POSITION = 0
 LEAVE = False
 
 # Dialogue / Scroll
-CODE401 = True
+CODE401 = False
 CODE405 = False
 
 # Choices
-CODE102 = True
+CODE102 = False
 
 # Variables
-CODE122 = False
+CODE122 = True
 
 # Names
-CODE101 = True
+CODE101 = False
 
 # Other
 CODE355655 = False
-CODE357 = True
+CODE357 = False
 CODE657 = False
 CODE356 = False
-CODE320 = True
+CODE320 = False
 CODE324 = False
 CODE111 = False
 CODE108 = False
@@ -254,7 +254,7 @@ def translateNote(event, regex):
             jaString = re.sub(r'\n', ' ', oldJAString)
 
             # Translate
-            response = translateGPT(jaString, 'Reply with only the '+ LANGUAGE +' translation of the RPG Skill name.', False)
+            response = translateGPT(jaString, 'Reply with only the '+ LANGUAGE +' translation', False)
             translatedText = response[0]
             tokens[0] += response[1][0]
             tokens[1] += response[1][1]
@@ -545,8 +545,24 @@ def searchNames(data, pbar, context):
                 if len(nameList) < BATCHSIZE:
                     nameList.append(data[i]['name'])
                     descriptionList.append(data[i]['description'].replace('\n', ' '))
-                    if 'hint' in data[i]['note']:
-                        tokensResponse = translateNote(data[i], r'<hint:(.+?)>')
+                    if '<hint:' in data[i]['note']:
+                        tokensResponse = translateNote(data[i], r'<hint:(.*?)>')
+                        totalTokens[0] += tokensResponse[0]
+                        totalTokens[1] += tokensResponse[1]
+                    if '<SG説明:' in data[i]['note']:
+                        tokensResponse = translateNote(data[i], r'<SG説明:(.*?)>')
+                        totalTokens[0] += tokensResponse[0]
+                        totalTokens[1] += tokensResponse[1]
+                    if '<SG説明2:' in data[i]['note']:
+                        tokensResponse = translateNote(data[i], r'<SG説明2:(.*?)>')
+                        totalTokens[0] += tokensResponse[0]
+                        totalTokens[1] += tokensResponse[1]
+                    if '<SG説明3:' in data[i]['note']:
+                        tokensResponse = translateNote(data[i], r'<SG説明3:(.*?)>')
+                        totalTokens[0] += tokensResponse[0]
+                        totalTokens[1] += tokensResponse[1]
+                    if '<SG説明4:' in data[i]['note']:
+                        tokensResponse = translateNote(data[i], r'<SG説明4:(.*?)>')
                         totalTokens[0] += tokensResponse[0]
                         totalTokens[1] += tokensResponse[1]
                     pbar.update(1)
@@ -930,7 +946,7 @@ def searchCodes(page, pbar, fillList, filename):
 
                     # Catch Vars that may break the TL
                     varString = ''
-                    matchList = re.findall(r'[\\]+[\w]+\[[a-zA-Z0-9\\\[\]\_]+\]', finalJAString)    
+                    matchList = re.findall(r'^[\\]+[\w]+\[[a-zA-Z0-9\\\[\]\_]+\]', finalJAString)    
                     if len(matchList) != 0:
                         varString = matchList[0]
                         finalJAString = finalJAString.replace(matchList[0], '')
@@ -1054,7 +1070,7 @@ def searchCodes(page, pbar, fillList, filename):
             ## Event Code: 122 [Set Variables]
             if codeList[i]['code'] == 122 and CODE122 is True:
                 # This is going to be the var being set. (IMPORTANT)
-                if codeList[i]['parameters'][0] not in [327]:
+                if codeList[i]['parameters'][0] not in [315,316,317,318,319,320,321,322,323,324,325]:
                     continue
                   
                 jaString = codeList[i]['parameters'][4]
@@ -1674,7 +1690,7 @@ def searchCodes(page, pbar, fillList, filename):
                         translatedText = translatedText.replace(' ', '_')
                         translatedText = jaString.replace(text, translatedText)
                         codeList[i]['parameters'][0] = translatedText
-
+        
             ### Event Code: 102 Show Choice
             if codeList[i]['code'] == 102 and CODE102 is True:
                 for choice in range(len(codeList[i]['parameters'][0])):
@@ -1696,10 +1712,10 @@ def searchCodes(page, pbar, fillList, filename):
                     else: endString = endString.group()
 
                     if len(textHistory) > 0:
-                        response = translateGPT(jaString, 'Keep your translation as brief as possible. Previous text for context: ' + textHistory[len(textHistory)-1] + '\n\nReply in the style of a dialogue option.', False)
+                        response = translateGPT(jaString, 'Keep your translation as brief as possible. Previous text for context: ' + textHistory[len(textHistory)-1] + '\n\nThis will be a dialogue option', False)
                         translatedText = response[0]
                     else:
-                        response = translateGPT(jaString, 'Keep your translation as brief as possible.\n\nStyle: dialogue option.', False)
+                        response = translateGPT(jaString, 'Keep your translation as brief as possible.\n\nThis will be a dialogue option', False)
                         translatedText = response[0]
 
                     # Remove characters that may break scripts
@@ -1972,10 +1988,10 @@ def searchSystem(data, pbar):
 # Save some money and enter the character before translation
 def getSpeaker(speaker):
     match speaker:
-        case 'ローゼリッテ':
-            return ['Roselitte', [0,0]]
-        case 'リリック':
-            return ['Lyric', [0,0]]
+        case 'セレナ':
+            return ['Serena', [0,0]]
+        case 'マリルー':
+            return ['Marilou', [0,0]]
         case 'アメリア':
             return ['Ameria', [0,0]]
         case 'ジゼル':
@@ -2121,12 +2137,11 @@ def batchList(input_list, batch_size):
 
 def createContext(fullPromptFlag, subbedT):
     characters = 'Game Characters:\n\
-朱雀　紅 (Akane Suzaku) - Female\n\
-白虎　撫子 (Shiratora Nadeshiko) - Female\n\
-鬼塚　百合花 (Onizuka Yurika) - Female\n\
-犬飼・アンナ・メープル (Inukai Anna Maple) - Female\n\
-鈴懸いるか (Suzukake Iruka) - Female\n\
-宇宙 (Sora) - Female\n\
+セレナ (Serena) - Female\n\
+マリルー (Marilou) - Female\n\
+カトリーヌ (Catherine) - Female\n\
+シシリア (Cecilia) - Female\n\
+エリカ (Erika) - Female\n\
 '
     
     system = PROMPT + VOCAB if fullPromptFlag else \
