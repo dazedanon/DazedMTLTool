@@ -2174,6 +2174,7 @@ Output ONLY the {LANGUAGE} translation in the following format: `Translation: <{
 - 'Game Characters' - The names, nicknames, and genders of the game characters. Reference this to know the names, nicknames, and gender of characters in the game\n\
 - All text in the output must be in English even if it may be hard to translate.\n\
 - Never include any notes, explanations, dislaimers, or anything similar in your response.\n\
+- Maintain any spacing in the translation.\n\
 - Maintain any code text in brackets if given.\n\
 {VOCAB}\n\
 "
