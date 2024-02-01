@@ -47,7 +47,7 @@ if 'gpt-3.5' in MODEL:
 elif 'gpt-4' in MODEL:
     INPUTAPICOST = .01
     OUTPUTAPICOST = .03
-    BATCHSIZE = 40
+    BATCHSIZE = 20
     FREQUENCY_PENALTY = 0.1
 
 #tqdm Globals
@@ -56,14 +56,14 @@ POSITION = 0
 LEAVE = False
 
 # Dialogue / Scroll
-CODE401 = False
+CODE401 = True
 CODE405 = False
 
 # Choices
-CODE102 = False
+CODE102 = True
 
 # Variables
-CODE122 = True
+CODE122 = False
 
 # Names
 CODE101 = False
@@ -791,6 +791,7 @@ def searchCodes(page, pbar, fillList, filename):
     maxHistory = MAXHISTORY
     global LOCK
     global NAMESLIST
+    global MISMATCH
 
     # Begin Parsing File
     try:
@@ -1101,7 +1102,7 @@ def searchCodes(page, pbar, fillList, filename):
                         translatedText = translatedText.replace(char, '')
                 
                 # Textwrap
-                translatedText = textwrap.fill(translatedText, width=LISTWIDTH)
+                translatedText = textwrap.fill(translatedText, width=200)
                 translatedText = translatedText.replace('\n', '\\n')
                 # translatedText = translatedText.replace('\'', '\\\'')
                 translatedText = '\"' + translatedText + '\"'
@@ -1263,26 +1264,31 @@ def searchCodes(page, pbar, fillList, filename):
                 jaString = codeList[i]['parameters'][0]
 
                 # If there isn't any Japanese in the text just skip
-                if not re.search(r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴー]+', jaString):
-                    continue
+                # if not re.search(r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴー]+', jaString):
+                #     continue
 
-                if '<' in jaString:
+                if 'this.' in jaString:
+                    continue
+                if 'console.' in jaString:
                     continue
 
                 # Want to translate this script
-                if '_logWindow.push' not in jaString:
-                    continue
+                # if '' not in jaString:
+                #     continue
 
                 # Need to remove outside code and put it back later
-                matchList = re.findall(r'_logWindow.push\(.addText\', \'\\(.+)\'\)', jaString)
+                matchList = re.findall(r'.+"(.*?)".*[;,]$', jaString)
 
                 # Translate
                 if len(matchList) > 0:
                     # If there isn't any Japanese in the text just skip
-                    if not re.search(r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴー]+', matchList[0]):
-                        continue
+                    # if not re.search(r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴー]+', matchList[0]):
+                    #     continue
 
-                    response = translateGPT(matchList[0], 'Reply with the '+ LANGUAGE +' translation Stat Title. Keep it brief.', True)
+                    # Remove Textwrap
+                    text = matchList[0].replace('\\n', ' ')
+
+                    response = translateGPT(text, 'Reply with the '+ LANGUAGE +' translation Stat Title. Keep it brief.', False)
                     totalTokens[0] += response[1][0]
                     totalTokens[1] += response[1][1]
                     translatedText = response[0]
@@ -1293,9 +1299,12 @@ def searchCodes(page, pbar, fillList, filename):
                         translatedText = translatedText.replace(char, '')
                     translatedText = translatedText.replace('"', '\"')
                     translatedText = translatedText.replace("'", '\'')
-                    translatedText = jaString.replace(matchList[0], translatedText)
+                    
+                    # Wordwrap
+                    translatedText = textwrap.fill(translatedText, width=60).replace('\n', '\\n')
 
                     # Set Data
+                    translatedText = jaString.replace(matchList[0], translatedText)
                     codeList[i]['parameters'][0] = translatedText
 
         ## Event Code: 408 (Script)
@@ -1516,7 +1525,7 @@ def searchCodes(page, pbar, fillList, filename):
                         jaString = re.sub(r'\n', '_', jaString)
 
                         # Translate
-                        response = translateGPT(finalJAString, 'Reply with the '+ LANGUAGE +' Translation.', True)
+                        response = translateGPT(finalJAString, 'Reply with the '+ LANGUAGE +' Translation.', False)
                         translatedText = response[0]
                         totalTokens[0] += response[1][0]
                         totalTokens[1] += response[1][1]
@@ -1693,40 +1702,61 @@ def searchCodes(page, pbar, fillList, filename):
         
             ### Event Code: 102 Show Choice
             if codeList[i]['code'] == 102 and CODE102 is True:
+                choiceList = []
+                varList = []
                 for choice in range(len(codeList[i]['parameters'][0])):
                     jaString = codeList[i]['parameters'][0][choice]
                     jaString = jaString.replace(' 。', '.')
+                    # Things to Check before starting translation
+                    if re.search(r'[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９]+', jaString):
+                        print('Test')
 
                     # Avoid Empty Strings
                     if jaString == '':
                         continue
 
-                    # Need to remove outside code and put it back later
-                    startString = re.search(r'^en.+\)\s|^en.+\)|^if.+\)\s|^if.+\)', jaString)
-                    jaString = re.sub(r'^en.+\)\s|^en.+\)|^if.+\)\s|^if.+\)', '', jaString)
-                    endString = re.search(r'\sen.+$|en.+$|\sif.+$|if.+$', jaString)
-                    jaString = re.sub(r'\sen.+$|en.+$|\sif.+$|if.+$', '', jaString)
-                    if startString is None: startString = ''
-                    else:  startString = startString.group()
-                    if endString is None: endString = ''
-                    else: endString = endString.group()
+                    # If and En Statements
+                    ifVar = ''
+                    enVar = ''
+                    ifList = re.findall(r'(if\(.*\))', jaString)
+                    enList = re.findall(r'(en\(.*\))', jaString)
+                    if len(ifList) != 0:
+                        jaString = jaString.replace(ifList[0], '')
+                        ifVar = ifList[0]
+                    if len(enList) != 0:
+                        jaString = jaString.replace(enList[0], '')
+                        enVar = enList[0]
+                    varList.append(ifVar + enVar)
 
-                    if len(textHistory) > 0:
-                        response = translateGPT(jaString, 'Keep your translation as brief as possible. Previous text for context: ' + textHistory[len(textHistory)-1] + '\n\nThis will be a dialogue option', False)
-                        translatedText = response[0]
-                    else:
-                        response = translateGPT(jaString, 'Keep your translation as brief as possible.\n\nThis will be a dialogue option', False)
-                        translatedText = response[0]
+                    # Append to List
+                    choiceList.append(jaString)
 
-                    # Remove characters that may break scripts
-                    charList = ['.', '\"', '\\n']
-                    for char in charList:
-                        translatedText = translatedText.replace(char, '')
+                # Translate
+                if len(textHistory) > 0:
+                    response = translateGPT(choiceList, 'Keep your translation as brief as possible. Previous text for context: ' + textHistory[len(textHistory)-1] + '\n\nThis will be a dialogue option', True)
+                    translatedTextList = response[0]
+                else:
+                    response = translateGPT(choiceList, 'Keep your translation as brief as possible.\n\nThis will be a dialogue option', True)
+                    translatedTextList = response[0]
 
-                    # Set Data
-                    totalTokens[0] += response[1][0]
-                    totalTokens[1] += response[1][1]
-                    codeList[i]['parameters'][0][choice] = startString + translatedText[0].upper() + translatedText[1:] + endString
+                # Check Mismatch
+                if len(translatedTextList) == len(choiceList):
+                    for choice in range(len(codeList[i]['parameters'][0])):
+                        translatedText = translatedTextList[choice]
+
+                        # Remove characters that may break scripts
+                        charList = ['.', '\"', '\\n']
+                        for char in charList:
+                            translatedText = translatedText.replace(char, '')
+
+                        # Set Data
+                        totalTokens[0] += response[1][0]
+                        totalTokens[1] += response[1][1]
+                        translatedText = varList[choice] + translatedText[0].upper() + translatedText[1:]
+                        codeList[i]['parameters'][0][choice] = translatedText
+                else:
+                    if filename not in MISMATCH:
+                        MISMATCH.append(filename)
 
             ### Event Code: 111 Script
             if codeList[i]['code'] == 111 and CODE111 is True:
@@ -1799,7 +1829,6 @@ def searchCodes(page, pbar, fillList, filename):
             totalTokens[0] += response[1][0]
             totalTokens[1] += response[1][1]
             if len(fillList) != len(docList):
-                global MISMATCH
                 with LOCK:
                     if filename not in MISMATCH:
                         MISMATCH.append(filename)
@@ -1988,16 +2017,10 @@ def searchSystem(data, pbar):
 # Save some money and enter the character before translation
 def getSpeaker(speaker):
     match speaker:
-        case 'セレナ':
-            return ['Serena', [0,0]]
-        case 'マリルー':
-            return ['Marilou', [0,0]]
-        case 'アメリア':
-            return ['Ameria', [0,0]]
-        case 'ジゼル':
-            return ['Giselle', [0,0]]
-        case 'ルエール':
-            return ['Luerre', [0,0]]
+        case 'ルイ':
+            return ['Rui', [0,0]]
+        case 'チュベロス':
+            return ['Tuberose', [0,0]]
         case '':
             return ['', [0,0]]
         case _:
@@ -2137,11 +2160,9 @@ def batchList(input_list, batch_size):
 
 def createContext(fullPromptFlag, subbedT):
     characters = 'Game Characters:\n\
-セレナ (Serena) - Female\n\
-マリルー (Marilou) - Female\n\
-カトリーヌ (Catherine) - Female\n\
-シシリア (Cecilia) - Female\n\
-エリカ (Erika) - Female\n\
+神田 瑠唯 (Kanda Rui) - Female\n\
+ルイ (Rui) - Female\n\
+チュベロス (Tuberose) - Male\n\
 '
     
     system = PROMPT + VOCAB if fullPromptFlag else \
@@ -2153,6 +2174,7 @@ Output ONLY the {LANGUAGE} translation in the following format: `Translation: <{
 - 'Game Characters' - The names, nicknames, and genders of the game characters. Reference this to know the names, nicknames, and gender of characters in the game\n\
 - All text in the output must be in English even if it may be hard to translate.\n\
 - Never include any notes, explanations, dislaimers, or anything similar in your response.\n\
+- Maintain any code text in brackets if given.\n\
 {VOCAB}\n\
 "
     user = f'{subbedT}'
