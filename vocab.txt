@@ -34,4 +34,7 @@ Here are some vocabulary and terms so that you know the proper spelling and tran
 魔法力 (M. Power)
 命中率 (Accuracy)
 %1 の%2を獲得！ (Gained %1 %2!)
+
+# Other
+ソル (Sol)
 ```
