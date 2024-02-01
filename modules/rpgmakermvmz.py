@@ -56,11 +56,11 @@ POSITION = 0
 LEAVE = False
 
 # Dialogue / Scroll
-CODE401 = True
+CODE401 = False
 CODE405 = False
 
 # Choices
-CODE102 = True
+CODE102 = False
 
 # Variables
 CODE122 = False
@@ -69,7 +69,7 @@ CODE122 = False
 CODE101 = False
 
 # Other
-CODE355655 = False
+CODE355655 = True
 CODE357 = False
 CODE657 = False
 CODE356 = False
@@ -1267,14 +1267,15 @@ def searchCodes(page, pbar, fillList, filename):
                 # if not re.search(r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴー]+', jaString):
                 #     continue
 
-                if 'this.' in jaString:
-                    continue
+                # Skip These
+                # if 'this.' in jaString:
+                #     continue
                 if 'console.' in jaString:
                     continue
 
                 # Want to translate this script
-                # if '' not in jaString:
-                #     continue
+                if 'this.BLogAdd' not in jaString:
+                    continue
 
                 # Need to remove outside code and put it back later
                 matchList = re.findall(r'.+"(.*?)".*[;,]$', jaString)
@@ -2175,7 +2176,7 @@ Output ONLY the {LANGUAGE} translation in the following format: `Translation: <{
 - All text in the output must be in English even if it may be hard to translate.\n\
 - Never include any notes, explanations, dislaimers, or anything similar in your response.\n\
 - Maintain any spacing in the translation.\n\
-- Maintain any code text in brackets if given.\n\
+- Maintain any code text in brackets if given. (e.g `[Color_0]`, `[Ascii_0]`, etc)\n\
 {VOCAB}\n\
 "
     user = f'{subbedT}'
