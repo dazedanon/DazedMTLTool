@@ -24,6 +24,7 @@ from modules.kansen import handleKansen
 from modules.lune import handleLune
 from modules.atelier import handleAtelier
 from modules.anim import handleAnim
+from modules.nscript import handleNScript
 
 # For GPT4 rate limit will be hit if you have more than 1 thread.
 # 1 Thread for each file. Controls how many files are worked on at once.
@@ -41,6 +42,7 @@ MODULES = [
     ["Lune", "json", handleLune],
     ["Atelier", "txt", handleAtelier],
     ["Anim", "json", handleAnim],
+    ["NScript", "txt", handleNScript],
 ]
 
 # Info Message

@@ -47,7 +47,7 @@ if 'gpt-3.5' in MODEL:
 elif 'gpt-4' in MODEL:
     INPUTAPICOST = .01
     OUTPUTAPICOST = .03
-    BATCHSIZE = 20
+    BATCHSIZE = 40
     FREQUENCY_PENALTY = 0.1
 
 #tqdm Globals
@@ -56,11 +56,11 @@ POSITION = 0
 LEAVE = False
 
 # Dialogue / Scroll
-CODE401 = False
-CODE405 = False
+CODE401 = True
+CODE405 = True
 
 # Choices
-CODE102 = False
+CODE102 = True
 
 # Variables
 CODE122 = False
@@ -69,7 +69,7 @@ CODE122 = False
 CODE101 = False
 
 # Other
-CODE355655 = True
+CODE355655 = False
 CODE357 = False
 CODE657 = False
 CODE356 = False
@@ -1708,9 +1708,6 @@ def searchCodes(page, pbar, fillList, filename):
                 for choice in range(len(codeList[i]['parameters'][0])):
                     jaString = codeList[i]['parameters'][0][choice]
                     jaString = jaString.replace(' 。', '.')
-                    # Things to Check before starting translation
-                    if re.search(r'[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９]+', jaString):
-                        print('Test')
 
                     # Avoid Empty Strings
                     if jaString == '':
@@ -2161,9 +2158,13 @@ def batchList(input_list, batch_size):
 
 def createContext(fullPromptFlag, subbedT):
     characters = 'Game Characters:\n\
-神田 瑠唯 (Kanda Rui) - Female\n\
-ルイ (Rui) - Female\n\
-チュベロス (Tuberose) - Male\n\
+ルース (Ruth) - Male\n\
+リーザ (Reeza) - Female\n\
+エリル (Eril) - Female\n\
+シアン (Cyan) - Female\n\
+トリス (Tris) - Female\n\
+エリル (Eril) - Female\n\
+エリル (Eril) - Female\n\
 '
     
     system = PROMPT + VOCAB if fullPromptFlag else \
