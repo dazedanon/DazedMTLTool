@@ -49,7 +49,7 @@ if 'gpt-3.5' in MODEL:
 elif 'gpt-4' in MODEL:
     INPUTAPICOST = .01
     OUTPUTAPICOST = .03
-    BATCHSIZE = 10
+    BATCHSIZE = 40
 
 def handleNScript(filename, estimate):
     global ESTIMATE
@@ -178,32 +178,35 @@ def translateNScript(data, pbar, totalLines):
             speaker = ''
 
         # Choices
-        matchList = re.findall(r'\[sel.+text="(.+?)".+', data[i])
-        if len(matchList) != 0:
-            originalText = matchList[0]
-            if len(textHistory) > 0:
-                response = translateGPT(matchList[0], 'Keep your translation as brief as possible. Previous text for context: ' + textHistory[len(textHistory)-1] + '\n\nReply in the style of a dialogue option.', False)
-            else:
-                response = translateGPT(matchList[0], '\n\nReply in the style of a dialogue option.', False)
-            translatedText = response[0]
-            tokens[0] += response[1][0]
-            tokens[1] += response[1][1]
+        if 'select' in data[i]:
+            matchList = re.findall(r'\"(.*?)\"', data[i])
+            if len(matchList) != 0:
+                originalTextList = matchList
+                if len(textHistory) > 0:
+                    response = translateGPT(matchList, 'Keep your translation as brief as possible. Previous text for context: ' + textHistory[len(textHistory)-1] + '\n\nReply in the style of a dialogue option.', True)
+                else:
+                    response = translateGPT(matchList, '\n\nReply in the style of a dialogue option.', True)
+                translatedTextList = response[0]
+                tokens[0] += response[1][0]
+                tokens[1] += response[1][1]
 
-            # Remove characters that may break scripts
-            charList = ['.', '\"', '\\n']
-            for char in charList:
-                translatedText = translatedText.replace(char, '')
+                for choice in range(len(translatedTextList)):
+                    translatedText = translatedTextList[choice]
+                    
+                    # Remove characters that may break scripts
+                    charList = ['.', '\"', '\\n']
+                    for char in charList:
+                        translatedText = translatedText.replace(char, '')
 
-            # Escape all '
-            translatedText = translatedText.replace('\\', '')
-            # translatedText = translatedText.replace("'", "\\\'")
+                    # Escape all '
+                    translatedText = translatedText.replace('\\', '')
 
-            # Set Data
-            translatedText = data[i].replace(originalText, translatedText)
-            data[i] = translatedText                
+                    # Set Data
+                    translatedText = data[i].replace(originalTextList[choice], translatedText)
+                    data[i] = translatedText                
 
         # Lines
-        matchList = re.findall(r'^[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９「」　>].*', data[i]) 
+        matchList = re.findall(r'^[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９「」　>（）].*', data[i]) 
         if len(matchList) > 0:
             currentGroup.append(matchList[0])
             if len(data) > i+1:
@@ -213,16 +216,16 @@ def translateNScript(data, pbar, totalLines):
                             data[i] = '\d\n'
                             pbar.update(1)
                         i += 1
-                        matchList = re.findall(r'^[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９「」　>].*', data[i])
+                        matchList = re.findall(r'^[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９「」　>（）].*', data[i])
                         if len(matchList) > 0:
                             currentGroup.append(matchList[0])
                 else:
-                    while '　' in data[i+1][0] or '"' in data[i+1]:
+                    while '　' in data[i+1][0] or '"' in data[i+1] or ')' in data[i+1] or '）' in data[i+1]:
                         if insertBool is True:
                             data[i] = '\d\n'
                             pbar.update(1)
                         i += 1
-                        matchList = re.findall(r'^[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９「」　>].*', data[i])
+                        matchList = re.findall(r'^[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９「」　>（）].*', data[i])
                         if len(matchList) > 0:
                             currentGroup.append(matchList[0])
                         
@@ -234,6 +237,7 @@ def translateNScript(data, pbar, totalLines):
             # Remove any textwrap
             if FIXTEXTWRAP == True:
                 finalJAString = finalJAString.replace('>', '')
+                finalJAString = finalJAString.replace('\\', ' ')
 
             # Remove Extra Stuff bad for translation.
             finalJAString = finalJAString.replace('ﾞ', '')
@@ -304,13 +308,22 @@ def translateNScript(data, pbar, totalLines):
                     
                 # Set Text
                 data[i] = '\d\n'
+                counter = 0
                 for line in textList:
                     # Wordwrap Text
                     line = textwrap.fill(line, width=WIDTH)
                     
                     # Set
                     data.insert(i, '>' + line.strip() + '\n')
+                    counter += 1
                     i+=1
+                    
+                    # Go to new window if too long
+                    if counter >= 4:
+                        data[i-1] = data[i-1].replace('\n', '\\\n')
+                        counter = 0
+                if '\\' not in data[i-1]:
+                    data[i-1] = data[i-1].replace('\n', '\\\n')
                 translatedBatch.pop(0)
                 speaker = ''
                 currentGroup = []
@@ -354,24 +367,27 @@ def translateNScript(data, pbar, totalLines):
 # Save some money and enter the character before translation
 def getSpeaker(speaker):
     match speaker:
-        case '央':
-            return ['Akira', [0,0]]
-        case '累':
+        case 'ルイ':
             return ['Rui', [0,0]]
-        case '梨里':
-            return ['Riri', [0,0]]
-        case '純':
-            return ['Jun', [0,0]]
-        case '美鈴':
-            return ['Misuzu', [0,0]]
-        case '須田':
-            return ['Suda', [0,0]]
-        case '高橋':
-            return ['Takahashi', [0,0]]
-        case '勇二':
-            return ['Yuuji', [0,0]]
+        case 'チュベロス':
+            return ['Tuberose', [0,0]]
+        case '':
+            return ['', [0,0]]
         case _:
-            return translateGPT(speaker, 'Reply with only the '+ LANGUAGE +' translation of the NPC name.', False)
+            # Store Speaker
+            if speaker not in str(NAMESLIST):
+                response = translateGPT(speaker, 'Reply with only the '+ LANGUAGE +' translation of the NPC name.', False)
+                response[0] = response[0].title()
+                speakerList = [speaker, response[0]]
+                NAMESLIST.append(speakerList)
+                return response
+            # Find Speaker
+            else:
+                for i in range(len(NAMESLIST)):
+                    if speaker == NAMESLIST[i][0]:
+                        return [NAMESLIST[i][1],[0,0]]
+                               
+    return [speaker,[0,0]]
         
 def subVars(jaString):
     jaString = jaString.replace('\u3000', ' ')
@@ -494,14 +510,10 @@ def batchList(input_list, batch_size):
 
 def createContext(fullPromptFlag, subbedT):
     characters = 'Game Characters:\n\
-渋江 央 (Shibue Akira) - Male\n\
-蘆名 累 (Ashina Rui) - Female\n\
-清原 梨里 (Kiyohara Riri) - Female\n\
-五十嵐 純 (Igarashi Jun) - Female\n\
-子野日 美鈴 (Nenohi Misuzu) - Female\n\
-須田 (Suda) - Male\n\
-高橋 (Takahashi) - Female\n\
-勇二 (Yuuji) - Male\n\
+水原 雪 (Minahara Yuki) - Female\n\
+黒服の男 (Man in Black) - Male\n\
+駿河 京也 (Suruga Kyouya) - Male\n\
+壱型０２ (Type 02) - Monster\n\
 '
     
     system = PROMPT + VOCAB if fullPromptFlag else \
