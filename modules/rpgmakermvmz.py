@@ -58,6 +58,7 @@ LEAVE = False
 # Dialogue / Scroll
 CODE401 = True
 CODE405 = True
+CODE408 = True
 
 # Choices
 CODE102 = True
@@ -77,7 +78,6 @@ CODE320 = False
 CODE324 = False
 CODE111 = False
 CODE108 = False
-CODE408 = False
 
 def handleMVMZ(filename, estimate):
     global ESTIMATE, TOKENS
@@ -1022,7 +1022,7 @@ def searchCodes(page, pbar, fillList, filename):
                         # Grab Translated String
                         translatedText = fillList[0]
                         
-                        # Remove added speaker
+                        # Remove speaker
                         if speaker != '':
                             matchSpeakerList = re.findall(r'(^.+?)\s?[|:]\s?', translatedText)
                             if len(matchSpeakerList) > 0:
@@ -1742,10 +1742,12 @@ def searchCodes(page, pbar, fillList, filename):
                     for choice in range(len(codeList[i]['parameters'][0])):
                         translatedText = translatedTextList[choice]
 
-                        # Remove characters that may break scripts
-                        charList = ['.', '\"', '\\n']
-                        for char in charList:
-                            translatedText = translatedText.replace(char, '')
+                        # Remove speaker
+                        matchSpeakerList = re.findall(r'(^.+?)\s?[|:]\s?', translatedText)
+                        if len(matchSpeakerList) > 0:
+                            newSpeaker = matchSpeakerList[0]
+                            nametag = nametag.replace(speaker, newSpeaker)
+                        translatedText = re.sub(r'(^.+?)\s?[|:]\s?', '', translatedText)
 
                         # Set Data
                         totalTokens[0] += response[1][0]
@@ -2178,6 +2180,7 @@ Output ONLY the {LANGUAGE} translation in the following format: `Translation: <{
 - Never include any notes, explanations, dislaimers, or anything similar in your response.\n\
 - Maintain any spacing in the translation.\n\
 - Maintain any code text in brackets if given. (e.g `[Color_0]`, `[Ascii_0]`, etc)\n\
+- `...` can be a part of the dialogue. Translate it as it is.\n\
 {VOCAB}\n\
 "
     user = f'{subbedT}'
