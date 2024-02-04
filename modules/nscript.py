@@ -212,133 +212,133 @@ def translateNScript(data, pbar, totalLines):
                 i += 1   
 
         # Lines
-        # matchList = re.findall(r'^[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９「」　>（）].*', data[i]) 
-        # if len(matchList) > 0:
-        #     currentGroup.append(matchList[0])
-        #     if len(data) > i+1:
-        #         if speaker == '':
-        #             while '\n' != data[i+1] and '【' not in data[i+1]:
-        #                 if insertBool is True:
-        #                     data[i] = '\d\n'
-        #                     pbar.update(1)
-        #                 i += 1
-        #                 matchList = re.findall(r'^[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９「」　>（）].*', data[i])
-        #                 if len(matchList) > 0:
-        #                     currentGroup.append(matchList[0])
-        #         else:
-        #             while '　' in data[i+1][0] or '"' in data[i+1] or ')' in data[i+1] or '）' in data[i+1]:
-        #                 if insertBool is True:
-        #                     data[i] = '\d\n'
-        #                     pbar.update(1)
-        #                 i += 1
-        #                 matchList = re.findall(r'^[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９「」　>（）].*', data[i])
-        #                 if len(matchList) > 0:
-        #                     currentGroup.append(matchList[0])
+        matchList = re.findall(r'^[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９「」『』　>（）].*', data[i]) 
+        if len(matchList) > 0:
+            currentGroup.append(matchList[0])
+            if len(data) > i+1:
+                if speaker == '':
+                    while '\n' != data[i+1] and '【' not in data[i+1]:
+                        if insertBool is True:
+                            data[i] = '\d\n'
+                            pbar.update(1)
+                        i += 1
+                        matchList = re.findall(r'^[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９「」『』　>（）].*', data[i])
+                        if len(matchList) > 0:
+                            currentGroup.append(matchList[0])
+                else:
+                    while '　' in data[i+1][0] or '"' in data[i+1] or ')' in data[i+1] or '）' in data[i+1]:
+                        if insertBool is True:
+                            data[i] = '\d\n'
+                            pbar.update(1)
+                        i += 1
+                        matchList = re.findall(r'^[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９「」『』　>（）].*', data[i])
+                        if len(matchList) > 0:
+                            currentGroup.append(matchList[0])
                         
-        #     # Join up 401 groups for better translation.
-        #     if len(currentGroup) > 0:
-        #         finalJAString = ' '.join(currentGroup)
-        #         oldjaString = finalJAString
+            # Join up 401 groups for better translation.
+            if len(currentGroup) > 0:
+                finalJAString = ' '.join(currentGroup)
+                oldjaString = finalJAString
 
-        #     # Remove any textwrap
-        #     if FIXTEXTWRAP == True:
-        #         finalJAString = finalJAString.replace('>', '')
-        #         finalJAString = finalJAString.replace('\\', ' ')
+            # Remove any textwrap
+            if FIXTEXTWRAP == True:
+                finalJAString = finalJAString.replace('>', '')
+                finalJAString = finalJAString.replace('\\', ' ')
 
-        #     # Remove Extra Stuff bad for translation.
-        #     finalJAString = finalJAString.replace('ﾞ', '')
-        #     finalJAString = finalJAString.replace('・', '.')
-        #     finalJAString = finalJAString.replace('‶', '')
-        #     finalJAString = finalJAString.replace('”', '')
-        #     finalJAString = finalJAString.replace('―', '-')
-        #     finalJAString = finalJAString.replace('ー', '-')
-        #     finalJAString = finalJAString.replace('…', '...')
-        #     finalJAString = re.sub(r'(\.{3}\.+)', '...', finalJAString)
-        #     finalJAString = finalJAString.replace('　', ' ')
+            # Remove Extra Stuff bad for translation.
+            finalJAString = finalJAString.replace('ﾞ', '')
+            finalJAString = finalJAString.replace('・', '.')
+            finalJAString = finalJAString.replace('‶', '')
+            finalJAString = finalJAString.replace('”', '')
+            finalJAString = finalJAString.replace('―', '-')
+            finalJAString = finalJAString.replace('ー', '-')
+            finalJAString = finalJAString.replace('…', '...')
+            finalJAString = re.sub(r'(\.{3}\.+)', '...', finalJAString)
+            finalJAString = finalJAString.replace('　', ' ')
 
-        #     # Furigana Removal
-        #     matchList = re.findall(r'『\((.+)/.*?』', finalJAString)
-        #     if len(matchList) > 0:
-        #         finalJAString = finalJAString.replace(matchList[0][0], matchList[0][1])
+            # Furigana Removal
+            matchList = re.findall(r'『\((.+)/.*?』', finalJAString)
+            if len(matchList) > 0:
+                finalJAString = finalJAString.replace(matchList[0][0], matchList[0][1])
 
-        #     # Add Speaker (If there is one)
-        #     if speaker != '':
-        #         finalJAString = f'{speaker}: {finalJAString}'
+            # Add Speaker (If there is one)
+            if speaker != '':
+                finalJAString = f'{speaker}: {finalJAString}'
 
-        #     # [Passthrough 1] Pulling From File
-        #     if insertBool is False:
-        #         # Append to List and Clear Values
-        #         batch.append(finalJAString)
-        #         speaker = ''
+            # [Passthrough 1] Pulling From File
+            if insertBool is False:
+                # Append to List and Clear Values
+                batch.append(finalJAString)
+                speaker = ''
 
-        #         # Translate Batch if Full
-        #         if len(batch) == BATCHSIZE:
-        #             # Translate
-        #             response = translateGPT(batch, textHistory, True)
-        #             tokens[0] += response[1][0]
-        #             tokens[1] += response[1][1]
-        #             translatedBatch = response[0]
-        #             textHistory = translatedBatch[-10:]
+                # Translate Batch if Full
+                if len(batch) == BATCHSIZE:
+                    # Translate
+                    response = translateGPT(batch, textHistory, True)
+                    tokens[0] += response[1][0]
+                    tokens[1] += response[1][1]
+                    translatedBatch = response[0]
+                    textHistory = translatedBatch[-10:]
 
-        #             # Set Values
-        #             if len(batch) == len(translatedBatch):
-        #                 i = batchStartIndex
-        #                 insertBool = True
+                    # Set Values
+                    if len(batch) == len(translatedBatch):
+                        i = batchStartIndex
+                        insertBool = True
 
-        #             # Mismatch
-        #             else:
-        #                 pbar.write(f'Mismatch: {batchStartIndex} - {i}')
-        #                 MISMATCH.append(batch)
-        #                 batchStartIndex = i
-        #                 batch.clear()
+                    # Mismatch
+                    else:
+                        pbar.write(f'Mismatch: {batchStartIndex} - {i}')
+                        MISMATCH.append(batch)
+                        batchStartIndex = i
+                        batch.clear()
 
-        #         i += 1
-        #         if insertBool is True:
-        #             pbar.update(1)
-        #         currentGroup = []
+                i += 1
+                if insertBool is True:
+                    pbar.update(1)
+                currentGroup = []
 
-        #     # [Passthrough 2] Setting Data
-        #     else:
-        #         # Get Text
-        #         translatedText = translatedBatch[0]
-        #         translatedText = translatedText.replace('\\"', '\"')
-        #         translatedText = translatedText.replace('[', '(')
-        #         translatedText = translatedText.replace(']', ')')
+            # [Passthrough 2] Setting Data
+            else:
+                # Get Text
+                translatedText = translatedBatch[0]
+                translatedText = translatedText.replace('\\"', '\"')
+                translatedText = translatedText.replace('[', '(')
+                translatedText = translatedText.replace(']', ')')
 
-        #         # Remove added speaker
-        #         translatedText = re.sub(r'^.+?:\s', '', translatedText)
+                # Remove added speaker
+                translatedText = re.sub(r'^.+?:\s', '', translatedText)
 
-        #         # Textwrap
-        #         translatedText = textwrap.fill(translatedText, width=WIDTH)
-        #         textList = translatedText.split('\n')
+                # Textwrap
+                translatedText = textwrap.fill(translatedText, width=WIDTH)
+                textList = translatedText.split('\n')
                     
-        #         # Set Text
-        #         data[i] = '\d\n'
-        #         counter = 0
-        #         for line in textList:
-        #             # Wordwrap Text
-        #             line = textwrap.fill(line, width=WIDTH)
+                # Set Text
+                data[i] = '\d\n'
+                counter = 0
+                for line in textList:
+                    # Wordwrap Text
+                    line = textwrap.fill(line, width=WIDTH)
                     
-        #             # Set
-        #             data.insert(i, '>' + line.strip() + '\n')
-        #             counter += 1
-        #             i+=1
+                    # Set
+                    data.insert(i, '>' + line.strip() + '\n')
+                    counter += 1
+                    i+=1
                     
-        #             # Go to new window if too long
-        #             if counter >= 4:
-        #                 data[i-1] = data[i-1].replace('\n', '\\\n')
-        #                 counter = 0
-        #         if '\\' not in data[i-1]:
-        #             data[i-1] = data[i-1].replace('\n', '\\\n')
-        #         translatedBatch.pop(0)
-        #         speaker = ''
-        #         currentGroup = []
+                    # Go to new window if too long
+                    if counter >= 4:
+                        data[i-1] = data[i-1].replace('\n', '\\\n')
+                        counter = 0
+                if '\\' not in data[i-1]:
+                    data[i-1] = data[i-1].replace('\n', '\\\n')
+                translatedBatch.pop(0)
+                speaker = ''
+                currentGroup = []
 
-        #         # If Batch is empty. Move on.
-        #         if len(translatedBatch) == 0:
-        #             insertBool = False
-        #             batchStartIndex = i
-        #             batch.clear()
+                # If Batch is empty. Move on.
+                if len(translatedBatch) == 0:
+                    insertBool = False
+                    batchStartIndex = i
+                    batch.clear()
 
         # Nothing relevant. Skip Line.
         else:

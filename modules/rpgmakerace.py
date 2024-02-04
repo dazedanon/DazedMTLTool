@@ -37,6 +37,7 @@ FIXTEXTWRAP = True  # Overwrites textwrap
 IGNORETLTEXT = False    # Ignores all translated text.
 MISMATCH = []   # Lists files that throw a mismatch error (Length of GPT list response is wrong)
 BRACKETNAMES = False
+SKIPTRANSLATE = False
 
 # Pricing - Depends on the model https://openai.com/pricing
 # Batch Size - GPT 3.5 Struggles past 15 lines per request. GPT4 struggles past 50 lines per request
@@ -835,6 +836,8 @@ def searchCodes(page, pbar, fillList, filename):
 
                 # Check for Speaker
                 coloredSpeakerList = re.findall(r'^[\\]+[cC]\[[\d]+\](.+?)[\\]+[Cc]\[[\d]\]$', jaString)
+                if len(coloredSpeakerList) == 0:
+                    coloredSpeakerList = re.findall(r'^【(.*?)】$', jaString)
                 if len(coloredSpeakerList) != 0 and len(codeList[i+1]['p']) > 0:
                     # Get Speaker
                     response = getSpeaker(coloredSpeakerList[0])
@@ -2147,13 +2150,15 @@ def batchList(input_list, batch_size):
 
 def createContext(fullPromptFlag, subbedT):
     characters = 'Game Characters:\n\
-ルース (Ruth) - Male\n\
-リーザ (Reeza) - Female\n\
-エリル (Eril) - Female\n\
-シアン (Cyan) - Female\n\
-トリス (Tris) - Female\n\
-エリル (Eril) - Female\n\
-エリル (Eril) - Female\n\
+リー (Marie) - Female\n\
+ザウバー (Sauber) - Male\n\
+ルナ (Luna) - Female\n\
+神父 (Father) - Male\n\
+クロエ (Chloe) - Female\n\
+レオン (Leon) - Male\n\
+ジョニー (Johnny) - Male\n\
+ウィル (Will) - Male\n\
+Taro - Male\n\
 '
     
     system = PROMPT + VOCAB if fullPromptFlag else \
@@ -2251,6 +2256,8 @@ def combineList(tlist, text):
 
 @retry(exceptions=Exception, tries=5, delay=5)
 def translateGPT(text, history, fullPromptFlag):
+    if SKIPTRANSLATE:
+        return [text, [0,0]]
     totalTokens = [0, 0]
     if isinstance(text, list):
         tList = batchList(text, BATCHSIZE)
