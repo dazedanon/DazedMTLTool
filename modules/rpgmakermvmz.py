@@ -56,9 +56,9 @@ POSITION = 0
 LEAVE = False
 
 # Dialogue / Scroll
-CODE401 = True
-CODE405 = True
-CODE408 = True
+CODE401 = False
+CODE405 = False
+CODE408 = False
 
 # Choices
 CODE102 = True
@@ -228,8 +228,9 @@ def parseMap(data, filename):
                 if event is not None:
                     # This translates ID of events. (May break the game)
                     if '<namePop:' in event['note']:
-                        totalTokens[0] += translateNoteOmitSpace(event, r'<namePop:(.*?) [\d]+>')[0]
-                        totalTokens[1] += translateNoteOmitSpace(event, r'<namePop:(.*?) [\d]+>')[1]
+                        response = translateNoteOmitSpace(event, r'<namePop:(.*?)\s.+>')
+                        totalTokens[0] += response[0]
+                        totalTokens[1] += response[1]
 
                     futures = [executor.submit(searchCodes, page, pbar, [], filename) for page in event['pages'] if page is not None]
                     for future in as_completed(futures):
@@ -279,7 +280,7 @@ def translateNoteOmitSpace(event, regex):
         jaString = re.sub(r'\n', ' ', oldJAString)
 
         # Translate
-        response = translateGPT(jaString, 'Reply with the '+ LANGUAGE +' translation of the location name.', True)
+        response = translateGPT(jaString, 'Reply with the '+ LANGUAGE +' translation of the location name.', False)
         translatedText = response[0]
 
         translatedText = translatedText.replace('\"', '')
@@ -827,9 +828,9 @@ def searchCodes(page, pbar, fillList, filename):
                     codeList[i]['code'] = -1
                     continue
 
-                # Check for Speaker
+                # Check for Colored Speaker
                 coloredSpeakerList = re.findall(r'^[\\]+[cC]\[[\d]+\](.+?)[\\]+[Cc]\[[\d]\]$', jaString)
-                if len(coloredSpeakerList) != 0 and len(codeList[i+1]['parameters']) > 0:
+                if len(coloredSpeakerList) != 0 and codeList[i+1]['code'] in [401, 405, -1]:
                     # Get Speaker
                     response = getSpeaker(coloredSpeakerList[0])
                     speaker = response[0]
@@ -1071,7 +1072,7 @@ def searchCodes(page, pbar, fillList, filename):
             ## Event Code: 122 [Set Variables]
             if codeList[i]['code'] == 122 and CODE122 is True:
                 # This is going to be the var being set. (IMPORTANT)
-                if codeList[i]['parameters'][0] not in [315,316,317,318,319,320,321,322,323,324,325]:
+                if codeList[i]['parameters'][0] not in [528, 944]:
                     continue
                   
                 jaString = codeList[i]['parameters'][4]
@@ -1261,6 +1262,7 @@ def searchCodes(page, pbar, fillList, filename):
 
             ## Event Code: 355 or 655 Scripts [Optional]
             if (codeList[i]['code'] == 355 or codeList[i]['code'] == 655) and CODE355655 is True:
+                matchList = []
                 jaString = codeList[i]['parameters'][0]
 
                 # If there isn't any Japanese in the text just skip
@@ -1270,15 +1272,19 @@ def searchCodes(page, pbar, fillList, filename):
                 # Skip These
                 # if 'this.' in jaString:
                 #     continue
+
+                # Need to remove outside code and put it back later
+                # matchList = re.findall(r'.+"(.*?)".*[;,]$', jaString)
+
                 if 'console.' in jaString:
                     continue
 
                 # Want to translate this script
-                if 'this.BLogAdd' not in jaString:
-                    continue
+                # if 'this.BLogAdd' not in jaString:
+                #     continue
 
-                # Need to remove outside code and put it back later
-                matchList = re.findall(r'.+"(.*?)".*[;,]$', jaString)
+                if '_subject=' in jaString:
+                    matchList = re.findall(r'.*?subject=(.*?)\".*?', jaString)
 
                 # Translate
                 if len(matchList) > 0:
@@ -1287,9 +1293,10 @@ def searchCodes(page, pbar, fillList, filename):
                     #     continue
 
                     # Remove Textwrap
-                    text = matchList[0].replace('\\n', ' ')
+                    # text = matchList[0].replace('\\n', ' ')
+                    text = matchList[0]
 
-                    response = translateGPT(text, 'Reply with the '+ LANGUAGE +' translation Stat Title. Keep it brief.', False)
+                    response = translateGPT(text, 'Reply with the '+ LANGUAGE +' translation. Keep it brief.', False)
                     totalTokens[0] += response[1][0]
                     totalTokens[1] += response[1][1]
                     translatedText = response[0]
@@ -1302,7 +1309,7 @@ def searchCodes(page, pbar, fillList, filename):
                     translatedText = translatedText.replace("'", '\'')
                     
                     # Wordwrap
-                    translatedText = textwrap.fill(translatedText, width=60).replace('\n', '\\n')
+                    # translatedText = textwrap.fill(translatedText, width=60).replace('\n', '\\n')
 
                     # Set Data
                     translatedText = jaString.replace(matchList[0], translatedText)
@@ -1360,7 +1367,7 @@ def searchCodes(page, pbar, fillList, filename):
                 if 'info:' in jaString:
                     regex = r'info:(.*)'
                 elif 'ActiveMessage:' in jaString:
-                    regex = r'<ActiveMessage:(.*)>'
+                    regex = r'<ActiveMessage:(.*)>?'
                 else:
                     continue
 
@@ -1369,7 +1376,7 @@ def searchCodes(page, pbar, fillList, filename):
 
                 # Translate
                 if len(matchList) > 0:
-                    response = translateGPT(matchList[0], 'Reply with the '+ LANGUAGE +' translation of the Title', False)
+                    response = translateGPT(matchList[0], 'Reply with the '+ LANGUAGE +' translation of the text.', False)
                     totalTokens[0] += response[1][0]
                     totalTokens[1] += response[1][1]
                     translatedText = response[0]
@@ -1731,23 +1738,16 @@ def searchCodes(page, pbar, fillList, filename):
 
                 # Translate
                 if len(textHistory) > 0:
-                    response = translateGPT(choiceList, 'Keep your translation as brief as possible. Previous text for context: ' + textHistory[len(textHistory)-1] + '\n\nThis will be a dialogue option', True)
+                    response = translateGPT(choiceList, 'This will be a dialogue option. Previous text for context: ' + textHistory[len(textHistory)-1] + '\n\nThis will be a dialogue option', True)
                     translatedTextList = response[0]
                 else:
-                    response = translateGPT(choiceList, 'Keep your translation as brief as possible.\n\nThis will be a dialogue option', True)
+                    response = translateGPT(choiceList, 'This will be a dialogue option', True)
                     translatedTextList = response[0]
 
                 # Check Mismatch
                 if len(translatedTextList) == len(choiceList):
                     for choice in range(len(codeList[i]['parameters'][0])):
                         translatedText = translatedTextList[choice]
-
-                        # Remove speaker
-                        matchSpeakerList = re.findall(r'(^.+?)\s?[|:]\s?', translatedText)
-                        if len(matchSpeakerList) > 0:
-                            newSpeaker = matchSpeakerList[0]
-                            nametag = nametag.replace(speaker, newSpeaker)
-                        translatedText = re.sub(r'(^.+?)\s?[|:]\s?', '', translatedText)
 
                         # Set Data
                         totalTokens[0] += response[1][0]
@@ -2160,13 +2160,12 @@ def batchList(input_list, batch_size):
 
 def createContext(fullPromptFlag, subbedT):
     characters = 'Game Characters:\n\
-ルース (Ruth) - Male\n\
-リーザ (Reeza) - Female\n\
-エリル (Eril) - Female\n\
-シアン (Cyan) - Female\n\
-トリス (Tris) - Female\n\
-エリル (Eril) - Female\n\
-エリル (Eril) - Female\n\
+ルナ (Luna) - Female\n\
+Taro (Taro) - Male\n\
+ドルトン (Dalton) - Male\n\
+アラシ (Arashi) - Male\n\
+ボブ (Bob) - Male\n\
+ショウタ (Syouta) - Male\n\
 '
     
     system = PROMPT + VOCAB if fullPromptFlag else \

@@ -61,13 +61,13 @@ LEAVE = False
 # Dialogue / Scroll
 CODE401 = False
 CODE405 = False
-CODE408 = True
+CODE408 = False
 
 # Choices
 CODE102 = False
 
 # Variables
-CODE122 = False
+CODE122 = True
 
 # Names
 CODE101 = False
@@ -1080,7 +1080,7 @@ def searchCodes(page, pbar, fillList, filename):
             ## Event Code: 122 [Set Variables]
             if codeList[i]['c'] == 122 and CODE122 is True:
                 # This is going to be the var being set. (IMPORTANT)
-                if codeList[i]['p'][0] not in [315,316,317,318,319,320,321,322,323,324,325]:
+                if codeList[i]['p'][0] not in [528, 944]:
                     continue
                   
                 jaString = codeList[i]['p'][4]
