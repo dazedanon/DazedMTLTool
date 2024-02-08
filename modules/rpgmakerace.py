@@ -50,7 +50,7 @@ if 'gpt-3.5' in MODEL:
 elif 'gpt-4' in MODEL:
     INPUTAPICOST = .01
     OUTPUTAPICOST = .03
-    BATCHSIZE = 20
+    BATCHSIZE = 40
     FREQUENCY_PENALTY = 0.1
 
 #tqdm Globals
@@ -59,15 +59,15 @@ POSITION = 0
 LEAVE = False
 
 # Dialogue / Scroll
-CODE401 = False
-CODE405 = False
-CODE408 = False
+CODE401 = True
+CODE405 = True
+CODE408 = True
 
 # Choices
-CODE102 = False
+CODE102 = True
 
 # Variables
-CODE122 = True
+CODE122 = False
 
 # Names
 CODE101 = False
@@ -838,18 +838,22 @@ def searchCodes(page, pbar, fillList, filename):
                 coloredSpeakerList = re.findall(r'^[\\]+[cC]\[[\d]+\](.+?)[\\]+[Cc]\[[\d]\]$', jaString)
                 if len(coloredSpeakerList) == 0:
                     coloredSpeakerList = re.findall(r'^【(.*?)】$', jaString)
-                if len(coloredSpeakerList) != 0 and len(codeList[i+1]['p']) > 0:
+                if len(coloredSpeakerList) != 0 and codeList[i+1]['c'] in [401, 405, -1]:
                     # Get Speaker
                     response = getSpeaker(coloredSpeakerList[0])
                     speaker = response[0]
                     totalTokens[0] += response[1][0]
                     totalTokens[1] += response[1][1]
 
-                    #Set Data
+                    # Set Data
                     codeList[i]['p'][0] = jaString.replace(coloredSpeakerList[0], speaker)
 
+                    # Iterate to next string
                     i += 1
                     j = i
+                    while codeList[i]['c'] in [-1]:
+                        i += 1
+                        j = i
                     jaString = codeList[i]['p'][0]
 
                 # Using this to keep track of 401's in a row.
@@ -1740,23 +1744,16 @@ def searchCodes(page, pbar, fillList, filename):
 
                 # Translate
                 if len(textHistory) > 0:
-                    response = translateGPT(choiceList, 'Keep your translation as brief as possible. Previous text for context: ' + textHistory[len(textHistory)-1] + '\n\nThis will be a dialogue option', True)
+                    response = translateGPT(choiceList, 'This will be a dialogue option. Previous text for context: ' + textHistory[len(textHistory)-1], True)
                     translatedTextList = response[0]
                 else:
-                    response = translateGPT(choiceList, 'Keep your translation as brief as possible.\n\nThis will be a dialogue option', True)
+                    response = translateGPT(choiceList, 'This will be a dialogue option', True)
                     translatedTextList = response[0]
 
                 # Check Mismatch
                 if len(translatedTextList) == len(choiceList):
                     for choice in range(len(codeList[i]['p'][0])):
                         translatedText = translatedTextList[choice]
-
-                        # Remove speaker
-                        matchSpeakerList = re.findall(r'(^.+?)\s?[|:]\s?', translatedText)
-                        if len(matchSpeakerList) > 0:
-                            newSpeaker = matchSpeakerList[0]
-                            nametag = nametag.replace(speaker, newSpeaker)
-                        translatedText = re.sub(r'(^.+?)\s?[|:]\s?', '', translatedText)
 
                         # Set Data
                         totalTokens[0] += response[1][0]
@@ -2009,8 +2006,8 @@ def searchSystem(data, pbar):
 # Save some money and enter the character before translation
 def getSpeaker(speaker):
     match speaker:
-        case 'ルイ':
-            return ['Rui', [0,0]]
+        case 'パテラ':
+            return ['Patera', [0,0]]
         case 'チュベロス':
             return ['Tuberose', [0,0]]
         case '':
@@ -2152,14 +2149,20 @@ def batchList(input_list, batch_size):
 
 def createContext(fullPromptFlag, subbedT):
     characters = 'Game Characters:\n\
-リー (Marie) - Female\n\
-ザウバー (Sauber) - Male\n\
-ルナ (Luna) - Female\n\
-神父 (Father) - Male\n\
-クロエ (Chloe) - Female\n\
-レオン (Leon) - Male\n\
-ジョニー (Johnny) - Male\n\
-ウィル (Will) - Male\n\
+パテラ (Patera) - Female\n\
+オーロラ (Aurora) - Female\n\
+ニトロリーヌ (Nitroline) - Female\n\
+ナジョノワール (Najonoir) - Male\n\
+ケリーメロー (Kellymellow) - Male\n\
+ミローラ (Mirora) - Female\n\
+ザムスィー (Zamsy) - Male\n\
+シェヌーパ (Shenupa) - Male\n\
+ノグマ (Noguma) - Male\n\
+コキューズ (Cocuz) - Female\n\
+サヌパ (Sanupa) - Male\n\
+カル (Karu) - Male\n\
+サナ (Sana) - Female\n\
+モロドフ (Molodov) - Male\n\
 Taro - Male\n\
 '
     
