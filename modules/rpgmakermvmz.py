@@ -828,8 +828,10 @@ def searchCodes(page, pbar, fillList, filename):
                     codeList[i]['code'] = -1
                     continue
 
-                # Check for Colored Speaker
+                # Check for Speaker
                 coloredSpeakerList = re.findall(r'^[\\]+[cC]\[[\d]+\](.+?)[\\]+[Cc]\[[\d]\]$', jaString)
+                if len(coloredSpeakerList) == 0:
+                    coloredSpeakerList = re.findall(r'^【(.*?)】$', jaString)
                 if len(coloredSpeakerList) != 0 and codeList[i+1]['code'] in [401, 405, -1]:
                     # Get Speaker
                     response = getSpeaker(coloredSpeakerList[0])
@@ -837,11 +839,15 @@ def searchCodes(page, pbar, fillList, filename):
                     totalTokens[0] += response[1][0]
                     totalTokens[1] += response[1][1]
 
-                    #Set Data
-                    codeList[i]['parameters'][0] = jaString.replace(coloredSpeakerList[0], speaker)
+                    # Set Data
+                    codeList[i]['p'][0] = jaString.replace(coloredSpeakerList[0], speaker)
 
+                    # Iterate to next string
                     i += 1
                     j = i
+                    while codeList[i]['code'] in [-1]:
+                        i += 1
+                        j = i
                     jaString = codeList[i]['parameters'][0]
 
                 # Using this to keep track of 401's in a row.
