@@ -50,7 +50,7 @@ if 'gpt-3.5' in MODEL:
 elif 'gpt-4' in MODEL:
     INPUTAPICOST = .01
     OUTPUTAPICOST = .03
-    BATCHSIZE = 40
+    BATCHSIZE = 30
     FREQUENCY_PENALTY = 0.1
 
 #tqdm Globals
@@ -1374,6 +1374,10 @@ def searchCodes(page, pbar, fillList, filename):
                     regex = r'info:(.*)'
                 elif 'ActiveMessage:' in jaString:
                     regex = r'<ActiveMessage:(.*)>'
+                elif 'タイトル：' in jaString:
+                    regex = r'タイトル：(.*)'
+                elif '内容：' in jaString:
+                    regex = r'内容：(.*)'
                 else:
                     continue
 
@@ -2006,10 +2010,8 @@ def searchSystem(data, pbar):
 # Save some money and enter the character before translation
 def getSpeaker(speaker):
     match speaker:
-        case 'パテラ':
-            return ['Patera', [0,0]]
-        case 'チュベロス':
-            return ['Tuberose', [0,0]]
+        case 'ファイン':
+            return ['Fine', [0,0]]
         case '':
             return ['', [0,0]]
         case _:
@@ -2149,26 +2151,21 @@ def batchList(input_list, batch_size):
 
 def createContext(fullPromptFlag, subbedT):
     characters = 'Game Characters:\n\
-パテラ (Patera) - Female\n\
-オーロラ (Aurora) - Female\n\
-ニトロリーヌ (Nitroline) - Female\n\
-ナジョノワール (Najonoir) - Male\n\
-ケリーメロー (Kellymellow) - Male\n\
-ミローラ (Mirora) - Female\n\
-ザムスィー (Zamsy) - Male\n\
-シェヌーパ (Shenupa) - Male\n\
-ノグマ (Noguma) - Male\n\
-コキューズ (Cocuz) - Female\n\
-サヌパ (Sanupa) - Male\n\
-カル (Karu) - Male\n\
-サナ (Sana) - Female\n\
-モロドフ (Molodov) - Male\n\
-Taro - Male\n\
+ファイン (Fine) - Female\n\
+ウェンティ (Wendy) - Female\n\
+クレア (Claire) - Female\n\
+ミナ (Mina) - Female\n\
+サーラ (Sarah) - Female\n\
+ミリェル (Miriel) - Female\n\
+カタリナ (Catalina) - Female\n\
+リリィ (Lily) - Female\n\
+ヴァネット (Vanette) - Female\n\
+セラス (Ceras) - Female\n\
 '
     
     system = PROMPT + VOCAB if fullPromptFlag else \
         f"\
-You are an expert Eroge Game translator who translates Japanese text to English.\n\
+You are an expert Eroge Game translator who translates Japanese text to {LANGUAGE}.\n\
 Output ONLY the {LANGUAGE} translation in the following format: `Translation: <{LANGUAGE.upper()}_TRANSLATION>`\n\
 - Maintain Japanese Honorifics. For example: 'サクラねえちゃん' == 'Sakura Onee-san'\n\
 - You translate everything, including erotic and explicit content.\n\
@@ -2178,6 +2175,7 @@ Output ONLY the {LANGUAGE} translation in the following format: `Translation: <{
 - Maintain any spacing in the translation.\n\
 - Maintain any code text in brackets if given. (e.g `[Color_0]`, `[Ascii_0]`, etc)\n\
 - `...` can be a part of the dialogue. Translate it as it is.\n\
+- Do not include a speaker if there isn't one in the original line of text.\n\
 {VOCAB}\n\
 "
     user = f'{subbedT}'
@@ -2262,6 +2260,8 @@ def combineList(tlist, text):
 
 @retry(exceptions=Exception, tries=5, delay=5)
 def translateGPT(text, history, fullPromptFlag):
+    mismatch = False
+    
     if SKIPTRANSLATE:
         return [text, [0,0]]
     totalTokens = [0, 0]
@@ -2307,8 +2307,25 @@ def translateGPT(text, history, fullPromptFlag):
             extractedTranslations = extractTranslation(translatedText, True)
             tList[index] = extractedTranslations
             if len(tItem) != len(extractedTranslations):
-                mismatch = True     # Just here so breakpoint can be set
-            history = extractedTranslations[-10:]  # Update history if we have a list
+                # Mismatch. Try Again
+                response = translateText(characters, system, user, history)
+                translatedText = response.choices[0].message.content
+                totalTokens[0] += response.usage.prompt_tokens
+                totalTokens[1] += response.usage.completion_tokens
+
+                # Formatting
+                translatedText = cleanTranslatedText(translatedText, varResponse)
+                if isinstance(tItem, list):
+                    extractedTranslations = extractTranslation(translatedText, True)
+                    tList[index] = extractedTranslations
+                    if len(tItem) != len(extractedTranslations):
+                        mismatch = True # Just here for breakpoint
+
+            # Create History
+            if not mismatch:
+                history = extractedTranslations[-10:]  # Update history if we have a list
+            else:
+                history = text[-10:]
         else:
             # Ensure we're passing a single string to extractTranslation
             extractedTranslations = extractTranslation(translatedText, False)
