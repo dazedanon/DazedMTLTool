@@ -605,9 +605,6 @@ def combineList(tlist, text):
 @retry(exceptions=Exception, tries=5, delay=5)
 def translateGPT(text, history, fullPromptFlag):
     mismatch = False
-    
-    if SKIPTRANSLATE:
-        return [text, [0,0]]
     totalTokens = [0, 0]
     if isinstance(text, list):
         tList = batchList(text, BATCHSIZE)

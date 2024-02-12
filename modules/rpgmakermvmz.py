@@ -56,9 +56,9 @@ POSITION = 0
 LEAVE = False
 
 # Dialogue / Scroll
-CODE401 = False
-CODE405 = False
-CODE408 = False
+CODE401 = True
+CODE405 = True
+CODE408 = True
 
 # Choices
 CODE102 = True
@@ -252,10 +252,10 @@ def translateNote(event, regex):
         while i < len(match):
             oldJAString = match[i]
             # Remove any textwrap
-            jaString = re.sub(r'\n', ' ', oldJAString)
+            oldJAString = oldJAString.replace('\n', ' ')
 
             # Translate
-            response = translateGPT(jaString, 'Reply with only the '+ LANGUAGE +' translation', False)
+            response = translateGPT(oldJAString, 'Reply with only the '+ LANGUAGE +' translation.', False)
             translatedText = response[0]
             tokens[0] += response[1][0]
             tokens[1] += response[1][1]
@@ -263,7 +263,8 @@ def translateNote(event, regex):
             # Textwrap
             translatedText = textwrap.fill(translatedText, width=NOTEWIDTH)
             translatedText = translatedText.replace('\"', '')
-            event['note'] = event['note'].replace(oldJAString, translatedText)
+            jaString = jaString.replace(oldJAString, translatedText)
+            event['note'] = jaString
             i += 1
         return tokens
     return [0,0]
@@ -2093,7 +2094,7 @@ def subVars(jaString):
 
     # Formatting
     count = 0
-    formatList = re.findall(r'[\\]+[\w]*\[[\w\\\[\]]+\]', jaString)
+    formatList = re.findall(r'[\\]+[\w]*\[[\w\\\[\],\s]+?\]', jaString)
     formatList = set(formatList)
     if len(formatList) != 0:
         for var in formatList:
@@ -2164,16 +2165,8 @@ def batchList(input_list, batch_size):
 
 def createContext(fullPromptFlag, subbedT):
     characters = 'Game Characters:\n\
-ファイン (Fine) - Female\n\
-ウェンティ (Wendy) - Female\n\
-クレア (Claire) - Female\n\
-ミナ (Mina) - Female\n\
-サーラ (Sarah) - Female\n\
-ミリェル (Miriel) - Female\n\
-カタリナ (Catalina) - Female\n\
-リリィ (Lily) - Female\n\
-ヴァネット (Vanette) - Female\n\
-セラス (Ceras) - Female\n\
+咲姫 (Saki) - Female\n\
+メアリー (Meary) - Female\n\
 '
     
     system = PROMPT + VOCAB if fullPromptFlag else \
@@ -2273,6 +2266,7 @@ def combineList(tlist, text):
 
 @retry(exceptions=Exception, tries=5, delay=5)
 def translateGPT(text, history, fullPromptFlag):
+    mismatch = False
     totalTokens = [0, 0]
     if isinstance(text, list):
         tList = batchList(text, BATCHSIZE)
