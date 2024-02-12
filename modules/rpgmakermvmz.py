@@ -955,7 +955,7 @@ def searchCodes(page, pbar, fillList, filename):
 
                     # Catch Vars that may break the TL
                     varString = ''
-                    matchList = re.findall(r'^[\\]+[\w]+\[[a-zA-Z0-9\\\[\]\_]+\]', finalJAString)    
+                    matchList = re.findall(r'^[\\]+[\w]+\[[a-zA-Z0-9\\\[\]\_,\s-]+\]', finalJAString)    
                     if len(matchList) != 0:
                         varString = matchList[0]
                         finalJAString = finalJAString.replace(matchList[0], '')
@@ -2094,7 +2094,7 @@ def subVars(jaString):
 
     # Formatting
     count = 0
-    formatList = re.findall(r'[\\]+[\w]*\[[\w\\\[\],\s]+?\]', jaString)
+    formatList = re.findall(r'^[\\]+[\w]+\[[a-zA-Z0-9\\\[\]\_,\s-]+\]', jaString)
     formatList = set(formatList)
     if len(formatList) != 0:
         for var in formatList:
@@ -2179,7 +2179,7 @@ Output ONLY the {LANGUAGE} translation in the following format: `Translation: <{
 - All text in the output must be in English even if it may be hard to translate.\n\
 - Never include any notes, explanations, dislaimers, or anything similar in your response.\n\
 - Maintain any spacing in the translation.\n\
-- Maintain any code text in brackets if given. (e.g `[Color_0]`, `[Ascii_0]`, etc)\n\
+- Maintain any code text in brackets if given. (e.g `[Color_0]`, `[Ascii_0]`, `[FCode_1`], etc)\n\
 - `...` can be a part of the dialogue. Translate it as it is.\n\
 - Do not include a speaker if there isn't one in the original line of text.\n\
 {VOCAB}\n\
