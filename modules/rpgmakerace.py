@@ -260,10 +260,10 @@ def translateNote(event, regex):
         while i < len(match):
             oldJAString = match[i]
             # Remove any textwrap
-            jaString = re.sub(r'\n', ' ', oldJAString)
+            oldJAString = oldJAString.replace('\n', ' ')
 
             # Translate
-            response = translateGPT(jaString, 'Reply with only the '+ LANGUAGE +' translation of the RPG Skill name.', False)
+            response = translateGPT(oldJAString, 'Reply with only the '+ LANGUAGE +' translation.', False)
             translatedText = response[0]
             tokens[0] += response[1][0]
             tokens[1] += response[1][1]
@@ -271,7 +271,8 @@ def translateNote(event, regex):
             # Textwrap
             translatedText = textwrap.fill(translatedText, width=NOTEWIDTH)
             translatedText = translatedText.replace('\"', '')
-            event['note'] = event['note'].replace(oldJAString, translatedText)
+            jaString = jaString.replace(oldJAString, translatedText)
+            event['note'] = jaString
             i += 1
         return tokens
     return [0,0]
@@ -570,6 +571,10 @@ def searchNames(data, pbar, context):
                         totalTokens[1] += tokensResponse[1]
                     if '<SG説明4:' in data[i]['note']:
                         tokensResponse = translateNote(data[i], r'<SG説明4:(.*?)>')
+                        totalTokens[0] += tokensResponse[0]
+                        totalTokens[1] += tokensResponse[1]
+                    if '<図鑑特徴:' in data[i]['note']:
+                        tokensResponse = translateNote(data[i], r'<図鑑特徴:(.*?)>')
                         totalTokens[0] += tokensResponse[0]
                         totalTokens[1] += tokensResponse[1]
                     pbar.update(1)
