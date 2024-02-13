@@ -2094,7 +2094,7 @@ def subVars(jaString):
 
     # Formatting
     count = 0
-    formatList = re.findall(r'^[\\]+[\w]+\[[a-zA-Z0-9\\\[\]\_,\s-]+\]', jaString)
+    formatList = re.findall(r'[\\]+[\w]+\[[a-zA-Z0-9\\\[\]\_,\s-]+\]', jaString)
     formatList = set(formatList)
     if len(formatList) != 0:
         for var in formatList:
