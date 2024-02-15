@@ -21,6 +21,7 @@ Here are some vocabulary and terms so that you know the proper spelling and tran
 先生, せんせい (sensei)
 
 # System
+初めから (Start)
 逃げる (Escape)
 大事なもの (Key Items)
 最強装備 (Optimize)

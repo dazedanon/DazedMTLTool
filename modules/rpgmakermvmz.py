@@ -250,12 +250,12 @@ def translateNote(event, regex):
         tokens = [0,0]
         i = 0
         while i < len(match):
-            oldJAString = match[i]
+            initialJAString = match[i]
             # Remove any textwrap
-            oldJAString = oldJAString.replace('\n', ' ')
+            modifiedJAString = initialJAString.replace('\n', ' ')
 
             # Translate
-            response = translateGPT(oldJAString, 'Reply with only the '+ LANGUAGE +' translation.', False)
+            response = translateGPT(modifiedJAString, 'Reply with only the '+ LANGUAGE +' translation.', False)
             translatedText = response[0]
             tokens[0] += response[1][0]
             tokens[1] += response[1][1]
@@ -263,7 +263,7 @@ def translateNote(event, regex):
             # Textwrap
             translatedText = textwrap.fill(translatedText, width=NOTEWIDTH)
             translatedText = translatedText.replace('\"', '')
-            jaString = jaString.replace(oldJAString, translatedText)
+            jaString = jaString.replace(initialJAString, translatedText)
             event['note'] = jaString
             i += 1
         return tokens
@@ -549,6 +549,10 @@ def searchNames(data, pbar, context):
                     descriptionList.append(data[i]['description'].replace('\n', ' '))
                     if '<hint:' in data[i]['note']:
                         tokensResponse = translateNote(data[i], r'<hint:(.*?)>')
+                        totalTokens[0] += tokensResponse[0]
+                        totalTokens[1] += tokensResponse[1]
+                    if '<SGDescription:' in data[i]['note']:
+                        tokensResponse = translateNote(data[i], r'<SGDescription:(.*?)>')
                         totalTokens[0] += tokensResponse[0]
                         totalTokens[1] += tokensResponse[1]
                     if '<SG説明:' in data[i]['note']:
@@ -1079,7 +1083,7 @@ def searchCodes(page, pbar, fillList, filename):
             ## Event Code: 122 [Set Variables]
             if codeList[i]['code'] == 122 and CODE122 is True:
                 # This is going to be the var being set. (IMPORTANT)
-                if codeList[i]['parameters'][0] not in [528, 944]:
+                if codeList[i]['parameters'][0] not in range(121, 128):
                     continue
                   
                 jaString = codeList[i]['parameters'][4]
@@ -1087,7 +1091,7 @@ def searchCodes(page, pbar, fillList, filename):
                     continue
                 
                 # Definitely don't want to mess with files
-                if '■' in jaString or '_' in jaString:
+                if 'gameV' in jaString or '_' in jaString:
                     continue
 
                 # Need to remove outside code and put it back later
@@ -1105,14 +1109,13 @@ def searchCodes(page, pbar, fillList, filename):
                     translatedText = jaString.replace(jaString, translatedText)
 
                     # Remove characters that may break scripts
-                    charList = ['.', '\"', '\\n']
+                    charList = ['\"', '\\n']
                     for char in charList:
                         translatedText = translatedText.replace(char, '')
                 
                 # Textwrap
-                translatedText = textwrap.fill(translatedText, width=200)
+                translatedText = textwrap.fill(translatedText, width=45)
                 translatedText = translatedText.replace('\n', '\\n')
-                # translatedText = translatedText.replace('\'', '\\\'')
                 translatedText = '\"' + translatedText + '\"'
 
                 # Set Data
@@ -1290,18 +1293,13 @@ def searchCodes(page, pbar, fillList, filename):
                 # if 'this.BLogAdd' not in jaString:
                 #     continue
 
-                if '_subject=' in jaString:
-                    matchList = re.findall(r'.*?subject=(.*?)\".*?', jaString)
+                if '$gameVariables.setValue(201' in jaString:
+                    matchList = re.findall(r'\$gameVariables\.setValue.*?"(.*)"', jaString)
 
                 # Translate
                 if len(matchList) > 0:
-                    # If there isn't any Japanese in the text just skip
-                    # if not re.search(r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴー]+', matchList[0]):
-                    #     continue
-
                     # Remove Textwrap
-                    # text = matchList[0].replace('\\n', ' ')
-                    text = matchList[0]
+                    text = matchList[0].replace('\\n', ' ')
 
                     response = translateGPT(text, 'Reply with the '+ LANGUAGE +' translation. Keep it brief.', False)
                     totalTokens[0] += response[1][0]
@@ -1316,7 +1314,7 @@ def searchCodes(page, pbar, fillList, filename):
                     translatedText = translatedText.replace("'", '\'')
                     
                     # Wordwrap
-                    # translatedText = textwrap.fill(translatedText, width=60).replace('\n', '\\n')
+                    translatedText = textwrap.fill(translatedText, width=80).replace('\n', '\\n')
 
                     # Set Data
                     translatedText = jaString.replace(matchList[0], translatedText)
@@ -2165,8 +2163,8 @@ def batchList(input_list, batch_size):
 
 def createContext(fullPromptFlag, subbedT):
     characters = 'Game Characters:\n\
-咲姫 (Saki) - Female\n\
-メアリー (Meary) - Female\n\
+メミミ (Memimi) - Female\n\
+バニーちゃん (Bunny-chan) - Female\n\
 '
     
     system = PROMPT + VOCAB if fullPromptFlag else \
