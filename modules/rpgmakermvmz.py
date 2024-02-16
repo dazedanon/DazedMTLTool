@@ -2165,6 +2165,11 @@ def createContext(fullPromptFlag, subbedT):
     characters = 'Game Characters:\n\
 メミミ (Memimi) - Female\n\
 バニーちゃん (Bunny-chan) - Female\n\
+ブラキオコンドル (Brachiocondor) - Male\n\
+サメブロッコリー (Shark Broccoli) - Male\n\
+シャチアスパラガス (Orca Asparagus) - Male\n\
+ドリルマメイド (Drillmaid) - Male\n\
+ケルベロスオクトパス (Cerburus Octopus) - Male\n\
 '
     
     system = PROMPT + VOCAB if fullPromptFlag else \

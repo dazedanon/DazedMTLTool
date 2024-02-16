@@ -287,8 +287,8 @@ def translateCSV(reader, pbar, writer, textHistory, format):
             for row in batch:
                 if row[1] == "":
                     jaString = row[0]
-                # else:
-                #     jaString = row[1]
+                else:
+                    continue
 
                 # Remove Textwrap
                 jaString = jaString.replace('\n', ' ')
