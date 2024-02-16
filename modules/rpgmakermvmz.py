@@ -1,5 +1,6 @@
 # Libraries
 import json, os, re, textwrap, threading, time, traceback, tiktoken, openai
+import google.generativeai as genai
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from colorama import Fore
@@ -14,8 +15,11 @@ if os.getenv('api').replace(' ', '') != '':
 openai.organization = os.getenv('org')
 openai.api_key = os.getenv('key')
 
+# Google
+gemini = genai.GenerativeModel(os.getenv('geminiModel'))
+
 #Globals
-MODEL = os.getenv('model')
+MODEL = genai.GenerativeModel(os.getenv('geminiModel')).model_name
 TIMEOUT = int(os.getenv('timeout'))
 LANGUAGE = os.getenv('language').capitalize()
 PROMPT = Path('prompt.txt').read_text(encoding='utf-8')
@@ -45,6 +49,11 @@ if 'gpt-3.5' in MODEL:
     BATCHSIZE = 10
     FREQUENCY_PENALTY = 0.2
 elif 'gpt-4' in MODEL:
+    INPUTAPICOST = .01
+    OUTPUTAPICOST = .03
+    BATCHSIZE = 40
+    FREQUENCY_PENALTY = 0.1
+else:
     INPUTAPICOST = .01
     OUTPUTAPICOST = .03
     BATCHSIZE = 40
@@ -1017,13 +1026,13 @@ def searchCodes(page, pbar, fillList, filename):
                     if len(fillList) == 0:
                         if speaker == '' and finalJAString != '':
                             docList.append(finalJAString)
-                            textHistory.append(finalJAString)
+                            # textHistory.append(finalJAString)
                         elif finalJAString != '':
                             docList.append(f'{speaker}: {finalJAString}')
-                            textHistory.append(finalJAString)
+                            # textHistory.append(finalJAString)
                         else:
                             docList.append(speaker)
-                            textHistory.append(speaker)
+                            # textHistory.append(speaker)
                         speaker = ''
                         match = []
                         currentGroup = []
@@ -2214,6 +2223,25 @@ def translateText(characters, system, user, history):
     )
     return response
 
+def translateTextGemini(characters, system, user, history):
+    # History
+    parts = [system, characters]
+    if isinstance(history, list):
+        for h in history:
+            parts.append(h)
+    else:
+        parts.append(history)
+    parts.append(user)
+
+    response = gemini.generate_content(
+        {"role": "user", "parts": parts}, 
+        safety_settings={
+            'HARASSMENT':'block_none',
+            'SEXUAL':'block_none',
+        }
+    )
+    return response
+
 def cleanTranslatedText(translatedText, varResponse):
     placeholders = {
         f'{LANGUAGE} Translation: ': '',
@@ -2302,11 +2330,15 @@ def translateGPT(text, history, fullPromptFlag):
             continue
 
         # Translating
-        response = translateText(characters, system, user, history)
-        translatedText = response.choices[0].message.content
-        totalTokens[0] += response.usage.prompt_tokens
-        totalTokens[1] += response.usage.completion_tokens
-
+        if 'gpt-4' in MODEL:
+            response = translateText(characters, system, user, history)
+            translatedText = response.choices[0].message.content
+            totalTokens[0] += response.usage.prompt_tokens
+            totalTokens[1] += response.usage.completion_tokens
+        else:
+            response = translateTextGemini(characters, system, user, history)
+            translatedText = response.text
+            
         # Formatting
         translatedText = cleanTranslatedText(translatedText, varResponse)
         if isinstance(tItem, list):
@@ -2314,10 +2346,14 @@ def translateGPT(text, history, fullPromptFlag):
             tList[index] = extractedTranslations
             if len(tItem) != len(extractedTranslations):
                 # Mismatch. Try Again
-                response = translateText(characters, system, user, history)
-                translatedText = response.choices[0].message.content
-                totalTokens[0] += response.usage.prompt_tokens
-                totalTokens[1] += response.usage.completion_tokens
+                if 'gpt-4' in MODEL:
+                    response = translateText(characters, system, user, history)
+                    translatedText = response.choices[0].message.content
+                    totalTokens[0] += response.usage.prompt_tokens
+                    totalTokens[1] += response.usage.completion_tokens
+                else:
+                    response = translateTextGemini(characters, system, user, history)
+                    translatedText = response.text
 
                 # Formatting
                 translatedText = cleanTranslatedText(translatedText, varResponse)
