@@ -845,7 +845,7 @@ def searchCodes(page, pbar, fillList, filename):
                     totalTokens[1] += response[1][1]
 
                     # Set Data
-                    codeList[i]['p'][0] = jaString.replace(coloredSpeakerList[0], speaker)
+                    codeList[i]['parameters'][0] = jaString.replace(coloredSpeakerList[0], speaker)
 
                     # Iterate to next string
                     i += 1
@@ -2163,13 +2163,9 @@ def batchList(input_list, batch_size):
 
 def createContext(fullPromptFlag, subbedT):
     characters = 'Game Characters:\n\
-メミミ (Memimi) - Female\n\
-バニーちゃん (Bunny-chan) - Female\n\
-ブラキオコンドル (Brachiocondor) - Male\n\
-サメブロッコリー (Shark Broccoli) - Male\n\
-シャチアスパラガス (Orca Asparagus) - Male\n\
-ドリルマメイド (Drillmaid) - Male\n\
-ケルベロスオクトパス (Cerburus Octopus) - Male\n\
+レイシア (Reisha) - Female\n\
+アカネ (Akane) - Female\n\
+王女ソアラ (Princess Soara) - Female\n\
 '
     
     system = PROMPT + VOCAB if fullPromptFlag else \
