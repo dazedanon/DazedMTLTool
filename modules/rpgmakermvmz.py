@@ -61,7 +61,7 @@ CODE405 = True
 CODE408 = True
 
 # Choices
-CODE102 = True
+CODE102 = False
 
 # Variables
 CODE122 = False
@@ -1083,7 +1083,7 @@ def searchCodes(page, pbar, fillList, filename):
             ## Event Code: 122 [Set Variables]
             if codeList[i]['code'] == 122 and CODE122 is True:
                 # This is going to be the var being set. (IMPORTANT)
-                if codeList[i]['parameters'][0] not in range(121, 128):
+                if codeList[i]['parameters'][0] not in [79]:
                     continue
                   
                 jaString = codeList[i]['parameters'][4]
@@ -1100,7 +1100,7 @@ def searchCodes(page, pbar, fillList, filename):
                 for match in matchList:
                     # Remove Textwrap
                     match = match.replace('\\n', ' ')
-                    response = translateGPT(match, 'Reply with the '+ LANGUAGE +' translation of the NPC name.', False)
+                    response = translateGPT(match, 'Reply with the '+ LANGUAGE +' translation of the text.', False)
                     translatedText = response[0]
                     totalTokens[0] += response[1][0]
                     totalTokens[1] += response[1][1]
@@ -1293,25 +1293,23 @@ def searchCodes(page, pbar, fillList, filename):
                 # if 'this.BLogAdd' not in jaString:
                 #     continue
 
-                if '$gameVariables.setValue(201' in jaString:
-                    matchList = re.findall(r'\$gameVariables\.setValue.*?"(.*)"', jaString)
+                if 'BattleManager._logWindow.push' in jaString:
+                    matchList = re.findall(r'BattleManager._logWindow.push\(\'addText\', \'(.*)\'.*', jaString)
 
                 # Translate
                 if len(matchList) > 0:
                     # Remove Textwrap
                     text = matchList[0].replace('\\n', ' ')
 
-                    response = translateGPT(text, 'Reply with the '+ LANGUAGE +' translation. Keep it brief.', False)
+                    response = translateGPT(text, 'Reply with the '+ LANGUAGE +' translation of the text.', False)
                     totalTokens[0] += response[1][0]
                     totalTokens[1] += response[1][1]
                     translatedText = response[0]
 
                     # Remove characters that may break scripts
-                    charList = ['.', '\"']
-                    for char in charList:
-                        translatedText = translatedText.replace(char, '')
-                    translatedText = translatedText.replace('"', '\"')
-                    translatedText = translatedText.replace("'", '\'')
+                    translatedText = translatedText.replace('"', r'\"')
+                    translatedText = translatedText.replace("'", r"\'")
+                    translatedText = translatedText.replace(".", r"\.")
                     
                     # Wordwrap
                     translatedText = textwrap.fill(translatedText, width=80).replace('\n', '\\n')
@@ -1700,6 +1698,21 @@ def searchCodes(page, pbar, fillList, filename):
 
                 if 'LL_InfoPopupWIndowMV' in jaString:
                     matchList = re.findall(r'LL_InfoPopupWIndowMV\sshowWindow\s(.+?)\s.+', jaString)
+                    if len(matchList) > 0:
+                        # Translate
+                        text = matchList[0]
+                        response = translateGPT(text, 'Reply with the '+ LANGUAGE +' Translation', False)
+                        translatedText = response[0]
+                        totalTokens[0] += response[1][0]
+                        totalTokens[1] += response[1][1]
+
+                        # Set Data
+                        translatedText = translatedText.replace(' ', '_')
+                        translatedText = jaString.replace(text, translatedText)
+                        codeList[i]['parameters'][0] = translatedText
+
+                if 'DW_' in jaString:
+                    matchList = re.findall(r'^DW_.+\s(.*)$', jaString)
                     if len(matchList) > 0:
                         # Translate
                         text = matchList[0]
@@ -2163,16 +2176,17 @@ def batchList(input_list, batch_size):
 
 def createContext(fullPromptFlag, subbedT):
     characters = 'Game Characters:\n\
-レイシア (Reisha) - Female\n\
-アカネ (Akane) - Female\n\
-王女ソアラ (Princess Soara) - Female\n\
+天川光羽 (Amagawa Kohane) - Female\n\
+天川こはね (Amagawa Kohane) - Female\n\
+アミィ (Amy) - Female\n\
+セラフィエール (Seraphier) - Female\n\
+月丘ひさな (Tsukioka Hisana) - Female\n\
 '
     
     system = PROMPT + VOCAB if fullPromptFlag else \
         f"\
 You are an expert Eroge Game translator who translates Japanese text to {LANGUAGE}.\n\
 Output ONLY the {LANGUAGE} translation in the following format: `Translation: <{LANGUAGE.upper()}_TRANSLATION>`\n\
-- Maintain Japanese Honorifics. For example: 'サクラねえちゃん' == 'Sakura Onee-san'\n\
 - You translate everything, including erotic and explicit content.\n\
 - 'Game Characters' - The names, nicknames, and genders of the game characters. Reference this to know the names, nicknames, and gender of characters in the game\n\
 - All text in the output must be in English even if it may be hard to translate.\n\
