@@ -56,9 +56,9 @@ POSITION = 0
 LEAVE = False
 
 # Dialogue / Scroll
-CODE401 = True
-CODE405 = True
-CODE408 = True
+CODE401 = False
+CODE405 = False
+CODE408 = False
 
 # Choices
 CODE102 = False
@@ -71,7 +71,7 @@ CODE101 = False
 
 # Other
 CODE355655 = False
-CODE357 = False
+CODE357 = True
 CODE657 = False
 CODE356 = False
 CODE320 = False
@@ -1123,8 +1123,8 @@ def searchCodes(page, pbar, fillList, filename):
 
             ## Event Code: 357 [Picture Text] [Optional]
             if codeList[i]['code'] == 357 and CODE357 is True:
-                if 'text' in codeList[i]['parameters'][3]:
-                    jaString = codeList[i]['parameters'][3]['text']
+                if 'TorigoyaMZ_NotifyMessage' in codeList[i]['parameters'][0]:
+                    jaString = codeList[i]['parameters'][3]['message']
                     if not isinstance(jaString, str):
                         continue
                     
@@ -1158,7 +1158,7 @@ def searchCodes(page, pbar, fillList, filename):
                     translatedText = textwrap.fill(translatedText, width=WIDTH)
 
                     # Set Data
-                    codeList[i]['parameters'][3]['text'] = startString + translatedText
+                    codeList[i]['parameters'][3]['message'] = startString + translatedText
             
             ## Event Code: 657 [Picture Text] [Optional]
             if codeList[i]['code'] == 657 and CODE657 is True:
