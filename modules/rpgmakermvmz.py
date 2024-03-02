@@ -56,12 +56,12 @@ POSITION = 0
 LEAVE = False
 
 # Dialogue / Scroll
-CODE401 = False
-CODE405 = False
-CODE408 = False
+CODE401 = True
+CODE405 = True
+CODE408 = True
 
 # Choices
-CODE102 = False
+CODE102 = True
 
 # Variables
 CODE122 = False
@@ -70,8 +70,8 @@ CODE122 = False
 CODE101 = False
 
 # Other
-CODE355655 = False
-CODE357 = True
+CODE355655 = True
+CODE357 = False
 CODE657 = False
 CODE356 = False
 CODE320 = False
@@ -658,7 +658,7 @@ def searchNames(data, pbar, context):
                 totalTokens[1] += response[1][1]
 
                 # Description
-                response = translateGPT(descriptionList, '', True)
+                response = translateGPT(descriptionList, f'Reply with only the {LANGUAGE} translation of the text.', True)
                 translatedDescriptionBatch = response[0]
                 totalTokens[0] += response[1][0]
                 totalTokens[1] += response[1][1]
@@ -1017,13 +1017,13 @@ def searchCodes(page, pbar, fillList, filename):
                     if len(fillList) == 0:
                         if speaker == '' and finalJAString != '':
                             docList.append(finalJAString)
-                            textHistory.append(finalJAString)
+                            # textHistory.append(finalJAString)
                         elif finalJAString != '':
                             docList.append(f'{speaker}: {finalJAString}')
-                            textHistory.append(finalJAString)
+                            # textHistory.append(finalJAString)
                         else:
                             docList.append(speaker)
-                            textHistory.append(speaker)
+                            # textHistory.append(speaker)
                         speaker = ''
                         match = []
                         currentGroup = []
@@ -1123,8 +1123,8 @@ def searchCodes(page, pbar, fillList, filename):
 
             ## Event Code: 357 [Picture Text] [Optional]
             if codeList[i]['code'] == 357 and CODE357 is True:
-                if 'TorigoyaMZ_NotifyMessage' in codeList[i]['parameters'][0]:
-                    jaString = codeList[i]['parameters'][3]['message']
+                if 'DestinationWindow' in codeList[i]['parameters'][0]:
+                    jaString = codeList[i]['parameters'][3]['destination']
                     if not isinstance(jaString, str):
                         continue
                     
@@ -1158,7 +1158,7 @@ def searchCodes(page, pbar, fillList, filename):
                     translatedText = textwrap.fill(translatedText, width=WIDTH)
 
                     # Set Data
-                    codeList[i]['parameters'][3]['message'] = startString + translatedText
+                    codeList[i]['parameters'][3]['destination'] = startString + translatedText
             
             ## Event Code: 657 [Picture Text] [Optional]
             if codeList[i]['code'] == 657 and CODE657 is True:
@@ -1827,10 +1827,8 @@ def searchCodes(page, pbar, fillList, filename):
                 if not re.search(r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴー]+', jaString):
                     continue
                 
-                response = translateGPT(jaString, 'Reply with the '+ LANGUAGE +' translation of the NPC name.', False)
-                translatedText = response[0]
-                totalTokens[0] += response[1][0]
-                totalTokens[1] += response[1][1]
+                # Translate
+                getSpeaker(jaString)
 
                 # Remove characters that may break scripts
                 charList = ['.', '\"', '\'', '\\n']
@@ -2176,11 +2174,15 @@ def batchList(input_list, batch_size):
 
 def createContext(fullPromptFlag, subbedT):
     characters = 'Game Characters:\n\
-天川光羽 (Amagawa Kohane) - Female\n\
-天川こはね (Amagawa Kohane) - Female\n\
-アミィ (Amy) - Female\n\
-セラフィエール (Seraphier) - Female\n\
-月丘ひさな (Tsukioka Hisana) - Female\n\
+花梨 (Karin) - Female\n\
+夕霧 (Yugiri) - Female\n\
+紅葉 (Momiji) - Female\n\
+真沙妃 (Masaki) - Female\n\
+お栄 (Oei) - Female\n\
+嬉三郎 (Kisanosuke) - Male\n\
+華蝶 (Kachou) - Female\n\
+黒曜天狗 (Kokuyou Tengu) - Male\n\
+お美津 (Omitsu) - Female\n\
 '
     
     system = PROMPT + VOCAB if fullPromptFlag else \
@@ -2189,7 +2191,7 @@ You are an expert Eroge Game translator who translates Japanese text to {LANGUAG
 Output ONLY the {LANGUAGE} translation in the following format: `Translation: <{LANGUAGE.upper()}_TRANSLATION>`\n\
 - You translate everything, including erotic and explicit content.\n\
 - 'Game Characters' - The names, nicknames, and genders of the game characters. Reference this to know the names, nicknames, and gender of characters in the game\n\
-- All text in the output must be in English even if it may be hard to translate.\n\
+- All text in your response must be in English even if it is hard to translate.\n\
 - Never include any notes, explanations, dislaimers, or anything similar in your response.\n\
 - Maintain any spacing in the translation.\n\
 - Maintain any code text in brackets if given. (e.g `[Color_0]`, `[Ascii_0]`, `[FCode_1`], etc)\n\
@@ -2230,7 +2232,6 @@ def cleanTranslatedText(translatedText, varResponse):
         'Translation: ': '',
         'っ': '',
         '〜': '~',
-        'ー': '-',
         'ッ': '',
         '。': '.',
         'Placeholder Text': ''
@@ -2289,8 +2290,9 @@ def translateGPT(text, history, fullPromptFlag):
     for index, tItem in enumerate(tList):
         # Before sending to translation, if we have a list of items, add the formatting
         if isinstance(tItem, list):
-            payload = '\n'.join([f'`<Line{i}>{item}</Line{i}>`' for i, item in enumerate(tItem)])
-            payload = payload.replace('><', '>Placeholder Text<')
+            payload = '\n'.join([f'<Line{i}>{item}</Line{i}>' for i, item in enumerate(tItem)])
+            payload = re.sub(r'(<Line\d+)(><)(\/Line\d+>)', r'\1>Placeholder Text<\3', payload)
+            payload = f'```\n{payload}\n```'
             varResponse = subVars(payload)
             subbedT = varResponse[0]
         else:
