@@ -40,4 +40,5 @@ ME 音量 (ME Volume)
 回想する (Recollection)
 
 # Other
+ジュピターノ (Jupiterino)
 ```
