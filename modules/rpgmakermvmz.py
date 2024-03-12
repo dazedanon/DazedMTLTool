@@ -64,13 +64,13 @@ CODE408 = True
 CODE102 = True
 
 # Variables
-CODE122 = False
+CODE122 = True
 
 # Names
-CODE101 = False
+CODE101 = True
 
 # Other
-CODE355655 = True
+CODE355655 = False
 CODE357 = False
 CODE657 = False
 CODE356 = False
@@ -228,7 +228,7 @@ def parseMap(data, filename):
                 if event is not None:
                     # This translates ID of events. (May break the game)
                     if '<namePop:' in event['note']:
-                        response = translateNoteOmitSpace(event, r'<namePop:(.*?)\s.+>')
+                        response = translateNoteOmitSpace(event, r'<namePop:　(.*?)　>')
                         totalTokens[0] += response[0]
                         totalTokens[1] += response[1]
 
@@ -1212,63 +1212,42 @@ def searchCodes(page, pbar, fillList, filename):
 
         ## Event Code: 101 [Name] [Optional]
             if codeList[i]['code'] == 101 and CODE101 is True:
+                isVar = False
+                
                 # Grab String
                 jaString = ''  
                 if len(codeList[i]['parameters']) > 4:
                     jaString = codeList[i]['parameters'][4]
+                # Check for Var
+                elif len(codeList[i]['parameters']) > 0:
+                    jaString = codeList[i]['parameters'][0]
+                    isVar = True
                 if not isinstance(jaString, str):
                     continue
 
-                # Force Speaker
+                # Force Speaker using var
+                if 'memerisu' in jaString.lower():
+                    speaker = 'Memerisu'
+                elif 'thina' in jaString.lower():
+                    speaker = 'Tina'
+
+                # Get Speaker
                 response = getSpeaker(jaString)
                 totalTokens[0] += response[1][0]
                 totalTokens[1] += response[1][1]
                 speaker = response[0]
                 
+                # Validate Speaker is not empty
                 if len(speaker) > 0:
-                    codeList[i]['parameters'][4] = speaker
-                    continue
+                    if isVar == False:
+                        codeList[i]['parameters'][4] = speaker
+                        continue
+                    else:
+                        codeList[i]['parameters'][0] = speaker
+                        isVar = False
+                        continue
                 else:
                     speaker = ''
-                
-                # Definitely don't want to mess with files
-                if '_' in jaString:
-                    continue
-
-                # If there isn't any Japanese in the text just skip
-                if not re.search(r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴー]+', jaString):
-                    speaker = jaString
-                    continue
-
-                # Need to remove outside code and put it back later
-                startString = re.search(r'^[^一-龠ぁ-ゔァ-ヴー\<\>【】]+', jaString)
-                jaString = re.sub(r'^[^一-龠ぁ-ゔァ-ヴー\<\>【】]+', '', jaString)
-                endString = re.search(r'[^一-龠ぁ-ゔァ-ヴー\<\>【】。！？]+$', jaString)
-                jaString = re.sub(r'[^一-龠ぁ-ゔァ-ヴー\<\>【】。！？]+$', '', jaString)
-                if startString is None: startString = ''
-                else:  startString = startString.group() + ' '
-                if endString is None: endString = ''
-                else: endString = endString.group()
-
-                # Translate
-                response = translateGPT(jaString, 'Reply with only the '+ LANGUAGE +' translation of the NPC name.', False)
-                totalTokens[0] += response[1][0]
-                totalTokens[1] += response[1][1]
-                translatedText = response[0]
-
-                # Remove characters that may break scripts
-                charList = ['.', '\"']
-                for char in charList:
-                    translatedText = translatedText.replace(char, '')
-
-                translatedText = startString + translatedText + endString
-
-                # Set Data
-                speaker = translatedText
-                codeList[i]['parameters'][4] = translatedText
-                if speaker not in NAMESLIST:
-                    with LOCK:
-                        NAMESLIST.append(speaker)
 
             ## Event Code: 355 or 655 Scripts [Optional]
             if (codeList[i]['code'] == 355 or codeList[i]['code'] == 655) and CODE355655 is True:
@@ -1711,8 +1690,8 @@ def searchCodes(page, pbar, fillList, filename):
                         translatedText = jaString.replace(text, translatedText)
                         codeList[i]['parameters'][0] = translatedText
 
-                if 'DW_' in jaString:
-                    matchList = re.findall(r'^DW_.+\s(.*)$', jaString)
+                if 'OriginMenuStatus SetParam' in jaString:
+                    matchList = re.findall(r'OriginMenuStatus\sSetParam\sparam[\d]\s(.*)', jaString)
                     if len(matchList) > 0:
                         # Translate
                         text = matchList[0]
@@ -2174,15 +2153,8 @@ def batchList(input_list, batch_size):
 
 def createContext(fullPromptFlag, subbedT):
     characters = 'Game Characters:\n\
-花梨 (Karin) - Female\n\
-夕霧 (Yugiri) - Female\n\
-紅葉 (Momiji) - Female\n\
-真沙妃 (Masaki) - Female\n\
-お栄 (Oei) - Female\n\
-嬉三郎 (Kisanosuke) - Male\n\
-華蝶 (Kachou) - Female\n\
-黒曜天狗 (Kokuyou Tengu) - Male\n\
-お美津 (Omitsu) - Female\n\
+メメリス (Memerisu) - Female\n\
+ティーナ (Tina) - Female\n\
 '
     
     system = PROMPT + VOCAB if fullPromptFlag else \
@@ -2196,7 +2168,6 @@ Output ONLY the {LANGUAGE} translation in the following format: `Translation: <{
 - Maintain any spacing in the translation.\n\
 - Maintain any code text in brackets if given. (e.g `[Color_0]`, `[Ascii_0]`, `[FCode_1`], etc)\n\
 - `...` can be a part of the dialogue. Translate it as it is.\n\
-- Do not include a speaker if there isn't one in the original line of text.\n\
 {VOCAB}\n\
 "
     user = f'{subbedT}'
@@ -2219,8 +2190,8 @@ def translateText(characters, system, user, history):
     msg.append({"role": "user", "content": f'{user}'})
     response = openai.chat.completions.create(
         temperature=0.1,
-        frequency_penalty=0.1,
-        presence_penalty=0.1,
+        frequency_penalty=0,
+        presence_penalty=0.2,
         model=MODEL,
         messages=msg,
     )
@@ -2290,9 +2261,8 @@ def translateGPT(text, history, fullPromptFlag):
     for index, tItem in enumerate(tList):
         # Before sending to translation, if we have a list of items, add the formatting
         if isinstance(tItem, list):
-            payload = '\n'.join([f'<Line{i}>{item}</Line{i}>' for i, item in enumerate(tItem)])
+            payload = '\n'.join([f'`<Line{i}>{item}</Line{i}>`' for i, item in enumerate(tItem)])
             payload = re.sub(r'(<Line\d+)(><)(\/Line\d+>)', r'\1>Placeholder Text<\3', payload)
-            payload = f'```\n{payload}\n```'
             varResponse = subVars(payload)
             subbedT = varResponse[0]
         else:
