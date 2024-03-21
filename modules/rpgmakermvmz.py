@@ -58,16 +58,16 @@ LEAVE = False
 # Dialogue / Scroll
 CODE401 = True
 CODE405 = True
-CODE408 = True
+CODE408 = False
 
 # Choices
 CODE102 = True
 
 # Variables
-CODE122 = True
+CODE122 = False
 
 # Names
-CODE101 = True
+CODE101 = False
 
 # Other
 CODE355655 = False
@@ -360,25 +360,6 @@ def parseNames(data, filename, context):
                 return [data, totalTokens, e]
     return [data, totalTokens, None]
 
-def parseThings(data, filename):
-    totalTokens = [0, 0]
-    totalLines = 0
-    totalLines += len(data)
-                
-    with tqdm(bar_format=BAR_FORMAT, position=POSITION, total=totalLines, leave=LEAVE) as pbar:
-            pbar.desc=filename
-            pbar.total=totalLines
-            for name in data:
-                if name is not None:
-                    try:
-                        result = searchThings(name, pbar)       
-                        totalTokens[0] += result[0]
-                        totalTokens[1] += result[1]
-                    except Exception as e:
-                        traceback.print_exc()
-                        return [data, totalTokens, e]
-    return [data, totalTokens, None]
-
 def parseSS(data, filename):
     totalTokens = [0, 0]
     totalLines = 0
@@ -448,56 +429,11 @@ def parseScenario(data, filename):
                     return [data, totalTokens, e]
     return [data, totalTokens, None]
 
-def searchThings(name, pbar):
-    totalTokens = [0, 0]
-
-    # If there isn't any Japanese in the text just skip
-    if IGNORETLTEXT is True:
-        if not re.search(r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴー]+', name['name']) and re.search(r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴー]+', name['description']):
-            pbar.update(1)
-            return totalTokens
-
-    # Name
-    nameResponse = translateGPT(name['name'], 'Reply with only the '+ LANGUAGE +' translation of the RPG item name.', False) if 'name' in name else ''
-
-    # Description
-    descriptionResponse = translateGPT(name['description'], 'Reply with only the '+ LANGUAGE +' translation of the description.', False) if 'description' in name else ''
-
-    # Note
-    if '<SG説明:' in name['note']:
-        totalTokens[0] += translateNote(name, r'<SG説明:(.*?)>')[0]
-        totalTokens[1] += translateNote(name, r'<SG説明:(.*?)>')[1]
-    if '<SGカテゴリ:' in name['note']:
-        totalTokens[0] += translateNote(name, r'<SGカテゴリ:(.*?)>')[0]
-        totalTokens[1] += translateNote(name, r'<SGカテゴリ:(.*?)>')[1]
-    if '<ExtendDesc:' in name['note']:
-        totalTokens[0] += translateNote(name, r'<ExtendDesc:(.*?)>')[0]
-        totalTokens[1] += translateNote(name, r'<ExtendDesc:(.*?)>')[1]
-
-    # Count totalTokens
-    totalTokens[0] += nameResponse[1][0] if nameResponse != '' else 0
-    totalTokens[1] += nameResponse[1][1] if nameResponse != '' else 0
-    totalTokens[0] += descriptionResponse[1][0] if descriptionResponse != '' else 0
-    totalTokens[1] += descriptionResponse[1][1] if descriptionResponse != '' else 0
-
-    # Set Data
-    if 'name' in name:
-        name['name'] = nameResponse[0].replace('\"', '')
-    if 'description' in name:
-        description = descriptionResponse[0]
-
-        # Remove Textwrap
-        description = description.replace('\n', ' ')
-        description = textwrap.fill(descriptionResponse[0], LISTWIDTH)
-        name['description'] = description.replace('\"', '')
-
-    pbar.update(1)
-    return totalTokens
-
 def searchNames(data, pbar, context):
     totalTokens = [0, 0]
     nameList = []
     profileList = []
+    nicknameList = []
     descriptionList = []
     noteList = []
     i = 0 # Counter
@@ -538,6 +474,7 @@ def searchNames(data, pbar, context):
             if context in 'Actors':
                 if len(nameList) < BATCHSIZE:
                     nameList.append(data[i]['name'])
+                    nicknameList.append(data[i]['nickname'])
                     profileList.append(data[i]['profile'].replace('\n', ' '))
                     pbar.update(1)
                     i += 1
@@ -569,6 +506,10 @@ def searchNames(data, pbar, context):
                         totalTokens[1] += tokensResponse[1]
                     if '<SG説明4:' in data[i]['note']:
                         tokensResponse = translateNote(data[i], r'<SG説明4:(.*?)>')
+                        totalTokens[0] += tokensResponse[0]
+                        totalTokens[1] += tokensResponse[1]
+                    if '<SGカテゴリ:' in data[i]['note']:
+                        tokensResponse = translateNote(data[i], r'<SGカテゴリ:(.*?)>')
                         totalTokens[0] += tokensResponse[0]
                         totalTokens[1] += tokensResponse[1]
                     pbar.update(1)
@@ -621,6 +562,12 @@ def searchNames(data, pbar, context):
                 totalTokens[0] += response[1][0]
                 totalTokens[1] += response[1][1]
 
+                # Nickname
+                response = translateGPT(nicknameList, newContext, True)
+                translatedNicknameBatch = response[0]
+                totalTokens[0] += response[1][0]
+                totalTokens[1] += response[1][1]
+
                 # Profile
                 response = translateGPT(profileList, '', True)
                 translatedProfileBatch = response[0]
@@ -638,8 +585,10 @@ def searchNames(data, pbar, context):
                         else:
                             # Get Text
                             data[j]['name'] = translatedNameBatch[0]
+                            data[j]['nickname'] = translatedNicknameBatch[0]
                             data[j]['profile'] = textwrap.fill(translatedProfileBatch[0], LISTWIDTH)
                             translatedNameBatch.pop(0)
+                            translatedNicknameBatch.pop(0)
                             translatedProfileBatch.pop(0)
 
                             # If Batch is empty. Move on.
@@ -959,7 +908,7 @@ def searchCodes(page, pbar, fillList, filename):
 
                     # Catch Vars that may break the TL
                     varString = ''
-                    matchList = re.findall(r'^[\\]+[\w]+\[[a-zA-Z0-9\\\[\]\_,\s-]+\]', finalJAString)    
+                    matchList = re.findall(r'^[\\_]+[\w]+\[[a-zA-Z0-9\\\[\]\_,\s-]+\]', finalJAString)    
                     if len(matchList) != 0:
                         varString = matchList[0]
                         finalJAString = finalJAString.replace(matchList[0], '')
@@ -1083,7 +1032,7 @@ def searchCodes(page, pbar, fillList, filename):
             ## Event Code: 122 [Set Variables]
             if codeList[i]['code'] == 122 and CODE122 is True:
                 # This is going to be the var being set. (IMPORTANT)
-                if codeList[i]['parameters'][0] not in [79]:
+                if codeList[i]['parameters'][0] not in [34]:
                     continue
                   
                 jaString = codeList[i]['parameters'][4]
@@ -1114,7 +1063,7 @@ def searchCodes(page, pbar, fillList, filename):
                         translatedText = translatedText.replace(char, '')
                 
                 # Textwrap
-                translatedText = textwrap.fill(translatedText, width=45)
+                translatedText = textwrap.fill(translatedText, width=LISTWIDTH)
                 translatedText = translatedText.replace('\n', '\\n')
                 translatedText = '\"' + translatedText + '\"'
 
@@ -1272,8 +1221,8 @@ def searchCodes(page, pbar, fillList, filename):
                 # if 'this.BLogAdd' not in jaString:
                 #     continue
 
-                if 'BattleManager._logWindow.push' in jaString:
-                    matchList = re.findall(r'BattleManager._logWindow.push\(\'addText\', \'(.*)\'.*', jaString)
+                if 'テキスト-' in jaString:
+                    matchList = re.findall(r'テキスト-(.*)', jaString)
 
                 # Translate
                 if len(matchList) > 0:
@@ -1676,7 +1625,7 @@ def searchCodes(page, pbar, fillList, filename):
                         codeList[i]['parameters'][0] = translatedText
 
                 if 'LL_InfoPopupWIndowMV' in jaString:
-                    matchList = re.findall(r'LL_InfoPopupWIndowMV\sshowWindow\s(.+?)\s.+', jaString)
+                    matchList = re.findall(r'LL_InfoPopupWIndowMV\sshowWindow\s(.+?) .+', jaString)
                     if len(matchList) > 0:
                         # Translate
                         text = matchList[0]
@@ -2021,6 +1970,7 @@ def getSpeaker(speaker):
             if speaker not in str(NAMESLIST):
                 response = translateGPT(speaker, 'Reply with only the '+ LANGUAGE +' translation of the NPC name.', False)
                 response[0] = response[0].title()
+                response[0] = response[0].replace("'S", "'s")
                 speakerList = [speaker, response[0]]
                 NAMESLIST.append(speakerList)
                 return response
@@ -2153,8 +2103,13 @@ def batchList(input_list, batch_size):
 
 def createContext(fullPromptFlag, subbedT):
     characters = 'Game Characters:\n\
-メメリス (Memerisu) - Female\n\
-ティーナ (Tina) - Female\n\
+リーフ (Leaf) - Female\n\
+ハートラント (Hartrant) - Female\n\
+マリカ (Marika) - Female\n\
+クィリー (Quirlee) - Female\n\
+ハーミア (Hermia) - Female\n\
+ステラ (Stella) - Female\n\
+ドッペル (Doppel) - Female \n\
 '
     
     system = PROMPT + VOCAB if fullPromptFlag else \
@@ -2190,8 +2145,7 @@ def translateText(characters, system, user, history):
     msg.append({"role": "user", "content": f'{user}'})
     response = openai.chat.completions.create(
         temperature=0.1,
-        frequency_penalty=0,
-        presence_penalty=0.2,
+        frequency_penalty=0.1,
         model=MODEL,
         messages=msg,
     )
