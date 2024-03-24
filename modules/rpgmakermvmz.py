@@ -56,12 +56,12 @@ POSITION = 0
 LEAVE = False
 
 # Dialogue / Scroll
-CODE401 = True
-CODE405 = True
+CODE401 = False
+CODE405 = False
 CODE408 = False
 
 # Choices
-CODE102 = True
+CODE102 = False
 
 # Variables
 CODE122 = False
@@ -71,7 +71,7 @@ CODE101 = False
 
 # Other
 CODE355655 = False
-CODE357 = False
+CODE357 = True
 CODE657 = False
 CODE356 = False
 CODE320 = False
@@ -920,7 +920,7 @@ def searchCodes(page, pbar, fillList, filename):
 
                     # Remove Extra Stuff bad for translation.
                     finalJAString = finalJAString.replace('ﾞ', '')
-                    finalJAString = finalJAString.replace('・', '.')
+                    finalJAString = finalJAString.replace(' ', '.')
                     finalJAString = finalJAString.replace('―', '-')
                     finalJAString = finalJAString.replace('ー', '-')
                     finalJAString = finalJAString.replace('…', '...')
@@ -1072,42 +1072,40 @@ def searchCodes(page, pbar, fillList, filename):
 
             ## Event Code: 357 [Picture Text] [Optional]
             if codeList[i]['code'] == 357 and CODE357 is True:
-                if 'DestinationWindow' in codeList[i]['parameters'][0]:
-                    jaString = codeList[i]['parameters'][3]['destination']
-                    if not isinstance(jaString, str):
-                        continue
-                    
-                    # Definitely don't want to mess with files
-                    if '_' in jaString:
-                        continue
+                headerString = codeList[i]['parameters'][0]
 
-                    # If there isn't any Japanese in the text just skip
-                    if not re.search(r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴー]+', jaString):
-                        continue
+                if headerString == 'LL_GalgeChoiceWindow':
+                    ### Message Text First
+                    jaString = codeList[i]['parameters'][3]['messageText']
 
-                    # Need to remove outside code and put it back later
-                    oldjaString = jaString
-                    startString = re.search(r'^[^一-龠ぁ-ゔァ-ヴー【】（）「」a-zA-ZＡ-Ｚ０-９\\]+', jaString)
-                    finalJAString = re.sub(r'^[^一-龠ぁ-ゔァ-ヴー【】（）「」a-zA-ZＡ-Ｚ０-９\\]+', '', jaString)
-                    if startString is None:
-                        startString = ''
-                    else:
-                        startString = startString.group()
-
-                    # Remove any textwrap
-                    finalJAString = re.sub(r'\n', ' ', finalJAString)
-
-                    # Translate
-                    response = translateGPT(finalJAString, '', False)
+                    # Remove any textwrap & TL
+                    jaString = re.sub(r'\n', ' ', jaString)
+                    response = translateGPT(jaString, '', False)
+                    translatedText = response[0]
                     totalTokens[0] += response[1][0]
                     totalTokens[1] += response[1][1]
-                    translatedText = response[0]
 
-                    # Textwrap
+                    # Textwrap & Set
                     translatedText = textwrap.fill(translatedText, width=WIDTH)
+                    codeList[i]['parameters'][3]['messageText'] = translatedText
 
-                    # Set Data
-                    codeList[i]['parameters'][3]['destination'] = startString + translatedText
+                    ### Choices
+                    jaString = codeList[i]['parameters'][3]['choices']
+                    matchList = re.findall(r'"label[\\]*":[\\]*"(.*?)[\\]', jaString)
+                    if matchList != None:
+                        # Translate
+                        question = codeList[i]['parameters'][3]['messageText']
+                        response = translateGPT(matchList, f'Previous text for context: {question}\n\nThis will be a dialogue option', True)
+                        totalTokens[0] += response[1][0]
+                        totalTokens[1] += response[1][1]
+                        translatedText = jaString
+
+                        # Replace Strings
+                        for j in range(len(matchList)):
+                            translatedText = translatedText.replace(matchList[j], response[0][j])
+
+                        # Set Data
+                        codeList[i]['parameters'][3]['choices'] = translatedText
             
             ## Event Code: 657 [Picture Text] [Optional]
             if codeList[i]['code'] == 657 and CODE657 is True:
@@ -1686,9 +1684,13 @@ def searchCodes(page, pbar, fillList, filename):
                 if len(textHistory) > 0:
                     response = translateGPT(choiceList, 'This will be a dialogue option. Previous text for context: ' + textHistory[len(textHistory)-1] + '\n\nThis will be a dialogue option', True)
                     translatedTextList = response[0]
+                    totalTokens[0] += response[1][0]
+                    totalTokens[1] += response[1][1]
                 else:
                     response = translateGPT(choiceList, 'This will be a dialogue option', True)
                     translatedTextList = response[0]
+                    totalTokens[0] += response[1][0]
+                    totalTokens[1] += response[1][1]
 
                 # Check Mismatch
                 if len(translatedTextList) == len(choiceList):
@@ -2103,13 +2105,14 @@ def batchList(input_list, batch_size):
 
 def createContext(fullPromptFlag, subbedT):
     characters = 'Game Characters:\n\
-リーフ (Leaf) - Female\n\
-ハートラント (Hartrant) - Female\n\
-マリカ (Marika) - Female\n\
-クィリー (Quirlee) - Female\n\
-ハーミア (Hermia) - Female\n\
-ステラ (Stella) - Female\n\
-ドッペル (Doppel) - Female \n\
+シラス ティア ナナシユエル (Silas Tia Nanasiyuel) - Female\n\
+レイラ プラム ナナシユエル (Leila Plum Nanasiyuel) - Female\n\
+アリア グランツ (Aria Granz) - Female\n\
+ソフィー グリーンウッド (Sophie Greenwood) - Female\n\
+ヨウコ マッカーシー (Yoko McCarthy) - Female\n\
+ルフィナ アリーニア (Rufina Arinia) - Female\n\
+ヘレナ ルオ アルバネル (Helena Luo Albaner) - Female\n\
+アウローラ パパス (Aurora Pappas) - Female\n\
 '
     
     system = PROMPT + VOCAB if fullPromptFlag else \
