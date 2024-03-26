@@ -67,11 +67,11 @@ CODE102 = False
 CODE122 = False
 
 # Names
-CODE101 = False
+CODE101 = True
 
 # Other
 CODE355655 = False
-CODE357 = True
+CODE357 = False
 CODE657 = False
 CODE356 = False
 CODE320 = False
@@ -1970,7 +1970,7 @@ def getSpeaker(speaker):
         case _:
             # Store Speaker
             if speaker not in str(NAMESLIST):
-                response = translateGPT(speaker, 'Reply with only the '+ LANGUAGE +' translation of the NPC name.', False)
+                response = translateGPT(speaker, 'Reply with the '+ LANGUAGE +' translation of the NPC name.', False)
                 response[0] = response[0].title()
                 response[0] = response[0].replace("'S", "'s")
                 speakerList = [speaker, response[0]]
