@@ -1,5 +1,6 @@
 .env
 *.json
+*.js
 *.yaml
 *.yml
 *.txt
