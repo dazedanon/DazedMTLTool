@@ -26,6 +26,7 @@ from modules.atelier import handleAtelier
 from modules.anim import handleAnim
 from modules.nscript import handleNScript
 from modules.wolf import handleWOLF
+from modules.wolf2 import handleWOLF2
 from modules.javascript import handleJavascript
 
 # For GPT4 rate limit will be hit if you have more than 1 thread.
@@ -46,6 +47,7 @@ MODULES = [
     ["Anim", "json", handleAnim],
     ["NScript", "txt", handleNScript],
     ["Wolf", "json", handleWOLF],
+    ["Wolf", "txt", handleWOLF2],
     ["Javascript", "js", handleJavascript],
 ]
 
