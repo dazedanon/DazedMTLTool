@@ -91,7 +91,7 @@ def handleMVMZ(filename, estimate):
     if not estimate:
         try:
             with open('translated/' + filename, 'w', encoding='utf-8') as outFile:
-                json.dump(translatedData[0], outFile, ensure_ascii=False, indent=4))
+                json.dump(translatedData[0], outFile, ensure_ascii=False, indent=4)
         except Exception:
             traceback.print_exc()
             return 'Fail'
