@@ -76,7 +76,7 @@ def handleJSON(filename, estimate):
 
                 # Print Result
                 end = time.time()
-                json.dump(translatedData[0], outFile, ensure_ascii=False, indent=4))
+                json.dump(translatedData[0], outFile, ensure_ascii=False, indent=4)
                 tqdm.write(getResultString(translatedData, end - start, filename))
                 with LOCK:
                     TOKENS[0] += translatedData[1][0]
