@@ -70,7 +70,7 @@ def handleWOLF(filename, estimate):
     if not estimate:
         try:
             with open('translated/' + filename, 'w', encoding='utf-8') as outFile:
-                json.dump(translatedData[0], outFile, ensure_ascii=False)
+                json.dump(translatedData[0], outFile, ensure_ascii=False, indent=4), indent=4)
         except Exception:
             traceback.print_exc()
             return 'Fail'
@@ -144,14 +144,10 @@ def parseMap(data, filename):
 def searchCodes(events, pbar, translatedList, filename):
     stringList = []
     textHistory = []
-    match = []
     totalTokens = [0, 0]
     translatedText = ''
     speaker = ''
-    speakerID = None
     nametag = ''
-    CLFlag = False
-    maxHistory = MAXHISTORY
     initialJAString = ''
     global LOCK
     global NAMESLIST
@@ -182,7 +178,7 @@ def searchCodes(events, pbar, translatedList, filename):
                     nameList = re.findall(r'(.*)：\n', jaString)
                     if nameList is not None:
                         # TL Speaker
-                        response = getSpeaker(nameList[0], pbar)
+                        response = getSpeaker(nameList[0], pbar, filename)
                         speaker = response[0]
                         totalTokens[0] += response[1][0]
                         totalTokens[1] += response[1][1]
@@ -215,6 +211,8 @@ def searchCodes(events, pbar, translatedList, filename):
                     if FIXTEXTWRAP is True:
                         translatedText = textwrap.fill(translatedText, width=WIDTH)
 
+                    
+
                     # Add back Nametag
                     translatedText = nametag + translatedText
                     nametag = ''
@@ -232,15 +230,31 @@ def searchCodes(events, pbar, translatedList, filename):
                     # If this is the last item in list, set to empty string
                     if len(translatedList) == 0:
                         translatedList = ''
+
+            ### Event Code: 102 Choices
+            if codeList[i]['code'] == 102 and CODE101 == True:
+                # Grab Choice List
+                choiceList = codeList[i]['stringArgs']
+
+                # Translate
+                response = translateGPT(choiceList, f'Reply with the {LANGUAGE} translation of the dialogue choice', True, pbar, filename)
+                translatedChoiceList = response[0]
+                totalTokens[0] = response[1][0]
+                totalTokens[0] = response[1][1]
+
+                # Validate and Set Data
+                if len(choiceList) == len(translatedChoiceList):
+                    codeList[i]['stringArgs'] = translatedChoiceList
+
         
             ### Iterate
             i += 1
              
         # End of the line
-        if translatedList == []:
+        if translatedList == [] and stringList != []:
             pbar.total = len(stringList)
             pbar.refresh()
-            response = translateGPT(stringList, textHistory, True, pbar)
+            response = translateGPT(stringList, textHistory, True, pbar, filename)
             translatedList = response[0]
             totalTokens[0] += response[1][0]
             totalTokens[1] += response[1][1]
@@ -265,7 +279,7 @@ def searchCodes(events, pbar, translatedList, filename):
     return totalTokens
 
 # Save some money and enter the character before translation
-def getSpeaker(speaker, pbar):
+def getSpeaker(speaker, pbar, filename):
     match speaker:
         case 'ファイン':
             return ['Fine', [0,0]]
@@ -274,12 +288,13 @@ def getSpeaker(speaker, pbar):
         case _:
             # Store Speaker
             if speaker not in str(NAMESLIST):
-                response = translateGPT(speaker, 'Reply with only the '+ LANGUAGE +' translation of the NPC name.', False, pbar)
+                response = translateGPT(speaker, 'Reply with only the '+ LANGUAGE +' translation of the NPC name.', False, pbar, filename)
                 response[0] = response[0].title()
                 response[0] = response[0].replace("'S", "'s")
                 speakerList = [speaker, response[0]]
                 NAMESLIST.append(speakerList)
                 return response
+            
             # Find Speaker
             else:
                 for i in range(len(NAMESLIST)):
@@ -409,14 +424,11 @@ def batchList(input_list, batch_size):
 
 def createContext(fullPromptFlag, subbedT):
     characters = 'Game Characters:\n\
-シラス ティア ナナシユエル (Silas Tia Nanasiyuel) - Female\n\
-レイラ プラム ナナシユエル (Leila Plum Nanasiyuel) - Female\n\
-アリア グランツ (Aria Granz) - Female\n\
-ソフィー グリーンウッド (Sophie Greenwood) - Female\n\
-ヨウコ マッカーシー (Yoko McCarthy) - Female\n\
-ルフィナ アリーニア (Rufina Arinia) - Female\n\
-ヘレナ ルオ アルバネル (Helena Luo Albaner) - Female\n\
-アウローラ パパス (Aurora Pappas) - Female\n\
+リリア (Lilia) - Female\n\
+シェリル (Sheryl) - Female\n\
+チロ (Chiro) - Female\n\
+メルキュール (Mercury) - Female\n\
+のじゃっち (Nojachi) - Female\n\
 '
     
     system = PROMPT + VOCAB if fullPromptFlag else \
@@ -511,7 +523,7 @@ def combineList(tlist, text):
     return tlist[0]
 
 @retry(exceptions=Exception, tries=5, delay=5)
-def translateGPT(text, history, fullPromptFlag, pbar):
+def translateGPT(text, history, fullPromptFlag, pbar, filename):
     mismatch = False
     totalTokens = [0, 0]
     if isinstance(text, list):
@@ -554,7 +566,6 @@ def translateGPT(text, history, fullPromptFlag, pbar):
         translatedText = cleanTranslatedText(translatedText, varResponse)
         if isinstance(tItem, list):
             extractedTranslations = extractTranslation(translatedText, True)
-            tList[index] = extractedTranslations
             if len(tItem) != len(extractedTranslations):
                 # Mismatch. Try Again
                 response = translateText(characters, system, user, history)
@@ -569,7 +580,9 @@ def translateGPT(text, history, fullPromptFlag, pbar):
                     if len(tItem) == len(extractedTranslations):
                         tList[index] = extractedTranslations
                     else:
-                        mismatch = True # Just here for breakpoint
+                        MISMATCH.append(filename)
+            else:
+                tList[index] = extractedTranslations
 
             # Create History
             history = tList[index]  # Update history if we have a list

@@ -145,7 +145,7 @@ def translateJS(data, pbar):
     i = 0
 
     # Regex & Plugin Name
-    regex = r'ObjectiveContent[\\]+":[\\]+"[\\]+"(.*?)[\\]+"'
+    regex = r'Description[\\]+":[\\]+"(.*?)[\\]+"'
 
     # Find Plugin
     while i < len(data):
@@ -158,7 +158,7 @@ def translateJS(data, pbar):
 
             # Remove Wordwrap [Optional]
             for j in range(len(modifiedStringList)):
-                modifiedStringList[j] = modifiedStringList[j].replace(r'\\\\\\\\n', r' ')
+                modifiedStringList[j] = modifiedStringList[j].replace(r'\\\\n', r' ')
 
             # Translate
             response = translateGPT(modifiedStringList, f'Reply with the {LANGUAGE} translation', True, pbar)
@@ -174,7 +174,7 @@ def translateJS(data, pbar):
 
                     # Wordwrap [Optional]
                     translatedList[j] = textwrap.fill(translatedList[j], LISTWIDTH)
-                    translatedList[j] = translatedList[j].replace('\n', r'\\\\\\\\n')
+                    translatedList[j] = translatedList[j].replace('\n', r'\\\\n')
 
                     # Set
                     data[i] = data[i].replace(stringList[j], translatedList[j])
