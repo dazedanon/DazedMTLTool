@@ -1,6 +1,5 @@
 # Libraries
-import json, os, re, textwrap, threading, time, traceback, tiktoken, openai
-from concurrent.futures import ThreadPoolExecutor, as_completed
+import os, re, textwrap, threading, time, traceback, tiktoken, openai
 from pathlib import Path
 from colorama import Fore
 from dotenv import load_dotenv
@@ -24,7 +23,7 @@ THREADS = int(os.getenv('threads'))
 LOCK = threading.Lock()
 WIDTH = int(os.getenv('width'))
 LISTWIDTH = int(os.getenv('listWidth'))
-NOTEWIDTH = int(os.getenv('noteWidth'))
+NOTEWIDTH = 70
 MAXHISTORY = 10
 ESTIMATE = ''
 TOKENS = [0, 0]
@@ -34,7 +33,11 @@ BRFLAG = False   # If the game uses <br> instead
 FIXTEXTWRAP = True  # Overwrites textwrap
 IGNORETLTEXT = False    # Ignores all translated text.
 MISMATCH = []   # Lists files that throw a mismatch error (Length of GPT list response is wrong)
-BRACKETNAMES = False
+
+#tqdm Globals
+BAR_FORMAT='{l_bar}{bar:10}{r_bar}{bar:-10b}'
+POSITION = 0
+LEAVE = False
 
 # Pricing - Depends on the model https://openai.com/pricing
 # Batch Size - GPT 3.5 Struggles past 15 lines per request. GPT4 struggles past 50 lines per request
@@ -43,74 +46,53 @@ if 'gpt-3.5' in MODEL:
     INPUTAPICOST = .002 
     OUTPUTAPICOST = .002
     BATCHSIZE = 10
-    FREQUENCY_PENALTY = 0.2
 elif 'gpt-4' in MODEL:
     INPUTAPICOST = .01
     OUTPUTAPICOST = .03
     BATCHSIZE = 40
-    FREQUENCY_PENALTY = 0.1
 
-#tqdm Globals
-BAR_FORMAT='{l_bar}{bar:10}{r_bar}{bar:-10b}'
-POSITION = 0
-LEAVE = False
-
-# Dialogue / Scroll
-CODE101 = False
-CODE102 = False
-
-# Other
-CODE300 = True
-
-def handleWOLF(filename, estimate):
-    global ESTIMATE, TOKENS
+def handleWOLF2(filename, estimate):
+    global ESTIMATE
     ESTIMATE = estimate
 
-    # Translate
-    start = time.time()
-    translatedData = openFiles(filename)
+    if ESTIMATE:
+        start = time.time()
+        translatedData = openFiles(filename)
+
+        # Print Result
+        end = time.time()
+        tqdm.write(getResultString(translatedData, end - start, filename))
+        with LOCK:
+            TOKENS[0] += translatedData[1][0]
+            TOKENS[1] += translatedData[1][1]
+
+        # Print Total
+        totalString = getResultString(['', TOKENS, None], end - start, 'TOTAL')
+
+        # Print any errors on maps
+        if len(MISMATCH) > 0:
+            return totalString + Fore.RED + f'\nMismatch Errors: {MISMATCH}' + Fore.RESET
+        else:
+            return totalString
     
-    # Translate
-    if not estimate:
+    else:
         try:
-            with open('translated/' + filename, 'w', encoding='utf-8') as outFile:
-                json.dump(translatedData[0], outFile, ensure_ascii=False, indent=4)
-        except Exception:
+            with open('translated/' + filename, 'w', encoding='utf8', errors='ignore') as outFile:
+                start = time.time()
+                translatedData = openFiles(filename)
+
+                # Print Result
+                end = time.time()
+                outFile.writelines(translatedData[0])
+                tqdm.write(getResultString(translatedData, end - start, filename))
+                with LOCK:
+                    TOKENS[0] += translatedData[1][0]
+                    TOKENS[1] += translatedData[1][1]
+        except Exception as e:
             traceback.print_exc()
             return 'Fail'
-    
-    # Print File
-    end = time.time()
-    tqdm.write(getResultString(translatedData, end - start, filename))
-    with LOCK:
-        TOKENS[0] += translatedData[1][0]
-        TOKENS[1] += translatedData[1][1]
 
-    # Print Total
-    totalString = getResultString(['', TOKENS, None], end - start, 'TOTAL')
-
-    # Print any errors on maps
-    if len(MISMATCH) > 0:
-        return totalString + Fore.RED + f'\nMismatch Errors: {MISMATCH}' + Fore.RESET
-    else:
-        return totalString
-
-def openFiles(filename):
-    with open('files/' + filename, 'r', encoding='utf-8-sig') as f:
-        data = json.load(f)
-
-        # Map Files
-        if "'events':" in str(data):
-            translatedData = parseMap(data, filename)
-
-        # Other Files
-        elif "'commands':" in str(data):
-            translatedData = parseOther(data, filename)
-
-        else:
-            translatedData = data
-    
-    return translatedData
+    return getResultString(['', TOKENS, None], end - start, 'TOTAL')
 
 def getResultString(translatedData, translationTime, filename):
     # File Print String
@@ -122,9 +104,10 @@ def getResultString(translatedData, translationTime, filename):
         (translatedData[1][1] * .001 * OUTPUTAPICOST)) + ']'
     timeString = Fore.BLUE + '[' + str(round(translationTime, 1)) + 's]'
 
-    if translatedData[2] is None:
+    if translatedData[2] == None:
         # Success
         return filename + ': ' + totalTokenstring + timeString + Fore.GREEN + u' \u2713 ' + Fore.RESET
+
     else:
         # Fail
         try:
@@ -135,223 +118,135 @@ def getResultString(translatedData, translationTime, filename):
             return filename + ': ' + totalTokenstring + timeString + Fore.RED + u' \u2717 ' +\
                 errorString + Fore.RESET
 
-def parseOther(data, filename):
-    totalTokens = [0, 0]
-    totalLines = 0
-    events = data['commands']
-    global LOCK
+def openFiles(filename):
+    with open('files/' + filename, 'r', encoding='cp932') as readFile:
+        translatedData = parseWOLF(readFile, filename)
+
+        # Delete lines marked for deletion
+        finalData = []
+        for line in translatedData[0]:
+            if line != '\\d\n':
+                finalData.append(line)
+        translatedData[0] = finalData
     
-    # Thread for each page in file
+    return translatedData
+
+def parseWOLF(readFile, filename):
+    totalTokens = [0,0]
+
+    # Read File into data
+    data = readFile.readlines()
+
+    # Create Progress Bar
     with tqdm(bar_format=BAR_FORMAT, position=POSITION, leave=LEAVE) as pbar:
         pbar.desc=filename
-        pbar.total=totalLines
-        translationData = searchCodes(events, pbar, [], filename)
+
         try:
-            totalTokens[0] += translationData[0]
-            totalTokens[1] += translationData[1]
+            result = translateWOLF(data, pbar, filename, [])
+            totalTokens[0] += result[0]
+            totalTokens[1] += result[1]
         except Exception as e:
+            traceback.print_exc()
             return [data, totalTokens, e]
     return [data, totalTokens, None]
 
-def parseMap(data, filename):
-    totalTokens = [0, 0]
-    totalLines = 0
-    events = data['events']
-    global LOCK
-
-    # Get total for progress bar
-    for event in events:
-        if event is not None:
-            for page in event['pages']:
-                totalLines += len(page['list'])
-    
-    # Thread for each page in file
-    with tqdm(bar_format=BAR_FORMAT, position=POSITION, total=totalLines, leave=LEAVE) as pbar:
-        pbar.desc=filename
-        pbar.total=totalLines
-        with ThreadPoolExecutor(max_workers=THREADS) as executor:
-            for event in events:
-                if event is not None:
-                    futures = [executor.submit(searchCodes, page, pbar, [], filename) for page in event['pages'] if page is not None]
-                    for future in as_completed(futures):
-                        try:
-                            totalTokensFuture = future.result()
-                            totalTokens[0] += totalTokensFuture[0]
-                            totalTokens[1] += totalTokensFuture[1]
-                        except Exception as e:
-                            return [data, totalTokens, e]
-    return [data, totalTokens, None]
-
-def searchCodes(events, pbar, translatedList, filename):
+def translateWOLF(data, pbar, filename, translatedList):
     stringList = []
-    textHistory = []
-    totalTokens = [0, 0]
-    translatedText = ''
+    currentGroup = []
+    tokens = [0,0]
     speaker = ''
-    nametag = ''
-    initialJAString = ''
-    global LOCK
-    global NAMESLIST
-    global MISMATCH
+    global LOCK, ESTIMATE
+    i = 0
 
-    # Begin Parsing File
-    try:
-        codeList = events
+    while i < len(data):
+        # Speaker
+        matchList = re.findall(r'(.*)：$', data[i])
+        if len(matchList) != 0:
+            response = getSpeaker(matchList[0], pbar, filename)
+            speaker = response[0]
+            tokens[0] += response[1][0]
+            tokens[1] += response[1][1]
+            data[i] = f'{speaker}：\n'
+            i += 1
+        else:
+            speaker = '' 
 
-        # Iterate through events
-        i = 0
-        while i < len(codeList):
-            ### Event Code: 101 Message
-            if codeList[i]['code'] == 101 and CODE101 == True:
-                # Grab String
-                jaString = codeList[i]['stringArgs'][0]
-                initialJAString = jaString
-
-                # Catch Vars that may break the TL
-                varString = ''
-                matchList = re.findall(r'^[\\_]+[\w]+\[[a-zA-Z0-9\\\[\]\_,\s-]+\]', jaString)    
-                if len(matchList) != 0:
-                    varString = matchList[0]
-                    jaString = jaString.replace(matchList[0], '')
-
-                # Grab Speaker
-                if '：\n' in jaString:
-                    nameList = re.findall(r'(.*)：\n', jaString)
-                    if nameList is not None:
-                        # TL Speaker
-                        response = getSpeaker(nameList[0], pbar, filename)
-                        speaker = response[0]
-                        totalTokens[0] += response[1][0]
-                        totalTokens[1] += response[1][1]
-                                                
-                        # Set nametag and remove from string
-                        nametag = f'{speaker}：\n'
-                        jaString = jaString.replace(f'{nameList[0]}：\n', '')
-
-                # Remove Textwrap
+        # Lines
+        if r'/' not in data[i] and data[i] != '\n':
+            # Pass 1
+            if translatedList == []:
+                # Grab Consecutive Strings
+                currentGroup.append(data[i])
+                i += 1
+                while  i < len(data) and r'/' not in data[i] and data[i] != '\n':
+                    currentGroup.append(data[i])
+                    i += 1
+                
+                # Join up 401 groups for better translation.
+                if len(currentGroup) > 0:
+                    jaString = ' '.join(currentGroup)
+                    currentGroup = []
+                
+                # Remove any textwrap
                 jaString = jaString.replace('\n', ' ')
 
-                # 1st Pass (Save Text to List)
-                if len(translatedList) == 0:
-                    if speaker == '':
-                        stringList.append(jaString)
-                    else:
-                        stringList.append(f'[{speaker}]: {jaString}')
+                # Add Speaker (If there is one)
+                if speaker != '':
+                    jaString = f'{speaker}: {jaString}'
 
-                # 2nd Pass (Set Text)
-                else:
-                    # Grab Translated String
-                    translatedText = translatedList[0]
-                    
-                    # Remove speaker
-                    matchSpeakerList = re.findall(r'^(\[.+?\]\s?[|:]\s?)\s?', translatedText)
-                    if len(matchSpeakerList) > 0:
-                        translatedText = translatedText.replace(matchSpeakerList[0], '')
-
-                    # Textwrap
-                    if FIXTEXTWRAP is True:
-                        translatedText = textwrap.fill(translatedText, width=WIDTH)
-
-                    # Add back Nametag
-                    translatedText = nametag + translatedText
-                    nametag = ''
-
-                    # Add back Potential Variables in String
-                    translatedText = varString + translatedText
-
-                    # Set Data
-                    codeList[i]['stringArgs'][0] = translatedText
-
-                    # Reset Data and Pop Item
-                    speaker = ''
-                    translatedList.pop(0)
-                    
-                    # If this is the last item in list, set to empty string
-                    if len(translatedList) == 0:
-                        translatedList = ''
-
-            ### Event Code: 102 Choices
-            if codeList[i]['code'] == 102 and CODE102 == True:
-                # Grab Choice List
-                choiceList = codeList[i]['stringArgs']
-
-                # Translate
-                response = translateGPT(choiceList, f'Reply with the {LANGUAGE} translation of the dialogue choice', True, pbar, filename)
-                translatedChoiceList = response[0]
-                totalTokens[0] = response[1][0]
-                totalTokens[0] = response[1][1]
-
-                # Validate and Set Data
-                if len(choiceList) == len(translatedChoiceList):
-                    codeList[i]['stringArgs'] = translatedChoiceList
-
-            ### Event Code: 300 Common Events
-            if codeList[i]['code'] == 300 and CODE300 == True:
-                # Validate size
-                if len(codeList[i]['stringArgs']) > 1:
-                    # Grab String
-                    jaString = codeList[i]['stringArgs'][1]
-
-                    # Skip Heavy Var Text
-                    if 'Hシナリオtext演出' in codeList[i]['stringArgs'][0] or r'/evcg' in jaString:
-                        i += 1
-                        continue
-
-                    # Catch Vars that may break the TL
-                    varString = ''
-                    matchList = re.findall(r'^[\\_]+[\w]+\[[a-zA-Z0-9\\\[\]\_,\s-]+\]', jaString)    
-                    if len(matchList) != 0:
-                        varString = matchList[0]
-                        jaString = jaString.replace(matchList[0], '')
-
-                    # Remove Textwrap
-                    jaString = jaString.replace('\n', ' ')
-
-                    # Translate
-                    response = translateGPT(jaString, f'Reply with the {LANGUAGE} translation of the text.', False, pbar, filename)
-                    translatedText = response[0]
-                    totalTokens[0] = response[1][0]
-                    totalTokens[0] = response[1][1]
-
-                    # Add Textwrap
-                    translatedText = textwrap.fill(translatedText, WIDTH)
-
-                    # Add back Potential Variables in String
-                    translatedText = varString + translatedText
-
-                    # Set Data
-                    codeList[i]['stringArgs'][1] = translatedText
-        
-            ### Iterate
-            i += 1
-             
-        # End of the line
-        if translatedList == [] and stringList != []:
-            pbar.total = len(stringList)
-            pbar.refresh()
-            response = translateGPT(stringList, textHistory, True, pbar, filename)
-            translatedList = response[0]
-            totalTokens[0] += response[1][0]
-            totalTokens[1] += response[1][1]
-            if len(translatedList) != len(stringList):
-                with LOCK:
-                    if filename not in MISMATCH:
-                        MISMATCH.append(filename)
+                # Add String
+                stringList.append(jaString)
+                i += 1
+            
+            # Pass 2
             else:
-                stringList = []
-                searchCodes(events, pbar, translatedList, filename)
-        else:         
-            # Set Data
-            events = codeList
+                # Insert Strings
+                while  i < len(data) and r'/' not in data[i] and data[i] != '\n':
+                    data.pop(i)
 
-    except IndexError as e:
-        traceback.print_exc()
-        raise Exception(str(e) + 'Failed to translate: ' + initialJAString) from None
-    except Exception as e:
-        traceback.print_exc()
-        raise Exception(str(e) + 'Failed to translate: ' + initialJAString) from None   
+                # Get Text
+                translatedText = translatedList[0]
+                translatedList.pop(0)
 
-    return totalTokens
+                if len(translatedList) <= 0:
+                    translatedList = None
+
+                # Remove added speaker
+                translatedText = re.sub(r'^.+?:\s', '', translatedText)
+
+                # Textwrap
+                translatedText = textwrap.fill(translatedText, width=WIDTH)
+
+                # Set Data
+                data.insert(i, f'{translatedText}\n')
+                i += 1
+
+        # Nothing relevant. Skip Line.
+        else:
+            i += 1
+
+    # EOF
+    if translatedList == []:
+        # Set Progress
+        pbar.total = len(stringList)
+        pbar.refresh()
+        
+        # Translate
+        response = translateGPT(stringList, '', True, pbar, filename)
+        tokens[0] += response[1][0]
+        tokens[1] += response[1][1]
+        translatedList = response[0]
+
+        # Set Strings
+        if len(stringList) == len(translatedList):
+            translateWOLF(data, pbar, filename, translatedList)
+
+        # Mismatch
+        else:
+            with LOCK:
+                if filename not in MISMATCH:
+                    MISMATCH.append(filename)
+    return tokens
 
 # Save some money and enter the character before translation
 def getSpeaker(speaker, pbar, filename):
