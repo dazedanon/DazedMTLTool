@@ -28,7 +28,8 @@ NOTEWIDTH = int(os.getenv('noteWidth'))
 MAXHISTORY = 10
 ESTIMATE = ''
 TOKENS = [0, 0]
-NAMESLIST = []
+NAMESLIST = []   # Keep list for consistency
+TERMSLIST = []   # Keep list for consistency
 NAMES = False    # Output a list of all the character names found
 BRFLAG = False   # If the game uses <br> instead
 FIXTEXTWRAP = True  # Overwrites textwrap
@@ -61,6 +62,7 @@ CODE102 = False
 
 # Other
 CODE300 = True
+CODE250 = True
 
 def handleWOLF(filename, estimate):
     global ESTIMATE, TOKENS
@@ -172,7 +174,7 @@ def parseMap(data, filename):
         with ThreadPoolExecutor(max_workers=THREADS) as executor:
             for event in events:
                 if event is not None:
-                    futures = [executor.submit(searchCodes, page, pbar, [], filename) for page in event['pages'] if page is not None]
+                    futures = [executor.submit(searchCodes, page['list'], pbar, [], filename) for page in event['pages'] if page is not None]
                     for future in as_completed(futures):
                         try:
                             totalTokensFuture = future.result()
@@ -321,6 +323,42 @@ def searchCodes(events, pbar, translatedList, filename):
 
                     # Set Data
                     codeList[i]['stringArgs'][1] = translatedText
+
+            ### Event Code: 250 Common Events
+            if codeList[i]['code'] == 250 and CODE250 == True:
+                foundTerm = False
+
+                # Validate size
+                if len(codeList[i]['stringArgs']) > 0:
+                    # Grab String
+                    jaString = codeList[i]['stringArgs'][0]
+
+                    # Catch Vars that may break the TL
+                    varString = ''
+                    matchList = re.findall(r'^[\\_]+[\w]+\[[a-zA-Z0-9\\\[\]\_,\s-]+\]', jaString)    
+                    if len(matchList) != 0:
+                        varString = matchList[0]
+                        jaString = jaString.replace(matchList[0], '')
+
+                    # Check if term already translated
+                    for j in range(len(TERMSLIST)):
+                        if jaString == TERMSLIST[j][0]:
+                            translatedText = TERMSLIST[j][1]
+                            foundTerm = True
+
+                    # Translate
+                    if foundTerm == False:
+                        response = translateGPT(jaString, f'Reply with the {LANGUAGE} translation of the text.', False, pbar, filename)
+                        translatedText = response[0]
+                        totalTokens[0] = response[1][0]
+                        totalTokens[0] = response[1][1]
+                        TERMSLIST.append([jaString, translatedText])
+
+                    # Add back Potential Variables in String
+                    translatedText = varString + translatedText
+
+                    # Set Data
+                    codeList[i]['stringArgs'][0] = translatedText
         
             ### Iterate
             i += 1
