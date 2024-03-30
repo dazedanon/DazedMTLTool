@@ -105,6 +105,10 @@ def openFiles(filename):
         if "'events':" in str(data):
             translatedData = parseMap(data, filename)
 
+        # Map Files
+        if "'types':" in str(data):
+            translatedData = parseDB(data, filename)
+
         # Other Files
         elif "'commands':" in str(data):
             translatedData = parseOther(data, filename)
@@ -148,6 +152,24 @@ def parseOther(data, filename):
         pbar.desc=filename
         pbar.total=totalLines
         translationData = searchCodes(events, pbar, [], filename)
+        try:
+            totalTokens[0] += translationData[0]
+            totalTokens[1] += translationData[1]
+        except Exception as e:
+            return [data, totalTokens, e]
+    return [data, totalTokens, None]
+
+def parseDB(data, filename):
+    totalTokens = [0, 0]
+    totalLines = 0
+    events = data['types']
+    global LOCK
+    
+    # Thread for each page in file
+    with tqdm(bar_format=BAR_FORMAT, position=POSITION, leave=LEAVE) as pbar:
+        pbar.desc=filename
+        pbar.total=totalLines
+        translationData = searchDB(events, pbar, [], filename)
         try:
             totalTokens[0] += translationData[0]
             totalTokens[1] += translationData[1]
@@ -381,6 +403,120 @@ def searchCodes(events, pbar, translatedList, filename):
         else:         
             # Set Data
             events = codeList
+
+    except IndexError as e:
+        traceback.print_exc()
+        raise Exception(str(e) + 'Failed to translate: ' + initialJAString) from None
+    except Exception as e:
+        traceback.print_exc()
+        raise Exception(str(e) + 'Failed to translate: ' + initialJAString) from None   
+
+    return totalTokens
+
+# Database
+def searchDB(events, pbar, translatedList, filename):
+    stringList = []
+    totalTokens = [0, 0]
+    initialJAString = ''
+    tableList = events
+
+    global LOCK
+    global NAMESLIST
+    global MISMATCH
+    
+    # Calculate Total
+    totalLines = 0
+    for table in tableList:
+        if table['name'] == 'NPC':
+            for NPC in table['data']:
+                totalLines += len(NPC['data'])
+    pbar.total = totalLines
+    pbar.refresh()
+
+    # Begin Parsing File
+    try:
+        for table in tableList:
+
+            # Translate NPC Table
+            if table['name'] == 'NPC':
+                varList = []
+                stringList = []
+                for NPC in table['data']:                                            
+                    # TL Dialogue
+                    dataList = NPC['data']
+
+                    # Modify each string
+                    for j in range(len(dataList)):
+                        jaString = dataList[j].get('value')
+                        # Check String
+                        if j == 0:
+                            continue
+                        if not isinstance(jaString, str):
+                            continue
+                        if len(jaString) < 1:
+                            continue
+            
+                        # Append and Replace Var
+                        matchVar = re.findall(r'^\/b\r\n', jaString)
+                        if len(matchVar) > 0:
+                            varList.append(True)
+                            jaString = re.sub(r'^\/b\r\n', '', jaString)
+                        else:
+                            varList.append(False)
+
+                        # Replace special character sequences with a var
+                        jaString = jaString.replace('\r\n\r\n', '[BREAK_1]')
+
+                        # Remove the rest of the textwrap
+                        jaString = jaString.replace('\n', ' ')
+                        jaString = jaString.replace('\r', '')
+
+                        # Add to List
+                        stringList.append(jaString)
+                        
+                    # Translate
+                    response = translateGPT(stringList, f'Reply with the {LANGUAGE} translation of the text.', True, pbar, filename)
+                    translatedList = response[0]
+                    totalTokens[0] += response[1][0]
+                    totalTokens[1] += response[1][1]
+
+                    # Validate
+                    if len(translatedList) != len(stringList):
+                        with LOCK:
+                            if filename not in MISMATCH:
+                                MISMATCH.append(filename)
+                    else:
+                        k = 0
+                        for j in range(len(dataList)):
+                            jaString = dataList[j].get('value')
+                            # Check String
+                            if j == 0:
+                                continue
+                            if not isinstance(jaString, str):
+                                continue
+                            if len(jaString) < 1:
+                                continue
+                            
+                            # Textwrap
+                            if FIXTEXTWRAP is True:
+                                translatedList[k] = textwrap.fill(translatedList[k], width=WIDTH)
+
+                            # Replace special character sequences with a var
+                            translatedList[k] = translatedList[k].replace('[BREAK_1]', '\r\n\r\n')
+                            translatedList[k] = translatedList[k].replace('：', '：\r\n')
+                            translatedList[k] = translatedList[k].replace(':', '：\r\n')
+
+                            # Append and Replace Var
+                            if varList[k] == True:
+                                translatedList[k] = f'/b\r\n{translatedList[k]}'                                
+                        
+                            # Set Text
+                            dataList[j].update({'value': translatedList[k]})
+                            k += 1
+
+                        # Reset Lists
+                        stringList.clear()
+                        varList.clear()
 
     except IndexError as e:
         traceback.print_exc()
