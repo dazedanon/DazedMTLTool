@@ -59,10 +59,12 @@ LEAVE = False
 # Dialogue / Scroll
 CODE101 = False
 CODE102 = False
+CODE122 = False
 
 # Other
-CODE300 = True
-CODE250 = True
+CODE210 = True
+CODE300 = False
+CODE250 = False
 
 def handleWOLF(filename, estimate):
     global ESTIMATE, TOKENS
@@ -207,6 +209,7 @@ def parseMap(data, filename):
     return [data, totalTokens, None]
 
 def searchCodes(events, pbar, translatedList, filename):
+    codeList = events
     stringList = []
     textHistory = []
     totalTokens = [0, 0]
@@ -218,10 +221,22 @@ def searchCodes(events, pbar, translatedList, filename):
     global NAMESLIST
     global MISMATCH
 
+    # Calculate Total Length
+    code_flags = {
+        102: CODE102,
+        122: CODE122,
+        300: CODE300,
+        250: CODE250
+    }
+    totalList = 0
+    for code_item in codeList:
+        if code_flags.get(code_item['code'], False):
+            totalList += 1
+    pbar.total = totalList
+    pbar.refresh()
+    
     # Begin Parsing File
     try:
-        codeList = events
-
         # Iterate through events
         i = 0
         while i < len(codeList):
@@ -303,11 +318,62 @@ def searchCodes(events, pbar, translatedList, filename):
                 response = translateGPT(choiceList, f'Reply with the {LANGUAGE} translation of the dialogue choice', True, pbar, filename)
                 translatedChoiceList = response[0]
                 totalTokens[0] = response[1][0]
-                totalTokens[0] = response[1][1]
+                totalTokens[1] = response[1][1]
 
                 # Validate and Set Data
                 if len(choiceList) == len(translatedChoiceList):
                     codeList[i]['stringArgs'] = translatedChoiceList
+
+            ### Event Code: 210 Common Event
+            if codeList[i]['code'] == 210 and CODE210 == True:
+                if 'stringArgs' in codeList[i] and len(codeList[i]['stringArgs']) > 1:
+                    # Grab Event List
+                    jaString = codeList[i]['stringArgs'][1]
+
+                    # Translate
+                    response = translateGPT(jaString, f'Reply with the {LANGUAGE} translation of the location', False, pbar, filename)
+                    translatedText = response[0]
+                    totalTokens[0] = response[1][0]
+                    totalTokens[1] = response[1][1]
+
+                    # Validate and Set Data
+                    codeList[i]['stringArgs'][1] = translatedText
+
+            ### Event Code: 122 SetString
+            if codeList[i]['code'] == 122 and CODE122 == True:
+                if 'stringArgs' in codeList[i] and len(codeList[i]['stringArgs']) > 0:
+                    # Grab String
+                    jaString = codeList[i]['stringArgs'][0]
+
+                    # Only Translate Conversations
+                    if '：' in jaString:
+                        # Separate into list
+                        stringList = jaString.split('\n\n')
+
+                        # Remove Textwrap
+                        for j in range(len(stringList)):
+                            stringList[j] = stringList[j].replace('\n', ' ')
+
+                        # Translate
+                        response = translateGPT(stringList, f'Reply with the {LANGUAGE} translation of the text', True, pbar, filename)
+                        translatedList = response[0]
+                        totalTokens[0] = response[1][0]
+                        totalTokens[1] = response[1][1]
+
+                        # Validate and Set Data
+                        if len(stringList) == len(translatedList):
+                            # Adjust Speaker and Add Textwrap
+                            for j in range(len(translatedList)):
+                                translatedList[j] = textwrap.fill(translatedList[j], WIDTH)
+                                translatedList[j] = re.sub(r'^\[?(.+?)\]?:', r'\1：', translatedList[j])
+                                translatedList[j] = translatedList[j].replace('：', '：\n')
+                                translatedList[j] = translatedList[j].replace('：\n ', '：\n')
+
+                            # Join back into single string
+                            translatedList = '\n\n'.join(translatedList)
+                            
+                            # Set String
+                            codeList[i]['stringArgs'][0] = translatedList
 
             ### Event Code: 300 Common Events
             if codeList[i]['code'] == 300 and CODE300 == True:
@@ -335,7 +401,7 @@ def searchCodes(events, pbar, translatedList, filename):
                     response = translateGPT(jaString, f'Reply with the {LANGUAGE} translation of the text.', False, pbar, filename)
                     translatedText = response[0]
                     totalTokens[0] = response[1][0]
-                    totalTokens[0] = response[1][1]
+                    totalTokens[1] = response[1][1]
 
                     # Add Textwrap
                     translatedText = textwrap.fill(translatedText, WIDTH)
@@ -373,7 +439,7 @@ def searchCodes(events, pbar, translatedList, filename):
                         response = translateGPT(jaString, f'Reply with the {LANGUAGE} translation of the text.', False, pbar, filename)
                         translatedText = response[0]
                         totalTokens[0] = response[1][0]
-                        totalTokens[0] = response[1][1]
+                        totalTokens[1] = response[1][1]
                         TERMSLIST.append([jaString, translatedText])
 
                     # Add back Potential Variables in String
@@ -508,7 +574,13 @@ def searchDB(events, pbar, translatedList, filename):
 
                             # Append and Replace Var
                             if varList[k] == True:
-                                translatedList[k] = f'/b\r\n{translatedList[k]}'                                
+                                translatedList[k] = f'/b\r\n{translatedList[k]}' 
+
+                            # Replace other /b
+                            translatedList[k] = translatedList[k].replace('/b ', '/b\r\n')
+
+                            # Remove whitespace after newline
+                            translatedList[k] = translatedList[k].replace('\n ', '\n')                           
                         
                             # Set Text
                             dataList[j].update({'value': translatedList[k]})
@@ -733,8 +805,24 @@ def cleanTranslatedText(translatedText, varResponse):
     for target, replacement in placeholders.items():
         translatedText = translatedText.replace(target, replacement)
 
+    # Elongate Long Dashes (Since GPT Ignores them...)
+    translatedText = elongateCharacters(translatedText)
     translatedText = resubVars(translatedText, varResponse[1])
     return translatedText
+
+def elongateCharacters(text):
+    # Define a pattern to match one character followed by one or more `ー` characters
+    # Using a positive lookbehind assertion to capture the preceding character
+    pattern = r'(?<=(.))ー+'
+    
+    # Define a replacement function that elongates the captured character
+    def repl(match):
+        char = match.group(1)  # The character before the ー sequence
+        count = len(match.group(0)) - 1  # Number of ー characters
+        return char * count  # Replace ー sequence with the character repeated
+
+    # Use re.sub() to replace the pattern in the text
+    return re.sub(pattern, repl, text)
 
 def extractTranslation(translatedTextList, is_list):
     pattern = r'`?<Line\d+>([\\]*.*?[\\]*?)<\/?Line\d+>`?'
@@ -835,12 +923,13 @@ def translateGPT(text, history, fullPromptFlag, pbar, filename):
 
             # Create History
             history = tList[index]  # Update history if we have a list
-            pbar.update(len(tList[index]))
+            pbar.update(1)
 
         else:
             # Ensure we're passing a single string to extractTranslation
             extractedTranslations = extractTranslation(translatedText, False)
             tList[index] = extractedTranslations
+            pbar.update(1)
 
     finalList = combineList(tList, text)
     return [finalList, totalTokens]
