@@ -219,7 +219,7 @@ def translateNScript(data, pbar, totalLines):
                 if speaker == '':
                     while '\n' != data[i+1] and '【' not in data[i+1]:
                         if insertBool is True:
-                            data[i] = '\d\n'
+                            data[i] = r'\d\n'
                             pbar.update(1)
                         i += 1
                         matchList = re.findall(r'^[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９「」『』　>（）].*', data[i])
@@ -228,7 +228,7 @@ def translateNScript(data, pbar, totalLines):
                 else:
                     while '　' in data[i+1][0] or '"' in data[i+1] or ')' in data[i+1] or '）' in data[i+1]:
                         if insertBool is True:
-                            data[i] = '\d\n'
+                            data[i] = r'\d\n'
                             pbar.update(1)
                         i += 1
                         matchList = re.findall(r'^[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９「」『』　>（）].*', data[i])
@@ -313,7 +313,7 @@ def translateNScript(data, pbar, totalLines):
                 textList = translatedText.split('\n')
                     
                 # Set Text
-                data[i] = '\d\n'
+                data[i] = r'\d\n'
                 counter = 0
                 for line in textList:
                     # Wordwrap Text

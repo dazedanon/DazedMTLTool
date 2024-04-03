@@ -370,8 +370,24 @@ def cleanTranslatedText(translatedText, varResponse):
     for target, replacement in placeholders.items():
         translatedText = translatedText.replace(target, replacement)
 
+    # Elongate Long Dashes (Since GPT Ignores them...)
+    translatedText = elongateCharacters(translatedText)
     translatedText = resubVars(translatedText, varResponse[1])
     return translatedText
+
+def elongateCharacters(text):
+    # Define a pattern to match one character followed by one or more `ー` characters
+    # Using a positive lookbehind assertion to capture the preceding character
+    pattern = r'(?<=(.))ー+'
+    
+    # Define a replacement function that elongates the captured character
+    def repl(match):
+        char = match.group(1)  # The character before the ー sequence
+        count = len(match.group(0)) - 1  # Number of ー characters
+        return char * count  # Replace ー sequence with the character repeated
+
+    # Use re.sub() to replace the pattern in the text
+    return re.sub(pattern, repl, text)
 
 def extractTranslation(translatedTextList, is_list):
     pattern = r'`?<Line\d+>([\\]*.*?[\\]*?)<\/?Line\d+>`?'
