@@ -77,7 +77,7 @@ def handleWOLF2(filename, estimate):
     
     else:
         try:
-            with open('translated/' + filename, 'w', encoding='utf8', errors='ignore') as outFile:
+            with open('translated/' + filename, 'w', encoding='cp932', errors='ignore') as outFile:
                 start = time.time()
                 translatedData = openFiles(filename)
 
@@ -119,7 +119,7 @@ def getResultString(translatedData, translationTime, filename):
                 errorString + Fore.RESET
 
 def openFiles(filename):
-    with open('files/' + filename, 'r', encoding='cp932') as readFile:
+    with open('files/' + filename, 'r', encoding='utf-8') as readFile:
         translatedData = parseWOLF(readFile, filename)
 
         # Delete lines marked for deletion
@@ -172,7 +172,7 @@ def translateWOLF(data, pbar, filename, translatedList):
             speaker = '' 
 
         # Lines
-        if r'/' not in data[i] and data[i] != '\n':
+        if r'/dfsdsfs' in data[i] and data[i] != '\n':
             # Pass 1
             if translatedList == []:
                 # Grab Consecutive Strings
@@ -226,7 +226,7 @@ def translateWOLF(data, pbar, filename, translatedList):
             i += 1
 
     # EOF
-    if translatedList == []:
+    if len(stringList) > 0:
         # Set Progress
         pbar.total = len(stringList)
         pbar.refresh()
