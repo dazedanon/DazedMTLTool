@@ -57,8 +57,8 @@ POSITION = 0
 LEAVE = False
 
 # Dialogue / Scroll
-CODE101 = False
-CODE102 = False
+CODE101 = True
+CODE102 = True
 CODE122 = False
 
 # Other
@@ -68,10 +68,11 @@ CODE250 = False
 
 # Database
 NPCFLAG = False
-HSCENARIOFLAG = False
+SCENARIOFLAG = False
 ITEMFLAG = False
-COLLECTIONFLAG = False
-ARMORFLAG = True
+COLLECTIONFLAG = True
+ARMORFLAG = False
+OTHERFLAG = False
 
 def handleWOLF(filename, estimate):
     global ESTIMATE, TOKENS
@@ -112,18 +113,21 @@ def openFiles(filename):
 
         # Map Files
         if "'events':" in str(data):
-            translatedData = parseMap(data, filename)
+            if len(data['events']) > 0:
+                translatedData = parseMap(data, filename)
+            else:
+                return [data, [0,0], None]
 
         # Map Files
-        if "'types':" in str(data):
+        elif "'types':" in str(data):
             translatedData = parseDB(data, filename)
 
         # Other Files
         elif "'commands':" in str(data):
             translatedData = parseOther(data, filename)
-
+            
         else:
-            translatedData = data
+            raise NameError(filename + ' Not Supported')
     
     return translatedData
 
@@ -519,12 +523,14 @@ def searchDB(events, pbar, jobList, filename):
         itemList = jobList[2]
         collectionList = jobList[3]
         armorList = jobList[4]
+        otherList = jobList[5]
         setData = True
     else:
-        scenarioList = []
+        scenarioList = [[],[],[]]
         NPCList = []
         itemList = [[],[],[]]
         armorList = [[],[]]
+        otherList = [[],[],[],[]]
         collectionList = []
         setData = False
     
@@ -543,7 +549,7 @@ def searchDB(events, pbar, jobList, filename):
         if table['name'] == 'NPC' and NPCFLAG == True:
             for NPC in table['data']:
                 totalLines += len(NPC['data'])
-        if table['name'] == 'Hシナリオ' and HSCENARIOFLAG == True:
+        if table['name'] == 'Hシナリオ' and SCENARIOFLAG == True:
             for hScenario in table['data']:
                 totalLines += len(hScenario['data'])
     pbar.total = totalLines
@@ -641,21 +647,31 @@ def searchDB(events, pbar, jobList, filename):
                         varList.clear()
 
             # Grab Scenarios
-            if table['name'] == 'Hシナリオ' and HSCENARIOFLAG == True:
+            if table['name'] == 'Hシナリオ' and SCENARIOFLAG == True:
                 for hScenario in table['data']:                                            
                     dataList = hScenario['data']
 
-                    # Grab Specific String
-                    if 'txtファイル名' in dataList[0].get('name'):
-                        jaString = dataList[1].get('value')
-
-                    # Pass 1
+                    # Parse
+                    # Pass 1 (Grab Data)
                     if setData == False:
-                        scenarioList.append(jaString)
-                    # Pass 2
+                        if dataList[1].get('value') != '':
+                            scenarioList[0].append(dataList[1].get('value'))
+                        if dataList[15].get('value') != '':
+                            scenarioList[1].append(dataList[15].get('value'))
+                        if dataList[77].get('value') != '':
+                            scenarioList[2].append(dataList[77].get('value'))
+
+                    # Pass 2 (Set Data)
                     else:
-                        dataList[1].update({'value': scenarioList[0]})
-                        scenarioList.pop(0)
+                        if dataList[1].get('value') != '':
+                            dataList[1].update({'value': scenarioList[0][0]})
+                            scenarioList[0].pop(0)
+                        if dataList[15].get('value') != '':
+                            dataList[15].update({'value': scenarioList[1][0]})
+                            scenarioList[1].pop(0)
+                        if dataList[77].get('value') != '':
+                            dataList[77].update({'value': scenarioList[2][0]})
+                            scenarioList[2].pop(0)
 
             # Grab Items
             if table['name'] == '道具' and ITEMFLAG == True:
@@ -703,13 +719,41 @@ def searchDB(events, pbar, jobList, filename):
                                 dataList[1].update({'value': armorList[1][0]})
                                 armorList[1].pop(0)
 
+            # Grab Other
+            if table['name'] == 'バステ' and OTHERFLAG == True:
+                for other in table['data']:                                            
+                    dataList = other['data']
+
+                    # Parse
+                    if 'バステ名' in dataList[0].get('name'):
+                        # Pass 1 (Grab Data)
+                        if setData == False:
+                            if dataList[0].get('value') != '':
+                                otherList[0].append(dataList[0].get('value'))
+                            if dataList[1].get('value') != '':
+                                otherList[1].append('Taro' + dataList[1].get('value'))
+                            if dataList[2].get('value') != '':
+                                otherList[2].append('Taro' + dataList[2].get('value'))
+
+                        # Pass 2 (Set Data)
+                        else:
+                            if dataList[0].get('value') != '':
+                                dataList[0].update({'value': otherList[0][0]})
+                                otherList[0].pop(0)
+                            if dataList[1].get('value') != '':
+                                dataList[1].update({'value': otherList[1][0].replace('Taro', '')})
+                                otherList[1].pop(0)
+                            if dataList[2].get('value') != '':
+                                dataList[2].update({'value': otherList[2][0].replace('Taro', '')})
+                                otherList[2].pop(0)
+
             # Grab Collection
             if table['name'] == '採取' and COLLECTIONFLAG == True:
                 for object in table['data']:                                            
                     dataList = object['data']
 
                     # Parse
-                    if dataList[0].get('value') != '':
+                    if dataList[0].get('value') != '' and dataList[0].get('name') == 'オブジェクト名':
                         # Pass 1 (Grab Data)
                         if setData == False:
                             collectionList.append(dataList[0].get('value'))
@@ -720,38 +764,50 @@ def searchDB(events, pbar, jobList, filename):
                             collectionList.pop(0)
 
         # Translation
-        scenarioListTL = []
+        scenarioListTL = [[],[],[]]
         NPCListTL = []
         itemListTL = [[],[],[]]
         collectionListTL = []
         armorListTL = [[],[]]
+        otherListTL = [[],[],[]]
 
         translate = False
-        if len(scenarioList) > 0:
+
+        # SCENARIO
+        if len(scenarioList[0]) > 0:
             # Progress Bar
-            pbar.total = len(scenarioList)
+            total = 0
+            for scenarioArray in scenarioList:
+                total += len(scenarioArray)
+            pbar.total = total
             pbar.refresh()
 
-            # Total
-            response = translateGPT(scenarioList, '', True, pbar, filename)
-            translatedScenarioList = response[0]
+            # Name
+            response = translateGPT(scenarioList[0], 'Reply with only the '+ LANGUAGE +' translation', True, pbar, filename)
+            nameListTL = response[0]
+            totalTokens[0] += response[1][0]
+            totalTokens[1] += response[1][1]
+            # Desc 1
+            response = translateGPT(scenarioList[1], 'reply with only the gender neutral '+ LANGUAGE +' translation of the NPC name', True, pbar, filename)
+            descListTL1 = response[0]
+            totalTokens[0] += response[1][0]
+            totalTokens[1] += response[1][1]
+            # Desc 2
+            response = translateGPT(scenarioList[2], 'Reply with only the '+ LANGUAGE +' translation', True, pbar, filename)
+            descListTL2 = response[0]
             totalTokens[0] += response[1][0]
             totalTokens[1] += response[1][1]
 
             # Check Mismatch
-            if len(translatedScenarioList) != len(scenarioList):
+            if len(nameListTL) != len(scenarioList[0]) or\
+            len(descListTL1) != len(scenarioList[1]) or\
+            len(descListTL2) != len(scenarioList[2]):
                 with LOCK:
                     if filename not in MISMATCH:
                         MISMATCH.append(filename)
             else:
-                scenarioListTL = translatedScenarioList
-                translate = True
-            
-            # Start Pass 2
-            if translate == True:
-                jobList.append(translatedScenarioList)
-                jobList.append([])
-                searchDB(events, pbar, jobList, filename)  
+                scenarioListTL = [nameListTL, descListTL1, descListTL2]
+                translate = True 
 
         # ITEMS
         if len(itemList[0]) > 0:
@@ -819,6 +875,42 @@ def searchDB(events, pbar, jobList, filename):
                 armorListTL = [nameListTL, descListTL1]
                 translate = True  
 
+        # Other
+        if len(otherList[0]) > 0:
+            # Progress Bar
+            total = 0
+            for otherArray in otherList:
+                total += len(otherArray)
+            pbar.total = total
+            pbar.refresh()
+
+            # Name
+            response = translateGPT(otherList[0], 'Reply with only the '+ LANGUAGE +' translation of the RPG item name', True, pbar, filename)
+            nameListTL = response[0]
+            totalTokens[0] += response[1][0]
+            totalTokens[1] += response[1][1]
+            # Desc 1
+            response = translateGPT(otherList[1], 'reply with only the gender neutral '+ LANGUAGE +' translation of the action log. Always start the sentence with Taro. For example, Translate \'Taroを倒した！\' as \'Taro was defeated!\'', True, pbar, filename)
+            descListTL1 = response[0]
+            totalTokens[0] += response[1][0]
+            totalTokens[1] += response[1][1]
+            # Desc 2
+            response = translateGPT(otherList[2], 'reply with only the gender neutral '+ LANGUAGE +' translation of the action log. Always start the sentence with Taro. For example, Translate \'Taroを倒した！\' as \'Taro was defeated!\'', True, pbar, filename)
+            descListTL2 = response[0]
+            totalTokens[0] += response[1][0]
+            totalTokens[1] += response[1][1]
+
+            # Check Mismatch
+            if len(nameListTL) != len(otherList[0]) or\
+            len(descListTL1) != len(otherList[1]) or\
+            len(descListTL2) != len(otherList[2]):
+                with LOCK:
+                    if filename not in MISMATCH:
+                        MISMATCH.append(filename)
+            else:
+                otherListTL = [nameListTL, descListTL1, descListTL2]
+                translate = True  
+
         # COLLECTION
         if len(collectionList) > 0:
             # Progress Bar
@@ -848,6 +940,7 @@ def searchDB(events, pbar, jobList, filename):
             jobList.append(itemListTL)
             jobList.append(collectionListTL)
             jobList.append(armorListTL)
+            jobList.append(otherListTL)
             searchDB(events, pbar, jobList, filename)                
 
     except IndexError as e:
