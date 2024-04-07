@@ -56,18 +56,18 @@ POSITION = 0
 LEAVE = False
 
 # Dialogue / Scroll
-CODE401 = False
-CODE405 = False
+CODE401 = True
+CODE405 = True
 CODE408 = False
 
 # Choices
-CODE102 = False
+CODE102 = True
 
 # Variables
 CODE122 = False
 
 # Names
-CODE101 = True
+CODE101 = False
 
 # Other
 CODE355655 = False
@@ -838,10 +838,10 @@ def searchCodes(page, pbar, fillList, filename):
                     ### \\n<Speaker>
                     nCase = None
                     if finalJAString[0] != '\\':
-                        regex = r'(.*?)([\\]+[nN][wWcC]?<(.*?)>.*)'
+                        regex = r'(.*?)([\\]+[kKnN][wWcC]?[<\[](.*?)[>\]].*)'
                         nCase = 0
                     else:
-                        regex = r'(.*[\\]+[nN][wWcC]?<(.*?)>)(.*)'
+                        regex = r'(.*[\\]+[kKnN][wWcC]?[<\[](.*?)[\]>])(.*)'
                         nCase = 1
                     matchList = re.findall(regex, finalJAString)
                     if len(matchList) > 0:  
@@ -920,7 +920,6 @@ def searchCodes(page, pbar, fillList, filename):
 
                     # Remove Extra Stuff bad for translation.
                     finalJAString = finalJAString.replace('ﾞ', '')
-                    finalJAString = finalJAString.replace(' ', '.')
                     finalJAString = finalJAString.replace('―', '-')
                     finalJAString = finalJAString.replace('ー', '-')
                     finalJAString = finalJAString.replace('…', '...')
@@ -929,10 +928,10 @@ def searchCodes(page, pbar, fillList, filename):
                     finalJAString = finalJAString.replace('　', '')
 
                     # Remove any RPGMaker Code at start
-                    ffMatchList = re.findall(r'[\\]+[fFaA]+\[.+?\]', finalJAString)
-                    if len(ffMatchList) > 0:
-                        finalJAString = finalJAString.replace(ffMatchList[0], '')
-                        nametag += ffMatchList[0]
+                    ffMatch = re.search(r'^([.\\]+[aAbBcCdDeEfFgGhHiIjJlLmMoOpPqQrRsStTuUvVwWxXyYzZ]+\[.+?\])+', finalJAString)
+                    if ffMatch != None:
+                        finalJAString = finalJAString.replace(ffMatch.group(0), '')
+                        nametag += ffMatch.group(0)
 
                     ### Remove format codes
                     # Furigana
@@ -985,11 +984,11 @@ def searchCodes(page, pbar, fillList, filename):
                         
                         # Remove speaker
                         if speaker != '':
-                            matchSpeakerList = re.findall(r'(^.+?)\s?[|:]\s?', translatedText)
+                            matchSpeakerList = re.findall(r'^\[?(.+?)\]?\s?[|:]\s?', translatedText)
                             if len(matchSpeakerList) > 0:
                                 newSpeaker = matchSpeakerList[0]
                                 nametag = nametag.replace(speaker, newSpeaker)
-                            translatedText = re.sub(r'(^.+?)\s?[|:]\s?', '', translatedText)
+                            translatedText = re.sub(r'^\[?(.+?)\]?\s?[|:]\s?', '', translatedText)
 
                         # Textwrap
                         if FIXTEXTWRAP is True:
@@ -2105,14 +2104,13 @@ def batchList(input_list, batch_size):
 
 def createContext(fullPromptFlag, subbedT):
     characters = 'Game Characters:\n\
-シラス ティア ナナシユエル (Silas Tia Nanasiyuel) - Female\n\
-レイラ プラム ナナシユエル (Leila Plum Nanasiyuel) - Female\n\
-アリア グランツ (Aria Granz) - Female\n\
-ソフィー グリーンウッド (Sophie Greenwood) - Female\n\
-ヨウコ マッカーシー (Yoko McCarthy) - Female\n\
-ルフィナ アリーニア (Rufina Arinia) - Female\n\
-ヘレナ ルオ アルバネル (Helena Luo Albaner) - Female\n\
-アウローラ パパス (Aurora Pappas) - Female\n\
+クロア (Croix) - Female\n\
+月影 (Tsukikage) - Female\n\
+あろま (Aroma) - Female\n\
+フトシ (Futoshi) - Male\n\
+ユウナ (Shuu) - Male\n\
+嵐野 (Arashino) - Male\n\
+鬼瓦 (Onigawara) - Male\n\
 '
     
     system = PROMPT + VOCAB if fullPromptFlag else \

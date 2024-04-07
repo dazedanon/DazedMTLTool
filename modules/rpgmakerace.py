@@ -1042,11 +1042,11 @@ def searchCodes(page, pbar, fillList, filename):
                         
                         # Remove speaker
                         if speaker != '':
-                            matchSpeakerList = re.findall(r'(^.+?)\s?[|:]\s?', translatedText)
+                            matchSpeakerList = re.findall(r'^\[?(.+?)\]?\s?[|:]\s?', translatedText)
                             if len(matchSpeakerList) > 0:
                                 newSpeaker = matchSpeakerList[0]
                                 nametag = nametag.replace(speaker, newSpeaker)
-                            translatedText = re.sub(r'(^.+?)\s?[|:]\s?', '', translatedText)
+                            translatedText = re.sub(r'^\[?(.+?)\]?\s?[|:]\s?', '', translatedText)
 
                         # Textwrap
                         if FIXTEXTWRAP is True:

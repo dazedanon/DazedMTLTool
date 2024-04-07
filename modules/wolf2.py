@@ -119,7 +119,7 @@ def getResultString(translatedData, translationTime, filename):
                 errorString + Fore.RESET
 
 def openFiles(filename):
-    with open('files/' + filename, 'r', encoding='utf-8') as readFile:
+    with open('files/' + filename, 'r', encoding='shift_jis') as readFile:
         translatedData = parseWOLF(readFile, filename)
 
         # Delete lines marked for deletion
@@ -172,7 +172,7 @@ def translateWOLF(data, pbar, filename, translatedList):
             speaker = '' 
 
         # Lines
-        if r'/dfsdsfs' in data[i] and data[i] != '\n':
+        if r'/' not in data[i] and data[i] != '\n':
             # Pass 1
             if translatedList == []:
                 # Grab Consecutive Strings
@@ -184,7 +184,7 @@ def translateWOLF(data, pbar, filename, translatedList):
                 
                 # Join up 401 groups for better translation.
                 if len(currentGroup) > 0:
-                    jaString = ' '.join(currentGroup)
+                    jaString = ''.join(currentGroup)
                     currentGroup = []
                 
                 # Remove any textwrap
