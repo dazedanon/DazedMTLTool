@@ -57,8 +57,8 @@ POSITION = 0
 LEAVE = False
 
 # Dialogue / Scroll
-CODE101 = True
-CODE102 = True
+CODE101 = False
+CODE102 = False
 CODE122 = False
 
 # Other
@@ -656,21 +656,21 @@ def searchDB(events, pbar, jobList, filename):
                     if setData == False:
                         if dataList[1].get('value') != '':
                             scenarioList[0].append(dataList[1].get('value'))
-                        if dataList[15].get('value') != '':
-                            scenarioList[1].append(dataList[15].get('value'))
-                        if dataList[77].get('value') != '':
-                            scenarioList[2].append(dataList[77].get('value'))
+                        if dataList[74].get('value') != '':
+                            scenarioList[1].append(dataList[74].get('value'))
+                        if dataList[75].get('value') != '':
+                            scenarioList[2].append(dataList[75].get('value'))
 
                     # Pass 2 (Set Data)
                     else:
                         if dataList[1].get('value') != '':
                             dataList[1].update({'value': scenarioList[0][0]})
                             scenarioList[0].pop(0)
-                        if dataList[15].get('value') != '':
-                            dataList[15].update({'value': scenarioList[1][0]})
+                        if dataList[74].get('value') != '':
+                            dataList[74].update({'value': scenarioList[1][0]})
                             scenarioList[1].pop(0)
-                        if dataList[77].get('value') != '':
-                            dataList[77].update({'value': scenarioList[2][0]})
+                        if dataList[75].get('value') != '':
+                            dataList[75].update({'value': scenarioList[2][0]})
                             scenarioList[2].pop(0)
 
             # Grab Items
@@ -720,32 +720,32 @@ def searchDB(events, pbar, jobList, filename):
                                 armorList[1].pop(0)
 
             # Grab Other
-            if table['name'] == 'バステ' and OTHERFLAG == True:
+            if table['name'] == 'ダンジョン敵' and OTHERFLAG == True:
                 for other in table['data']:                                            
                     dataList = other['data']
 
                     # Parse
-                    if 'バステ名' in dataList[0].get('name'):
+                    if '名前' in dataList[0].get('name'):
                         # Pass 1 (Grab Data)
                         if setData == False:
                             if dataList[0].get('value') != '':
                                 otherList[0].append(dataList[0].get('value'))
-                            if dataList[1].get('value') != '':
-                                otherList[1].append('Taro' + dataList[1].get('value'))
-                            if dataList[2].get('value') != '':
-                                otherList[2].append('Taro' + dataList[2].get('value'))
+                            # if dataList[1].get('value') != '':
+                            #     otherList[1].append('Taro' + dataList[1].get('value'))
+                            # if dataList[2].get('value') != '':
+                            #     otherList[2].append('Taro' + dataList[2].get('value'))
 
                         # Pass 2 (Set Data)
                         else:
                             if dataList[0].get('value') != '':
                                 dataList[0].update({'value': otherList[0][0]})
                                 otherList[0].pop(0)
-                            if dataList[1].get('value') != '':
-                                dataList[1].update({'value': otherList[1][0].replace('Taro', '')})
-                                otherList[1].pop(0)
-                            if dataList[2].get('value') != '':
-                                dataList[2].update({'value': otherList[2][0].replace('Taro', '')})
-                                otherList[2].pop(0)
+                            # if dataList[1].get('value') != '':
+                            #     dataList[1].update({'value': otherList[1][0].replace('Taro', '')})
+                            #     otherList[1].pop(0)
+                            # if dataList[2].get('value') != '':
+                            #     dataList[2].update({'value': otherList[2][0].replace('Taro', '')})
+                            #     otherList[2].pop(0)
 
             # Grab Collection
             if table['name'] == '採取' and COLLECTIONFLAG == True:
@@ -753,14 +753,26 @@ def searchDB(events, pbar, jobList, filename):
                     dataList = object['data']
 
                     # Parse
-                    if dataList[0].get('value') != '' and dataList[0].get('name') == 'オブジェクト名':
+                    if dataList[15].get('value') != '' and dataList[0].get('name') == 'オブジェクト名':
                         # Pass 1 (Grab Data)
+                        jaString = dataList[15].get('value')
+                        speaker = re.search(r'(.*)：\r\n', jaString)
                         if setData == False:
-                            collectionList.append(dataList[0].get('value'))
+                            collectionList.append(dataList[15].get('value'))
 
                         # Pass 2 (Set Data)
                         else:
-                            dataList[0].update({'value': collectionList[0]})
+                            if speaker == None:
+                                # Remove speaker
+                                matchSpeakerList = re.findall(r'^(\[.+?\]\s?[|:]\s?)\s?', collectionList[0])
+                                if len(matchSpeakerList) > 0:
+                                    collectionList[0] = collectionList[0].replace(matchSpeakerList[0], '')
+                            else:
+                                # Reformat Speaker
+                                matchSpeaker = re.search(r'^\[(.+?)\]\s?[|:]\s?\s?(.+)', collectionList[0])
+                                if matchSpeaker != None:
+                                    collectionList[0] = f'{matchSpeaker.group(1)}：\r\n{matchSpeaker.group(2)}'
+                            dataList[15].update({'value': collectionList[0]})
                             collectionList.pop(0)
 
         # Translation
@@ -793,7 +805,7 @@ def searchDB(events, pbar, jobList, filename):
             totalTokens[0] += response[1][0]
             totalTokens[1] += response[1][1]
             # Desc 2
-            response = translateGPT(scenarioList[2], 'Reply with only the '+ LANGUAGE +' translation', True, pbar, filename)
+            response = translateGPT(scenarioList[2], 'reply with only the gender neutral '+ LANGUAGE +' translation of the NPC name', True, pbar, filename)
             descListTL2 = response[0]
             totalTokens[0] += response[1][0]
             totalTokens[1] += response[1][1]
@@ -920,7 +932,7 @@ def searchDB(events, pbar, jobList, filename):
             pbar.refresh()
 
             # Name
-            response = translateGPT(collectionList, 'Reply with only the '+ LANGUAGE +' translation of the RPG item name', True, pbar, filename)
+            response = translateGPT(collectionList, 'Reply with only the '+ LANGUAGE +' translation', True, pbar, filename)
             collectionListTL = response[0]
             totalTokens[0] += response[1][0]
             totalTokens[1] += response[1][1]
