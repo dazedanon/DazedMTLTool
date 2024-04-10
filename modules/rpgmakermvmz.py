@@ -56,12 +56,12 @@ POSITION = 0
 LEAVE = False
 
 # Dialogue / Scroll
-CODE401 = True
-CODE405 = True
+CODE401 = False
+CODE405 = False
 CODE408 = False
 
 # Choices
-CODE102 = True
+CODE102 = False
 
 # Variables
 CODE122 = True
@@ -731,8 +731,15 @@ def searchNames(data, pbar, context):
 
     return totalTokens
 
-def searchCodes(page, pbar, fillList, filename):
-    docList = []
+def searchCodes(page, pbar, jobList, filename):
+    if len(jobList) > 0:
+        docList = jobList[0]
+        scriptList = jobList[1]
+        setData = True
+    else:
+        docList = []
+        scriptList = []
+        setData = False
     currentGroup = []
     textHistory = []
     match = []
@@ -764,8 +771,6 @@ def searchCodes(page, pbar, fillList, filename):
                 # syncIndex will keep i in sync when it gets modified
                 if syncIndex > i:
                     i = syncIndex
-                if fillList == []:
-                    pbar.update(1)
                 if len(codeList) <= i:
                     break
 
@@ -962,16 +967,13 @@ def searchCodes(page, pbar, fillList, filename):
                             continue
 
                     # 1st Passthrough (Grabbing Data)
-                    if len(fillList) == 0:
+                    if setData == False:
                         if speaker == '' and finalJAString != '':
                             docList.append(finalJAString)
-                            # textHistory.append(finalJAString)
                         elif finalJAString != '':
                             docList.append(f'{speaker}: {finalJAString}')
-                            # textHistory.append(finalJAString)
                         else:
                             docList.append(speaker)
-                            # textHistory.append(speaker)
                         speaker = ''
                         match = []
                         currentGroup = []
@@ -980,7 +982,7 @@ def searchCodes(page, pbar, fillList, filename):
                     # 2nd Passthrough (Setting Data) 
                     else:
                         # Grab Translated String
-                        translatedText = fillList[0]
+                        translatedText = docList[0]
                         
                         # Remove speaker
                         if speaker != '':
@@ -1021,17 +1023,12 @@ def searchCodes(page, pbar, fillList, filename):
                         match = []
                         currentGroup = []
                         syncIndex = i + 1
-                        fillList.pop(0)
-                        
-                        # If this is the last item in list, set to empty string
-                        if len(fillList) == 0:
-                            fillList = ''
-                                
+                        docList.pop(0)                                
 
             ## Event Code: 122 [Set Variables]
             if codeList[i]['code'] == 122 and CODE122 is True:
                 # This is going to be the var being set. (IMPORTANT)
-                if codeList[i]['parameters'][0] not in [4]:
+                if codeList[i]['parameters'][0] not in [356]:
                     continue
                   
                 jaString = codeList[i]['parameters'][4]
@@ -1043,17 +1040,16 @@ def searchCodes(page, pbar, fillList, filename):
                     continue
 
                 # Need to remove outside code and put it back later
-                matchList = re.findall(r"[\'\"\`](.*)[\'\"\`]", jaString)
-                
-                for match in matchList:
-                    # Remove Textwrap
-                    match = match.replace('\\n', ' ')
-                    response = translateGPT(match, 'Reply with the '+ LANGUAGE +' translation of the text.', False)
-                    translatedText = response[0]
-                    totalTokens[0] += response[1][0]
-                    totalTokens[1] += response[1][1]
+                matchedText = re.search(r"[\'\"\`](.*)[\'\"\`]", jaString)
 
-                    # Replace
+                if matchedText != None:
+                    # Remove Textwrap
+                    finalJAString = matchedText.group(1).replace('\\n', ' ')
+
+                # Pass 1
+                if setData == True:                
+                    # Grab and Replace
+                    translatedText = scriptList[0]
                     translatedText = jaString.replace(jaString, translatedText)
 
                     # Remove characters that may break scripts
@@ -1061,13 +1057,17 @@ def searchCodes(page, pbar, fillList, filename):
                     for char in charList:
                         translatedText = translatedText.replace(char, '')
                 
-                # Textwrap
-                translatedText = textwrap.fill(translatedText, width=50)
-                translatedText = translatedText.replace('\n', '\\n')
-                translatedText = '\"' + translatedText + '\"'
+                    # Textwrap
+                    translatedText = textwrap.fill(translatedText, width=60)
+                    translatedText = translatedText.replace('\n', '\\n')
+                    translatedText = '\"' + translatedText + '\"'
 
-                # Set Data
-                codeList[i]['parameters'][4] = translatedText
+                    # Set
+                    codeList[i]['parameters'][4] = translatedText
+                    scriptList.pop(0)
+                # Pass 2
+                else:
+                    scriptList.append(finalJAString)
 
             ## Event Code: 357 [Picture Text] [Optional]
             if codeList[i]['code'] == 357 and CODE357 is True:
@@ -1243,7 +1243,7 @@ def searchCodes(page, pbar, fillList, filename):
                     translatedText = jaString.replace(matchList[0], translatedText)
                     codeList[i]['parameters'][0] = translatedText
 
-        ## Event Code: 408 (Script)
+            ## Event Code: 408 (Script)
             if (codeList[i]['code'] == 408) and CODE408 is True:
                 jaString = codeList[i]['parameters'][0]
 
@@ -1768,18 +1768,32 @@ def searchCodes(page, pbar, fillList, filename):
                 codeList[i]['parameters'][1] = translatedText
 
         # End of the line
-        if docList != [] and fillList != '':
+        docListTL = []
+        scriptListTL = []
+        if len(docList) > 0 or len(scriptList) > 0:
+            # 401
             response = translateGPT(docList, textHistory, True)
-            fillList = response[0]
+            docListTL = response[0]
             totalTokens[0] += response[1][0]
             totalTokens[1] += response[1][1]
-            if len(fillList) != len(docList):
+            if len(docListTL) != len(docList):
                 with LOCK:
                     if filename not in MISMATCH:
                         MISMATCH.append(filename)
-            else:
-                docList = []
-                searchCodes(page, pbar, fillList, filename)
+            
+            # 122
+            response = translateGPT(scriptList, textHistory, True)
+            scriptListTL = response[0]
+            totalTokens[0] += response[1][0]
+            totalTokens[1] += response[1][1]
+            pbar.update(len(scriptList))
+            if len(scriptListTL) != len(scriptList):
+                with LOCK:
+                    if filename not in MISMATCH:
+                        MISMATCH.append(filename)
+
+            # Start Pass 2
+            searchCodes(page, pbar, [docListTL, scriptListTL], filename)
 
         # Delete all -1 codes
         codeListFinal = []
