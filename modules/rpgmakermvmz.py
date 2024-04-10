@@ -64,7 +64,7 @@ CODE408 = False
 CODE102 = True
 
 # Variables
-CODE122 = False
+CODE122 = True
 
 # Names
 CODE101 = False
@@ -927,18 +927,18 @@ def searchCodes(page, pbar, fillList, filename):
                     finalJAString = re.sub(r'(\.{3}\.+)', '...', finalJAString)
                     finalJAString = finalJAString.replace('　', '')
 
+                    ### Remove format codes
+                    # Furigana
+                    rcodeMatch = re.findall(r'([\\]+[r][b]?\[.*?,(.*?)\])', finalJAString)
+                    if len(rcodeMatch) > 0:
+                        for match in rcodeMatch:
+                            finalJAString = finalJAString.replace(match[0],match[1])
+
                     # Remove any RPGMaker Code at start
                     ffMatch = re.search(r'^([.\\]+[aAbBcCdDeEfFgGhHiIjJlLmMoOpPqQrRsStTuUvVwWxXyYzZ]+\[.+?\])+', finalJAString)
                     if ffMatch != None:
                         finalJAString = finalJAString.replace(ffMatch.group(0), '')
                         nametag += ffMatch.group(0)
-
-                    ### Remove format codes
-                    # Furigana
-                    rcodeMatch = re.findall(r'([\\]+[r][b]?\[.+?,(.+?)\])', finalJAString)
-                    if len(rcodeMatch) > 0:
-                        for match in rcodeMatch:
-                            finalJAString = finalJAString.replace(match[0],match[1])
 
                     # Formatting
                     formatMatch = re.findall(r'[\\]+[!><.|#^{}]', finalJAString)
@@ -1031,7 +1031,7 @@ def searchCodes(page, pbar, fillList, filename):
             ## Event Code: 122 [Set Variables]
             if codeList[i]['code'] == 122 and CODE122 is True:
                 # This is going to be the var being set. (IMPORTANT)
-                if codeList[i]['parameters'][0] not in [34]:
+                if codeList[i]['parameters'][0] not in [4]:
                     continue
                   
                 jaString = codeList[i]['parameters'][4]
@@ -1062,7 +1062,7 @@ def searchCodes(page, pbar, fillList, filename):
                         translatedText = translatedText.replace(char, '')
                 
                 # Textwrap
-                translatedText = textwrap.fill(translatedText, width=LISTWIDTH)
+                translatedText = textwrap.fill(translatedText, width=50)
                 translatedText = translatedText.replace('\n', '\\n')
                 translatedText = '\"' + translatedText + '\"'
 
@@ -2107,8 +2107,9 @@ def createContext(fullPromptFlag, subbedT):
 クロア (Croix) - Female\n\
 月影 (Tsukikage) - Female\n\
 あろま (Aroma) - Female\n\
+シュウ (Shuu) - Male\n\
 フトシ (Futoshi) - Male\n\
-ユウナ (Shuu) - Male\n\
+ユウナ (Yuna) - Female\n\
 嵐野 (Arashino) - Male\n\
 鬼瓦 (Onigawara) - Male\n\
 '
