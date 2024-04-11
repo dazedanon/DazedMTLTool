@@ -58,13 +58,13 @@ LEAVE = False
 # Dialogue / Scroll
 CODE401 = False
 CODE405 = False
-CODE408 = False
+CODE408 = True
 
 # Choices
 CODE102 = False
 
 # Variables
-CODE122 = True
+CODE122 = False
 
 # Names
 CODE101 = False
@@ -1028,7 +1028,7 @@ def searchCodes(page, pbar, jobList, filename):
             ## Event Code: 122 [Set Variables]
             if codeList[i]['code'] == 122 and CODE122 is True:
                 # This is going to be the var being set. (IMPORTANT)
-                if codeList[i]['parameters'][0] not in [356]:
+                if codeList[i]['parameters'][0] not in [291]:
                     continue
                   
                 jaString = codeList[i]['parameters'][4]
@@ -1343,51 +1343,61 @@ def searchCodes(page, pbar, jobList, filename):
 
                 # Want to translate this script
                 if 'D_TEXT ' in jaString:
-                    # Remove any textwrap
-                    jaString = re.sub(r'\n', '_', jaString)
+                    regex = r'D_TEXT\s(.*?)\s.+'
+                elif 'ShowInfo':
+                    regex = r'ShowInfo\s(.*)'
+                elif 'PushGab':
+                    regex = r'PushGab\s(.*)'
+                elif 'addLog':
+                    regex = r'addLog\s(.*)'
+                else:
+                    regex = r''
 
-                    # Capture Arguments and text
-                    dtextList = re.findall(r'D_TEXT\s(.+)\s|D_TEXT\s(.+)', jaString)
-                    if len(dtextList) > 0:
-                        if dtextList[0][0] != '':
-                            dtext = dtextList[0][0]
+                # Remove any textwrap
+                jaString = re.sub(r'\n', '_', jaString)
+
+                # Capture Arguments and text
+                textMatch = re.search(regex, jaString)
+                if textMatch != None:
+                    text = textMatch.group(1)
+
+                    # Using this to keep track of 401's in a row. Throws IndexError at EndOfList (Expected Behavior)
+                    currentGroup.append(text)
+
+                    # Check Next Codes for text
+                    while (codeList[i+1]['code'] == 356):
+                        match = re.search(regex, codeList[i+1]['parameters'][0])
+                        if match == None:
+                            break
                         else:
-                            dtext = dtextList[0][1]
-                        originalDTEXT = dtext
-
-                        # Using this to keep track of 401's in a row. Throws IndexError at EndOfList (Expected Behavior)
-                        currentGroup.append(dtext)
-
-                        while (codeList[i+1]['code'] == 356):
-                            # Want to translate this script
-                            if 'D_TEXT ' not in codeList[i+1]['parameters'][0]:
-                                break
-
-                            codeList[i]['parameters'][0] = ''
+                            jaString = codeList[i+1]['parameters'][0]
+                            textMatch = re.search(regex, jaString)
+                            if textMatch != None:
+                                currentGroup.append(textMatch.group(1))
                             i += 1
-                            jaString = codeList[i]['parameters'][0]
-                            dtextList = re.findall(r'D_TEXT\s(.+)\s|D_TEXT\s(.+)', jaString)
-                            if len(dtextList) > 0:
-                                if dtextList[0][0] != '':
-                                    dtext = dtextList[0][0]
-                                else:
-                                    dtext = dtextList[0][1]
-                                currentGroup.append(dtext)
 
-                        # Join up 356 groups for better translation.
-                        if len(currentGroup) > 0:
-                            finalJAString = ' '.join(currentGroup)
-                        else:
-                            finalJAString = dtext
+                    # Set Final List
+                    finalList = currentGroup
 
-                        # Clear Group
-                        currentGroup = [] 
+                    # Clear Group and Reset Index
+                    currentGroup = [] 
+                    i = i - len(finalList) + 1
 
-                        # Translate
-                        response = translateGPT(finalJAString, 'Reply with the '+ LANGUAGE +' Translation.', False)
-                        translatedText = response[0]
-                        totalTokens[0] += response[1][0]
-                        totalTokens[1] += response[1][1]
+                    # Translate
+                    response = translateGPT(finalList, 'Reply with the '+ LANGUAGE +' Translation.', True)
+                    finalListTL = response[0]
+                    totalTokens[0] += response[1][0]
+                    totalTokens[1] += response[1][1]                        
+
+                    for j in range(len(finalListTL)):
+                        # Grab String Again For Replace
+                        jaString = codeList[i]['parameters'][0]
+                        textMatch = re.search(regex, jaString)
+                        if textMatch != None:
+                            text = textMatch.group(1)
+
+                        # Grab
+                        translatedText = finalListTL[j]
 
                         # Textwrap
                         translatedText = textwrap.fill(translatedText, width=WIDTH, drop_whitespace=False)
@@ -1404,209 +1414,14 @@ def searchCodes(page, pbar, jobList, filename):
                         translatedText = translatedText.replace('__\n', '__')
                     
                         # Put Args Back
-                        translatedText = jaString.replace(originalDTEXT, translatedText)
-
-                        # Set Data
-                        codeList[i]['parameters'][0] = translatedText
-                    else:
-                        continue
-
-                if 'ShowInfo ' in jaString:
-                    # Remove any textwrap
-                    jaString = re.sub(r'\n', '_', jaString)
-
-                    # _SEItem1
-                    if '_SE' in jaString:
-                        infoList = re.findall(r'\_SE\[.+?\](.+)', jaString)
-                    else:
-                        infoList = re.findall(r'ShowInfo (.+)', jaString)
-
-                    # Capture Arguments and text
-                    if len(infoList) > 0:
-                        info = infoList[0]
-                        originalInfo = info
-
-                        # Remove underscores
-                        info = re.sub(r'_', ' ', info)
-
-                        # Using this to keep track of 401's in a row. Throws IndexError at EndOfList (Expected Behavior)
-                        currentGroup.append(info)
-
-                        while (codeList[i+1]['code'] == 356):
-                            # Want to translate this script
-                            if 'ShowInfo ' not in codeList[i+1]['parameters'][0]:
-                                break
-
-                            codeList[i]['parameters'][0] = ''
-                            i += 1
-                            jaString = codeList[i]['parameters'][0]
-                            if '_SE' in jaString:
-                                infoList = re.findall(r'\_SE\[.+?\](.+)', jaString)
-                            else:
-                                infoList = re.findall(r'ShowInfo (.+)', jaString)
-                            if len(infoList) > 0:
-                                dtext = infoList[0]
-                                currentGroup.append(info)
-
-                        # Join up 356 groups for better translation.
-                        if len(currentGroup) > 0:
-                            finalJAString = ' '.join(currentGroup)
-                        else:
-                            finalJAString = info
-
-                        # Clear Group
-                        currentGroup = [] 
-                    
-                        # Remove any textwrap
-                        jaString = re.sub(r'\n', '_', jaString)
-
-                        # Translate
-                        response = translateGPT(finalJAString, 'Reply with the '+ LANGUAGE +' Translation.', False)
-                        translatedText = response[0]
-                        totalTokens[0] += response[1][0]
-                        totalTokens[1] += response[1][1]
-
-                        # Remove characters that may break scripts
-                        charList = ['.', '\"']
-                        for char in charList:
-                            translatedText = translatedText.replace(char, '')
+                        translatedText = jaString.replace(text, translatedText)
                         
-                        # Cant have spaces?
-                        translatedText = translatedText.replace(' ', '_')
-                    
-                        # Put Args Back
-                        translatedText = jaString.replace(originalInfo, translatedText)
-
                         # Set Data
                         codeList[i]['parameters'][0] = translatedText
+                        i += 1
                     else:
                         continue
 
-                if 'PushGab ' in jaString:
-                    # Remove any textwrap
-                    jaString = re.sub(r'\n', '_', jaString)
-
-                    # Capture Arguments and text
-                    infoList = re.findall(r'PushGab [0-9]+ (.+)', jaString)
-                    if len(infoList) > 0:
-                        info = infoList[0]
-                        originalInfo = info
-
-                        # Remove underscores
-                        info = re.sub(r'_', ' ', info)
-
-                        # Using this to keep track of 401's in a row. Throws IndexError at EndOfList (Expected Behavior)
-                        currentGroup.append(info)
-
-                        while (codeList[i+1]['code'] == 356):
-                            # Want to translate this script
-                            if 'PushGab ' not in codeList[i+1]['parameters'][0]:
-                                break
-
-                            codeList[i]['parameters'][0] = ''
-                            i += 1
-                            jaString = codeList[i]['parameters'][0]
-                            infoList = re.findall(r'PushGab [0-9]+ (.+)', jaString)
-                            if len(infoList) > 0:
-                                dtext = infoList[0]
-                                currentGroup.append(info)
-
-                        # Join up 356 groups for better translation.
-                        if len(currentGroup) > 0:
-                            finalJAString = ' '.join(currentGroup)
-                        else:
-                            finalJAString = info
-
-                        # Clear Group
-                        currentGroup = [] 
-                    
-                        # Remove any textwrap
-                        jaString = re.sub(r'\n', '_', jaString)
-
-                        # Translate
-                        response = translateGPT(finalJAString, 'Reply with the '+ LANGUAGE +' Translation.', False)
-                        translatedText = response[0]
-                        totalTokens[0] += response[1][0]
-                        totalTokens[1] += response[1][1]
-
-                        # Remove characters that may break scripts
-                        charList = ['.', '\"']
-                        for char in charList:
-                            translatedText = translatedText.replace(char, '')
-                        
-                        # Cant have spaces?
-                        translatedText = translatedText.replace(' ', '_')
-                    
-                        # Put Args Back
-                        translatedText = jaString.replace(originalInfo, translatedText)
-
-                        # Set Data
-                        codeList[i]['parameters'][0] = translatedText
-                    else:
-                        continue
-
-                if 'addLog ' in jaString:
-                    # Remove any textwrap
-                    jaString = re.sub(r'\n', '_', jaString)
-                    infoList = re.findall(r'addLog (.+)', jaString)
-
-                    # Capture Arguments and text
-                    if len(infoList) > 0:
-                        info = infoList[0]
-                        originalInfo = info
-
-                        # Remove underscores
-                        info = re.sub(r'_', ' ', info)
-
-                        # Using this to keep track of 401's in a row. Throws IndexError at EndOfList (Expected Behavior)
-                        currentGroup.append(info)
-
-                        while (codeList[i+1]['code'] == 356):
-                            # Want to translate this script
-                            if 'ShowInfo ' not in codeList[i+1]['parameters'][0]:
-                                break
-
-                            codeList[i]['parameters'][0] = ''
-                            i += 1
-                            jaString = codeList[i]['parameters'][0]
-                            infoList = re.findall(r'addLog (.+)', jaString)
-                            if len(infoList) > 0:
-                                dtext = infoList[0]
-                                currentGroup.append(info)
-
-                        # Join up 356 groups for better translation.
-                        if len(currentGroup) > 0:
-                            finalJAString = ' '.join(currentGroup)
-                        else:
-                            finalJAString = info
-
-                        # Clear Group
-                        currentGroup = [] 
-                    
-                        # Remove any textwrap
-                        jaString = re.sub(r'\n', '_', jaString)
-
-                        # Translate
-                        response = translateGPT(finalJAString, 'Reply with the '+ LANGUAGE +' Translation.', False)
-                        translatedText = response[0]
-                        totalTokens[0] += response[1][0]
-                        totalTokens[1] += response[1][1]
-
-                        # Remove characters that may break scripts
-                        charList = ['.', '\"']
-                        for char in charList:
-                            translatedText = translatedText.replace(char, '')
-                        
-                        # Cant have spaces?
-                        translatedText = translatedText.replace(' ', '_')
-                    
-                        # Put Args Back
-                        translatedText = jaString.replace(originalInfo, translatedText)
-
-                        # Set Data
-                        codeList[i]['parameters'][0] = translatedText
-                    else:
-                        continue
                 if 'namePop' in jaString:
                     matchList = re.findall(r'namePop\s\d+\s(.+?)\s.+', jaString)
                     if len(matchList) > 0:
