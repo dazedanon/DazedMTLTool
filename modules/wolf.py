@@ -68,9 +68,9 @@ CODE250 = False
 
 # Database
 NPCFLAG = False
-SCENARIOFLAG = False
+SCENARIOFLAG = True
 ITEMFLAG = False
-COLLECTIONFLAG = True
+COLLECTIONFLAG = False
 ARMORFLAG = False
 OTHERFLAG = False
 
@@ -656,21 +656,21 @@ def searchDB(events, pbar, jobList, filename):
                     if setData == False:
                         if dataList[1].get('value') != '':
                             scenarioList[0].append(dataList[1].get('value'))
-                        if dataList[74].get('value') != '':
-                            scenarioList[1].append(dataList[74].get('value'))
-                        if dataList[75].get('value') != '':
-                            scenarioList[2].append(dataList[75].get('value'))
+                        if dataList[44].get('value') != '':
+                            scenarioList[1].append(dataList[44].get('value'))
+                        if dataList[45].get('value') != '':
+                            scenarioList[2].append(dataList[45].get('value'))
 
                     # Pass 2 (Set Data)
                     else:
                         if dataList[1].get('value') != '':
                             dataList[1].update({'value': scenarioList[0][0]})
                             scenarioList[0].pop(0)
-                        if dataList[74].get('value') != '':
-                            dataList[74].update({'value': scenarioList[1][0]})
+                        if dataList[44].get('value') != '':
+                            dataList[44].update({'value': scenarioList[1][0]})
                             scenarioList[1].pop(0)
-                        if dataList[75].get('value') != '':
-                            dataList[75].update({'value': scenarioList[2][0]})
+                        if dataList[45].get('value') != '':
+                            dataList[45].update({'value': scenarioList[2][0]})
                             scenarioList[2].pop(0)
 
             # Grab Items
