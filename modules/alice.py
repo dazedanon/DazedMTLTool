@@ -9,7 +9,7 @@ from tqdm import tqdm
 # Open AI
 load_dotenv()
 if os.getenv('api').replace(' ', '') != '':
-    openai.api_base = os.getenv('api')
+    openai.base_url = os.getenv('api')
 openai.organization = os.getenv('org')
 openai.api_key = os.getenv('key')
 
