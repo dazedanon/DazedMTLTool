@@ -56,18 +56,18 @@ POSITION = 0
 LEAVE = False
 
 # Dialogue / Scroll
-CODE401 = False
-CODE405 = False
-CODE408 = True
+CODE401 = True
+CODE405 = True
+CODE408 = False
 
 # Choices
-CODE102 = False
+CODE102 = True
 
 # Variables
 CODE122 = False
 
 # Names
-CODE101 = False
+CODE101 = True
 
 # Other
 CODE355655 = False
@@ -1933,14 +1933,9 @@ def batchList(input_list, batch_size):
 
 def createContext(fullPromptFlag, subbedT):
     characters = 'Game Characters:\n\
-クロア (Croix) - Female\n\
-月影 (Tsukikage) - Female\n\
-あろま (Aroma) - Female\n\
-シュウ (Shuu) - Male\n\
-フトシ (Futoshi) - Male\n\
-ユウナ (Yuna) - Female\n\
-嵐野 (Arashino) - Male\n\
-鬼瓦 (Onigawara) - Male\n\
+バルゴ (Balgo) - Female\n\
+エリシア (Elysia) - Female\n\
+サキュバスクイーン (Succubus Queen) - Female\n\
 '
     
     system = PROMPT + VOCAB if fullPromptFlag else \
