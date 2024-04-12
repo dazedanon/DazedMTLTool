@@ -982,48 +982,49 @@ def searchCodes(page, pbar, jobList, filename):
                     # 2nd Passthrough (Setting Data) 
                     else:
                         # Grab Translated String
-                        translatedText = docList[0]
-                        
-                        # Remove speaker
-                        if speaker != '':
-                            matchSpeakerList = re.findall(r'^\[?(.+?)\]?\s?[|:]\s?', translatedText)
-                            if len(matchSpeakerList) > 0:
-                                newSpeaker = matchSpeakerList[0]
-                                nametag = nametag.replace(speaker, newSpeaker)
-                            translatedText = re.sub(r'^\[?(.+?)\]?\s?[|:]\s?', '', translatedText)
+                        if len(docList) > 0:
+                            translatedText = docList[0]
+                            
+                            # Remove speaker
+                            if speaker != '':
+                                matchSpeakerList = re.findall(r'^\[?(.+?)\]?\s?[|:]\s?', translatedText)
+                                if len(matchSpeakerList) > 0:
+                                    newSpeaker = matchSpeakerList[0]
+                                    nametag = nametag.replace(speaker, newSpeaker)
+                                translatedText = re.sub(r'^\[?(.+?)\]?\s?[|:]\s?', '', translatedText)
 
-                        # Textwrap
-                        if FIXTEXTWRAP is True:
-                            translatedText = textwrap.fill(translatedText, width=WIDTH)
-                            if BRFLAG is True:
-                                translatedText = translatedText.replace('\n', '<br>')   
+                            # Textwrap
+                            if FIXTEXTWRAP is True:
+                                translatedText = textwrap.fill(translatedText, width=WIDTH)
+                                if BRFLAG is True:
+                                    translatedText = translatedText.replace('\n', '<br>')   
 
-                        ### Add Var Strings
-                        # CL Flag
-                        if CLFlag:
-                            translatedText = '\\CL' + translatedText
-                            CLFlag = False
+                            ### Add Var Strings
+                            # CL Flag
+                            if CLFlag:
+                                translatedText = '\\CL' + translatedText
+                                CLFlag = False
 
-                        # Nametag
-                        if nCase == 0:
-                            translatedText = translatedText + nametag
-                        else:
-                            translatedText = nametag + translatedText
-                        nametag = ''
+                            # Nametag
+                            if nCase == 0:
+                                translatedText = translatedText + nametag
+                            else:
+                                translatedText = nametag + translatedText
+                            nametag = ''
 
-                        # //SE[#]
-                        translatedText = varString + translatedText
+                            # //SE[#]
+                            translatedText = varString + translatedText
 
-                        # Set Data
-                        if speakerID != None:
-                            codeList[speakerID]['parameters'] = [fullSpeaker]
-                        codeList[j]['parameters'] = [translatedText]
-                        codeList[j]['code'] = code
-                        speaker = ''
-                        match = []
-                        currentGroup = []
-                        syncIndex = i + 1
-                        docList.pop(0)                                
+                            # Set Data
+                            if speakerID != None:
+                                codeList[speakerID]['parameters'] = [fullSpeaker]
+                            codeList[j]['parameters'] = [translatedText]
+                            codeList[j]['code'] = code
+                            speaker = ''
+                            match = []
+                            currentGroup = []
+                            syncIndex = i + 1
+                            docList.pop(0)                                
 
             ## Event Code: 122 [Set Variables]
             if codeList[i]['code'] == 122 and CODE122 is True:
@@ -1047,27 +1048,29 @@ def searchCodes(page, pbar, jobList, filename):
                     finalJAString = matchedText.group(1).replace('\\n', ' ')
 
                 # Pass 1
-                if setData == True:                
-                    # Grab and Replace
-                    translatedText = scriptList[0]
-                    translatedText = jaString.replace(jaString, translatedText)
-
-                    # Remove characters that may break scripts
-                    charList = ['\"', '\\n']
-                    for char in charList:
-                        translatedText = translatedText.replace(char, '')
-                
-                    # Textwrap
-                    translatedText = textwrap.fill(translatedText, width=60)
-                    translatedText = translatedText.replace('\n', '\\n')
-                    translatedText = '\"' + translatedText + '\"'
-
-                    # Set
-                    codeList[i]['parameters'][4] = translatedText
-                    scriptList.pop(0)
-                # Pass 2
-                else:
+                if setData == False:
                     scriptList.append(finalJAString)
+
+                # Pass 2
+                else:  
+                    if len(scriptList) > 0:            
+                        # Grab and Replace
+                        translatedText = scriptList[0]
+                        translatedText = jaString.replace(jaString, translatedText)
+
+                        # Remove characters that may break scripts
+                        charList = ['\"', '\\n']
+                        for char in charList:
+                            translatedText = translatedText.replace(char, '')
+                    
+                        # Textwrap
+                        translatedText = textwrap.fill(translatedText, width=60)
+                        translatedText = translatedText.replace('\n', '\\n')
+                        translatedText = '\"' + translatedText + '\"'
+
+                        # Set
+                        codeList[i]['parameters'][4] = translatedText
+                        scriptList.pop(0)
 
             ## Event Code: 357 [Picture Text] [Optional]
             if codeList[i]['code'] == 357 and CODE357 is True:
@@ -1585,8 +1588,10 @@ def searchCodes(page, pbar, jobList, filename):
         # End of the line
         docListTL = []
         scriptListTL = []
-        if len(docList) > 0 or len(scriptList) > 0:
-            # 401
+        setData = False
+        
+        # 401
+        if len(docList) > 0:
             response = translateGPT(docList, textHistory, True)
             docListTL = response[0]
             totalTokens[0] += response[1][0]
@@ -1595,8 +1600,11 @@ def searchCodes(page, pbar, jobList, filename):
                 with LOCK:
                     if filename not in MISMATCH:
                         MISMATCH.append(filename)
-            
-            # 122
+            else:
+                setData = True
+
+        # 122
+        if len(scriptList) > 0:
             response = translateGPT(scriptList, textHistory, True)
             scriptListTL = response[0]
             totalTokens[0] += response[1][0]
@@ -1606,8 +1614,11 @@ def searchCodes(page, pbar, jobList, filename):
                 with LOCK:
                     if filename not in MISMATCH:
                         MISMATCH.append(filename)
+            else:
+                setData = True
 
-            # Start Pass 2
+        # Start Pass 2
+        if setData:
             searchCodes(page, pbar, [docListTL, scriptListTL], filename)
 
         # Delete all -1 codes
