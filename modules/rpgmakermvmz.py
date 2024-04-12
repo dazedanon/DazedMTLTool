@@ -1965,7 +1965,7 @@ Output ONLY the {LANGUAGE} translation in the following format: `Translation: <{
     user = f'{subbedT}'
     return characters, system, user
 
-def translateText(characters, system, user, history):
+def translateText(characters, system, user, history, penalty):
     # Prompt
     msg = [{"role": "system", "content": system + characters}]
 
@@ -1981,8 +1981,8 @@ def translateText(characters, system, user, history):
     # Content to TL
     msg.append({"role": "user", "content": f'{user}'})
     response = openai.chat.completions.create(
-        temperature=0.1,
-        frequency_penalty=0.1,
+        temperature=0,
+        frequency_penalty=penalty,
         model=MODEL,
         messages=msg,
     )
@@ -2091,7 +2091,7 @@ def translateGPT(text, history, fullPromptFlag):
             continue
 
         # Translating
-        response = translateText(characters, system, user, history)
+        response = translateText(characters, system, user, history, 0)
         translatedText = response.choices[0].message.content
         totalTokens[0] += response.usage.prompt_tokens
         totalTokens[1] += response.usage.completion_tokens
@@ -2103,7 +2103,7 @@ def translateGPT(text, history, fullPromptFlag):
             tList[index] = extractedTranslations
             if len(tItem) != len(extractedTranslations):
                 # Mismatch. Try Again
-                response = translateText(characters, system, user, history)
+                response = translateText(characters, system, user, history, 0.05)
                 translatedText = response.choices[0].message.content
                 totalTokens[0] += response.usage.prompt_tokens
                 totalTokens[1] += response.usage.completion_tokens
