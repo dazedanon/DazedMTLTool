@@ -2,10 +2,12 @@ import sys, os, traceback
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from colorama import Fore
 from tqdm import tqdm
+from dotenv import load_dotenv
 
 # This needs to be before the module imports as some of them currently try to read and use some of these values
 # upon import, in which case if they are unset the script will crash before we can output these messages.
 envMissing = False
+load_dotenv()
 for env in ['api','key','organization','model','language','timeout','fileThreads','threads','width','listWidth']:
     if os.getenv(env) is None or str(os.getenv(env))[:1] == '<':
         tqdm.write(Fore.RED + f'Environment variable {env} is not set!')
