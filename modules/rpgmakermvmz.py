@@ -67,7 +67,7 @@ CODE102 = True
 CODE122 = False
 
 # Names
-CODE101 = True
+CODE101 = False
 
 # Other
 CODE355655 = False
@@ -1029,7 +1029,7 @@ def searchCodes(page, pbar, jobList, filename):
             ## Event Code: 122 [Set Variables]
             if codeList[i]['code'] == 122 and CODE122 is True:
                 # This is going to be the var being set. (IMPORTANT)
-                if codeList[i]['parameters'][0] not in [291]:
+                if codeList[i]['parameters'][0] not in [314, 315, 316, 291]:
                     continue
                   
                 jaString = codeList[i]['parameters'][4]
@@ -1299,6 +1299,8 @@ def searchCodes(page, pbar, jobList, filename):
                     regex = r'info:(.*)'
                 elif 'ActiveMessage:' in jaString:
                     regex = r'<ActiveMessage:(.*)>?'
+                elif 'event_text' in jaString:
+                    regex = r'event_text\s?:\s?(.*)'
                 else:
                     continue
 
@@ -1944,9 +1946,11 @@ def batchList(input_list, batch_size):
 
 def createContext(fullPromptFlag, subbedT):
     characters = 'Game Characters:\n\
-バルゴ (Balgo) - Female\n\
-エリシア (Elysia) - Female\n\
-サキュバスクイーン (Succubus Queen) - Female\n\
+リゼ (Rize) - Female\n\
+ティア (Tia)\n\
+リィナ (Riina)\n\
+クェス (Ques)\n\
+たこ (Tako)\n\
 '
     
     system = PROMPT + VOCAB if fullPromptFlag else \
