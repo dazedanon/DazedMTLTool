@@ -57,7 +57,7 @@ LEAVE = False
 
 # Dialogue / Scroll
 CODE401 = True
-CODE405 = True
+CODE405 = False
 CODE408 = False
 
 # Choices
@@ -1029,7 +1029,7 @@ def searchCodes(page, pbar, jobList, filename):
             ## Event Code: 122 [Set Variables]
             if codeList[i]['code'] == 122 and CODE122 is True:
                 # This is going to be the var being set. (IMPORTANT)
-                if codeList[i]['parameters'][0] not in [314, 315, 316, 291]:
+                if codeList[i]['parameters'][0] not in [297, 298, 299]:
                     continue
                   
                 jaString = codeList[i]['parameters'][4]
@@ -1486,8 +1486,8 @@ def searchCodes(page, pbar, jobList, filename):
                     # If and En Statements
                     ifVar = ''
                     enVar = ''
-                    ifList = re.findall(r'(if\(.*\))', jaString)
-                    enList = re.findall(r'(en\(.*\))', jaString)
+                    ifList = re.findall(r'(if\(.*?\))', jaString)
+                    enList = re.findall(r'(en\(.*?\))', jaString)
                     if len(ifList) != 0:
                         jaString = jaString.replace(ifList[0], '')
                         ifVar = ifList[0]
@@ -1947,10 +1947,10 @@ def batchList(input_list, batch_size):
 def createContext(fullPromptFlag, subbedT):
     characters = 'Game Characters:\n\
 リゼ (Rize) - Female\n\
-ティア (Tia)\n\
-リィナ (Riina)\n\
-クェス (Ques)\n\
-たこ (Tako)\n\
+ティア (Tia) - Female\n\
+リィナ (Riina) - Female\n\
+クェス (Ques) - Female\n\
+たこ (Tako) - Female\n\
 '
     
     system = PROMPT + VOCAB if fullPromptFlag else \
