@@ -1,5 +1,5 @@
 # Libraries
-import json, os, re, textwrap, threading, time, traceback, tiktoken, openai
+import json, os, re, textwrap, threading, time, traceback, tiktoken, openai, cohere
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from colorama import Fore
@@ -9,10 +9,16 @@ from tqdm import tqdm
 
 # Open AI
 load_dotenv()
-if os.getenv('api').replace(' ', '') != '':
-    openai.base_url = os.getenv('api')
-openai.organization = os.getenv('org')
-openai.api_key = os.getenv('key')
+APITYPE = os.getenv('type')
+if APITYPE == 'openai':
+    if os.getenv('api').replace(' ', '') != '':
+        openai.base_url = os.getenv('api')
+    openai.organization = os.getenv('org')
+    openai.api_key = os.getenv('key')
+elif APITYPE == 'cohere':
+    co = cohere.Client(os.getenv('key'))
+
+WAITTIME = os.getenv('waitTime')
 
 #Globals
 MODEL = os.getenv('model')
@@ -48,6 +54,16 @@ elif 'gpt-4' in MODEL:
     INPUTAPICOST = .01
     OUTPUTAPICOST = .03
     BATCHSIZE = 40
+    FREQUENCY_PENALTY = 0.1
+elif 'command-r' in MODEL:
+    INPUTAPICOST = .00
+    OUTPUTAPICOST = .00
+    BATCHSIZE = 10
+    FREQUENCY_PENALTY = 0.2
+elif 'command-r-plus' in MODEL:
+    INPUTAPICOST = .00
+    OUTPUTAPICOST = .00
+    BATCHSIZE = 30
     FREQUENCY_PENALTY = 0.1
 
 #tqdm Globals
@@ -1971,27 +1987,51 @@ Output ONLY the {LANGUAGE} translation in the following format: `Translation: <{
     return characters, system, user
 
 def translateText(characters, system, user, history, penalty):
-    # Prompt
-    msg = [{"role": "system", "content": system + characters}]
+    time.sleep(WAITTIME)
+    if APITYPE =='openai':
+        # Prompt
+        msg = [{"role": "system", "content": system + characters}]
 
-    # Characters
-    msg.append({"role": "system", "content": characters})
+        # Characters
+        msg.append({"role": "system", "content": characters})
 
-    # History
-    if isinstance(history, list):
-        msg.extend([{"role": "system", "content": h} for h in history])
-    else:
-        msg.append({"role": "system", "content": history})
-    
-    # Content to TL
-    msg.append({"role": "user", "content": f'{user}'})
-    response = openai.chat.completions.create(
-        temperature=0,
-        frequency_penalty=penalty,
-        model=MODEL,
-        messages=msg,
-    )
-    return response
+        # History
+        if isinstance(history, list):
+            msg.extend([{"role": "system", "content": h} for h in history])
+        else:
+            msg.append({"role": "system", "content": history})
+        
+        # Content to TL
+        msg.append({"role": "user", "content": f'{user}'})
+        response = openai.chat.completions.create(
+            temperature=0,
+            frequency_penalty=penalty,
+            model=MODEL,
+            messages=msg,
+        )
+        return response
+    elif APITYPE == 'cohere':
+        # Prompt
+        msg = [{"role": "system", "message": system + characters}]
+
+        # Characters
+        msg.append({"role": "system", "message": characters})
+
+        # History
+        if isinstance(history, list):
+            msg.extend([{"role": "system", "message": h} for h in history])
+        else:
+            msg.append({"role": "system", "message": history})
+        
+        # Content to TL
+        response = co.chat(
+            temperature=0,
+            frequency_penalty=penalty,
+            model=MODEL,
+            chat_history=msg,
+            message=user
+        )
+        return response
 
 def cleanTranslatedText(translatedText, varResponse):
     placeholders = {
@@ -2097,9 +2137,9 @@ def translateGPT(text, history, fullPromptFlag):
 
         # Translating
         response = translateText(characters, system, user, history, 0.02)
-        translatedText = response.choices[0].message.content
-        totalTokens[0] += response.usage.prompt_tokens
-        totalTokens[1] += response.usage.completion_tokens
+        translatedText = contentSelector(response)
+        totalTokens[0] += inputToken(response)
+        totalTokens[1] += outputToken(response)
 
         # Formatting
         translatedText = cleanTranslatedText(translatedText, varResponse)
@@ -2109,9 +2149,9 @@ def translateGPT(text, history, fullPromptFlag):
             if len(tItem) != len(extractedTranslations):
                 # Mismatch. Try Again
                 response = translateText(characters, system, user, history, 0.1)
-                translatedText = response.choices[0].message.content
-                totalTokens[0] += response.usage.prompt_tokens
-                totalTokens[1] += response.usage.completion_tokens
+                translatedText = contentSelector(response)
+                totalTokens[0] += inputToken(response)
+                totalTokens[1] += outputToken(response)
 
                 # Formatting
                 translatedText = cleanTranslatedText(translatedText, varResponse)
@@ -2133,3 +2173,21 @@ def translateGPT(text, history, fullPromptFlag):
 
     finalList = combineList(tList, text)
     return [finalList, totalTokens]
+
+def contentSelector(response):
+    if APITYPE == 'openai':
+        return response.choices[0].message.content
+    elif APITYPE == 'cohere':
+        return response.text
+
+def inputToken(response):
+    if APITYPE == 'openai':
+        return response.usage.prompt_tokens
+    elif APITYPE == 'cohere':
+        return response.meta.billed_units.input_tokens
+
+def outputToken(response):
+    if APITYPE == 'openai':
+        return response.usage.completion_tokens
+    elif APITYPE == 'cohere':
+        return response.meta.billed_units.output_tokens
