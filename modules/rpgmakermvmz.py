@@ -57,7 +57,7 @@ LEAVE = False
 
 # Dialogue / Scroll
 CODE401 = True
-CODE405 = False
+CODE405 = True
 CODE408 = False
 
 # Choices
@@ -67,7 +67,7 @@ CODE102 = True
 CODE122 = False
 
 # Names
-CODE101 = False
+CODE101 = True
 
 # Other
 CODE355655 = False
@@ -843,10 +843,10 @@ def searchCodes(page, pbar, jobList, filename):
                     ### \\n<Speaker>
                     nCase = None
                     if finalJAString[0] != '\\':
-                        regex = r'(.*?)([\\]+[kKnN][wWcC]?[<\[](.*?)[>\]].*)'
+                        regex = r'(.*?)([\\]+[kKnN][wWcC]?[<](.*?)[>].*)'
                         nCase = 0
                     else:
-                        regex = r'(.*[\\]+[kKnN][wWcC]?[<\[](.*?)[\]>])(.*)'
+                        regex = r'(.*[\\]+[kKnN][wWcC]?[<](.*?)[>])(.*)'
                         nCase = 1
                     matchList = re.findall(regex, finalJAString)
                     if len(matchList) > 0:  
@@ -971,7 +971,7 @@ def searchCodes(page, pbar, jobList, filename):
                         if speaker == '' and finalJAString != '':
                             docList.append(finalJAString)
                         elif finalJAString != '':
-                            docList.append(f'{speaker}: {finalJAString}')
+                            docList.append(f'[{speaker}]: {finalJAString}')
                         else:
                             docList.append(speaker)
                         speaker = ''
@@ -1946,11 +1946,12 @@ def batchList(input_list, batch_size):
 
 def createContext(fullPromptFlag, subbedT):
     characters = 'Game Characters:\n\
-リゼ (Rize) - Female\n\
-ティア (Tia) - Female\n\
-リィナ (Riina) - Female\n\
-クェス (Ques) - Female\n\
-たこ (Tako) - Female\n\
+皆月 (Minazuki)\n\
+さやか (Sayaka)\n\
+皆月 さやか (Minazuki Sayaka) - Female\n\
+広瀬 (Hirose)\n\
+智恵 (Chie) - Female\n\
+広瀬 智恵 (Hirose Chie) - Femal\n\
 '
     
     system = PROMPT + VOCAB if fullPromptFlag else \
@@ -2051,7 +2052,7 @@ def countTokens(characters, system, user, history):
     inputTotalTokens += len(enc.encode(user))
 
     # Output
-    outputTotalTokens += round(len(enc.encode(user))/1.5)
+    outputTotalTokens += round(len(enc.encode(user))*3)
 
     return [inputTotalTokens, outputTotalTokens]
 
@@ -2095,7 +2096,7 @@ def translateGPT(text, history, fullPromptFlag):
             continue
 
         # Translating
-        response = translateText(characters, system, user, history, 0)
+        response = translateText(characters, system, user, history, 0.02)
         translatedText = response.choices[0].message.content
         totalTokens[0] += response.usage.prompt_tokens
         totalTokens[1] += response.usage.completion_tokens
@@ -2107,7 +2108,7 @@ def translateGPT(text, history, fullPromptFlag):
             tList[index] = extractedTranslations
             if len(tItem) != len(extractedTranslations):
                 # Mismatch. Try Again
-                response = translateText(characters, system, user, history, 0.05)
+                response = translateText(characters, system, user, history, 0.1)
                 translatedText = response.choices[0].message.content
                 totalTokens[0] += response.usage.prompt_tokens
                 totalTokens[1] += response.usage.completion_tokens

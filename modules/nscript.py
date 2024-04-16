@@ -600,7 +600,7 @@ def countTokens(characters, system, user, history):
     inputTotalTokens += len(enc.encode(user))
 
     # Output
-    outputTotalTokens += round(len(enc.encode(user))/1.5)
+    outputTotalTokens += round(len(enc.encode(user))*3)
 
     return [inputTotalTokens, outputTotalTokens]
 
