@@ -145,7 +145,7 @@ def translateJS(data, pbar):
     i = 0
 
     # Regex & Plugin Name
-    regex = r'Description[\\]+":[\\]+"(.*?)[\\]+"'
+    regex = r'ObjectiveContent[\\]+":[\\]+"[\\]+"(.*?)[\\]+"'
 
     # Find Plugin
     while i < len(data):
@@ -158,7 +158,7 @@ def translateJS(data, pbar):
 
             # Remove Wordwrap [Optional]
             for j in range(len(modifiedStringList)):
-                modifiedStringList[j] = modifiedStringList[j].replace(r'\\\\n', r' ')
+                modifiedStringList[j] = modifiedStringList[j].replace(r'\\\\\\\\n', r' ')
 
             # Translate
             response = translateGPT(modifiedStringList, f'Reply with the {LANGUAGE} translation', True, pbar)
@@ -170,11 +170,11 @@ def translateJS(data, pbar):
             if len(translatedList) == len(modifiedStringList):
                 for j in range(len(translatedList)):
                     # Add escape for '
-                    translatedList[j] = translatedList[j].replace("'", "\\'")
+                    translatedList[j] = re.sub(r"[^\\](')", "\\'", translatedList[j])
 
                     # Wordwrap [Optional]
                     translatedList[j] = textwrap.fill(translatedList[j], LISTWIDTH)
-                    translatedList[j] = translatedList[j].replace('\n', r'\\\\n')
+                    translatedList[j] = translatedList[j].replace('\n', r'\\\\\\\\n')
 
                     # Set
                     data[i] = data[i].replace(stringList[j], translatedList[j])
@@ -307,14 +307,12 @@ def batchList(input_list, batch_size):
 
 def createContext(fullPromptFlag, subbedT):
     characters = 'Game Characters:\n\
-シラス ティア ナナシユエル (Silas Tia Nanasiyuel) - Female\n\
-レイラ プラム ナナシユエル (Leila Plum Nanasiyuel) - Female\n\
-アリア グランツ (Aria Granz) - Female\n\
-ソフィー グリーンウッド (Sophie Greenwood) - Female\n\
-ヨウコ マッカーシー (Yoko McCarthy) - Female\n\
-ルフィナ アリーニア (Rufina Arinia) - Female\n\
-ヘレナ ルオ アルバネル (Helena Luo Albaner) - Female\n\
-アウローラ パパス (Aurora Pappas) - Female\n\
+皆月 (Minazuki)\n\
+さやか (Sayaka)\n\
+皆月 さやか (Minazuki Sayaka) - Female\n\
+広瀬 (Hirose)\n\
+智恵 (Chie) - Female\n\
+広瀬 智恵 (Hirose Chie) - Female\n\
 '
     
     system = PROMPT + VOCAB if fullPromptFlag else \
