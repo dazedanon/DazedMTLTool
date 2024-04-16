@@ -18,7 +18,7 @@ if APITYPE == 'openai':
 elif APITYPE == 'cohere':
     co = cohere.Client(os.getenv('key'))
 
-WAITTIME = os.getenv('waitTime')
+WAITTIME = int(os.getenv('waitTime'))
 
 #Globals
 MODEL = os.getenv('model')
