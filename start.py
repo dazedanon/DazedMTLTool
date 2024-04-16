@@ -1,5 +1,5 @@
 print('Select which API type you want to use:')
-print('1. cohere')
+print('1. cohere (under development)')
 print('2. openai')
 module_choice = input()
 
