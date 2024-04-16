@@ -9,7 +9,7 @@ from tqdm import tqdm
 
 # Open AI
 load_dotenv()
-APITYPE = os.getenv('type')
+APITYPE = os.getenv('apiType')
 if APITYPE == 'openai':
     if os.getenv('api').replace(' ', '') != '':
         openai.base_url = os.getenv('api')
