@@ -1,5 +1,5 @@
 # Libraries
-import json, os, re, textwrap, threading, time, traceback, tiktoken, openai
+import json, os, re, textwrap, threading, time, traceback, tiktoken, cohere
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from colorama import Fore
@@ -7,12 +7,12 @@ from dotenv import load_dotenv
 from retry import retry
 from tqdm import tqdm
 
-# Open AI
+# cohere
 load_dotenv()
-if os.getenv('api').replace(' ', '') != '':
-    openai.base_url = os.getenv('api')
-openai.organization = os.getenv('org')
-openai.api_key = os.getenv('key')
+co = cohere.Client(os.getenv('key'))
+
+# Wait time to prevent free trial lockout, set to 0 to disable, 3 is theroetical minimum for 20 requests per minute limit
+waitTime=5
 
 #Globals
 MODEL = os.getenv('model')
@@ -39,9 +39,9 @@ BRACKETNAMES = False
 # Pricing - Depends on the model https://openai.com/pricing
 # Batch Size - GPT 3.5 Struggles past 15 lines per request. GPT4 struggles past 50 lines per request
 # If you are getting a MISMATCH LENGTH error, lower the batch size.
-if 'gpt-3.5' in MODEL:
-    INPUTAPICOST = .002 
-    OUTPUTAPICOST = .002
+if 'command-r' in MODEL:
+    INPUTAPICOST = .00
+    OUTPUTAPICOST = .00
     BATCHSIZE = 10
     FREQUENCY_PENALTY = 0.2
 elif 'gpt-4' in MODEL:
@@ -1972,24 +1972,26 @@ Output ONLY the {LANGUAGE} translation in the following format: `Translation: <{
 
 def translateText(characters, system, user, history, penalty):
     # Prompt
-    msg = [{"role": "system", "content": system + characters}]
+    msg = [{"role": "system", "message": system + characters}]
 
     # Characters
-    msg.append({"role": "system", "content": characters})
+    msg.append({"role": "system", "message": characters})
 
     # History
     if isinstance(history, list):
-        msg.extend([{"role": "system", "content": h} for h in history])
+        msg.extend([{"role": "system", "message": h} for h in history])
     else:
-        msg.append({"role": "system", "content": history})
+        msg.append({"role": "system", "message": history})
     
     # Content to TL
-    msg.append({"role": "user", "content": f'{user}'})
-    response = openai.chat.completions.create(
+    #msg.append({"role": "user", "content": f'{user}'})
+    time.sleep(waitTime)
+    response = co.chat(
         temperature=0,
         frequency_penalty=penalty,
         model=MODEL,
-        messages=msg,
+        chat_history=msg,
+        message=user
     )
     return response
 
@@ -2097,9 +2099,9 @@ def translateGPT(text, history, fullPromptFlag):
 
         # Translating
         response = translateText(characters, system, user, history, 0.02)
-        translatedText = response.choices[0].message.content
-        totalTokens[0] += response.usage.prompt_tokens
-        totalTokens[1] += response.usage.completion_tokens
+        translatedText = response.text
+        totalTokens[0] += 69
+        totalTokens[1] += 69
 
         # Formatting
         translatedText = cleanTranslatedText(translatedText, varResponse)
@@ -2109,9 +2111,9 @@ def translateGPT(text, history, fullPromptFlag):
             if len(tItem) != len(extractedTranslations):
                 # Mismatch. Try Again
                 response = translateText(characters, system, user, history, 0.1)
-                translatedText = response.choices[0].message.content
-                totalTokens[0] += response.usage.prompt_tokens
-                totalTokens[1] += response.usage.completion_tokens
+                translatedText = response.text
+                totalTokens[0] += 69
+                totalTokens[1] += 69
 
                 # Formatting
                 translatedText = cleanTranslatedText(translatedText, varResponse)
