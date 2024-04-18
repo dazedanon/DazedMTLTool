@@ -8,4 +8,5 @@
 !requirements.txt
 *.csv
 *.ks
+*.cid
 __pycache__
