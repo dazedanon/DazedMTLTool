@@ -72,24 +72,24 @@ POSITION = 0
 LEAVE = False
 
 # Dialogue / Scroll
-CODE401 = True
-CODE405 = True
+CODE401 = False
+CODE405 = False
 CODE408 = False
 
 # Choices
-CODE102 = True
+CODE102 = False
 
 # Variables
 CODE122 = False
 
 # Names
-CODE101 = True
+CODE101 = False
 
 # Other
 CODE355655 = False
 CODE357 = False
 CODE657 = False
-CODE356 = False
+CODE356 = True
 CODE320 = False
 CODE324 = False
 CODE111 = False
@@ -244,7 +244,7 @@ def parseMap(data, filename):
                 if event is not None:
                     # This translates ID of events. (May break the game)
                     if '<namePop:' in event['note']:
-                        response = translateNoteOmitSpace(event, r'<namePop:　(.*?)　>')
+                        response = translateNoteOmitSpace(event, r'<namePop:(.*?)\s.+')
                         totalTokens[0] += response[0]
                         totalTokens[1] += response[1]
 
@@ -1045,7 +1045,7 @@ def searchCodes(page, pbar, jobList, filename):
             ## Event Code: 122 [Set Variables]
             if codeList[i]['code'] == 122 and CODE122 is True:
                 # This is going to be the var being set. (IMPORTANT)
-                if codeList[i]['parameters'][0] not in [297, 298, 299]:
+                if codeList[i]['parameters'][0] not in list(range(0,2000)):
                     continue
                   
                 jaString = codeList[i]['parameters'][4]
@@ -1080,7 +1080,7 @@ def searchCodes(page, pbar, jobList, filename):
                             translatedText = translatedText.replace(char, '')
                     
                         # Textwrap
-                        translatedText = textwrap.fill(translatedText, width=60)
+                        translatedText = textwrap.fill(translatedText, width=30)
                         translatedText = translatedText.replace('\n', '\\n')
                         translatedText = '\"' + translatedText + '\"'
 
@@ -1967,7 +1967,7 @@ def createContext(fullPromptFlag, subbedT):
 皆月 さやか (Minazuki Sayaka) - Female\n\
 広瀬 (Hirose)\n\
 智恵 (Chie) - Female\n\
-広瀬 智恵 (Hirose Chie) - Femal\n\
+広瀬 智恵 (Hirose Chie) - Female\n\
 '
     
     system = PROMPT + VOCAB if fullPromptFlag else \

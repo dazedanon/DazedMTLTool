@@ -38,6 +38,7 @@ Here are some vocabulary and terms so that you know the proper spelling and tran
 持っている数 (Owned)
 ME 音量 (ME Volume)
 回想する (Recollection)
+回 (x)
 
 # Other
 パパ (papa)
