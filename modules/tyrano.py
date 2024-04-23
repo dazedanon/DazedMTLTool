@@ -166,15 +166,15 @@ def translateTyrano(data, pbar, filename, setData, jobList):
     while i < len(data):
         # Choices
         choiceList = []
-        choiceRegex = r'\[font.+\](.+)\/$'
-        if 'font' in data[i]:
+        choiceRegex = r'char\s=\s\"status.+?\](.+)'
+        if 'status' in data[i]:
             match = re.search(choiceRegex, data[i])
             if match != None:
                 choiceList.append(match.group(1))
                 i += 1
 
                 # Grab them all up for list
-                while(i < len(data) and 'font' in data[i]):
+                while(i < len(data) and 'status' in data[i]):
                     match = re.search(choiceRegex, data[i])
                     if match != None:
                         choiceList.append(match.group(1))
@@ -182,7 +182,7 @@ def translateTyrano(data, pbar, filename, setData, jobList):
                 
                 # Translate
                 if len(choiceList) != 0:
-                    response = translateGPT(choiceList, 'This will be a dialogue option', True)
+                    response = translateGPT(choiceList, 'Reply with the English translation of the text', True)
                     choiceListTL = response[0]
                     totalTokens[0] += response[1][0]
                     totalTokens[1] += response[1][1]
@@ -201,9 +201,9 @@ def translateTyrano(data, pbar, filename, setData, jobList):
         # Speaker
         if '[@]' in data[i]:
             if 'FACE' not in data[i]:
-                matchList = re.findall(r'd^\[(.*?)\].+\[.+\]$', data[i])
+                matchList = re.findall(r'dd\[(.*?)\].+\[.*\]', data[i])
             else:
-                matchList = re.findall(r'd^\[.+\]\[(.*?)\].+\[.+\]$', data[i])
+                matchList = re.findall(r'dd^\[.+\]\[(.*?)\].+\[.+\]$', data[i])
             if len(matchList) != 0 and '=' not in matchList[0] and re.search(r'\[.+\]', matchList[0]) == None:
                 response = getSpeaker(matchList[0])
                 speaker = response[0]
@@ -214,11 +214,16 @@ def translateTyrano(data, pbar, filename, setData, jobList):
                 speaker = ''
                    
         # Lines
-        if '-FACE' not in data[i]:
-            matchList = re.findall(r'd^\[.*?\](.+)\[.+\]$', data[i])
+        if 'FACE' not in data[i]:
+            matchList = re.findall(r'stat\s=\s.+?\](.+)', data[i])
         else:
             matchList = re.findall(r'd^\[.+\]\[.*?\](.+)\[.+\]$', data[i]) 
-        if len(matchList) > 0 and '=' not in matchList[0] and re.search(r'\[.+\]', matchList[0]) == None:
+        if len(matchList) > 0 and '=' not in matchList[0]:
+            # No Japanese text
+            if not re.search(r'[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９]+', matchList[0]):
+                i += 1
+                continue
+
             # Remove [r] and [l]
             oldjaString = matchList[0]
             jaString = oldjaString
@@ -492,7 +497,9 @@ def cleanTranslatedText(translatedText, varResponse):
         '〜': '~',
         'ッ': '',
         '。': '.',
-        'Placeholder Text': ''
+        'Placeholder Text': '',
+        '[' : '(',
+        ']' : ')'
         # Add more replacements as needed
     }
     for target, replacement in placeholders.items():
