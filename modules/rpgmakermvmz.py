@@ -814,7 +814,7 @@ def searchCodes(page, pbar, jobList, filename):
 
                 # Join Up 401's into single string
                 if len(codeList) > i+1:
-                    while codeList[i+1]['code'] in [401, 405, -1]:
+                    while codeList[i+1]['code'] in [401, -1]:
                         codeList[i]['parameters'] = []
                         codeList[i]['code'] = -1
                         i += 1
