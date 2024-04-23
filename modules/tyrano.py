@@ -201,9 +201,9 @@ def translateTyrano(data, pbar, filename, setData, jobList):
         # Speaker
         if '[@]' in data[i]:
             if 'FACE' not in data[i]:
-                matchList = re.findall(r'dd\[(.*?)\].+\[.*\]', data[i])
+                matchList = re.findall(r'\[(.*?)\].+\[.*\]', data[i])
             else:
-                matchList = re.findall(r'dd^\[.+\]\[(.*?)\].+\[.+\]$', data[i])
+                matchList = re.findall(r'face=.+?\]\[(.+?)\]', data[i])
             if len(matchList) != 0 and '=' not in matchList[0] and re.search(r'\[.+\]', matchList[0]) == None:
                 response = getSpeaker(matchList[0])
                 speaker = response[0]
@@ -215,9 +215,9 @@ def translateTyrano(data, pbar, filename, setData, jobList):
                    
         # Lines
         if 'FACE' not in data[i]:
-            matchList = re.findall(r'stat\s=\s.+?\](.+)', data[i])
+            matchList = re.findall(r'\[.+?\](.+)\[.+\]', data[i])
         else:
-            matchList = re.findall(r'd^\[.+\]\[.*?\](.+)\[.+\]$', data[i]) 
+            matchList = re.findall(r'face=.+?\]\[.+?\](.+)\[.+\]', data[i]) 
         if len(matchList) > 0 and '=' not in matchList[0]:
             # No Japanese text
             if not re.search(r'[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９]+', matchList[0]):
