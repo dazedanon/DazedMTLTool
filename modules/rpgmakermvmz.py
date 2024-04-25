@@ -57,8 +57,8 @@ POSITION = 0
 LEAVE = False
 
 # Dialogue / Scroll
-CODE401 = False
-CODE405 = False
+CODE401 = True
+CODE405 = True
 CODE408 = False
 
 # Choices
@@ -74,7 +74,7 @@ CODE101 = False
 CODE355655 = False
 CODE357 = False
 CODE657 = False
-CODE356 = True
+CODE356 = False
 CODE320 = False
 CODE324 = False
 CODE111 = False
@@ -804,8 +804,8 @@ def searchCodes(page, pbar, jobList, filename):
                             nametag = matchList[0][1]
                             speaker = matchList[0][2]
                         elif nCase == 1:
-                            nametag = matchList[0][0]
-                            speaker = matchList[0][1]
+                            nametag = matchList[0][1]
+                            speaker = matchList[0][2]
 
                         # Translate Speaker  
                         response = getSpeaker(speaker)
@@ -985,7 +985,7 @@ def searchCodes(page, pbar, jobList, filename):
             ## Event Code: 122 [Set Variables]
             if codeList[i]['code'] == 122 and CODE122 is True:
                 # This is going to be the var being set. (IMPORTANT)
-                if codeList[i]['parameters'][0] not in list(range(0,2000)):
+                if codeList[i]['parameters'][0] not in [44, 221, 223]:
                     i += 1
                     continue
                   
