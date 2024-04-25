@@ -35,6 +35,7 @@ FIXTEXTWRAP = True  # Overwrites textwrap
 IGNORETLTEXT = False    # Ignores all translated text.
 MISMATCH = []   # Lists files that throw a mismatch error (Length of GPT list response is wrong)
 BRACKETNAMES = False
+PBAR = None
 
 # Pricing - Depends on the model https://openai.com/pricing
 # Batch Size - GPT 3.5 Struggles past 15 lines per request. GPT4 struggles past 50 lines per request
@@ -220,9 +221,8 @@ def parseMap(data, filename):
                 totalLines += len(page['list'])
     
     # Thread for each page in file
-    with tqdm(bar_format=BAR_FORMAT, position=POSITION, total=totalLines, leave=LEAVE) as pbar:
+    with tqdm(bar_format=BAR_FORMAT, position=POSITION, leave=LEAVE) as pbar:
         pbar.desc=filename
-        pbar.total=totalLines
         with ThreadPoolExecutor(max_workers=THREADS) as executor:
             for event in events:
                 if event is not None:
@@ -239,6 +239,7 @@ def parseMap(data, filename):
                             totalTokens[0] += totalTokensFuture[0]
                             totalTokens[1] += totalTokensFuture[1]
                         except Exception as e:
+                            traceback.print_exc()
                             return [data, totalTokens, e]
     return [data, totalTokens, None]
 
@@ -300,9 +301,8 @@ def parseCommonEvents(data, filename):
         if page is not None:
             totalLines += len(page['list'])
 
-    with tqdm(bar_format=BAR_FORMAT, position=POSITION, total=totalLines, leave=LEAVE) as pbar:
+    with tqdm(bar_format=BAR_FORMAT, position=POSITION, leave=LEAVE) as pbar:
         pbar.desc=filename
-        pbar.total=totalLines
         with ThreadPoolExecutor(max_workers=THREADS) as executor:
             futures = [executor.submit(searchCodes, page, pbar, [], filename) for page in data if page is not None]
             for future in as_completed(futures):
@@ -326,9 +326,8 @@ def parseTroops(data, filename):
             for page in troop['pages']:
                 totalLines += len(page['list']) + 1 # The +1 is because each page has a name.
 
-    with tqdm(bar_format=BAR_FORMAT, position=POSITION, total=totalLines, leave=LEAVE) as pbar:
+    with tqdm(bar_format=BAR_FORMAT, position=POSITION, leave=LEAVE) as pbar:
         pbar.desc=filename
-        pbar.total=totalLines
         for troop in data:
             if troop is not None:
                 with ThreadPoolExecutor(max_workers=THREADS) as executor:
@@ -348,9 +347,8 @@ def parseNames(data, filename, context):
     totalLines = 0
     totalLines += len(data)
                 
-    with tqdm(bar_format=BAR_FORMAT, position=POSITION, total=totalLines, leave=LEAVE) as pbar:
+    with tqdm(bar_format=BAR_FORMAT, position=POSITION, leave=LEAVE) as pbar:
             pbar.desc=filename
-            pbar.total=totalLines
             try:
                 result = searchNames(data, pbar, context)       
                 totalTokens[0] += result[0]
@@ -365,9 +363,8 @@ def parseSS(data, filename):
     totalLines = 0
     totalLines += len(data)
                 
-    with tqdm(bar_format=BAR_FORMAT, position=POSITION, total=totalLines, leave=LEAVE) as pbar:
+    with tqdm(bar_format=BAR_FORMAT, position=POSITION, leave=LEAVE) as pbar:
             pbar.desc=filename
-            pbar.total=totalLines
             for ss in data:
                 if ss is not None:
                     try:
@@ -394,9 +391,8 @@ def parseSystem(data, filename):
     totalLines += len(data['armorTypes'])
     totalLines += len(data['skillTypes'])
                 
-    with tqdm(bar_format=BAR_FORMAT, position=POSITION, total=totalLines, leave=LEAVE) as pbar:
+    with tqdm(bar_format=BAR_FORMAT, position=POSITION, leave=LEAVE) as pbar:
         pbar.desc=filename
-        pbar.total=totalLines
         try:
             result = searchSystem(data, pbar)       
             totalTokens[0] += result[0]
@@ -415,9 +411,8 @@ def parseScenario(data, filename):
     for page in data.items():
         totalLines += len(page[1])
 
-    with tqdm(bar_format=BAR_FORMAT, position=POSITION, total=totalLines, leave=LEAVE) as pbar:
+    with tqdm(bar_format=BAR_FORMAT, position=POSITION, leave=LEAVE) as pbar:
         pbar.desc=filename
-        pbar.total=totalLines
         with ThreadPoolExecutor(max_workers=THREADS) as executor:
             futures = [executor.submit(searchCodes, page[1], pbar, [], filename) for page in data.items() if page[1] is not None]
             for future in as_completed(futures):
@@ -426,6 +421,7 @@ def parseScenario(data, filename):
                     totalTokens[0] += totalTokensFuture[0]
                     totalTokens[1] += totalTokensFuture[1]
                 except Exception as e:
+                    traceback.print_exc()
                     return [data, totalTokens, e]
     return [data, totalTokens, None]
 
@@ -466,7 +462,7 @@ def searchNames(data, pbar, context):
             # Empty Data
             if data[i] is None or data[i]['name'] == "":
                 i += 1
-                pbar.update(1)
+                
                 continue  
 
             # Filling up Batch
@@ -476,7 +472,7 @@ def searchNames(data, pbar, context):
                     nameList.append(data[i]['name'])
                     nicknameList.append(data[i]['nickname'])
                     profileList.append(data[i]['profile'].replace('\n', ' '))
-                    pbar.update(1)
+                    
                     i += 1
                 else:
                     batchFull = True
@@ -512,7 +508,7 @@ def searchNames(data, pbar, context):
                         tokensResponse = translateNote(data[i], r'<SGカテゴリ:(.*?)>')
                         totalTokens[0] += tokensResponse[0]
                         totalTokens[1] += tokensResponse[1]
-                    pbar.update(1)
+                    
                     i += 1
                 else:
                     batchFull = True
@@ -540,14 +536,14 @@ def searchNames(data, pbar, context):
                                 number += 1
                         else:
                             number += 1
-                    pbar.update(1)
+                    
                     i += 1
                 else:
                     batchFull = True
             if context in ['Enemies', 'Classes', 'MapInfos']:
                 if len(nameList) < BATCHSIZE:
                     nameList.append(data[i]['name'])
-                    pbar.update(1)
+                    
                     i += 1
                 else:
                     batchFull = True
@@ -672,62 +668,8 @@ def searchNames(data, pbar, context):
                 descriptionList.clear()
                 filling = False
                 mismatch = False
-                pbar.update(1)
+                
                 i += 1
-
-    # responseList = []
-    # responseList.append(translateGPT(name['name'], newContext, False))
-    # if 'Actors' in context:
-    #     responseList.append(translateGPT(name['profile'], '', False))
-    #     responseList.append(translateGPT(name['nickname'], 'Reply with ONLY the '+ LANGUAGE +' translation of the NPC nickname', False))
-
-    # if 'Armors' in context or 'Weapons' in context:
-    #     if 'description' in name:
-    #         responseList.append(translateGPT(name['description'], '', False))
-    #     else:
-    #         responseList.append(['', 0])
-    #     if 'hint' in name['note']:
-    #         totalTokens[0] += translateNote(name, r'<hint:(.*?)>')[0]
-    #         totalTokens[1] += translateNote(name, r'<hint:(.*?)>')[1]
-
-    # if 'Enemies' in context:
-    #     if 'variable_update_skill' in name['note']:
-    #         totalTokens[0] += translateNote(name, r'111:(.+?)\n')[0]
-    #         totalTokens[1] += translateNote(name, r'111:(.+?)\n')[1]
-
-    #     if 'desc2' in name['note']:
-    #         totalTokens[0] += translateNote(name, r'<desc2:([^>]*)>')[0]
-    #         totalTokens[1] += translateNote(name, r'<desc2:([^>]*)>')[1]
-
-    #     if 'desc3' in name['note']:
-    #         totalTokens[0] += translateNote(name, r'<desc3:([^>]*)>')[0]
-    #         totalTokens[1] += translateNote(name, r'<desc3:([^>]*)>')[1]
-
-    # # Extract all our translations in a list from response
-    # for i in range(len(responseList)):
-    #     totalTokens[0] += responseList[i][1][0]
-    #     totalTokens[1] += responseList[i][1][1]
-    #     responseList[i] = responseList[i][0]
-
-    # # Set Data
-    # name['name'] = responseList[0].replace('\"', '')
-    # if 'Actors' in context:
-    #     translatedText = textwrap.fill(responseList[1], LISTWIDTH)
-    #     name['profile'] = translatedText.replace('\"', '')
-    #     translatedText = textwrap.fill(responseList[2], LISTWIDTH)
-    #     name['nickname'] = translatedText.replace('\"', '')
-    #     if '<特徴1:' in name['note']:
-    #         totalTokens[0] += translateNote(name, r'<特徴1:([^>]*)>')[0]
-    #         totalTokens[1] += translateNote(name, r'<特徴1:([^>]*)>')[1]
-
-    # if 'Armors' in context or 'Weapons' in context:
-    #     translatedText = textwrap.fill(responseList[1], LISTWIDTH)
-    #     if 'description' in name:
-    #         name['description'] = translatedText.replace('\"', '')
-    #         if '<SG説明:' in name['note']:
-    #             totalTokens[0] += translateNote(name, r'<Info Text Bottom>\n([\s\S]*?)\n</Info Text Bottom>')[0]
-    #             totalTokens[1] += translateNote(name, r'<Info Text Bottom>\n([\s\S]*?)\n</Info Text Bottom>')[1]
-    # pbar.update(1)
 
     return totalTokens
 
@@ -754,6 +696,10 @@ def searchCodes(page, pbar, jobList, filename):
     global LOCK
     global NAMESLIST
     global MISMATCH
+    global PBAR
+    with LOCK:
+        PBAR = pbar
+
 
     # Begin Parsing File
     try:
@@ -766,7 +712,8 @@ def searchCodes(page, pbar, jobList, filename):
             codeList = page
 
         # Iterate through page
-        for i in range(len(codeList)):
+        i = 0
+        while i < len(codeList):
             with LOCK:  
                 # syncIndex will keep i in sync when it gets modified
                 if syncIndex > i:
@@ -779,12 +726,14 @@ def searchCodes(page, pbar, jobList, filename):
                 # Save Code and starting index (j)
                 code = codeList[i]['code']
                 j = i
+                endtag = ''
 
                 # Grab String
                 if len(codeList[i]['parameters']) > 0:
                     jaString = codeList[i]['parameters'][0]
                 else:
                     codeList[i]['code'] = -1
+                    i += 1
                     continue
 
                 # Check for Speaker
@@ -814,7 +763,7 @@ def searchCodes(page, pbar, jobList, filename):
 
                 # Join Up 401's into single string
                 if len(codeList) > i+1:
-                    while codeList[i+1]['code'] in [401, -1]:
+                    while codeList[i+1]['code'] in [401, 405, -1]:
                         codeList[i]['parameters'] = []
                         codeList[i]['code'] = -1
                         i += 1
@@ -835,6 +784,7 @@ def searchCodes(page, pbar, jobList, filename):
 
                     # Check if Empty
                     if finalJAString == '':
+                        i += 1
                         continue
 
                     # Set Back
@@ -964,6 +914,7 @@ def searchCodes(page, pbar, jobList, filename):
                             if len(textHistory) > maxHistory:
                                 textHistory.pop(0)
                             currentGroup = []  
+                            i += 1
                             continue
 
                     # 1st Passthrough (Grabbing Data)
@@ -1012,6 +963,11 @@ def searchCodes(page, pbar, jobList, filename):
                                 translatedText = nametag + translatedText
                             nametag = ''
 
+                            # Endtag
+                            if endtag != '':
+                                translatedText = translatedText + endtag
+                                endtag = ''
+
                             # //SE[#]
                             translatedText = varString + translatedText
 
@@ -1030,14 +986,17 @@ def searchCodes(page, pbar, jobList, filename):
             if codeList[i]['code'] == 122 and CODE122 is True:
                 # This is going to be the var being set. (IMPORTANT)
                 if codeList[i]['parameters'][0] not in list(range(0,2000)):
+                    i += 1
                     continue
                   
                 jaString = codeList[i]['parameters'][4]
                 if not isinstance(jaString, str):
+                    i += 1
                     continue
                 
                 # Definitely don't want to mess with files
                 if 'gameV' in jaString or '_' in jaString:
+                    i += 1
                     continue
 
                 # Need to remove outside code and put it back later
@@ -1114,14 +1073,17 @@ def searchCodes(page, pbar, jobList, filename):
                 if 'text' in codeList[i]['parameters'][0]:
                     jaString = codeList[i]['parameters'][0]
                     if not isinstance(jaString, str):
+                        i += 1
                         continue
                     
                     # Definitely don't want to mess with files
                     if '_' in jaString:
+                        i += 1
                         continue
 
                     # If there isn't any Japanese in the text just skip
                     if not re.search(r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴー]+', jaString):
+                        i += 1
                         continue
 
                     # Remove outside text
@@ -1172,6 +1134,7 @@ def searchCodes(page, pbar, jobList, filename):
                     jaString = codeList[i]['parameters'][0]
                     isVar = True
                 if not isinstance(jaString, str):
+                    i += 1
                     continue
 
                 # Force Speaker using var
@@ -1190,10 +1153,12 @@ def searchCodes(page, pbar, jobList, filename):
                 if len(speaker) > 0:
                     if isVar == False:
                         codeList[i]['parameters'][4] = speaker
+                        i += 1
                         continue
                     else:
                         codeList[i]['parameters'][0] = speaker
                         isVar = False
+                        i += 1
                         continue
                 else:
                     speaker = ''
@@ -1215,6 +1180,7 @@ def searchCodes(page, pbar, jobList, filename):
                 # matchList = re.findall(r'.+"(.*?)".*[;,]$', jaString)
 
                 if 'console.' in jaString:
+                    i += 1
                     continue
 
                 # Want to translate this script
@@ -1252,6 +1218,7 @@ def searchCodes(page, pbar, jobList, filename):
 
                 # If there isn't any Japanese in the text just skip
                 if not re.search(r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴー]+', jaString):
+                    i += 1
                     continue
 
                 if 'secretText' in jaString:
@@ -1281,7 +1248,7 @@ def searchCodes(page, pbar, jobList, filename):
                         translatedText = translatedText.replace(char, '')
 
                     # Textwrap
-                    translatedText = textwrap.fill(translatedText, width=LISTWIDTH)
+                    translatedText = textwrap.fill(translatedText, width=WIDTH)
 
                     # Set Data
                     codeList[i]['parameters'][0] = translatedText
@@ -1292,6 +1259,7 @@ def searchCodes(page, pbar, jobList, filename):
 
                 # If there isn't any Japanese in the text just skip
                 if not re.search(r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴー]+', jaString):
+                    i += 1
                     continue
 
                 # Translate
@@ -1302,6 +1270,7 @@ def searchCodes(page, pbar, jobList, filename):
                 elif 'event_text' in jaString:
                     regex = r'event_text\s?:\s?(.*)'
                 else:
+                    i += 1
                     continue
 
                 # Need to remove outside code and put it back later
@@ -1344,6 +1313,7 @@ def searchCodes(page, pbar, jobList, filename):
                         speaker = translatedText
                         speaker = speaker.replace(' ', ' ')
                         codeList[i]['parameters'][0] = jaString.replace(matchList[0], speaker)
+                    i += 1
                     continue
 
                 # Want to translate this script
@@ -1405,7 +1375,7 @@ def searchCodes(page, pbar, jobList, filename):
                         translatedText = finalListTL[j]
 
                         # Textwrap
-                        translatedText = textwrap.fill(translatedText, width=WIDTH, drop_whitespace=False)
+                        translatedText = textwrap.fill(translatedText, width=LISTWIDTH, drop_whitespace=False)
 
                         # Remove characters that may break scripts
                         charList = ['.', '\"']
@@ -1425,6 +1395,7 @@ def searchCodes(page, pbar, jobList, filename):
                         codeList[i]['parameters'][0] = translatedText
                         i += 1
                     else:
+                        i += 1
                         continue
 
                 if 'namePop' in jaString:
@@ -1481,6 +1452,7 @@ def searchCodes(page, pbar, jobList, filename):
 
                     # Avoid Empty Strings
                     if jaString == '':
+                        i += 1
                         continue
 
                     # If and En Statements
@@ -1532,14 +1504,17 @@ def searchCodes(page, pbar, jobList, filename):
 
                     # Check if String
                     if not isinstance(jaString, str):
+                        i += 1
                         continue
 
                     # Only TL the Game Variable
                     if '$gameVariables' not in jaString:
+                        i += 1
                         continue
 
                     # This is going to be the var being set. (IMPORTANT)
                     if '1045' not in jaString:
+                        i += 1
                         continue
 
                     # Need to remove outside code and put it back later
@@ -1566,14 +1541,17 @@ def searchCodes(page, pbar, jobList, filename):
             if codeList[i]['code'] == 320 and CODE320 is True:
                 jaString = codeList[i]['parameters'][1]
                 if not isinstance(jaString, str):
+                    i += 1
                     continue
                 
                 # Definitely don't want to mess with files
                 if '■' in jaString or '_' in jaString:
+                    i += 1
                     continue
 
                 # If there isn't any Japanese in the text just skip
                 if not re.search(r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴー]+', jaString):
+                    i += 1
                     continue
                 
                 # Translate
@@ -1586,11 +1564,16 @@ def searchCodes(page, pbar, jobList, filename):
 
                 # Set Data
                 codeList[i]['parameters'][1] = translatedText
+            
+            # Iterate
+            else:
+                i += 1
 
         # End of the line
         docListTL = []
         scriptListTL = []
         setData = False
+        PBAR = pbar
         
         # 401
         if len(docList) > 0:
@@ -1611,7 +1594,6 @@ def searchCodes(page, pbar, jobList, filename):
             scriptListTL = response[0]
             totalTokens[0] += response[1][0]
             totalTokens[1] += response[1][1]
-            pbar.update(len(scriptList))
             if len(scriptListTL) != len(scriptList):
                 with LOCK:
                     if filename not in MISMATCH:
@@ -1725,7 +1707,7 @@ Translate \'Taroを倒した！\' as \'Taro was defeated!\'', False)
     if 'message4' in state:
         state['message4'] = message4Response[0].replace('\"', '').replace('Taro', '')
 
-    pbar.update(1)
+    
     return totalTokens
 
 def searchSystem(data, pbar):
@@ -1737,7 +1719,7 @@ def searchSystem(data, pbar):
     totalTokens[0] += response[1][0]
     totalTokens[1] += response[1][1]
     data['gameTitle'] = response[0].strip('.')
-    pbar.update(1)
+    
     
     # Terms
     for term in data['terms']:
@@ -1749,7 +1731,7 @@ def searchSystem(data, pbar):
                     totalTokens[0] += response[1][0]
                     totalTokens[1] += response[1][1]
                     termList[i] = response[0].replace('\"', '').strip()
-                    pbar.update(1)
+                    
 
     # Armor Types
     for i in range(len(data['armorTypes'])):
@@ -1757,7 +1739,7 @@ def searchSystem(data, pbar):
         totalTokens[0] += response[1][0]
         totalTokens[1] += response[1][1]
         data['armorTypes'][i] = response[0].replace('\"', '').strip()
-        pbar.update(1)
+        
 
     # Skill Types
     for i in range(len(data['skillTypes'])):
@@ -1765,7 +1747,7 @@ def searchSystem(data, pbar):
         totalTokens[0] += response[1][0]
         totalTokens[1] += response[1][1]
         data['skillTypes'][i] = response[0].replace('\"', '').strip()
-        pbar.update(1)
+        
 
     # Equip Types
     for i in range(len(data['equipTypes'])):
@@ -1773,7 +1755,7 @@ def searchSystem(data, pbar):
         totalTokens[0] += response[1][0]
         totalTokens[1] += response[1][1]
         data['equipTypes'][i] = response[0].replace('\"', '').strip()
-        pbar.update(1)
+        
 
     # Variables (Optional ususally)
     # for i in range(len(data['variables'])):
@@ -1781,7 +1763,7 @@ def searchSystem(data, pbar):
     #     totalTokens[0] += response[1][0]
     #     totalTokens[1] += response[1][1]
     #     data['variables'][i] = response[0].replace('\"', '').strip()
-    #     pbar.update(1)
+    #     
 
     # Messages
     messages = (data['terms']['messages'])
@@ -1797,7 +1779,7 @@ def searchSystem(data, pbar):
         totalTokens[0] += response[1][0]
         totalTokens[1] += response[1][1]
         messages[key] = translatedText
-        pbar.update(1)
+        
     
     return totalTokens
 
@@ -1946,12 +1928,12 @@ def batchList(input_list, batch_size):
 
 def createContext(fullPromptFlag, subbedT):
     characters = 'Game Characters:\n\
-皆月 (Minazuki)\n\
-さやか (Sayaka)\n\
-皆月 さやか (Minazuki Sayaka) - Female\n\
-広瀬 (Hirose)\n\
-智恵 (Chie) - Female\n\
-広瀬 智恵 (Hirose Chie) - Female\n\
+皆見 (Minami) - Female\n\
+彩夏 (Ayaka) - Female\n\
+中島 (Nakajima)) - Male\n\
+健太 (Kenta) - Male\n\
+五十嵐 (Igarashi) - Male\n\
+翔 (Sho) - Male\n\
 '
     
     system = PROMPT + VOCAB if fullPromptFlag else \
@@ -2001,7 +1983,10 @@ def cleanTranslatedText(translatedText, varResponse):
         '〜': '~',
         'ッ': '',
         '。': '.',
-        'Placeholder Text': ''
+        'Placeholder Text': '',
+        '- chan': '-chan',
+        '- kun': '-kun',
+        '- san': '-san',
         # Add more replacements as needed
     }
     for target, replacement in placeholders.items():
@@ -2063,6 +2048,8 @@ def combineList(tlist, text):
 
 @retry(exceptions=Exception, tries=5, delay=5)
 def translateGPT(text, history, fullPromptFlag):
+    global PBAR
+    
     mismatch = False
     totalTokens = [0, 0]
     if isinstance(text, list):
@@ -2083,6 +2070,8 @@ def translateGPT(text, history, fullPromptFlag):
 
         # Things to Check before starting translation
         if not re.search(r'[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９]+', subbedT):
+            if PBAR is not None:
+                PBAR.update(len(tItem))
             continue
 
         # Create Message
@@ -2122,6 +2111,9 @@ def translateGPT(text, history, fullPromptFlag):
                         mismatch = True # Just here for breakpoint
 
             # Create History
+            with LOCK:
+                if PBAR is not None:
+                    PBAR.update(len(tItem))
             if not mismatch:
                 history = extractedTranslations[-10:]  # Update history if we have a list
             else:
