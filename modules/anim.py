@@ -339,8 +339,12 @@ def batchList(input_list, batch_size):
 
 def createContext(fullPromptFlag, subbedT):
     characters = 'Game Characters:\n\
-眠り姫 (Sleeping Princess) - Female\n\
-迷子 (Lost Child) - Male\n\
+達也 (Tatsuya) - Male\n\
+香織 (Kaori) - Female\n\
+岩瀬 (Iwase)\n\
+万蔵 (Manzou) - Male\n\
+結奈 (Yuuna) - Female\n\
+茅部 (Kayabe)\n\
 '
     
     system = PROMPT + VOCAB if fullPromptFlag else \
@@ -391,8 +395,9 @@ def cleanTranslatedText(translatedText, varResponse):
         'ッ': '',
         '。': '.',
         'Placeholder Text': '',
-        '[' : '(',
-        ']' : ')'
+        'é' : 'e',
+        '—' : '-',
+        'ū' : 'u',
         # Add more replacements as needed
     }
     for target, replacement in placeholders.items():

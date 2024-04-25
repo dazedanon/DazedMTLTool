@@ -1,5 +1,5 @@
 # Libraries
-import json, os, re, textwrap, threading, time, traceback, tiktoken, openai
+import os, re, textwrap, threading, time, traceback, tiktoken, openai
 from pathlib import Path
 from colorama import Fore
 from dotenv import load_dotenv
@@ -39,6 +39,10 @@ MISMATCH = []   # Lists files that throw a mismatch error (Length of GPT list re
 BAR_FORMAT='{l_bar}{bar:10}{r_bar}{bar:-10b}'
 POSITION = 0
 LEAVE = False
+
+# Flags
+DIALOGUEFLAG = False
+TEXTWRAPCHOICES = True
 
 # Pricing - Depends on the model https://openai.com/pricing
 # Batch Size - GPT 3.5 Struggles past 15 lines per request. GPT4 struggles past 50 lines per request
@@ -166,18 +170,34 @@ def translateTyrano(data, pbar, filename, setData, jobList):
     while i < len(data):
         # Choices
         choiceList = []
-        choiceRegex = r'char\s=\s\"status.+?\](.+)'
-        if 'status' in data[i]:
+        choiceRegex = r'[sS]tatus.+?\](.+)'
+        if 'tatus' in data[i]:
             match = re.search(choiceRegex, data[i])
             if match != None:
-                choiceList.append(match.group(1))
+                jaString = match.group(1)
+
+                # Remove Textwrap
+                if TEXTWRAPCHOICES is True:
+                    jaString = jaString.replace('[r]', ' ')
+                    data[i] = data[i].replace('[r]', ' ')
+                
+                # Add to list
+                choiceList.append(jaString)
                 i += 1
 
                 # Grab them all up for list
-                while(i < len(data) and 'status' in data[i]):
+                while(i < len(data) and 'tatus' in data[i]):
                     match = re.search(choiceRegex, data[i])
                     if match != None:
-                        choiceList.append(match.group(1))
+                        jaString = match.group(1)
+
+                        # Remove Textwrap
+                        if TEXTWRAPCHOICES is True:
+                            jaString = jaString.replace('[r]', ' ')
+                            data[i] = data[i].replace('[r]', ' ')
+
+                        # Add to list
+                        choiceList.append(jaString)
                     i += 1
                 
                 # Translate
@@ -191,89 +211,96 @@ def translateTyrano(data, pbar, filename, setData, jobList):
                 if len(choiceList) == len(choiceListTL):
                     i = i - len(choiceListTL)
                     for j in range(len(choiceListTL)):
-                        data[i] = data[i].replace(choiceList[j], choiceListTL[j])
+                        translatedText = choiceListTL[j]
+
+                        # Textwrap
+                        if TEXTWRAPCHOICES is True:
+                            translatedText = textwrap.fill(translatedText, WIDTH)
+                            translatedText = translatedText.replace('\n', '[r]')
+                        data[i] = data[i].replace(choiceList[j], translatedText)
                         i += 1
                 else:
                     with LOCK:
                         if filename not in MISMATCH:
                             MISMATCH.append(filename)
                    
-        # Speaker
-        if '[@]' in data[i]:
+        if DIALOGUEFLAG is True:
+            # Speaker
+            if '[@]' in data[i]:
+                if 'FACE' not in data[i]:
+                    matchList = re.findall(r'\[(.*?)\].+\[.*\]', data[i])
+                else:
+                    matchList = re.findall(r'face=.+?\]\[(.+?)\]', data[i])
+                if len(matchList) != 0 and '=' not in matchList[0] and re.search(r'\[.+\]', matchList[0]) == None:
+                    response = getSpeaker(matchList[0])
+                    speaker = response[0]
+                    totalTokens[0] += response[1][0]
+                    totalTokens[1] += response[1][1]
+                    # data[i] = data[i].replace(matchList[0], f'{speaker}')
+                else:
+                    speaker = ''
+                    
+            # Lines
             if 'FACE' not in data[i]:
-                matchList = re.findall(r'\[(.*?)\].+\[.*\]', data[i])
+                matchList = re.findall(r'\[.+?\](.+)\[.+\]', data[i])
             else:
-                matchList = re.findall(r'face=.+?\]\[(.+?)\]', data[i])
-            if len(matchList) != 0 and '=' not in matchList[0] and re.search(r'\[.+\]', matchList[0]) == None:
-                response = getSpeaker(matchList[0])
-                speaker = response[0]
-                totalTokens[0] += response[1][0]
-                totalTokens[1] += response[1][1]
-                # data[i] = data[i].replace(matchList[0], f'{speaker}')
-            else:
-                speaker = ''
-                   
-        # Lines
-        if 'FACE' not in data[i]:
-            matchList = re.findall(r'\[.+?\](.+)\[.+\]', data[i])
-        else:
-            matchList = re.findall(r'face=.+?\]\[.+?\](.+)\[.+\]', data[i]) 
-        if len(matchList) > 0 and '=' not in matchList[0]:
-            # No Japanese text
-            if not re.search(r'[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９]+', matchList[0]):
-                i += 1
-                continue
+                matchList = re.findall(r'face=.+?\]\[.+?\](.+)\[.+\]', data[i]) 
+            if len(matchList) > 0 and '=' not in matchList[0]:
+                # No Japanese text
+                if not re.search(r'[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９]+', matchList[0]):
+                    i += 1
+                    continue
 
-            # Remove [r] and [l]
-            oldjaString = matchList[0]
-            jaString = oldjaString
-            jaString = jaString.replace('[r]', ' ')
-            jaString = jaString.replace('[l]', '')
+                # Remove [r] and [l]
+                oldjaString = matchList[0]
+                jaString = oldjaString
+                jaString = jaString.replace('[r]', ' ')
+                jaString = jaString.replace('[l]', '')
 
-            # Join up 401 groups for better translation.
-            finalJAString = jaString
+                # Join up 401 groups for better translation.
+                finalJAString = jaString
 
-            # Remove Extra Stuff bad for translation.
-            finalJAString = finalJAString.replace('ﾞ', '')
-            finalJAString = finalJAString.replace('・', '.')
-            finalJAString = finalJAString.replace('‶', '')
-            finalJAString = finalJAString.replace('”', '')
-            finalJAString = finalJAString.replace('―', '-')
-            finalJAString = finalJAString.replace('ー', '-')
-            finalJAString = finalJAString.replace('…', '...')
-            finalJAString = re.sub(r'(\.{3}\.+)', '...', finalJAString)
-            finalJAString = finalJAString.replace('　', ' ')
-            finalJAString = finalJAString.replace('】', ')')
-            finalJAString = finalJAString.replace('【　', '(')
+                # Remove Extra Stuff bad for translation.
+                finalJAString = finalJAString.replace('ﾞ', '')
+                finalJAString = finalJAString.replace('・', '.')
+                finalJAString = finalJAString.replace('‶', '')
+                finalJAString = finalJAString.replace('”', '')
+                finalJAString = finalJAString.replace('―', '-')
+                finalJAString = finalJAString.replace('ー', '-')
+                finalJAString = finalJAString.replace('…', '...')
+                finalJAString = re.sub(r'(\.{3}\.+)', '...', finalJAString)
+                finalJAString = finalJAString.replace('　', ' ')
+                finalJAString = finalJAString.replace('】', ')')
+                finalJAString = finalJAString.replace('【　', '(')
 
-            # Furigana Removal
-            matchList = re.findall(r'(\[ruby\stext=.+text=\"(.+)\"\])', finalJAString)
-            if len(matchList) > 0:
-                finalJAString = finalJAString.replace(matchList[0][0], matchList[0][1])
+                # Furigana Removal
+                matchList = re.findall(r'(\[ruby\stext=.+text=\"(.+)\"\])', finalJAString)
+                if len(matchList) > 0:
+                    finalJAString = finalJAString.replace(matchList[0][0], matchList[0][1])
 
-            # Add Speaker (If there is one)
-            if speaker != '':
-                finalJAString = f'{speaker}: {finalJAString}'
+                # Add Speaker (If there is one)
+                if speaker != '':
+                    finalJAString = f'{speaker}: {finalJAString}'
 
-            # [Passthrough 1] Append To List
-            if setData is False:
-                lineList.append(finalJAString)
-            
-            # [Passthrough 2] Set Data
-            else:
-                # Grab and Pop
-                translatedText = lineList[0]
-                lineList.pop(0)
+                # [Passthrough 1] Append To List
+                if setData is False:
+                    lineList.append(finalJAString)
+                
+                # [Passthrough 2] Set Data
+                else:
+                    # Grab and Pop
+                    translatedText = lineList[0]
+                    lineList.pop(0)
 
-                # Remove speaker
-                translatedText = re.sub(r'^\[?(.+?)\]?\s?[|:]\s?', '', translatedText)
+                    # Remove speaker
+                    translatedText = re.sub(r'^\[?(.+?)\]?\s?[|:]\s?', '', translatedText)
 
-                # Textwrap
-                translatedText = textwrap.fill(translatedText, WIDTH)
-                translatedText = translatedText.replace('\n', '[r]')
+                    # Textwrap
+                    translatedText = textwrap.fill(translatedText, WIDTH)
+                    translatedText = translatedText.replace('\n', '[r]')
 
-                # Set Data
-                data[i] = data[i].replace(oldjaString, translatedText)
+                    # Set Data
+                    data[i] = data[i].replace(oldjaString, translatedText)
 
         # Next Line
         i += 1
