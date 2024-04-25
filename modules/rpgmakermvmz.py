@@ -796,7 +796,7 @@ def searchCodes(page, pbar, jobList, filename):
                         regex = r'(.*?)([\\]+[kKnN][wWcC]?[<](.*?)[>].*)'
                         nCase = 0
                     else:
-                        regex = r'(.*[\\]+[kKnN][wWcC]?[<](.*?)[>])(.*)'
+                        regex = r'([\\]+[kKnN][wWcC]?[<](.*?)[>])'
                         nCase = 1
                     matchList = re.findall(regex, finalJAString)
                     if len(matchList) > 0:  
@@ -804,8 +804,8 @@ def searchCodes(page, pbar, jobList, filename):
                             nametag = matchList[0][1]
                             speaker = matchList[0][2]
                         elif nCase == 1:
-                            nametag = matchList[0][1]
-                            speaker = matchList[0][2]
+                            nametag = matchList[0][0]
+                            speaker = matchList[0][1]
 
                         # Translate Speaker  
                         response = getSpeaker(speaker)
