@@ -57,8 +57,8 @@ POSITION = 0
 LEAVE = False
 
 # Dialogue / Scroll
-CODE401 = True
-CODE405 = True
+CODE401 = False
+CODE405 = False
 CODE408 = False
 
 # Choices
@@ -78,7 +78,7 @@ CODE356 = False
 CODE320 = False
 CODE324 = False
 CODE111 = False
-CODE108 = False
+CODE108 = True
 
 def handleMVMZ(filename, estimate):
     global ESTIMATE, TOKENS
@@ -228,7 +228,7 @@ def parseMap(data, filename):
                 if event is not None:
                     # This translates ID of events. (May break the game)
                     if '<namePop:' in event['note']:
-                        response = translateNoteOmitSpace(event, r'<namePop:(.*?)\s.+')
+                        response = translateNoteOmitSpace(event, r'<namePop:(.*?)\s?>.+')
                         totalTokens[0] += response[0]
                         totalTokens[1] += response[1]
 
@@ -506,6 +506,10 @@ def searchNames(data, pbar, context):
                         totalTokens[1] += tokensResponse[1]
                     if '<SGカテゴリ:' in data[i]['note']:
                         tokensResponse = translateNote(data[i], r'<SGカテゴリ:(.*?)>')
+                        totalTokens[0] += tokensResponse[0]
+                        totalTokens[1] += tokensResponse[1]
+                    if 'Switch Shop Description' in data[i]['note']:
+                        tokensResponse = translateNote(data[i], r'<Switch Shop Description>\n(.*)\n')
                         totalTokens[0] += tokensResponse[0]
                         totalTokens[1] += tokensResponse[1]
                     
@@ -985,7 +989,7 @@ def searchCodes(page, pbar, jobList, filename):
             ## Event Code: 122 [Set Variables]
             if codeList[i]['code'] == 122 and CODE122 is True:
                 # This is going to be the var being set. (IMPORTANT)
-                if codeList[i]['parameters'][0] not in [44, 221, 223]:
+                if codeList[i]['parameters'][0] not in [240]:
                     i += 1
                     continue
                   
@@ -1168,6 +1172,27 @@ def searchCodes(page, pbar, jobList, filename):
                 matchList = []
                 jaString = codeList[i]['parameters'][0]
 
+                # Skip Console Logs
+                if 'console.log' in jaString:
+                    i += 1
+                    continue
+                # Skip if
+                if 'if(' in jaString:
+                    i += 1
+                    continue
+                # Skip if
+                if 'list' in jaString:
+                    i += 1
+                    continue
+
+                stringList = []
+                matchList = re.findall(r"'(.+?)'", jaString)
+                if len(matchList) > 0:
+                    for match in matchList:
+                        # Remove Textwrap
+                        match = match.replace('\\n', ' ')
+                        stringList.append(match)
+
                 # If there isn't any Japanese in the text just skip
                 # if not re.search(r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴー]+', jaString):
                 #     continue
@@ -1179,37 +1204,33 @@ def searchCodes(page, pbar, jobList, filename):
                 # Need to remove outside code and put it back later
                 # matchList = re.findall(r'.+"(.*?)".*[;,]$', jaString)
 
-                if 'console.' in jaString:
-                    i += 1
-                    continue
-
                 # Want to translate this script
                 # if 'this.BLogAdd' not in jaString:
                 #     continue
 
-                if 'テキスト-' in jaString:
-                    matchList = re.findall(r'テキスト-(.*)', jaString)
-
                 # Translate
                 if len(matchList) > 0:
-                    # Remove Textwrap
-                    text = matchList[0].replace('\\n', ' ')
 
-                    response = translateGPT(text, 'Reply with the '+ LANGUAGE +' translation of the text.', False)
+                    response = translateGPT(stringList, 'Reply with the '+ LANGUAGE +' translation of the text.', True)
                     totalTokens[0] += response[1][0]
                     totalTokens[1] += response[1][1]
-                    translatedText = response[0]
-
-                    # Remove characters that may break scripts
-                    translatedText = translatedText.replace('"', r'\"')
-                    translatedText = translatedText.replace("'", r"\'")
-                    translatedText = translatedText.replace(".", r"\.")
+                    translatedTextList = response[0]
+                    translatedText = jaString
                     
-                    # Wordwrap
-                    translatedText = textwrap.fill(translatedText, width=80).replace('\n', '\\n')
+                    # Replace Each Instance
+                    for j in range(len(translatedTextList)):
+                        # Remove characters that may break scripts
+                        translatedTextList[j] = translatedTextList[j].replace('"', r'\"')
+                        translatedTextList[j] = translatedTextList[j].replace("'", r"\'")
+                        translatedTextList[j] = translatedTextList[j].replace(".", r"\.")
+                        
+                        # Wordwrap
+                        translatedTextList[j] = textwrap.fill(translatedTextList[j], width=WIDTH).replace('\n', '\\n')
+
+                        # Replace Instance
+                        translatedText = translatedText.replace(matchList[j], translatedTextList[j])
 
                     # Set Data
-                    translatedText = jaString.replace(matchList[0], translatedText)
                     codeList[i]['parameters'][0] = translatedText
 
             ## Event Code: 408 (Script)
@@ -1266,7 +1287,7 @@ def searchCodes(page, pbar, jobList, filename):
                 if 'info:' in jaString:
                     regex = r'info:(.*)'
                 elif 'ActiveMessage:' in jaString:
-                    regex = r'<ActiveMessage:(.*)>?'
+                    regex = r'<ActiveMessage:(.*)>'
                 elif 'event_text' in jaString:
                     regex = r'event_text\s?:\s?(.*)'
                 else:
