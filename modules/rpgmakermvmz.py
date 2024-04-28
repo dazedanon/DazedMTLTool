@@ -57,12 +57,12 @@ POSITION = 0
 LEAVE = False
 
 # Dialogue / Scroll
-CODE401 = False
-CODE405 = False
+CODE401 = True
+CODE405 = True
 CODE408 = False
 
 # Choices
-CODE102 = False
+CODE102 = True
 
 # Variables
 CODE122 = False
@@ -78,7 +78,7 @@ CODE356 = False
 CODE320 = False
 CODE324 = False
 CODE111 = False
-CODE108 = True
+CODE108 = False
 
 def handleMVMZ(filename, estimate):
     global ESTIMATE, TOKENS
@@ -741,7 +741,7 @@ def searchCodes(page, pbar, jobList, filename):
                     continue
 
                 # Check for Speaker
-                coloredSpeakerList = re.findall(r'^[\\]+[cC]\[[\d]+\](.+?)[\\]+[Cc]\[[\d]\]$', jaString)
+                coloredSpeakerList = re.findall(r'^[\\]+[cC]\[[\d]+\](.+?)[\\]+[Cc]\[[\d]\]\\?\\?$', jaString)
                 if len(coloredSpeakerList) == 0:
                     coloredSpeakerList = re.findall(r'^【(.*?)】$', jaString)
                 if len(coloredSpeakerList) != 0 and codeList[i+1]['code'] in [401, 405, -1]:
@@ -906,8 +906,11 @@ def searchCodes(page, pbar, jobList, filename):
                             finalJAString = finalJAString.replace(match, '')
 
                     # Center Lines
-                    if '\\CL' in finalJAString:
+                    if '\\CL' in finalJAString or '\\ac' in finalJAString:
+                        finalJAString = finalJAString.replace('\\CL ', '')
                         finalJAString = finalJAString.replace('\\CL', '')
+                        finalJAString = finalJAString.replace('\\ac ', '')
+                        finalJAString = finalJAString.replace('\\ac', '')
                         CLFlag = True
 
                     # If there isn't any Japanese in the text just skip
@@ -957,7 +960,9 @@ def searchCodes(page, pbar, jobList, filename):
                             ### Add Var Strings
                             # CL Flag
                             if CLFlag:
-                                translatedText = '\\CL' + translatedText
+                                translatedText = '\\ac ' + translatedText
+                                translatedText = translatedText.replace('\n', '\n\\ac ')
+                                translatedText = re.sub(r'[\\]+?ac\s+', r'\\ac ', translatedText)
                                 CLFlag = False
 
                             # Nametag
@@ -1949,12 +1954,9 @@ def batchList(input_list, batch_size):
 
 def createContext(fullPromptFlag, subbedT):
     characters = 'Game Characters:\n\
-皆見 (Minami) - Female\n\
-彩夏 (Ayaka) - Female\n\
-中島 (Nakajima)) - Male\n\
-健太 (Kenta) - Male\n\
-五十嵐 (Igarashi) - Male\n\
-翔 (Sho) - Male\n\
+セレリア (Celeria) - Female\n\
+シスター (Sister) - Female\n\
+聖女 (Saintess) - Female\n\
 '
     
     system = PROMPT + VOCAB if fullPromptFlag else \
