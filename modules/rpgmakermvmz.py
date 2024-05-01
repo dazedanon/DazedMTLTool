@@ -48,7 +48,7 @@ if 'gpt-3.5' in MODEL:
 elif 'gpt-4' in MODEL:
     INPUTAPICOST = .01
     OUTPUTAPICOST = .03
-    BATCHSIZE = 40
+    BATCHSIZE = 20
     FREQUENCY_PENALTY = 0.1
 
 #tqdm Globals
@@ -512,6 +512,10 @@ def searchNames(data, pbar, context):
                         tokensResponse = translateNote(data[i], r'<Switch Shop Description>\n(.*)\n')
                         totalTokens[0] += tokensResponse[0]
                         totalTokens[1] += tokensResponse[1]
+                    if '<MapText:' in data[i]['note']:
+                        tokensResponse = translateNote(data[i], r'<MapText:(.*?)>')
+                        totalTokens[0] += tokensResponse[0]
+                        totalTokens[1] += tokensResponse[1]
                     
                     i += 1
                 else:
@@ -726,7 +730,7 @@ def searchCodes(page, pbar, jobList, filename):
                     break
 
             ## Event Code: 401 Show Text
-            if codeList[i]['code'] in [401, 405, -1] and (CODE401 or CODE405):
+            if 'code' in codeList[i] and codeList[i]['code'] in [401, 405, -1] and (CODE401 or CODE405):
                 # Save Code and starting index (j)
                 code = codeList[i]['code']
                 j = i
@@ -992,9 +996,9 @@ def searchCodes(page, pbar, jobList, filename):
                             docList.pop(0)                                
 
             ## Event Code: 122 [Set Variables]
-            if codeList[i]['code'] == 122 and CODE122 is True:
+            if 'code' in codeList[i] and codeList[i]['code'] == 122 and CODE122 is True:
                 # This is going to be the var being set. (IMPORTANT)
-                if codeList[i]['parameters'][0] not in [240]:
+                if codeList[i]['parameters'][0] not in list(range(60, 130)):
                     i += 1
                     continue
                   
@@ -1015,33 +1019,33 @@ def searchCodes(page, pbar, jobList, filename):
                     # Remove Textwrap
                     finalJAString = matchedText.group(1).replace('\\n', ' ')
 
-                # Pass 1
-                if setData == False:
-                    scriptList.append(finalJAString)
+                    # Pass 1
+                    if setData == False:
+                        scriptList.append(finalJAString)
 
-                # Pass 2
-                else:  
-                    if len(scriptList) > 0:            
-                        # Grab and Replace
-                        translatedText = scriptList[0]
-                        translatedText = jaString.replace(jaString, translatedText)
+                    # Pass 2
+                    else:  
+                        if len(scriptList) > 0:            
+                            # Grab and Replace
+                            translatedText = scriptList[0]
+                            translatedText = jaString.replace(jaString, translatedText)
 
-                        # Remove characters that may break scripts
-                        charList = ['\"', '\\n']
-                        for char in charList:
-                            translatedText = translatedText.replace(char, '')
-                    
-                        # Textwrap
-                        translatedText = textwrap.fill(translatedText, width=30)
-                        translatedText = translatedText.replace('\n', '\\n')
-                        translatedText = '\"' + translatedText + '\"'
+                            # Remove characters that may break scripts
+                            charList = ['\"', '\\n']
+                            for char in charList:
+                                translatedText = translatedText.replace(char, '')
+                        
+                            # Textwrap
+                            translatedText = textwrap.fill(translatedText, width=30)
+                            translatedText = translatedText.replace('\n', '\\n')
+                            translatedText = '\"' + translatedText + '\"'
 
-                        # Set
-                        codeList[i]['parameters'][4] = translatedText
-                        scriptList.pop(0)
+                            # Set
+                            codeList[i]['parameters'][4] = translatedText
+                            scriptList.pop(0)
 
             ## Event Code: 357 [Picture Text] [Optional]
-            if codeList[i]['code'] == 357 and CODE357 is True:
+            if 'code' in codeList[i] and codeList[i]['code'] == 357 and CODE357 is True:
                 headerString = codeList[i]['parameters'][0]
 
                 if headerString == 'LL_GalgeChoiceWindow':
@@ -1076,9 +1080,32 @@ def searchCodes(page, pbar, jobList, filename):
 
                         # Set Data
                         codeList[i]['parameters'][3]['choices'] = translatedText
-            
+
+                if 'SoR_GabWindow' in headerString:
+                    argVar = 'arg1'
+                    ### Message Text First
+                    if argVar in codeList[i]['parameters'][3]:
+                        jaString = codeList[i]['parameters'][3][argVar]
+
+                        # If there isn't any Japanese in the text just skip
+                        if not re.search(r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴー]+', jaString):
+                            i += 1
+                            continue
+
+                        # Remove any textwrap & TL
+                        jaString = re.sub(r'\n', ' ', jaString)
+                        response = translateGPT(jaString, '', False)
+                        translatedText = response[0]
+                        totalTokens[0] += response[1][0]
+                        totalTokens[1] += response[1][1]
+
+                        # Textwrap & Set
+                        translatedText = textwrap.fill(translatedText, width=WIDTH)
+                        codeList[i]['parameters'][3][argVar] = translatedText
+                        pbar.update(1)
+                
             ## Event Code: 657 [Picture Text] [Optional]
-            if codeList[i]['code'] == 657 and CODE657 is True:
+            if 'code' in codeList[i] and codeList[i]['code'] == 657 and CODE657 is True:
                 if 'text' in codeList[i]['parameters'][0]:
                     jaString = codeList[i]['parameters'][0]
                     if not isinstance(jaString, str):
@@ -1131,7 +1158,7 @@ def searchCodes(page, pbar, jobList, filename):
                     codeList[i]['parameters'][0] = translatedText
 
         ## Event Code: 101 [Name] [Optional]
-            if codeList[i]['code'] == 101 and CODE101 is True:
+            if 'code' in codeList[i] and codeList[i]['code'] == 101 and CODE101 is True:
                 isVar = False
                 
                 # Grab String
@@ -1173,7 +1200,7 @@ def searchCodes(page, pbar, jobList, filename):
                     speaker = ''
 
             ## Event Code: 355 or 655 Scripts [Optional]
-            if (codeList[i]['code'] == 355 or codeList[i]['code'] == 655) and CODE355655 is True:
+            if 'code' in codeList[i] and (codeList[i]['code'] == 355 or codeList[i]['code'] == 655) and CODE355655 is True:
                 matchList = []
                 jaString = codeList[i]['parameters'][0]
 
@@ -1239,7 +1266,7 @@ def searchCodes(page, pbar, jobList, filename):
                     codeList[i]['parameters'][0] = translatedText
 
             ## Event Code: 408 (Script)
-            if (codeList[i]['code'] == 408) and CODE408 is True:
+            if 'code' in codeList[i] and (codeList[i]['code'] == 408) and CODE408 is True:
                 jaString = codeList[i]['parameters'][0]
 
                 # If there isn't any Japanese in the text just skip
@@ -1280,7 +1307,7 @@ def searchCodes(page, pbar, jobList, filename):
                     codeList[i]['parameters'][0] = translatedText
 
             ## Event Code: 108 (Script)
-            if (codeList[i]['code'] == 108) and CODE108 is True:
+            if 'code' in codeList[i] and (codeList[i]['code'] == 108) and CODE108 is True:
                 jaString = codeList[i]['parameters'][0]
 
                 # If there isn't any Japanese in the text just skip
@@ -1321,7 +1348,7 @@ def searchCodes(page, pbar, jobList, filename):
                     codeList[i]['parameters'][0] = translatedText
 
             ## Event Code: 356
-            if codeList[i]['code'] == 356 and CODE356 is True:
+            if 'code' in codeList[i] and codeList[i]['code'] == 356 and CODE356 is True:
                 jaString = codeList[i]['parameters'][0]
                 oldjaString = jaString
 
@@ -1469,7 +1496,7 @@ def searchCodes(page, pbar, jobList, filename):
                         codeList[i]['parameters'][0] = translatedText
         
             ### Event Code: 102 Show Choice
-            if codeList[i]['code'] == 102 and CODE102 is True:
+            if 'code' in codeList[i] and codeList[i]['code'] == 102 and CODE102 is True:
                 choiceList = []
                 varList = []
                 for choice in range(len(codeList[i]['parameters'][0])):
@@ -1524,7 +1551,7 @@ def searchCodes(page, pbar, jobList, filename):
                         MISMATCH.append(filename)
 
             ### Event Code: 111 Script
-            if codeList[i]['code'] == 111 and CODE111 is True:
+            if 'code' in codeList[i] and codeList[i]['code'] == 111 and CODE111 is True:
                 for j in range(len(codeList[i]['parameters'])):
                     jaString = codeList[i]['parameters'][j]
 
@@ -1564,7 +1591,7 @@ def searchCodes(page, pbar, jobList, filename):
                     codeList[i]['parameters'][j] = translatedText
 
             ### Event Code: 320 Set Variable
-            if codeList[i]['code'] == 320 and CODE320 is True:
+            if 'code' in codeList[i] and codeList[i]['code'] == 320 and CODE320 is True:
                 jaString = codeList[i]['parameters'][1]
                 if not isinstance(jaString, str):
                     i += 1
@@ -1634,7 +1661,7 @@ def searchCodes(page, pbar, jobList, filename):
         # Delete all -1 codes
         codeListFinal = []
         for i in range(len(codeList)):
-            if codeList[i]['code'] != -1:
+            if 'code' in codeList[i] and codeList[i]['code'] != -1:
                 codeListFinal.append(codeList[i])
 
         # Normal Format
@@ -1954,9 +1981,9 @@ def batchList(input_list, batch_size):
 
 def createContext(fullPromptFlag, subbedT):
     characters = 'Game Characters:\n\
-セレリア (Celeria) - Female\n\
-シスター (Sister) - Female\n\
-聖女 (Saintess) - Female\n\
+ルイ (Rui) - Female\n\
+優樹 (Yuuki) - Female\n\
+Tuberose (Tuberose) - Male\n\
 '
     
     system = PROMPT + VOCAB if fullPromptFlag else \
@@ -2006,6 +2033,9 @@ def cleanTranslatedText(translatedText, varResponse):
         '〜': '~',
         'ッ': '',
         '。': '.',
+        '< ': '<',
+        '</ ': '</',
+        ' >': '>',
         'Placeholder Text': '',
         '- chan': '-chan',
         '- kun': '-kun',
@@ -2120,7 +2150,7 @@ def translateGPT(text, history, fullPromptFlag):
             tList[index] = extractedTranslations
             if len(tItem) != len(extractedTranslations):
                 # Mismatch. Try Again
-                response = translateText(characters, system, user, history, 0.1)
+                response = translateText(characters, system, user, history, 0.2)
                 translatedText = response.choices[0].message.content
                 totalTokens[0] += response.usage.prompt_tokens
                 totalTokens[1] += response.usage.completion_tokens
