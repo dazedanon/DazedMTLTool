@@ -39,6 +39,10 @@ Here are some vocabulary and terms so that you know the proper spelling and tran
 ME 音量 (ME Volume)
 回想する (Recollection)
 
+# RPG
+エクスポーション (EX Potion)
+アスカロン (Ascalon)
+
 # Other
 パパ (papa)
 ```
