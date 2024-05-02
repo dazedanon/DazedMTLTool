@@ -155,13 +155,18 @@ def translateRegex(data, pbar, filename, translatedList):
     currentGroup = []
     tokens = [0,0]
     speaker = ''
+    voice = False
     global LOCK, ESTIMATE
     i = 0
 
     while i < len(data):
+        voice = False
+        speaker = ''
         if '#MSGVOICE' in data[i]:
-            i += 2
-        if '#MSG,' in data[i]:
+            i += 1
+            voice = True
+            voiceVar = data[i]
+        if '#MSG,' in data[i] or voice == True:
             i += 1
             # Speaker
             if '「' in data[i+1] or '"' in data[i+1]:
@@ -240,8 +245,36 @@ def translateRegex(data, pbar, filename, translatedList):
                     translatedText = translatedText.replace(' ', '\u3000')
 
                     # Set Data
-                    data.insert(i, f'\u3000{translatedText}\n')
-                    i += 1
+                    # Game crashes on more than 3 lines. Will need to create a new MSG for long translations
+                    if translatedText.count('\n') > 2:
+                        # Split List
+                        translatedTextList = splitNewlines(translatedText)
+
+                        # MSG Voice
+                        count = 0
+                        for text in translatedTextList:
+                            if count != 0:
+                                if voice == True:
+                                    #MSG for each item in the list
+                                    data.insert(i, f'#MSGVOICE,\n')
+                                    i += 1
+                                    data.insert(i, f'{voiceVar}')
+                                    i += 1
+                                else:
+                                    data.insert(i, f'#MSG,\n')
+                                    i += 1
+                                if speaker:
+                                    data[i] = f'\u3000{speaker}\n'
+                                    i += 1
+                            if text[0] == '\u3000':
+                                data.insert(i, f'{text}\n')
+                            else:
+                                data.insert(i, f'\u3000{text}\n')
+                            i += 1
+                            count += 1
+                    else:
+                        data.insert(i, f'\u3000{translatedText}\n')
+                        i += 1
 
             # Nothing relevant. Skip Line.
             else:
@@ -271,6 +304,27 @@ def translateRegex(data, pbar, filename, translatedList):
                 if filename not in MISMATCH:
                     MISMATCH.append(filename)
     return tokens
+
+def splitNewlines(text):
+    parts = []
+    newline_count = 0  # Counts the number of newline characters encountered
+    start_index = 0  # Start index of the current string part
+
+    for i, char in enumerate(text):
+        if char == '\n':
+            newline_count += 1
+            if newline_count == 3:
+                # Append the string part from start_index to current index (inclusive)
+                parts.append(text[start_index:i+1])
+                # Reset newline count and update start_index for the next string part
+                newline_count = 0
+                start_index = i+1
+
+    # Edge case: if the text does not end with a newline, we still need to append the last part
+    if start_index < len(text):
+        parts.append(text[start_index:])
+
+    return parts
 
 # Save some money and enter the character before translation
 def getSpeaker(speaker, pbar, filename):
@@ -418,11 +472,15 @@ def batchList(input_list, batch_size):
 
 def createContext(fullPromptFlag, subbedT):
     characters = 'Game Characters:\n\
-リリア (Lilia) - Female\n\
-シェリル (Sheryl) - Female\n\
-チロ (Chiro) - Female\n\
-メルキュール (Mercury) - Female\n\
-のじゃっち (Nojachi) - Female\n\
+フィリア (Philia) - Female\n\
+アルネット (Annett) - Female\n\
+ラピュセナ (Rapusena) - Female\n\
+リッカ (Rikka) - Female\n\
+アンデリビア (Andelivia) - Female\n\
+リリアブルム (Liliabloom) - Female\n\
+カルナ (Karna) - Female\n\
+ラフィング＝スピア (Laughing Spear) - Female\n\
+ノーラ (Nora) - Female\n\
 '
     
     system = PROMPT + VOCAB if fullPromptFlag else \
