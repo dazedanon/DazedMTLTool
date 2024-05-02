@@ -57,12 +57,12 @@ POSITION = 0
 LEAVE = False
 
 # Dialogue / Scroll
-CODE401 = True
-CODE405 = True
+CODE401 = False
+CODE405 = False
 CODE408 = False
 
 # Choices
-CODE102 = True
+CODE102 = False
 
 # Variables
 CODE122 = False
@@ -71,7 +71,7 @@ CODE122 = False
 CODE101 = False
 
 # Other
-CODE355655 = False
+CODE355655 = True
 CODE357 = False
 CODE657 = False
 CODE356 = False
@@ -1218,7 +1218,7 @@ def searchCodes(page, pbar, jobList, filename):
                     continue
 
                 stringList = []
-                matchList = re.findall(r"'(.+?)'", jaString)
+                matchList = re.findall(r"this.BLogAdd\(.+?\"(.+?)\"", jaString)
                 if len(matchList) > 0:
                     for match in matchList:
                         # Remove Textwrap
@@ -1237,8 +1237,9 @@ def searchCodes(page, pbar, jobList, filename):
                 # matchList = re.findall(r'.+"(.*?)".*[;,]$', jaString)
 
                 # Want to translate this script
-                # if 'this.BLogAdd' not in jaString:
-                #     continue
+                if 'this.BLogAdd' not in jaString:
+                    i += 1
+                    continue
 
                 # Translate
                 if len(matchList) > 0:
