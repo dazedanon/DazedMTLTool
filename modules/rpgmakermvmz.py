@@ -65,13 +65,13 @@ CODE408 = False
 CODE102 = False
 
 # Variables
-CODE122 = False
+CODE122 = True
 
 # Names
 CODE101 = False
 
 # Other
-CODE355655 = True
+CODE355655 = False
 CODE357 = False
 CODE657 = False
 CODE356 = False
@@ -998,7 +998,7 @@ def searchCodes(page, pbar, jobList, filename):
             ## Event Code: 122 [Set Variables]
             if 'code' in codeList[i] and codeList[i]['code'] == 122 and CODE122 is True:
                 # This is going to be the var being set. (IMPORTANT)
-                if codeList[i]['parameters'][0] not in list(range(60, 130)):
+                if codeList[i]['parameters'][0] not in list(range(0, 20)):
                     i += 1
                     continue
                   
@@ -1036,7 +1036,7 @@ def searchCodes(page, pbar, jobList, filename):
                                 translatedText = translatedText.replace(char, '')
                         
                             # Textwrap
-                            translatedText = textwrap.fill(translatedText, width=30)
+                            translatedText = textwrap.fill(translatedText, width=80)
                             translatedText = translatedText.replace('\n', '\\n')
                             translatedText = '\"' + translatedText + '\"'
 
@@ -1495,6 +1495,51 @@ def searchCodes(page, pbar, jobList, filename):
                         translatedText = translatedText.replace(' ', '_')
                         translatedText = jaString.replace(text, translatedText)
                         codeList[i]['parameters'][0] = translatedText
+
+                # LL_GalgeChoiceWindowMV Message
+                if  'LL_GalgeChoiceWindowMV setMessageText' in jaString:
+                    ### Message Text First
+                    match = re.search(r'LL_GalgeChoiceWindowMV setMessageText (.+)', jaString)
+                    if match:
+                        jaString = match.group(1)
+
+                        # Remove any textwrap & TL
+                        jaString = re.sub(r'\n', ' ', jaString)
+                        response = translateGPT(jaString, '', False)
+                        translatedText = response[0]
+                        totalTokens[0] += response[1][0]
+                        totalTokens[1] += response[1][1]
+
+                        # Textwrap & Replace Whitespace
+                        translatedText = textwrap.fill(translatedText, width=WIDTH)
+                        translatedText = translatedText.replace(' ', '_')
+
+                        # Replace and Set
+                        translatedText = match.group(0).replace(match.group(1), translatedText)
+                        codeList[i]['parameters'][0] = translatedText
+
+                # LL_GalgeChoiceWindowMV Choices
+                if 'LL_GalgeChoiceWindowMV setChoices':
+                    match = re.search(r'LL_GalgeChoiceWindowMV setChoices (.+)', jaString)
+                    if match:
+                        jaString = match.group(1)
+                        choiceList = jaString.split(',')
+
+                        # Translate
+                        question = translatedText
+                        response = translateGPT(choiceList, f'Previous text for context: {question}\n\nThis will be a dialogue option', True)
+                        totalTokens[0] += response[1][0]
+                        totalTokens[1] += response[1][1]
+                        choiceListTL = response[0]
+                        translatedText = match.group(0)
+
+                        # Replace Strings
+                        for j in range(len(choiceListTL)):
+                            choiceListTL[j] = choiceListTL[j].replace(' ', '_')
+                            translatedText = translatedText.replace(choiceList[j], choiceListTL[j])
+
+                        # Set Data
+                        codeList[i]['parameters'][0] = translatedText
         
             ### Event Code: 102 Show Choice
             if 'code' in codeList[i] and codeList[i]['code'] == 102 and CODE102 is True:
@@ -1545,7 +1590,10 @@ def searchCodes(page, pbar, jobList, filename):
                         # Set Data
                         totalTokens[0] += response[1][0]
                         totalTokens[1] += response[1][1]
-                        translatedText = varList[choice] + translatedText[0].upper() + translatedText[1:]
+                        if translatedText != '':
+                            translatedText = varList[choice] + translatedText[0].upper() + translatedText[1:]
+                        else:
+                            translatedText = varList[choice] + translatedText
                         codeList[i]['parameters'][0][choice] = translatedText
                 else:
                     if filename not in MISMATCH:
@@ -1982,9 +2030,10 @@ def batchList(input_list, batch_size):
 
 def createContext(fullPromptFlag, subbedT):
     characters = 'Game Characters:\n\
-ルイ (Rui) - Female\n\
-優樹 (Yuuki) - Female\n\
-Tuberose (Tuberose) - Male\n\
+セリカ (Celica) - Female\n\
+レティシア・ル・ブラン・ド・ラ・ルミエール (Leticia Le Blanc De La Lumière) - Female\n\
+レオン (Leon) - Male\n\
+ラース (Lars) - Male\n\
 '
     
     system = PROMPT + VOCAB if fullPromptFlag else \
