@@ -166,10 +166,10 @@ def translateRegex(data, pbar, filename, translatedList):
             i += 1
             voice = True
             voiceVar = data[i]
-        if '#MSG,' in data[i] or voice == True:
+        if '#MSG,' in data[i] or '#MSG\n' in data[i] or voice == True:
             i += 1
             # Speaker
-            if re.search(r'^\u3000([^."、。*!?！？（）\(\)\[\]\u3000]+)\n', data[i]) and len(data[i]) < 25:
+            if re.search(r'^　?([^#\/."、。*!！（）\(\)\[\]　\n]+)\n', data[i]) and len(data[i]) < 25:
                 match = re.search(r'(.*)', data[i])
                 if match != None:
                     speaker = match.group(1)
@@ -187,43 +187,45 @@ def translateRegex(data, pbar, filename, translatedList):
 
             # Lines
             match = re.search(r'(.*)', data[i])
-            if match != None:
+            if match != None and match.group(1) != '':
                 # Pass 1
                 if translatedList == []:
                     # Grab Consecutive Strings
-                    if data[i][0] == '\u3000':
-                        jaString = data[i][1:]
-                    currentGroup.append(jaString)
-                    i += 1
-                    while '\u3000' in data[i]:
-                        jaString = data[i]
+                    jaString = data[i]
+                    if data[i] != '\n':
                         if data[i][0] == '\u3000':
                             jaString = data[i][1:]
                         currentGroup.append(jaString)
                         i += 1
-                    
-                    # Join up 401 groups for better translation.
-                    if len(currentGroup) > 0:
-                        jaString = ''.join(currentGroup)
-                        currentGroup = []
-                    
-                    # Remove any textwrap
-                    jaString = jaString.replace('\n', ' ')
+                        while data[i] != '\n':
+                            jaString = data[i]
+                            if data[i] != '\n':
+                                jaString = data[i][1:]
+                            currentGroup.append(jaString)
+                            i += 1
+                        
+                        # Join up 401 groups for better translation.
+                        if len(currentGroup) > 0:
+                            jaString = ''.join(currentGroup)
+                            currentGroup = []
+                        
+                        # Remove any textwrap
+                        jaString = jaString.replace('\n', ' ')
 
-                    # Temporarily convert spaces (For Textwrap Later)
-                    jaString = jaString.replace('\u3000', ' ')
+                        # Temporarily convert spaces (For Textwrap Later)
+                        jaString = jaString.replace('\u3000', ' ')
 
-                    # Add Speaker (If there is one)
-                    if speaker != '':
-                        jaString = f'{speaker}: {jaString}'
+                        # Add Speaker (If there is one)
+                        if speaker != '':
+                            jaString = f'{speaker}: {jaString}'
 
-                    # Add String
-                    stringList.append(jaString.strip())
+                        # Add String
+                        stringList.append(jaString.strip())
                 
                 # Pass 2
                 else:
                     # Insert Strings
-                    while '\u3000' in data[i]:
+                    while data[i] != '\n':
                         data.pop(i)
 
                     # Get Text
