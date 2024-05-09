@@ -32,7 +32,7 @@ NAMESLIST = []
 NAMES = False    # Output a list of all the character names found
 BRFLAG = False   # If the game uses <br> instead
 FIXTEXTWRAP = True  # Overwrites textwrap
-IGNORETLTEXT = False    # Ignores all translated text.
+IGNORETLTEXT = True    # Ignores all translated text.
 MISMATCH = []   # Lists files that throw a mismatch error (Length of GPT list response is wrong)
 BRACKETNAMES = False
 PBAR = None
@@ -57,7 +57,7 @@ POSITION = 0
 LEAVE = False
 
 # Dialogue / Scroll
-CODE401 = False
+CODE401 = True
 CODE405 = False
 CODE408 = False
 
@@ -65,7 +65,7 @@ CODE408 = False
 CODE102 = False
 
 # Variables
-CODE122 = True
+CODE122 = False
 
 # Names
 CODE101 = False
@@ -1898,6 +1898,13 @@ def getSpeaker(speaker):
                 response = translateGPT(speaker, 'Reply with the '+ LANGUAGE +' translation of the NPC name.', False)
                 response[0] = response[0].title()
                 response[0] = response[0].replace("'S", "'s")
+
+                # Retry if name doesn't translate for some reason
+                if re.search(r'([a-zA-Z？?])', response[0]) == None:
+                    response = translateGPT(speaker, 'Reply with the '+ LANGUAGE +' translation of the NPC name.', False)
+                    response[0] = response[0].title()
+                    response[0] = response[0].replace("'S", "'s")
+
                 speakerList = [speaker, response[0]]
                 NAMESLIST.append(speakerList)
                 return response
@@ -2030,10 +2037,7 @@ def batchList(input_list, batch_size):
 
 def createContext(fullPromptFlag, subbedT):
     characters = 'Game Characters:\n\
-セリカ (Celica) - Female\n\
-レティシア・ル・ブラン・ド・ラ・ルミエール (Leticia Le Blanc De La Lumière) - Female\n\
-レオン (Leon) - Male\n\
-ラース (Lars) - Male\n\
+リーフ (Leaf) - Female\n\
 '
     
     system = PROMPT + VOCAB if fullPromptFlag else \
