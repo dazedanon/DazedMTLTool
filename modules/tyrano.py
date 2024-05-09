@@ -41,7 +41,7 @@ POSITION = 0
 LEAVE = False
 
 # Flags
-DIALOGUEFLAG = False
+DIALOGUEFLAG = True
 TEXTWRAPCHOICES = True
 
 # Pricing - Depends on the model https://openai.com/pricing
