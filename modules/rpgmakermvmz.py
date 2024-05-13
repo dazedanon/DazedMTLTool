@@ -45,9 +45,9 @@ if 'gpt-3.5' in MODEL:
     OUTPUTAPICOST = .002
     BATCHSIZE = 10
     FREQUENCY_PENALTY = 0.2
-elif 'gpt-4' in MODEL:
-    INPUTAPICOST = .01
-    OUTPUTAPICOST = .03
+elif 'gpt-4o' in MODEL:
+    INPUTAPICOST = .005
+    OUTPUTAPICOST = .015
     BATCHSIZE = 20
     FREQUENCY_PENALTY = 0.1
 
@@ -58,11 +58,11 @@ LEAVE = False
 
 # Dialogue / Scroll
 CODE401 = True
-CODE405 = False
+CODE405 = True
 CODE408 = False
 
 # Choices
-CODE102 = False
+CODE102 = True
 
 # Variables
 CODE122 = False
@@ -1174,10 +1174,18 @@ def searchCodes(page, pbar, jobList, filename):
                     continue
 
                 # Force Speaker using var
-                if 'memerisu' in jaString.lower():
-                    speaker = 'Memerisu'
-                elif 'thina' in jaString.lower():
-                    speaker = 'Tina'
+                if 'ari' in jaString.lower():
+                    speaker = 'Arisa'
+                    i += 1
+                    continue
+                elif 'riika' in jaString.lower():
+                    speaker = 'Rika'
+                    i += 1
+                    continue
+                elif 'sutera' in jaString.lower():
+                    speaker = 'Stella'
+                    i += 1
+                    continue
 
                 # Get Speaker
                 response = getSpeaker(jaString)
@@ -2037,7 +2045,8 @@ def batchList(input_list, batch_size):
 
 def createContext(fullPromptFlag, subbedT):
     characters = 'Game Characters:\n\
-リーフ (Leaf) - Female\n\
+葵 (Aoi) - Female\n\
+豪山剛 (Tsuyoshi Gouyama) - Male\n\
 '
     
     system = PROMPT + VOCAB if fullPromptFlag else \

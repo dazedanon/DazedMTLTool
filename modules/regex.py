@@ -169,7 +169,7 @@ def translateRegex(data, pbar, filename, translatedList):
         if '#MSG,' in data[i] or '#MSG\n' in data[i] or voice == True:
             i += 1
             # Speaker
-            if re.search(r'^　?([^#\/."、。*!！（）\(\)\[\]　\n]+)\n', data[i]) and len(data[i]) < 25:
+            if re.search(r'^　?([^#\/."、。*!！（）\(\)\[\]　\n]+)\n', data[i]) and len(data[i]) < 30:
                 match = re.search(r'(.*)', data[i])
                 if match != None:
                     speaker = match.group(1)
@@ -180,6 +180,7 @@ def translateRegex(data, pbar, filename, translatedList):
                     tokens[0] += response[1][0]
                     tokens[1] += response[1][1]
                     if translatedList != []:
+                        speaker = speaker.replace(' ', '\u3000')
                         data[i] = f'\u3000{speaker}\n'
                 else:
                     speaker = '' 
