@@ -250,7 +250,6 @@ def translateTyrano(data, pbar, totalLines):
             finalJAString = finalJAString.replace('‶', '')
             finalJAString = finalJAString.replace('”', '')
             finalJAString = finalJAString.replace('―', '-')
-            finalJAString = finalJAString.replace('ー', '-')
             finalJAString = finalJAString.replace('…', '...')
             finalJAString = re.sub(r'(\.{3}\.+)', '...', finalJAString)
             finalJAString = finalJAString.replace('　', ' ')
@@ -557,7 +556,6 @@ def cleanTranslatedText(translatedText, varResponse):
         'Translation: ': '',
         'っ': '',
         '〜': '~',
-        'ー': '-',
         'ッ': '',
         '。': '.',
         'Placeholder Text': ''

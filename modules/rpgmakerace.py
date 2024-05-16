@@ -979,7 +979,6 @@ def searchCodes(page, pbar, fillList, filename):
                     finalJAString = finalJAString.replace('ﾞ', '')
                     finalJAString = finalJAString.replace('・', '.')
                     finalJAString = finalJAString.replace('―', '-')
-                    finalJAString = finalJAString.replace('ー', '-')
                     finalJAString = finalJAString.replace('…', '...')
                     finalJAString = finalJAString.replace('。', '.')
                     finalJAString = re.sub(r'(\.{3}\.+)', '...', finalJAString)
@@ -2216,7 +2215,6 @@ def cleanTranslatedText(translatedText, varResponse):
         'Translation: ': '',
         'っ': '',
         '〜': '~',
-        'ー': '-',
         'ッ': '',
         '。': '.',
         'Placeholder Text': ''

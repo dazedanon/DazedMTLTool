@@ -884,7 +884,6 @@ def searchCodes(page, pbar, jobList, filename):
                     # Remove Extra Stuff bad for translation.
                     finalJAString = finalJAString.replace('ﾞ', '')
                     finalJAString = finalJAString.replace('―', '-')
-                    finalJAString = finalJAString.replace('ー', '-')
                     finalJAString = finalJAString.replace('…', '...')
                     finalJAString = finalJAString.replace('。', '.')
                     finalJAString = re.sub(r'(\.{3}\.+)', '...', finalJAString)
