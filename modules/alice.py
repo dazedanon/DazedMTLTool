@@ -457,7 +457,6 @@ def cleanTranslatedText(translatedText, varResponse):
         'Translation: ': '',
         'っ': '',
         '〜': '~',
-        'ー': '-',
         'ッ': '',
         '。': '.',
         'Placeholder Text': ''

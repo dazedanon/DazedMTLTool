@@ -266,7 +266,6 @@ def translateTyrano(data, pbar, filename, setData, jobList):
                 finalJAString = finalJAString.replace('‶', '')
                 finalJAString = finalJAString.replace('”', '')
                 finalJAString = finalJAString.replace('―', '-')
-                finalJAString = finalJAString.replace('ー', '-')
                 finalJAString = finalJAString.replace('…', '...')
                 finalJAString = re.sub(r'(\.{3}\.+)', '...', finalJAString)
                 finalJAString = finalJAString.replace('　', ' ')
