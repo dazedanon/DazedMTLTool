@@ -2139,7 +2139,7 @@ def extractTranslation(translatedTextList, is_list):
 def countTokens(characters, system, user, history):
     inputTotalTokens = 0
     outputTotalTokens = 0
-    enc = tiktoken.encoding_for_model(MODEL)
+    enc = tiktoken.encoding_for_model('gpt-4')
     
     # Input
     if isinstance(history, list):

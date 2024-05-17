@@ -46,8 +46,8 @@ if 'gpt-3.5' in MODEL:
     BATCHSIZE = 10
     FREQUENCY_PENALTY = 0.2
 elif 'gpt-4' in MODEL:
-    INPUTAPICOST = .01
-    OUTPUTAPICOST = .03
+    INPUTAPICOST = .005
+    OUTPUTAPICOST = .015
     BATCHSIZE = 40
     FREQUENCY_PENALTY = 0.1
 
@@ -1202,7 +1202,7 @@ def extractTranslation(translatedTextList, is_list):
 def countTokens(characters, system, user, history):
     inputTotalTokens = 0
     outputTotalTokens = 0
-    enc = tiktoken.encoding_for_model(MODEL)
+    enc = tiktoken.encoding_for_model('gpt-4')
     
     # Input
     if isinstance(history, list):

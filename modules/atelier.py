@@ -301,7 +301,7 @@ def translateGPT(t, history, fullPromptFlag):
     
     # If ESTIMATE is True just count this as an execution and return.
     if ESTIMATE:
-        enc = tiktoken.encoding_for_model(MODEL)
+        enc = tiktoken.encoding_for_model('gpt-4')
         historyRaw = ''
         if isinstance(history, list):
             for line in history:
