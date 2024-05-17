@@ -47,8 +47,8 @@ if 'gpt-3.5' in MODEL:
     OUTPUTAPICOST = .002
     BATCHSIZE = 10
 elif 'gpt-4' in MODEL:
-    INPUTAPICOST = .01
-    OUTPUTAPICOST = .03
+    INPUTAPICOST = .005
+    OUTPUTAPICOST = .015
     BATCHSIZE = 40
 
 def handleRegex(filename, estimate):
@@ -162,161 +162,43 @@ def translateRegex(data, pbar, filename, translatedList):
     while i < len(data):
         voice = False
         speaker = ''
-        if '#MSGVOICE' in data[i]:
-            i += 1
-            voice = True
-            voiceVar = data[i]
-        if '#MSG,' in data[i] or '#MSG\n' in data[i] or voice == True:
-            i += 1
-            # Speaker
-            if re.search(r'^　?([^#\/."、。*!！（）\(\)\[\]　\n]+)\n', data[i]) and len(data[i]) < 30:
-                match = re.search(r'(.*)', data[i])
-                if match != None:
-                    speaker = match.group(1)
-                    if speaker[0] == '\u3000':
-                        speaker = speaker[1:]
-                    response = getSpeaker(speaker, pbar, filename)
-                    speaker = response[0]
-                    tokens[0] += response[1][0]
-                    tokens[1] += response[1][1]
-                    if translatedList != []:
-                        speaker = speaker.replace(' ', '\u3000')
-                        data[i] = f'\u3000{speaker}\n'
-                else:
-                    speaker = '' 
-                i += 1
-
+        if 'MSG' in data[i] or 'SYSTEM' in data[i]:
             # Lines
-            match = re.search(r'(.*)', data[i])
+            match = re.search(r'.+	.+	MSG.*?		.+	\u3000?(.+)	.+	.+	.+	', data[i])
+            if match == None:
+                match = re.search(r'.+	.+	SYSTEM.*?		.+	\u3000?(.+)	.+	.+	.+	', data[i])
             if match != None and match.group(1) != '':
+                originalString = match.group(1)
                 # Pass 1
                 if translatedList == []:
                     # Grab Consecutive Strings
-                    jaString = data[i]
-                    if data[i] != '\n':
-                        if data[i][0] == '\u3000':
-                            jaString = data[i][1:]
-                        currentGroup.append(jaString)
-                        i += 1
-                        while data[i] != '\n':
-                            jaString = data[i]
-                            if data[i] != '\n':
-                                jaString = data[i][1:]
-                            currentGroup.append(jaString)
-                            i += 1
+                    jaString = match.group(1)
                         
-                        # Join up 401 groups for better translation.
-                        if len(currentGroup) > 0:
-                            jaString = ''.join(currentGroup)
-                            currentGroup = []
-                        
-                        # Remove any textwrap
-                        jaString = jaString.replace('\n', ' ')
+                    # Remove any textwrap
+                    jaString = jaString.replace('<br>', ' ')
 
-                        # Temporarily convert spaces (For Textwrap Later)
-                        jaString = jaString.replace('\u3000', ' ')
-
-                        # Add Speaker (If there is one)
-                        if speaker != '':
-                            jaString = f'{speaker}: {jaString}'
-
-                        # Add String
-                        stringList.append(jaString.strip())
+                    # Add String
+                    stringList.append(jaString.strip())
                 
                 # Pass 2
                 else:
-                    # Insert Strings
-                    while data[i] != '\n':
-                        data.pop(i)
-
                     # Get Text
                     if translatedList:
+                        # Grab and Pop
                         translatedText = translatedList[0]
                         translatedList.pop(0)
+
+                        # Set to None if empty list
                         if len(translatedList) <= 0:
                             translatedList = None
 
-                        # Remove added speaker
-                        translatedText = re.sub(r'^.+?:\s', '', translatedText)
-
                         # Textwrap
                         translatedText = textwrap.fill(translatedText, width=WIDTH)
-                        translatedText = translatedText.replace('\n', '\n\u3000')
-
-                        # Replace Whitespace and Commas
-                        translatedText = translatedText.replace(', ', '、')
-                        translatedText = translatedText.replace(',\u3000', '、')
-                        translatedText = translatedText.replace(',', '、')
-                        translatedText = translatedText.replace(' ', '\u3000')
+                        translatedText = translatedText.replace('\n', '<br>')
 
                         # Set Data
-                        # Game crashes on more than 3 lines. Will need to create a new MSG for long translations
-                        if translatedText.count('\n') > 2:
-                            # Split List
-                            translatedTextList = splitNewlines(translatedText)
-
-                            # MSG Voice
-                            count = 0
-                            for text in translatedTextList:
-                                if count != 0:
-                                    if voice == True:
-                                        #MSG for each item in the list
-                                        data.insert(i, f'#MSGVOICE,\n')
-                                        i += 1
-                                        data.insert(i, f'{voiceVar}')
-                                        i += 1
-                                    else:
-                                        data.insert(i, f'#MSG,\n')
-                                        i += 1
-                                    if speaker:
-                                        data[i] = f'\u3000{speaker}\n'
-                                        i += 1
-                                if text[0] == '\u3000':
-                                    data.insert(i, f'{text}\n')
-                                else:
-                                    data.insert(i, f'\u3000{text}\n')
-                                i += 1
-                                count += 1
-                            if data[i] != '\n':
-                                data.insert(i, '\n')
-                                data[i] = f'\n{data[i]}'
-                        else:
-                            data.insert(i, f'\u3000{translatedText}\n')
-                            i += 1
-                            if data[i] != '\n':
-                                data[i] = f'\n{data[i]}'
-
-        elif '#SELECT' in data[i] and translatedList == []:
-            regex = r'(.+?)	+\d$'
-            i += 1
-            match = re.search(regex, data[i])
-            if match:
-                choiceList = []
-                choiceList.append(match.group(1))
+                        data[i] = data[i].replace(originalString, translatedText)
                 i += 1
-                match = re.search(regex, data[i])
-                while(match):
-                    choiceList.append(match.group(1))
-                    i += 1
-                    match = re.search(regex, data[i])
-                
-                # Translate
-                question = stringList[len(stringList) - 1]
-                response = translateGPT(choiceList, f'Previous text for context: {question}\n\nThis will be a dialogue option', True, pbar, filename)
-                tokens[0] += response[1][0]
-                tokens[1] += response[1][1]
-                choiceListTL = response[0]
-
-                # Set Data
-                i = i - len(choiceListTL)
-                for j in range(len(choiceListTL)):
-                    # Replace Whitespace and Commas
-                    choiceListTL[j] = choiceListTL[j].replace(', ', '、')
-                    choiceListTL[j] = choiceListTL[j].replace(',\u3000', '、')
-                    choiceListTL[j] = choiceListTL[j].replace(',', '、')
-                    choiceListTL[j] = choiceListTL[j].replace(' ', '\u3000')
-                    data[i] = data[i].replace(choiceList[j], choiceListTL[j])
-                    i += 1
 
             # Nothing relevant. Skip Line.
             else:
@@ -346,27 +228,6 @@ def translateRegex(data, pbar, filename, translatedList):
                 if filename not in MISMATCH:
                     MISMATCH.append(filename)
     return tokens
-
-def splitNewlines(text):
-    parts = []
-    newline_count = 0  # Counts the number of newline characters encountered
-    start_index = 0  # Start index of the current string part
-
-    for i, char in enumerate(text):
-        if char == '\n':
-            newline_count += 1
-            if newline_count == 3:
-                # Append the string part from start_index to current index (inclusive)
-                parts.append(text[start_index:i+1])
-                # Reset newline count and update start_index for the next string part
-                newline_count = 0
-                start_index = i+1
-
-    # Edge case: if the text does not end with a newline, we still need to append the last part
-    if start_index < len(text):
-        parts.append(text[start_index:])
-
-    return parts
 
 # Save some money and enter the character before translation
 def getSpeaker(speaker, pbar, filename):
@@ -609,7 +470,7 @@ def extractTranslation(translatedTextList, is_list):
 def countTokens(characters, system, user, history):
     inputTotalTokens = 0
     outputTotalTokens = 0
-    enc = tiktoken.encoding_for_model(MODEL)
+    enc = tiktoken.encoding_for_model('gpt-4')
     
     # Input
     if isinstance(history, list):

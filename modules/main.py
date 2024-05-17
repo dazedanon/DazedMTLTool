@@ -30,6 +30,7 @@ from modules.nscript import handleNScript
 from modules.wolf import handleWOLF
 from modules.wolf2 import handleWOLF2
 from modules.javascript import handleJavascript
+from modules.irissoft import handleIris
 from modules.regex import handleRegex
 
 # For GPT4 rate limit will be hit if you have more than 1 thread.
@@ -52,6 +53,7 @@ MODULES = [
     ["Wolf", "json", handleWOLF],
     ["Wolf", "txt", handleWOLF2],
     ["Javascript", "js", handleJavascript],
+    ["Iris", "txt", handleIris],
     ["Regex", "txt", handleRegex],
 ]
 
