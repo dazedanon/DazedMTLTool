@@ -57,22 +57,22 @@ POSITION = 0
 LEAVE = False
 
 # Dialogue / Scroll
-CODE101 = False
-CODE102 = False
-CODE122 = False
+CODE101 = True
+CODE102 = True
+CODE122 = True
 
 # Other
-CODE210 = False
-CODE300 = False
-CODE250 = False
+CODE210 = True
+CODE300 = True
+CODE250 = True
 
 # Database
-NPCFLAG = False
+NPCFLAG = True
 SCENARIOFLAG = True
-ITEMFLAG = False
-COLLECTIONFLAG = False
-ARMORFLAG = False
-OTHERFLAG = False
+ITEMFLAG = True
+COLLECTIONFLAG = True
+ARMORFLAG = True
+OTHERFLAG = True
 
 def handleWOLF(filename, estimate):
     global ESTIMATE, TOKENS
