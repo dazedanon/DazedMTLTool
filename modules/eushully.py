@@ -1,5 +1,6 @@
 # Libraries
-import os, re, textwrap, threading, time, traceback, tiktoken, openai
+import json, os, re, textwrap, threading, time, traceback, tiktoken, openai, csv
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from colorama import Fore
 from dotenv import load_dotenv
@@ -23,7 +24,7 @@ THREADS = int(os.getenv('threads'))
 LOCK = threading.Lock()
 WIDTH = int(os.getenv('width'))
 LISTWIDTH = int(os.getenv('listWidth'))
-NOTEWIDTH = 70
+NOTEWIDTH = int(os.getenv('noteWidth'))
 MAXHISTORY = 10
 ESTIMATE = ''
 TOKENS = [0, 0]
@@ -31,13 +32,11 @@ NAMESLIST = []
 NAMES = False    # Output a list of all the character names found
 BRFLAG = False   # If the game uses <br> instead
 FIXTEXTWRAP = True  # Overwrites textwrap
-IGNORETLTEXT = False    # Ignores all translated text.
-MISMATCH = []   # Lists files that throw a mismatch error (Length of GPT list response is wrong)
-
-#tqdm Globals
-BAR_FORMAT='{l_bar}{bar:10}{r_bar}{bar:-10b}'
-POSITION = 0
-LEAVE = False
+IGNORETLTEXT = True    # Ignores all translated text.
+MISMATCH = []   # Lists files that thdata a mismatch error (Length of GPT list response is wrong)
+BRACKETNAMES = False
+TOTALLINES = 0
+PBAR = None
 
 # Pricing - Depends on the model https://openai.com/pricing
 # Batch Size - GPT 3.5 Struggles past 15 lines per request. GPT4 struggles past 50 lines per request
@@ -46,19 +45,39 @@ if 'gpt-3.5' in MODEL:
     INPUTAPICOST = .002 
     OUTPUTAPICOST = .002
     BATCHSIZE = 10
+    FREQUENCY_PENALTY = 0.2
 elif 'gpt-4' in MODEL:
     INPUTAPICOST = .005
     OUTPUTAPICOST = .015
-    BATCHSIZE = 40
+    BATCHSIZE = 20
+    FREQUENCY_PENALTY = 0.1
 
-def handleOnscripter(filename, estimate):
-    global ESTIMATE
+#tqdm Globals
+BAR_FORMAT='{l_bar}{bar:10}{r_bar}{bar:-10b}'
+POSITION = 0
+LEAVE = False
+
+def handleEushully(filename, estimate):
+    global ESTIMATE, TOKENS
     ESTIMATE = estimate
 
-    if ESTIMATE:
+    if not ESTIMATE:
+        with open('translated/' + filename, 'w+t', newline='', encoding='utf-8') as writeFile:
+            # Translate
+            start = time.time()
+            translatedData = openFiles(filename, writeFile)
+            
+            # Print Result
+            end = time.time()
+            tqdm.write(getResultString(translatedData, end - start, filename))
+            with LOCK:
+                TOKENS[0] += translatedData[1][0]
+                TOKENS[1] += translatedData[1][1]
+    else:
+        # Translate
         start = time.time()
-        translatedData = openFiles(filename)
-
+        translatedData = openFilesEstimate(filename)
+        
         # Print Result
         end = time.time()
         tqdm.write(getResultString(translatedData, end - start, filename))
@@ -66,33 +85,27 @@ def handleOnscripter(filename, estimate):
             TOKENS[0] += translatedData[1][0]
             TOKENS[1] += translatedData[1][1]
 
-        # Print Total
-        totalString = getResultString(['', TOKENS, None], end - start, 'TOTAL')
 
-        # Print any errors on maps
-        if len(MISMATCH) > 0:
-            return totalString + Fore.RED + f'\nMismatch Errors: {MISMATCH}' + Fore.RESET
-        else:
-            return totalString
-    
+    # Print Total
+    totalString = getResultString(['', TOKENS, None], end - start, 'TOTAL')
+
+    # Print any errors on maps
+    if len(MISMATCH) > 0:
+        return totalString + Fore.RED + f'\nMismatch Errors: {MISMATCH}' + Fore.RESET
     else:
-        try:
-            with open('translated/' + filename, 'w', encoding='cp932', errors='ignore') as outFile:
-                start = time.time()
-                translatedData = openFiles(filename)
+        return totalString
 
-                # Print Result
-                end = time.time()
-                outFile.writelines(translatedData[0])
-                tqdm.write(getResultString(translatedData, end - start, filename))
-                with LOCK:
-                    TOKENS[0] += translatedData[1][0]
-                    TOKENS[1] += translatedData[1][1]
-        except Exception as e:
-            traceback.print_exc()
-            return 'Fail'
+def openFiles(filename, writeFile):
+    with open('files/' + filename, 'r', encoding='utf-8') as readFile, writeFile:
+        translatedData = parseCSV(readFile, writeFile, filename)
 
-    return getResultString(['', TOKENS, None], end - start, 'TOTAL')
+    return translatedData
+
+def openFilesEstimate(filename):
+    with open('files/' + filename, 'r', encoding='utf-8') as readFile:
+        translatedData = parseCSV(readFile, '', filename)
+
+    return translatedData
 
 def getResultString(translatedData, translationTime, filename):
     # File Print String
@@ -100,14 +113,14 @@ def getResultString(translatedData, translationTime, filename):
         Fore.YELLOW +\
         '[Input: ' + str(translatedData[1][0]) + ']'\
         '[Output: ' + str(translatedData[1][1]) + ']'\
+        '[Lines: ' + str(TOTALLINES) + ']'\
         '[Cost: ${:,.4f}'.format((translatedData[1][0] * .001 * INPUTAPICOST) +\
         (translatedData[1][1] * .001 * OUTPUTAPICOST)) + ']'
     timeString = Fore.BLUE + '[' + str(round(translationTime, 1)) + 's]'
 
-    if translatedData[2] == None:
+    if translatedData[2] is None:
         # Success
         return filename + ': ' + totalTokenstring + timeString + Fore.GREEN + u' \u2713 ' + Fore.RESET
-
     else:
         # Fail
         try:
@@ -117,127 +130,248 @@ def getResultString(translatedData, translationTime, filename):
             errorString = str(e) + Fore.RED
             return filename + ': ' + totalTokenstring + timeString + Fore.RED + u' \u2717 ' +\
                 errorString + Fore.RESET
-
-def openFiles(filename):
-    with open('files/' + filename, 'r', encoding='cp932') as readFile:
-        translatedData = parseOnscripter(readFile, filename)
-
-        # Delete lines marked for deletion
-        finalData = []
-        for line in translatedData[0]:
-            if line != '\\d\n':
-                finalData.append(line)
-        translatedData[0] = finalData
-    
-    return translatedData
-
-def parseOnscripter(readFile, filename):
+        
+def parseCSV(readFile, writeFile, filename):
     totalTokens = [0,0]
+    totalLines = 0
+    textHistory = []
+    global LOCK
 
-    # Read File into data
-    data = readFile.readlines()
+    # Get total for progress bar
+    totalLines = len(readFile.readlines())
+    readFile.seek(0)
+    data = []
 
-    # Create Progress Bar
-    with tqdm(bar_format=BAR_FORMAT, position=POSITION, leave=LEAVE) as pbar:
+    reader = csv.reader(readFile, delimiter=',',)
+    if not ESTIMATE:
+        writer = csv.writer(writeFile, delimiter=',', quoting=csv.QUOTE_ALL)
+    else:
+        writer = ''
+
+    # Write All Rows to Data
+    for row in reader:
+        data.append(row)
+
+    with tqdm(bar_format=BAR_FORMAT, position=POSITION, total=totalLines, leave=LEAVE) as pbar:
         pbar.desc=filename
-
+        pbar.total=totalLines
         try:
-            result = translateOnscripter(data, pbar, filename, [])
-            totalTokens[0] += result[0]
-            totalTokens[1] += result[1]
+            if 'SC' == filename[0:2] or 'SP' == filename[0:2]:
+                response = translateDialogue(data, pbar, writer, format, filename, [])
+                totalTokens[0] = response[0]
+                totalTokens[1] = response[1]
+            elif 'UI' == filename[0:2]:
+                response = translateUI(data, pbar, writer, format, filename, [])
+                totalTokens[0] = response[0]
+                totalTokens[1] = response[1]
         except Exception as e:
             traceback.print_exc()
-            return [data, totalTokens, e]
-    return [data, totalTokens, None]
+    return [reader, totalTokens, None]
 
-def translateOnscripter(data, pbar, filename, translatedList):
-    stringList = []
-    currentGroup = []
-    tokens = [0,0]
-    speaker = ''
-    voice = False
+def translateDialogue(data, pbar, writer, format, filename, translatedList):
     global LOCK, ESTIMATE
+    tokens = [0,0]
+    stringList = [None] * 2
     i = 0
 
-    while i < len(data):
-        voice = False
-        speaker = ''
-        if re.search(r'^caption|^event|^operation_caption|^manual|^mes\s\d+', data[i]):
-            # Lines
-            match = re.search(r'="(.+?)"', data[i])
-            if match == None:
-                match = re.search(r'mes\s\d+,"(.+?)"', data[i])
-            if match != None and match.group(1) != '':
-                originalString = match.group(1)
+    try:
+        # Set Variables
+        speakerColumn = 0
+        textSourceColumn = 3
+        textTargetColumn = 3
+
+        # Lists
+        dialogueList = []
+        setStringList = []
+
+        # Parse Data
+        while i in range(len(data)):
+            # Dialogue
+            if len(data[i][speakerColumn]) > 0 and data[i][speakerColumn][0].isupper() \
+            or 'show-text' in data[i][speakerColumn] \
+            or 'concat' in data[i][speakerColumn]:
+                # Speaker
+                speaker = ''
+                if data[i][speakerColumn][0].isupper():
+                    if speakerColumn != None:
+                        response = getSpeaker(data[i][speakerColumn])
+                        tokens[0] += response[1][0]
+                        tokens[1] += response[1][1]
+                        speaker = response[0]
+
+                # Dialogue
+                jaString = data[i][textSourceColumn]
+
+                # Remove Textwrap
+                jaString = jaString.replace('\n', ' ')
+                
+                # Replace Unicode
+                jaString = jaString.replace('\ue000', '...')
+
                 # Pass 1
                 if translatedList == []:
-                    # Grab Consecutive Strings
-                    jaString = match.group(1)
-                        
-                    # Remove any textwrap
-                    jaString = jaString.replace('\\n', ' ')
+                    # Add to list
+                    if speaker:
+                        dialogueList.append(f'[{speaker}]: {jaString}')
+                    else:
+                        dialogueList.append(f'[InnerVoice]: {jaString}')
+                    stringList[0] = dialogueList
 
-                    # Remove Furigana
-                    furiMatch = re.findall(r'({(.+?)\/(.+?)})', jaString)
-                    if furiMatch:
-                        for match in furiMatch:
-                            jaString = jaString.replace(match[0], match[2])
-
-                    # Add String
-                    stringList.append(jaString.strip())
-                
                 # Pass 2
                 else:
-                    # Get Text
-                    if translatedList:
+                    if translatedList[0]:
                         # Grab and Pop
-                        translatedText = translatedList[0]
-                        translatedList.pop(0)
+                        translatedText = translatedList[0][0]
+                        translatedList[0].pop(0)
 
                         # Set to None if empty list
-                        if len(translatedList) <= 0:
-                            translatedList = None
+                        if len(translatedList[0]) <= 0:
+                            translatedList[0] = None
 
-                        # Textwrap
-                        translatedText = textwrap.fill(translatedText, width=WIDTH)
-                        translatedText = translatedText.replace('\n', '\\n')
-                        translatedText = translatedText.replace('\"', '\'')
+                        # Remove speaker
+                        translatedText = re.sub(r'^\[(.+?)\]\s?[|:]\s?', '', translatedText)
 
                         # Set Data
-                        data[i] = data[i].replace(originalString, translatedText)
-                i += 1
+                        data[i][textTargetColumn] = f'{translatedText}'
+            
+            # Set String Command
+            if 'set-string' in data[i][speakerColumn]:
+                jaString = data[i][textSourceColumn]
+                
+                # Pass 1
+                if translatedList == []:
+                    setStringList.append(jaString)
+                    stringList[1] = setStringList
 
-            # Nothing relevant. Skip Line.
-            else:
-                i += 1
-        else:
+                # Pass 2
+                else:
+                    if len(translatedList) > 1 and translatedList[1]:
+                        # Grab and Pop
+                        translatedText = translatedList[1][0]
+                        translatedList[1].pop(0)
+
+                        # Set to None if empty list
+                        if len(translatedList[1]) <= 0:
+                            translatedList[1] = None
+
+                        # Textwrap
+                        translatedText = textwrap.fill(translatedText, WIDTH)
+                        
+                        # Set Data
+                        data[i][textTargetColumn] = f'{translatedText}'
+
+            # Iterate
             i += 1
 
-    # EOF
-    if len(stringList) > 0:
-        # Set Progress
-        pbar.total = len(stringList)
-        pbar.refresh()
-        
-        # Translate
-        response = translateGPT(stringList, '', True, pbar, filename)
-        tokens[0] += response[1][0]
-        tokens[1] += response[1][1]
-        translatedList = response[0]
+        # EOF
+        stringList = [x for x in stringList if x is not None]
+        if len(stringList) > 0:  
+            # Translate
+            pbar.total = 0
+            for i in range(len(stringList)):
+                # Set Progress
+                pbar.total += len(stringList[i])
+                pbar.refresh()
+                PBAR = pbar
+                response = translateGPT(stringList[i], '', True)
+                tokens[0] += response[1][0]
+                tokens[1] += response[1][1]
+                translatedList.append(response[0])
 
-        # Set Strings
-        if len(stringList) == len(translatedList):
-            translateOnscripter(data, pbar, filename, translatedList)
+            # Set Strings
+            if len(stringList) == len(translatedList):
+                translateDialogue(data, pbar, writer, format, filename, translatedList)
 
-        # Mismatch
-        else:
-            with LOCK:
-                if filename not in MISMATCH:
-                    MISMATCH.append(filename)
+        # Write all Data
+        with LOCK:
+            if not ESTIMATE:
+                for row in data:
+                    writer.writerow(row)
+
+    except Exception as e:
+        traceback.print_exc()
+    
     return tokens
 
+def translateUI(data, pbar, writer, format, filename, translatedList):
+    global LOCK, ESTIMATE
+    tokens = [0,0]
+    stringList = [None] * 1
+    i = 0
+
+    try:
+        # Lists
+        textList = []
+
+        # Parse Data
+        while i in range(len(data)):
+            # Text
+            for j in range(len(data[i])):
+                jaString = data[i][j]
+
+                # If Japanese Text, Translate it.
+                if not re.search(r'[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９]+', jaString):
+                    continue
+            
+                # Replace Unicode
+                jaString = jaString.replace('', '...')
+
+                # Pass 1
+                if translatedList == []:
+                    # Add to list
+                    textList.append(f'{jaString}')
+                    stringList[0] = textList
+
+                # Pass 2
+                else:
+                    if translatedList[0]:
+                        # Grab and Pop
+                        translatedText = translatedList[0][0]
+                        translatedList[0].pop(0)
+
+                        # Set to None if empty list
+                        if len(translatedList[0]) <= 0:
+                            translatedList[0] = None
+
+                        # Set Data
+                        if len(data[i]) > j + 1:
+                            data[i][j+1] = f'{translatedText}'
+
+            # Iterate
+            i += 1
+
+        # EOF
+        stringList = [x for x in stringList if x is not None]
+        if len(stringList) > 0:  
+            # Translate
+            pbar.total = 0
+            for i in range(len(stringList)):
+                # Set Progress
+                pbar.total += len(stringList[i])
+                pbar.refresh()
+                response = translateGPT(stringList[i], '', True)
+                tokens[0] += response[1][0]
+                tokens[1] += response[1][1]
+                translatedList.append(response[0])
+
+            # Set Strings
+            if len(stringList) == len(translatedList):
+                translateUI(data, pbar, writer, format, filename, translatedList)
+
+        # Write all Data
+        with LOCK:
+            if not ESTIMATE:
+                for row in data:
+                    writer.writerow(row)
+
+    except Exception as e:
+        traceback.print_exc()
+    
+    return tokens
+    
+
 # Save some money and enter the character before translation
-def getSpeaker(speaker, pbar, filename):
+def getSpeaker(speaker):
     match speaker:
         case 'ファイン':
             return ['Fine', [0,0]]
@@ -246,7 +380,7 @@ def getSpeaker(speaker, pbar, filename):
         case _:
             # Store Speaker
             if speaker not in str(NAMESLIST):
-                response = translateGPT(speaker, 'Reply with only the '+ LANGUAGE +' translation of the NPC name.', False, pbar, filename)
+                response = translateGPT(speaker, 'Reply with only the '+ LANGUAGE +' translation of the NPC name.', False)
                 response[0] = response[0].replace("'S", "'s")
                 speakerList = [speaker, response[0]]
                 NAMESLIST.append(speakerList)
@@ -381,7 +515,21 @@ def batchList(input_list, batch_size):
 
 def createContext(fullPromptFlag, subbedT):
     characters = 'Game Characters:\n\
-エル (El) - Female\n\
+クラウス (Klaus) - Male\n\
+ベアトリース (Beatrice) - Female\n\
+カミラ (Camilla) - Female\n\
+セルージュ (Cerouge) - Female\n\
+エルヴィール (Elvire) - Female\n\
+ヘルミィナ (Helmina) - Female\n\
+アンリエット (Henriette) - Female\n\
+ユリアーナ (Juliana) - Female\n\
+ルシエル (Luciel) - Female\n\
+メイズ (Maize) - Female\n\
+メイヴィスレイン (Mavislaine) - Female\n\
+ラムエル (Ramiel) - Female\n\
+レジーニア (Reginia) - Female\n\
+リリィ (Lily) - Female\n\
+エウクレイアさん (Ms. Eukleia) - Female\n\
 '
     
     system = PROMPT + VOCAB if fullPromptFlag else \
@@ -400,7 +548,7 @@ Output ONLY the {LANGUAGE} translation in the following format: `Translation: <{
     user = f'{subbedT}'
     return characters, system, user
 
-def translateText(characters, system, user, history):
+def translateText(characters, system, user, history, penalty):
     # Prompt
     msg = [{"role": "system", "content": system + characters}]
 
@@ -416,8 +564,8 @@ def translateText(characters, system, user, history):
     # Content to TL
     msg.append({"role": "user", "content": f'{user}'})
     response = openai.chat.completions.create(
-        temperature=0.1,
-        frequency_penalty=0.1,
+        temperature=0,
+        frequency_penalty=penalty,
         model=MODEL,
         messages=msg,
     )
@@ -431,7 +579,13 @@ def cleanTranslatedText(translatedText, varResponse):
         '〜': '~',
         'ッ': '',
         '。': '.',
-        'Placeholder Text': ''
+        '< ': '<',
+        '</ ': '</',
+        ' >': '>',
+        'Placeholder Text': '',
+        '- chan': '-chan',
+        '- kun': '-kun',
+        '- san': '-san',
         # Add more replacements as needed
     }
     for target, replacement in placeholders.items():
@@ -482,7 +636,7 @@ def countTokens(characters, system, user, history):
     inputTotalTokens += len(enc.encode(user))
 
     # Output
-    outputTotalTokens += round(len(enc.encode(user))*2)
+    outputTotalTokens += round(len(enc.encode(user))*3)
 
     return [inputTotalTokens, outputTotalTokens]
 
@@ -492,7 +646,9 @@ def combineList(tlist, text):
     return tlist[0]
 
 @retry(exceptions=Exception, tries=5, delay=5)
-def translateGPT(text, history, fullPromptFlag, pbar, filename):
+def translateGPT(text, history, fullPromptFlag):
+    global PBAR
+    
     mismatch = False
     totalTokens = [0, 0]
     if isinstance(text, list):
@@ -513,6 +669,8 @@ def translateGPT(text, history, fullPromptFlag, pbar, filename):
 
         # Things to Check before starting translation
         if not re.search(r'[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９]+', subbedT):
+            if PBAR is not None:
+                PBAR.update(len(tItem))
             continue
 
         # Create Message
@@ -526,7 +684,7 @@ def translateGPT(text, history, fullPromptFlag, pbar, filename):
             continue
 
         # Translating
-        response = translateText(characters, system, user, history)
+        response = translateText(characters, system, user, history, 0.02)
         translatedText = response.choices[0].message.content
         totalTokens[0] += response.usage.prompt_tokens
         totalTokens[1] += response.usage.completion_tokens
@@ -535,9 +693,10 @@ def translateGPT(text, history, fullPromptFlag, pbar, filename):
         translatedText = cleanTranslatedText(translatedText, varResponse)
         if isinstance(tItem, list):
             extractedTranslations = extractTranslation(translatedText, True)
+            tList[index] = extractedTranslations
             if len(tItem) != len(extractedTranslations):
                 # Mismatch. Try Again
-                response = translateText(characters, system, user, history)
+                response = translateText(characters, system, user, history, 0.2)
                 translatedText = response.choices[0].message.content
                 totalTokens[0] += response.usage.prompt_tokens
                 totalTokens[1] += response.usage.completion_tokens
@@ -546,17 +705,18 @@ def translateGPT(text, history, fullPromptFlag, pbar, filename):
                 translatedText = cleanTranslatedText(translatedText, varResponse)
                 if isinstance(tItem, list):
                     extractedTranslations = extractTranslation(translatedText, True)
-                    if len(tItem) == len(extractedTranslations):
-                        tList[index] = extractedTranslations
-                    else:
-                        MISMATCH.append(filename)
-            else:
-                tList[index] = extractedTranslations
+                    tList[index] = extractedTranslations
+                    if len(tItem) != len(extractedTranslations):
+                        mismatch = True # Just here for breakpoint
 
             # Create History
-            history = tList[index]  # Update history if we have a list
-            pbar.update(len(tList[index]))
-
+            with LOCK:
+                if PBAR is not None:
+                    PBAR.update(len(tItem))
+            if not mismatch:
+                history = extractedTranslations[-10:]  # Update history if we have a list
+            else:
+                history = text[-10:]
         else:
             # Ensure we're passing a single string to extractTranslation
             extractedTranslations = extractTranslation(translatedText, False)
