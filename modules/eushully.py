@@ -169,7 +169,7 @@ def parseCSV(readFile, writeFile, filename):
     return [reader, totalTokens, None]
 
 def translateDialogue(data, pbar, writer, format, filename, translatedList):
-    global LOCK, ESTIMATE
+    global LOCK, ESTIMATE, PBAR
     tokens = [0,0]
     stringList = [None] * 2
     i = 0
@@ -177,7 +177,7 @@ def translateDialogue(data, pbar, writer, format, filename, translatedList):
     try:
         # Set Variables
         speakerColumn = 0
-        textSourceColumn = 3
+        textSourceColumn = 1
         textTargetColumn = 3
 
         # Lists
@@ -252,7 +252,7 @@ def translateDialogue(data, pbar, writer, format, filename, translatedList):
 
                         # Set to None if empty list
                         if len(translatedList[1]) <= 0:
-                            translatedList[1] = None
+                            translatedList[1] = -1
 
                         # Textwrap
                         translatedText = textwrap.fill(translatedText, WIDTH)
@@ -281,12 +281,12 @@ def translateDialogue(data, pbar, writer, format, filename, translatedList):
             # Set Strings
             if len(stringList) == len(translatedList):
                 translateDialogue(data, pbar, writer, format, filename, translatedList)
-
-        # Write all Data
-        with LOCK:
-            if not ESTIMATE:
-                for row in data:
-                    writer.writerow(row)
+        else:
+            # Write all Data
+            with LOCK:
+                if not ESTIMATE:
+                    for row in data:
+                        writer.writerow(row)
 
     except Exception as e:
         traceback.print_exc()
