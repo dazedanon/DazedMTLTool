@@ -19,6 +19,7 @@ these values using an .env file, for an example see .env.example')
 from modules.rpgmakermvmz import handleMVMZ
 from modules.rpgmakerace import handleACE
 from modules.csv import handleCSV
+from modules.eushully import handleEushully
 from modules.alice import handleAlice
 from modules.tyrano import handleTyrano
 from modules.json import handleJSON
@@ -26,7 +27,7 @@ from modules.kansen import handleKansen
 from modules.lune import handleLune
 from modules.atelier import handleAtelier
 from modules.anim import handleAnim
-from modules.nscript import handleNScript
+from modules.nscript import handleOnscripter
 from modules.wolf import handleWOLF
 from modules.wolf2 import handleWOLF2
 from modules.javascript import handleJavascript
@@ -42,6 +43,7 @@ MODULES = [
     ["RPGMaker MV/MZ", "json", handleMVMZ],
     ["RPGMaker ACE", "yaml", handleACE],
     ["CSV (From Translator++)", "csv", handleCSV],
+    ["Eushully", "csv", handleEushully],
     ["Alice", "txt", handleAlice],
     ["Tyrano", "ks", handleTyrano],
     ["JSON", "json", handleJSON],
@@ -49,7 +51,7 @@ MODULES = [
     ["Lune", "json", handleLune],
     ["Atelier", "txt", handleAtelier],
     ["Anim", "json", handleAnim],
-    ["NScript", "txt", handleNScript],
+    ["NScript", "txt", handleOnscripter],
     ["Wolf", "json", handleWOLF],
     ["Wolf", "txt", handleWOLF2],
     ["Javascript", "js", handleJavascript],
