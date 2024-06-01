@@ -50,7 +50,7 @@ if 'gpt-3.5' in MODEL:
 elif 'gpt-4o' in MODEL:
     INPUTAPICOST = .005
     OUTPUTAPICOST = .015
-    BATCHSIZE = 50
+    BATCHSIZE = 20
     FREQUENCY_PENALTY = 0.1
 
 #tqdm Globals
@@ -394,7 +394,6 @@ def parseSystem(data, filename):
         termList = data['terms'][term]
         totalLines += len(termList)
     totalLines += len(data['game_title'])
-    totalLines += len(data['terms']['messages'])
     totalLines += len(data['variables'])
     totalLines += len(data['weapon_types'])
     totalLines += len(data['armor_types'])
@@ -1873,31 +1872,6 @@ def searchSystem(data, pbar):
         totalTokens[0] += response[1][0]
         totalTokens[1] += response[1][1]
         data['weapon_types'][i] = response[0].replace('\"', '').strip()
-        
-
-    # Variables (Optional ususally)
-    # for i in range(len(data['variables'])):
-    #     response = translateGPT(data['variables'][i], 'Reply with only the '+ LANGUAGE +' translation of the title', False)
-    #     totalTokens[0] += response[1][0]
-    #     totalTokens[1] += response[1][1]
-    #     data['variables'][i] = response[0].replace('\"', '').strip()
-    #     
-
-    # Messages
-    messages = (data['terms']['messages'])
-    for key, value in messages.items():
-        response = translateGPT(value, 'Reply with only the '+ LANGUAGE +' translation of the battle text.\nTranslate "常時ダッシュ" as "Always Dash"\nTranslate "次の%1まで" as Next %1.', False)
-        translatedText = response[0]
-
-        # Remove characters that may break scripts
-        charList = ['.', '\"', '\\n']
-        for char in charList:
-            translatedText = translatedText.replace(char, '')
-
-        totalTokens[0] += response[1][0]
-        totalTokens[1] += response[1][1]
-        messages[key] = translatedText
-        
     
     return totalTokens
 
@@ -2052,10 +2026,21 @@ def batchList(input_list, batch_size):
     return [input_list[i:i + batch_size] for i in range(0, len(input_list), batch_size)]
 
 def createContext(fullPromptFlag, subbedT):
-    characters = 'Game Characters:\n\
-葵 (Aoi) - Female\n\
-豪山剛 (Tsuyoshi Gouyama) - Male\n\
-'
+    characters = "Game Characters:\n\
+朱音 (Akane) - Female\n\
+満留 (Maru) - Female\n\
+ルイム (Ruimu) - Female\n\
+都子 (Miyako) - Female\n\
+たかし (Takashi) - Male\n\
+レヴァン (Revan) - Male\n\
+大海 (Taikai) - Female\n\
+桜花 (Ouka) - Female\n\
+烈火 (Rekka) - Female\n\
+よみこ (Yomiko) - Female\n\
+新 (Arata) - Female\n\
+ヴィルトルクス (Viltrex) - Female\n\
+光男 (Mitsuo) - Male\n\
+"
     
     system = PROMPT + VOCAB if fullPromptFlag else \
         f"\
