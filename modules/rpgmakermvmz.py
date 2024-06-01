@@ -48,7 +48,7 @@ if 'gpt-3.5' in MODEL:
 elif 'gpt-4o' in MODEL:
     INPUTAPICOST = .005
     OUTPUTAPICOST = .015
-    BATCHSIZE = 20
+    BATCHSIZE = 40
     FREQUENCY_PENALTY = 0.1
 
 #tqdm Globals
@@ -744,19 +744,33 @@ def searchCodes(page, pbar, jobList, filename):
                     i += 1
                     continue
 
-                # Check for Speaker
-                coloredSpeakerList = re.findall(r'^[\\]+[cC]\[[\d]+\](.+?)[\\]+[Cc]\[[\d]\]\\?\\?$', jaString)
-                if len(coloredSpeakerList) == 0:
-                    coloredSpeakerList = re.findall(r'^【(.*?)】$', jaString)
-                if len(coloredSpeakerList) != 0 and codeList[i+1]['code'] in [401, 405, -1]:
+                # Speaker Check
+                # Colors
+                speakerList = re.findall(r'^[\\]+[cC]\[[\d]+\](.+?)[\\]+[Cc]\[[\d]\]\\?\\?$', jaString)
+
+                # Brackets
+                if len(speakerList) == 0:
+                    speakerList = re.findall(r'^【(.*?)】$', jaString)
+
+                # None
+                if len(speakerList) == 0:
+                    if len(jaString) < 40 \
+                    and 'code' in codeList[i+1] \
+                    and codeList[i+1]['code'] in [401, 405, -1] \
+                    and len(codeList[i+1]['parameters']) > 0 \
+                    and len(codeList[i+1]['parameters'][0]) > 0:
+                        if codeList[i+1]['parameters'][0][0] in ['「', '"', '(', '（', '*', '[']:
+                            speakerList = re.findall(r'.+', jaString)
+
+                if len(speakerList) != 0 and codeList[i+1]['code'] in [401, 405, -1]:
                     # Get Speaker
-                    response = getSpeaker(coloredSpeakerList[0])
+                    response = getSpeaker(speakerList[0])
                     speaker = response[0]
                     totalTokens[0] += response[1][0]
                     totalTokens[1] += response[1][1]
 
                     # Set Data
-                    codeList[i]['parameters'][0] = jaString.replace(coloredSpeakerList[0], speaker)
+                    codeList[i]['parameters'][0] = jaString.replace(speakerList[0], speaker)
 
                     # Iterate to next string
                     i += 1
@@ -772,9 +786,11 @@ def searchCodes(page, pbar, jobList, filename):
                 # Join Up 401's into single string
                 if len(codeList) > i+1:
                     while codeList[i+1]['code'] in [401, 405, -1]:
-                        codeList[i]['parameters'] = []
-                        codeList[i]['code'] = -1
+                        if setData == True:
+                            codeList[i]['parameters'] = []
+                            codeList[i]['code'] = -1
                         i += 1
+                        j = i
 
                         # Only add if not empty
                         if len(codeList[i]['parameters']) > 0:
@@ -787,7 +803,7 @@ def searchCodes(page, pbar, jobList, filename):
 
                 # Format String
                 if len(currentGroup) > 0:
-                    finalJAString = ''.join(currentGroup).replace('？', '?')
+                    finalJAString = ' '.join(currentGroup).replace('？', '?')
                     oldjaString = finalJAString
 
                     # Check if Empty
@@ -796,7 +812,8 @@ def searchCodes(page, pbar, jobList, filename):
                         continue
 
                     # Set Back
-                    codeList[i]['parameters'] = [finalJAString]
+                    if setData == True:
+                        codeList[i]['parameters'] = [finalJAString]
 
                     ### \\n<Speaker>
                     nCase = None
@@ -888,6 +905,8 @@ def searchCodes(page, pbar, jobList, filename):
                     finalJAString = finalJAString.replace('。', '.')
                     finalJAString = re.sub(r'(\.{3}\.+)', '...', finalJAString)
                     finalJAString = finalJAString.replace('　', '')
+                    finalJAString = finalJAString.replace('」', '\"')
+                    finalJAString = finalJAString.replace('」', '\"')
 
                     ### Remove format codes
                     # Furigana
@@ -2044,8 +2063,7 @@ def batchList(input_list, batch_size):
 
 def createContext(fullPromptFlag, subbedT):
     characters = 'Game Characters:\n\
-葵 (Aoi) - Female\n\
-豪山剛 (Tsuyoshi Gouyama) - Male\n\
+グレイス (Grace) - Female\n\
 '
     
     system = PROMPT + VOCAB if fullPromptFlag else \
@@ -2098,6 +2116,8 @@ def cleanTranslatedText(translatedText, varResponse):
         '< ': '<',
         '</ ': '</',
         ' >': '>',
+        '「': '\"',
+        ' 」': '\"',
         'Placeholder Text': '',
         '- chan': '-chan',
         '- kun': '-kun',
