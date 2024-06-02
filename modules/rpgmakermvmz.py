@@ -48,7 +48,7 @@ if 'gpt-3.5' in MODEL:
 elif 'gpt-4o' in MODEL:
     INPUTAPICOST = .005
     OUTPUTAPICOST = .015
-    BATCHSIZE = 40
+    BATCHSIZE = 20
     FREQUENCY_PENALTY = 0.1
 
 #tqdm Globals
@@ -2150,7 +2150,7 @@ def extractTranslation(translatedTextList, is_list):
     pattern = r'`?<Line\d+>([\\]*.*?[\\]*?)<\/?Line\d+>`?'
     # If it's a batch (i.e., list), extract with tags; otherwise, return the single item.
     if is_list:
-        matchList = re.findall(pattern, translatedTextList)
+        matchList = re.findall(pattern, translatedTextList, flags=re.DOTALL)
         return matchList
     else:
         matchList = re.findall(pattern, translatedTextList)
