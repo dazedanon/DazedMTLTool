@@ -43,7 +43,7 @@ MODULES = [
     ["RPGMaker MV/MZ", "json", handleMVMZ],
     ["RPGMaker ACE", "yaml", handleACE],
     ["CSV (From Translator++)", "csv", handleCSV],
-    ["Eushully", "csv", handleEushully],
+    ["Eushully", "txt", handleEushully],
     ["Alice", "txt", handleAlice],
     ["Tyrano", "ks", handleTyrano],
     ["JSON", "json", handleJSON],

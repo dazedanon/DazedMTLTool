@@ -597,7 +597,7 @@ def elongateCharacters(text):
     return re.sub(pattern, repl, text)
 
 def extractTranslation(translatedTextList, is_list):
-    pattern = r'`?<Line\d+>([\\]*.*?[\\]*?)<\/?Line\d+>`?'
+    pattern = r'`?<[Ll]ine\d+>([\\]*.*?[\\]*?)<\/?[Ll]ine\d+>`?'
     # If it's a batch (i.e., list), extract with tags; otherwise, return the single item.
     if is_list:
         matchList = re.findall(pattern, translatedTextList)
