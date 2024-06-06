@@ -162,6 +162,7 @@ def translatePlugin(data, pbar, filename, translatedList):
     while i < len(data):
         voice = False
         speaker = ''
+        newline = r'\\\\n'
 
         """
         Plugin List
@@ -176,14 +177,14 @@ def translatePlugin(data, pbar, filename, translatedList):
         TODO TL all of the above in one call instead of multiple
         """
         # Lines
-        matchList = re.findall(r'[\\]+"PlaceInformation[\\]+":[\\]+"(.*?)[\\]+"', data[i])
+        matchList = re.findall(r'Latest Title:.*?\].*?[\\]+C.*?[\\]+n(.*?)[\\]+n?[\\]+n[\\]+C', data[i])
         if len(matchList) > 0:
             for match in matchList:
                 # Save Original String
                 originalString = match
                 
                 # Remove any textwrap
-                match = match.replace(r'\\\\\\\\n', ' ')
+                match = match.replace(newline, ' ')
 
                 # Pass 1
                 if translatedList == []:            
@@ -204,10 +205,11 @@ def translatePlugin(data, pbar, filename, translatedList):
 
                         # Textwrap
                         translatedText = textwrap.fill(translatedText, width=WIDTH)
-                        translatedText = translatedText.replace('\n', r'\\\\\\\\n')
+                        translatedText = translatedText.replace('\n', newline)
 
                         # Replace Single Quotes
-                        translatedText = translatedText.replace("'", "\\'")
+                        translatedText = translatedText.replace("'", "\'")
+                        translatedText = translatedText.replace('"', "\'")
 
                         # Set Data
                         data[i] = data[i].replace(originalString, translatedText)
@@ -221,7 +223,7 @@ def translatePlugin(data, pbar, filename, translatedList):
         pbar.refresh()
         
         # Translate
-        response = translateGPT(stringList, 'The following lines are quest locations', True, pbar, filename)
+        response = translateGPT(stringList, '', True, pbar, filename)
         tokens[0] += response[1][0]
         tokens[1] += response[1][1]
         translatedList = response[0]
@@ -382,7 +384,7 @@ def batchList(input_list, batch_size):
 
 def createContext(fullPromptFlag, subbedT):
     characters = 'Game Characters:\n\
-ティアナ (Tiana) - Female\n\
+ティアナ (Teana) - Female\n\
 キャサリン (Catherine) - Female\n\
 '
     
