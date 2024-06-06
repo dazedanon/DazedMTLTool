@@ -33,6 +33,7 @@ from modules.wolf2 import handleWOLF2
 from modules.javascript import handleJavascript
 from modules.irissoft import handleIris
 from modules.regex import handleRegex
+from modules.rpgmakerplugin import handlePlugin
 
 # For GPT4 rate limit will be hit if you have more than 1 thread.
 # 1 Thread for each file. Controls how many files are worked on at once.
@@ -41,6 +42,7 @@ THREADS = int(os.getenv('fileThreads'))
 # [Display name, file extension, handle function]
 MODULES = [
     ["RPGMaker MV/MZ", "json", handleMVMZ],
+    ["RPGMaker Plugins", "js", handlePlugin],
     ["RPGMaker ACE", "yaml", handleACE],
     ["CSV (From Translator++)", "csv", handleCSV],
     ["Eushully", "txt", handleEushully],
