@@ -29,10 +29,11 @@ MAXHISTORY = 10
 ESTIMATE = ''
 TOKENS = [0, 0]
 NAMESLIST = []
+FIRSTLINESPEAKERS = False    # If 1st line of dialogue is a speaker, set to True 
 NAMES = False    # Output a list of all the character names found
 BRFLAG = False   # If the game uses <br> instead
 FIXTEXTWRAP = True  # Overwrites textwrap
-IGNORETLTEXT = True    # Ignores all translated text.
+IGNORETLTEXT = False    # Ignores all translated text.
 MISMATCH = []   # Lists files that throw a mismatch error (Length of GPT list response is wrong)
 BRACKETNAMES = False
 PBAR = None
@@ -48,7 +49,7 @@ if 'gpt-3.5' in MODEL:
 elif 'gpt-4o' in MODEL:
     INPUTAPICOST = .005
     OUTPUTAPICOST = .015
-    BATCHSIZE = 20
+    BATCHSIZE = 50
     FREQUENCY_PENALTY = 0.1
 
 #tqdm Globals
@@ -57,12 +58,12 @@ POSITION = 0
 LEAVE = False
 
 # Dialogue / Scroll
-CODE401 = True
-CODE405 = True
+CODE401 = False
+CODE405 = False
 CODE408 = False
 
 # Choices
-CODE102 = True
+CODE102 = False
 
 # Variables
 CODE122 = False
@@ -78,7 +79,7 @@ CODE356 = False
 CODE320 = False
 CODE324 = False
 CODE111 = False
-CODE108 = False
+CODE108 = True
 
 def handleMVMZ(filename, estimate):
     global ESTIMATE, TOKENS
@@ -479,7 +480,8 @@ def searchNames(data, pbar, context):
             if context in ['Armors', 'Weapons', 'Items']:
                 if len(nameList) < BATCHSIZE:
                     nameList.append(data[i]['name'])
-                    descriptionList.append(data[i]['description'].replace('\n', ' '))
+                    if 'description' in data[i]:
+                        descriptionList.append(data[i]['description'].replace('\n', ' '))
                     if '<hint:' in data[i]['note']:
                         tokensResponse = translateNote(data[i], r'<hint:(.*?)>')
                         totalTokens[0] += tokensResponse[0]
@@ -551,7 +553,9 @@ def searchNames(data, pbar, context):
             if context in ['Enemies', 'Classes', 'MapInfos']:
                 if len(nameList) < BATCHSIZE:
                     nameList.append(data[i]['name'])
-                    
+                    # tokensResponse = translateNote(data[i], r'.+')
+                    # totalTokens[0] += tokensResponse[0]
+                    # totalTokens[1] += tokensResponse[1]
                     i += 1
                 else:
                     batchFull = True
@@ -627,7 +631,8 @@ def searchNames(data, pbar, context):
                         else:
                             # Get Text
                             data[j]['name'] = translatedNameBatch[0]
-                            data[j]['description'] = textwrap.fill(translatedDescriptionBatch[0], LISTWIDTH)
+                            if 'description' in data[j]:
+                                data[j]['description'] = textwrap.fill(translatedDescriptionBatch[0], LISTWIDTH)
                             translatedNameBatch.pop(0)
                             translatedDescriptionBatch.pop(0)
 
@@ -683,12 +688,16 @@ def searchNames(data, pbar, context):
 
 def searchCodes(page, pbar, jobList, filename):
     if len(jobList) > 0:
-        docList = jobList[0]
-        scriptList = jobList[1]
+        list401 = jobList[0]
+        list122 = jobList[1]
+        list355655 = jobList[2]
+        list108 = jobList[3]
         setData = True
     else:
-        docList = []
-        scriptList = []
+        list401 = []
+        list122 = []
+        list355655 = []
+        list108 = []
         setData = False
     currentGroup = []
     textHistory = []
@@ -753,7 +762,7 @@ def searchCodes(page, pbar, jobList, filename):
                     speakerList = re.findall(r'^【(.*?)】$', jaString)
 
                 # None
-                if len(speakerList) == 0:
+                if len(speakerList) == 0 and FIRSTLINESPEAKERS is True:
                     if len(jaString) < 40 \
                     and 'code' in codeList[i+1] \
                     and codeList[i+1]['code'] in [401, 405, -1] \
@@ -848,10 +857,6 @@ def searchCodes(page, pbar, jobList, filename):
                             codeList[i]['parameters'] = [finalJAString + nametag]
                         elif nCase == 1:
                             codeList[i]['parameters'] = [nametag + finalJAString]
-                            
-                    ### Brackets
-                    matchList = re.findall\
-                        (r'^([\\]+[cC]\[[0-9]+\]【?(.+?)】?[\\]+[cC]\[[0-9]+\])|^(【(.+)】)', finalJAString)  
                     
                     # Handle both cases of the regex  
                     if len(matchList) != 0 and BRACKETNAMES is True:
@@ -949,11 +954,11 @@ def searchCodes(page, pbar, jobList, filename):
                     # 1st Passthrough (Grabbing Data)
                     if setData == False:
                         if speaker == '' and finalJAString != '':
-                            docList.append(finalJAString)
+                            list401.append(finalJAString)
                         elif finalJAString != '':
-                            docList.append(f'[{speaker}]: {finalJAString}')
+                            list401.append(f'[{speaker}]: {finalJAString}')
                         else:
-                            docList.append(speaker)
+                            list401.append(speaker)
                         speaker = ''
                         match = []
                         currentGroup = []
@@ -962,8 +967,8 @@ def searchCodes(page, pbar, jobList, filename):
                     # 2nd Passthrough (Setting Data) 
                     else:
                         # Grab Translated String
-                        if len(docList) > 0:
-                            translatedText = docList[0]
+                        if len(list401) > 0:
+                            translatedText = list401[0]
                             
                             # Remove speaker
                             if speaker != '':
@@ -1011,12 +1016,12 @@ def searchCodes(page, pbar, jobList, filename):
                             match = []
                             currentGroup = []
                             syncIndex = i + 1
-                            docList.pop(0)                                
+                            list401.pop(0)                                
 
             ## Event Code: 122 [Set Variables]
             if 'code' in codeList[i] and codeList[i]['code'] == 122 and CODE122 is True:
                 # This is going to be the var being set. (IMPORTANT)
-                if codeList[i]['parameters'][0] not in list(range(0, 20)):
+                if codeList[i]['parameters'][0] not in list(range(0, 100)):
                     i += 1
                     continue
                   
@@ -1039,13 +1044,13 @@ def searchCodes(page, pbar, jobList, filename):
 
                     # Pass 1
                     if setData == False:
-                        scriptList.append(finalJAString)
+                        list122.append(finalJAString)
 
                     # Pass 2
                     else:  
-                        if len(scriptList) > 0:            
+                        if len(list122) > 0:            
                             # Grab and Replace
-                            translatedText = scriptList[0]
+                            translatedText = list122[0]
                             translatedText = jaString.replace(jaString, translatedText)
 
                             # Remove characters that may break scripts
@@ -1060,7 +1065,7 @@ def searchCodes(page, pbar, jobList, filename):
 
                             # Set
                             codeList[i]['parameters'][4] = translatedText
-                            scriptList.pop(0)
+                            list122.pop(0)
 
             ## Event Code: 357 [Picture Text] [Optional]
             if 'code' in codeList[i] and codeList[i]['code'] == 357 and CODE357 is True:
@@ -1227,70 +1232,22 @@ def searchCodes(page, pbar, jobList, filename):
 
             ## Event Code: 355 or 655 Scripts [Optional]
             if 'code' in codeList[i] and (codeList[i]['code'] == 355 or codeList[i]['code'] == 655) and CODE355655 is True:
-                matchList = []
                 jaString = codeList[i]['parameters'][0]
+                
+                # Var Text
+                if 'text =' in jaString or '$gameVariables.setValue(' in jaString:
+                    # Pass 1
+                    if setData is False:
+                        list355655.append(jaString)
 
-                # Skip Console Logs
-                if 'console.log' in jaString:
-                    i += 1
-                    continue
-                # Skip if
-                if 'if(' in jaString:
-                    i += 1
-                    continue
-                # Skip if
-                if 'list' in jaString:
-                    i += 1
-                    continue
+                    # Pass 2
+                    else:  
+                        # Grab and Replace
+                        translatedText = list355655[0]
 
-                stringList = []
-                matchList = re.findall(r"this.BLogAdd\(.+?\"(.+?)\"", jaString)
-                if len(matchList) > 0:
-                    for match in matchList:
-                        # Remove Textwrap
-                        match = match.replace('\\n', ' ')
-                        stringList.append(match)
-
-                # If there isn't any Japanese in the text just skip
-                # if not re.search(r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴー]+', jaString):
-                #     continue
-
-                # Skip These
-                # if 'this.' in jaString:
-                #     continue
-
-                # Need to remove outside code and put it back later
-                # matchList = re.findall(r'.+"(.*?)".*[;,]$', jaString)
-
-                # Want to translate this script
-                if 'this.BLogAdd' not in jaString:
-                    i += 1
-                    continue
-
-                # Translate
-                if len(matchList) > 0:
-
-                    response = translateGPT(stringList, 'Reply with the '+ LANGUAGE +' translation of the text.', True)
-                    totalTokens[0] += response[1][0]
-                    totalTokens[1] += response[1][1]
-                    translatedTextList = response[0]
-                    translatedText = jaString
-                    
-                    # Replace Each Instance
-                    for j in range(len(translatedTextList)):
-                        # Remove characters that may break scripts
-                        translatedTextList[j] = translatedTextList[j].replace('"', r'\"')
-                        translatedTextList[j] = translatedTextList[j].replace("'", r"\'")
-                        translatedTextList[j] = translatedTextList[j].replace(".", r"\.")
-                        
-                        # Wordwrap
-                        translatedTextList[j] = textwrap.fill(translatedTextList[j], width=WIDTH).replace('\n', '\\n')
-
-                        # Replace Instance
-                        translatedText = translatedText.replace(matchList[j], translatedTextList[j])
-
-                    # Set Data
-                    codeList[i]['parameters'][0] = translatedText
+                        # Set
+                        codeList[i]['parameters'][0] = translatedText
+                        list355655.pop(0)                
 
             ## Event Code: 408 (Script)
             if 'code' in codeList[i] and (codeList[i]['code'] == 408) and CODE408 is True:
@@ -1356,12 +1313,15 @@ def searchCodes(page, pbar, jobList, filename):
                 # Need to remove outside code and put it back later
                 matchList = re.findall(regex, jaString)
 
-                # Translate
-                if len(matchList) > 0:
-                    response = translateGPT(matchList[0], 'Reply with the '+ LANGUAGE +' translation of the text.', False)
-                    totalTokens[0] += response[1][0]
-                    totalTokens[1] += response[1][1]
-                    translatedText = response[0]
+                # Pass 1
+                if setData is False:
+                    list108.append(matchList[0])
+
+                # Pass 2
+                else:
+                    # Grab and Replace
+                    translatedText = list108[0]
+                    list108.pop(0)      
 
                     # Remove characters that may break scripts
                     charList = ['.', '\"']
@@ -1698,18 +1658,20 @@ def searchCodes(page, pbar, jobList, filename):
                 i += 1
 
         # End of the line
-        docListTL = []
-        scriptListTL = []
+        list401TL = []
+        list122TL = []
+        list355655TL = []
+        list108TL = []
         setData = False
         PBAR = pbar
         
         # 401
-        if len(docList) > 0:
-            response = translateGPT(docList, textHistory, True)
-            docListTL = response[0]
+        if len(list401) > 0:
+            response = translateGPT(list401, textHistory, True)
+            list401TL = response[0]
             totalTokens[0] += response[1][0]
             totalTokens[1] += response[1][1]
-            if len(docListTL) != len(docList):
+            if len(list401TL) != len(list401):
                 with LOCK:
                     if filename not in MISMATCH:
                         MISMATCH.append(filename)
@@ -1717,12 +1679,38 @@ def searchCodes(page, pbar, jobList, filename):
                 setData = True
 
         # 122
-        if len(scriptList) > 0:
-            response = translateGPT(scriptList, textHistory, True)
-            scriptListTL = response[0]
+        if len(list122) > 0:
+            response = translateGPT(list122, textHistory, True)
+            list122TL = response[0]
             totalTokens[0] += response[1][0]
             totalTokens[1] += response[1][1]
-            if len(scriptListTL) != len(scriptList):
+            if len(list122TL) != len(list122):
+                with LOCK:
+                    if filename not in MISMATCH:
+                        MISMATCH.append(filename)
+            else:
+                setData = True
+
+        # 355/655
+        if len(list355655) > 0:
+            response = translateGPT(list355655, textHistory, True)
+            list355655TL = response[0]
+            totalTokens[0] += response[1][0]
+            totalTokens[1] += response[1][1]
+            if len(list355655TL) != len(list355655):
+                with LOCK:
+                    if filename not in MISMATCH:
+                        MISMATCH.append(filename)
+            else:
+                setData = True
+
+        # 108
+        if len(list108) > 0:
+            response = translateGPT(list108, textHistory, True)
+            list108TL = response[0]
+            totalTokens[0] += response[1][0]
+            totalTokens[1] += response[1][1]
+            if len(list108TL) != len(list108):
                 with LOCK:
                     if filename not in MISMATCH:
                         MISMATCH.append(filename)
@@ -1731,7 +1719,7 @@ def searchCodes(page, pbar, jobList, filename):
 
         # Start Pass 2
         if setData:
-            searchCodes(page, pbar, [docListTL, scriptListTL], filename)
+            searchCodes(page, pbar, [list401TL, list122TL, list355655TL, list108TL], filename)
 
         # Delete all -1 codes
         codeListFinal = []
@@ -2063,7 +2051,8 @@ def batchList(input_list, batch_size):
 
 def createContext(fullPromptFlag, subbedT):
     characters = 'Game Characters:\n\
-グレイス (Grace) - Female\n\
+ティアナ (Tiana) - Female\n\
+キャサリン (Catherine) - Female\n\
 '
     
     system = PROMPT + VOCAB if fullPromptFlag else \
