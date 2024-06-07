@@ -2092,10 +2092,8 @@ def cleanTranslatedText(translatedText, varResponse):
         '< ': '<',
         '</ ': '</',
         ' >': '>',
+        '- ': '-',
         'Placeholder Text': '',
-        '- chan': '-chan',
-        '- kun': '-kun',
-        '- san': '-san',
         # Add more replacements as needed
     }
     for target, replacement in placeholders.items():
