@@ -162,7 +162,7 @@ def translatePlugin(data, pbar, filename, translatedList):
     while i < len(data):
         voice = False
         speaker = ''
-        newline = r'\\\\n'
+        newline = r'\n'
 
         """
         Plugin List
@@ -177,7 +177,7 @@ def translatePlugin(data, pbar, filename, translatedList):
         TODO TL all of the above in one call instead of multiple
         """
         # Lines
-        matchList = re.findall(r'Latest Title:.*?\].*?[\\]+C.*?[\\]+n(.*?)[\\]+n?[\\]+n[\\]+C', data[i])
+        matchList = re.findall(r'.*?[^[]"(.*)"', data[i])
         if len(matchList) > 0:
             for match in matchList:
                 # Save Original String
@@ -435,7 +435,13 @@ def cleanTranslatedText(translatedText, varResponse):
         '〜': '~',
         'ッ': '',
         '。': '.',
-        'Placeholder Text': ''
+        '< ': '<',
+        '</ ': '</',
+        ' >': '>',
+        '「': '\"',
+        ' 」': '\"',
+        '- ': '-',
+        'Placeholder Text': '',
         # Add more replacements as needed
     }
     for target, replacement in placeholders.items():
