@@ -29,7 +29,7 @@ MAXHISTORY = 10
 ESTIMATE = ''
 TOKENS = [0, 0]
 NAMESLIST = []
-FIRSTLINESPEAKERS = False    # If 1st line of dialogue is a speaker, set to True 
+FIRSTLINESPEAKERS = True    # If 1st line of dialogue is a speaker, set to True 
 NAMES = False    # Output a list of all the character names found
 BRFLAG = False   # If the game uses <br> instead
 FIXTEXTWRAP = True  # Overwrites textwrap
@@ -79,7 +79,7 @@ CODE356 = False
 CODE320 = False
 CODE324 = False
 CODE111 = False
-CODE108 = True
+CODE108 = False
 
 def handleMVMZ(filename, estimate):
     global ESTIMATE, TOKENS
@@ -229,7 +229,11 @@ def parseMap(data, filename):
                 if event is not None:
                     # This translates ID of events. (May break the game)
                     if '<namePop:' in event['note']:
-                        response = translateNoteOmitSpace(event, r'<namePop:(.*?)\s?>.+')
+                        response = translateNoteOmitSpace(event, r'<namePop:(.*?)\s?>.*')
+                        totalTokens[0] += response[0]
+                        totalTokens[1] += response[1]
+                    if '<LB:' in event['note']:
+                        response = translateNoteOmitSpace(event, r'<LB:(.*?)\s?>.*')
                         totalTokens[0] += response[0]
                         totalTokens[1] += response[1]
 
@@ -1114,6 +1118,52 @@ def searchCodes(page, pbar, jobList, filename):
                         if not re.search(r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴー]+', jaString):
                             i += 1
                             continue
+
+                        # Remove any textwrap & TL
+                        jaString = re.sub(r'\n', ' ', jaString)
+                        response = translateGPT(jaString, '', False)
+                        translatedText = response[0]
+                        totalTokens[0] += response[1][0]
+                        totalTokens[1] += response[1][1]
+
+                        # Textwrap & Set
+                        translatedText = textwrap.fill(translatedText, width=WIDTH)
+                        codeList[i]['parameters'][3][argVar] = translatedText
+                        pbar.update(1)
+
+                if 'TorigoyaMZ_NotifyMessage' in headerString:
+                    argVar = 'message'
+                    ### Message Text First
+                    if argVar in codeList[i]['parameters'][3]:
+                        jaString = codeList[i]['parameters'][3][argVar]
+
+                        # If there isn't any Japanese in the text just skip
+                        if not re.search(r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴー]+', jaString):
+                            i += 1
+                            continue
+
+                        # Remove any textwrap & TL
+                        jaString = re.sub(r'\n', ' ', jaString)
+                        response = translateGPT(jaString, '', False)
+                        translatedText = response[0]
+                        totalTokens[0] += response[1][0]
+                        totalTokens[1] += response[1][1]
+
+                        # Textwrap & Set
+                        translatedText = textwrap.fill(translatedText, width=WIDTH)
+                        codeList[i]['parameters'][3][argVar] = translatedText
+                        pbar.update(1)
+
+                if '_TMLogWindowMZ' in headerString:
+                    argVar = 'text'
+                    ### Message Text First
+                    if argVar in codeList[i]['parameters'][3]:
+                        jaString = codeList[i]['parameters'][3][argVar]
+
+                        # If there isn't any Japanese in the text just skip
+                        # if not re.search(r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴー]+', jaString):
+                        #     i += 1
+                        #     continue
 
                         # Remove any textwrap & TL
                         jaString = re.sub(r'\n', ' ', jaString)
@@ -2051,8 +2101,7 @@ def batchList(input_list, batch_size):
 
 def createContext(fullPromptFlag, subbedT):
     characters = 'Game Characters:\n\
-ティアナ (Tiana) - Female\n\
-キャサリン (Catherine) - Female\n\
+カエデ (Kaede) - Female\n\
 '
     
     system = PROMPT + VOCAB if fullPromptFlag else \
