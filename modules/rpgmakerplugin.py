@@ -177,7 +177,7 @@ def translatePlugin(data, pbar, filename, translatedList):
         TODO TL all of the above in one call instead of multiple
         """
         # Lines
-        matchList = re.findall(r'.*?[^[]"(.*)"', data[i])
+        matchList = re.findall(r'\\"SpotName[\\]+":[\\]+"(.*?)[\\]+"', data[i])
         if len(matchList) > 0:
             for match in matchList:
                 # Save Original String
@@ -249,7 +249,7 @@ def getSpeaker(speaker, pbar, filename):
         case _:
             # Store Speaker
             if speaker not in str(NAMESLIST):
-                response = translateGPT(speaker, 'Reply with only the '+ LANGUAGE +' translation of the NPC name.', False, pbar, filename)
+                response = translateGPT(speaker, 'Reply with only the '+ LANGUAGE +' translation of the Location name.', False, pbar, filename)
                 response[0] = response[0].replace("'S", "'s")
                 speakerList = [speaker, response[0]]
                 NAMESLIST.append(speakerList)
