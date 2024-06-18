@@ -539,6 +539,7 @@ def searchDB(events, pbar, jobList, filename):
     totalTokens = [0, 0]
     initialJAString = ''
     tableList = events
+    font = '\\f[18]'
     global LOCK
     global NAMESLIST
     global MISMATCH
@@ -674,27 +675,50 @@ def searchDB(events, pbar, jobList, filename):
                             scenarioList[2].pop(0)
 
             # Grab Items
-            if table['name'] == '道具' and ITEMFLAG == True:
+            if table['name'] == 'アイテム' and ITEMFLAG == True:
                 for item in table['data']:                                            
                     dataList = item['data']
 
                     # Parse
-                    if '名前' in dataList[0].get('name') and dataList[0].get('value') != '':
-                        # Pass 1 (Grab Data)
-                        if setData == False:
-                            itemList[0].append(dataList[0].get('value'))
-                            itemList[1].append(dataList[20].get('value').replace('\n', ' '))
-                            itemList[2].append(dataList[21].get('value').replace('\n', ' '))
+                    for j in range(len(dataList)):
+                        # Name
+                        if 'アイテム名' in dataList[j].get('name'):
+                            # Pass 1 (Grab Data)
+                            if setData == False:
+                                if dataList[j].get('value') != '':
+                                    itemList[0].append(dataList[0].get('value'))
 
-                        # Pass 2 (Set Data)
-                        else:
-                            dataList[0].update({'value': itemList[0][0]})
-                            itemList[0].pop(0)
-                            dataList[20].update({'value': itemList[1][0]})
-                            itemList[1].pop(0)
-                            itemList[2][0] = textwrap.fill(itemList[2][0], LISTWIDTH)
-                            dataList[21].update({'value': itemList[2][0]})
-                            itemList[2].pop(0)
+                            # Pass 2 (Set Data)
+                            else:
+                                if dataList[j].get('value') != '':
+                                    dataList[j].update({'value': itemList[0][0]})
+                                    itemList[0].pop(0)
+                    
+                        # Description
+                        if '説明文' in dataList[j].get('name'):
+                            # Pass 1 (Grab Data)
+                            if setData == False:
+                                if dataList[j].get('value') != '':
+                                    # Remove Textwrap
+                                    jaString = dataList[j].get('value')
+                                    jaString = jaString.replace('\n', ' ')
+                                    jaString = jaString.replace('\r', '')
+                                    jaString = re.sub(r'[\\]+f\[\d+\]', '', jaString)
+
+                                    # Append Data
+                                    itemList[1].append(jaString)
+
+                            # Pass 2 (Set Data)
+                            else:
+                                if dataList[j].get('value') != '':
+                                    # Textwrap
+                                    translateText = itemList[1][0]
+                                    translateText = textwrap.fill(translateText, LISTWIDTH)
+                                    translateText = font + translateText
+
+                                    # Set Data
+                                    dataList[j].update({'value': translateText})
+                                    itemList[1].pop(0)
 
             # Grab Armors
             if table['name'] == '防具' and ARMORFLAG == True:
@@ -720,32 +744,50 @@ def searchDB(events, pbar, jobList, filename):
                                 armorList[1].pop(0)
 
             # Grab Other
-            if table['name'] == 'ダンジョン敵' and OTHERFLAG == True:
+            if table['name'] == '技能' and OTHERFLAG == True:
                 for other in table['data']:                                            
                     dataList = other['data']
 
                     # Parse
-                    if '名前' in dataList[0].get('name'):
-                        # Pass 1 (Grab Data)
-                        if setData == False:
-                            if dataList[0].get('value') != '':
-                                otherList[0].append(dataList[0].get('value'))
-                            # if dataList[1].get('value') != '':
-                            #     otherList[1].append('Taro' + dataList[1].get('value'))
-                            # if dataList[2].get('value') != '':
-                            #     otherList[2].append('Taro' + dataList[2].get('value'))
+                    for j in range(len(dataList)):
+                        # Name
+                        if '技能の名前' in dataList[j].get('name'):
+                            # Pass 1 (Grab Data)
+                            if setData == False:
+                                if dataList[j].get('value') != '':
+                                    otherList[0].append(dataList[0].get('value'))
 
-                        # Pass 2 (Set Data)
-                        else:
-                            if dataList[0].get('value') != '':
-                                dataList[0].update({'value': otherList[0][0]})
-                                otherList[0].pop(0)
-                            # if dataList[1].get('value') != '':
-                            #     dataList[1].update({'value': otherList[1][0].replace('Taro', '')})
-                            #     otherList[1].pop(0)
-                            # if dataList[2].get('value') != '':
-                            #     dataList[2].update({'value': otherList[2][0].replace('Taro', '')})
-                            #     otherList[2].pop(0)
+                            # Pass 2 (Set Data)
+                            else:
+                                if dataList[j].get('value') != '':
+                                    dataList[j].update({'value': otherList[0][0]})
+                                    otherList[0].pop(0)
+                    
+                        # Description
+                        if '説明' in dataList[j].get('name'):
+                            # Pass 1 (Grab Data)
+                            if setData == False:
+                                if dataList[j].get('value') != '':
+                                    # Remove Textwrap & Font
+                                    jaString = dataList[j].get('value')
+                                    jaString = jaString.replace('\n', ' ')
+                                    jaString = jaString.replace('\r', '')
+                                    jaString = re.sub(r'[\\]+f\[\d+\]', '', jaString)
+
+                                    # Append Data
+                                    otherList[1].append(jaString)
+
+                            # Pass 2 (Set Data)
+                            else:
+                                if dataList[j].get('value') != '':
+                                    # Add Textwrap & Font
+                                    translateText = otherList[1][0]
+                                    translateText = textwrap.fill(translateText, LISTWIDTH)
+                                    translateText = font + translateText
+
+                                    # Set Data
+                                    dataList[j].update({'value': translateText})
+                                    otherList[1].pop(0)
 
             # Grab Collection
             if table['name'] == '採取' and COLLECTIONFLAG == True:
@@ -1110,11 +1152,23 @@ def batchList(input_list, batch_size):
 
 def createContext(fullPromptFlag, subbedT):
     characters = 'Game Characters:\n\
-リリア (Lilia) - Female\n\
-シェリル (Sheryl) - Female\n\
-チロ (Chiro) - Female\n\
-メルキュール (Mercury) - Female\n\
-のじゃっち (Nojachi) - Female\n\
+セシリア (Cecilia) - Female\
+椎那天 (Ten Shiina) - Female\
+大高あまね (Amane Otaka) - Female\
+メアリ (Mary) - Female\
+ルナマリア (Lunamaria) - Female\
+柚木朱莉 (Akari Yuzuki) - Female\
+エリス (Elise) - Female\
+野上菜月 (Natsuki Nogami) - Female\
+マイナ (Maina) - Female\
+沢野ぽぷら (Popura Sawano) - Female\
+シャーリー (Shirley) - Female\
+餅よもぎ (Yomogi Mochi) - Female\
+要人アイリス (VIP Iris) - Female\
+佐藤みるく (Miruku Sato) - Female\
+少女スゥ (Girl Suu) - Female\
+山田じぇみ子 (Jemiko Yamada) - Female\
+大山チロル (Tirol Oyama) - Female\
 '
     
     system = PROMPT + VOCAB if fullPromptFlag else \
@@ -1164,7 +1218,13 @@ def cleanTranslatedText(translatedText, varResponse):
         '〜': '~',
         'ッ': '',
         '。': '.',
-        'Placeholder Text': ''
+        '< ': '<',
+        '</ ': '</',
+        ' >': '>',
+        '「': '\"',
+        ' 」': '\"',
+        '- ': '-',
+        'Placeholder Text': '',
         # Add more replacements as needed
     }
     for target, replacement in placeholders.items():
