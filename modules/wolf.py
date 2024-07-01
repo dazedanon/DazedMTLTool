@@ -48,7 +48,7 @@ if 'gpt-3.5' in MODEL:
 elif 'gpt-4' in MODEL:
     INPUTAPICOST = .005
     OUTPUTAPICOST = .015
-    BATCHSIZE = 40
+    BATCHSIZE = 20
     FREQUENCY_PENALTY = 0.1
 
 #tqdm Globals
@@ -67,12 +67,13 @@ CODE300 = True
 CODE250 = True
 
 # Database
-NPCFLAG = True
-SCENARIOFLAG = True
-ITEMFLAG = True
+NPCFLAG = False
+SCENARIOFLAG = False
+ITEMFLAG = False
 COLLECTIONFLAG = True
-ARMORFLAG = True
-OTHERFLAG = True
+ARMORFLAG = False
+ENEMYFLAG = False
+WEAPONFLAG = False
 
 def handleWOLF(filename, estimate):
     global ESTIMATE, TOKENS
@@ -341,11 +342,17 @@ def searchCodes(events, pbar, translatedList, filename):
                     # Grab Event List
                     jaString = codeList[i]['stringArgs'][1]
 
+                    # Remove Textwrap
+                    jaString = jaString.replace("\n", ' ')
+
                     # Translate
                     response = translateGPT(jaString, f'Reply with the {LANGUAGE} translation of the location', False, pbar, filename)
                     translatedText = response[0]
                     totalTokens[0] = response[1][0]
                     totalTokens[1] = response[1][1]
+
+                    # Textwrap
+                    translatedText = textwrap.fill(translatedText, WIDTH)
 
                     # Validate and Set Data
                     codeList[i]['stringArgs'][1] = translatedText
@@ -523,15 +530,17 @@ def searchDB(events, pbar, jobList, filename):
         itemList = jobList[2]
         collectionList = jobList[3]
         armorList = jobList[4]
-        otherList = jobList[5]
+        enemyList = jobList[5]
+        weaponsList = jobList[6]
         setData = True
     else:
         scenarioList = [[],[],[]]
-        NPCList = []
+        NPCList = [[],[],[],[]]
         itemList = [[],[],[]]
         armorList = [[],[]]
-        otherList = [[],[],[],[]]
-        collectionList = []
+        enemyList = [[],[]]
+        weaponsList = [[],[],[],[]]
+        collectionList = [[],[],[],[]]
         setData = False
     
     # Vars/Globals
@@ -561,91 +570,78 @@ def searchDB(events, pbar, jobList, filename):
         for table in tableList:
 
             # Translate NPC Table
-            if table['name'] == 'NPC' and NPCFLAG == True:
-                varList = []
-                stringList = []
-                for NPC in table['data']:                                            
-                    # TL Dialogue
-                    dataList = NPC['data']
+            # Grab Scenarios
+            # Grab Items
+            if table['name'] == '万能型用語辞典' and NPCFLAG == True:
+                for npc in table['data']:                                            
+                    dataList = npc['data']
 
-                    # Modify each string
+                    # Parse
                     for j in range(len(dataList)):
-                        jaString = dataList[j].get('value')
-                        # Check String
-                        if j == 0:
-                            continue
-                        if not isinstance(jaString, str):
-                            continue
-                        if len(jaString) < 1:
-                            continue
-            
-                        # Append and Replace Var
-                        matchVar = re.findall(r'^\/b\r\n', jaString)
-                        if len(matchVar) > 0:
-                            varList.append(True)
-                            jaString = re.sub(r'^\/b\r\n', '', jaString)
-                        else:
-                            varList.append(False)
+                        # Name
+                        if 'ルール名' in dataList[j].get('name'):
+                            # Pass 1 (Grab Data)
+                            if setData == False:
+                                if dataList[j].get('value') != '':
+                                    NPCList[0].append(dataList[0].get('value'))
 
-                        # Replace special character sequences with a var
-                        jaString = jaString.replace('\r\n\r\n', '[BREAK_1]')
+                            # Pass 2 (Set Data)
+                            else:
+                                if dataList[j].get('value') != '':
+                                    dataList[j].update({'value': NPCList[0][0]})
+                                    NPCList[0].pop(0)
+                    
+                        # Description
+                        if 'ルール内容' in dataList[j].get('name'):
+                            # Pass 1 (Grab Data)
+                            if setData == False:
+                                if dataList[j].get('value') != '':
+                                    # Remove Textwrap
+                                    jaString = dataList[j].get('value')
+                                    jaString = jaString.replace('\n', ' ')
+                                    jaString = jaString.replace('\r', '')
+                                    jaString = re.sub(r'[\\]+f\[\d+\]', '', jaString)
 
-                        # Remove the rest of the textwrap
-                        jaString = jaString.replace('\n', ' ')
-                        jaString = jaString.replace('\r', '')
+                                    # Append Data
+                                    NPCList[1].append(jaString)
 
-                        # Add to List
-                        stringList.append(jaString)
-                        
-                    # Translate
-                    response = translateGPT(stringList, f'Reply with the {LANGUAGE} translation of the text.', True, pbar, filename)
-                    translatedList = response[0]
-                    totalTokens[0] += response[1][0]
-                    totalTokens[1] += response[1][1]
+                            # Pass 2 (Set Data)
+                            else:
+                                if dataList[j].get('value') != '':
+                                    # Textwrap
+                                    translatedText = NPCList[1][0]
+                                    translatedText = textwrap.fill(translatedText, 30)
+                                    translatedText = font + translatedText
 
-                    # Validate
-                    if len(translatedList) != len(stringList):
-                        with LOCK:
-                            if filename not in MISMATCH:
-                                MISMATCH.append(filename)
-                    else:
-                        k = 0
-                        for j in range(len(dataList)):
-                            jaString = dataList[j].get('value')
-                            # Check String
-                            if j == 0:
-                                continue
-                            if not isinstance(jaString, str):
-                                continue
-                            if len(jaString) < 1:
-                                continue
-                            
-                            # Textwrap
-                            if FIXTEXTWRAP is True:
-                                translatedList[k] = textwrap.fill(translatedList[k], width=WIDTH)
+                                    # Set Data
+                                    dataList[j].update({'value': translatedText})
+                                    NPCList[1].pop(0)
 
-                            # Replace special character sequences with a var
-                            translatedList[k] = translatedList[k].replace('[BREAK_1]', '\r\n\r\n')
-                            translatedList[k] = translatedList[k].replace('：', '：\r\n')
-                            translatedList[k] = translatedList[k].replace(':', '：\r\n')
+                        # Description
+                        if '詳しく説明をだな' in dataList[j].get('name'):
+                            # Pass 1 (Grab Data)
+                            if setData == False:
+                                if dataList[j].get('value') != '':
+                                    # Remove Textwrap
+                                    jaString = dataList[j].get('value')
+                                    jaString = jaString.replace('\n', ' ')
+                                    jaString = jaString.replace('\r', '')
+                                    jaString = re.sub(r'[\\]+f\[\d+\]', '', jaString)
 
-                            # Append and Replace Var
-                            if varList[k] == True:
-                                translatedList[k] = f'/b\r\n{translatedList[k]}' 
+                                    # Append Data
+                                    NPCList[2].append(jaString)
 
-                            # Replace other /b
-                            translatedList[k] = translatedList[k].replace('/b ', '/b\r\n')
+                            # Pass 2 (Set Data)
+                            else:
+                                if dataList[j].get('value') != '':
+                                    # Textwrap
+                                    translatedText = NPCList[2][0]
+                                    translatedText = textwrap.fill(translatedText, LISTWIDTH)
+                                    translatedText = font + translatedText
 
-                            # Remove whitespace after newline
-                            translatedList[k] = translatedList[k].replace('\n ', '\n')                           
-                        
-                            # Set Text
-                            dataList[j].update({'value': translatedList[k]})
-                            k += 1
-
-                        # Reset Lists
-                        stringList.clear()
-                        varList.clear()
+                                    # Set Data
+                                    dataList[j].update({'value': translatedText})
+                                    NPCList[2].pop(0)
 
             # Grab Scenarios
             if table['name'] == 'Hシナリオ' and SCENARIOFLAG == True:
@@ -712,12 +708,12 @@ def searchDB(events, pbar, jobList, filename):
                             else:
                                 if dataList[j].get('value') != '':
                                     # Textwrap
-                                    translateText = itemList[1][0]
-                                    translateText = textwrap.fill(translateText, LISTWIDTH)
-                                    translateText = font + translateText
+                                    translatedText = itemList[1][0]
+                                    translatedText = textwrap.fill(translatedText, LISTWIDTH)
+                                    translatedText = font + translatedText
 
                                     # Set Data
-                                    dataList[j].update({'value': translateText})
+                                    dataList[j].update({'value': translatedText})
                                     itemList[1].pop(0)
 
             # Grab Armors
@@ -726,104 +722,232 @@ def searchDB(events, pbar, jobList, filename):
                     dataList = armor['data']
 
                     # Parse
-                    if '名前' in dataList[0].get('name'):
-                        # Pass 1 (Grab Data)
-                        if setData == False:
-                            if dataList[0].get('value') != '':
-                                armorList[0].append(dataList[0].get('value'))
-                            if dataList[1].get('value') != '':
-                                armorList[1].append(dataList[1].get('value').replace('\n', ' '))
-
-                        # Pass 2 (Set Data)
-                        else:
-                            if dataList[0].get('value') != '':
-                                dataList[0].update({'value': armorList[0][0]})
-                                armorList[0].pop(0)
-                            if dataList[1].get('value') != '':
-                                dataList[1].update({'value': armorList[1][0]})
-                                armorList[1].pop(0)
-
-            # Grab Other
-            if table['name'] == '技能' and OTHERFLAG == True:
-                for other in table['data']:                                            
-                    dataList = other['data']
-
-                    # Parse
                     for j in range(len(dataList)):
                         # Name
-                        if '技能の名前' in dataList[j].get('name'):
+                        if '防具の名前' in dataList[j].get('name'):
                             # Pass 1 (Grab Data)
                             if setData == False:
                                 if dataList[j].get('value') != '':
-                                    otherList[0].append(dataList[0].get('value'))
+                                    armorList[0].append(dataList[0].get('value'))
 
                             # Pass 2 (Set Data)
                             else:
                                 if dataList[j].get('value') != '':
-                                    dataList[j].update({'value': otherList[0][0]})
-                                    otherList[0].pop(0)
+                                    dataList[j].update({'value': armorList[0][0]})
+                                    armorList[0].pop(0)
                     
                         # Description
-                        if '説明' in dataList[j].get('name'):
+                        if '防具の説明' in dataList[j].get('name'):
                             # Pass 1 (Grab Data)
                             if setData == False:
                                 if dataList[j].get('value') != '':
-                                    # Remove Textwrap & Font
+                                    # Remove Textwrap
                                     jaString = dataList[j].get('value')
                                     jaString = jaString.replace('\n', ' ')
                                     jaString = jaString.replace('\r', '')
                                     jaString = re.sub(r'[\\]+f\[\d+\]', '', jaString)
 
                                     # Append Data
-                                    otherList[1].append(jaString)
+                                    armorList[1].append(jaString)
+                            # Pass 2 (Set Data)
+                            else:
+                                if dataList[j].get('value') != '':
+                                    # Textwrap
+                                    translatedText = armorList[1][0]
+                                    translatedText = textwrap.fill(translatedText, LISTWIDTH)
+                                    translatedText = font + translatedText
+
+                                    # Set Data
+                                    dataList[j].update({'value': translatedText})
+                                    armorList[1].pop(0)
+
+            # Grab Enemies
+            if table['name'] == '敵ｷｬﾗ個体ﾃﾞｰﾀ' and ENEMYFLAG == True:
+                for enemy in table['data']:                                            
+                    dataList = enemy['data']
+
+                    # Parse
+                    for j in range(len(dataList)):
+                        # Name
+                        if '敵キャラ名' in dataList[j].get('name'):
+                            # Pass 1 (Grab Data)
+                            if setData == False:
+                                if dataList[j].get('value') != '':
+                                    enemyList[0].append(dataList[0].get('value'))
 
                             # Pass 2 (Set Data)
                             else:
                                 if dataList[j].get('value') != '':
-                                    # Add Textwrap & Font
-                                    translateText = otherList[1][0]
-                                    translateText = textwrap.fill(translateText, LISTWIDTH)
-                                    translateText = font + translateText
+                                    dataList[j].update({'value': enemyList[0][0]})
+                                    enemyList[0].pop(0)
+                    
+                        # Description
+                        if 'NULL' in dataList[j].get('name'):
+                            # Pass 1 (Grab Data)
+                            if setData == False:
+                                if dataList[j].get('value') != '':
+                                    # Remove Textwrap
+                                    jaString = dataList[j].get('value')
+                                    jaString = jaString.replace('\n', ' ')
+                                    jaString = jaString.replace('\r', '')
+                                    jaString = re.sub(r'[\\]+f\[\d+\]', '', jaString)
+
+                                    # Append Data
+                                    enemyList[1].append(jaString)
+                            # Pass 2 (Set Data)
+                            else:
+                                if dataList[j].get('value') != '':
+                                    # Textwrap
+                                    translatedText = enemyList[1][0]
+                                    translatedText = textwrap.fill(translatedText, LISTWIDTH)
+                                    translatedText = font + translatedText
 
                                     # Set Data
-                                    dataList[j].update({'value': translateText})
-                                    otherList[1].pop(0)
+                                    dataList[j].update({'value': translatedText})
+                                    enemyList[1].pop(0)
+
+            # Grab Weapons
+            if table['name'] == '武器' and WEAPONFLAG == True:
+                for weapon in table['data']:                                            
+                    dataList = weapon['data']
+
+                    # Parse
+                    for j in range(len(dataList)):
+                        # Name
+                        if '武器の名前' in dataList[j].get('name'):
+                            # Pass 1 (Grab Data)
+                            if setData == False:
+                                if dataList[j].get('value') != '':
+                                    weaponsList[0].append(dataList[0].get('value'))
+
+                            # Pass 2 (Set Data)
+                            else:
+                                if dataList[j].get('value') != '':
+                                    dataList[j].update({'value': weaponsList[0][0]})
+                                    weaponsList[0].pop(0)
+                    
+                        # Description
+                        if '武器の説明' in dataList[j].get('name'):
+                            # Pass 1 (Grab Data)
+                            if setData == False:
+                                if dataList[j].get('value') != '':
+                                    # Remove Textwrap
+                                    jaString = dataList[j].get('value')
+                                    jaString = jaString.replace('\n', ' ')
+                                    jaString = jaString.replace('\r', '')
+                                    jaString = re.sub(r'[\\]+f\[\d+\]', '', jaString)
+
+                                    # Append Data
+                                    weaponsList[1].append(jaString)
+                            # Pass 2 (Set Data)
+                            else:
+                                if dataList[j].get('value') != '':
+                                    # Textwrap
+                                    translatedText = weaponsList[1][0]
+                                    translatedText = textwrap.fill(translatedText, LISTWIDTH)
+                                    translatedText = font + translatedText
+
+                                    # Set Data
+                                    dataList[j].update({'value': translatedText})
+                                    weaponsList[1].pop(0)
 
             # Grab Collection
-            if table['name'] == '採取' and COLLECTIONFLAG == True:
+            if table['name'] == '属性名の設定' and COLLECTIONFLAG == True:
                 for object in table['data']:                                            
                     dataList = object['data']
 
                     # Parse
-                    if dataList[15].get('value') != '' and dataList[0].get('name') == 'オブジェクト名':
-                        # Pass 1 (Grab Data)
-                        jaString = dataList[15].get('value')
-                        speaker = re.search(r'(.*)：\r\n', jaString)
-                        if setData == False:
-                            collectionList.append(dataList[15].get('value'))
+                    for j in range(len(dataList)):
+                        # Name
+                        if '表示名' in dataList[j].get('name'):
+                            # Pass 1 (Grab Data)
+                            if setData == False:
+                                if dataList[j].get('value') != '':
+                                    # Remove Textwrap
+                                    jaString = dataList[j].get('value')
+                                    jaString = jaString.replace('\n', ' ')
+                                    jaString = jaString.replace('\r', '')
+                                    jaString = re.sub(r'[\\]+f\[\d+\]', '', jaString)
+                                    collectionList[0].append(jaString)
 
-                        # Pass 2 (Set Data)
-                        else:
-                            if speaker == None:
-                                # Remove speaker
-                                matchSpeakerList = re.findall(r'^(\[.+?\]\s?[|:]\s?)\s?', collectionList[0])
-                                if len(matchSpeakerList) > 0:
-                                    collectionList[0] = collectionList[0].replace(matchSpeakerList[0], '')
+                            # Pass 2 (Set Data)
                             else:
-                                # Reformat Speaker
-                                matchSpeaker = re.search(r'^\[(.+?)\]\s?[|:]\s?\s?(.+)', collectionList[0])
-                                if matchSpeaker != None:
-                                    collectionList[0] = f'{matchSpeaker.group(1)}：\r\n{matchSpeaker.group(2)}'
-                            dataList[15].update({'value': collectionList[0]})
-                            collectionList.pop(0)
+                                if dataList[j].get('value') != '':
+                                    dataList[j].update({'value': collectionList[0][0]})
+                                    collectionList[0].pop(0)
+
+                    # Description
+                        if 'NULL' in dataList[j].get('name'):
+                            # Pass 1 (Grab Data)
+                            if setData == False:
+                                if dataList[j].get('value') != '':
+                                    # Remove Textwrap
+                                    jaString = dataList[j].get('value')
+                                    jaString = jaString.replace('\n', ' ')
+                                    jaString = jaString.replace('\r', '')
+                                    jaString = re.sub(r'[\\]+f\[\d+\]', '', jaString)
+
+                                    # Skill Action (Optional)
+                                    # jaString = f'Taro{jaString}'
+
+                                    # Append Data
+                                    collectionList[1].append(jaString)
+                            # Pass 2 (Set Data)
+                            else:
+                                if dataList[j].get('value') != '':
+                                    translatedText = collectionList[1][0]
+
+                                    # Remove Action (Optional)
+                                    # translatedText = translatedText.replace('Taro', '')
+
+                                    # Textwrap
+                                    translatedText = textwrap.fill(translatedText, LISTWIDTH)
+                                    translatedText = font + translatedText
+
+                                    # Set Data
+                                    dataList[j].update({'value': translatedText})
+                                    collectionList[1].pop(0)
+
+                    # Description 2
+                        if 'NULL' in dataList[j].get('name'):
+                            # Pass 1 (Grab Data)
+                            if setData == False:
+                                if dataList[j].get('value') != '':
+                                    # Remove Textwrap
+                                    jaString = dataList[j].get('value')
+                                    jaString = jaString.replace('\n', ' ')
+                                    jaString = jaString.replace('\r', '')
+                                    jaString = re.sub(r'[\\]+f\[\d+\]', '', jaString)
+
+                                    # Skill Action (Optional)
+                                    # jaString = f'Taro{jaString}'
+
+                                    # Append Data
+                                    collectionList[2].append(jaString)
+                            # Pass 2 (Set Data)
+                            else:
+                                if dataList[j].get('value') != '':
+                                    translatedText = collectionList[2][0]
+
+                                    # Remove Action (Optional)
+                                    # translatedText = translatedText.replace('Taro', '')
+
+                                    # Textwrap
+                                    translatedText = textwrap.fill(translatedText, LISTWIDTH)
+                                    translatedText = font + translatedText
+
+                                    # Set Data
+                                    dataList[j].update({'value': translatedText})
+                                    collectionList[2].pop(0)
 
         # Translation
         scenarioListTL = [[],[],[]]
         NPCListTL = []
         itemListTL = [[],[],[]]
-        collectionListTL = []
+        collectionListTL = [[],[],[],[]]
         armorListTL = [[],[]]
-        otherListTL = [[],[],[]]
+        enemyListTL = [[],[]]
+        weaponsListTL = [[],[],[]]
 
         translate = False
 
@@ -929,63 +1053,110 @@ def searchDB(events, pbar, jobList, filename):
                 armorListTL = [nameListTL, descListTL1]
                 translate = True  
 
-        # Other
-        if len(otherList[0]) > 0:
+        # Enemies
+        if len(enemyList[0]) > 0:
             # Progress Bar
             total = 0
-            for otherArray in otherList:
-                total += len(otherArray)
+            for enemyArray in enemyList:
+                total += len(enemyArray)
             pbar.total = total
             pbar.refresh()
 
             # Name
-            response = translateGPT(otherList[0], 'Reply with only the '+ LANGUAGE +' translation of the RPG item name', True, pbar, filename)
+            response = translateGPT(enemyList[0], 'Reply with only the '+ LANGUAGE +' translation of the RPG item name', True, pbar, filename)
             nameListTL = response[0]
             totalTokens[0] += response[1][0]
             totalTokens[1] += response[1][1]
             # Desc 1
-            response = translateGPT(otherList[1], 'reply with only the gender neutral '+ LANGUAGE +' translation of the action log. Always start the sentence with Taro. For example, Translate \'Taroを倒した！\' as \'Taro was defeated!\'', True, pbar, filename)
+            response = translateGPT(enemyList[1], 'Reply with only the '+ LANGUAGE +' translation', True, pbar, filename)
+            descListTL1 = response[0]
+            totalTokens[0] += response[1][0]
+            totalTokens[1] += response[1][1]
+
+            # Check Mismatch
+            if len(nameListTL) != len(enemyList[0]) or\
+            len(descListTL1) != len(enemyList[1]):
+                with LOCK:
+                    if filename not in MISMATCH:
+                        MISMATCH.append(filename)
+            else:
+                enemyListTL = [nameListTL, descListTL1]
+                translate = True  
+
+        # Weapons
+        if len(weaponsList[0]) > 0:
+            # Progress Bar
+            total = 0
+            for weaponsArray in weaponsList:
+                total += len(weaponsArray)
+            pbar.total = total
+            pbar.refresh()
+
+            # Name
+            response = translateGPT(weaponsList[0], 'Reply with only the '+ LANGUAGE +' translation of the RPG item name', True, pbar, filename)
+            nameListTL = response[0]
+            totalTokens[0] += response[1][0]
+            totalTokens[1] += response[1][1]
+            # Desc 1
+            response = translateGPT(weaponsList[1], '', True, pbar, filename)
             descListTL1 = response[0]
             totalTokens[0] += response[1][0]
             totalTokens[1] += response[1][1]
             # Desc 2
-            response = translateGPT(otherList[2], 'reply with only the gender neutral '+ LANGUAGE +' translation of the action log. Always start the sentence with Taro. For example, Translate \'Taroを倒した！\' as \'Taro was defeated!\'', True, pbar, filename)
+            response = translateGPT(weaponsList[2], '', True, pbar, filename)
             descListTL2 = response[0]
             totalTokens[0] += response[1][0]
             totalTokens[1] += response[1][1]
 
             # Check Mismatch
-            if len(nameListTL) != len(otherList[0]) or\
-            len(descListTL1) != len(otherList[1]) or\
-            len(descListTL2) != len(otherList[2]):
+            if len(nameListTL) != len(weaponsList[0]) or\
+            len(descListTL1) != len(weaponsList[1]) or\
+            len(descListTL2) != len(weaponsList[2]):
                 with LOCK:
                     if filename not in MISMATCH:
                         MISMATCH.append(filename)
             else:
-                otherListTL = [nameListTL, descListTL1, descListTL2]
+                weaponsListTL = [nameListTL, descListTL1, descListTL2]
                 translate = True  
 
-        # COLLECTION
-        if len(collectionList) > 0:
-            # Progress Bar
-            total = 0
-            total += len(collectionList)
-            pbar.total = total
-            pbar.refresh()
+        # Collection
+        for list in collectionList:
+            if len(list) > 0:
+                # Progress Bar
+                total = 0
+                for collectionArray in collectionList:
+                    total += len(collectionArray)
+                pbar.total = total
+                pbar.refresh()
 
-            # Name
-            response = translateGPT(collectionList, 'Reply with only the '+ LANGUAGE +' translation', True, pbar, filename)
-            collectionListTL = response[0]
-            totalTokens[0] += response[1][0]
-            totalTokens[1] += response[1][1]
+                # Name
+                response = translateGPT(collectionList[0], '', True, pbar, filename)
+                nameListTL = response[0]
+                totalTokens[0] += response[1][0]
+                totalTokens[1] += response[1][1]
 
-            # Check Mismatch
-            if len(collectionListTL) != len(collectionList):
-                with LOCK:
-                    if filename not in MISMATCH:
-                        MISMATCH.append(filename)
-            else:
-                translate = True
+                # Desc 1
+                response = translateGPT(collectionList[1], '', True, pbar, filename)
+                descListTL1 = response[0]
+                totalTokens[0] += response[1][0]
+                totalTokens[1] += response[1][1]
+
+                # Desc 2
+                response = translateGPT(collectionList[2], '', True, pbar, filename)
+                descListTL2 = response[0]
+                totalTokens[0] += response[1][0]
+                totalTokens[1] += response[1][1]
+
+                # Check Mismatch
+                if len(nameListTL) != len(collectionList[0]) or\
+                len(descListTL1) != len(collectionList[1]) or\
+                len(descListTL2) != len(collectionList[2]):
+                    with LOCK:
+                        if filename not in MISMATCH:
+                            MISMATCH.append(filename)
+                else:
+                    collectionListTL = [nameListTL, descListTL1, descListTL2]
+                    translate = True  
             
         # Start Pass 2
         if translate == True:
@@ -994,7 +1165,8 @@ def searchDB(events, pbar, jobList, filename):
             jobList.append(itemListTL)
             jobList.append(collectionListTL)
             jobList.append(armorListTL)
-            jobList.append(otherListTL)
+            jobList.append(enemyListTL)
+            jobList.append(weaponsListTL)
             searchDB(events, pbar, jobList, filename)                
 
     except IndexError as e:
