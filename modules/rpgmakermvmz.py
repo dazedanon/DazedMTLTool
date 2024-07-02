@@ -2155,7 +2155,7 @@ def cleanTranslatedText(translatedText, varResponse):
         '</ ': '</',
         ' >': '>',
         '「': '\"',
-        ' 」': '\"',
+        '」': '\"',
         '- ': '-',
         'Placeholder Text': '',
         # Add more replacements as needed
