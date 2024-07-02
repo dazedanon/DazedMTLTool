@@ -559,7 +559,7 @@ def cleanTranslatedText(translatedText, varResponse):
         '</ ': '</',
         ' >': '>',
         '「': '\"',
-        ' 」': '\"',
+        '」': '\"',
         'Placeholder Text': '',
         '- chan': '-chan',
         '- kun': '-kun',

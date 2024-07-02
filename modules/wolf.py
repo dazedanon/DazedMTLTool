@@ -64,7 +64,7 @@ CODE122 = True
 # Other
 CODE210 = True
 CODE300 = True
-CODE250 = True
+CODE250 = False
 
 # Database
 NPCFLAG = False
@@ -521,7 +521,7 @@ def searchCodes(events, pbar, translatedList, filename):
 
     return totalTokens
 
-# Database
+# DatabaseDatabase
 def searchDB(events, pbar, jobList, filename):
     # Set Lists
     if len(jobList) > 0:
@@ -536,7 +536,7 @@ def searchDB(events, pbar, jobList, filename):
     else:
         scenarioList = [[],[],[]]
         NPCList = [[],[],[],[]]
-        itemList = [[],[],[]]
+        itemList = [[],[],[],[]]
         armorList = [[],[]]
         enemyList = [[],[]]
         weaponsList = [[],[],[],[]]
@@ -716,6 +716,58 @@ def searchDB(events, pbar, jobList, filename):
                                     dataList[j].update({'value': translatedText})
                                     itemList[1].pop(0)
 
+                        # Description 2
+                        if '使用後文章[移動]' in dataList[j].get('name'):
+                            # Pass 1 (Grab Data)
+                            if setData == False:
+                                if dataList[j].get('value') != '':
+                                    # Remove Textwrap
+                                    jaString = dataList[j].get('value')
+                                    jaString = jaString.replace('\n', ' ')
+                                    jaString = jaString.replace('\r', '')
+                                    jaString = re.sub(r'[\\]+f\[\d+\]', '', jaString)
+
+                                    # Append Data
+                                    itemList[2].append(jaString)
+
+                            # Pass 2 (Set Data)
+                            else:
+                                if dataList[j].get('value') != '':
+                                    # Textwrap
+                                    translatedText = itemList[2][0]
+                                    translatedText = textwrap.fill(translatedText, LISTWIDTH)
+                                    translatedText = font + translatedText
+
+                                    # Set Data
+                                    dataList[j].update({'value': translatedText})
+                                    itemList[2].pop(0)
+
+                        # Description 3
+                        if '使用時文章[戦]' in dataList[j].get('name'):
+                            # Pass 1 (Grab Data)
+                            if setData == False:
+                                if dataList[j].get('value') != '':
+                                    # Remove Textwrap
+                                    jaString = dataList[j].get('value')
+                                    jaString = jaString.replace('\n', ' ')
+                                    jaString = jaString.replace('\r', '')
+                                    jaString = re.sub(r'[\\]+f\[\d+\]', '', jaString)
+
+                                    # Append Data
+                                    itemList[3].append(jaString)
+
+                            # Pass 2 (Set Data)
+                            else:
+                                if dataList[j].get('value') != '':
+                                    # Textwrap
+                                    translatedText = itemList[3][0]
+                                    translatedText = textwrap.fill(translatedText, LISTWIDTH)
+                                    translatedText = font + translatedText
+
+                                    # Set Data
+                                    dataList[j].update({'value': translatedText})
+                                    itemList[3].pop(0)
+
             # Grab Armors
             if table['name'] == '防具' and ARMORFLAG == True:
                 for armor in table['data']:                                            
@@ -852,14 +904,14 @@ def searchDB(events, pbar, jobList, filename):
                                     weaponsList[1].pop(0)
 
             # Grab Collection
-            if table['name'] == '属性名の設定' and COLLECTIONFLAG == True:
+            if table['name'] == '鍛冶師用DB' and COLLECTIONFLAG == True:
                 for object in table['data']:                                            
                     dataList = object['data']
 
                     # Parse
                     for j in range(len(dataList)):
                         # Name
-                        if '表示名' in dataList[j].get('name'):
+                        if '作る装備' in dataList[j].get('name'):
                             # Pass 1 (Grab Data)
                             if setData == False:
                                 if dataList[j].get('value') != '':
@@ -877,7 +929,7 @@ def searchDB(events, pbar, jobList, filename):
                                     collectionList[0].pop(0)
 
                     # Description
-                        if 'NULL' in dataList[j].get('name'):
+                        if '品物の解説' in dataList[j].get('name'):
                             # Pass 1 (Grab Data)
                             if setData == False:
                                 if dataList[j].get('value') != '':
@@ -943,7 +995,7 @@ def searchDB(events, pbar, jobList, filename):
         # Translation
         scenarioListTL = [[],[],[]]
         NPCListTL = []
-        itemListTL = [[],[],[]]
+        itemListTL = [[],[],[],[]]
         collectionListTL = [[],[],[],[]]
         armorListTL = [[],[]]
         enemyListTL = [[],[]]
@@ -1011,16 +1063,22 @@ def searchDB(events, pbar, jobList, filename):
             descListTL2 = response[0]
             totalTokens[0] += response[1][0]
             totalTokens[1] += response[1][1]
+            # Desc 3
+            response = translateGPT(itemList[3], 'Reply with only the '+ LANGUAGE +' translation', True, pbar, filename)
+            descListTL3 = response[0]
+            totalTokens[0] += response[1][0]
+            totalTokens[1] += response[1][1]
 
             # Check Mismatch
             if len(nameListTL) != len(itemList[0]) or\
             len(descListTL1) != len(itemList[1]) or\
-            len(descListTL2) != len(itemList[2]):
+            len(descListTL2) != len(itemList[2])or\
+            len(descListTL3) != len(itemList[3]):
                 with LOCK:
                     if filename not in MISMATCH:
                         MISMATCH.append(filename)
             else:
-                itemListTL = [nameListTL, descListTL1, descListTL2]
+                itemListTL = [nameListTL, descListTL1, descListTL2, descListTL3]
                 translate = True  
 
         # Armor
@@ -1253,7 +1311,7 @@ def subVars(jaString):
 
     # Formatting
     count = 0
-    formatList = re.findall(r'[\\]+[\w]+\[[a-zA-Z0-9\\\[\]\_,\s-]+\]', jaString)
+    formatList = re.findall(r'[\\]+[\w]+\[[a-zA-Z0-9\\\[\]\_:,\s-]+\]', jaString)
     formatList = set(formatList)
     if len(formatList) != 0:
         for var in formatList:
@@ -1394,7 +1452,7 @@ def cleanTranslatedText(translatedText, varResponse):
         '</ ': '</',
         ' >': '>',
         '「': '\"',
-        ' 」': '\"',
+        '」': '\"',
         '- ': '-',
         'Placeholder Text': '',
         # Add more replacements as needed

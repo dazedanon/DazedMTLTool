@@ -38,6 +38,8 @@ MISMATCH = []   # Lists files that throw a mismatch error (Length of GPT list re
 BAR_FORMAT='{l_bar}{bar:10}{r_bar}{bar:-10b}'
 POSITION = 0
 LEAVE = False
+PBAR = None
+FILENAME = None
 
 # Pricing - Depends on the model https://openai.com/pricing
 # Batch Size - GPT 3.5 Struggles past 15 lines per request. GPT4 struggles past 50 lines per request
@@ -52,8 +54,9 @@ elif 'gpt-4' in MODEL:
     BATCHSIZE = 40
 
 def handleOnscripter(filename, estimate):
-    global ESTIMATE
+    global ESTIMATE, FILENAME
     ESTIMATE = estimate
+    FILENAME = filename
 
     if ESTIMATE:
         start = time.time()
@@ -156,60 +159,63 @@ def translateOnscripter(data, pbar, filename, translatedList):
     tokens = [0,0]
     speaker = ''
     voice = False
-    global LOCK, ESTIMATE
+    global LOCK, ESTIMATE, PBAR
+    PBAR = pbar
     i = 0
 
     while i < len(data):
         voice = False
         speaker = ''
-        if re.search(r'^caption|^event|^operation_caption|^manual|^mes\s\d+', data[i]):
-            # Lines
-            match = re.search(r'="(.+?)"', data[i])
-            if match == None:
-                match = re.search(r'mes\s\d+,"(.+?)"', data[i])
-            if match != None and match.group(1) != '':
-                originalString = match.group(1)
-                # Pass 1
-                if translatedList == []:
-                    # Grab Consecutive Strings
-                    jaString = match.group(1)
-                        
-                    # Remove any textwrap
-                    jaString = jaString.replace('\\n', ' ')
+        regex = r'^([\u3000「（【[][^\n]+)'
+        # Lines
+        match = re.search(regex, data[i])
+        if match != None and match.group(1) != '':
+            originalString = match.group(1)
+            # Pass 1
+            if translatedList == []:
+                # Grab Consecutive Strings
+                jaString = match.group(1)
+                while len(data) > i+1 and re.match(regex, data[i+1]):
+                    i += 1
+                    jaString = f'{jaString} {data[i]}'
+                    
+                # Remove any textwrap and \u3000 and \
+                jaString = jaString.replace('\n', ' ')
+                jaString = jaString.replace('\u3000', '')
+                jaString = jaString.replace('\\', '')
 
-                    # Remove Furigana
-                    furiMatch = re.findall(r'({(.+?)\/(.+?)})', jaString)
-                    if furiMatch:
-                        for match in furiMatch:
-                            jaString = jaString.replace(match[0], match[2])
+                # Remove Furigana
+                furiMatch = re.findall(r'({(.+?)\/(.+?)})', jaString)
+                if furiMatch:
+                    for match in furiMatch:
+                        jaString = jaString.replace(match[0], match[2])
 
-                    # Add String
-                    stringList.append(jaString.strip())
-                
-                # Pass 2
-                else:
-                    # Get Text
-                    if translatedList:
-                        # Grab and Pop
-                        translatedText = translatedList[0]
-                        translatedList.pop(0)
-
-                        # Set to None if empty list
-                        if len(translatedList) <= 0:
-                            translatedList = None
-
-                        # Textwrap
-                        translatedText = textwrap.fill(translatedText, width=WIDTH)
-                        translatedText = translatedText.replace('\n', '\\n')
-                        translatedText = translatedText.replace('\"', '\'')
-
-                        # Set Data
-                        data[i] = data[i].replace(originalString, translatedText)
-                i += 1
-
-            # Nothing relevant. Skip Line.
+                # Add String
+                stringList.append(jaString.strip())
+            
+            # Pass 2
             else:
-                i += 1
+                # Get Text
+                if translatedList:
+                    # Grab and Pop
+                    translatedText = translatedList[0]
+                    translatedList.pop(0)
+
+                    # Set to None if empty list
+                    if len(translatedList) <= 0:
+                        translatedList = None
+
+                    # Textwrap & Other Text
+                    translatedText = textwrap.fill(translatedText, width=WIDTH)
+                    translatedText = translatedText.replace('\n', '\n\u3000')
+                    translatedText = translatedText.replace('\"', '\'')
+                    translatedText = f'\u3000{translatedText}\\'
+
+                    # Set Data
+                    data[i] = data[i].replace(originalString, translatedText)
+            i += 1
+
+        # Nothing relevant. Skip Line.
         else:
             i += 1
 
@@ -220,7 +226,7 @@ def translateOnscripter(data, pbar, filename, translatedList):
         pbar.refresh()
         
         # Translate
-        response = translateGPT(stringList, '', True, pbar, filename)
+        response = translateGPT(stringList, '', True)
         tokens[0] += response[1][0]
         tokens[1] += response[1][1]
         translatedList = response[0]
@@ -237,7 +243,7 @@ def translateOnscripter(data, pbar, filename, translatedList):
     return tokens
 
 # Save some money and enter the character before translation
-def getSpeaker(speaker, pbar, filename):
+def getSpeaker(speaker):
     match speaker:
         case 'ファイン':
             return ['Fine', [0,0]]
@@ -246,12 +252,19 @@ def getSpeaker(speaker, pbar, filename):
         case _:
             # Store Speaker
             if speaker not in str(NAMESLIST):
-                response = translateGPT(speaker, 'Reply with only the '+ LANGUAGE +' translation of the NPC name.', False, pbar, filename)
+                response = translateGPT(speaker, 'Reply with the '+ LANGUAGE +' translation of the NPC name.', False)
+                response[0] = response[0].title()
                 response[0] = response[0].replace("'S", "'s")
+
+                # Retry if name doesn't translate for some reason
+                if re.search(r'([a-zA-Z？?])', response[0]) == None:
+                    response = translateGPT(speaker, 'Reply with the '+ LANGUAGE +' translation of the NPC name.', False)
+                    response[0] = response[0].title()
+                    response[0] = response[0].replace("'S", "'s")
+
                 speakerList = [speaker, response[0]]
                 NAMESLIST.append(speakerList)
                 return response
-            
             # Find Speaker
             else:
                 for i in range(len(NAMESLIST)):
@@ -381,7 +394,7 @@ def batchList(input_list, batch_size):
 
 def createContext(fullPromptFlag, subbedT):
     characters = 'Game Characters:\n\
-エル (El) - Female\n\
+カエデ (Kaede) - Female\n\
 '
     
     system = PROMPT + VOCAB if fullPromptFlag else \
@@ -400,7 +413,7 @@ Output ONLY the {LANGUAGE} translation in the following format: `Translation: <{
     user = f'{subbedT}'
     return characters, system, user
 
-def translateText(characters, system, user, history):
+def translateText(characters, system, user, history, penalty):
     # Prompt
     msg = [{"role": "system", "content": system + characters}]
 
@@ -416,8 +429,8 @@ def translateText(characters, system, user, history):
     # Content to TL
     msg.append({"role": "user", "content": f'{user}'})
     response = openai.chat.completions.create(
-        temperature=0.1,
-        frequency_penalty=0.1,
+        temperature=0,
+        frequency_penalty=penalty,
         model=MODEL,
         messages=msg,
     )
@@ -431,7 +444,13 @@ def cleanTranslatedText(translatedText, varResponse):
         '〜': '~',
         'ッ': '',
         '。': '.',
-        'Placeholder Text': ''
+        '< ': '<',
+        '</ ': '</',
+        ' >': '>',
+        '「': '\"',
+        '」': '\"',
+        '- ': '-',
+        'Placeholder Text': '',
         # Add more replacements as needed
     }
     for target, replacement in placeholders.items():
@@ -460,7 +479,7 @@ def extractTranslation(translatedTextList, is_list):
     pattern = r'`?<[Ll]ine\d+>([\\]*.*?[\\]*?)<\/?[Ll]ine\d+>`?'
     # If it's a batch (i.e., list), extract with tags; otherwise, return the single item.
     if is_list:
-        matchList = re.findall(pattern, translatedTextList)
+        matchList = re.findall(pattern, translatedTextList, flags=re.DOTALL)
         return matchList
     else:
         matchList = re.findall(pattern, translatedTextList)
@@ -482,7 +501,7 @@ def countTokens(characters, system, user, history):
     inputTotalTokens += len(enc.encode(user))
 
     # Output
-    outputTotalTokens += round(len(enc.encode(user))*2)
+    outputTotalTokens += round(len(enc.encode(user))*3)
 
     return [inputTotalTokens, outputTotalTokens]
 
@@ -492,7 +511,9 @@ def combineList(tlist, text):
     return tlist[0]
 
 @retry(exceptions=Exception, tries=5, delay=5)
-def translateGPT(text, history, fullPromptFlag, pbar, filename):
+def translateGPT(text, history, fullPromptFlag):
+    global PBAR
+    
     mismatch = False
     totalTokens = [0, 0]
     if isinstance(text, list):
@@ -513,6 +534,8 @@ def translateGPT(text, history, fullPromptFlag, pbar, filename):
 
         # Things to Check before starting translation
         if not re.search(r'[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９]+', subbedT):
+            if PBAR is not None:
+                PBAR.update(len(tItem))
             continue
 
         # Create Message
@@ -526,7 +549,7 @@ def translateGPT(text, history, fullPromptFlag, pbar, filename):
             continue
 
         # Translating
-        response = translateText(characters, system, user, history)
+        response = translateText(characters, system, user, history, 0.02)
         translatedText = response.choices[0].message.content
         totalTokens[0] += response.usage.prompt_tokens
         totalTokens[1] += response.usage.completion_tokens
@@ -535,9 +558,10 @@ def translateGPT(text, history, fullPromptFlag, pbar, filename):
         translatedText = cleanTranslatedText(translatedText, varResponse)
         if isinstance(tItem, list):
             extractedTranslations = extractTranslation(translatedText, True)
+            tList[index] = extractedTranslations
             if len(tItem) != len(extractedTranslations):
                 # Mismatch. Try Again
-                response = translateText(characters, system, user, history)
+                response = translateText(characters, system, user, history, 0.2)
                 translatedText = response.choices[0].message.content
                 totalTokens[0] += response.usage.prompt_tokens
                 totalTokens[1] += response.usage.completion_tokens
@@ -546,17 +570,18 @@ def translateGPT(text, history, fullPromptFlag, pbar, filename):
                 translatedText = cleanTranslatedText(translatedText, varResponse)
                 if isinstance(tItem, list):
                     extractedTranslations = extractTranslation(translatedText, True)
-                    if len(tItem) == len(extractedTranslations):
-                        tList[index] = extractedTranslations
-                    else:
-                        MISMATCH.append(filename)
-            else:
-                tList[index] = extractedTranslations
+                    tList[index] = extractedTranslations
+                    if len(tItem) != len(extractedTranslations):
+                        mismatch = True # Just here for breakpoint
 
             # Create History
-            history = tList[index]  # Update history if we have a list
-            pbar.update(len(tList[index]))
-
+            with LOCK:
+                if PBAR is not None:
+                    PBAR.update(len(tItem))
+            if not mismatch:
+                history = extractedTranslations[-10:]  # Update history if we have a list
+            else:
+                history = text[-10:]
         else:
             # Ensure we're passing a single string to extractTranslation
             extractedTranslations = extractTranslation(translatedText, False)
