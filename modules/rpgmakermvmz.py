@@ -49,7 +49,7 @@ if 'gpt-3.5' in MODEL:
 elif 'gpt-4' in MODEL:
     INPUTAPICOST = .005
     OUTPUTAPICOST = .015
-    BATCHSIZE = 50
+    BATCHSIZE = 20
     FREQUENCY_PENALTY = 0.1
 
 #tqdm Globals
@@ -58,18 +58,18 @@ POSITION = 0
 LEAVE = False
 
 # Dialogue / Scroll
-CODE401 = False
+CODE401 = True
 CODE405 = False
 CODE408 = False
 
 # Choices
-CODE102 = False
+CODE102 = True
 
 # Variables
 CODE122 = False
 
 # Names
-CODE101 = False
+CODE101 = True
 
 # Other
 CODE355655 = False
@@ -1247,38 +1247,47 @@ def searchCodes(page, pbar, jobList, filename):
                     continue
 
                 # Force Speaker using var
-                if 'ari' in jaString.lower():
-                    speaker = 'Arisa'
+                if '\\ap[1左]' in jaString.lower() or '\\ap[1右]' in jaString.lower():
+                    speaker = 'Cecily'
                     i += 1
                     continue
-                elif 'riika' in jaString.lower():
-                    speaker = 'Rika'
+                elif '\\ap[2左]' in jaString.lower() or '\\ap[2右]' in jaString.lower():
+                    speaker = 'Amelia'
                     i += 1
                     continue
-                elif 'sutera' in jaString.lower():
-                    speaker = 'Stella'
+                elif '\\ap[3左]' in jaString.lower() or '\\ap[3右]' in jaString.lower():
+                    speaker = 'Henry'
                     i += 1
                     continue
+                elif '\\ap[4左]' in jaString.lower() or '\\ap[4右]' in jaString.lower():
+                    speaker = 'Oswald'
+                    i += 1
+                    continue
+                elif '\\ap' in jaString:
+                    speaker = re.search(r'[\\]+AP\[(.*?)\]', jaString).group(1)
+                    i += 1
+                    continue        
 
                 # Get Speaker
-                response = getSpeaker(jaString)
-                totalTokens[0] += response[1][0]
-                totalTokens[1] += response[1][1]
-                speaker = response[0]
-                
-                # Validate Speaker is not empty
-                if len(speaker) > 0:
-                    if isVar == False:
-                        codeList[i]['parameters'][4] = speaker
-                        i += 1
-                        continue
+                if '\\' not in jaString:
+                    response = getSpeaker(jaString)
+                    totalTokens[0] += response[1][0]
+                    totalTokens[1] += response[1][1]
+                    speaker = response[0]
+                    
+                    # Validate Speaker is not empty
+                    if len(speaker) > 0:
+                        if isVar == False:
+                            codeList[i]['parameters'][4] = speaker
+                            i += 1
+                            continue
+                        else:
+                            codeList[i]['parameters'][0] = speaker
+                            isVar = False
+                            i += 1
+                            continue
                     else:
-                        codeList[i]['parameters'][0] = speaker
-                        isVar = False
-                        i += 1
-                        continue
-                else:
-                    speaker = ''
+                        speaker = ''
 
             ## Event Code: 355 or 655 Scripts [Optional]
             if 'code' in codeList[i] and (codeList[i]['code'] == 355 or codeList[i]['code'] == 655) and CODE355655 is True:
@@ -2003,7 +2012,7 @@ def subVars(jaString):
 
     # Colors
     count = 0
-    colorList = re.findall(r'[\\]+[cC]\[[0-9]+\]', jaString)
+    colorList = re.findall(r'([\\]+c\[\d+\][\\]+c|[\\]+c\[\d+\])', jaString)
     colorList = set(colorList)
     if len(colorList) != 0:
         for color in colorList:
@@ -2101,7 +2110,11 @@ def batchList(input_list, batch_size):
 
 def createContext(fullPromptFlag, subbedT):
     characters = 'Game Characters:\n\
-カエデ (Kaede) - Female\n\
+セシリー (Cecily) - Female\n\
+アメリア (Amelia) - Female\n\
+ヘンリー (Henry) - Male\n\
+オズワルド (Oswald) - Male\n\
+ダミアーニ (Damian) - Male\n\
 '
     
     system = PROMPT + VOCAB if fullPromptFlag else \

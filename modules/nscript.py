@@ -176,6 +176,7 @@ def translateOnscripter(data, pbar, filename, translatedList):
                 # Grab Consecutive Strings
                 jaString = match.group(1)
                 while len(data) > i+1 and re.match(regex, data[i+1]):
+                    data[i] = ''
                     i += 1
                     jaString = f'{jaString} {data[i]}'
                     
@@ -183,6 +184,8 @@ def translateOnscripter(data, pbar, filename, translatedList):
                 jaString = jaString.replace('\n', ' ')
                 jaString = jaString.replace('\u3000', '')
                 jaString = jaString.replace('\\', '')
+                jaString = jaString.replace('　＞', ')')
+                jaString = jaString.replace('＜　', '(')
 
                 # Remove Furigana
                 furiMatch = re.findall(r'({(.+?)\/(.+?)})', jaString)
@@ -449,6 +452,7 @@ def cleanTranslatedText(translatedText, varResponse):
         ' >': '>',
         '「': '\"',
         '」': '\"',
+        '―': '-',
         '- ': '-',
         'Placeholder Text': '',
         # Add more replacements as needed

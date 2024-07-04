@@ -67,10 +67,10 @@ CODE300 = True
 CODE250 = False
 
 # Database
-NPCFLAG = False
+NPCFLAG = True
 SCENARIOFLAG = False
 ITEMFLAG = False
-COLLECTIONFLAG = True
+COLLECTIONFLAG = False
 ARMORFLAG = False
 ENEMYFLAG = False
 WEAPONFLAG = False
@@ -569,21 +569,19 @@ def searchDB(events, pbar, jobList, filename):
     try:
         for table in tableList:
 
-            # Translate NPC Table
-            # Grab Scenarios
-            # Grab Items
-            if table['name'] == '万能型用語辞典' and NPCFLAG == True:
+            # Translate NPC
+            if table['name'] == '主人公ステータス' and NPCFLAG == True:
                 for npc in table['data']:                                            
                     dataList = npc['data']
 
                     # Parse
                     for j in range(len(dataList)):
                         # Name
-                        if 'ルール名' in dataList[j].get('name'):
+                        if 'スペシャルゲージ名称' in dataList[j].get('name'):
                             # Pass 1 (Grab Data)
                             if setData == False:
                                 if dataList[j].get('value') != '':
-                                    NPCList[0].append(dataList[0].get('value'))
+                                    NPCList[0].append(dataList[j].get('value'))
 
                             # Pass 2 (Set Data)
                             else:
@@ -592,7 +590,7 @@ def searchDB(events, pbar, jobList, filename):
                                     NPCList[0].pop(0)
                     
                         # Description
-                        if 'ルール内容' in dataList[j].get('name'):
+                        if 'NULL' in dataList[j].get('name'):
                             # Pass 1 (Grab Data)
                             if setData == False:
                                 if dataList[j].get('value') != '':
@@ -618,7 +616,7 @@ def searchDB(events, pbar, jobList, filename):
                                     NPCList[1].pop(0)
 
                         # Description
-                        if '詳しく説明をだな' in dataList[j].get('name'):
+                        if 'NULL' in dataList[j].get('name'):
                             # Pass 1 (Grab Data)
                             if setData == False:
                                 if dataList[j].get('value') != '':
@@ -682,7 +680,7 @@ def searchDB(events, pbar, jobList, filename):
                             # Pass 1 (Grab Data)
                             if setData == False:
                                 if dataList[j].get('value') != '':
-                                    itemList[0].append(dataList[0].get('value'))
+                                    itemList[0].append(dataList[j].get('value'))
 
                             # Pass 2 (Set Data)
                             else:
@@ -780,7 +778,7 @@ def searchDB(events, pbar, jobList, filename):
                             # Pass 1 (Grab Data)
                             if setData == False:
                                 if dataList[j].get('value') != '':
-                                    armorList[0].append(dataList[0].get('value'))
+                                    armorList[0].append(dataList[j].get('value'))
 
                             # Pass 2 (Set Data)
                             else:
@@ -825,7 +823,7 @@ def searchDB(events, pbar, jobList, filename):
                             # Pass 1 (Grab Data)
                             if setData == False:
                                 if dataList[j].get('value') != '':
-                                    enemyList[0].append(dataList[0].get('value'))
+                                    enemyList[0].append(dataList[j].get('value'))
 
                             # Pass 2 (Set Data)
                             else:
@@ -870,7 +868,7 @@ def searchDB(events, pbar, jobList, filename):
                             # Pass 1 (Grab Data)
                             if setData == False:
                                 if dataList[j].get('value') != '':
-                                    weaponsList[0].append(dataList[0].get('value'))
+                                    weaponsList[0].append(dataList[j].get('value'))
 
                             # Pass 2 (Set Data)
                             else:
@@ -994,7 +992,7 @@ def searchDB(events, pbar, jobList, filename):
 
         # Translation
         scenarioListTL = [[],[],[]]
-        NPCListTL = []
+        NPCListTL = [[],[],[],[]]
         itemListTL = [[],[],[],[]]
         collectionListTL = [[],[],[],[]]
         armorListTL = [[],[]]
@@ -1002,6 +1000,48 @@ def searchDB(events, pbar, jobList, filename):
         weaponsListTL = [[],[],[]]
 
         translate = False
+
+        # NPCs
+        if len(NPCList[0]) > 0:
+            # Progress Bar
+            total = 0
+            for itemArray in NPCList:
+                total += len(itemArray)
+            pbar.total = total
+            pbar.refresh()
+
+            # Name
+            response = translateGPT(NPCList[0], 'Reply with only the '+ LANGUAGE +' translation of the RPG item name', True, pbar, filename)
+            nameListTL = response[0]
+            totalTokens[0] += response[1][0]
+            totalTokens[1] += response[1][1]
+            # Desc 1
+            response = translateGPT(NPCList[1], 'Reply with only the '+ LANGUAGE +' translation', True, pbar, filename)
+            descListTL1 = response[0]
+            totalTokens[0] += response[1][0]
+            totalTokens[1] += response[1][1]
+            # Desc 2
+            response = translateGPT(NPCList[2], 'Reply with only the '+ LANGUAGE +' translation', True, pbar, filename)
+            descListTL2 = response[0]
+            totalTokens[0] += response[1][0]
+            totalTokens[1] += response[1][1]
+            # Desc 3
+            response = translateGPT(NPCList[3], 'Reply with only the '+ LANGUAGE +' translation', True, pbar, filename)
+            descListTL3 = response[0]
+            totalTokens[0] += response[1][0]
+            totalTokens[1] += response[1][1]
+
+            # Check Mismatch
+            if len(nameListTL) != len(NPCList[0]) or\
+            len(descListTL1) != len(NPCList[1]) or\
+            len(descListTL2) != len(NPCList[2])or\
+            len(descListTL3) != len(NPCList[3]):
+                with LOCK:
+                    if filename not in MISMATCH:
+                        MISMATCH.append(filename)
+            else:
+                NPCListTL = [nameListTL, descListTL1, descListTL2, descListTL3]
+                translate = True  
 
         # SCENARIO
         if len(scenarioList[0]) > 0:
