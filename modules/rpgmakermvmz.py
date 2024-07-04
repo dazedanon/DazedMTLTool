@@ -2130,7 +2130,7 @@ Output ONLY the {LANGUAGE} translation in the following format: `Translation: <{
 - `...` can be a part of the dialogue. Translate it as it is.\n\
 {VOCAB}\n\
 "
-    user = f'{subbedT}'
+    user = f'```json\n{subbedT}```'
     return characters, system, user
 
 def translateText(characters, system, user, history, penalty):
@@ -2152,6 +2152,7 @@ def translateText(characters, system, user, history, penalty):
         temperature=0,
         frequency_penalty=penalty,
         model=MODEL,
+        response_format={ "type": "json_object" },
         messages=msg,
     )
     return response
@@ -2196,14 +2197,11 @@ def elongateCharacters(text):
     return re.sub(pattern, repl, text)
 
 def extractTranslation(translatedTextList, is_list):
-    pattern = r'`?<[Ll]ine\d+>([\\]*.*?[\\]*?)<\/?[Ll]ine\d+>`?'
+    line_dict = json.loads(translatedTextList)
     # If it's a batch (i.e., list), extract with tags; otherwise, return the single item.
     if is_list:
-        matchList = re.findall(pattern, translatedTextList, flags=re.DOTALL)
-        return matchList
-    else:
-        matchList = re.findall(pattern, translatedTextList)
-        return matchList[0][0] if matchList else translatedTextList
+        string_list = [line_dict[key] for key in sorted(line_dict.keys(), key=lambda x: int(x[4:]))]
+        return string_list
 
 def countTokens(characters, system, user, history):
     inputTotalTokens = 0
@@ -2244,8 +2242,8 @@ def translateGPT(text, history, fullPromptFlag):
     for index, tItem in enumerate(tList):
         # Before sending to translation, if we have a list of items, add the formatting
         if isinstance(tItem, list):
-            payload = '\n'.join([f'`<Line{i}>{item}</Line{i}>`' for i, item in enumerate(tItem)])
-            payload = re.sub(r'(<Line\d+)(><)(\/Line\d+>)', r'\1>Placeholder Text<\3', payload)
+            payload = {f"Line{i+1}": string for i, string in enumerate(tItem)}
+            payload = json.dumps(payload, indent=4, ensure_ascii=False)
             varResponse = subVars(payload)
             subbedT = varResponse[0]
         else:
