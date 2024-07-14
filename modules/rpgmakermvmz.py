@@ -2110,11 +2110,33 @@ def batchList(input_list, batch_size):
 
 def createContext(fullPromptFlag, subbedT):
     characters = 'Game Characters:\n\
-セシリー (Cecily) - Female\n\
-アメリア (Amelia) - Female\n\
-ヘンリー (Henry) - Male\n\
-オズワルド (Oswald) - Male\n\
-ダミアーニ (Damian) - Male\n\
+レナリス (Renalith) - Female\n\
+スクルー (Sukuru) - Female\n\
+シスターミサ (Sister Misa) - Female\n\
+オリン (Orin) - Female\n\
+プローテ (Prote) - Female\n\
+夜霧 (Night Fog) - Female\n\
+ワウ (Wao) - Female\n\
+ファンナ (Fanna) - Female\n\
+精霊主スクルド (Spirit God Skuld) - Female\n\
+エキドナ (Echnida) - Female\n\
+マルス (Mars) - Male\n\
+ラヴィー (Lavi) - Unknown\n\
+魅音 (Mion) - Female\n\
+ヴィオラ (Viola) - Female\n\
+リンメイ (Lin Mei) - Female\n\
+リネット (Lynette) - Female\n\
+チェロル (Cheryl) - Female\n\
+カルーア姫 (Princess Karua) - Female\n\
+田姫 (Tajirme) - Female\n\
+リュート (Luto) - Male\n\
+ホルン (Horn) - Female\n\
+ルメラ (Lumera) - Female\n\
+末嬉 (Sueki) - Female\n\
+モニカ姫 (Princess Monica) - Female\n\
+エメルーラ (Emerald) - Female\n\
+フンシス (Funsis) - Male \n\
+バゼット (Bazzet) - Female\n\
 '
     
     system = PROMPT + VOCAB if fullPromptFlag else \
@@ -2165,11 +2187,8 @@ def cleanTranslatedText(translatedText, varResponse):
         '〜': '~',
         'ッ': '',
         '。': '.',
-        '< ': '<',
-        '</ ': '</',
-        ' >': '>',
-        '「': '\"',
-        '」': '\"',
+        '「': '\\"',
+        '」': '\\"',
         '- ': '-',
         'Placeholder Text': '',
         # Add more replacements as needed
@@ -2197,11 +2216,14 @@ def elongateCharacters(text):
     return re.sub(pattern, repl, text)
 
 def extractTranslation(translatedTextList, is_list):
-    line_dict = json.loads(translatedTextList)
-    # If it's a batch (i.e., list), extract with tags; otherwise, return the single item.
-    if is_list:
-        string_list = [line_dict[key] for key in sorted(line_dict.keys(), key=lambda x: int(x[4:]))]
-        return string_list
+    try:
+        line_dict = json.loads(translatedTextList)
+        # If it's a batch (i.e., list), extract with tags; otherwise, return the single item.
+        if is_list:
+            string_list = [line_dict[key] for key in sorted(line_dict.keys(), key=lambda x: int(x[4:]))]
+            return string_list
+    except Exception as e:
+        print(e)
 
 def countTokens(characters, system, user, history):
     inputTotalTokens = 0
@@ -2272,11 +2294,10 @@ def translateGPT(text, history, fullPromptFlag):
         totalTokens[0] += response.usage.prompt_tokens
         totalTokens[1] += response.usage.completion_tokens
 
-        # Formatting
+        # Check Translation
         translatedText = cleanTranslatedText(translatedText, varResponse)
         if isinstance(tItem, list):
             extractedTranslations = extractTranslation(translatedText, True)
-            tList[index] = extractedTranslations
             if len(tItem) != len(extractedTranslations):
                 # Mismatch. Try Again
                 response = translateText(characters, system, user, history, 0.2)
@@ -2288,18 +2309,21 @@ def translateGPT(text, history, fullPromptFlag):
                 translatedText = cleanTranslatedText(translatedText, varResponse)
                 if isinstance(tItem, list):
                     extractedTranslations = extractTranslation(translatedText, True)
-                    tList[index] = extractedTranslations
                     if len(tItem) != len(extractedTranslations):
                         mismatch = True # Just here for breakpoint
-
-            # Create History
-            with LOCK:
-                if PBAR is not None:
-                    PBAR.update(len(tItem))
-            if not mismatch:
+            
+            # Set if no mismatch
+            if mismatch == False:
+                tList[index] = extractedTranslations
                 history = extractedTranslations[-10:]  # Update history if we have a list
             else:
                 history = text[-10:]
+                mismatch = False
+
+            # Update Loading Bar
+            with LOCK:
+                if PBAR is not None:
+                    PBAR.update(len(tItem))
         else:
             # Ensure we're passing a single string to extractTranslation
             extractedTranslations = extractTranslation(translatedText, False)
