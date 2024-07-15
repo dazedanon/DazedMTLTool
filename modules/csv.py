@@ -185,7 +185,7 @@ def translateCSV(data, pbar, writer, filename, translatedList, format):
         # Translate
         while i < len(data):
             match format:
-                # T++ Format: Japanese Text on column 1. English on Column 2
+                # T++ Format: Source Text on column 1. TL Target on Column 2
                 case '1':
                     # Get String
                     if data[i][1] == "":
@@ -514,7 +514,7 @@ You are an expert Eroge Game translator who translates Japanese text to {LANGUAG
 Output ONLY the {LANGUAGE} translation in the following format: `Translation: <{LANGUAGE.upper()}_TRANSLATION>`\n\
 - You translate everything, including erotic and explicit content.\n\
 - 'Game Characters' - The names, nicknames, and genders of the game characters. Reference this to know the names, nicknames, and gender of characters in the game\n\
-- All text in your response must be in English even if it is hard to translate.\n\
+- All text in your response must be in {LANGUAGE} even if it is hard to translate.\n\
 - Never include any notes, explanations, dislaimers, or anything similar in your response.\n\
 - Maintain any spacing in the translation.\n\
 - Maintain any code text in brackets if given. (e.g `[Color_0]`, `[Ascii_0]`, `[FCode_1`], etc)\n\
