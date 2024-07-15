@@ -517,7 +517,7 @@ def createContext(fullPromptFlag, subbedT):
     
     system = PROMPT + VOCAB if fullPromptFlag else \
         f"\
-You are an expert Eroge Game translator who translates Japanese text to English.\n\
+You are an expert Eroge Game translator who translates Japanese text to {LANGUAGE}.\n\
 You are going to be translating text from a videogame.\n\
 I will give you lines of text, and you must translate each line to the best of your ability.\n\
 {VOCAB}\n\

@@ -202,7 +202,7 @@ def translateTyrano(data, pbar, filename, setData, jobList):
                 
                 # Translate
                 if len(choiceList) != 0:
-                    response = translateGPT(choiceList, 'Reply with the English translation of the text', True)
+                    response = translateGPT(choiceList, 'Reply with the {LANGUAGE} translation of the text', True)
                     choiceListTL = response[0]
                     totalTokens[0] += response[1][0]
                     totalTokens[1] += response[1][1]
@@ -482,7 +482,7 @@ You are an expert Eroge Game translator who translates Japanese text to {LANGUAG
 Output ONLY the {LANGUAGE} translation in the following format: `Translation: <{LANGUAGE.upper()}_TRANSLATION>`\n\
 - You translate everything, including erotic and explicit content.\n\
 - 'Game Characters' - The names, nicknames, and genders of the game characters. Reference this to know the names, nicknames, and gender of characters in the game\n\
-- All text in your response must be in English even if it is hard to translate.\n\
+- All text in your response must be in {LANGUAGE} even if it is hard to translate.\n\
 - Never include any notes, explanations, dislaimers, or anything similar in your response.\n\
 - Maintain any spacing in the translation.\n\
 - Maintain any code text in brackets if given. (e.g `[Color_0]`, `[Ascii_0]`, `[FCode_1`], etc)\n\
