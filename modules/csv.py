@@ -137,10 +137,14 @@ def parseCSV(readFile, writeFile, filename):
 
     format = ''
     while format == '':
-        format = input('\n\nSelect the CSV Format:\n\n1. Translator++')
+        format = input('\n\nSelect the CSV Format:\n\n1. Translator++\n2. Single\n3. Multiple')
         match format:
             case '1':
                 format = '1'
+            case '2':
+                format = '2'
+            case '3':
+                format = '3'
 
     # Get total for progress bar
     totalLines = len(readFile.readlines())
@@ -165,7 +169,7 @@ def parseCSV(readFile, writeFile, filename):
             response = translateCSV(data, pbar, writer, filename, None, format)
             totalTokens[0] = response[0]
             totalTokens[1] = response[1]
-        except Exception as e:
+        except Exception:
             traceback.print_exc()
     return [data, totalTokens, None]
 
@@ -202,9 +206,82 @@ def translateCSV(data, pbar, writer, filename, translatedList, format):
 
                             # Add Wordwrap
                             translatedText = textwrap.fill(translatedText, WIDTH)
+                            translatedText = translatedText.replace('\n', '\\n')
 
                             # Set Data
                             data[i][1] = translatedText
+                        
+                    # Iterate
+                    i += 1
+                
+                # Target Format
+                case '2':
+                    # Set Values
+                    sourceColumn = 0
+                    targetColumn = 1
+
+                    # Check if Translated
+                    jaString = data[i][sourceColumn]
+
+                    # Remove Textwrap
+                    jaString = jaString.replace('\n', ' ')
+
+                    # Pass 1
+                    if not translatedList:
+                        stringList.append(jaString)
+
+                    # Pass 2
+                    else:
+                        # Grab and Pop
+                        translatedText = translatedList[0]
+                        translatedList.pop(0)
+
+                        # Add Wordwrap
+                        translatedText = textwrap.fill(translatedText, WIDTH)
+                        translatedText = translatedText.replace('\n', '\\n')
+
+                        # Set Data
+                        data[i][targetColumn] = translatedText
+                        
+                    # Iterate
+                    i += 1
+
+                # All Format
+                case '3':
+                    # Set columns to translate. Leave empty to translate all.
+                    targetColumns = []
+
+                    # False - Place translation in source column
+                    # True - Place translation in next column
+                    targetNextRow = True 
+
+                    for j in range(len(data[i])):
+                        if j not in targetColumns:
+                            # Check if Translated
+                            jaString = data[i][j]
+
+                            # Remove Textwrap
+                            jaString = jaString.replace('\n', ' ')
+
+                            # Pass 1
+                            if not translatedList:
+                                stringList.append(jaString)
+
+                            # Pass 2
+                            else:
+                                # Grab and Pop
+                                translatedText = translatedList[0]
+                                translatedList.pop(0)
+
+                                # Add Wordwrap
+                                translatedText = textwrap.fill(translatedText, WIDTH)
+                                translatedText = translatedText.replace('\n', '\\n')
+
+                                # Set Data
+                                if targetNextRow:
+                                    data[i][j + 1] = translatedText
+                                else:
+                                    data[i][j] = translatedText
                         
                     # Iterate
                     i += 1
@@ -565,11 +642,11 @@ def translateGPT(text, history, fullPromptFlag):
             varResponse = subVars(tItem)
             subbedT = varResponse[0]
 
-        # # Things to Check before starting translation
-        # if not re.search(r'[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９]+', subbedT):
-        #     if PBAR is not None:
-        #         PBAR.update(len(tItem))
-        #     continue
+        # Things to Check before starting translation (Comment if not translating from Japanese)
+        if not re.search(r'[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９]+', subbedT):
+            if PBAR is not None:
+                PBAR.update(len(tItem))
+            continue
 
         # Create Message
         characters, system, user = createContext(fullPromptFlag, subbedT)
