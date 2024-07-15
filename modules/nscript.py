@@ -230,10 +230,30 @@ def translateOnscripter(data, pbar, filename, translatedList):
                     translatedText = f'\u3000{translatedText}\\'
 
                     # Unconvert Codes
-                    matchList = re.findall(r'([＄＃％].*?)[^\w]', translatedText)
+                    matchList = re.findall(r'([＄].+?)[^\w]', translatedText)
                     if matchList:
                         for match in matchList:
                             translatedText = translatedText.replace(match, match.translate(wide_to_ascii))
+
+                    # Unconvert Color Codes
+                    matchList = re.findall(r'([＃][\w\d]{6})', translatedText)
+                    if matchList:
+                        for match in matchList:
+                            translatedText = translatedText.replace(match, match.translate(wide_to_ascii))
+
+                    # Unconvert Variables
+                    matchList = re.findall(r'([％]\w.+?)[^\w＿]', translatedText)
+                    if matchList:
+                        for match in matchList:
+                            translatedText = translatedText.replace(match, match.translate(wide_to_ascii))
+
+                    # Fix Broken Code
+                    matchList = re.findall(r'(：　.*)', translatedText, re.DOTALL)
+                    if matchList:
+                        for match in matchList:
+                            code = match.replace('\n', ' ')
+                            translatedText = translatedText.replace(match, '\\' + f'{code.translate(wide_to_ascii)}'.replace('\\', ''))
+
 
                     # Set Data
                     data[i] = data[i].replace(originalString, translatedText)
@@ -528,10 +548,11 @@ def extractTranslation(translatedTextList, is_list):
         line_dict = json.loads(translatedTextList)
         # If it's a batch (i.e., list), extract with tags; otherwise, return the single item.
         if is_list:
-            string_list = [line_dict[key] for key in sorted(line_dict.keys(), key=lambda x: int(x[4:]))]
+            string_list = list(line_dict.values())
             return string_list
     except Exception as e:
         print(e)
+        return translatedTextList
 
 def countTokens(characters, system, user, history):
     inputTotalTokens = 0
