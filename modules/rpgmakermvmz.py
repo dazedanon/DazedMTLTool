@@ -2220,7 +2220,7 @@ def extractTranslation(translatedTextList, is_list):
         line_dict = json.loads(translatedTextList)
         # If it's a batch (i.e., list), extract with tags; otherwise, return the single item.
         if is_list:
-            string_list = [line_dict[key] for key in sorted(line_dict.keys(), key=lambda x: int(x[4:]))]
+            string_list = list(line_dict.values())
             return string_list
     except Exception as e:
         print(e)
