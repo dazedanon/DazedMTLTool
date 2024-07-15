@@ -137,7 +137,7 @@ def parseCSV(readFile, writeFile, filename):
 
     format = ''
     while format not in ['1', '2', '3']:
-        format = input('\n\nSelect the CSV Format:\n\n1. Translator++\n2. Single\n3. Multiple')
+        format = input('\n\nSelect the CSV Format:\n\n1. Translator++\n2. Single\n3. Multiple\n')
         match format:
             case '1':
                 format = '1'
