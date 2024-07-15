@@ -61,7 +61,7 @@ def handleCSV(filename, estimate):
     ESTIMATE = estimate
 
     if not ESTIMATE:
-        with open('translated/' + filename, 'w+t', newline='', encoding='utf-8') as writeFile:
+        with open('translated/' + filename, 'w+t', newline='', encoding='utf-8-sig') as writeFile:
             # Translate
             start = time.time()
             translatedData = openFiles(filename, writeFile)
@@ -95,13 +95,13 @@ def handleCSV(filename, estimate):
         return totalString
 
 def openFiles(filename, writeFile):
-    with open('files/' + filename, 'r', encoding='utf-8') as readFile, writeFile:
+    with open('files/' + filename, 'r', encoding='utf-8-sig') as readFile, writeFile:
         translatedData = parseCSV(readFile, writeFile, filename)
 
     return translatedData
 
 def openFilesEstimate(filename):
-    with open('files/' + filename, 'r', encoding='utf-8') as readFile:
+    with open('files/' + filename, 'r', encoding='utf-8-sig') as readFile:
         translatedData = parseCSV(readFile, '', filename)
 
     return translatedData
@@ -146,7 +146,7 @@ def parseCSV(readFile, writeFile, filename):
     totalLines = len(readFile.readlines())
     readFile.seek(0)
 
-    reader = csv.reader(readFile, delimiter=',',)
+    reader = csv.reader(readFile, delimiter=',')
     if not ESTIMATE:
         writer = csv.writer(writeFile, delimiter=',', quotechar='\"')
     else:
@@ -155,113 +155,91 @@ def parseCSV(readFile, writeFile, filename):
     with tqdm(bar_format=BAR_FORMAT, position=POSITION, total=totalLines, leave=LEAVE) as pbar:
         pbar.desc=filename
         pbar.total=totalLines
+
+        # Grab All Rows
+        data = []
+        for row in reader:
+            data.append(row)
+
         try:
-            response = translateCSV(reader, pbar, writer, textHistory, format)
+            response = translateCSV(data, pbar, writer, filename, None, format)
             totalTokens[0] = response[0]
             totalTokens[1] = response[1]
         except Exception as e:
             traceback.print_exc()
-    return [reader, totalTokens, None]
+    return [data, totalTokens, None]
 
-def translateCSV(reader, pbar, writer, textHistory, format):
+def translateCSV(data, pbar, writer, filename, translatedList, format):
     global LOCK, ESTIMATE, PBAR
     PBAR = pbar
     translatedText = ''
-    maxHistory = MAXHISTORY
     totalTokens = [0,0]
-    data = []
-    batch = []
     i = 0
+    stringList = []
 
     try:
-        # Grab All Rows
-        for row in reader:
-            data.append(row)
-
-        # Batch
+        # Translate
         while i < len(data):
-            if len(batch) < BATCHSIZE:
-                if 'Original Text' not in data[i]:
-                    batch.append(data[i])
-                pbar.update(1)
-                i += 1
-            else:
-                match format:
-                    # T++ Format: Japanese Text on column 1. English on Column 2
-                    case '1':
-                        # Put in Payload
-                        payload = []
-                        for row in batch:
-                            if row[1] == "":
-                                jaString = row[0]
+            match format:
+                # T++ Format: Japanese Text on column 1. English on Column 2
+                case '1':
+                    # Get String
+                    if data[i][1] == "":
+                        jaString = data[i][0]
 
-                                # Remove Textwrap
-                                jaString = jaString.replace('\n', ' ')
-                                payload.append(jaString)
+                        # Remove Textwrap
+                        jaString = jaString.replace('\n', ' ')
 
-                        # Translate
-                        response = translateGPT(payload, textHistory, True)
-                        translatedTextList = response[0]
-                        totalTokens[0] = response[1][0]
-                        totalTokens[1] = response[1][1]
+                        # Pass 1
+                        if not translatedList:
+                            stringList.append(jaString)
 
-                        # MISMATCH
-                        if len(translatedTextList) != len(payload):
-                            pbar.write(f'Mismatch Error: {i-len(batch)}-{i}')
-                            batch.clear()
-                            continue
+                        # Pass 2
+                        else:
+                            # Grab and Pop
+                            translatedText = translatedList[0]
+                            translatedList.pop(0)
 
-                        # Set Data
-                        j = i - BATCHSIZE
-                        for row in translatedTextList:
-                            row = row.replace('"', r'\\"')
-                            row = row.replace(',', r'\\,')
-                            data[j][1] = row
-                            j += 1
-                        batch.clear()
+                            # Add Wordwrap
+                            translatedText = textwrap.fill(translatedText, WIDTH)
 
-        # Leftovers
-        if format == '1':
-            # Put in Payload
-            payload = []
-            for row in batch:
-                if row[1] == "":
-                    jaString = row[0]
-                else:
-                    continue
+                            # Set Data
+                            data[i][1] = translatedText
+                        
+                    # Iterate
+                    i += 1
 
-                # Remove Textwrap
-                jaString = jaString.replace('\n', ' ')
-                payload.append(jaString)
-
+        # EOF
+        if len(stringList) > 0:
+            # Set Progress
+            pbar.total = len(stringList)
+            pbar.refresh()
+            
             # Translate
-            response = translateGPT(payload, textHistory, True)
-            translatedTextList = response[0]
-            totalTokens[0] = response[1][0]
-            totalTokens[1] = response[1][1]
+            response = translateGPT(stringList, '', True)
+            totalTokens[0] += response[1][0]
+            totalTokens[1] += response[1][1]
+            translatedList = response[0]
 
-            # MISMATCH
-            if len(translatedTextList) != len(payload):
-                pbar.write(f'Mismatch Error: {i-BATCHSIZE}-{i}')
-                batch.clear()
+            # Set Strings
+            if len(stringList) == len(translatedList):
+                translateCSV(data, pbar, writer, filename, translatedList, format)
+
+            # Mismatch
             else:
-                # Set Data
-                j = i - len(batch)
-                for row in translatedTextList:
-                    row = row.replace('"', r'\"')
-                    row = row.replace(',', r'\,')
-                    data[j][1] = row
-                    j += 1
-                batch.clear()
+                with LOCK:
+                    if filename not in MISMATCH:
+                        MISMATCH.append(filename)
 
-        # Write all Data
-        with LOCK:
-            if not ESTIMATE:
-                for row in data:
-                    writer.writerow(row)
+            # Write all Data
+            with LOCK:
+                if not ESTIMATE:
+                    for row in data:
+                        writer.writerow(row)
 
     except Exception:
         traceback.print_exc()
+
         # Write all Data
         with LOCK:
             if not ESTIMATE:
