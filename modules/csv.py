@@ -132,7 +132,6 @@ def getResultString(translatedData, translationTime, filename):
 def parseCSV(readFile, writeFile, filename):
     totalTokens = [0,0]
     totalLines = 0
-    textHistory = []
     global LOCK
 
     format = ''
@@ -643,10 +642,10 @@ def translateGPT(text, history, fullPromptFlag):
             subbedT = varResponse[0]
 
         # Things to Check before starting translation (Comment if not translating from Japanese)
-        if not re.search(r'[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９]+', subbedT):
-            if PBAR is not None:
-                PBAR.update(len(tItem))
-            continue
+        # if not re.search(r'[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９]+', subbedT):
+        #     if PBAR is not None:
+        #         PBAR.update(len(tItem))
+        #     continue
 
         # Create Message
         characters, system, user = createContext(fullPromptFlag, subbedT)

@@ -58,24 +58,24 @@ POSITION = 0
 LEAVE = False
 
 # Dialogue / Scroll
-CODE401 = True
+CODE401 = False
 CODE405 = False
 CODE408 = False
 
 # Choices
-CODE102 = True
+CODE102 = False
 
 # Variables
 CODE122 = False
 
 # Names
-CODE101 = True
+CODE101 = False
 
 # Other
 CODE355655 = False
 CODE357 = False
 CODE657 = False
-CODE356 = False
+CODE356 = True
 CODE320 = False
 CODE324 = False
 CODE111 = False
@@ -1418,11 +1418,11 @@ def searchCodes(page, pbar, jobList, filename):
                 # Want to translate this script
                 if 'D_TEXT ' in jaString:
                     regex = r'D_TEXT\s(.*?)\s.+'
-                elif 'ShowInfo':
+                elif 'ShowInfo' in jaString:
                     regex = r'ShowInfo\s(.*)'
-                elif 'PushGab':
+                elif 'PushGab' in jaString:
                     regex = r'PushGab\s(.*)'
-                elif 'addLog':
+                elif 'addLog' in jaString:
                     regex = r'addLog\s(.*)'
                 else:
                     regex = r''
@@ -1432,7 +1432,7 @@ def searchCodes(page, pbar, jobList, filename):
 
                 # Capture Arguments and text
                 textMatch = re.search(regex, jaString)
-                if textMatch != None:
+                if textMatch.group() != '':
                     text = textMatch.group(1)
 
                     # Using this to keep track of 401's in a row. Throws IndexError at EndOfList (Expected Behavior)
