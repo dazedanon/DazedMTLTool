@@ -162,11 +162,11 @@ def translateRegex(data, pbar, filename, translatedList):
     while i < len(data):
         voice = False
         speaker = ''
-        if 'MSG' in data[i] or 'SYSTEM' in data[i]:
+        if 'mov' in data[i]:
             # Lines
-            match = re.search(r'.+	.+	MSG.*?		.+	\u3000?(.+)	.+	.+	.+	', data[i])
+            match = re.search(r'mov\s\$\d+?,"(.*?)"', data[i])
             if match == None:
-                match = re.search(r'.+	.+	SYSTEM.*?		.+	\u3000?(.+)	.+	.+	.+	', data[i])
+                match = re.search(r'mov\s\$\d+?,"(.*?)"', data[i])
             if match != None and match.group(1) != '':
                 originalString = match.group(1)
                 # Pass 1
@@ -175,7 +175,7 @@ def translateRegex(data, pbar, filename, translatedList):
                     jaString = match.group(1)
                         
                     # Remove any textwrap
-                    jaString = jaString.replace('<br>', ' ')
+                    jaString = jaString.replace('\n', ' ')
 
                     # Add String
                     stringList.append(jaString.strip())
@@ -194,7 +194,6 @@ def translateRegex(data, pbar, filename, translatedList):
 
                         # Textwrap
                         translatedText = textwrap.fill(translatedText, width=WIDTH)
-                        translatedText = translatedText.replace('\n', '<br>')
 
                         # Set Data
                         data[i] = data[i].replace(originalString, translatedText)
@@ -213,7 +212,7 @@ def translateRegex(data, pbar, filename, translatedList):
         pbar.refresh()
         
         # Translate
-        response = translateGPT(stringList, '', True, pbar, filename)
+        response = translateGPT(stringList, 'Reply with the English TL of the NPC Name', True, pbar, filename)
         tokens[0] += response[1][0]
         tokens[1] += response[1][1]
         translatedList = response[0]
