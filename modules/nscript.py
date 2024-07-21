@@ -170,11 +170,10 @@ def translateOnscripter(data, pbar, filename, translatedList):
     PBAR = pbar
     i = 0
 
+    # Dialogue
     while i < len(data):
-        voice = False
-        speaker = ''
-        regex = r'^([\u3000「（【[][^\n]+)'
         # Lines
+        regex = r'^([\u3000「（【[][^\n]+)'
         match = re.search(regex, data[i])
         if match != None and match.group(1) != '':
             originalString = match.group(1)
@@ -191,7 +190,7 @@ def translateOnscripter(data, pbar, filename, translatedList):
                 jaString = jaString.translate(wide_to_ascii)
                     
                 # Remove any textwrap and \u3000 and \
-                jaString = jaString.replace('\n', ' ')
+                jaString = jaString.replace('\n', '')
                 jaString = jaString.replace('\u3000', '')
                 jaString = jaString.replace('\\', '')
                 jaString = jaString.replace('　＞', ')')
@@ -222,41 +221,53 @@ def translateOnscripter(data, pbar, filename, translatedList):
                     translatedText = textwrap.fill(translatedText, width=WIDTH)
                     translatedText = translatedText.replace('\n', '\n\u3000')
 
+                    # Split the string into lines
+                    lines = translatedText.split('\n')
+                    
+                    # Add a backslash after every 3rd line
+                    j = 0
+                    while j < len(lines):
+                        if j == 4:
+                            lines[j-1] = f'{lines[j-1]}\\'
+                            lines[j] = f'\n{lines[j]}'
+                        j += 1
+                    
+                    # Join the lines back into a single string
+                    translatedText = '\n'.join(lines)
+
+                    # Remove Double Spaces
+                    translatedText = translatedText.replace('  ', ' ')
+
                     # Convert to Wide
                     translatedText = translatedText.translate(ascii_to_wide)
 
-                    # Add Break
-                    translatedText = translatedText.replace('\"', '\'')
-                    translatedText = f'\u3000{translatedText}\\'
-
-                    # Unconvert Codes
-                    matchList = re.findall(r'([＄].+?)[^\w]', translatedText)
-                    if matchList:
-                        for match in matchList:
-                            translatedText = translatedText.replace(match, match.translate(wide_to_ascii))
-
-                    # Unconvert Color Codes
-                    matchList = re.findall(r'([＃][\w\d]{6})', translatedText)
-                    if matchList:
-                        for match in matchList:
-                            translatedText = translatedText.replace(match, match.translate(wide_to_ascii))
-
-                    # Unconvert Variables
-                    matchList = re.findall(r'([％]\w.+?)[^\w＿]', translatedText)
-                    if matchList:
-                        for match in matchList:
-                            translatedText = translatedText.replace(match, match.translate(wide_to_ascii))
-
-                    # Fix Broken Code
-                    matchList = re.findall(r'(：　.*)', translatedText, re.DOTALL)
-                    if matchList:
-                        for match in matchList:
-                            code = match.replace('\n', ' ')
-                            translatedText = translatedText.replace(match, '\\' + f'{code.translate(wide_to_ascii)}'.replace('\\', ''))
-
+                    # Fix Formatting
+                    translatedText = fixText(translatedText)
 
                     # Set Data
-                    data[i] = data[i].replace(originalString, translatedText)
+                    data[i] = data[i].replace(originalString, f'{translatedText}')
+            i += 1
+
+        # Choices
+        elif 'csel' in data[i] and translatedList != []:
+            choiceList = []
+            jaString = data[i]
+
+            choiceList = re.findall(r'\"(.*?)\"', jaString)
+            if len(choiceList) > 0:
+                # Translate
+                response = translateGPT(choiceList, 'This will be a dialogue option', True)
+                translatedTextList = response[0]
+                tokens[0] += response[1][0]
+                tokens[1] += response[1][1]
+
+                # Set Data
+                for j in range(len(translatedTextList)):
+                    # Convert to Wide
+                    translatedText = translatedTextList[j].translate(ascii_to_wide)
+
+                    # Set
+                    data[i] = data[i].replace(choiceList[j], translatedText)
             i += 1
 
         # Nothing relevant. Skip Line.
@@ -285,6 +296,37 @@ def translateOnscripter(data, pbar, filename, translatedList):
                 if filename not in MISMATCH:
                     MISMATCH.append(filename)
     return tokens
+
+def fixText(translatedText):
+    # Add Break
+    translatedText = translatedText.replace('\"', '\'')
+    translatedText = f'\u3000{translatedText}\\'
+
+    # Unconvert Codes
+    matchList = re.findall(r'([＄].+?)[^\w]', translatedText)
+    if matchList:
+        for match in matchList:
+            translatedText = translatedText.replace(match, match.translate(wide_to_ascii))
+
+    # Unconvert Color Codes
+    matchList = re.findall(r'([＃][\w\d]{6})', translatedText)
+    if matchList:
+        for match in matchList:
+            translatedText = translatedText.replace(match, match.translate(wide_to_ascii))
+
+    # Unconvert Variables
+    matchList = re.findall(r'([％]\w.+?)[^\w＿]', translatedText)
+    if matchList:
+        for match in matchList:
+            translatedText = translatedText.replace(match, match.translate(wide_to_ascii))
+
+    # Unconvert Backslashes
+    matchList = re.findall(r'＼', translatedText)
+    if matchList:
+        for match in matchList:
+            translatedText = translatedText.replace(match, match.translate(wide_to_ascii))
+
+    return translatedText
 
 # Save some money and enter the character before translation
 def getSpeaker(speaker):
