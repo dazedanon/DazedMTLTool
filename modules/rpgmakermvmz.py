@@ -29,7 +29,7 @@ MAXHISTORY = 10
 ESTIMATE = ''
 TOKENS = [0, 0]
 NAMESLIST = []
-FIRSTLINESPEAKERS = True    # If 1st line of dialogue is a speaker, set to True 
+FIRSTLINESPEAKERS = False    # If 1st line of dialogue is a speaker, set to True 
 NAMES = False    # Output a list of all the character names found
 BRFLAG = False   # If the game uses <br> instead
 FIXTEXTWRAP = True  # Overwrites textwrap
@@ -58,18 +58,18 @@ POSITION = 0
 LEAVE = False
 
 # Dialogue / Scroll
-CODE401 = False
-CODE405 = False
+CODE401 = True
+CODE405 = True
 CODE408 = False
 
 # Choices
-CODE102 = False
+CODE102 = True
 
 # Variables
 CODE122 = False
 
 # Names
-CODE101 = False
+CODE101 = True
 
 # Other
 CODE355655 = False
@@ -714,6 +714,7 @@ def searchCodes(page, pbar, jobList, filename):
     syncIndex = 0
     CLFlag = False
     maxHistory = MAXHISTORY
+    VNameValue = None
     global LOCK
     global NAMESLIST
     global MISMATCH
@@ -756,6 +757,21 @@ def searchCodes(page, pbar, jobList, filename):
                     codeList[i]['code'] = -1
                     i += 1
                     continue
+
+                # # For Retarded Devs
+                # retardRegex = r'([\\]+[nN]\[[\\]+V\[\d*?\]\])'
+                # match = re.search(retardRegex, jaString)
+                # if match:
+                #     if VNameValue == 1:
+                #         jaString = re.sub(retardRegex, 'リッカ', jaString)
+                #     if VNameValue == 2:
+                #         jaString = re.sub(retardRegex, 'ミミ', jaString)
+                #     if VNameValue == 3:
+                #         jaString = re.sub(retardRegex, 'ヒトミ', jaString)
+                #     if VNameValue == 4:
+                #         jaString = re.sub(retardRegex, 'Taro', jaString)
+                #     if VNameValue == 5:
+                #         jaString = re.sub(retardRegex, '富士見', jaString)
 
                 # Speaker Check
                 # Colors
@@ -831,10 +847,10 @@ def searchCodes(page, pbar, jobList, filename):
                     ### \\n<Speaker>
                     nCase = None
                     if finalJAString[0] != '\\':
-                        regex = r'(.*?)([\\]+[kKnN][wWcC]?[<](.*?)[>].*)'
+                        regex = r'(.*?)([\\]+[kKnN][wWcCrR]?[<](.*?)[>].*)'
                         nCase = 0
                     else:
-                        regex = r'([\\]+[kKnN][wWcC]?[<](.*?)[>])'
+                        regex = r'([\\]+[kKnN][wWcCrR]?[<](.*?)[>])'
                         nCase = 1
                     matchList = re.findall(regex, finalJAString)
                     if len(matchList) > 0:  
@@ -914,7 +930,7 @@ def searchCodes(page, pbar, jobList, filename):
                     finalJAString = finalJAString.replace('。', '.')
                     finalJAString = re.sub(r'(\.{3}\.+)', '...', finalJAString)
                     finalJAString = finalJAString.replace('　', '')
-                    finalJAString = finalJAString.replace('」', '\"')
+                    finalJAString = finalJAString.replace('「', '\"')
                     finalJAString = finalJAString.replace('」', '\"')
 
                     ### Remove format codes
@@ -924,17 +940,17 @@ def searchCodes(page, pbar, jobList, filename):
                         for match in rcodeMatch:
                             finalJAString = finalJAString.replace(match[0],match[1])
 
-                    # Remove any RPGMaker Code at start
-                    ffMatch = re.search(r'^([.\\]+[aAbBcCdDeEfFgGhHiIjJlLmMoOpPqQrRsStTuUvVwWxXyYzZ]+\[.+?\])+', finalJAString)
-                    if ffMatch != None:
-                        finalJAString = finalJAString.replace(ffMatch.group(0), '')
-                        nametag += ffMatch.group(0)
-
                     # Formatting
                     formatMatch = re.findall(r'[\\]+[!><.|#^{}]', finalJAString)
                     if len(formatMatch) > 0:
                         for match in formatMatch:
                             finalJAString = finalJAString.replace(match, '')
+
+                    # Remove any RPGMaker Code at start
+                    ffMatch = re.search(r'^([.\\]+[aAbBcCdDeEfFgGhHiIjJlLmMoOpPqQrRsStTuUvVwWxXyYzZ]+\[.+?\]\]?)+', finalJAString)
+                    if ffMatch != None:
+                        finalJAString = finalJAString.replace(ffMatch.group(0), '')
+                        nametag += ffMatch.group(0)
 
                     # Center Lines
                     if '\\CL' in finalJAString or '\\ac' in finalJAString:
@@ -1025,11 +1041,17 @@ def searchCodes(page, pbar, jobList, filename):
             ## Event Code: 122 [Set Variables]
             if 'code' in codeList[i] and codeList[i]['code'] == 122 and CODE122 is True:
                 # This is going to be the var being set. (IMPORTANT)
-                if codeList[i]['parameters'][0] not in list(range(0, 100)):
+                if codeList[i]['parameters'][0] not in list(range(20, 100)):
                     i += 1
                     continue
                   
                 jaString = codeList[i]['parameters'][4]
+
+                # # For Retarded Devs
+                # VNameValue = jaString
+                # i += 1
+                # continue
+
                 if not isinstance(jaString, str):
                     i += 1
                     continue
@@ -1370,28 +1392,28 @@ def searchCodes(page, pbar, jobList, filename):
                     continue
 
                 # Need to remove outside code and put it back later
-                matchList = re.findall(regex, jaString)
+                match = re.search(regex, jaString)
+                if match:
+                    # Pass 1
+                    if setData is False:
+                        list108.append(match.group(0))
 
-                # Pass 1
-                if setData is False:
-                    list108.append(matchList[0])
+                    # Pass 2
+                    else:
+                        # Grab and Replace
+                        translatedText = list108[0]
+                        list108.pop(0)      
 
-                # Pass 2
-                else:
-                    # Grab and Replace
-                    translatedText = list108[0]
-                    list108.pop(0)      
+                        # Remove characters that may break scripts
+                        charList = ['.', '\"']
+                        for char in charList:
+                            translatedText = translatedText.replace(char, '')
+                        translatedText = translatedText.replace('"', '\"')
+                        translatedText = translatedText.replace(' ', '_')
+                        translatedText = jaString.replace(match.group(0), translatedText)
 
-                    # Remove characters that may break scripts
-                    charList = ['.', '\"']
-                    for char in charList:
-                        translatedText = translatedText.replace(char, '')
-                    translatedText = translatedText.replace('"', '\"')
-                    translatedText = translatedText.replace(' ', '_')
-                    translatedText = jaString.replace(matchList[0], translatedText)
-
-                    # Set Data
-                    codeList[i]['parameters'][0] = translatedText
+                        # Set Data
+                        codeList[i]['parameters'][0] = translatedText
 
             ## Event Code: 356
             if 'code' in codeList[i] and codeList[i]['code'] == 356 and CODE356 is True:
@@ -1424,6 +1446,8 @@ def searchCodes(page, pbar, jobList, filename):
                     regex = r'PushGab\s(.*)'
                 elif 'addLog' in jaString:
                     regex = r'addLog\s(.*)'
+                elif 'DW_' in jaString:
+                    regex = r'DW_.*?\s(.*)'
                 else:
                     regex = r''
 
@@ -1716,7 +1740,7 @@ def searchCodes(page, pbar, jobList, filename):
             else:
                 i += 1
 
-        # End of the line
+        # EOF
         list401TL = []
         list122TL = []
         list355655TL = []
@@ -1895,7 +1919,6 @@ def searchSystem(data, pbar):
     totalTokens[1] += response[1][1]
     data['gameTitle'] = response[0].strip('.')
     
-    
     # Terms
     for term in data['terms']:
         if term != 'messages':
@@ -1907,14 +1930,12 @@ def searchSystem(data, pbar):
                     totalTokens[1] += response[1][1]
                     termList[i] = response[0].replace('\"', '').strip()
                     
-
     # Armor Types
     for i in range(len(data['armorTypes'])):
         response = translateGPT(data['armorTypes'][i], 'Reply with only the '+ LANGUAGE +' translation of the armor type', False)
         totalTokens[0] += response[1][0]
         totalTokens[1] += response[1][1]
         data['armorTypes'][i] = response[0].replace('\"', '').strip()
-        
 
     # Skill Types
     for i in range(len(data['skillTypes'])):
@@ -1922,7 +1943,6 @@ def searchSystem(data, pbar):
         totalTokens[0] += response[1][0]
         totalTokens[1] += response[1][1]
         data['skillTypes'][i] = response[0].replace('\"', '').strip()
-        
 
     # Equip Types
     for i in range(len(data['equipTypes'])):
@@ -1930,7 +1950,6 @@ def searchSystem(data, pbar):
         totalTokens[0] += response[1][0]
         totalTokens[1] += response[1][1]
         data['equipTypes'][i] = response[0].replace('\"', '').strip()
-        
 
     # Variables (Optional ususally)
     # for i in range(len(data['variables'])):
@@ -1955,7 +1974,6 @@ def searchSystem(data, pbar):
         totalTokens[1] += response[1][1]
         messages[key] = translatedText
         
-    
     return totalTokens
 
 # Save some money and enter the character before translation
@@ -2110,33 +2128,17 @@ def batchList(input_list, batch_size):
 
 def createContext(fullPromptFlag, subbedT):
     characters = 'Game Characters:\n\
-レナリス (Renalith) - Female\n\
-スクルー (Sukuru) - Female\n\
-シスターミサ (Sister Misa) - Female\n\
-オリン (Orin) - Female\n\
-プローテ (Prote) - Female\n\
-夜霧 (Night Fog) - Female\n\
-ワウ (Wao) - Female\n\
-ファンナ (Fanna) - Female\n\
-精霊主スクルド (Spirit God Skuld) - Female\n\
-エキドナ (Echnida) - Female\n\
-マルス (Mars) - Male\n\
-ラヴィー (Lavi) - Unknown\n\
-魅音 (Mion) - Female\n\
-ヴィオラ (Viola) - Female\n\
-リンメイ (Lin Mei) - Female\n\
-リネット (Lynette) - Female\n\
-チェロル (Cheryl) - Female\n\
-カルーア姫 (Princess Karua) - Female\n\
-田姫 (Tajirme) - Female\n\
-リュート (Luto) - Male\n\
-ホルン (Horn) - Female\n\
-ルメラ (Lumera) - Female\n\
-末嬉 (Sueki) - Female\n\
-モニカ姫 (Princess Monica) - Female\n\
-エメルーラ (Emerald) - Female\n\
-フンシス (Funsis) - Male \n\
-バゼット (Bazzet) - Female\n\
+リッカ (Rikka) - Female\n\
+白根 (Shirane) - Female\n\
+ミミ (Mimi) - Female\n\
+赤薙 (Akanage) - Female\n\
+ヒトミ (Hitomi) - Female\n\
+錫ヶ岳 (Suzugadake) - Female\n\
+コウ (Kou) - Male\n\
+Taro (Taro) - Male\n\
+富士見 (Fujimi) - Male\n\
+ｼﾞｭｳｲﾁﾛｳ (Juichiro) - Male\n\
+ジュウイチロウ (Juichiro) - Male\n\
 '
     
     system = PROMPT + VOCAB if fullPromptFlag else \
@@ -2152,10 +2154,13 @@ Output ONLY the {LANGUAGE} translation in the following format: `Translation: <{
 - `...` can be a part of the dialogue. Translate it as it is.\n\
 {VOCAB}\n\
 "
-    user = f'```json\n{subbedT}```'
+    if isinstance(subbedT, list):
+        user = f'```json\n{subbedT}```'
+    else:
+        user = subbedT
     return characters, system, user
 
-def translateText(characters, system, user, history, penalty):
+def translateText(characters, system, user, history, penalty, format):
     # Prompt
     msg = [{"role": "system", "content": system + characters}]
 
@@ -2167,6 +2172,12 @@ def translateText(characters, system, user, history, penalty):
         msg.extend([{"role": "system", "content": h} for h in history])
     else:
         msg.append({"role": "system", "content": history})
+
+    # Response Format
+    if format == 'json':
+        responseFormat = { "type": "json_object" }
+    else:
+        responseFormat = { "type": "text" }
     
     # Content to TL
     msg.append({"role": "user", "content": f'{user}'})
@@ -2174,7 +2185,7 @@ def translateText(characters, system, user, history, penalty):
         temperature=0,
         frequency_penalty=penalty,
         model=MODEL,
-        response_format={ "type": "json_object" },
+        response_format=responseFormat,
         messages=msg,
     )
     return response
@@ -2219,11 +2230,16 @@ def extractTranslation(translatedTextList, is_list):
     try:
         line_dict = json.loads(translatedTextList)
         # If it's a batch (i.e., list), extract with tags; otherwise, return the single item.
+        string_list = list(line_dict.values())
         if is_list:
-            string_list = list(line_dict.values())
             return string_list
+        else:
+            return string_list[0]
+
     except Exception as e:
-        print(e)
+        print(f'extractTranslation Error: {translatedTextList}')
+        return None
+
 
 def countTokens(characters, system, user, history):
     inputTotalTokens = 0
@@ -2257,8 +2273,10 @@ def translateGPT(text, history, fullPromptFlag):
     mismatch = False
     totalTokens = [0, 0]
     if isinstance(text, list):
+        format = 'json'
         tList = batchList(text, BATCHSIZE)
     else:
+        format = 'text'
         tList = [text]
 
     for index, tItem in enumerate(tList):
@@ -2289,7 +2307,7 @@ def translateGPT(text, history, fullPromptFlag):
             continue
 
         # Translating
-        response = translateText(characters, system, user, history, 0.02)
+        response = translateText(characters, system, user, history, 0.2, format)
         translatedText = response.choices[0].message.content
         totalTokens[0] += response.usage.prompt_tokens
         totalTokens[1] += response.usage.completion_tokens
@@ -2298,9 +2316,9 @@ def translateGPT(text, history, fullPromptFlag):
         translatedText = cleanTranslatedText(translatedText, varResponse)
         if isinstance(tItem, list):
             extractedTranslations = extractTranslation(translatedText, True)
-            if len(tItem) != len(extractedTranslations):
+            if extractedTranslations == None or len(tItem) != len(extractedTranslations):
                 # Mismatch. Try Again
-                response = translateText(characters, system, user, history, 0.2)
+                response = translateText(characters, system, user, history, 0.05, format)
                 translatedText = response.choices[0].message.content
                 totalTokens[0] += response.usage.prompt_tokens
                 totalTokens[1] += response.usage.completion_tokens
@@ -2309,7 +2327,7 @@ def translateGPT(text, history, fullPromptFlag):
                 translatedText = cleanTranslatedText(translatedText, varResponse)
                 if isinstance(tItem, list):
                     extractedTranslations = extractTranslation(translatedText, True)
-                    if len(tItem) != len(extractedTranslations):
+                    if extractedTranslations == None or len(tItem) != len(extractedTranslations):
                         mismatch = True # Just here for breakpoint
             
             # Set if no mismatch
@@ -2326,8 +2344,7 @@ def translateGPT(text, history, fullPromptFlag):
                     PBAR.update(len(tItem))
         else:
             # Ensure we're passing a single string to extractTranslation
-            extractedTranslations = extractTranslation(translatedText, False)
-            tList[index] = extractedTranslations
+            tList[index] = translatedText                
 
     finalList = combineList(tList, text)
     return [finalList, totalTokens]

@@ -177,7 +177,7 @@ def translatePlugin(data, pbar, filename, translatedList):
         TODO TL all of the above in one call instead of multiple
         """
         # Lines
-        matchList = re.findall(r'\\"SpotName[\\]+":[\\]+"(.*?)[\\]+"', data[i])
+        matchList = re.findall(r'label[\\]+\":[\\]+\"(.*?)\"', data[i])
         if len(matchList) > 0:
             for match in matchList:
                 # Save Original String
@@ -189,7 +189,8 @@ def translatePlugin(data, pbar, filename, translatedList):
                 # Pass 1
                 if translatedList == []:            
                     # Add String
-                    stringList.append(match.strip())
+                    if match != '\\\\\\\\':
+                        stringList.append(match.strip())
                 
                 # Pass 2
                 else:

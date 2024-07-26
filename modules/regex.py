@@ -162,11 +162,11 @@ def translateRegex(data, pbar, filename, translatedList):
     while i < len(data):
         voice = False
         speaker = ''
-        if 'mov' in data[i]:
+        if 'actorID' in data[i]:
             # Lines
-            match = re.search(r'mov\s\$\d+?,"(.*?)"', data[i])
+            match = re.search(r'label[\\]+\":[\\]+\"(.*?)\"', data[i])
             if match == None:
-                match = re.search(r'mov\s\$\d+?,"(.*?)"', data[i])
+                match = re.search(r'label[\\]+\":[\\]+\"(.*?)\"', data[i])
             if match != None and match.group(1) != '':
                 originalString = match.group(1)
                 # Pass 1
