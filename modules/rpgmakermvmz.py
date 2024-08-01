@@ -29,7 +29,7 @@ MAXHISTORY = 10
 ESTIMATE = ''
 TOKENS = [0, 0]
 NAMESLIST = []
-FIRSTLINESPEAKERS = False    # If 1st line of dialogue is a speaker, set to True 
+FIRSTLINESPEAKERS = True    # If 1st line of dialogue is a speaker, set to True 
 NAMES = False    # Output a list of all the character names found
 BRFLAG = False   # If the game uses <br> instead
 FIXTEXTWRAP = True  # Overwrites textwrap
@@ -58,24 +58,24 @@ POSITION = 0
 LEAVE = False
 
 # Dialogue / Scroll
-CODE401 = True
-CODE405 = True
+CODE401 = False
+CODE405 = False
 CODE408 = False
 
 # Choices
-CODE102 = True
+CODE102 = False
 
 # Variables
 CODE122 = False
 
 # Names
-CODE101 = True
+CODE101 = False
 
 # Other
-CODE355655 = False
+CODE355655 = True
 CODE357 = False
 CODE657 = False
-CODE356 = True
+CODE356 = False
 CODE320 = False
 CODE324 = False
 CODE111 = False
@@ -715,6 +715,7 @@ def searchCodes(page, pbar, jobList, filename):
     CLFlag = False
     maxHistory = MAXHISTORY
     VNameValue = None
+    speakerWindow = FIRSTLINESPEAKERS
     global LOCK
     global NAMESLIST
     global MISMATCH
@@ -998,6 +999,9 @@ def searchCodes(page, pbar, jobList, filename):
                                     nametag = nametag.replace(speaker, newSpeaker)
                                 translatedText = re.sub(r'^\[?(.+?)\]?\s?[|:]\s?', '', translatedText)
 
+                            # Fix '- '
+                            translatedText = translatedText.replace('- ', '-')
+
                             # Textwrap
                             if FIXTEXTWRAP is True:
                                 translatedText = textwrap.fill(translatedText, width=WIDTH)
@@ -1041,7 +1045,7 @@ def searchCodes(page, pbar, jobList, filename):
             ## Event Code: 122 [Set Variables]
             if 'code' in codeList[i] and codeList[i]['code'] == 122 and CODE122 is True:
                 # This is going to be the var being set. (IMPORTANT)
-                if codeList[i]['parameters'][0] not in list(range(20, 100)):
+                if codeList[i]['parameters'][0] not in list(range(0, 100)):
                     i += 1
                     continue
                   
@@ -1254,72 +1258,83 @@ def searchCodes(page, pbar, jobList, filename):
 
         ## Event Code: 101 [Name] [Optional]
             if 'code' in codeList[i] and codeList[i]['code'] == 101 and CODE101 is True:
-                isVar = False
-                
-                # Grab String
-                jaString = ''  
-                if len(codeList[i]['parameters']) > 4:
-                    jaString = codeList[i]['parameters'][4]
-                # Check for Var
-                elif len(codeList[i]['parameters']) > 0:
-                    jaString = codeList[i]['parameters'][0]
-                    isVar = True
-                if not isinstance(jaString, str):
-                    i += 1
-                    continue
-
-                # Force Speaker using var
-                if '\\ap[1左]' in jaString.lower() or '\\ap[1右]' in jaString.lower():
-                    speaker = 'Cecily'
-                    i += 1
-                    continue
-                elif '\\ap[2左]' in jaString.lower() or '\\ap[2右]' in jaString.lower():
-                    speaker = 'Amelia'
-                    i += 1
-                    continue
-                elif '\\ap[3左]' in jaString.lower() or '\\ap[3右]' in jaString.lower():
-                    speaker = 'Henry'
-                    i += 1
-                    continue
-                elif '\\ap[4左]' in jaString.lower() or '\\ap[4右]' in jaString.lower():
-                    speaker = 'Oswald'
-                    i += 1
-                    continue
-                elif '\\ap' in jaString:
-                    speaker = re.search(r'[\\]+AP\[(.*?)\]', jaString).group(1)
-                    i += 1
-                    continue        
-
-                # Get Speaker
-                if '\\' not in jaString:
-                    response = getSpeaker(jaString)
-                    totalTokens[0] += response[1][0]
-                    totalTokens[1] += response[1][1]
-                    speaker = response[0]
-                    
-                    # Validate Speaker is not empty
-                    if len(speaker) > 0:
-                        if isVar == False:
-                            codeList[i]['parameters'][4] = speaker
-                            i += 1
-                            continue
-                        else:
-                            codeList[i]['parameters'][0] = speaker
-                            isVar = False
-                            i += 1
-                            continue
+                # Check Window Type (Certain games switch between 1st line speakers and none)
+                if FIRSTLINESPEAKERS:
+                    if codeList[i]['parameters'][2] == 0:
+                        speakerWindow = True
                     else:
-                        speaker = ''
+                        speakerWindow = False
+
+                else:
+                    isVar = False
+                    
+                    # Grab String
+                    jaString = ''  
+                    if len(codeList[i]['parameters']) > 4:
+                        jaString = codeList[i]['parameters'][4]
+                    # Check for Var
+                    elif len(codeList[i]['parameters']) > 0:
+                        jaString = codeList[i]['parameters'][0]
+                        isVar = True
+                    if not isinstance(jaString, str):
+                        i += 1
+                        continue
+
+                    # Force Speaker using var
+                    if '\\ap[1左]' in jaString.lower() or '\\ap[1右]' in jaString.lower():
+                        speaker = 'Cecily'
+                        i += 1
+                        continue
+                    elif '\\ap[2左]' in jaString.lower() or '\\ap[2右]' in jaString.lower():
+                        speaker = 'Amelia'
+                        i += 1
+                        continue
+                    elif '\\ap[3左]' in jaString.lower() or '\\ap[3右]' in jaString.lower():
+                        speaker = 'Henry'
+                        i += 1
+                        continue
+                    elif '\\ap[4左]' in jaString.lower() or '\\ap[4右]' in jaString.lower():
+                        speaker = 'Oswald'
+                        i += 1
+                        continue
+                    elif '\\ap' in jaString:
+                        speaker = re.search(r'[\\]+AP\[(.*?)\]', jaString).group(1)
+                        i += 1
+                        continue        
+
+                    # Get Speaker
+                    if '\\' not in jaString:
+                        response = getSpeaker(jaString)
+                        totalTokens[0] += response[1][0]
+                        totalTokens[1] += response[1][1]
+                        speaker = response[0]
+                        
+                        # Validate Speaker is not empty
+                        if len(speaker) > 0:
+                            if isVar == False:
+                                codeList[i]['parameters'][4] = speaker
+                                i += 1
+                                continue
+                            else:
+                                codeList[i]['parameters'][0] = speaker
+                                isVar = False
+                                i += 1
+                                continue
+                        else:
+                            speaker = ''
 
             ## Event Code: 355 or 655 Scripts [Optional]
             if 'code' in codeList[i] and (codeList[i]['code'] == 355 or codeList[i]['code'] == 655) and CODE355655 is True:
                 jaString = codeList[i]['parameters'][0]
+                regex = r'memory\._eventTitle\s=\s\"(.*)\"'
                 
                 # Var Text
-                if 'text =' in jaString or '$gameVariables.setValue(' in jaString:
+                match = re.search(regex, jaString)
+                if re.search(regex, jaString):
+                    finalJAString = match.group(1)
                     # Pass 1
                     if setData is False:
-                        list355655.append(jaString)
+                        list355655.append(finalJAString)
 
                     # Pass 2
                     else:  
@@ -1327,7 +1342,7 @@ def searchCodes(page, pbar, jobList, filename):
                         translatedText = list355655[0]
 
                         # Set
-                        codeList[i]['parameters'][0] = translatedText
+                        codeList[i]['parameters'][0] = codeList[i]['parameters'][0].replace(finalJAString, translatedText)
                         list355655.pop(0)                
 
             ## Event Code: 408 (Script)
@@ -1952,12 +1967,12 @@ def searchSystem(data, pbar):
         data['equipTypes'][i] = response[0].replace('\"', '').strip()
 
     # Variables (Optional ususally)
-    # for i in range(len(data['variables'])):
-    #     response = translateGPT(data['variables'][i], 'Reply with only the '+ LANGUAGE +' translation of the title', False)
-    #     totalTokens[0] += response[1][0]
-    #     totalTokens[1] += response[1][1]
-    #     data['variables'][i] = response[0].replace('\"', '').strip()
-    #     
+    for i in range(len(data['variables'])):
+        response = translateGPT(data['variables'][i], 'Reply with only the '+ LANGUAGE +' translation of the title', False)
+        totalTokens[0] += response[1][0]
+        totalTokens[1] += response[1][1]
+        data['variables'][i] = response[0].replace('\"', '').strip()
+        
 
     # Messages
     messages = (data['terms']['messages'])
@@ -2128,17 +2143,14 @@ def batchList(input_list, batch_size):
 
 def createContext(fullPromptFlag, subbedT):
     characters = 'Game Characters:\n\
-リッカ (Rikka) - Female\n\
-白根 (Shirane) - Female\n\
-ミミ (Mimi) - Female\n\
-赤薙 (Akanage) - Female\n\
-ヒトミ (Hitomi) - Female\n\
-錫ヶ岳 (Suzugadake) - Female\n\
-コウ (Kou) - Male\n\
-Taro (Taro) - Male\n\
-富士見 (Fujimi) - Male\n\
-ｼﾞｭｳｲﾁﾛｳ (Juichiro) - Male\n\
-ジュウイチロウ (Juichiro) - Male\n\
+綾瀬 (Ayase) - Female\n\
+千草 (Chigusa) - Female\n\
+マジカルブレスティ (Magical Breasty) - Female\n\
+アルベール (Albert) - Male\n\
+ケイシー (Casey) - Unknown\n\
+レス (Res) - Unknown\n\
+ドミュノス (Dominus) - Male\n\
+ひミズ (Himizu) - Male\n\
 '
     
     system = PROMPT + VOCAB if fullPromptFlag else \
