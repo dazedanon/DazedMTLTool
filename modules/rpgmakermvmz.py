@@ -72,10 +72,10 @@ CODE122 = False
 CODE101 = False
 
 # Other
-CODE355655 = True
+CODE355655 = False
 CODE357 = False
 CODE657 = False
-CODE356 = False
+CODE356 = True
 CODE320 = False
 CODE324 = False
 CODE111 = False
@@ -847,20 +847,13 @@ def searchCodes(page, pbar, jobList, filename):
 
                     ### \\n<Speaker>
                     nCase = None
-                    if finalJAString[0] != '\\':
-                        regex = r'(.*?)([\\]+[kKnN][wWcCrR]?[<](.*?)[>].*)'
-                        nCase = 0
-                    else:
-                        regex = r'([\\]+[kKnN][wWcCrR]?[<](.*?)[>])'
-                        nCase = 1
-                    matchList = re.findall(regex, finalJAString)
-                    if len(matchList) > 0:  
-                        if nCase == 0:
-                            nametag = matchList[0][1]
-                            speaker = matchList[0][2]
-                        elif nCase == 1:
-                            nametag = matchList[0][0]
-                            speaker = matchList[0][1]
+                    regex = r'([\\]+[kKnN][wWcCrRrEe]?[\[<](.*?)[>\]])'
+                    match = re.search(regex, finalJAString)
+
+                    # Set Name
+                    if match:
+                        nametag = match.group(1)
+                        speaker = match.group(2)
 
                         # Translate Speaker  
                         response = getSpeaker(speaker)
@@ -872,15 +865,9 @@ def searchCodes(page, pbar, jobList, filename):
                         finalJAString = finalJAString.replace(nametag, '')
                         nametag = nametag.replace(speaker, tledSpeaker)
                         speaker = tledSpeaker
-
-                        # Set dialogue
-                        if nCase == 0:
-                            codeList[i]['parameters'] = [finalJAString + nametag]
-                        elif nCase == 1:
-                            codeList[i]['parameters'] = [nametag + finalJAString]
-                    
-                    # Handle both cases of the regex  
-                    if len(matchList) != 0 and BRACKETNAMES is True:
+                        
+                    # Bracket Names
+                    if BRACKETNAMES is True and len(matchList) != 0:
                         if matchList[0][0] != '':
                             match0 = matchList[0][0]
                             match1 = matchList[0][1]
@@ -2143,14 +2130,8 @@ def batchList(input_list, batch_size):
 
 def createContext(fullPromptFlag, subbedT):
     characters = 'Game Characters:\n\
-綾瀬 (Ayase) - Female\n\
-千草 (Chigusa) - Female\n\
-マジカルブレスティ (Magical Breasty) - Female\n\
-アルベール (Albert) - Male\n\
-ケイシー (Casey) - Unknown\n\
-レス (Res) - Unknown\n\
-ドミュノス (Dominus) - Male\n\
-ひミズ (Himizu) - Male\n\
+クリスティーナ (Christina) - Female\n\
+リズ (Liz) - Female\n\
 '
     
     system = PROMPT + VOCAB if fullPromptFlag else \
