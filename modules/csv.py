@@ -47,7 +47,7 @@ if 'gpt-3.5' in MODEL:
 elif 'gpt-4' in MODEL:
     INPUTAPICOST = .005
     OUTPUTAPICOST = .015
-    BATCHSIZE = 40
+    BATCHSIZE = 20
     FREQUENCY_PENALTY = 0.1
 
 #tqdm Globals
@@ -187,11 +187,14 @@ def translateCSV(data, pbar, writer, filename, translatedList, format):
                 # T++ Format: Source Text on column 1. TL Target on Column 2
                 case '1':
                     # Get String
-                    if data[i][1] == "":
-                        jaString = data[i][0]
+                    if i != 0:
+                        if data[i][1] == "":
+                            jaString = data[i][0]
+                        else:
+                            jaString = data[i][1]
 
                         # Remove Textwrap
-                        jaString = jaString.replace('\n', ' ')
+                        jaString = jaString.replace('\\n', ' ')
 
                         # Pass 1
                         if not translatedList:
@@ -223,7 +226,7 @@ def translateCSV(data, pbar, writer, filename, translatedList, format):
                     jaString = data[i][sourceColumn]
 
                     # Remove Textwrap
-                    jaString = jaString.replace('\n', ' ')
+                    jaString = jaString.replace('\\n', ' ')
 
                     # Pass 1
                     if not translatedList:
@@ -260,7 +263,7 @@ def translateCSV(data, pbar, writer, filename, translatedList, format):
                             jaString = data[i][j]
 
                             # Remove Textwrap
-                            jaString = jaString.replace('\n', ' ')
+                            jaString = jaString.replace('\\n', ' ')
 
                             # Pass 1
                             if not translatedList:
@@ -478,33 +481,8 @@ def batchList(input_list, batch_size):
 
 def createContext(fullPromptFlag, subbedT):
     characters = 'Game Characters:\n\
-レナリス (Renalith) - Female\n\
-スクルー (Sukuru) - Female\n\
-シスターミサ (Sister Misa) - Female\n\
-オリン (Orin) - Female\n\
-プローテ (Prote) - Female\n\
-夜霧 (Night Fog) - Female\n\
-ワウ (Wao) - Female\n\
-ファンナ (Fanna) - Female\n\
-精霊主スクルド (Spirit God Skuld) - Female\n\
-エキドナ (Echnida) - Female\n\
-マルス (Mars) - Male\n\
-ラヴィー (Lavi) - Unknown\n\
-魅音 (Mion) - Female\n\
-ヴィオラ (Viola) - Female\n\
-リンメイ (Lin Mei) - Female\n\
-リネット (Lynette) - Female\n\
-チェロル (Cheryl) - Female\n\
-カルーア姫 (Princess Karua) - Female\n\
-田姫 (Tajirme) - Female\n\
-リュート (Luto) - Male\n\
-ホルン (Horn) - Female\n\
-ルメラ (Lumera) - Female\n\
-末嬉 (Sueki) - Female\n\
-モニカ姫 (Princess Monica) - Female\n\
-エメルーラ (Emerald) - Female\n\
-フンシス (Funsis) - Male \n\
-バゼット (Bazzet) - Female\n\
+クリスティーナ (Christina) - Female\n\
+リズ (Liz) - Female\n\
 '
     
     system = PROMPT + VOCAB if fullPromptFlag else \
@@ -520,10 +498,13 @@ Output ONLY the {LANGUAGE} translation in the following format: `Translation: <{
 - `...` can be a part of the dialogue. Translate it as it is.\n\
 {VOCAB}\n\
 "
-    user = f'```json\n{subbedT}```'
+    if isinstance(subbedT, list):
+        user = f'```json\n{subbedT}```'
+    else:
+        user = subbedT
     return characters, system, user
 
-def translateText(characters, system, user, history, penalty):
+def translateText(characters, system, user, history, penalty, format):
     # Prompt
     msg = [{"role": "system", "content": system + characters}]
 
@@ -535,6 +516,12 @@ def translateText(characters, system, user, history, penalty):
         msg.extend([{"role": "system", "content": h} for h in history])
     else:
         msg.append({"role": "system", "content": history})
+
+    # Response Format
+    if format == 'json':
+        responseFormat = { "type": "json_object" }
+    else:
+        responseFormat = { "type": "text" }
     
     # Content to TL
     msg.append({"role": "user", "content": f'{user}'})
@@ -542,7 +529,7 @@ def translateText(characters, system, user, history, penalty):
         temperature=0,
         frequency_penalty=penalty,
         model=MODEL,
-        response_format={ "type": "json_object" },
+        response_format=responseFormat,
         messages=msg,
     )
     return response
@@ -587,12 +574,16 @@ def extractTranslation(translatedTextList, is_list):
     try:
         line_dict = json.loads(translatedTextList)
         # If it's a batch (i.e., list), extract with tags; otherwise, return the single item.
+        string_list = list(line_dict.values())
         if is_list:
-            string_list = list(line_dict.values())
             return string_list
+        else:
+            return string_list[0]
+
     except Exception as e:
-        print(e)
-        return translatedTextList
+        print(f'extractTranslation Error: {translatedTextList}')
+        return None
+
 
 def countTokens(characters, system, user, history):
     inputTotalTokens = 0
@@ -626,8 +617,10 @@ def translateGPT(text, history, fullPromptFlag):
     mismatch = False
     totalTokens = [0, 0]
     if isinstance(text, list):
+        format = 'json'
         tList = batchList(text, BATCHSIZE)
     else:
+        format = 'text'
         tList = [text]
 
     for index, tItem in enumerate(tList):
@@ -641,11 +634,11 @@ def translateGPT(text, history, fullPromptFlag):
             varResponse = subVars(tItem)
             subbedT = varResponse[0]
 
-        # Things to Check before starting translation (Comment if not translating from Japanese)
-        # if not re.search(r'[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９]+', subbedT):
-        #     if PBAR is not None:
-        #         PBAR.update(len(tItem))
-        #     continue
+        # Things to Check before starting translation
+        if not re.search(r'[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９]+', subbedT):
+            if PBAR is not None:
+                PBAR.update(len(tItem))
+            continue
 
         # Create Message
         characters, system, user = createContext(fullPromptFlag, subbedT)
@@ -658,7 +651,7 @@ def translateGPT(text, history, fullPromptFlag):
             continue
 
         # Translating
-        response = translateText(characters, system, user, history, 0.02)
+        response = translateText(characters, system, user, history, 0.2, format)
         translatedText = response.choices[0].message.content
         totalTokens[0] += response.usage.prompt_tokens
         totalTokens[1] += response.usage.completion_tokens
@@ -667,9 +660,9 @@ def translateGPT(text, history, fullPromptFlag):
         translatedText = cleanTranslatedText(translatedText, varResponse)
         if isinstance(tItem, list):
             extractedTranslations = extractTranslation(translatedText, True)
-            if len(tItem) != len(extractedTranslations):
+            if extractedTranslations == None or len(tItem) != len(extractedTranslations):
                 # Mismatch. Try Again
-                response = translateText(characters, system, user, history, 0.2)
+                response = translateText(characters, system, user, history, 0.05, format)
                 translatedText = response.choices[0].message.content
                 totalTokens[0] += response.usage.prompt_tokens
                 totalTokens[1] += response.usage.completion_tokens
@@ -678,7 +671,7 @@ def translateGPT(text, history, fullPromptFlag):
                 translatedText = cleanTranslatedText(translatedText, varResponse)
                 if isinstance(tItem, list):
                     extractedTranslations = extractTranslation(translatedText, True)
-                    if len(tItem) != len(extractedTranslations):
+                    if extractedTranslations == None or len(tItem) != len(extractedTranslations):
                         mismatch = True # Just here for breakpoint
             
             # Set if no mismatch
@@ -695,8 +688,7 @@ def translateGPT(text, history, fullPromptFlag):
                     PBAR.update(len(tItem))
         else:
             # Ensure we're passing a single string to extractTranslation
-            extractedTranslations = extractTranslation(translatedText, False)
-            tList[index] = extractedTranslations
+            tList[index] = translatedText                
 
     finalList = combineList(tList, text)
     return [finalList, totalTokens]
