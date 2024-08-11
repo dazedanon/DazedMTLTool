@@ -29,7 +29,7 @@ MAXHISTORY = 10
 ESTIMATE = ''
 TOKENS = [0, 0]
 NAMESLIST = []
-FIRSTLINESPEAKERS = True    # If 1st line of dialogue is a speaker, set to True 
+FIRSTLINESPEAKERS = False    # If 1st line of dialogue is a speaker, set to True 
 NAMES = False    # Output a list of all the character names found
 BRFLAG = False   # If the game uses <br> instead
 FIXTEXTWRAP = True  # Overwrites textwrap
@@ -58,12 +58,12 @@ POSITION = 0
 LEAVE = False
 
 # Dialogue / Scroll
-CODE401 = False
-CODE405 = False
+CODE401 = True
+CODE405 = True
 CODE408 = False
 
 # Choices
-CODE102 = False
+CODE102 = True
 
 # Variables
 CODE122 = False
@@ -75,7 +75,7 @@ CODE101 = False
 CODE355655 = False
 CODE357 = False
 CODE657 = False
-CODE356 = True
+CODE356 = False
 CODE320 = False
 CODE324 = False
 CODE111 = False
@@ -940,6 +940,12 @@ def searchCodes(page, pbar, jobList, filename):
                         finalJAString = finalJAString.replace(ffMatch.group(0), '')
                         nametag += ffMatch.group(0)
 
+                    # Remove _ABL Codes
+                    ffMatch = re.search(r'^(_ABL).*', finalJAString)
+                    if ffMatch != None:
+                        finalJAString = finalJAString.replace(ffMatch.group(1), '')
+                        nametag += ffMatch.group(1)
+
                     # Center Lines
                     if '\\CL' in finalJAString or '\\ac' in finalJAString:
                         finalJAString = finalJAString.replace('\\CL ', '')
@@ -990,9 +996,13 @@ def searchCodes(page, pbar, jobList, filename):
                             translatedText = translatedText.replace('- ', '-')
 
                             # Textwrap
-                            if FIXTEXTWRAP is True:
+                            if FIXTEXTWRAP is True and '_ABL' in nametag:
+                                translatedText = textwrap.fill(translatedText, width=100)
+                            elif FIXTEXTWRAP is True:
                                 translatedText = textwrap.fill(translatedText, width=WIDTH)
-                                if BRFLAG is True:
+                            
+                            # BR Flag
+                            if BRFLAG is True:
                                     translatedText = translatedText.replace('\n', '<br>')   
 
                             ### Add Var Strings
@@ -1032,7 +1042,7 @@ def searchCodes(page, pbar, jobList, filename):
             ## Event Code: 122 [Set Variables]
             if 'code' in codeList[i] and codeList[i]['code'] == 122 and CODE122 is True:
                 # This is going to be the var being set. (IMPORTANT)
-                if codeList[i]['parameters'][0] not in list(range(0, 100)):
+                if codeList[i]['parameters'][0] not in list(range(0, 10)):
                     i += 1
                     continue
                   
@@ -1169,6 +1179,29 @@ def searchCodes(page, pbar, jobList, filename):
 
                 if '_TMLogWindowMZ' in headerString:
                     argVar = 'text'
+                    ### Message Text First
+                    if argVar in codeList[i]['parameters'][3]:
+                        jaString = codeList[i]['parameters'][3][argVar]
+
+                        # If there isn't any Japanese in the text just skip
+                        # if not re.search(r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴー]+', jaString):
+                        #     i += 1
+                        #     continue
+
+                        # Remove any textwrap & TL
+                        jaString = re.sub(r'\n', ' ', jaString)
+                        response = translateGPT(jaString, '', False)
+                        translatedText = response[0]
+                        totalTokens[0] += response[1][0]
+                        totalTokens[1] += response[1][1]
+
+                        # Textwrap & Set
+                        translatedText = textwrap.fill(translatedText, width=WIDTH)
+                        codeList[i]['parameters'][3][argVar] = translatedText
+                        pbar.update(1)
+
+                if 'DestinationWindow' in headerString:
+                    argVar = 'destination'
                     ### Message Text First
                     if argVar in codeList[i]['parameters'][3]:
                         jaString = codeList[i]['parameters'][3][argVar]
@@ -1872,11 +1905,16 @@ Translate \'Taroを倒した！\' as \'Taro was defeated!\'', False)
         else:
             message4Response = translateGPT(state['message4'], 'reply with only the gender neutral '+ LANGUAGE +' translation', False)
 
-    # if 'note' in state:
+    # Translate State Notes
     if 'help' in state['note']:
-        totalTokens[0] += translateNote(state, r'<help:([^>]*)>')[0]
-        totalTokens[1] += translateNote(state, r'<help:([^>]*)>')[1]
-    
+        noteResponse = translateNote(state, r'<help:([^>]*)>')
+        totalTokens[0] += noteResponse[0]
+        totalTokens[1] += noteResponse[1]
+    if 'STATE_HELP' in state['note']:
+        noteResponse = translateNote(state, r'<STATE_HELP>\n(.*)\n')
+        totalTokens[0] += noteResponse[0]
+        totalTokens[1] += noteResponse[1]
+        
     # Count totalTokens
     totalTokens[0] += nameResponse[1][0] if nameResponse != '' else 0
     totalTokens[1] += nameResponse[1][1] if nameResponse != '' else 0
@@ -2130,8 +2168,14 @@ def batchList(input_list, batch_size):
 
 def createContext(fullPromptFlag, subbedT):
     characters = 'Game Characters:\n\
-クリスティーナ (Christina) - Female\n\
-リズ (Liz) - Female\n\
+シェーア (Shea) - Female\n\
+ミューテ (Mute) - Female\n\
+タビノ (Tabino) - Female\n\
+スラミー (Slamy) - Female\n\
+クリスタ (Christa) - Female\n\
+ソフィー (Sophie) - Female\n\
+ドーラ (Dora) - Female\n\
+ミューレ (Mule) - Female\n\
 '
     
     system = PROMPT + VOCAB if fullPromptFlag else \
@@ -2300,7 +2344,7 @@ def translateGPT(text, history, fullPromptFlag):
             continue
 
         # Translating
-        response = translateText(characters, system, user, history, 0.2, format)
+        response = translateText(characters, system, user, history, 0.05, format)
         translatedText = response.choices[0].message.content
         totalTokens[0] += response.usage.prompt_tokens
         totalTokens[1] += response.usage.completion_tokens
