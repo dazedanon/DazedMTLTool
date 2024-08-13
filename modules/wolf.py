@@ -59,12 +59,12 @@ PBAR = None
 FILENAME = None
 
 # Dialogue / Scroll
-CODE101 = True
-CODE102 = True
-CODE122 = True
+CODE101 = False
+CODE102 = False
+CODE122 = False
 
 # Other
-CODE210 = True
+CODE210 = False
 CODE300 = True
 CODE250 = False
 
@@ -438,14 +438,17 @@ def searchCodes(events, pbar, jobList, filename):
                         continue
 
                     # Catch Vars that may break the TL
-                    varString = ''
-                    matchList = re.findall(r'^[\\_]+[\w]+\[[a-zA-Z0-9\\\[\]\_,\s-]+\]', jaString)    
-                    if len(matchList) != 0:
-                        varString = matchList[0]
-                        jaString = jaString.replace(matchList[0], '')
+                    # varString = ''
+                    # matchList = re.findall(r'^[\\_]+[\w]+\[[a-zA-Z0-9\\\[\]\_,\s-]+\]', jaString)    
+                    # if len(matchList) != 0:
+                    #     varString = matchList[0]
+                    #     jaString = jaString.replace(matchList[0], '')
 
                     # Remove Textwrap
                     jaString = jaString.replace('\n', ' ')
+
+                    # Fix Multiple Spaces
+                    jaString = re.sub(r'\s+', ' ', jaString)
 
                     # Pass 1
                     if not setData:
@@ -458,7 +461,7 @@ def searchCodes(events, pbar, jobList, filename):
                         translatedText = textwrap.fill(translatedText, WIDTH)
 
                         # Add back Potential Variables in String
-                        translatedText = varString + translatedText
+                        translatedText = translatedText
 
                         # Set Data
                         codeList[i]['stringArgs'][1] = translatedText
@@ -506,7 +509,7 @@ def searchCodes(events, pbar, jobList, filename):
         stringListTL = []
         list300TL = []
         setData = False
-        
+
         # String List
         if len(stringList) > 0:
             pbar.total = len(stringList)
