@@ -78,7 +78,7 @@ def handleWOLF2(filename, estimate):
     
     else:
         try:
-            with open('translated/' + filename, 'w', encoding='cp932', errors='ignore') as outFile:
+            with open('translated/' + filename, 'w', encoding='shift_jis', errors='ignore') as outFile:
                 start = time.time()
                 translatedData = openFiles(filename)
 
@@ -162,7 +162,7 @@ def translateWOLF(data, translatedList, pbar, filename):
 
     while i < len(data):
         # Speaker
-        matchList = re.findall(r'(.*)：$', data[i])
+        matchList = re.findall(r'(.*)：', data[i])
         if len(matchList) != 0:
             response = getSpeaker(matchList[0])
             speaker = response[0]
@@ -172,6 +172,37 @@ def translateWOLF(data, translatedList, pbar, filename):
             i += 1
         else:
             speaker = '' 
+
+        # Options
+        if '//選択肢' in data[i]:
+            i += 1
+            choiceList = []
+            initialIndex = i
+            while('//' in data[i] and 'の場合' not in data[i]):
+                choiceList.append(re.search(r'\/\/(.*)', data[i]).group(1))
+                i += 1
+            
+            # Translate
+            response = translateGPT(choiceList, 'This will be a dialogue option', True)
+            tokens[0] += response[1][0]
+            tokens[1] += response[1][1]
+            choiceListTL = response[0]
+
+            # Set Data
+            if len(choiceList) == len(choiceListTL):
+                # Set Data
+                i = initialIndex
+                while('//' in data[i] and 'の場合' not in data[i]):
+                    choiceListTL[0] = choiceListTL[0].replace(', ', '、')
+                    data[i] = f'//{choiceListTL[0]}\n'
+                    choiceListTL.pop(0)
+                    i += 1
+
+            # Mismatch
+            else:
+                with LOCK:
+                    if filename not in MISMATCH:
+                        MISMATCH.append(filename)
 
         # Lines
         if r'/' not in data[i] and data[i] != '\n':
@@ -325,7 +356,6 @@ def createContext(fullPromptFlag, subbedT):
 ちか (Chika) - Female\n\
 和樹 (Kazuki) - Male\n\
 かずき (Kazuki) - Male\n\
-松本 (Matsumoto) - Unknown\n\
 猿山 (Saruyama) - Male\n\
 菊池 (Kikuchi) - Male\n\
 篠宮 (Shinomiya) - Male\n\
