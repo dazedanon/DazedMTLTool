@@ -29,7 +29,7 @@ MAXHISTORY = 10
 ESTIMATE = ''
 TOKENS = [0, 0]
 NAMESLIST = []
-FIRSTLINESPEAKERS = False    # If 1st line of dialogue is a speaker, set to True 
+FIRSTLINESPEAKERS = True    # If 1st line of dialogue is a speaker, set to True 
 NAMES = False    # Output a list of all the character names found
 BRFLAG = False   # If the game uses <br> instead
 FIXTEXTWRAP = True  # Overwrites textwrap
@@ -754,6 +754,7 @@ def searchCodes(page, pbar, jobList, filename):
                 # Grab String
                 if len(codeList[i]['parameters']) > 0:
                     jaString = codeList[i]['parameters'][0]
+                    oldjaString = jaString
                 else:
                     codeList[i]['code'] = -1
                     i += 1
@@ -775,12 +776,22 @@ def searchCodes(page, pbar, jobList, filename):
                 #         jaString = re.sub(retardRegex, '富士見', jaString)
 
                 # Speaker Check
-                # Colors
-                speakerList = re.findall(r'^[\\]+[cC]\[[\d]+\](.+?)[\\]+[Cc]\[[\d]\]\\?\\?$', jaString)
+                speakerList = []
+
+                # m and z Codes
+                match = re.search(r'(.*?)[\\]+m\[\d+?\][\\]+z\[\d+?\]', jaString)
+                if match:
+                    speakerList.append(match.group(1))
+                    if '\\c' in speakerList[0]:
+                        speakerList = re.findall(r'^[\\]+[cC]\[[\d]+\](.+?)[\\]+[Cc]\[[\d]\]\\?\\?$', speakerList[0])
 
                 # Brackets
                 if len(speakerList) == 0:
                     speakerList = re.findall(r'^【(.*?)】$', jaString)
+
+                # Colors
+                if len(speakerList) == 0:
+                    speakerList = re.findall(r'^[\\]+[cC]\[[\d]+\](.+?)[\\]+[Cc]\[[\d]\]\\?\\?$', jaString)
 
                 # None
                 if len(speakerList) == 0 and FIRSTLINESPEAKERS is True:
@@ -789,7 +800,7 @@ def searchCodes(page, pbar, jobList, filename):
                     and codeList[i+1]['code'] in [401, 405, -1] \
                     and len(codeList[i+1]['parameters']) > 0 \
                     and len(codeList[i+1]['parameters'][0]) > 0:
-                        if codeList[i+1]['parameters'][0][0] in ['「', '"', '(', '（', '*', '[']:
+                        if codeList[i+1]['parameters'][0].strip()[0] in ['「', '"', '(', '（', '*', '[']:
                             speakerList = re.findall(r'.+', jaString)
 
                 if len(speakerList) != 0 and codeList[i+1]['code'] in [401, 405, -1]:
@@ -797,7 +808,7 @@ def searchCodes(page, pbar, jobList, filename):
                     response = getSpeaker(speakerList[0])
                     speaker = response[0]
                     totalTokens[0] += response[1][0]
-                    totalTokens[1] += response[1][1]
+                    totalTokens[1] += response[1][1]                    
 
                     # Set Data
                     codeList[i]['parameters'][0] = jaString.replace(speakerList[0], speaker)
@@ -898,13 +909,6 @@ def searchCodes(page, pbar, jobList, filename):
                             # Set nametag in string
                             codeList[j]['parameters'] = [fullSpeaker + finalJAString]
                             codeList[j]['code'] = code
-
-                    # Catch Vars that may break the TL
-                    varString = ''
-                    matchList = re.findall(r'^[\\_]+[\w]+\[[a-zA-Z0-9\\\[\]\_,\s-]+\]', finalJAString)    
-                    if len(matchList) != 0:
-                        varString = matchList[0]
-                        finalJAString = finalJAString.replace(matchList[0], '')
 
                     # Remove any textwrap
                     if FIXTEXTWRAP is True:
@@ -1024,9 +1028,6 @@ def searchCodes(page, pbar, jobList, filename):
                             if endtag != '':
                                 translatedText = translatedText + endtag
                                 endtag = ''
-
-                            # //SE[#]
-                            translatedText = varString + translatedText
 
                             # Set Data
                             if speakerID != None:
@@ -1202,6 +1203,29 @@ def searchCodes(page, pbar, jobList, filename):
 
                 if 'DestinationWindow' in headerString:
                     argVar = 'destination'
+                    ### Message Text First
+                    if argVar in codeList[i]['parameters'][3]:
+                        jaString = codeList[i]['parameters'][3][argVar]
+
+                        # If there isn't any Japanese in the text just skip
+                        # if not re.search(r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴー]+', jaString):
+                        #     i += 1
+                        #     continue
+
+                        # Remove any textwrap & TL
+                        jaString = re.sub(r'\n', ' ', jaString)
+                        response = translateGPT(jaString, '', False)
+                        translatedText = response[0]
+                        totalTokens[0] += response[1][0]
+                        totalTokens[1] += response[1][1]
+
+                        # Textwrap & Set
+                        translatedText = textwrap.fill(translatedText, width=WIDTH)
+                        codeList[i]['parameters'][3][argVar] = translatedText
+                        pbar.update(1)
+
+                if 'MNKR_CommonPopupCoreMZ' in headerString:
+                    argVar = 'text'
                     ### Message Text First
                     if argVar in codeList[i]['parameters'][3]:
                         jaString = codeList[i]['parameters'][3][argVar]
@@ -2050,111 +2074,30 @@ def getSpeaker(speaker):
 def subVars(jaString):
     jaString = jaString.replace('\u3000', ' ')
 
-    # Nested
-    count = 0
-    nestedList = re.findall(r'[\\]+[\w]+\[[\\]+[\w]+\[[0-9]+\]\]', jaString)
-    nestedList = set(nestedList)
-    if len(nestedList) != 0:
-        for icon in nestedList:
-            jaString = jaString.replace(icon, '[Nested_' + str(count) + ']')
-            count += 1
-
-    # Icons
-    count = 0
-    iconList = re.findall(r'[\\]+[iIkKwWaA]+\[[0-9]+\]', jaString)
-    iconList = set(iconList)
-    if len(iconList) != 0:
-        for icon in iconList:
-            jaString = jaString.replace(icon, '[Ascii_' + str(count) + ']')
-            count += 1
-
-    # Colors
-    count = 0
-    colorList = re.findall(r'([\\]+c\[\d+\][\\]+c|[\\]+c\[\d+\])', jaString)
-    colorList = set(colorList)
-    if len(colorList) != 0:
-        for color in colorList:
-            jaString = jaString.replace(color, '[Color_' + str(count) + ']')
-            count += 1
-
-    # Names
-    count = 0
-    nameList = re.findall(r'[\\]+[nN]\[.+?\]+', jaString)
-    nameList = set(nameList)
-    if len(nameList) != 0:
-        for name in nameList:
-            jaString = jaString.replace(name, '[Noun_' + str(count) + ']')
-            count += 1
-
-    # Variables
-    count = 0
-    varList = re.findall(r'[\\]+[vV]\[[0-9]+\]', jaString)
-    varList = set(varList)
-    if len(varList) != 0:
-        for var in varList:
-            jaString = jaString.replace(var, '[Var_' + str(count) + ']')
-            count += 1
-
     # Formatting
     count = 0
-    formatList = re.findall(r'[\\]+[\w]+\[[a-zA-Z0-9\\\[\]\_,\s-]+\]', jaString)
-    formatList = set(formatList)
-    if len(formatList) != 0:
-        for var in formatList:
+    codeList = re.findall(r'[\\]+[\w]+\[[a-zA-Z0-9\\\[\]\_,\s-]+\]', jaString)
+    codeList = set(codeList)
+    if len(codeList) != 0:
+        for var in codeList:
             jaString = jaString.replace(var, '[FCode_' + str(count) + ']')
             count += 1
 
     # Put all lists in list and return
-    allList = [nestedList, iconList, colorList, nameList, varList, formatList]
-    return [jaString, allList]
+    return [jaString, codeList]
 
-def resubVars(translatedText, allList):
+def resubVars(translatedText, codeList):
     # Fix Spacing and ChatGPT Nonsense
     matchList = re.findall(r'\[\s?.+?\s?\]', translatedText)
     if len(matchList) > 0:
         for match in matchList:
             text = match.strip()
             translatedText = translatedText.replace(match, text)
-
-    # Nested
-    count = 0
-    if len(allList[0]) != 0:
-        for var in allList[0]:
-            translatedText = translatedText.replace('[Nested_' + str(count) + ']', var)
-            count += 1
-
-    # Icons
-    count = 0
-    if len(allList[1]) != 0:
-        for var in allList[1]:
-            translatedText = translatedText.replace('[Ascii_' + str(count) + ']', var)
-            count += 1
-
-    # Colors
-    count = 0
-    if len(allList[2]) != 0:
-        for var in allList[2]:
-            translatedText = translatedText.replace('[Color_' + str(count) + ']', var)
-            count += 1
-
-    # Names
-    count = 0
-    if len(allList[3]) != 0:
-        for var in allList[3]:
-            translatedText = translatedText.replace('[Noun_' + str(count) + ']', var)
-            count += 1
-
-    # Vars
-    count = 0
-    if len(allList[4]) != 0:
-        for var in allList[4]:
-            translatedText = translatedText.replace('[Var_' + str(count) + ']', var)
-            count += 1
     
     # Formatting
     count = 0
-    if len(allList[5]) != 0:
-        for var in allList[5]:
+    if len(codeList) != 0:
+        for var in codeList:
             translatedText = translatedText.replace('[FCode_' + str(count) + ']', var)
             count += 1
 
@@ -2168,14 +2111,11 @@ def batchList(input_list, batch_size):
 
 def createContext(fullPromptFlag, subbedT):
     characters = 'Game Characters:\n\
-シェーア (Shea) - Female\n\
-ミューテ (Mute) - Female\n\
-タビノ (Tabino) - Female\n\
-スラミー (Slamy) - Female\n\
-クリスタ (Christa) - Female\n\
-ソフィー (Sophie) - Female\n\
-ドーラ (Dora) - Female\n\
-ミューレ (Mule) - Female\n\
+レイラ (Layla) - Female\n\
+ミア (Mia) - Female\n\
+ローズ (Rose) - Female\n\
+テオ (Theo) - Male\n\
+ハルファス (Halfas) - Female\n\
 '
     
     system = PROMPT + VOCAB if fullPromptFlag else \
