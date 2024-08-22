@@ -474,9 +474,12 @@ def searchNames(data, pbar, context):
             filling = True
             if context in 'Actors':
                 if len(nameList) < BATCHSIZE:
-                    nameList.append(data[i]['name'])
-                    nicknameList.append(data[i]['nickname'])
-                    profileList.append(data[i]['profile'].replace('\n', ' '))
+                    if data[i]['name'] != '':
+                        nameList.append(data[i]['name'])
+                    if data[i]['nickname'] != '':
+                        nicknameList.append(data[i]['nickname'])
+                    if data[i]['profile'] != '':
+                        profileList.append(data[i]['profile'].replace('\n', ' '))
                     
                     i += 1
                 else:
@@ -596,12 +599,15 @@ def searchNames(data, pbar, context):
                             continue 
                         else:
                             # Get Text
-                            data[j]['name'] = translatedNameBatch[0]
-                            data[j]['nickname'] = translatedNicknameBatch[0]
-                            data[j]['profile'] = textwrap.fill(translatedProfileBatch[0], LISTWIDTH)
-                            translatedNameBatch.pop(0)
-                            translatedNicknameBatch.pop(0)
-                            translatedProfileBatch.pop(0)
+                            if data[j]['name'] != '':
+                                data[j]['name'] = translatedNameBatch[0]
+                                translatedNameBatch.pop(0)
+                            if data[j]['nickname'] != '':
+                                data[j]['nickname'] = translatedNicknameBatch[0]
+                                translatedNicknameBatch.pop(0)
+                            if data[j]['profile'] != '':
+                                data[j]['profile'] = textwrap.fill(translatedProfileBatch[0], LISTWIDTH)
+                                translatedProfileBatch.pop(0)
 
                             # If Batch is empty. Move on.
                             if len(translatedNameBatch) == 0:
@@ -971,12 +977,13 @@ def searchCodes(page, pbar, jobList, filename):
 
                     # 1st Passthrough (Grabbing Data)
                     if setData == False:
-                        if speaker == '' and finalJAString != '':
-                            list401.append(finalJAString)
-                        elif finalJAString != '':
-                            list401.append(f'[{speaker}]: {finalJAString}')
-                        else:
-                            list401.append(speaker)
+                        if finalJAString != '':
+                            if speaker == '' and finalJAString != '':
+                                list401.append(finalJAString)
+                            elif finalJAString != '':
+                                list401.append(f'[{speaker}]: {finalJAString}')
+                            else:
+                                list401.append(speaker)
                         speaker = ''
                         match = []
                         currentGroup = []
@@ -1043,7 +1050,7 @@ def searchCodes(page, pbar, jobList, filename):
             ## Event Code: 122 [Set Variables]
             if 'code' in codeList[i] and codeList[i]['code'] == 122 and CODE122 is True:
                 # This is going to be the var being set. (IMPORTANT)
-                if codeList[i]['parameters'][0] not in list(range(0, 10)):
+                if codeList[i]['parameters'][0] not in list(range(0, 100)):
                     i += 1
                     continue
                   
@@ -1072,7 +1079,8 @@ def searchCodes(page, pbar, jobList, filename):
 
                     # Pass 1
                     if setData == False:
-                        list122.append(finalJAString)
+                        if finalJAString != '':
+                            list122.append(finalJAString)
 
                     # Pass 2
                     else:  
@@ -1445,7 +1453,7 @@ def searchCodes(page, pbar, jobList, filename):
                 elif 'ActiveMessage:' in jaString:
                     regex = r'<ActiveMessage:(.*)>'
                 elif 'event_text' in jaString:
-                    regex = r'event_text\s?:\s?(.*)'
+                    regex = r'event_text\s*:\s*(.*)'
                 else:
                     i += 1
                     continue
@@ -1455,7 +1463,7 @@ def searchCodes(page, pbar, jobList, filename):
                 if match:
                     # Pass 1
                     if setData is False:
-                        list108.append(match.group(0))
+                        list108.append(match.group(1))
 
                     # Pass 2
                     else:
@@ -1469,7 +1477,7 @@ def searchCodes(page, pbar, jobList, filename):
                             translatedText = translatedText.replace(char, '')
                         translatedText = translatedText.replace('"', '\"')
                         translatedText = translatedText.replace(' ', '_')
-                        translatedText = jaString.replace(match.group(0), translatedText)
+                        translatedText = jaString.replace(match.group(1), translatedText)
 
                         # Set Data
                         codeList[i]['parameters'][0] = translatedText
@@ -2111,11 +2119,17 @@ def batchList(input_list, batch_size):
 
 def createContext(fullPromptFlag, subbedT):
     characters = 'Game Characters:\n\
-レイラ (Layla) - Female\n\
-ミア (Mia) - Female\n\
-ローズ (Rose) - Female\n\
-テオ (Theo) - Male\n\
-ハルファス (Halfas) - Female\n\
+圭太 (Keita) - Male\n\
+涼香 (Ryoka) - Female\n\
+咲 (Saki) - Female\n\
+大介 (Daisuke) - Male\n\
+浮浪者 (Vagrant) - Male\n\
+まさる (Masaru) - Male\n\
+ノブオ (Nobuo) - Male\n\
+安井 (Yasui) - Male\n\
+大山 (Oyama) - Male\n\
+関口 (Sekiguchi) - Male\n\
+黒崎 (Kurosaki) - Male\n\
 '
     
     system = PROMPT + VOCAB if fullPromptFlag else \
@@ -2214,7 +2228,7 @@ def extractTranslation(translatedTextList, is_list):
             return string_list[0]
 
     except Exception as e:
-        print(f'extractTranslation Error: {translatedTextList}')
+        print(f'extractTranslation Error: {e}')
         return None
 
 
