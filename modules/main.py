@@ -33,6 +33,7 @@ from modules.wolf2 import handleWOLF2
 from modules.javascript import handleJavascript
 from modules.irissoft import handleIris
 from modules.regex import handleRegex
+from modules.images import handleImages
 from modules.rpgmakerplugin import handlePlugin
 
 # For GPT4 rate limit will be hit if you have more than 1 thread.
@@ -59,6 +60,7 @@ MODULES = [
     ["Javascript", "js", handleJavascript],
     ["Iris", "txt", handleIris],
     ["Regex", "txt", handleRegex],
+    ["Images", "png", handleImages],
 ]
 
 # Info Message
@@ -97,9 +99,11 @@ files to translate are in the /files folder and that you picked the right game e
 
     # Open File (Threads)
     with ThreadPoolExecutor(max_workers=THREADS) as executor:
-        futures = [executor.submit(MODULES[version][2], filename, estimate) \
-                    for filename in os.listdir("files") if filename.endswith(MODULES[version][1])]
-                    
+        if MODULES[version][0] != 'Images':
+            futures = [executor.submit(MODULES[version][2], filename, estimate) \
+            for filename in os.listdir("files") if filename.endswith(MODULES[version][1])]
+        else:
+            futures = [executor.submit(MODULES[version][2], 'files', estimate)]                    
         for future in as_completed(futures):
             try:
                 totalCost = future.result()

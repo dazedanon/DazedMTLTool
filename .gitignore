@@ -9,4 +9,5 @@
 *.csv
 *.ks
 *.cid
+*.png
 __pycache__
