@@ -59,13 +59,18 @@ def handleImages(filepath, estimate):
 
     translatedData = openFiles(filepath)
 
-     # Convert Strings to Images
-    for i in range(len(translatedData[0][0])):
-        translatedList = translatedData[0][0]
-        originalList = translatedData[0][1]
-        dimensionsList = translatedData[0][2]
-        image = stringToImage(translatedList[i], dimensionsList[i][0], dimensionsList[i][1])
-        image.save(f'translated/{originalList[i]}.png', quality=100)
+    # Convert Strings to Images
+    if not ESTIMATE:
+        for i in range(len(translatedData[0][0])):
+            try:
+                translatedList = translatedData[0][0]
+                originalList = translatedData[0][1]
+                dimensionsList = translatedData[0][2]
+                image = stringToImage(translatedList[i], dimensionsList[i][0], dimensionsList[i][1])
+                image.save(rf'translated/{originalList[i]}.png', quality=100)
+            except Exception as e:
+                PBAR.write(f'{originalList[i]}: {str(e)}')
+                #Ignore Error
 
     # Print File
     end = time.time()
@@ -125,7 +130,7 @@ def getFontSize(text, image_width, image_height, font_path):
         font = ImageFont.truetype(font_path, font_size)
         text_bbox = ImageDraw.Draw(Image.new('RGB', (1, 1))).textbbox((0, 0), text, font=font)
         text_width = text_bbox[2] - text_bbox[0]
-        text_height = text_bbox[3] - text_bbox[1]
+        text_height = text_bbox[3] - text_bbox[1] + 5
         
         if text_width <= image_width and text_height <= image_height:
             return font_size
@@ -133,33 +138,38 @@ def getFontSize(text, image_width, image_height, font_path):
 
     return font_size
 
-def stringToImage(text, width, height, font_path='arial.ttf'):
-    # Find the appropriate font size
-    font_size = getFontSize(text, width, height, font_path)
+def stringToImage(text, width, height, font_path='fonts/TsunagiGothic.ttf', scale_factor=4):
+    # Increase the resolution
+    scaled_width = int(width * scale_factor)
+    scaled_height = int(height * scale_factor)
     
+    # Find the appropriate font size for the scaled up image
+    font_size = getFontSize(text, scaled_width, scaled_height, font_path)
     if font_size == 0:
         raise ValueError("Text is too long to fit in the supplied dimensions.")
-
-    # Create a new image with the specified width and height and a transparent background
-    image = Image.new('RGBA', (width, height), (255, 255, 255, 0))
-
+    
+    # Create a new image with the scaled width and height and a transparent background
+    image = Image.new('RGBA', (scaled_width, scaled_height), (255, 255, 255, 0))
+    
     # Create a drawing context
     draw = ImageDraw.Draw(image)
-
+    
     # Load the appropriate font
     font = ImageFont.truetype(font_path, font_size)
-
+    
     # Calculate the size of the text to center it
     text_bbox = draw.textbbox((0, 0), text, font=font)
     text_width = text_bbox[2] - text_bbox[0]
     text_height = text_bbox[3] - text_bbox[1]
+    x = (scaled_width - text_width) // 2
+    y = (scaled_height - text_height) // 2
     
-    x = (width - text_width) // 2
-    y = (height - text_height) // 2
-
     # Draw the text on the image
     draw.text((x, y), text, font=font, fill=(255, 255, 255, 255))
-
+    
+    # Resize back to the original dimensions to get a clearer text rendering
+    image = image.resize((width, height), Image.LANCZOS,)
+    
     return image
 
 def getImageDimensions(file_path):
@@ -173,14 +183,20 @@ def getImageDimensions(file_path):
 
 def processImagesDir(directory_path, imageList):
     for file_name in os.listdir(directory_path):
-        if '.png' in file_name:
+        # .png and Japanese
+        if '.png' in file_name and re.search(r'[一-龠ぁ-ゔァ-ヴー]+', file_name):
             file_path = os.path.join(directory_path, file_name)
             if os.path.isfile(file_path):
                 # Check if the file is an image
                 try:
                     width, height = getImageDimensions(file_path)
                     if width is not None and height is not None:
-                        imageList[0].append(file_name.replace('.png', ' '))
+                        placeholders = {
+                            '.png': '',
+                        }
+                        for target, replacement in placeholders.items():
+                            file_name = file_name.replace(target, replacement)
+                        imageList[0].append(file_name)
                         imageList[1].append([width, height])
                 except Exception as e:
                     print(f"Error processing {file_name}: {e}")
@@ -192,7 +208,7 @@ def translateImages(imageList):
     totalTokens = [0,0]
     with tqdm(bar_format=BAR_FORMAT, position=POSITION, leave=LEAVE, desc='Images', total=len(imageList[0])) as PBAR:
         # Translate GPT
-        response = translateGPT(imageList[0], 'Keep the Translation brief', True)
+        response = translateGPT(imageList[0], 'Keep the Translation as brief as possible', True)
         translatedList = response[0]
         totalTokens[0] += response[1][0]
         totalTokens[1] += response[1][1]
