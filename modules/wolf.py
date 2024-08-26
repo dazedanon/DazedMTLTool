@@ -69,9 +69,9 @@ CODE300 = False
 CODE250 = False
 
 # Database
-NPCFLAG = True
+NPCFLAG = False
 SCENARIOFLAG = False
-ITEMFLAG = False
+ITEMFLAG = True
 COLLECTIONFLAG = False
 ARMORFLAG = False
 ENEMYFLAG = False
@@ -701,7 +701,7 @@ def searchDB(events, pbar, jobList, filename):
                     # Parse
                     for j in range(len(dataList)):
                         # Name
-                        if 'NULL' in dataList[j].get('name'):
+                        if '道具名' in dataList[j].get('name'):
                             # Pass 1 (Grab Data)
                             if setData == False:
                                 if dataList[j].get('value') != '':
@@ -714,7 +714,7 @@ def searchDB(events, pbar, jobList, filename):
                                     itemList[0].pop(0)
                     
                         # Description
-                        if '説明' in dataList[j].get('name'):
+                        if 'NULL' in dataList[j].get('name'):
                             # Pass 1 (Grab Data)
                             if setData == False:
                                 if dataList[j].get('value') != '':
@@ -1105,7 +1105,7 @@ def searchDB(events, pbar, jobList, filename):
                 translate = True 
 
         # ITEMS
-        if len(itemList[1]) > 0:
+        if len(itemList[0]) > 0:
             # Progress Bar
             total = 0
             for itemArray in itemList:

@@ -1050,7 +1050,7 @@ def searchCodes(page, pbar, jobList, filename):
             ## Event Code: 122 [Set Variables]
             if 'code' in codeList[i] and codeList[i]['code'] == 122 and CODE122 is True:
                 # This is going to be the var being set. (IMPORTANT)
-                if codeList[i]['parameters'][0] not in list(range(0, 100)):
+                if codeList[i]['parameters'][0] not in list(range(15, 17)):
                     i += 1
                     continue
                   
@@ -1066,13 +1066,17 @@ def searchCodes(page, pbar, jobList, filename):
                     continue
                 
                 # Definitely don't want to mess with files
-                if 'gameV' in jaString or '_' in jaString:
-                    i += 1
-                    continue
+                # if 'gameV' in jaString or '_' in jaString:
+                #     i += 1
+                #     continue
+                
+                # Set String
+                if len(re.findall(r"(')", jaString)) == 2:
+                    matchedText = re.search(r"[\'\"\`](.*)[\'\"\`]", jaString)
+                else:
+                    matchedText = re.search(r'(.*)', jaString)
 
-                # Need to remove outside code and put it back later
-                matchedText = re.search(r"[\'\"\`](.*)[\'\"\`]", jaString)
-
+                # Last Check
                 if matchedText != None:
                     # Remove Textwrap
                     finalJAString = matchedText.group(1).replace('\\n', ' ')
@@ -1097,7 +1101,8 @@ def searchCodes(page, pbar, jobList, filename):
                             # Textwrap
                             translatedText = textwrap.fill(translatedText, width=80)
                             translatedText = translatedText.replace('\n', '\\n')
-                            translatedText = '\"' + translatedText + '\"'
+                            if len(re.findall(r"(')", jaString)) == 2:
+                                translatedText = '\'' + translatedText + '\''
 
                             # Set
                             codeList[i]['parameters'][4] = translatedText
@@ -1515,6 +1520,8 @@ def searchCodes(page, pbar, jobList, filename):
                     regex = r'addLog\s(.*)'
                 elif 'DW_' in jaString:
                     regex = r'DW_.*?\s(.*)'
+                elif 'CommonPopup' in jaString:
+                    regex = r'CommonPopup\sadd\stext:(.*?)[\\]+}'
                 else:
                     regex = r''
 
@@ -1523,7 +1530,7 @@ def searchCodes(page, pbar, jobList, filename):
 
                 # Capture Arguments and text
                 textMatch = re.search(regex, jaString)
-                if textMatch.group() != '':
+                if textMatch and textMatch.group(0) != '':
                     text = textMatch.group(1)
 
                     # Using this to keep track of 401's in a row. Throws IndexError at EndOfList (Expected Behavior)
@@ -2117,7 +2124,7 @@ def batchList(input_list, batch_size):
         
     return [input_list[i:i + batch_size] for i in range(0, len(input_list), batch_size)]
 
-def createContext(fullPromptFlag, subbedT):
+def createContext(fullPromptFlag, subbedT, format):
     characters = 'Game Characters:\n\
 圭太 (Keita) - Male\n\
 涼香 (Ryoka) - Female\n\
@@ -2145,8 +2152,8 @@ Output ONLY the {LANGUAGE} translation in the following format: `Translation: <{
 - `...` can be a part of the dialogue. Translate it as it is.\n\
 {VOCAB}\n\
 "
-    if isinstance(subbedT, list):
-        user = f'```json\n{subbedT}```'
+    if format == 'json':
+        user = f'```json\n{subbedT}\n```'
     else:
         user = subbedT
     return characters, system, user
@@ -2288,7 +2295,7 @@ def translateGPT(text, history, fullPromptFlag):
             continue
 
         # Create Message
-        characters, system, user = createContext(fullPromptFlag, subbedT)
+        characters, system, user = createContext(fullPromptFlag, subbedT, format)
 
         # Calculate Estimate
         if ESTIMATE:
