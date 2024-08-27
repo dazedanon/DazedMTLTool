@@ -65,7 +65,7 @@ CODE122 = False
 
 # Other
 CODE210 = False
-CODE300 = False
+CODE300 = True
 CODE250 = False
 
 # Database
@@ -455,6 +455,47 @@ def searchCodes(events, pbar, jobList, filename):
                     # Convert to String and Set
                     translatedText = ','.join(choiceListTL)
                     codeList[i]['stringArgs'][1] = translatedText
+
+                # Dialogue
+                elif codeList[i]['stringArgs'][0] == "Hメッセージ":
+                    imageRegex = r'(\\?r?\\?n?_.*?\d\r\n[@#]?)|(\r\n@)(.+?)(\r\n)|(\r\n_PDC)|(>\r\n)'
+                    startString = ''
+
+                    # Grab String
+                    jaString = codeList[i]['stringArgs'][1]
+
+                    # Grab and Split
+                    jaStringList = re.split(imageRegex, jaString)
+
+                    # Clean List
+                    cleanedList = [x for x in jaStringList if x is not None and x != '']
+
+                    # Iterate Through List
+                    translatedText = ''
+                    for str in cleanedList:
+
+                        # Pass 1
+                        if not setData:
+                            if '_' not in str and '@' not in str and '>' not in str and str != '\r\n':
+                                # Remove Textwrap and Add to list
+                                str = str.replace('\r\n', ' ')
+                                list300.append(str)
+
+                        # Pass 2
+                        else:
+                            if '_' not in str and '@' not in str and '>' not in str and str != '\r\n':
+                                # Add Textwrap
+                                list300[0] = textwrap.fill(list300[0], WIDTH)
+                                list300[0] = list300[0].replace('\n', '\r\n')
+                                translatedText += list300[0]
+                                list300.pop(0)
+                            else:
+                                translatedText += str
+
+                    # Write to File
+                    if setData:
+                        codeList[i]['stringArgs'][1] = translatedText
+
 
             ### Event Code: 250 Common Events
             if codeList[i]['code'] == 250 and CODE250 == True:
@@ -1344,10 +1385,19 @@ def subVars(jaString):
             jaString = jaString.replace(var, '[FCode_' + str(count) + ']')
             count += 1
 
-    # Put all lists in list and return
-    return [jaString, codeList]
+    # WOLF Images
+    count = 0
+    humList = re.findall(r'(\\?r?\\?n?_.*?\d\\r\\n@?)', jaString)
+    humList = set(humList)
+    if len(humList) != 0:
+        for var in humList:
+            jaString = jaString.replace(var, '[ICode_' + str(count) + ']')
+            count += 1
 
-def resubVars(translatedText, codeList):
+    # Put all lists in list and return
+    return [jaString, [codeList, humList]]
+
+def resubVars(translatedText, varList):
     # Fix Spacing and ChatGPT Nonsense
     matchList = re.findall(r'\[\s?.+?\s?\]', translatedText)
     if len(matchList) > 0:
@@ -1357,9 +1407,16 @@ def resubVars(translatedText, codeList):
     
     # Formatting
     count = 0
-    if len(codeList) != 0:
-        for var in codeList:
+    if len(varList[0]) != 0:
+        for var in varList[0]:
             translatedText = translatedText.replace('[FCode_' + str(count) + ']', var)
+            count += 1
+
+    # Formatting
+    count = 0
+    if len(varList[1]) != 0:
+        for var in varList[1]:
+            translatedText = translatedText.replace('[ICode_' + str(count) + ']', var)
             count += 1
 
     return translatedText
@@ -1372,15 +1429,48 @@ def batchList(input_list, batch_size):
 
 def createContext(fullPromptFlag, subbedT):
     characters = 'Game Characters:\n\
-千佳 (Chika) - Female\n\
-ちか (Chika) - Female\n\
-和樹 (Kazuki) - Male\n\
-かずき (Kazuki) - Male\n\
-松本 (Matsumoto) - Unknown\n\
-猿山 (Saruyama) - Male\n\
-菊池 (Kikuchi) - Male\n\
-篠宮 (Shinomiya) - Male\n\
-翔太 (Shota) - Male\n\
+ロラン (Roland) - Male\n\
+リュカ (Ryuka) - Male\n\
+レックス (Rex) - Male\n\
+タバサ (Tabasa) - Female\n\
+アルス (Ars) - Male\n\
+アマカラ (Amakara) - Male\n\
+エリー (Eri) - Female\n\
+リオ (Rio) - Female\n\
+サマル (Samal) - Male\n\
+ムーン (Moon) - Female\n\
+アリーナ (Arina) - Female\n\
+クリフト (Cliff) - Male\n\
+マーニャ (Manya) - Female\n\
+ミネア (Minea) - Female\n\
+デボラ (Debora) - Female\n\
+ビアンカ (Bianca) - Female\n\
+フローラ (Flora) - Female\n\
+バーバラ (Barbara) - Female\n\
+ミレーユ (Mireyu) - Female\n\
+アイラ (Aira) - Female\n\
+フォズ (Foz) - Female\n\
+マリベル (Maribel) - Female\n\
+ククール (Kukool) - Male\n\
+ゲルダ (Gerda) - Female\n\
+ゼシカ (Jessica) - Female\n\
+ヤンガス (Yangus) - Male\n\
+ラヴィエル (Raviel) - Female\n\
+セティア (Setia) - Female\n\
+ダイ (Dai) - Male\n\
+ヒュンケル (Hyunckel) - Male\n\
+ポップ (Pop) - Male\n\
+マァム (Maam) - Female\n\
+レオナ (Leona) - Female\n\
+アステア (Astea) - Female\n\
+イヨ (Iyo) - Female\n\
+ジャガン (Jagan) - Male\n\
+ヤオ (Yao) - Female\n\
+デイジィ (Daisy) - Female\n\
+バイシュン (Baishun) - Male\n\
+ブライ (Buraimu) - Male\n\
+ハッサン (Hassan) - Male\n\
+アロマ (Aroma) - Female\n\
 '
     
     system = PROMPT + VOCAB if fullPromptFlag else \

@@ -52,29 +52,32 @@ BAR_FORMAT='{l_bar}{bar:10}{r_bar}{bar:-10b}'
 POSITION = 0
 LEAVE = False
 
-def handleImages(filepath, estimate):
+def handleImages(folderName, estimate):
     global ESTIMATE, TOKENS
     ESTIMATE = estimate
     start = time.time()
 
-    translatedData = openFiles(filepath)
+    # Translate Strings
+    translatedData = openFiles(f'files/{folderName}')
 
-    # Convert Strings to Images
+    # Write Strings to Images
     if not ESTIMATE:
+        if not os.path.exists(f'translated/{folderName}'):
+            os.mkdir(f'translated/{folderName}')
         for i in range(len(translatedData[0][0])):
             try:
                 translatedList = translatedData[0][0]
                 originalList = translatedData[0][1]
                 dimensionsList = translatedData[0][2]
                 image = stringToImage(translatedList[i], dimensionsList[i][0], dimensionsList[i][1])
-                image.save(rf'translated/{originalList[i]}.png', quality=100)
+                image.save(rf'translated/{folderName}/{originalList[i]}.png', quality=100)
             except Exception as e:
                 PBAR.write(f'{originalList[i]}: {str(e)}')
                 #Ignore Error
 
     # Print File
     end = time.time()
-    tqdm.write(getResultString(translatedData, end - start, filepath))
+    tqdm.write(getResultString(translatedData, end - start, folderName))
     with LOCK:
         TOKENS[0] += translatedData[1][0]
         TOKENS[1] += translatedData[1][1]
@@ -88,12 +91,17 @@ def handleImages(filepath, estimate):
     else:
         return totalString
     
-def openFiles(filepath):
-    if os.path.isdir(filepath):
+def openFiles(folderName):
+    global PBAR
+
+    if os.path.isdir(folderName):
         imageList = [[],[]]
-        imageList = processImagesDir(filepath, imageList)
-        translatedData = translateImages(imageList)
-        translatedData = [[translatedData[0], imageList[0], imageList[1]], translatedData[1], translatedData[2]]
+        imageList = processImagesDir(folderName, imageList)
+        
+        # Start Translation
+        with tqdm(bar_format=BAR_FORMAT, position=POSITION, leave=LEAVE, desc=folderName, total=len(imageList[0])) as PBAR:
+            translatedData = translateImages(imageList)
+            translatedData = [[translatedData[0], imageList[0], imageList[1]], translatedData[1], translatedData[2]]
         
         return translatedData
     else:
@@ -165,7 +173,7 @@ def stringToImage(text, width, height, font_path='fonts/TsunagiGothic.ttf', scal
     y = (scaled_height - text_height) // 2
     
     # Draw the text on the image
-    draw.text((x, y), text, font=font, fill=(255, 255, 255, 255))
+    draw.text((x, y), text, font=font, fill=(0, 0, 0, 255))
     
     # Resize back to the original dimensions to get a clearer text rendering
     image = image.resize((width, height), Image.LANCZOS,)
@@ -204,14 +212,13 @@ def processImagesDir(directory_path, imageList):
     return imageList
 
 def translateImages(imageList):
-    global PBAR
     totalTokens = [0,0]
-    with tqdm(bar_format=BAR_FORMAT, position=POSITION, leave=LEAVE, desc='Images', total=len(imageList[0])) as PBAR:
-        # Translate GPT
-        response = translateGPT(imageList[0], 'Keep the Translation as brief as possible', True)
-        translatedList = response[0]
-        totalTokens[0] += response[1][0]
-        totalTokens[1] += response[1][1]
+
+    # Translate GPT
+    response = translateGPT(imageList[0], 'Keep the Translation as brief as possible', True)
+    translatedList = response[0]
+    totalTokens[0] += response[1][0]
+    totalTokens[1] += response[1][1]
 
     return [translatedList, totalTokens, None]   
 
@@ -286,17 +293,48 @@ def batchList(input_list, batch_size):
 
 def createContext(fullPromptFlag, subbedT, format):
     characters = 'Game Characters:\n\
-圭太 (Keita) - Male\n\
-涼香 (Ryoka) - Female\n\
-咲 (Saki) - Female\n\
-大介 (Daisuke) - Male\n\
-浮浪者 (Vagrant) - Male\n\
-まさる (Masaru) - Male\n\
-ノブオ (Nobuo) - Male\n\
-安井 (Yasui) - Male\n\
-大山 (Oyama) - Male\n\
-関口 (Sekiguchi) - Male\n\
-黒崎 (Kurosaki) - Male\n\
+ロラン (Roland) - Male\n\
+リュカ (Ryuka) - Male\n\
+レックス (Rex) - Male\n\
+タバサ (Tabasa) - Female\n\
+アルス (Ars) - Male\n\
+アマカラ (Amakara) - Male\n\
+エリー (Eri) - Female\n\
+リオ (Rio) - Female\n\
+サマル (Samal) - Male\n\
+ムーン (Moon) - Female\n\
+アリーナ (Arina) - Female\n\
+クリフト (Cliff) - Male\n\
+マーニャ (Manya) - Female\n\
+ミネア (Minea) - Female\n\
+デボラ (Debora) - Female\n\
+ビアンカ (Bianca) - Female\n\
+フローラ (Flora) - Female\n\
+バーバラ (Barbara) - Female\n\
+ミレーユ (Mireyu) - Female\n\
+アイラ (Aira) - Female\n\
+フォズ (Foz) - Female\n\
+マリベル (Maribel) - Female\n\
+ククール (Kukool) - Male\n\
+ゲルダ (Gerda) - Female\n\
+ゼシカ (Jessica) - Female\n\
+ヤンガス (Yangus) - Male\n\
+ラヴィエル (Raviel) - Female\n\
+セティア (Setia) - Female\n\
+ダイ (Dai) - Male\n\
+ヒュンケル (Hyunckel) - Male\n\
+ポップ (Pop) - Male\n\
+マァム (Maam) - Female\n\
+レオナ (Leona) - Female\n\
+アステア (Astea) - Female\n\
+イヨ (Iyo) - Female\n\
+ジャガン (Jagan) - Male\n\
+ヤオ (Yao) - Female\n\
+デイジィ (Daisy) - Female\n\
+バイシュン (Baishun) - Male\n\
+ブライ (Buraimu) - Male\n\
+ハッサン (Hassan) - Male\n\
+アロマ (Aroma) - Female\n\
 '
     
     system = PROMPT + VOCAB if fullPromptFlag else \
