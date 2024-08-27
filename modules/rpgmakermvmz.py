@@ -2160,7 +2160,7 @@ Output ONLY the {LANGUAGE} translation in the following format: `Translation: <{
 
 def translateText(characters, system, user, history, penalty, format):
     # Prompt
-    msg = [{"role": "system", "content": system + characters}]
+    msg = [{"role": "system", "content": system}]
 
     # Characters
     msg.append({"role": "system", "content": characters})
