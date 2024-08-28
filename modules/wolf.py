@@ -458,11 +458,13 @@ def searchCodes(events, pbar, jobList, filename):
 
                 # Dialogue
                 elif codeList[i]['stringArgs'][0] == "Hメッセージ":
-                    imageRegex = r'(\\?r?\\?n?_.*?\d\r\n[@#]?)|(\r\n@)(.+?)(\r\n)|(\r\n_PDC)|(>\r\n)'
-                    startString = ''
+                    imageRegex = r'(\\?r?\\?n?_.*?\d\r\n)|(@-?\d?)(\d?-?\d?.+?)(\r\n)|(\r\n_PDC)|(>\r\n)|(^[#])|(\r\n@$)'
+                    fontSize = 24
 
                     # Grab String
                     jaString = codeList[i]['stringArgs'][1]
+                    jaString = jaString.replace('\u3000', ' ')
+                    jaString = jaString.replace('#', '')
 
                     # Grab and Split
                     jaStringList = re.split(imageRegex, jaString)
@@ -471,22 +473,37 @@ def searchCodes(events, pbar, jobList, filename):
                     cleanedList = [x for x in jaStringList if x is not None and x != '']
 
                     # Iterate Through List
+                    j = 0
                     translatedText = ''
+                    while j < len(cleanedList):
+                        if j > 0 and '@' in cleanedList[j] and j < len(cleanedList)-1:
+                            # Setup @
+                            if '@' not in cleanedList[j-1] and '_' not in cleanedList[j-1]:
+                                cleanedList[j-1] = cleanedList[j-1] + cleanedList[j+1]
+                            else:
+                                cleanedList.insert(j, cleanedList[j+1])
+                                j += 1
+                            cleanedList[j] = f'\r\n{cleanedList[j]}\r\n'
+                            cleanedList.pop(j+1)
+                            cleanedList.pop(j+1)
+                        j += 1
+                    
                     for str in cleanedList:
-
                         # Pass 1
                         if not setData:
-                            if '_' not in str and '@' not in str and '>' not in str and str != '\r\n':
-                                # Remove Textwrap and Add to list
+                            if all(x not in str for x in ['_', '@', '>']) and str != '\r\n':
+                                # Remove Textwrap and Font and Add to list
                                 str = str.replace('\r\n', ' ')
+                                str = str.replace(f'\\f[{fontSize}]', '')
                                 list300.append(str)
 
                         # Pass 2
                         else:
-                            if '_' not in str and '@' not in str and '>' not in str and str != '\r\n':
-                                # Add Textwrap
+                            if all(x not in str for x in ['_', '@', '>']) and str != '\r\n':
+                                # Add Textwrap and Font
                                 list300[0] = textwrap.fill(list300[0], WIDTH)
-                                list300[0] = list300[0].replace('\n', '\r\n')
+                                list300[0] = list300[0].replace('\n', f'\r\n\\f[{fontSize}]')
+                                list300[0] = f'\\f[{fontSize}]{list300[0]}'
                                 translatedText += list300[0]
                                 list300.pop(0)
                             else:
@@ -494,8 +511,9 @@ def searchCodes(events, pbar, jobList, filename):
 
                     # Write to File
                     if setData:
+                        # Formatting Fixes
+                        translatedText = translatedText.replace('*"', '* "')
                         codeList[i]['stringArgs'][1] = translatedText
-
 
             ### Event Code: 250 Common Events
             if codeList[i]['code'] == 250 and CODE250 == True:
@@ -1387,7 +1405,7 @@ def subVars(jaString):
 
     # WOLF Images
     count = 0
-    humList = re.findall(r'(\\?r?\\?n?_.*?\d\\r\\n@?)', jaString)
+    humList = re.findall(r'(\\?r?\\?n?_.*?\d\r\n@?)', jaString)
     humList = set(humList)
     if len(humList) != 0:
         for var in humList:
@@ -1494,7 +1512,7 @@ Output ONLY the {LANGUAGE} translation in the following format: `Translation: <{
 
 def translateText(characters, system, user, history, penalty, format):
     # Prompt
-    msg = [{"role": "system", "content": system + characters}]
+    msg = [{"role": "system", "content": system}]
 
     # Characters
     msg.append({"role": "system", "content": characters})
