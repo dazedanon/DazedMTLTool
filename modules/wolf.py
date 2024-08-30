@@ -458,7 +458,7 @@ def searchCodes(events, pbar, jobList, filename):
 
                 # Dialogue
                 elif codeList[i]['stringArgs'][0] == "Hメッセージ":
-                    imageRegex = r'(\\?r?\\?n?_.*?\d\r\n)|(@-?\d?)(\d?-?\d?.+?)(\r\n)|(\r\n_PDC)|(>\r\n)|(^[#])|(\r\n@$)|(/)'
+                    imageRegex = r'(\\?r?\\?n?_.*?\d\r\n)|(@-?\d?)(\d?-?\d?.+?)(\r\n)|(_PDC)|(>\r\n)|(^[#])|(\r\n@$)|(/)'
                     fontSize = 24
 
                     # Grab String
@@ -470,7 +470,7 @@ def searchCodes(events, pbar, jobList, filename):
                     jaStringList = re.split(imageRegex, jaString)
 
                     # Clean List
-                    cleanedList = [x for x in jaStringList if x is not None and x != '']
+                    cleanedList = [x for x in jaStringList if x is not None and x != '' and x != '\r\n']
 
                     # Iterate Through List
                     j = 0
@@ -484,7 +484,6 @@ def searchCodes(events, pbar, jobList, filename):
                                 cleanedList.insert(j, cleanedList[j+1])
                                 j += 1
                             cleanedList[j] = f'\r\n{cleanedList[j]}\r\n'
-                            cleanedList.pop(j+1)
                             cleanedList.pop(j+1)
                         j += 1
                     
@@ -503,7 +502,7 @@ def searchCodes(events, pbar, jobList, filename):
                                 # Add Textwrap and Font
                                 list300[0] = textwrap.fill(list300[0], WIDTH)
                                 list300[0] = list300[0].replace('\n', f'\r\n\\f[{fontSize}]')
-                                list300[0] = f'\\f[{fontSize}]{list300[0]}'
+                                list300[0] = f'\\f[{fontSize}]{list300[0]}\r\n'
                                 translatedText += list300[0]
                                 list300.pop(0)
                             else:
