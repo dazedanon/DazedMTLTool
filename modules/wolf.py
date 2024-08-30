@@ -458,7 +458,7 @@ def searchCodes(events, pbar, jobList, filename):
 
                 # Dialogue
                 elif codeList[i]['stringArgs'][0] == "Hメッセージ":
-                    imageRegex = r'(\\?r?\\?n?_.*?\d\r\n)|(@-?\d?)(\d?-?\d?.+?)(\r\n)|(_PDC)|(>\r\n)|(^[#])|(\r\n@$)|(/)'
+                    imageRegex = r'(\\?r?\\?n?_\w+\r\n)|(@-?\d?)(\d?-?\d?[^\r]+?)(\r\n|$)|(_PDC)|(>\r\n)|(^[#])|(\r\n@$)|(/)|(_SS_)|(\r\n@\r\n)'
                     fontSize = 24
 
                     # Grab String
@@ -470,15 +470,15 @@ def searchCodes(events, pbar, jobList, filename):
                     jaStringList = re.split(imageRegex, jaString)
 
                     # Clean List
-                    cleanedList = [x for x in jaStringList if x is not None and x != '' and x != '\r\n']
+                    cleanedList = [x for x in jaStringList if x is not None and x != '' and x != '\r\n' and x != '_SS_']
 
                     # Iterate Through List
                     j = 0
                     translatedText = ''
                     while j < len(cleanedList):
-                        if j > 0 and '@' in cleanedList[j] and j < len(cleanedList)-1:
+                        if j > 0 and ('@' in cleanedList[j] or '/' in cleanedList[j]) and j < len(cleanedList)-1 and cleanedList[j] != '\r\n@\r\n':
                             # Setup @
-                            if '@' not in cleanedList[j-1] and '_' not in cleanedList[j-1]:
+                            if ('@' not in cleanedList[j-1] or '/' not in cleanedList[j-1]) and '_' not in cleanedList[j-1]:
                                 cleanedList[j-1] = cleanedList[j-1] + cleanedList[j+1]
                             else:
                                 cleanedList.insert(j, cleanedList[j+1])
@@ -498,7 +498,7 @@ def searchCodes(events, pbar, jobList, filename):
 
                         # Pass 2
                         else:
-                            if all(x not in str for x in ['_', '@', '>', '/']) and str != '\r\n':
+                            if all(x not in str for x in ['_', '@', '>', '/',]) and str != '\r\n':
                                 # Add Textwrap and Font
                                 list300[0] = textwrap.fill(list300[0], WIDTH)
                                 list300[0] = list300[0].replace('\n', f'\r\n\\f[{fontSize}]')
