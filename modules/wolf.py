@@ -458,7 +458,7 @@ def searchCodes(events, pbar, jobList, filename):
 
                 # Dialogue
                 elif codeList[i]['stringArgs'][0] == "Hメッセージ":
-                    imageRegex = r'(\\?r?\\?n?_.*?\d\r\n)|(@-?\d?)(\d?-?\d?.+?)(\r\n)|(\r\n_PDC)|(>\r\n)|(^[#])|(\r\n@$)'
+                    imageRegex = r'(\\?r?\\?n?_.*?\d\r\n)|(@-?\d?)(\d?-?\d?.+?)(\r\n)|(\r\n_PDC)|(>\r\n)|(^[#])|(\r\n@$)|(/)'
                     fontSize = 24
 
                     # Grab String
@@ -491,7 +491,7 @@ def searchCodes(events, pbar, jobList, filename):
                     for str in cleanedList:
                         # Pass 1
                         if not setData:
-                            if all(x not in str for x in ['_', '@', '>']) and str != '\r\n':
+                            if all(x not in str for x in ['_', '@', '>', '/']) and str != '\r\n':
                                 # Remove Textwrap and Font and Add to list
                                 str = str.replace('\r\n', ' ')
                                 str = str.replace(f'\\f[{fontSize}]', '')
@@ -499,7 +499,7 @@ def searchCodes(events, pbar, jobList, filename):
 
                         # Pass 2
                         else:
-                            if all(x not in str for x in ['_', '@', '>']) and str != '\r\n':
+                            if all(x not in str for x in ['_', '@', '>', '/']) and str != '\r\n':
                                 # Add Textwrap and Font
                                 list300[0] = textwrap.fill(list300[0], WIDTH)
                                 list300[0] = list300[0].replace('\n', f'\r\n\\f[{fontSize}]')
