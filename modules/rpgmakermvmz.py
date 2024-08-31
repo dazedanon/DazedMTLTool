@@ -58,15 +58,15 @@ POSITION = 0
 LEAVE = False
 
 # Dialogue / Scroll
-CODE401 = True
-CODE405 = True
+CODE401 = False
+CODE405 = False
 CODE408 = False
 
 # Choices
-CODE102 = True
+CODE102 = False
 
 # Variables
-CODE122 = False
+CODE122 = True
 
 # Names
 CODE101 = False
@@ -480,6 +480,12 @@ def searchNames(data, pbar, context):
                         nicknameList.append(data[i]['nickname'])
                     if data[i]['profile'] != '':
                         profileList.append(data[i]['profile'].replace('\n', ' '))
+
+                    # Notes
+                    if '<note:' in data[i]['note']:
+                        tokensResponse = translateNote(data[i], r'<note:(.*?)>')
+                        totalTokens[0] += tokensResponse[0]
+                        totalTokens[1] += tokensResponse[1]
                     
                     i += 1
                 else:
@@ -560,9 +566,12 @@ def searchNames(data, pbar, context):
             if context in ['Enemies', 'Classes', 'MapInfos']:
                 if len(nameList) < BATCHSIZE:
                     nameList.append(data[i]['name'])
-                    # tokensResponse = translateNote(data[i], r'.+')
-                    # totalTokens[0] += tokensResponse[0]
-                    # totalTokens[1] += tokensResponse[1]
+
+                    # Notes
+                    if '<note:' in data[i]['note']:
+                        tokensResponse = translateNote(data[i], r'<note:(.*?)>')
+                        totalTokens[0] += tokensResponse[0]
+                        totalTokens[1] += tokensResponse[1]
                     i += 1
                 else:
                     batchFull = True
@@ -1050,7 +1059,7 @@ def searchCodes(page, pbar, jobList, filename):
             ## Event Code: 122 [Set Variables]
             if 'code' in codeList[i] and codeList[i]['code'] == 122 and CODE122 is True:
                 # This is going to be the var being set. (IMPORTANT)
-                if codeList[i]['parameters'][0] not in list(range(15, 17)):
+                if codeList[i]['parameters'][0] not in list(range(150, 180)):
                     i += 1
                     continue
                   
@@ -1060,21 +1069,23 @@ def searchCodes(page, pbar, jobList, filename):
                 # VNameValue = jaString
                 # i += 1
                 # continue
-
-                if not isinstance(jaString, str):
-                    i += 1
-                    continue
                 
                 # Definitely don't want to mess with files
                 # if 'gameV' in jaString or '_' in jaString:
                 #     i += 1
                 #     continue
+
+                # Validate String
+                if not isinstance(jaString, str):
+                    i += 1
+                    continue
                 
                 # Set String
-                if len(re.findall(r"(')", jaString)) == 2:
+                matchedText = None
+                if len(re.findall(r"([\'\"])", jaString)) == 2:
                     matchedText = re.search(r"[\'\"\`](.*)[\'\"\`]", jaString)
-                else:
-                    matchedText = re.search(r'(.*)', jaString)
+                # else:
+                #     matchedText = re.search(r'(.*)', jaString)
 
                 # Last Check
                 if matchedText != None:
@@ -1101,11 +1112,9 @@ def searchCodes(page, pbar, jobList, filename):
                             # Textwrap
                             translatedText = textwrap.fill(translatedText, width=80)
                             translatedText = translatedText.replace('\n', '\\n')
-                            if len(re.findall(r"(')", jaString)) == 2:
-                                translatedText = '\'' + translatedText + '\''
 
                             # Set
-                            codeList[i]['parameters'][4] = translatedText
+                            codeList[i]['parameters'][4] = jaString.replace(finalJAString, translatedText)
                             list122.pop(0)
 
             ## Event Code: 357 [Picture Text] [Optional]
@@ -2126,17 +2135,18 @@ def batchList(input_list, batch_size):
 
 def createContext(fullPromptFlag, subbedT, format):
     characters = 'Game Characters:\n\
-圭太 (Keita) - Male\n\
-涼香 (Ryoka) - Female\n\
-咲 (Saki) - Female\n\
-大介 (Daisuke) - Male\n\
-浮浪者 (Vagrant) - Male\n\
-まさる (Masaru) - Male\n\
-ノブオ (Nobuo) - Male\n\
-安井 (Yasui) - Male\n\
-大山 (Oyama) - Male\n\
-関口 (Sekiguchi) - Male\n\
-黒崎 (Kurosaki) - Male\n\
+リリアレット (Lilliete) - Female\n\
+ルディ (Rudy) - Male\n\
+マックス (Max) - Male\n\
+ランベール (Lambert) - Male\n\
+ミリエル (Miriel) - Female\n\
+マドレリー (Madorery) - Female\n\
+シスター (Sister) - Female\n\
+踊り子さん (Dancer) - Female\n\
+自称勇者 (Self-Proclaimed Hero) - Male\n\
+甲冑 (Armor) - Male\n\
+コレクター (Collector) - Male\n\
+ひげ (Whiskers) - Male\n\
 '
     
     system = PROMPT + VOCAB if fullPromptFlag else \
