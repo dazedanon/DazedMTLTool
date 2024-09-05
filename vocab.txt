@@ -65,4 +65,5 @@ ME 音量 (ME Volume)
 鬼 (Oni)
 ギャンデッド (Ganded)
 リーロランド (Liloland)
+ローバー (Roper)
 ```

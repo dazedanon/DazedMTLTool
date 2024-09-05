@@ -64,7 +64,7 @@ CODE102 = False
 CODE122 = False
 
 # Other
-CODE210 = False
+CODE210 = True
 CODE300 = True
 CODE250 = False
 
@@ -346,24 +346,81 @@ def searchCodes(events, pbar, jobList, filename):
 
             ### Event Code: 210 Common Event
             if codeList[i]['code'] == 210 and CODE210 == True:
+                # if 'stringArgs' in codeList[i] and len(codeList[i]['stringArgs']) > 1:
+                #     # Grab Event List
+                #     jaString = codeList[i]['stringArgs'][1]
+
+                #     # Remove Textwrap
+                #     jaString = jaString.replace("\n", ' ')
+
+                #     # Translate
+                #     response = translateGPT(jaString, f'Reply with the {LANGUAGE} translation of the location', False)
+                #     translatedText = response[0]
+                #     totalTokens[0] = response[1][0]
+                #     totalTokens[1] = response[1][1]
+
+                #     # Textwrap
+                #     translatedText = textwrap.fill(translatedText, WIDTH)
+
+                #     # Validate and Set Data
+                #     codeList[i]['stringArgs'][1] = translatedText
                 if 'stringArgs' in codeList[i] and len(codeList[i]['stringArgs']) > 1:
-                    # Grab Event List
+                    imageRegex = r'(\\?r?\\?n?_\w+\r\n)|(@-?\d?)(\d?-?\d?[^\r]+?)(\r\n|$)|(_PDC)|(>\r\n)|(^[#])|(\r\n@$)|(/)|(_SS_)|(\r\n[@/]-?\d?\r\n)'
+                    fontSize = 24
+
+                    # Grab String
                     jaString = codeList[i]['stringArgs'][1]
+                    jaString = jaString.replace('\u3000', ' ')
+                    jaString = jaString.replace('#', '')
 
-                    # Remove Textwrap
-                    jaString = jaString.replace("\n", ' ')
+                    # Grab and Split
+                    jaStringList = re.split(imageRegex, jaString)
 
-                    # Translate
-                    response = translateGPT(jaString, f'Reply with the {LANGUAGE} translation of the location', False)
-                    translatedText = response[0]
-                    totalTokens[0] = response[1][0]
-                    totalTokens[1] = response[1][1]
+                    # Clean List
+                    cleanedList = [x for x in jaStringList if x is not None and x != '' and x != '\r\n' and x != '_SS_']
 
-                    # Textwrap
-                    translatedText = textwrap.fill(translatedText, WIDTH)
+                    # Iterate Through List
+                    j = 0
+                    translatedText = ''
+                    while j < len(cleanedList):
+                        if j > 0 and ('@' in cleanedList[j] or '/' in cleanedList[j]) and j < len(cleanedList)-1 and re.search(r'(\r\n[@/]-?\d?\r\n)', cleanedList[j]) is None:
+                            # Setup @
+                            if '@' not in cleanedList[j-1] and '/' not in cleanedList[j-1] and '_' not in cleanedList[j-1]:
+                                cleanedList[j-1] = cleanedList[j-1] + cleanedList[j+1]
+                            else:
+                                cleanedList.insert(j, cleanedList[j+1])
+                                j += 1
+                            cleanedList[j] = f'\r\n{cleanedList[j]}\r\n'
+                            cleanedList.pop(j+1)
+                        j += 1
+                    
+                    for str in cleanedList:
+                        # Pass 1
+                        if not setData:
+                            if all(x not in str for x in ['_', '@', '>', '/']) and str != '\r\n':
+                                # Remove Textwrap and Font and Add to list
+                                str = str.replace('\r\n', ' ')
+                                str = str.replace(f'\\f[{fontSize}]', '')
+                                list300.append(str)
 
-                    # Validate and Set Data
-                    codeList[i]['stringArgs'][1] = translatedText
+                        # Pass 2
+                        else:
+                            if all(x not in str for x in ['_', '@', '>', '/',]) and str != '\r\n':
+                                # Add Textwrap and Font
+                                list300[0] = textwrap.fill(list300[0], WIDTH)
+                                list300[0] = list300[0].replace('\n', f'\r\n\\f[{fontSize}]')
+                                list300[0] = f'\\f[{fontSize}]{list300[0]}\r\n'
+                                translatedText += list300[0]
+                                list300.pop(0)
+                            else:
+                                translatedText += str
+
+                    # Write to File
+                    if setData:
+                        # Formatting Fixes
+                        translatedText = translatedText.replace('*"', '* "')
+                        codeList[i]['stringArgs'][1] = translatedText
+
 
             ### Event Code: 122 SetString
             if codeList[i]['code'] == 122 and CODE122 == True:
@@ -458,7 +515,7 @@ def searchCodes(events, pbar, jobList, filename):
 
                 # Dialogue
                 elif codeList[i]['stringArgs'][0] == "Hメッセージ":
-                    imageRegex = r'(\\?r?\\?n?_\w+\r\n)|(@-?\d?)(\d?-?\d?[^\r]+?)(\r\n|$)|(_PDC)|(>\r\n)|(^[#])|(\r\n@$)|(/)|(_SS_)|(\r\n@\r\n)'
+                    imageRegex = r'(\\?r?\\?n?_\w+\r\n)|(@-?\d?)(\d?-?\d?[^\r]+?)(\r\n|$)|(_PDC)|(>\r\n)|(^[#])|(\r\n@$)|(/)|(_SS_)|(\r\n[@/]-?\d?\r\n)'
                     fontSize = 24
 
                     # Grab String
@@ -476,9 +533,9 @@ def searchCodes(events, pbar, jobList, filename):
                     j = 0
                     translatedText = ''
                     while j < len(cleanedList):
-                        if j > 0 and ('@' in cleanedList[j] or '/' in cleanedList[j]) and j < len(cleanedList)-1 and cleanedList[j] != '\r\n@\r\n':
+                        if ('@' in cleanedList[j] or '/' in cleanedList[j]) and j < len(cleanedList)-1 and re.search(r'(\r\n[@/]-?\d?\r\n)', cleanedList[j]) is None:
                             # Setup @
-                            if ('@' not in cleanedList[j-1] or '/' not in cleanedList[j-1]) and '_' not in cleanedList[j-1]:
+                            if j > 0 and '@' not in cleanedList[j-1] and '/' not in cleanedList[j-1] and '_' not in cleanedList[j-1]:
                                 cleanedList[j-1] = cleanedList[j-1] + cleanedList[j+1]
                             else:
                                 cleanedList.insert(j, cleanedList[j+1])

@@ -58,7 +58,7 @@ POSITION = 0
 LEAVE = False
 
 # Dialogue / Scroll
-CODE401 = False
+CODE401 = True
 CODE405 = False
 CODE408 = False
 
@@ -66,7 +66,7 @@ CODE408 = False
 CODE102 = False
 
 # Variables
-CODE122 = True
+CODE122 = False
 
 # Names
 CODE101 = False
@@ -2039,12 +2039,12 @@ def searchSystem(data, pbar):
         totalTokens[1] += response[1][1]
         data['equipTypes'][i] = response[0].replace('\"', '').strip()
 
-    # Variables (Optional ususally)
-    for i in range(len(data['variables'])):
-        response = translateGPT(data['variables'][i], 'Reply with only the '+ LANGUAGE +' translation of the title', False)
-        totalTokens[0] += response[1][0]
-        totalTokens[1] += response[1][1]
-        data['variables'][i] = response[0].replace('\"', '').strip()
+    # # Variables (Optional ususally)
+    # for i in range(len(data['variables'])):
+    #     response = translateGPT(data['variables'][i], 'Reply with only the '+ LANGUAGE +' translation of the title', False)
+    #     totalTokens[0] += response[1][0]
+    #     totalTokens[1] += response[1][1]
+    #     data['variables'][i] = response[0].replace('\"', '').strip()
         
 
     # Messages
