@@ -483,7 +483,7 @@ def searchCodes(events, pbar, jobList, filename):
                                 codeList[i]['stringArgs'][0] = translatedText
 
             ### Event Code: 300 Common Events
-            if codeList[i]['code'] == 300 and CODE300 == True:
+            if codeList[i]['code'] == 300 and CODE300 == True and len(codeList[i]['stringArgs']) > 1:
                 # Choices
                 if codeList[i]['stringArgs'][0] == "選択肢/確認":
                     # Grab String
@@ -514,8 +514,10 @@ def searchCodes(events, pbar, jobList, filename):
                     codeList[i]['stringArgs'][1] = translatedText
 
                 # Dialogue
-                elif codeList[i]['stringArgs'][0] == "Hメッセージ":
-                    imageRegex = r'(\\?r?\\?n?_\w+\r\n)|(@-?\d?)(\d?-?\d?[^\r]+?)(\r\n|$)|(_PDC)|(>\r\n)|(^[#])|(\r\n@$)|(/)|(_SS_)|(\r\n[@/]-?\d?\r\n)'
+                elif codeList[i]['stringArgs'][0] == "Hメッセージ" \
+                or codeList[i]['stringArgs'][0] == 'Hしらべる' \
+                or codeList[i]['stringArgs'][0] == '[移]サウンドノベル':
+                    imageRegex = r'(\r?\n?_\w+\r?\n?)|(@-?\d?\r\n)|(@-?\d?[^\r])(\d?-?\d?[^\r]+?)(\r\n|$)|(_PDC)|(>\r\n)|(^[#])|(\r\n@$)|(/)|(_SS_)|(\r\n[@/]-?\d?\r\n)'
                     fontSize = 24
 
                     # Grab String
@@ -533,7 +535,7 @@ def searchCodes(events, pbar, jobList, filename):
                     j = 0
                     translatedText = ''
                     while j < len(cleanedList):
-                        if ('@' in cleanedList[j] or '/' in cleanedList[j]) and j < len(cleanedList)-1 and re.search(r'(\r\n[@/]-?\d?\r\n)', cleanedList[j]) is None:
+                        if ('@' in cleanedList[j] or '/' in cleanedList[j]) and j < len(cleanedList)-1 and re.search(r'([@/]-?\d?\r\n)', cleanedList[j]) is None:
                             # Setup @
                             if j > 0 and '@' not in cleanedList[j-1] and '/' not in cleanedList[j-1] and '_' not in cleanedList[j-1]:
                                 cleanedList[j-1] = cleanedList[j-1] + cleanedList[j+1]
@@ -556,6 +558,12 @@ def searchCodes(events, pbar, jobList, filename):
                         # Pass 2
                         else:
                             if all(x not in str for x in ['_', '@', '>', '/',]) and str != '\r\n':
+                                # Decide Wrap
+                                if codeList[i]['stringArgs'][0] == '[移]サウンドノベル':
+                                    width = 50
+                                else:
+                                    width = WIDTH
+
                                 # Add Textwrap and Font
                                 list300[0] = textwrap.fill(list300[0], WIDTH)
                                 list300[0] = list300[0].replace('\n', f'\r\n\\f[{fontSize}]')
@@ -569,6 +577,7 @@ def searchCodes(events, pbar, jobList, filename):
                     if setData:
                         # Formatting Fixes
                         translatedText = translatedText.replace('*"', '* "')
+                        translatedText = re.sub(r'[^\S\r\n]+', ' ', translatedText)
                         codeList[i]['stringArgs'][1] = translatedText
 
             ### Event Code: 250 Common Events
@@ -1545,6 +1554,7 @@ def createContext(fullPromptFlag, subbedT):
 ブライ (Buraimu) - Male\n\
 ハッサン (Hassan) - Male\n\
 アロマ (Aroma) - Female\n\
+ピッケ (Pikke) - Female\n\
 '
     
     system = PROMPT + VOCAB if fullPromptFlag else \
@@ -1634,6 +1644,7 @@ def elongateCharacters(text):
 
 def extractTranslation(translatedTextList, is_list):
     try:
+        translatedTextList = re.sub(r'\\"+\"([^,\n}])', r'\\"\1', translatedTextList)
         line_dict = json.loads(translatedTextList)
         # If it's a batch (i.e., list), extract with tags; otherwise, return the single item.
         string_list = list(line_dict.values())
@@ -1643,7 +1654,7 @@ def extractTranslation(translatedTextList, is_list):
             return string_list[0]
 
     except Exception as e:
-        print(f'extractTranslation Error: {translatedTextList}')
+        PBAR.write(f'extractTranslation Error: {e} on String {translatedTextList}')
         return None
 
 
