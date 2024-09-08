@@ -39,6 +39,7 @@ IGNORETLTEXT = False    # Ignores all translated text.
 MISMATCH = []   # Lists files that throw a mismatch error (Length of GPT list response is wrong)
 BRACKETNAMES = False
 PBAR = None
+FILENAME = None
 
 # Pricing - Depends on the model https://openai.com/pricing
 # Batch Size - GPT 3.5 Struggles past 15 lines per request. GPT4 struggles past 50 lines per request
@@ -84,8 +85,9 @@ CODE111 = False
 CODE108 = False
 
 def handleACE(filename, estimate):
-    global ESTIMATE, TOKENS
+    global ESTIMATE, TOKENS, FILENAME
     ESTIMATE = estimate
+    FILENAME = filename
 
     # Translate
     start = time.time()
@@ -2173,7 +2175,7 @@ Output ONLY the {LANGUAGE} translation in the following format: `Translation: <{
         user = subbedT
     return characters, system, user
 
-def translateText(characters, system, user, history, penalty, format):
+def translateText(characters, system, user, history, penalty, format, model=MODEL):
     # Prompt
     msg = [{"role": "system", "content": system}]
 
@@ -2192,12 +2194,12 @@ def translateText(characters, system, user, history, penalty, format):
     else:
         responseFormat = { "type": "text" }
     
-    # Content to TL
+    # Content to TL Cleanup
     msg.append({"role": "user", "content": f'{user}'})
     response = openai.chat.completions.create(
         temperature=0,
         frequency_penalty=penalty,
-        model=MODEL,
+        model=model,
         response_format=responseFormat,
         messages=msg,
     )
@@ -2282,7 +2284,7 @@ def combineList(tlist, text):
 
 @retry(exceptions=Exception, tries=5, delay=5)
 def translateGPT(text, history, fullPromptFlag):
-    global PBAR
+    global PBAR, MISMATCH, FILENAME
     
     mismatch = False
     totalTokens = [0, 0]
@@ -2331,8 +2333,8 @@ def translateGPT(text, history, fullPromptFlag):
         if isinstance(tItem, list):
             extractedTranslations = extractTranslation(translatedText, True)
             if extractedTranslations == None or len(tItem) != len(extractedTranslations):
-                # Mismatch. Try Again
-                response = translateText(characters, system, user, history, 0.05, format)
+                # Mismatch. Try Again w/ Different Model
+                response = translateText(characters, system, user, history, 0.05, format, 'gpt-4o')
                 translatedText = response.choices[0].message.content
                 totalTokens[0] += response.usage.prompt_tokens
                 totalTokens[1] += response.usage.completion_tokens
@@ -2348,9 +2350,12 @@ def translateGPT(text, history, fullPromptFlag):
             if mismatch == False:
                 tList[index] = extractedTranslations
                 history = extractedTranslations[-10:]  # Update history if we have a list
+                
             else:
                 history = text[-10:]
                 mismatch = False
+                if FILENAME not in MISMATCH:
+                    MISMATCH.append(FILENAME)
 
             # Update Loading Bar
             with LOCK:
