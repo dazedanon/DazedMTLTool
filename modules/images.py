@@ -70,9 +70,9 @@ def handleImages(folderName, estimate):
                 originalList = translatedData[0][1]
                 dimensionsList = translatedData[0][2]
                 image = stringToImage(translatedList[i], dimensionsList[i][0], dimensionsList[i][1])
-                image.save(rf'translated/{folderName}/{originalList[i]}.png', quality=100)
+                image.save(rf'translated/{folderName}/{translatedList[i]}.png', quality=100)
             except Exception as e:
-                PBAR.write(f'{originalList[i]}: {str(e)}')
+                PBAR.write(f'{translatedList[i]}: {str(e)}')
                 #Ignore Error
 
     # Print File
@@ -173,7 +173,7 @@ def stringToImage(text, width, height, font_path='fonts/TsunagiGothic.ttf', scal
     y = (scaled_height - text_height) // 2
     
     # Draw the text on the image
-    draw.text((x, y), text, font=font, fill=(0, 0, 0, 255))
+    draw.text((x, y), text, font=font, fill=(255, 255, 255, 255))
     
     # Resize back to the original dimensions to get a clearer text rendering
     image = image.resize((width, height), Image.LANCZOS,)
@@ -192,7 +192,7 @@ def getImageDimensions(file_path):
 def processImagesDir(directory_path, imageList):
     for file_name in os.listdir(directory_path):
         # .png and Japanese
-        if '.png' in file_name and re.search(r'[一-龠ぁ-ゔァ-ヴー]+', file_name):
+        if '.png' in file_name and re.search(r'[一-龠ぁ-ゔァ-ヴー]+', file_name) and file_name.replace('.png', '') in VOCAB and len(file_name) > 5:
             file_path = os.path.join(directory_path, file_name)
             if os.path.isfile(file_path):
                 # Check if the file is an image
