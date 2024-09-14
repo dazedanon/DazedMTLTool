@@ -49,7 +49,7 @@ if 'gpt-3.5' in MODEL:
 elif 'gpt-4' in MODEL:
     INPUTAPICOST = .005
     OUTPUTAPICOST = .015
-    BATCHSIZE = 40
+    BATCHSIZE = 20
     FREQUENCY_PENALTY = 0.1
 
 #tqdm Globals
@@ -62,12 +62,12 @@ FILENAME = None
 # Dialogue / Scroll
 CODE101 = False
 CODE102 = False
-CODE122 = False
+CODE122 = True
 
 # Other
 CODE210 = False
 CODE300 = False
-CODE250 = True
+CODE250 = False
 
 # Database
 NPCFLAG = False
@@ -367,34 +367,9 @@ def searchCodes(events, pbar, jobList, filename):
                 #     # Validate and Set Data
                 #     codeList[i]['stringArgs'][1] = translatedText
                 if 'stringArgs' in codeList[i] and len(codeList[i]['stringArgs']) > 1:
-                    imageRegex = r'(\r?\n?_\w+\r?\n?)|(@-?\d?\r\n)|(@-?\d?[^\r])(\d?-?\d?[^\r]+?)(\r\n|$)|(_PDC)|(>\r\n)|(^[#])|(\r\n@$)|(/)|(_SS_)|(\r\n[@/]-?\d?\r\n)'
+                    cleanedList = formatDramon(codeList[i]['stringArgs'][1])
                     fontSize = 24
-
-                    # Grab String
-                    jaString = codeList[i]['stringArgs'][1]
-                    jaString = jaString.replace('\u3000', ' ')
-                    jaString = jaString.replace('#', '')
-
-                    # Grab and Split
-                    jaStringList = re.split(imageRegex, jaString)
-
-                    # Clean List
-                    cleanedList = [x for x in jaStringList if x is not None and x != '' and x != '\r\n' and x != '_SS_']
-
-                    # Iterate Through List
-                    j = 0
                     translatedText = ''
-                    while j < len(cleanedList):
-                        if ('@' in cleanedList[j] or '/' in cleanedList[j]) and j < len(cleanedList)-1 and re.search(r'([@/]-?\d?\r\n)', cleanedList[j]) is None:
-                            # Setup @
-                            if j > 0 and '@' not in cleanedList[j-1] and '/' not in cleanedList[j-1] and '_' not in cleanedList[j-1]:
-                                cleanedList[j-1] = cleanedList[j-1] + cleanedList[j+1]
-                            else:
-                                cleanedList.insert(j, cleanedList[j+1])
-                                j += 1
-                            cleanedList[j] = f'\r\n{cleanedList[j]}\r\n'
-                            cleanedList.pop(j+1)
-                        j += 1
                     
                     for str in cleanedList:
                         # Pass 1
@@ -493,7 +468,7 @@ def searchCodes(events, pbar, jobList, filename):
                                 codeList[i]['stringArgs'][0] = translatedText
 
             ### Event Code: 300 Common Events
-            if codeList[i]['code'] == 122 and CODE300 == True and len(codeList[i]['stringArgs']) > 0:
+            if codeList[i]['code'] == 300 and CODE300 == True and len(codeList[i]['stringArgs']) > 0:
                 # Choices
                 if codeList[i]['stringArgs'][0] == "m_可変式選択肢":
                     # Grab String
@@ -531,38 +506,12 @@ def searchCodes(events, pbar, jobList, filename):
                 or codeList[i]['stringArgs'][0] == 'm_謎冒頭' \
                 or (codeList[i]['codeStr'] == 'SetString' and '@' in codeList[i]['stringArgs'][0])\
                 or codeList[i]['stringArgs'][0] == '[移]サウンドノベル':
-                    imageRegex = r'(\r?\n?_\w+\r?\n?)|(@-?\d?\r\n)|(@-?\d?[^\r*])(\d?-?\d?[^\r]+?)(\r\n|$)|(_PDC)|(>\r\n)|(^[#])|(\r\n@$)|(/)|(_SS_)|(\r\n[@/]-?\d?\r\n)'
-                    fontSize = 24
-
-                    # Grab String
-                    if codeList[i]['codeStr'] != 'SetString':
-                        jaString = codeList[i]['stringArgs'][1]
+                    if len(codeList[i]['stringArgs']) > 1:
+                        cleanedList = formatDramon(codeList[i]['stringArgs'][1])
                     else:
-                        jaString = codeList[i]['stringArgs'][0]
-                    jaString = jaString.replace('\u3000', ' ')
-                    jaString = jaString.replace('#', '')
-                    jaString = re.sub(r'[^\r]\n', '\r\n', jaString)
-
-                    # Grab and Split
-                    jaStringList = re.split(imageRegex, jaString)
-
-                    # Clean List
-                    cleanedList = [x for x in jaStringList if x is not None and x != '' and x != '\r\n' and x != '_SS_']
-
-                    # Iterate Through List
-                    j = 0
+                        cleanedList = formatDramon(codeList[i]['stringArgs'][0])
+                    fontSize = 24
                     translatedText = ''
-                    while j < len(cleanedList):
-                        if ('@' in cleanedList[j] or '/' in cleanedList[j]) and j < len(cleanedList)-1 and re.search(r'([@/]-?\d?\r\n)', cleanedList[j]) is None:
-                            # Setup @
-                            if j > 0 and '@' not in cleanedList[j-1] and '/' not in cleanedList[j-1] and '_' not in cleanedList[j-1]:
-                                cleanedList[j-1] = cleanedList[j-1] + cleanedList[j+1]
-                            else:
-                                cleanedList.insert(j, cleanedList[j+1])
-                                j += 1
-                            cleanedList[j] = f'\r\n{cleanedList[j]}\r\n'
-                            cleanedList.pop(j+1)
-                        j += 1
                     
                     for str in cleanedList:
                         # Pass 1
@@ -597,7 +546,7 @@ def searchCodes(events, pbar, jobList, filename):
                         translatedText = translatedText.replace('*"', '* "')
                         translatedText = translatedText.replace('\r\n\r\n', '\r\n')
                         translatedText = re.sub(r'[^\S\r\n]+', ' ', translatedText)
-                        if codeList[i]['codeStr'] != 'SetString':
+                        if len(codeList[i]['stringArgs']) > 1:
                             codeList[i]['stringArgs'][1] = translatedText
                         else:
                             codeList[i]['stringArgs'][0] = translatedText                          
@@ -693,6 +642,36 @@ def searchCodes(events, pbar, jobList, filename):
         raise Exception(str(e) + 'Failed to translate: ' + initialJAString) from None   
 
     return totalTokens
+
+def formatDramon(jaString):
+    imageRegex = r'(\r?\n?_\w+\r?\n?)|(@-?\d?\r\n)|(@-?\d?)([^\r]\d?-?\d?[^\r]+?)(\r\n|$)|(_PDC)|(>\r\n)|(^[#])|(\r\n@$)|(/)|(_SS_)|(\r\n[@/]-?\d?\r\n)'
+
+    jaString = jaString.replace('\u3000', ' ')
+    jaString = jaString.replace('#', '')
+    jaString = re.sub(r'[^\r]\n', '\r\n', jaString)
+
+    # Grab and Split
+    jaStringList = re.split(imageRegex, jaString)
+
+    # Clean List
+    cleanedList = [x for x in jaStringList if x is not None and x != '' and x != '\r\n' and x != '_SS_']
+
+    # Iterate Through List
+    j = 0
+    translatedText = ''
+    while j < len(cleanedList):
+        if ('@' in cleanedList[j] or '/' in cleanedList[j]) and j < len(cleanedList)-1 and re.search(r'([@/]-?\d?\r\n)', cleanedList[j]) is None:
+            # Setup @
+            if j > 0 and '@' not in cleanedList[j-1] and '/' not in cleanedList[j-1] and '_' not in cleanedList[j-1]:
+                cleanedList[j-1] = cleanedList[j-1] + cleanedList[j+1]
+            else:
+                cleanedList.insert(j, cleanedList[j+1])
+                j += 1
+            cleanedList[j] = f'\r\n{cleanedList[j]}\r\n'
+            cleanedList.pop(j+1)
+        j += 1
+    
+    return cleanedList
 
 # DatabaseDatabase
 def searchDB(events, pbar, jobList, filename):
@@ -841,7 +820,7 @@ def searchDB(events, pbar, jobList, filename):
                             scenarioList[2].pop(0)
 
             # Grab Items
-            if table['name'] == '宿泊施設' and ITEMFLAG == True:
+            if table['name'] == '商品' and ITEMFLAG == True:
                 with open('translations.txt', 'a') as file:
                     for item in table['data']:                                            
                         dataList = item['data']
@@ -849,7 +828,7 @@ def searchDB(events, pbar, jobList, filename):
                         # Parse #
                         for j in range(len(dataList)):
                             # Name
-                            if 'NULL' in dataList[j].get('name'):
+                            if '商品の名前' in dataList[j].get('name'):
                                 # Pass 1 (Grab Data)
                                 if setData == False:
                                     if dataList[j].get('value') != '':
@@ -863,7 +842,7 @@ def searchDB(events, pbar, jobList, filename):
                                         itemList[0].pop(0)
                         
                             # Description
-                            if dataList[j].get('name') == '選2文字列(夜時非表示':
+                            if dataList[j].get('name') == 'NULL':
                                 # Pass 1 (Grab Data)
                                 if setData == False:
                                     if dataList[j].get('value') != '':
@@ -883,14 +862,14 @@ def searchDB(events, pbar, jobList, filename):
                                         translatedText = itemList[1][0]
                                         translatedText = textwrap.fill(translatedText, LISTWIDTH)
                                         translatedText = translatedText.replace('\n', '\r\n')
-                                        translatedText = font + translatedText
+                                        translatedText = font + translatedText.replace('\r\n', f'\r\n{font}')
 
                                         # Set Data
                                         dataList[j].update({'value': translatedText})
                                         itemList[1].pop(0)
 
                             # Description 2
-                            if dataList[j].get('name') == '選3文字列':
+                            if dataList[j].get('name') == 'NULL':
                                 # Pass 1 (Grab Data)
                                 if setData == False:
                                     if dataList[j].get('value') != '':
@@ -909,14 +888,15 @@ def searchDB(events, pbar, jobList, filename):
                                         # Textwrap
                                         translatedText = itemList[2][0]
                                         translatedText = textwrap.fill(translatedText, LISTWIDTH)
-                                        translatedText = font + translatedText
+                                        translatedText = translatedText.replace('\n', '\r\n')
+                                        translatedText = font + translatedText.replace('\r\n', f'\r\n{font}')
 
                                         # Set Data
                                         dataList[j].update({'value': translatedText})
                                         itemList[2].pop(0)
 
                             # Description 3
-                            if dataList[j].get('name') == '┗セ⑥_昼(になった)':
+                            if dataList[j].get('name') == 'NULL':
                                 # Pass 1 (Grab Data)
                                 if setData == False:
                                     if dataList[j].get('value') != '':
@@ -935,7 +915,8 @@ def searchDB(events, pbar, jobList, filename):
                                         # Textwrap
                                         translatedText = itemList[3][0]
                                         translatedText = textwrap.fill(translatedText, LISTWIDTH)
-                                        translatedText = font + translatedText
+                                        translatedText = translatedText.replace('\n', '\r\n')
+                                        translatedText = font + translatedText.replace('\r\n', f'\r\n{font}')
 
                                         # Set Data
                                         dataList[j].update({'value': translatedText})
@@ -1751,7 +1732,7 @@ def translateGPT(text, history, fullPromptFlag):
             continue
 
         # Translating
-        response = translateText(characters, system, user, history, 0.05, format)
+        response = translateText(characters, system, user, history, 0.1, format)
         translatedText = response.choices[0].message.content
         totalTokens[0] += response.usage.prompt_tokens
         totalTokens[1] += response.usage.completion_tokens

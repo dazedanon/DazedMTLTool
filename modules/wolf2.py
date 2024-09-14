@@ -352,14 +352,50 @@ def batchList(input_list, batch_size):
 
 def createContext(fullPromptFlag, subbedT):
     characters = 'Game Characters:\n\
-千佳 (Chika) - Female\n\
-ちか (Chika) - Female\n\
-和樹 (Kazuki) - Male\n\
-かずき (Kazuki) - Male\n\
-猿山 (Saruyama) - Male\n\
-菊池 (Kikuchi) - Male\n\
-篠宮 (Shinomiya) - Male\n\
-翔太 (Shota) - Male\n\
+ロラン (Roland) - Male\n\
+リュカ (Ryuka) - Male\n\
+レックス (Rex) - Male\n\
+タバサ (Tabasa) - Female\n\
+アルス (Ars) - Male\n\
+アマカラ (Amakara) - Male\n\
+エリー (Eri) - Female\n\
+リオ (Rio) - Female\n\
+サマル (Samal) - Male\n\
+ムーン (Moon) - Female\n\
+アリーナ (Arina) - Female\n\
+クリフト (Cliff) - Male\n\
+マーニャ (Manya) - Female\n\
+ミネア (Minea) - Female\n\
+デボラ (Debora) - Female\n\
+ビアンカ (Bianca) - Female\n\
+フローラ (Flora) - Female\n\
+バーバラ (Barbara) - Female\n\
+ミレーユ (Mireyu) - Female\n\
+アイラ (Aira) - Female\n\
+フォズ (Foz) - Female\n\
+マリベル (Maribel) - Female\n\
+ククール (Kukool) - Male\n\
+ゲルダ (Gerda) - Female\n\
+ゼシカ (Jessica) - Female\n\
+ヤンガス (Yangus) - Male\n\
+ラヴィエル (Raviel) - Female\n\
+セティア (Setia) - Female\n\
+ダイ (Dai) - Male\n\
+ヒュンケル (Hyunckel) - Male\n\
+ポップ (Pop) - Male\n\
+マァム (Maam) - Female\n\
+レオナ (Leona) - Female\n\
+アステア (Astea) - Female\n\
+イヨ (Iyo) - Female\n\
+ジャガン (Jagan) - Male\n\
+ヤオ (Yao) - Female\n\
+デイジィ (Daisy) - Female\n\
+バイシュン (Baishun) - Male\n\
+ブライ (Buraimu) - Male\n\
+ハッサン (Hassan) - Male\n\
+アロマ (Aroma) - Female\n\
+ピッケ (Pikke) - Female\n\
+ドラオ (Dorao) - Male\n\
 '
     
     system = PROMPT + VOCAB if fullPromptFlag else \
