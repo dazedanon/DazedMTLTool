@@ -213,7 +213,7 @@ def translateTyrano(data, pbar, totalLines):
             if len(data) > i+1:
                 while '[r]' in data[i+1]:
                     if insertBool is True:
-                        data[i] = '\d\n'
+                        data[i] = r'\d\n'
                         pbar.update(1)
                     i += 1
                     matchList = re.findall(r'(.+?)\[r\]', data[i])
@@ -221,7 +221,7 @@ def translateTyrano(data, pbar, totalLines):
                         currentGroup.append(matchList[0])
                 while '[pcms]' in data[i+1]:
                     if insertBool is True:
-                        data[i] = '\d\n'
+                        data[i] = r'\d\n'
                         pbar.update(1)
                     i += 1
                     matchList = re.findall(r'(.+?)\[pcms\]', data[i])
@@ -229,7 +229,7 @@ def translateTyrano(data, pbar, totalLines):
                         currentGroup.append(matchList[0])
                 while '[pcms_sel]' in data[i+1]:
                     if insertBool is True:
-                        data[i] = '\d\n'
+                        data[i] = r'\d\n'
                         pbar.update(1)
                     i += 1
                     matchList = re.findall(r'(.+?)\[pcms_sel\]', data[i])
@@ -311,7 +311,7 @@ def translateTyrano(data, pbar, totalLines):
                 textList = translatedText.split('\n')
                     
                 # Set Text
-                data[i] = '\d\n'
+                data[i] = r'\d\n'
                 for line in textList:
                     # Wordwrap Text
                     if '[r]' not in line:
