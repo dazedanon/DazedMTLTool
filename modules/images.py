@@ -192,7 +192,7 @@ def getImageDimensions(file_path):
 def processImagesDir(directory_path, imageList):
     for file_name in os.listdir(directory_path):
         # .png and Japanese
-        if '.png' in file_name and re.search(r'[一-龠ぁ-ゔァ-ヴー]+', file_name) and file_name.replace('.png', '') in VOCAB and len(file_name) > 5:
+        if '.png' in file_name and re.search(r'[一-龠ぁ-ゔァ-ヴー]+', file_name) and file_name.replace('.png', '') in VOCAB:
             file_path = os.path.join(directory_path, file_name)
             if os.path.isfile(file_path):
                 # Check if the file is an image
