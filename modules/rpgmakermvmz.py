@@ -2137,18 +2137,17 @@ def batchList(input_list, batch_size):
 
 def createContext(fullPromptFlag, subbedT, format):
     characters = 'Game Characters:\n\
-リリアレット (Lilliete) - Female\n\
-ルディ (Rudy) - Male\n\
-マックス (Max) - Male\n\
-ランベール (Lambert) - Male\n\
-ミリエル (Miriel) - Female\n\
-マドレリー (Madorery) - Female\n\
-シスター (Sister) - Female\n\
-踊り子さん (Dancer) - Female\n\
-自称勇者 (Self-Proclaimed Hero) - Male\n\
-甲冑 (Armor) - Male\n\
-コレクター (Collector) - Male\n\
-ひげ (Whiskers) - Male\n\
+圭太 (Keita) - Male\n\
+涼香 (Ryoka) - Female\n\
+咲 (Saki) - Female\n\
+大介 (Daisuke) - Male\n\
+浮浪者 (Vagrant) - Male\n\
+まさる (Masaru) - Male\n\
+ノブオ (Nobuo) - Male\n\
+安井 (Yasui) - Male\n\
+大山 (Oyama) - Male\n\
+関口 (Sekiguchi) - Male\n\
+黒崎 (Kurosaki) - Male\n\
 '
     
     system = PROMPT + VOCAB if fullPromptFlag else \
