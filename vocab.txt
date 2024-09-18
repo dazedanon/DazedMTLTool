@@ -2,9 +2,9 @@ Here are some vocabulary and terms so that you know the proper spelling and tran
 ```
 # Lewd Terms
 マンコ (pussy)
-おまんこ (pussy)
-お尻 (butt)
+おまんこ (vagina)
 尻 (ass)
+お尻 (butt)
 お股 (crotch)
 秘部 (genitals)
 チンポ (dick)
@@ -17,8 +17,11 @@ Here are some vocabulary and terms so that you know the proper spelling and tran
 君, くん (kun)
 ちゃん (chan)
 たん (tan)
-先輩, せんぱい (senpai)
-先生, せんせい (sensei)
+先輩 (senpai)
+せんぱい (senpai)
+先生 (sensei)
+師匠 (shishou)
+せんせい (sensei)
 お兄ちゃん (Onii-chan)
 お姉ちゃん (Onee-chan)
 
@@ -45,7 +48,7 @@ ME 音量 (ME Volume)
 エクスポーション (EX Potion)
 アスカロン (Ascalon)
 
-# Other
+# Terms
 悪魔 (Devil)  
 上級悪魔 (Arch Devil)  
 歪魔 (Distorted Devil)  
@@ -63,10 +66,5 @@ ME 音量 (ME Volume)
 飛天魔 (Nephilim)  
 堕天使 (Fallen Angel)  
 鬼 (Oni)
-ギャンデッド (Ganded)
-リーロランド (Liloland)
 ローバー (Roper)
-
-タリホー (Tariho)
-
 ```
