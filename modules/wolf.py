@@ -62,7 +62,7 @@ FILENAME = None
 # Dialogue / Scroll
 CODE101 = False
 CODE102 = False
-CODE122 = False
+CODE122 = True
 
 # Other
 CODE210 = False
@@ -468,9 +468,10 @@ def searchCodes(events, pbar, jobList, filename):
                                 codeList[i]['stringArgs'][0] = translatedText
 
             ### Event Code: 300 Common Events
-            if codeList[i]['code'] == 300 and CODE300 == True and len(codeList[i]['stringArgs']) > 0:
+            if codeList[i]['code'] == 300 and CODE300 == True and 'stringArgs' in codeList[i] and len(codeList[i]['stringArgs']) > 1:
                 # Choices
-                if codeList[i]['stringArgs'][0] == "[共]汎用ウィンドウ生成":
+                if codeList[i]['stringArgs'][0] == "[共]汎用ウィンドウ生成" \
+                or codeList[i]['stringArgs'][0] == "[共]選択生成":
                     # Grab String
                     choiceList = codeList[i]['stringArgs'][1].split('\r\n')
 
@@ -502,54 +503,56 @@ def searchCodes(events, pbar, jobList, filename):
                 elif codeList[i]['stringArgs'][0] == "Hメッセージ" \
                 or codeList[i]['stringArgs'][0] == 'Hしらべる' \
                 or codeList[i]['stringArgs'][0] == '[共]Hメッセージ+' \
-                or codeList[i]['stringArgs'][0] == '[共]ポップアップ表示' \
+                or codeList[i]['stringArgs'][0] == 'd[共]ポップアップ表示' \
                 or codeList[i]['stringArgs'][0] == 'm_謎冒頭' \
-                or (codeList[i]['codeStr'] == 'SetString' and '\n' in codeList[i]['stringArgs'][0])\
+                or (codeList[i]['codeStr'] == 'SetString' and ('「' in codeList[i]['stringArgs'][0] or '*' in codeList[i]['stringArgs'][0]))\
                 or codeList[i]['stringArgs'][0] == '[移]サウンドノベル':
-                    if len(codeList[i]['stringArgs']) > 1:
+                    cleanedList = None
+                    if len(codeList[i]['stringArgs']) > 1 and not re.search(r'^[\\]+cself\[\d+\]$', codeList[i]['stringArgs'][1]):
                         cleanedList = formatDramon(codeList[i]['stringArgs'][1])
-                    else:
+                    elif codeList[i]['code'] == 122:
                         cleanedList = formatDramon(codeList[i]['stringArgs'][0])
-                    fontSize = 24
-                    translatedText = ''
-                    
-                    for str in cleanedList:
-                        # Pass 1
-                        if not setData:
-                            if all(x not in str for x in ['_', '@', '>', '/']) and str != '\r\n':
-                                # Remove Textwrap and Font and Add to list
-                                str = str.replace('\r\n', ' ')
-                                str = str.replace(f'\\f[{fontSize}]', '')
-                                list300.append(str)
+                    if cleanedList:
+                        fontSize = 24
+                        translatedText = ''
+                        
+                        for str in cleanedList:
+                            # Pass 1
+                            if not setData:
+                                if all(x not in str for x in ['_', '@', '>', '/']) and str != '\r\n':
+                                    # Remove Textwrap and Font and Add to list
+                                    str = str.replace('\r\n', ' ')
+                                    str = str.replace(f'\\f[{fontSize}]', '')
+                                    list300.append(str)
 
-                        # Pass 2
-                        else:
-                            if all(x not in str for x in ['_', '@', '>', '/',]) and str != '\r\n':
-                                # Decide Wrap
-                                if codeList[i]['stringArgs'][0] == '[移]サウンドノベル':
-                                    width = 40
-                                else:
-                                    width = WIDTH
-
-                                # Add Textwrap and Font
-                                list300[0] = textwrap.fill(list300[0], width)
-                                list300[0] = list300[0].replace('\n', f'\r\n\\f[{fontSize}]')
-                                list300[0] = f'\\f[{fontSize}]{list300[0]}\r\n'
-                                translatedText += list300[0]
-                                list300.pop(0)
+                            # Pass 2
                             else:
-                                translatedText += str
+                                if all(x not in str for x in ['_', '@', '>', '/',]) and str != '\r\n':
+                                    # Decide Wrap
+                                    if codeList[i]['stringArgs'][0] == '[移]サウンドノベル':
+                                        width = 40
+                                    else:
+                                        width = WIDTH
 
-                    # Write to File
-                    if setData:
-                        # Formatting Fixes
-                        translatedText = translatedText.replace('*"', '* "')
-                        translatedText = translatedText.replace('\r\n\r\n', '\r\n')
-                        translatedText = re.sub(r'[^\S\r\n]+', ' ', translatedText)
-                        if len(codeList[i]['stringArgs']) > 1:
-                            codeList[i]['stringArgs'][1] = translatedText
-                        else:
-                            codeList[i]['stringArgs'][0] = translatedText                          
+                                    # Add Textwrap and Font
+                                    list300[0] = textwrap.fill(list300[0], width)
+                                    list300[0] = list300[0].replace('\n', f'\r\n\\f[{fontSize}]')
+                                    list300[0] = f'\\f[{fontSize}]{list300[0]}\r\n'
+                                    translatedText += list300[0]
+                                    list300.pop(0)
+                                else:
+                                    translatedText += str
+
+                        # Write to File
+                        if setData:
+                            # Formatting Fixes
+                            translatedText = translatedText.replace('*"', '* "')
+                            translatedText = translatedText.replace('\r\n\r\n', '\r\n')
+                            translatedText = re.sub(r'[^\S\r\n]+', ' ', translatedText)
+                            if len(codeList[i]['stringArgs']) > 1:
+                                codeList[i]['stringArgs'][1] = translatedText
+                            else:
+                                codeList[i]['stringArgs'][0] = translatedText                          
 
             ### Event Code: 250 Common Events
             if codeList[i]['code'] == 250 and CODE250 == True:
@@ -820,7 +823,7 @@ def searchDB(events, pbar, jobList, filename):
                             scenarioList[2].pop(0)
 
             # Grab Items
-            if table['name'] == 'm_ﾓﾝｽﾀｰ用名前候補' and ITEMFLAG == True:
+            if table['name'] == 'オーブ' and ITEMFLAG == True:
                 with open('translations.txt', 'a', encoding='utf-8') as file:
                     for item in table['data']:                                            
                         dataList = item['data']
@@ -828,7 +831,7 @@ def searchDB(events, pbar, jobList, filename):
                         # Parse #
                         for j in range(len(dataList)):
                             # Name
-                            if dataList[j].get('name') == '名前':
+                            if dataList[j].get('name') == 'オーブの名前':
                                 # Pass 1 (Grab Data)
                                 if setData == False:
                                     if dataList[j].get('value') != '':
@@ -842,9 +845,9 @@ def searchDB(events, pbar, jobList, filename):
                                         itemList[0].pop(0)
                         
                             # Description 1 (You are my specialz)
-                            if dataList[j].get('name') == 'NULL':
+                            if dataList[j].get('name') == 'オーブの説明':
                                 # Clean String
-                                fontSize = 24
+                                fontSize = 18
                                 translatedText = ''
                                 cleanedList = formatDramon(dataList[j].get('value'))
                                 for str in cleanedList:
@@ -864,9 +867,9 @@ def searchDB(events, pbar, jobList, filename):
 
                                             # Add Textwrap and Font
                                             tempText = itemList[1][0]
-                                            # tempText = textwrap.fill(tempText, width)
-                                            # tempText = tempText.replace('\n', f'\r\n\\f[{fontSize}]')
-                                            # tempText = f'\\f[{fontSize}]{tempText}\r\n'
+                                            tempText = textwrap.fill(tempText, width)
+                                            tempText = tempText.replace('\n', f'\r\n\\f[{fontSize}]')
+                                            tempText = f'\\f[{fontSize}]{tempText}\r\n'
                                             translatedText += tempText
                                             itemList[1].pop(0)
                                         else:
@@ -903,9 +906,9 @@ def searchDB(events, pbar, jobList, filename):
 
                                             # Add Textwrap and Font
                                             tempText = itemList[2][0]
-                                            # tempText = textwrap.fill(tempText, width)
-                                            # tempText = tempText.replace('\n', f'\r\n\\f[{fontSize}]')
-                                            # tempText = f'\\f[{fontSize}]{tempText}\r\n'
+                                            tempText = textwrap.fill(tempText, width)
+                                            tempText = tempText.replace('\n', f'\r\n\\f[{fontSize}]')
+                                            tempText = f'\\f[{fontSize}]{tempText}\r\n'
                                             translatedText += tempText
                                             itemList[2].pop(0)
                                         else:
