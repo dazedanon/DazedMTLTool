@@ -60,11 +60,11 @@ LEAVE = False
 
 # Dialogue / Scroll
 CODE401 = True
-CODE405 = False
+CODE405 = True
 CODE408 = False
 
 # Choices
-CODE102 = False
+CODE102 = True
 
 # Variables
 CODE122 = False
@@ -488,7 +488,10 @@ def searchNames(data, pbar, context):
                         tokensResponse = translateNote(data[i], r'<note:(.*?)>')
                         totalTokens[0] += tokensResponse[0]
                         totalTokens[1] += tokensResponse[1]
-                    
+                    if 'PE拡張' in data[i]['note']:
+                        tokensResponse = translateNote(data[i], r'<PE拡張:(.*?)>')
+                        totalTokens[0] += tokensResponse[0]
+                        totalTokens[1] += tokensResponse[1]
                     i += 1
                 else:
                     batchFull = True
@@ -611,7 +614,9 @@ def searchNames(data, pbar, context):
                         else:
                             # Get Text
                             if data[j]['name'] != '':
-                                data[j]['name'] = translatedNameBatch[0]
+                                with open('translations.txt', 'a', encoding='utf-8') as file:
+                                    file.write(f'{data[j]['name']} ({translatedNameBatch[0]})\n')
+                                    data[j]['name'] = translatedNameBatch[0]
                                 translatedNameBatch.pop(0)
                             if data[j]['nickname'] != '':
                                 data[j]['nickname'] = translatedNicknameBatch[0]
@@ -644,26 +649,29 @@ def searchNames(data, pbar, context):
                 # Set Data
                 if len(nameList) == len(translatedNameBatch):
                     j = k
-                    while j < i:
-                        # Empty Data
-                        if data[j] is None or data[j]['name'] == "":
-                            j += 1
-                            continue 
-                        else:
-                            # Get Text
-                            data[j]['name'] = translatedNameBatch[0]
-                            if 'description' in data[j]:
-                                data[j]['description'] = textwrap.fill(translatedDescriptionBatch[0], LISTWIDTH)
-                            translatedNameBatch.pop(0)
-                            translatedDescriptionBatch.pop(0)
+                    with open('translations.txt', 'a', encoding='utf-8') as file:
+                        file.write(f'# Items\n')
+                        while j < i:
+                            # Empty Data
+                            if data[j] is None or data[j]['name'] == "":
+                                j += 1
+                                continue 
+                            else:
+                                # Get Text
+                                file.write(f'{data[j]['name']} ({translatedNameBatch[0]})\n')
+                                data[j]['name'] = translatedNameBatch[0]
+                                if 'description' in data[j]:
+                                    data[j]['description'] = textwrap.fill(translatedDescriptionBatch[0], LISTWIDTH)
+                                translatedNameBatch.pop(0)
+                                translatedDescriptionBatch.pop(0)
 
-                            # If Batch is empty. Move on.
-                            if len(translatedNameBatch) == 0:
-                                nameList.clear()
-                                descriptionList.clear()
-                                batchFull = False
-                                filling = False
-                            j += 1
+                                # If Batch is empty. Move on.
+                                if len(translatedNameBatch) == 0:
+                                    nameList.clear()
+                                    descriptionList.clear()
+                                    batchFull = False
+                                    filling = False
+                                j += 1
                 else:
                     mismatch = True
             if context in ['Enemies', 'Classes', 'MapInfos']:
@@ -720,14 +728,12 @@ def searchCodes(page, pbar, jobList, filename):
         list355655 = []
         list108 = []
         setData = False
-    currentGroup = []
     textHistory = []
     match = []
     totalTokens = [0, 0]
     translatedText = ''
     speaker = ''
     speakerID = None
-    nametag = ''
     syncIndex = 0
     CLFlag = False
     maxHistory = MAXHISTORY
@@ -760,6 +766,10 @@ def searchCodes(page, pbar, jobList, filename):
                     i = syncIndex
                 if len(codeList) <= i:
                     break
+
+            # Declare Varss
+            currentGroup = []
+            nametag = ''
 
             ## Event Code: 401 Show Text
             if 'code' in codeList[i] and codeList[i]['code'] in [401, 405, -1] and (CODE401 or CODE405):
@@ -810,8 +820,15 @@ def searchCodes(page, pbar, jobList, filename):
                 if len(speakerList) == 0:
                     speakerList = re.findall(r'^[\\]+[cC]\[[\d]+\](.+?)[\\]+[Cc]\[[\d]\]\\?\\?$', jaString)
 
-                # None
+                # First Line Speakers
                 if len(speakerList) == 0 and FIRSTLINESPEAKERS is True:
+                    # Remove any RPGMaker Code at start
+                    ffMatch = re.search(r'^(\s*[\\]+[aAbBdDeEfFgGhHiIjJlLmMoOpPqQrRsStTuUvVwWxXyYzZ]+\[[\w\d\[\]\\]+\])', jaString)
+                    if ffMatch != None:
+                        jaString = jaString.replace(ffMatch.group(0), '')
+                        nametag += ffMatch.group(0)
+                    
+                    # Test Speaker
                     if len(jaString) < 40 \
                     and 'code' in codeList[i+1] \
                     and codeList[i+1]['code'] in [401, 405, -1] \
@@ -828,7 +845,8 @@ def searchCodes(page, pbar, jobList, filename):
                     totalTokens[1] += response[1][1]                    
 
                     # Set Data
-                    codeList[i]['parameters'][0] = jaString.replace(speakerList[0], speaker)
+                    codeList[i]['parameters'][0] = nametag + jaString.replace(speakerList[0], speaker)
+                    nametag = ''
 
                     # Iterate to next string
                     i += 1
@@ -861,7 +879,8 @@ def searchCodes(page, pbar, jobList, filename):
 
                 # Format String
                 if len(currentGroup) > 0:
-                    finalJAString = ' '.join(currentGroup).replace('？', '?')
+                    finalJAString = ''
+                    finalJAString = ''.join(currentGroup).replace('？', '?')
                     oldjaString = finalJAString
 
                     # Check if Empty
@@ -956,7 +975,7 @@ def searchCodes(page, pbar, jobList, filename):
                             finalJAString = finalJAString.replace(match, '')
 
                     # Remove any RPGMaker Code at start
-                    ffMatch = re.search(r'^([.\\]+[aAbBcCdDeEfFgGhHiIjJlLmMoOpPqQrRsStTuUvVwWxXyYzZ]+\[.+?\]\]?)+', finalJAString)
+                    ffMatch = re.search(r'^(\s*[\\]+[aAbBdDeEfFgGhHiIjJlLmMoOpPqQrRsStTuUvVwWxXyYzZ]+\[[\w\d\[\]\\]+\])', finalJAString)
                     if ffMatch != None:
                         finalJAString = finalJAString.replace(ffMatch.group(0), '')
                         nametag += ffMatch.group(0)
@@ -997,6 +1016,7 @@ def searchCodes(page, pbar, jobList, filename):
                                 list401.append(speaker)
                         speaker = ''
                         match = []
+                        nametag = ''
                         currentGroup = []
                         syncIndex = i + 1                          
 
@@ -2136,20 +2156,6 @@ def batchList(input_list, batch_size):
     return [input_list[i:i + batch_size] for i in range(0, len(input_list), batch_size)]
 
 def createContext(fullPromptFlag, subbedT, format):
-    characters = 'Game Characters:\n\
-圭太 (Keita) - Male\n\
-涼香 (Ryoka) - Female\n\
-咲 (Saki) - Female\n\
-大介 (Daisuke) - Male\n\
-浮浪者 (Vagrant) - Male\n\
-まさる (Masaru) - Male\n\
-ノブオ (Nobuo) - Male\n\
-安井 (Yasui) - Male\n\
-大山 (Oyama) - Male\n\
-関口 (Sekiguchi) - Male\n\
-黒崎 (Kurosaki) - Male\n\
-'
-    
     system = PROMPT + VOCAB if fullPromptFlag else \
         f"\
 You are an expert Eroge Game translator who translates Japanese text to {LANGUAGE}.\n\
@@ -2167,14 +2173,11 @@ Output ONLY the {LANGUAGE} translation in the following format: `Translation: <{
         user = f'```json\n{subbedT}\n```'
     else:
         user = subbedT
-    return characters, system, user
+    return system, user
 
-def translateText(characters, system, user, history, penalty, format, model=MODEL):
+def translateText(system, user, history, penalty, format, model=MODEL):
     # Prompt
     msg = [{"role": "system", "content": system}]
-
-    # Characters
-    msg.append({"role": "system", "content": characters})
 
     # History
     if isinstance(history, list):
@@ -2250,7 +2253,7 @@ def extractTranslation(translatedTextList, is_list):
         return None
 
 
-def countTokens(characters, system, user, history):
+def countTokens(system, user, history):
     inputTotalTokens = 0
     outputTotalTokens = 0
     enc = tiktoken.encoding_for_model('gpt-4')
@@ -2262,7 +2265,6 @@ def countTokens(characters, system, user, history):
     else:
         inputTotalTokens += len(enc.encode(history))
     inputTotalTokens += len(enc.encode(system))
-    inputTotalTokens += len(enc.encode(characters))
     inputTotalTokens += len(enc.encode(user))
 
     # Output
@@ -2306,17 +2308,17 @@ def translateGPT(text, history, fullPromptFlag):
             continue
 
         # Create Message
-        characters, system, user = createContext(fullPromptFlag, subbedT, format)
+        system, user = createContext(fullPromptFlag, subbedT, format)
 
         # Calculate Estimate
         if ESTIMATE:
-            estimate = countTokens(characters, system, user, history)
+            estimate = countTokens(system, user, history)
             totalTokens[0] += estimate[0]
             totalTokens[1] += estimate[1]
             continue
 
         # Translating
-        response = translateText(characters, system, user, history, 0.05, format)
+        response = translateText(system, user, history, 0.05, format)
         translatedText = response.choices[0].message.content
         totalTokens[0] += response.usage.prompt_tokens
         totalTokens[1] += response.usage.completion_tokens
@@ -2327,7 +2329,7 @@ def translateGPT(text, history, fullPromptFlag):
             extractedTranslations = extractTranslation(translatedText, True)
             if extractedTranslations == None or len(tItem) != len(extractedTranslations):
                 # Mismatch. Try Again
-                response = translateText(characters, system, user, history, 0.05, format, 'gpt-4o')
+                response = translateText(system, user, history, 0.05, format, 'gpt-4o')
                 translatedText = response.choices[0].message.content
                 totalTokens[0] += response.usage.prompt_tokens
                 totalTokens[1] += response.usage.completion_tokens
