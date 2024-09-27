@@ -16,7 +16,7 @@ from tqdm import tqdm
 # Open AI
 load_dotenv()
 if os.getenv("api").replace(" ", "") != "":
-    openai.base_url = os.getenv('api')
+    openai.base_url = os.getenv("api")
 openai.organization = os.getenv("org")
 openai.api_key = os.getenv("key")
 
@@ -95,8 +95,9 @@ def getResultString(translatedData, translationTime, filename):
     # File Print String
     totalTokenstring = (
         Fore.YELLOW + "[Input: " + str(translatedData[1][0]) + "]"
-        "[Output: " + str(translatedData[1][1]) + "]"
-        "[Cost: ${:,.4f}".format(
+        "[Output: "
+        + str(translatedData[1][1])
+        + "]" "[Cost: ${:,.4f}".format(
             (translatedData[1][0] * 0.001 * INPUTAPICOST)
             + (translatedData[1][1] * 0.001 * OUTPUTAPICOST)
         )
@@ -189,17 +190,17 @@ def translateTyrano(data, pbar):
         if syncIndex > i:
             i = syncIndex
 
-        if '[▼]' in data[i]:
-            data[i] = data[i].replace('[▼]'.strip(), '[page]\n')
+        if "[▼]" in data[i]:
+            data[i] = data[i].replace("[▼]".strip(), "[page]\n")
 
         # If there isn't any Japanese in the text just skip
         if IGNORETLTEXT is True:
-            if not re.search(r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴー]+', data[i]):
+            if not re.search(r"[一-龠]+|[ぁ-ゔ]+|[ァ-ヴー]+", data[i]):
                 # Keep textHistory list at length maxHistory
-                textHistory.append('\"' + data[i] + '\"')
+                textHistory.append('"' + data[i] + '"')
                 if len(textHistory) > maxHistory:
                     textHistory.pop(0)
-                currentGroup = []  
+                currentGroup = []
                 continue
 
         # Speaker
@@ -215,18 +216,16 @@ def translateTyrano(data, pbar):
                 speaker = "Narrator"
             elif "マコ" in matchList[0]:
                 speaker = "Mako"
-            elif '少年' in matchList[0]:
+            elif "少年" in matchList[0]:
                 speaker = "Boy"
-            elif '友達' in matchList[0]:
+            elif "友達" in matchList[0]:
                 speaker = "Friend"
-            elif '少女' in matchList[0]:
+            elif "少女" in matchList[0]:
                 speaker = "Girl"
             else:
                 response = translateGPT(
                     matchList[0],
-                    "Reply with only the "
-                    + LANGUAGE
-                    + " translation of the NPC name",
+                    "Reply with only the " + LANGUAGE + " translation of the NPC name",
                     True,
                 )
                 speaker = response[0]
@@ -263,13 +262,17 @@ def translateTyrano(data, pbar):
 
                 # Set Data
                 translatedText = data[i].replace(
-                    matchList[0], translatedText.replace(" ", "\u00A0")
+                    matchList[0], translatedText.replace(" ", "\u00a0")
                 )
                 data[i] = translatedText
 
         # Grab Lines
         matchList = re.findall(r"^([^\n;@*\{\[].+[^;'{}\[]$)", data[i])
-        if len(matchList) > 0 and (re.search(r'^\[(.+)\sstorage=.+\],', data[i-1]) or re.search(r'^\[(.+)\]$', data[i-1]) or re.search(r'^《(.+)》', data[i-1])):
+        if len(matchList) > 0 and (
+            re.search(r"^\[(.+)\sstorage=.+\],", data[i - 1])
+            or re.search(r"^\[(.+)\]$", data[i - 1])
+            or re.search(r"^《(.+)》", data[i - 1])
+        ):
             currentGroup.append(matchList[0])
             if len(data) > i + 1:
                 matchList = re.findall(r"^([^\n;@*\{\[].+[^;'{}\[]$)", data[i + 1])
@@ -323,10 +326,10 @@ def translateTyrano(data, pbar):
 
             # Set
             if delFlag is True:
-                data.insert(i, translatedText.strip() + '\n')
+                data.insert(i, translatedText.strip() + "\n")
                 delFlag = False
             else:
-                data[i] = translatedText.strip() + '\n'
+                data[i] = translatedText.strip() + "\n"
 
             # Keep textHistory list at length maxHistory
             if len(textHistory) > maxHistory:
@@ -399,10 +402,10 @@ def translateTyrano(data, pbar):
 
             # Set
             if delFlag is True:
-                data.insert(i, translatedText.strip() + '\n')
+                data.insert(i, translatedText.strip() + "\n")
                 delFlag = False
             else:
-                data[i] = translatedText.strip() + '\n'
+                data[i] = translatedText.strip() + "\n"
 
             # Keep textHistory list at length maxHistory
             if len(textHistory) > maxHistory:
@@ -417,6 +420,7 @@ def translateTyrano(data, pbar):
             break
 
     return tokens
+
 
 def subVars(jaString):
     jaString = jaString.replace("\u3000", " ")
@@ -551,7 +555,7 @@ def translateGPT(t, history, fullPromptFlag):
 
     # If ESTIMATE is True just count this as an execution and return.
     if ESTIMATE:
-        enc = tiktoken.encoding_for_model('gpt-4')
+        enc = tiktoken.encoding_for_model("gpt-4")
         historyRaw = ""
         if isinstance(history, list):
             for line in history:
