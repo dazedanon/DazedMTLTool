@@ -1,4 +1,6 @@
-import sys, os, traceback
+import sys
+import os
+import traceback
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from colorama import Fore
 from tqdm import tqdm
@@ -13,7 +15,7 @@ for env in ['api','key','organization','model','language','timeout','fileThreads
         tqdm.write(Fore.RED + f'Environment variable {env} is not set!')
         envMissing = True
 if envMissing:
-    tqdm.write(Fore.RED + f'Some of the required environment values may not be set correctly. You can set \
+    tqdm.write(Fore.RED + 'Some of the required environment values may not be set correctly. You can set \
 these values using an .env file, for an example see .env.example')
 
 from modules.rpgmakermvmz import handleMVMZ

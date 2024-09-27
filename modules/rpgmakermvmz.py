@@ -1,5 +1,13 @@
 # Libraries
-import json, os, re, textwrap, threading, time, traceback, tiktoken, openai
+import json
+import os
+import re
+import textwrap
+import threading
+import time
+import traceback
+import tiktoken
+import openai
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from colorama import Fore
@@ -650,7 +658,7 @@ def searchNames(data, pbar, context):
                 if len(nameList) == len(translatedNameBatch):
                     j = k
                     with open('translations.txt', 'a', encoding='utf-8') as file:
-                        file.write(f'# Items\n')
+                        file.write('# Items\n')
                         while j < i:
                             # Empty Data
                             if data[j] is None or data[j]['name'] == "":

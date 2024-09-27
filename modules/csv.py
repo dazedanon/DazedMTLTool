@@ -1,6 +1,14 @@
 # Libraries
-import json, os, re, textwrap, threading, time, traceback, tiktoken, openai, csv
-from concurrent.futures import ThreadPoolExecutor, as_completed
+import json
+import os
+import re
+import textwrap
+import threading
+import time
+import traceback
+import tiktoken
+import openai
+import csv
 from pathlib import Path
 from colorama import Fore
 from dotenv import load_dotenv

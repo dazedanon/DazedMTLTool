@@ -1,5 +1,12 @@
 # Libraries
-import json, os, re, textwrap, threading, time, traceback, tiktoken, openai
+import os
+import re
+import textwrap
+import threading
+import time
+import traceback
+import tiktoken
+import openai
 from pathlib import Path
 from colorama import Fore
 from dotenv import load_dotenv
@@ -89,7 +96,7 @@ def handleAlice(filename, estimate):
                 with LOCK:
                     totalTokens[0] += translatedData[1][0]
                     totalTokens[1] += translatedData[1][1]
-        except Exception as e:
+        except Exception:
             traceback.print_exc()
             return 'Fail'
 
@@ -187,7 +194,7 @@ def translateLines(linesList, pbar):
 
                 # Check if next line should be merged
                 if insertBool is True:
-                    linesList[i] = re.sub(r'(s\[[0-9]+\]) = \"(.+)\"', rf'\1 = ""', linesList[i])
+                    linesList[i] = re.sub(r'(s\[[0-9]+\]) = \"(.+)\"', r'\1 = ""', linesList[i])
                     linesList[i] = linesList[i].replace(';', '')
                 start = i
                 while (len(linesList) > i+1 and re.search(r's\[[0-9]+\] = \"\s+(.*)\"', linesList[i+1]) != None):
@@ -196,7 +203,7 @@ def translateLines(linesList, pbar):
                     match = re.findall(r's\[[0-9]+\] = \"\s+(.*)\"', linesList[i])
                     currentGroup.append(match[0])
                     if insertBool is True:
-                        linesList[i] = re.sub(r'(s\[[0-9]+\]) = \"\s+(.+)\"', rf'\1 = ""', linesList[i])
+                        linesList[i] = re.sub(r'(s\[[0-9]+\]) = \"\s+(.+)\"', r'\1 = ""', linesList[i])
                         linesList[i] = linesList[i].replace(';', '')
                 i += 1
 

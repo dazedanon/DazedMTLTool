@@ -1,5 +1,12 @@
 # Libraries
-import os, re, textwrap, threading, time, traceback, tiktoken, openai
+import os
+import re
+import textwrap
+import threading
+import time
+import traceback
+import tiktoken
+import openai
 from pathlib import Path
 from colorama import Fore
 from dotenv import load_dotenv
@@ -88,7 +95,7 @@ def handleIris(filename, estimate):
                 with LOCK:
                     TOKENS[0] += translatedData[1][0]
                     TOKENS[1] += translatedData[1][1]
-        except Exception as e:
+        except Exception:
             traceback.print_exc()
             return 'Fail'
 
@@ -261,12 +268,12 @@ def translateIris(data, pbar, filename, translatedList):
                                 if count != 0:
                                     if voice == True:
                                         #MSG for each item in the list
-                                        data.insert(i, f'#MSGVOICE,\n')
+                                        data.insert(i, '#MSGVOICE,\n')
                                         i += 1
                                         data.insert(i, f'{voiceVar}')
                                         i += 1
                                     else:
-                                        data.insert(i, f'#MSG,\n')
+                                        data.insert(i, '#MSG,\n')
                                         i += 1
                                     if speaker:
                                         data[i] = f'\u3000{speaker}\n'
