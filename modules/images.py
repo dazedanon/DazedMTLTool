@@ -1,7 +1,13 @@
 # Libraries
 from PIL import Image, ImageDraw, ImageFont
-import json, os, re, textwrap, threading, time, traceback, tiktoken, openai
-from concurrent.futures import ThreadPoolExecutor, as_completed
+import json
+import os
+import re
+import threading
+import time
+import traceback
+import tiktoken
+import openai
 from pathlib import Path
 from colorama import Fore
 from dotenv import load_dotenv

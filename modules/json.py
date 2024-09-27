@@ -1,5 +1,13 @@
 # Libraries
-import json, os, re, textwrap, threading, time, traceback, tiktoken, openai
+import json
+import os
+import re
+import textwrap
+import threading
+import time
+import traceback
+import tiktoken
+import openai
 from pathlib import Path
 from colorama import Fore
 from dotenv import load_dotenv
@@ -81,7 +89,7 @@ def handleJSON(filename, estimate):
                 with LOCK:
                     TOKENS[0] += translatedData[1][0]
                     TOKENS[1] += translatedData[1][1]
-        except Exception as e:
+        except Exception:
             return 'Fail'
 
     return getResultString(['', TOKENS, None], end - start, 'TOTAL')

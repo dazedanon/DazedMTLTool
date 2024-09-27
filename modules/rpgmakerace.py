@@ -1,5 +1,13 @@
 # Libraries
-import json, os, re, textwrap, threading, time, traceback, tiktoken, openai
+import json
+import os
+import re
+import textwrap
+import threading
+import time
+import traceback
+import tiktoken
+import openai
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from colorama import Fore
