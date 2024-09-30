@@ -70,7 +70,7 @@ FILENAME = None
 # Dialogue / Scroll
 CODE101 = False
 CODE102 = False
-CODE122 = True
+CODE122 = False
 
 # Other
 CODE210 = False
@@ -383,8 +383,8 @@ def searchCodes(events, pbar, jobList, filename):
                     True,
                 )
                 translatedChoiceList = response[0]
-                totalTokens[0] = response[1][0]
-                totalTokens[1] = response[1][1]
+                totalTokens[0] += response[1][0]
+                totalTokens[1] += response[1][1]
 
                 # Validate and Set Data
                 if len(choiceList) == len(translatedChoiceList):
@@ -402,8 +402,8 @@ def searchCodes(events, pbar, jobList, filename):
                 #     # Translate
                 #     response = translateGPT(jaString, f'Reply with the {LANGUAGE} translation of the location', False)
                 #     translatedText = response[0]
-                #     totalTokens[0] = response[1][0]
-                #     totalTokens[1] = response[1][1]
+                #     totalTokens[0] += response[1][0]
+                #     totalTokens[1] += response[1][1]
 
                 #     # Textwrap
                 #     translatedText = textwrap.fill(translatedText, WIDTH)
@@ -470,7 +470,11 @@ def searchCodes(events, pbar, jobList, filename):
             if codeList[i]["code"] == 122 and CODE122 == True:
                 if "stringArgs" in codeList[i] and len(codeList[i]["stringArgs"]) > 0:
                     # Grab String
-                    jaString = codeList[i]["stringArgs"][0]
+                    jaString = re.search(r'^\n?(.*)\n?$', codeList[i]["stringArgs"][0])
+                    if jaString:
+                        jaString = jaString.group(1)
+                    else:
+                        jaString = codeList[i]["stringArgs"][0]
 
                     # Translate Conversations
                     if "：Nothing" in jaString:
@@ -478,8 +482,8 @@ def searchCodes(events, pbar, jobList, filename):
                         list122 = jaString.split("\n\n")
 
                         # Remove Textwrap
-                        for j in range(len(list122)):
-                            list122[j] = list122[j].replace("\n", " ")
+                        # for j in range(len(list122)):
+                        #     list122[j] = list122[j].replace("\n", " ")
 
                         # Translate
                         response = translateGPT(
@@ -488,8 +492,8 @@ def searchCodes(events, pbar, jobList, filename):
                             True,
                         )
                         list122TL = response[0]
-                        totalTokens[0] = response[1][0]
-                        totalTokens[1] = response[1][1]
+                        totalTokens[0] += response[1][0]
+                        totalTokens[1] += response[1][1]
 
                         # Validate and Set Data
                         if len(list122) == len(list122TL):
@@ -522,7 +526,7 @@ def searchCodes(events, pbar, jobList, filename):
                                 r"[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９]+", jaString
                             ):
                                 # Remove Textwrap
-                                jaString = jaString.replace("\n", " ")
+                                # jaString = jaString.replace("\n", " ")
 
                                 # Translate
                                 response = translateGPT(
@@ -531,14 +535,14 @@ def searchCodes(events, pbar, jobList, filename):
                                     False,
                                 )
                                 translatedText = response[0]
-                                totalTokens[0] = response[1][0]
-                                totalTokens[1] = response[1][1]
+                                totalTokens[0] += response[1][0]
+                                totalTokens[1] += response[1][1]
 
                                 # Textwrap
-                                translatedText = textwrap.fill(translatedText, WIDTH)
+                                # translatedText = textwrap.fill(translatedText, WIDTH)
 
                                 # Set String
-                                codeList[i]["stringArgs"][0] = translatedText
+                                codeList[i]["stringArgs"][0] = codeList[i]["stringArgs"][0].replace(jaString, translatedText)
 
             ### Event Code: 300 Common Events
             if (
@@ -559,8 +563,8 @@ def searchCodes(events, pbar, jobList, filename):
                     # question = codeList[i]['stringArgs'][2]
                     # response = translateGPT(question, "", True)
                     # translatedText = response[0]
-                    # totalTokens[0] = response[1][0]
-                    # totalTokens[1] = response[1][1]
+                    # totalTokens[0] += response[1][0]
+                    # totalTokens[1] += response[1][1]
 
                     # # Translate Question
                     # codeList[i]['stringArgs'][2] = translatedText
@@ -568,8 +572,8 @@ def searchCodes(events, pbar, jobList, filename):
                     # Translate Choices
                     response = translateGPT(choiceList, translatedText, True)
                     choiceListTL = response[0]
-                    totalTokens[0] = response[1][0]
-                    totalTokens[1] = response[1][1]
+                    totalTokens[0] += response[1][0]
+                    totalTokens[1] += response[1][1]
 
                     # Replace Commas
                     for j in range(len(choiceListTL)):
@@ -670,7 +674,7 @@ def searchCodes(events, pbar, jobList, filename):
                 # Validate size
                 if len(codeList[i]["stringArgs"]) > 2:
                     if (
-                        codeList[i]["stringArgs"][1] == "┗所持防具個数"
+                        codeList[i]["stringArgs"][1] == "所持商品"
                         and codeList[i]["stringArgs"][2] != ""
                     ):
                         # Grab String
@@ -699,8 +703,8 @@ def searchCodes(events, pbar, jobList, filename):
                                 False,
                             )
                             translatedText = response[0]
-                            totalTokens[0] = response[1][0]
-                            totalTokens[1] = response[1][1]
+                            totalTokens[0] += response[1][0]
+                            totalTokens[1] += response[1][1]
                             TERMSLIST.append([jaString, translatedText])
 
                         # Add back Potential Variables in String
@@ -810,7 +814,7 @@ def formatDramon(jaString):
     return cleanedList
 
 
-# DatabaseDatabase
+# Database
 def searchDB(events, pbar, jobList, filename):
     # Set Lists
     if len(jobList) > 0:
@@ -857,7 +861,7 @@ def searchDB(events, pbar, jobList, filename):
     try:
         for table in tableList:
             # Translate NPC
-            if table["name"] == "キャラ会話" and NPCFLAG == True:
+            if table["name"] == "状態設定（戦場）" and NPCFLAG == True:
                 for npc in table["data"]:
                     dataList = npc["data"]
 
@@ -931,7 +935,7 @@ def searchDB(events, pbar, jobList, filename):
                                     NPCList[2].pop(0)
 
             # Grab Scenarios
-            if table["name"] == "Hシナリオ" and SCENARIOFLAG == True:
+            if table["name"] == "MGP_参加者" and SCENARIOFLAG == True:
                 for hScenario in table["data"]:
                     dataList = hScenario["data"]
 
@@ -958,7 +962,7 @@ def searchDB(events, pbar, jobList, filename):
                             scenarioList[2].pop(0)
 
             # Grab Items
-            if table["name"] == "オーブ" and ITEMFLAG == True:
+            if table["name"] == "キャラクタプロフィール" and ITEMFLAG == True:
                 with open("translations.txt", "a", encoding="utf-8") as file:
                     for item in table["data"]:
                         dataList = item["data"]
@@ -966,7 +970,7 @@ def searchDB(events, pbar, jobList, filename):
                         # Parse #
                         for j in range(len(dataList)):
                             # Name
-                            if dataList[j].get("name") == "オーブの名前":
+                            if dataList[j].get("name") == "名前":
                                 # Pass 1 (Grab Data)
                                 if setData == False:
                                     if dataList[j].get("value") != "":
@@ -978,11 +982,15 @@ def searchDB(events, pbar, jobList, filename):
                                         file.write(
                                             f'{dataList[j].get('value')} ({itemList[0][0]})\n'
                                         )
-                                        dataList[j].update({"value": itemList[0][0]})
+                                        line = itemList[0][0]
+                                        line = line.replace(':', '：')
+                                        line = line.replace('/', '／')
+                                        line = line.replace('?', '？')
+                                        dataList[j].update({"value": line})
                                         itemList[0].pop(0)
 
                             # Description 1 (You are my specialz)
-                            if dataList[j].get("name") == "オーブの説明":
+                            if dataList[j].get("name") == "戦闘面での特徴":
                                 # Clean String
                                 fontSize = 18
                                 translatedText = ""
@@ -1044,7 +1052,7 @@ def searchDB(events, pbar, jobList, filename):
                                     dataList[j].update({"value": translatedText})
 
                             # Description 2 (You are my specialz)
-                            if dataList[j].get("name") == "NULL":
+                            if dataList[j].get("name") == "01_説明":
                                 # Clean String
                                 fontSize = 24
                                 translatedText = ""
@@ -1106,7 +1114,7 @@ def searchDB(events, pbar, jobList, filename):
                                     dataList[j].update({"value": translatedText})
 
                             # Description 3 (You are my specialz)
-                            if dataList[j].get("name") == "NULL":
+                            if dataList[j].get("name") == "01_説明未婚":
                                 # Clean String
                                 fontSize = 24
                                 translatedText = ""

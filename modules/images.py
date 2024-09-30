@@ -263,6 +263,20 @@ def processImagesDir(directory_path, imageList):
                 except Exception as e:
                     print(f"Error processing {file_name}: {e}")
 
+        if ".txt" in file_name:
+            try:
+                with open(f'{directory_path}/{file_name}', 'r', encoding='utf8') as file:
+                    for line in file:
+                        line = line.strip()
+                        line = line.replace(':', '：')
+                        line = line.replace('/', '／')
+                        line = line.replace('?', '？')
+                        imageList[0].append(line)  # Using strip() to remove any extra newlines or spaces
+                        imageList[1].append([100, 15])
+            except FileNotFoundError:
+                print(f"The file at {file_path} was not found.")
+            except IOError:
+                print(f"An error occurred while reading the file at {file_path}.")
     return imageList
 
 
