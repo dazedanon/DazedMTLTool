@@ -1,53 +1,8 @@
 Here are some vocabulary and terms so that you know the proper spelling and translation.
 ```
 # Game Characters
-朱雀 (Suzuku) - Female
-紅 (Akane) - Female
-エージェントシリウス (Agent Sirius) - Female
-白虎 (Shiratora) - Female
-撫子 (Nadeshiko) - Female
-鬼塚 (Onizuka) - Female
-百合花 (Yurika) - Female
-犬飼 (Inukai) - Female
-アンナ (Anna) - Female
-メープル (Maple) - Female
-鈴懸 (Suzukake) - Female
-いるか (Iruka) - Female
-安知理 (Ajiri) - Female
-結 (Yuu) - Female
-綾香 (Ayaka) - Female
-鳥居 (Tori) - Female
-鈴蘭 (Suzuran) - Female
-宇宙 (Sora) - Female
-青龍 (Aotatsu) - Female
-桔梗 (Kikyo) - Female
-獅堂 (Shidou) - Female
-向日葵 (Himawari) - Female
-大紫 (Omurasaki) -  Female
-菫 (Sumire) - Female
-亀神 (Kamegami) - Female
-柊 (Shu) - Female
-鷲尾 (Washio) - Male
-菊一 (Kikuichi) - Male
-花村 (Hanamura) - Female
-咲夜 (Sakuya) - Female
-曽我井 (Sogai) - Male
-四海 (Shikai) - Male
-志倉　綿 (Shikura Wata) - Female
-皐月　亜麻 (Satsuki Ama) - Female
-安知理　結 (Ajiri Yuu) - Female
-栗山　五十木 (Kuriyama Itsuki) - Male
-天狐 橙 (Tenkou Daidai) - Female
-天狐 蜜柑 (Tenkou Mikan) - Female
-鷹本 椿 (Takamoto Tsubaki) - Female
-青龍 桃葉 (Aotatsu Momoba) - Female
-雨宮 星羅 (Amamiya Seira) - Female
-山内 紫苑 (Yamauchi Shion) - Female
-野沢 林檎 (Nozawa Ringo) - Female
-城ヶ峰 柳 (Jougamine Yanagi) - Female
-山角 翠 (Yamakaku Midori) - Female
-来杉馬来 (Kisugiba Rai) - Male
-狼煙蓮 (Noroshi Ren) - Male
+ラピスフィリア (Lapis Philia) - Female\n
+水奈月 瑠璃 (Mizunazuki Ruri) - Female\n
 
 # Lewd Terms
 マンコ (pussy)
@@ -116,10 +71,4 @@ ME 音量 (ME Volume)
 堕天使 (Fallen Angel)  
 鬼 (Oni)
 ローバー (Roper)
-
-# Skills
-Highest Repeat Rate No.1 Girl
-Veteran Courtesan
-Vital Point Thrust
-Majikite
 ```
