@@ -37,7 +37,7 @@ MAXHISTORY = 10
 ESTIMATE = ""
 TOKENS = [0, 0]
 NAMESLIST = []
-FIRSTLINESPEAKERS = True  # If 1st line of dialogue is a speaker, set to True
+FIRSTLINESPEAKERS = False  # If 1st line of dialogue is a speaker, set to True
 NAMES = False  # Output a list of all the character names found
 BRFLAG = False  # If the game uses <br> instead
 FIXTEXTWRAP = True  # Overwrites textwrap
@@ -67,12 +67,12 @@ POSITION = 0
 LEAVE = False
 
 # Dialogue / Scroll
-CODE401 = True
-CODE405 = True
-CODE408 = False
+CODE401 = False
+CODE405 = False
+CODE408 = True
 
 # Choices
-CODE102 = True
+CODE102 = False
 
 # Variables
 CODE122 = False
@@ -682,10 +682,11 @@ def searchNames(data, pbar, context):
                     nameList.append(data[i]["name"])
 
                     # Notes
-                    if "<note:" in data[i]["note"]:
-                        tokensResponse = translateNote(data[i], r"<note:(.*?)>")
-                        totalTokens[0] += tokensResponse[0]
-                        totalTokens[1] += tokensResponse[1]
+                    if "note" in data[i]:
+                        if "<note:" in data[i]["note"]:
+                            tokensResponse = translateNote(data[i], r"<note:(.*?)>")
+                            totalTokens[0] += tokensResponse[0]
+                            totalTokens[1] += tokensResponse[1]
                     i += 1
                 else:
                     batchFull = True
@@ -845,12 +846,14 @@ def searchCodes(page, pbar, jobList, filename):
         list122 = jobList[1]
         list355655 = jobList[2]
         list108 = jobList[3]
+        list356 = jobList[4]
         setData = True
     else:
         list401 = []
         list122 = []
         list355655 = []
         list108 = []
+        list356 = []
         setData = False
     textHistory = []
     match = []
@@ -971,7 +974,9 @@ def searchCodes(page, pbar, jobList, filename):
                         and len(codeList[i + 1]["parameters"]) > 0
                         and len(codeList[i + 1]["parameters"][0]) > 0
                     ):
-                        if codeList[i + 1]["parameters"][0].strip()[0] in [
+                        if codeList[i + 1]["parameters"] != "" and codeList[i + 1][
+                            "parameters"
+                        ][0].strip()[0] in [
                             "「",
                             '"',
                             "(",
@@ -1247,7 +1252,7 @@ def searchCodes(page, pbar, jobList, filename):
             ## Event Code: 122 [Set Variables]
             if "code" in codeList[i] and codeList[i]["code"] == 122 and CODE122 is True:
                 # This is going to be the var being set. (IMPORTANT)
-                if codeList[i]["parameters"][0] not in list(range(150, 180)):
+                if codeList[i]["parameters"][0] not in list(range(70, 90)):
                     i += 1
                     continue
 
@@ -1786,71 +1791,32 @@ def searchCodes(page, pbar, jobList, filename):
                 if textMatch and textMatch.group(0) != "":
                     text = textMatch.group(1)
 
-                    # Using this to keep track of 401's in a row. Throws IndexError at EndOfList (Expected Behavior)
-                    currentGroup.append(text)
+                    # Pass 1
+                    if setData == False:
+                        text = text.replace("_", " ")
+                        list356.append(text)
 
-                    # Check Next Codes for text
-                    while codeList[i + 1]["code"] == 356:
-                        match = re.search(regex, codeList[i + 1]["parameters"][0])
-                        if match == None:
-                            break
-                        else:
-                            jaString = codeList[i + 1]["parameters"][0]
-                            textMatch = re.search(regex, jaString)
-                            if textMatch != None:
-                                currentGroup.append(textMatch.group(1))
-                            i += 1
-
-                    # Set Final List
-                    finalList = currentGroup
-
-                    # Clear Group and Reset Index
-                    currentGroup = []
-                    i = i - len(finalList) + 1
-
-                    # Translate
-                    response = translateGPT(
-                        finalList, "Reply with the " + LANGUAGE + " Translation.", True
-                    )
-                    finalListTL = response[0]
-                    totalTokens[0] += response[1][0]
-                    totalTokens[1] += response[1][1]
-
-                    for j in range(len(finalListTL)):
-                        # Grab String Again For Replace
-                        jaString = codeList[i]["parameters"][0]
-                        textMatch = re.search(regex, jaString)
-                        if textMatch != None:
-                            text = textMatch.group(1)
-
-                        # Grab
-                        translatedText = finalListTL[j]
-
-                        # Textwrap
-                        translatedText = textwrap.fill(
-                            translatedText, width=LISTWIDTH, drop_whitespace=False
-                        )
-
-                        # Remove characters that may break scripts
-                        charList = [".", '"']
-                        for char in charList:
-                            translatedText = translatedText.replace(char, "")
-
-                        # Cant have spaces?
-                        translatedText = translatedText.replace(" ", "_")
-
-                        # Fix spacing after ___
-                        translatedText = translatedText.replace("__\n", "__")
-
-                        # Put Args Back
-                        translatedText = jaString.replace(text, translatedText)
-
-                        # Set Data
-                        codeList[i]["parameters"][0] = translatedText
-                        i += 1
+                    # Pass 2
                     else:
-                        i += 1
-                        continue
+                        if len(list356) > 0:
+                            # Grab
+                            translatedText = list356[0]
+
+                            # Remove characters that may break scripts
+                            charList = [".", '"']
+                            for char in charList:
+                                translatedText = translatedText.replace(char, "")
+
+                            # Cant have spaces?
+                            translatedText = translatedText.replace(" ", "_")
+                            translatedText = translatedText.replace("__", "_")
+
+                            # Put Args Back
+                            translatedText = jaString.replace(text, translatedText)
+
+                            # Set Data
+                            codeList[i]["parameters"][0] = translatedText
+                            list356.pop(0)
 
                 if "namePop" in jaString:
                     matchList = re.findall(r"namePop\s\d+\s(.+?)\s.+", jaString)
@@ -2108,6 +2074,7 @@ def searchCodes(page, pbar, jobList, filename):
         # EOF
         list401TL = []
         list122TL = []
+        list356TL = []
         list355655TL = []
         list108TL = []
         setData = False
@@ -2165,10 +2132,26 @@ def searchCodes(page, pbar, jobList, filename):
             else:
                 setData = True
 
+        # 356
+        if len(list356) > 0:
+            response = translateGPT(list356, textHistory, True)
+            list356TL = response[0]
+            totalTokens[0] += response[1][0]
+            totalTokens[1] += response[1][1]
+            if len(list356TL) != len(list356):
+                with LOCK:
+                    if filename not in MISMATCH:
+                        MISMATCH.append(filename)
+            else:
+                setData = True
+
         # Start Pass 2
         if setData:
             searchCodes(
-                page, pbar, [list401TL, list122TL, list355655TL, list108TL], filename
+                page,
+                pbar,
+                [list401TL, list122TL, list355655TL, list108TL, list356TL],
+                filename,
             )
 
         # Delete all -1 codes

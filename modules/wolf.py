@@ -470,7 +470,7 @@ def searchCodes(events, pbar, jobList, filename):
             if codeList[i]["code"] == 122 and CODE122 == True:
                 if "stringArgs" in codeList[i] and len(codeList[i]["stringArgs"]) > 0:
                     # Grab String
-                    jaString = re.search(r'^\n?(.*)\n?$', codeList[i]["stringArgs"][0])
+                    jaString = re.search(r"^\n?(.*)\n?$", codeList[i]["stringArgs"][0])
                     if jaString:
                         jaString = jaString.group(1)
                     else:
@@ -542,7 +542,9 @@ def searchCodes(events, pbar, jobList, filename):
                                 # translatedText = textwrap.fill(translatedText, WIDTH)
 
                                 # Set String
-                                codeList[i]["stringArgs"][0] = codeList[i]["stringArgs"][0].replace(jaString, translatedText)
+                                codeList[i]["stringArgs"][0] = codeList[i][
+                                    "stringArgs"
+                                ][0].replace(jaString, translatedText)
 
             ### Event Code: 300 Common Events
             if (
@@ -983,9 +985,9 @@ def searchDB(events, pbar, jobList, filename):
                                             f'{dataList[j].get('value')} ({itemList[0][0]})\n'
                                         )
                                         line = itemList[0][0]
-                                        line = line.replace(':', '：')
-                                        line = line.replace('/', '／')
-                                        line = line.replace('?', '？')
+                                        line = line.replace(":", "：")
+                                        line = line.replace("/", "／")
+                                        line = line.replace("?", "？")
                                         dataList[j].update({"value": line})
                                         itemList[0].pop(0)
 
