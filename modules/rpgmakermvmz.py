@@ -69,7 +69,7 @@ LEAVE = False
 # Dialogue / Scroll
 CODE401 = False
 CODE405 = False
-CODE408 = True
+CODE408 = False # Warning, translates comments and can inflate costs.
 
 # Choices
 CODE102 = False
@@ -84,7 +84,7 @@ CODE101 = False
 CODE355655 = False
 CODE357 = False
 CODE657 = False
-CODE356 = False
+CODE356 = True
 CODE320 = False
 CODE324 = False
 CODE111 = False

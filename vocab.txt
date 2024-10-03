@@ -1,11 +1,12 @@
 Here are some vocabulary and terms so that you know the proper spelling and translation.
 ```
 # Game Characters
-リエナ (Liena) - Female\n
-イル (Iru) - Male\n
-ヨーグ (Yorg) - Male\n
-メリッサ (Melissa) - Female\n
-ナーサ (Naasa) - Female\n\
+ジーナ (Gina) - Female\n\
+マナリス (Manaris) - Female\n\
+ラビィ (Lavi) - Female\n\
+ララ (Lala) - Female\n\
+クリス (Chris) - Female\n\
+モーガン (Morgan) - Male\n\
 
 # Lewd Terms
 マンコ (pussy)
@@ -74,4 +75,7 @@ ME 音量 (ME Volume)
 堕天使 (Fallen Angel)  
 鬼 (Oni)
 ローバー (Roper)
+
+# Locations
+トリス (Tris)
 ```
