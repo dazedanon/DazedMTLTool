@@ -74,8 +74,8 @@ CODE122 = False
 
 # Other
 CODE210 = False
-CODE300 = True
-CODE250 = False
+CODE300 = False
+CODE250 = True
 
 # Database
 NPCFLAG = False
@@ -424,7 +424,7 @@ def searchCodes(events, pbar, jobList, filename):
                             ):
                                 # Remove Textwrap and Font and Add to list
                                 str = str.replace("\r\n", " ")
-                                str = str.replace(f"\\f[{fontSize}]", "")
+                                str = re.sub(r'[\\]+f\[\d+\]', '', str)
                                 list300.append(str)
 
                         # Pass 2
@@ -621,7 +621,7 @@ def searchCodes(events, pbar, jobList, filename):
                                 ):
                                     # Remove Textwrap and Font and Add to list
                                     str = str.replace("\r\n", " ")
-                                    str = str.replace(f"\\f[{fontSize}]", "")
+                                    str = re.sub(r'[\\]+f\[\d+\]', '', str)
                                     list300.append(str)
 
                             # Pass 2
@@ -676,7 +676,7 @@ def searchCodes(events, pbar, jobList, filename):
                 # Validate size
                 if len(codeList[i]["stringArgs"]) > 2:
                     if (
-                        codeList[i]["stringArgs"][1] == "所持商品"
+                        codeList[i]["stringArgs"][1] == "クエスト情報"
                         and codeList[i]["stringArgs"][2] != ""
                     ):
                         # Grab String
@@ -964,7 +964,7 @@ def searchDB(events, pbar, jobList, filename):
                             scenarioList[2].pop(0)
 
             # Grab Items
-            if table["name"] == "キャラクタプロフィール" and ITEMFLAG == True:
+            if table["name"] == "アイテム" and ITEMFLAG == True:
                 with open("translations.txt", "a", encoding="utf-8") as file:
                     for item in table["data"]:
                         dataList = item["data"]
@@ -972,7 +972,7 @@ def searchDB(events, pbar, jobList, filename):
                         # Parse #
                         for j in range(len(dataList)):
                             # Name
-                            if dataList[j].get("name") == "名前":
+                            if dataList[j].get("name") == "生息海域":
                                 # Pass 1 (Grab Data)
                                 if setData == False:
                                     if dataList[j].get("value") != "":
@@ -992,9 +992,9 @@ def searchDB(events, pbar, jobList, filename):
                                         itemList[0].pop(0)
 
                             # Description 1 (You are my specialz)
-                            if dataList[j].get("name") == "戦闘面での特徴":
+                            if dataList[j].get("name") == "説明":
                                 # Clean String
-                                fontSize = 18
+                                fontSize = 14
                                 translatedText = ""
                                 cleanedList = formatDramon(dataList[j].get("value"))
                                 for str in cleanedList:
@@ -1009,7 +1009,7 @@ def searchDB(events, pbar, jobList, filename):
                                         ):
                                             # Remove Textwrap and Font and Add to list
                                             str = str.replace("\r\n", " ")
-                                            str = str.replace(f"\\f[{fontSize}]", "")
+                                            str = re.sub(r'[\\]+f\[\d+\]', '', str)
                                             itemList[1].append(str)
 
                                     # Pass 2
@@ -1054,7 +1054,7 @@ def searchDB(events, pbar, jobList, filename):
                                     dataList[j].update({"value": translatedText})
 
                             # Description 2 (You are my specialz)
-                            if dataList[j].get("name") == "01_説明":
+                            if dataList[j].get("name") == "NULL":
                                 # Clean String
                                 fontSize = 24
                                 translatedText = ""
@@ -1071,7 +1071,7 @@ def searchDB(events, pbar, jobList, filename):
                                         ):
                                             # Remove Textwrap and Font and Add to list
                                             str = str.replace("\r\n", " ")
-                                            str = str.replace(f"\\f[{fontSize}]", "")
+                                            str = re.sub(r'[\\]+f\[\d+\]', '', str)
                                             itemList[2].append(str)
 
                                     # Pass 2
@@ -1116,7 +1116,7 @@ def searchDB(events, pbar, jobList, filename):
                                     dataList[j].update({"value": translatedText})
 
                             # Description 3 (You are my specialz)
-                            if dataList[j].get("name") == "01_説明未婚":
+                            if dataList[j].get("name") == "NULL":
                                 # Clean String
                                 fontSize = 24
                                 translatedText = ""
@@ -1133,7 +1133,7 @@ def searchDB(events, pbar, jobList, filename):
                                         ):
                                             # Remove Textwrap and Font and Add to list
                                             str = str.replace("\r\n", " ")
-                                            str = str.replace(f"\\f[{fontSize}]", "")
+                                            str = re.sub(r'[\\]+f\[\d+\]', '', str)
                                             itemList[3].append(str)
 
                                     # Pass 2
