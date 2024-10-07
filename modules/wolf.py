@@ -964,7 +964,7 @@ def searchDB(events, pbar, jobList, filename):
                             scenarioList[2].pop(0)
 
             # Grab Items
-            if table["name"] == "種族" and ITEMFLAG == True:
+            if table["name"] == "シーン回想" and ITEMFLAG == True:
                 with open("translations.txt", "a", encoding="utf-8") as file:
                     for item in table["data"]:
                         dataList = item["data"]
@@ -972,7 +972,7 @@ def searchDB(events, pbar, jobList, filename):
                         # Parse #
                         for j in range(len(dataList)):
                             # Name
-                            if dataList[j].get("name") == "種族":
+                            if dataList[j].get("name") == "キャラ名":
                                 # Pass 1 (Grab Data)
                                 if setData == False:
                                     if dataList[j].get("value") != "":
