@@ -49,6 +49,7 @@ from modules.wolf2 import handleWOLF2
 from modules.javascript import handleJavascript
 from modules.irissoft import handleIris
 from modules.regex import handleRegex
+from modules.unity import handleUnity
 from modules.images import handleImages
 from modules.rpgmakerplugin import handlePlugin
 
@@ -76,6 +77,7 @@ MODULES = [
     ["Javascript", "js", handleJavascript],
     ["Iris", "txt", handleIris],
     ["Regex", "txt", handleRegex],
+    ["Unity", "txt", handleUnity],
     ["Images", "", handleImages],
 ]
 
