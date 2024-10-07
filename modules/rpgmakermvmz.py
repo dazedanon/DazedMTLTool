@@ -67,12 +67,12 @@ POSITION = 0
 LEAVE = False
 
 # Dialogue / Scroll
-CODE401 = False
-CODE405 = False
+CODE401 = True
+CODE405 = True
 CODE408 = False # Warning, translates comments and can inflate costs.
 
 # Choices
-CODE102 = False
+CODE102 = True
 
 # Variables
 CODE122 = False
@@ -84,7 +84,7 @@ CODE101 = False
 CODE355655 = False
 CODE357 = False
 CODE657 = False
-CODE356 = True
+CODE356 = False
 CODE320 = False
 CODE324 = False
 CODE111 = False
@@ -274,6 +274,10 @@ def parseMap(data, filename):
                         totalTokens[1] += response[1]
                     if "<LB:" in event["note"]:
                         response = translateNoteOmitSpace(event, r"<LB:(.*?)\s?>.*")
+                        totalTokens[0] += response[0]
+                        totalTokens[1] += response[1]
+                    if "<dn:" in event["note"]:
+                        response = translateNoteOmitSpace(event, r"<dn:\s*(.*)>.*")
                         totalTokens[0] += response[0]
                         totalTokens[1] += response[1]
 
@@ -847,6 +851,7 @@ def searchCodes(page, pbar, jobList, filename):
         list355655 = jobList[2]
         list108 = jobList[3]
         list356 = jobList[4]
+        list357 = jobList[5]
         setData = True
     else:
         list401 = []
@@ -854,6 +859,7 @@ def searchCodes(page, pbar, jobList, filename):
         list355655 = []
         list108 = []
         list356 = []
+        list357 = []
         setData = False
     textHistory = []
     match = []
@@ -954,6 +960,10 @@ def searchCodes(page, pbar, jobList, filename):
                     speakerList = re.findall(
                         r"^[\\]+[cC]\[[\d]+\](.+?)[\\]+[Cc]\[[\d]\]\\?\\?$", jaString
                     )
+
+                # Full Width Space
+                if len(speakerList) == 0:
+                    speakerList = re.findall(r"^[　 ](.*)", jaString)
 
                 # First Line Speakers
                 if len(speakerList) == 0 and FIRSTLINESPEAKERS is True:
@@ -1156,7 +1166,7 @@ def searchCodes(page, pbar, jobList, filename):
                     # If there isn't any Japanese in the text just skip
                     if IGNORETLTEXT is True:
                         if not re.search(
-                            r"[一-龠]+|[ぁ-ゔ]+|[ァ-ヴー]+", finalJAString
+                            r"[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]+", finalJAString
                         ):
                             # Keep textHistory list at length maxHistory
                             textHistory.append('"' + finalJAString + '"')
@@ -1252,7 +1262,7 @@ def searchCodes(page, pbar, jobList, filename):
             ## Event Code: 122 [Set Variables]
             if "code" in codeList[i] and codeList[i]["code"] == 122 and CODE122 is True:
                 # This is going to be the var being set. (IMPORTANT)
-                if codeList[i]["parameters"][0] not in list(range(70, 90)):
+                if codeList[i]["parameters"][0] not in list(range(0, 1000)):
                     i += 1
                     continue
 
@@ -1362,7 +1372,7 @@ def searchCodes(page, pbar, jobList, filename):
                         jaString = codeList[i]["parameters"][3][argVar]
 
                         # If there isn't any Japanese in the text just skip
-                        if not re.search(r"[一-龠]+|[ぁ-ゔ]+|[ァ-ヴー]+", jaString):
+                        if not re.search(r"[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]+", jaString):
                             i += 1
                             continue
 
@@ -1385,7 +1395,7 @@ def searchCodes(page, pbar, jobList, filename):
                         jaString = codeList[i]["parameters"][3][argVar]
 
                         # If there isn't any Japanese in the text just skip
-                        if not re.search(r"[一-龠]+|[ぁ-ゔ]+|[ァ-ヴー]+", jaString):
+                        if not re.search(r"[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]+", jaString):
                             i += 1
                             continue
 
@@ -1470,6 +1480,57 @@ def searchCodes(page, pbar, jobList, filename):
                         codeList[i]["parameters"][3][argVar] = translatedText
                         pbar.update(1)
 
+                if "TextPicture" in headerString:
+                    argVar = "text"
+                    ### Message Text First
+                    if argVar in codeList[i]["parameters"][3]:
+                        acExist = False
+                        jaString = codeList[i]["parameters"][3][argVar]
+
+                        # Check ac
+                        if '\\ac' in jaString:
+                            acExist = True
+                        else:
+                            acExist = False
+
+                        # If there isn't any Japanese in the text just skip
+                        # if not re.search(r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴー]+', jaString):
+                        #     i += 1
+                        #     continue
+
+                        # Remove any textwrap & TL
+                        jaString = re.sub(r"\n", " ", jaString)
+                        if acExist:
+                            jaString = jaString.replace('\\ac ', ' ')
+                            jaString = jaString.replace('\\ac', '')
+
+                        # Pass 1
+                        if setData == False:
+                            list357.append(jaString)
+
+                        # Pass 2
+                        else:
+                            if len(list357) > 0:
+                                # Grab and Replace
+                                translatedText = list357[0]
+                                translatedText = jaString.replace(jaString, translatedText)
+
+                                # Remove characters that may break scripts
+                                charList = ['"', "\\n"]
+                                for char in charList:
+                                    translatedText = translatedText.replace(char, "")
+
+                                # Textwrap
+                                translatedText = textwrap.fill(translatedText, 100)
+                                translatedText = translatedText.replace("- ", "-")
+                                if acExist:
+                                    translatedText = f'\\ac {translatedText.replace('\n', '\n\\ac ')}'
+
+                                # Set
+                                codeList[i]["parameters"][3][argVar] = translatedText
+                                codeList[i]["parameters"][3]['fontSize'] = "18"
+                                list357.pop(0)
+
             ## Event Code: 657 [Picture Text] [Optional]
             if "code" in codeList[i] and codeList[i]["code"] == 657 and CODE657 is True:
                 if "text" in codeList[i]["parameters"][0]:
@@ -1484,7 +1545,7 @@ def searchCodes(page, pbar, jobList, filename):
                         continue
 
                     # If there isn't any Japanese in the text just skip
-                    if not re.search(r"[一-龠]+|[ぁ-ゔ]+|[ァ-ヴー]+", jaString):
+                    if not re.search(r"[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]+", jaString):
                         i += 1
                         continue
 
@@ -1615,7 +1676,7 @@ def searchCodes(page, pbar, jobList, filename):
                 and CODE355655 is True
             ):
                 jaString = codeList[i]["parameters"][0]
-                regex = r"memory\._eventTitle\s=\s\"(.*)\""
+                regex = r"BattleManager\._logWindow.addText\('(.*)'"
 
                 # Var Text
                 match = re.search(regex, jaString)
@@ -1629,6 +1690,7 @@ def searchCodes(page, pbar, jobList, filename):
                     else:
                         # Grab and Replace
                         translatedText = list355655[0]
+                        translatedText = translatedText.replace("'", "\\'")
 
                         # Set
                         codeList[i]["parameters"][0] = codeList[i]["parameters"][
@@ -1645,7 +1707,7 @@ def searchCodes(page, pbar, jobList, filename):
                 jaString = codeList[i]["parameters"][0]
 
                 # If there isn't any Japanese in the text just skip
-                if not re.search(r"[一-龠]+|[ぁ-ゔ]+|[ァ-ヴー]+", jaString):
+                if not re.search(r"[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]+", jaString):
                     i += 1
                     continue
 
@@ -1696,7 +1758,7 @@ def searchCodes(page, pbar, jobList, filename):
                 jaString = codeList[i]["parameters"][0]
 
                 # If there isn't any Japanese in the text just skip
-                if not re.search(r"[一-龠]+|[ぁ-ゔ]+|[ァ-ヴー]+", jaString):
+                if not re.search(r"[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]+", jaString):
                     i += 1
                     continue
 
@@ -1944,16 +2006,11 @@ def searchCodes(page, pbar, jobList, filename):
 
                     # If and En Statements
                     ifVar = ""
-                    enVar = ""
-                    ifList = re.findall(r"(if\(.*?\))", jaString)
-                    enList = re.findall(r"(en\(.*?\))", jaString)
+                    ifList = re.findall(r"([ei][nf]\(.+?\)\)?\)?)", jaString)
                     if len(ifList) != 0:
                         jaString = jaString.replace(ifList[0], "")
                         ifVar = ifList[0]
-                    if len(enList) != 0:
-                        jaString = jaString.replace(enList[0], "")
-                        enVar = enList[0]
-                    varList.append(ifVar + enVar)
+                    varList.append(ifVar)
 
                     # Append to List
                     choiceList.append(jaString)
@@ -2052,7 +2109,7 @@ def searchCodes(page, pbar, jobList, filename):
                     continue
 
                 # If there isn't any Japanese in the text just skip
-                if not re.search(r"[一-龠]+|[ぁ-ゔ]+|[ァ-ヴー]+", jaString):
+                if not re.search(r"[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]+", jaString):
                     i += 1
                     continue
 
@@ -2075,6 +2132,7 @@ def searchCodes(page, pbar, jobList, filename):
         list401TL = []
         list122TL = []
         list356TL = []
+        list357TL = []
         list355655TL = []
         list108TL = []
         setData = False
@@ -2095,7 +2153,7 @@ def searchCodes(page, pbar, jobList, filename):
 
         # 122
         if len(list122) > 0:
-            response = translateGPT(list122, textHistory, True)
+            response = translateGPT(list122, 'Keep you translation as brief as possible', True)
             list122TL = response[0]
             totalTokens[0] += response[1][0]
             totalTokens[1] += response[1][1]
@@ -2145,12 +2203,25 @@ def searchCodes(page, pbar, jobList, filename):
             else:
                 setData = True
 
+        # 357
+        if len(list357) > 0:
+            response = translateGPT(list357, textHistory, True)
+            list357TL = response[0]
+            totalTokens[0] += response[1][0]
+            totalTokens[1] += response[1][1]
+            if len(list357TL) != len(list357):
+                with LOCK:
+                    if filename not in MISMATCH:
+                        MISMATCH.append(filename)
+            else:
+                setData = True
+
         # Start Pass 2
         if setData:
             searchCodes(
                 page,
                 pbar,
-                [list401TL, list122TL, list355655TL, list108TL, list356TL],
+                [list401TL, list122TL, list355655TL, list108TL, list356TL, list357TL],
                 filename,
             )
 
@@ -2449,7 +2520,7 @@ def getSpeaker(speaker):
                 response = translateGPT(
                     speaker,
                     "Reply with the " + LANGUAGE + " translation of the NPC name.",
-                    False,
+                    True,
                 )
                 response[0] = response[0].title()
                 response[0] = response[0].replace("'S", "'s")
@@ -2675,7 +2746,7 @@ def translateGPT(text, history, fullPromptFlag):
             subbedT = varResponse[0]
 
         # Things to Check before starting translation
-        if not re.search(r"[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９]+", subbedT):
+        if not re.search(r"[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]+", subbedT):
             if PBAR is not None:
                 PBAR.update(len(tItem))
             continue
