@@ -74,8 +74,8 @@ CODE122 = False
 
 # Other
 CODE210 = False
-CODE300 = False
-CODE250 = True
+CODE300 = True
+CODE250 = False
 
 # Database
 NPCFLAG = False
@@ -964,7 +964,7 @@ def searchDB(events, pbar, jobList, filename):
                             scenarioList[2].pop(0)
 
             # Grab Items
-            if table["name"] == "アイテム" and ITEMFLAG == True:
+            if table["name"] == "種族" and ITEMFLAG == True:
                 with open("translations.txt", "a", encoding="utf-8") as file:
                     for item in table["data"]:
                         dataList = item["data"]
@@ -972,7 +972,7 @@ def searchDB(events, pbar, jobList, filename):
                         # Parse #
                         for j in range(len(dataList)):
                             # Name
-                            if dataList[j].get("name") == "生息海域":
+                            if dataList[j].get("name") == "種族":
                                 # Pass 1 (Grab Data)
                                 if setData == False:
                                     if dataList[j].get("value") != "":
@@ -992,7 +992,7 @@ def searchDB(events, pbar, jobList, filename):
                                         itemList[0].pop(0)
 
                             # Description 1 (You are my specialz)
-                            if dataList[j].get("name") == "説明":
+                            if dataList[j].get("name") == "NULL":
                                 # Clean String
                                 fontSize = 14
                                 translatedText = ""
