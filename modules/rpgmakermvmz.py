@@ -56,8 +56,8 @@ if "gpt-3.5" in MODEL:
     BATCHSIZE = 10
     FREQUENCY_PENALTY = 0.2
 elif "gpt-4" in MODEL:
-    INPUTAPICOST = 0.005
-    OUTPUTAPICOST = 0.015
+    INPUTAPICOST = 0.0025
+    OUTPUTAPICOST = 0.01
     BATCHSIZE = 20
     FREQUENCY_PENALTY = 0.1
 
@@ -66,25 +66,23 @@ BAR_FORMAT = "{l_bar}{bar:10}{r_bar}{bar:-10b}"
 POSITION = 0
 LEAVE = False
 
-# Dialogue / Scroll
-CODE401 = True
-CODE405 = True
-CODE408 = False # Warning, translates comments and can inflate costs.
+# Dialogue / Scroll / Choices (Main Codes)
+CODE401 = False
+CODE405 = False
+CODE102 = False
 
-# Choices
-CODE102 = True
+# Optional
+CODE101 = False # Turn this one when names exist in 101
+CODE408 = False # Warning, translates comments and can inflate costs.
 
 # Variables
 CODE122 = False
-
-# Names
-CODE101 = False
 
 # Other
 CODE355655 = False
 CODE357 = False
 CODE657 = False
-CODE356 = False
+CODE356 = True
 CODE320 = False
 CODE324 = False
 CODE111 = False
@@ -1262,7 +1260,7 @@ def searchCodes(page, pbar, jobList, filename):
             ## Event Code: 122 [Set Variables]
             if "code" in codeList[i] and codeList[i]["code"] == 122 and CODE122 is True:
                 # This is going to be the var being set. (IMPORTANT)
-                if codeList[i]["parameters"][0] not in list(range(0, 1000)):
+                if codeList[i]["parameters"][0] not in list(range(0, 100)):
                     i += 1
                     continue
 

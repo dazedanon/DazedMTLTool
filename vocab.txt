@@ -34,8 +34,6 @@ Here are some vocabulary and terms so that you know the proper spelling and tran
 先生 (sensei)
 師匠 (shishou)
 せんせい (sensei)
-お兄ちゃん (Onii-chan)
-お姉ちゃん (Onee-chan)
 
 # System
 初めから (Start)
@@ -81,5 +79,4 @@ ME 音量 (ME Volume)
 ローバー (Roper)
 
 # Locations
-トリス (Tris)
 ```
