@@ -48,8 +48,8 @@ if "gpt-3.5" in MODEL:
     BATCHSIZE = 10
     FREQUENCY_PENALTY = 0.2
 elif "gpt-4" in MODEL:
-    INPUTAPICOST = 0.005
-    OUTPUTAPICOST = 0.015
+    INPUTAPICOST = 0.0025
+    OUTPUTAPICOST = 0.01
     BATCHSIZE = 20
     FREQUENCY_PENALTY = 0.1
 
@@ -276,7 +276,7 @@ def processImagesDir(directory_path, imageList):
                         imageList[0].append(
                             line
                         )  # Using strip() to remove any extra newlines or spaces
-                        imageList[1].append([10, 14])
+                        imageList[1].append([100, 22])
             except FileNotFoundError:
                 print(f"The file at {file_path} was not found.")
             except IOError:
