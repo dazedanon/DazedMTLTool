@@ -67,9 +67,9 @@ POSITION = 0
 LEAVE = False
 
 # Dialogue / Scroll / Choices (Main Codes)
-CODE401 = False
-CODE405 = False
-CODE102 = False
+CODE401 = True
+CODE405 = True
+CODE102 = True
 
 # Optional
 CODE101 = False # Turn this one when names exist in 101
@@ -1038,8 +1038,7 @@ def searchCodes(page, pbar, jobList, filename):
 
                 # Format String
                 if len(currentGroup) > 0:
-                    finalJAString = ""
-                    finalJAString = "".join(currentGroup).replace("？", "?")
+                    finalJAString = "\n".join(currentGroup)
                     oldjaString = finalJAString
 
                     # Check if Empty
@@ -1107,11 +1106,6 @@ def searchCodes(page, pbar, jobList, filename):
                             # Set nametag in string
                             codeList[j]["parameters"] = [fullSpeaker + finalJAString]
                             codeList[j]["code"] = code
-
-                    # Remove any textwrap
-                    if FIXTEXTWRAP is True:
-                        finalJAString = re.sub(r"\n", " ", finalJAString)
-                        finalJAString = finalJAString.replace("<br>", " ")
 
                     # Remove Extra Stuff bad for translation.
                     finalJAString = finalJAString.replace("ﾞ", "")
@@ -1211,6 +1205,10 @@ def searchCodes(page, pbar, jobList, filename):
                             translatedText = translatedText.replace("- ", "-")
 
                             # Textwrap
+                            if FIXTEXTWRAP is True:
+                                finalJAString = re.sub(r"\n", " ", finalJAString)
+                                finalJAString = finalJAString.replace("<br>", " ")
+
                             if FIXTEXTWRAP is True and "_ABL" in nametag:
                                 translatedText = textwrap.fill(
                                     translatedText, width=100

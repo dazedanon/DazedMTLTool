@@ -676,7 +676,7 @@ def searchCodes(events, pbar, jobList, filename):
                 # Validate size
                 if len(codeList[i]["stringArgs"]) > 2:
                     if (
-                        codeList[i]["stringArgs"][1] == "クエスト情報"
+                        "┗" in codeList[i]["stringArgs"][1]
                         and codeList[i]["stringArgs"][2] != ""
                     ):
                         # Grab String

@@ -291,7 +291,7 @@ def translateWOLF(data, translatedList, pbar, filename):
                     translatedList = None
 
                 # Remove added speaker
-                translatedText = re.sub(r"^.+?:\s", "", translatedText)
+                # translatedText = re.sub(r"^.+?:\s", "", translatedText)
 
                 # Textwrap
                 translatedText = textwrap.fill(translatedText, width=WIDTH)

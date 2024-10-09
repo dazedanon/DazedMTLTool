@@ -245,7 +245,7 @@ def translateUnity(data, pbar, filename, translatedList):
                     translatedText = translatedText.replace("=", "->")
 
                     # Set Data
-                    data[i] = f'{originalString}={translatedText}\n'
+                    data[i] = f'{originalString}{originalString}={translatedText}\n'
             i += 1
 
         # Nothing relevant. Skip Line.
