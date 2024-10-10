@@ -82,7 +82,7 @@ CODE122 = False
 CODE355655 = False
 CODE357 = False
 CODE657 = False
-CODE356 = True
+CODE356 = False
 CODE320 = False
 CODE324 = False
 CODE111 = False
@@ -266,7 +266,7 @@ def parseMap(data, filename):
                     # This translates ID of events. (May break the game)
                     if "<namePop:" in event["note"]:
                         response = translateNoteOmitSpace(
-                            event, r"<namePop:(.*?)\s?>.*"
+                            event, r"<namePop:(.*?)\s?\d?>.*"
                         )
                         totalTokens[0] += response[0]
                         totalTokens[1] += response[1]
@@ -587,7 +587,7 @@ def searchNames(data, pbar, context):
             if context in ["Armors", "Weapons", "Items"]:
                 if len(nameList) < BATCHSIZE:
                     nameList.append(data[i]["name"])
-                    if "description" in data[i]:
+                    if "description" in data[i] and data[i]["description"] != "":
                         descriptionList.append(
                             data[i]["description"].replace("\n", " ")
                         )
@@ -602,19 +602,19 @@ def searchNames(data, pbar, context):
                         totalTokens[0] += tokensResponse[0]
                         totalTokens[1] += tokensResponse[1]
                     if "<SG説明:" in data[i]["note"]:
-                        tokensResponse = translateNote(data[i], r"<SG説明:(.*?)>")
+                        tokensResponse = translateNote(data[i], r"<SG説明:\n?(.*?)>")
                         totalTokens[0] += tokensResponse[0]
                         totalTokens[1] += tokensResponse[1]
                     if "<SG説明2:" in data[i]["note"]:
-                        tokensResponse = translateNote(data[i], r"<SG説明2:(.*?)>")
+                        tokensResponse = translateNote(data[i], r"<SG説明2:\n?(.*?)>")
                         totalTokens[0] += tokensResponse[0]
                         totalTokens[1] += tokensResponse[1]
                     if "<SG説明3:" in data[i]["note"]:
-                        tokensResponse = translateNote(data[i], r"<SG説明3:(.*?)>")
+                        tokensResponse = translateNote(data[i], r"<SG説明3:\n?(.*?)>")
                         totalTokens[0] += tokensResponse[0]
                         totalTokens[1] += tokensResponse[1]
                     if "<SG説明4:" in data[i]["note"]:
-                        tokensResponse = translateNote(data[i], r"<SG説明4:(.*?)>")
+                        tokensResponse = translateNote(data[i], r"<SG説明4:\n?(.*?)>")
                         totalTokens[0] += tokensResponse[0]
                         totalTokens[1] += tokensResponse[1]
                     if "<SGカテゴリ:" in data[i]["note"]:
@@ -784,12 +784,12 @@ def searchNames(data, pbar, context):
                                     f'{data[j]['name']} ({translatedNameBatch[0]})\n'
                                 )
                                 data[j]["name"] = translatedNameBatch[0]
-                                if "description" in data[j]:
+                                translatedNameBatch.pop(0)
+                                if "description" in data[j] and data[j]["description"] != "":
                                     data[j]["description"] = textwrap.fill(
                                         translatedDescriptionBatch[0], LISTWIDTH
                                     )
-                                translatedNameBatch.pop(0)
-                                translatedDescriptionBatch.pop(0)
+                                    translatedDescriptionBatch.pop(0)
 
                                 # If Batch is empty. Move on.
                                 if len(translatedNameBatch) == 0:
@@ -2514,12 +2514,13 @@ def getSpeaker(speaker):
             # Store Speaker
             if speaker not in str(NAMESLIST):
                 response = translateGPT(
-                    speaker,
+                    f'Speaker: {speaker}',
                     "Reply with the " + LANGUAGE + " translation of the NPC name.",
                     True,
                 )
                 response[0] = response[0].title()
                 response[0] = response[0].replace("'S", "'s")
+                response[0] = response[0].replace("Speaker: ", "")
 
                 # Retry if name doesn't translate for some reason
                 if re.search(r"([a-zA-Z？?])", response[0]) == None:
@@ -2548,7 +2549,7 @@ def subVars(jaString):
 
     # Formatting
     count = 0
-    codeList = re.findall(r"[\\]+[\w]+\[[a-zA-Z0-9\\\[\]\_,\s-]+\]", jaString)
+    codeList = re.findall(r"[\\]+[\w]+\[[a-zA-Z0-9\\\[\]\_,\s-]+?\]", jaString)
     codeList = set(codeList)
     if len(codeList) != 0:
         for var in codeList:
@@ -2678,6 +2679,8 @@ def elongateCharacters(text):
 
 def extractTranslation(translatedTextList, is_list):
     try:
+        translatedTextList = re.sub(r'\\"+\"([^,\n}])', r'\\"\1', translatedTextList)
+        translatedTextList = re.sub(r'(?<![\\])"+', r'"', translatedTextList)
         line_dict = json.loads(translatedTextList)
         # If it's a batch (i.e., list), extract with tags; otherwise, return the single item.
         string_list = list(line_dict.values())
@@ -2687,7 +2690,7 @@ def extractTranslation(translatedTextList, is_list):
             return string_list[0]
 
     except Exception as e:
-        print(f"extractTranslation Error: {e}")
+        PBAR.write(f"extractTranslation Error: {e} on String {translatedTextList}")
         return None
 
 
@@ -2720,90 +2723,92 @@ def combineList(tlist, text):
 @retry(exceptions=Exception, tries=5, delay=5)
 def translateGPT(text, history, fullPromptFlag):
     global PBAR, MISMATCH, FILENAME
-
-    mismatch = False
-    totalTokens = [0, 0]
-    if isinstance(text, list):
-        format = "json"
-        tList = batchList(text, BATCHSIZE)
-    else:
-        format = "text"
-        tList = [text]
-
-    for index, tItem in enumerate(tList):
-        # Before sending to translation, if we have a list of items, add the formatting
-        if isinstance(tItem, list):
-            payload = {f"Line{i+1}": string for i, string in enumerate(tItem)}
-            payload = json.dumps(payload, indent=4, ensure_ascii=False)
-            varResponse = subVars(payload)
-            subbedT = varResponse[0]
+    with open("log/translationHistory.txt", "a+", encoding="utf-8") as logFile:
+        mismatch = False
+        totalTokens = [0, 0]
+        if isinstance(text, list):
+            format = "json"
+            tList = batchList(text, BATCHSIZE)
         else:
-            varResponse = subVars(tItem)
-            subbedT = varResponse[0]
+            format = "text"
+            tList = [text]
 
-        # Things to Check before starting translation
-        if not re.search(r"[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]+", subbedT):
-            if PBAR is not None:
-                PBAR.update(len(tItem))
-            continue
-
-        # Create Message
-        system, user = createContext(fullPromptFlag, subbedT, format)
-
-        # Calculate Estimate
-        if ESTIMATE:
-            estimate = countTokens(system, user, history)
-            totalTokens[0] += estimate[0]
-            totalTokens[1] += estimate[1]
-            continue
-
-        # Translating
-        response = translateText(system, user, history, 0.05, format)
-        translatedText = response.choices[0].message.content
-        totalTokens[0] += response.usage.prompt_tokens
-        totalTokens[1] += response.usage.completion_tokens
-
-        # Check Translation
-        translatedText = cleanTranslatedText(translatedText, varResponse)
-        if isinstance(tItem, list):
-            extractedTranslations = extractTranslation(translatedText, True)
-            if extractedTranslations == None or len(tItem) != len(
-                extractedTranslations
-            ):
-                # Mismatch. Try Again
-                response = translateText(system, user, history, 0.05, format, "gpt-4o")
-                translatedText = response.choices[0].message.content
-                totalTokens[0] += response.usage.prompt_tokens
-                totalTokens[1] += response.usage.completion_tokens
-
-                # Formatting
-                translatedText = cleanTranslatedText(translatedText, varResponse)
-                if isinstance(tItem, list):
-                    extractedTranslations = extractTranslation(translatedText, True)
-                    if extractedTranslations == None or len(tItem) != len(
-                        extractedTranslations
-                    ):
-                        mismatch = True  # Just here for breakpoint
-
-            # Set if no mismatch
-            if mismatch == False:
-                tList[index] = extractedTranslations
-                history = extractedTranslations[
-                    -10:
-                ]  # Update history if we have a list
+        for index, tItem in enumerate(tList):
+            # Before sending to translation, if we have a list of items, add the formatting
+            if isinstance(tItem, list):
+                payload = {f"Line{i+1}": string for i, string in enumerate(tItem)}
+                payload = json.dumps(payload, indent=4, ensure_ascii=False)
+                varResponse = subVars(payload)
+                subbedT = varResponse[0]
+                logFile.write(f'Input:\n{subbedT}\n')
             else:
-                history = text[-10:]
-                mismatch = False
-                if FILENAME not in MISMATCH:
-                    MISMATCH.append(FILENAME)
+                varResponse = subVars(tItem)
+                subbedT = varResponse[0]
 
-            # Update Loading Bar
-            with LOCK:
+            # Things to Check before starting translation
+            if not re.search(r"[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]+", subbedT):
                 if PBAR is not None:
                     PBAR.update(len(tItem))
-        else:
-            # Ensure we're passing a single string to extractTranslation
-            tList[index] = translatedText
+                continue
+
+            # Create Message
+            system, user = createContext(fullPromptFlag, subbedT, format)
+
+            # Calculate Estimate
+            if ESTIMATE:
+                estimate = countTokens(system, user, history)
+                totalTokens[0] += estimate[0]
+                totalTokens[1] += estimate[1]
+                continue
+
+            # Translating
+            response = translateText(system, user, history, 0.05, format)
+            translatedText = response.choices[0].message.content
+            totalTokens[0] += response.usage.prompt_tokens
+            totalTokens[1] += response.usage.completion_tokens
+
+            # Check Translation
+            translatedText = cleanTranslatedText(translatedText, varResponse)
+            if isinstance(tItem, list):
+                extractedTranslations = extractTranslation(translatedText, True)
+                if extractedTranslations == None or len(tItem) != len(
+                    extractedTranslations
+                ):
+                    # Mismatch. Try Again
+                    response = translateText(system, user, history, 0.05, format, "gpt-4o")
+                    translatedText = response.choices[0].message.content
+                    totalTokens[0] += response.usage.prompt_tokens
+                    totalTokens[1] += response.usage.completion_tokens
+
+                    # Formatting
+                    translatedText = cleanTranslatedText(translatedText, varResponse)
+                    if isinstance(tItem, list):
+                        extractedTranslations = extractTranslation(translatedText, True)
+                        if extractedTranslations == None or len(tItem) != len(
+                            extractedTranslations
+                        ):
+                            mismatch = True  # Just here for breakpoint
+                logFile.write(f'Output:\n{translatedText}\n')
+
+                # Set if no mismatch
+                if mismatch == False:
+                    tList[index] = extractedTranslations
+                    history = extractedTranslations[
+                        -10:
+                    ]  # Update history if we have a list
+                else:
+                    history = text[-10:]
+                    mismatch = False
+                    if FILENAME not in MISMATCH:
+                        MISMATCH.append(FILENAME)
+
+                # Update Loading Bar
+                with LOCK:
+                    if PBAR is not None:
+                        PBAR.update(len(tItem))
+            else:
+                # Ensure we're passing a single string to extractTranslation
+                tList[index] = translatedText
 
     finalList = combineList(tList, text)
     return [finalList, totalTokens]
