@@ -74,8 +74,8 @@ CODE122 = False
 
 # Other
 CODE210 = False
-CODE300 = True
-CODE250 = False
+CODE300 = False
+CODE250 = True
 
 # Database
 NPCFLAG = False
@@ -676,8 +676,7 @@ def searchCodes(events, pbar, jobList, filename):
                 # Validate size
                 if len(codeList[i]["stringArgs"]) > 2:
                     if (
-                        "┗" in codeList[i]["stringArgs"][1]
-                        and codeList[i]["stringArgs"][2] != ""
+                        codeList[i]["stringArgs"][2] != ""
                     ):
                         # Grab String
                         jaString = codeList[i]["stringArgs"][2]
@@ -964,7 +963,7 @@ def searchDB(events, pbar, jobList, filename):
                             scenarioList[2].pop(0)
 
             # Grab Items
-            if table["name"] == "音楽鑑賞" and ITEMFLAG == True:
+            if table["name"] == "武器タイプ" and ITEMFLAG == True:
                 with open("translations.txt", "a", encoding="utf-8") as file:
                     for item in table["data"]:
                         dataList = item["data"]
@@ -972,7 +971,7 @@ def searchDB(events, pbar, jobList, filename):
                         # Parse #
                         for j in range(len(dataList)):
                             # Name
-                            if dataList[j].get("name") == "名称":
+                            if dataList[j].get("name") == "武器タイプ":
                                 # Pass 1 (Grab Data)
                                 if setData == False:
                                     if dataList[j].get("value") != "":

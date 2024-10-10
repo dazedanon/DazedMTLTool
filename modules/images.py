@@ -276,7 +276,7 @@ def processImagesDir(directory_path, imageList):
                         imageList[0].append(
                             line
                         )  # Using strip() to remove any extra newlines or spaces
-                        imageList[1].append([100, 22])
+                        imageList[1].append([150, 22])
             except FileNotFoundError:
                 print(f"The file at {file_path} was not found.")
             except IOError:
