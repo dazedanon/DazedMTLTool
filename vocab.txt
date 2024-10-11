@@ -112,4 +112,5 @@ ME 音量 (ME Volume)
 堕天使 (Fallen Angel)  
 鬼 (Oni)
 ローバー (Roper)
+w (lol)
 ```
