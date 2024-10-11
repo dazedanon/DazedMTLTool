@@ -2127,7 +2127,7 @@ def searchCodes(page, pbar, jobList, filename):
 
         # 401
         if len(list401) > 0:
-            response = translateGPT(list401, textHistory, True)
+            response = translateGPT(list401, "", True)
             list401TL = response[0]
             totalTokens[0] += response[1][0]
             totalTokens[1] += response[1][1]
@@ -2740,7 +2740,8 @@ def translateGPT(text, history, fullPromptFlag):
             if not re.search(r"[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]+", subbedT):
                 if PBAR is not None:
                     PBAR.update(len(tItem))
-                continue
+                history = tItem[-MAXHISTORY:]
+                continue 
 
             # Create Message
             system, user = createContext(fullPromptFlag, subbedT, format)
@@ -2785,10 +2786,10 @@ def translateGPT(text, history, fullPromptFlag):
                 if mismatch == False:
                     tList[index] = extractedTranslations
                     history = extractedTranslations[
-                        -10:
+                        -MAXHISTORY:
                     ]  # Update history if we have a list
                 else:
-                    history = text[-10:]
+                    history = text[-MAXHISTORY:]
                     mismatch = False
                     if FILENAME not in MISMATCH:
                         MISMATCH.append(FILENAME)
