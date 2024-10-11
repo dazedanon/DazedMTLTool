@@ -2731,7 +2731,6 @@ def translateGPT(text, history, fullPromptFlag):
                 payload = json.dumps(payload, indent=4, ensure_ascii=False)
                 varResponse = subVars(payload)
                 subbedT = varResponse[0]
-                logFile.write(f'Input:\n{subbedT}\n')
             else:
                 varResponse = subVars(tItem)
                 subbedT = varResponse[0]
@@ -2754,6 +2753,7 @@ def translateGPT(text, history, fullPromptFlag):
                 continue
 
             # Translating
+            logFile.write(f'Input:\n{subbedT}\n')
             response = translateText(system, user, history, 0.05, format)
             translatedText = response.choices[0].message.content
             totalTokens[0] += response.usage.prompt_tokens
