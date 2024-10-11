@@ -68,7 +68,7 @@ LEAVE = False
 
 # Dialogue / Scroll / Choices (Main Codes)
 CODE401 = True
-CODE405 = True
+CODE405 = False
 CODE102 = True
 
 # Optional
@@ -1155,19 +1155,6 @@ def searchCodes(page, pbar, jobList, filename):
                         finalJAString = finalJAString.replace("\\ac", "")
                         CLFlag = True
 
-                    # If there isn't any Japanese in the text just skip
-                    if IGNORETLTEXT is True:
-                        if not re.search(
-                            r"[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]+", finalJAString
-                        ):
-                            # Keep textHistory list at length maxHistory
-                            textHistory.append('"' + finalJAString + '"')
-                            if len(textHistory) > maxHistory:
-                                textHistory.pop(0)
-                            currentGroup = []
-                            i += 1
-                            continue
-
                     # 1st Passthrough (Grabbing Data)
                     if setData == False:
                         if finalJAString != "":
@@ -1182,6 +1169,11 @@ def searchCodes(page, pbar, jobList, filename):
                         nametag = ""
                         currentGroup = []
                         syncIndex = i + 1
+
+                        # Keep textHistory list at length maxHistory
+                        textHistory.append('"' + finalJAString + '"')
+                        if len(textHistory) > maxHistory:
+                            textHistory.pop(0)
 
                     # 2nd Passthrough (Setting Data)
                     else:
@@ -2015,9 +2007,8 @@ def searchCodes(page, pbar, jobList, filename):
                 if len(textHistory) > 0:
                     response = translateGPT(
                         choiceList,
-                        "This will be a dialogue option. Previous text for context: "
-                        + textHistory[len(textHistory) - 1]
-                        + "\n\nThis will be a dialogue option",
+                        "This will be a dialogue option.\nPrevious text for context: "
+                        + str(textHistory),
                         True,
                     )
                     translatedTextList = response[0]

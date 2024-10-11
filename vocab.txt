@@ -91,6 +91,7 @@ ME 音量 (ME Volume)
 # RPG
 エクスポーション (EX Potion)
 アスカロン (Ascalon)
+刀 (Sword)
 
 # Terms
 悪魔 (Devil)  
