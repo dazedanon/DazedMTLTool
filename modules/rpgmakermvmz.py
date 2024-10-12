@@ -67,9 +67,9 @@ POSITION = 0
 LEAVE = False
 
 # Dialogue / Scroll / Choices (Main Codes)
-CODE401 = True
+CODE401 = False
 CODE405 = False
-CODE102 = True
+CODE102 = False
 
 # Optional
 CODE101 = False # Turn this one when names exist in 101
@@ -80,7 +80,7 @@ CODE122 = False
 
 # Other
 CODE355655 = False
-CODE357 = False
+CODE357 = True
 CODE657 = False
 CODE356 = False
 CODE320 = False
@@ -1509,14 +1509,14 @@ def searchCodes(page, pbar, jobList, filename):
                                     translatedText = translatedText.replace(char, "")
 
                                 # Textwrap
-                                translatedText = textwrap.fill(translatedText, 100)
-                                translatedText = translatedText.replace("- ", "-")
-                                if acExist:
-                                    translatedText = f'\\ac {translatedText.replace('\n', '\n\\ac ')}'
+                                # translatedText = textwrap.fill(translatedText, LISTWIDTH)
+                                # translatedText = translatedText.replace("- ", "-")
+                                # if acExist:
+                                #     translatedText = f'\\ac {translatedText.replace('\n', '\n\\ac ')}'
 
                                 # Set
                                 codeList[i]["parameters"][3][argVar] = translatedText
-                                codeList[i]["parameters"][3]['fontSize'] = "18"
+                                # codeList[i]["parameters"][3]['fontSize'] = "18"
                                 list357.pop(0)
 
             ## Event Code: 657 [Picture Text] [Optional]
@@ -1996,8 +1996,9 @@ def searchCodes(page, pbar, jobList, filename):
                     ifVar = ""
                     ifList = re.findall(r"([ei][nf]\(.+?\)\)?\)?)", jaString)
                     if len(ifList) != 0:
-                        jaString = jaString.replace(ifList[0], "")
-                        ifVar = ifList[0]
+                        for var in ifList:
+                            jaString = jaString.replace(var, "")
+                            ifVar += var
                     varList.append(ifVar)
 
                     # Append to List
@@ -2535,38 +2536,38 @@ def getSpeaker(speaker):
     return [speaker, [0, 0]]
 
 
-def subVars(jaString):
-    jaString = jaString.replace("\u3000", " ")
+# def subVars(jaString):
+#     jaString = jaString.replace("\u3000", " ")
 
-    # Formatting
-    count = 0
-    codeList = re.findall(r"[\\]+[\w]+\[[a-zA-Z0-9\\\[\]\_,\s-]+?\]", jaString)
-    codeList = set(codeList)
-    if len(codeList) != 0:
-        for var in codeList:
-            jaString = jaString.replace(var, "[FCode_" + str(count) + "]")
-            count += 1
+#     # Formatting
+#     count = 0
+#     codeList = re.findall(r"[\\]+[\w]+\[[a-zA-Z0-9\\\[\]\_,\s-]+?\]", jaString)
+#     codeList = set(codeList)
+#     if len(codeList) != 0:
+#         for var in codeList:
+#             jaString = jaString.replace(var, "[FCode_" + str(count) + "]")
+#             count += 1
 
-    # Put all lists in list and return
-    return [jaString, codeList]
+#     # Put all lists in list and return
+#     return [jaString, codeList]
 
 
-def resubVars(translatedText, codeList):
-    # Fix Spacing and ChatGPT Nonsense
-    matchList = re.findall(r"\[\s?.+?\s?\]", translatedText)
-    if len(matchList) > 0:
-        for match in matchList:
-            text = match.strip()
-            translatedText = translatedText.replace(match, text)
+# def resubVars(translatedText, codeList):
+#     # Fix Spacing and ChatGPT Nonsense
+#     matchList = re.findall(r"\[\s?.+?\s?\]", translatedText)
+#     if len(matchList) > 0:
+#         for match in matchList:
+#             text = match.strip()
+#             translatedText = translatedText.replace(match, text)
 
-    # Formatting
-    count = 0
-    if len(codeList) != 0:
-        for var in codeList:
-            translatedText = translatedText.replace("[FCode_" + str(count) + "]", var)
-            count += 1
+#     # Formatting
+#     count = 0
+#     if len(codeList) != 0:
+#         for var in codeList:
+#             translatedText = translatedText.replace("[FCode_" + str(count) + "]", var)
+#             count += 1
 
-    return translatedText
+#     return translatedText
 
 
 def batchList(input_list, batch_size):
@@ -2649,7 +2650,7 @@ def cleanTranslatedText(translatedText, varResponse):
 
     # Elongate Long Dashes (Since GPT Ignores them...)
     translatedText = elongateCharacters(translatedText)
-    translatedText = resubVars(translatedText, varResponse[1])
+    # translatedText = resubVars(translatedText, varResponse[1])
     return translatedText
 
 
@@ -2729,10 +2730,11 @@ def translateGPT(text, history, fullPromptFlag):
             if isinstance(tItem, list):
                 payload = {f"Line{i+1}": string for i, string in enumerate(tItem)}
                 payload = json.dumps(payload, indent=4, ensure_ascii=False)
-                varResponse = subVars(payload)
+                # varResponse = subVars(payload)
+                varResponse = [payload,[]]
                 subbedT = varResponse[0]
             else:
-                varResponse = subVars(tItem)
+                varResponse = [tItem,[]]
                 subbedT = varResponse[0]
 
             # Things to Check before starting translation

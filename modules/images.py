@@ -67,6 +67,10 @@ def handleImages(folderName, estimate):
     # Translate Strings
     translatedData = openFiles(f"files/{folderName}")
 
+    # Custom Names
+    # customList = [[], []]
+    # customList = processImagesDir('Custom', customList)
+
     # Write Strings to Images
     if not ESTIMATE:
         if not os.path.exists(f"translated/{folderName}"):
@@ -82,6 +86,7 @@ def handleImages(folderName, estimate):
                 image.save(
                     rf"translated/{folderName}/{translatedList[i]}.png", quality=100
                 )
+                # customList[0].pop(0)
             except Exception as e:
                 PBAR.write(f"{translatedList[i]}: {str(e)}")
                 # Ignore Error
@@ -184,7 +189,7 @@ def getFontSize(text, image_width, image_height, font_path):
             (0, 0), text, font=font
         )
         text_width = text_bbox[2] - text_bbox[0]
-        text_height = text_bbox[3] - text_bbox[1] + 5
+        text_height = text_bbox[3] - text_bbox[1] + 10
 
         if text_width <= image_width and text_height <= image_height:
             return font_size
@@ -218,8 +223,8 @@ def stringToImage(
     text_bbox = draw.textbbox((0, 0), text, font=font)
     text_width = text_bbox[2] - text_bbox[0]
     text_height = text_bbox[3] - text_bbox[1]
-    x = (scaled_width - text_width) // 2
-    y = (scaled_height - text_height) // 2
+    x = 0
+    y = 0
 
     # Draw the text on the image
     draw.text((x, y), text, font=font, fill=(255, 255, 255, 255))
@@ -246,7 +251,7 @@ def getImageDimensions(file_path):
 def processImagesDir(directory_path, imageList):
     for file_name in os.listdir(directory_path):
         # .png and Japanese
-        if ".png" in file_name and file_name.replace(".png", "") in VOCAB:
+        if ".png" in file_name:
             file_path = os.path.join(directory_path, file_name)
             if os.path.isfile(file_path):
                 # Check if the file is an image
@@ -276,7 +281,7 @@ def processImagesDir(directory_path, imageList):
                         imageList[0].append(
                             line
                         )  # Using strip() to remove any extra newlines or spaces
-                        imageList[1].append([150, 22])
+                        imageList[1].append([104, 15])
             except FileNotFoundError:
                 print(f"The file at {file_path} was not found.")
             except IOError:
