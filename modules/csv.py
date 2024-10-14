@@ -376,35 +376,34 @@ def getSpeaker(speaker):
         case "":
             return ["", [0, 0]]
         case _:
-            # Store Speaker
-            if speaker not in str(NAMESLIST):
+            # Find Speaker
+            for i in range(len(NAMESLIST)):
+                if speaker == NAMESLIST[i][0]:
+                    return [NAMESLIST[i][1], [0, 0]]
+            
+            # Translate and Store Speaker
+            response = translateGPT(
+                f'Speaker: {speaker}',
+                "Reply with the " + LANGUAGE + " translation of the NPC name.",
+                True,
+            )
+            response[0] = response[0].title()
+            response[0] = response[0].replace("'S", "'s")
+            response[0] = response[0].replace("Speaker: ", "")
+
+            # Retry if name doesn't translate for some reason
+            if re.search(r"([a-zA-Z？?])", response[0]) == None:
                 response = translateGPT(
-                    speaker,
+                    f'Speaker: {speaker}',
                     "Reply with the " + LANGUAGE + " translation of the NPC name.",
                     False,
                 )
                 response[0] = response[0].title()
                 response[0] = response[0].replace("'S", "'s")
 
-                # Retry if name doesn't translate for some reason
-                if re.search(r"([a-zA-Z？?])", response[0]) == None:
-                    response = translateGPT(
-                        speaker,
-                        "Reply with the " + LANGUAGE + " translation of the NPC name.",
-                        False,
-                    )
-                    response[0] = response[0].title()
-                    response[0] = response[0].replace("'S", "'s")
-
-                speakerList = [speaker, response[0]]
-                NAMESLIST.append(speakerList)
-                return response
-            # Find Speaker
-            else:
-                for i in range(len(NAMESLIST)):
-                    if speaker == NAMESLIST[i][0]:
-                        return [NAMESLIST[i][1], [0, 0]]
-
+            speakerList = [speaker, response[0]]
+            NAMESLIST.append(speakerList)
+            return response
     return [speaker, [0, 0]]
 
 

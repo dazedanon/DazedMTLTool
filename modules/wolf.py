@@ -963,7 +963,7 @@ def searchDB(events, pbar, jobList, filename):
                             scenarioList[2].pop(0)
 
             # Grab Items
-            if table["name"] == "モンスター図鑑" and ITEMFLAG == True:
+            if table["name"] == "mNPC管理" and ITEMFLAG == True:
                 with open("translations.txt", "a", encoding="utf-8") as file:
                     for item in table["data"]:
                         dataList = item["data"]
@@ -991,9 +991,9 @@ def searchDB(events, pbar, jobList, filename):
                                         itemList[0].pop(0)
 
                             # Description 1 (You are my specialz)
-                            if dataList[j].get("name") == "説明文":
+                            if dataList[j].get("name") == "ｾﾘﾌ_交換成立":
                                 # Clean String
-                                fontSize = 14
+                                fontSize = 24
                                 translatedText = ""
                                 cleanedList = formatDramon(dataList[j].get("value"))
                                 for str in cleanedList:
@@ -1053,7 +1053,7 @@ def searchDB(events, pbar, jobList, filename):
                                     dataList[j].update({"value": translatedText})
 
                             # Description 2 (You are my specialz)
-                            if dataList[j].get("name") == "NULL":
+                            if dataList[j].get("name") == "ｾﾘﾌ_素材が足りない":
                                 # Clean String
                                 fontSize = 24
                                 translatedText = ""
@@ -1115,7 +1115,7 @@ def searchDB(events, pbar, jobList, filename):
                                     dataList[j].update({"value": translatedText})
 
                             # Description 3 (You are my specialz)
-                            if dataList[j].get("name") == "NULL":
+                            if dataList[j].get("name") == "ｾﾘﾌ_":
                                 # Clean String
                                 fontSize = 24
                                 translatedText = ""
@@ -1773,36 +1773,34 @@ def getSpeaker(speaker):
         case "":
             return ["", [0, 0]]
         case _:
-            # Store Speaker
-            if speaker not in str(NAMESLIST):
+            # Find Speaker
+            for i in range(len(NAMESLIST)):
+                if speaker == NAMESLIST[i][0]:
+                    return [NAMESLIST[i][1], [0, 0]]
+            
+            # Translate and Store Speaker
+            response = translateGPT(
+                f'Speaker: {speaker}',
+                "Reply with the " + LANGUAGE + " translation of the NPC name.",
+                True,
+            )
+            response[0] = response[0].title()
+            response[0] = response[0].replace("'S", "'s")
+            response[0] = response[0].replace("Speaker: ", "")
+
+            # Retry if name doesn't translate for some reason
+            if re.search(r"([a-zA-Z？?])", response[0]) == None:
                 response = translateGPT(
                     f'Speaker: {speaker}',
                     "Reply with the " + LANGUAGE + " translation of the NPC name.",
-                    True,
+                    False,
                 )
                 response[0] = response[0].title()
                 response[0] = response[0].replace("'S", "'s")
-                response[0] = response[0].replace("Speaker: ", "")
 
-                # Retry if name doesn't translate for some reason
-                if re.search(r"([a-zA-Z？?])", response[0]) == None:
-                    response = translateGPT(
-                        speaker,
-                        "Reply with the " + LANGUAGE + " translation of the NPC name.",
-                        False,
-                    )
-                    response[0] = response[0].title()
-                    response[0] = response[0].replace("'S", "'s")
-
-                speakerList = [speaker, response[0]]
-                NAMESLIST.append(speakerList)
-                return response
-            # Find Speaker
-            else:
-                for i in range(len(NAMESLIST)):
-                    if speaker == NAMESLIST[i][0]:
-                        return [NAMESLIST[i][1], [0, 0]]
-
+            speakerList = [speaker, response[0]]
+            NAMESLIST.append(speakerList)
+            return response
     return [speaker, [0, 0]]
 
 
