@@ -68,8 +68,8 @@ def handleImages(folderName, estimate):
     translatedData = openFiles(f"files/{folderName}")
 
     # Custom Names
-    # customList = [[], []]
-    # customList = processImagesDir('Custom', customList)
+    customList = [[], []]
+    customList = processImagesDir('Custom', customList)
 
     # Write Strings to Images
     if not ESTIMATE:
@@ -84,9 +84,9 @@ def handleImages(folderName, estimate):
                     translatedList[i], dimensionsList[i][0], dimensionsList[i][1]
                 )
                 image.save(
-                    rf"translated/{folderName}/{translatedList[i]}.png", quality=100
+                    rf"translated/{folderName}/{customList[0][0]}.png", quality=100
                 )
-                # customList[0].pop(0)
+                customList[0].pop(0)
             except Exception as e:
                 PBAR.write(f"{translatedList[i]}: {str(e)}")
                 # Ignore Error
@@ -189,7 +189,7 @@ def getFontSize(text, image_width, image_height, font_path):
             (0, 0), text, font=font
         )
         text_width = text_bbox[2] - text_bbox[0]
-        text_height = text_bbox[3] - text_bbox[1] + 10
+        text_height = text_bbox[3] - text_bbox[1]
 
         if text_width <= image_width and text_height <= image_height:
             return font_size
@@ -222,9 +222,9 @@ def stringToImage(
     # Calculate the size of the text to center it
     text_bbox = draw.textbbox((0, 0), text, font=font)
     text_width = text_bbox[2] - text_bbox[0]
-    text_height = text_bbox[3] - text_bbox[1]
+    text_height = text_bbox[3] - text_bbox[1] + 20
     x = 0
-    y = 0
+    y = (scaled_height - text_height) // 2
 
     # Draw the text on the image
     draw.text((x, y), text, font=font, fill=(255, 255, 255, 255))
@@ -311,35 +311,34 @@ def getSpeaker(speaker):
         case "":
             return ["", [0, 0]]
         case _:
-            # Store Speaker
-            if speaker not in str(NAMESLIST):
+            # Find Speaker
+            for i in range(len(NAMESLIST)):
+                if speaker == NAMESLIST[i][0]:
+                    return [NAMESLIST[i][1], [0, 0]]
+            
+            # Translate and Store Speaker
+            response = translateGPT(
+                f'Speaker: {speaker}',
+                "Reply with the " + LANGUAGE + " translation of the NPC name.",
+                True,
+            )
+            response[0] = response[0].title()
+            response[0] = response[0].replace("'S", "'s")
+            response[0] = response[0].replace("Speaker: ", "")
+
+            # Retry if name doesn't translate for some reason
+            if re.search(r"([a-zA-Z？?])", response[0]) == None:
                 response = translateGPT(
-                    speaker,
+                    f'Speaker: {speaker}',
                     "Reply with the " + LANGUAGE + " translation of the NPC name.",
                     False,
                 )
                 response[0] = response[0].title()
                 response[0] = response[0].replace("'S", "'s")
 
-                # Retry if name doesn't translate for some reason
-                if re.search(r"([a-zA-Z？?])", response[0]) == None:
-                    response = translateGPT(
-                        speaker,
-                        "Reply with the " + LANGUAGE + " translation of the NPC name.",
-                        False,
-                    )
-                    response[0] = response[0].title()
-                    response[0] = response[0].replace("'S", "'s")
-
-                speakerList = [speaker, response[0]]
-                NAMESLIST.append(speakerList)
-                return response
-            # Find Speaker
-            else:
-                for i in range(len(NAMESLIST)):
-                    if speaker == NAMESLIST[i][0]:
-                        return [NAMESLIST[i][1], [0, 0]]
-
+            speakerList = [speaker, response[0]]
+            NAMESLIST.append(speakerList)
+            return response
     return [speaker, [0, 0]]
 
 

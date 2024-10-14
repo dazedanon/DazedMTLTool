@@ -72,7 +72,7 @@ CODE405 = False
 CODE102 = False
 
 # Optional
-CODE101 = False # Turn this one when names exist in 101
+CODE101 = True # Turn this one when names exist in 101
 CODE408 = False # Warning, translates comments and can inflate costs.
 
 # Variables
@@ -80,7 +80,7 @@ CODE122 = False
 
 # Other
 CODE355655 = False
-CODE357 = True
+CODE357 = False
 CODE657 = False
 CODE356 = False
 CODE320 = False
@@ -1509,10 +1509,12 @@ def searchCodes(page, pbar, jobList, filename):
                                     translatedText = translatedText.replace(char, "")
 
                                 # Textwrap
-                                # translatedText = textwrap.fill(translatedText, LISTWIDTH)
-                                # translatedText = translatedText.replace("- ", "-")
-                                # if acExist:
-                                #     translatedText = f'\\ac {translatedText.replace('\n', '\n\\ac ')}'
+                                translatedText = textwrap.fill(translatedText, WIDTH)
+                                translatedText = translatedText.replace("- ", "-")
+
+                                # Center Text
+                                if acExist:
+                                    translatedText = f'\\ac {translatedText.replace('\n', '\n\\ac ')}'
 
                                 # Set
                                 codeList[i]["parameters"][3][argVar] = translatedText
@@ -2503,36 +2505,34 @@ def getSpeaker(speaker):
         case "":
             return ["", [0, 0]]
         case _:
-            # Store Speaker
-            if speaker not in str(NAMESLIST):
+            # Find Speaker
+            for i in range(len(NAMESLIST)):
+                if speaker == NAMESLIST[i][0]:
+                    return [NAMESLIST[i][1], [0, 0]]
+            
+            # Translate and Store Speaker
+            response = translateGPT(
+                f'Speaker: {speaker}',
+                "Reply with the " + LANGUAGE + " translation of the NPC name.",
+                True,
+            )
+            response[0] = response[0].title()
+            response[0] = response[0].replace("'S", "'s")
+            response[0] = response[0].replace("Speaker: ", "")
+
+            # Retry if name doesn't translate for some reason
+            if re.search(r"([a-zA-Z？?])", response[0]) == None:
                 response = translateGPT(
                     f'Speaker: {speaker}',
                     "Reply with the " + LANGUAGE + " translation of the NPC name.",
-                    True,
+                    False,
                 )
                 response[0] = response[0].title()
                 response[0] = response[0].replace("'S", "'s")
-                response[0] = response[0].replace("Speaker: ", "")
 
-                # Retry if name doesn't translate for some reason
-                if re.search(r"([a-zA-Z？?])", response[0]) == None:
-                    response = translateGPT(
-                        speaker,
-                        "Reply with the " + LANGUAGE + " translation of the NPC name.",
-                        False,
-                    )
-                    response[0] = response[0].title()
-                    response[0] = response[0].replace("'S", "'s")
-
-                speakerList = [speaker, response[0]]
-                NAMESLIST.append(speakerList)
-                return response
-            # Find Speaker
-            else:
-                for i in range(len(NAMESLIST)):
-                    if speaker == NAMESLIST[i][0]:
-                        return [NAMESLIST[i][1], [0, 0]]
-
+            speakerList = [speaker, response[0]]
+            NAMESLIST.append(speakerList)
+            return response
     return [speaker, [0, 0]]
 
 
@@ -2755,7 +2755,6 @@ def translateGPT(text, history, fullPromptFlag):
                 continue
 
             # Translating
-            logFile.write(f'Input:\n{subbedT}\n')
             response = translateText(system, user, history, 0.05, format)
             translatedText = response.choices[0].message.content
             totalTokens[0] += response.usage.prompt_tokens
@@ -2782,6 +2781,7 @@ def translateGPT(text, history, fullPromptFlag):
                             extractedTranslations
                         ):
                             mismatch = True  # Just here for breakpoint
+                logFile.write(f'Input:\n{subbedT}\n')
                 logFile.write(f'Output:\n{translatedText}\n')
 
                 # Set if no mismatch

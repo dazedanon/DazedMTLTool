@@ -1,50 +1,13 @@
 Here are some vocabulary and terms so that you know the proper spelling and translation.
 ```
 # Game Characters
-ロラン (Roland) - Male\n\
-リュカ (Ryuka) - Male\n\
-レックス (Rex) - Male\n\
-タバサ (Tabasa) - Female\n\
-アルス (Ars) - Male\n\
-アマカラ (Amakara) - Male\n\
-エリー (Eri) - Female\n\
-リオ (Rio) - Female\n\
-サマル (Samal) - Male\n\
-ムーン (Moon) - Female\n\
-アリーナ (Arina) - Female\n\
-クリフト (Cliff) - Male\n\
-マーニャ (Manya) - Female\n\
-ミネア (Minea) - Female\n\
-デボラ (Debora) - Female\n\
-ビアンカ (Bianca) - Female\n\
-フローラ (Flora) - Female\n\
-バーバラ (Barbara) - Female\n\
-ミレーユ (Mireyu) - Female\n\
-アイラ (Aira) - Female\n\
-フォズ (Foz) - Female\n\
-マリベル (Maribel) - Female\n\
-ククール (Kukool) - Male\n\
-ゲルダ (Gerda) - Female\n\
-ゼシカ (Jessica) - Female\n\
-ヤンガス (Yangus) - Male\n\
-ラヴィエル (Raviel) - Female\n\
-セティア (Setia) - Female\n\
-ダイ (Dai) - Male\n\
-ヒュンケル (Hyunckel) - Male\n\
-ポップ (Pop) - Male\n\
-マァム (Maam) - Female\n\
-レオナ (Leona) - Female\n\
-アステア (Astea) - Female\n\
-イヨ (Iyo) - Female\n\
-ジャガン (Jagan) - Male\n\
-ヤオ (Yao) - Female\n\
-デイジィ (Daisy) - Female\n\
-バイシュン (Baishun) - Male\n\
-ブライ (Buraimu) - Male\n\
-ハッサン (Hassan) - Male\n\
-アロマ (Aroma) - Female\n\
-ピッケ (Pikke) - Female\n\
-ドラオ (Dorao) - Male\n\
+天之 みなか (Minaka Amayuki) - Female
+御祖シターテル (Shitateru Miono) - Female
+雨野 若姫 (Wakahime Amano) - Female
+火野 円真 (Madoka Hino) - Female
+玲原 導子 (Michiko Reihara) - Female
+弓削 佐保 (Saho Yuge) - Female
+鹿ヶ壺 伊佐 (Isa Kagatsubo) - Female
 
 # Lewd Terms
 マンコ (pussy)
@@ -113,4 +76,8 @@ ME 音量 (ME Volume)
 鬼 (Oni)
 ローバー (Roper)
 w (lol)
+方相氏 (Housoushi)
+天照大神おわす (Amaterasu Omikami)
+月夜見尊お (Tsukuyomi no Mikoto)
+辟邪の半陽 (Half Sun of Bixie)
 ```
