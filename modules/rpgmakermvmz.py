@@ -67,8 +67,8 @@ POSITION = 0
 LEAVE = False
 
 # Dialogue / Scroll / Choices (Main Codes)
-CODE401 = False
-CODE405 = False
+CODE401 = True
+CODE405 = True
 CODE102 = False
 
 # Optional
@@ -638,7 +638,8 @@ def searchNames(data, pbar, context):
             if context in ["Skills"]:
                 if len(nameList) < BATCHSIZE:
                     nameList.append(data[i]["name"])
-                    descriptionList.append(data[i]["description"].replace("\n", " "))
+                    if "description" in data[i] and data[i]["description"] != "":
+                        descriptionList.append(data[i]["description"].replace("\n", " "))
 
                     # Messages
                     number = 1
