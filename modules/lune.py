@@ -323,7 +323,7 @@ def getSpeaker(speaker):
             
             # Translate and Store Speaker
             response = translateGPT(
-                f'Speaker: {speaker}',
+                f'{speaker}',
                 "Reply with the " + LANGUAGE + " translation of the NPC name.",
                 True,
             )
@@ -334,7 +334,7 @@ def getSpeaker(speaker):
             # Retry if name doesn't translate for some reason
             if re.search(r"([a-zA-Z？?])", response[0]) == None:
                 response = translateGPT(
-                    f'Speaker: {speaker}',
+                    f'{speaker}',
                     "Reply with the " + LANGUAGE + " translation of the NPC name.",
                     False,
                 )
