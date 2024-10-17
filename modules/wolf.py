@@ -424,7 +424,7 @@ def searchCodes(events, pbar, jobList, filename):
                             ):
                                 # Remove Textwrap and Font and Add to list
                                 str = str.replace("\r\n", " ")
-                                str = re.sub(r'[\\]+f\[\d+\]', '', str)
+                                str = re.sub(r"[\\]+f\[\d+\]", "", str)
                                 list300.append(str)
 
                         # Pass 2
@@ -621,7 +621,7 @@ def searchCodes(events, pbar, jobList, filename):
                                 ):
                                     # Remove Textwrap and Font and Add to list
                                     str = str.replace("\r\n", " ")
-                                    str = re.sub(r'[\\]+f\[\d+\]', '', str)
+                                    str = re.sub(r"[\\]+f\[\d+\]", "", str)
                                     list300.append(str)
 
                             # Pass 2
@@ -675,9 +675,7 @@ def searchCodes(events, pbar, jobList, filename):
 
                 # Validate size
                 if len(codeList[i]["stringArgs"]) > 2:
-                    if (
-                        codeList[i]["stringArgs"][2] != ""
-                    ):
+                    if codeList[i]["stringArgs"][2] != "":
                         # Grab String
                         jaString = codeList[i]["stringArgs"][2]
 
@@ -1008,7 +1006,7 @@ def searchDB(events, pbar, jobList, filename):
                                         ):
                                             # Remove Textwrap and Font and Add to list
                                             str = str.replace("\r\n", " ")
-                                            str = re.sub(r'[\\]+f\[\d+\]', '', str)
+                                            str = re.sub(r"[\\]+f\[\d+\]", "", str)
                                             itemList[1].append(str)
 
                                     # Pass 2
@@ -1070,7 +1068,7 @@ def searchDB(events, pbar, jobList, filename):
                                         ):
                                             # Remove Textwrap and Font and Add to list
                                             str = str.replace("\r\n", " ")
-                                            str = re.sub(r'[\\]+f\[\d+\]', '', str)
+                                            str = re.sub(r"[\\]+f\[\d+\]", "", str)
                                             itemList[2].append(str)
 
                                     # Pass 2
@@ -1132,7 +1130,7 @@ def searchDB(events, pbar, jobList, filename):
                                         ):
                                             # Remove Textwrap and Font and Add to list
                                             str = str.replace("\r\n", " ")
-                                            str = re.sub(r'[\\]+f\[\d+\]', '', str)
+                                            str = re.sub(r"[\\]+f\[\d+\]", "", str)
                                             itemList[3].append(str)
 
                                     # Pass 2
@@ -1777,10 +1775,10 @@ def getSpeaker(speaker):
             for i in range(len(NAMESLIST)):
                 if speaker == NAMESLIST[i][0]:
                     return [NAMESLIST[i][1], [0, 0]]
-            
+
             # Translate and Store Speaker
             response = translateGPT(
-                f'{speaker}',
+                f"{speaker}",
                 "Reply with the " + LANGUAGE + " translation of the NPC name.",
                 True,
             )
@@ -1791,7 +1789,7 @@ def getSpeaker(speaker):
             # Retry if name doesn't translate for some reason
             if re.search(r"([a-zA-Z？?])", response[0]) == None:
                 response = translateGPT(
-                    f'{speaker}',
+                    f"{speaker}",
                     "Reply with the " + LANGUAGE + " translation of the NPC name.",
                     False,
                 )
@@ -2000,13 +1998,15 @@ def translateGPT(text, history, fullPromptFlag):
                 payload = json.dumps(payload, indent=4, ensure_ascii=False)
                 varResponse = subVars(payload)
                 subbedT = varResponse[0]
-                logFile.write(f'Input:\n{subbedT}\n')
+                logFile.write(f"Input:\n{subbedT}\n")
             else:
                 varResponse = subVars(tItem)
                 subbedT = varResponse[0]
 
             # Things to Check before starting translation
-            if not re.search(r"[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]+", subbedT):
+            if not re.search(
+                r"[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]+", subbedT
+            ):
                 if PBAR is not None:
                     PBAR.update(len(tItem))
                 continue
@@ -2035,7 +2035,9 @@ def translateGPT(text, history, fullPromptFlag):
                     extractedTranslations
                 ):
                     # Mismatch. Try Again
-                    response = translateText(system, user, history, 0.05, format, "gpt-4o")
+                    response = translateText(
+                        system, user, history, 0.05, format, "gpt-4o"
+                    )
                     translatedText = response.choices[0].message.content
                     totalTokens[0] += response.usage.prompt_tokens
                     totalTokens[1] += response.usage.completion_tokens
@@ -2048,7 +2050,7 @@ def translateGPT(text, history, fullPromptFlag):
                             extractedTranslations
                         ):
                             mismatch = True  # Just here for breakpoint
-                logFile.write(f'Output:\n{translatedText}\n')
+                logFile.write(f"Output:\n{translatedText}\n")
 
                 # Set if no mismatch
                 if mismatch == False:

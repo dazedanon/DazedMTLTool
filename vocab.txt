@@ -1,13 +1,43 @@
 Here are some vocabulary and terms so that you know the proper spelling and translation.
 ```
 # Game Characters
-天之 みなか (Minaka Amayuki) - Female
-御祖シターテル (Shitateru Miono) - Female
-雨野 若姫 (Wakahime Amano) - Female
-火野 円真 (Madoka Hino) - Female
-玲原 導子 (Michiko Reihara) - Female
-弓削 佐保 (Saho Yuge) - Female
-鹿ヶ壺 伊佐 (Isa Kagatsubo) - Female
+コサギ (Kosagi) - Male
+ヒサメ (Hisame) - Female
+モミジ (Momiji) - Female
+ミズキ (Mizuki) - Female
+ホノカ (Honoka) - Female
+チヅル (Chizuru) - Female
+リュウゲン (Ryugen) - Male
+ゴサク (Gosaku) - Male
+トウジ (Touji) - Male
+シグレ (Shigure) - Female
+カツラギ (Katsuragi) - Male
+リュウヤ (Ryuya) - Male
+ヨシモト (Yoshimoto) - Male
+ヤエ (Yae) - Female
+シラツユ (Shiratsuyu) - Female
+ジンスケ (Jinsuke) - Male
+ハクビ (Hakubi) - Male
+ゲンセイ (Gensei) - Male
+レイゼイ (Reizei) - Male
+ソラ (Sora) - Male
+テッシュウ (Tesshu) - Male
+ゲンサイ (Gensai) - Female
+タネ (Tane) - Female
+ドウキュウ (Doukyu) - Male
+コロク (Koroku) - Male
+ヤタロウ (Yataro) - Male
+ドウマン (Douman) - Male
+ブンキチ (Bunkichi) - Male
+キッペイ (Kippei) - Male
+シンパチ (Shinpachi) - Male
+アザミ (Azami) - Female
+セキジ (Sekiji) - Male
+システィナ (Sistina) - Female
+バサラ (Basara) - Male
+ジカイ (Jikai) - Male
+レンゲ (Renge) - Female
+タサブロウ (Tasaburou) - Male
 
 # Lewd Terms
 マンコ (pussy)
@@ -55,6 +85,7 @@ ME 音量 (ME Volume)
 エクスポーション (EX Potion)
 アスカロン (Ascalon)
 刀 (Sword)
+ゴブリン (Goblin)
 
 # Terms
 悪魔 (Devil)  
@@ -74,10 +105,52 @@ ME 音量 (ME Volume)
 飛天魔 (Nephilim)  
 堕天使 (Fallen Angel)  
 鬼 (Oni)
+妖怪 (Yokai)
+式神 (Shikigami)
 ローバー (Roper)
 w (lol)
-方相氏 (Housoushi)
-天照大神おわす (Amaterasu Omikami)
-月夜見尊お (Tsukuyomi no Mikoto)
-辟邪の半陽 (Half Sun of Bixie)
+巫女 (Shrine Maiden)
+
+# Names
+オサンギツネ (Osangitsune)
+クウコ (Kuuko)
+タマモノマエ (Tamamo-no-Mae)
+タタリモッケ (Tatarimokke)
+ヤタガラス (Yatagarasu)
+ライジュウ (Raijuu)
+ヌエ (Nue)
+ゴトクネコ (Gotokuneko)
+カジガカカ (Kajigakaka)
+バッキ (Bakki)
+ヒデリガミ (Hiderigami)
+ナルカミ (Narukami)
+マガツヒノカミ (Magatsuhinokami)
+アマノジャク (Amanojaku)
+ウラ (Ura)
+シュテンドウジ (Shuten Douji)
+ガワッパ (Gawappa)
+スイコ (Suiko)
+ユキンコ (Yukinko)
+ツララオンナ (Tsurara Onna)
+ワニザメ (Bull Shark)
+アマビエ (Amabie)
+オトロシ (Otoroshi)
+アカシタサマ (Akashita-sama)
+ノビアガリ (Nobiagari)
+タカオンナ (Takaonna)
+ヤシャ (Yasha)
+ラセツ (Rasetsu)
+オオタケマル (Ootakemaru)
+ジュボッコ (Jubokko)
+ホウコウ (Houkoh)
+ツチグモ (Tsuchigumo)
+ジョロウグモ (Jorogumo)
+ムジナ (Mujina)
+フクロサゲ (Fukurosage)
+ワイラ (Waira)
+サンジャクボウ (Sanjakubou)
+セキヨウ (Sekiyou)
+ウンガイキョウ (Ungai-kyo)
+リュウヤ (Ryuya)
+
 ```
