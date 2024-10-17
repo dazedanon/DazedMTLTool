@@ -238,14 +238,14 @@ def translateUnity(data, pbar, filename, translatedList):
 
                     # Textwrap
                     translatedText = textwrap.fill(translatedText, width=WIDTH)
-                    translatedText = translatedText.replace('\n', '\\n')
+                    translatedText = translatedText.replace("\n", "\\n")
 
                     # Remove Double Spaces and =
                     translatedText = translatedText.replace("  ", " ")
                     translatedText = translatedText.replace("=", "->")
 
                     # Set Data
-                    data[i] = f'{originalString}{originalString}={translatedText}\n'
+                    data[i] = f"{originalString}{originalString}={translatedText}\n"
             i += 1
 
         # Nothing relevant. Skip Line.
@@ -275,6 +275,7 @@ def translateUnity(data, pbar, filename, translatedList):
                     MISMATCH.append(filename)
     return tokens
 
+
 # Save some money and enter the character before translation
 def getSpeaker(speaker):
     if speaker not in str(NAMESLIST):
@@ -299,7 +300,7 @@ def getSpeaker(speaker):
         speakerList = [speaker, response[0]]
         NAMESLIST.append(speakerList)
         return response
-    
+
     # Find Speaker
     else:
         for i in range(len(NAMESLIST)):
