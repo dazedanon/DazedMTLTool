@@ -108,8 +108,9 @@ ME 音量 (ME Volume)
 妖怪 (Yokai)
 式神 (Shikigami)
 ローバー (Roper)
-w (lol)
+w ((lol))
 巫女 (Shrine Maiden)
+コイツ (this bastard)
 
 # Names
 オサンギツネ (Osangitsune)
