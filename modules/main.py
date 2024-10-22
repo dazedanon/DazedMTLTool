@@ -38,6 +38,7 @@ from modules.csv import handleCSV
 from modules.eushully import handleEushully
 from modules.alice import handleAlice
 from modules.tyrano import handleTyrano
+from modules.kirikiri import handleKirikiri
 from modules.json import handleJSON
 from modules.kansen import handleKansen
 from modules.lune import handleLune
@@ -66,6 +67,7 @@ MODULES = [
     ["Eushully", "txt", handleEushully],
     ["Alice", "txt", handleAlice],
     ["Tyrano", "ks", handleTyrano],
+    ["Kirikiri", "ks", handleKirikiri],
     ["JSON", "json", handleJSON],
     ["Kansen", "ks", handleKansen],
     ["Lune", "json", handleLune],
