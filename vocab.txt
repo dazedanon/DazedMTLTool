@@ -1,43 +1,11 @@
 Here are some vocabulary and terms so that you know the proper spelling and translation.
 ```
 # Game Characters
-コサギ (Kosagi) - Male
-ヒサメ (Hisame) - Female
-モミジ (Momiji) - Female
-ミズキ (Mizuki) - Female
-ホノカ (Honoka) - Female
-チヅル (Chizuru) - Female
-リュウゲン (Ryugen) - Male
-ゴサク (Gosaku) - Male
-トウジ (Touji) - Male
-シグレ (Shigure) - Female
-カツラギ (Katsuragi) - Male
-リュウヤ (Ryuya) - Male
-ヨシモト (Yoshimoto) - Male
-ヤエ (Yae) - Female
-シラツユ (Shiratsuyu) - Female
-ジンスケ (Jinsuke) - Male
-ハクビ (Hakubi) - Male
-ゲンセイ (Gensei) - Male
-レイゼイ (Reizei) - Male
-ソラ (Sora) - Male
-テッシュウ (Tesshu) - Male
-ゲンサイ (Gensai) - Female
-タネ (Tane) - Female
-ドウキュウ (Doukyu) - Male
-コロク (Koroku) - Male
-ヤタロウ (Yataro) - Male
-ドウマン (Douman) - Male
-ブンキチ (Bunkichi) - Male
-キッペイ (Kippei) - Male
-シンパチ (Shinpachi) - Male
-アザミ (Azami) - Female
-セキジ (Sekiji) - Male
-システィナ (Sistina) - Female
-バサラ (Basara) - Male
-ジカイ (Jikai) - Male
-レンゲ (Renge) - Female
-タサブロウ (Tasaburou) - Male
+御木原菜月 (Mikihara Natsuki) - Female
+エクセルシフォン (Excel Chiffon) - Female
+如月深冬 (Kisaragi Mifuyu) - Female
+エクセルショコラ (Excel Chocolat) - Female
+レヴィエラ (Reviella) - Female
 
 # Lewd Terms
 マンコ (pussy)
@@ -111,47 +79,6 @@ ME 音量 (ME Volume)
 w ((lol))
 巫女 (Shrine Maiden)
 コイツ (this bastard)
-
-# Names
-オサンギツネ (Osangitsune)
-クウコ (Kuuko)
-タマモノマエ (Tamamo-no-Mae)
-タタリモッケ (Tatarimokke)
-ヤタガラス (Yatagarasu)
-ライジュウ (Raijuu)
-ヌエ (Nue)
-ゴトクネコ (Gotokuneko)
-カジガカカ (Kajigakaka)
-バッキ (Bakki)
-ヒデリガミ (Hiderigami)
-ナルカミ (Narukami)
-マガツヒノカミ (Magatsuhinokami)
-アマノジャク (Amanojaku)
-ウラ (Ura)
-シュテンドウジ (Shuten Douji)
-ガワッパ (Gawappa)
-スイコ (Suiko)
-ユキンコ (Yukinko)
-ツララオンナ (Tsurara Onna)
-ワニザメ (Bull Shark)
-アマビエ (Amabie)
-オトロシ (Otoroshi)
-アカシタサマ (Akashita-sama)
-ノビアガリ (Nobiagari)
-タカオンナ (Takaonna)
-ヤシャ (Yasha)
-ラセツ (Rasetsu)
-オオタケマル (Ootakemaru)
-ジュボッコ (Jubokko)
-ホウコウ (Houkoh)
-ツチグモ (Tsuchigumo)
-ジョロウグモ (Jorogumo)
-ムジナ (Mujina)
-フクロサゲ (Fukurosage)
-ワイラ (Waira)
-サンジャクボウ (Sanjakubou)
-セキヨウ (Sekiyou)
-ウンガイキョウ (Ungai-kyo)
-リュウヤ (Ryuya)
+エルゴネア (Ergonia)
 
 ```

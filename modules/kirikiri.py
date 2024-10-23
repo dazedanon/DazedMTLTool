@@ -49,6 +49,11 @@ BAR_FORMAT = "{l_bar}{bar:10}{r_bar}{bar:-10b}"
 POSITION = 0
 LEAVE = False
 
+# Flags
+SPEAKERS = False
+CHOICES = True
+DIALOGUE = False
+
 # Pricing - Depends on the model https://openai.com/pricing
 # Batch Size - GPT 3.5 Struggles past 15 lines per request. GPT4 struggles past 50 lines per request
 # If you are getting a MISMATCH LENGTH error, lower the batch size.
@@ -159,14 +164,6 @@ def getResultString(translatedData, translationTime, filename):
 def openFiles(filename):
     with open("files/" + filename, "r", encoding="utf16") as readFile:
         translatedData = parseKiriKiri(readFile, filename)
-
-        # Delete lines marked for deletion
-        finalData = []
-        for line in translatedData[0]:
-            if line != "\\d\n":
-                finalData.append(line)
-        translatedData[0] = finalData
-
     return translatedData
 
 
@@ -191,8 +188,16 @@ def parseKiriKiri(readFile, filename):
     return [data, totalTokens, None]
 
 
-def translateKiriKiri(data, pbar, filename, translatedList):
-    stringList = []
+def translateKiriKiri(data, pbar, filename, jobList):
+    # Check Job Data
+    if len(jobList) > 0:
+        stringList = jobList[0]
+        choiceList = jobList[1]
+        setData = True
+    else:
+        stringList = []
+        choiceList = []
+        setData = False
     tokens = [0, 0]
     speaker = ""
     global LOCK, ESTIMATE
@@ -200,14 +205,15 @@ def translateKiriKiri(data, pbar, filename, translatedList):
 
     # Regex
     speakerRegex = r'【(.*)】\[CR\]'
-    dialogueRegex = r'^\[text\](.*).*\[KeyWait\]|\[v\](.*)\[\/v\].*\[KeyWait\]'
+    dialogueRegex = r'^\[text\](.*).*\[KeyWait\]|\[\w+\](.*)\[\/\w+\].*\[KeyWait\]'
     furiganaRegex = r'(\[eruby\sstr="(.*?)"\stext.*?\])'
+    choicesRegex = r"^\s*\[button\d\sclickse=sys_decide.*text='(.*?)'.*"
 
     while i < len(data):
         speaker = ""
         # Speaker
         match  = re.search(speakerRegex, data[i])
-        if match:
+        if match and SPEAKERS:
             speakerJA = match.group(1)
             response = getSpeaker(speakerJA)
             speaker = response[0]
@@ -216,14 +222,35 @@ def translateKiriKiri(data, pbar, filename, translatedList):
             data[i] = data[i].replace(speakerJA, speaker)
             i += 1
         
+        # Choices
+        match = re.search(choicesRegex, data[i])
+        if match and CHOICES:
+            jaString = match.group(1)
+            
+            # Pass 1
+            if not setData:
+                choiceList.append(jaString)
+
+            # Pass 2
+            else:
+                # Grab and Pop and Set
+                translatedText = choiceList[0]
+                choiceList.pop(0)
+
+                # Replace Quotes
+                data[i] = data[i].replace("'", '"')
+                translatedText = translatedText.replace('"', "'")
+                data[i] = data[i].replace(jaString, translatedText)
+        
         # Dialogue
         match = re.search(dialogueRegex, data[i])
-        if match:
+        if match and DIALOGUE:
             jaString = match.group(1)
             if not jaString:
                 jaString = match.group(2)
+
             # Pass 1
-            if translatedList == []:
+            if not setData:
                 # Remove any textwrap
                 jaString = jaString.replace("[r]", " ")
 
@@ -242,12 +269,8 @@ def translateKiriKiri(data, pbar, filename, translatedList):
             # Pass 2
             else:
                 # Grab and Pop
-                translatedText = translatedList[0]
-                translatedList.pop(0)
-
-                # Set to None if empty list
-                if len(translatedList) <= 0:
-                    translatedList = None
+                translatedText = stringList[0]
+                stringList.pop(0)
 
                 # Remove Speaker
                 translatedText = translatedText.replace(f"[{speaker}]: ", "")
@@ -263,6 +286,10 @@ def translateKiriKiri(data, pbar, filename, translatedList):
         i += 1
 
     # EOF
+    stringListTL = []
+    choiceListTL = []
+
+    # Dialogue
     if len(stringList) > 0:
         # Set Progress
         pbar.total = len(stringList)
@@ -276,17 +303,41 @@ def translateKiriKiri(data, pbar, filename, translatedList):
         )
         tokens[0] += response[1][0]
         tokens[1] += response[1][1]
-        translatedList = response[0]
+        stringListTL = response[0]
 
-        # Set Strings
-        if len(stringList) == len(translatedList):
-            translateKiriKiri(data, pbar, filename, translatedList)
-
-        # Mismatch
-        else:
+        # Validate
+        if len(stringList) != len(stringListTL):
             with LOCK:
                 if filename not in MISMATCH:
                     MISMATCH.append(filename)
+                    stringListTL = stringList
+
+    # Choices
+    if len(choiceList) > 0:
+        # Set Progress
+        pbar.total = len(choiceList)
+        pbar.refresh()
+
+        # Translate
+        response = translateGPT(
+            choiceList,
+            "",
+            True,
+        )
+        tokens[0] += response[1][0]
+        tokens[1] += response[1][1]
+        choiceListTL = response[0]
+
+        # Validate
+        if len(choiceList) != len(choiceListTL):
+            with LOCK:
+                if filename not in MISMATCH:
+                    MISMATCH.append(filename)
+                    choiceListTL = choiceList
+
+        # Proceed to Pass 2
+        translateKiriKiri(data, pbar, filename, [stringListTL, choiceListTL])
+
     return tokens
 
 
