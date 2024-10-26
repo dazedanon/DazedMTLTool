@@ -217,7 +217,7 @@ def translateKiriKiri(data, pbar, filename, jobList):
     while i < len(data):
         speaker = ""
         # Speaker
-        match  = re.search(speakerRegex, data[i])
+        match = re.search(speakerRegex, data[i])
         if match and SPEAKERS:
             speakerJA = match.group(1)
             response = getSpeaker(speakerJA)
@@ -226,12 +226,12 @@ def translateKiriKiri(data, pbar, filename, jobList):
             tokens[1] += response[1][1]
             data[i] = data[i].replace(speakerJA, speaker)
             i += 1
-        
+
         # Choices
         match = re.search(choicesRegex, data[i])
         if match and CHOICES:
             jaString = match.group(1)
-            
+
             # Pass 1
             if not setData:
                 choiceList.append(jaString)
@@ -246,7 +246,7 @@ def translateKiriKiri(data, pbar, filename, jobList):
                 data[i] = data[i].replace("'", '"')
                 translatedText = translatedText.replace('"', "'")
                 data[i] = data[i].replace(jaString, translatedText)
-        
+
         # Dialogue
         match = re.search(dialogueRegex, data[i])
         if match and DIALOGUE:
@@ -279,7 +279,7 @@ def translateKiriKiri(data, pbar, filename, jobList):
                     stringList.pop(0)
 
                     # Remove Speaker
-                    translatedText = re.sub(r'\[.*?\]:\s', '', translatedText)
+                    translatedText = re.sub(r"\[.*?\]:\s", "", translatedText)
 
                     # Textwrap
                     translatedText = textwrap.fill(translatedText, width=WIDTH)
@@ -289,7 +289,7 @@ def translateKiriKiri(data, pbar, filename, jobList):
                     data[i] = data[i].replace("'", '"')
                     translatedText = translatedText.replace('"', "'")
                     data[i] = data[i].replace(jaString, translatedText)
-        
+
         # Next Line
         i += 1
 
@@ -346,7 +346,7 @@ def translateKiriKiri(data, pbar, filename, jobList):
     # Proceed to Pass 2
     if not setData:
         translateKiriKiri(data, pbar, filename, [stringListTL, choiceListTL])
-    
+
     return tokens
 
 
@@ -393,7 +393,9 @@ def subVars(jaString):
     jaString = jaString.replace("\u3000", " ")
 
     # Formatting
-    codeList = re.findall(r"([\\]*(\w+)\[(\d+)\])|([\\]*(\w+)\[[\\]*\\w+\[(\d+)\]\])", jaString)
+    codeList = re.findall(
+        r"([\\]*(\w+)\[(\d+)\])|([\\]*(\w+)\[[\\]*\\w+\[(\d+)\]\])", jaString
+    )
     codeList = set(codeList)
     if len(codeList) != 0:
         for var in codeList:
@@ -405,13 +407,18 @@ def subVars(jaString):
     # Put all lists in list and return
     return [jaString, codeList]
 
+
 def resubVars(translatedText, codeList):
     # Formatting
     for var in codeList:
         if var[2]:
-            translatedText = translatedText.replace(f"[{var[1]}Code_" + f"{var[2]}]", var[0])
+            translatedText = translatedText.replace(
+                f"[{var[1]}Code_" + f"{var[2]}]", var[0]
+            )
         else:
-            translatedText = translatedText.replace(f"[{var[4]}Code_" + f"{var[5]}]", var[3])
+            translatedText = translatedText.replace(
+                f"[{var[4]}Code_" + f"{var[5]}]", var[3]
+            )
 
     return translatedText
 
