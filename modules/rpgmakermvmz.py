@@ -2570,7 +2570,9 @@ def subVars(jaString):
     jaString = jaString.replace("\u3000", " ")
 
     # Formatting
-    codeList = re.findall(r"([\\]*(\w+)\[(\d+)\])|([\\]*(\w+)\[[\\]*\\w+\[(\d+)\]\])", jaString)
+    codeList = re.findall(
+        r"([\\]*(\w+)\[(\d+)\])|([\\]*(\w+)\[[\\]*\\w+\[(\d+)\]\])", jaString
+    )
     codeList = set(codeList)
     if len(codeList) != 0:
         for var in codeList:
@@ -2582,13 +2584,18 @@ def subVars(jaString):
     # Put all lists in list and return
     return [jaString, codeList]
 
+
 def resubVars(translatedText, codeList):
     # Formatting
     for var in codeList:
         if var[2]:
-            translatedText = translatedText.replace(f"[{var[1]}Code_" + f"{var[2]}]", var[0])
+            translatedText = translatedText.replace(
+                f"[{var[1]}Code_" + f"{var[2]}]", var[0]
+            )
         else:
-            translatedText = translatedText.replace(f"[{var[4]}Code_" + f"{var[5]}]", var[3])
+            translatedText = translatedText.replace(
+                f"[{var[4]}Code_" + f"{var[5]}]", var[3]
+            )
 
     return translatedText
 
