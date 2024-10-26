@@ -67,7 +67,7 @@ MODULES = [
     ["Eushully", "txt", handleEushully],
     ["Alice", "txt", handleAlice],
     ["Tyrano", "ks", handleTyrano],
-    ["Kirikiri", "ks", handleKirikiri],
+    ["Kirikiri", "tjs", handleKirikiri],
     ["JSON", "json", handleJSON],
     ["Kansen", "ks", handleKansen],
     ["Lune", "json", handleLune],
