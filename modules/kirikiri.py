@@ -50,8 +50,8 @@ POSITION = 0
 LEAVE = False
 
 # Flags
-SPEAKERS = False
-CHOICES = True
+SPEAKERS = True
+CHOICES = False
 DIALOGUE = False
 
 # Pricing - Depends on the model https://openai.com/pricing
@@ -97,20 +97,25 @@ def handleKirikiri(filename, estimate):
     else:
         try:
             with open(
-                "translated/" + filename, "w", encoding="utf16", errors="ignore"
+                "translated/" + filename, "w", encoding="utf-16-le", errors="ignore"
             ) as outFile:
                 start = time.time()
                 translatedData = openFiles(filename)
 
                 # Print Result
                 end = time.time()
-                outFile.writelines(translatedData[0])
+                if translatedData[0] != []:
+                    outFile.writelines(translatedData[0])
+                else:
+                    PBAR.write(f"{FILENAME} Failed to write")
+                    os.remove(f"translated/{filename}")
                 tqdm.write(getResultString(translatedData, end - start, filename))
                 with LOCK:
                     TOKENS[0] += translatedData[1][0]
                     TOKENS[1] += translatedData[1][1]
         except Exception:
             traceback.print_exc()
+            os.remove(f"translated/{filename}")
             return "Fail"
 
     return getResultString(["", TOKENS, None], end - start, "TOTAL")
@@ -162,7 +167,7 @@ def getResultString(translatedData, translationTime, filename):
 
 
 def openFiles(filename):
-    with open("files/" + filename, "r", encoding="utf16") as readFile:
+    with open("files/" + filename, "r", encoding="utf-16-le") as readFile:
         translatedData = parseKiriKiri(readFile, filename)
     return translatedData
 
@@ -204,8 +209,8 @@ def translateKiriKiri(data, pbar, filename, jobList):
     i = 0
 
     # Regex
-    speakerRegex = r'【(.*)】\[CR\]'
-    dialogueRegex = r'^\[text\](.*).*\[KeyWait\]|\[\w+\](.*)\[\/\w+\].*\[KeyWait\]'
+    speakerRegex = r'.*elm.name0\s:\s"(.*?)"'
+    dialogueRegex = r"^\s*.*fukidashi.*text.*=.*[\"'](.*?)[\"']"
     furiganaRegex = r'(\[eruby\sstr="(.*?)"\stext.*?\])'
     choicesRegex = r"^\s*\[button\d\sclickse=sys_decide.*text='(.*?)'.*"
 
@@ -268,19 +273,22 @@ def translateKiriKiri(data, pbar, filename, jobList):
 
             # Pass 2
             else:
-                # Grab and Pop
-                translatedText = stringList[0]
-                stringList.pop(0)
+                if len(stringList) > 0:
+                    # Grab and Pop
+                    translatedText = stringList[0]
+                    stringList.pop(0)
 
-                # Remove Speaker
-                translatedText = translatedText.replace(f"[{speaker}]: ", "")
+                    # Remove Speaker
+                    translatedText = re.sub(r'\[.*?\]:\s', '', translatedText)
 
-                # Textwrap
-                translatedText = textwrap.fill(translatedText, width=WIDTH)
-                translatedText = translatedText.replace("\n", "[r]")
+                    # Textwrap
+                    translatedText = textwrap.fill(translatedText, width=WIDTH)
+                    translatedText = translatedText.replace("\n", "[r]")
 
-                # Set Data
-                data[i] = data[i].replace(jaString, translatedText)
+                    # Replace Quotes
+                    data[i] = data[i].replace("'", '"')
+                    translatedText = translatedText.replace('"', "'")
+                    data[i] = data[i].replace(jaString, translatedText)
         
         # Next Line
         i += 1
@@ -335,9 +343,10 @@ def translateKiriKiri(data, pbar, filename, jobList):
                     MISMATCH.append(filename)
                     choiceListTL = choiceList
 
-        # Proceed to Pass 2
+    # Proceed to Pass 2
+    if not setData:
         translateKiriKiri(data, pbar, filename, [stringListTL, choiceListTL])
-
+    
     return tokens
 
 
