@@ -37,7 +37,7 @@ MAXHISTORY = 10
 ESTIMATE = ""
 TOKENS = [0, 0]
 NAMESLIST = []
-FIRSTLINESPEAKERS = False  # If 1st line of dialogue is a speaker, set to True
+FIRSTLINESPEAKERS = True  # If 1st line of dialogue is a speaker, set to True
 NAMES = False  # Output a list of all the character names found
 BRFLAG = False  # If the game uses <br> instead
 FIXTEXTWRAP = True  # Overwrites textwrap
@@ -58,7 +58,7 @@ if "gpt-3.5" in MODEL:
 elif "gpt-4" in MODEL:
     INPUTAPICOST = 0.0025
     OUTPUTAPICOST = 0.01
-    BATCHSIZE = 20
+    BATCHSIZE = 30
     FREQUENCY_PENALTY = 0.1
 
 # tqdm Globals
@@ -68,8 +68,8 @@ LEAVE = False
 
 # Dialogue / Scroll / Choices (Main Codes)
 CODE401 = True
-CODE405 = False
-CODE102 = False
+CODE405 = True
+CODE102 = True
 
 # Optional
 CODE101 = False  # Turn this one when names exist in 101
@@ -826,6 +826,12 @@ def searchNames(data, pbar, context):
                             j += 1
                             continue
                         else:
+                            with open(
+                                "translations.txt", "a", encoding="utf-8"
+                            ) as file:
+                                file.write(
+                                    f'{data[j]["name"]} ({translatedNameBatch[0]})\n'
+                                )
                             # Get Text
                             data[j]["name"] = translatedNameBatch[0]
                             translatedNameBatch.pop(0)
@@ -2565,41 +2571,6 @@ def getSpeaker(speaker):
             return response
     return [speaker, [0, 0]]
 
-
-def subVars(jaString):
-    jaString = jaString.replace("\u3000", " ")
-
-    # Formatting
-    codeList = re.findall(
-        r"([\\]*(\w+)\[(\d+)\])|([\\]*(\w+)\[[\\]*\\w+\[(\d+)\]\])", jaString
-    )
-    codeList = set(codeList)
-    if len(codeList) != 0:
-        for var in codeList:
-            if var[2]:
-                jaString = jaString.replace(var[0], f"[{var[1]}Code_" + f"{var[2]}]")
-            else:
-                jaString = jaString.replace(var[3], f"[{var[4]}Code_" + f"{var[5]}]")
-
-    # Put all lists in list and return
-    return [jaString, codeList]
-
-
-def resubVars(translatedText, codeList):
-    # Formatting
-    for var in codeList:
-        if var[2]:
-            translatedText = translatedText.replace(
-                f"[{var[1]}Code_" + f"{var[2]}]", var[0]
-            )
-        else:
-            translatedText = translatedText.replace(
-                f"[{var[4]}Code_" + f"{var[5]}]", var[3]
-            )
-
-    return translatedText
-
-
 def batchList(input_list, batch_size):
     if not isinstance(batch_size, int) or batch_size <= 0:
         raise ValueError("batch_size must be a positive integer")
@@ -2682,7 +2653,6 @@ def cleanTranslatedText(translatedText, varResponse):
 
     # Elongate Long Dashes (Since GPT Ignores them...)
     translatedText = elongateCharacters(translatedText)
-    translatedText = resubVars(translatedText, varResponse[1])
     return translatedText
 
 
@@ -2762,7 +2732,7 @@ def translateGPT(text, history, fullPromptFlag):
             if isinstance(tItem, list):
                 payload = {f"Line{i+1}": string for i, string in enumerate(tItem)}
                 payload = json.dumps(payload, indent=4, ensure_ascii=False)
-                varResponse = subVars(payload)
+                varResponse = [payload, []]
                 subbedT = varResponse[0]
             else:
                 varResponse = [tItem, []]

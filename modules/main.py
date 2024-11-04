@@ -60,27 +60,27 @@ THREADS = int(os.getenv("fileThreads"))
 
 # [Display name, file extension, handle function]
 MODULES = [
-    ["RPGMaker MV/MZ", "json", handleMVMZ],
-    ["RPGMaker Plugins", "js", handlePlugin],
-    ["RPGMaker ACE", "yaml", handleACE],
-    ["CSV (From Translator++)", "csv", handleCSV],
-    ["Eushully", "txt", handleEushully],
-    ["Alice", "txt", handleAlice],
-    ["Tyrano", "ks", handleTyrano],
-    ["Kirikiri", "tjs", handleKirikiri],
-    ["JSON", "json", handleJSON],
-    ["Kansen", "ks", handleKansen],
-    ["Lune", "json", handleLune],
-    ["Atelier", "txt", handleAtelier],
-    ["Anim", "json", handleAnim],
-    ["NScript", "txt", handleOnscripter],
-    ["Wolf", "json", handleWOLF],
-    ["Wolf", "txt", handleWOLF2],
-    ["Javascript", "js", handleJavascript],
-    ["Iris", "txt", handleIris],
-    ["Regex", "txt", handleRegex],
-    ["Unity", "txt", handleUnity],
-    ["Images", "", handleImages],
+    ["RPGMaker MV/MZ", ["json"], handleMVMZ],
+    ["RPGMaker Plugins", ["js"], handlePlugin],
+    ["RPGMaker ACE", ["yaml"], handleACE],
+    ["CSV (From Translator++)", ["csv"], handleCSV],
+    ["Eushully", ["txt"], handleEushully],
+    ["Alice", ["txt"], handleAlice],
+    ["Tyrano", ["ks"], handleTyrano],
+    ["Kirikiri", ['ks', 'tjs', 'ssd', 'asd'], handleKirikiri],
+    ["JSON", ["json"], handleJSON],
+    ["Kansen", ["ks"], handleKansen],
+    ["Lune", ["json"], handleLune],
+    ["Atelier", ["txt"], handleAtelier],
+    ["Anim", ["json"], handleAnim],
+    ["NScript", ["txt"], handleOnscripter],
+    ["Wolf", ["json"], handleWOLF],
+    ["Wolf", ["txt"], handleWOLF2],
+    ["Javascript", ["js"], handleJavascript],
+    ["Iris", ["txt"], handleIris],
+    ["Regex", ["txt"], handleRegex],
+    ["Unity", ["txt"], handleUnity],
+    ["Images", [""], handleImages],
 ]
 
 # Info Message
@@ -133,7 +133,8 @@ files to translate are in the /files folder and that you picked the right game e
         futures = [
             executor.submit(MODULES[version][2], filename, estimate)
             for filename in os.listdir("files")
-            if filename.endswith(MODULES[version][1]) and filename != ".gitkeep"
+            for m in MODULES[version][1] 
+            if filename.endswith(m) and filename != ".gitkeep"
         ]
         for future in as_completed(futures):
             try:
