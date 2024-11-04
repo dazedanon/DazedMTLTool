@@ -51,8 +51,8 @@ LEAVE = False
 
 # Flags
 SPEAKERS = True
-CHOICES = False
-DIALOGUE = False
+CHOICES = True
+DIALOGUE = True
 
 # Pricing - Depends on the model https://openai.com/pricing
 # Batch Size - GPT 3.5 Struggles past 15 lines per request. GPT4 struggles past 50 lines per request
@@ -97,7 +97,7 @@ def handleKirikiri(filename, estimate):
     else:
         try:
             with open(
-                "translated/" + filename, "w", encoding="utf-16-le", errors="ignore"
+                "translated/" + filename, "w", encoding="cp932", errors="ignore"
             ) as outFile:
                 start = time.time()
                 translatedData = openFiles(filename)
@@ -167,7 +167,7 @@ def getResultString(translatedData, translationTime, filename):
 
 
 def openFiles(filename):
-    with open("files/" + filename, "r", encoding="utf-16-le") as readFile:
+    with open("files/" + filename, "r", encoding="cp932") as readFile:
         translatedData = parseKiriKiri(readFile, filename)
     return translatedData
 
@@ -209,8 +209,8 @@ def translateKiriKiri(data, pbar, filename, jobList):
     i = 0
 
     # Regex
-    speakerRegex = r'.*elm.name0\s:\s"(.*?)"'
-    dialogueRegex = r"^\s*.*fukidashi.*text.*=.*[\"'](.*?)[\"']"
+    speakerRegex = r'【(.*)】\[CR\]'
+    dialogueRegex = r"^\[text\](.*).*\[KeyWait\]|\[\w+\](.*)\[\/\w+\].*\[KeyWait\]"
     furiganaRegex = r'(\[eruby\sstr="(.*?)"\stext.*?\])'
     choicesRegex = r"^\s*\[button\d\sclickse=sys_decide.*text='(.*?)'.*"
 
