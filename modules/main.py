@@ -50,6 +50,7 @@ from modules.wolf2 import handleWOLF2
 from modules.javascript import handleJavascript
 from modules.irissoft import handleIris
 from modules.regex import handleRegex
+from modules.renpy import handleRenpy
 from modules.unity import handleUnity
 from modules.images import handleImages
 from modules.rpgmakerplugin import handlePlugin
@@ -67,7 +68,7 @@ MODULES = [
     ["Eushully", ["txt"], handleEushully],
     ["Alice", ["txt"], handleAlice],
     ["Tyrano", ["ks"], handleTyrano],
-    ["Kirikiri", ['ks', 'tjs', 'ssd', 'asd'], handleKirikiri],
+    ["Kirikiri", ["ks", "tjs", "ssd", "asd"], handleKirikiri],
     ["JSON", ["json"], handleJSON],
     ["Kansen", ["ks"], handleKansen],
     ["Lune", ["json"], handleLune],
@@ -79,6 +80,7 @@ MODULES = [
     ["Javascript", ["js"], handleJavascript],
     ["Iris", ["txt"], handleIris],
     ["Regex", ["txt"], handleRegex],
+    ["Renpy", ["rpy"], handleRenpy],
     ["Unity", ["txt"], handleUnity],
     ["Images", [""], handleImages],
 ]
@@ -133,7 +135,7 @@ files to translate are in the /files folder and that you picked the right game e
         futures = [
             executor.submit(MODULES[version][2], filename, estimate)
             for filename in os.listdir("files")
-            for m in MODULES[version][1] 
+            for m in MODULES[version][1]
             if filename.endswith(m) and filename != ".gitkeep"
         ]
         for future in as_completed(futures):

@@ -4,6 +4,7 @@
 *.yaml
 *.yml
 *.txt
+*.rpy
 !vocab.txt
 !requirements.txt
 *.csv
