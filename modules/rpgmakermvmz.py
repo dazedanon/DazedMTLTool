@@ -37,11 +37,11 @@ MAXHISTORY = 10
 ESTIMATE = ""
 TOKENS = [0, 0]
 NAMESLIST = []
-FIRSTLINESPEAKERS = True  # If 1st line of dialogue is a speaker, set to True
+FIRSTLINESPEAKERS = False  # If 1st line of dialogue is a speaker, set to True
 NAMES = False  # Output a list of all the character names found
 BRFLAG = False  # If the game uses <br> instead
 FIXTEXTWRAP = True  # Overwrites textwrap
-IGNORETLTEXT = False  # Ignores all translated text.
+IGNORETLTEXT = True  # Ignores all translated text.
 MISMATCH = []  # Lists files that throw a mismatch error (Length of GPT list response is wrong)
 BRACKETNAMES = False
 PBAR = None
@@ -67,16 +67,16 @@ POSITION = 0
 LEAVE = False
 
 # Dialogue / Scroll / Choices (Main Codes)
-CODE401 = True
-CODE405 = True
-CODE102 = True
+CODE401 = False
+CODE405 = False
+CODE102 = False
 
 # Optional
 CODE101 = False  # Turn this one when names exist in 101
 CODE408 = False  # Warning, translates comments and can inflate costs.
 
 # Variables
-CODE122 = False
+CODE122 = True
 
 # Other
 CODE355655 = False
@@ -938,6 +938,16 @@ def searchCodes(page, pbar, jobList, filename):
                     i += 1
                     continue
 
+                # Validate Japanese Text
+                if (
+                    not re.search(
+                        r"[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]+", jaString
+                    )
+                    and IGNORETLTEXT
+                ):
+                    i += 1
+                    continue
+
                 # # For Retarded Devs
                 # retardRegex = r'([\\]+[nN]\[[\\]+V\[\d*?\]\])'
                 # match = re.search(retardRegex, jaString)
@@ -1268,7 +1278,7 @@ def searchCodes(page, pbar, jobList, filename):
             ## Event Code: 122 [Set Variables]
             if "code" in codeList[i] and codeList[i]["code"] == 122 and CODE122 is True:
                 # This is going to be the var being set. (IMPORTANT)
-                if codeList[i]["parameters"][0] not in list(range(155, 165)):
+                if codeList[i]["parameters"][0] not in list(range(0, 1000)):
                     i += 1
                     continue
 
@@ -1291,7 +1301,7 @@ def searchCodes(page, pbar, jobList, filename):
 
                 # Set String
                 matchedText = None
-                if len(re.findall(r"([\'\"])", jaString)) == 2:
+                if len(re.findall(r"([\'\"\`])", jaString)) == 2:
                     matchedText = re.search(r"[\'\"\`](.*)[\'\"\`]", jaString)
                 # else:
                 #     matchedText = re.search(r'(.*)', jaString)
@@ -1323,9 +1333,7 @@ def searchCodes(page, pbar, jobList, filename):
                             translatedText = translatedText.replace("\n", "\\n")
 
                             # Set
-                            codeList[i]["parameters"][4] = jaString.replace(
-                                finalJAString, translatedText
-                            )
+                            codeList[i]["parameters"][4] = f"`{translatedText}`"
                             list122.pop(0)
 
             ## Event Code: 357 [Picture Text] [Optional]
@@ -1494,6 +1502,7 @@ def searchCodes(page, pbar, jobList, filename):
 
                 if "TextPicture" in headerString or "BalloonInBattle" in headerString:
                     argVar = "text"
+                    font = None
                     ### Message Text First
                     if argVar in codeList[i]["parameters"][3]:
                         acExist = False
@@ -1542,9 +1551,13 @@ def searchCodes(page, pbar, jobList, filename):
                                 if acExist:
                                     translatedText = f'\\ac {translatedText.replace('\n', '\n\\ac ')}'
 
+                                # Check and Set Font
+                                if "fontSize" in codeList[i]["parameters"][3]:
+                                    if font:
+                                        codeList[i]["parameters"][3]["fontSize"] = font
+
                                 # Set
                                 codeList[i]["parameters"][3][argVar] = translatedText
-                                # codeList[i]["parameters"][3]['fontSize'] = "18"
                                 list357.pop(0)
 
             ## Event Code: 657 [Picture Text] [Optional]
@@ -2570,6 +2583,7 @@ def getSpeaker(speaker):
             NAMESLIST.append(speakerList)
             return response
     return [speaker, [0, 0]]
+
 
 def batchList(input_list, batch_size):
     if not isinstance(batch_size, int) or batch_size <= 0:
