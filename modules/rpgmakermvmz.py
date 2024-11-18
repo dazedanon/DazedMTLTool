@@ -41,7 +41,7 @@ FIRSTLINESPEAKERS = False  # If 1st line of dialogue is a speaker, set to True
 NAMES = False  # Output a list of all the character names found
 BRFLAG = False  # If the game uses <br> instead
 FIXTEXTWRAP = True  # Overwrites textwrap
-IGNORETLTEXT = True  # Ignores all translated text.
+IGNORETLTEXT = False  # Ignores all translated text.
 MISMATCH = []  # Lists files that throw a mismatch error (Length of GPT list response is wrong)
 BRACKETNAMES = False
 PBAR = None
@@ -67,23 +67,23 @@ POSITION = 0
 LEAVE = False
 
 # Dialogue / Scroll / Choices (Main Codes)
-CODE401 = False
-CODE405 = False
-CODE102 = False
+CODE401 = True
+CODE405 = True
+CODE102 = True
 
 # Optional
 CODE101 = False  # Turn this one when names exist in 101
 CODE408 = False  # Warning, translates comments and can inflate costs.
 
 # Variables
-CODE122 = True
+CODE122 = False
 
 # Other
 CODE355655 = False
 CODE357 = False
 CODE657 = False
 CODE356 = False
-CODE320 = False
+CODE320 = True
 CODE324 = False
 CODE111 = False
 CODE108 = False
@@ -2151,7 +2151,10 @@ def searchCodes(page, pbar, jobList, filename):
                     continue
 
                 # Translate
-                getSpeaker(jaString)
+                response = getSpeaker(jaString)
+                translatedText = response[0]
+                totalTokens[0] += response[1][0]
+                totalTokens[1] += response[1][1]
 
                 # Remove characters that may break scripts
                 charList = [".", '"', "'", "\\n"]

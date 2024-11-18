@@ -1,10 +1,13 @@
 Here are some vocabulary and terms so that you know the proper spelling and translation.
 ```
 # Game Characters
-スミレ (Sumire) - Female
-サシャ (Sasha) - Female
-ラウル (Raul) - Male
-ゲン (Gen) - Male
+#Actors
+伊早瀬アラカ (Isayase Araka) - Female
+如月ヨミ (Kisaragi Yomi) - Female
+水本佐奈 (Mizumoto Sana) - Female
+ミツキ・ロンズ (Mitsuki Ronzu) - Female
+テール (Teeru) - Female
+ユウキ (Yuuki) - Male
 
 # Lewd Terms
 マンコ (pussy)

@@ -148,9 +148,9 @@ files to translate are in the /files folder and that you picked the right game e
                 tqdm.write(Fore.RED + str(e) + "|" + tracebackLineNo + Fore.RESET)
 
     if totalCost != "Fail":
-        if estimate is False:
+        # if estimate is False:
             # This is to encourage people to grab what's in /translated instead
-            deleteFolderFiles("files")
+            # deleteFolderFiles("files")
 
         tqdm.write(str(totalCost))
 
