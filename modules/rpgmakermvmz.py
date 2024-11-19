@@ -72,7 +72,7 @@ CODE405 = True
 CODE102 = True
 
 # Optional
-CODE101 = False  # Turn this one when names exist in 101
+CODE101 = True  # Turn this one when names exist in 101
 CODE408 = False  # Warning, translates comments and can inflate costs.
 
 # Variables
@@ -83,7 +83,7 @@ CODE355655 = False
 CODE357 = False
 CODE657 = False
 CODE356 = False
-CODE320 = True
+CODE320 = False
 CODE324 = False
 CODE111 = False
 CODE108 = False
@@ -1162,12 +1162,12 @@ def searchCodes(page, pbar, jobList, filename):
 
                     # Remove any RPGMaker Code at start
                     ffMatch = re.search(
-                        r"^(\s*[\\]+[aAbBdDeEfFgGhHjJlLmMoOpPqQrRsStTuUwWxXyYzZ]+\[[\w\d\[\]\\]+\])",
+                        r"^(\s*[\\]+[aAbBdDeEfFgGhHjJlLmMoOpPqQrRsStTuUwWxXyYzZ]+\[[\w\d\[\]\\]+?\])",
                         finalJAString,
                     )
                     if ffMatch != None:
-                        finalJAString = finalJAString.replace(ffMatch.group(0), "")
-                        nametag += ffMatch.group(0)
+                        finalJAString = finalJAString.replace(ffMatch.group(1), "")
+                        nametag += ffMatch.group(1)
 
                     # Remove _ABL Codes
                     ffMatch = re.search(r"^(_ABL).*", finalJAString)
@@ -1185,6 +1185,13 @@ def searchCodes(page, pbar, jobList, filename):
 
                     # 1st Passthrough (Grabbing Data)
                     if setData == False:
+                        # Remove Textwrap
+                        if FIXTEXTWRAP:
+                            finalJAString = finalJAString.replace('\n', ' ')
+                        if "\\px[200]" in finalJAString:
+                            finalJAString = finalJAString.replace('\\px[200]', '')
+                        
+                        # Append
                         if finalJAString != "":
                             if speaker == "" and finalJAString != "":
                                 list401.append(finalJAString)
@@ -1241,6 +1248,11 @@ def searchCodes(page, pbar, jobList, filename):
                             # BR Flag
                             if BRFLAG is True:
                                 translatedText = translatedText.replace("\n", "<br>")
+
+                            # px
+                            if '\\px[200]' in nametag:
+                                translatedText = translatedText.replace("\\px[200]", "")
+                                translatedText = translatedText.replace("\n", "\n\\px[200]")
 
                             ### Add Var Strings
                             # CL Flag

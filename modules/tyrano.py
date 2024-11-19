@@ -59,57 +59,42 @@ if "gpt-3.5" in MODEL:
 elif "gpt-4" in MODEL:
     INPUTAPICOST = 0.0025
     OUTPUTAPICOST = 0.01
-    BATCHSIZE = 40
+    BATCHSIZE = 20
 
 
 def handleTyrano(filename, estimate):
-    global ESTIMATE
-    global FILENAME
-    FILENAME = filename
+    global ESTIMATE, TOKENS, FILENAME
     ESTIMATE = estimate
+    FILENAME = filename
 
-    if ESTIMATE:
-        start = time.time()
-        translatedData = openFiles(filename)
+    # Translate
+    start = time.time()
+    translatedData = openFiles(filename)
 
-        # Print Result
-        end = time.time()
-        tqdm.write(getResultString(translatedData, end - start, filename))
-        with LOCK:
-            TOKENS[0] += translatedData[1][0]
-            TOKENS[1] += translatedData[1][1]
-
-        # Print Total
-        totalString = getResultString(["", TOKENS, None], end - start, "TOTAL")
-
-        # Print any errors on maps
-        if len(MISMATCH) > 0:
-            return (
-                totalString + Fore.RED + f"\nMismatch Errors: {MISMATCH}" + Fore.RESET
-            )
-        else:
-            return totalString
-
-    else:
+    # Translate
+    if not estimate:
         try:
-            with open(
-                "translated/" + filename, "w", encoding="utf8", errors="ignore"
-            ) as outFile:
-                start = time.time()
-                translatedData = openFiles(filename)
-
-                # Print Result
-                end = time.time()
+            with open("translated/" + filename, "w", encoding="utf-8") as outFile:
                 outFile.writelines(translatedData[0])
-                tqdm.write(getResultString(translatedData, end - start, filename))
-                with LOCK:
-                    TOKENS[0] += translatedData[1][0]
-                    TOKENS[1] += translatedData[1][1]
         except Exception:
             traceback.print_exc()
             return "Fail"
 
-    return getResultString(["", TOKENS, None], end - start, "TOTAL")
+    # Print File
+    end = time.time()
+    tqdm.write(getResultString(translatedData, end - start, filename))
+    with LOCK:
+        TOKENS[0] += translatedData[1][0]
+        TOKENS[1] += translatedData[1][1]
+
+    # Print Total
+    totalString = getResultString(["", TOKENS, None], end - start, "TOTAL")
+
+    # Print any errors on maps
+    if len(MISMATCH) > 0:
+        return totalString + Fore.RED + f"\nMismatch Errors: {MISMATCH}" + Fore.RESET
+    else:
+        return totalString
 
 
 def getResultString(translatedData, translationTime, filename):
@@ -202,7 +187,7 @@ def translateTyrano(data, translatedList):
         choiceList = []
     tokens = [0, 0]
     speaker = ""
-    global LOCK, ESTIMATE, FILENAME, PBAR
+    global LOCK, ESTIMATE, FILENAME, PBAR, MISMATCH
     i = 0
 
     while i < len(data):
@@ -320,6 +305,9 @@ def translateTyrano(data, translatedList):
                 translatedText = choiceList[0]
                 choiceList.pop(0)
 
+                # Replace Spaces
+                translatedText = translatedText.replace(' ', '\u3000')
+
                 # Set
                 data[i] = data[i].replace(match.group(1), translatedText)
 
@@ -338,7 +326,7 @@ def translateTyrano(data, translatedList):
             PBAR.refresh()
             response = translateGPT(
                 stringList,
-                "",
+                "Reply with the English Translation",
                 True
             )
             tokens[0] += response[1][0]
