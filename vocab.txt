@@ -2,19 +2,8 @@ Here are some vocabulary and terms so that you know the proper spelling and tran
 ```
 # Game Characters
 #Actors
-レイリ (Reiri) - Female
-スズリカ (Suzurika) - Female
-メルメイア (Merumeia) - Female
-ヘーゼル (Hazel) - Female
-カナメ (Kaname) - Female
-グライヘイム (Guraiheim)
-ゴンゾー (Gonzo) - Male
-デルケム (Derukemu) - Male
-グレッグ (Gregg) - Male
-チャーリー (Charlie) - Male
-コモル (Komoru) - Male
-トムソン (Thomson) - Male
-ティン (Tin) - Male
+ナギ (Nagi) - Female
+アカリ (Akari) - Female
 
 # Lewd Terms
 マンコ (pussy)
@@ -92,65 +81,5 @@ w ((lol))
 巫女 (Shrine Maiden)
 コイツ (this bastard)
 シュード (Schnood)
-
-# Locations
-セレメー入り口 (Sereme Entrance)
-地下スラム街 (Underground Slum)
-ヘスぺリス監獄 (Hesperis Prison)
-ガーゴイル工場 (Gargoyle Factory)
-ケイトスの私室 (Cetus's Private Room)
-パル・カタナス商会 (Pal Katanas Trading Company)
-グレア商会 (Glear Trading Company)
-
-#Enemies
-スライム (Slime)
-巨大スライム (Giant Slime)
-チスイコウモリモドキ (Bloodsucking Bat Imposter)
-ネムリハブ (Sleeping Habu)
-ゴブリン (Goblin)
-テンタクルシェル (Tentacle Shell)
-ガーゴイルの触腕 (Gargoyle's Tentacle)
-ノブタ (Wild Boar)
-野犬 (Wild Dog)
-盗賊下っ端 (Thief Underling)
-盗賊リーダー (Thief Leader)
-スライム (Slime)
-ダミー (Dummy)
-サンドバッグ (Punching Bag)
-アレチムシクイ (Desert Bug Eater)
-はぐれ盗賊 (Rogue Thief)
-盗賊エリート (Thief Elite)
-巨大ヒル (Giant Leech)
-ハネイルカ (Jumping Dolphin)
-ダイオオバエ (Giant Fly)
-ウマムシ (Horse Bug)
-ロックミミック (Rock Mimic)
-戦場漁り (Battle Scavenger)
-荒くれノブタ (Rough Nobuta)
-バリバリコブラ (Crackling Cobra)
-洞窟ウナギ (Cave Eel)
-浮浪者 (Vagrant)
-囚人 (Prisoner)
-看守 (Guard)
-剣聖スズリカ (Sword Saint Suzurika)
-ハーピーのガーゴイル (Harpy Gargoyle)
-サラマンダーのガーゴイル (Salamander Gargoyle)
-剛力ゴブリン (Mighty Goblin)
-ユニコーンのガーゴイル (Unicorn Gargoyle)
-サキュバスのガーゴイル (Succubus Gargoyle)
-会長代理補佐メルメイア (Acting President's Assistant Merumeia)
-クラーケンのガーゴイル (Kraken Gargoyle)
-ガーゴイルの触腕 (Gargoyle Tentacle)
-ヒュドラの先兵 (Hydra Vanguard)
-ミノタウロスのガーゴイル (Minotaur Gargoyle)
-ヒュドラのガーゴイル (Hydra Gargoyle)
-狼男のガーゴイル (Werewolf Gargoyle)
-兵士のガーゴイル (Soldier Gargoyle)
-キマイラのガーゴイル (Chimera Gargoyle)
-ワイバーンのガーゴイル (Wyvern Gargoyle)
-サイコゴブリン・シルバーバック (Psycho Goblin Silverback)
-商人パルカタナス (Merchant Palkatanas)
-邪視のヴェルセウス (Evil Eye Velseus)
-黒いドラゴン (Black Dragon)
 
 ```

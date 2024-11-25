@@ -72,7 +72,7 @@ CODE405 = True
 CODE102 = True
 
 # Optional
-CODE101 = True  # Turn this one when names exist in 101
+CODE101 = False  # Turn this one when names exist in 101
 CODE408 = False  # Warning, translates comments and can inflate costs.
 
 # Variables
@@ -986,10 +986,6 @@ def searchCodes(page, pbar, jobList, filename):
                         r"^[\\]+[cC]\[[\d]+\]【?(.+?)】?[\\]+[Cc]\[[\d]\]\\?\\?$",
                         jaString,
                     )
-
-                # Full Width Space
-                if len(speakerList) == 0:
-                    speakerList = re.findall(r"^[　 ](.*)", jaString)
 
                 # First Line Speakers
                 if len(speakerList) == 0 and FIRSTLINESPEAKERS is True:
