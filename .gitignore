@@ -11,4 +11,5 @@
 *.ks
 *.cid
 *.png
+!screens/*.png
 __pycache__
