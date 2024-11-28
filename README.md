@@ -72,7 +72,8 @@ That will about wrap it up for setup.
 1. Navigate to the game folder (where game.exe is).
 2. Shift + Right Click and select "Open in Code".
 3. Press `CTRL+SHIFT+X` and type `JSON formatter`. I recommend the one by Clemens Peters, but choose whichever works.
-4. Navigate to the `www` folder and right-click `data`. Then click `Format`. This will format all the files and make them look pretty for editing.
+4. Again Press `CTRL+SHIFT+X` and type `Workspace Formatter` and install that as well.
+5. Navigate to the `www` folder and right-click `data`. Then click `Format`. This will format all the files and make them look pretty for editing.
 
    <img src="screens/format.png" alt="vscode" width=200>
 
@@ -80,7 +81,7 @@ That will about wrap it up for setup.
 
 This is going to help us track changes we make while translating. It is extremely helpful, and I do not recommend skipping it.
 
-1. Press `CTRL+SHIFT+X` and type `Gitlens`. Install the extension.
+1. In VSCode press `CTRL+SHIFT+X` and type `Gitlens`. Install the extension.
 2. Create a new file `.gitignore` in the game directory and add the following to it:
 
    ```plaintext
