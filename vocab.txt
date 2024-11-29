@@ -1,16 +1,58 @@
 Here are some vocabulary and terms so that you know the proper spelling and translation.
 ```
 # Game Characters
-#Actors
-水無月 士乃 (Minazuki Shino) - Female
-怪盗エース (Phantom Thief Ace) - Female
-暗黒斎 (Dark Kokusai) - Male
-フトシ (Futoshi) - Male
-アキラ (Akira) - Male
-雨散(うさん)句斎(くさい)博士 (Dr. Usankusai) - Male
-ゆたか (Yutaka) - Male
-真理 (Mari) - Female
-幸せのホッホー会 (Society of Happiness Hoo-Hoo) - Organization
+モネ (Mone) - Female
+ツバキ (Tsubaki) - Female
+ソニア (Sonia) - Female
+キール (Keel) - Male
+キルル (Kiruru) - Female
+トリトマ (Toritoma) - Female
+クルミ (Kurumi) - Female
+レンカ (Lenka) - Female
+マザー (Mother) - Female
+シロ (Shiro) - Female
+アンヌ (Anne) - Female
+ンゴガン (Ngogan) - Male
+アイ (Ai) - Female
+セラ (Sera) - Female
+プリムラ (Primula) - Female
+ラニュール (Ranyule) - Female
+リリ (Lili) - Female
+エイク (Eiku) - Male
+アイビー (Ivy) - Female
+スーチス (Suchis) - Female
+キュラス (Kulas) - Female
+ベル (Bel) - Female
+スイ (Sui) - Female
+ペララ (Perara) - Female
+ルピナス (Lupinus) - Female
+レア (Rea) - Female
+ランド (Rando) - Male
+ミト (Mito) - Male
+ラータ (Rata) - Female
+ヤマーニ (Yamani) - Male
+ジュリオ (Julio) - Male
+ザルス (Zarus) - Male
+タルタル (Tartar) - Male
+メロ (Melo) - Female
+シャル (Sharu) - Female
+ゴブブ (Gobbu) - Male
+ユウト (Yuuto) - Male
+リンドウ (Rindou) - Male
+ポチョ (Puchu) - Male
+ロイド (Lloyd) - Male
+ワジマ (Wajima) - Male
+バルディア (Valdia) - Male
+アーモン (Amon) - Male
+クロス (Cross) - Male
+ラダ (Rada) - Male
+マツトネ (Matsutone) - Male
+ケルーム (Kerume) - Male
+ジン (Gin) - Male
+ドルン (Dolphin) - Male
+ダン神父 (Father Dan) - Male
+ツンベル (Tsunberu) - Male
+Penisu (Penisu) - Name of Penis
 
 # Lewd Terms
 マンコ (pussy)
@@ -87,75 +129,18 @@ ME 音量 (ME Volume)
 w ((lol))
 巫女 (Shrine Maiden)
 コイツ (this bastard)
-シュード (Schnood)
+メナスフィア (Menacephere)
 
-#Items
-メモリーサーチ (Memory Search)
-何者かの人工血液のデータ (Data on someone's artificial blood)
-何者かの人工肺のデータ (Data on someone's artificial lung)
-大規模な植林のデータ (Data on large-scale afforestation)
-パスコード１ (Passcode 1)
-パスコード２ (Passcode 2)
-パスコード３ (Passcode 3)
-メモリーサーチ拡張機能 (Memory Search Expansion Function)
-水質研究所跡への地図 (Map to the Water Quality Research Institute Ruins)
-くたびれ集落への地図 (Map to the Worn-out Settlement)
-くたびれ学校への地図 (Map to the Worn-out School)
-科学公園への地図 (Map to the Science Park)
-境界トンネルへの地図 (Map to the Boundary Tunnel)
-商店街裏通りへの地図 (Map to the Back Alley of the Shopping District)
-ＩＹ社 社長宅への地図 (Map to the IY Company President's House)
-サカエ商店街への地図 (Map to the Sakae Shopping District)
-発声装置 (Voice Device)
-走力増強シューズ (Running Enhancement Shoes)
-超磁力グローブ (Super Magnetic Gloves)
-瞬間除草剤 (Instant Herbicide)
-小型爆炎放射器 (Small Flame Thrower)
-破魔のお札 (Exorcism Talisman)
-空間転移装置 (Spatial Transfer Device)
-暗視レンズ (Night Vision Lens)
-光学迷彩ベール (Optical Camouflage Veil)
-人体複製 (Human Body Replication)
-万能電子鍵 (Universal Electronic Key)
-激流の河口への地図 (Map to the Estuary of the Raging River)
-大気研究所跡への地図 (Map to the Atmosphere Research Institute Ruins)
-サカエファームへの地図 (Map to the Sakae Farm)
-水流コントローラー (Water Flow Controller)
-毛生え薬 (Hair Growth Medicine)
-水着セット (Swimsuit Set)
-多目的ワームハンド (Multi-Purpose Worm Hand)
-面布 (Face Cloth)
-ミルク薬 (Milk Medicine)
-精神性別逆転薬 (Mental Gender Reversal Medicine)
-反転薬 (Reversal Medicine)
-催淫ショック (Aphrodisiac Shock)
-性器刺激装置 (Genital Stimulation Device)
-村道の神玉 (Village Road Divine Orb)
-脳みそツルツル装置 (Brain Smoothing Device)
-行動予測システム (Action Prediction System)
-願い事なんでも叶える券 (Wish-Granting Ticket)
-ソレっぽいオブジェ (Something-Like Object)
-会長室へのパスワード (Password to the Chairman's Room)
-美味しそうなお肉 (Delicious-Looking Meat)
-士乃ミルク (Shino Milk)
-研究所へのアクセス端末 (Access Terminal to the Laboratory)
-あつあつおでん (Hot Oden)
-露出商店街への地図 (Map to the Exhibition Shopping District)
-回想部屋 (Recollection Room)
-露出公園への地図 (Map to the Exhibition Park)
-蒼海の洞窟への地図 (Map to the Azure Sea Cave)
-母娘の未来結晶 (Mother-Daughter Future Crystal)
-生徒との未来結晶 (Future Crystal with Students)
-モルモットの未来結晶 (Guinea Pig Future Crystal)
-夏休みの終わり (End of Summer Vacation)
-第一部の始まり (Beginning of Part One)
-装いを新たに探検開始！ (Start Exploring with a New Look!)
-第ニ部の始まり (Beginning of Part Two)
-第三部の始まり (Beginning of Part Three)
-病を治し者 (Healer of Illness)
-野望を阻みし者 (Thwarter of Ambition)
-神社を照らす光 (Light Illuminating the Shrine)
-銭湯へようこそ！ (Welcome to the Bathhouse!)
-浄化のお札 (Purification Talisman)
+# Locations
+テリス修道院 (Terys Monastery)
+ニルマル村 (Nirmal Village)
+セチア学園 (Sechia Academy)
+王都カサブランカ (Royal Capital Casablanca)
+ロボ子の国　ルストア (Robot Country Rustoa)
+ムニュニュ村 (Munyu Village)
+いなほ亭 (Inaho Inn)
+
+# Items
+ドラティルのコア (Dratir's Core)
 
 ```
