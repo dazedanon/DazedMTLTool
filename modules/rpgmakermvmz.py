@@ -43,7 +43,6 @@ BRFLAG = False  # If the game uses <br> instead
 FIXTEXTWRAP = True  # Overwrites textwrap
 IGNORETLTEXT = False  # Ignores all translated text.
 MISMATCH = []  # Lists files that throw a mismatch error (Length of GPT list response is wrong)
-BRACKETNAMES = False
 PBAR = None
 FILENAME = None
 
@@ -1095,42 +1094,6 @@ def searchCodes(page, pbar, jobList, filename):
                         nametag = nametag.replace(speaker, tledSpeaker)
                         speaker = tledSpeaker
 
-                    # Bracket Names
-                    if BRACKETNAMES is True and len(matchList) != 0:
-                        if matchList[0][0] != "":
-                            match0 = matchList[0][0]
-                            match1 = matchList[0][1]
-                        else:
-                            match0 = matchList[0][2]
-                            match1 = matchList[0][3]
-
-                        # Translate Speaker
-                        speakerID = j
-                        response = getSpeaker(match1)
-                        speaker = response[0]
-                        totalTokens[0] += response[1][0]
-                        totalTokens[1] += response[1][1]
-
-                        # Set Nametag and Remove from Final String
-                        fullSpeaker = match0.replace(match1, speaker)
-                        finalJAString = finalJAString.replace(match0, "")
-
-                        # Set next item as dialogue
-                        if (
-                            codeList[j + 1]["code"] == 401
-                            or codeList[j + 1]["code"] == -1
-                        ):
-                            # Set name var to top of list
-                            codeList[j]["parameters"] = [fullSpeaker]
-                            codeList[j]["code"] = code
-                            j += 1
-                            codeList[j]["parameters"] = [finalJAString]
-                            codeList[j]["code"] = code
-                        else:
-                            # Set nametag in string
-                            codeList[j]["parameters"] = [fullSpeaker + finalJAString]
-                            codeList[j]["code"] = code
-
                     # Remove Extra Stuff bad for translation.
                     finalJAString = finalJAString.replace("ﾞ", "")
                     finalJAString = finalJAString.replace("―", "-")
@@ -1273,8 +1236,6 @@ def searchCodes(page, pbar, jobList, filename):
                                 endtag = ""
 
                             # Set Data
-                            if speakerID != None:
-                                codeList[speakerID]["parameters"] = [fullSpeaker]
                             codeList[j]["parameters"] = [translatedText]
                             codeList[j]["code"] = code
                             speaker = ""
@@ -1715,7 +1676,7 @@ def searchCodes(page, pbar, jobList, filename):
                 and CODE355655 is True
             ):
                 jaString = codeList[i]["parameters"][0]
-                regex = r"BattleManager\._logWindow.addText\('(.*)'"
+                regex = r'.*subject=(.*?)"'
 
                 # Var Text
                 match = re.search(regex, jaString)
