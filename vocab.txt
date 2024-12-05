@@ -1,15 +1,14 @@
 Here are some vocabulary and terms so that you know the proper spelling and translation.
 ```
 # Game Characters
-セレト (Sereto) - Male
-メア (Mea) - Female
-リリリ (Lilili) - Female
-デイ (Dei) - Female
-ルーシィ (Lucy) - Female
-セビナ (Sebina) - Female
-アビー (Abby) - Female
-マリステラ (Maristella) - Female
-レミ (Remy) - Female
+ルカミラ・ハル・ロッシュ (Lukamilla Harre Roche) - Female
+マリアーヌ・ローエン・グリン (Marianne Roen Green) - Female
+リアン (Rianne) - Female
+スカーレット・ルンベルク (Scarlet Lumberg) - Female
+ソフィア (Sofia) - Female
+アグファス・ブロウニン (Agfas Blonin) - Male
+マルック・スタンレー (Marc Stanley) - Male
+モノキオス (Monokios) - Male
 
 # Lewd Terms
 マンコ (pussy)
