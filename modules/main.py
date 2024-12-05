@@ -79,7 +79,7 @@ MODULES = [
     ["Wolf", ["txt"], handleWOLF2],
     ["Javascript", ["js"], handleJavascript],
     ["Iris", ["txt"], handleIris],
-    ["Regex", ["txt"], handleRegex],
+    ["Regex", ["txt", "json", "script"], handleRegex],
     ["Renpy", ["rpy"], handleRenpy],
     ["Unity", ["txt"], handleUnity],
     ["Images", [""], handleImages],

@@ -188,7 +188,7 @@ def translateJSON(data, pbar):
     while i < len(data):
         item = data[i]
         # Speaker
-        if "name" in item:
+        if "VA" in item:
             if item["name"] not in [None, "-"]:
                 response = getSpeaker(item["name"])
                 speaker = response[0]
