@@ -1,58 +1,15 @@
 Here are some vocabulary and terms so that you know the proper spelling and translation.
 ```
 # Game Characters
-モネ (Mone) - Female
-ツバキ (Tsubaki) - Female
-ソニア (Sonia) - Female
-キール (Keel) - Male
-キルル (Kiruru) - Female
-トリトマ (Toritoma) - Female
-クルミ (Kurumi) - Female
-レンカ (Lenka) - Female
-マザー (Mother) - Female
-シロ (Shiro) - Female
-アンヌ (Anne) - Female
-ンゴガン (Ngogan) - Male
-アイ (Ai) - Female
-セラ (Sera) - Female
-プリムラ (Primula) - Female
-ラニュール (Ranyule) - Female
-リリ (Lili) - Female
-エイク (Eiku) - Male
-アイビー (Ivy) - Female
-スーチス (Suchis) - Female
-キュラス (Kulas) - Female
-ベル (Bel) - Female
-スイ (Sui) - Female
-ペララ (Perara) - Female
-ルピナス (Lupinus) - Female
-レア (Rea) - Female
-ランド (Rando) - Male
-ミト (Mito) - Male
-ラータ (Rata) - Female
-ヤマーニ (Yamani) - Male
-ジュリオ (Julio) - Male
-ザルス (Zarus) - Male
-タルタル (Tartar) - Male
-メロ (Melo) - Female
-シャル (Sharu) - Female
-ゴブブ (Gobbu) - Male
-ユウト (Yuuto) - Male
-リンドウ (Rindou) - Male
-ポチョ (Puchu) - Male
-ロイド (Lloyd) - Male
-ワジマ (Wajima) - Male
-バルディア (Valdia) - Male
-アーモン (Amon) - Male
-クロス (Cross) - Male
-ラダ (Rada) - Male
-マツトネ (Matsutone) - Male
-ケルーム (Kerume) - Male
-ジン (Gin) - Male
-ドルン (Dolphin) - Male
-ダン神父 (Father Dan) - Male
-ツンベル (Tsunberu) - Male
-Penisu (Penisu) - Name of Penis
+セレト (Sereto) - Male
+メア (Mea) - Female
+リリリ (Lilili) - Female
+デイ (Dei) - Female
+ルーシィ (Lucy) - Female
+セビナ (Sebina) - Female
+アビー (Abby) - Female
+マリステラ (Maristella) - Female
+レミ (Remy) - Female
 
 # Lewd Terms
 マンコ (pussy)
@@ -76,6 +33,12 @@ Penisu (Penisu) - Name of Penis
 先生 (sensei)
 師匠 (shishou)
 せんせい (sensei)
+にいさん (nii-san)
+兄さん (nii-san)
+お兄ちゃん (onii-san)
+姉さん (nee-san)
+お姉ちゃん (onee-chan)
+ねえさん (nee-san)
 
 # System
 初めから (Start)
@@ -130,17 +93,5 @@ w ((lol))
 巫女 (Shrine Maiden)
 コイツ (this bastard)
 メナスフィア (Menacephere)
-
-# Locations
-テリス修道院 (Terys Monastery)
-ニルマル村 (Nirmal Village)
-セチア学園 (Sechia Academy)
-王都カサブランカ (Royal Capital Casablanca)
-ロボ子の国　ルストア (Robot Country Rustoa)
-ムニュニュ村 (Munyu Village)
-いなほ亭 (Inaho Inn)
-
-# Items
-ドラティルのコア (Dratir's Core)
 
 ```

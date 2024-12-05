@@ -215,7 +215,7 @@ def translatePlugin(data, pbar, filename, translatedList):
         TODO TL all of the above in one call instead of multiple
         """
         # Lines
-        regex = r'txtSubject.*:\s"(.*)"'
+        regex = r'this.log_output\("(.*)"'
         matchList = re.findall(regex, data[i])
         if len(matchList) > 0:
             for match in matchList:

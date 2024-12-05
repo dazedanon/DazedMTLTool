@@ -41,7 +41,7 @@ FIRSTLINESPEAKERS = False  # If 1st line of dialogue is a speaker, set to True
 NAMES = False  # Output a list of all the character names found
 BRFLAG = False  # If the game uses <br> instead
 FIXTEXTWRAP = True  # Overwrites textwrap
-IGNORETLTEXT = False  # Ignores all translated text.
+IGNORETLTEXT = True  # Ignores all translated text.
 MISMATCH = []  # Lists files that throw a mismatch error (Length of GPT list response is wrong)
 PBAR = None
 FILENAME = None
@@ -1247,7 +1247,7 @@ def searchCodes(page, pbar, jobList, filename):
             ## Event Code: 122 [Set Variables]
             if "code" in codeList[i] and codeList[i]["code"] == 122 and CODE122 is True:
                 # This is going to be the var being set. (IMPORTANT)
-                if codeList[i]["parameters"][0] not in list(range(0, 1000)):
+                if codeList[i]["parameters"][0] not in list(range(42, 45)):
                     i += 1
                     continue
 
@@ -1270,13 +1270,13 @@ def searchCodes(page, pbar, jobList, filename):
 
                 # Set String
                 matchedText = None
-                if len(re.findall(r"([\'\"\`])", jaString)) == 2:
+                if len(re.findall(r"([\'\"\`])", jaString)) >= 2:
                     matchedText = re.search(r"[\'\"\`](.*)[\'\"\`]", jaString)
                 # else:
                 #     matchedText = re.search(r'(.*)', jaString)
 
                 # Last Check
-                if matchedText != None:
+                if matchedText.group(1) != None and matchedText.group(1) != " ":
                     # Remove Textwrap
                     finalJAString = matchedText.group(1).replace("\\n", " ")
 
