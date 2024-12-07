@@ -192,32 +192,34 @@ def translateTyrano(data, translatedList):
 
     while i < len(data):
         voice = False
-        lineRegexNoSpeaker = r'^([^\[#;*@\n]+)\[l\]\[[rp]\]|^([^\[#;*@\n]+)\[[rpl]\]|^([^\[#;*@_\n]+)\n$'
-        lineRegexSpeaker = r'^#(.*)'
-        furiganaRegex = r'(\[ruby\stext=(.*?)\])'
+        lineRegexNoSpeaker = (
+            r"^([^\[#;*@\n]+)\[l\]\[[rp]\]|^([^\[#;*@\n]+)\[[rpl]\]|^([^\[#;*@_\n]+)\n$"
+        )
+        lineRegexSpeaker = r"^#(.*)"
+        furiganaRegex = r"(\[ruby\stext=(.*?)\])"
         choiceRegex = r'\[glink.+?text="(.*?)"'
-        
+
         # Speaker
-        match = re.search(lineRegexSpeaker, data[i]) 
+        match = re.search(lineRegexSpeaker, data[i])
         if match:
             if match.group(1):
                 response = getSpeaker(match.group(1))
                 speaker = response[0]
                 tokens[0] += response[1][0]
                 tokens[1] += response[1][1]
-                data[i] = data[i].replace(match.group(1), speaker)  
+                data[i] = data[i].replace(match.group(1), speaker)
             else:
-                speaker = None   
+                speaker = None
 
         # Furigana
-        match = re.search(r'^\[ruby\stext', data[i])
+        match = re.search(r"^\[ruby\stext", data[i])
         furiganaList = []
         if match:
             # Check next line and combine
             while match:
-                furiganaList.append(data[i].replace('\n', ''))
+                furiganaList.append(data[i].replace("\n", ""))
                 del data[i]
-                match = re.search(r'^\[ruby\stext', data[i])
+                match = re.search(r"^\[ruby\stext", data[i])
             jaString = "".join(furiganaList)
 
             # Ruby Text
@@ -228,7 +230,7 @@ def translateTyrano(data, translatedList):
             data.insert(i, f"{jaString}[r]")
 
         # Dialogue
-        match = re.search(lineRegexNoSpeaker, data[i]) 
+        match = re.search(lineRegexNoSpeaker, data[i])
         jaString = None
         if match:
             jaString = match.group(1)
@@ -238,7 +240,7 @@ def translateTyrano(data, translatedList):
                 jaString = match.group(3)
 
             originalString = jaString
-            
+
             # Pass 1
             if not translatedList:
                 # Remove any textwrap and commands
@@ -285,8 +287,8 @@ def translateTyrano(data, translatedList):
                     # translatedText = translatedText.replace('\n', '[r]')
 
                     # Avoid Crashes
-                    translatedText = translatedText.replace('[', '(')
-                    translatedText = translatedText.replace(']', ')')
+                    translatedText = translatedText.replace("[", "(")
+                    translatedText = translatedText.replace("]", ")")
 
                     # Set Data
                     data[i] = data[i].replace(originalString, translatedText)
@@ -297,7 +299,7 @@ def translateTyrano(data, translatedList):
             # Pass 1
             if not translatedList:
                 choiceList.append(match.group(1))
-                match = re.search(choiceRegex, data[i+1])
+                match = re.search(choiceRegex, data[i + 1])
 
             # Pass 2
             else:
@@ -306,7 +308,7 @@ def translateTyrano(data, translatedList):
                 choiceList.pop(0)
 
                 # Replace Spaces
-                translatedText = translatedText.replace(' ', '\u3000')
+                translatedText = translatedText.replace(" ", "\u3000")
 
                 # Set
                 data[i] = data[i].replace(match.group(1), translatedText)
@@ -318,23 +320,21 @@ def translateTyrano(data, translatedList):
     # EOF
     if not translatedList:
         stringListTL = []
-        choiceListTL = []        
+        choiceListTL = []
 
         # String List
         if stringList:
             PBAR.total = len(stringList)
             PBAR.refresh()
             response = translateGPT(
-                stringList,
-                "Reply with the English Translation",
-                True
+                stringList, "Reply with the English Translation", True
             )
             tokens[0] += response[1][0]
             tokens[1] += response[1][1]
             stringListTL = response[0]
-            
+
             if len(stringList) != len(stringListTL):
-            # Mismatch
+                # Mismatch
                 with LOCK:
                     if FILENAME not in MISMATCH:
                         MISMATCH.append(FILENAME)
@@ -342,16 +342,14 @@ def translateTyrano(data, translatedList):
         # Choice List
         if choiceList:
             response = translateGPT(
-                choiceList,
-                "Reply with the English TL of the Dialogue Choice",
-                True
+                choiceList, "Reply with the English TL of the Dialogue Choice", True
             )
             tokens[0] += response[1][0]
             tokens[1] += response[1][1]
             choiceListTL = response[0]
-            
+
             if len(choiceList) != len(choiceListTL):
-            # Mismatch
+                # Mismatch
                 with LOCK:
                     if FILENAME not in MISMATCH:
                         MISMATCH.append(FILENAME)
