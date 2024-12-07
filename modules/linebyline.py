@@ -232,6 +232,10 @@ def translateTxt(data, translatedList):
                     translatedText = re.sub(r'(?<!\\)"', r'\\"', translatedText)
                     translatedText = re.sub(r"(?<!\\)'", r"\\'", translatedText)
 
+                    # # Textwrap
+                    # translatedText = textwrap.fill(translatedText, width=WIDTH)
+                    # translatedText = translatedText.replace("\n", "\\n")
+
                     # Set Data
                     data[i] = f"{translatedText}\n"
 
