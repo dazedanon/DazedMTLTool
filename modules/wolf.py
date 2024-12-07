@@ -284,6 +284,7 @@ def searchCodes(events, pbar, jobList, filename):
     totalTokens = [0, 0]
     translatedText = ""
     speaker = ""
+    lastSpeaker = ""
     nametag = ""
     initialJAString = ""
     global LOCK, NAMESLIST, MISMATCH, PBAR, FILENAME
@@ -410,7 +411,7 @@ def searchCodes(events, pbar, jobList, filename):
                     codeList[i]["stringArgs"][1] = speaker
                 
                 # Reuse Last Speaker
-                elif codeList[i]["intArgs"][0] == 500501 and lastSpeaker != "":
+                elif codeList[i]["intArgs"][0] == 500501 and lastSpeaker:
                     codeList[i]["stringArgs"] = ["", lastSpeaker]
                     codeList[i]["intArgs"] = [500529, 4112, 0]
                     speaker = lastSpeaker
