@@ -207,9 +207,9 @@ def translateRenpy(data, translatedList):
         speaker = ""
         lineRegexNoSpeaker = r'^\s\s\s\s"(.*)"'
         lineRegexSpeaker = r'^\s\s\s\s(.+?)\s"(.*)"'
-        
+
         # Grab Line
-        match = re.search(lineRegexSpeaker, data[i]) 
+        match = re.search(lineRegexSpeaker, data[i])
         if match:
             response = getSpeaker(match.group(1))
             jaString = match.group(2)
@@ -222,7 +222,7 @@ def translateRenpy(data, translatedList):
                 jaString = match.group(1)
 
         # Valid Line
-        if match and 'voice' not in data[i]:
+        if match and "voice" not in data[i]:
             originalString = jaString
             # Pass 1
             if translatedList == []:
@@ -262,7 +262,7 @@ def translateRenpy(data, translatedList):
 
                     # Textwrap
                     translatedText = textwrap.fill(translatedText, width=WIDTH)
-                    translatedText = translatedText.replace('\n', '\\n')
+                    translatedText = translatedText.replace("\n", "\\n")
 
                     # Set Data
                     data[i] = data[i].replace(originalString, translatedText)
@@ -278,9 +278,7 @@ def translateRenpy(data, translatedList):
 
         # Translate
         response = translateGPT(
-            stringList,
-            "Reply with the English TL of the NPC Name",
-            True
+            stringList, "Reply with the English TL of the NPC Name", True
         )
         tokens[0] += response[1][0]
         tokens[1] += response[1][1]

@@ -149,8 +149,8 @@ files to translate are in the /files folder and that you picked the right game e
 
     if totalCost != "Fail":
         # if estimate is False:
-            # This is to encourage people to grab what's in /translated instead
-            # deleteFolderFiles("files")
+        # This is to encourage people to grab what's in /translated instead
+        # deleteFolderFiles("files")
 
         tqdm.write(str(totalCost))
 

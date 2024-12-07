@@ -57,7 +57,7 @@ if "gpt-3.5" in MODEL:
 elif "gpt-4" in MODEL:
     INPUTAPICOST = 0.0025
     OUTPUTAPICOST = 0.01
-    BATCHSIZE = 20
+    BATCHSIZE = 30
     FREQUENCY_PENALTY = 0.1
 
 # tqdm Globals
@@ -68,14 +68,16 @@ PBAR = None
 FILENAME = None
 
 # Dialogue / Scroll
-CODE101 = False
-CODE102 = False
+CODE101 = True
+CODE102 = True
+
+# Set String (Fragile but necessary)
 CODE122 = False
 
 # Other
-CODE210 = False
+CODE210 = True
 CODE300 = False
-CODE250 = True
+CODE250 = False
 
 # Database
 NPCFLAG = False
@@ -392,79 +394,28 @@ def searchCodes(events, pbar, jobList, filename):
 
             ### Event Code: 210 Common Event
             if codeList[i]["code"] == 210 and CODE210 == True:
-                # if 'stringArgs' in codeList[i] and len(codeList[i]['stringArgs']) > 1:
-                #     # Grab Event List
-                #     jaString = codeList[i]['stringArgs'][1]
+                # Add Speaker
+                if (
+                    "stringArgs" in codeList[i]
+                    and codeList[i]["intArgs"][0] == 500529
+                    and len(codeList[i]["stringArgs"]) == 2
+                ):
+                    response = getSpeaker(codeList[i]["stringArgs"][1])
+                    totalTokens[1] += response[1][0]
+                    totalTokens[1] += response[1][1]
+                    speaker = response[0]
+                    lastSpeaker = speaker
 
-                #     # Remove Textwrap
-                #     jaString = jaString.replace("\n", ' ')
-
-                #     # Translate
-                #     response = translateGPT(jaString, f'Reply with the {LANGUAGE} translation of the location', False)
-                #     translatedText = response[0]
-                #     totalTokens[0] += response[1][0]
-                #     totalTokens[1] += response[1][1]
-
-                #     # Textwrap
-                #     translatedText = textwrap.fill(translatedText, WIDTH)
-
-                #     # Validate and Set Data
-                #     codeList[i]['stringArgs'][1] = translatedText
-                if "stringArgs" in codeList[i] and len(codeList[i]["stringArgs"]) > 1:
-                    cleanedList = formatDramon(codeList[i]["stringArgs"][1])
-                    fontSize = 24
-                    translatedText = ""
-
-                    for str in cleanedList:
-                        # Pass 1
-                        if not setData:
-                            if (
-                                all(x not in str for x in ["_", "@", ">", "/"])
-                                and str != "\r\n"
-                            ):
-                                # Remove Textwrap and Font and Add to list
-                                str = str.replace("\r\n", " ")
-                                str = re.sub(r"[\\]+f\[\d+\]", "", str)
-                                list300.append(str)
-
-                        # Pass 2
-                        else:
-                            if (
-                                all(
-                                    x not in str
-                                    for x in [
-                                        "_",
-                                        "@",
-                                        ">",
-                                        "/",
-                                    ]
-                                )
-                                and str != "\r\n"
-                            ):
-                                # Decide Wrap
-                                if codeList[i]["stringArgs"][0] == "[移]サウンドノベル":
-                                    width = 40
-                                else:
-                                    width = WIDTH
-
-                                # Add Textwrap and Font
-                                list300[0] = textwrap.fill(list300[0], width)
-                                list300[0] = list300[0].replace(
-                                    "\n", f"\r\n\\f[{fontSize}]"
-                                )
-                                list300[0] = f"\\f[{fontSize}]{list300[0]}\r\n"
-                                translatedText += list300[0]
-                                list300.pop(0)
-                            else:
-                                translatedText += str
-
-                    # Write to File
-                    if setData:
-                        # Formatting Fixes
-                        translatedText = translatedText.replace('*"', '* "')
-                        translatedText = translatedText.replace("\r\n\r\n", "\r\n")
-                        translatedText = re.sub(r"[^\S\r\n]+", " ", translatedText)
-                        codeList[i]["stringArgs"][1] = translatedText
+                    # Set Data
+                    codeList[i]["stringArgs"][1] = speaker
+                
+                # Reuse Last Speaker
+                elif codeList[i]["intArgs"][0] == 500501 and lastSpeaker != "":
+                    speaker = lastSpeaker
+                    
+                # Erase Speaker
+                elif codeList[i]["intArgs"][0] == 500529:
+                    speaker = ""
 
             ### Event Code: 122 SetString
             if codeList[i]["code"] == 122 and CODE122 == True:
@@ -1802,40 +1753,6 @@ def getSpeaker(speaker):
     return [speaker, [0, 0]]
 
 
-def subVars(jaString):
-    jaString = jaString.replace("\u3000", " ")
-
-    # Formatting
-    count = 0
-    codeList = re.findall(r"[\\]+[\w]+\[[a-zA-Z0-9\\\[\]\_,\s-]+?\]", jaString)
-    codeList = set(codeList)
-    if len(codeList) != 0:
-        for var in codeList:
-            jaString = jaString.replace(var, "[FCode_" + str(count) + "]")
-            count += 1
-
-    # Put all lists in list and return
-    return [jaString, codeList]
-
-
-def resubVars(translatedText, codeList):
-    # Fix Spacing and ChatGPT Nonsense
-    matchList = re.findall(r"\[\s?.+?\s?\]", translatedText)
-    if len(matchList) > 0:
-        for match in matchList:
-            text = match.strip()
-            translatedText = translatedText.replace(match, text)
-
-    # Formatting
-    count = 0
-    if len(codeList) != 0:
-        for var in codeList:
-            translatedText = translatedText.replace("[FCode_" + str(count) + "]", var)
-            count += 1
-
-    return translatedText
-
-
 def batchList(input_list, batch_size):
     if not isinstance(batch_size, int) or batch_size <= 0:
         raise ValueError("batch_size must be a positive integer")
@@ -1908,6 +1825,8 @@ def cleanTranslatedText(translatedText, varResponse):
         "「": '\\"',
         "」": '\\"',
         "- ": "-",
+        "】": "]",
+        "【": "[",
         "Placeholder Text": "",
         # Add more replacements as needed
     }
@@ -1916,7 +1835,6 @@ def cleanTranslatedText(translatedText, varResponse):
 
     # Elongate Long Dashes (Since GPT Ignores them...)
     translatedText = elongateCharacters(translatedText)
-    translatedText = resubVars(translatedText, varResponse[1])
     return translatedText
 
 
@@ -1938,7 +1856,7 @@ def elongateCharacters(text):
 def extractTranslation(translatedTextList, is_list):
     try:
         translatedTextList = re.sub(r'\\"+\"([^,\n}])', r'\\"\1', translatedTextList)
-        translatedTextList = re.sub(r'(?<![\\])"+', r'"', translatedTextList)
+        translatedTextList = re.sub(r"(?<![\\])\"+(?!\n)", r'"', translatedTextList)
         line_dict = json.loads(translatedTextList)
         # If it's a batch (i.e., list), extract with tags; otherwise, return the single item.
         string_list = list(line_dict.values())
@@ -1996,11 +1914,10 @@ def translateGPT(text, history, fullPromptFlag):
             if isinstance(tItem, list):
                 payload = {f"Line{i+1}": string for i, string in enumerate(tItem)}
                 payload = json.dumps(payload, indent=4, ensure_ascii=False)
-                varResponse = subVars(payload)
+                varResponse = [payload, []]
                 subbedT = varResponse[0]
-                logFile.write(f"Input:\n{subbedT}\n")
             else:
-                varResponse = subVars(tItem)
+                varResponse = [tItem, []]
                 subbedT = varResponse[0]
 
             # Things to Check before starting translation
@@ -2009,6 +1926,7 @@ def translateGPT(text, history, fullPromptFlag):
             ):
                 if PBAR is not None:
                     PBAR.update(len(tItem))
+                history = tItem[-MAXHISTORY:]
                 continue
 
             # Create Message
@@ -2050,16 +1968,17 @@ def translateGPT(text, history, fullPromptFlag):
                             extractedTranslations
                         ):
                             mismatch = True  # Just here for breakpoint
+                logFile.write(f"Input:\n{subbedT}\n")
                 logFile.write(f"Output:\n{translatedText}\n")
 
                 # Set if no mismatch
                 if mismatch == False:
                     tList[index] = extractedTranslations
                     history = extractedTranslations[
-                        -10:
+                        -MAXHISTORY:
                     ]  # Update history if we have a list
                 else:
-                    history = text[-10:]
+                    history = text[-MAXHISTORY:]
                     mismatch = False
                     if FILENAME not in MISMATCH:
                         MISMATCH.append(FILENAME)

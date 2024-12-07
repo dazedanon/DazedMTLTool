@@ -195,38 +195,38 @@ def translateRegex(data, translatedList):
         lineRegexText = r"t\s'(.*)'$"
         lineRegexSpeaker = r"n\s'(.*)'$"
         choiceRegex = r"choice:\d+\s'(.*)'"
-        
+
         # Speaker
-        match = re.search(lineRegexSpeaker, data[i]) 
+        match = re.search(lineRegexSpeaker, data[i])
         if match:
             if match.group(1):
                 response = getSpeaker(match.group(1))
                 speaker = response[0]
                 tokens[0] += response[1][0]
                 tokens[1] += response[1][1]
-                data[i] = data[i].replace(match.group(1), speaker)  
+                data[i] = data[i].replace(match.group(1), speaker)
             else:
-                speaker = None   
+                speaker = None
 
         # Dialogue
-        match = re.search(lineRegexText, data[i]) 
+        match = re.search(lineRegexText, data[i])
         jaString = None
-        if match:            
+        if match:
             # Set String
             jaString = match.group(1)
             originalString = jaString
 
             # Check if next lines are strings
             jaStringLines = [jaString]
-            match = re.search(lineRegexText, data[i+1])
+            match = re.search(lineRegexText, data[i + 1])
             while match:
                 jaStringLines.append(match.group(1))
-                del(data[i+1])
-                match = re.search(lineRegexText, data[i+1])
+                del data[i + 1]
+                match = re.search(lineRegexText, data[i + 1])
 
             # Combine
             jaString = " ".join(jaStringLines)
-            
+
             # Pass 1
             if not translatedList:
                 # Strip Spaces
@@ -284,7 +284,11 @@ def translateRegex(data, translatedList):
                 choiceList.pop(0)
 
                 # Replace Spaces
-                translatedText = translatedText.replace(' ', '\u3000')
+                translatedText = translatedText.replace("\u3000", " ")
+
+                # Escape Quotes
+                translatedText = re.sub(r'(?<!\\)"', r'\\"', translatedText)
+                translatedText = re.sub(r"(?<!\\)'", r"\\'", translatedText)
 
                 # Set
                 data[i] = data[i].replace(match.group(1), translatedText)
@@ -296,23 +300,21 @@ def translateRegex(data, translatedList):
     # EOF
     if not translatedList:
         stringListTL = []
-        choiceListTL = []        
+        choiceListTL = []
 
         # String List
         if stringList:
             PBAR.total = len(stringList)
             PBAR.refresh()
             response = translateGPT(
-                stringList,
-                "Reply with the English Translation",
-                True
+                stringList, "Reply with the English Translation", True
             )
             tokens[0] += response[1][0]
             tokens[1] += response[1][1]
             stringListTL = response[0]
-            
+
             if len(stringList) != len(stringListTL):
-            # Mismatch
+                # Mismatch
                 with LOCK:
                     if FILENAME not in MISMATCH:
                         MISMATCH.append(FILENAME)
@@ -320,16 +322,14 @@ def translateRegex(data, translatedList):
         # Choice List
         if choiceList:
             response = translateGPT(
-                choiceList,
-                "Reply with the English TL of the Dialogue Choice",
-                True
+                choiceList, "Reply with the English TL of the Dialogue Choice", True
             )
             tokens[0] += response[1][0]
             tokens[1] += response[1][1]
             choiceListTL = response[0]
-            
+
             if len(choiceList) != len(choiceListTL):
-            # Mismatch
+                # Mismatch
                 with LOCK:
                     if FILENAME not in MISMATCH:
                         MISMATCH.append(FILENAME)
@@ -450,7 +450,7 @@ def cleanTranslatedText(translatedText, varResponse):
         "「": '\\"',
         "」": '\\"',
         "- ": "-",
-        "—" : "-",
+        "—": "-",
         "】": "]",
         "【": "[",
         "Placeholder Text": "",

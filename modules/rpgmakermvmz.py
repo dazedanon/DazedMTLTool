@@ -1146,10 +1146,10 @@ def searchCodes(page, pbar, jobList, filename):
                     if setData == False:
                         # Remove Textwrap
                         if FIXTEXTWRAP:
-                            finalJAString = finalJAString.replace('\n', ' ')
+                            finalJAString = finalJAString.replace("\n", " ")
                         if "\\px[200]" in finalJAString:
-                            finalJAString = finalJAString.replace('\\px[200]', '')
-                        
+                            finalJAString = finalJAString.replace("\\px[200]", "")
+
                         # Append
                         if finalJAString != "":
                             if speaker == "" and finalJAString != "":
@@ -1209,9 +1209,11 @@ def searchCodes(page, pbar, jobList, filename):
                                 translatedText = translatedText.replace("\n", "<br>")
 
                             # px
-                            if '\\px[200]' in nametag:
+                            if "\\px[200]" in nametag:
                                 translatedText = translatedText.replace("\\px[200]", "")
-                                translatedText = translatedText.replace("\n", "\n\\px[200]")
+                                translatedText = translatedText.replace(
+                                    "\n", "\n\\px[200]"
+                                )
 
                             ### Add Var Strings
                             # CL Flag
