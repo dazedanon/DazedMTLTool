@@ -411,6 +411,8 @@ def searchCodes(events, pbar, jobList, filename):
                 
                 # Reuse Last Speaker
                 elif codeList[i]["intArgs"][0] == 500501 and lastSpeaker != "":
+                    codeList[i]["stringArgs"] = ["", lastSpeaker]
+                    codeList[i]["intArgs"] = [500529, 4112, 0]
                     speaker = lastSpeaker
                     
                 # Erase Speaker

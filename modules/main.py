@@ -50,6 +50,7 @@ from modules.wolf2 import handleWOLF2
 from modules.javascript import handleJavascript
 from modules.irissoft import handleIris
 from modules.regex import handleRegex
+from modules.linebyline import handleText
 from modules.renpy import handleRenpy
 from modules.unity import handleUnity
 from modules.images import handleImages
@@ -80,6 +81,7 @@ MODULES = [
     ["Javascript", ["js"], handleJavascript],
     ["Iris", ["txt"], handleIris],
     ["Regex", ["txt", "json", "script"], handleRegex],
+    ["Line By Line", ["txt"], handleText],
     ["Renpy", ["rpy"], handleRenpy],
     ["Unity", ["txt"], handleUnity],
     ["Images", [""], handleImages],
