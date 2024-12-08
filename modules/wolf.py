@@ -310,15 +310,6 @@ def searchCodes(events, pbar, jobList, filename):
                 jaString = codeList[i]["stringArgs"][0]
                 initialJAString = jaString
 
-                # Catch Vars that may break the TL
-                varString = ""
-                matchList = re.findall(
-                    r"^[\\_]+[\w]+\[[a-zA-Z0-9\\\[\]\_,\s-]+\]", jaString
-                )
-                if len(matchList) != 0:
-                    varString = matchList[0]
-                    jaString = jaString.replace(matchList[0], "")
-
                 # Grab Speaker
                 if "：\n" in jaString:
                     nameList = re.findall(r"(.*)：\n", jaString)
@@ -362,9 +353,6 @@ def searchCodes(events, pbar, jobList, filename):
                     # Add back Nametag
                     translatedText = nametag + translatedText
                     nametag = ""
-
-                    # Add back Potential Variables in String
-                    translatedText = varString + translatedText
 
                     # Set Data
                     codeList[i]["stringArgs"][0] = translatedText
