@@ -59,7 +59,7 @@ if "gpt-3.5" in MODEL:
 elif "gpt-4" in MODEL:
     INPUTAPICOST = 0.0025
     OUTPUTAPICOST = 0.01
-    BATCHSIZE = 20
+    BATCHSIZE = 30
 
 def handleText(filename, estimate):
     global ESTIMATE, TOKENS, FILENAME
@@ -190,7 +190,7 @@ def translateTxt(data, translatedList):
     i = 0
 
     while i < len(data):
-        lineTextRegex = r"(.*)"
+        lineTextRegex = r"(.+)"
 
         # Dialogue
         match = re.search(lineTextRegex, data[i])
@@ -198,7 +198,6 @@ def translateTxt(data, translatedList):
         if match:
             # Set String
             jaString = match.group(1)
-            originalString = jaString
 
             # Pass 1
             if not translatedList:
@@ -227,10 +226,6 @@ def translateTxt(data, translatedList):
                     translatedText = re.sub(
                         r"^\[?(.+?)\]?\s?[|:]\s?", "", translatedText
                     )
-
-                    # Escape Quotes
-                    translatedText = re.sub(r'(?<!\\)"', r'\\"', translatedText)
-                    translatedText = re.sub(r"(?<!\\)'", r"\\'", translatedText)
 
                     # # Textwrap
                     # translatedText = textwrap.fill(translatedText, width=WIDTH)
