@@ -57,7 +57,7 @@ if "gpt-3.5" in MODEL:
 elif "gpt-4" in MODEL:
     INPUTAPICOST = 0.0025
     OUTPUTAPICOST = 0.01
-    BATCHSIZE = 30
+    BATCHSIZE = 20
     FREQUENCY_PENALTY = 0.1
 
 # tqdm Globals
@@ -284,7 +284,6 @@ def searchCodes(events, pbar, jobList, filename):
     totalTokens = [0, 0]
     translatedText = ""
     speaker = ""
-    lastSpeaker = ""
     nametag = ""
     initialJAString = ""
     global LOCK, NAMESLIST, MISMATCH, PBAR, FILENAME
@@ -377,8 +376,14 @@ def searchCodes(events, pbar, jobList, filename):
             ### Event Code: 102 Choices
             if codeList[i]["code"] == 102 and CODE102 == True:
                 # Grab Choice List
-                choiceList = codeList[i]["stringArgs"]
+                choiceList = []
+                jaChoiceList = codeList[i]["stringArgs"]
 
+                # Filter Empty
+                for j in range(len(jaChoiceList)):
+                    if jaChoiceList[j]:
+                        choiceList.append(jaChoiceList[j])
+                
                 # Translate
                 response = translateGPT(
                     choiceList,
@@ -390,8 +395,11 @@ def searchCodes(events, pbar, jobList, filename):
                 totalTokens[1] += response[1][1]
 
                 # Validate and Set Data
-                if len(choiceList) == len(translatedChoiceList):
-                    codeList[i]["stringArgs"] = translatedChoiceList
+                if len(translatedChoiceList) == len(choiceList):
+                    for j in range(len(jaChoiceList)):
+                        if jaChoiceList[j]:
+                            codeList[i]["stringArgs"][j] = translatedChoiceList[0]
+                            translatedChoiceList.pop(0)
 
             ### Event Code: 210 Common Event
             if codeList[i]["code"] == 210 and CODE210 == True:
@@ -404,21 +412,9 @@ def searchCodes(events, pbar, jobList, filename):
                     response = getSpeaker(codeList[i]["stringArgs"][1])
                     totalTokens[1] += response[1][0]
                     totalTokens[1] += response[1][1]
-                    speaker = response[0]
-                    lastSpeaker = speaker
 
                     # Set Data
-                    codeList[i]["stringArgs"][1] = speaker
-                
-                # Reuse Last Speaker
-                elif codeList[i]["intArgs"][0] == 500501 and lastSpeaker:
-                    codeList[i]["stringArgs"] = ["", lastSpeaker]
-                    codeList[i]["intArgs"] = [500529, 4112, 0]
-                    speaker = lastSpeaker
-                    
-                # Erase Speaker
-                elif codeList[i]["intArgs"][0] == 500529:
-                    speaker = ""
+                    codeList[i]["stringArgs"][1] = response[0]
 
             ### Event Code: 122 SetString
             if codeList[i]["code"] == 122 and CODE122 == True:
