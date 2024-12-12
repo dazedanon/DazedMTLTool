@@ -447,7 +447,7 @@ def elongateCharacters(text):
 def extractTranslation(translatedTextList, is_list):
     try:
         translatedTextList = re.sub(r'\\"+\"([^,\n}])', r'\\"\1', translatedTextList)
-        translatedTextList = re.sub(r"(?<![\\])\"+(?!\n)", r'"', translatedTextList)
+        translatedTextList = re.sub(r"(?<![\\])\"+(?![\n,])", r'"', translatedTextList)
         line_dict = json.loads(translatedTextList)
         # If it's a batch (i.e., list), extract with tags; otherwise, return the single item.
         string_list = list(line_dict.values())
@@ -455,6 +455,10 @@ def extractTranslation(translatedTextList, is_list):
             return string_list
         else:
             return string_list[0]
+
+    except Exception as e:
+        PBAR.write(f"extractTranslation Error: {e} on String {translatedTextList}")
+        return None
 
     except Exception as e:
         PBAR.write(f"extractTranslation Error: {e} on String {translatedTextList}")
@@ -503,6 +507,9 @@ def translateGPT(text, history, fullPromptFlag):
         for index, tItem in enumerate(tList):
             # Before sending to translation, if we have a list of items, add the formatting
             if isinstance(tItem, list):
+                for j in range(len(tItem)):
+                    if not tItem[j]:
+                        tItem[j] = tItem[j].replace("", "Placeholder Text")
                 payload = {f"Line{i+1}": string for i, string in enumerate(tItem)}
                 payload = json.dumps(payload, indent=4, ensure_ascii=False)
                 varResponse = [payload, []]
