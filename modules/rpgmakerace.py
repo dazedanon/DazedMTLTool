@@ -2702,7 +2702,7 @@ def elongateCharacters(text):
 def extractTranslation(translatedTextList, is_list):
     try:
         translatedTextList = re.sub(r'\\"+\"([^,\n}])', r'\\"\1', translatedTextList)
-        translatedTextList = re.sub(r"(?<![\\])\"+(?!\n)", r'"', translatedTextList)
+        translatedTextList = re.sub(r"(?<![\\])\"+(?![\n,])", r'"', translatedTextList)
         line_dict = json.loads(translatedTextList)
         # If it's a batch (i.e., list), extract with tags; otherwise, return the single item.
         string_list = list(line_dict.values())
@@ -2710,6 +2710,10 @@ def extractTranslation(translatedTextList, is_list):
             return string_list
         else:
             return string_list[0]
+
+    except Exception as e:
+        PBAR.write(f"extractTranslation Error: {e} on String {translatedTextList}")
+        return None
 
     except Exception as e:
         PBAR.write(f"extractTranslation Error: {e} on String {translatedTextList}")
