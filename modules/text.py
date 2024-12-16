@@ -61,6 +61,7 @@ elif "gpt-4" in MODEL:
     OUTPUTAPICOST = 0.01
     BATCHSIZE = 30
 
+
 def handleText(filename, estimate):
     global ESTIMATE, TOKENS, FILENAME
     ESTIMATE = estimate

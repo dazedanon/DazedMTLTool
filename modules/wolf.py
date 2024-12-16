@@ -82,12 +82,13 @@ CODE250 = False
 # Database
 NPCFLAG = False
 SCENARIOFLAG = False
-ITEMFLAG = False
+OPTIONSFLAG = False
+ITEMFLAG = True
 COLLECTIONFLAG = False
 ENEMYFLAG = False
 ARMORFLAG = False
 WEAPONFLAG = False
-SKILLFLAG = True
+SKILLFLAG = False
 
 
 def handleWOLF(filename, estimate):
@@ -372,7 +373,7 @@ def searchCodes(events, pbar, jobList, filename):
                 for j in range(len(jaChoiceList)):
                     if jaChoiceList[j]:
                         choiceList.append(jaChoiceList[j])
-                
+
                 # Translate
                 response = translateGPT(
                     choiceList,
@@ -481,9 +482,9 @@ def searchCodes(events, pbar, jobList, filename):
                             translatedText = textwrap.fill(translatedText, LISTWIDTH)
 
                             # Set String
-                            codeList[i]["stringArgs"][0] = codeList[i][
-                                "stringArgs"
-                            ][0].replace(jaString, translatedText)
+                            codeList[i]["stringArgs"][0] = codeList[i]["stringArgs"][
+                                0
+                            ].replace(jaString, translatedText)
 
             ### Event Code: 300 Common Events
             if (
@@ -764,6 +765,7 @@ def searchDB(events, pbar, jobList, filename):
         enemyList = jobList[5]
         weaponsList = jobList[6]
         skillList = jobList[7]
+        optionsList = jobList[8]
         setData = True
     else:
         scenarioList = [[], [], []]
@@ -774,6 +776,7 @@ def searchDB(events, pbar, jobList, filename):
         weaponsList = [[], [], [], []]
         skillList = [[], [], [], []]
         collectionList = [[], [], [], []]
+        optionsList = [[], [], [], []]
         setData = False
 
     # Vars/Globals
@@ -901,217 +904,188 @@ def searchDB(events, pbar, jobList, filename):
                             dataList[45].update({"value": scenarioList[2][0]})
                             scenarioList[2].pop(0)
 
+            # Grab Options
+            if table["name"] == "選択肢説明" and OPTIONSFLAG == True:
+                for option in table["data"]:
+                    dataList = option["data"]
+
+                    # Parse
+                    for j in range(len(dataList)):
+                        # Name
+                        if "表示名" in dataList[j].get("name"):
+                            # Pass 1 (Grab Data)
+                            if setData == False:
+                                if dataList[j].get("value") != "":
+                                    optionsList[0].append(dataList[j].get("value"))
+
+                            # Pass 2 (Set Data)
+                            else:
+                                if dataList[j].get("value") != "":
+                                    dataList[j].update({"value": choiceList[0][0]})
+                                    optionsList[0].pop(0)
+
+                        # Description
+                        if "選択肢1" in dataList[j].get("name"):
+                            if setData == False:
+                                if dataList[j].get("value") != "":
+                                    # Grab Choices
+                                    optionsList[1] = (
+                                        dataList[j].get("value").split("\r\n")
+                                    )
+
+                                    # Translate
+                                    response = translateGPT(
+                                        optionsList[1],
+                                        "Reply with the English translation of the dialogue choices",
+                                        True,
+                                    )
+                                    totalTokens[0] += response[1][0]
+                                    totalTokens[1] += response[1][1]
+                                    translatedText = "\r\n".split(response[0])
+
+                                    # Set Data
+                                    dataList[j].update({"value": translatedText})
+                        # Description
+                        if "選択肢1" in dataList[j].get("name"):
+                            if setData == False:
+                                if dataList[j].get("value") != "":
+                                    # Grab Choices
+                                    optionsList[1] = (
+                                        dataList[j].get("value").split("\r\n")
+                                    )
+
+                                    # Translate
+                                    response = translateGPT(
+                                        optionsList[1],
+                                        "Reply with the English translation of the dialogue choices",
+                                        True,
+                                    )
+                                    totalTokens[0] += response[1][0]
+                                    totalTokens[1] += response[1][1]
+                                    translatedText = "\r\n".split(response[0])
+
+                                    # Set Data
+                                    dataList[j].update({"value": translatedText})
+                        # Description
+                        if "選択肢1" in dataList[j].get("name"):
+                            if setData == False:
+                                if dataList[j].get("value") != "":
+                                    # Grab Choices
+                                    optionsList[1] = (
+                                        dataList[j].get("value").split("\r\n")
+                                    )
+
+                                    # Translate
+                                    response = translateGPT(
+                                        optionsList[1],
+                                        "Reply with the English translation of the dialogue choices",
+                                        True,
+                                    )
+                                    totalTokens[0] += response[1][0]
+                                    totalTokens[1] += response[1][1]
+                                    translatedText = "\r\n".split(response[0])
+
+                                    # Set Data
+                                    dataList[j].update({"value": translatedText})
+
             # Grab Items
-            if table["name"] == "NULL" and ITEMFLAG == True:
-                with open("translations.txt", "a", encoding="utf-8") as file:
-                    for item in table["data"]:
-                        dataList = item["data"]
+            if table["name"] == "選択肢説明" and ITEMFLAG == True:
+                for item in table["data"]:
+                    dataList = item["data"]
 
-                        # Parse #
-                        for j in range(len(dataList)):
-                            # Name
-                            if "項目文" in dataList[j].get("name"):
-                                # Pass 1 (Grab Data)
-                                if setData == False:
-                                    if dataList[j].get("value") != "":
-                                        itemList[0].append(dataList[j].get("value"))
+                    # Parse
+                    for j in range(len(dataList)):
+                        # Name
+                        if "表示名" in dataList[j].get("name"):
+                            # Pass 1 (Grab Data)
+                            if setData == False:
+                                if dataList[j].get("value") != "":
+                                    itemList[0].append(dataList[j].get("value"))
 
-                                # Pass 2 (Set Data)
-                                else:
-                                    if dataList[j].get("value") != "":
-                                        file.write(
-                                            f'{dataList[j].get('value')} ({itemList[0][0]})\n'
-                                        )
-                                        line = itemList[0][0]
-                                        line = line.replace(":", "：")
-                                        line = line.replace("/", "／")
-                                        line = line.replace("?", "？")
-                                        dataList[j].update({"value": line})
-                                        itemList[0].pop(0)
+                            # Pass 2 (Set Data)
+                            else:
+                                if dataList[j].get("value") != "":
+                                    dataList[j].update({"value": itemList[0][0]})
+                                    itemList[0].pop(0)
 
-                            # Description 1 (You are my specialz)
-                            if dataList[j].get("name") == "ｾﾘﾌ_交換成立":
-                                # Clean String
-                                fontSize = 24
-                                translatedText = ""
-                                cleanedList = formatDramon(dataList[j].get("value"))
-                                for str in cleanedList:
-                                    # Pass 1
-                                    if not setData:
-                                        if (
-                                            all(
-                                                x not in str
-                                                for x in ["_", "@", ">", "/"]
-                                            )
-                                            and str != "\r\n"
-                                        ):
-                                            # Remove Textwrap and Font and Add to list
-                                            str = str.replace("\r\n", " ")
-                                            str = re.sub(r"[\\]+f\[\d+\]", "", str)
-                                            itemList[1].append(str)
+                        # Description
+                        if "選択肢1" in dataList[j].get("name"):
+                            # Pass 1 (Grab Data)
+                            if setData == False:
+                                if dataList[j].get("value") != "":
+                                    # Remove Textwrap
+                                    jaString = dataList[j].get("value")
+                                    jaString = jaString.replace("\n", " ")
+                                    jaString = jaString.replace("\r", "")
+                                    jaString = re.sub(r"[\\]+f\[\d+\]", "", jaString)
 
-                                    # Pass 2
-                                    else:
-                                        if (
-                                            all(
-                                                x not in str
-                                                for x in [
-                                                    "_",
-                                                    "@",
-                                                    ">",
-                                                    "/",
-                                                ]
-                                            )
-                                            and str != "\r\n"
-                                        ):
-                                            # Decide Wrap
-                                            width = WIDTH
-
-                                            # Add Textwrap and Font
-                                            tempText = itemList[1][0]
-                                            tempText = textwrap.fill(tempText, width)
-                                            # tempText = tempText.replace(
-                                            #     "\n", f"\r\n\\f[{fontSize}]"
-                                            # )
-                                            # tempText = f"\\f[{fontSize}]{tempText}\r\n"
-                                            translatedText += tempText
-                                            itemList[1].pop(0)
-                                        else:
-                                            translatedText += str
-
-                                # Write to File
-                                if setData:
-                                    # Formatting Fixes
-                                    translatedText = translatedText.replace('*"', '* "')
-                                    translatedText = translatedText.replace(
-                                        "\r\n\r\n", "\r\n"
+                                    # Append Data
+                                    itemList[1].append(jaString)
+                            # Pass 2 (Set Data)
+                            else:
+                                if dataList[j].get("value") != "":
+                                    # Textwrap
+                                    translatedText = itemList[1][0]
+                                    translatedText = textwrap.fill(
+                                        translatedText, LISTWIDTH
                                     )
-                                    translatedText = re.sub(
-                                        r"[^\S\r\n]+", " ", translatedText
-                                    )
+                                    translatedText = font + translatedText
+
+                                    # Set Data
                                     dataList[j].update({"value": translatedText})
+                                    itemList[1].pop(0)
+                        # Description
+                        if "選択肢2" in dataList[j].get("name"):
+                            # Pass 1 (Grab Data)
+                            if setData == False:
+                                if dataList[j].get("value") != "":
+                                    # Remove Textwrap
+                                    jaString = dataList[j].get("value")
+                                    jaString = jaString.replace("\n", " ")
+                                    jaString = jaString.replace("\r", "")
+                                    jaString = re.sub(r"[\\]+f\[\d+\]", "", jaString)
 
-                            # Description 2 (You are my specialz)
-                            if dataList[j].get("name") == "ｾﾘﾌ_素材が足りない":
-                                # Clean String
-                                fontSize = 24
-                                translatedText = ""
-                                cleanedList = formatDramon(dataList[j].get("value"))
-                                for str in cleanedList:
-                                    # Pass 1
-                                    if not setData:
-                                        if (
-                                            all(
-                                                x not in str
-                                                for x in ["_", "@", ">", "/"]
-                                            )
-                                            and str != "\r\n"
-                                        ):
-                                            # Remove Textwrap and Font and Add to list
-                                            str = str.replace("\r\n", " ")
-                                            str = re.sub(r"[\\]+f\[\d+\]", "", str)
-                                            itemList[2].append(str)
-
-                                    # Pass 2
-                                    else:
-                                        if (
-                                            all(
-                                                x not in str
-                                                for x in [
-                                                    "_",
-                                                    "@",
-                                                    ">",
-                                                    "/",
-                                                ]
-                                            )
-                                            and str != "\r\n"
-                                        ):
-                                            # Decide Wrap
-                                            width = WIDTH
-
-                                            # Add Textwrap and Font
-                                            tempText = itemList[2][0]
-                                            tempText = textwrap.fill(tempText, width)
-                                            tempText = tempText.replace(
-                                                "\n", f"\r\n\\f[{fontSize}]"
-                                            )
-                                            tempText = f"\\f[{fontSize}]{tempText}\r\n"
-                                            translatedText += tempText
-                                            itemList[2].pop(0)
-                                        else:
-                                            translatedText += str
-
-                                # Write to File
-                                if setData:
-                                    # Formatting Fixes
-                                    translatedText = translatedText.replace('*"', '* "')
-                                    translatedText = translatedText.replace(
-                                        "\r\n\r\n", "\r\n"
+                                    # Append Data
+                                    itemList[2].append(jaString)
+                            # Pass 2 (Set Data)
+                            else:
+                                if dataList[j].get("value") != "":
+                                    # Textwrap
+                                    translatedText = itemList[2][0]
+                                    translatedText = textwrap.fill(
+                                        translatedText, LISTWIDTH
                                     )
-                                    translatedText = re.sub(
-                                        r"[^\S\r\n]+", " ", translatedText
-                                    )
+                                    translatedText = font + translatedText
+
+                                    # Set Data
                                     dataList[j].update({"value": translatedText})
+                                    itemList[2].pop(0)
+                        # Description
+                        if "NULL" in dataList[j].get("name"):
+                            # Pass 1 (Grab Data)
+                            if setData == False:
+                                if dataList[j].get("value") != "":
+                                    # Remove Textwrap
+                                    jaString = dataList[j].get("value")
+                                    jaString = jaString.replace("\n", " ")
+                                    jaString = jaString.replace("\r", "")
+                                    jaString = re.sub(r"[\\]+f\[\d+\]", "", jaString)
 
-                            # Description 3 (You are my specialz)
-                            if dataList[j].get("name") == "ｾﾘﾌ_":
-                                # Clean String
-                                fontSize = 24
-                                translatedText = ""
-                                cleanedList = formatDramon(dataList[j].get("value"))
-                                for str in cleanedList:
-                                    # Pass 1
-                                    if not setData:
-                                        if (
-                                            all(
-                                                x not in str
-                                                for x in ["_", "@", ">", "/"]
-                                            )
-                                            and str != "\r\n"
-                                        ):
-                                            # Remove Textwrap and Font and Add to list
-                                            str = str.replace("\r\n", " ")
-                                            str = re.sub(r"[\\]+f\[\d+\]", "", str)
-                                            itemList[3].append(str)
-
-                                    # Pass 2
-                                    else:
-                                        if (
-                                            all(
-                                                x not in str
-                                                for x in [
-                                                    "_",
-                                                    "@",
-                                                    ">",
-                                                    "/",
-                                                ]
-                                            )
-                                            and str != "\r\n"
-                                        ):
-                                            # Decide Wrap
-                                            width = WIDTH
-
-                                            # Add Textwrap and Font
-                                            tempText = itemList[3][0]
-                                            # tempText = textwrap.fill(tempText, width)
-                                            # tempText = tempText.replace('\n', f'\r\n\\f[{fontSize}]')
-                                            # tempText = f'\\f[{fontSize}]{tempText}\r\n'
-                                            translatedText += tempText
-                                            itemList[3].pop(0)
-                                        else:
-                                            translatedText += str
-
-                                # Write to File
-                                if setData:
-                                    # Formatting Fixes
-                                    translatedText = translatedText.replace('*"', '* "')
-                                    translatedText = translatedText.replace(
-                                        "\r\n\r\n", "\r\n"
+                                    # Append Data
+                                    itemList[3].append(jaString)
+                            # Pass 2 (Set Data)
+                            else:
+                                if dataList[j].get("value") != "":
+                                    # Textwrap
+                                    translatedText = itemList[3][0]
+                                    translatedText = textwrap.fill(
+                                        translatedText, LISTWIDTH
                                     )
-                                    translatedText = re.sub(
-                                        r"[^\S\r\n]+", " ", translatedText
-                                    )
+                                    translatedText = font + translatedText
+
+                                    # Set Data
                                     dataList[j].update({"value": translatedText})
+                                    itemList[3].pop(0)
 
             # Grab Armors
             if table["name"] == "防具" and ARMORFLAG == True:
@@ -1403,6 +1377,7 @@ def searchDB(events, pbar, jobList, filename):
         enemyListTL = [[], []]
         weaponsListTL = [[], [], []]
         skillListTL = [[], [], []]
+        optionsListTL = [[], [], [], []]
 
         translate = False
 
@@ -1617,7 +1592,9 @@ def searchDB(events, pbar, jobList, filename):
             # Name
             response = translateGPT(
                 enemyList[0],
-                "Reply with only the " + LANGUAGE + " translation of the enemy NPC name",
+                "Reply with only the "
+                + LANGUAGE
+                + " translation of the enemy NPC name",
                 True,
             )
             nameListTL = response[0]
@@ -1654,7 +1631,9 @@ def searchDB(events, pbar, jobList, filename):
             # Name
             response = translateGPT(
                 weaponsList[0],
-                "Reply with only the " + LANGUAGE + " translation of the RPG weapon name",
+                "Reply with only the "
+                + LANGUAGE
+                + " translation of the RPG weapon name",
                 True,
             )
             nameListTL = response[0]
@@ -1696,7 +1675,9 @@ def searchDB(events, pbar, jobList, filename):
             # Name
             response = translateGPT(
                 skillList[0],
-                "Reply with only the " + LANGUAGE + " translation of the RPG skill name",
+                "Reply with only the "
+                + LANGUAGE
+                + " translation of the RPG skill name",
                 True,
             )
             nameListTL = response[0]
@@ -1773,6 +1754,32 @@ def searchDB(events, pbar, jobList, filename):
                     collectionListTL = [nameListTL, descListTL1, descListTL2]
                     translate = True
 
+        # OPTIONS
+        if len(optionsList[0]) > 0 or len(optionsList[1]) > 0:
+            # Progress Bar
+            total = 0
+            for optionsArray in optionsList:
+                total += len(optionsArray)
+            pbar.total = total
+            pbar.refresh()
+
+            # Name
+            response = translateGPT(
+                itemList[0], "Reply with only the " + LANGUAGE + " translation", True
+            )
+            nameListTL = response[0]
+            totalTokens[0] += response[1][0]
+            totalTokens[1] += response[1][1]
+
+            # Check Mismatch
+            if len(nameListTL) != len(optionsList[0]):
+                with LOCK:
+                    if filename not in MISMATCH:
+                        MISMATCH.append(filename)
+            else:
+                optionsListTL = [nameListTL]
+                translate = True
+
         # Start Pass 2
         if translate == True:
             jobList.append(scenarioListTL)
@@ -1783,6 +1790,7 @@ def searchDB(events, pbar, jobList, filename):
             jobList.append(enemyListTL)
             jobList.append(weaponsListTL)
             jobList.append(skillListTL)
+            jobList.append(optionsListTL)
             searchDB(events, pbar, jobList, filename)
 
     except IndexError as e:
