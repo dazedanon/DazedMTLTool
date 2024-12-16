@@ -655,7 +655,7 @@ def translateGPT(text, history, fullPromptFlag):
                     PBAR.update(len(tItem))
         else:
             # Ensure we're passing a single string to extractTranslation
-            tList[index] = translatedText
+            tList[index] = translatedText.replace("Placeholder Text", "")
 
     finalList = combineList(tList, text)
     return [finalList, totalTokens]

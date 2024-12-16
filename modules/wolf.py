@@ -72,7 +72,7 @@ CODE101 = False
 CODE102 = False
 
 # Set String (Fragile but necessary)
-CODE122 = True
+CODE122 = False
 
 # Other
 CODE210 = True
@@ -80,10 +80,10 @@ CODE300 = False
 CODE250 = False
 
 # Database
-NPCFLAG = False
 SCENARIOFLAG = False
 OPTIONSFLAG = False
-ITEMFLAG = True
+NPCFLAG = True
+ITEMFLAG = False
 COLLECTIONFLAG = False
 ENEMYFLAG = False
 ARMORFLAG = False
@@ -265,10 +265,12 @@ def searchCodes(events, pbar, jobList, filename):
     # Lists
     if jobList:
         stringList = jobList[0]
-        list300 = jobList[1]
+        list210 = jobList[1]
+        list300 = jobList[2]
         setData = True
     else:
         stringList = []
+        list210 = []
         list300 = []
         setData = False
 
@@ -383,7 +385,7 @@ def searchCodes(events, pbar, jobList, filename):
 
             ### Event Code: 210 Common Event
             if codeList[i]["code"] == 210 and CODE210 == True:
-                # Add Speaker
+                # Speaker Event
                 if (
                     "stringArgs" in codeList[i]
                     and codeList[i]["intArgs"][0] == 500529
@@ -395,6 +397,39 @@ def searchCodes(events, pbar, jobList, filename):
 
                     # Set Data
                     codeList[i]["stringArgs"][1] = response[0]
+
+                # Logs
+                elif (
+                    "stringArgs" in codeList[i]
+                    and codeList[i]["intArgs"][0] == 500510
+                    and len(codeList[i]["stringArgs"]) == 2
+                ):
+                    # Grab String
+                    jaString = codeList[i]["stringArgs"][1]
+                    initialJAString = jaString
+
+                    # Remove Textwrap
+                    jaString = jaString.replace("\r", "")
+                    jaString = jaString.replace("\n", " ")
+
+                    # 1st Pass (Save Text to List)
+                    if not setData:
+                        list210.append(jaString)
+
+                    # 2nd Pass (Set Text)
+                    else:
+                        # Grab Translated String
+                        translatedText = list210[0]
+
+                        # Textwrap
+                        if FIXTEXTWRAP is True:
+                            translatedText = textwrap.fill(translatedText, width=WIDTH)
+
+                        # Set Data
+                        codeList[i]["stringArgs"][1] = translatedText
+
+                        # Pop Item
+                        list210.pop(0)
 
             ### Event Code: 122 SetString
             if codeList[i]["code"] == 122 and CODE122 == True:
@@ -640,6 +675,7 @@ def searchCodes(events, pbar, jobList, filename):
 
         # EOF
         stringListTL = []
+        list210TL = []
         list300TL = []
         setData = False
 
@@ -652,6 +688,21 @@ def searchCodes(events, pbar, jobList, filename):
             totalTokens[0] += response[1][0]
             totalTokens[1] += response[1][1]
             if len(stringListTL) != len(stringList):
+                with LOCK:
+                    if filename not in MISMATCH:
+                        MISMATCH.append(filename)
+            else:
+                setData = True
+
+        # 210 List
+        if len(list210) > 0:
+            pbar.total = len(list210)
+            pbar.refresh()
+            response = translateGPT(list210, textHistory, True)
+            list210TL = response[0]
+            totalTokens[0] += response[1][0]
+            totalTokens[1] += response[1][1]
+            if len(list210TL) != len(list210):
                 with LOCK:
                     if filename not in MISMATCH:
                         MISMATCH.append(filename)
@@ -676,7 +727,7 @@ def searchCodes(events, pbar, jobList, filename):
         # Pass 2
         if setData:
             stringList = []
-            searchCodes(events, pbar, [stringListTL, list300TL], filename)
+            searchCodes(events, pbar, [stringListTL, list210TL, list300TL], filename)
         else:
             # Set Data
             events = codeList
@@ -739,7 +790,7 @@ def searchDB(events, pbar, jobList, filename):
     # Set Lists
     if len(jobList) > 0:
         scenarioList = jobList[0]
-        NPCList = jobList[1]
+        npcList = jobList[1]
         itemList = jobList[2]
         collectionList = jobList[3]
         armorList = jobList[4]
@@ -750,7 +801,7 @@ def searchDB(events, pbar, jobList, filename):
         setData = True
     else:
         scenarioList = [[], [], []]
-        NPCList = [[], [], [], []]
+        npcList = [[], [], [], []]
         itemList = [[], [], [], []]
         armorList = [[], []]
         enemyList = [[], []]
@@ -769,23 +820,11 @@ def searchDB(events, pbar, jobList, filename):
     global NAMESLIST
     global MISMATCH
 
-    # Calculate Total
-    totalLines = 0
-    for table in tableList:
-        if table["name"] == "NPC" and NPCFLAG == True:
-            for NPC in table["data"]:
-                totalLines += len(NPC["data"])
-        if table["name"] == "Hシナリオ" and SCENARIOFLAG == True:
-            for hScenario in table["data"]:
-                totalLines += len(hScenario["data"])
-    pbar.total = totalLines
-    pbar.refresh()
-
     # Begin Parsing File
     try:
         for table in tableList:
-            # Translate NPC
-            if table["name"] == "状態設定（戦場）" and NPCFLAG == True:
+            # Grab Armors
+            if table["name"] == "主人公ステータス" and NPCFLAG == True:
                 for npc in table["data"]:
                     dataList = npc["data"]
 
@@ -796,16 +835,16 @@ def searchDB(events, pbar, jobList, filename):
                             # Pass 1 (Grab Data)
                             if setData == False:
                                 if dataList[j].get("value") != "":
-                                    NPCList[0].append(dataList[j].get("value"))
+                                    npcList[0].append(dataList[j].get("value"))
 
                             # Pass 2 (Set Data)
                             else:
                                 if dataList[j].get("value") != "":
-                                    dataList[j].update({"value": NPCList[0][0]})
-                                    NPCList[0].pop(0)
+                                    dataList[j].update({"value": npcList[0][0]})
+                                    npcList[0].pop(0)
 
                         # Description
-                        if "菊池" in dataList[j].get("name"):
+                        if "肩書き" in dataList[j].get("name"):
                             # Pass 1 (Grab Data)
                             if setData == False:
                                 if dataList[j].get("value") != "":
@@ -816,45 +855,18 @@ def searchDB(events, pbar, jobList, filename):
                                     jaString = re.sub(r"[\\]+f\[\d+\]", "", jaString)
 
                                     # Append Data
-                                    NPCList[1].append(jaString)
-
+                                    npcList[1].append(jaString)
                             # Pass 2 (Set Data)
                             else:
                                 if dataList[j].get("value") != "":
                                     # Textwrap
-                                    translatedText = NPCList[1][0]
-                                    translatedText = textwrap.fill(translatedText, 30)
-                                    translatedText = font + translatedText
-
-                                    # Set Data
-                                    dataList[j].update({"value": translatedText})
-                                    NPCList[1].pop(0)
-
-                        # Description
-                        if "篠宮" in dataList[j].get("name"):
-                            # Pass 1 (Grab Data)
-                            if setData == False:
-                                if dataList[j].get("value") != "":
-                                    # Remove Textwrap
-                                    jaString = dataList[j].get("value")
-                                    jaString = jaString.replace("\n", " ")
-                                    jaString = jaString.replace("\r", "")
-                                    jaString = re.sub(r"[\\]+f\[\d+\]", "", jaString)
-
-                                    # Append Data
-                                    NPCList[2].append(jaString)
-
-                            # Pass 2 (Set Data)
-                            else:
-                                if dataList[j].get("value") != "":
-                                    # Textwrap
-                                    translatedText = NPCList[2][0]
+                                    translatedText = npcList[1][0]
                                     translatedText = textwrap.fill(translatedText, LISTWIDTH)
                                     translatedText = font + translatedText
 
                                     # Set Data
                                     dataList[j].update({"value": translatedText})
-                                    NPCList[2].pop(0)
+                                    npcList[1].pop(0)
 
             # Grab Scenarios
             if table["name"] == "MGP_参加者" and SCENARIOFLAG == True:
@@ -982,7 +994,7 @@ def searchDB(events, pbar, jobList, filename):
                                     itemList[0].pop(0)
 
                         # Description
-                        if "選択肢1" in dataList[j].get("name"):
+                        if "選択肢9" in dataList[j].get("name"):
                             # Pass 1 (Grab Data)
                             if setData == False:
                                 if dataList[j].get("value") != "":
@@ -1006,7 +1018,7 @@ def searchDB(events, pbar, jobList, filename):
                                     dataList[j].update({"value": translatedText})
                                     itemList[1].pop(0)
                         # Description
-                        if "選択肢2" in dataList[j].get("name"):
+                        if "選択肢10" in dataList[j].get("name"):
                             # Pass 1 (Grab Data)
                             if setData == False:
                                 if dataList[j].get("value") != "":
@@ -1030,7 +1042,7 @@ def searchDB(events, pbar, jobList, filename):
                                     dataList[j].update({"value": translatedText})
                                     itemList[2].pop(0)
                         # Description
-                        if "NULL" in dataList[j].get("name"):
+                        if "選択肢11" in dataList[j].get("name"):
                             # Pass 1 (Grab Data)
                             if setData == False:
                                 if dataList[j].get("value") != "":
@@ -1325,7 +1337,7 @@ def searchDB(events, pbar, jobList, filename):
 
         # Translation
         scenarioListTL = [[], [], []]
-        NPCListTL = [[], [], [], []]
+        npcListTL = [[], [], [], []]
         itemListTL = [[], [], [], []]
         collectionListTL = [[], [], [], []]
         armorListTL = [[], []]
@@ -1337,17 +1349,17 @@ def searchDB(events, pbar, jobList, filename):
         translate = False
 
         # NPCs
-        if len(NPCList[0]) > 0:
+        if len(npcList[0]) > 0:
             # Progress Bar
             total = 0
-            for itemArray in NPCList:
+            for itemArray in npcList:
                 total += len(itemArray)
             pbar.total = total
             pbar.refresh()
 
             # Name
             response = translateGPT(
-                NPCList[0],
+                npcList[0],
                 "Reply with only the " + LANGUAGE + " translation of the RPG enemy name",
                 True,
             )
@@ -1356,21 +1368,21 @@ def searchDB(events, pbar, jobList, filename):
             totalTokens[1] += response[1][1]
             # Desc 1
             response = translateGPT(
-                NPCList[1], "Reply with only the " + LANGUAGE + " translation", True
+                npcList[1], "Reply with only the " + LANGUAGE + " translation", True
             )
             descListTL1 = response[0]
             totalTokens[0] += response[1][0]
             totalTokens[1] += response[1][1]
             # Desc 2
             response = translateGPT(
-                NPCList[2], "Reply with only the " + LANGUAGE + " translation", True
+                npcList[2], "Reply with only the " + LANGUAGE + " translation", True
             )
             descListTL2 = response[0]
             totalTokens[0] += response[1][0]
             totalTokens[1] += response[1][1]
             # Desc 3
             response = translateGPT(
-                NPCList[3], "Reply with only the " + LANGUAGE + " translation", True
+                npcList[3], "Reply with only the " + LANGUAGE + " translation", True
             )
             descListTL3 = response[0]
             totalTokens[0] += response[1][0]
@@ -1378,16 +1390,16 @@ def searchDB(events, pbar, jobList, filename):
 
             # Check Mismatch
             if (
-                len(nameListTL) != len(NPCList[0])
-                or len(descListTL1) != len(NPCList[1])
-                or len(descListTL2) != len(NPCList[2])
-                or len(descListTL3) != len(NPCList[3])
+                len(nameListTL) != len(npcList[0])
+                or len(descListTL1) != len(npcList[1])
+                or len(descListTL2) != len(npcList[2])
+                or len(descListTL3) != len(npcList[3])
             ):
                 with LOCK:
                     if filename not in MISMATCH:
                         MISMATCH.append(filename)
             else:
-                NPCListTL = [nameListTL, descListTL1, descListTL2, descListTL3]
+                npcListTL = [nameListTL, descListTL1, descListTL2, descListTL3]
                 translate = True
 
         # SCENARIO
@@ -1722,7 +1734,7 @@ def searchDB(events, pbar, jobList, filename):
         # Start Pass 2
         if translate == True:
             jobList.append(scenarioListTL)
-            jobList.append(NPCListTL)
+            jobList.append(npcListTL)
             jobList.append(itemListTL)
             jobList.append(collectionListTL)
             jobList.append(armorListTL)
@@ -2012,7 +2024,7 @@ def translateGPT(text, history, fullPromptFlag):
                         PBAR.update(len(tItem))
             else:
                 # Ensure we're passing a single string to extractTranslation
-                tList[index] = translatedText
+                tList[index] = translatedText.replace("Placeholder Text", "")
 
     finalList = combineList(tList, text)
     return [finalList, totalTokens]
