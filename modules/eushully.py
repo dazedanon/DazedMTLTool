@@ -80,17 +80,13 @@ def handleEushully(filename, estimate):
 
         # Print any errors on maps
         if len(MISMATCH) > 0:
-            return (
-                totalString + Fore.RED + f"\nMismatch Errors: {MISMATCH}" + Fore.RESET
-            )
+            return totalString + Fore.RED + f"\nMismatch Errors: {MISMATCH}" + Fore.RESET
         else:
             return totalString
 
     else:
         try:
-            with open(
-                "translated/" + filename, "w", encoding="utf-8", errors="ignore"
-            ) as outFile:
+            with open("translated/" + filename, "w", encoding="utf-8", errors="ignore") as outFile:
                 start = time.time()
                 translatedData = openFiles(filename)
 
@@ -125,13 +121,7 @@ def getResultString(translatedData, translationTime, filename):
     if translatedData[2] == None:
         # Success
         return (
-            filename
-            + ": "
-            + totalTokenstring
-            + timeString
-            + Fore.GREEN
-            + " \u2713 "
-            + Fore.RESET
+            filename + ": " + totalTokenstring + timeString + Fore.GREEN + " \u2713 " + Fore.RESET
         )
 
     else:
@@ -254,9 +244,7 @@ def translateEushully(data, pbar, filename, translatedList):
 
                         # Remove speaker
                         if speaker != "":
-                            translatedText = re.sub(
-                                r"^\[?(.+?)\]?\s?[|:]\s?", "", translatedText
-                            )
+                            translatedText = re.sub(r"^\[?(.+?)\]?\s?[|:]\s?", "", translatedText)
 
                         # Textwrap
                         translatedText = textwrap.fill(translatedText, width=WIDTH)
@@ -265,14 +253,9 @@ def translateEushully(data, pbar, filename, translatedList):
                         # Set Data
                         if len(translatedTextList) > 1:
                             for j in range(len(translatedTextList)):
-                                if any(
-                                    x in data[i]
-                                    for x in ["show-text", "set-string", "concat"]
-                                ):
+                                if any(x in data[i] for x in ["show-text", "set-string", "concat"]):
                                     del data[i]
-                                data.insert(
-                                    i, f'{match.group(1)}"{translatedTextList[j]}"\n'
-                                )
+                                data.insert(i, f'{match.group(1)}"{translatedTextList[j]}"\n')
                                 i += 1
                                 if "end-text-line" not in data[i]:
                                     data.insert(i, "end-text-line 0\n")
@@ -550,9 +533,7 @@ def batchList(input_list, batch_size):
     if not isinstance(batch_size, int) or batch_size <= 0:
         raise ValueError("batch_size must be a positive integer")
 
-    return [
-        input_list[i : i + batch_size] for i in range(0, len(input_list), batch_size)
-    ]
+    return [input_list[i : i + batch_size] for i in range(0, len(input_list), batch_size)]
 
 
 def createContext(fullPromptFlag, subbedT):
@@ -699,12 +680,8 @@ def translateGPT(text, history, fullPromptFlag):
     for index, tItem in enumerate(tList):
         # Before sending to translation, if we have a list of items, add the formatting
         if isinstance(tItem, list):
-            payload = "\n".join(
-                [f"`<Line{i}>{item}</Line{i}>`" for i, item in enumerate(tItem)]
-            )
-            payload = re.sub(
-                r"(<Line\d+)(><)(\/Line\d+>)", r"\1>Placeholder Text<\3", payload
-            )
+            payload = "\n".join([f"`<Line{i}>{item}</Line{i}>`" for i, item in enumerate(tItem)])
+            payload = re.sub(r"(<Line\d+)(><)(\/Line\d+>)", r"\1>Placeholder Text<\3", payload)
             varResponse = subVars(payload)
             subbedT = varResponse[0]
         else:
@@ -758,9 +735,7 @@ def translateGPT(text, history, fullPromptFlag):
                 if PBAR is not None:
                     PBAR.update(len(tItem))
             if not mismatch:
-                history = extractedTranslations[
-                    -10:
-                ]  # Update history if we have a list
+                history = extractedTranslations[-10:]  # Update history if we have a list
             else:
                 history = text[-10:]
         else:

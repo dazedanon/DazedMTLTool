@@ -70,9 +70,7 @@ def handleCSV(filename, estimate):
     ESTIMATE = estimate
 
     if not ESTIMATE:
-        with open(
-            "translated/" + filename, "w+t", newline="", encoding="utf-8-sig"
-        ) as writeFile:
+        with open("translated/" + filename, "w+t", newline="", encoding="utf-8-sig") as writeFile:
             # Translate
             start = time.time()
             translatedData = openFiles(filename, writeFile)
@@ -136,13 +134,7 @@ def getResultString(translatedData, translationTime, filename):
     if translatedData[2] is None:
         # Success
         return (
-            filename
-            + ": "
-            + totalTokenstring
-            + timeString
-            + Fore.GREEN
-            + " \u2713 "
-            + Fore.RESET
+            filename + ": " + totalTokenstring + timeString + Fore.GREEN + " \u2713 " + Fore.RESET
         )
     else:
         # Fail
@@ -170,9 +162,7 @@ def parseCSV(readFile, writeFile, filename):
 
     format = ""
     while format not in ["1", "2", "3"]:
-        format = input(
-            "\n\nSelect the CSV Format:\n\n1. Translator++\n2. Single\n3. Multiple\n"
-        )
+        format = input("\n\nSelect the CSV Format:\n\n1. Translator++\n2. Single\n3. Multiple\n")
         match format:
             case "1":
                 format = "1"
@@ -191,9 +181,7 @@ def parseCSV(readFile, writeFile, filename):
     else:
         writer = ""
 
-    with tqdm(
-        bar_format=BAR_FORMAT, position=POSITION, total=totalLines, leave=LEAVE
-    ) as pbar:
+    with tqdm(bar_format=BAR_FORMAT, position=POSITION, total=totalLines, leave=LEAVE) as pbar:
         pbar.desc = filename
         pbar.total = totalLines
 
@@ -526,9 +514,7 @@ def batchList(input_list, batch_size):
     if not isinstance(batch_size, int) or batch_size <= 0:
         raise ValueError("batch_size must be a positive integer")
 
-    return [
-        input_list[i : i + batch_size] for i in range(0, len(input_list), batch_size)
-    ]
+    return [input_list[i : i + batch_size] for i in range(0, len(input_list), batch_size)]
 
 
 def createContext(fullPromptFlag, subbedT):
@@ -722,13 +708,9 @@ def translateGPT(text, history, fullPromptFlag):
         translatedText = cleanTranslatedText(translatedText, varResponse)
         if isinstance(tItem, list):
             extractedTranslations = extractTranslation(translatedText, True)
-            if extractedTranslations == None or len(tItem) != len(
-                extractedTranslations
-            ):
+            if extractedTranslations == None or len(tItem) != len(extractedTranslations):
                 # Mismatch. Try Again
-                response = translateText(
-                    characters, system, user, history, 0.05, format
-                )
+                response = translateText(characters, system, user, history, 0.05, format)
                 translatedText = response.choices[0].message.content
                 totalTokens[0] += response.usage.prompt_tokens
                 totalTokens[1] += response.usage.completion_tokens
@@ -737,17 +719,13 @@ def translateGPT(text, history, fullPromptFlag):
                 translatedText = cleanTranslatedText(translatedText, varResponse)
                 if isinstance(tItem, list):
                     extractedTranslations = extractTranslation(translatedText, True)
-                    if extractedTranslations == None or len(tItem) != len(
-                        extractedTranslations
-                    ):
+                    if extractedTranslations == None or len(tItem) != len(extractedTranslations):
                         mismatch = True  # Just here for breakpoint
 
             # Set if no mismatch
             if mismatch == False:
                 tList[index] = extractedTranslations
-                history = extractedTranslations[
-                    -10:
-                ]  # Update history if we have a list
+                history = extractedTranslations[-10:]  # Update history if we have a list
             else:
                 history = text[-10:]
                 mismatch = False

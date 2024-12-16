@@ -114,13 +114,7 @@ def getResultString(translatedData, translationTime, filename):
     if translatedData[2] == None:
         # Success
         return (
-            filename
-            + ": "
-            + totalTokenstring
-            + timeString
-            + Fore.GREEN
-            + " \u2713 "
-            + Fore.RESET
+            filename + ": " + totalTokenstring + timeString + Fore.GREEN + " \u2713 " + Fore.RESET
         )
 
     else:
@@ -251,9 +245,7 @@ def translateRegex(data, translatedList):
                         stringList = None
 
                     # Remove speaker
-                    translatedText = re.sub(
-                        r"^\[?(.+?)\]?\s?[|:]\s?", "", translatedText
-                    )
+                    translatedText = re.sub(r"^\[?(.+?)\]?\s?[|:]\s?", "", translatedText)
 
                     # Escape Quotes
                     translatedText = re.sub(r'(?<!\\)"', r'\\"', translatedText)
@@ -306,9 +298,7 @@ def translateRegex(data, translatedList):
         if stringList:
             PBAR.total = len(stringList)
             PBAR.refresh()
-            response = translateGPT(
-                stringList, "Reply with the English Translation", True
-            )
+            response = translateGPT(stringList, "Reply with the English Translation", True)
             tokens[0] += response[1][0]
             tokens[1] += response[1][1]
             stringListTL = response[0]
@@ -382,9 +372,7 @@ def batchList(input_list, batch_size):
     if not isinstance(batch_size, int) or batch_size <= 0:
         raise ValueError("batch_size must be a positive integer")
 
-    return [
-        input_list[i : i + batch_size] for i in range(0, len(input_list), batch_size)
-    ]
+    return [input_list[i : i + batch_size] for i in range(0, len(input_list), batch_size)]
 
 
 def createContext(fullPromptFlag, subbedT, format):
@@ -554,9 +542,7 @@ def translateGPT(text, history, fullPromptFlag):
                 subbedT = varResponse[0]
 
             # Things to Check before starting translation
-            if not re.search(
-                r"[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]+", subbedT
-            ):
+            if not re.search(r"[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]+", subbedT):
                 if PBAR is not None:
                     PBAR.update(len(tItem))
                 history = tItem[-MAXHISTORY:]
@@ -582,13 +568,9 @@ def translateGPT(text, history, fullPromptFlag):
             translatedText = cleanTranslatedText(translatedText, varResponse)
             if isinstance(tItem, list):
                 extractedTranslations = extractTranslation(translatedText, True)
-                if extractedTranslations == None or len(tItem) != len(
-                    extractedTranslations
-                ):
+                if extractedTranslations == None or len(tItem) != len(extractedTranslations):
                     # Mismatch. Try Again
-                    response = translateText(
-                        system, user, history, 0.05, format, "gpt-4o"
-                    )
+                    response = translateText(system, user, history, 0.05, format, "gpt-4o")
                     translatedText = response.choices[0].message.content
                     totalTokens[0] += response.usage.prompt_tokens
                     totalTokens[1] += response.usage.completion_tokens

@@ -80,9 +80,7 @@ def handleAlice(filename, estimate):
 
         # Print any errors on maps
         if len(MISMATCH) > 0:
-            return (
-                totalString + Fore.RED + f"\nMismatch Errors: {MISMATCH}" + Fore.RESET
-            )
+            return totalString + Fore.RED + f"\nMismatch Errors: {MISMATCH}" + Fore.RESET
         else:
             return totalString
 
@@ -130,13 +128,7 @@ def getResultString(translatedData, translationTime, filename):
     if translatedData[2] == None:
         # Success
         return (
-            filename
-            + ": "
-            + totalTokenstring
-            + timeString
-            + Fore.GREEN
-            + " \u2713 "
-            + Fore.RESET
+            filename + ": " + totalTokenstring + timeString + Fore.GREEN + " \u2713 " + Fore.RESET
         )
 
     else:
@@ -165,9 +157,7 @@ def parseText(data, filename):
     totalLines = len(linesList)
     global LOCK
 
-    with tqdm(
-        bar_format=BAR_FORMAT, position=POSITION, total=totalLines, leave=LEAVE
-    ) as pbar:
+    with tqdm(bar_format=BAR_FORMAT, position=POSITION, total=totalLines, leave=LEAVE) as pbar:
         pbar.desc = filename
         pbar.total = totalLines
         try:
@@ -208,9 +198,7 @@ def translateLines(linesList, pbar):
                 jaString = re.sub(r"\\n", " ", jaString)
 
                 # Grab Speaker
-                speakerMatch = re.findall(
-                    r"s\[[0-9]+\] = \"([^／]+)\"", linesList[i - 1]
-                )
+                speakerMatch = re.findall(r"s\[[0-9]+\] = \"([^／]+)\"", linesList[i - 1])
                 if len(speakerMatch) > 0:
                     # If there isn't any Japanese in the text just skip
                     if (
@@ -228,15 +216,12 @@ def translateLines(linesList, pbar):
 
                 # Check if next line should be merged
                 if insertBool is True:
-                    linesList[i] = re.sub(
-                        r"(s\[[0-9]+\]) = \"(.+)\"", r'\1 = ""', linesList[i]
-                    )
+                    linesList[i] = re.sub(r"(s\[[0-9]+\]) = \"(.+)\"", r'\1 = ""', linesList[i])
                     linesList[i] = linesList[i].replace(";", "")
                 start = i
                 while (
                     len(linesList) > i + 1
-                    and re.search(r"s\[[0-9]+\] = \"\s+(.*)\"", linesList[i + 1])
-                    != None
+                    and re.search(r"s\[[0-9]+\] = \"\s+(.*)\"", linesList[i + 1]) != None
                 ):
                     multiLine = True
                     i += 1
@@ -465,9 +450,7 @@ def batchList(input_list, batch_size):
     if not isinstance(batch_size, int) or batch_size <= 0:
         raise ValueError("batch_size must be a positive integer")
 
-    return [
-        input_list[i : i + batch_size] for i in range(0, len(input_list), batch_size)
-    ]
+    return [input_list[i : i + batch_size] for i in range(0, len(input_list), batch_size)]
 
 
 def createContext(fullPromptFlag, subbedT):
@@ -592,9 +575,7 @@ def translateGPT(text, history, fullPromptFlag):
     for index, tItem in enumerate(tList):
         # Before sending to translation, if we have a list of items, add the formatting
         if isinstance(tItem, list):
-            payload = "\n".join(
-                [f"<Line{i}>`{item}`</Line{i}>" for i, item in enumerate(tItem)]
-            )
+            payload = "\n".join([f"<Line{i}>`{item}`</Line{i}>" for i, item in enumerate(tItem)])
             payload = payload.replace("``", "`Placeholder Text`")
             varResponse = subVars(payload)
             subbedT = varResponse[0]
@@ -632,9 +613,7 @@ def translateGPT(text, history, fullPromptFlag):
             history = extractedTranslations[-10:]  # Update history if we have a list
         else:
             # Ensure we're passing a single string to extractTranslation
-            extractedTranslations = extractTranslation(
-                "\n".join(translatedTextList), False
-            )
+            extractedTranslations = extractTranslation("\n".join(translatedTextList), False)
             tList[index] = extractedTranslations
 
     finalList = combineList(tList, text)

@@ -80,12 +80,8 @@ def handleImages(folderName, estimate):
                 translatedList = translatedData[0][0]
                 originalList = translatedData[0][1]
                 dimensionsList = translatedData[0][2]
-                image = stringToImage(
-                    translatedList[i], dimensionsList[i][0], dimensionsList[i][1]
-                )
-                image.save(
-                    rf"translated/{folderName}/{customList[0][0]}.png", quality=100
-                )
+                image = stringToImage(translatedList[i], dimensionsList[i][0], dimensionsList[i][1])
+                image.save(rf"translated/{folderName}/{customList[0][0]}.png", quality=100)
                 customList[0].pop(0)
             except Exception as e:
                 PBAR.write(f"{translatedList[i]}: {str(e)}")
@@ -152,13 +148,7 @@ def getResultString(translatedData, translationTime, filename):
     if translatedData[2] is None:
         # Success
         return (
-            filename
-            + ": "
-            + totalTokenstring
-            + timeString
-            + Fore.GREEN
-            + " \u2713 "
-            + Fore.RESET
+            filename + ": " + totalTokenstring + timeString + Fore.GREEN + " \u2713 " + Fore.RESET
         )
     else:
         # Fail
@@ -185,9 +175,7 @@ def getFontSize(text, image_width, image_height, font_path):
 
     while font_size > 0:
         font = ImageFont.truetype(font_path, font_size)
-        text_bbox = ImageDraw.Draw(Image.new("RGB", (1, 1))).textbbox(
-            (0, 0), text, font=font
-        )
+        text_bbox = ImageDraw.Draw(Image.new("RGB", (1, 1))).textbbox((0, 0), text, font=font)
         text_width = text_bbox[2] - text_bbox[0]
         text_height = text_bbox[3] - text_bbox[1]
 
@@ -198,9 +186,7 @@ def getFontSize(text, image_width, image_height, font_path):
     return font_size
 
 
-def stringToImage(
-    text, width, height, font_path="fonts/TsunagiGothic.ttf", scale_factor=4
-):
+def stringToImage(text, width, height, font_path="fonts/TsunagiGothic.ttf", scale_factor=4):
     # Increase the resolution
     scaled_width = int(width * scale_factor)
     scaled_height = int(height * scale_factor)
@@ -270,9 +256,7 @@ def processImagesDir(directory_path, imageList):
 
         if ".txt" in file_name:
             try:
-                with open(
-                    f"{directory_path}/{file_name}", "r", encoding="utf8"
-                ) as file:
+                with open(f"{directory_path}/{file_name}", "r", encoding="utf8") as file:
                     for line in file:
                         line = line.strip()
                         line = line.replace(":", "：")
@@ -293,9 +277,7 @@ def translateImages(imageList):
     totalTokens = [0, 0]
 
     # Translate GPT
-    response = translateGPT(
-        imageList[0], "Keep the Translation as brief as possible", True
-    )
+    response = translateGPT(imageList[0], "Keep the Translation as brief as possible", True)
     translatedList = response[0]
     totalTokens[0] += response[1][0]
     totalTokens[1] += response[1][1]
@@ -380,9 +362,7 @@ def batchList(input_list, batch_size):
     if not isinstance(batch_size, int) or batch_size <= 0:
         raise ValueError("batch_size must be a positive integer")
 
-    return [
-        input_list[i : i + batch_size] for i in range(0, len(input_list), batch_size)
-    ]
+    return [input_list[i : i + batch_size] for i in range(0, len(input_list), batch_size)]
 
 
 def createContext(fullPromptFlag, subbedT, format):
@@ -615,13 +595,9 @@ def translateGPT(text, history, fullPromptFlag):
         translatedText = cleanTranslatedText(translatedText, varResponse)
         if isinstance(tItem, list):
             extractedTranslations = extractTranslation(translatedText, True)
-            if extractedTranslations == None or len(tItem) != len(
-                extractedTranslations
-            ):
+            if extractedTranslations == None or len(tItem) != len(extractedTranslations):
                 # Mismatch. Try Again
-                response = translateText(
-                    characters, system, user, history, 0.05, format
-                )
+                response = translateText(characters, system, user, history, 0.05, format)
                 translatedText = response.choices[0].message.content
                 totalTokens[0] += response.usage.prompt_tokens
                 totalTokens[1] += response.usage.completion_tokens
@@ -630,17 +606,13 @@ def translateGPT(text, history, fullPromptFlag):
                 translatedText = cleanTranslatedText(translatedText, varResponse)
                 if isinstance(tItem, list):
                     extractedTranslations = extractTranslation(translatedText, True)
-                    if extractedTranslations == None or len(tItem) != len(
-                        extractedTranslations
-                    ):
+                    if extractedTranslations == None or len(tItem) != len(extractedTranslations):
                         mismatch = True  # Just here for breakpoint
 
             # Set if no mismatch
             if mismatch == False:
                 tList[index] = extractedTranslations
-                history = extractedTranslations[
-                    -10:
-                ]  # Update history if we have a list
+                history = extractedTranslations[-10:]  # Update history if we have a list
             else:
                 history = text[-10:]
                 mismatch = False

@@ -102,9 +102,7 @@ to worry about being charged twice. You can simply copy the file generated in /t
 def main():
     estimate = ""
     while estimate == "":
-        estimate = input(
-            "Select Translation or Cost Estimation:\n\n 1. Translate\n 2. Estimate\n"
-        )
+        estimate = input("Select Translation or Cost Estimation:\n\n 1. Translate\n 2. Estimate\n")
         match estimate:
             case "1":
                 estimate = False
@@ -144,9 +142,7 @@ files to translate are in the /files folder and that you picked the right game e
             try:
                 totalCost = future.result()
             except Exception as e:
-                tracebackLineNo = str(
-                    traceback.extract_tb(sys.exc_info()[2])[-1].lineno
-                )
+                tracebackLineNo = str(traceback.extract_tb(sys.exc_info()[2])[-1].lineno)
                 tqdm.write(Fore.RED + str(e) + "|" + tracebackLineNo + Fore.RESET)
 
     if totalCost != "Fail":

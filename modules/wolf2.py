@@ -80,9 +80,7 @@ def handleWOLF2(filename, estimate):
 
         # Print any errors on maps
         if len(MISMATCH) > 0:
-            return (
-                totalString + Fore.RED + f"\nMismatch Errors: {MISMATCH}" + Fore.RESET
-            )
+            return totalString + Fore.RED + f"\nMismatch Errors: {MISMATCH}" + Fore.RESET
         else:
             return totalString
 
@@ -125,13 +123,7 @@ def getResultString(translatedData, translationTime, filename):
     if translatedData[2] == None:
         # Success
         return (
-            filename
-            + ": "
-            + totalTokenstring
-            + timeString
-            + Fore.GREEN
-            + " \u2713 "
-            + Fore.RESET
+            filename + ": " + totalTokenstring + timeString + Fore.GREEN + " \u2713 " + Fore.RESET
         )
 
     else:
@@ -248,10 +240,7 @@ def translateWOLF(data, translatedList, pbar, filename):
                 currentGroup.append(data[i])
                 i += 1
                 while (
-                    i < len(data)
-                    and r"/" not in data[i]
-                    and "@" not in data[i]
-                    and data[i] != "\n"
+                    i < len(data) and r"/" not in data[i] and "@" not in data[i] and data[i] != "\n"
                 ):
                     currentGroup.append(data[i])
                     i += 1
@@ -276,10 +265,7 @@ def translateWOLF(data, translatedList, pbar, filename):
             else:
                 # Insert Strings
                 while (
-                    i < len(data)
-                    and r"/" not in data[i]
-                    and "@" not in data[i]
-                    and data[i] != "\n"
+                    i < len(data) and r"/" not in data[i] and "@" not in data[i] and data[i] != "\n"
                 ):
                     data.pop(i)
 
@@ -405,9 +391,7 @@ def batchList(input_list, batch_size):
     if not isinstance(batch_size, int) or batch_size <= 0:
         raise ValueError("batch_size must be a positive integer")
 
-    return [
-        input_list[i : i + batch_size] for i in range(0, len(input_list), batch_size)
-    ]
+    return [input_list[i : i + batch_size] for i in range(0, len(input_list), batch_size)]
 
 
 def createContext(fullPromptFlag, subbedT):
@@ -643,13 +627,9 @@ def translateGPT(text, history, fullPromptFlag):
         translatedText = cleanTranslatedText(translatedText, varResponse)
         if isinstance(tItem, list):
             extractedTranslations = extractTranslation(translatedText, True)
-            if extractedTranslations == None or len(tItem) != len(
-                extractedTranslations
-            ):
+            if extractedTranslations == None or len(tItem) != len(extractedTranslations):
                 # Mismatch. Try Again
-                response = translateText(
-                    characters, system, user, history, 0.05, format
-                )
+                response = translateText(characters, system, user, history, 0.05, format)
                 translatedText = response.choices[0].message.content
                 totalTokens[0] += response.usage.prompt_tokens
                 totalTokens[1] += response.usage.completion_tokens
@@ -658,17 +638,13 @@ def translateGPT(text, history, fullPromptFlag):
                 translatedText = cleanTranslatedText(translatedText, varResponse)
                 if isinstance(tItem, list):
                     extractedTranslations = extractTranslation(translatedText, True)
-                    if extractedTranslations == None or len(tItem) != len(
-                        extractedTranslations
-                    ):
+                    if extractedTranslations == None or len(tItem) != len(extractedTranslations):
                         mismatch = True  # Just here for breakpoint
 
             # Set if no mismatch
             if mismatch == False:
                 tList[index] = extractedTranslations
-                history = extractedTranslations[
-                    -10:
-                ]  # Update history if we have a list
+                history = extractedTranslations[-10:]  # Update history if we have a list
             else:
                 history = text[-10:]
                 mismatch = False

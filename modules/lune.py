@@ -130,13 +130,7 @@ def getResultString(translatedData, translationTime, filename):
     if translatedData[2] == None:
         # Success
         return (
-            filename
-            + ": "
-            + totalTokenstring
-            + timeString
-            + Fore.GREEN
-            + " \u2713 "
-            + Fore.RESET
+            filename + ": " + totalTokenstring + timeString + Fore.GREEN + " \u2713 " + Fore.RESET
         )
 
     else:
@@ -164,9 +158,7 @@ def parseJSON(data, filename):
     totalLines = len(data)
     global LOCK
 
-    with tqdm(
-        bar_format=BAR_FORMAT, position=POSITION, total=totalLines, leave=LEAVE
-    ) as pbar:
+    with tqdm(bar_format=BAR_FORMAT, position=POSITION, total=totalLines, leave=LEAVE) as pbar:
         pbar.desc = filename
         pbar.total = totalLines
         try:
@@ -385,9 +377,7 @@ def batchList(input_list, batch_size):
     if not isinstance(batch_size, int) or batch_size <= 0:
         raise ValueError("batch_size must be a positive integer")
 
-    return [
-        input_list[i : i + batch_size] for i in range(0, len(input_list), batch_size)
-    ]
+    return [input_list[i : i + batch_size] for i in range(0, len(input_list), batch_size)]
 
 
 def createContext(fullPromptFlag, subbedT, format):
@@ -571,9 +561,7 @@ def translateGPT(text, history, fullPromptFlag):
         translatedText = cleanTranslatedText(translatedText, varResponse)
         if isinstance(tItem, list):
             extractedTranslations = extractTranslation(translatedText, True)
-            if extractedTranslations == None or len(tItem) != len(
-                extractedTranslations
-            ):
+            if extractedTranslations == None or len(tItem) != len(extractedTranslations):
                 # Mismatch. Try Again
                 response = translateText(system, user, history, 0.05, format, "gpt-4o")
                 translatedText = response.choices[0].message.content
@@ -584,17 +572,13 @@ def translateGPT(text, history, fullPromptFlag):
                 translatedText = cleanTranslatedText(translatedText, varResponse)
                 if isinstance(tItem, list):
                     extractedTranslations = extractTranslation(translatedText, True)
-                    if extractedTranslations == None or len(tItem) != len(
-                        extractedTranslations
-                    ):
+                    if extractedTranslations == None or len(tItem) != len(extractedTranslations):
                         mismatch = True  # Just here for breakpoint
 
             # Set if no mismatch
             if mismatch == False:
                 tList[index] = extractedTranslations
-                history = extractedTranslations[
-                    -10:
-                ]  # Update history if we have a list
+                history = extractedTranslations[-10:]  # Update history if we have a list
             else:
                 history = text[-10:]
                 mismatch = False
