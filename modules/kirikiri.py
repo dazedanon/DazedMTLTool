@@ -88,17 +88,13 @@ def handleKirikiri(filename, estimate):
 
         # Print any errors on maps
         if len(MISMATCH) > 0:
-            return (
-                totalString + Fore.RED + f"\nMismatch Errors: {MISMATCH}" + Fore.RESET
-            )
+            return totalString + Fore.RED + f"\nMismatch Errors: {MISMATCH}" + Fore.RESET
         else:
             return totalString
 
     else:
         try:
-            with open(
-                "translated/" + filename, "w", encoding="cp932", errors="ignore"
-            ) as outFile:
+            with open("translated/" + filename, "w", encoding="cp932", errors="ignore") as outFile:
                 start = time.time()
                 translatedData = openFiles(filename)
 
@@ -138,13 +134,7 @@ def getResultString(translatedData, translationTime, filename):
     if translatedData[2] == None:
         # Success
         return (
-            filename
-            + ": "
-            + totalTokenstring
-            + timeString
-            + Fore.GREEN
-            + " \u2713 "
-            + Fore.RESET
+            filename + ": " + totalTokenstring + timeString + Fore.GREEN + " \u2713 " + Fore.RESET
         )
 
     else:
@@ -393,9 +383,7 @@ def subVars(jaString):
     jaString = jaString.replace("\u3000", " ")
 
     # Formatting
-    codeList = re.findall(
-        r"([\\]*(\w+)\[(\d+)\])|([\\]*(\w+)\[[\\]*\\w+\[(\d+)\]\])", jaString
-    )
+    codeList = re.findall(r"([\\]*(\w+)\[(\d+)\])|([\\]*(\w+)\[[\\]*\\w+\[(\d+)\]\])", jaString)
     codeList = set(codeList)
     if len(codeList) != 0:
         for var in codeList:
@@ -412,13 +400,9 @@ def resubVars(translatedText, codeList):
     # Formatting
     for var in codeList:
         if var[2]:
-            translatedText = translatedText.replace(
-                f"[{var[1]}Code_" + f"{var[2]}]", var[0]
-            )
+            translatedText = translatedText.replace(f"[{var[1]}Code_" + f"{var[2]}]", var[0])
         else:
-            translatedText = translatedText.replace(
-                f"[{var[4]}Code_" + f"{var[5]}]", var[3]
-            )
+            translatedText = translatedText.replace(f"[{var[4]}Code_" + f"{var[5]}]", var[3])
 
     return translatedText
 
@@ -427,9 +411,7 @@ def batchList(input_list, batch_size):
     if not isinstance(batch_size, int) or batch_size <= 0:
         raise ValueError("batch_size must be a positive integer")
 
-    return [
-        input_list[i : i + batch_size] for i in range(0, len(input_list), batch_size)
-    ]
+    return [input_list[i : i + batch_size] for i in range(0, len(input_list), batch_size)]
 
 
 def createContext(fullPromptFlag, subbedT, format):
@@ -596,9 +578,7 @@ def translateGPT(text, history, fullPromptFlag):
                 subbedT = varResponse[0]
 
             # Things to Check before starting translation
-            if not re.search(
-                r"[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]+", subbedT
-            ):
+            if not re.search(r"[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]+", subbedT):
                 if PBAR is not None:
                     PBAR.update(len(tItem))
                 history = tItem[-MAXHISTORY:]
@@ -624,13 +604,9 @@ def translateGPT(text, history, fullPromptFlag):
             translatedText = cleanTranslatedText(translatedText, varResponse)
             if isinstance(tItem, list):
                 extractedTranslations = extractTranslation(translatedText, True)
-                if extractedTranslations == None or len(tItem) != len(
-                    extractedTranslations
-                ):
+                if extractedTranslations == None or len(tItem) != len(extractedTranslations):
                     # Mismatch. Try Again
-                    response = translateText(
-                        system, user, history, 0.05, format, "gpt-4o"
-                    )
+                    response = translateText(system, user, history, 0.05, format, "gpt-4o")
                     translatedText = response.choices[0].message.content
                     totalTokens[0] += response.usage.prompt_tokens
                     totalTokens[1] += response.usage.completion_tokens

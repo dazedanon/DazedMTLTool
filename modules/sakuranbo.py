@@ -108,13 +108,7 @@ def getResultString(translatedData, translationTime, filename):
     if translatedData[2] is None:
         # Success
         return (
-            filename
-            + ": "
-            + totalTokenstring
-            + timeString
-            + Fore.GREEN
-            + " \u2713 "
-            + Fore.RESET
+            filename + ": " + totalTokenstring + timeString + Fore.GREEN + " \u2713 " + Fore.RESET
         )
 
     else:
@@ -157,9 +151,7 @@ def parseTyrano(readFile, filename):
     data = readFile.readlines()
     totalLines = len(data)
 
-    with tqdm(
-        bar_format=BAR_FORMAT, position=POSITION, total=totalLines, leave=LEAVE
-    ) as pbar:
+    with tqdm(bar_format=BAR_FORMAT, position=POSITION, total=totalLines, leave=LEAVE) as pbar:
         pbar.desc = filename
         pbar.total = totalLines
 
@@ -300,9 +292,7 @@ def translateTyrano(data, pbar):
                 translatedText = response[0]
                 textHistory.append('"' + translatedText + '"')
             else:
-                response = translateGPT(
-                    speaker + ": " + finalJAString, textHistory, True
-                )
+                response = translateGPT(speaker + ": " + finalJAString, textHistory, True)
                 tokens[0] += response[1][0]
                 tokens[1] += response[1][1]
                 translatedText = response[0]
@@ -375,9 +365,7 @@ def translateTyrano(data, pbar):
                 translatedText = response[0]
                 textHistory.append('"' + translatedText + '"')
             else:
-                response = translateGPT(
-                    speaker + ": " + finalJAString, textHistory, True
-                )
+                response = translateGPT(speaker + ": " + finalJAString, textHistory, True)
                 tokens[0] += response[1][0]
                 tokens[1] += response[1][1]
                 translatedText = response[0]
@@ -564,9 +552,7 @@ def translateGPT(t, history, fullPromptFlag):
             historyRaw = history
 
         inputTotalTokens = len(enc.encode(historyRaw)) + len(enc.encode(PROMPT))
-        outputTotalTokens = (
-            len(enc.encode(t)) * 2
-        )  # Estimating 2x the size of the original text
+        outputTotalTokens = len(enc.encode(t)) * 2  # Estimating 2x the size of the original text
         totalTokens = [inputTotalTokens, outputTotalTokens]
         return (t, totalTokens)
 

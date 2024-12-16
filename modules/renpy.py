@@ -84,17 +84,13 @@ def handleRenpy(filename, estimate):
 
         # Print any errors on maps
         if len(MISMATCH) > 0:
-            return (
-                totalString + Fore.RED + f"\nMismatch Errors: {MISMATCH}" + Fore.RESET
-            )
+            return totalString + Fore.RED + f"\nMismatch Errors: {MISMATCH}" + Fore.RESET
         else:
             return totalString
 
     else:
         try:
-            with open(
-                "translated/" + filename, "w", encoding="utf8", errors="ignore"
-            ) as outFile:
+            with open("translated/" + filename, "w", encoding="utf8", errors="ignore") as outFile:
                 start = time.time()
                 translatedData = openFiles(filename)
 
@@ -129,13 +125,7 @@ def getResultString(translatedData, translationTime, filename):
     if translatedData[2] == None:
         # Success
         return (
-            filename
-            + ": "
-            + totalTokenstring
-            + timeString
-            + Fore.GREEN
-            + " \u2713 "
-            + Fore.RESET
+            filename + ": " + totalTokenstring + timeString + Fore.GREEN + " \u2713 " + Fore.RESET
         )
 
     else:
@@ -249,12 +239,8 @@ def translateRenpy(data, translatedList):
 
                     # Remove speaker
                     if speaker != "":
-                        matchSpeakerList = re.findall(
-                            r"^\[?(.+?)\]?\s?[|:]\s?", translatedText
-                        )
-                        translatedText = re.sub(
-                            r"^\[?(.+?)\]?\s?[|:]\s?", "", translatedText
-                        )
+                        matchSpeakerList = re.findall(r"^\[?(.+?)\]?\s?[|:]\s?", translatedText)
+                        translatedText = re.sub(r"^\[?(.+?)\]?\s?[|:]\s?", "", translatedText)
 
                     # Escape Quotes
                     translatedText = re.sub(r'[\\]*(")', '\\"', translatedText)
@@ -277,9 +263,7 @@ def translateRenpy(data, translatedList):
         PBAR.refresh()
 
         # Translate
-        response = translateGPT(
-            stringList, "Reply with the English TL of the NPC Name", True
-        )
+        response = translateGPT(stringList, "Reply with the English TL of the NPC Name", True)
         tokens[0] += response[1][0]
         tokens[1] += response[1][1]
         translatedList = response[0]
@@ -348,9 +332,7 @@ def batchList(input_list, batch_size):
     if not isinstance(batch_size, int) or batch_size <= 0:
         raise ValueError("batch_size must be a positive integer")
 
-    return [
-        input_list[i : i + batch_size] for i in range(0, len(input_list), batch_size)
-    ]
+    return [input_list[i : i + batch_size] for i in range(0, len(input_list), batch_size)]
 
 
 def createContext(fullPromptFlag, subbedT, format):
@@ -519,9 +501,7 @@ def translateGPT(text, history, fullPromptFlag):
                 subbedT = varResponse[0]
 
             # Things to Check before starting translation
-            if not re.search(
-                r"[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]+", subbedT
-            ):
+            if not re.search(r"[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]+", subbedT):
                 if PBAR is not None:
                     PBAR.update(len(tItem))
                 history = tItem[-MAXHISTORY:]
@@ -547,13 +527,9 @@ def translateGPT(text, history, fullPromptFlag):
             translatedText = cleanTranslatedText(translatedText, varResponse)
             if isinstance(tItem, list):
                 extractedTranslations = extractTranslation(translatedText, True)
-                if extractedTranslations == None or len(tItem) != len(
-                    extractedTranslations
-                ):
+                if extractedTranslations == None or len(tItem) != len(extractedTranslations):
                     # Mismatch. Try Again
-                    response = translateText(
-                        system, user, history, 0.05, format, "gpt-4o"
-                    )
+                    response = translateText(system, user, history, 0.05, format, "gpt-4o")
                     translatedText = response.choices[0].message.content
                     totalTokens[0] += response.usage.prompt_tokens
                     totalTokens[1] += response.usage.completion_tokens

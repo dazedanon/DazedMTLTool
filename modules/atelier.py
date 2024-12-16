@@ -109,13 +109,7 @@ def getResultString(translatedData, translationTime, filename):
     if translatedData[2] is None:
         # Success
         return (
-            filename
-            + ": "
-            + totalTokenstring
-            + timeString
-            + Fore.GREEN
-            + " \u2713 "
-            + Fore.RESET
+            filename + ": " + totalTokenstring + timeString + Fore.GREEN + " \u2713 " + Fore.RESET
         )
 
     else:
@@ -144,9 +138,7 @@ def parseText(data, filename):
     linesList = data.readlines()
     totalLines = len(linesList)
 
-    with tqdm(
-        bar_format=BAR_FORMAT, position=POSITION, total=totalLines, leave=LEAVE
-    ) as pbar:
+    with tqdm(bar_format=BAR_FORMAT, position=POSITION, total=totalLines, leave=LEAVE) as pbar:
         pbar.desc = filename
         pbar.total = totalLines
         try:
@@ -346,9 +338,7 @@ def translateGPT(t, history, fullPromptFlag):
             historyRaw = history
 
         inputTotalTokens = len(enc.encode(historyRaw)) + len(enc.encode(PROMPT))
-        outputTotalTokens = (
-            len(enc.encode(t)) * 2
-        )  # Estimating 2x the size of the original text
+        outputTotalTokens = len(enc.encode(t)) * 2  # Estimating 2x the size of the original text
         totalTokens = [inputTotalTokens, outputTotalTokens]
         return (t, totalTokens)
 
