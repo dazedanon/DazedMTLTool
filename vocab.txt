@@ -43,6 +43,7 @@ REMU - Female
 最強装備 (Optimize)
 攻撃力 (Attack)
 回避率 (Evasion)
+敏捷性 (Agility)
 最大ＨＰ (Max HP)
 経験値 (EXP)
 購入する (Buy)
