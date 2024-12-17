@@ -72,19 +72,21 @@ CODE101 = False
 CODE102 = False
 
 # Set String (Fragile but necessary)
-CODE122 = False
+CODE122 = True
+CODE150 = False
 
 # Other
-CODE210 = True
+CODE210 = False
 CODE300 = False
 CODE250 = False
 
 # Database
 SCENARIOFLAG = False
 OPTIONSFLAG = False
-NPCFLAG = True
-ITEMFLAG = False
-COLLECTIONFLAG = False
+NPCFLAG = False
+DBNAMEFLAG = False
+ITEMFLAG = True
+STATEFLAG = False
 ENEMYFLAG = False
 ARMORFLAG = False
 WEAPONFLAG = False
@@ -401,7 +403,7 @@ def searchCodes(events, pbar, jobList, filename):
                 # Logs
                 elif (
                     "stringArgs" in codeList[i]
-                    and codeList[i]["intArgs"][0] == 500510
+                    and codeList[i]["intArgs"][0] == 500221
                     and len(codeList[i]["stringArgs"]) == 2
                 ):
                     # Grab String
@@ -485,29 +487,61 @@ def searchCodes(events, pbar, jobList, filename):
                             and "/" not in jaString
                         ):
                             # Japanese Text Only
-                            # if re.search(
-                            #     r"[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９]+", jaString
-                            # ):
-                            # Remove Textwrap
-                            jaString = jaString.replace("\n", " ")
+                            if re.search(r"[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９]+", jaString):
+                                # Translate
+                                response = translateGPT(
+                                    jaString,
+                                    f"Reply with the {LANGUAGE} translation of the text",
+                                    True,
+                                )
+                                translatedText = response[0]
+                                totalTokens[0] += response[1][0]
+                                totalTokens[1] += response[1][1]
 
+                                # Set String
+                                codeList[i]["stringArgs"][0] = codeList[i]["stringArgs"][0].replace(
+                                    jaString, translatedText
+                                )
+
+            ### Event Code: 122 SetString
+            if codeList[i]["code"] == 150 and CODE150 == True:
+                if "stringArgs" in codeList[i] and len(codeList[i]["stringArgs"]) > 0:
+                    # Grab String
+                    jaString = re.search(r"^\n?(.*)\n?$", codeList[i]["stringArgs"][0])
+                    if jaString:
+                        jaString = jaString.group(1)
+                    else:
+                        jaString = codeList[i]["stringArgs"][0]
+
+                    # Remove Textwrap
+                    jaString = jaString.replace("\n", " ")
+                    jaString = jaString.replace("\r", "")
+
+                    # Translate Other Strings [Specific Files Only]
+                    if (
+                        not re.search(r"\.[\w]+$", jaString)
+                        and jaString != ""
+                        and "_" not in jaString
+                        and '",' not in jaString
+                        and "/" not in jaString
+                    ):
+                        # Japanese Text Only
+                        if re.search(r"[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９]+", jaString):
                             # Translate
                             response = translateGPT(
                                 jaString,
                                 f"Reply with the {LANGUAGE} translation of the text",
-                                False,
+                                True,
                             )
                             translatedText = response[0]
                             totalTokens[0] += response[1][0]
                             totalTokens[1] += response[1][1]
 
                             # Textwrap
-                            translatedText = textwrap.fill(translatedText, LISTWIDTH)
+                            translatedText = textwrap.fill(translatedText, WIDTH)
 
                             # Set String
-                            codeList[i]["stringArgs"][0] = codeList[i]["stringArgs"][0].replace(
-                                jaString, translatedText
-                            )
+                            codeList[i]["stringArgs"][0] = translatedText
 
             ### Event Code: 300 Common Events
             if (
@@ -549,91 +583,37 @@ def searchCodes(events, pbar, jobList, filename):
                     codeList[i]["stringArgs"][1] = translatedText
 
                 # Dialogue
-                elif (
-                    codeList[i]["stringArgs"][0] == "Hメッセージ"
-                    or codeList[i]["stringArgs"][0] == "Hしらべる"
-                    or codeList[i]["stringArgs"][0] == "[共]Hメッセージ+"
-                    or codeList[i]["stringArgs"][0] == "d[共]ポップアップ表示"
-                    or codeList[i]["stringArgs"][0] == "m_謎冒頭"
-                    or (
-                        codeList[i]["codeStr"] == "SetString"
-                        and (
-                            "「" in codeList[i]["stringArgs"][0]
-                            or "*" in codeList[i]["stringArgs"][0]
-                        )
-                    )
-                    or codeList[i]["stringArgs"][0] == "[移]サウンドノベル"
-                ):
-                    cleanedList = None
-                    if len(codeList[i]["stringArgs"]) > 1 and not re.search(
-                        r"^[\\]+cself\[\d+\]$", codeList[i]["stringArgs"][1]
-                    ):
-                        cleanedList = formatDramon(codeList[i]["stringArgs"][1])
-                    elif codeList[i]["code"] == 122:
-                        cleanedList = formatDramon(codeList[i]["stringArgs"][0])
-                    if cleanedList:
-                        fontSize = 24
-                        translatedText = ""
+                elif codeList[i]["stringArgs"][0] == "○【戦闘】テキスト表示":
+                    jaString = codeList[i]["stringArgs"][1]
 
-                        for str in cleanedList:
-                            # Pass 1
-                            if not setData:
-                                if (
-                                    all(x not in str for x in ["_", "@", ">", "/"])
-                                    and str != "\r\n"
-                                ):
-                                    # Remove Textwrap and Font and Add to list
-                                    str = str.replace("\r\n", " ")
-                                    str = re.sub(r"[\\]+f\[\d+\]", "", str)
-                                    list300.append(str)
+                    # Pass 1
+                    if not setData:
+                        # Remove Textwrap
+                        jaString = jaString.replace("\n", " ")
+                        jaString = jaString.replace("\r", "")
 
-                            # Pass 2
-                            else:
-                                if (
-                                    all(
-                                        x not in str
-                                        for x in [
-                                            "_",
-                                            "@",
-                                            ">",
-                                            "/",
-                                        ]
-                                    )
-                                    and str != "\r\n"
-                                ):
-                                    # Decide Wrap
-                                    if codeList[i]["stringArgs"][0] == "[移]サウンドノベル":
-                                        width = 40
-                                    else:
-                                        width = WIDTH
+                        # Append
+                        list300.append(jaString)
 
-                                    # Add Textwrap and Font
-                                    list300[0] = textwrap.fill(list300[0], width)
-                                    list300[0] = list300[0].replace("\n", f"\r\n\\f[{fontSize}]")
-                                    list300[0] = f"\\f[{fontSize}]{list300[0]}\r\n"
-                                    translatedText += list300[0]
-                                    list300.pop(0)
-                                else:
-                                    translatedText += str
+                    # Pass 2
+                    else:
+                        # Add Textwrap and Font
+                        translatedText = textwrap.fill(list300[0], WIDTH)
+                        list300.pop(0)
 
                         # Write to File
-                        if setData:
-                            # Formatting Fixes
-                            translatedText = translatedText.replace('*"', '* "')
-                            translatedText = translatedText.replace("\r\n\r\n", "\r\n")
-                            translatedText = re.sub(r"[^\S\r\n]+", " ", translatedText)
-                            if len(codeList[i]["stringArgs"]) > 1:
-                                codeList[i]["stringArgs"][1] = translatedText
-                            else:
-                                codeList[i]["stringArgs"][0] = translatedText
+                        codeList[i]["stringArgs"][1] = translatedText
 
-            ### Event Code: 250 Common Events
+            ### Event Code: 250 DB Read/Writes
             if codeList[i]["code"] == 250 and CODE250 == True:
                 foundTerm = False
 
                 # Validate size
-                if len(codeList[i]["stringArgs"]) > 2:
-                    if codeList[i]["stringArgs"][2] != "":
+                if len(codeList[i]["stringArgs"]) == 4:
+                    if (
+                        codeList[i]["stringArgs"][1] == "ワープポイント設定"
+                        and codeList[i]["stringArgs"][2] != ""
+                    ):
                         # Grab String
                         jaString = codeList[i]["stringArgs"][2]
 
@@ -657,7 +637,7 @@ def searchCodes(events, pbar, jobList, filename):
                             response = translateGPT(
                                 jaString,
                                 f"Reply with the {LANGUAGE} translation of the text.",
-                                False,
+                                True,
                             )
                             translatedText = response[0]
                             totalTokens[0] += response[1][0]
@@ -792,12 +772,13 @@ def searchDB(events, pbar, jobList, filename):
         scenarioList = jobList[0]
         npcList = jobList[1]
         itemList = jobList[2]
-        collectionList = jobList[3]
+        stateList = jobList[3]
         armorList = jobList[4]
         enemyList = jobList[5]
         weaponsList = jobList[6]
         skillList = jobList[7]
         optionsList = jobList[8]
+        dbNameList = jobList[9]
         setData = True
     else:
         scenarioList = [[], [], []]
@@ -806,9 +787,10 @@ def searchDB(events, pbar, jobList, filename):
         armorList = [[], []]
         enemyList = [[], []]
         weaponsList = [[], [], [], []]
-        skillList = [[], [], [], []]
-        collectionList = [[], [], [], []]
+        skillList = [[], [], [], [], []]
+        stateList = [[], [], [], [], [], [], [], []]
         optionsList = [[], [], [], []]
+        dbNameList = [[]]
         setData = False
 
     # Vars/Globals
@@ -973,15 +955,32 @@ def searchDB(events, pbar, jobList, filename):
                                     # Set Data
                                     dataList[j].update({"value": translatedText})
 
+            # Grab DB Names
+            if table["name"] == "マップ設定" and DBNAMEFLAG == True:
+                font = None
+                dbName = table["data"]
+                for j in range(len(dbName)):
+                    # Pass 1 (Grab Data)
+                    if setData == False:
+                        if dbName[j].get("name") != "":
+                            dbNameList[0].append(dbName[j].get("name"))
+
+                    # Pass 2 (Set Data)
+                    else:
+                        if dbName[j].get("name") != "":
+                            dbName[j].update({"name": dbNameList[0][0]})
+                            dbNameList[0].pop(0)
+
             # Grab Items
-            if table["name"] == "選択肢説明" and ITEMFLAG == True:
+            if table["name"] == "アイテム・技能作成" and ITEMFLAG == True:
                 for item in table["data"]:
                     dataList = item["data"]
 
                     # Parse
                     for j in range(len(dataList)):
+                        font = None
                         # Name
-                        if "表示名" in dataList[j].get("name"):
+                        if "項目文　　　　　" in dataList[j].get("name"):
                             # Pass 1 (Grab Data)
                             if setData == False:
                                 if dataList[j].get("value") != "":
@@ -994,11 +993,11 @@ def searchDB(events, pbar, jobList, filename):
                                     itemList[0].pop(0)
 
                         # Description
-                        if "選択肢9" in dataList[j].get("name"):
+                        if "┗未作成時" in dataList[j].get("name"):
                             # Pass 1 (Grab Data)
                             if setData == False:
                                 if dataList[j].get("value") != "":
-                                    # Remove Textwrap
+                                    # Remove Textwrap & Font
                                     jaString = dataList[j].get("value")
                                     jaString = jaString.replace("\n", " ")
                                     jaString = jaString.replace("\r", "")
@@ -1012,13 +1011,16 @@ def searchDB(events, pbar, jobList, filename):
                                     # Textwrap
                                     translatedText = itemList[1][0]
                                     translatedText = textwrap.fill(translatedText, LISTWIDTH)
-                                    translatedText = font + translatedText
+
+                                    # Font
+                                    if font:
+                                        translatedText = f"{font}{translatedText}"
 
                                     # Set Data
                                     dataList[j].update({"value": translatedText})
                                     itemList[1].pop(0)
                         # Description
-                        if "選択肢10" in dataList[j].get("name"):
+                        if "説明文　　　　　" in dataList[j].get("name"):
                             # Pass 1 (Grab Data)
                             if setData == False:
                                 if dataList[j].get("value") != "":
@@ -1036,13 +1038,16 @@ def searchDB(events, pbar, jobList, filename):
                                     # Textwrap
                                     translatedText = itemList[2][0]
                                     translatedText = textwrap.fill(translatedText, LISTWIDTH)
-                                    translatedText = font + translatedText
+
+                                    # Font
+                                    if font:
+                                        translatedText = f"{font}{translatedText}"
 
                                     # Set Data
                                     dataList[j].update({"value": translatedText})
                                     itemList[2].pop(0)
                         # Description
-                        if "選択肢11" in dataList[j].get("name"):
+                        if "┗未作成時" in dataList[j].get("name"):
                             # Pass 1 (Grab Data)
                             if setData == False:
                                 if dataList[j].get("value") != "":
@@ -1060,7 +1065,10 @@ def searchDB(events, pbar, jobList, filename):
                                     # Textwrap
                                     translatedText = itemList[3][0]
                                     translatedText = textwrap.fill(translatedText, LISTWIDTH)
-                                    translatedText = font + translatedText
+
+                                    # Font
+                                    if font:
+                                        translatedText = f"{font}{translatedText}"
 
                                     # Set Data
                                     dataList[j].update({"value": translatedText})
@@ -1202,14 +1210,14 @@ def searchDB(events, pbar, jobList, filename):
                                     weaponsList[1].pop(0)
 
             # Grab Skills
-            if table["name"] == "戦闘コマンド" and SKILLFLAG == True:
+            if table["name"] == "技能" and SKILLFLAG == True:
                 for skill in table["data"]:
                     dataList = skill["data"]
 
                     # Parse
                     for j in range(len(dataList)):
                         # Name
-                        if "コマンド名" in dataList[j].get("name"):
+                        if "技能の名前" in dataList[j].get("name"):
                             # Pass 1 (Grab Data)
                             if setData == False:
                                 if dataList[j].get("value") != "":
@@ -1222,7 +1230,7 @@ def searchDB(events, pbar, jobList, filename):
                                     skillList[0].pop(0)
 
                         # Description
-                        if "コマンドの説明文" in dataList[j].get("name"):
+                        if "説明" in dataList[j].get("name"):
                             # Pass 1 (Grab Data)
                             if setData == False:
                                 if dataList[j].get("value") != "":
@@ -1246,33 +1254,142 @@ def searchDB(events, pbar, jobList, filename):
                                     dataList[j].update({"value": translatedText})
                                     skillList[1].pop(0)
 
-            # Grab Collection
-            if table["name"] == "鍛冶師用DB" and COLLECTIONFLAG == True:
-                for object in table["data"]:
-                    dataList = object["data"]
+                        # Log
+                        if "使用時文章[移動](人名~" in dataList[j].get("name"):
+                            # Pass 1 (Grab Data)
+                            if setData == False:
+                                if dataList[j].get("value") != "":
+                                    # Remove Textwrap
+                                    jaString = dataList[j].get("value")
+                                    jaString = jaString.replace("\n", " ")
+                                    jaString = jaString.replace("\r", "")
+                                    jaString = re.sub(r"[\\]+f\[\d+\]", "", jaString)
+
+                                    # Skill Action
+                                    if jaString[0] in [
+                                        "は",
+                                        "を",
+                                        "の",
+                                        "に",
+                                        "が",
+                                    ]:
+                                        jaString = f"Taro{jaString}"
+
+                                    # Append Data
+                                    skillList[2].append(jaString)
+                            # Pass 2 (Set Data)
+                            else:
+                                if dataList[j].get("value") != "":
+                                    # Textwrap
+                                    translatedText = skillList[2][0]
+                                    translatedText = textwrap.fill(translatedText, LISTWIDTH)
+                                    translatedText = font + translatedText
+
+                                    # Remove Taro
+                                    translatedText = re.sub(r"\bTaro\b", "", translatedText)
+
+                                    # Set Data
+                                    dataList[j].update({"value": translatedText})
+                                    skillList[2].pop(0)
+
+                        # Log
+                        if "使用時文章[戦闘](人名~" in dataList[j].get("name"):
+                            # Pass 1 (Grab Data)
+                            if setData == False:
+                                if dataList[j].get("value") != "":
+                                    # Remove Textwrap
+                                    jaString = dataList[j].get("value")
+                                    jaString = jaString.replace("\n", " ")
+                                    jaString = jaString.replace("\r", "")
+                                    jaString = re.sub(r"[\\]+f\[\d+\]", "", jaString)
+
+                                    # Skill Action
+                                    if jaString[0] in [
+                                        "は",
+                                        "を",
+                                        "の",
+                                        "に",
+                                        "が",
+                                    ]:
+                                        jaString = f"Taro{jaString}"
+
+                                    # Append Data
+                                    skillList[3].append(jaString)
+                            # Pass 2 (Set Data)
+                            else:
+                                if dataList[j].get("value") != "":
+                                    # Textwrap
+                                    translatedText = skillList[3][0]
+                                    translatedText = textwrap.fill(translatedText, LISTWIDTH)
+                                    translatedText = font + translatedText
+
+                                    # Remove Taro
+                                    translatedText = re.sub(r"\bTaro\b", "", translatedText)
+
+                                    # Set Data
+                                    dataList[j].update({"value": translatedText})
+                                    skillList[3].pop(0)
+
+                        # Log
+                        if "失敗時文章[(対象)～]" in dataList[j].get("name"):
+                            # Pass 1 (Grab Data)
+                            if setData == False:
+                                if dataList[j].get("value") != "":
+                                    # Remove Textwrap
+                                    jaString = dataList[j].get("value")
+                                    jaString = jaString.replace("\n", " ")
+                                    jaString = jaString.replace("\r", "")
+                                    jaString = re.sub(r"[\\]+f\[\d+\]", "", jaString)
+
+                                    # Skill Action
+                                    if jaString[0] in [
+                                        "は",
+                                        "を",
+                                        "の",
+                                        "に",
+                                        "が",
+                                    ]:
+                                        jaString = f"Taro{jaString}"
+
+                                    # Append Data
+                                    skillList[4].append(jaString)
+                            # Pass 2 (Set Data)
+                            else:
+                                if dataList[j].get("value") != "":
+                                    # Textwrap
+                                    translatedText = skillList[4][0]
+                                    translatedText = textwrap.fill(translatedText, LISTWIDTH)
+                                    translatedText = font + translatedText
+
+                                    # Remove Taro
+                                    translatedText = re.sub(r"\bTaro\b", "", translatedText)
+
+                                    # Set Data
+                                    dataList[j].update({"value": translatedText})
+                                    skillList[4].pop(0)
+
+            # Grab States
+            if table["name"] == "状態設定" and STATEFLAG == True:
+                for state in table["data"]:
+                    dataList = state["data"]
 
                     # Parse
                     for j in range(len(dataList)):
                         # Name
-                        if "作る装備" in dataList[j].get("name"):
+                        if "状態名" in dataList[j].get("name"):
                             # Pass 1 (Grab Data)
                             if setData == False:
                                 if dataList[j].get("value") != "":
-                                    # Remove Textwrap
-                                    jaString = dataList[j].get("value")
-                                    jaString = jaString.replace("\n", " ")
-                                    jaString = jaString.replace("\r", "")
-                                    jaString = re.sub(r"[\\]+f\[\d+\]", "", jaString)
-                                    collectionList[0].append(jaString)
+                                    stateList[0].append(dataList[j].get("value"))
 
                             # Pass 2 (Set Data)
                             else:
                                 if dataList[j].get("value") != "":
-                                    dataList[j].update({"value": collectionList[0][0]})
-                                    collectionList[0].pop(0)
+                                    dataList[j].update({"value": stateList[0][0]})
+                                    stateList[0].pop(0)
 
                         # Description
-                        if "品物の解説" in dataList[j].get("name"):
+                        if "表示名" in dataList[j].get("name"):
                             # Pass 1 (Grab Data)
                             if setData == False:
                                 if dataList[j].get("value") != "":
@@ -1282,29 +1399,22 @@ def searchDB(events, pbar, jobList, filename):
                                     jaString = jaString.replace("\r", "")
                                     jaString = re.sub(r"[\\]+f\[\d+\]", "", jaString)
 
-                                    # Skill Action (Optional)
-                                    # jaString = f'Taro{jaString}'
-
                                     # Append Data
-                                    collectionList[1].append(jaString)
+                                    stateList[1].append(jaString)
                             # Pass 2 (Set Data)
                             else:
                                 if dataList[j].get("value") != "":
-                                    translatedText = collectionList[1][0]
-
-                                    # Remove Action (Optional)
-                                    # translatedText = translatedText.replace('Taro', '')
-
                                     # Textwrap
+                                    translatedText = stateList[1][0]
                                     translatedText = textwrap.fill(translatedText, LISTWIDTH)
                                     translatedText = font + translatedText
 
                                     # Set Data
                                     dataList[j].update({"value": translatedText})
-                                    collectionList[1].pop(0)
+                                    stateList[1].pop(0)
 
-                        # Description 2
-                        if "NULL" in dataList[j].get("name"):
+                        # Log
+                        if "発生時の文章[(人名)～]" in dataList[j].get("name"):
                             # Pass 1 (Grab Data)
                             if setData == False:
                                 if dataList[j].get("value") != "":
@@ -1314,37 +1424,233 @@ def searchDB(events, pbar, jobList, filename):
                                     jaString = jaString.replace("\r", "")
                                     jaString = re.sub(r"[\\]+f\[\d+\]", "", jaString)
 
-                                    # Skill Action (Optional)
-                                    # jaString = f'Taro{jaString}'
+                                    # State Action
+                                    if jaString[0] in [
+                                        "は",
+                                        "を",
+                                        "の",
+                                        "に",
+                                        "が",
+                                    ]:
+                                        jaString = f"Taro{jaString}"
 
                                     # Append Data
-                                    collectionList[2].append(jaString)
+                                    stateList[2].append(jaString)
                             # Pass 2 (Set Data)
                             else:
                                 if dataList[j].get("value") != "":
-                                    translatedText = collectionList[2][0]
-
-                                    # Remove Action (Optional)
-                                    # translatedText = translatedText.replace('Taro', '')
-
                                     # Textwrap
+                                    translatedText = stateList[2][0]
                                     translatedText = textwrap.fill(translatedText, LISTWIDTH)
                                     translatedText = font + translatedText
 
+                                    # Remove Taro
+                                    translatedText = re.sub(r"\bTaro\b", "", translatedText)
+
                                     # Set Data
                                     dataList[j].update({"value": translatedText})
-                                    collectionList[2].pop(0)
+                                    stateList[2].pop(0)
+
+                        # Log
+                        if "行動制限時文章(空欄:ﾅｼ" in dataList[j].get("name"):
+                            # Pass 1 (Grab Data)
+                            if setData == False:
+                                if dataList[j].get("value") != "":
+                                    # Remove Textwrap
+                                    jaString = dataList[j].get("value")
+                                    jaString = jaString.replace("\n", " ")
+                                    jaString = jaString.replace("\r", "")
+                                    jaString = re.sub(r"[\\]+f\[\d+\]", "", jaString)
+
+                                    # State Action
+                                    if jaString[0] in [
+                                        "は",
+                                        "を",
+                                        "の",
+                                        "に",
+                                        "が",
+                                    ]:
+                                        jaString = f"Taro{jaString}"
+
+                                    # Append Data
+                                    stateList[3].append(jaString)
+                            # Pass 2 (Set Data)
+                            else:
+                                if dataList[j].get("value") != "":
+                                    # Textwrap
+                                    translatedText = stateList[3][0]
+                                    translatedText = textwrap.fill(translatedText, LISTWIDTH)
+                                    translatedText = font + translatedText
+
+                                    # Remove Taro
+                                    translatedText = re.sub(r"\bTaro\b", "", translatedText)
+
+                                    # Set Data
+                                    dataList[j].update({"value": translatedText})
+                                    stateList[3].pop(0)
+
+                        # Log
+                        if "回復時の文章[(人名)～]" in dataList[j].get("name"):
+                            # Pass 1 (Grab Data)
+                            if setData == False:
+                                if dataList[j].get("value") != "":
+                                    # Remove Textwrap
+                                    jaString = dataList[j].get("value")
+                                    jaString = jaString.replace("\n", " ")
+                                    jaString = jaString.replace("\r", "")
+                                    jaString = re.sub(r"[\\]+f\[\d+\]", "", jaString)
+
+                                    # State Action
+                                    if jaString[0] in [
+                                        "は",
+                                        "を",
+                                        "の",
+                                        "に",
+                                        "が",
+                                    ]:
+                                        jaString = f"Taro{jaString}"
+
+                                    # Append Data
+                                    stateList[4].append(jaString)
+                            # Pass 2 (Set Data)
+                            else:
+                                if dataList[j].get("value") != "":
+                                    # Textwrap
+                                    translatedText = stateList[4][0]
+                                    translatedText = textwrap.fill(translatedText, LISTWIDTH)
+                                    translatedText = font + translatedText
+
+                                    # Remove Taro
+                                    translatedText = re.sub(r"\bTaro\b", "", translatedText)
+
+                                    # Set Data
+                                    dataList[j].update({"value": translatedText})
+                                    stateList[4].pop(0)
+                        # Log
+                        if "┣ ｶｳﾝﾀｰ発動文[対象～" in dataList[j].get("name"):
+                            # Pass 1 (Grab Data)
+                            if setData == False:
+                                if dataList[j].get("value") != "":
+                                    # Remove Textwrap
+                                    jaString = dataList[j].get("value")
+                                    jaString = jaString.replace("\n", " ")
+                                    jaString = jaString.replace("\r", "")
+                                    jaString = re.sub(r"[\\]+f\[\d+\]", "", jaString)
+
+                                    # State Action
+                                    if jaString[0] in [
+                                        "は",
+                                        "を",
+                                        "の",
+                                        "に",
+                                        "が",
+                                    ]:
+                                        jaString = f"Taro{jaString}"
+
+                                    # Append Data
+                                    stateList[5].append(jaString)
+                            # Pass 2 (Set Data)
+                            else:
+                                if dataList[j].get("value") != "":
+                                    # Textwrap
+                                    translatedText = stateList[5][0]
+                                    translatedText = textwrap.fill(translatedText, LISTWIDTH)
+                                    translatedText = font + translatedText
+
+                                    # Remove Taro
+                                    translatedText = re.sub(r"\bTaro\b", "", translatedText)
+
+                                    # Set Data
+                                    dataList[j].update({"value": translatedText})
+                                    stateList[5].pop(0)
+
+                        # Log
+                        if "尻もち　行動不能　持続3ターン" in dataList[j].get("name"):
+                            # Pass 1 (Grab Data)
+                            if setData == False:
+                                if dataList[j].get("value") != "":
+                                    # Remove Textwrap
+                                    jaString = dataList[j].get("value")
+                                    jaString = jaString.replace("\n", " ")
+                                    jaString = jaString.replace("\r", "")
+                                    jaString = re.sub(r"[\\]+f\[\d+\]", "", jaString)
+
+                                    # State Action
+                                    if jaString[0] in [
+                                        "は",
+                                        "を",
+                                        "の",
+                                        "に",
+                                        "が",
+                                    ]:
+                                        jaString = f"Taro{jaString}"
+
+                                    # Append Data
+                                    stateList[6].append(jaString)
+                            # Pass 2 (Set Data)
+                            else:
+                                if dataList[j].get("value") != "":
+                                    # Textwrap
+                                    translatedText = stateList[6][0]
+                                    translatedText = textwrap.fill(translatedText, LISTWIDTH)
+                                    translatedText = font + translatedText
+
+                                    # Remove Taro
+                                    translatedText = re.sub(r"\bTaro\b", "", translatedText)
+
+                                    # Set Data
+                                    dataList[j].update({"value": translatedText})
+                                    stateList[6].pop(0)
+
+                        # Log
+                        if "状態異常の説明" in dataList[j].get("name"):
+                            # Pass 1 (Grab Data)
+                            if setData == False:
+                                if dataList[j].get("value") != "":
+                                    # Remove Textwrap
+                                    jaString = dataList[j].get("value")
+                                    jaString = jaString.replace("\n", " ")
+                                    jaString = jaString.replace("\r", "")
+                                    jaString = re.sub(r"[\\]+f\[\d+\]", "", jaString)
+
+                                    # State Action
+                                    if jaString[0] in [
+                                        "は",
+                                        "を",
+                                        "の",
+                                        "に",
+                                        "が",
+                                    ]:
+                                        jaString = f"Taro{jaString}"
+
+                                    # Append Data
+                                    stateList[7].append(jaString)
+                            # Pass 2 (Set Data)
+                            else:
+                                if dataList[j].get("value") != "":
+                                    # Textwrap
+                                    translatedText = stateList[7][0]
+                                    translatedText = textwrap.fill(translatedText, LISTWIDTH)
+                                    translatedText = font + translatedText
+
+                                    # Remove Taro
+                                    translatedText = re.sub(r"\bTaro\b", "", translatedText)
+
+                                    # Set Data
+                                    dataList[j].update({"value": translatedText})
+                                    stateList[7].pop(0)
 
         # Translation
         scenarioListTL = [[], [], []]
         npcListTL = [[], [], [], []]
         itemListTL = [[], [], [], []]
-        collectionListTL = [[], [], [], []]
+        stateListTL = [[], [], [], [], [], [], [], []]
         armorListTL = [[], []]
         enemyListTL = [[], []]
         weaponsListTL = [[], [], []]
-        skillListTL = [[], [], []]
+        skillListTL = [[], [], [], [], []]
         optionsListTL = [[], [], [], []]
+        dbNameListTL = [[]]
 
         translate = False
 
@@ -1634,14 +1940,50 @@ def searchDB(events, pbar, jobList, filename):
             nameListTL = response[0]
             totalTokens[0] += response[1][0]
             totalTokens[1] += response[1][1]
-            # Desc 1
-            response = translateGPT(skillList[1], "", True)
+
+            # Desc
+            response = translateGPT(
+                skillList[1],
+                "Reply with only the " + LANGUAGE + " translation of the RPG skill description",
+                True,
+            )
             descListTL1 = response[0]
             totalTokens[0] += response[1][0]
             totalTokens[1] += response[1][1]
-            # Desc 2
-            response = translateGPT(skillList[2], "", True)
+
+            # Log 1
+            response = translateGPT(
+                skillList[2],
+                "reply with only the gender neutral "
+                + LANGUAGE
+                + " translation of the action log. Always start the sentence with Taro. For example, Translate 'Taroを倒した！' as 'Taro was defeated!'",
+                True,
+            )
             descListTL2 = response[0]
+            totalTokens[0] += response[1][0]
+            totalTokens[1] += response[1][1]
+
+            # Log 2
+            response = translateGPT(
+                skillList[3],
+                "reply with only the gender neutral "
+                + LANGUAGE
+                + " translation of the action log. Always start the sentence with Taro. For example, Translate 'Taroを倒した！' as 'Taro was defeated!'",
+                True,
+            )
+            descListTL3 = response[0]
+            totalTokens[0] += response[1][0]
+            totalTokens[1] += response[1][1]
+
+            # Log 3
+            response = translateGPT(
+                skillList[4],
+                "reply with only the gender neutral "
+                + LANGUAGE
+                + " translation of the action log. Always start the sentence with Taro. For example, Translate 'Taroを倒した！' as 'Taro was defeated!'",
+                True,
+            )
+            descListTL4 = response[0]
             totalTokens[0] += response[1][0]
             totalTokens[1] += response[1][1]
 
@@ -1650,30 +1992,30 @@ def searchDB(events, pbar, jobList, filename):
                 len(nameListTL) != len(skillList[0])
                 or len(descListTL1) != len(skillList[1])
                 or len(descListTL2) != len(skillList[2])
+                or len(descListTL3) != len(skillList[3])
+                or len(descListTL4) != len(skillList[4])
             ):
                 with LOCK:
                     if filename not in MISMATCH:
                         MISMATCH.append(filename)
             else:
-                skillListTL = [nameListTL, descListTL1, descListTL2]
+                skillListTL = [nameListTL, descListTL1, descListTL2, descListTL3, descListTL4]
                 translate = True
 
-        # Collection
-        for list in collectionList:
+        # State
+        for list in stateList:
             if len(list) > 0:
                 # Progress Bar
                 total = 0
-                for collectionArray in collectionList:
-                    total += len(collectionArray)
+                for stateArray in stateList:
+                    total += len(stateArray)
                 pbar.total = total
                 pbar.refresh()
 
                 # Name
                 response = translateGPT(
-                    collectionList[0],
-                    "reply with only the gender neutral "
-                    + LANGUAGE
-                    + " translation of the action log. Always start the sentence with Taro. For example, Translate 'Taroを倒した！' as 'Taro was defeated!'",
+                    stateList[0],
+                    f"Reply with the {LANGUAGE} translation of the status effect.",
                     True,
                 )
                 nameListTL = response[0]
@@ -1681,28 +2023,105 @@ def searchDB(events, pbar, jobList, filename):
                 totalTokens[1] += response[1][1]
 
                 # Desc 1
-                response = translateGPT(collectionList[1], "", True)
+                response = translateGPT(stateList[1], "", True)
                 descListTL1 = response[0]
                 totalTokens[0] += response[1][0]
                 totalTokens[1] += response[1][1]
 
-                # Desc 2
-                response = translateGPT(collectionList[2], "", True)
+                # Log 1
+                response = translateGPT(
+                    stateList[2],
+                    f"Reply with the {LANGUAGE} translation of the status effect.",
+                    True,
+                )
                 descListTL2 = response[0]
+                totalTokens[0] += response[1][0]
+                totalTokens[1] += response[1][1]
+
+                # Log 2
+                response = translateGPT(
+                    stateList[3],
+                    "reply with only the gender neutral "
+                    + LANGUAGE
+                    + " translation of the action log. Always start the sentence with Taro. For example, Translate 'Taroを倒した！' as 'Taro was defeated!'",
+                    True,
+                )
+                descListTL3 = response[0]
+                totalTokens[0] += response[1][0]
+                totalTokens[1] += response[1][1]
+
+                # Log 3
+                response = translateGPT(
+                    stateList[4],
+                    "reply with only the gender neutral "
+                    + LANGUAGE
+                    + " translation of the action log. Always start the sentence with Taro. For example, Translate 'Taroを倒した！' as 'Taro was defeated!'",
+                    True,
+                )
+                descListTL4 = response[0]
+                totalTokens[0] += response[1][0]
+                totalTokens[1] += response[1][1]
+
+                # Log 4
+                response = translateGPT(
+                    stateList[5],
+                    "reply with only the gender neutral "
+                    + LANGUAGE
+                    + " translation of the action log. Always start the sentence with Taro. For example, Translate 'Taroを倒した！' as 'Taro was defeated!'",
+                    True,
+                )
+                descListTL5 = response[0]
+                totalTokens[0] += response[1][0]
+                totalTokens[1] += response[1][1]
+
+                # Log 1
+                response = translateGPT(
+                    stateList[6],
+                    "reply with only the gender neutral "
+                    + LANGUAGE
+                    + " translation of the action log. Always start the sentence with Taro. For example, Translate 'Taroを倒した！' as 'Taro was defeated!'",
+                    True,
+                )
+                descListTL6 = response[0]
+                totalTokens[0] += response[1][0]
+                totalTokens[1] += response[1][1]
+
+                # Log 1
+                response = translateGPT(
+                    stateList[7],
+                    "reply with only the gender neutral "
+                    + LANGUAGE
+                    + " translation of the action log. Always start the sentence with Taro. For example, Translate 'Taroを倒した！' as 'Taro was defeated!'",
+                    True,
+                )
+                descListTL7 = response[0]
                 totalTokens[0] += response[1][0]
                 totalTokens[1] += response[1][1]
 
                 # Check Mismatch
                 if (
-                    len(nameListTL) != len(collectionList[0])
-                    or len(descListTL1) != len(collectionList[1])
-                    or len(descListTL2) != len(collectionList[2])
+                    len(nameListTL) != len(stateList[0])
+                    or len(descListTL1) != len(stateList[1])
+                    or len(descListTL2) != len(stateList[2])
+                    or len(descListTL3) != len(stateList[3])
+                    or len(descListTL4) != len(stateList[4])
+                    or len(descListTL5) != len(stateList[5])
+                    or len(descListTL6) != len(stateList[6])
                 ):
                     with LOCK:
                         if filename not in MISMATCH:
                             MISMATCH.append(filename)
                 else:
-                    collectionListTL = [nameListTL, descListTL1, descListTL2]
+                    stateListTL = [
+                        nameListTL,
+                        descListTL1,
+                        descListTL2,
+                        descListTL3,
+                        descListTL4,
+                        descListTL5,
+                        descListTL6,
+                        descListTL7,
+                    ]
                     translate = True
 
         # OPTIONS
@@ -1731,17 +2150,44 @@ def searchDB(events, pbar, jobList, filename):
                 optionsListTL = [nameListTL]
                 translate = True
 
+        # DB Names
+        if len(dbNameList[0]) > 0:
+            # Progress Bar
+            total = 0
+            for dbNameArray in dbNameList:
+                total += len(dbNameArray)
+            pbar.total = total
+            pbar.refresh()
+
+            # Name
+            response = translateGPT(
+                dbNameList[0], "Reply with only the " + LANGUAGE + " translation", True
+            )
+            nameListTL = response[0]
+            totalTokens[0] += response[1][0]
+            totalTokens[1] += response[1][1]
+
+            # Check Mismatch
+            if len(nameListTL) != len(dbNameList[0]):
+                with LOCK:
+                    if filename not in MISMATCH:
+                        MISMATCH.append(filename)
+            else:
+                dbNameListTL = [nameListTL]
+                translate = True
+
         # Start Pass 2
         if translate == True:
             jobList.append(scenarioListTL)
             jobList.append(npcListTL)
             jobList.append(itemListTL)
-            jobList.append(collectionListTL)
+            jobList.append(stateListTL)
             jobList.append(armorListTL)
             jobList.append(enemyListTL)
             jobList.append(weaponsListTL)
             jobList.append(skillListTL)
             jobList.append(optionsListTL)
+            jobList.append(dbNameListTL)
             searchDB(events, pbar, jobList, filename)
 
     except IndexError as e:
@@ -1817,10 +2263,7 @@ Output ONLY the {LANGUAGE} translation in the following format: `Translation: <{
 {VOCAB}\n\
 "
     )
-    if format == "json":
-        user = f"```json\n{subbedT}\n```"
-    else:
-        user = subbedT
+    user = f"```json\n{subbedT}\n```"
     return system, user
 
 
@@ -1835,10 +2278,7 @@ def translateText(system, user, history, penalty, format, model=MODEL):
         msg.append({"role": "system", "content": history})
 
     # Response Format
-    if format == "json":
-        responseFormat = {"type": "json_object"}
-    else:
-        responseFormat = {"type": "text"}
+    responseFormat = {"type": "json_object"}
 
     # Content to TL
     msg.append({"role": "user", "content": f"{user}"})
@@ -1949,17 +2389,15 @@ def translateGPT(text, history, fullPromptFlag):
 
         for index, tItem in enumerate(tList):
             # Before sending to translation, if we have a list of items, add the formatting
-            if isinstance(tItem, list):
-                for j in range(len(tItem)):
-                    if not tItem[j]:
-                        tItem[j] = tItem[j].replace("", "Placeholder Text")
-                payload = {f"Line{i+1}": string for i, string in enumerate(tItem)}
-                payload = json.dumps(payload, indent=4, ensure_ascii=False)
-                varResponse = [payload, []]
-                subbedT = varResponse[0]
-            else:
-                varResponse = [tItem, []]
-                subbedT = varResponse[0]
+            if not isinstance(tItem, list):
+                tItem = [tItem]
+            for j in range(len(tItem)):
+                if not tItem[j]:
+                    tItem[j] = tItem[j].replace("", "Placeholder Text")
+            payload = {f"Line{i+1}": string for i, string in enumerate(tItem)}
+            payload = json.dumps(payload, indent=4, ensure_ascii=False)
+            varResponse = [payload, []]
+            subbedT = varResponse[0]
 
             # Things to Check before starting translation
             if not re.search(r"[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]+", subbedT):
@@ -2027,4 +2465,7 @@ def translateGPT(text, history, fullPromptFlag):
                 tList[index] = translatedText.replace("Placeholder Text", "")
 
     finalList = combineList(tList, text)
-    return [finalList, totalTokens]
+    if format == "json":
+        return [finalList, totalTokens]
+    else:
+        return [finalList[0], totalTokens]

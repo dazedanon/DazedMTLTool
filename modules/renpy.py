@@ -283,20 +283,11 @@ def translateRenpy(data, translatedList):
 # Save some money and enter the character before translation
 def getSpeaker(speaker):
     match speaker:
-        case "す":
-            return ["Sumire", [0, 0]]
-        case "ら":
-            return ["Raul", [0, 0]]
-        case "ぶ":
-            return ["Gen", [0, 0]]
-        case "さ":
-            return ["Sasha", [0, 0]]
-        case "む":
-            return ["Villager", [0, 0]]
-        case "ま":
-            return ["Villager 2", [0, 0]]
+        case "ファイン":
+            return ["Fine", [0, 0]]
+        case "":
+            return ["", [0, 0]]
         case _:
-            return [speaker, [0, 0]]
             # Find Speaker
             for i in range(len(NAMESLIST)):
                 if speaker == NAMESLIST[i][0]:
@@ -352,10 +343,7 @@ Output ONLY the {LANGUAGE} translation in the following format: `Translation: <{
 {VOCAB}\n\
 "
     )
-    if format == "json":
-        user = f"```json\n{subbedT}\n```"
-    else:
-        user = subbedT
+    user = f"```json\n{subbedT}\n```"
     return system, user
 
 
@@ -370,10 +358,7 @@ def translateText(system, user, history, penalty, format, model=MODEL):
         msg.append({"role": "system", "content": history})
 
     # Response Format
-    if format == "json":
-        responseFormat = {"type": "json_object"}
-    else:
-        responseFormat = {"type": "text"}
+    responseFormat = {"type": "json_object"}
 
     # Content to TL
     msg.append({"role": "user", "content": f"{user}"})
@@ -442,10 +427,6 @@ def extractTranslation(translatedTextList, is_list):
         PBAR.write(f"extractTranslation Error: {e} on String {translatedTextList}")
         return None
 
-    except Exception as e:
-        PBAR.write(f"extractTranslation Error: {e} on String {translatedTextList}")
-        return None
-
 
 def countTokens(system, user, history):
     inputTotalTokens = 0
@@ -488,17 +469,15 @@ def translateGPT(text, history, fullPromptFlag):
 
         for index, tItem in enumerate(tList):
             # Before sending to translation, if we have a list of items, add the formatting
-            if isinstance(tItem, list):
-                for j in range(len(tItem)):
-                    if not tItem[j]:
-                        tItem[j] = tItem[j].replace("", "Placeholder Text")
-                payload = {f"Line{i+1}": string for i, string in enumerate(tItem)}
-                payload = json.dumps(payload, indent=4, ensure_ascii=False)
-                varResponse = [payload, []]
-                subbedT = varResponse[0]
-            else:
-                varResponse = [tItem, []]
-                subbedT = varResponse[0]
+            if not isinstance(tItem, list):
+                tItem = [tItem]
+            for j in range(len(tItem)):
+                if not tItem[j]:
+                    tItem[j] = tItem[j].replace("", "Placeholder Text")
+            payload = {f"Line{i+1}": string for i, string in enumerate(tItem)}
+            payload = json.dumps(payload, indent=4, ensure_ascii=False)
+            varResponse = [payload, []]
+            subbedT = varResponse[0]
 
             # Things to Check before starting translation
             if not re.search(r"[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]+", subbedT):
@@ -566,4 +545,7 @@ def translateGPT(text, history, fullPromptFlag):
                 tList[index] = translatedText.replace("Placeholder Text", "")
 
     finalList = combineList(tList, text)
-    return [finalList, totalTokens]
+    if format == "json":
+        return [finalList, totalTokens]
+    else:
+        return [finalList[0], totalTokens]

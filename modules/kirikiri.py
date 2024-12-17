@@ -379,34 +379,6 @@ def getSpeaker(speaker):
     return [speaker, [0, 0]]
 
 
-def subVars(jaString):
-    jaString = jaString.replace("\u3000", " ")
-
-    # Formatting
-    codeList = re.findall(r"([\\]*(\w+)\[(\d+)\])|([\\]*(\w+)\[[\\]*\\w+\[(\d+)\]\])", jaString)
-    codeList = set(codeList)
-    if len(codeList) != 0:
-        for var in codeList:
-            if var[2]:
-                jaString = jaString.replace(var[0], f"[{var[1]}Code_" + f"{var[2]}]")
-            else:
-                jaString = jaString.replace(var[3], f"[{var[4]}Code_" + f"{var[5]}]")
-
-    # Put all lists in list and return
-    return [jaString, codeList]
-
-
-def resubVars(translatedText, codeList):
-    # Formatting
-    for var in codeList:
-        if var[2]:
-            translatedText = translatedText.replace(f"[{var[1]}Code_" + f"{var[2]}]", var[0])
-        else:
-            translatedText = translatedText.replace(f"[{var[4]}Code_" + f"{var[5]}]", var[3])
-
-    return translatedText
-
-
 def batchList(input_list, batch_size):
     if not isinstance(batch_size, int) or batch_size <= 0:
         raise ValueError("batch_size must be a positive integer")
@@ -431,10 +403,7 @@ Output ONLY the {LANGUAGE} translation in the following format: `Translation: <{
 {VOCAB}\n\
 "
     )
-    if format == "json":
-        user = f"```json\n{subbedT}\n```"
-    else:
-        user = subbedT
+    user = f"```json\n{subbedT}\n```"
     return system, user
 
 
@@ -449,10 +418,7 @@ def translateText(system, user, history, penalty, format, model=MODEL):
         msg.append({"role": "system", "content": history})
 
     # Response Format
-    if format == "json":
-        responseFormat = {"type": "json_object"}
-    else:
-        responseFormat = {"type": "text"}
+    responseFormat = {"type": "json_object"}
 
     # Content to TL
     msg.append({"role": "user", "content": f"{user}"})
@@ -487,7 +453,6 @@ def cleanTranslatedText(translatedText, varResponse):
 
     # Elongate Long Dashes (Since GPT Ignores them...)
     translatedText = elongateCharacters(translatedText)
-    translatedText = resubVars(translatedText, varResponse[1])
     return translatedText
 
 
@@ -517,10 +482,6 @@ def extractTranslation(translatedTextList, is_list):
             return string_list
         else:
             return string_list[0]
-
-    except Exception as e:
-        PBAR.write(f"extractTranslation Error: {e} on String {translatedTextList}")
-        return None
 
     except Exception as e:
         PBAR.write(f"extractTranslation Error: {e} on String {translatedTextList}")
@@ -568,14 +529,15 @@ def translateGPT(text, history, fullPromptFlag):
 
         for index, tItem in enumerate(tList):
             # Before sending to translation, if we have a list of items, add the formatting
-            if isinstance(tItem, list):
-                payload = {f"Line{i+1}": string for i, string in enumerate(tItem)}
-                payload = json.dumps(payload, indent=4, ensure_ascii=False)
-                varResponse = subVars(payload)
-                subbedT = varResponse[0]
-            else:
-                varResponse = [tItem, []]
-                subbedT = varResponse[0]
+            if not isinstance(tItem, list):
+                tItem = [tItem]
+            for j in range(len(tItem)):
+                if not tItem[j]:
+                    tItem[j] = tItem[j].replace("", "Placeholder Text")
+            payload = {f"Line{i+1}": string for i, string in enumerate(tItem)}
+            payload = json.dumps(payload, indent=4, ensure_ascii=False)
+            varResponse = [payload, []]
+            subbedT = varResponse[0]
 
             # Things to Check before starting translation
             if not re.search(r"[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]+", subbedT):
@@ -643,4 +605,7 @@ def translateGPT(text, history, fullPromptFlag):
                 tList[index] = translatedText.replace("Placeholder Text", "")
 
     finalList = combineList(tList, text)
-    return [finalList, totalTokens]
+    if format == "json":
+        return [finalList, totalTokens]
+    else:
+        return [finalList[0], totalTokens]
