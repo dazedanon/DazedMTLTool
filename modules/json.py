@@ -400,6 +400,7 @@ def cleanTranslatedText(translatedText, varResponse):
         "「": '\\"',
         "」": '\\"',
         "- ": "-",
+        "—": "―",
         "】": "]",
         "【": "[",
         "Placeholder Text": "",
