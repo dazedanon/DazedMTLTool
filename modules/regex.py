@@ -198,7 +198,9 @@ def translateRegex(data, translatedList):
                 speaker = response[0]
                 tokens[0] += response[1][0]
                 tokens[1] += response[1][1]
-                data[i] = data[i].replace(match.group(1), speaker)
+                
+                if translatedList:
+                    data[i] = data[i].replace(match.group(1), speaker)
             else:
                 speaker = None
 
@@ -248,7 +250,6 @@ def translateRegex(data, translatedList):
                     translatedText = re.sub(r"^\[?(.+?)\]?\s?[|:]\s?", "", translatedText)
 
                     # Escape Quotes
-                    translatedText = re.sub(r'(?<!\\)"', r'\\"', translatedText)
                     translatedText = re.sub(r"(?<!\\)'", r"\\'", translatedText)
 
                     # Textwrap
@@ -558,7 +559,7 @@ def translateGPT(text, history, fullPromptFlag):
                 extractedTranslations = extractTranslation(translatedText, True)
                 if extractedTranslations == None or len(tItem) != len(extractedTranslations):
                     # Mismatch. Try Again
-                    response = translateText(system, user, history, 0.05, format, "gpt-4o")
+                    response = translateText(system, user, history, 0.05, format, "gpt-4")
                     translatedText = response.choices[0].message.content
                     totalTokens[0] += response.usage.prompt_tokens
                     totalTokens[1] += response.usage.completion_tokens
