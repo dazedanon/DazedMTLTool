@@ -2667,7 +2667,4 @@ def translateGPT(text, history, fullPromptFlag):
                 tList[index] = translatedText.replace("Placeholder Text", "")
 
     finalList = combineList(tList, text)
-    if format == "json":
-        return [finalList, totalTokens]
-    else:
-        return [finalList[0], totalTokens]
+    return [finalList, totalTokens]
