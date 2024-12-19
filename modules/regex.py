@@ -195,7 +195,7 @@ def translateRegex(data, translatedList):
         match = re.search(titleRegex, data[i])
         if match:
             response = translateGPT(
-                [match.group(1)],
+                match.group(1),
                 f"Reply with the {LANGUAGE} translation of the chapter title",
                 True,
             )
@@ -204,8 +204,8 @@ def translateRegex(data, translatedList):
             title = response[0]
 
             # Set
-            if translatedList:
-                title = re.sub(r"(?<!\\)'", r"\\'", title[0])
+            if not translatedList:
+                title = re.sub(r"(?<!\\)'", r"\\'", title)
                 data[i] = data[i].replace(match.group(1), title)
 
         # Speaker
@@ -273,9 +273,9 @@ def translateRegex(data, translatedList):
                     translatedText = re.sub(r"(?<!\\)'", r"\\'", translatedText)
 
                     # Remove Repeating Characters
-                    pattern = re.compile(r"(.)\s*\1(?:\s*\1){" + str(10 - 1) + r",}")
+                    pattern = re.compile(r"(.)\s*\1(?:\s*\1){" + str(20 - 1) + r",}")
                     translatedText = pattern.sub(
-                        lambda match: match.group(0).replace(" ", "")[:10], translatedText
+                        lambda match: match.group(0).replace(" ", "")[:20], translatedText
                     )
 
                     # Textwrap
@@ -468,9 +468,6 @@ def cleanTranslatedText(translatedText, varResponse):
     for target, replacement in placeholders.items():
         translatedText = translatedText.replace(target, replacement)
 
-    # Remove Repeating Characters
-    translatedText = re.sub(r"^(.){10,}$", "\1\1\1\1\1\1\1\1\1\1", translatedText)
-
     # Elongate Long Dashes (Since GPT Ignores them...)
     translatedText = elongateCharacters(translatedText)
     return translatedText
@@ -626,8 +623,8 @@ def translateGPT(text, history, fullPromptFlag):
                 # Ensure we're passing a single string to extractTranslation
                 tList[index] = translatedText.replace("Placeholder Text", "")
 
-    finalList = combineList(tList, text)
     if format == "json":
+        finalList = combineList(tList, text)
         return [finalList, totalTokens]
     else:
-        return [finalList[0], totalTokens]
+        return [tList[0], totalTokens]

@@ -625,5 +625,8 @@ def translateGPT(text, history, fullPromptFlag):
             # Ensure we're passing a single string to extractTranslation
             tList[index] = translatedText.replace("Placeholder Text", "")
 
-    finalList = combineList(tList, text)
-    return [finalList, totalTokens]
+    if format == "json":
+        finalList = combineList(tList, text)
+        return [finalList, totalTokens]
+    else:
+        return [tList[0], totalTokens]
