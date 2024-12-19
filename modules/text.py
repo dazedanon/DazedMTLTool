@@ -383,6 +383,10 @@ def cleanTranslatedText(translatedText, varResponse):
     for target, replacement in placeholders.items():
         translatedText = translatedText.replace(target, replacement)
 
+    # Remove Repeating Characters
+    pattern = re.compile(r"(.)\s*\1(?:\s*\1){" + str(20 - 1) + r",}")
+    translatedText = pattern.sub(lambda match: match.group(0).replace(" ", "")[:20], translatedText)
+
     # Elongate Long Dashes (Since GPT Ignores them...)
     translatedText = elongateCharacters(translatedText)
     return translatedText
