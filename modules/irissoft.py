@@ -759,5 +759,8 @@ def translateGPT(text, history, fullPromptFlag, pbar, filename):
             extractedTranslations = extractTranslation(translatedText, False)
             tList[index] = extractedTranslations
 
-    finalList = combineList(tList, text)
-    return [finalList, totalTokens]
+    if format == "json":
+        finalList = combineList(tList, text)
+        return [finalList, totalTokens]
+    else:
+        return [tList[0], totalTokens]
