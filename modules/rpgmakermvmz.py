@@ -2574,12 +2574,6 @@ def countTokens(system, user, history):
     return [inputTotalTokens, outputTotalTokens]
 
 
-def combineList(tlist, text):
-    if isinstance(text, list):
-        return [t for sublist in tlist for t in sublist]
-    return tlist[0]
-
-
 @retry(exceptions=Exception, tries=5, delay=5)
 def translateGPT(text, history, fullPromptFlag):
     global PBAR, MISMATCH, FILENAME
@@ -2670,8 +2664,12 @@ def translateGPT(text, history, fullPromptFlag):
                 # Ensure we're passing a single string to extractTranslation
                 tList[index] = translatedText.replace("Placeholder Text", "")
 
+    # Combine if multilist
+    if isinstance(tList[0], list):
+        tList = [t for sublist in tList for t in sublist]
+
+    # Return
     if format == "json":
-        finalList = combineList(tList, text)
-        return [finalList, totalTokens]
+        return [tList, totalTokens]
     else:
         return [tList[0], totalTokens]

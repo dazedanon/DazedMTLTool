@@ -499,12 +499,6 @@ def countTokens(characters, system, user, history):
     return [inputTotalTokens, outputTotalTokens]
 
 
-def combineList(tlist, text):
-    if isinstance(text, list):
-        return [t for sublist in tlist for t in sublist]
-    return tlist[0]
-
-
 @retry(exceptions=Exception, tries=5, delay=5)
 def translateGPT(text, history, fullPromptFlag):
     mismatch = False
@@ -575,8 +569,12 @@ def translateGPT(text, history, fullPromptFlag):
             extractedTranslations = extractTranslation(translatedText, False)
             tList[index] = extractedTranslations
 
+    # Combine if multilist
+    if isinstance(tList[0], list):
+        tList = [t for sublist in tList for t in sublist]
+
+    # Return
     if format == "json":
-        finalList = combineList(tList, text)
-        return [finalList, totalTokens]
+        return [tList, totalTokens]
     else:
         return [tList[0], totalTokens]
