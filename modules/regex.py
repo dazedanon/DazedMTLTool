@@ -189,6 +189,24 @@ def translateRegex(data, translatedList):
         lineRegexText = r"t\s'(.*)'$"
         lineRegexSpeaker = r"n\s'(.*)'$"
         choiceRegex = r"choice:\d+\s'(.*)'"
+        titleRegex = r"title\s'(.*)'$"
+
+        # Title
+        match = re.search(titleRegex, data[i])
+        if match:
+            response = translateGPT(
+                [match.group(1)],
+                f"Reply with the {LANGUAGE} translation of the chapter title",
+                True,
+            )
+            tokens[0] += response[1][0]
+            tokens[1] += response[1][1]
+            title = response[0]
+
+            # Set
+            if translatedList:
+                title = re.sub(r"(?<!\\)'", r"\\'", title[0])
+                data[i] = data[i].replace(match.group(1), title)
 
         # Speaker
         match = re.search(lineRegexSpeaker, data[i])
@@ -198,8 +216,10 @@ def translateRegex(data, translatedList):
                 speaker = response[0]
                 tokens[0] += response[1][0]
                 tokens[1] += response[1][1]
-                
+
                 if translatedList:
+                    # Escape Quotes
+                    speaker = re.sub(r"(?<!\\)'", r"\\'", speaker)
                     data[i] = data[i].replace(match.group(1), speaker)
             else:
                 speaker = None
@@ -251,6 +271,12 @@ def translateRegex(data, translatedList):
 
                     # Escape Quotes
                     translatedText = re.sub(r"(?<!\\)'", r"\\'", translatedText)
+
+                    # Remove Repeating Characters
+                    pattern = re.compile(r"(.)\s*\1(?:\s*\1){" + str(10 - 1) + r",}")
+                    translatedText = pattern.sub(
+                        lambda match: match.group(0).replace(" ", "")[:10], translatedText
+                    )
 
                     # Textwrap
                     translatedText = textwrap.fill(translatedText, width=WIDTH)
@@ -442,6 +468,9 @@ def cleanTranslatedText(translatedText, varResponse):
     for target, replacement in placeholders.items():
         translatedText = translatedText.replace(target, replacement)
 
+    # Remove Repeating Characters
+    translatedText = re.sub(r"^(.){10,}$", "\1\1\1\1\1\1\1\1\1\1", translatedText)
+
     # Elongate Long Dashes (Since GPT Ignores them...)
     translatedText = elongateCharacters(translatedText)
     return translatedText
@@ -559,7 +588,9 @@ def translateGPT(text, history, fullPromptFlag):
                 extractedTranslations = extractTranslation(translatedText, True)
                 if extractedTranslations == None or len(tItem) != len(extractedTranslations):
                     # Mismatch. Try Again
-                    response = translateText(system, user, history, 0.05, format, "gpt-4")
+                    response = translateText(
+                        system, user, history, 0.05, format, "gpt-4-turbo-2024-04-09"
+                    )
                     translatedText = response.choices[0].message.content
                     totalTokens[0] += response.usage.prompt_tokens
                     totalTokens[1] += response.usage.completion_tokens
