@@ -1,14 +1,10 @@
 Here are some vocabulary and terms so that you know the proper spelling and translation.
 ```
 # Game Characters
-ルカミラ ハル ロッシュ (Lukamilla Harre Roche) - Female
-マリアーヌ ローエン グリン (Marianne Roen Green) - Female
-リアン (Rianne) - Female
-スカーレット ルンベルク (Scarlet Lumberg) - Female
-ソフィア (Sofia) - Female
-アグファス ブロウニン (Agfas Blonin) - Male
-マルック スタンレー (Marc Stanley) - Male
-モノキオス (Monokios) - Male
+エレッタ (Eretta) - Female
+セッカ (Sekka) - Female
+新宮寧々 (Nene Shingu) - Female
+辰野伊吹 (Ibuki Tatsuno) - Female
 
 # Lewd Terms
 マンコ (pussy)
@@ -93,4 +89,48 @@ w ((lol))
 巫女 (Shrine Maiden)
 コイツ (this bastard)
 メナスフィア (Menacephere)
+
+# Armor
+ガードストーン (Guard Stone)
+ガードリング (Guard Ring)
+パワーストーン (Power Stone)
+パワーリング (Power Ring)
+スピードストーン (Speed Stone)
+スピードリング (Speed Ring)
+ラッキーストーン (Lucky Stone)
+ラッキーリング (Lucky Ring)
+マジカルストーン (Magical Stone)
+マジカルリング (Magical Ring)
+シューターストーン (Shooter Stone)
+シューターリング (Shooter Ring)
+
+# Classes
+キュバリエエレッタ (Cavalier Eretta)
+
+#Enemies
+ガーゴットン (Gargoton)
+スライム (Slime)
+スライム（エロなし） (Slime (No Lewd))
+群体スライム（中ボス） (Swarm Slime (Mid-Boss))
+スライム（黄） (Slime (Yellow))
+ボスウナズ (Boss Unaz)
+スライム（道中エロ補助用） (Slime (On the Way for Lewd Support))
+スライム（取り巻き） (Slime (Minion))
+ゴブリンリーダー (Goblin Leader)
+ゴブリンシャーマン (Goblin Shaman)
+ゴブリンソルジャー (Goblin Soldier)
+ゴブリン（取り巻き） (Goblin (Minion))
+オーク (Orc)
+ボストロ (Bostro)
+アイリス (Iris)
+アラクネ (Arachne)
+テレビフレーム (TV Frame)
+コカトリス (Cockatrice)
+シュトリア (Shtoria)
+シュトリアビット (Shtoria Bit)
+シュトリアビット２ (Shtoria Bit 2)
+ボスウナズ (Boss Unaz)
+
+# Locations
+ハレイシア (Haleisia)
 ```

@@ -71,7 +71,7 @@ CODE405 = True
 CODE102 = True
 
 # Optional
-CODE101 = False  # Turn this one when names exist in 101
+CODE101 = True  # Turn this one when names exist in 101
 CODE408 = False  # Warning, translates comments and can inflate costs.
 
 # Variables
@@ -617,10 +617,8 @@ def searchNames(data, pbar, context):
                     # Messages
                     number = 1
                     while number < 5:
-                        if f"message{number}" in data[i]:
-                            if len(data[i][f"message{number}"]) > 0 and data[i][f"message{number}"][
-                                0
-                            ] in ["は", "を", "の", "に", "が"]:
+                        if f"message{number}" in data[i] and data[i][f"message{number}"]:
+                            if data[i][f"message{number}"][0] in ["は", "を", "の", "に", "が"]:
                                 msgResponse = translateGPT(
                                     "Taro" + data[i][f"message{number}"],
                                     "reply with only the gender neutral "
@@ -680,10 +678,11 @@ def searchNames(data, pbar, context):
                 totalTokens[1] += response[1][1]
 
                 # Nickname
-                response = translateGPT(nicknameList, newContext, True)
-                translatedNicknameBatch = response[0]
-                totalTokens[0] += response[1][0]
-                totalTokens[1] += response[1][1]
+                if nicknameList:
+                    response = translateGPT(nicknameList, newContext, True)
+                    translatedNicknameBatch = response[0]
+                    totalTokens[0] += response[1][0]
+                    totalTokens[1] += response[1][1]
 
                 # Profile
                 response = translateGPT(profileList, "", True)
@@ -2464,7 +2463,10 @@ Output ONLY the {LANGUAGE} translation in the following format: `Translation: <{
 {VOCAB}\n\
 "
     )
-    user = f"```json\n{subbedT}\n```"
+    if format == "json":
+        user = f"```json\n{subbedT}\n```"
+    else:
+        user = subbedT
     return system, user
 
 
@@ -2479,7 +2481,10 @@ def translateText(system, user, history, penalty, format, model=MODEL):
         msg.append({"role": "system", "content": history})
 
     # Response Format
-    responseFormat = {"type": "json_object"}
+    if format == "json":
+        responseFormat = {"type": "json_object"}
+    else:
+        responseFormat = {"type": "text"}
 
     # Content to TL
     msg.append({"role": "user", "content": f"{user}"})
@@ -2589,15 +2594,17 @@ def translateGPT(text, history, fullPromptFlag):
 
         for index, tItem in enumerate(tList):
             # Before sending to translation, if we have a list of items, add the formatting
-            if not isinstance(tItem, list):
-                tItem = [tItem]
-            for j in range(len(tItem)):
-                if not tItem[j]:
-                    tItem[j] = tItem[j].replace("", "Placeholder Text")
-            payload = {f"Line{i+1}": string for i, string in enumerate(tItem)}
-            payload = json.dumps(payload, indent=4, ensure_ascii=False)
-            varResponse = [payload, []]
-            subbedT = varResponse[0]
+            if isinstance(tItem, list):
+                for j in range(len(tItem)):
+                    if not tItem[j]:
+                        tItem[j] = tItem[j].replace("", "Placeholder Text")
+                payload = {f"Line{i+1}": string for i, string in enumerate(tItem)}
+                payload = json.dumps(payload, indent=4, ensure_ascii=False)
+                varResponse = [payload, []]
+                subbedT = varResponse[0]
+            else:
+                varResponse = [tItem, []]
+                subbedT = varResponse[0]
 
             # Things to Check before starting translation
             if not re.search(r"[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]+", subbedT):
