@@ -117,19 +117,14 @@ def getResultString(translatedData, translationTime, filename):
         Fore.YELLOW + "[Input: " + str(translatedData[1][0]) + "]"
         "[Output: "
         + str(translatedData[1][1])
-        + "]" "[Cost: ${:,.4f}".format(
-            (translatedData[1][0] * 0.001 * INPUTAPICOST)
-            + (translatedData[1][1] * 0.001 * OUTPUTAPICOST)
-        )
+        + "]" "[Cost: ${:,.4f}".format((translatedData[1][0] * 0.001 * INPUTAPICOST) + (translatedData[1][1] * 0.001 * OUTPUTAPICOST))
         + "]"
     )
     timeString = Fore.BLUE + "[" + str(round(translationTime, 1)) + "s]"
 
     if translatedData[2] == None:
         # Success
-        return (
-            filename + ": " + totalTokenstring + timeString + Fore.GREEN + " \u2713 " + Fore.RESET
-        )
+        return filename + ": " + totalTokenstring + timeString + Fore.GREEN + " \u2713 " + Fore.RESET
 
     else:
         # Fail
@@ -138,16 +133,7 @@ def getResultString(translatedData, translationTime, filename):
         except Exception as e:
             traceback.print_exc()
             errorString = str(e) + Fore.RED
-            return (
-                filename
-                + ": "
-                + totalTokenstring
-                + timeString
-                + Fore.RED
-                + " \u2717 "
-                + errorString
-                + Fore.RESET
-            )
+            return filename + ": " + totalTokenstring + timeString + Fore.RED + " \u2717 " + errorString + Fore.RESET
 
 
 def parseText(data, filename):
@@ -201,10 +187,7 @@ def translateLines(linesList, pbar):
                 speakerMatch = re.findall(r"s\[[0-9]+\] = \"([^／]+)\"", linesList[i - 1])
                 if len(speakerMatch) > 0:
                     # If there isn't any Japanese in the text just skip
-                    if (
-                        re.search(r"[一-龠]+|[ぁ-ゔ]+|[ァ-ヴー]+", jaString)
-                        and "_" not in speakerMatch[0]
-                    ):
+                    if re.search(r"[一-龠]+|[ぁ-ゔ]+|[ァ-ヴー]+", jaString) and "_" not in speakerMatch[0]:
                         speaker = speakerMatch[0]
                     else:
                         speaker = ""
@@ -219,18 +202,13 @@ def translateLines(linesList, pbar):
                     linesList[i] = re.sub(r"(s\[[0-9]+\]) = \"(.+)\"", r'\1 = ""', linesList[i])
                     linesList[i] = linesList[i].replace(";", "")
                 start = i
-                while (
-                    len(linesList) > i + 1
-                    and re.search(r"s\[[0-9]+\] = \"\s+(.*)\"", linesList[i + 1]) != None
-                ):
+                while len(linesList) > i + 1 and re.search(r"s\[[0-9]+\] = \"\s+(.*)\"", linesList[i + 1]) != None:
                     multiLine = True
                     i += 1
                     match = re.findall(r"s\[[0-9]+\] = \"\s+(.*)\"", linesList[i])
                     currentGroup.append(match[0])
                     if insertBool is True:
-                        linesList[i] = re.sub(
-                            r"(s\[[0-9]+\]) = \"\s+(.+)\"", r'\1 = ""', linesList[i]
-                        )
+                        linesList[i] = re.sub(r"(s\[[0-9]+\]) = \"\s+(.+)\"", r'\1 = ""', linesList[i])
                         linesList[i] = linesList[i].replace(";", "")
                 i += 1
 
@@ -527,11 +505,7 @@ def extractTranslation(translatedTextList, is_list):
     pattern = r"<Line(\d+)>[\\]*`?(.*?)[\\]*?`?</?Line\d+>"
     # If it's a batch (i.e., list), extract with tags; otherwise, return the single item.
     if is_list:
-        return [
-            re.findall(pattern, line)[0][1]
-            for line in translatedTextList
-            if re.search(pattern, line)
-        ]
+        return [re.findall(pattern, line)[0][1] for line in translatedTextList if re.search(pattern, line)]
     else:
         matchList = re.findall(pattern, translatedTextList)
         return matchList[0][1] if matchList else translatedTextList

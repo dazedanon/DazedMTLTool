@@ -103,19 +103,14 @@ def getResultString(translatedData, translationTime, filename):
         Fore.YELLOW + "[Input: " + str(translatedData[1][0]) + "]"
         "[Output: "
         + str(translatedData[1][1])
-        + "]" "[Cost: ${:,.4f}".format(
-            (translatedData[1][0] * 0.001 * INPUTAPICOST)
-            + (translatedData[1][1] * 0.001 * OUTPUTAPICOST)
-        )
+        + "]" "[Cost: ${:,.4f}".format((translatedData[1][0] * 0.001 * INPUTAPICOST) + (translatedData[1][1] * 0.001 * OUTPUTAPICOST))
         + "]"
     )
     timeString = Fore.BLUE + "[" + str(round(translationTime, 1)) + "s]"
 
     if translatedData[2] == None:
         # Success
-        return (
-            filename + ": " + totalTokenstring + timeString + Fore.GREEN + " \u2713 " + Fore.RESET
-        )
+        return filename + ": " + totalTokenstring + timeString + Fore.GREEN + " \u2713 " + Fore.RESET
 
     else:
         # Fail
@@ -124,16 +119,7 @@ def getResultString(translatedData, translationTime, filename):
         except Exception as e:
             traceback.print_exc()
             errorString = str(e) + Fore.RED
-            return (
-                filename
-                + ": "
-                + totalTokenstring
-                + timeString
-                + Fore.RED
-                + " \u2717 "
-                + errorString
-                + Fore.RESET
-            )
+            return filename + ": " + totalTokenstring + timeString + Fore.RED + " \u2717 " + errorString + Fore.RESET
 
 
 def openFiles(filename):
@@ -186,9 +172,7 @@ def translateTyrano(data, translatedList):
 
     while i < len(data):
         voice = False
-        lineRegexNoSpeaker = (
-            r"^([^\[#;*@\n]+)\[l\]\[[rp]\]|^([^\[#;*@\n]+)\[[rpl]\]|^([^\[#;*@_\n]+)\n$"
-        )
+        lineRegexNoSpeaker = r"^([^\[#;*@\n]+)\[l\]\[[rp]\]|^([^\[#;*@\n]+)\[[rpl]\]|^([^\[#;*@_\n]+)\n$"
         lineRegexSpeaker = r"^#(.*)"
         furiganaRegex = r"(\[ruby\stext=(.*?)\])"
         choiceRegex = r'\[glink.+?text="(.*?)"'
@@ -329,9 +313,7 @@ def translateTyrano(data, translatedList):
 
         # Choice List
         if choiceList:
-            response = translateGPT(
-                choiceList, "Reply with the English TL of the Dialogue Choice", True
-            )
+            response = translateGPT(choiceList, "Reply with the English TL of the Dialogue Choice", True)
             tokens[0] += response[1][0]
             tokens[1] += response[1][1]
             choiceListTL = response[0]
@@ -591,9 +573,7 @@ def translateGPT(text, history, fullPromptFlag):
                     translatedText = cleanTranslatedText(translatedText, varResponse)
                     if isinstance(tItem, list):
                         extractedTranslations = extractTranslation(translatedText, True)
-                        if extractedTranslations == None or len(tItem) != len(
-                            extractedTranslations
-                        ):
+                        if extractedTranslations == None or len(tItem) != len(extractedTranslations):
                             mismatch = True  # Just here for breakpoint
                 logFile.write(f"Input:\n{subbedT}\n")
                 logFile.write(f"Output:\n{translatedText}\n")
@@ -601,9 +581,7 @@ def translateGPT(text, history, fullPromptFlag):
                 # Set if no mismatch
                 if mismatch == False:
                     tList[index] = extractedTranslations
-                    history = extractedTranslations[
-                        -MAXHISTORY:
-                    ]  # Update history if we have a list
+                    history = extractedTranslations[-MAXHISTORY:]  # Update history if we have a list
                 else:
                     history = text[-MAXHISTORY:]
                     mismatch = False

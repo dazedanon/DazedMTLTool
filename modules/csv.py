@@ -63,6 +63,7 @@ BAR_FORMAT = "{l_bar}{bar:10}{r_bar}{bar:-10b}"
 POSITION = 0
 LEAVE = False
 PBAR = None
+ENCODING = "cp932"
 
 
 def handleCSV(filename, estimate):
@@ -70,7 +71,7 @@ def handleCSV(filename, estimate):
     ESTIMATE = estimate
 
     if not ESTIMATE:
-        with open("translated/" + filename, "w+t", newline="", encoding="utf-8-sig") as writeFile:
+        with open("translated/" + filename, "w+t", newline="", encoding=ENCODING) as writeFile:
             # Translate
             start = time.time()
             translatedData = openFiles(filename, writeFile)
@@ -104,14 +105,14 @@ def handleCSV(filename, estimate):
 
 
 def openFiles(filename, writeFile):
-    with open("files/" + filename, "r", encoding="utf-8-sig") as readFile, writeFile:
+    with open("files/" + filename, "r", encoding="cp932") as readFile, writeFile:
         translatedData = parseCSV(readFile, writeFile, filename)
 
     return translatedData
 
 
 def openFilesEstimate(filename):
-    with open("files/" + filename, "r", encoding="utf-8-sig") as readFile:
+    with open("files/" + filename, "r", encoding="cp932") as readFile:
         translatedData = parseCSV(readFile, "", filename)
 
     return translatedData
@@ -123,19 +124,14 @@ def getResultString(translatedData, translationTime, filename):
         Fore.YELLOW + "[Input: " + str(translatedData[1][0]) + "]"
         "[Output: "
         + str(translatedData[1][1])
-        + "]" "[Cost: ${:,.4f}".format(
-            (translatedData[1][0] * 0.001 * INPUTAPICOST)
-            + (translatedData[1][1] * 0.001 * OUTPUTAPICOST)
-        )
+        + "]" "[Cost: ${:,.4f}".format((translatedData[1][0] * 0.001 * INPUTAPICOST) + (translatedData[1][1] * 0.001 * OUTPUTAPICOST))
         + "]"
     )
     timeString = Fore.BLUE + "[" + str(round(translationTime, 1)) + "s]"
 
     if translatedData[2] is None:
         # Success
-        return (
-            filename + ": " + totalTokenstring + timeString + Fore.GREEN + " \u2713 " + Fore.RESET
-        )
+        return filename + ": " + totalTokenstring + timeString + Fore.GREEN + " \u2713 " + Fore.RESET
     else:
         # Fail
         try:
@@ -143,16 +139,7 @@ def getResultString(translatedData, translationTime, filename):
         except Exception as e:
             traceback.print_exc()
             errorString = str(e) + Fore.RED
-            return (
-                filename
-                + ": "
-                + totalTokenstring
-                + timeString
-                + Fore.RED
-                + " \u2717 "
-                + errorString
-                + Fore.RESET
-            )
+            return filename + ": " + totalTokenstring + timeString + Fore.RED + " \u2717 " + errorString + Fore.RESET
 
 
 def parseCSV(readFile, writeFile, filename):
@@ -161,8 +148,8 @@ def parseCSV(readFile, writeFile, filename):
     global LOCK
 
     format = ""
-    while format not in ["1", "2", "3"]:
-        format = input("\n\nSelect the CSV Format:\n\n1. Translator++\n2. Single\n3. Multiple\n")
+    while format not in ["1", "2", "3", "4"]:
+        format = input("\n\nSelect the CSV Format:\n\n1. Translator++\n2. Single\n3. Multiple\n4. Speaker&Text\n")
         match format:
             case "1":
                 format = "1"
@@ -170,6 +157,8 @@ def parseCSV(readFile, writeFile, filename):
                 format = "2"
             case "3":
                 format = "3"
+            case "4":
+                format = "4"
 
     # Get total for progress bar
     totalLines = len(readFile.readlines())
@@ -275,7 +264,7 @@ def translateCSV(data, pbar, writer, filename, translatedList, format):
                     # Iterate
                     i += 1
 
-                # All Format
+                # In Place Format
                 case "3":
                     # Set columns to translate. Leave empty to translate all.
                     targetColumns = []
@@ -311,6 +300,52 @@ def translateCSV(data, pbar, writer, filename, translatedList, format):
                                     data[i][j + 1] = translatedText
                                 else:
                                     data[i][j] = translatedText
+
+                    # Iterate
+                    i += 1
+
+                # Speaker & Text Format
+                case "4":
+                    # Set columns to translate. Leave empty to translate all.
+                    speakerColumn = 8
+                    textColumn = 20
+                    speaker = ""
+
+                    if len(data[i]) > textColumn:
+                        # Speaker
+                        if data[i][speakerColumn]:
+                            speakerResponse = getSpeaker(data[i][speakerColumn])
+                            totalTokens[0] += speakerResponse[1][0]
+                            totalTokens[1] += speakerResponse[1][1]
+                            speaker = speakerResponse[0]
+                            data[i][speakerColumn] = speaker
+
+                        # Check if Translated
+                        jaString = data[i][textColumn]
+
+                        # Remove Textwrap
+                        jaString = jaString.replace("\\n", " ")
+
+                        # Pass 1
+                        if not translatedList:
+                            stringList.append(jaString)
+
+                        # Pass 2
+                        else:
+                            # Grab and Pop
+                            translatedText = translatedList[0]
+                            translatedList.pop(0)
+
+                            # Remove speaker
+                            if speaker:
+                                translatedText = re.sub(r"^\[?(.+?)\]?\s?[|:]\s?", "", translatedText)
+
+                            # Add Wordwrap
+                            translatedText = textwrap.fill(translatedText, WIDTH)
+                            translatedText = translatedText.replace("\n", "\\n")
+
+                            # Set Data
+                            data[i][textColumn] = translatedText
 
                     # Iterate
                     i += 1
@@ -368,6 +403,10 @@ def getSpeaker(speaker):
             for i in range(len(NAMESLIST)):
                 if speaker == NAMESLIST[i][0]:
                     return [NAMESLIST[i][1], [0, 0]]
+
+            # If there isn't any Japanese in the text just skip
+            if not re.search(r"[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]+", speaker):
+                return [speaker, [0, 0]]
 
             # Translate and Store Speaker
             response = translateGPT(
@@ -600,9 +639,7 @@ def translateGPT(text, history, fullPromptFlag):
                     translatedText = cleanTranslatedText(translatedText, varResponse)
                     if isinstance(tItem, list):
                         extractedTranslations = extractTranslation(translatedText, True)
-                        if extractedTranslations == None or len(tItem) != len(
-                            extractedTranslations
-                        ):
+                        if extractedTranslations == None or len(tItem) != len(extractedTranslations):
                             mismatch = True  # Just here for breakpoint
                 logFile.write(f"Input:\n{subbedT}\n")
                 logFile.write(f"Output:\n{translatedText}\n")
@@ -610,9 +647,7 @@ def translateGPT(text, history, fullPromptFlag):
                 # Set if no mismatch
                 if mismatch == False:
                     tList[index] = extractedTranslations
-                    history = extractedTranslations[
-                        -MAXHISTORY:
-                    ]  # Update history if we have a list
+                    history = extractedTranslations[-MAXHISTORY:]  # Update history if we have a list
                 else:
                     history = text[-MAXHISTORY:]
                     mismatch = False

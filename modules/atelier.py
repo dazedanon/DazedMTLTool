@@ -27,9 +27,7 @@ INPUTAPICOST = 0.002  # Depends on the model https://openai.com/pricing
 OUTPUTAPICOST = 0.002
 PROMPT = Path("prompt.txt").read_text(encoding="utf-8")
 VOCAB = Path("vocab.txt").read_text(encoding="utf-8")
-THREADS = int(
-    os.getenv("threads")
-)  # Controls how many threads are working on a single file (May have to drop this)
+THREADS = int(os.getenv("threads"))  # Controls how many threads are working on a single file (May have to drop this)
 LOCK = threading.Lock()
 WIDTH = int(os.getenv("width"))
 LISTWIDTH = int(os.getenv("listWidth"))
@@ -98,19 +96,14 @@ def getResultString(translatedData, translationTime, filename):
         Fore.YELLOW + "[Input: " + str(translatedData[1][0]) + "]"
         "[Output: "
         + str(translatedData[1][1])
-        + "]" "[Cost: ${:,.4f}".format(
-            (translatedData[1][0] * 0.001 * INPUTAPICOST)
-            + (translatedData[1][1] * 0.001 * OUTPUTAPICOST)
-        )
+        + "]" "[Cost: ${:,.4f}".format((translatedData[1][0] * 0.001 * INPUTAPICOST) + (translatedData[1][1] * 0.001 * OUTPUTAPICOST))
         + "]"
     )
     timeString = Fore.BLUE + "[" + str(round(translationTime, 1)) + "s]"
 
     if translatedData[2] is None:
         # Success
-        return (
-            filename + ": " + totalTokenstring + timeString + Fore.GREEN + " \u2713 " + Fore.RESET
-        )
+        return filename + ": " + totalTokenstring + timeString + Fore.GREEN + " \u2713 " + Fore.RESET
 
     else:
         # Fail
@@ -118,16 +111,7 @@ def getResultString(translatedData, translationTime, filename):
             raise translatedData[2]
         except Exception as e:
             errorString = str(e) + Fore.RED
-            return (
-                filename
-                + ": "
-                + totalTokenstring
-                + timeString
-                + Fore.RED
-                + " \u2717 "
-                + errorString
-                + Fore.RESET
-            )
+            return filename + ": " + totalTokenstring + timeString + Fore.RED + " \u2717 " + errorString + Fore.RESET
 
 
 def parseText(data, filename):
@@ -356,13 +340,7 @@ def translateGPT(t, history, fullPromptFlag):
         system = PROMPT
         user = "Line to Translate = " + subbedT
     else:
-        system = (
-            "Output ONLY the "
-            + LANGUAGE
-            + " translation in the following format: `Translation: <"
-            + LANGUAGE.upper()
-            + "_TRANSLATION>`"
-        )
+        system = "Output ONLY the " + LANGUAGE + " translation in the following format: `Translation: <" + LANGUAGE.upper() + "_TRANSLATION>`"
         user = "Line to Translate = " + subbedT
 
     # Create Message List
@@ -412,10 +390,7 @@ def translateGPT(t, history, fullPromptFlag):
     translatedText = translatedText.replace("！", "!")
 
     # Return Translation
-    if (
-        len(translatedText) > 15 * len(t)
-        or "I'm sorry, but I'm unable to assist with that translation" in translatedText
-    ):
+    if len(translatedText) > 15 * len(t) or "I'm sorry, but I'm unable to assist with that translation" in translatedText:
         raise Exception
     else:
         return [translatedText, totalTokens]
