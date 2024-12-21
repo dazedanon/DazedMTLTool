@@ -159,19 +159,14 @@ def getResultString(translatedData, translationTime, filename):
         Fore.YELLOW + "[Input: " + str(translatedData[1][0]) + "]"
         "[Output: "
         + str(translatedData[1][1])
-        + "]" "[Cost: ${:,.4f}".format(
-            (translatedData[1][0] * 0.001 * INPUTAPICOST)
-            + (translatedData[1][1] * 0.001 * OUTPUTAPICOST)
-        )
+        + "]" "[Cost: ${:,.4f}".format((translatedData[1][0] * 0.001 * INPUTAPICOST) + (translatedData[1][1] * 0.001 * OUTPUTAPICOST))
         + "]"
     )
     timeString = Fore.BLUE + "[" + str(round(translationTime, 1)) + "s]"
 
     if translatedData[2] is None:
         # Success
-        return (
-            filename + ": " + totalTokenstring + timeString + Fore.GREEN + " \u2713 " + Fore.RESET
-        )
+        return filename + ": " + totalTokenstring + timeString + Fore.GREEN + " \u2713 " + Fore.RESET
     else:
         # Fail
         try:
@@ -179,16 +174,7 @@ def getResultString(translatedData, translationTime, filename):
         except Exception as e:
             traceback.print_exc()
             errorString = str(e) + Fore.RED
-            return (
-                filename
-                + ": "
-                + totalTokenstring
-                + timeString
-                + Fore.RED
-                + " \u2717 "
-                + errorString
-                + Fore.RESET
-            )
+            return filename + ": " + totalTokenstring + timeString + Fore.RED + " \u2717 " + errorString + Fore.RESET
 
 
 def parseOther(data, filename):
@@ -248,11 +234,7 @@ def parseMap(data, filename):
         with ThreadPoolExecutor(max_workers=THREADS) as executor:
             for event in events:
                 if event is not None:
-                    futures = [
-                        executor.submit(searchCodes, page["list"], pbar, None, filename)
-                        for page in event["pages"]
-                        if page is not None
-                    ]
+                    futures = [executor.submit(searchCodes, page["list"], pbar, None, filename) for page in event["pages"] if page is not None]
                     for future in as_completed(futures):
                         try:
                             totalTokensFuture = future.result()
@@ -388,11 +370,7 @@ def searchCodes(events, pbar, jobList, filename):
             ### Event Code: 210 Common Event
             if codeList[i]["code"] == 210 and CODE210 == True:
                 # Speaker Event
-                if (
-                    "stringArgs" in codeList[i]
-                    and codeList[i]["intArgs"][0] == None
-                    and len(codeList[i]["stringArgs"]) == 2
-                ):
+                if "stringArgs" in codeList[i] and codeList[i]["intArgs"][0] == None and len(codeList[i]["stringArgs"]) == 2:
                     response = getSpeaker(codeList[i]["stringArgs"][1])
                     totalTokens[1] += response[1][0]
                     totalTokens[1] += response[1][1]
@@ -401,11 +379,7 @@ def searchCodes(events, pbar, jobList, filename):
                     codeList[i]["stringArgs"][1] = response[0]
 
                 # Logs
-                elif (
-                    "stringArgs" in codeList[i]
-                    and codeList[i]["intArgs"][0] == 500220
-                    and len(codeList[i]["stringArgs"]) == 2
-                ):
+                elif "stringArgs" in codeList[i] and codeList[i]["intArgs"][0] == 500220 and len(codeList[i]["stringArgs"]) == 2:
                     # Grab String
                     jaString = codeList[i]["stringArgs"][1]
                     initialJAString = jaString
@@ -499,9 +473,7 @@ def searchCodes(events, pbar, jobList, filename):
                                 totalTokens[1] += response[1][1]
 
                                 # Set String
-                                codeList[i]["stringArgs"][0] = codeList[i]["stringArgs"][0].replace(
-                                    jaString, translatedText
-                                )
+                                codeList[i]["stringArgs"][0] = codeList[i]["stringArgs"][0].replace(jaString, translatedText)
 
             ### Event Code: 122 SetString
             if codeList[i]["code"] == 150 and CODE150 == True:
@@ -544,17 +516,9 @@ def searchCodes(events, pbar, jobList, filename):
                             codeList[i]["stringArgs"][0] = translatedText
 
             ### Event Code: 300 Common Events
-            if (
-                codeList[i]["code"] == 300
-                and CODE300 == True
-                and "stringArgs" in codeList[i]
-                and len(codeList[i]["stringArgs"]) > 1
-            ):
+            if codeList[i]["code"] == 300 and CODE300 == True and "stringArgs" in codeList[i] and len(codeList[i]["stringArgs"]) > 1:
                 # Choices
-                if (
-                    codeList[i]["stringArgs"][0] == "[共]汎用ウィンドウ生成"
-                    or codeList[i]["stringArgs"][0] == "[共]選択生成"
-                ):
+                if codeList[i]["stringArgs"][0] == "[共]汎用ウィンドウ生成" or codeList[i]["stringArgs"][0] == "[共]選択生成":
                     # Grab String
                     choiceList = codeList[i]["stringArgs"][1].split("\r\n")
 
@@ -610,18 +574,13 @@ def searchCodes(events, pbar, jobList, filename):
 
                 # Validate size
                 if len(codeList[i]["stringArgs"]) == 4:
-                    if (
-                        codeList[i]["stringArgs"][1] == "┣所持アイテム個数"
-                        and codeList[i]["stringArgs"][2] != ""
-                    ):
+                    if codeList[i]["stringArgs"][1] == "┣所持アイテム個数" and codeList[i]["stringArgs"][2] != "":
                         # Grab String
                         jaString = codeList[i]["stringArgs"][2]
 
                         # Catch Vars that may break the TL
                         varString = ""
-                        matchList = re.findall(
-                            r"^[\\_]+[\w]+\[[a-zA-Z0-9\\\[\]\_,\s-]+\]", jaString
-                        )
+                        matchList = re.findall(r"^[\\_]+[\w]+\[[a-zA-Z0-9\\\[\]\_,\s-]+\]", jaString)
                         if len(matchList) != 0:
                             varString = matchList[0]
                             jaString = jaString.replace(matchList[0], "")
@@ -733,9 +692,7 @@ def formatDramon(jaString):
     jaStringList = re.split(imageRegex, jaString)
 
     # Clean List
-    cleanedList = [
-        x for x in jaStringList if x is not None and x != "" and x != "\r\n" and x != "_SS_"
-    ]
+    cleanedList = [x for x in jaStringList if x is not None and x != "" and x != "\r\n" and x != "_SS_"]
 
     # Iterate Through List
     j = 0
@@ -748,12 +705,7 @@ def formatDramon(jaString):
             and ".ogg" not in cleanedList[j]
         ):
             # Setup @
-            if (
-                j > 0
-                and "@" not in cleanedList[j - 1]
-                and "/" not in cleanedList[j - 1]
-                and "_" not in cleanedList[j - 1]
-            ):
+            if j > 0 and "@" not in cleanedList[j - 1] and "/" not in cleanedList[j - 1] and "_" not in cleanedList[j - 1]:
                 cleanedList[j - 1] = cleanedList[j - 1] + cleanedList[j + 1]
             else:
                 cleanedList.insert(j, cleanedList[j + 1])
@@ -1682,23 +1634,17 @@ def searchDB(events, pbar, jobList, filename):
             totalTokens[0] += response[1][0]
             totalTokens[1] += response[1][1]
             # Desc 1
-            response = translateGPT(
-                npcList[1], "Reply with only the " + LANGUAGE + " translation", True
-            )
+            response = translateGPT(npcList[1], "Reply with only the " + LANGUAGE + " translation", True)
             descListTL1 = response[0]
             totalTokens[0] += response[1][0]
             totalTokens[1] += response[1][1]
             # Desc 2
-            response = translateGPT(
-                npcList[2], "Reply with only the " + LANGUAGE + " translation", True
-            )
+            response = translateGPT(npcList[2], "Reply with only the " + LANGUAGE + " translation", True)
             descListTL2 = response[0]
             totalTokens[0] += response[1][0]
             totalTokens[1] += response[1][1]
             # Desc 3
-            response = translateGPT(
-                npcList[3], "Reply with only the " + LANGUAGE + " translation", True
-            )
+            response = translateGPT(npcList[3], "Reply with only the " + LANGUAGE + " translation", True)
             descListTL3 = response[0]
             totalTokens[0] += response[1][0]
             totalTokens[1] += response[1][1]
@@ -1755,11 +1701,7 @@ def searchDB(events, pbar, jobList, filename):
             totalTokens[1] += response[1][1]
 
             # Check Mismatch
-            if (
-                len(nameListTL) != len(scenarioList[0])
-                or len(descListTL1) != len(scenarioList[1])
-                or len(descListTL2) != len(scenarioList[2])
-            ):
+            if len(nameListTL) != len(scenarioList[0]) or len(descListTL1) != len(scenarioList[1]) or len(descListTL2) != len(scenarioList[2]):
                 with LOCK:
                     if filename not in MISMATCH:
                         MISMATCH.append(filename)
@@ -1777,30 +1719,22 @@ def searchDB(events, pbar, jobList, filename):
             pbar.refresh()
 
             # Name
-            response = translateGPT(
-                itemList[0], "Reply with only the " + LANGUAGE + " translation", True
-            )
+            response = translateGPT(itemList[0], "Reply with only the " + LANGUAGE + " translation", True)
             nameListTL = response[0]
             totalTokens[0] += response[1][0]
             totalTokens[1] += response[1][1]
             # Desc 1
-            response = translateGPT(
-                itemList[1], "Reply with only the " + LANGUAGE + " translation", True
-            )
+            response = translateGPT(itemList[1], "Reply with only the " + LANGUAGE + " translation", True)
             descListTL1 = response[0]
             totalTokens[0] += response[1][0]
             totalTokens[1] += response[1][1]
             # Desc 2
-            response = translateGPT(
-                itemList[2], "Reply with only the " + LANGUAGE + " translation", True
-            )
+            response = translateGPT(itemList[2], "Reply with only the " + LANGUAGE + " translation", True)
             descListTL2 = response[0]
             totalTokens[0] += response[1][0]
             totalTokens[1] += response[1][1]
             # Desc 3
-            response = translateGPT(
-                itemList[3], "Reply with only the " + LANGUAGE + " translation", True
-            )
+            response = translateGPT(itemList[3], "Reply with only the " + LANGUAGE + " translation", True)
             descListTL3 = response[0]
             totalTokens[0] += response[1][0]
             totalTokens[1] += response[1][1]
@@ -1838,9 +1772,7 @@ def searchDB(events, pbar, jobList, filename):
             totalTokens[0] += response[1][0]
             totalTokens[1] += response[1][1]
             # Desc 1
-            response = translateGPT(
-                armorList[1], "Reply with only the " + LANGUAGE + " translation", True
-            )
+            response = translateGPT(armorList[1], "Reply with only the " + LANGUAGE + " translation", True)
             descListTL1 = response[0]
             totalTokens[0] += response[1][0]
             totalTokens[1] += response[1][1]
@@ -1873,9 +1805,7 @@ def searchDB(events, pbar, jobList, filename):
             totalTokens[0] += response[1][0]
             totalTokens[1] += response[1][1]
             # Desc 1
-            response = translateGPT(
-                enemyList[1], "Reply with only the " + LANGUAGE + " translation", True
-            )
+            response = translateGPT(enemyList[1], "Reply with only the " + LANGUAGE + " translation", True)
             descListTL1 = response[0]
             totalTokens[0] += response[1][0]
             totalTokens[1] += response[1][1]
@@ -1919,11 +1849,7 @@ def searchDB(events, pbar, jobList, filename):
             totalTokens[1] += response[1][1]
 
             # Check Mismatch
-            if (
-                len(nameListTL) != len(weaponsList[0])
-                or len(descListTL1) != len(weaponsList[1])
-                or len(descListTL2) != len(weaponsList[2])
-            ):
+            if len(nameListTL) != len(weaponsList[0]) or len(descListTL1) != len(weaponsList[1]) or len(descListTL2) != len(weaponsList[2]):
                 with LOCK:
                     if filename not in MISMATCH:
                         MISMATCH.append(filename)
@@ -2143,9 +2069,7 @@ def searchDB(events, pbar, jobList, filename):
             pbar.refresh()
 
             # Name
-            response = translateGPT(
-                itemList[0], "Reply with only the " + LANGUAGE + " translation", True
-            )
+            response = translateGPT(itemList[0], "Reply with only the " + LANGUAGE + " translation", True)
             nameListTL = response[0]
             totalTokens[0] += response[1][0]
             totalTokens[1] += response[1][1]
@@ -2169,9 +2093,7 @@ def searchDB(events, pbar, jobList, filename):
             pbar.refresh()
 
             # Name
-            response = translateGPT(
-                dbNameList[0], "Reply with only the " + LANGUAGE + " translation", True
-            )
+            response = translateGPT(dbNameList[0], "Reply with only the " + LANGUAGE + " translation", True)
             nameListTL = response[0]
             totalTokens[0] += response[1][0]
             totalTokens[1] += response[1][1]
@@ -2453,9 +2375,7 @@ def translateGPT(text, history, fullPromptFlag):
                     translatedText = cleanTranslatedText(translatedText, varResponse)
                     if isinstance(tItem, list):
                         extractedTranslations = extractTranslation(translatedText, True)
-                        if extractedTranslations == None or len(tItem) != len(
-                            extractedTranslations
-                        ):
+                        if extractedTranslations == None or len(tItem) != len(extractedTranslations):
                             mismatch = True  # Just here for breakpoint
                 logFile.write(f"Input:\n{subbedT}\n")
                 logFile.write(f"Output:\n{translatedText}\n")
@@ -2463,9 +2383,7 @@ def translateGPT(text, history, fullPromptFlag):
                 # Set if no mismatch
                 if mismatch == False:
                     tList[index] = extractedTranslations
-                    history = extractedTranslations[
-                        -MAXHISTORY:
-                    ]  # Update history if we have a list
+                    history = extractedTranslations[-MAXHISTORY:]  # Update history if we have a list
                 else:
                     history = text[-MAXHISTORY:]
                     mismatch = False

@@ -195,19 +195,14 @@ def getResultString(translatedData, translationTime, filename):
         Fore.YELLOW + "[Input: " + str(translatedData[1][0]) + "]"
         "[Output: "
         + str(translatedData[1][1])
-        + "]" "[Cost: ${:,.4f}".format(
-            (translatedData[1][0] * 0.001 * INPUTAPICOST)
-            + (translatedData[1][1] * 0.001 * OUTPUTAPICOST)
-        )
+        + "]" "[Cost: ${:,.4f}".format((translatedData[1][0] * 0.001 * INPUTAPICOST) + (translatedData[1][1] * 0.001 * OUTPUTAPICOST))
         + "]"
     )
     timeString = Fore.BLUE + "[" + str(round(translationTime, 1)) + "s]"
 
     if translatedData[2] is None:
         # Success
-        return (
-            filename + ": " + totalTokenstring + timeString + Fore.GREEN + " \u2713 " + Fore.RESET
-        )
+        return filename + ": " + totalTokenstring + timeString + Fore.GREEN + " \u2713 " + Fore.RESET
     else:
         # Fail
         try:
@@ -215,16 +210,7 @@ def getResultString(translatedData, translationTime, filename):
         except Exception as e:
             traceback.print_exc()
             errorString = str(e) + Fore.RED
-            return (
-                filename
-                + ": "
-                + totalTokenstring
-                + timeString
-                + Fore.RED
-                + " \u2717 "
-                + errorString
-                + Fore.RESET
-            )
+            return filename + ": " + totalTokenstring + timeString + Fore.RED + " \u2717 " + errorString + Fore.RESET
 
 
 def parseMap(data, filename):
@@ -270,11 +256,7 @@ def parseMap(data, filename):
                         totalTokens[0] += response[0]
                         totalTokens[1] += response[1]
 
-                    futures = [
-                        executor.submit(searchCodes, page, pbar, [], filename)
-                        for page in event["pages"]
-                        if page is not None
-                    ]
+                    futures = [executor.submit(searchCodes, page, pbar, [], filename) for page in event["pages"] if page is not None]
                     for future in as_completed(futures):
                         try:
                             totalTokensFuture = future.result()
@@ -357,11 +339,7 @@ def parseCommonEvents(data, filename):
     with tqdm(bar_format=BAR_FORMAT, position=POSITION, leave=LEAVE) as pbar:
         pbar.desc = filename
         with ThreadPoolExecutor(max_workers=THREADS) as executor:
-            futures = [
-                executor.submit(searchCodes, page, pbar, [], filename)
-                for page in data
-                if page is not None
-            ]
+            futures = [executor.submit(searchCodes, page, pbar, [], filename) for page in data if page is not None]
             for future in as_completed(futures):
                 try:
                     totalTokensFuture = future.result()
@@ -389,11 +367,7 @@ def parseTroops(data, filename):
         for troop in data:
             if troop is not None:
                 with ThreadPoolExecutor(max_workers=THREADS) as executor:
-                    futures = [
-                        executor.submit(searchCodes, page, pbar, [], filename)
-                        for page in troop["pages"]
-                        if page is not None
-                    ]
+                    futures = [executor.submit(searchCodes, page, pbar, [], filename) for page in troop["pages"] if page is not None]
                     for future in as_completed(futures):
                         try:
                             totalTokensFuture = future.result()
@@ -480,11 +454,7 @@ def parseScenario(data, filename):
     with tqdm(bar_format=BAR_FORMAT, position=POSITION, leave=LEAVE) as pbar:
         pbar.desc = filename
         with ThreadPoolExecutor(max_workers=THREADS) as executor:
-            futures = [
-                executor.submit(searchCodes, page[1], pbar, [], filename)
-                for page in data.items()
-                if page[1] is not None
-            ]
+            futures = [executor.submit(searchCodes, page[1], pbar, [], filename) for page in data.items() if page[1] is not None]
             for future in as_completed(futures):
                 try:
                     totalTokensFuture = future.result()
@@ -595,9 +565,7 @@ def searchNames(data, pbar, context):
                         totalTokens[0] += tokensResponse[0]
                         totalTokens[1] += tokensResponse[1]
                     if "Switch Shop Description" in data[i]["note"]:
-                        tokensResponse = translateNote(
-                            data[i], r"<Switch Shop Description>\n(.*)\n"
-                        )
+                        tokensResponse = translateNote(data[i], r"<Switch Shop Description>\n(.*)\n")
                         totalTokens[0] += tokensResponse[0]
                         totalTokens[1] += tokensResponse[1]
                     if "<MapText:" in data[i]["note"]:
@@ -634,9 +602,7 @@ def searchNames(data, pbar, context):
                             else:
                                 msgResponse = translateGPT(
                                     data[i][f"message{number}"],
-                                    "reply with only the gender neutral "
-                                    + LANGUAGE
-                                    + " translation",
+                                    "reply with only the gender neutral " + LANGUAGE + " translation",
                                     False,
                                 )
                                 data[i][f"message{number}"] = msgResponse[0]
@@ -709,9 +675,7 @@ def searchNames(data, pbar, context):
                                 data[j]["nickname"] = translatedNicknameBatch[0]
                                 translatedNicknameBatch.pop(0)
                             if data[j]["profile"] != "":
-                                data[j]["profile"] = textwrap.fill(
-                                    translatedProfileBatch[0], LISTWIDTH
-                                )
+                                data[j]["profile"] = textwrap.fill(translatedProfileBatch[0], LISTWIDTH)
                                 translatedProfileBatch.pop(0)
 
                             # If Batch is empty. Move on.
@@ -754,9 +718,7 @@ def searchNames(data, pbar, context):
                                 data[j]["name"] = translatedNameBatch[0]
                                 translatedNameBatch.pop(0)
                                 if "description" in data[j] and data[j]["description"] != "":
-                                    data[j]["description"] = textwrap.fill(
-                                        translatedDescriptionBatch[0], LISTWIDTH
-                                    )
+                                    data[j]["description"] = textwrap.fill(translatedDescriptionBatch[0], LISTWIDTH)
                                     translatedDescriptionBatch.pop(0)
 
                             # If Batch is empty. Move on.
@@ -872,11 +834,7 @@ def searchCodes(page, pbar, jobList, filename):
             nametag = ""
 
             ## Event Code: 401 Show Text
-            if (
-                "code" in codeList[i]
-                and codeList[i]["code"] in [401, 405, -1]
-                and (CODE401 or CODE405)
-            ):
+            if "code" in codeList[i] and codeList[i]["code"] in [401, 405, -1] and (CODE401 or CODE405):
                 # Save Code and starting index (j)
                 code = codeList[i]["code"]
                 j = i
@@ -892,10 +850,7 @@ def searchCodes(page, pbar, jobList, filename):
                     continue
 
                 # Validate Japanese Text
-                if (
-                    not re.search(r"[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]+", jaString)
-                    and IGNORETLTEXT
-                ):
+                if not re.search(r"[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]+", jaString) and IGNORETLTEXT:
                     i += 1
                     continue
 
@@ -957,9 +912,7 @@ def searchCodes(page, pbar, jobList, filename):
                         and len(codeList[i + 1]["parameters"]) > 0
                         and len(codeList[i + 1]["parameters"][0]) > 0
                     ):
-                        if codeList[i + 1]["parameters"] != "" and codeList[i + 1]["parameters"][
-                            0
-                        ].strip()[0] in [
+                        if codeList[i + 1]["parameters"] != "" and codeList[i + 1]["parameters"][0].strip()[0] in [
                             "「",
                             '"',
                             "(",
@@ -977,9 +930,7 @@ def searchCodes(page, pbar, jobList, filename):
                     totalTokens[1] += response[1][1]
 
                     # Set Data
-                    codeList[i]["parameters"][0] = nametag + jaString.replace(
-                        speakerList[0], speaker
-                    )
+                    codeList[i]["parameters"][0] = nametag + jaString.replace(speakerList[0], speaker)
                     nametag = ""
 
                     # Iterate to next string
@@ -1127,15 +1078,11 @@ def searchCodes(page, pbar, jobList, filename):
 
                             # Remove speaker
                             if speaker != "":
-                                matchSpeakerList = re.findall(
-                                    r"^\[?(.+?)\]?\s?[|:]\s?", translatedText
-                                )
+                                matchSpeakerList = re.findall(r"^\[?(.+?)\]?\s?[|:]\s?", translatedText)
                                 if len(matchSpeakerList) > 0:
                                     newSpeaker = matchSpeakerList[0]
                                     nametag = nametag.replace(speaker, newSpeaker)
-                                translatedText = re.sub(
-                                    r"^\[?(.+?)\]?\s?[|:]\s?", "", translatedText
-                                )
+                                translatedText = re.sub(r"^\[?(.+?)\]?\s?[|:]\s?", "", translatedText)
 
                             # Fix '- '
                             translatedText = translatedText.replace("- ", "-")
@@ -1458,9 +1405,7 @@ def searchCodes(page, pbar, jobList, filename):
 
                                 # Center Text
                                 if acExist:
-                                    translatedText = (
-                                        f'\\ac {translatedText.replace('\n', '\n\\ac ')}'
-                                    )
+                                    translatedText = f'\\ac {translatedText.replace('\n', '\n\\ac ')}'
 
                                 # Check and Set Font
                                 if "fontSize" in codeList[i]["parameters"][3]:
@@ -1592,11 +1537,7 @@ def searchCodes(page, pbar, jobList, filename):
                             speaker = ""
 
             ## Event Code: 355 or 655 Scripts [Optional]
-            if (
-                "code" in codeList[i]
-                and (codeList[i]["code"] == 355 or codeList[i]["code"] == 655)
-                and CODE355655 is True
-            ):
+            if "code" in codeList[i] and (codeList[i]["code"] == 355 or codeList[i]["code"] == 655) and CODE355655 is True:
                 jaString = codeList[i]["parameters"][0]
                 regex = r'.*subject=(.*?)"'
 
@@ -1615,9 +1556,7 @@ def searchCodes(page, pbar, jobList, filename):
                         translatedText = translatedText.replace("'", "\\'")
 
                         # Set
-                        codeList[i]["parameters"][0] = codeList[i]["parameters"][0].replace(
-                            finalJAString, translatedText
-                        )
+                        codeList[i]["parameters"][0] = codeList[i]["parameters"][0].replace(finalJAString, translatedText)
                         list355655.pop(0)
 
             ## Event Code: 408 (Script)
@@ -1791,9 +1730,7 @@ def searchCodes(page, pbar, jobList, filename):
                     if len(matchList) > 0:
                         # Translate
                         text = matchList[0]
-                        response = translateGPT(
-                            text, "Reply with the " + LANGUAGE + " Translation", False
-                        )
+                        response = translateGPT(text, "Reply with the " + LANGUAGE + " Translation", False)
                         translatedText = response[0]
                         totalTokens[0] += response[1][0]
                         totalTokens[1] += response[1][1]
@@ -1807,9 +1744,7 @@ def searchCodes(page, pbar, jobList, filename):
                     if len(matchList) > 0:
                         # Translate
                         text = matchList[0]
-                        response = translateGPT(
-                            text, "Reply with the " + LANGUAGE + " Translation", False
-                        )
+                        response = translateGPT(text, "Reply with the " + LANGUAGE + " Translation", False)
                         translatedText = response[0]
                         totalTokens[0] += response[1][0]
                         totalTokens[1] += response[1][1]
@@ -1824,9 +1759,7 @@ def searchCodes(page, pbar, jobList, filename):
                     if len(matchList) > 0:
                         # Translate
                         text = matchList[0]
-                        response = translateGPT(
-                            text, "Reply with the " + LANGUAGE + " Translation", False
-                        )
+                        response = translateGPT(text, "Reply with the " + LANGUAGE + " Translation", False)
                         translatedText = response[0]
                         totalTokens[0] += response[1][0]
                         totalTokens[1] += response[1][1]
@@ -1914,8 +1847,7 @@ def searchCodes(page, pbar, jobList, filename):
                 if len(textHistory) > 0:
                     response = translateGPT(
                         choiceList,
-                        "This will be a dialogue option.\nPrevious text for context: "
-                        + str(textHistory),
+                        "This will be a dialogue option.\nPrevious text for context: " + str(textHistory),
                         True,
                     )
                     translatedTextList = response[0]
@@ -1936,9 +1868,7 @@ def searchCodes(page, pbar, jobList, filename):
                         totalTokens[0] += response[1][0]
                         totalTokens[1] += response[1][1]
                         if translatedText != "":
-                            translatedText = (
-                                varList[choice] + translatedText[0].upper() + translatedText[1:]
-                            )
+                            translatedText = varList[choice] + translatedText[0].upper() + translatedText[1:]
                         else:
                             translatedText = varList[choice] + translatedText
                         codeList[i]["parameters"][0][choice] = translatedText
@@ -2360,9 +2290,7 @@ def searchSystem(data, pbar):
     for i in range(len(data["equipTypes"])):
         response = translateGPT(
             data["equipTypes"][i],
-            "Reply with only the "
-            + LANGUAGE
-            + " translation of the equipment type. No disclaimers.",
+            "Reply with only the " + LANGUAGE + " translation of the equipment type. No disclaimers.",
             False,
         )
         totalTokens[0] += response[1][0]
@@ -2644,9 +2572,7 @@ def translateGPT(text, history, fullPromptFlag):
                     translatedText = cleanTranslatedText(translatedText, varResponse)
                     if isinstance(tItem, list):
                         extractedTranslations = extractTranslation(translatedText, True)
-                        if extractedTranslations == None or len(tItem) != len(
-                            extractedTranslations
-                        ):
+                        if extractedTranslations == None or len(tItem) != len(extractedTranslations):
                             mismatch = True  # Just here for breakpoint
                 logFile.write(f"Input:\n{subbedT}\n")
                 logFile.write(f"Output:\n{translatedText}\n")
@@ -2654,9 +2580,7 @@ def translateGPT(text, history, fullPromptFlag):
                 # Set if no mismatch
                 if mismatch == False:
                     tList[index] = extractedTranslations
-                    history = extractedTranslations[
-                        -MAXHISTORY:
-                    ]  # Update history if we have a list
+                    history = extractedTranslations[-MAXHISTORY:]  # Update history if we have a list
                 else:
                     history = text[-MAXHISTORY:]
                     mismatch = False

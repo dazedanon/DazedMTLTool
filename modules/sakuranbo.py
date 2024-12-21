@@ -27,9 +27,7 @@ LANGUAGE = os.getenv("language").capitalize()
 INPUTAPICOST = 0.002  # Depends on the model https://openai.com/pricing
 OUTPUTAPICOST = 0.002
 PROMPT = Path("prompt.txt").read_text(encoding="utf-8")
-THREADS = int(
-    os.getenv("threads")
-)  # Controls how many threads are working on a single file (May have to drop this)
+THREADS = int(os.getenv("threads"))  # Controls how many threads are working on a single file (May have to drop this)
 LOCK = threading.Lock()
 WIDTH = int(os.getenv("width"))
 LISTWIDTH = int(os.getenv("listWidth"))
@@ -97,19 +95,14 @@ def getResultString(translatedData, translationTime, filename):
         Fore.YELLOW + "[Input: " + str(translatedData[1][0]) + "]"
         "[Output: "
         + str(translatedData[1][1])
-        + "]" "[Cost: ${:,.4f}".format(
-            (translatedData[1][0] * 0.001 * INPUTAPICOST)
-            + (translatedData[1][1] * 0.001 * OUTPUTAPICOST)
-        )
+        + "]" "[Cost: ${:,.4f}".format((translatedData[1][0] * 0.001 * INPUTAPICOST) + (translatedData[1][1] * 0.001 * OUTPUTAPICOST))
         + "]"
     )
     timeString = Fore.BLUE + "[" + str(round(translationTime, 1)) + "s]"
 
     if translatedData[2] is None:
         # Success
-        return (
-            filename + ": " + totalTokenstring + timeString + Fore.GREEN + " \u2713 " + Fore.RESET
-        )
+        return filename + ": " + totalTokenstring + timeString + Fore.GREEN + " \u2713 " + Fore.RESET
 
     else:
         # Fail
@@ -117,16 +110,7 @@ def getResultString(translatedData, translationTime, filename):
             raise translatedData[2]
         except Exception as e:
             errorString = str(e) + Fore.RED
-            return (
-                filename
-                + ": "
-                + totalTokenstring
-                + timeString
-                + Fore.RED
-                + " \u2717 "
-                + errorString
-                + Fore.RESET
-            )
+            return filename + ": " + totalTokenstring + timeString + Fore.RED + " \u2717 " + errorString + Fore.RESET
 
 
 def openFiles(filename):
@@ -232,9 +216,7 @@ def translateTyrano(data, pbar):
                 if len(textHistory) > 0:
                     response = translateGPT(
                         matchList[0],
-                        "Past Translated Text: "
-                        + textHistory[len(textHistory) - 1]
-                        + "\n\nReply in the style of a dialogue option.",
+                        "Past Translated Text: " + textHistory[len(textHistory) - 1] + "\n\nReply in the style of a dialogue option.",
                         True,
                     )
                 else:
@@ -253,17 +235,13 @@ def translateTyrano(data, pbar):
                 translatedText = translatedText.replace("'", "\\'")
 
                 # Set Data
-                translatedText = data[i].replace(
-                    matchList[0], translatedText.replace(" ", "\u00a0")
-                )
+                translatedText = data[i].replace(matchList[0], translatedText.replace(" ", "\u00a0"))
                 data[i] = translatedText
 
         # Grab Lines
         matchList = re.findall(r"^([^\n;@*\{\[].+[^;'{}\[]$)", data[i])
         if len(matchList) > 0 and (
-            re.search(r"^\[(.+)\sstorage=.+\],", data[i - 1])
-            or re.search(r"^\[(.+)\]$", data[i - 1])
-            or re.search(r"^《(.+)》", data[i - 1])
+            re.search(r"^\[(.+)\sstorage=.+\],", data[i - 1]) or re.search(r"^\[(.+)\]$", data[i - 1]) or re.search(r"^《(.+)》", data[i - 1])
         ):
             currentGroup.append(matchList[0])
             if len(data) > i + 1:
@@ -566,13 +544,7 @@ def translateGPT(t, history, fullPromptFlag):
         system = PROMPT
         user = "Line to Translate = " + subbedT
     else:
-        system = (
-            "Output ONLY the "
-            + LANGUAGE
-            + " translation in the following format: `Translation: <"
-            + LANGUAGE.upper()
-            + "_TRANSLATION>`"
-        )
+        system = "Output ONLY the " + LANGUAGE + " translation in the following format: `Translation: <" + LANGUAGE.upper() + "_TRANSLATION>`"
         user = "Line to Translate = " + subbedT
 
     # Create Message List
@@ -622,10 +594,7 @@ def translateGPT(t, history, fullPromptFlag):
     translatedText = translatedText.replace("！", "!")
 
     # Return Translation
-    if (
-        len(translatedText) > 15 * len(t)
-        or "I'm sorry, but I'm unable to assist with that translation" in translatedText
-    ):
+    if len(translatedText) > 15 * len(t) or "I'm sorry, but I'm unable to assist with that translation" in translatedText:
         raise Exception
     else:
         return [translatedText, totalTokens]
