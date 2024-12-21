@@ -147,7 +147,14 @@ def parseCSV(readFile, writeFile, filename):
     totalLines = 0
     global LOCK
 
-    format = ""
+    # Read from tmp files
+    if os.path.isfile("csv.tmp"):
+        with open("csv.tmp") as tmpFile:
+            format = tmpFile.readline()
+    else:
+        format = ""
+
+    # Choices
     while format not in ["1", "2", "3", "4"]:
         format = input("\n\nSelect the CSV Format:\n\n1. Translator++\n2. Single\n3. Multiple\n4. Speaker&Text\n")
         match format:
@@ -159,6 +166,10 @@ def parseCSV(readFile, writeFile, filename):
                 format = "3"
             case "4":
                 format = "4"
+    
+        # Write to file for later use
+        with open("csv.tmp", "w", encoding="utf-8") as tmpFile:
+            tmpFile.write(f"{format}")
 
     # Get total for progress bar
     totalLines = len(readFile.readlines())
@@ -166,7 +177,7 @@ def parseCSV(readFile, writeFile, filename):
 
     reader = csv.reader(readFile, delimiter=",")
     if not ESTIMATE:
-        writer = csv.writer(writeFile, delimiter=",", quotechar='"')
+        writer = csv.writer(writeFile, delimiter=",")
     else:
         writer = ""
 
@@ -311,7 +322,7 @@ def translateCSV(data, pbar, writer, filename, translatedList, format):
                     textColumn = 20
                     speaker = ""
 
-                    if len(data[i]) > textColumn:
+                    if len(data[i]) > textColumn and data[i][textColumn]:
                         # Speaker
                         if data[i][speakerColumn]:
                             speakerResponse = getSpeaker(data[i][speakerColumn])
@@ -320,14 +331,22 @@ def translateCSV(data, pbar, writer, filename, translatedList, format):
                             speaker = speakerResponse[0]
                             data[i][speakerColumn] = speaker
 
-                        # Check if Translated
+                        # Get Text
                         jaString = data[i][textColumn]
 
                         # Remove Textwrap
                         jaString = jaString.replace("\\n", " ")
 
+                        # Remove Furigana
+                        jaString = re.sub(r"＜(.*)＝.*＞", r"\1", jaString)
+
                         # Pass 1
                         if not translatedList:
+                            # Append Speaker
+                            if speaker:
+                                jaString = f"[{speaker}]: {jaString}"
+
+                            # Append to List
                             stringList.append(jaString)
 
                         # Pass 2

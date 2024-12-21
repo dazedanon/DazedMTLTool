@@ -145,6 +145,10 @@ files to translate are in the /files folder and that you picked the right game e
                 tracebackLineNo = str(traceback.extract_tb(sys.exc_info()[2])[-1].lineno)
                 tqdm.write(Fore.RED + str(e) + "|" + tracebackLineNo + Fore.RESET)
 
+    # Delete Tmp Files
+    os.remove("csv.tmp")
+
+    # Finish
     if totalCost != "Fail":
         # if estimate is False:
         # This is to encourage people to grab what's in /translated instead
