@@ -579,7 +579,7 @@ def searchNames(data, pbar, context):
             if context in ["Skills"]:
                 if len(nameList) < BATCHSIZE:
                     nameList.append(data[i]["name"])
-                    if "description" in data[i] and data[i]["description"] != "":
+                    if "description" in data[i] and data[i]["description"]:
                         descriptionList.append(data[i]["description"].replace("\n", " "))
 
                     # Messages
@@ -694,14 +694,15 @@ def searchNames(data, pbar, context):
                 totalTokens[1] += response[1][1]
 
                 # Description
-                response = translateGPT(
-                    descriptionList,
-                    f"Reply with only the {LANGUAGE} translation of the text.",
-                    True,
-                )
-                translatedDescriptionBatch = response[0]
-                totalTokens[0] += response[1][0]
-                totalTokens[1] += response[1][1]
+                if descriptionList:
+                    response = translateGPT(
+                        descriptionList,
+                        f"Reply with only the {LANGUAGE} translation of the text.",
+                        True,
+                    )
+                    translatedDescriptionBatch = response[0]
+                    totalTokens[0] += response[1][0]
+                    totalTokens[1] += response[1][1]
 
                 # Set Data
                 if len(nameList) == len(translatedNameBatch):
