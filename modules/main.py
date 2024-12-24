@@ -146,7 +146,8 @@ files to translate are in the /files folder and that you picked the right game e
                 tqdm.write(Fore.RED + str(e) + "|" + tracebackLineNo + Fore.RESET)
 
     # Delete Tmp Files
-    os.remove("csv.tmp")
+    if os.path.isfile("csv.tmp"):
+        os.remove("csv.tmp")
 
     # Finish
     if totalCost != "Fail":
