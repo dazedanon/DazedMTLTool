@@ -656,10 +656,11 @@ def searchNames(data, pbar, context):
                     totalTokens[1] += response[1][1]
 
                 # Profile
-                response = translateGPT(profileList, "", True)
-                translatedProfileBatch = response[0]
-                totalTokens[0] += response[1][0]
-                totalTokens[1] += response[1][1]
+                if profileList:
+                    response = translateGPT(profileList, "", True)
+                    translatedProfileBatch = response[0]
+                    totalTokens[0] += response[1][0]
+                    totalTokens[1] += response[1][1]
 
                 # Set Data
                 if len(nameList) == len(translatedNameBatch):
@@ -699,14 +700,15 @@ def searchNames(data, pbar, context):
                 totalTokens[1] += response[1][1]
 
                 # Description
-                response = translateGPT(
-                    descriptionList,
-                    f"Reply with only the {LANGUAGE} translation of the text.",
-                    True,
-                )
-                translatedDescriptionBatch = response[0]
-                totalTokens[0] += response[1][0]
-                totalTokens[1] += response[1][1]
+                if descriptionList:
+                    response = translateGPT(
+                        descriptionList,
+                        f"Reply with only the {LANGUAGE} translation of the text.",
+                        True,
+                    )
+                    translatedDescriptionBatch = response[0]
+                    totalTokens[0] += response[1][0]
+                    totalTokens[1] += response[1][1]
 
                 # Set Data
                 if len(nameList) == len(translatedNameBatch):
