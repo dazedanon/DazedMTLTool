@@ -166,7 +166,7 @@ def parseCSV(readFile, writeFile, filename):
                 format = "3"
             case "4":
                 format = "4"
-    
+
         # Write to file for later use
         with open("csv.tmp", "w", encoding="utf-8") as tmpFile:
             tmpFile.write(f"{format}")
@@ -693,4 +693,4 @@ def translateGPT(text, history, fullPromptFlag):
         else:
             return [tList[0], totalTokens]
     else:
-        return [text, [0,0]]
+        return [text, [0, 0]]

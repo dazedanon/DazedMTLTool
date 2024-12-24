@@ -2627,4 +2627,4 @@ def translateGPT(text, history, fullPromptFlag):
         else:
             return [tList[0], totalTokens]
     else:
-        return [text, [0,0]]
+        return [text, [0, 0]]
