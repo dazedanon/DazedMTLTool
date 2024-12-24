@@ -526,6 +526,7 @@ def cleanTranslatedText(translatedText, varResponse):
         "—": "―",
         "】": "]",
         "【": "[",
+        "é": "e",
         "Placeholder Text": "",
         # Add more replacements as needed
     }
