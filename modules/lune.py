@@ -60,6 +60,11 @@ elif "gpt-4" in MODEL:
     INPUTAPICOST = 0.01
     OUTPUTAPICOST = 0.03
     BATCHSIZE = 50
+else:
+    INPUTAPICOST = float(os.getenv("input_cost"))
+    OUTPUTAPICOST = float(os.getenv("output_cost"))
+    BATCHSIZE = int(os.getenv("batchsize"))
+    FREQUENCY_PENALTY = float(os.getenv("frequency_penalty"))
 
 
 def handleLune(filename, estimate):

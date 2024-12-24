@@ -60,7 +60,11 @@ elif "gpt-4" in MODEL:
     INPUTAPICOST = 0.0025
     OUTPUTAPICOST = 0.01
     BATCHSIZE = 30
-
+else:
+    INPUTAPICOST = float(os.getenv("input_cost"))
+    OUTPUTAPICOST = float(os.getenv("output_cost"))
+    BATCHSIZE = int(os.getenv("batchsize"))
+    FREQUENCY_PENALTY = float(os.getenv("frequency_penalty"))
 
 def handleText(filename, estimate):
     global ESTIMATE, TOKENS, FILENAME

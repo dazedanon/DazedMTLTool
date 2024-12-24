@@ -57,7 +57,11 @@ elif "gpt-4" in MODEL:
     INPUTAPICOST = 0.01
     OUTPUTAPICOST = 0.03
     BATCHSIZE = 1
-
+else:
+    INPUTAPICOST = float(os.getenv("input_cost"))
+    OUTPUTAPICOST = float(os.getenv("output_cost"))
+    BATCHSIZE = int(os.getenv("batchsize"))
+    FREQUENCY_PENALTY = float(os.getenv("frequency_penalty"))
 
 def handleAlice(filename, estimate):
     global ESTIMATE
