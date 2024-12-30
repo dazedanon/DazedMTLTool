@@ -1983,7 +1983,7 @@ def searchCodes(page, pbar, jobList, filename):
 
         # 122
         if len(list122) > 0:
-            response = translateGPT(list122, "Keep you translation as brief as possible", True)
+            response = translateGPT(list122, "Keep your translation as brief as possible", True)
             list122TL = response[0]
             totalTokens[0] += response[1][0]
             totalTokens[1] += response[1][1]
