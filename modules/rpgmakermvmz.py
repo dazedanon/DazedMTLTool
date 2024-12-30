@@ -59,6 +59,11 @@ elif "gpt-4" in MODEL:
     OUTPUTAPICOST = 0.01
     BATCHSIZE = 30
     FREQUENCY_PENALTY = 0.1
+else:
+    INPUTAPICOST = float(os.getenv("input_cost"))
+    OUTPUTAPICOST = float(os.getenv("output_cost"))
+    BATCHSIZE = int(os.getenv("batchsize"))
+    FREQUENCY_PENALTY = float(os.getenv("frequency_penalty"))
 
 # tqdm Globals
 BAR_FORMAT = "{l_bar}{bar:10}{r_bar}{bar:-10b}"
@@ -651,10 +656,11 @@ def searchNames(data, pbar, context):
                     totalTokens[1] += response[1][1]
 
                 # Profile
-                response = translateGPT(profileList, "", True)
-                translatedProfileBatch = response[0]
-                totalTokens[0] += response[1][0]
-                totalTokens[1] += response[1][1]
+                if profileList:
+                    response = translateGPT(profileList, "", True)
+                    translatedProfileBatch = response[0]
+                    totalTokens[0] += response[1][0]
+                    totalTokens[1] += response[1][1]
 
                 # Set Data
                 if len(nameList) == len(translatedNameBatch):
