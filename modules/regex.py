@@ -79,7 +79,7 @@ def handleRegex(filename, estimate):
     # Translate
     if not estimate:
         try:
-            with open("translated/" + filename, "w", encoding="utf-8") as outFile:
+            with open("translated/" + filename, "w", encoding="cp932") as outFile:
                 outFile.writelines(translatedData[0])
         except Exception:
             traceback.print_exc()
@@ -128,7 +128,7 @@ def getResultString(translatedData, translationTime, filename):
 
 
 def openFiles(filename):
-    with open("files/" + filename, "r", encoding="utf8") as readFile:
+    with open("files/" + filename, "r", encoding="cp932") as readFile:
         translatedData = parseRegex(readFile, filename)
 
         # Delete lines marked for deletion
@@ -179,7 +179,7 @@ def translateRegex(data, translatedList):
         voice = False
         lineRegexText = r"t\s'(.*)'$"
         lineRegexSpeaker = r"n\s'(.*)'$"
-        choiceRegex = r"choice:\d+\s'(.*)'"
+        choiceRegex = r"\$menu_item.+?,(.*?),"
         titleRegex = r"title\s'(.*)'$"
 
         # Title

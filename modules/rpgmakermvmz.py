@@ -71,12 +71,12 @@ POSITION = 0
 LEAVE = False
 
 # Dialogue / Scroll / Choices (Main Codes)
-CODE401 = True
-CODE405 = True
-CODE102 = True
+CODE401 = False
+CODE405 = False
+CODE102 = False
 
 # Optional
-CODE101 = True  # Turn this one when names exist in 101
+CODE101 = False  # Turn this one when names exist in 101
 CODE408 = False  # Warning, translates comments and can inflate costs.
 
 # Variables
@@ -90,7 +90,7 @@ CODE356 = False
 CODE320 = False
 CODE324 = False
 CODE111 = False
-CODE108 = False
+CODE108 = True
 
 
 def handleMVMZ(filename, estimate):
@@ -1230,7 +1230,7 @@ def searchCodes(page, pbar, jobList, filename):
                         question = codeList[i]["parameters"][3]["messageText"]
                         response = translateGPT(
                             matchList,
-                            f"Previous text for context: {question}\n\nThis will be a dialogue option",
+                            f"Previous text for context: {question}\n",
                             True,
                         )
                         totalTokens[0] += response[1][0]
@@ -1624,7 +1624,7 @@ def searchCodes(page, pbar, jobList, filename):
                 if "info:" in jaString:
                     regex = r"info:(.*)"
                 elif "ActiveMessage:" in jaString:
-                    regex = r"<ActiveMessage:(.*)>"
+                    regex = r"<ActiveMessage:(.*)>?"
                 elif "event_text" in jaString:
                     regex = r"event_text\s*:\s*(.*)"
                 else:
@@ -1638,19 +1638,35 @@ def searchCodes(page, pbar, jobList, filename):
                     if setData is False:
                         list108.append(match.group(1))
 
+                        # Grab Next
+                        j = i
+                        while codeList[j + 1]["code"] == 408:
+                            j += 1
+                            list108[0] = list108[0] + codeList[j]["parameters"][0].replace(">", "")
+                            codeList[j]["parameters"][0] = ""
+                            list108[0] = list108[0].replace("\n", " ")
+
                     # Pass 2
                     else:
                         # Grab and Replace
                         translatedText = list108[0]
                         list108.pop(0)
 
+                        # Textwrap
+                        if codeList[i + 1]["code"] == 408:
+                            translatedText = textwrap.fill(translatedText, WIDTH)
+
                         # Remove characters that may break scripts
-                        charList = [".", '"']
+                        charList = ['"']
                         for char in charList:
                             translatedText = translatedText.replace(char, "")
                         translatedText = translatedText.replace('"', '"')
                         translatedText = translatedText.replace(" ", "_")
                         translatedText = jaString.replace(match.group(1), translatedText)
+
+                        # Add >
+                        if ">" not in translatedText:
+                            translatedText = translatedText + ">"
 
                         # Set Data
                         codeList[i]["parameters"][0] = translatedText
@@ -1809,7 +1825,7 @@ def searchCodes(page, pbar, jobList, filename):
                         question = translatedText
                         response = translateGPT(
                             choiceList,
-                            f"Previous text for context: {question}\n\nThis will be a dialogue option",
+                            f"Previous text for context: {question}\n",
                             True,
                         )
                         totalTokens[0] += response[1][0]
@@ -1835,7 +1851,6 @@ def searchCodes(page, pbar, jobList, filename):
 
                     # Avoid Empty Strings
                     if jaString == "":
-                        i += 1
                         continue
 
                     # If and En Statements
@@ -1854,14 +1869,14 @@ def searchCodes(page, pbar, jobList, filename):
                 if len(textHistory) > 0:
                     response = translateGPT(
                         choiceList,
-                        "This will be a dialogue option.\nPrevious text for context: " + str(textHistory),
+                        f"Previous text for context: {str(textHistory)}\n",
                         True,
                     )
                     translatedTextList = response[0]
                     totalTokens[0] += response[1][0]
                     totalTokens[1] += response[1][1]
                 else:
-                    response = translateGPT(choiceList, "This will be a dialogue option", True)
+                    response = translateGPT(choiceList, "", True)
                     translatedTextList = response[0]
                     totalTokens[0] += response[1][0]
                     totalTokens[1] += response[1][1]
@@ -1869,6 +1884,13 @@ def searchCodes(page, pbar, jobList, filename):
                 # Check Mismatch
                 if len(translatedTextList) == len(choiceList):
                     for choice in range(len(codeList[i]["parameters"][0])):
+                        jaString = codeList[i]["parameters"][0][choice]
+                        jaString = jaString.replace(" 。", ".")
+
+                        # Avoid Empty Strings
+                        if jaString == "":
+                            continue
+
                         translatedText = translatedTextList[choice]
 
                         # Set Data
