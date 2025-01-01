@@ -63,6 +63,7 @@ else:
     BATCHSIZE = int(os.getenv("batchsize"))
     FREQUENCY_PENALTY = float(os.getenv("frequency_penalty"))
 
+
 def handleIris(filename, estimate):
     global ESTIMATE
     ESTIMATE = estimate

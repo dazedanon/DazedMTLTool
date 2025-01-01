@@ -66,6 +66,7 @@ else:
     BATCHSIZE = int(os.getenv("batchsize"))
     FREQUENCY_PENALTY = float(os.getenv("frequency_penalty"))
 
+
 def handleText(filename, estimate):
     global ESTIMATE, TOKENS, FILENAME
     ESTIMATE = estimate

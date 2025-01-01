@@ -64,6 +64,7 @@ else:
     BATCHSIZE = int(os.getenv("batchsize"))
     FREQUENCY_PENALTY = float(os.getenv("frequency_penalty"))
 
+
 def handleEushully(filename, estimate):
     global ESTIMATE
     ESTIMATE = estimate

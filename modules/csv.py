@@ -287,7 +287,7 @@ def translateCSV(data, pbar, writer, filename, translatedList, format):
 
                     # False - Place translation in source column
                     # True - Place translation in next column
-                    targetNextRow = True
+                    targetNextRow = False
 
                     for j in range(len(data[i])):
                         if j not in targetColumns:

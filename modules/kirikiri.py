@@ -71,6 +71,7 @@ else:
     BATCHSIZE = int(os.getenv("batchsize"))
     FREQUENCY_PENALTY = float(os.getenv("frequency_penalty"))
 
+
 def handleKirikiri(filename, estimate):
     global ESTIMATE, FILENAME
     ESTIMATE = estimate
