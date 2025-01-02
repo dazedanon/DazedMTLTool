@@ -46,6 +46,9 @@ MISMATCH = []  # Lists files that throw a mismatch error (Length of GPT list res
 PBAR = None
 FILENAME = None
 
+# Regex - Need to change this if you want to translate from/to other languages
+LANGREGEX = r"[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]+"
+
 # Pricing - Depends on the model https://openai.com/pricing
 # Batch Size - GPT 3.5 Struggles past 15 lines per request. GPT4 struggles past 50 lines per request
 # If you are getting a MISMATCH LENGTH error, lower the batch size.
@@ -857,7 +860,7 @@ def searchCodes(page, pbar, jobList, filename):
                     continue
 
                 # Validate Japanese Text
-                if not re.search(r"[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]+", jaString) and IGNORETLTEXT:
+                if not re.search(LANGREGEX, jaString) and IGNORETLTEXT:
                     i += 1
                     continue
 
@@ -1252,7 +1255,7 @@ def searchCodes(page, pbar, jobList, filename):
 
                         # If there isn't any Japanese in the text just skip
                         if not re.search(
-                            r"[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]+",
+                            LANGREGEX,
                             jaString,
                         ):
                             i += 1
@@ -1278,7 +1281,7 @@ def searchCodes(page, pbar, jobList, filename):
 
                         # If there isn't any Japanese in the text just skip
                         if not re.search(
-                            r"[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]+",
+                            LANGREGEX,
                             jaString,
                         ):
                             i += 1
@@ -1437,7 +1440,7 @@ def searchCodes(page, pbar, jobList, filename):
                         continue
 
                     # If there isn't any Japanese in the text just skip
-                    if not re.search(r"[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]+", jaString):
+                    if not re.search(LANGREGEX, jaString):
                         i += 1
                         continue
 
@@ -1571,7 +1574,7 @@ def searchCodes(page, pbar, jobList, filename):
                 jaString = codeList[i]["parameters"][0]
 
                 # If there isn't any Japanese in the text just skip
-                if not re.search(r"[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]+", jaString):
+                if not re.search(LANGREGEX, jaString):
                     i += 1
                     continue
 
@@ -1616,7 +1619,7 @@ def searchCodes(page, pbar, jobList, filename):
                 jaString = codeList[i]["parameters"][0]
 
                 # If there isn't any Japanese in the text just skip
-                if not re.search(r"[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]+", jaString):
+                if not re.search(LANGREGEX, jaString):
                     i += 1
                     continue
 
@@ -1665,7 +1668,7 @@ def searchCodes(page, pbar, jobList, filename):
                         translatedText = jaString.replace(match.group(1), translatedText)
 
                         # Add >
-                        if ">" not in translatedText:
+                        if "ActiveMessage" in translatedText and ">" not in translatedText:
                             translatedText = translatedText + ">"
 
                         # Set Data
@@ -1958,7 +1961,7 @@ def searchCodes(page, pbar, jobList, filename):
                     continue
 
                 # If there isn't any Japanese in the text just skip
-                if not re.search(r"[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]+", jaString):
+                if not re.search(LANGREGEX, jaString):
                     i += 1
                     continue
 
@@ -2565,7 +2568,7 @@ def translateGPT(text, history, fullPromptFlag):
                     subbedT = varResponse[0]
 
                 # Things to Check before starting translation
-                if not re.search(r"[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]+", subbedT):
+                if not re.search(LANGREGEX, subbedT):
                     if PBAR is not None:
                         PBAR.update(len(tItem))
                     history = tItem[-MAXHISTORY:]
