@@ -498,7 +498,7 @@ def translateGPT(text, history, fullPromptFlag):
                     extractedTranslations = extractTranslation(translatedText, True)
                     if extractedTranslations == None or len(tItem) != len(extractedTranslations):
                         # Mismatch. Try Again
-                        response = translateText(system, user, history, 0.05, format, "gpt-4o")
+                        response = translateText(system, user, history, 0.05, format, MODEL)
                         translatedText = response.choices[0].message.content
                         totalTokens[0] += response.usage.prompt_tokens
                         totalTokens[1] += response.usage.completion_tokens

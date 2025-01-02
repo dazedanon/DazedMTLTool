@@ -88,6 +88,7 @@ ME 音量 (ME Volume)
 w ((lol))
 巫女 (Shrine Maiden)
 コイツ (this bastard)
+２万 (20,000)
 
 #Items
 デバッグ用 (Debug Item)
