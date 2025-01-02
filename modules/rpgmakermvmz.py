@@ -46,7 +46,7 @@ MISMATCH = []  # Lists files that throw a mismatch error (Length of GPT list res
 PBAR = None
 FILENAME = None
 
-# Regex - Need to change this if you want to translate from/to other languages
+# Regex - Need to change this if you want to translate from/to other languages. Default is Japanese Regex
 LANGREGEX = r"[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]+"
 
 # Pricing - Depends on the model https://openai.com/pricing
@@ -83,11 +83,11 @@ CODE101 = False  # Turn this one when names exist in 101
 CODE408 = False  # Warning, translates comments and can inflate costs.
 
 # Variables
-CODE122 = False
+CODE122 = True
 
 # Other
 CODE355655 = False
-CODE357 = True
+CODE357 = False
 CODE657 = False
 CODE356 = False
 CODE320 = False
@@ -1148,7 +1148,7 @@ def searchCodes(page, pbar, jobList, filename):
             ## Event Code: 122 [Set Variables]
             if "code" in codeList[i] and codeList[i]["code"] == 122 and CODE122 is True:
                 # This is going to be the var being set. (IMPORTANT)
-                if codeList[i]["parameters"][0] not in list(range(42, 45)):
+                if codeList[i]["parameters"][0] not in list(range(95, 96)):
                     i += 1
                     continue
 
@@ -1549,25 +1549,26 @@ def searchCodes(page, pbar, jobList, filename):
             ## Event Code: 355 or 655 Scripts [Optional]
             if "code" in codeList[i] and (codeList[i]["code"] == 355 or codeList[i]["code"] == 655) and CODE355655 is True:
                 jaString = codeList[i]["parameters"][0]
-                regex = r'.*subject=(.*?)"'
+                regexPatterns = [r'.*subject=(.*?)"', r"テキスト-(.*)"]
 
-                # Var Text
-                match = re.search(regex, jaString)
-                if re.search(regex, jaString):
-                    finalJAString = match.group(1)
-                    # Pass 1
-                    if setData is False:
-                        list355655.append(finalJAString)
+                # Iterate over the list of regex patterns
+                for regex in regexPatterns:
+                    match = re.search(regex, jaString)
+                    if re.search(regex, jaString):
+                        finalJAString = match.group(1)
+                        # Pass 1
+                        if setData is False:
+                            list355655.append(finalJAString)
 
-                    # Pass 2
-                    else:
-                        # Grab and Replace
-                        translatedText = list355655[0]
-                        translatedText = translatedText.replace("'", "\\'")
+                        # Pass 2
+                        else:
+                            # Grab and Replace
+                            translatedText = list355655[0]
+                            translatedText = translatedText.replace("'", "\\'")
 
-                        # Set
-                        codeList[i]["parameters"][0] = codeList[i]["parameters"][0].replace(finalJAString, translatedText)
-                        list355655.pop(0)
+                            # Set
+                            codeList[i]["parameters"][0] = codeList[i]["parameters"][0].replace(finalJAString, translatedText)
+                            list355655.pop(0)
 
             ## Event Code: 408 (Script)
             if "code" in codeList[i] and (codeList[i]["code"] == 408) and CODE408 is True:

@@ -47,6 +47,9 @@ BAR_FORMAT = "{l_bar}{bar:10}{r_bar}{bar:-10b}"
 POSITION = 0
 LEAVE = False
 
+# Regex - Need to change this if you want to translate from/to other languages. Default is Japanese Regex
+LANGREGEX = r"[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]+"
+
 # Pricing - Depends on the model https://openai.com/pricing
 # Batch Size - GPT 3.5 Struggles past 15 lines per request. GPT4 struggles past 50 lines per request
 # If you are getting a MISMATCH LENGTH error, lower the batch size.
@@ -496,7 +499,7 @@ def translateGPT(text, history, fullPromptFlag):
                     subbedT = varResponse[0]
 
                 # Things to Check before starting translation
-                if not re.search(r"[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]+", subbedT):
+                if not re.search(LANGREGEX, subbedT):
                     if PBAR is not None:
                         PBAR.update(len(tItem))
                     history = tItem[-MAXHISTORY:]
