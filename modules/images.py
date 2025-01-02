@@ -39,6 +39,9 @@ if os.getenv("api").replace(" ", "") != "":
 openai.organization = os.getenv("org")
 openai.api_key = os.getenv("key")
 
+# Regex - Need to change this if you want to translate from/to other languages. Default is Japanese Regex
+LANGREGEX = r"[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]+"
+
 # Pricing - Depends on the model https://openai.com/pricing
 # Batch Size - GPT 3.5 Struggles past 15 lines per request. GPT4 struggles past 50 lines per request
 # If you are getting a MISMATCH LENGTH error, lower the batch size.
