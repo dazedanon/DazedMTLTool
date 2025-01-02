@@ -1148,7 +1148,7 @@ def searchCodes(page, pbar, jobList, filename):
             ## Event Code: 122 [Set Variables]
             if "code" in codeList[i] and codeList[i]["code"] == 122 and CODE122 is True:
                 # This is going to be the var being set. (IMPORTANT)
-                if codeList[i]["parameters"][0] not in list(range(95, 96)):
+                if codeList[i]["parameters"][0] not in list(range(70, 80)):
                     i += 1
                     continue
 
@@ -1173,38 +1173,34 @@ def searchCodes(page, pbar, jobList, filename):
                 matchedText = None
                 if len(re.findall(r"([\'\"\`])", jaString)) >= 2:
                     matchedText = re.search(r"[\'\"\`](.*)[\'\"\`]", jaString)
-                # else:
-                #     matchedText = re.search(r'(.*)', jaString)
+                    if matchedText and matchedText.group(1) != " ":
+                        # Remove Textwrap
+                        finalJAString = matchedText.group(1).replace("\\n", " ")
 
-                # Last Check
-                if matchedText.group(1) != None and matchedText.group(1) != " ":
-                    # Remove Textwrap
-                    finalJAString = matchedText.group(1).replace("\\n", " ")
+                        # Pass 1
+                        if setData == False:
+                            if finalJAString != "":
+                                list122.append(finalJAString)
 
-                    # Pass 1
-                    if setData == False:
-                        if finalJAString != "":
-                            list122.append(finalJAString)
+                        # Pass 2
+                        else:
+                            if len(list122) > 0:
+                                # Grab and Replace
+                                translatedText = list122[0]
+                                translatedText = jaString.replace(jaString, translatedText)
 
-                    # Pass 2
-                    else:
-                        if len(list122) > 0:
-                            # Grab and Replace
-                            translatedText = list122[0]
-                            translatedText = jaString.replace(jaString, translatedText)
+                                # Remove characters that may break scripts
+                                charList = ['"', "\\n"]
+                                for char in charList:
+                                    translatedText = translatedText.replace(char, "")
 
-                            # Remove characters that may break scripts
-                            charList = ['"', "\\n"]
-                            for char in charList:
-                                translatedText = translatedText.replace(char, "")
+                                # Textwrap
+                                translatedText = textwrap.fill(translatedText, width=WIDTH)
+                                translatedText = translatedText.replace("\n", "\\n")
 
-                            # Textwrap
-                            translatedText = textwrap.fill(translatedText, width=WIDTH)
-                            translatedText = translatedText.replace("\n", "\\n")
-
-                            # Set
-                            codeList[i]["parameters"][4] = f"`{translatedText}`"
-                            list122.pop(0)
+                                # Set
+                                codeList[i]["parameters"][4] = f"`{translatedText}`"
+                                list122.pop(0)
 
             ## Event Code: 357 [Picture Text] [Optional]
             if "code" in codeList[i] and codeList[i]["code"] == 357 and CODE357 is True:

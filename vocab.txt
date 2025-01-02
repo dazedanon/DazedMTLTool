@@ -61,6 +61,9 @@ ME 音量 (ME Volume)
 アスカロン (Ascalon)
 刀 (Sword)
 ゴブリン (Goblin)
+会話 (Conversation)
+収集 (Collect)
+討伐 (Subjugate)
 
 # Demons/Angels
 悪魔 (Devil)  

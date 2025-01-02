@@ -173,7 +173,12 @@ def parsePlugin(readFile, filename):
 
 
 def translatePlugin(data, pbar, filename, translatedList):
-    stringList = []
+    if len(translatedList) > 0:
+        questList = translatedList[0]
+        setData = True
+    else:
+        questList = [[], [], [], [], [], []]
+        setData = False
     currentGroup = []
     tokens = [0, 0]
     speaker = ""
@@ -188,80 +193,307 @@ def translatePlugin(data, pbar, filename, translatedList):
 
         """
         Plugin List
-        Quest Name: [\\]+"QuestName[\\]+":[\\]+"(.*?)[\\]+"
-        Quest Client: [\\]+"QuestClientName[\\]+":[\\]+"[\\]+"[\\]+"(.*?)[\\]+"
-        Quest Location: [\\]+"QuestionLocation[\\]+":[\\]+"[\\]+"[\\]+"(.*?)[\\]+"
-        Quest Targe Location: [\\]+"PlaceInformation[\\]+":[\\]+"(.*?)[\\]+"
-        Quest Summary: [\\]+"QuestContent[\\]+":[\\]+"(.*?)[\\]+"
-        Quest Goal: [\\]+"ObjectiveContent[\\]+":[\\]+"[\\]+"[\\]+"(.*?)[\\]+"
-        Quest Goal 2: [\\]+"ObjectiveContent[\\]+":[\\]+"[\\]+"[\\]+".*?[\\]+"(.*?)[\\]+"
+        Quest Name: QuestName[\\]+":[\\]+"(.*?)[\\]+"
+        Quest Client: QuestClientName[\\]+":[\\]+"(.*?)[\\]+"
+        Quest Location: QuestLocation[\\]+":[\\]+"(.*?)[\\]+"
+        Quest Target Location: PlaceInformation[\\]+":[\\]+"(.*?)[\\]+"
+        Quest Summary: QuestContent[\\]+":[\\]+"[\\]+"(.*?)[\\]+"
+        Quest Goal: ObjectiveContent[\\]+":[\\]+"[\\]+"(.*?)[\\]+"
 
         TODO TL all of the above in one call instead of multiple
         """
-        # Lines
-        regex = r'this.log_output\("(.*)"'
+        # Quest Name
+        regex = r'[\\]+"QuestName[\\]+":[\\]+"(.*?)[\\]+"'
         matchList = re.findall(regex, data[i])
         if len(matchList) > 0:
             for match in matchList:
-                # Save Original String
-                originalString = match
+                if match:
+                    # Save Original String
+                    originalString = match
 
-                # Remove any textwrap
-                match = match.replace(newline, " ")
+                    # Remove any textwrap
+                    match = match.replace(newline, " ")
 
-                # Pass 1
-                if translatedList == []:
-                    # Add String
-                    if match != "\\\\\\\\":
-                        stringList.append(match.strip())
+                    # Pass 1
+                    if setData == False:
+                        # Add String
+                        if match != "\\\\\\\\":
+                            questList[0].append(match.strip())
 
-                # Pass 2
-                else:
-                    # Get Text
-                    if translatedList:
-                        # Grab and Pop
-                        translatedText = translatedList[0]
-                        translatedList.pop(0)
+                    # Pass 2
+                    else:
+                        if questList[0]:
+                            # Grab and Pop
+                            translatedText = questList[0][0]
+                            questList[0].pop(0)
 
-                        # Set to None if empty list
-                        if len(translatedList) <= 0:
-                            translatedList = None
+                            # Set to None if empty list
+                            if len(translatedList) <= 0:
+                                translatedList = None
 
-                        # Textwrap
-                        translatedText = textwrap.fill(translatedText, width=WIDTH)
-                        translatedText = translatedText.replace("\n", newline)
+                            # Replace Single Quotes
+                            translatedText = re.sub(r"[^\\]'", "\\'", translatedText)
+                            translatedText = re.sub(r'[^\\]"', '\\"', translatedText)
 
-                        # Replace Single Quotes
-                        translatedText = translatedText.replace("'", "\\'")
-                        translatedText = translatedText.replace('"', "\\'")
+                            # Set Data
+                            data[i] = re.sub(r"\b%s\b" % originalString, translatedText, data[i])
 
-                        # Set Data
-                        data[i] = data[i].replace(originalString, translatedText)
+        # Quest Client
+        regex = r'QuestClientName[\\]+":[\\]+"(.*?)[\\]+"'
+        matchList = re.findall(regex, data[i])
+        if len(matchList) > 0:
+            for match in matchList:
+                if match:
+                    # Save Original String
+                    originalString = match
+
+                    # Pass 1
+                    if setData == False:
+                        # Add String
+                        if match != "\\\\\\\\":
+                            questList[1].append(match.strip())
+
+                    # Pass 2
+                    else:
+                        if questList[1]:
+                            # Grab and Pop
+                            translatedText = questList[1][0]
+                            questList[1].pop(0)
+
+                            # Set to None if empty list
+                            if len(translatedList) <= 0:
+                                translatedList = None
+
+                            # Replace Single Quotes
+                            translatedText = re.sub(r"[^\\]'", "\\'", translatedText)
+                            translatedText = re.sub(r'[^\\]"', '\\"', translatedText)
+
+                            # Set Data
+                            data[i] = re.sub(r"\b%s\b" % originalString, translatedText, data[i])
+
+        # Quest Location
+        regex = r'QuestLocation[\\]+":[\\]+"(.*?)[\\]+"'
+        matchList = re.findall(regex, data[i])
+        if len(matchList) > 0:
+            for match in matchList:
+                if match:
+                    # Save Original String
+                    originalString = match
+
+                    # Pass 1
+                    if setData == False:
+                        # Add String
+                        if match != "\\\\\\\\":
+                            questList[2].append(match.strip())
+
+                    # Pass 2
+                    else:
+                        if questList[2]:
+                            # Grab and Pop
+                            translatedText = questList[2][0]
+                            questList[2].pop(0)
+
+                            # Set to None if empty list
+                            if len(translatedList) <= 0:
+                                translatedList = None
+
+                            # Replace Single Quotes
+                            translatedText = re.sub(r"[^\\]'", "\\'", translatedText)
+                            translatedText = re.sub(r'[^\\]"', '\\"', translatedText)
+
+                            # Set Data
+                            data[i] = re.sub(r"\b%s\b" % originalString, translatedText, data[i])
+
+        # Quest Target
+        regex = r'PlaceInformation[\\]+":[\\]+"(.*?)[\\]+"'
+        matchList = re.findall(regex, data[i])
+        if len(matchList) > 0:
+            for match in matchList:
+                if match:
+                    # Save Original String
+                    originalString = match
+
+                    # Pass 1
+                    if setData == False:
+                        # Add String
+                        if match != "\\\\\\\\":
+                            questList[3].append(match.strip())
+
+                    # Pass 2
+                    else:
+                        if questList[3]:
+                            # Grab and Pop
+                            translatedText = questList[3][0]
+                            questList[3].pop(0)
+
+                            # Set to None if empty list
+                            if len(translatedList) <= 0:
+                                translatedList = None
+
+                            # Replace Single Quotes
+                            translatedText = re.sub(r"[^\\]'", "\\'", translatedText)
+                            translatedText = re.sub(r'[^\\]"', '\\"', translatedText)
+
+                            # Set Data
+                            data[i] = re.sub(r"\b%s\b" % originalString, translatedText, data[i])
+
+        # Quest Summary
+        regex = r'QuestContent[\\]+":[\\]+"[\\]+"(.*?)[\\]+"'
+        matchList = re.findall(regex, data[i])
+        if len(matchList) > 0:
+            for match in matchList:
+                if match:
+                    # Save Original String
+                    originalString = match
+
+                    # Remove any textwrap
+                    match = match.replace(r"\\\\\\\\n", " ")
+
+                    # Pass 1
+                    if setData == False:
+                        # Add String
+                        if match != "\\\\\\\\":
+                            questList[4].append(match.strip())
+
+                    # Pass 2
+                    else:
+                        if questList[4]:
+                            # Grab and Pop
+                            translatedText = questList[4][0]
+                            questList[4].pop(0)
+
+                            # Set to None if empty list
+                            if len(translatedList) <= 0:
+                                translatedList = None
+
+                            # Textwrap
+                            translatedText = textwrap.fill(translatedText, width=WIDTH)
+                            translatedText = translatedText.replace("\n", r"\\\\\\\\n")
+
+                            # Replace Single Quotes
+                            translatedText = re.sub(r"[^\\]'", "\\'", translatedText)
+                            translatedText = re.sub(r'[^\\]"', '\\"', translatedText)
+
+                            # Set Data
+                            data[i] = data[i].replace(originalString, translatedText)
+
+        # Quest Goal 1
+        regex = r'ObjectiveContent[\\]+":[\\]+"[\\]+"(.*?)[\\]+"'
+        matchList = re.findall(regex, data[i])
+        if len(matchList) > 0:
+            for match in matchList:
+                if match:
+                    # Save Original String
+                    originalString = match
+
+                    # Remove any textwrap
+                    match = match.replace(r"\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\n", " ")
+
+                    # Pass 1
+                    if setData == False:
+                        # Add String
+                        if match != "\\\\\\\\":
+                            questList[5].append(match.strip())
+
+                    # Pass 2
+                    else:
+                        if questList[5]:
+                            # Grab and Pop
+                            translatedText = questList[5][0]
+                            questList[5].pop(0)
+
+                            # Set to None if empty list
+                            if len(translatedList) <= 0:
+                                translatedList = None
+
+                            # Textwrap
+                            translatedText = textwrap.fill(translatedText, width=WIDTH)
+                            translatedText = translatedText.replace("\n", r"\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\n")
+
+                            # Replace Single Quotes
+                            translatedText = re.sub(r"[^\\]'", "\\'", translatedText)
+                            translatedText = re.sub(r'[^\\]"', '\\"', translatedText)
+
+                            # Set Data
+                            data[i] = data[i].replace(originalString, translatedText)
+
         # Next Line
         i += 1
 
     # EOF
-    if len(stringList) > 0:
+    translate = False
+    questListTL = [[], [], [], [], [], []]
+
+    if len(questList) > 0:
         # Set Progress
-        pbar.total = len(stringList)
+        pbar.total = sum(len(quest) for quest in questList)
         pbar.refresh()
         PBAR = pbar
 
-        # Translate
-        response = translateGPT(stringList, "", True)
+        # Quest Name
+        response = translateGPT(questList[0], "Quest Name", True)
         tokens[0] += response[1][0]
         tokens[1] += response[1][1]
-        translatedList = response[0]
+        questName = response[0]
+        pbar.update(len(questList[0]))
 
-        # Set Strings
-        if len(stringList) == len(translatedList):
-            translatePlugin(data, pbar, filename, translatedList)
+        # Quest Client
+        response = translateGPT(questList[1], "Quest Client", True)
+        tokens[0] += response[1][0]
+        tokens[1] += response[1][1]
+        questClient = response[0]
+        pbar.update(len(questList[1]))
+
+        # Quest Location
+        response = translateGPT(questList[2], "Quest Location", True)
+        tokens[0] += response[1][0]
+        tokens[1] += response[1][1]
+        questLocation = response[0]
+        pbar.update(len(questList[2]))
+
+        # Quest Target
+        response = translateGPT(questList[3], "Quest Location", True)
+        tokens[0] += response[1][0]
+        tokens[1] += response[1][1]
+        questTarget = response[0]
+        pbar.update(len(questList[3]))
+
+        # Quest Summary
+        response = translateGPT(questList[4], "Quest Summary", True)
+        tokens[0] += response[1][0]
+        tokens[1] += response[1][1]
+        questSummary = response[0]
+        pbar.update(len(questList[4]))
+
+        # Quest Goal 1
+        response = translateGPT(questList[5], "Quest Goal", True)
+        tokens[0] += response[1][0]
+        tokens[1] += response[1][1]
+        questGoal1 = response[0]
+        pbar.update(len(questList[5]))
+
+        # Check Mismatch
+        if (
+            len(questName) == len(questList[0])
+            or len(questClient) == len(questList[1])
+            or len(questLocation) == len(questList[2])
+            or len(questTarget) == len(questList[3])
+            or len(questSummary) == len(questList[4])
+            or len(questGoal1) == len(questList[5])
+        ):
+            # Set Strings
+            questListTL = [questName, questClient, questLocation, questTarget, questSummary, questGoal1]
+            translate = True
 
         # Mismatch
         else:
             with LOCK:
                 if filename not in MISMATCH:
                     MISMATCH.append(filename)
+
+        # Pass 2
+        if translate and not setData:
+            translatePlugin(data, pbar, filename, [questListTL])
     return tokens
 
 
