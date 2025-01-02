@@ -84,13 +84,13 @@ CODE122 = False
 
 # Other
 CODE355655 = False
-CODE357 = False
+CODE357 = True
 CODE657 = False
 CODE356 = False
 CODE320 = False
 CODE324 = False
 CODE111 = False
-CODE108 = True
+CODE108 = False
 
 
 def handleMVMZ(filename, estimate):
@@ -2593,7 +2593,7 @@ def translateGPT(text, history, fullPromptFlag):
                     extractedTranslations = extractTranslation(translatedText, True)
                     if extractedTranslations == None or len(tItem) != len(extractedTranslations):
                         # Mismatch. Try Again
-                        response = translateText(system, user, history, 0.05, format, "gpt-4o")
+                        response = translateText(system, user, history, 0.05, format, MODEL)
                         translatedText = response.choices[0].message.content
                         totalTokens[0] += response.usage.prompt_tokens
                         totalTokens[1] += response.usage.completion_tokens
