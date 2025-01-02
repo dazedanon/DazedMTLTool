@@ -191,17 +191,6 @@ def translatePlugin(data, pbar, filename, translatedList):
         speaker = ""
         newline = r"\n"
 
-        """
-        Plugin List
-        Quest Name: QuestName[\\]+":[\\]+"(.*?)[\\]+"
-        Quest Client: QuestClientName[\\]+":[\\]+"(.*?)[\\]+"
-        Quest Location: QuestLocation[\\]+":[\\]+"(.*?)[\\]+"
-        Quest Target Location: PlaceInformation[\\]+":[\\]+"(.*?)[\\]+"
-        Quest Summary: QuestContent[\\]+":[\\]+"[\\]+"(.*?)[\\]+"
-        Quest Goal: ObjectiveContent[\\]+":[\\]+"[\\]+"(.*?)[\\]+"
-
-        TODO TL all of the above in one call instead of multiple
-        """
         # Quest Name
         regex = r'[\\]+"QuestName[\\]+":[\\]+"(.*?)[\\]+"'
         matchList = re.findall(regex, data[i])
