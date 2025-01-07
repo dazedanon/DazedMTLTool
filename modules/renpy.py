@@ -473,9 +473,12 @@ def translateGPT(text, history, fullPromptFlag):
                 if not re.search(LANGREGEX, str(tItem)):
                     if PBAR is not None:
                         PBAR.update(len(tItem))
-                    for j in range(len(tItem)):
-                       tItem[j] = cleanTranslatedText(tItem[j])
-                       tList[index] = tItem
+                    if isinstance(tItem, list):
+                        for j in range(len(tItem)):
+                            tItem[j] = cleanTranslatedText(tItem[j])
+                            tList[index] = tItem
+                    else:
+                        tList[index] = cleanTranslatedText(tItem)
                     history = tItem[-MAXHISTORY:]
                     continue
 
