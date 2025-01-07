@@ -435,7 +435,7 @@ def translateText(system, user, history, penalty, format, model=MODEL):
     return response
 
 
-def cleanTranslatedText(translatedText, varResponse):
+def cleanTranslatedText(translatedText):
     placeholders = {
         f"{LANGUAGE} Translation: ": "",
         "Translation: ": "",
@@ -449,6 +449,7 @@ def cleanTranslatedText(translatedText, varResponse):
         "—": "―",
         "】": "]",
         "【": "[",
+        "é": "e",
         "Placeholder Text": "",
         # Add more replacements as needed
     }
@@ -531,6 +532,16 @@ def translateGPT(text, history, fullPromptFlag):
                 tList = [text]
 
             for index, tItem in enumerate(tList):
+                # Things to Check before starting translation
+                if not re.search(LANGREGEX, str(tItem)):
+                    if PBAR is not None:
+                        PBAR.update(len(tItem))
+                    for j in range(len(tItem)):
+                       tItem[j] = cleanTranslatedText(tItem[j])
+                       tList[index] = tItem
+                    history = tItem[-MAXHISTORY:]
+                    continue
+
                 # Before sending to translation, if we have a list of items, add the formatting
                 if isinstance(tItem, list):
                     for j in range(len(tItem)):
@@ -543,13 +554,6 @@ def translateGPT(text, history, fullPromptFlag):
                 else:
                     varResponse = [tItem, []]
                     subbedT = varResponse[0]
-
-                # Things to Check before starting translation
-                if not re.search(LANGREGEX, subbedT):
-                    if PBAR is not None:
-                        PBAR.update(len(tItem))
-                    history = tItem[-MAXHISTORY:]
-                    continue
 
                 # Create Message
                 system, user = createContext(fullPromptFlag, subbedT, format)
@@ -568,7 +572,7 @@ def translateGPT(text, history, fullPromptFlag):
                 totalTokens[1] += response.usage.completion_tokens
 
                 # Check Translation
-                translatedText = cleanTranslatedText(translatedText, varResponse)
+                translatedText = cleanTranslatedText(translatedText)
                 if isinstance(tItem, list):
                     extractedTranslations = extractTranslation(translatedText, True)
                     if extractedTranslations == None or len(tItem) != len(extractedTranslations):
@@ -579,7 +583,7 @@ def translateGPT(text, history, fullPromptFlag):
                         totalTokens[1] += response.usage.completion_tokens
 
                         # Formatting
-                        translatedText = cleanTranslatedText(translatedText, varResponse)
+                        translatedText = cleanTranslatedText(translatedText)
                         if isinstance(tItem, list):
                             extractedTranslations = extractTranslation(translatedText, True)
                             if extractedTranslations == None or len(tItem) != len(extractedTranslations):
