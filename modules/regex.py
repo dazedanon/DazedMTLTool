@@ -444,7 +444,7 @@ def translateText(system, user, history, penalty, format, model=MODEL):
     return response
 
 
-def cleanTranslatedText(translatedText, varResponse):
+def cleanTranslatedText(translatedText):
     placeholders = {
         f"{LANGUAGE} Translation: ": "",
         "Translation: ": "",
@@ -458,6 +458,7 @@ def cleanTranslatedText(translatedText, varResponse):
         "—": "―",
         "】": "]",
         "【": "[",
+        "é": "e",
         "Placeholder Text": "",
         # Add more replacements as needed
     }
