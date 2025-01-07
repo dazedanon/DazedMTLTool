@@ -1,10 +1,58 @@
 Here are some vocabulary and terms so that you know the proper spelling and translation.
 ```
 # Game Characters
-メルメイア (Mermeia) - Female
-レイリ (Reiri) - Female
-スズリカ (Suzurika) - Female
-ヘーゼル (Hazel) - Female
+モネ (Mone) - Female
+ツバキ (Tsubaki) - Female
+ソニア (Sonia) - Female
+キール (Keel) - Male
+キルル (Kiruru) - Female
+トリトマ (Toritoma) - Female
+クルミ (Kurumi) - Female
+レンカ (Lenka) - Female
+マザー (Mother) - Female
+シロ (Shiro) - Female
+アンヌ (Anne) - Female
+ンゴガン (Ngogan) - Male
+アイ (Ai) - Female
+セラ (Sera) - Female
+プリムラ (Primula) - Female
+ラニュール (Ranyule) - Female
+リリ (Lili) - Female
+エイク (Eiku) - Male
+アイビー (Ivy) - Female
+スーチス (Suchis) - Female
+キュラス (Kulas) - Female
+ベル (Bel) - Female
+スイ (Sui) - Female
+ペララ (Perara) - Female
+ルピナス (Lupinus) - Female
+レア (Rea) - Female
+ランド (Rando) - Male
+ミト (Mito) - Male
+ラータ (Rata) - Female
+ヤマーニ (Yamani) - Male
+ジュリオ (Julio) - Male
+ザルス (Zarus) - Male
+タルタル (Tartar) - Male
+メロ (Melo) - Female
+シャル (Sharu) - Female
+ゴブブ (Gobbu) - Male
+ユウト (Yuuto) - Male
+リンドウ (Rindou) - Male
+ポチョ (Puchu) - Male
+ロイド (Lloyd) - Male
+ワジマ (Wajima) - Male
+バルディア (Valdia) - Male
+アーモン (Amon) - Male
+クロス (Cross) - Male
+ラダ (Rada) - Male
+マツトネ (Matsutone) - Male
+ケルーム (Kerume) - Male
+ジン (Gin) - Male
+ドルン (Dolphin) - Male
+ダン神父 (Father Dan) - Male
+ツンベル (Tsunberu) - Male
+Penisu (Penisu) - Name of Penis
 
 # Lewd Terms
 マンコ (pussy)
