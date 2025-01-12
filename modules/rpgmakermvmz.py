@@ -79,7 +79,7 @@ CODE405 = True
 CODE102 = True
 
 # Optional
-CODE101 = False  # Turn this one when names exist in 101
+CODE101 = True  # Turn this one when names exist in 101
 CODE408 = False  # Warning, translates comments and can inflate costs.
 
 # Variables
@@ -2089,8 +2089,7 @@ def searchCodes(page, pbar, jobList, filename):
 
         # Special Format (Scenario)
         else:
-            page = codeListFinal
-
+            page[:] = codeListFinal
     except IndexError as e:
         traceback.print_exc()
         raise Exception(str(e) + "Failed to translate: " + oldjaString) from None
