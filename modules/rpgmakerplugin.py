@@ -175,9 +175,11 @@ def parsePlugin(readFile, filename):
 def translatePlugin(data, pbar, filename, translatedList):
     if len(translatedList) > 0:
         questList = translatedList[0]
+        custom = translatedList[1]
         setData = True
     else:
         questList = [[], [], [], [], [], []]
+        custom = []
         setData = False
     currentGroup = []
     tokens = [0, 0]
@@ -190,6 +192,38 @@ def translatePlugin(data, pbar, filename, translatedList):
         voice = False
         speaker = ""
         newline = r"\n"
+
+        # Custom
+        regex = r'hint:\s"(.*)"'
+        match = re.search(regex, data[i])
+        if match:
+            # Save Original String
+            jaString = match.group(1)
+            originalString = jaString
+
+            # Remove any textwrap
+            jaString = jaString.replace(newline, " ")
+
+            # Pass 1
+            if setData == False:
+                custom.append(jaString.strip())
+
+            # Pass 2
+            else:
+                if custom:
+                    # Grab and Pop
+                    translatedText = custom[0]
+                    custom.pop(0)
+
+                    # Set to None if empty list
+                    if len(translatedList) <= 0:
+                        translatedList = None
+
+                    # Replace Single Quotes
+                    translatedText = re.sub(r'[^\\]"', '\\"', translatedText)
+
+                    # Set Data
+                    data[i] = re.sub(r"\b%s\b" % originalString, translatedText, data[i])
 
         # Quest Name
         regex = r'[\\]+"QuestName[\\]+":[\\]+"(.*?)[\\]+"'
@@ -412,7 +446,9 @@ def translatePlugin(data, pbar, filename, translatedList):
     # EOF
     translate = False
     questListTL = [[], [], [], [], [], []]
+    customTL = []
 
+    # Quest
     if len(questList) > 0:
         # Set Progress
         pbar.total = sum(len(quest) for quest in questList)
@@ -479,10 +515,35 @@ def translatePlugin(data, pbar, filename, translatedList):
             with LOCK:
                 if filename not in MISMATCH:
                     MISMATCH.append(filename)
+    
+    # Custom
+    if custom:
+        # Set Progress
+        pbar.total = len(custom)
+        pbar.refresh()
+        PBAR = pbar
 
-        # Pass 2
-        if translate and not setData:
-            translatePlugin(data, pbar, filename, [questListTL])
+        # TL
+        response = translateGPT(custom, "Title", True)
+        tokens[0] += response[1][0]
+        tokens[1] += response[1][1]
+        customResponse = response[0]
+        pbar.update(len(custom))
+        
+        # Check Mismatch
+        if len(custom) == len(customResponse):
+            customTL = customResponse
+            translate = True
+
+        # Mismatch
+        else:
+            with LOCK:
+                if filename not in MISMATCH:
+                    MISMATCH.append(filename)
+
+    # Pass 2
+    if translate and not setData:
+        translatePlugin(data, pbar, filename, [questListTL, customTL])
     return tokens
 
 
