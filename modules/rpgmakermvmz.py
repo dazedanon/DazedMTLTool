@@ -38,6 +38,7 @@ ESTIMATE = ""
 TOKENS = [0, 0]
 NAMESLIST = []
 FIRSTLINESPEAKERS = False  # If 1st line of dialogue is a speaker, set to True
+FACENAME101 =  False     # Find Speakers in 101 Codes based on Face Name
 NAMES = False  # Output a list of all the character names found
 BRFLAG = False  # If the game uses <br> instead
 FIXTEXTWRAP = True  # Overwrites textwrap
@@ -580,6 +581,14 @@ def searchNames(data, pbar, context):
                         tokensResponse = translateNote(data[i], r"<MapText:(.*?)>")
                         totalTokens[0] += tokensResponse[0]
                         totalTokens[1] += tokensResponse[1]
+                    if "<WATs:" in data[i]["note"]:
+                        tokensResponse = translateNote(data[i], r"WATs:(.+?)>")
+                        totalTokens[0] += tokensResponse[0]
+                        totalTokens[1] += tokensResponse[1]
+                    if "<ADT:" in data[i]["note"]:
+                        tokensResponse = translateNote(data[i], r"ADTs?:(.+?)>")
+                        totalTokens[0] += tokensResponse[0]
+                        totalTokens[1] += tokensResponse[1]
 
                     i += 1
                 else:
@@ -619,6 +628,16 @@ def searchNames(data, pbar, context):
                                 number += 1
                         else:
                             number += 1
+
+                    # Notes
+                    if "<WAT:" in data[i]["note"]:
+                        tokensResponse = translateNote(data[i], r"WATs:(.+?)>")
+                        totalTokens[0] += tokensResponse[0]
+                        totalTokens[1] += tokensResponse[1]
+                    if "<ADT:" in data[i]["note"]:
+                        tokensResponse = translateNote(data[i], r"ADTs?:(.+?)>")
+                        totalTokens[0] += tokensResponse[0]
+                        totalTokens[1] += tokensResponse[1]
 
                     i += 1
                 else:
@@ -1364,8 +1383,67 @@ def searchCodes(page, pbar, jobList, filename):
                         codeList[i]["parameters"][3][argVar] = translatedText
                         pbar.update(1)
 
-                if "TextPicture" in headerString or "BalloonInBattle" in headerString:
-                    argVar = "text"
+                # if "TextPicture" in headerString or "BalloonInBattle" in headerString:
+                #     argVar = "text"
+                #     font = None
+                #     ### Message Text First
+                #     if argVar in codeList[i]["parameters"][3]:
+                #         acExist = False
+                #         jaString = codeList[i]["parameters"][3][argVar]
+
+                #         # Check ac
+                #         if "\\ac" in jaString:
+                #             acExist = True
+                #         else:
+                #             acExist = False
+
+                #         # If there isn't any Japanese in the text just skip
+                #         # if not re.search(r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴー]+', jaString):
+                #         #     i += 1
+                #         #     continue
+
+                #         # Remove any textwrap & TL
+                #         if '[Lewd Power' in jaString:
+                #             jaString = re.sub(r"\n", " ", jaString)
+                #             if acExist:
+                #                 jaString = jaString.replace("\\ac ", " ")
+                #                 jaString = jaString.replace("\\ac", "")
+
+                #         # Pass 1
+                #         if setData == False:
+                #             list357.append(jaString)
+
+                #         # Pass 2
+                #         else:
+                #             if len(list357) > 0:
+                #                 # Grab and Replace
+                #                 translatedText = list357[0]
+                #                 translatedText = jaString.replace(jaString, translatedText)
+
+                #                 # Remove characters that may break scripts
+                #                 charList = ['"', "\\n"]
+                #                 for char in charList:
+                #                     translatedText = translatedText.replace(char, "")
+
+                #                 # Textwrap
+                #                 if '[Lewd Power' in jaString:
+                #                     translatedText = textwrap.fill(translatedText, 50)
+
+                #                 # Center Text
+                #                 if acExist:
+                #                     translatedText = f'\\ac {translatedText.replace('\n', '\n\\ac ')}'
+
+                #                 # Check and Set Font
+                #                 if "fontSize" in codeList[i]["parameters"][3]:
+                #                     if font:
+                #                         codeList[i]["parameters"][3]["fontSize"] = font
+
+                #                 # Set
+                #                 codeList[i]["parameters"][3][argVar] = translatedText
+                #                 list357.pop(0)
+
+                if "QuestSystem" in headerString:
+                    argVar = "DetailNote"
                     font = None
                     ### Message Text First
                     if argVar in codeList[i]["parameters"][3]:
@@ -1384,7 +1462,7 @@ def searchCodes(page, pbar, jobList, filename):
                         #     continue
 
                         # Remove any textwrap & TL
-                        jaString = re.sub(r"\n", " ", jaString)
+                        jaString = jaString.replace('\\n', ' ')
                         if acExist:
                             jaString = jaString.replace("\\ac ", " ")
                             jaString = jaString.replace("\\ac", "")
@@ -1406,8 +1484,9 @@ def searchCodes(page, pbar, jobList, filename):
                                     translatedText = translatedText.replace(char, "")
 
                                 # Textwrap
-                                translatedText = textwrap.fill(translatedText, WIDTH)
-                                translatedText = translatedText.replace("- ", "-")
+                                translatedText = textwrap.fill(translatedText, 80)
+                                translatedText = translatedText.replace('\n', '\\n')
+                                translatedText = re.sub(r"[\\]+c", r"\\\\c", translatedText)
 
                                 # Center Text
                                 if acExist:
@@ -1419,7 +1498,7 @@ def searchCodes(page, pbar, jobList, filename):
                                         codeList[i]["parameters"][3]["fontSize"] = font
 
                                 # Set
-                                codeList[i]["parameters"][3][argVar] = translatedText
+                                codeList[i]["parameters"][3][argVar] = f"\"{translatedText}\""
                                 list357.pop(0)
 
             ## Event Code: 657 [Picture Text] [Optional]
@@ -1522,7 +1601,7 @@ def searchCodes(page, pbar, jobList, filename):
                         continue
 
                     # Get Speaker
-                    if "\\" not in jaString:
+                    if "\\" not in jaString and jaString:
                         response = getSpeaker(jaString)
                         totalTokens[0] += response[1][0]
                         totalTokens[1] += response[1][1]
@@ -1541,11 +1620,33 @@ def searchCodes(page, pbar, jobList, filename):
                                 continue
                         else:
                             speaker = ""
+                    elif FACENAME101:
+                        faceName = codeList[i]["parameters"][0]
+                        if faceName == "Actor1_1":
+                            speaker = "Sakura"
+                        if faceName == "Actor2_1":
+                            speaker = "Suzune"
+                        if faceName == "Actor3_1":
+                            speaker = "Kaji"
+                        if faceName == "Actor4_1":
+                            speaker = "Kirari"
+                        if faceName == "Actor5_1":
+                            speaker = "Onsen"
+                        if faceName == "Actor6_1":
+                            speaker = "Gufu"
+                        if faceName == "Actor7_1":
+                            speaker = "Kahimeru"
+                        if faceName == "Actor10_1":
+                            speaker = "Miuma"
+                        if faceName == "Actor11_1":
+                            speaker = "Nurari"
+                        if faceName == "Actor12_1":
+                            speaker = "Kokotsuzumi"
 
             ## Event Code: 355 or 655 Scripts [Optional]
             if "code" in codeList[i] and (codeList[i]["code"] == 355 or codeList[i]["code"] == 655) and CODE355655 is True:
                 jaString = codeList[i]["parameters"][0]
-                regexPatterns = [r'.*subject=(.*?)"', r"テキスト-(.*)"]
+                regexPatterns = [r'const.+=\s?\"(.+?)\"']
 
                 # Iterate over the list of regex patterns
                 for regex in regexPatterns:
