@@ -1,38 +1,18 @@
 Here are some vocabulary and terms so that you know the proper spelling and translation.
 ```
 # Game Characters
-ココナ (Kokona) - Female
-センリ (Senri) - Female
-カナミ (Kanami) - Female
-サキ (Saki) - Female
-ミユ (Miyu) - Female
-カナミ (Kanami) - Female
-ノノカ (Nonoka) - Female
-シンジ (Shinji)
-タクオ (Takuo)
-ユヅキ (Yuzuki)
-マリナ (Marina)
-レン (Ren)
-コクリュウ (Kokuryu)
-センリ (Senri)
-ノノカ (Nonoka)
-ミユ (Miyu)
-リツコ (Ritsuko)
-カスゾウ (Kasuzou)
-ヨシオ (Yoshio)
-ブスジマ (Busujima)
-タロウ (Tarou)
-オリバー (Oliver)
-デブオ (Debuo)
-ミン (Min)
-ザコ戦闘員 (Zako Combatant)
-Dr.ゲーリー (Dr. Gary)
-キャプテンブランドー (Captain Brando)
-サンタコロース (Santa Claus)
-一ノ瀬　茂 (Shigeru Ichinose)
-クズオ (Kuzuo)
-ガリオ (Gario)
-シゲさん (Shige-san)
+桜 謳歌 (Sakura Ouka) - Female
+鈴音 (Suzune) - Female
+鍛冶 演歌 (Kaji Enka) - Female
+希来里 (Kirari) - Female
+温泉 玉子 (Onsen Tamago) - Female
+愚譜 徳朗 (Gufu Tokuro) - Unknown
+華姫瑠 (Kahimeru) - Unknown
+枝切 はらら (Edakiri Harara) - Unknown
+枝切 鋏 (Edakiri Hasami) - Unknown
+御馬 忠勝 (Miuma Tadakatsu) - Unknown
+ぬらり (Nurari) - Unknown
+狐鼓 (Kokotsuzumi) - Unknown
 
 # Lewd Terms
 マンコ (pussy)
@@ -121,6 +101,9 @@ ME 音量 (ME Volume)
 ローバー (Roper)
 w ((lol))
 巫女 (Shrine Maiden)
-コイツ (this bastard)
 ２万 (20,000)
+
+# Locations
+サイノ河 (Saino River)
+オソレ峠 一幕 (Osore Pass Act One)
 ```

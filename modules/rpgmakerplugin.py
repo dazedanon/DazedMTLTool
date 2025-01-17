@@ -194,39 +194,40 @@ def translatePlugin(data, pbar, filename, translatedList):
         newline = r"\n"
 
         # Custom
-        regex = r'hint:\s"(.*)"'
-        match = re.search(regex, data[i])
-        if match:
-            # Save Original String
-            jaString = match.group(1)
-            originalString = jaString
+        regex = r'{.+?"Text[\\]+":[\\]+"[\\]+}[\\]*(.+?)[\\]'
+        matchList = re.findall(regex, data[i])
+        if len(matchList) > 0:
+            for match in matchList:
+                # Save Original String
+                jaString = match
+                originalString = jaString
 
-            # Remove any textwrap
-            jaString = jaString.replace(newline, " ")
+                # Remove any textwrap
+                jaString = jaString.replace(newline, " ")
 
-            # Pass 1
-            if setData == False:
-                custom.append(jaString.strip())
+                # Pass 1
+                if setData == False:
+                    custom.append(jaString.strip())
 
-            # Pass 2
-            else:
-                if custom:
-                    # Grab and Pop
-                    translatedText = custom[0]
-                    custom.pop(0)
+                # Pass 2
+                else:
+                    if custom:
+                        # Grab and Pop
+                        translatedText = custom[0]
+                        custom.pop(0)
 
-                    # Set to None if empty list
-                    if len(translatedList) <= 0:
-                        translatedList = None
+                        # Set to None if empty list
+                        if len(translatedList) <= 0:
+                            translatedList = None
 
-                    # Replace Single Quotes
-                    translatedText = re.sub(r'[^\\]"', '\\"', translatedText)
+                        # Replace Single Quotes
+                        translatedText = re.sub(r'[^\\]"', '\\"', translatedText)
 
-                    # Set Data
-                    data[i] = re.sub(r"\b%s\b" % originalString, translatedText, data[i])
+                        # Set Data
+                        data[i] = data[i].replace(originalString, translatedText)
 
         # Quest Name
-        regex = r'[\\]+"QuestName[\\]+":[\\]+"(.*?)[\\]+"'
+        regex = r'[\\]+"Titled[\\]+":[\\]+"(.*?)[\\]+"'
         matchList = re.findall(regex, data[i])
         if len(matchList) > 0:
             for match in matchList:
@@ -255,14 +256,14 @@ def translatePlugin(data, pbar, filename, translatedList):
                                 translatedList = None
 
                             # Replace Single Quotes
-                            translatedText = re.sub(r"[^\\]'", "\\'", translatedText)
-                            translatedText = re.sub(r'[^\\]"', '\\"', translatedText)
+                            translatedText = translatedText.replace('"', "'")
+                            translatedText = re.sub(r"([^\\'])'", r"\1\\'", translatedText)
 
                             # Set Data
-                            data[i] = re.sub(r"\b%s\b" % originalString, translatedText, data[i])
+                            data[i] = data[i].replace(originalString, translatedText)
 
         # Quest Client
-        regex = r'QuestClientName[\\]+":[\\]+"(.*?)[\\]+"'
+        regex = r'Requesterd[\\]+":[\\]+"(.*?)[\\]+"'
         matchList = re.findall(regex, data[i])
         if len(matchList) > 0:
             for match in matchList:
@@ -288,14 +289,14 @@ def translatePlugin(data, pbar, filename, translatedList):
                                 translatedList = None
 
                             # Replace Single Quotes
-                            translatedText = re.sub(r"[^\\]'", "\\'", translatedText)
-                            translatedText = re.sub(r'[^\\]"', '\\"', translatedText)
+                            translatedText = translatedText.replace('"', "'")
+                            translatedText = re.sub(r"([^\\'])'", r"\1\\'", translatedText)
 
                             # Set Data
-                            data[i] = re.sub(r"\b%s\b" % originalString, translatedText, data[i])
+                            data[i] = data[i].replace(originalString, translatedText)
 
         # Quest Location
-        regex = r'QuestLocation[\\]+":[\\]+"(.*?)[\\]+"'
+        regex = r'Placed[\\]+":[\\]+"(.*?)[\\]+"'
         matchList = re.findall(regex, data[i])
         if len(matchList) > 0:
             for match in matchList:
@@ -321,14 +322,14 @@ def translatePlugin(data, pbar, filename, translatedList):
                                 translatedList = None
 
                             # Replace Single Quotes
-                            translatedText = re.sub(r"[^\\]'", "\\'", translatedText)
-                            translatedText = re.sub(r'[^\\]"', '\\"', translatedText)
+                            translatedText = translatedText.replace('"', "'")
+                            translatedText = re.sub(r"([^\\'])'", r"\1\\'", translatedText)
 
                             # Set Data
-                            data[i] = re.sub(r"\b%s\b" % originalString, translatedText, data[i])
+                            data[i] = data[i].replace(originalString, translatedText)
 
         # Quest Target
-        regex = r'PlaceInformation[\\]+":[\\]+"(.*?)[\\]+"'
+        regex = r'PlacedInformation[\\]+":[\\]+"(.*?)[\\]+"'
         matchList = re.findall(regex, data[i])
         if len(matchList) > 0:
             for match in matchList:
@@ -354,14 +355,14 @@ def translatePlugin(data, pbar, filename, translatedList):
                                 translatedList = None
 
                             # Replace Single Quotes
-                            translatedText = re.sub(r"[^\\]'", "\\'", translatedText)
-                            translatedText = re.sub(r'[^\\]"', '\\"', translatedText)
+                            translatedText = translatedText.replace('"', "'")
+                            translatedText = re.sub(r"([^\\'])'", r"\1\\'", translatedText)
 
                             # Set Data
-                            data[i] = re.sub(r"\b%s\b" % originalString, translatedText, data[i])
+                            data[i] = data[i].replace(originalString, translatedText)
 
         # Quest Summary
-        regex = r'QuestContent[\\]+":[\\]+"[\\]+"(.*?)[\\]+"'
+        regex = r'[\\]+"DetaildNote[\\]+":[\\]+"[\\]+"(.*?)[\\]+"[\\]+"'
         matchList = re.findall(regex, data[i])
         if len(matchList) > 0:
             for match in matchList:
@@ -371,6 +372,7 @@ def translatePlugin(data, pbar, filename, translatedList):
 
                     # Remove any textwrap
                     match = match.replace(r"\\\\\\\\n", " ")
+                    match = match.replace(r"\\\\\\\\\\\\\\\\c", "\\c")
 
                     # Pass 1
                     if setData == False:
@@ -392,10 +394,11 @@ def translatePlugin(data, pbar, filename, translatedList):
                             # Textwrap
                             translatedText = textwrap.fill(translatedText, width=WIDTH)
                             translatedText = translatedText.replace("\n", r"\\\\\\\\n")
+                            match = match.replace("\\c", r"\\\\\\\\\\\\\\\\c")
 
                             # Replace Single Quotes
-                            translatedText = re.sub(r"[^\\]'", "\\'", translatedText)
-                            translatedText = re.sub(r'[^\\]"', '\\"', translatedText)
+                            translatedText = translatedText.replace('"', "'")
+                            translatedText = re.sub(r"([^\\'])'", r"\1\\'", translatedText)
 
                             # Set Data
                             data[i] = data[i].replace(originalString, translatedText)
@@ -434,8 +437,8 @@ def translatePlugin(data, pbar, filename, translatedList):
                             translatedText = translatedText.replace("\n", r"\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\n")
 
                             # Replace Single Quotes
-                            translatedText = re.sub(r"[^\\]'", "\\'", translatedText)
-                            translatedText = re.sub(r'[^\\]"', '\\"', translatedText)
+                            translatedText = translatedText.replace('"', "'")
+                            translatedText = re.sub(r"([^\\'])'", r"\1\\'", translatedText)
 
                             # Set Data
                             data[i] = data[i].replace(originalString, translatedText)
