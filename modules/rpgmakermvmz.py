@@ -61,8 +61,8 @@ if "gpt-3.5" in MODEL:
 elif "gpt-4" in MODEL:
     INPUTAPICOST = 0.0025
     OUTPUTAPICOST = 0.01
-    BATCHSIZE = 30
-    FREQUENCY_PENALTY = 0.1
+    BATCHSIZE = 60
+    FREQUENCY_PENALTY = 0.05
 else:
     INPUTAPICOST = float(os.getenv("input_cost"))
     OUTPUTAPICOST = float(os.getenv("output_cost"))
@@ -1487,6 +1487,7 @@ def searchCodes(page, pbar, jobList, filename):
                                 translatedText = textwrap.fill(translatedText, 80)
                                 translatedText = translatedText.replace('\n', '\\n')
                                 translatedText = re.sub(r"[\\]+c", r"\\\\c", translatedText)
+                                translatedText = re.sub(r"[\\]+\*item", r"\\\\*item", translatedText)
 
                                 # Center Text
                                 if acExist:
@@ -2333,6 +2334,10 @@ Translate 'Taroを倒した！' as 'Taro was defeated!'",
         noteResponse = translateNote(state, r"<STATE_HELP>\n(.*)\n")
         totalTokens[0] += noteResponse[0]
         totalTokens[1] += noteResponse[1]
+    if "ShowHoverState" in state["note"]:
+        noteResponse = translateNote(state, r"<ShowHoverState:\s?(.+?)>")
+        totalTokens[0] += noteResponse[0]
+        totalTokens[1] += noteResponse[1]
 
     # Count totalTokens
     totalTokens[0] += nameResponse[1][0] if nameResponse != "" else 0
@@ -2533,9 +2538,10 @@ def translateText(system, user, history, penalty, format, model=MODEL):
 
     # History
     if isinstance(history, list):
-        msg.extend([{"role": "system", "content": h} for h in history])
+        msg.append({"role": "assistant", "content": "Translation History:"})
+        msg.extend([{"role": "assistant", "content": h} for h in history])
     else:
-        msg.append({"role": "system", "content": history})
+        msg.append({"role": "assistant", "content": history})
 
     # Response Format
     if format == "json":
@@ -2570,6 +2576,8 @@ def cleanTranslatedText(translatedText):
         "】": "]",
         "【": "[",
         "é": "e",
+        "this guy": "this bastard",
+        "This guy": "This bastard",
         "Placeholder Text": "",
         # Add more replacements as needed
     }
