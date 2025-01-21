@@ -286,19 +286,24 @@ def translateCSV(data, pbar, writer, filename, translatedList, format):
                 # In Place Format
                 case "3":
                     # Set columns to translate. Leave empty to translate all.
-                    targetColumns = []
+                    targetColumns = [0]
 
                     # False - Place translation in source column
                     # True - Place translation in next column
                     targetNextRow = False
 
+                    # Skip 1st Row
+                    skipFirstRow = True
+
                     for j in range(len(data[i])):
-                        if j not in targetColumns:
+                        if skipFirstRow and i == 0:
+                            continue
+                        if j in targetColumns and data[i][j]:
                             # Check if Translated
                             jaString = data[i][j]
 
                             # Remove Textwrap
-                            jaString = jaString.replace("\\n", " ")
+                            jaString = jaString.replace("\n", " ")
 
                             # Pass 1
                             if not translatedList:
@@ -312,7 +317,6 @@ def translateCSV(data, pbar, writer, filename, translatedList, format):
 
                                 # Add Wordwrap
                                 translatedText = textwrap.fill(translatedText, WIDTH)
-                                translatedText = translatedText.replace("\n", "\\n")
 
                                 # Set Data
                                 if targetNextRow:

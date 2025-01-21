@@ -75,13 +75,13 @@ LEAVE = False
 PBAR = None
 FILENAME = None
 
-# Dialogue / Scroll
-CODE101 = False
+# Dialogue / Choices
+CODE101 = True
 CODE102 = False
 
 # Set String (Fragile but necessary)
 CODE122 = False
-CODE150 = True
+CODE150 = False
 
 # Other
 CODE210 = False
@@ -93,12 +93,12 @@ SCENARIOFLAG = False
 OPTIONSFLAG = False
 NPCFLAG = False
 DBNAMEFLAG = False
-ITEMFLAG = True
+ITEMFLAG = False
 STATEFLAG = False
 ENEMYFLAG = False
-ARMORFLAG = True
-WEAPONFLAG = True
-SKILLFLAG = True
+ARMORFLAG = False
+WEAPONFLAG = False
+SKILLFLAG = False
 
 
 def handleWOLF(filename, estimate):
@@ -761,6 +761,8 @@ def searchDB(events, pbar, jobList, filename):
     global LOCK
     global NAMESLIST
     global MISMATCH
+    global PBAR
+    PBAR = pbar
 
     # Begin Parsing File
     try:
@@ -810,32 +812,30 @@ def searchDB(events, pbar, jobList, filename):
                                     dataList[j].update({"value": translatedText})
                                     npcList[1].pop(0)
 
-            # Grab Scenarios
-            if table["name"] == "MGP_参加者" and SCENARIOFLAG == True:
-                for hScenario in table["data"]:
-                    dataList = hScenario["data"]
+            # Grab Scenario
+            if table["name"] == "ﾏｯﾌﾟｷｬﾗ配置ﾏｽﾀ" and SCENARIOFLAG == True:
+                for scenario in table["data"]:
+                    dataList = scenario["data"]
 
                     # Parse
-                    # Pass 1 (Grab Data)
-                    if setData == False:
-                        if dataList[1].get("value") != "":
-                            scenarioList[0].append(dataList[1].get("value"))
-                        if dataList[44].get("value") != "":
-                            scenarioList[1].append(dataList[44].get("value"))
-                        if dataList[45].get("value") != "":
-                            scenarioList[2].append(dataList[45].get("value"))
+                    for j in range(len(dataList)):
+                        # Name
+                        if "テキスト" in dataList[j].get("name"):
+                            if dataList[j].get("value"):
+                                jaStringList = dataList[j].get("value").split("\r\nPFD\r\n")
+                                for jaString in jaStringList:
+                                    # Pass 1 (Grab Data)
+                                    if setData == False:
+                                        jaString = jaString.replace('\n', ' ')
+                                        jaString = jaString.replace('\r', '')
+                                        scenarioList[0].append(jaString)
 
-                    # Pass 2 (Set Data)
-                    else:
-                        if dataList[1].get("value") != "":
-                            dataList[1].update({"value": scenarioList[0][0]})
-                            scenarioList[0].pop(0)
-                        if dataList[44].get("value") != "":
-                            dataList[44].update({"value": scenarioList[1][0]})
-                            scenarioList[1].pop(0)
-                        if dataList[45].get("value") != "":
-                            dataList[45].update({"value": scenarioList[2][0]})
-                            scenarioList[2].pop(0)
+                                    # Pass 2 (Set Data)
+                                    else:
+                                        translatedText = scenarioList[0][0]
+                                        scenarioList[0].pop(0)
+                                        translatedText = textwrap.fill(translatedText, 35)
+                                        dataList[j].update({"value": dataList[j].get("value").replace(jaString, translatedText)})
 
             # Grab Options
             if table["name"] == "選択肢説明" and OPTIONSFLAG == True:
