@@ -113,7 +113,7 @@ def handleCSV(filename, estimate):
 
 
 def openFiles(filename, writeFile):
-    with open("files/" + filename, "r", encoding="cp932") as readFile, writeFile:
+    with open("files/" + filename, "r", encoding="cp932", errors="ignore") as readFile, writeFile:
         translatedData = parseCSV(readFile, writeFile, filename)
 
     return translatedData
@@ -539,6 +539,7 @@ def cleanTranslatedText(translatedText):
         "】": "]",
         "【": "[",
         "é": "e",
+        "ō": "o",
         "Placeholder Text": "",
         # Add more replacements as needed
     }

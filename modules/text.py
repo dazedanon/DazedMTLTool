@@ -376,6 +376,7 @@ def cleanTranslatedText(translatedText):
         "】": "]",
         "【": "[",
         "é": "e",
+        "ō": "o",
         "Placeholder Text": "",
         # Add more replacements as needed
     }
