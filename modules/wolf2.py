@@ -536,6 +536,14 @@ def translateGPT(text, history, fullPromptFlag):
 
                 # Translating
                 response = translateText(system, user, history, 0.05, format)
+
+                # AI Refused. Try Again
+                if not response:
+                    response = translateText(system, user, history, 0.05, format, MODEL)
+                    if not response:
+                        continue
+
+                # Set Tokens
                 translatedText = response.choices[0].message.content
                 totalTokens[0] += response.usage.prompt_tokens
                 totalTokens[1] += response.usage.completion_tokens
