@@ -61,7 +61,7 @@ if "gpt-3.5" in MODEL:
 elif "gpt-4" in MODEL:
     INPUTAPICOST = 0.0025
     OUTPUTAPICOST = 0.01
-    BATCHSIZE = 60
+    BATCHSIZE = 30
     FREQUENCY_PENALTY = 0.05
 else:
     INPUTAPICOST = float(os.getenv("input_cost"))
@@ -77,10 +77,10 @@ LEAVE = False
 # Dialogue / Scroll / Choices (Main Codes)
 CODE401 = True
 CODE405 = True
-CODE102 = False
+CODE102 = True
 
 # Optional
-CODE101 = True  # Turn this one when names exist in 101
+CODE101 = False  # Turn this one when names exist in 101
 CODE408 = False  # Warning, translates comments and can inflate costs.
 
 # Variables
@@ -2702,6 +2702,14 @@ def translateGPT(text, history, fullPromptFlag):
 
                 # Translating
                 response = translateText(system, user, history, 0.05, format)
+
+                # AI Refused. Try Again
+                if not response:
+                    response = translateText(system, user, history, 0.05, format, MODEL)
+                    if not response:
+                        continue
+
+                # Set Tokens
                 translatedText = response.choices[0].message.content
                 totalTokens[0] += response.usage.prompt_tokens
                 totalTokens[1] += response.usage.completion_tokens

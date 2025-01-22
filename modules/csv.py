@@ -79,7 +79,7 @@ def handleCSV(filename, estimate):
     ESTIMATE = estimate
 
     if not ESTIMATE:
-        with open("translated/" + filename, "w+t", newline="", encoding=ENCODING) as writeFile:
+        with open("translated/" + filename, "w+t", newline="", encoding=ENCODING, errors="xmlcharrefreplace") as writeFile:
             # Translate
             start = time.time()
             translatedData = openFiles(filename, writeFile)
@@ -113,7 +113,7 @@ def handleCSV(filename, estimate):
 
 
 def openFiles(filename, writeFile):
-    with open("files/" + filename, "r", encoding="cp932", errors="ignore") as readFile, writeFile:
+    with open("files/" + filename, "r", encoding=ENCODING) as readFile, writeFile:
         translatedData = parseCSV(readFile, writeFile, filename)
 
     return translatedData
@@ -185,7 +185,7 @@ def parseCSV(readFile, writeFile, filename):
 
     reader = csv.reader(readFile, delimiter=",")
     if not ESTIMATE:
-        writer = csv.writer(writeFile, delimiter=",")
+        writer = csv.writer(writeFile, delimiter=",", )
     else:
         writer = ""
 
@@ -660,6 +660,14 @@ def translateGPT(text, history, fullPromptFlag):
 
                 # Translating
                 response = translateText(system, user, history, 0.05, format)
+
+                # AI Refused. Try Again
+                if not response:
+                    response = translateText(system, user, history, 0.05, format, MODEL)
+                    if not response:
+                        continue
+
+                # Set Tokens
                 translatedText = response.choices[0].message.content
                 totalTokens[0] += response.usage.prompt_tokens
                 totalTokens[1] += response.usage.completion_tokens
