@@ -76,7 +76,7 @@ PBAR = None
 FILENAME = None
 
 # Dialogue / Choices
-CODE101 = True
+CODE101 = False
 CODE102 = False
 
 # Set String (Fragile but necessary)
@@ -89,7 +89,7 @@ CODE300 = False
 CODE250 = False
 
 # Database
-SCENARIOFLAG = False
+SCENARIOFLAG = True
 OPTIONSFLAG = False
 NPCFLAG = False
 DBNAMEFLAG = False
@@ -813,14 +813,14 @@ def searchDB(events, pbar, jobList, filename):
                                     npcList[1].pop(0)
 
             # Grab Scenario
-            if table["name"] == "ﾏｯﾌﾟｷｬﾗ配置ﾏｽﾀ" and SCENARIOFLAG == True:
+            if table["name"] == "回想ｲﾍﾞﾝﾄﾃｰﾌﾞﾙ" and SCENARIOFLAG == True:
                 for scenario in table["data"]:
                     dataList = scenario["data"]
 
                     # Parse
                     for j in range(len(dataList)):
                         # Name
-                        if "テキスト" in dataList[j].get("name"):
+                        if "回想ﾃｷｽﾄ" in dataList[j].get("name"):
                             if dataList[j].get("value"):
                                 jaStringList = dataList[j].get("value").split("\r\nPFD\r\n")
                                 for jaString in jaStringList:
@@ -834,7 +834,7 @@ def searchDB(events, pbar, jobList, filename):
                                     else:
                                         translatedText = scenarioList[0][0]
                                         scenarioList[0].pop(0)
-                                        translatedText = textwrap.fill(translatedText, 35)
+                                        translatedText = textwrap.fill(translatedText, 1000)
                                         dataList[j].update({"value": dataList[j].get("value").replace(jaString, translatedText)})
 
             # Grab Options
@@ -2252,6 +2252,7 @@ def cleanTranslatedText(translatedText):
         "】": "]",
         "【": "[",
         "é": "e",
+        "ō": "o",
         "Placeholder Text": "",
         # Add more replacements as needed
     }

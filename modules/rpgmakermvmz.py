@@ -75,19 +75,19 @@ POSITION = 0
 LEAVE = False
 
 # Dialogue / Scroll / Choices (Main Codes)
-CODE401 = False
-CODE405 = False
+CODE401 = True
+CODE405 = True
 CODE102 = False
 
 # Optional
-CODE101 = False  # Turn this one when names exist in 101
+CODE101 = True  # Turn this one when names exist in 101
 CODE408 = False  # Warning, translates comments and can inflate costs.
 
 # Variables
 CODE122 = False
 
 # Other
-CODE355655 = True
+CODE355655 = False
 CODE357 = False
 CODE657 = False
 CODE356 = False
