@@ -917,7 +917,12 @@ def searchCodes(page, pbar, jobList, filename):
 
                 # Brackets
                 if len(speakerList) == 0:
-                    speakerList = re.findall(r"^【(.*?)】$", jaString)
+                    speakerList = re.findall(r"^【(.*?)】$|^【(.*?)】[\\]*[a-zA-Z]*\[.*\]$", jaString)
+                    if speakerList:
+                        if speakerList[0][0]:
+                            speakerList = [speakerList[0][0]]
+                        else:
+                            speakerList = [speakerList[0][1]]
 
                 # Colors
                 if len(speakerList) == 0:
