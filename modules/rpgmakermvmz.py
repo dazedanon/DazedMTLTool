@@ -50,17 +50,22 @@ FILENAME = None
 # Regex - Need to change this if you want to translate from/to other languages. Default is Japanese Regex
 LANGREGEX = r"[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]+"
 
-# Pricing - Depends on the model https://openai.com/pricing
+# Pricing - Depends on the model https://openai.com/pricing ($ Price Per 1M)
 # Batch Size - GPT 3.5 Struggles past 15 lines per request. GPT4 struggles past 50 lines per request
 # If you are getting a MISMATCH LENGTH error, lower the batch size.
 if "gpt-3.5" in MODEL:
-    INPUTAPICOST = 0.002
-    OUTPUTAPICOST = 0.002
+    INPUTAPICOST = 3.00
+    OUTPUTAPICOST = 5.00
     BATCHSIZE = 10
     FREQUENCY_PENALTY = 0.2
 elif "gpt-4" in MODEL:
-    INPUTAPICOST = 0.0025
-    OUTPUTAPICOST = 0.01
+    INPUTAPICOST = 2.50
+    OUTPUTAPICOST = 10.00
+    BATCHSIZE = 30
+    FREQUENCY_PENALTY = 0.05
+elif "deepseek" in MODEL:
+    INPUTAPICOST = 0.14
+    OUTPUTAPICOST = 0.28
     BATCHSIZE = 30
     FREQUENCY_PENALTY = 0.05
 else:
@@ -75,9 +80,9 @@ POSITION = 0
 LEAVE = False
 
 # Dialogue / Scroll / Choices (Main Codes)
-CODE401 = False
-CODE405 = False
-CODE102 = False
+CODE401 = True
+CODE405 = True
+CODE102 = True
 
 # Optional
 CODE101 = False  # Turn this one when names exist in 101
@@ -87,7 +92,7 @@ CODE408 = False  # Warning, translates comments and can inflate costs.
 CODE122 = False
 
 # Other
-CODE355655 = True
+CODE355655 = False
 CODE357 = False
 CODE657 = False
 CODE356 = False
@@ -204,7 +209,7 @@ def getResultString(translatedData, translationTime, filename):
         Fore.YELLOW + "[Input: " + str(translatedData[1][0]) + "]"
         "[Output: "
         + str(translatedData[1][1])
-        + "]" "[Cost: ${:,.4f}".format((translatedData[1][0] * 0.001 * INPUTAPICOST) + (translatedData[1][1] * 0.001 * OUTPUTAPICOST))
+        + "]" "[Cost: ${:,.4f}".format(((translatedData[1][0] / 1000000) * INPUTAPICOST) + ((translatedData[1][1] / 1000000) * OUTPUTAPICOST))
         + "]"
     )
     timeString = Fore.BLUE + "[" + str(round(translationTime, 1)) + "s]"

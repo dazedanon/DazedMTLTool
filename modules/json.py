@@ -54,13 +54,20 @@ LANGREGEX = r"[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]+"
 # Batch Size - GPT 3.5 Struggles past 15 lines per request. GPT4 struggles past 50 lines per request
 # If you are getting a MISMATCH LENGTH error, lower the batch size.
 if "gpt-3.5" in MODEL:
-    INPUTAPICOST = 0.002
-    OUTPUTAPICOST = 0.002
+    INPUTAPICOST = 3.00
+    OUTPUTAPICOST = 5.00
     BATCHSIZE = 10
+    FREQUENCY_PENALTY = 0.2
 elif "gpt-4" in MODEL:
-    INPUTAPICOST = 0.01
-    OUTPUTAPICOST = 0.03
-    BATCHSIZE = 50
+    INPUTAPICOST = 2.50
+    OUTPUTAPICOST = 10.00
+    BATCHSIZE = 30
+    FREQUENCY_PENALTY = 0.05
+elif "deepseek" in MODEL:
+    INPUTAPICOST = 0.14
+    OUTPUTAPICOST = 0.28
+    BATCHSIZE = 30
+    FREQUENCY_PENALTY = 0.05
 else:
     INPUTAPICOST = float(os.getenv("input_cost"))
     OUTPUTAPICOST = float(os.getenv("output_cost"))
@@ -124,7 +131,7 @@ def getResultString(translatedData, translationTime, filename):
         Fore.YELLOW + "[Input: " + str(translatedData[1][0]) + "]"
         "[Output: "
         + str(translatedData[1][1])
-        + "]" "[Cost: ${:,.4f}".format((translatedData[1][0] * 0.001 * INPUTAPICOST) + (translatedData[1][1] * 0.001 * OUTPUTAPICOST))
+        + "]" "[Cost: ${:,.4f}".format(((translatedData[1][0] / 1000000) * INPUTAPICOST) + ((translatedData[1][1] / 1000000) * OUTPUTAPICOST))
         + "]"
     )
     timeString = Fore.BLUE + "[" + str(round(translationTime, 1)) + "s]"
