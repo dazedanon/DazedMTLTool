@@ -1240,43 +1240,6 @@ def searchCodes(page, pbar, jobList, filename):
                 headerString = codeList[i]["parameters"][0]
                 argVar = None
 
-                if headerString == "LL_GalgeChoiceWindow":
-                    ### Message Text First
-                    jaString = codeList[i]["parameters"][3]["messageText"]
-
-                    # Remove any textwrap & TL
-                    jaString = re.sub(r"\n", " ", jaString)
-                    response = translateGPT(jaString, "", False)
-                    translatedText = response[0]
-                    totalTokens[0] += response[1][0]
-                    totalTokens[1] += response[1][1]
-
-                    # Textwrap & Set
-                    translatedText = textwrap.fill(translatedText, width=WIDTH)
-                    codeList[i]["parameters"][3]["messageText"] = translatedText
-
-                    ### Choices
-                    jaString = codeList[i]["parameters"][3]["choices"]
-                    matchList = re.findall(r'"label[\\]*":[\\]*"(.*?)[\\]', jaString)
-                    if matchList != None:
-                        # Translate
-                        question = codeList[i]["parameters"][3]["messageText"]
-                        response = translateGPT(
-                            matchList,
-                            f"Previous text for context: {question}\n",
-                            True,
-                        )
-                        totalTokens[0] += response[1][0]
-                        totalTokens[1] += response[1][1]
-                        translatedText = jaString
-
-                        # Replace Strings
-                        for j in range(len(matchList)):
-                            translatedText = translatedText.replace(matchList[j], response[0][j])
-
-                        # Set Data
-                        codeList[i]["parameters"][3]["choices"] = translatedText
-
                 def translatePlugins(argVar, font):
                     ### Message Text First
                     if argVar in codeList[i]["parameters"][3]:
@@ -1351,6 +1314,43 @@ def searchCodes(page, pbar, jobList, filename):
                 for key, (argVar, font) in headerMappings.items():
                     if key in headerString:
                         translatePlugins(argVar, font)
+                
+                if headerString == "LL_GalgeChoiceWindow":
+                    ### Message Text First
+                    jaString = codeList[i]["parameters"][3]["messageText"]
+
+                    # Remove any textwrap & TL
+                    jaString = re.sub(r"\n", " ", jaString)
+                    response = translateGPT(jaString, "", False)
+                    translatedText = response[0]
+                    totalTokens[0] += response[1][0]
+                    totalTokens[1] += response[1][1]
+
+                    # Textwrap & Set
+                    translatedText = textwrap.fill(translatedText, width=WIDTH)
+                    codeList[i]["parameters"][3]["messageText"] = translatedText
+
+                    ### Choices
+                    jaString = codeList[i]["parameters"][3]["choices"]
+                    matchList = re.findall(r'"label[\\]*":[\\]*"(.*?)[\\]', jaString)
+                    if matchList != None:
+                        # Translate
+                        question = codeList[i]["parameters"][3]["messageText"]
+                        response = translateGPT(
+                            matchList,
+                            f"Previous text for context: {question}\n",
+                            True,
+                        )
+                        totalTokens[0] += response[1][0]
+                        totalTokens[1] += response[1][1]
+                        translatedText = jaString
+
+                        # Replace Strings
+                        for j in range(len(matchList)):
+                            translatedText = translatedText.replace(matchList[j], response[0][j])
+
+                        # Set Data
+                        codeList[i]["parameters"][3]["choices"] = translatedText
 
             ## Event Code: 657 [Picture Text] [Optional]
             if "code" in codeList[i] and codeList[i]["code"] == 657 and CODE657 is True:
