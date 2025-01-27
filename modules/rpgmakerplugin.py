@@ -230,7 +230,7 @@ def translatePlugin(data, pbar, filename, translatedList):
 
                         # Set to None if empty list
                         if len(translatedList) <= 0:
-                            translatedList = None                        
+                            translatedList = None
 
                         # Replace Single Quotes
                         translatedText = re.sub(r"([^\\'])'", r"\1\\'", translatedText)
@@ -538,7 +538,7 @@ def translatePlugin(data, pbar, filename, translatedList):
             with LOCK:
                 if filename not in MISMATCH:
                     MISMATCH.append(filename)
-    
+
     # Custom
     if custom:
         # Set Progress
@@ -552,7 +552,7 @@ def translatePlugin(data, pbar, filename, translatedList):
         tokens[1] += response[1][1]
         customResponse = response[0]
         pbar.update(len(custom))
-        
+
         # Check Mismatch
         if len(custom) == len(customResponse):
             customTL = customResponse
