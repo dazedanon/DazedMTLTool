@@ -198,10 +198,11 @@ def translatePlugin(data, pbar, filename, translatedList):
     while i < len(data):
         voice = False
         speaker = ""
-        newline = r"\n"
+        newline = r"\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\n"
+        colorCode = r"\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\C"
 
         # Custom
-        regex = r'{.+?"Text[\\]+":[\\]+"[\\]+}[\\]*(.+?)[\\]'
+        regex = r'\\+"HelpText\\+":\\+"(.+?)\\+",'
         matchList = re.findall(regex, data[i])
         if len(matchList) > 0:
             for match in matchList:
@@ -209,8 +210,12 @@ def translatePlugin(data, pbar, filename, translatedList):
                 jaString = match
                 originalString = jaString
 
+                # Replace \n and \c
+                jaString = re.sub(r"\\+n", r"\\n", jaString)
+                jaString = re.sub(r"\\+C", r"\\C", jaString)
+
                 # Remove any textwrap
-                jaString = jaString.replace(newline, " ")
+                # jaString = jaString.replace(newline, " ")
 
                 # Pass 1
                 if setData == False:
@@ -225,10 +230,18 @@ def translatePlugin(data, pbar, filename, translatedList):
 
                         # Set to None if empty list
                         if len(translatedList) <= 0:
-                            translatedList = None
+                            translatedList = None                        
 
                         # Replace Single Quotes
-                        translatedText = re.sub(r'[^\\]"', '\\"', translatedText)
+                        translatedText = re.sub(r"([^\\'])'", r"\1\\'", translatedText)
+                        translatedText = re.sub(r"([^\\'])\"", r"\1\\'", translatedText)
+
+                        # Textwrap
+                        # translatedText = textwrap.fill(translatedText, WIDTH)
+
+                        # Replace \n and \c
+                        translatedText = re.sub(r"\\+n", re.escape(newline), translatedText)
+                        translatedText = re.sub(r"\\+C", re.escape(colorCode), translatedText)
 
                         # Set Data
                         data[i] = data[i].replace(originalString, translatedText)

@@ -1,10 +1,16 @@
 Here are some vocabulary and terms so that you know the proper spelling and translation.
 ```
 # Game Characters
-イルミナ (Lumina) - Female
-セラ (Sera) - Female
-リアン (Lian) - Female
-イニス (Inis) - Female
+レイア (Leia) - Female
+リード (Reed) - Male
+プリシア (Priscia) - Female
+ゲイル (Gale) - Male
+ミシェル (Michelle) - Female
+アルベール (Albert) - Male
+ケイシー (Casey) - Gender Neutral
+エリオット (Elliot) - Male
+ローザ (Rosa) - Female
+ユーリ (Yuri) - Gender Neutral
 
 # Lewd Terms
 マンコ (pussy)
@@ -96,50 +102,46 @@ w ((lol))
 巫女 (Shrine Maiden)
 ２万 (20,000)
 
-# Locations
-サイノ河 (Saino River)
-オソレ峠 一幕 (Osore Pass Act One)
+#Weapons
+ショートソード (Short Sword)
+ロングソード (Long Sword)
+ファルシオン (Falchion)
+ミスリルソード (Mithril Sword)
+ドラゴンブレード (Dragon Blade)
+ウッドスタッフ (Wood Staff)
+マジックワンド (Magic Wand)
+フォースワンド (Force Wand)
+ミスリルロッド (Mithril Rod)
+ドラゴンスタッフ (Dragon Staff)
+ストーンフレイル (Stone Flail)
+ブロンズフレイル (Bronze Flail)
+モーニングスター (Morning Star)
+ミスリルフレイル (Mithril Flail)
+ドラゴンフレイル (Dragon Flail)
+ハンドアクス (Hand Axe)
+バトルアクス (Battle Axe)
+バルディッシュ (Bardiche)
+ミスリルアクス (Mithril Axe)
+ドラゴンアクス (Dragon Axe)
+ショートスピア (Short Spear)
+ロングスピア (Long Spear)
+ハルバード (Halberd)
+ミスリルスピア (Mithril Spear)
+ドラゴンスピア (Dragon Spear)
+セスタス (Cestus)
+バグナウ (Bagh Nakh)
+アイアンクロウ (Iron Claw)
+ミスリルクロウ (Mithril Claw)
+ドラゴンクロウ (Dragon Claw)
+ショートボウ (Short Bow)
+ロングボウ (Long Bow)
+クロスボウ (Crossbow)
+ミスリルボウ (Mithril Bow)
+ドラゴンボウ (Dragon Bow)
+ナイフ (Knife)
+ダガー (Dagger)
+マシェット (Machete)
+ミスリルダガー (Mithril Dagger)
+ドラゴンダガー (Dragon Dagger)
 
-#Skills
-ヒール (Heal)
-ファイア (Fire)
-スパーク (Spark)
-アーマーブレイク (Armor Break)
-チートアタック (Cheat Attack)
-ゴブリン拘束攻撃 (Goblin Restraint Attack)
-ゴブリン拘束攻撃バックアップ (Goblin Restraint Attack Backup)
-■↓イルミナの技↓■ (■↓Lumina's Skills↓■)
-ホーリーインパクト (Holy Impact)
-セイントアロー (Saint Arrow)
-ホーリーインパクトII (Holy Impact II)
-セイントアローII (Saint Arrow II)
-ヒール (Heal)
-クリアウィンド (Clear Wind)
-エクスプロージョン (Explosion)
-アンチマジック (Anti-Magic)
-リザレクション (Resurrection)
-リジェネ (Regen)
-ルミナス・ゲイル (Luminous Gale)
-プロメテウスバースト (Prometheus Burst)
-コキュートス (Cocytus)
-ディエス・イラ (Dies Irae)
-■インフェリアード行動■ (■ Inferiard Actions ■)
-ブロッサムスラッシュ (Blossom Slash)
-ラッシュオブアイビー (Rush of Ivy)
-デバウアーブロッサム (Devour Blossom)
-■マクスウェル行動■ (■ Maxwell Actions ■)
-チャージ (Charge)
-サンダーフォース (Thunder Force)
-オーバードライブ・キャノン (Overdrive Cannon)
-マシンガン (Machine Gun)
-■ナイトメア (■ Nightmare)
-イントロイトゥス (Introitus)
-タルタロス・ハウル (Tartarus Howl)
-ユーディキウム (Eudicium)
-ソムニウム・シネフィーネ (Somnium Cinefine)
-ラクリモーサ (Lacrimosa)
-モルス・ウルティマ (Mors Ultima)
-リベラ・メ (Libera Me)
-ディエス・イレ (Dies Irae)
-乱舞 (Wild Dance)
 ```
