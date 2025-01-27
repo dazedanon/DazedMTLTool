@@ -80,9 +80,9 @@ POSITION = 0
 LEAVE = False
 
 # Dialogue / Scroll / Choices (Main Codes)
-CODE401 = True
-CODE405 = True
-CODE102 = True
+CODE401 = False
+CODE405 = False
+CODE102 = False
 
 # Optional
 CODE101 = False  # Turn this one when names exist in 101
@@ -93,7 +93,7 @@ CODE122 = False
 
 # Other
 CODE355655 = False
-CODE357 = False
+CODE357 = True
 CODE657 = False
 CODE356 = False
 CODE320 = False
@@ -1277,90 +1277,80 @@ def searchCodes(page, pbar, jobList, filename):
                         # Set Data
                         codeList[i]["parameters"][3]["choices"] = translatedText
 
-                if "LL_InfoPopupWIndow" in headerString:
-                    argVar = "messageText"
-                    font = None
-                elif "QuestSystem" in headerString:
-                    argVar = "DetailNote"
-                    font = None
-                elif "BalloonInBattle" in headerString:
-                    argVar = "text"
-                    font = None
-                elif "MNKR_CommonPopupCoreMZ" in headerString:
-                    argVar = "text"
-                    font = None
-                elif "DestinationWindow" in headerString:
-                    argVar = "destination"
-                    font = None
-                elif "_TMLogWindowMZ" in headerString:
-                    argVar = "text"
-                    font = None
-                elif "TorigoyaMZ_NotifyMessage" in headerString:
-                    argVar = "message"
-                    font = None
-                elif "SoR_GabWindow" in headerString:
-                    argVar = "arg1"
-                    font = None
-                elif "DarkPlasma_CharacterText" in headerString:
-                    argVar = "text"
-                    font = None
-
-                ### Message Text First
-                if argVar in codeList[i]["parameters"][3]:
-                    acExist = False
-                    jaString = codeList[i]["parameters"][3][argVar]
-
-                    # Check ac
-                    if "\\ac" in jaString:
-                        acExist = True
-                    else:
+                def translatePlugins(argVar, font):
+                    ### Message Text First
+                    if argVar in codeList[i]["parameters"][3]:
                         acExist = False
+                        jaString = codeList[i]["parameters"][3][argVar]
 
-                    # If there isn't any Japanese in the text just skip
-                    # if not re.search(r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴー]+', jaString):
-                    #     i += 1
-                    #     continue
+                        # Check ac
+                        if "\\ac" in jaString:
+                            acExist = True
+                        else:
+                            acExist = False
 
-                    # Remove any textwrap & TL
-                    jaString = jaString.replace('\\n', ' ')
-                    if acExist:
-                        jaString = jaString.replace("\\ac ", " ")
-                        jaString = jaString.replace("\\ac", "")
+                        # If there isn't any Japanese in the text just skip
+                        # if not re.search(r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴー]+', jaString):
+                        #     i += 1
+                        #     continue
 
-                    # Pass 1
-                    if setData == False:
-                        list357.append(jaString)
+                        # Remove any textwrap & TL
+                        jaString = jaString.replace('\\n', ' ')
+                        if acExist:
+                            jaString = jaString.replace("\\ac ", " ")
+                            jaString = jaString.replace("\\ac", "")
 
-                    # Pass 2
-                    else:
-                        if len(list357) > 0:
-                            # Grab and Replace
-                            translatedText = list357[0]
-                            translatedText = jaString.replace(jaString, translatedText)
+                        # Pass 1
+                        if setData == False:
+                            list357.append(jaString)
 
-                            # Remove characters that may break scripts
-                            charList = ['"', "\\n"]
-                            for char in charList:
-                                translatedText = translatedText.replace(char, "")
+                        # Pass 2
+                        else:
+                            if len(list357) > 0:
+                                # Grab and Replace
+                                translatedText = list357[0]
+                                translatedText = jaString.replace(jaString, translatedText)
 
-                            # Textwrap
-                            translatedText = textwrap.fill(translatedText, 80)
-                            translatedText = translatedText.replace('\n', '\\n')
-                            translatedText = re.sub(r"[\\]+c", r"\\\\c", translatedText)
-                            translatedText = re.sub(r"[\\]+\*item", r"\\\\*item", translatedText)
+                                # Remove characters that may break scripts
+                                charList = ['"', "\\n"]
+                                for char in charList:
+                                    translatedText = translatedText.replace(char, "")
 
-                            # Center Text
-                            if acExist:
-                                translatedText = f'\\ac {translatedText.replace('\n', '\n\\ac ')}'
+                                # Textwrap
+                                translatedText = textwrap.fill(translatedText, 80)
+                                translatedText = translatedText.replace('\n', '\\n')
+                                translatedText = re.sub(r"[\\]+c", r"\\\\c", translatedText)
+                                translatedText = re.sub(r"[\\]+\*item", r"\\\\*item", translatedText)
 
-                            # Check and Set Font
-                            if "fontSize" in codeList[i]["parameters"][3]:
-                                if font:
-                                    codeList[i]["parameters"][3]["fontSize"] = font
+                                # Center Text
+                                if acExist:
+                                    translatedText = f'\\ac {translatedText.replace('\n', '\n\\ac ')}'
 
-                            # Set
-                            codeList[i]["parameters"][3][argVar] = f"{translatedText}"
-                            list357.pop(0)
+                                # Check and Set Font
+                                if "fontSize" in codeList[i]["parameters"][3]:
+                                    if font:
+                                        codeList[i]["parameters"][3]["fontSize"] = font
+
+                                # Set
+                                codeList[i]["parameters"][3][argVar] = f"{translatedText}"
+                                list357.pop(0)
+
+                # Map Plugins
+                headerMappings = {
+                    "LL_InfoPopupWIndow": ("messageText", None),
+                    "QuestSystem": ("DetailNote", None),
+                    "BalloonInBattle": ("text", None),
+                    "MNKR_CommonPopupCoreMZ": ("text", None),
+                    "DestinationWindow": ("destination", None),
+                    "_TMLogWindowMZ": ("text", None),
+                    "TorigoyaMZ_NotifyMessage": ("message", None),
+                    "SoR_GabWindow": ("arg1", None),
+                    "DarkPlasma_CharacterText": ("text", None)
+                }
+
+                for key, (argVar, font) in headerMappings.items():
+                    if key in headerString:
+                        translatePlugins(argVar, font)
 
             ## Event Code: 657 [Picture Text] [Optional]
             if "code" in codeList[i] and codeList[i]["code"] == 657 and CODE657 is True:
