@@ -190,7 +190,10 @@ def parseCSV(readFile, writeFile, filename):
 
     reader = csv.reader(readFile, delimiter=",")
     if not ESTIMATE:
-        writer = csv.writer(writeFile, delimiter=",", )
+        writer = csv.writer(
+            writeFile,
+            delimiter=",",
+        )
     else:
         writer = ""
 

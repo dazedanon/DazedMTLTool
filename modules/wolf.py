@@ -831,8 +831,8 @@ def searchDB(events, pbar, jobList, filename):
                                 for jaString in jaStringList:
                                     # Pass 1 (Grab Data)
                                     if setData == False:
-                                        jaString = jaString.replace('\n', ' ')
-                                        jaString = jaString.replace('\r', '')
+                                        jaString = jaString.replace("\n", " ")
+                                        jaString = jaString.replace("\r", "")
                                         scenarioList[0].append(jaString)
 
                                     # Pass 2 (Set Data)

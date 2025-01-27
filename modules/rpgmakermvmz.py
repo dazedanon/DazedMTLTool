@@ -38,7 +38,7 @@ ESTIMATE = ""
 TOKENS = [0, 0]
 NAMESLIST = []
 FIRSTLINESPEAKERS = False  # If 1st line of dialogue is a speaker, set to True
-FACENAME101 =  False     # Find Speakers in 101 Codes based on Face Name
+FACENAME101 = False  # Find Speakers in 101 Codes based on Face Name
 NAMES = False  # Output a list of all the character names found
 BRFLAG = False  # If the game uses <br> instead
 FIXTEXTWRAP = True  # Overwrites textwrap
@@ -878,7 +878,7 @@ def searchCodes(page, pbar, jobList, filename):
                 if len(codeList[i]["parameters"]) > 0:
                     jaString = codeList[i]["parameters"][0]
                     # Check if there is text to translate
-                    if not re.search(r'\w+', jaString):
+                    if not re.search(r"\w+", jaString):
                         i += 1
                         continue
                     oldjaString = jaString
@@ -1295,7 +1295,7 @@ def searchCodes(page, pbar, jobList, filename):
                         #     continue
 
                         # Remove any textwrap & TL
-                        jaString = jaString.replace('\\n', ' ')
+                        jaString = jaString.replace("\\n", " ")
                         if acExist:
                             jaString = jaString.replace("\\ac ", " ")
                             jaString = jaString.replace("\\ac", "")
@@ -1318,7 +1318,7 @@ def searchCodes(page, pbar, jobList, filename):
 
                                 # Textwrap
                                 translatedText = textwrap.fill(translatedText, 80)
-                                translatedText = translatedText.replace('\n', '\\n')
+                                translatedText = translatedText.replace("\n", "\\n")
                                 translatedText = re.sub(r"[\\]+c", r"\\\\c", translatedText)
                                 translatedText = re.sub(r"[\\]+\*item", r"\\\\*item", translatedText)
 
@@ -1345,7 +1345,7 @@ def searchCodes(page, pbar, jobList, filename):
                     "_TMLogWindowMZ": ("text", None),
                     "TorigoyaMZ_NotifyMessage": ("message", None),
                     "SoR_GabWindow": ("arg1", None),
-                    "DarkPlasma_CharacterText": ("text", None)
+                    "DarkPlasma_CharacterText": ("text", None),
                 }
 
                 for key, (argVar, font) in headerMappings.items():
