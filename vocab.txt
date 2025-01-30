@@ -1,16 +1,12 @@
 Here are some vocabulary and terms so that you know the proper spelling and translation.
 ```
 # Game Characters
-レイア (Leia) - Female
-リード (Reed) - Male
-プリシア (Priscia) - Female
-ゲイル (Gale) - Male
-ミシェル (Michelle) - Female
-アルベール (Albert) - Male
-ケイシー (Casey) - Gender Neutral
-エリオット (Elliot) - Male
-ローザ (Rosa) - Female
-ユーリ (Yuri) - Gender Neutral
+水原　雪 (Mizuhara Yuki) - Female
+彩芽 (Ayame) - Female
+水原　独苑 (Mizuhara Dokuen) - Male
+空木 (Utsugi) - Male
+金目 (Kaname) - Male
+銀目 (Ginme) - Male
 
 # Lewd Terms
 マンコ (pussy)
@@ -37,13 +33,13 @@ Here are some vocabulary and terms so that you know the proper spelling and tran
 せんせい (sensei)
 にいさん (nii-san)
 兄さん (nii-san)
+兄者 (elder brother)
 お兄ちゃん (onii-san)
 姉さん (nee-san)
 お姉ちゃん (onee-chan)
 お姉ちゃん (onee-chan)
 ねえさん (nee-san)
 おじさん (oji-san)
-あいつ (they)
 
 # System
 初めから (Start)
@@ -66,7 +62,6 @@ ME 音量 (ME Volume)
 回想する (Recollection)
 
 # RPG
-魂 (Soul)
 エクスポーション (EX Potion)
 アスカロン (Ascalon)
 刀 (Sword)
@@ -74,6 +69,8 @@ ME 音量 (ME Volume)
 会話 (Conversation)
 収集 (Collect)
 討伐 (Subjugate)
+破滅 (Destruction)
+魂 (Soul)
 
 # Demons/Angels
 悪魔 (Devil)  
@@ -101,47 +98,5 @@ ME 音量 (ME Volume)
 w ((lol))
 巫女 (Shrine Maiden)
 ２万 (20,000)
-
-#Weapons
-ショートソード (Short Sword)
-ロングソード (Long Sword)
-ファルシオン (Falchion)
-ミスリルソード (Mithril Sword)
-ドラゴンブレード (Dragon Blade)
-ウッドスタッフ (Wood Staff)
-マジックワンド (Magic Wand)
-フォースワンド (Force Wand)
-ミスリルロッド (Mithril Rod)
-ドラゴンスタッフ (Dragon Staff)
-ストーンフレイル (Stone Flail)
-ブロンズフレイル (Bronze Flail)
-モーニングスター (Morning Star)
-ミスリルフレイル (Mithril Flail)
-ドラゴンフレイル (Dragon Flail)
-ハンドアクス (Hand Axe)
-バトルアクス (Battle Axe)
-バルディッシュ (Bardiche)
-ミスリルアクス (Mithril Axe)
-ドラゴンアクス (Dragon Axe)
-ショートスピア (Short Spear)
-ロングスピア (Long Spear)
-ハルバード (Halberd)
-ミスリルスピア (Mithril Spear)
-ドラゴンスピア (Dragon Spear)
-セスタス (Cestus)
-バグナウ (Bagh Nakh)
-アイアンクロウ (Iron Claw)
-ミスリルクロウ (Mithril Claw)
-ドラゴンクロウ (Dragon Claw)
-ショートボウ (Short Bow)
-ロングボウ (Long Bow)
-クロスボウ (Crossbow)
-ミスリルボウ (Mithril Bow)
-ドラゴンボウ (Dragon Bow)
-ナイフ (Knife)
-ダガー (Dagger)
-マシェット (Machete)
-ミスリルダガー (Mithril Dagger)
-ドラゴンダガー (Dragon Dagger)
 
 ```
