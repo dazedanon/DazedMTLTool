@@ -138,7 +138,7 @@ def handleMVMZ(filename, estimate):
 
 
 def openFiles(filename):
-    with open("files/" + filename, "r", encoding="utf-8-sig") as f:
+    with open("files/" + filename, "r", encoding="utf-8") as f:
         data = json.load(f)
 
         # Map Files
@@ -1314,7 +1314,7 @@ def searchCodes(page, pbar, jobList, filename):
                 for key, (argVar, font) in headerMappings.items():
                     if key in headerString:
                         translatePlugins(argVar, font)
-                
+
                 if headerString == "LL_GalgeChoiceWindow":
                     ### Message Text First
                     jaString = codeList[i]["parameters"][3]["messageText"]
