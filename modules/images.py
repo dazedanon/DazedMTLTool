@@ -208,7 +208,7 @@ def stringToImage(text, width, height, font_path="fonts/TsunagiGothic.ttf", scal
     text_width = text_bbox[2] - text_bbox[0]
     text_height = text_bbox[3] - text_bbox[1] + 20
     x = 0
-    
+
     x = (scaled_width - text_width) // 2
     y = (scaled_height - text_height) // 2
 
@@ -223,12 +223,14 @@ def stringToImage(text, width, height, font_path="fonts/TsunagiGothic.ttf", scal
 
     return image
 
+
 from PIL import Image, ImageDraw, ImageFont
+
 
 def stringToImageOutline(text, width, height, font_path="fonts/TsunagiGothic.ttf", scale_factor=4):
     # Outline
-    outline_color=(0, 0, 0, 255)
-    outline_thickness=4
+    outline_color = (0, 0, 0, 255)
+    outline_thickness = 4
 
     # Increase the resolution
     scaled_width = int(width * scale_factor)
@@ -269,6 +271,7 @@ def stringToImageOutline(text, width, height, font_path="fonts/TsunagiGothic.ttf
 
     return image
 
+
 def stringToImageBox(text, width, height, font_path="fonts/TsunagiGothic.ttf", scale_factor=4):
     # Increase the resolution
     scaled_width = int(width * scale_factor)
@@ -304,17 +307,10 @@ def stringToImageBox(text, width, height, font_path="fonts/TsunagiGothic.ttf", s
     y = (scaled_height - text_height) // 2
 
     # Draw a black box with a white outline that fits the image dimensions precisely
-    draw.rectangle(
-        [0, 0, scaled_width - 1, scaled_height - 1],
-        outline=(255, 255, 255, 255),
-        width=1
-    )
+    draw.rectangle([0, 0, scaled_width - 1, scaled_height - 1], outline=(255, 255, 255, 255), width=1)
 
     # Fill the inside box with black color
-    draw.rectangle(
-        [1, 1, scaled_width - 2, scaled_height - 2],
-        fill=(0, 0, 0, 255)
-    )
+    draw.rectangle([1, 1, scaled_width - 2, scaled_height - 2], fill=(0, 0, 0, 255))
 
     # Render the text within the image
     draw.text((x, y), text, font=font, fill=(255, 255, 255, 255))
