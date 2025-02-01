@@ -315,7 +315,7 @@ def searchCodes(events, pbar, jobList, filename):
 
                         # Set nametag and remove from string
                         codeList[i]["stringArgs"][0] = codeList[i]["stringArgs"][0].replace(match.group(1), speaker)
-                
+
                 # Grab Only Text
                 match = re.search(r"\n\s+([\w\W\n]+)", codeList[i]["stringArgs"][0])
                 if match:

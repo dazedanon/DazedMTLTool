@@ -93,7 +93,7 @@ CODE122 = False
 
 # Other
 CODE355655 = False
-CODE357 = True
+CODE357 = False
 CODE657 = False
 CODE356 = False
 CODE320 = False
@@ -246,7 +246,16 @@ def parseMap(data, filename):
 
     # Get total for progress bar
     for event in events:
-        if event is not None:
+        if event:
+            if "<LB>" in event["note"]:
+                response = translateGPT(
+                    event["name"],
+                    "Reply with only the " + LANGUAGE + " translation of the RPG location name",
+                    False,
+                )
+                totalTokens[0] += response[1][0]
+                totalTokens[1] += response[1][1]
+                event["name"] = response[0].replace('"', "")
             for page in event["pages"]:
                 totalLines += len(page["list"])
 
@@ -1057,12 +1066,6 @@ def searchCodes(page, pbar, jobList, filename):
                         for match in rcodeMatch:
                             finalJAString = finalJAString.replace(match[0], match[1])
 
-                    # Formatting
-                    formatMatch = re.findall(r"[\\]+[!><.|#^{}]", finalJAString)
-                    if len(formatMatch) > 0:
-                        for match in formatMatch:
-                            finalJAString = finalJAString.replace(match, "")
-
                     # Remove any RPGMaker Code at start
                     ffMatch = re.search(
                         r"^(\s*[\\]+[aAbBdDeEfFgGhHjJlLmMoOpPqQrRsStTuUwWxXyYzZ]+\[[\w\d\[\]\\]+?\])",
@@ -1181,7 +1184,7 @@ def searchCodes(page, pbar, jobList, filename):
             ## Event Code: 122 [Set Variables]
             if "code" in codeList[i] and codeList[i]["code"] == 122 and CODE122 is True:
                 # This is going to be the var being set. (IMPORTANT)
-                if codeList[i]["parameters"][0] not in list(range(410, 430)):
+                if codeList[i]["parameters"][0] not in list(range(18, 19)):
                     i += 1
                     continue
 
@@ -1282,7 +1285,7 @@ def searchCodes(page, pbar, jobList, filename):
                                 # Textwrap
                                 translatedText = textwrap.fill(translatedText, 80)
                                 translatedText = translatedText.replace("\n", "\\n")
-                                translatedText = re.sub(r"[\\]+c", r"\\\\c", translatedText)
+                                # translatedText = re.sub(r"[\\]+c", r"\\\\c", translatedText)
                                 translatedText = re.sub(r"[\\]+\*item", r"\\\\*item", translatedText)
 
                                 # Center Text
@@ -1309,6 +1312,7 @@ def searchCodes(page, pbar, jobList, filename):
                     "TorigoyaMZ_NotifyMessage": ("message", None),
                     "SoR_GabWindow": ("arg1", None),
                     "DarkPlasma_CharacterText": ("text", None),
+                    "DTextPicture": ("text", None),
                 }
 
                 for key, (argVar, font) in headerMappings.items():
@@ -1497,7 +1501,7 @@ def searchCodes(page, pbar, jobList, filename):
             ## Event Code: 355 or 655 Scripts [Optional]
             if "code" in codeList[i] and (codeList[i]["code"] == 355 or codeList[i]["code"] == 655) and CODE355655 is True:
                 jaString = codeList[i]["parameters"][0]
-                regexPatterns = [r"テキスト-(.*)"]
+                regexPatterns = [r'setValue\((.+)\)']
 
                 # Iterate over the list of regex patterns
                 for regex in regexPatterns:

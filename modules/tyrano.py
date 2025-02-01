@@ -234,21 +234,21 @@ def translateTyrano(data, translatedList):
 
             # Combine w/ next line if necessary
             repeatRegex = r"(.+?)\[[rpl]\]"
-            match = re.search(repeatRegex, data[i+1])
+            match = re.search(repeatRegex, data[i + 1])
             while match and "[p]" not in data[i]:
                 jaString = jaString + match.group(1)
                 jaString = jaString.replace("_　", "")
-                if "[p]" in data[i+1]:
+                if "[p]" in data[i + 1]:
                     data[i] = f"{jaString}[p]\n"
                 else:
                     data[i] = jaString
-                del data[i+1]
-                match = re.search(repeatRegex, data[i+1])
+                del data[i + 1]
+                match = re.search(repeatRegex, data[i + 1])
 
             originalString = jaString
 
             # Pass 1
-            if not translatedList:                
+            if not translatedList:
                 # Remove any textwrap and commands
                 jaString = jaString.replace("[r]", " ")
                 jaString = jaString.replace("[l]", "")
@@ -290,7 +290,7 @@ def translateTyrano(data, translatedList):
 
                     # Textwrap
                     translatedText = textwrap.fill(translatedText, width=WIDTH)
-                    translatedText = translatedText.replace('\n', '[r]')
+                    translatedText = translatedText.replace("\n", "[r]")
 
                     # Set Data
                     data[i] = data[i].replace(originalString, translatedText)
