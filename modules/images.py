@@ -81,24 +81,23 @@ def handleImages(folderName, estimate):
     translatedData = openFiles(f"files/{folderName}")
 
     # Custom Names
-    customList = [[], []]
-    customList = processImagesDir("Custom", customList)
+    # customList = [[], []]
+    # customList = processImagesDir("Custom", customList)
 
-    # Write Strings to Images
-    if not ESTIMATE:
-        if not os.path.exists(f"translated/{folderName}"):
-            os.mkdir(f"translated/{folderName}")
-        for i in range(len(translatedData[0][0])):
+    # Write TL To Images
+    try:
+        translatedList, originalList, dimensionsList = translatedData[0]
+        for i in range(len(translatedList)):
             try:
-                translatedList = translatedData[0][0]
-                originalList = translatedData[0][1]
-                dimensionsList = translatedData[0][2]
-                image = stringToImage(translatedList[i], dimensionsList[i][0], dimensionsList[i][1])
-                image.save(rf"translated/{folderName}/{customList[0][0]}.png", quality=100)
-                customList[0].pop(0)
+                # Create image from string
+                image = stringToImageOutline(translatedList[i], dimensionsList[i][0], dimensionsList[i][1])
+                # Save image using the corresponding original filename
+                image.save(rf"translated/{folderName}/{originalList[i]}.png", quality=100)
             except Exception as e:
-                PBAR.write(f"{translatedList[i]}: {str(e)}")
-                # Ignore Error
+                # Log error if image saving fails
+                PBAR.write(f"Error processing {translatedList[i]}: {str(e)}")
+    except IndexError:
+        PBAR.write("Translated data is incomplete. Please check your input.")
 
     # Print File
     end = time.time()
@@ -121,7 +120,7 @@ def openFiles(folderName):
     global PBAR
 
     if os.path.isdir(folderName):
-        imageList = [[], []]
+        imageList = [[], [], []]
         imageList = processImagesDir(folderName, imageList)
 
         # Start Translation
@@ -134,7 +133,7 @@ def openFiles(folderName):
         ) as PBAR:
             translatedData = translateImages(imageList)
             translatedData = [
-                [translatedData[0], imageList[0], imageList[1]],
+                [translatedData[0], imageList[2], imageList[1]],
                 translatedData[1],
                 translatedData[2],
             ]
@@ -209,12 +208,118 @@ def stringToImage(text, width, height, font_path="fonts/TsunagiGothic.ttf", scal
     text_width = text_bbox[2] - text_bbox[0]
     text_height = text_bbox[3] - text_bbox[1] + 20
     x = 0
+    
+    x = (scaled_width - text_width) // 2
     y = (scaled_height - text_height) // 2
 
     # Draw the text on the image
     draw.text((x, y), text, font=font, fill=(255, 255, 255, 255))
 
     # Resize back to the original dimensions to get a clearer text rendering
+    image = image.resize(
+        (width, height),
+        Image.LANCZOS,
+    )
+
+    return image
+
+from PIL import Image, ImageDraw, ImageFont
+
+def stringToImageOutline(text, width, height, font_path="fonts/TsunagiGothic.ttf", scale_factor=4):
+    # Outline
+    outline_color=(0, 0, 0, 255)
+    outline_thickness=4
+
+    # Increase the resolution
+    scaled_width = int(width * scale_factor)
+    scaled_height = int(height * scale_factor)
+
+    # Find the appropriate font size for the scaled up image
+    font_size = getFontSize(text, scaled_width, scaled_height, font_path)
+    if font_size == 0:
+        raise ValueError("Text is too long to fit in the supplied dimensions.")
+
+    # Create a new image with the scaled width and height and a transparent background
+    image = Image.new("RGBA", (scaled_width, scaled_height), (255, 255, 255, 0))
+
+    # Create a drawing context
+    draw = ImageDraw.Draw(image)
+
+    # Load the appropriate font
+    font = ImageFont.truetype(font_path, font_size)
+
+    # Calculate the size of the text to center it
+    text_bbox = draw.textbbox((0, 0), text, font=font)
+    text_width = text_bbox[2] - text_bbox[0]
+    text_height = text_bbox[3] - text_bbox[1] + 20
+    x = (scaled_width - text_width) // 2
+    y = (scaled_height - text_height) // 2
+
+    # Draw the text outline by applying the text multiple times with small offsets
+    for dx in range(-outline_thickness, outline_thickness + 1):
+        for dy in range(-outline_thickness, outline_thickness + 1):
+            if dx != 0 or dy != 0:
+                draw.text((x + dx, y + dy), text, font=font, fill=outline_color)
+
+    # Draw the main text
+    draw.text((x, y), text, font=font, fill=(60, 160, 230, 255))
+
+    # Resize back to the original dimensions to get a clearer text rendering
+    image = image.resize((width, height), Image.LANCZOS)
+
+    return image
+
+def stringToImageBox(text, width, height, font_path="fonts/TsunagiGothic.ttf", scale_factor=4):
+    # Increase the resolution
+    scaled_width = int(width * scale_factor)
+    scaled_height = int(height * scale_factor)
+
+    # Padding around the text
+    padding = 10
+
+    # Calculate the dimensions available for text placement
+    available_width = scaled_width - 2 * padding
+    available_height = scaled_height - 2 * padding
+
+    # Determine the best font size to fit within the available dimensions
+    font_size = getFontSize(text, available_width, available_height, font_path)
+    if font_size <= 0:
+        raise ValueError("Text is too long to fit in the supplied dimensions.")
+
+    # Create a new image with increased resolution
+    image = Image.new("RGBA", (scaled_width, scaled_height), (255, 255, 255, 0))
+    draw = ImageDraw.Draw(image)
+
+    # Load the calculated font
+    font = ImageFont.truetype(font_path, font_size)
+
+    # Calculate the size and bounding box of the text
+    text_bbox = draw.textbbox((0, 0), text, font=font)
+    text_width = text_bbox[2] - text_bbox[0]
+    text_height = text_bbox[3] - text_bbox[1] + 20
+
+    # Determine centered position for the text while considering padding
+    # Additional adjustment ensures text appears centrally aligned
+    x = (scaled_width - text_width) // 2
+    y = (scaled_height - text_height) // 2
+
+    # Draw a black box with a white outline that fits the image dimensions precisely
+    draw.rectangle(
+        [0, 0, scaled_width - 1, scaled_height - 1],
+        outline=(255, 255, 255, 255),
+        width=1
+    )
+
+    # Fill the inside box with black color
+    draw.rectangle(
+        [1, 1, scaled_width - 2, scaled_height - 2],
+        fill=(0, 0, 0, 255)
+    )
+
+    # Render the text within the image
+    draw.text((x, y), text, font=font, fill=(255, 255, 255, 255))
+
+    # Shrink the image back to original dimensions with high-quality interpolation
     image = image.resize(
         (width, height),
         Image.LANCZOS,
@@ -248,8 +353,14 @@ def processImagesDir(directory_path, imageList):
                         }
                         for target, replacement in placeholders.items():
                             file_name = file_name.replace(target, replacement)
-                        imageList[0].append(file_name)
+                            match = re.search(r"[\[【].+?[\]】](.*)", file_name)
+                            if match:
+                                text = match.group(1)
+                            else:
+                                text = file_name
+                        imageList[0].append(text)
                         imageList[1].append([width, height])
+                        imageList[2].append(file_name)
                 except Exception as e:
                     print(f"Error processing {file_name}: {e}")
 

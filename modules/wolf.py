@@ -81,8 +81,8 @@ PBAR = None
 FILENAME = None
 
 # Dialogue / Choices
-CODE101 = False
-CODE102 = False
+CODE101 = True
+CODE102 = True
 
 # Set String (Fragile but necessary)
 CODE122 = False
@@ -301,56 +301,56 @@ def searchCodes(events, pbar, jobList, filename):
             if codeList[i]["code"] == 101 and CODE101 == True:
                 # Grab String
                 jaString = codeList[i]["stringArgs"][0]
-                initialJAString = jaString
+                speaker = ""
 
                 # Grab Speaker
                 if "：\n" in jaString:
-                    nameList = re.findall(r"(.*)：\n", jaString)
-                    if nameList is not None:
+                    match = re.search(r"@\d+\n(.*)：\n", jaString)
+                    if match:
                         # TL Speaker
-                        response = getSpeaker(nameList[0])
+                        response = getSpeaker(match.group(1))
                         speaker = response[0]
                         totalTokens[0] += response[1][0]
                         totalTokens[1] += response[1][1]
 
                         # Set nametag and remove from string
-                        nametag = f"{speaker}：\n"
-                        jaString = jaString.replace(f"{nameList[0]}：\n", "")
+                        codeList[i]["stringArgs"][0] = codeList[i]["stringArgs"][0].replace(match.group(1), speaker)
+                
+                # Grab Only Text
+                match = re.search(r"\n\s+([\w\W\n]+)", codeList[i]["stringArgs"][0])
+                if match:
+                    jaString = match.group(1)
+                    initialJAString = jaString
 
-                # Remove Textwrap
-                jaString = jaString.replace("\n", " ")
+                    # Remove Textwrap
+                    jaString = jaString.replace("\n", " ")
 
-                # 1st Pass (Save Text to List)
-                if not setData:
-                    if speaker == "":
-                        stringList.append(jaString)
+                    # 1st Pass (Save Text to List)
+                    if not setData:
+                        if speaker == "":
+                            stringList.append(jaString)
+                        else:
+                            stringList.append(f"[{speaker}]: {jaString}")
+
+                    # 2nd Pass (Set Text)
                     else:
-                        stringList.append(f"[{speaker}]: {jaString}")
+                        # Grab Translated String
+                        translatedText = stringList[0]
 
-                # 2nd Pass (Set Text)
-                else:
-                    # Grab Translated String
-                    translatedText = stringList[0]
+                        # Remove speaker
+                        matchSpeakerList = re.findall(r"^(\[.+?\]\s?[|:]\s?)\s?", translatedText)
+                        if len(matchSpeakerList) > 0:
+                            translatedText = translatedText.replace(matchSpeakerList[0], "")
 
-                    # Remove speaker
-                    matchSpeakerList = re.findall(r"^(\[.+?\]\s?[|:]\s?)\s?", translatedText)
-                    if len(matchSpeakerList) > 0:
-                        translatedText = translatedText.replace(matchSpeakerList[0], "")
+                        # Textwrap
+                        if FIXTEXTWRAP is True:
+                            translatedText = textwrap.fill(translatedText, width=WIDTH)
 
-                    # Textwrap
-                    if FIXTEXTWRAP is True:
-                        translatedText = textwrap.fill(translatedText, width=WIDTH)
+                        # Set Data
+                        codeList[i]["stringArgs"][0] = codeList[i]["stringArgs"][0].replace(initialJAString, translatedText)
 
-                    # Add back Nametag
-                    translatedText = nametag + translatedText
-                    nametag = ""
-
-                    # Set Data
-                    codeList[i]["stringArgs"][0] = translatedText
-
-                    # Reset Data and Pop Item
-                    speaker = ""
-                    stringList.pop(0)
+                        # Reset Data and Pop Item
+                        stringList.pop(0)
 
             ### Event Code: 102 Choices
             if codeList[i]["code"] == 102 and CODE102 == True:
