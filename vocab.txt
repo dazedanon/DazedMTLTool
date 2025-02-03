@@ -1,18 +1,16 @@
 Here are some vocabulary and terms so that you know the proper spelling and translation.
 ```
 # Game Characters
-ジロウ (Jirou) - Male
-サクラ (Sakura) - Female
-ゼフ (Zeff) - Male
-ヨモダ (Yomada) - Male
-グダ (Guda) - Male
-フジワラ (Fujiwara) - Male
-ナオ (Nao) - Female
-タジ (Taji) - Male
-カリン (Karin) - Female
-セリナ (Serina) - Female
-ラグ (Ragu) - Male
-ハッカイ (Hakkai) - Male
+アイ (Ai) - Female
+シオン (Sion) - Female
+エリス (Eris) - Female
+杉浦 (Sugiura) - Female
+獏木 (Bakuki) - Female
+千里 (Chisato) - Female
+ハルカ (Haruka) - Female
+間根山 (Manemaya) - Female
+ミズキ (Mizuki) - Female
+ツヨシ (Tsuyoshi) - Male
  
 # Lewd Terms
 マンコ (pussy)

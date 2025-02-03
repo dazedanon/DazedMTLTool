@@ -516,57 +516,54 @@ def translateGPT(text, history, fullPromptFlag):
                 # Translating
                 response = translateText(system, user, history, 0.05, format)
 
+                # AI Refused. Try Again
+                if not response:
+                    response = translateText(system, user, history, 0.05, format, MODEL)
+                    if not response:
+                        continue
+
                 # Set Tokens
                 translatedText = response.choices[0].message.content
-
-                # AI Refused, Try Again
-                if not translatedText:
-                    response = translateText(system, user, history + "You Translate ALL content", 0.1, format)
-
-                # Report Tokens
                 totalTokens[0] += response.usage.prompt_tokens
                 totalTokens[1] += response.usage.completion_tokens
 
                 # Check Translation
-                if translatedText:
-                    translatedText = cleanTranslatedText(translatedText)
-                    if isinstance(tItem, list):
-                        extractedTranslations = extractTranslation(translatedText, True)
-                        if extractedTranslations == None or len(tItem) != len(extractedTranslations):
-                            # Mismatch. Try Again
-                            response = translateText(system, user, history, 0.05, format, MODEL)
-                            translatedText = response.choices[0].message.content
-                            totalTokens[0] += response.usage.prompt_tokens
-                            totalTokens[1] += response.usage.completion_tokens
+                translatedText = cleanTranslatedText(translatedText)
+                if isinstance(tItem, list):
+                    extractedTranslations = extractTranslation(translatedText, True)
+                    if extractedTranslations == None or len(tItem) != len(extractedTranslations):
+                        # Mismatch. Try Again
+                        response = translateText(system, user, history, 0.05, format, MODEL)
+                        translatedText = response.choices[0].message.content
+                        totalTokens[0] += response.usage.prompt_tokens
+                        totalTokens[1] += response.usage.completion_tokens
 
-                            # Formatting
-                            translatedText = cleanTranslatedText(translatedText)
-                            if isinstance(tItem, list):
-                                extractedTranslations = extractTranslation(translatedText, True)
-                                if extractedTranslations == None or len(tItem) != len(extractedTranslations):
-                                    mismatch = True  # Just here for breakpoint
-                        logFile.write(f"Input:\n{subbedT}\n")
-                        logFile.write(f"Output:\n{translatedText}\n")
+                        # Formatting
+                        translatedText = cleanTranslatedText(translatedText)
+                        if isinstance(tItem, list):
+                            extractedTranslations = extractTranslation(translatedText, True)
+                            if extractedTranslations == None or len(tItem) != len(extractedTranslations):
+                                mismatch = True  # Just here for breakpoint
+                    logFile.write(f"Input:\n{subbedT}\n")
+                    logFile.write(f"Output:\n{translatedText}\n")
 
-                        # Set if no mismatch
-                        if mismatch == False:
-                            tList[index] = extractedTranslations
-                            history = extractedTranslations[-MAXHISTORY:]  # Update history if we have a list
-                        else:
-                            history = text[-MAXHISTORY:]
-                            mismatch = False
-                            if FILENAME not in MISMATCH:
-                                MISMATCH.append(FILENAME)
-
-                        # Update Loading Bar
-                        with LOCK:
-                            if PBAR is not None:
-                                PBAR.update(len(tItem))
+                    # Set if no mismatch
+                    if mismatch == False:
+                        tList[index] = extractedTranslations
+                        history = extractedTranslations[-MAXHISTORY:]  # Update history if we have a list
                     else:
-                        # Ensure we're passing a single string to extractTranslation
-                        tList[index] = translatedText.replace("Placeholder Text", "")
+                        history = text[-MAXHISTORY:]
+                        mismatch = False
+                        if FILENAME not in MISMATCH:
+                            MISMATCH.append(FILENAME)
+
+                    # Update Loading Bar
+                    with LOCK:
+                        if PBAR is not None:
+                            PBAR.update(len(tItem))
                 else:
-                    PBAR.write(f"AI Refused:{tItem}\n")
+                    # Ensure we're passing a single string to extractTranslation
+                    tList[index] = translatedText.replace("Placeholder Text", "")
 
         # Combine if multilist
         if isinstance(tList[0], list):
