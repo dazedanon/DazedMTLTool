@@ -299,16 +299,13 @@ def searchCodes(events, pbar, jobList, filename):
         while i < len(codeList):
             ### Event Code: 101 Message
             if codeList[i]["code"] == 101 and CODE101 == True:
-                speakerRegex = r"@\d+\n(.*)：\n"
-                textRegex = r"@?\d*\n?\u3000*([\w\W]+)\n?"
-
                 # Grab String
                 jaString = codeList[i]["stringArgs"][0]
                 speaker = ""
 
                 # Grab Speaker
                 if "：\n" in jaString:
-                    match = re.search(speakerRegex, jaString)
+                    match = re.search(r"@\d+\n(.*)：\n", jaString)
                     if match:
                         # TL Speaker
                         response = getSpeaker(match.group(1))
@@ -318,10 +315,9 @@ def searchCodes(events, pbar, jobList, filename):
 
                         # Set nametag and remove from string
                         codeList[i]["stringArgs"][0] = codeList[i]["stringArgs"][0].replace(match.group(1), speaker)
-                        jaString = jaString.replace(match.group(0), "")
 
                 # Grab Only Text
-                match = re.search(textRegex, jaString)
+                match = re.search(r"\n\s+([\w\W\n]+)", codeList[i]["stringArgs"][0])
                 if match:
                     jaString = match.group(1)
                     initialJAString = jaString
@@ -822,14 +818,14 @@ def searchDB(events, pbar, jobList, filename):
                                     npcList[1].pop(0)
 
             # Grab Scenario
-            if "UI--" in table["name"] and SCENARIOFLAG == True:
+            if table["name"] == "回想ｲﾍﾞﾝﾄﾃｰﾌﾞﾙ" and SCENARIOFLAG == True:
                 for scenario in table["data"]:
                     dataList = scenario["data"]
 
                     # Parse
                     for j in range(len(dataList)):
                         # Name
-                        if "NULL" in dataList[j].get("name"):
+                        if "回想ﾃｷｽﾄ" in dataList[j].get("name"):
                             if dataList[j].get("value"):
                                 jaStringList = dataList[j].get("value").split("\r\nPFD\r\n")
                                 for jaString in jaStringList:
@@ -844,42 +840,6 @@ def searchDB(events, pbar, jobList, filename):
                                         translatedText = scenarioList[0][0]
                                         scenarioList[0].pop(0)
                                         translatedText = textwrap.fill(translatedText, 1000)
-                                        dataList[j].update({"value": dataList[j].get("value").replace(jaString, translatedText)})
-
-                        # Description 1
-                        if "説明文１" in dataList[j].get("name"):
-                            if dataList[j].get("value"):
-                                jaStringList = dataList[j].get("value").split("\r\nPFD\r\n")
-                                for jaString in jaStringList:
-                                    # Pass 1 (Grab Data)
-                                    if setData == False:
-                                        jaString = jaString.replace("\n", " ")
-                                        jaString = jaString.replace("\r", "")
-                                        scenarioList[1].append(jaString)
-
-                                    # Pass 2 (Set Data)
-                                    else:
-                                        translatedText = scenarioList[1][0]
-                                        scenarioList[1].pop(0)
-                                        translatedText = textwrap.fill(translatedText, 30)
-                                        dataList[j].update({"value": dataList[j].get("value").replace(jaString, translatedText)})
-
-                        # Description 2
-                        if "説明文２" in dataList[j].get("name"):
-                            if dataList[j].get("value"):
-                                jaStringList = dataList[j].get("value").split("\r\nPFD\r\n")
-                                for jaString in jaStringList:
-                                    # Pass 1 (Grab Data)
-                                    if setData == False:
-                                        jaString = jaString.replace("\n", " ")
-                                        jaString = jaString.replace("\r", "")
-                                        scenarioList[2].append(jaString)
-
-                                    # Pass 2 (Set Data)
-                                    else:
-                                        translatedText = scenarioList[2][0]
-                                        scenarioList[2].pop(0)
-                                        translatedText = textwrap.fill(translatedText, 30)
                                         dataList[j].update({"value": dataList[j].get("value").replace(jaString, translatedText)})
 
             # Grab Options
@@ -1717,7 +1677,7 @@ def searchDB(events, pbar, jobList, filename):
                 translate = True
 
         # SCENARIO
-        if scenarioList[0] or scenarioList[1]:
+        if len(scenarioList[0]) > 0:
             # Progress Bar
             total = 0
             for scenarioArray in scenarioList:
@@ -2283,36 +2243,33 @@ def translateText(system, user, history, penalty, format, model=MODEL):
 
 
 def cleanTranslatedText(translatedText):
-    if translatedText:
-        placeholders = {
-            f"{LANGUAGE} Translation: ": "",
-            "Translation: ": "",
-            "っ": "",
-            "〜": "~",
-            "ッ": "",
-            "。": ".",
-            "「": '\\"',
-            "」": '\\"',
-            "- ": "-",
-            "—": "―",
-            "】": "]",
-            "【": "[",
-            "é": "e",
-            "ō": "o",
-            "Placeholder Text": "",
-            # Add more replacements as needed
-        }
-        for target, replacement in placeholders.items():
-            translatedText = translatedText.replace(target, replacement)
+    placeholders = {
+        f"{LANGUAGE} Translation: ": "",
+        "Translation: ": "",
+        "っ": "",
+        "〜": "~",
+        "ッ": "",
+        "。": ".",
+        "「": '\\"',
+        "」": '\\"',
+        "- ": "-",
+        "—": "―",
+        "】": "]",
+        "【": "[",
+        "é": "e",
+        "ō": "o",
+        "Placeholder Text": "",
+        # Add more replacements as needed
+    }
+    for target, replacement in placeholders.items():
+        translatedText = translatedText.replace(target, replacement)
 
-        # Remove Repeating Characters
-        pattern = re.compile(r"(.)\s*\1(?:\s*\1){" + str(20 - 1) + r",}")
-        translatedText = pattern.sub(lambda match: match.group(0).replace(" ", "")[:20], translatedText)
+    # Remove Repeating Characters
+    pattern = re.compile(r"(.)\s*\1(?:\s*\1){" + str(20 - 1) + r",}")
+    translatedText = pattern.sub(lambda match: match.group(0).replace(" ", "")[:20], translatedText)
 
-        # Elongate Long Dashes (Since GPT Ignores them...)
-        translatedText = elongateCharacters(translatedText)
-    else:
-        print(translatedText)
+    # Elongate Long Dashes (Since GPT Ignores them...)
+    translatedText = elongateCharacters(translatedText)
     return translatedText
 
 
@@ -2422,57 +2379,54 @@ def translateGPT(text, history, fullPromptFlag):
                 # Translating
                 response = translateText(system, user, history, 0.05, format)
 
+                # AI Refused. Try Again
+                if not response:
+                    response = translateText(system, user, history, 0.05, format, MODEL)
+                    if not response:
+                        continue
+
                 # Set Tokens
                 translatedText = response.choices[0].message.content
-
-                # AI Refused, Try Again
-                if not translatedText:
-                    response = translateText(system, user, history + "You Translate ALL content", 0.1, format)
-
-                # Report Tokens
                 totalTokens[0] += response.usage.prompt_tokens
                 totalTokens[1] += response.usage.completion_tokens
 
                 # Check Translation
-                if translatedText:
-                    translatedText = cleanTranslatedText(translatedText)
-                    if isinstance(tItem, list):
-                        extractedTranslations = extractTranslation(translatedText, True)
-                        if extractedTranslations == None or len(tItem) != len(extractedTranslations):
-                            # Mismatch. Try Again
-                            response = translateText(system, user, history, 0.05, format, MODEL)
-                            translatedText = response.choices[0].message.content
-                            totalTokens[0] += response.usage.prompt_tokens
-                            totalTokens[1] += response.usage.completion_tokens
+                translatedText = cleanTranslatedText(translatedText)
+                if isinstance(tItem, list):
+                    extractedTranslations = extractTranslation(translatedText, True)
+                    if extractedTranslations == None or len(tItem) != len(extractedTranslations):
+                        # Mismatch. Try Again
+                        response = translateText(system, user, history, 0.05, format, MODEL)
+                        translatedText = response.choices[0].message.content
+                        totalTokens[0] += response.usage.prompt_tokens
+                        totalTokens[1] += response.usage.completion_tokens
 
-                            # Formatting
-                            translatedText = cleanTranslatedText(translatedText)
-                            if isinstance(tItem, list):
-                                extractedTranslations = extractTranslation(translatedText, True)
-                                if extractedTranslations == None or len(tItem) != len(extractedTranslations):
-                                    mismatch = True  # Just here for breakpoint
-                        logFile.write(f"Input:\n{subbedT}\n")
-                        logFile.write(f"Output:\n{translatedText}\n")
+                        # Formatting
+                        translatedText = cleanTranslatedText(translatedText)
+                        if isinstance(tItem, list):
+                            extractedTranslations = extractTranslation(translatedText, True)
+                            if extractedTranslations == None or len(tItem) != len(extractedTranslations):
+                                mismatch = True  # Just here for breakpoint
+                    logFile.write(f"Input:\n{subbedT}\n")
+                    logFile.write(f"Output:\n{translatedText}\n")
 
-                        # Set if no mismatch
-                        if mismatch == False:
-                            tList[index] = extractedTranslations
-                            history = extractedTranslations[-MAXHISTORY:]  # Update history if we have a list
-                        else:
-                            history = text[-MAXHISTORY:]
-                            mismatch = False
-                            if FILENAME not in MISMATCH:
-                                MISMATCH.append(FILENAME)
-
-                        # Update Loading Bar
-                        with LOCK:
-                            if PBAR is not None:
-                                PBAR.update(len(tItem))
+                    # Set if no mismatch
+                    if mismatch == False:
+                        tList[index] = extractedTranslations
+                        history = extractedTranslations[-MAXHISTORY:]  # Update history if we have a list
                     else:
-                        # Ensure we're passing a single string to extractTranslation
-                        tList[index] = translatedText.replace("Placeholder Text", "")
+                        history = text[-MAXHISTORY:]
+                        mismatch = False
+                        if FILENAME not in MISMATCH:
+                            MISMATCH.append(FILENAME)
+
+                    # Update Loading Bar
+                    with LOCK:
+                        if PBAR is not None:
+                            PBAR.update(len(tItem))
                 else:
-                    PBAR.write(f"AI Refused:{tItem}\n")
+                    # Ensure we're passing a single string to extractTranslation
+                    tList[index] = translatedText.replace("Placeholder Text", "")
 
         # Combine if multilist
         if isinstance(tList[0], list):
