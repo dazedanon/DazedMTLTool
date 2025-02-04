@@ -81,11 +81,11 @@ PBAR = None
 FILENAME = None
 
 # Dialogue / Choices
-CODE101 = True
-CODE102 = True
+CODE101 = False
+CODE102 = False
 
 # Set String (Fragile but necessary)
-CODE122 = False
+CODE122 = True
 CODE150 = False
 
 # Other
@@ -94,15 +94,15 @@ CODE300 = False
 CODE250 = False
 
 # Database
-SCENARIOFLAG = True
+SCENARIOFLAG = False
 OPTIONSFLAG = False
 NPCFLAG = False
 DBNAMEFLAG = False
-ITEMFLAG = False
+ITEMFLAG = True
 STATEFLAG = False
 ENEMYFLAG = False
-ARMORFLAG = False
-WEAPONFLAG = False
+ARMORFLAG = True
+WEAPONFLAG = True
 SKILLFLAG = False
 
 
@@ -977,7 +977,7 @@ def searchDB(events, pbar, jobList, filename):
                             dbNameList[0].pop(0)
 
             # Grab Items
-            if table["name"] == "Item" and ITEMFLAG == True:
+            if table["name"] == "アイテム" and ITEMFLAG == True:
                 # Write Category
                 if setData:
                     with open("translations.txt", "a", encoding="utf-8") as file:
@@ -989,7 +989,7 @@ def searchDB(events, pbar, jobList, filename):
 
                     # Parse
                     for j in range(len(dataList)):
-                        font = None
+                        font = "16"
                         # Name
                         if "アイテム名" in dataList[j].get("name"):
                             jaString = dataList[j].get("value")
@@ -1030,7 +1030,7 @@ def searchDB(events, pbar, jobList, filename):
 
                                     # Font
                                     if font:
-                                        translatedText = f"{font}{translatedText}"
+                                        translatedText = f"\\f[{font}]{translatedText}"
 
                                     # Set Data
                                     dataList[j].update({"value": translatedText})
@@ -1057,7 +1057,7 @@ def searchDB(events, pbar, jobList, filename):
 
                                     # Font
                                     if font:
-                                        translatedText = f"{font}{translatedText}"
+                                        translatedText = f"\\f[{font}]{translatedText}"
 
                                     # Set Data
                                     dataList[j].update({"value": translatedText})
@@ -1084,7 +1084,7 @@ def searchDB(events, pbar, jobList, filename):
 
                                     # Font
                                     if font:
-                                        translatedText = f"{font}{translatedText}"
+                                        translatedText = f"\\f[{font}]{translatedText}"
 
                                     # Set Data
                                     dataList[j].update({"value": translatedText})
@@ -1092,6 +1092,7 @@ def searchDB(events, pbar, jobList, filename):
 
             # Grab Armors
             if table["name"] == "防具" and ARMORFLAG == True:
+                font = "16"
                 for armor in table["data"]:
                     dataList = armor["data"]
 
@@ -1129,6 +1130,10 @@ def searchDB(events, pbar, jobList, filename):
                                     # Textwrap
                                     translatedText = armorList[1][0]
                                     translatedText = textwrap.fill(translatedText, LISTWIDTH)
+
+                                    # Font
+                                    if font:
+                                        translatedText = f"\\f[{font}]{translatedText}"
 
                                     # Set Data
                                     dataList[j].update({"value": translatedText})
@@ -1181,6 +1186,7 @@ def searchDB(events, pbar, jobList, filename):
 
             # Grab Weapons
             if table["name"] == "武器" and WEAPONFLAG == True:
+                font = "16"
                 for weapon in table["data"]:
                     dataList = weapon["data"]
 
@@ -1218,6 +1224,10 @@ def searchDB(events, pbar, jobList, filename):
                                     # Textwrap
                                     translatedText = weaponsList[1][0]
                                     translatedText = textwrap.fill(translatedText, LISTWIDTH)
+
+                                    # Font
+                                    if font:
+                                        translatedText = f"\\f[{font}]{translatedText}"
 
                                     # Set Data
                                     dataList[j].update({"value": translatedText})
