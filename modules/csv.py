@@ -62,7 +62,7 @@ elif "gpt-4" in MODEL:
     FREQUENCY_PENALTY = 0.05
 elif "deepseek" in MODEL:
     INPUTAPICOST = 0.14
-    OUTPUTAPICOST = 0.28
+    OUTPUTAPICOST = 1.10
     BATCHSIZE = 30
     FREQUENCY_PENALTY = 0.05
 else:
