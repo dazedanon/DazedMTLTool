@@ -1,16 +1,14 @@
 Here are some vocabulary and terms so that you know the proper spelling and translation.
 ```
 # Game Characters
-アイ (Ai) - Female
-シオン (Sion) - Female
-エリス (Eris) - Female
-杉浦 (Sugiura) - Female
-獏木 (Bakuki) - Female
-千里 (Chisato) - Female
-ハルカ (Haruka) - Female
-間根山 (Manemaya) - Female
-ミズキ (Mizuki) - Female
-ツヨシ (Tsuyoshi) - Male
+リク (Riku) - Male
+シエンナ (Sienna) - Female
+ミラ (Mira) - Female
+ライオネス (Lioness) - Male
+モーングロウ (Mournglow)
+デボラ (Deborah)
+レジナルド (Reginald) - Male
+クスルーツ (Kuslutz)
  
 # Lewd Terms
 マンコ (pussy)
@@ -45,7 +43,7 @@ Here are some vocabulary and terms so that you know the proper spelling and tran
 ねえさん (nee-san)
 おじさん (oji-san)
 
-# System
+# Terms
 初めから (Start)
 逃げる (Escape)
 大事なもの (Key Items)
@@ -64,19 +62,15 @@ Here are some vocabulary and terms so that you know the proper spelling and tran
 持っている数 (Owned)
 ME 音量 (ME Volume)
 回想する (Recollection)
-
-# RPG
-エクスポーション (EX Potion)
-アスカロン (Ascalon)
-刀 (Sword)
-ゴブリン (Goblin)
+信仰心 (Faith)
 会話 (Conversation)
 収集 (Collect)
 討伐 (Subjugate)
 破滅 (Destruction)
 魂 (Soul)
+巫女 (Shrine Maiden)
 
-# Demons/Angels
+# Demons/Angels/Monsters
 悪魔 (Devil)  
 上級悪魔 (Arch Devil)  
 歪魔 (Distorted Devil)  
@@ -94,13 +88,15 @@ ME 音量 (ME Volume)
 飛天魔 (Nephilim)  
 堕天使 (Fallen Angel)  
 鬼 (Oni)
+魔 (Demon)
 妖怪 (Yokai)
 式神 (Shikigami)
-
-# Terms
+幽霊 (Ghost)
+デーモン (Daemon)
 ローバー (Roper)
+
+# Other
 w ((lol))
-巫女 (Shrine Maiden)
 ２万 (20,000)
 
 ```

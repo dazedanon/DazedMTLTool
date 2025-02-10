@@ -229,7 +229,8 @@ from PIL import Image, ImageDraw, ImageFont
 
 def stringToImageOutline(text, width, height, font_path="fonts/TsunagiGothic.ttf", scale_factor=4):
     # Outline
-    outline_color = (0, 0, 0, 255)
+    outline_color = (255, 255, 255, 255)
+    text_color = (0, 0, 0, 255)
     outline_thickness = 4
 
     # Increase the resolution
@@ -264,7 +265,7 @@ def stringToImageOutline(text, width, height, font_path="fonts/TsunagiGothic.ttf
                 draw.text((x + dx, y + dy), text, font=font, fill=outline_color)
 
     # Draw the main text
-    draw.text((x, y), text, font=font, fill=(60, 160, 230, 255))
+    draw.text((x, y), text, font=font, fill=text_color)
 
     # Resize back to the original dimensions to get a clearer text rendering
     image = image.resize((width, height), Image.LANCZOS)

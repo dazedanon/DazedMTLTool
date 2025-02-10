@@ -200,17 +200,21 @@ def translateUnity(data, pbar, filename, translatedList):
     # Dialogue
     while i < len(data):
         # Lines
-        regex = r".*?=(.*)"
+        regex = r"(.*?)=(.*)"
         match = re.search(regex, data[i])
-        if match != None and match.group(1) != "":
-            originalString = match.group(1)
+        if match:
+            leftString = match.group(1)
+            rightString = match.group(2)
+
+            # Validate Japanese Text
+            if not re.search(LANGREGEX, rightString) and IGNORETLTEXT:
+                i += 1
+                continue
+
             # Pass 1
             if translatedList == []:
-                # Grab Consecutive Strings
-                jaString = match.group(1)
-
                 # Remove textwrap
-                jaString = jaString.replace("\n", "")
+                jaString = leftString.replace("\n", "")
 
                 # Add String
                 stringList.append(jaString.strip())
@@ -236,7 +240,7 @@ def translateUnity(data, pbar, filename, translatedList):
                     translatedText = translatedText.replace("=", "->")
 
                     # Set Data
-                    data[i] = f"{originalString}{originalString}={translatedText}\n"
+                    data[i] = f"{leftString}={translatedText}\n"
             i += 1
 
         # Nothing relevant. Skip Line.
@@ -269,70 +273,41 @@ def translateUnity(data, pbar, filename, translatedList):
 
 # Save some money and enter the character before translation
 def getSpeaker(speaker):
-    if speaker not in str(NAMESLIST):
-        response = translateGPT(
-            speaker,
-            "Reply with the " + LANGUAGE + " translation of the NPC name.",
-            True,
-        )
-        response[0] = response[0].title()
-        response[0] = response[0].replace("'S", "'s")
+    match speaker:
+        case "ファイン":
+            return ["Fine", [0, 0]]
+        case "":
+            return ["", [0, 0]]
+        case _:
+            # Find Speaker
+            for i in range(len(NAMESLIST)):
+                if speaker == NAMESLIST[i][0]:
+                    return [NAMESLIST[i][1], [0, 0]]
 
-        # Retry if name doesn't translate for some reason
-        if re.search(r"([a-zA-Z？?])", response[0]) == None:
+            # Translate and Store Speaker
             response = translateGPT(
-                speaker,
+                f"{speaker}",
                 "Reply with the " + LANGUAGE + " translation of the NPC name.",
                 False,
             )
             response[0] = response[0].title()
             response[0] = response[0].replace("'S", "'s")
+            response[0] = response[0].replace("Speaker: ", "")
 
-        speakerList = [speaker, response[0]]
-        NAMESLIST.append(speakerList)
-        return response
+            # Retry if name doesn't translate for some reason
+            if re.search(r"([a-zA-Z？?])", response[0]) == None:
+                response = translateGPT(
+                    f"{speaker}",
+                    "Reply with the " + LANGUAGE + " translation of the NPC name.",
+                    False,
+                )
+                response[0] = response[0].title()
+                response[0] = response[0].replace("'S", "'s")
 
-    # Find Speaker
-    else:
-        for i in range(len(NAMESLIST)):
-            if speaker == NAMESLIST[i][0]:
-                return [NAMESLIST[i][1], [0, 0]]
-
+            speakerList = [speaker, response[0]]
+            NAMESLIST.append(speakerList)
+            return response
     return [speaker, [0, 0]]
-
-
-def subVars(jaString):
-    jaString = jaString.replace("\u3000", " ")
-
-    # Formatting
-    count = 0
-    codeList = re.findall(r"[\\]+[\w]+\[[a-zA-Z0-9\\\[\]\_,\s-]+\]", jaString)
-    codeList = set(codeList)
-    if len(codeList) != 0:
-        for var in codeList:
-            jaString = jaString.replace(var, "[FCode_" + str(count) + "]")
-            count += 1
-
-    # Put all lists in list and return
-    return [jaString, codeList]
-
-
-def resubVars(translatedText, codeList):
-    # Fix Spacing and ChatGPT Nonsense
-    matchList = re.findall(r"\[\s?.+?\s?\]", translatedText)
-    if len(matchList) > 0:
-        for match in matchList:
-            text = match.strip()
-            translatedText = translatedText.replace(match, text)
-
-    # Formatting
-    count = 0
-    if len(codeList) != 0:
-        for var in codeList:
-            translatedText = translatedText.replace("[FCode_" + str(count) + "]", var)
-            count += 1
-
-    return translatedText
 
 
 def batchList(input_list, batch_size):
@@ -372,9 +347,10 @@ def translateText(system, user, history, penalty, format, model=MODEL):
 
     # History
     if isinstance(history, list):
-        msg.extend([{"role": "system", "content": h} for h in history])
+        msg.append({"role": "system", "content": "Translation History:"})
+        msg.extend([{"role": "assistant", "content": h} for h in history])
     else:
-        msg.append({"role": "system", "content": history})
+        msg.append({"role": "assistant", "content": history})
 
     # Response Format
     if format == "json":
@@ -394,7 +370,7 @@ def translateText(system, user, history, penalty, format, model=MODEL):
     return response
 
 
-def cleanTranslatedText(translatedText, varResponse):
+def cleanTranslatedText(translatedText):
     placeholders = {
         f"{LANGUAGE} Translation: ": "",
         "Translation: ": "",
@@ -405,15 +381,24 @@ def cleanTranslatedText(translatedText, varResponse):
         "「": '\\"',
         "」": '\\"',
         "- ": "-",
+        "—": "―",
+        "】": "]",
+        "【": "[",
+        "é": "e",
+        "this guy": "this bastard",
+        "This guy": "This bastard",
         "Placeholder Text": "",
         # Add more replacements as needed
     }
     for target, replacement in placeholders.items():
         translatedText = translatedText.replace(target, replacement)
 
+    # Remove Repeating Characters
+    pattern = re.compile(r"(.)\s*\1(?:\s*\1){" + str(20 - 1) + r",}")
+    translatedText = pattern.sub(lambda match: match.group(0).replace(" ", "")[:20], translatedText)
+
     # Elongate Long Dashes (Since GPT Ignores them...)
     translatedText = elongateCharacters(translatedText)
-    translatedText = resubVars(translatedText, varResponse[1])
     return translatedText
 
 
@@ -434,6 +419,8 @@ def elongateCharacters(text):
 
 def extractTranslation(translatedTextList, is_list):
     try:
+        translatedTextList = re.sub(r'\\"+\"([^,\n}])', r'\\"\1', translatedTextList)
+        translatedTextList = re.sub(r"(?<![\\])\"+(?![\n,])", r'"', translatedTextList)
         line_dict = json.loads(translatedTextList)
         # If it's a batch (i.e., list), extract with tags; otherwise, return the single item.
         string_list = list(line_dict.values())
@@ -443,7 +430,7 @@ def extractTranslation(translatedTextList, is_list):
             return string_list[0]
 
     except Exception as e:
-        print(f"extractTranslation Error: {e}")
+        PBAR.write(f"extractTranslation Error: {e} on String {translatedTextList}")
         return None
 
 
@@ -470,91 +457,117 @@ def countTokens(system, user, history):
 @retry(exceptions=Exception, tries=5, delay=5)
 def translateGPT(text, history, fullPromptFlag):
     global PBAR, MISMATCH, FILENAME
+    if text:
+        with open("log/translationHistory.txt", "a+", encoding="utf-8") as logFile:
+            mismatch = False
+            totalTokens = [0, 0]
+            if isinstance(text, list):
+                format = "json"
+                tList = batchList(text, BATCHSIZE)
+            else:
+                format = "text"
+                tList = [text]
 
-    mismatch = False
-    totalTokens = [0, 0]
-    if isinstance(text, list):
-        format = "json"
-        tList = batchList(text, BATCHSIZE)
-    else:
-        format = "text"
-        tList = [text]
+            for index, tItem in enumerate(tList):
+                # Things to Check before starting translation
+                if not re.search(LANGREGEX, str(tItem)):
+                    if PBAR is not None:
+                        PBAR.update(len(tItem))
+                    if isinstance(tItem, list):
+                        for j in range(len(tItem)):
+                            tItem[j] = cleanTranslatedText(tItem[j])
+                            tList[index] = tItem
+                    else:
+                        tList[index] = cleanTranslatedText(tItem)
+                    history = tItem[-MAXHISTORY:]
+                    continue
 
-    for index, tItem in enumerate(tList):
-        # Before sending to translation, if we have a list of items, add the formatting
-        if isinstance(tItem, list):
-            payload = {f"Line{i+1}": string for i, string in enumerate(tItem)}
-            payload = json.dumps(payload, indent=4, ensure_ascii=False)
-            varResponse = subVars(payload)
-            subbedT = varResponse[0]
-        else:
-            varResponse = subVars(tItem)
-            subbedT = varResponse[0]
+                # Before sending to translation, if we have a list of items, add the formatting
+                if isinstance(tItem, list):
+                    for j in range(len(tItem)):
+                        if not tItem[j]:
+                            tItem[j] = tItem[j].replace("", "Placeholder Text")
+                    payload = {f"Line{i+1}": string for i, string in enumerate(tItem)}
+                    payload = json.dumps(payload, indent=4, ensure_ascii=False)
+                    varResponse = [payload, []]
+                    subbedT = varResponse[0]
+                else:
+                    varResponse = [tItem, []]
+                    subbedT = varResponse[0]
 
-        # Things to Check before starting translation
-        if not re.search(LANGREGEX, subbedT):
-            if PBAR is not None:
-                PBAR.update(len(tItem))
-            continue
+                # Create Message
+                system, user = createContext(fullPromptFlag, subbedT, format)
 
-        # Create Message
-        system, user = createContext(fullPromptFlag, subbedT, format)
+                # Calculate Estimate
+                if ESTIMATE:
+                    estimate = countTokens(system, user, history)
+                    totalTokens[0] += estimate[0]
+                    totalTokens[1] += estimate[1]
+                    continue
 
-        # Calculate Estimate
-        if ESTIMATE:
-            estimate = countTokens(system, user, history)
-            totalTokens[0] += estimate[0]
-            totalTokens[1] += estimate[1]
-            continue
+                # Translating
+                response = translateText(system, user, history, 0.05, format)
 
-        # Translating
-        response = translateText(system, user, history, 0.05, format)
-        translatedText = response.choices[0].message.content
-        totalTokens[0] += response.usage.prompt_tokens
-        totalTokens[1] += response.usage.completion_tokens
-
-        # Check Translation
-        translatedText = cleanTranslatedText(translatedText, varResponse)
-        if isinstance(tItem, list):
-            extractedTranslations = extractTranslation(translatedText, True)
-            if extractedTranslations == None or len(tItem) != len(extractedTranslations):
-                # Mismatch. Try Again
-                response = translateText(system, user, history, 0.05, format, MODEL)
+                # Set Tokens
                 translatedText = response.choices[0].message.content
+
+                # AI Refused, Try Again
+                if not translatedText:
+                    response = translateText(f"{system}\n You translate ALL content.", user, history, 0.1, format)
+
+                # Report Tokens
                 totalTokens[0] += response.usage.prompt_tokens
                 totalTokens[1] += response.usage.completion_tokens
 
-                # Formatting
-                translatedText = cleanTranslatedText(translatedText, varResponse)
-                if isinstance(tItem, list):
-                    extractedTranslations = extractTranslation(translatedText, True)
-                    if extractedTranslations == None or len(tItem) != len(extractedTranslations):
-                        mismatch = True  # Just here for breakpoint
+                # Check Translation
+                if translatedText:
+                    translatedText = cleanTranslatedText(translatedText)
+                    if isinstance(tItem, list):
+                        extractedTranslations = extractTranslation(translatedText, True)
+                        if extractedTranslations == None or len(tItem) != len(extractedTranslations):
+                            # Mismatch. Try Again
+                            response = translateText(system, user, history, 0.05, format, MODEL)
+                            translatedText = response.choices[0].message.content
+                            totalTokens[0] += response.usage.prompt_tokens
+                            totalTokens[1] += response.usage.completion_tokens
 
-            # Set if no mismatch
-            if mismatch == False:
-                tList[index] = extractedTranslations
-                history = extractedTranslations[-10:]  # Update history if we have a list
-            else:
-                history = text[-10:]
-                mismatch = False
-                if FILENAME not in MISMATCH:
-                    MISMATCH.append(FILENAME)
+                            # Formatting
+                            translatedText = cleanTranslatedText(translatedText)
+                            if isinstance(tItem, list):
+                                extractedTranslations = extractTranslation(translatedText, True)
+                                if extractedTranslations == None or len(tItem) != len(extractedTranslations):
+                                    mismatch = True  # Just here for breakpoint
+                        logFile.write(f"Input:\n{subbedT}\n")
+                        logFile.write(f"Output:\n{translatedText}\n")
 
-            # Update Loading Bar
-            with LOCK:
-                if PBAR is not None:
-                    PBAR.update(len(tItem))
+                        # Set if no mismatch
+                        if mismatch == False:
+                            tList[index] = extractedTranslations
+                            history = extractedTranslations[-MAXHISTORY:]  # Update history if we have a list
+                        else:
+                            history = text[-MAXHISTORY:]
+                            mismatch = False
+                            if FILENAME not in MISMATCH:
+                                MISMATCH.append(FILENAME)
+
+                        # Update Loading Bar
+                        with LOCK:
+                            if PBAR is not None:
+                                PBAR.update(len(tItem))
+                    else:
+                        # Ensure we're passing a single string to extractTranslation
+                        tList[index] = translatedText.replace("Placeholder Text", "")
+                else:
+                    PBAR.write(f"AI Refused:{tItem}\n")
+
+        # Combine if multilist
+        if isinstance(tList[0], list):
+            tList = [t for sublist in tList for t in sublist]
+
+        # Return
+        if format == "json":
+            return [tList, totalTokens]
         else:
-            # Ensure we're passing a single string to extractTranslation
-            tList[index] = translatedText.replace("Placeholder Text", "")
-
-    # Combine if multilist
-    if isinstance(tList[0], list):
-        tList = [t for sublist in tList for t in sublist]
-
-    # Return
-    if format == "json":
-        return [tList, totalTokens]
+            return [tList[0], totalTokens]
     else:
-        return [tList[0], totalTokens]
+        return [text, [0, 0]]

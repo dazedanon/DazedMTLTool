@@ -80,12 +80,12 @@ POSITION = 0
 LEAVE = False
 
 # Dialogue / Scroll / Choices (Main Codes)
-CODE401 = True
-CODE405 = True
-CODE102 = True
+CODE401 = False
+CODE405 = False
+CODE102 = False
 
 # Optional
-CODE101 = True  # Turn this one when names exist in 101
+CODE101 = False  # Turn this one when names exist in 101
 CODE408 = False  # Warning, translates comments and can inflate costs.
 
 # Variables
@@ -256,6 +256,10 @@ def parseMap(data, filename):
                 totalTokens[0] += response[1][0]
                 totalTokens[1] += response[1][1]
                 event["name"] = response[0].replace('"', "")
+            if "<msgText:" in event["note"]:
+                tokensResponse = translateNote(event, r"<msgText:\"(.*?)\">", False)
+                totalTokens[0] += tokensResponse[0]
+                totalTokens[1] += tokensResponse[1]
             for page in event["pages"]:
                 totalLines += len(page["list"])
 
@@ -291,7 +295,7 @@ def parseMap(data, filename):
     return [data, totalTokens, None]
 
 
-def translateNote(event, regex):
+def translateNote(event, regex, wordwrap=True):
     # Regex String
     jaString = event["note"]
     match = re.findall(regex, jaString, re.DOTALL)
@@ -314,8 +318,10 @@ def translateNote(event, regex):
             tokens[1] += response[1][1]
 
             # Textwrap
-            translatedText = textwrap.fill(translatedText, width=NOTEWIDTH)
-            translatedText = translatedText.replace('"', "")
+            if wordwrap:
+                translatedText = textwrap.fill(translatedText, width=NOTEWIDTH)
+                translatedText = translatedText.replace('"', "")
+
             jaString = jaString.replace(initialJAString, translatedText)
             event["note"] = jaString
             i += 1
@@ -1184,7 +1190,7 @@ def searchCodes(page, pbar, jobList, filename):
             ## Event Code: 122 [Set Variables]
             if "code" in codeList[i] and codeList[i]["code"] == 122 and CODE122 is True:
                 # This is going to be the var being set. (IMPORTANT)
-                if codeList[i]["parameters"][0] not in list(range(18, 19)):
+                if codeList[i]["parameters"][0] not in list(range(20, 150)):
                     i += 1
                     continue
 
@@ -1202,6 +1208,11 @@ def searchCodes(page, pbar, jobList, filename):
 
                 # Validate String
                 if not isinstance(jaString, str):
+                    i += 1
+                    continue
+
+                # Validate Japanese Text
+                if not re.search(LANGREGEX, jaString):
                     i += 1
                     continue
 
@@ -1283,8 +1294,8 @@ def searchCodes(page, pbar, jobList, filename):
                                     translatedText = translatedText.replace(char, "")
 
                                 # Textwrap
-                                translatedText = textwrap.fill(translatedText, 80)
-                                translatedText = translatedText.replace("\n", "\\n")
+                                # translatedText = textwrap.fill(translatedText, 80)
+                                # translatedText = translatedText.replace("\n", "\\n")
                                 # translatedText = re.sub(r"[\\]+c", r"\\\\c", translatedText)
                                 translatedText = re.sub(r"[\\]+\*item", r"\\\\*item", translatedText)
 
@@ -1313,6 +1324,7 @@ def searchCodes(page, pbar, jobList, filename):
                     "SoR_GabWindow": ("arg1", None),
                     "DarkPlasma_CharacterText": ("text", None),
                     "DTextPicture": ("text", None),
+                    "TextPicture": ("text", None),
                 }
 
                 for key, (argVar, font) in headerMappings.items():
@@ -2392,7 +2404,7 @@ def translateText(system, user, history, penalty, format, model=MODEL):
 
     # History
     if isinstance(history, list):
-        msg.append({"role": "assistant", "content": "Translation History:"})
+        msg.append({"role": "system", "content": "Translation History:"})
         msg.extend([{"role": "assistant", "content": h} for h in history])
     else:
         msg.append({"role": "assistant", "content": history})
