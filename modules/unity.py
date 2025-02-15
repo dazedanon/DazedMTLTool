@@ -74,7 +74,7 @@ elif "gpt-4" in MODEL:
 elif "deepseek" in MODEL:
     INPUTAPICOST = 0.14
     OUTPUTAPICOST = 1.10
-    BATCHSIZE = 30
+    BATCHSIZE = 50
     FREQUENCY_PENALTY = 0.05
 else:
     INPUTAPICOST = float(os.getenv("input_cost"))
@@ -189,10 +189,7 @@ def parseUnity(readFile, filename):
 
 def translateUnity(data, pbar, filename, translatedList):
     stringList = []
-    currentGroup = []
     tokens = [0, 0]
-    speaker = ""
-    voice = False
     global LOCK, ESTIMATE, PBAR
     PBAR = pbar
     i = 0
@@ -207,14 +204,16 @@ def translateUnity(data, pbar, filename, translatedList):
             rightString = match.group(2)
 
             # Validate Japanese Text
-            if not re.search(LANGREGEX, rightString) and IGNORETLTEXT:
+            if not re.search(LANGREGEX, leftString) and IGNORETLTEXT:
                 i += 1
                 continue
 
             # Pass 1
             if translatedList == []:
+                jaString = leftString
+                
                 # Remove textwrap
-                jaString = leftString.replace("\n", "")
+                # jaString = jaString.replace("\\n", " ")
 
                 # Add String
                 stringList.append(jaString.strip())
@@ -232,8 +231,8 @@ def translateUnity(data, pbar, filename, translatedList):
                         translatedList = None
 
                     # Textwrap
-                    translatedText = textwrap.fill(translatedText, width=WIDTH)
-                    translatedText = translatedText.replace("\n", "\\n")
+                    # translatedText = textwrap.fill(translatedText, width=WIDTH)
+                    # translatedText = translatedText.replace("\n", "\\n")
 
                     # Remove Double Spaces and =
                     translatedText = translatedText.replace("  ", " ")
