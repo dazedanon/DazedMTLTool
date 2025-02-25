@@ -1,19 +1,35 @@
 Here are some vocabulary and terms so that you know the proper spelling and translation.
 ```
 # Game Characters
-桜 謳歌 (Sakura Ouka) - Female
-鈴音 (Suzune) - Female
-鍛冶 演歌 (Kaji Enka) - Female
-希来里 (Kirari) - Female
-温泉 玉子 (Onsen Tamago) - Female
-愚譜 徳朗 (Gufu Tokuro) - Unknown
-華姫瑠 (Kahimeru) - Unknown
-枝切 はらら (Edakiri Harara) - Unknown
-枝切 鋏 (Edakiri Hasami) - Unknown
-御馬 忠勝 (Miuma Tadakatsu) - Unknown
-ぬらり (Nurari) - Unknown
-狐鼓 (Kokotsuzumi) - Unknown
- 
+#Actors
+アイカ (Aika) - Female
+カナエ (Kanae) - Female
+マドカ (Madoka) - Female
+シズカ (Shizuka) - Female
+ユウキ (Yuuki) - Male
+ユキナ (Yukina) - Female
+ヒカリ (Hikari) - Female
+イッパツ (Ippatsu) - Male
+ウユ (Uyu) - Female
+ミキ (Miki) - Female
+カズヨシ (Kazuyoshi) - Male
+モモコ (Momoko) - Female
+ライタ (Raita) - Male
+ツヨシ (Tsuyoshi) - Male
+レイキ (Reiki) - Male
+センカ (Senka) - Female
+タツオ (Tatsuo) - Male
+チョウシン (Choushin) - Male
+ヤワラ (Yawara) - Female
+カンテツ (Kantetsu) - Male
+ソラ (Sora) - Female
+すすむ (Susumu) - Male
+イリコ (Iriko)
+レイナ (Reina)
+ギンジ (Ginji)
+ケンシロウ (Kenshirou)
+カガミ (Kagami)
+
 # Lewd Terms
 マンコ (pussy)
 おまんこ (vagina)
@@ -45,7 +61,7 @@ Here are some vocabulary and terms so that you know the proper spelling and tran
 お姉ちゃん (onee-chan)
 お姉ちゃん (onee-chan)
 ねえさん (nee-san)
-おじさん (oji-san)
+おじさん (uncle)
 
 # Terms
 初めから (Start)
@@ -105,4 +121,10 @@ w ((lol))
 『 (『)
 』 (』)
 
+# Game Specific
+呪算-凡 (Curse Calculation - Normal)
+呪理-凡 (Curse Logic -Normal)
+呪器-凡 (Cursed Tool -Normal)
+呪器-光 (Cursed Weapon -Light)
+呪札-元 (Cursed Talisman -Origin)
 ```
