@@ -893,10 +893,6 @@ def searchCodes(page, pbar, jobList, filename):
                 # Grab String
                 if len(codeList[i]["parameters"]) > 0:
                     jaString = codeList[i]["parameters"][0]
-                    # Check if there is text to translate
-                    if not re.search(r"\w+", jaString):
-                        i += 1
-                        continue
                     oldjaString = jaString
                 else:
                     codeList[i]["code"] = -1
@@ -963,23 +959,23 @@ def searchCodes(page, pbar, jobList, filename):
                         jaString = jaString.replace(ffMatch.group(0), "")
                         nametag += ffMatch.group(0)
 
-                        # Test Speaker
-                        if (
-                            len(jaString) < 40
-                            and "code" in codeList[i + 1]
-                            and codeList[i + 1]["code"] in [401, 405, -1]
-                            and len(codeList[i + 1]["parameters"]) > 0
-                            and len(codeList[i + 1]["parameters"][0]) > 0
-                        ):
-                            if codeList[i + 1]["parameters"] != "" and codeList[i + 1]["parameters"][0].strip()[0] in [
-                                "「",
-                                '"',
-                                "(",
-                                "（",
-                                "*",
-                                "[",
-                            ]:
-                                speakerList = re.findall(r".+", jaString)
+                    # Test Speaker
+                    if (
+                        len(jaString) < 40
+                        and "code" in codeList[i + 1]
+                        and codeList[i + 1]["code"] in [401, 405, -1]
+                        and len(codeList[i + 1]["parameters"]) > 0
+                        and len(codeList[i + 1]["parameters"][0]) > 0
+                    ):
+                        if codeList[i + 1]["parameters"] != "" and codeList[i + 1]["parameters"][0].strip()[0] in [
+                            "「",
+                            '"',
+                            "(",
+                            "（",
+                            "*",
+                            "[",
+                        ]:
+                            speakerList = re.findall(r".+", jaString)
 
                 if len(speakerList) != 0 and codeList[i + 1]["code"] in [401, 405, -1]:
                     # Get Speaker
@@ -999,6 +995,18 @@ def searchCodes(page, pbar, jobList, filename):
                         i += 1
                         j = i
                     jaString = codeList[i]["parameters"][0]
+
+                # Replace Symbols
+                jaString = jaString.replace("…", "...")
+                jaString = jaString.replace("。", ".")
+                jaString = jaString.replace("･", ".")
+                jaString = jaString.replace("「", '"')
+                jaString = jaString.replace("」", '"')
+
+                # Check if there is text to translate
+                if not re.search(r"\w+", jaString):
+                    i += 1
+                    continue
 
                 # Using this to keep track of 401's in a row.
                 currentGroup.append(jaString)
