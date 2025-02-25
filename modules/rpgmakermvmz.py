@@ -37,12 +37,6 @@ MAXHISTORY = 10
 ESTIMATE = ""
 TOKENS = [0, 0]
 NAMESLIST = []
-FIRSTLINESPEAKERS = False  # If 1st line of dialogue is a speaker, set to True
-FACENAME101 = False  # Find Speakers in 101 Codes based on Face Name
-NAMES = False  # Output a list of all the character names found
-BRFLAG = False  # If the game uses <br> instead
-FIXTEXTWRAP = True  # Overwrites textwrap
-IGNORETLTEXT = True  # Ignores all translated text.
 MISMATCH = []  # Lists files that throw a mismatch error (Length of GPT list response is wrong)
 PBAR = None
 FILENAME = None
@@ -79,13 +73,21 @@ BAR_FORMAT = "{l_bar}{bar:10}{r_bar}{bar:-10b}"
 POSITION = 0
 LEAVE = False
 
+# Config (Default)
+FIRSTLINESPEAKERS = True  # If 1st line of 401 is a speaker, set to True (False)
+FACENAME101 = False  # Find Speakers in 101 Codes based on Face Name (False)
+NAMES = False  # Output a list of all the character names found (False)
+BRFLAG = False  # If the game uses <br> instead (False)
+FIXTEXTWRAP = True  # Overwrites textwrap (True)
+IGNORETLTEXT = True  # Ignores all translated text. (True)
+
 # Dialogue / Scroll / Choices (Main Codes)
-CODE401 = False
-CODE405 = False
-CODE102 = False
+CODE401 = True
+CODE405 = True
+CODE102 = True
 
 # Optional
-CODE101 = True  # Turn this one when names exist in 101
+CODE101 = False  # Turn this one when names exist in 101
 CODE408 = False  # Warning, translates comments and can inflate costs.
 
 # Variables
@@ -1129,12 +1131,9 @@ def searchCodes(page, pbar, jobList, filename):
                             translatedText = list401[0]
 
                             # Remove speaker
-                            if speaker != "":
-                                matchSpeakerList = re.findall(r"^\[?(.+?)\]?\s?[|:]\s?", translatedText)
-                                if len(matchSpeakerList) > 0:
-                                    newSpeaker = matchSpeakerList[0]
-                                    nametag = nametag.replace(speaker, newSpeaker)
-                                translatedText = re.sub(r"^\[?(.+?)\]?\s?[|:]\s?", "", translatedText)
+                            match = re.search(r'(^\[?.+?\]?\s?[|:]\s?)', translatedText)
+                            if match:
+                                translatedText = translatedText.replace(match.group(1), "") 
 
                             # Fix '- '
                             translatedText = translatedText.replace("- ", "-")
@@ -2060,10 +2059,8 @@ def searchCodes(page, pbar, jobList, filename):
             page[:] = codeListFinal
     except IndexError as e:
         traceback.print_exc()
-        raise Exception(str(e) + "Failed to translate: " + oldjaString) from None
     except Exception as e:
         traceback.print_exc()
-        raise Exception(str(e) + "Failed to translate: " + oldjaString) from None
 
     return totalTokens
 
