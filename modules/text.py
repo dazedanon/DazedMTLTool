@@ -89,7 +89,7 @@ def handleText(filename, estimate):
     # Translate
     if not estimate:
         try:
-            with open("translated/" + filename, "w", encoding="utf-8") as outFile:
+            with open("translated/" + filename, "w", encoding="utf-8", newline="\n") as outFile:
                 outFile.writelines(translatedData[0])
         except Exception:
             traceback.print_exc()

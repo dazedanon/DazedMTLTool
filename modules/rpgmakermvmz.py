@@ -42,7 +42,7 @@ FACENAME101 = False  # Find Speakers in 101 Codes based on Face Name
 NAMES = False  # Output a list of all the character names found
 BRFLAG = False  # If the game uses <br> instead
 FIXTEXTWRAP = True  # Overwrites textwrap
-IGNORETLTEXT = False  # Ignores all translated text.
+IGNORETLTEXT = True  # Ignores all translated text.
 MISMATCH = []  # Lists files that throw a mismatch error (Length of GPT list response is wrong)
 PBAR = None
 FILENAME = None
@@ -85,7 +85,7 @@ CODE405 = False
 CODE102 = False
 
 # Optional
-CODE101 = False  # Turn this one when names exist in 101
+CODE101 = True  # Turn this one when names exist in 101
 CODE408 = False  # Warning, translates comments and can inflate costs.
 
 # Variables
@@ -114,7 +114,7 @@ def handleMVMZ(filename, estimate):
     # Translate
     if not estimate:
         try:
-            with open("translated/" + filename, "w", encoding="utf-8") as outFile:
+            with open("translated/" + filename, "w", encoding="utf-8", newline="\n") as outFile:
                 json.dump(translatedData[0], outFile, ensure_ascii=False, indent=4)
         except Exception:
             traceback.print_exc()
@@ -138,7 +138,7 @@ def handleMVMZ(filename, estimate):
 
 
 def openFiles(filename):
-    with open("files/" + filename, "r", encoding="utf-8") as f:
+    with open("files/" + filename, "r", encoding="utf-8-sig") as f:
         data = json.load(f)
 
         # Map Files
