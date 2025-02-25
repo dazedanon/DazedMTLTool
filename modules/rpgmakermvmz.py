@@ -833,7 +833,7 @@ def searchCodes(page, pbar, jobList, filename):
         list108 = jobList[3]
         list356 = jobList[4]
         list357 = jobList[5]
-        setData = True
+        setData = False
     else:
         list401 = []
         list122 = []
@@ -841,7 +841,7 @@ def searchCodes(page, pbar, jobList, filename):
         list108 = []
         list356 = []
         list357 = []
-        setData = False
+        setData = True
     textHistory = []
     match = []
     totalTokens = [0, 0]
@@ -977,6 +977,7 @@ def searchCodes(page, pbar, jobList, filename):
                         ]:
                             speakerList = re.findall(r".+", jaString)
 
+                # Replace Speaker
                 if len(speakerList) != 0 and codeList[i + 1]["code"] in [401, 405, -1]:
                     # Get Speaker
                     response = getSpeaker(speakerList[0])
@@ -985,7 +986,8 @@ def searchCodes(page, pbar, jobList, filename):
                     totalTokens[1] += response[1][1]
 
                     # Set Data
-                    codeList[i]["parameters"][0] = nametag + jaString.replace(speakerList[0], speaker)
+                    if not setData:
+                        codeList[i]["parameters"][0] = nametag + jaString.replace(speakerList[0], speaker)
                     nametag = ""
 
                     # Iterate to next string
@@ -1014,7 +1016,7 @@ def searchCodes(page, pbar, jobList, filename):
                 # Join Up 401's into single string
                 if len(codeList) > i + 1:
                     while codeList[i + 1]["code"] in [401, 405, -1]:
-                        if setData == True:
+                        if not setData:
                             codeList[i]["parameters"] = []
                             codeList[i]["code"] = -1
                         i += 1
@@ -1040,7 +1042,7 @@ def searchCodes(page, pbar, jobList, filename):
                         continue
 
                     # Set Back
-                    if setData == True:
+                    if not setData:
                         codeList[i]["parameters"] = [finalJAString]
 
                     ### \\n<Speaker>
@@ -1103,8 +1105,8 @@ def searchCodes(page, pbar, jobList, filename):
                         finalJAString = finalJAString.replace("\\ac", "")
                         CLFlag = True
 
-                    # 1st Passthrough (Grabbing Data)
-                    if setData == False:
+                    # Pass 1 (Grabbing Data)
+                    if setData:
                         # Remove Textwrap
                         if FIXTEXTWRAP:
                             finalJAString = finalJAString.replace("\n", " ")
@@ -1130,7 +1132,7 @@ def searchCodes(page, pbar, jobList, filename):
                         if len(textHistory) > maxHistory:
                             textHistory.pop(0)
 
-                    # 2nd Passthrough (Setting Data)
+                    # Pass 2 (Setting Data)
                     else:
                         # Grab Translated String
                         if len(list401) > 0:
@@ -1230,7 +1232,7 @@ def searchCodes(page, pbar, jobList, filename):
                         finalJAString = matchedText.group(1).replace("\\n", " ")
 
                         # Pass 1
-                        if setData == False:
+                        if setData:
                             if finalJAString != "":
                                 list122.append(finalJAString)
 
@@ -1283,7 +1285,7 @@ def searchCodes(page, pbar, jobList, filename):
                             jaString = jaString.replace("\\ac", "")
 
                         # Pass 1
-                        if setData == False:
+                        if setData:
                             list357.append(jaString)
 
                         # Pass 2
@@ -1518,7 +1520,7 @@ def searchCodes(page, pbar, jobList, filename):
                     if re.search(regex, jaString):
                         finalJAString = match.group(1)
                         # Pass 1
-                        if setData is False:
+                        if setData:
                             list355655.append(finalJAString)
 
                         # Pass 2
@@ -1600,7 +1602,7 @@ def searchCodes(page, pbar, jobList, filename):
                 match = re.search(regex, jaString)
                 if match:
                     # Pass 1
-                    if setData is False:
+                    if setData:
                         list108.append(match.group(1))
 
                         # Grab Next
@@ -1687,7 +1689,7 @@ def searchCodes(page, pbar, jobList, filename):
                     text = textMatch.group(1)
 
                     # Pass 1
-                    if setData == False:
+                    if setData:
                         text = text.replace("_", " ")
                         list356.append(text)
 
@@ -1952,7 +1954,6 @@ def searchCodes(page, pbar, jobList, filename):
         list357TL = []
         list355655TL = []
         list108TL = []
-        setData = False
         PBAR = pbar
 
         # 401
@@ -1965,8 +1966,6 @@ def searchCodes(page, pbar, jobList, filename):
                 with LOCK:
                     if filename not in MISMATCH:
                         MISMATCH.append(filename)
-            else:
-                setData = True
 
         # 122
         if len(list122) > 0:
@@ -1978,8 +1977,6 @@ def searchCodes(page, pbar, jobList, filename):
                 with LOCK:
                     if filename not in MISMATCH:
                         MISMATCH.append(filename)
-            else:
-                setData = True
 
         # 355/655
         if len(list355655) > 0:
@@ -1991,8 +1988,6 @@ def searchCodes(page, pbar, jobList, filename):
                 with LOCK:
                     if filename not in MISMATCH:
                         MISMATCH.append(filename)
-            else:
-                setData = True
 
         # 108
         if len(list108) > 0:
@@ -2004,8 +1999,6 @@ def searchCodes(page, pbar, jobList, filename):
                 with LOCK:
                     if filename not in MISMATCH:
                         MISMATCH.append(filename)
-            else:
-                setData = True
 
         # 356
         if len(list356) > 0:
@@ -2017,8 +2010,6 @@ def searchCodes(page, pbar, jobList, filename):
                 with LOCK:
                     if filename not in MISMATCH:
                         MISMATCH.append(filename)
-            else:
-                setData = True
 
         # 357
         if len(list357) > 0:
@@ -2030,8 +2021,6 @@ def searchCodes(page, pbar, jobList, filename):
                 with LOCK:
                     if filename not in MISMATCH:
                         MISMATCH.append(filename)
-            else:
-                setData = True
 
         # Start Pass 2
         if setData:
