@@ -1066,7 +1066,6 @@ def searchCodes(page, pbar, jobList, filename):
 
                     # Remove Extra Stuff bad for translation.
                     finalJAString = finalJAString.replace("ﾞ", "")
-                    finalJAString = finalJAString.replace("―", "-")
                     finalJAString = finalJAString.replace("…", "...")
                     finalJAString = finalJAString.replace("。", ".")
                     finalJAString = re.sub(r"(\.{3}\.+)", "...", finalJAString)
@@ -1138,7 +1137,7 @@ def searchCodes(page, pbar, jobList, filename):
                             translatedText = list401[0]
 
                             # Remove speaker
-                            match = re.search(r'(^\[?.+?\]?\s?[|:]\s?)', translatedText)
+                            match = re.search(r'(^\[.+?\]\s?[|:]\s?)', translatedText)
                             if match:
                                 translatedText = translatedText.replace(match.group(1), "") 
 
