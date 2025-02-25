@@ -852,7 +852,6 @@ def searchCodes(page, pbar, jobList, filename):
     CLFlag = False
     maxHistory = MAXHISTORY
     VNameValue = None
-    speakerWindow = FIRSTLINESPEAKERS
     global LOCK
     global NAMESLIST
     global MISMATCH
@@ -964,23 +963,23 @@ def searchCodes(page, pbar, jobList, filename):
                         jaString = jaString.replace(ffMatch.group(0), "")
                         nametag += ffMatch.group(0)
 
-                    # Test Speaker
-                    if (
-                        len(jaString) < 40
-                        and "code" in codeList[i + 1]
-                        and codeList[i + 1]["code"] in [401, 405, -1]
-                        and len(codeList[i + 1]["parameters"]) > 0
-                        and len(codeList[i + 1]["parameters"][0]) > 0
-                    ):
-                        if codeList[i + 1]["parameters"] != "" and codeList[i + 1]["parameters"][0].strip()[0] in [
-                            "「",
-                            '"',
-                            "(",
-                            "（",
-                            "*",
-                            "[",
-                        ]:
-                            speakerList = re.findall(r".+", jaString)
+                        # Test Speaker
+                        if (
+                            len(jaString) < 40
+                            and "code" in codeList[i + 1]
+                            and codeList[i + 1]["code"] in [401, 405, -1]
+                            and len(codeList[i + 1]["parameters"]) > 0
+                            and len(codeList[i + 1]["parameters"][0]) > 0
+                        ):
+                            if codeList[i + 1]["parameters"] != "" and codeList[i + 1]["parameters"][0].strip()[0] in [
+                                "「",
+                                '"',
+                                "(",
+                                "（",
+                                "*",
+                                "[",
+                            ]:
+                                speakerList = re.findall(r".+", jaString)
 
                 if len(speakerList) != 0 and codeList[i + 1]["code"] in [401, 405, -1]:
                     # Get Speaker
@@ -1422,92 +1421,84 @@ def searchCodes(page, pbar, jobList, filename):
 
             ## Event Code: 101 [Name] [Optional]
             if "code" in codeList[i] and codeList[i]["code"] == 101 and CODE101 is True:
-                # Check Window Type (Certain games switch between 1st line speakers and none)
-                if FIRSTLINESPEAKERS:
-                    if codeList[i]["parameters"][2] == 0:
-                        speakerWindow = True
-                    else:
-                        speakerWindow = False
+                isVar = False
 
-                else:
-                    isVar = False
+                # Grab String
+                jaString = ""
+                if len(codeList[i]["parameters"]) > 4:
+                    jaString = codeList[i]["parameters"][4]
+                # Check for Var
+                elif len(codeList[i]["parameters"]) > 0:
+                    jaString = codeList[i]["parameters"][0]
+                    isVar = True
+                if not isinstance(jaString, str):
+                    i += 1
+                    continue
 
-                    # Grab String
-                    jaString = ""
-                    if len(codeList[i]["parameters"]) > 4:
-                        jaString = codeList[i]["parameters"][4]
-                    # Check for Var
-                    elif len(codeList[i]["parameters"]) > 0:
-                        jaString = codeList[i]["parameters"][0]
-                        isVar = True
-                    if not isinstance(jaString, str):
-                        i += 1
-                        continue
+                # Force Speaker using var
+                if "\\ap[1左]" in jaString.lower() or "\\ap[1右]" in jaString.lower():
+                    speaker = "Cecily"
+                    i += 1
+                    continue
+                elif "\\ap[2左]" in jaString.lower() or "\\ap[2右]" in jaString.lower():
+                    speaker = "Amelia"
+                    i += 1
+                    continue
+                elif "\\ap[3左]" in jaString.lower() or "\\ap[3右]" in jaString.lower():
+                    speaker = "Henry"
+                    i += 1
+                    continue
+                elif "\\ap[4左]" in jaString.lower() or "\\ap[4右]" in jaString.lower():
+                    speaker = "Oswald"
+                    i += 1
+                    continue
+                elif "\\ap" in jaString:
+                    speaker = re.search(r"[\\]+AP\[(.*?)\]", jaString).group(1)
+                    i += 1
+                    continue
 
-                    # Force Speaker using var
-                    if "\\ap[1左]" in jaString.lower() or "\\ap[1右]" in jaString.lower():
-                        speaker = "Cecily"
-                        i += 1
-                        continue
-                    elif "\\ap[2左]" in jaString.lower() or "\\ap[2右]" in jaString.lower():
-                        speaker = "Amelia"
-                        i += 1
-                        continue
-                    elif "\\ap[3左]" in jaString.lower() or "\\ap[3右]" in jaString.lower():
-                        speaker = "Henry"
-                        i += 1
-                        continue
-                    elif "\\ap[4左]" in jaString.lower() or "\\ap[4右]" in jaString.lower():
-                        speaker = "Oswald"
-                        i += 1
-                        continue
-                    elif "\\ap" in jaString:
-                        speaker = re.search(r"[\\]+AP\[(.*?)\]", jaString).group(1)
-                        i += 1
-                        continue
+                # Get Speaker
+                if "\\" not in jaString and jaString:
+                    response = getSpeaker(jaString)
+                    totalTokens[0] += response[1][0]
+                    totalTokens[1] += response[1][1]
+                    speaker = response[0]
 
-                    # Get Speaker
-                    if "\\" not in jaString and jaString:
-                        response = getSpeaker(jaString)
-                        totalTokens[0] += response[1][0]
-                        totalTokens[1] += response[1][1]
-                        speaker = response[0]
-
-                        # Validate Speaker is not empty
-                        if len(speaker) > 0:
-                            if isVar == False:
-                                codeList[i]["parameters"][4] = speaker
-                                i += 1
-                                continue
-                            else:
-                                codeList[i]["parameters"][0] = speaker
-                                isVar = False
-                                i += 1
-                                continue
+                    # Validate Speaker is not empty
+                    if len(speaker) > 0:
+                        if isVar == False:
+                            codeList[i]["parameters"][4] = speaker
+                            i += 1
+                            continue
                         else:
-                            speaker = ""
-                    elif FACENAME101:
-                        faceName = codeList[i]["parameters"][0]
-                        if faceName == "Actor1_1":
-                            speaker = "Sakura"
-                        if faceName == "Actor2_1":
-                            speaker = "Suzune"
-                        if faceName == "Actor3_1":
-                            speaker = "Kaji"
-                        if faceName == "Actor4_1":
-                            speaker = "Kirari"
-                        if faceName == "Actor5_1":
-                            speaker = "Onsen"
-                        if faceName == "Actor6_1":
-                            speaker = "Gufu"
-                        if faceName == "Actor7_1":
-                            speaker = "Kahimeru"
-                        if faceName == "Actor10_1":
-                            speaker = "Miuma"
-                        if faceName == "Actor11_1":
-                            speaker = "Nurari"
-                        if faceName == "Actor12_1":
-                            speaker = "Kokotsuzumi"
+                            codeList[i]["parameters"][0] = speaker
+                            isVar = False
+                            i += 1
+                            continue
+                    else:
+                        speaker = ""
+                elif FACENAME101:
+                    faceName = codeList[i]["parameters"][0]
+                    if faceName == "Actor1_1":
+                        speaker = "Sakura"
+                    if faceName == "Actor2_1":
+                        speaker = "Suzune"
+                    if faceName == "Actor3_1":
+                        speaker = "Kaji"
+                    if faceName == "Actor4_1":
+                        speaker = "Kirari"
+                    if faceName == "Actor5_1":
+                        speaker = "Onsen"
+                    if faceName == "Actor6_1":
+                        speaker = "Gufu"
+                    if faceName == "Actor7_1":
+                        speaker = "Kahimeru"
+                    if faceName == "Actor10_1":
+                        speaker = "Miuma"
+                    if faceName == "Actor11_1":
+                        speaker = "Nurari"
+                    if faceName == "Actor12_1":
+                        speaker = "Kokotsuzumi"
 
             ## Event Code: 355 or 655 Scripts [Optional]
             if "code" in codeList[i] and (codeList[i]["code"] == 355 or codeList[i]["code"] == 655) and CODE355655 is True:
