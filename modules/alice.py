@@ -101,7 +101,7 @@ def handleAlice(filename, estimate):
 
     else:
         try:
-            with open("translated/" + filename, "w", encoding="UTF-8") as outFile:
+            with open("translated/" + filename, "w", encoding="utf-8", newline="\n") as outFile:
                 start = time.time()
                 translatedData = openFiles(filename)
 

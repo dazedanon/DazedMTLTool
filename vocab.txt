@@ -1,20 +1,18 @@
 Here are some vocabulary and terms so that you know the proper spelling and translation.
 ```
 # Game Characters
-小鳥遊 乙羽 (Takanashi Otoha) - Female
-暁 莉乃 (Akatsuki Rino) - Female
-小鳥遊 麗子 (Takanashi Reiko) - Female
-田中 心々愛 (Tanaka Cocoa) - Female
-茂部 (Mobu) - Male
-たかし (Takashi) - Male
-小鳥遊 乙羽 (Kotori Yuu Otoha) - Female
-暁 莉乃 (Akira Rino) - Female
-小鳥遊 麗子 (Kotori Yuu Reiko) - Female
-田中 心々愛 (Tanaka Kokoroa) - Female
-陽向葵ゅか (Aoi Hinata) - Female
-水野七海 (Nanami Mizuno) - Female
-秋山はるる (Haruru Akiyama) - Female
-山田じぇみ子 (Junko Yamada) - Female
+桜 謳歌 (Sakura Ouka) - Female
+鈴音 (Suzune) - Female
+鍛冶 演歌 (Kaji Enka) - Female
+希来里 (Kirari) - Female
+温泉 玉子 (Onsen Tamago) - Female
+愚譜 徳朗 (Gufu Tokuro) - Unknown
+華姫瑠 (Kahimeru) - Unknown
+枝切 はらら (Edakiri Harara) - Unknown
+枝切 鋏 (Edakiri Hasami) - Unknown
+御馬 忠勝 (Miuma Tadakatsu) - Unknown
+ぬらり (Nurari) - Unknown
+狐鼓 (Kokotsuzumi) - Unknown
  
 # Lewd Terms
 マンコ (pussy)

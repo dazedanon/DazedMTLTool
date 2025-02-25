@@ -118,7 +118,7 @@ def handleWOLF(filename, estimate):
     # Translate
     if not estimate:
         try:
-            with open("translated/" + filename, "w", encoding="utf-8") as outFile:
+            with open("translated/" + filename, "w", encoding="utf-8", newline="\n") as outFile:
                 json.dump(translatedData[0], outFile, ensure_ascii=False, indent=4)
         except Exception:
             traceback.print_exc()
