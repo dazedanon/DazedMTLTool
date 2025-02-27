@@ -74,7 +74,7 @@ POSITION = 0
 LEAVE = False
 
 # Config (Default)
-FIRSTLINESPEAKERS = True  # If 1st line of 401 is a speaker, set to True (False)
+FIRSTLINESPEAKERS = False  # If 1st line of 401 is a speaker, set to True (False)
 FACENAME101 = False  # Find Speakers in 101 Codes based on Face Name (False)
 NAMES = False  # Output a list of all the character names found (False)
 BRFLAG = False  # If the game uses <br> instead (False)
@@ -899,11 +899,6 @@ def searchCodes(page, pbar, jobList, filename):
                     i += 1
                     continue
 
-                # Validate Japanese Text
-                if not re.search(LANGREGEX, jaString) and IGNORETLTEXT:
-                    i += 1
-                    continue
-
                 # # For Retarded Devs
                 # retardRegex = r'([\\]+[nN]\[[\\]+V\[\d*?\]\])'
                 # match = re.search(retardRegex, jaString)
@@ -1007,6 +1002,11 @@ def searchCodes(page, pbar, jobList, filename):
 
                 # Check if there is text to translate
                 if not re.search(r"\w+", jaString):
+                    i += 1
+                    continue
+
+                # Validate Japanese Text
+                if not re.search(LANGREGEX, jaString) and IGNORETLTEXT:
                     i += 1
                     continue
 
