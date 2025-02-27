@@ -74,7 +74,7 @@ POSITION = 0
 LEAVE = False
 
 # Config (Default)
-FIRSTLINESPEAKERS = False  # If 1st line of 401 is a speaker, set to True (False)
+FIRSTLINESPEAKERS = True  # If 1st line of 401 is a speaker, set to True (False)
 FACENAME101 = False  # Find Speakers in 101 Codes based on Face Name (False)
 NAMES = False  # Output a list of all the character names found (False)
 BRFLAG = False  # If the game uses <br> instead (False)
@@ -82,16 +82,16 @@ FIXTEXTWRAP = True  # Overwrites textwrap (True)
 IGNORETLTEXT = True  # Ignores all translated text. (True)
 
 # Dialogue / Scroll / Choices (Main Codes)
-CODE401 = True
-CODE405 = True
-CODE102 = True
+CODE401 = False
+CODE405 = False
+CODE102 = False
 
 # Optional
 CODE101 = False  # Turn this one when names exist in 101
 CODE408 = False  # Warning, translates comments and can inflate costs.
 
 # Variables
-CODE122 = False
+CODE122 = True
 
 # Other
 CODE355655 = False
@@ -297,7 +297,7 @@ def parseMap(data, filename):
     return [data, totalTokens, None]
 
 
-def translateNote(event, regex, wordwrap=True):
+def translateNote(event, regex, wordwrap=False):
     # Regex String
     jaString = event["note"]
     match = re.findall(regex, jaString, re.DOTALL)
@@ -307,13 +307,14 @@ def translateNote(event, regex, wordwrap=True):
         while i < len(match):
             initialJAString = match[i]
             # Remove any textwrap
-            modifiedJAString = initialJAString.replace("\n", " ")
+            if wordwrap:
+                jaString = initialJAString.replace("\n", " ")
 
             # Translate
             response = translateGPT(
-                modifiedJAString,
+                jaString,
                 "Reply with only the " + LANGUAGE + " translation.",
-                False,
+                True,
             )
             translatedText = response[0]
             tokens[0] += response[1][0]
@@ -660,6 +661,14 @@ def searchNames(data, pbar, context):
                         tokensResponse = translateNote(data[i], r"ADTs?:(.+?)>")
                         totalTokens[0] += tokensResponse[0]
                         totalTokens[1] += tokensResponse[1]
+                    if "<拡張説明:" in data[i]["note"]:
+                        tokensResponse = translateNote(data[i], r"<拡張説明:(.+?)>")
+                        totalTokens[0] += tokensResponse[0]
+                        totalTokens[1] += tokensResponse[1]
+                    if "<STS DESC>" in data[i]["note"]:
+                        tokensResponse = translateNote(data[i], r"<STS DESC>\n(.+?)\n<")
+                        totalTokens[0] += tokensResponse[0]
+                        totalTokens[1] += tokensResponse[1]
 
                     i += 1
                 else:
@@ -962,7 +971,8 @@ def searchCodes(page, pbar, jobList, filename):
                         and len(codeList[i + 1]["parameters"]) > 0
                         and len(codeList[i + 1]["parameters"][0]) > 0
                     ):
-                        if codeList[i + 1]["parameters"] != "" and codeList[i + 1]["parameters"][0].strip()[0] in [
+                        nextString = codeList[i + 1]["parameters"][0].strip()
+                        if nextString and nextString[0] in [
                             "「",
                             '"',
                             "(",
@@ -1197,7 +1207,7 @@ def searchCodes(page, pbar, jobList, filename):
             ## Event Code: 122 [Set Variables]
             if "code" in codeList[i] and codeList[i]["code"] == 122 and CODE122 is True:
                 # This is going to be the var being set. (IMPORTANT)
-                if codeList[i]["parameters"][0] not in list(range(20, 150)):
+                if codeList[i]["parameters"][0] not in list(range(4, 5)):
                     i += 1
                     continue
 
