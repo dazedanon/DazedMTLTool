@@ -82,9 +82,9 @@ FIXTEXTWRAP = True  # Overwrites textwrap (True)
 IGNORETLTEXT = True  # Ignores all translated text. (True)
 
 # Dialogue / Scroll / Choices (Main Codes)
-CODE401 = False
-CODE405 = False
-CODE102 = False
+CODE401 = True
+CODE405 = True
+CODE102 = True
 
 # Optional
 CODE101 = False  # Turn this one when names exist in 101
@@ -306,15 +306,16 @@ def translateNote(event, regex, wordwrap=False):
         i = 0
         while i < len(match):
             initialJAString = match[i]
+            modifiedJAString = initialJAString
             # Remove any textwrap
             if wordwrap:
-                jaString = initialJAString.replace("\n", " ")
+                modifiedJAString = modifiedJAString.replace("\n", " ")
 
             # Translate
             response = translateGPT(
-                jaString,
+                modifiedJAString,
                 "Reply with only the " + LANGUAGE + " translation.",
-                True,
+                False,
             )
             translatedText = response[0]
             tokens[0] += response[1][0]
@@ -1207,7 +1208,7 @@ def searchCodes(page, pbar, jobList, filename):
             ## Event Code: 122 [Set Variables]
             if "code" in codeList[i] and codeList[i]["code"] == 122 and CODE122 is True:
                 # This is going to be the var being set. (IMPORTANT)
-                if codeList[i]["parameters"][0] not in list(range(4, 5)):
+                if codeList[i]["parameters"][0] not in list(range(300, 321)):
                     i += 1
                     continue
 
