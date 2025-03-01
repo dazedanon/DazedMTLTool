@@ -17,7 +17,7 @@ def set_defaults(file_path):
         'CODE405': 'True',
         'CODE102': 'True',
         # Optional
-        'CODE101': 'False  # Turn this one when names exist in 101',
+        'CODE101': 'False  # Turn this one on when names exist in 101',
         'CODE408': 'False  # Warning, translates comments and can inflate costs.',
         # Variables
         'CODE122': 'False',
