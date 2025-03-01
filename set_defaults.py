@@ -11,7 +11,25 @@ def set_defaults(file_path):
         'NAMES': 'False  # Output a list of all the character names found (False)',
         'BRFLAG': 'False  # If the game uses <br> instead (False)',
         'FIXTEXTWRAP': 'True  # Overwrites textwrap (True)',
-        'IGNORETLTEXT': 'False  # Ignores all translated text. (False)'
+        'IGNORETLTEXT': 'False  # Ignores all translated text. (False)',
+        # Dialogue / Scroll / Choices (Main Codes)
+        'CODE401': 'True',
+        'CODE405': 'True',
+        'CODE102': 'True',
+        # Optional
+        'CODE101': 'False  # Turn this one when names exist in 101',
+        'CODE408': 'False  # Warning, translates comments and can inflate costs.',
+        # Variables
+        'CODE122': 'False',
+        # Other
+        'CODE355655': 'False',
+        'CODE357': 'False',
+        'CODE657': 'False',
+        'CODE356': 'False',
+        'CODE320': 'False',
+        'CODE324': 'False',
+        'CODE111': 'False',
+        'CODE108': 'False'
     }
 
     # Update the content with the default values
