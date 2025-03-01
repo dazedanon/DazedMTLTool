@@ -74,7 +74,7 @@ POSITION = 0
 LEAVE = False
 
 # Config (Default)
-FIRSTLINESPEAKERS = True  # If 1st line of 401 is a speaker, set to True (False)
+FIRSTLINESPEAKERS = False  # If 1st line of 401 is a speaker, set to True (False)
 FACENAME101 = False  # Find Speakers in 101 Codes based on Face Name (False)
 NAMES = False  # Output a list of all the character names found (False)
 BRFLAG = False  # If the game uses <br> instead (False)
