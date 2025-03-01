@@ -79,7 +79,7 @@ FACENAME101 = False  # Find Speakers in 101 Codes based on Face Name (False)
 NAMES = False  # Output a list of all the character names found (False)
 BRFLAG = False  # If the game uses <br> instead (False)
 FIXTEXTWRAP = True  # Overwrites textwrap (True)
-IGNORETLTEXT = True  # Ignores all translated text. (True)
+IGNORETLTEXT = False  # Ignores all translated text. (False)
 
 # Dialogue / Scroll / Choices (Main Codes)
 CODE401 = True
