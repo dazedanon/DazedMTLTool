@@ -1,35 +1,29 @@
 Here are some vocabulary and terms so that you know the proper spelling and translation.
 ```
 # Game Characters
-#Actors
-アイカ (Aika) - Female
-カナエ (Kanae) - Female
-マドカ (Madoka) - Female
-シズカ (Shizuka) - Female
-ユウキ (Yuuki) - Male
-ユキナ (Yukina) - Female
-ヒカリ (Hikari) - Female
-イッパツ (Ippatsu) - Male
-ウユ (Uyu) - Female
-ミキ (Miki) - Female
-カズヨシ (Kazuyoshi) - Male
-モモコ (Momoko) - Female
-ライタ (Raita) - Male
-ツヨシ (Tsuyoshi) - Male
-レイキ (Reiki) - Male
-センカ (Senka) - Female
-タツオ (Tatsuo) - Male
-チョウシン (Choushin) - Male
-ヤワラ (Yawara) - Female
-カンテツ (Kantetsu) - Male
-ソラ (Sora) - Female
-すすむ (Susumu) - Male
-イリコ (Iriko)
-レイナ (Reina)
-ギンジ (Ginji)
-ケンシロウ (Kenshirou)
-カガミ (Kagami)
-円 (Yen) - Female
+しナリス (Renalith) - Female
+ウイオラ (Viola) - Female
+夜霧 (Yogiri) - Female
+シスターミサ (Sister Misa) - Female
+マダムローズ (Madam Rose) - Female
+ドン=ブリトー (Don Borito) - Male
+ゴン=ブリトー (Gon Borito) - Male
+ボンゴ (Bongo) - Male
+占い師 (Fortune Teller) - Female
+グランド (Grand) - Male
+トラバス所長 (Director Trabas) - Male
+大富豪ティンパ (Tycoon Timpa) - Male
+傭兵サクソン (Mercenary Saxon) - Male
+拳法家リュウチン (Kung Fu Master Ryuchin) - Male
+マイティゴースト (Mighty Ghost) - Female
+バトウ (Batou) - Male
+ディーラー (Dealer) - Male
+チェンバロ王子 (Prince Cembalo) - Male
+リネット (Linette) - Female
+オリン (Orin) - Female
+チェロル (Cheryl) - Female
+スクルー (Sukuru) - Female
+スクルド (Skuld) - Female
 
 # Lewd Terms
 マンコ (pussy)
@@ -123,9 +117,5 @@ w ((lol))
 』 (』)
 
 # Game Specific
-呪算-凡 (Curse Calculation - Normal)
-呪理-凡 (Curse Logic -Normal)
-呪器-凡 (Cursed Tool -Normal)
-呪器-光 (Cursed Weapon -Light)
-呪札-元 (Cursed Talisman -Origin)
+イーリス (Iris)
 ```
