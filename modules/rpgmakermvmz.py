@@ -1026,17 +1026,15 @@ def searchCodes(page, pbar, jobList, filename):
 
                 # Join Up 401's into single string
                 if len(codeList) > i + 1:
-                    while codeList[i + 1]["code"] in [401, 405, -1]:
+                    while codeList[i + 1]["code"] in [401, 405, -1] and len(codeList[i]["parameters"]) > 0 and not re.match(r"^(\s*[\\]+[aAbBdDeEfFgGhHjJlLmMoOpPqQrRsStTuUwWxXyYzZ]+\[[\w\d\[\]\\]+\])", codeList[i+1]["parameters"][0]):
                         if not setData:
                             codeList[i]["parameters"] = []
                             codeList[i]["code"] = -1
                         i += 1
                         j = i
 
-                        # Only add if not empty
-                        if len(codeList[i]["parameters"]) > 0:
-                            jaString = codeList[i]["parameters"][0]
-                            currentGroup.append(jaString)
+                        jaString = codeList[i]["parameters"][0]
+                        currentGroup.append(jaString)
 
                         # Make sure not the end of the list.
                         if len(codeList) <= i + 1:
@@ -1208,7 +1206,7 @@ def searchCodes(page, pbar, jobList, filename):
             ## Event Code: 122 [Set Variables]
             if "code" in codeList[i] and codeList[i]["code"] == 122 and CODE122 is True:
                 # This is going to be the var being set. (IMPORTANT)
-                if codeList[i]["parameters"][0] not in list(range(300, 321)):
+                if codeList[i]["parameters"][0] not in list(range(0, 100)):
                     i += 1
                     continue
 
@@ -1478,7 +1476,9 @@ def searchCodes(page, pbar, jobList, filename):
                     continue
 
                 # Get Speaker
-                if "\\" not in jaString and jaString:
+                match = re.search(r"(?:[\\]+\w\[\d+\])?(.+)(?:[\\]+\w\[\d+\])?", jaString)
+                if match:
+                    jaString = match.group(1)
                     response = getSpeaker(jaString)
                     totalTokens[0] += response[1][0]
                     totalTokens[1] += response[1][1]
@@ -1487,11 +1487,11 @@ def searchCodes(page, pbar, jobList, filename):
                     # Validate Speaker is not empty
                     if len(speaker) > 0:
                         if isVar == False:
-                            codeList[i]["parameters"][4] = speaker
+                            codeList[i]["parameters"][4] = codeList[i]["parameters"][4].replace(jaString, speaker)
                             i += 1
                             continue
                         else:
-                            codeList[i]["parameters"][0] = speaker
+                            codeList[i]["parameters"][0] = codeList[i]["parameters"][0].replace(jaString, speaker)
                             isVar = False
                             i += 1
                             continue
@@ -2565,7 +2565,8 @@ def translateGPT(text, history, fullPromptFlag):
 
                 # AI Refused, Try Again
                 if not translatedText:
-                    response = translateText(f"{system}\n You translate ALL content.", user, history, 0.1, format)
+                    response = translateText(f"{system}\n You translate ALL content.", user, history, 0.1, format, model="gpt-4o")
+                    translatedText = response.choices[0].message.content
 
                 # Report Tokens
                 totalTokens[0] += response.usage.prompt_tokens
