@@ -41,6 +41,7 @@ BRFLAG = False  # If the game uses <br> instead
 FIXTEXTWRAP = True  # Overwrites textwrap
 IGNORETLTEXT = False  # Ignores all translated text.
 MISMATCH = []  # Lists files that throw a mismatch error (Length of GPT list response is wrong)
+CONVERTTOWIDE = False # Default (False)
 
 # tqdm Globals
 BAR_FORMAT = "{l_bar}{bar:10}{r_bar}{bar:-10b}"
@@ -266,7 +267,8 @@ def translateOnscripter(data, pbar, filename, translatedList):
                     translatedText = translatedText.replace("  ", " ")
 
                     # Convert to Wide
-                    translatedText = translatedText.translate(ascii_to_wide)
+                    if CONVERTTOWIDE:
+                        translatedText = translatedText.translate(ascii_to_wide)
 
                     # Fix Formatting
                     translatedText = fixText(translatedText)
@@ -291,7 +293,8 @@ def translateOnscripter(data, pbar, filename, translatedList):
                 # Set Data
                 for j in range(len(translatedTextList)):
                     # Convert to Wide
-                    translatedText = translatedTextList[j].translate(ascii_to_wide)
+                    if CONVERTTOWIDE:
+                        translatedText = translatedTextList[j].translate(ascii_to_wide)
 
                     # Set
                     data[i] = data[i].replace(choiceList[j], translatedText)
