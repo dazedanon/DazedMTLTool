@@ -86,11 +86,11 @@ CODE102 = False
 
 # Set String (Fragile but necessary)
 CODE122 = False
-CODE150 = True
+CODE150 = False
 
 # Other
 CODE210 = False
-CODE300 = False
+CODE300 = True
 CODE250 = False
 
 # Database
@@ -98,11 +98,11 @@ SCENARIOFLAG = False
 OPTIONSFLAG = False
 NPCFLAG = False
 DBNAMEFLAG = False
-ITEMFLAG = True
+ITEMFLAG = False
 STATEFLAG = False
 ENEMYFLAG = False
-ARMORFLAG = True
-WEAPONFLAG = True
+ARMORFLAG = False
+WEAPONFLAG = False
 SKILLFLAG = False
 
 
@@ -299,15 +299,15 @@ def searchCodes(events, pbar, jobList, filename):
         while i < len(codeList):
             ### Event Code: 101 Message
             if codeList[i]["code"] == 101 and CODE101 == True:
-                speakerRegex = r"@\d+\n(.*)：\n"
-                textRegex = r"@?\d*\n?\u3000*([\w\W]+)\n?"
+                speakerRegex = r"@\d+\r?\n(.*)：\r?\n" # Default: r"@\d+\r?\n(.*)：\r?\n"
+                textRegex = r"@?\d*\r?\n?\u3000*([\w\W]+)\r?\n?" # Default: r"@?\d*\r?\n?\u3000*([\w\W]+)\r?\n?"
 
                 # Grab String
                 jaString = codeList[i]["stringArgs"][0]
                 speaker = ""
 
                 # Grab Speaker
-                if "：\n" in jaString:
+                if "：\n" in jaString or "：\r\n" in jaString:
                     match = re.search(speakerRegex, jaString)
                     if match:
                         # TL Speaker
@@ -327,6 +327,7 @@ def searchCodes(events, pbar, jobList, filename):
                     initialJAString = jaString
 
                     # Remove Textwrap
+                    jaString = jaString.replace("\r", "")
                     jaString = jaString.replace("\n", " ")
 
                     # 1st Pass (Save Text to List)
@@ -584,6 +585,66 @@ def searchCodes(events, pbar, jobList, filename):
 
                         # Write to File
                         codeList[i]["stringArgs"][1] = translatedText
+                
+                # Dialogue
+                elif codeList[i]["stringArgs"][0] == "進入禁止":
+                    speakerRegex = r"@\d+\r?\n(.*)：\r?\n" # Default: r"@\d+\r?\n(.*)：\r?\n"
+                    textRegex = r"@?\d*\r?\n?\u3000*([\w\W]+)\r?\n?" # Default: r"@?\d*\r?\n?\u3000*([\w\W]+)\r?\n?"
+
+                    # Grab String
+                    jaString = codeList[i]["stringArgs"][1]
+                    speaker = ""
+
+                    # Grab Speaker
+                    if "：\n" in jaString or "：\r\n" in jaString:
+                        match = re.search(speakerRegex, jaString)
+                        if match:
+                            # TL Speaker
+                            response = getSpeaker(match.group(1))
+                            speaker = response[0]
+                            totalTokens[0] += response[1][0]
+                            totalTokens[1] += response[1][1]
+
+                            # Set nametag and remove from string
+                            codeList[i]["stringArgs"][1] = codeList[i]["stringArgs"][1].replace(match.group(1), speaker)
+                            jaString = jaString.replace(match.group(0), "")
+
+                    # Grab Only Text
+                    match = re.search(textRegex, jaString)
+                    if match:
+                        jaString = match.group(1)
+                        initialJAString = jaString
+
+                        # Remove Textwrap
+                        jaString = jaString.replace("\r", "")
+                        jaString = jaString.replace("\n", " ")
+
+                        # 1st Pass (Save Text to List)
+                        if not setData:
+                            if speaker == "":
+                                list300.append(jaString)
+                            else:
+                                list300.append(f"[{speaker}]: {jaString}")
+
+                        # 2nd Pass (Set Text)
+                        else:
+                            # Grab Translated String
+                            translatedText = list300[0]
+
+                            # Remove speaker
+                            matchSpeakerList = re.findall(r"^(\[.+?\]\s?[|:]\s?)\s?", translatedText)
+                            if len(matchSpeakerList) > 0:
+                                translatedText = translatedText.replace(matchSpeakerList[0], "")
+
+                            # Textwrap
+                            if FIXTEXTWRAP is True:
+                                translatedText = textwrap.fill(translatedText, width=WIDTH)
+
+                            # Set Data
+                            codeList[i]["stringArgs"][1] = codeList[i]["stringArgs"][1].replace(initialJAString, translatedText)
+
+                            # Reset Data and Pop Item
+                            list300.pop(0)
 
             ### Event Code: 250 DB Read/Writes
             if codeList[i]["code"] == 250 and CODE250 == True:
@@ -778,58 +839,61 @@ def searchDB(events, pbar, jobList, filename):
         for table in tableList:
             # Grab Armors
             if table["name"] == "主人公ステータス" and NPCFLAG == True:
-                for npc in table["data"]:
-                    dataList = npc["data"]
+                with open("translations.txt", "a", encoding="utf-8") as file:
+                    file.write(f"\n#Actors")
+                    for npc in table["data"]:
+                        dataList = npc["data"]
 
-                    # Parse
-                    for j in range(len(dataList)):
-                        # Name
-                        if "キャラ名" in dataList[j].get("name"):
-                            # Pass 1 (Grab Data)
-                            if setData == False:
-                                if dataList[j].get("value") != "":
-                                    npcList[0].append(dataList[j].get("value"))
+                        # Parse
+                        for j in range(len(dataList)):
+                            # Name
+                            if "キャラ名" in dataList[j].get("name"):
+                                # Pass 1 (Grab Data)
+                                if setData == False:
+                                    if dataList[j].get("value") != "":
+                                        npcList[0].append(dataList[j].get("value"))
 
-                            # Pass 2 (Set Data)
-                            else:
-                                if dataList[j].get("value") != "":
-                                    dataList[j].update({"value": npcList[0][0]})
-                                    npcList[0].pop(0)
+                                # Pass 2 (Set Data)
+                                else:
+                                    if dataList[j].get("value") != "":
+                                        dataList[j].update({"value": npcList[0][0]})
+                                        npcList[0].pop(0)
 
-                        # Description
-                        if "肩書き" in dataList[j].get("name"):
-                            # Pass 1 (Grab Data)
-                            if setData == False:
-                                if dataList[j].get("value") != "":
-                                    # Remove Textwrap
-                                    jaString = dataList[j].get("value")
-                                    jaString = jaString.replace("\n", " ")
-                                    jaString = jaString.replace("\r", "")
-                                    jaString = re.sub(r"[\\]+f\[\d+\]", "", jaString)
+                            # Description
+                            if "肩書き" in dataList[j].get("name"):
+                                # Pass 1 (Grab Data)
+                                if setData == False:
+                                    if dataList[j].get("value") != "":
+                                        # Remove Textwrap
+                                        jaString = dataList[j].get("value")
+                                        jaString = jaString.replace("\n", " ")
+                                        jaString = jaString.replace("\r", "")
+                                        jaString = re.sub(r"[\\]+f\[\d+\]", "", jaString)
 
-                                    # Append Data
-                                    npcList[1].append(jaString)
-                            # Pass 2 (Set Data)
-                            else:
-                                if dataList[j].get("value") != "":
-                                    # Textwrap
-                                    translatedText = npcList[1][0]
-                                    translatedText = textwrap.fill(translatedText, LISTWIDTH)
-                                    translatedText = font + translatedText
+                                        # Append Data
+                                        npcList[1].append(jaString)
+                                # Pass 2 (Set Data)
+                                else:
+                                    if dataList[j].get("value") != "":
+                                        # Textwrap
+                                        translatedText = npcList[1][0]
+                                        translatedText = textwrap.fill(translatedText, LISTWIDTH)
+                                        translatedText = font + translatedText
 
-                                    # Set Data
-                                    dataList[j].update({"value": translatedText})
-                                    npcList[1].pop(0)
+                                        # Set Data
+                                        dataList[j].update({"value": translatedText})
+                                        npcList[1].pop(0)
+                                        file.write(f"\n{translatedText}")
 
             # Grab Scenario
-            if "UI--" in table["name"] and SCENARIOFLAG == True:
+            if "ステータス表示情報" in table["name"] and SCENARIOFLAG == True:
                 for scenario in table["data"]:
                     dataList = scenario["data"]
 
                     # Parse
                     for j in range(len(dataList)):
                         # Name
-                        if "NULL" in dataList[j].get("name"):
+                        if "名前" in dataList[j].get("name"):
                             if dataList[j].get("value"):
                                 jaStringList = dataList[j].get("value").split("\r\nPFD\r\n")
                                 for jaString in jaStringList:
@@ -847,7 +911,7 @@ def searchDB(events, pbar, jobList, filename):
                                         dataList[j].update({"value": dataList[j].get("value").replace(jaString, translatedText)})
 
                         # Description 1
-                        if "説明文１" in dataList[j].get("name"):
+                        if "私生活" in dataList[j].get("name"):
                             if dataList[j].get("value"):
                                 jaStringList = dataList[j].get("value").split("\r\nPFD\r\n")
                                 for jaString in jaStringList:
@@ -865,7 +929,7 @@ def searchDB(events, pbar, jobList, filename):
                                         dataList[j].update({"value": dataList[j].get("value").replace(jaString, translatedText)})
 
                         # Description 2
-                        if "説明文２" in dataList[j].get("name"):
+                        if "性格" in dataList[j].get("name"):
                             if dataList[j].get("value"):
                                 jaStringList = dataList[j].get("value").split("\r\nPFD\r\n")
                                 for jaString in jaStringList:
@@ -2430,7 +2494,7 @@ def translateGPT(text, history, fullPromptFlag):
                     continue
 
                 # Translating
-                response = translateText(system, user, history, 0.05, format)
+                response = translateText(system, user, history, 0.05, format, model="gpt-4o")
 
                 # Set Tokens
                 translatedText = response.choices[0].message.content
