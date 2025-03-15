@@ -1341,6 +1341,7 @@ def searchCodes(page, pbar, jobList, filename):
                     "DarkPlasma_CharacterText": ("text", None),
                     "DTextPicture": ("text", None),
                     "TextPicture": ("text", None),
+                    "TRP_SkitMZ": ("name", None),
                 }
 
                 for key, (argVar, font) in headerMappings.items():
