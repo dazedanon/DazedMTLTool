@@ -85,12 +85,12 @@ CODE101 = False
 CODE102 = False
 
 # Set String (Fragile but necessary)
-CODE122 = False
+CODE122 = True
 CODE150 = False
 
 # Other
 CODE210 = False
-CODE300 = True
+CODE300 = False
 CODE250 = False
 
 # Database
@@ -98,6 +98,7 @@ SCENARIOFLAG = False
 OPTIONSFLAG = False
 NPCFLAG = False
 DBNAMEFLAG = False
+DBVALUEFLAG = False
 ITEMFLAG = False
 STATEFLAG = False
 ENEMYFLAG = False
@@ -434,6 +435,11 @@ def searchCodes(events, pbar, jobList, filename):
                         jaString = jaString.group(1)
                     else:
                         jaString = codeList[i]["stringArgs"][0]
+    
+                    originalString = jaString
+
+                    # Textwrap
+                    # jaString = jaString.replace('\n', ' ')
 
                     # Translate Conversations
                     if "：Nothing" in jaString:
@@ -483,17 +489,20 @@ def searchCodes(events, pbar, jobList, filename):
                                 # Translate
                                 response = translateGPT(
                                     jaString,
-                                    f"Reply with the {LANGUAGE} translation of the text",
+                                    f"Maintain any newlines and Reply with the {LANGUAGE} translation of the text",
                                     True,
                                 )
                                 translatedText = response[0]
                                 totalTokens[0] += response[1][0]
                                 totalTokens[1] += response[1][1]
 
-                                # Set String
-                                codeList[i]["stringArgs"][0] = codeList[i]["stringArgs"][0].replace(jaString, translatedText)
+                                # Textwrap
+                                # translatedText = textwrap.fill(translatedText, WIDTH)
 
-            ### Event Code: 122 SetString
+                                # Set String
+                                codeList[i]["stringArgs"][0] = codeList[i]["stringArgs"][0].replace(originalString, translatedText)
+
+            ### Event Code: 150 Picture String
             if codeList[i]["code"] == 150 and CODE150 == True:
                 if "stringArgs" in codeList[i] and len(codeList[i]["stringArgs"]) > 0:
                     # Grab String
@@ -587,7 +596,7 @@ def searchCodes(events, pbar, jobList, filename):
                         codeList[i]["stringArgs"][1] = translatedText
                 
                 # Dialogue
-                elif codeList[i]["stringArgs"][0] == "進入禁止":
+                elif codeList[i]["stringArgs"][0] == "援護文章":
                     speakerRegex = r"@\d+\r?\n(.*)：\r?\n" # Default: r"@\d+\r?\n(.*)：\r?\n"
                     textRegex = r"@?\d*\r?\n?\u3000*([\w\W]+)\r?\n?" # Default: r"@?\d*\r?\n?\u3000*([\w\W]+)\r?\n?"
 
@@ -809,6 +818,7 @@ def searchDB(events, pbar, jobList, filename):
         skillList = jobList[7]
         optionsList = jobList[8]
         dbNameList = jobList[9]
+        dbValueList = jobList[10]
         setData = True
     else:
         scenarioList = [[], [], []]
@@ -821,6 +831,7 @@ def searchDB(events, pbar, jobList, filename):
         stateList = [[], [], [], [], [], [], [], []]
         optionsList = [[], [], [], []]
         dbNameList = [[]]
+        dbValueList = [[]]
         setData = False
 
     # Vars/Globals
@@ -838,7 +849,7 @@ def searchDB(events, pbar, jobList, filename):
     try:
         for table in tableList:
             # Grab Armors
-            if table["name"] == "主人公ステータス" and NPCFLAG == True:
+            if table["name"] == "ステータス" and NPCFLAG == True:
                 with open("translations.txt", "a", encoding="utf-8") as file:
                     file.write(f"\n#Actors")
                     for npc in table["data"]:
@@ -886,7 +897,7 @@ def searchDB(events, pbar, jobList, filename):
                                         file.write(f"\n{translatedText}")
 
             # Grab Scenario
-            if "ステータス表示情報" in table["name"] and SCENARIOFLAG == True:
+            if "敵ｷｬﾗﾃﾞｰﾀ" in table["name"] and SCENARIOFLAG == True:
                 for scenario in table["data"]:
                     dataList = scenario["data"]
 
@@ -911,7 +922,7 @@ def searchDB(events, pbar, jobList, filename):
                                         dataList[j].update({"value": dataList[j].get("value").replace(jaString, translatedText)})
 
                         # Description 1
-                        if "私生活" in dataList[j].get("name"):
+                        if "文言" in dataList[j].get("name"):
                             if dataList[j].get("value"):
                                 jaStringList = dataList[j].get("value").split("\r\nPFD\r\n")
                                 for jaString in jaStringList:
@@ -929,7 +940,7 @@ def searchDB(events, pbar, jobList, filename):
                                         dataList[j].update({"value": dataList[j].get("value").replace(jaString, translatedText)})
 
                         # Description 2
-                        if "性格" in dataList[j].get("name"):
+                        if "防御破壊文言" in dataList[j].get("name"):
                             if dataList[j].get("value"):
                                 jaStringList = dataList[j].get("value").split("\r\nPFD\r\n")
                                 for jaString in jaStringList:
@@ -1039,6 +1050,49 @@ def searchDB(events, pbar, jobList, filename):
                         if dbName[j].get("name") != "":
                             dbName[j].update({"name": dbNameList[0][0]})
                             dbNameList[0].pop(0)
+
+            # Grab DB Values
+            if table["name"] == "近況文章" and DBVALUEFLAG == True:
+                font = 16
+                subject = ""
+                for entry in table["data"]:
+                    dbValue = entry["data"]
+                    for j in range(len(dbValue)):
+                        if dbValue[j].get("value"):
+                            jaString = dbValue[j].get("value")
+
+                            # Speaker
+                            match = re.search(r"(^[\\]+f\[\d+\].+?\r\n).+", jaString)
+                            if match:
+                                subject = match.group(1)
+                                jaString = jaString.replace(subject, "")
+
+                                # Nuke Textwrap & Font
+                                jaString = jaString.replace("\r", "")
+                                jaString = jaString.replace("\n", " ")
+                                jaString = re.sub(r"[\\]+f\[\d+\]", "", jaString)
+
+                                # Pass 1 (Grab Data)
+                                if setData == False:
+                                    # Append
+                                    dbValueList[0].append(jaString)
+
+                                # Pass 2 (Set Data)
+                                else:
+                                    if dbValue[j].get("value"):
+                                        translatedText = dbValueList[0][0]
+
+                                        # Textwrap
+                                        translatedText = textwrap.fill(translatedText, 30)
+                                        translatedText = translatedText.replace("\n", f"\r\n\\f[{font}]")
+
+                                        # Subject
+                                        if subject:
+                                            translatedText = f"{subject}{translatedText}"
+
+                                        # Set
+                                        dbValue[j].update({"value": translatedText})
+                                        dbValueList[0].pop(0)
 
             # Grab Items
             if table["name"] == "アイテム" and ITEMFLAG == True:
@@ -1739,6 +1793,7 @@ def searchDB(events, pbar, jobList, filename):
         skillListTL = [[], [], [], [], []]
         optionsListTL = [[], [], [], []]
         dbNameListTL = [[]]
+        dbValueListTL = [[]]
 
         translate = False
 
@@ -2234,6 +2289,30 @@ def searchDB(events, pbar, jobList, filename):
                 dbNameListTL = [nameListTL]
                 translate = True
 
+        # DB Values
+        if len(dbValueList[0]) > 0:
+            # Progress Bar
+            total = 0
+            for dbValueArray in dbValueList:
+                total += len(dbValueArray)
+            pbar.total = total
+            pbar.refresh()
+
+            # Name
+            response = translateGPT(dbValueList[0], "Reply with only the " + LANGUAGE + " translation", True)
+            valueListTL = response[0]
+            totalTokens[0] += response[1][0]
+            totalTokens[1] += response[1][1]
+
+            # Check Mismatch
+            if len(valueListTL) != len(dbValueList[0]):
+                with LOCK:
+                    if filename not in MISMATCH:
+                        MISMATCH.append(filename)
+            else:
+                dbValueListTL = [valueListTL]
+                translate = True
+
         # Start Pass 2
         if translate == True:
             jobList.append(scenarioListTL)
@@ -2246,6 +2325,7 @@ def searchDB(events, pbar, jobList, filename):
             jobList.append(skillListTL)
             jobList.append(optionsListTL)
             jobList.append(dbNameListTL)
+            jobList.append(dbValueListTL)
             searchDB(events, pbar, jobList, filename)
 
     except IndexError as e:
