@@ -383,8 +383,18 @@ def translateCSV(data, pbar, writer, filename, translatedList, format):
                             translatedText = textwrap.fill(translatedText, WIDTH)
                             translatedText = translatedText.replace("\n", "\\n")
 
-                            # Set Data
-                            data[i][textColumn] = translatedText
+                            # Check for more than 3 newlines (Shoujo Ramune)
+                            newline_count = translatedText.count("\\n")
+                            if newline_count >= 3:
+                                parts = translatedText.split("\\n", 3)
+                                data[i][textColumn] = parts[0] + "\\n" + parts[1] + "\\n" + parts[2]
+                                new_row = data[i].copy()
+                                new_row[textColumn] = parts[3]
+                                new_row[0] = str(int(new_row[0]) + 1)  # Add 1 to the line number
+                                data.insert(i + 1, new_row)
+                                i += 1
+                            else:
+                                data[i][textColumn] = translatedText
 
                     # Iterate
                     i += 1
