@@ -1,14 +1,11 @@
 Here are some vocabulary and terms so that you know the proper spelling and translation.
 ```
 # Game Characters
-江夏 遥香 (Enatsu Haruka) - Female
-森崎 千夏 (Morisaki Chinatsu) - Female
-綾瀬 江里菜 (Ayase Erina) - Female
-藤村沙織 (Fujimura Saori) - Female
-加奈 (Kana) - Female
-藤島先生 (Fujishima) - Male
-信二 (Shinji) - Male
-平八 (Heihachi) - Male
+イルル (Illul) - Neutral
+オペ子 (Opeko) - Female
+キョーコ (Kyoko) - Female
+サキュマ (Sakyuma) - Female
+ましろ (Mashiro) - Female
 
 # Lewd Terms
 マンコ (pussy)

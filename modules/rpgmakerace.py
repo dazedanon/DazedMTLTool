@@ -82,9 +82,9 @@ POSITION = 0
 LEAVE = False
 
 # Dialogue / Scroll / Choices (Main Codes)
-CODE401 = False
-CODE405 = False
-CODE102 = False
+CODE401 = True
+CODE405 = True
+CODE102 = True
 
 # Optional
 CODE101 = False  # Turn this one when names exist in 101
@@ -94,7 +94,7 @@ CODE408 = False  # Warning, translates comments and can inflate costs.
 CODE122 = False
 
 # Other
-CODE355655 = True
+CODE355655 = False
 CODE357 = False
 CODE657 = False
 CODE356 = False
@@ -296,6 +296,7 @@ def translateNote(event, regex, wrap=True):
             # Remove any textwrap
             if wrap:
                 modifiedJAString = modifiedJAString.replace("\n", " ")
+                modifiedJAString = modifiedJAString.replace("\\n", " ")
 
             # Translate
             response = translateGPT(
@@ -310,6 +311,7 @@ def translateNote(event, regex, wrap=True):
             # Textwrap
             if wrap:
                 translatedText = textwrap.fill(translatedText, width=NOTEWIDTH)
+                translatedText = translatedText.replace("\n", "\\n")
 
             translatedText = translatedText.replace('"', "")
             jaString = jaString.replace(initialJAString, translatedText)
@@ -534,7 +536,9 @@ def searchNames(data, pbar, context):
                     if data[i]["nickname"] != "":
                         nicknameList.append(data[i]["nickname"])
                     if data[i]["description"] != "":
-                        profileList.append(data[i]["description"].replace("\n", " "))
+                        text = data[i]["description"].replace("\n", " ")
+                        text = data[i]["description"].replace("\\n", " ")
+                        profileList.append(text)
 
                     # Notes
                     if "<note:" in data[i]["note"]:
@@ -552,7 +556,9 @@ def searchNames(data, pbar, context):
                 if len(nameList) < BATCHSIZE:
                     nameList.append(data[i]["name"])
                     if "description" in data[i] and data[i]["description"] != "":
-                        descriptionList.append(data[i]["description"].replace("\n", " "))
+                        text = data[i]["description"].replace("\n", " ")
+                        text = data[i]["description"].replace("\\n", " ")
+                        descriptionList.append(text)
                     if "<hint:" in data[i]["note"]:
                         tokensResponse = translateNote(data[i], r"<hint:(.*?)>")
                         totalTokens[0] += tokensResponse[0]
@@ -605,7 +611,9 @@ def searchNames(data, pbar, context):
                 if len(nameList) < BATCHSIZE:
                     nameList.append(data[i]["name"])
                     if "description" in data[i] and data[i]["description"] != "":
-                        descriptionList.append(data[i]["description"].replace("\n", " "))
+                        text = data[i]["description"].replace("\n", " ")
+                        text = data[i]["description"].replace("\\n", " ")
+                        descriptionList.append(text)
 
                     # Messages
                     number = 1
@@ -754,7 +762,9 @@ def searchNames(data, pbar, context):
                                 data[j]["name"] = translatedNameBatch[0]
                                 translatedNameBatch.pop(0)
                                 if "description" in data[j] and data[j]["description"] != "":
-                                    data[j]["description"] = textwrap.fill(translatedDescriptionBatch[0], LISTWIDTH)
+                                    translatedText = textwrap.fill(translatedDescriptionBatch[0], LISTWIDTH)
+                                    translatedText = translatedText.replace("\n", "\\n")
+                                    data[j]["description"] = translatedText
                                     translatedDescriptionBatch.pop(0)
 
                             # If Batch is empty. Move on.
@@ -1087,6 +1097,7 @@ def searchCodes(page, pbar, jobList, filename):
                         # Remove Textwrap
                         if FIXTEXTWRAP:
                             finalJAString = finalJAString.replace("\n", " ")
+                            finalJAString = finalJAString.replace("\\n", " ")
                         if "\\px[200]" in finalJAString:
                             finalJAString = finalJAString.replace("\\px[200]", "")
 
@@ -1133,8 +1144,10 @@ def searchCodes(page, pbar, jobList, filename):
 
                             if FIXTEXTWRAP is True and "_ABL" in nametag:
                                 translatedText = textwrap.fill(translatedText, width=100)
+                                translatedText = translatedText.replace("\n", "\\n")
                             elif FIXTEXTWRAP is True:
                                 translatedText = textwrap.fill(translatedText, width=WIDTH)
+                                translatedText = translatedText.replace("\n", "\\n")
 
                             # BR Flag
                             if BRFLAG is True:
@@ -1331,6 +1344,7 @@ def searchCodes(page, pbar, jobList, filename):
 
                     # Textwrap & Set
                     translatedText = textwrap.fill(translatedText, width=WIDTH)
+                    translatedText = translatedText.replace("\n", "\\n")
                     codeList[i]["p"][3]["messageText"] = translatedText
 
                     ### Choices
@@ -1403,6 +1417,7 @@ def searchCodes(page, pbar, jobList, filename):
 
                     # Textwrap
                     translatedText = textwrap.fill(translatedText, width=WIDTH)
+                    translatedText = translatedText.replace("\n", "\\n")
                     translatedText = startString + translatedText + endString
 
                     # Set Data
@@ -1543,6 +1558,7 @@ def searchCodes(page, pbar, jobList, filename):
                 for match in matchList:
                     # Remove Textwrap
                     match = match.replace("\n", " ")
+                    match = match.replace("\\n", " ")
                     response = translateGPT(
                         match,
                         "Reply with the " + LANGUAGE + " translation of the achievement title.",
@@ -1562,6 +1578,7 @@ def searchCodes(page, pbar, jobList, filename):
 
                     # Textwrap
                     translatedText = textwrap.fill(translatedText, width=WIDTH)
+                    translatedText = translatedText.replace("\n", "\\n")
 
                     # Set Data
                     codeList[i]["p"][0] = translatedText
@@ -1602,6 +1619,7 @@ def searchCodes(page, pbar, jobList, filename):
                             list108[len(list108) - 1] = list108[len(list108) - 1] + codeList[j]["p"][0].replace(">", "")
                             codeList[j]["p"][0] = ""
                             list108[len(list108) - 1] = list108[len(list108) - 1].replace("\n", " ")
+                            list108[len(list108) - 1] = list108[len(list108) - 1].replace("\\n", " ")
 
                     # Pass 2
                     else:
@@ -1612,6 +1630,7 @@ def searchCodes(page, pbar, jobList, filename):
                         # Textwrap
                         # if codeList[i + 1]["c"] == 408:
                         #     translatedText = textwrap.fill(translatedText, WIDTH)
+                        #     translatedText = translatedText.replace("\n", "\\n")
 
                         # Remove characters that may break scripts
                         charList = ['"']
@@ -1765,6 +1784,7 @@ def searchCodes(page, pbar, jobList, filename):
 
                         # Textwrap & Replace Whitespace
                         translatedText = textwrap.fill(translatedText, width=WIDTH)
+                        translatedText = translatedText.replace("\n", "\\n")
                         translatedText = translatedText.replace(" ", "_")
 
                         # Replace and Set
@@ -2219,6 +2239,7 @@ Translate 'Taroを倒した！' as 'Taro was defeated!'",
         # Textwrap
         translatedText = descriptionResponse[0]
         translatedText = textwrap.fill(translatedText, width=LISTWIDTH)
+        translatedText = translatedText.replace("\n", "\\n")
         state["description"] = translatedText.replace('"', "")
     if "message1" in state:
         state["message1"] = message1Response[0].replace('"', "").replace("Taro", "")
@@ -2428,10 +2449,12 @@ def cleanTranslatedText(translatedText):
         "—": "―",
         "】": "]",
         "【": "[",
+        "’": "'",
         "é": "e",
         "this guy": "this bastard",
         "This guy": "This bastard",
         "Placeholder Text": "",
+        ".  ": ". ",
         # Add more replacements as needed
     }
     for target, replacement in placeholders.items():
