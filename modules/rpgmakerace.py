@@ -82,9 +82,9 @@ POSITION = 0
 LEAVE = False
 
 # Dialogue / Scroll / Choices (Main Codes)
-CODE401 = True
-CODE405 = True
-CODE102 = True
+CODE401 = False
+CODE405 = False
+CODE102 = False
 
 # Optional
 CODE101 = False  # Turn this one when names exist in 101
@@ -94,7 +94,7 @@ CODE408 = False  # Warning, translates comments and can inflate costs.
 CODE122 = False
 
 # Other
-CODE355655 = False
+CODE355655 = True
 CODE357 = False
 CODE657 = False
 CODE356 = False
@@ -1515,26 +1515,35 @@ def searchCodes(page, pbar, jobList, filename):
             ## Event Code: 355 or 655 Scripts [Optional]
             if "c" in codeList[i] and (codeList[i]["c"] == 355 or codeList[i]["c"] == 655) and CODE355655 is True:
                 jaString = codeList[i]["p"][0]
-                regexPatterns = [r'ShowName\("(.+)"\)']
+                regexPatterns = [r'^"?([^=+_$]+[^")])"?\)?$']
 
                 # Iterate over the list of regex patterns
                 for regex in regexPatterns:
                     match = re.search(regex, jaString)
                     if re.search(regex, jaString):
-                        finalJAString = match.group(1)
-                        # Pass 1
-                        if setData is False:
-                            list355655.append(finalJAString)
+                        if match.group(1) and match.group(1) != "\u3000":
+                            finalJAString = match.group(1)
 
-                        # Pass 2
-                        else:
-                            # Grab and Replace
-                            translatedText = list355655[0]
-                            translatedText = translatedText.replace("'", "\\'")
+                            # Remove Textwrap
+                            finalJAString = finalJAString.replace("\\n", " ")
+                            # Pass 1
+                            if setData is False:
+                                list355655.append(finalJAString)
 
-                            # Set
-                            codeList[i]["p"][0] = codeList[i]["p"][0].replace(finalJAString, translatedText)
-                            list355655.pop(0)
+                            # Pass 2
+                            else:
+                                # Grab and Replace
+                                translatedText = list355655[0]
+                                translatedText = re.sub(r"(?<!\\)'", r"\\'", translatedText)
+                                translatedText = re.sub(r'(?<!\\)"', r'\\"', translatedText)
+
+                                # Textwrap
+                                translatedText = textwrap.fill(translatedText, width=WIDTH)
+                                translatedText = translatedText.replace("\n", "\\n")
+
+                                # Set
+                                codeList[i]["p"][0] = codeList[i]["p"][0].replace(finalJAString, translatedText)
+                                list355655.pop(0)
 
             ## Event Code: 408 (Script)
             if "c" in codeList[i] and (codeList[i]["c"] == 408) and CODE408 is True:

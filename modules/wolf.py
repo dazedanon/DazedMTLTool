@@ -438,8 +438,8 @@ def searchCodes(events, pbar, jobList, filename):
     
                     originalString = jaString
 
-                    # Textwrap
-                    # jaString = jaString.replace('\n', ' ')
+                    # Remove Textwrap
+                    jaString = jaString.replace('\n', ' ')
 
                     # Translate Conversations
                     if "：Nothing" in jaString:
@@ -485,22 +485,22 @@ def searchCodes(events, pbar, jobList, filename):
                             and "/" not in jaString
                         ):
                             # Japanese Text Only
-                            if re.search(r"[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９]+", jaString):
-                                # Translate
-                                response = translateGPT(
-                                    jaString,
-                                    f"Maintain any newlines and Reply with the {LANGUAGE} translation of the text",
-                                    True,
-                                )
-                                translatedText = response[0]
-                                totalTokens[0] += response[1][0]
-                                totalTokens[1] += response[1][1]
+                            # if re.search(r"[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９]+", jaString):
+                            # Translate
+                            response = translateGPT(
+                                jaString,
+                                f"Maintain any newlines and Reply with the {LANGUAGE} translation of the text",
+                                True,
+                            )
+                            translatedText = response[0]
+                            totalTokens[0] += response[1][0]
+                            totalTokens[1] += response[1][1]
 
-                                # Textwrap
-                                # translatedText = textwrap.fill(translatedText, WIDTH)
+                            # Textwrap
+                            translatedText = textwrap.fill(translatedText, 30)
 
-                                # Set String
-                                codeList[i]["stringArgs"][0] = codeList[i]["stringArgs"][0].replace(originalString, translatedText)
+                            # Set String
+                            codeList[i]["stringArgs"][0] = codeList[i]["stringArgs"][0].replace(originalString, translatedText)
 
             ### Event Code: 150 Picture String
             if codeList[i]["code"] == 150 and CODE150 == True:
