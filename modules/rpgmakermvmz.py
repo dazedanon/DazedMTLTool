@@ -1455,20 +1455,12 @@ def searchCodes(page, pbar, jobList, filename):
                     continue
 
                 # Force Speaker using var
-                if "\\ap[1左]" in jaString.lower() or "\\ap[1右]" in jaString.lower():
-                    speaker = "Cecily"
+                if "memerisu" in jaString.lower():
+                    speaker = "Memerisu"
                     i += 1
                     continue
-                elif "\\ap[2左]" in jaString.lower() or "\\ap[2右]" in jaString.lower():
-                    speaker = "Amelia"
-                    i += 1
-                    continue
-                elif "\\ap[3左]" in jaString.lower() or "\\ap[3右]" in jaString.lower():
-                    speaker = "Henry"
-                    i += 1
-                    continue
-                elif "\\ap[4左]" in jaString.lower() or "\\ap[4右]" in jaString.lower():
-                    speaker = "Oswald"
+                elif "thina" in jaString.lower():
+                    speaker = "Tina"
                     i += 1
                     continue
                 elif "\\ap" in jaString:
@@ -1531,6 +1523,10 @@ def searchCodes(page, pbar, jobList, filename):
                     match = re.search(regex, jaString)
                     if re.search(regex, jaString):
                         finalJAString = match.group(1)
+
+                        # Remove Textwrap
+                        finalJAString = finalJAString.replace("\n", " ")
+                        
                         # Pass 1
                         if setData:
                             list355655.append(finalJAString)
@@ -1540,6 +1536,9 @@ def searchCodes(page, pbar, jobList, filename):
                             # Grab and Replace
                             translatedText = list355655[0]
                             translatedText = translatedText.replace("'", "\\'")
+
+                            # Textwrap
+                            translatedText = textwrap.fill(translatedText, width=WIDTH)
 
                             # Set
                             codeList[i]["parameters"][0] = codeList[i]["parameters"][0].replace(finalJAString, translatedText)
