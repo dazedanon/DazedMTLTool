@@ -538,7 +538,6 @@ def searchNames(data, pbar, context):
             # Empty Data
             if data[i] is None or data[i]["name"] == "":
                 i += 1
-
                 continue
 
             # Filling up Batch
@@ -547,9 +546,9 @@ def searchNames(data, pbar, context):
                 if len(nameList) < BATCHSIZE:
                     if data[i]["name"] != "":
                         nameList.append(data[i]["name"])
-                    if data[i]["nickname"] != "":
+                    if "nickname" in data[i] and data[i]["nickname"]:
                         nicknameList.append(data[i]["nickname"])
-                    if data[i]["profile"] != "":
+                    if "profile" in data[i] and data[i]["profile"] != "":
                         profileList.append(data[i]["profile"].replace("\n", " "))
 
                     # Notes
@@ -731,10 +730,10 @@ def searchNames(data, pbar, context):
                                     file.write(f'{data[j]["name"]} ({translatedNameBatch[0]})\n')
                                     data[j]["name"] = translatedNameBatch[0]
                                 translatedNameBatch.pop(0)
-                            if data[j]["nickname"] != "":
+                            if "nickname" in data[j] and data[j]["nickname"]:
                                 data[j]["nickname"] = translatedNicknameBatch[0]
                                 translatedNicknameBatch.pop(0)
-                            if data[j]["profile"] != "":
+                            if "profile" in data[j] and data[j]["profile"]:
                                 data[j]["profile"] = textwrap.fill(translatedProfileBatch[0], LISTWIDTH)
                                 translatedProfileBatch.pop(0)
 
@@ -1056,7 +1055,7 @@ def searchCodes(page, pbar, jobList, filename):
 
                     ### \\n<Speaker>
                     nCase = None
-                    regex = r"([\\]+[kKnN][wWcCrRrEe][\[<](.*?)[>\]])"
+                    regex = r"([\\]+[kKnN][wWcCrRrEe]?[\[<](.*?)[>\]])"
                     match = re.search(regex, finalJAString)
 
                     # Set Name
@@ -1206,7 +1205,7 @@ def searchCodes(page, pbar, jobList, filename):
             ## Event Code: 122 [Set Variables]
             if "code" in codeList[i] and codeList[i]["code"] == 122 and CODE122 is True:
                 # This is going to be the var being set. (IMPORTANT)
-                if codeList[i]["parameters"][0] not in list(range(500, 800)):
+                if codeList[i]["parameters"][0] not in list(range(800, 811)):
                     i += 1
                     continue
 
@@ -1469,7 +1468,7 @@ def searchCodes(page, pbar, jobList, filename):
                     continue
 
                 # Get Speaker
-                match = re.search(r"(?:[\\]+\w\[\d+\])?(.+)(?:[\\]+\w\[\d+\])?", jaString)
+                match = re.search(r"^([\w\s]+)", jaString)
                 if match:
                     jaString = match.group(1)
                     response = getSpeaker(jaString)
