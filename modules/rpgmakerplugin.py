@@ -202,7 +202,7 @@ def translatePlugin(data, pbar, filename, translatedList):
         colorCode = r"\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\C"
 
         # Custom
-        regex = r'\\+"HelpText\\+":\\+"(.+?)\\+",'
+        regex = r'"Text[\\]+":[\\]+"(.+?)[\\]'
         matchList = re.findall(regex, data[i])
         if len(matchList) > 0:
             for match in matchList:

@@ -612,6 +612,10 @@ def searchNames(data, pbar, context):
                         tokensResponse = translateNote(data[i], r"ADTs?:(.+?)>")
                         totalTokens[0] += tokensResponse[0]
                         totalTokens[1] += tokensResponse[1]
+                    if "<detail" in data[i]["note"]:
+                        tokensResponse = translateNote(data[i], r"<detail:(.*?)>")
+                        totalTokens[0] += tokensResponse[0]
+                        totalTokens[1] += tokensResponse[1]
 
                     i += 1
                 else:
@@ -1205,7 +1209,7 @@ def searchCodes(page, pbar, jobList, filename):
             ## Event Code: 122 [Set Variables]
             if "code" in codeList[i] and codeList[i]["code"] == 122 and CODE122 is True:
                 # This is going to be the var being set. (IMPORTANT)
-                if codeList[i]["parameters"][0] not in list(range(800, 811)):
+                if codeList[i]["parameters"][0] not in list(range(0, 1200)):
                     i += 1
                     continue
 
@@ -1216,13 +1220,18 @@ def searchCodes(page, pbar, jobList, filename):
                 # i += 1
                 # continue
 
-                # Definitely don't want to mess with files
-                # if 'gameV' in jaString or '_' in jaString:
-                #     i += 1
-                #     continue
-
                 # Validate String
                 if not isinstance(jaString, str):
+                    i += 1
+                    continue
+
+                # Definitely don't want to mess with files
+                if 'gameV' in jaString or '_' in jaString:
+                    i += 1
+                    continue
+
+                # Avoid anything not quoted
+                if '\"' not in jaString:
                     i += 1
                     continue
 
@@ -1515,33 +1524,116 @@ def searchCodes(page, pbar, jobList, filename):
             ## Event Code: 355 or 655 Scripts [Optional]
             if "code" in codeList[i] and (codeList[i]["code"] == 355 or codeList[i]["code"] == 655) and CODE355655 is True:
                 jaString = codeList[i]["parameters"][0]
-                regexPatterns = [r"setValue\((.+)\)"]
 
-                # Iterate over the list of regex patterns
-                for regex in regexPatterns:
+                if "テキスト-" in jaString:
+                    jaString = codeList[i]["parameters"][0]
+                    regex = r"テキスト-(.+)"
+
+                    # Check Exist
                     match = re.search(regex, jaString)
-                    if re.search(regex, jaString):
-                        finalJAString = match.group(1)
+                    if match:
+                        replaceString = match.group(1)
+                        finalJAString = replaceString
 
                         # Remove Textwrap
-                        finalJAString = finalJAString.replace("\n", " ")
+                        # finalJAString = finalJAString.replace("\n", " ")
+                        
+                        # Remove Spaces
+                        finalJAString = finalJAString.replace("\u3000", "")
+                        finalJAString = finalJAString.strip()
+                        
+                        # Final Set
+                        if finalJAString:
+                            # Pass 1
+                            if setData:
+                                list355655.append(finalJAString)
+
+                            # Pass 2
+                            else:
+                                # Grab and Replace
+                                translatedText = list355655[0]
+                                translatedText = translatedText.replace("'", "\\'")
+
+                                # Textwrap
+                                # translatedText = textwrap.fill(translatedText, width=WIDTH)
+
+                                # Set
+                                codeList[i]["parameters"][0] = codeList[i]["parameters"][0].replace(replaceString, translatedText)
+                                list355655.pop(0)
+
+                # Grab Next Instead if Text
+                elif "テキスト" in jaString:
+                    i += 1
+                    jaString = codeList[i]["parameters"][0]
+
+                    # Regex  
+                    regex = r'setValue\(\d+,[\\]?"([^_]+)"'
+
+                    match = re.search(regex, jaString)
+                    if match:
+                        replaceString = match.group(1)
+                        finalJAString = replaceString
+
+                        # Remove Textwrap
+                        # finalJAString = finalJAString.replace("\n", " ")
+                        
+                        # Remove Spaces
+                        finalJAString = finalJAString.replace("\u3000", "")
+                        finalJAString = finalJAString.strip()
                         
                         # Pass 1
-                        if setData:
-                            list355655.append(finalJAString)
+                        if finalJAString:
+                            if setData:
+                                list355655.append(finalJAString)
 
-                        # Pass 2
-                        else:
-                            # Grab and Replace
-                            translatedText = list355655[0]
-                            translatedText = translatedText.replace("'", "\\'")
+                            # Pass 2
+                            else:
+                                # Grab and Replace
+                                translatedText = list355655[0]
+                                translatedText = translatedText.replace("'", "\\'")
 
-                            # Textwrap
-                            translatedText = textwrap.fill(translatedText, width=WIDTH)
+                                # Textwrap
+                                # translatedText = textwrap.fill(translatedText, width=WIDTH)
 
-                            # Set
-                            codeList[i]["parameters"][0] = codeList[i]["parameters"][0].replace(finalJAString, translatedText)
-                            list355655.pop(0)
+                                # Set
+                                codeList[i]["parameters"][0] = codeList[i]["parameters"][0].replace(replaceString, translatedText)
+                                list355655.pop(0)
+
+                elif "logtxt = " in jaString:
+                    jaString = codeList[i]["parameters"][0]
+                    regex = r"logtxt\s=\s'(.+)'"
+
+                    # Check Exist
+                    match = re.search(regex, jaString)
+                    if match:
+                        replaceString = match.group(1)
+                        finalJAString = replaceString
+
+                        # Remove Textwrap
+                        # finalJAString = finalJAString.replace("\n", " ")
+                        
+                        # Remove Spaces
+                        finalJAString = finalJAString.replace("\u3000", "")
+                        finalJAString = finalJAString.strip()
+                        
+                        # Final Set
+                        if finalJAString:
+                            # Pass 1
+                            if setData:
+                                list355655.append(finalJAString)
+
+                            # Pass 2
+                            else:
+                                # Grab and Replace
+                                translatedText = list355655[0]
+                                translatedText = translatedText.replace("'", "\\'")
+
+                                # Textwrap
+                                # translatedText = textwrap.fill(translatedText, width=WIDTH)
+
+                                # Set
+                                codeList[i]["parameters"][0] = codeList[i]["parameters"][0].replace(replaceString, translatedText)
+                                list355655.pop(0)
 
             ## Event Code: 408 (Script)
             if "code" in codeList[i] and (codeList[i]["code"] == 408) and CODE408 is True:
