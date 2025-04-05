@@ -534,6 +534,7 @@ def searchNames(data, pbar, context):
     with open("translations.txt", "a", encoding="utf-8") as file:
         file.write(f"\n#{context}\n")
     while i < len(data) or filling == True:
+        batchFull = False
         if i < len(data):
             # Empty Data
             if data[i] is None or data[i]["name"] == "":
@@ -548,7 +549,7 @@ def searchNames(data, pbar, context):
                         nameList.append(data[i]["name"])
                     if "nickname" in data[i] and data[i]["nickname"]:
                         nicknameList.append(data[i]["nickname"])
-                    if "profile" in data[i] and data[i]["profile"] != "":
+                    if "profile" in data[i] and data[i]["profile"]:
                         profileList.append(data[i]["profile"].replace("\n", " "))
 
                     # Notes
@@ -744,6 +745,8 @@ def searchNames(data, pbar, context):
                             # If Batch is empty. Move on.
                             if len(translatedNameBatch) == 0:
                                 nameList.clear()
+                                profileList.clear()
+                                nicknameList.clear()
                                 filling = False
                             j += 1
                 else:
@@ -1552,7 +1555,7 @@ def searchCodes(page, pbar, jobList, filename):
                             else:
                                 # Grab and Replace
                                 translatedText = list355655[0]
-                                translatedText = translatedText.replace("'", "\\'")
+                                translatedText = re.sub(r"(?<!\\)'", r"\\'", translatedText)
 
                                 # Textwrap
                                 # translatedText = textwrap.fill(translatedText, width=WIDTH)
@@ -1590,7 +1593,7 @@ def searchCodes(page, pbar, jobList, filename):
                             else:
                                 # Grab and Replace
                                 translatedText = list355655[0]
-                                translatedText = translatedText.replace("'", "\\'")
+                                translatedText = re.sub(r"(?<!\\)'", r"\\'", translatedText)
 
                                 # Textwrap
                                 # translatedText = textwrap.fill(translatedText, width=WIDTH)
@@ -1626,7 +1629,43 @@ def searchCodes(page, pbar, jobList, filename):
                             else:
                                 # Grab and Replace
                                 translatedText = list355655[0]
-                                translatedText = translatedText.replace("'", "\\'")
+                                translatedText = re.sub(r"(?<!\\)'", r"\\'", translatedText)
+
+                                # Textwrap
+                                # translatedText = textwrap.fill(translatedText, width=WIDTH)
+
+                                # Set
+                                codeList[i]["parameters"][0] = codeList[i]["parameters"][0].replace(replaceString, translatedText)
+                                list355655.pop(0)
+
+                elif ".setNickname" in jaString:
+                    jaString = codeList[i]["parameters"][0]
+                    regex = r'.setNickname\(\\?"(.+?)\\?"\)'
+
+                    # Check Exist
+                    match = re.search(regex, jaString)
+                    if match:
+                        replaceString = match.group(1)
+                        finalJAString = replaceString
+
+                        # Remove Textwrap
+                        # finalJAString = finalJAString.replace("\n", " ")
+                        
+                        # Remove Spaces
+                        finalJAString = finalJAString.replace("\u3000", "")
+                        finalJAString = finalJAString.strip()
+                        
+                        # Final Set
+                        if finalJAString:
+                            # Pass 1
+                            if setData:
+                                list355655.append(finalJAString)
+
+                            # Pass 2
+                            else:
+                                # Grab and Replace
+                                translatedText = list355655[0]
+                                translatedText = re.sub(r"(?<!\\)'", r"\\'", translatedText)
 
                                 # Textwrap
                                 # translatedText = textwrap.fill(translatedText, width=WIDTH)
