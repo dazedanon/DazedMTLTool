@@ -534,7 +534,6 @@ def searchNames(data, pbar, context):
     with open("translations.txt", "a", encoding="utf-8") as file:
         file.write(f"\n#{context}\n")
     while i < len(data) or filling == True:
-        batchFull = False
         if i < len(data):
             # Empty Data
             if data[i] is None or data[i]["name"] == "":
@@ -747,6 +746,7 @@ def searchNames(data, pbar, context):
                                 nameList.clear()
                                 profileList.clear()
                                 nicknameList.clear()
+                                batchFull = False
                                 filling = False
                             j += 1
                 else:
@@ -835,6 +835,7 @@ def searchNames(data, pbar, context):
                 descriptionList.clear()
                 filling = False
                 mismatch = False
+                batchFull = False
 
                 i += 1
 
