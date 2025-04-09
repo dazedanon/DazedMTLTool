@@ -2604,7 +2604,11 @@ def translateGPT(text, history, fullPromptFlag):
                             if isinstance(tItem, list):
                                 extractedTranslations = extractTranslation(translatedText, True)
                                 if extractedTranslations == None or len(tItem) != len(extractedTranslations):
-                                    mismatch = True  # Just here for breakpoint
+                                    with open("log/mismatchHistory.txt", "a+", encoding="utf-8") as mismatchFile:
+                                        mismatchFile.write(f"Mismatch: {FILENAME}\n")
+                                        mismatchFile.write(f"Input:\n{subbedT}\n")
+                                        mismatchFile.write(f"Output:\n{translatedText}\n")
+                                        mismatch = True  # Just here for breakpoint
                         logFile.write(f"Input:\n{subbedT}\n")
                         logFile.write(f"Output:\n{translatedText}\n")
 
