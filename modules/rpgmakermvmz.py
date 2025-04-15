@@ -956,7 +956,7 @@ def searchCodes(page, pbar, jobList, filename):
                 # Colors
                 if len(speakerList) == 0:
                     speakerList = re.findall(
-                        r"^[\\]+[cC]\[[\d]+\]【?(.+?)】?[\\]+[Cc]\[[\d]\]\\?\\?$",
+                        r"^[\\]+[cC]\[[\d]+\]【?(.+?)】?[\\]+[Cc]\[?[\d]?\]?\\?\\?$",
                         jaString,
                     )
 
@@ -1675,6 +1675,42 @@ def searchCodes(page, pbar, jobList, filename):
                                 codeList[i]["parameters"][0] = codeList[i]["parameters"][0].replace(replaceString, translatedText)
                                 list355655.pop(0)
 
+                elif "_subject=" in jaString:
+                    jaString = codeList[i]["parameters"][0]
+                    regex = r'_subject=(.+?)_'
+
+                    # Check Exist
+                    match = re.search(regex, jaString)
+                    if match:
+                        replaceString = match.group(1)
+                        finalJAString = replaceString
+
+                        # Remove Textwrap
+                        # finalJAString = finalJAString.replace("\n", " ")
+                        
+                        # Remove Spaces
+                        finalJAString = finalJAString.replace("\u3000", "")
+                        finalJAString = finalJAString.strip()
+                        
+                        # Final Set
+                        if finalJAString:
+                            # Pass 1
+                            if setData:
+                                list355655.append(finalJAString)
+
+                            # Pass 2
+                            else:
+                                # Grab and Replace
+                                translatedText = list355655[0]
+                                translatedText = re.sub(r"(?<!\\)'", r"\\'", translatedText)
+
+                                # Textwrap
+                                # translatedText = textwrap.fill(translatedText, width=WIDTH)
+
+                                # Set
+                                codeList[i]["parameters"][0] = codeList[i]["parameters"][0].replace(replaceString, translatedText)
+                                list355655.pop(0)
+
             ## Event Code: 408 (Script)
             if "code" in codeList[i] and (codeList[i]["code"] == 408) and CODE408 is True:
                 jaString = codeList[i]["parameters"][0]
@@ -1736,6 +1772,8 @@ def searchCodes(page, pbar, jobList, filename):
                     regex = r"<ActiveMessage:(.*)>?"
                 elif "event_text" in jaString:
                     regex = r"event_text\s*:\s*(.*)"
+                elif "Menu Name" in jaString:
+                    regex = r"Menu\sName\s*:\s*(.*)>"
                 else:
                     i += 1
                     continue

@@ -195,6 +195,11 @@ def translatePlugin(data, pbar, filename, translatedList):
     global LOCK, ESTIMATE
     i = 0
 
+    # Category
+    with open("translations.txt", "a+", encoding="utf-8") as tlFile:
+                tlFile.write(f"\nCustom:\n")
+                tlFile.close()
+
     while i < len(data):
         voice = False
         speaker = ""
@@ -202,7 +207,7 @@ def translatePlugin(data, pbar, filename, translatedList):
         colorCode = r"\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\C"
 
         # Custom
-        regex = r'"Text[\\]+":[\\]+"(.+?)[\\]'
+        regex = r'"description":\s"(.+?)",?$'
         matchList = re.findall(regex, data[i])
         if len(matchList) > 0:
             for match in matchList:
@@ -217,34 +222,37 @@ def translatePlugin(data, pbar, filename, translatedList):
                 # Remove any textwrap
                 # jaString = jaString.replace(newline, " ")
 
-                # Pass 1
-                if setData == False:
-                    custom.append(jaString.strip())
+                if jaString.replace("\u3000", "") and jaString:
+                    # Pass 1
+                    if setData == False:
+                        custom.append(jaString.strip())
 
-                # Pass 2
-                else:
-                    if custom:
-                        # Grab and Pop
-                        translatedText = custom[0]
-                        custom.pop(0)
+                    # Pass 2
+                    else:
+                        if custom:
+                            # Grab and Pop
+                            translatedText = custom[0]
+                            custom.pop(0)
 
-                        # Set to None if empty list
-                        if len(translatedList) <= 0:
-                            translatedList = None
+                            # Set to None if empty list
+                            if len(translatedList) <= 0:
+                                translatedList = None
 
-                        # Replace Single Quotes
-                        translatedText = re.sub(r"([^\\'])'", r"\1\\'", translatedText)
-                        translatedText = re.sub(r"([^\\'])\"", r"\1\\'", translatedText)
+                            # Replace Single Quotes
+                            translatedText = re.sub(r"([^\\'])'", r"\1\\'", translatedText)
+                            translatedText = re.sub(r"([^\\'])\"", r"\1\\'", translatedText)
 
-                        # Textwrap
-                        # translatedText = textwrap.fill(translatedText, WIDTH)
+                            # Textwrap
+                            # translatedText = textwrap.fill(translatedText, WIDTH)
 
-                        # Replace \n and \c
-                        translatedText = re.sub(r"\\+n", re.escape(newline), translatedText)
-                        translatedText = re.sub(r"\\+C", re.escape(colorCode), translatedText)
+                            # Replace \n and \c
+                            translatedText = re.sub(r"\\+n", re.escape(newline), translatedText)
+                            translatedText = re.sub(r"\\+C", re.escape(colorCode), translatedText)
 
-                        # Set Data
-                        data[i] = data[i].replace(originalString, translatedText)
+                            # Set Data
+                            with open("translations.txt", "a+", encoding="utf-8") as tlFile:
+                                tlFile.write(f"{originalString} ({translatedText})\n")
+                            data[i] = data[i].replace(originalString, translatedText)
 
         # Quest Name
         regex = r'[\\]+"Titled[\\]+":[\\]+"(.*?)[\\]+"'
@@ -547,7 +555,7 @@ def translatePlugin(data, pbar, filename, translatedList):
         PBAR = pbar
 
         # TL
-        response = translateGPT(custom, "Title", True)
+        response = translateGPT(custom, "Relic Name", True)
         tokens[0] += response[1][0]
         tokens[1] += response[1][1]
         customResponse = response[0]
