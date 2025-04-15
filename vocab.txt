@@ -1,15 +1,8 @@
 Here are some vocabulary and terms so that you know the proper spelling and translation.
 ```
 # Game Characters
-セレト (Sereto) - Male
-メア (Mea) - Female
-リリリ (Lilili) - Female
-デイ (Dei) - Female
-ルーシィ (Lucy) - Female
-セビナ (Sebina) - Female
-アビー (Abby) - Female
-マリステラ (Maristella) - Female
-レミ (Remy) - Female
+シリル (Cyril) - Female
+ジャヒカ (Jahika) - Female
 
 # Lewd Terms
 マンコ (pussy)
@@ -22,6 +15,36 @@ Here are some vocabulary and terms so that you know the proper spelling and tran
 チンコ (cock)
 ショーツ (panties)
 イラマチオ (irrumatio)
+理性 (Sanity)
+性欲 (Libido)
+子宮の状態 (Uterus St.)
+最後の相手 (Last Partner)
+陰茎の長さ (Penis Length)
+射精量 (Total Cum)
+絶頂回数 (Orgasm)
+搾精回数 (Semen Milked)
+経験人数 (Partners)
+膣内射精 (Creampie)
+膣外射精 (Non-Creampie)
+アナル (Anal)
+パイズリ (Paizuri)
+フェラ (Blowjob)
+手コキ (Handjob)
+太もも (Thighjob)
+尻コキ (Assjob)
+ぶっかけ (Cumshot)
+おさわり (Touched)
+受精 (Fertilized)
+出産 (Births)
+子宮 (Womb)
+股触られ (Fingered)
+乳揉まれ (Fondled)
+尻揉まれ (Ass Groped)
+乳首 (Nipples)
+キス (Kiss)
+舐めた (Lick)
+舐められ (Licked By)
+衣装ごとの性行為回数 (Sex Acts per Outfit)
 
 # Honorifics
 さん (san)
@@ -73,38 +96,6 @@ ME 音量 (ME Volume)
 回 (x)
 人 (x)
 
-# Sex Terms
-理性 (Sanity)
-性欲 (Libido)
-子宮の状態 (Uterus St.)
-最後の相手 (Last Partner)
-陰茎の長さ (Penis Length)
-射精量 (Total Cum)
-絶頂回数 (Orgasm)
-搾精回数 (Semen Milked)
-経験人数 (Partners)
-膣内射精 (Creampie)
-膣外射精 (Non-Creampie)
-アナル (Anal)
-パイズリ (Paizuri)
-フェラ (Blowjob)
-手コキ (Handjob)
-太もも (Thighjob)
-尻コキ (Assjob)
-ぶっかけ (Cumshot)
-おさわり (Touched)
-受精 (Fertilized)
-出産 (Births)
-子宮 (Womb)
-股触られ (Fingered)
-乳揉まれ (Fondled)
-尻揉まれ (Ass Groped)
-乳首 (Nipples)
-キス (Kiss)
-舐めた (Lick)
-舐められ (Licked By)
-衣装ごとの性行為回数 (Sex Acts per Outfit)
-
 # Demons/Angels/Monsters
 悪魔 (Devil)  
 上級悪魔 (Arch Devil)  
@@ -137,5 +128,9 @@ w ((lol))
 』 (』)
 
 # Game Specific
-デロメーロ (Delomero)
+クーリア (Curia)
+デヴァンド (Devand)
+ツァフ荒地 (Tzaf Wasteland)
+エラトー密林 (Erato Jungle)
+
 ```
