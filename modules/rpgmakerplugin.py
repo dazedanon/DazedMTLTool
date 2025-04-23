@@ -255,7 +255,7 @@ def translatePlugin(data, pbar, filename, translatedList):
                             data[i] = data[i].replace(originalString, translatedText)
 
         # Quest Name
-        regex = r'[\\]+"Titled[\\]+":[\\]+"(.*?)[\\]+"'
+        regex = r'[\\]+"QuestName[\\]+":[\\]+"(.*?)[\\]+"'
         matchList = re.findall(regex, data[i])
         if len(matchList) > 0:
             for match in matchList:
@@ -291,7 +291,7 @@ def translatePlugin(data, pbar, filename, translatedList):
                             data[i] = data[i].replace(originalString, translatedText)
 
         # Quest Client
-        regex = r'Requesterd[\\]+":[\\]+"(.*?)[\\]+"'
+        regex = r'QuestClientName[\\]+":[\\]+"(.*?)[\\]+"'
         matchList = re.findall(regex, data[i])
         if len(matchList) > 0:
             for match in matchList:
@@ -324,7 +324,7 @@ def translatePlugin(data, pbar, filename, translatedList):
                             data[i] = data[i].replace(originalString, translatedText)
 
         # Quest Location
-        regex = r'Placed[\\]+":[\\]+"(.*?)[\\]+"'
+        regex = r'QuestLocation[\\]+":[\\]+"(.*?)[\\]+"'
         matchList = re.findall(regex, data[i])
         if len(matchList) > 0:
             for match in matchList:
@@ -357,7 +357,7 @@ def translatePlugin(data, pbar, filename, translatedList):
                             data[i] = data[i].replace(originalString, translatedText)
 
         # Quest Target
-        regex = r'PlacedInformation[\\]+":[\\]+"(.*?)[\\]+"'
+        regex = r'PlaceInformation[\\]+":[\\]+"(.*?)[\\]+"'
         matchList = re.findall(regex, data[i])
         if len(matchList) > 0:
             for match in matchList:
@@ -390,7 +390,7 @@ def translatePlugin(data, pbar, filename, translatedList):
                             data[i] = data[i].replace(originalString, translatedText)
 
         # Quest Summary
-        regex = r'[\\]+"DetaildNote[\\]+":[\\]+"[\\]+"(.*?)[\\]+"[\\]+"'
+        regex = r'[\\]+"QuestContent[\\]+":[\\]+"[\\]+"(.*?)[\\]+"[\\]+"'
         matchList = re.findall(regex, data[i])
         if len(matchList) > 0:
             for match in matchList:
