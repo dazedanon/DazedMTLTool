@@ -8,6 +8,7 @@ import time
 import traceback
 import tiktoken
 import openai
+import copy
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from colorama import Fore
@@ -1201,13 +1202,36 @@ def searchCodes(page, pbar, jobList, filename):
                                 translatedText = translatedText + endtag
                                 endtag = ""
 
-                            # Set Data
-                            codeList[j]["parameters"] = [translatedText]
+                            # Set Code
                             codeList[j]["code"] = code
+
+                            # Handle 405
+                            if codeList[j]["code"] == 405:
+                                # 1. Split translatedText by newlines
+                                lines = [line for line in translatedText.split('\n') if line.strip() != ""]
+                                
+                                # 2. Set the first string to codeList[j]["p"]
+                                codeList[j]["parameters"] = [lines[0]]
+                                
+                                # 3. Make copies for each additional line and insert them
+                                for idx, line in enumerate(lines[1:]):
+                                    new_item = copy.deepcopy(codeList[j])
+                                    new_item["parameters"] = [line]
+                                    codeList.insert(j + idx + 1, new_item)
+                                
+                                # 4. Update syncIndex to the last modified/added position
+                                syncIndex = j + len(lines)
+
+                            # Handle 401
+                            else:
+                                codeList[j]["parameters"] = [translatedText]
+                                codeList[j]["code"] = code
+                                syncIndex = i + 1
+
+                            # Reset
                             speaker = ""
                             match = []
                             currentGroup = []
-                            syncIndex = i + 1
                             list401.pop(0)
 
             ## Event Code: 122 [Set Variables]
@@ -1549,44 +1573,6 @@ def searchCodes(page, pbar, jobList, filename):
                         # Final Set
                         if finalJAString:
                             # Pass 1
-                            if setData:
-                                list355655.append(finalJAString)
-
-                            # Pass 2
-                            else:
-                                # Grab and Replace
-                                translatedText = list355655[0]
-                                translatedText = re.sub(r"(?<!\\)'", r"\\'", translatedText)
-
-                                # Textwrap
-                                # translatedText = textwrap.fill(translatedText, width=WIDTH)
-
-                                # Set
-                                codeList[i]["parameters"][0] = codeList[i]["parameters"][0].replace(replaceString, translatedText)
-                                list355655.pop(0)
-
-                # Grab Next Instead if Text
-                elif "テキスト" in jaString:
-                    i += 1
-                    jaString = codeList[i]["parameters"][0]
-
-                    # Regex  
-                    regex = r'setValue\(\d+,[\\]?"([^_]+)"'
-
-                    match = re.search(regex, jaString)
-                    if match:
-                        replaceString = match.group(1)
-                        finalJAString = replaceString
-
-                        # Remove Textwrap
-                        # finalJAString = finalJAString.replace("\n", " ")
-                        
-                        # Remove Spaces
-                        finalJAString = finalJAString.replace("\u3000", "")
-                        finalJAString = finalJAString.strip()
-                        
-                        # Pass 1
-                        if finalJAString:
                             if setData:
                                 list355655.append(finalJAString)
 
@@ -2609,6 +2595,8 @@ def cleanTranslatedText(translatedText):
         "this guy": "this bastard",
         "This guy": "This bastard",
         "Placeholder Text": "",
+        "```json": "",
+        "```": "",
         # Add more replacements as needed
     }
     for target, replacement in placeholders.items():
