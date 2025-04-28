@@ -207,7 +207,7 @@ def translatePlugin(data, pbar, filename, translatedList):
         colorCode = r"\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\C"
 
         # Custom
-        regex = r'"description":\s"(.+?)",?$'
+        regex = r'=\s\[".+?",\s"(.+)"\]'
         matchList = re.findall(regex, data[i])
         if len(matchList) > 0:
             for match in matchList:
@@ -243,7 +243,7 @@ def translatePlugin(data, pbar, filename, translatedList):
                             translatedText = re.sub(r"([^\\'])\"", r"\1\\'", translatedText)
 
                             # Textwrap
-                            # translatedText = textwrap.fill(translatedText, WIDTH)
+                            translatedText = textwrap.fill(translatedText, WIDTH)
 
                             # Replace \n and \c
                             translatedText = re.sub(r"\\+n", re.escape(newline), translatedText)

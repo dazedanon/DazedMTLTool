@@ -63,7 +63,7 @@ THREADS = int(os.getenv("fileThreads"))
 # [Display name, file extension, handle function]
 MODULES = [
     ["RPGMaker MV/MZ", ["json"], handleMVMZ],
-    ["RPGMaker Plugins", ["js"], handlePlugin],
+    ["RPGMaker Plugins", ["js", "rb"], handlePlugin],
     ["RPGMaker ACE", ["yaml"], handleACE],
     ["CSV (From Translator++)", ["csv"], handleCSV],
     ["Eushully", ["txt"], handleEushully],

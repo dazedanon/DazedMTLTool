@@ -8,6 +8,7 @@ import time
 import traceback
 import tiktoken
 import openai
+import copy
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from colorama import Fore
@@ -82,9 +83,9 @@ POSITION = 0
 LEAVE = False
 
 # Dialogue / Scroll / Choices (Main Codes)
-CODE401 = True
-CODE405 = True
-CODE102 = True
+CODE401 = False
+CODE405 = False
+CODE102 = False
 
 # Optional
 CODE101 = False  # Turn this one when names exist in 101
@@ -94,8 +95,8 @@ CODE408 = False  # Warning, translates comments and can inflate costs.
 CODE122 = False
 
 # Other
-CODE355655 = False
-CODE357 = True
+CODE355655 = True
+CODE357 = False
 CODE657 = False
 CODE356 = False
 CODE320 = False
@@ -271,6 +272,11 @@ def parseMap(data, filename):
         with ThreadPoolExecutor(max_workers=THREADS) as executor:
             for key in events:
                 if key is not None:
+                    # This translates ID of events. (May break the game)
+                    if "<namepop" in events[key]["name"]:
+                        response = translateNoteOmitSpace(events[key], r"<namepop\s(.*?)\s?\d?>.*")
+                        totalTokens[0] += response[0]
+                        totalTokens[1] += response[1]
                     futures = [executor.submit(searchCodes, page, pbar, [], filename) for page in events[key]["pages"] if page is not None]
                     for future in as_completed(futures):
                         try:
@@ -311,9 +317,10 @@ def translateNote(event, regex, wrap=True):
             # Textwrap
             if wrap:
                 translatedText = textwrap.fill(translatedText, width=NOTEWIDTH)
-                translatedText = translatedText.replace("\n", "\\n")
+                # translatedText = translatedText.replace("\n", "\\n")
 
             translatedText = translatedText.replace('"', "")
+            translatedText = translatedText.replace(' ', "_")
             jaString = jaString.replace(initialJAString, translatedText)
             event["note"] = jaString
             i += 1
@@ -324,7 +331,7 @@ def translateNote(event, regex, wrap=True):
 # For notes that can't have spaces.
 def translateNoteOmitSpace(event, regex):
     # Regex that only matches text inside LB.
-    jaString = event["note"]
+    jaString = event["name"]
 
     match = re.findall(regex, jaString, re.DOTALL)
     if match:
@@ -342,7 +349,7 @@ def translateNoteOmitSpace(event, regex):
 
         translatedText = translatedText.replace('"', "")
         translatedText = translatedText.replace(" ", "_")
-        event["note"] = event["note"].replace(oldJAString, translatedText)
+        event["name"] = event["name"].replace(oldJAString, translatedText)
         return response[1]
     return [0, 0]
 
@@ -654,6 +661,10 @@ def searchNames(data, pbar, context):
                         tokensResponse = translateNote(data[i], r"ADTs?:(.+?)>")
                         totalTokens[0] += tokensResponse[0]
                         totalTokens[1] += tokensResponse[1]
+                    if "=前提スキル" in data[i]["note"]:
+                        tokensResponse = translateNote(data[i], r"<習得ヘルプ=前提スキル：(.+?)>")
+                        totalTokens[0] += tokensResponse[0]
+                        totalTokens[1] += tokensResponse[1]
 
                     i += 1
                 else:
@@ -763,7 +774,7 @@ def searchNames(data, pbar, context):
                                 translatedNameBatch.pop(0)
                                 if "description" in data[j] and data[j]["description"] != "":
                                     translatedText = textwrap.fill(translatedDescriptionBatch[0], LISTWIDTH)
-                                    translatedText = translatedText.replace("\n", "\\n")
+                                    # translatedText = translatedText.replace("\n", "\\n")
                                     data[j]["description"] = translatedText
                                     translatedDescriptionBatch.pop(0)
 
@@ -940,6 +951,10 @@ def searchCodes(page, pbar, jobList, filename):
                             speakerList = [speakerList[0][0]]
                         else:
                             speakerList = [speakerList[0][1]]
+
+                # Diamonds
+                if len(speakerList) == 0:
+                    speakerList = re.findall(r"^◆(.*)", jaString)
 
                 # Colors
                 if len(speakerList) == 0:
@@ -1144,10 +1159,10 @@ def searchCodes(page, pbar, jobList, filename):
 
                             if FIXTEXTWRAP is True and "_ABL" in nametag:
                                 translatedText = textwrap.fill(translatedText, width=100)
-                                translatedText = translatedText.replace("\n", "\\n")
+                                # # translatedText = translatedText.replace("\n", "\\n")
                             elif FIXTEXTWRAP is True:
                                 translatedText = textwrap.fill(translatedText, width=WIDTH)
-                                translatedText = translatedText.replace("\n", "\\n")
+                                # # translatedText = translatedText.replace("\n", "\\n")
 
                             # BR Flag
                             if BRFLAG is True:
@@ -1178,19 +1193,42 @@ def searchCodes(page, pbar, jobList, filename):
                                 translatedText = translatedText + endtag
                                 endtag = ""
 
-                            # Set Data
-                            codeList[j]["p"] = [translatedText]
+                            # Set Code
                             codeList[j]["c"] = code
+
+                            # Handle 405
+                            if codeList[j]["c"] == 405:
+                                # 1. Split translatedText by newlines
+                                lines = [line for line in translatedText.split('\n') if line.strip() != ""]
+                                
+                                # 2. Set the first string to codeList[j]["p"]
+                                codeList[j]["p"] = [lines[0]]
+                                
+                                # 3. Make copies for each additional line and insert them
+                                for idx, line in enumerate(lines[1:]):
+                                    new_item = copy.deepcopy(codeList[j])
+                                    new_item["p"] = [line]
+                                    codeList.insert(j + idx + 1, new_item)
+                                
+                                # 4. Update syncIndex to the last modified/added position
+                                syncIndex = j + len(lines)
+
+                            # Handle 401
+                            else:
+                                codeList[j]["p"] = [translatedText]
+                                codeList[j]["c"] = code
+                                syncIndex = i + 1
+
+                            # Reset
                             speaker = ""
                             match = []
                             currentGroup = []
-                            syncIndex = i + 1
                             list401.pop(0)
 
             ## Event Code: 122 [Set Variables]
             if "c" in codeList[i] and codeList[i]["c"] == 122 and CODE122 is True:
                 # This is going to be the var being set. (IMPORTANT)
-                if codeList[i]["p"][0] not in list(range(20, 150)):
+                if codeList[i]["p"][0] not in list(range(0, 1500)):
                     i += 1
                     continue
 
@@ -1237,16 +1275,16 @@ def searchCodes(page, pbar, jobList, filename):
                                 translatedText = jaString.replace(jaString, translatedText)
 
                                 # Remove characters that may break scripts
-                                charList = ['"', "\\n"]
+                                charList = ['"', "\\n", "'"]
                                 for char in charList:
                                     translatedText = translatedText.replace(char, "")
 
                                 # Textwrap
                                 translatedText = textwrap.fill(translatedText, width=WIDTH)
-                                translatedText = translatedText.replace("\n", "\\n")
+                                # translatedText = translatedText.replace("\n", "\\n")
 
                                 # Set
-                                codeList[i]["p"][4] = f"`{translatedText}`"
+                                codeList[i]["p"][4] = f'"{translatedText}"'
                                 list122.pop(0)
 
             ## Event Code: 357 [Picture Text] [Optional]
@@ -1295,7 +1333,7 @@ def searchCodes(page, pbar, jobList, filename):
 
                                 # Textwrap
                                 # translatedText = textwrap.fill(translatedText, 80)
-                                # translatedText = translatedText.replace("\n", "\\n")
+                                # # translatedText = translatedText.replace("\n", "\\n")
                                 # translatedText = re.sub(r"[\\]+c", r"\\\\c", translatedText)
                                 translatedText = re.sub(r"[\\]+\*item", r"\\\\*item", translatedText)
 
@@ -1344,7 +1382,7 @@ def searchCodes(page, pbar, jobList, filename):
 
                     # Textwrap & Set
                     translatedText = textwrap.fill(translatedText, width=WIDTH)
-                    translatedText = translatedText.replace("\n", "\\n")
+                    # translatedText = translatedText.replace("\n", "\\n")
                     codeList[i]["p"][3]["messageText"] = translatedText
 
                     ### Choices
@@ -1417,7 +1455,7 @@ def searchCodes(page, pbar, jobList, filename):
 
                     # Textwrap
                     translatedText = textwrap.fill(translatedText, width=WIDTH)
-                    translatedText = translatedText.replace("\n", "\\n")
+                    # translatedText = translatedText.replace("\n", "\\n")
                     translatedText = startString + translatedText + endString
 
                     # Set Data
@@ -1515,19 +1553,28 @@ def searchCodes(page, pbar, jobList, filename):
             ## Event Code: 355 or 655 Scripts [Optional]
             if "c" in codeList[i] and (codeList[i]["c"] == 355 or codeList[i]["c"] == 655) and CODE355655 is True:
                 jaString = codeList[i]["p"][0]
-                regexPatterns = [r'^"?([^=+_$]+[^")])"?\)?$']
 
-                # Iterate over the list of regex patterns
-                for regex in regexPatterns:
+                if "テキスト-" in jaString:
+                    jaString = codeList[i]["p"][0]
+                    regex = r"テキスト-(.+)"
+
+                    # Check Exist
                     match = re.search(regex, jaString)
-                    if re.search(regex, jaString):
-                        if match.group(1) and match.group(1) != "\u3000":
-                            finalJAString = match.group(1)
+                    if match:
+                        replaceString = match.group(1)
+                        finalJAString = replaceString
 
-                            # Remove Textwrap
-                            finalJAString = finalJAString.replace("\\n", " ")
+                        # Remove Textwrap
+                        # finalJAString = finalJAString.replace("\n", " ")
+                        
+                        # Remove Spaces
+                        finalJAString = finalJAString.replace("\u3000", "")
+                        finalJAString = finalJAString.strip()
+                        
+                        # Final Set
+                        if finalJAString:
                             # Pass 1
-                            if setData is False:
+                            if setData:
                                 list355655.append(finalJAString)
 
                             # Pass 2
@@ -1535,14 +1582,228 @@ def searchCodes(page, pbar, jobList, filename):
                                 # Grab and Replace
                                 translatedText = list355655[0]
                                 translatedText = re.sub(r"(?<!\\)'", r"\\'", translatedText)
+
+                                # Textwrap
+                                # translatedText = textwrap.fill(translatedText, width=WIDTH)
+
+                                # Set
+                                codeList[i]["p"][0] = codeList[i]["p"][0].replace(replaceString, translatedText)
+                                list355655.pop(0)
+
+                elif "logtxt = " in jaString:
+                    jaString = codeList[i]["p"][0]
+                    regex = r"logtxt\s=\s'(.+)'"
+
+                    # Check Exist
+                    match = re.search(regex, jaString)
+                    if match:
+                        replaceString = match.group(1)
+                        finalJAString = replaceString
+
+                        # Remove Textwrap
+                        # finalJAString = finalJAString.replace("\n", " ")
+                        
+                        # Remove Spaces
+                        finalJAString = finalJAString.replace("\u3000", "")
+                        finalJAString = finalJAString.strip()
+                        
+                        # Final Set
+                        if finalJAString:
+                            # Pass 1
+                            if setData:
+                                list355655.append(finalJAString)
+
+                            # Pass 2
+                            else:
+                                # Grab and Replace
+                                translatedText = list355655[0]
+                                translatedText = re.sub(r"(?<!\\)'", r"\\'", translatedText)
+
+                                # Textwrap
+                                # translatedText = textwrap.fill(translatedText, width=WIDTH)
+
+                                # Set
+                                codeList[i]["p"][0] = codeList[i]["p"][0].replace(replaceString, translatedText)
+                                list355655.pop(0)
+
+                elif ".setNickname" in jaString:
+                    jaString = codeList[i]["p"][0]
+                    regex = r'.setNickname\(\\?"(.+?)\\?"\)'
+
+                    # Check Exist
+                    match = re.search(regex, jaString)
+                    if match:
+                        replaceString = match.group(1)
+                        finalJAString = replaceString
+
+                        # Remove Textwrap
+                        # finalJAString = finalJAString.replace("\n", " ")
+                        
+                        # Remove Spaces
+                        finalJAString = finalJAString.replace("\u3000", "")
+                        finalJAString = finalJAString.strip()
+                        
+                        # Final Set
+                        if finalJAString:
+                            # Pass 1
+                            if setData:
+                                list355655.append(finalJAString)
+
+                            # Pass 2
+                            else:
+                                # Grab and Replace
+                                translatedText = list355655[0]
+                                translatedText = re.sub(r"(?<!\\)'", r"\\'", translatedText)
+
+                                # Textwrap
+                                # translatedText = textwrap.fill(translatedText, width=WIDTH)
+
+                                # Set
+                                codeList[i]["p"][0] = codeList[i]["p"][0].replace(replaceString, translatedText)
+                                list355655.pop(0)
+
+                elif "_subject=" in jaString:
+                    jaString = codeList[i]["p"][0]
+                    regex = r'_subject=(.+?)_'
+
+                    # Check Exist
+                    match = re.search(regex, jaString)
+                    if match:
+                        replaceString = match.group(1)
+                        finalJAString = replaceString
+
+                        # Remove Textwrap
+                        # finalJAString = finalJAString.replace("\n", " ")
+                        
+                        # Remove Spaces
+                        finalJAString = finalJAString.replace("\u3000", "")
+                        finalJAString = finalJAString.strip()
+                        
+                        # Final Set
+                        if finalJAString:
+                            # Pass 1
+                            if setData:
+                                list355655.append(finalJAString)
+
+                            # Pass 2
+                            else:
+                                # Grab and Replace
+                                translatedText = list355655[0]
+                                translatedText = re.sub(r"(?<!\\)'", r"\\'", translatedText)
+
+                                # Textwrap
+                                # translatedText = textwrap.fill(translatedText, width=WIDTH)
+
+                                # Set
+                                codeList[i]["p"][0] = codeList[i]["p"][0].replace(replaceString, translatedText)
+                                list355655.pop(0)
+
+                elif "\")" in jaString:
+                    jaString = codeList[i]["p"][0]
+                    regex = r'^([^(]+)"\)$'
+
+                    # Check Exist
+                    match = re.search(regex, jaString)
+                    if match:
+                        replaceString = match.group(1)
+                        finalJAString = replaceString
+
+                        # Remove Textwrap
+                        # finalJAString = finalJAString.replace("\n", " ")
+                        
+                        # Remove Spaces
+                        finalJAString = finalJAString.replace("\u3000", "")
+                        finalJAString = finalJAString.strip()
+                        
+                        # Final Set
+                        if finalJAString:
+                            # Pass 1
+                            if not setData:
+                                list355655.append(finalJAString)
+
+                            # Pass 2
+                            else:
+                                # Grab and Replace
+                                translatedText = list355655[0]
+                                translatedText = re.sub(r"(?<!\\)'", r"\\'", translatedText)
+
+                                # Textwrap
+                                # translatedText = textwrap.fill(translatedText, width=WIDTH)
+
+                                # Set
+                                codeList[i]["p"][0] = codeList[i]["p"][0].replace(replaceString, translatedText)
+                                list355655.pop(0)
+
+                # elif "$game_variables" in jaString:
+                #     jaString = codeList[i]["p"][0]
+                #     regex = r'^\$game_variables\[\d+\]\s=\s"(.+)"'
+
+                #     # Check Exist
+                #     match = re.search(regex, jaString)
+                #     if match:
+                #         replaceString = match.group(1)
+                #         finalJAString = replaceString
+
+                #         # Remove Textwrap
+                #         # finalJAString = finalJAString.replace("\n", " ")
+                        
+                #         # Remove Spaces
+                #         finalJAString = finalJAString.replace("\u3000", "")
+                #         finalJAString = finalJAString.strip()
+                        
+                #         # Final Set
+                #         if finalJAString:
+                #             # Pass 1
+                #             if not setData:
+                #                 list355655.append(finalJAString)
+
+                #             # Pass 2
+                #             else:
+                #                 # Grab and Replace
+                #                 translatedText = list355655[0]
+                #                 translatedText = re.sub(r"(?<!\\)'", r"\\'", translatedText)
+
+                #                 # Textwrap
+                #                 # translatedText = textwrap.fill(translatedText, width=WIDTH)
+
+                #                 # Set
+                #                 codeList[i]["p"][0] = codeList[i]["p"][0].replace(replaceString, translatedText)
+                #                 list355655.pop(0)
+
+                elif "text =" in jaString:
+                    jaString = codeList[i]["p"][0]
+                    regex = r'text\s=\s"(.+)"'
+
+                    # Check Exist
+                    match = re.search(regex, jaString)
+                    if match:
+                        replaceString = match.group(1)
+                        finalJAString = replaceString
+
+                        # Remove Textwrap
+                        # finalJAString = finalJAString.replace("\n", " ")
+                        
+                        # Remove Spaces
+                        finalJAString = finalJAString.replace("\u3000", "")
+                        finalJAString = finalJAString.strip()
+                        
+                        # Final Set
+                        if finalJAString:
+                            # Pass 1
+                            if not setData:
+                                list355655.append(finalJAString)
+
+                            # Pass 2
+                            else:
+                                # Grab and Replace
+                                translatedText = list355655[0]
                                 translatedText = re.sub(r'(?<!\\)"', r'\\"', translatedText)
 
                                 # Textwrap
-                                translatedText = textwrap.fill(translatedText, width=WIDTH)
-                                translatedText = translatedText.replace("\n", "\\n")
+                                # translatedText = textwrap.fill(translatedText, width=WIDTH)
 
                                 # Set
-                                codeList[i]["p"][0] = codeList[i]["p"][0].replace(finalJAString, translatedText)
+                                codeList[i]["p"][0] = codeList[i]["p"][0].replace(replaceString, translatedText)
                                 list355655.pop(0)
 
             ## Event Code: 408 (Script)
@@ -1587,7 +1848,7 @@ def searchCodes(page, pbar, jobList, filename):
 
                     # Textwrap
                     translatedText = textwrap.fill(translatedText, width=WIDTH)
-                    translatedText = translatedText.replace("\n", "\\n")
+                    # translatedText = translatedText.replace("\n", "\\n")
 
                     # Set Data
                     codeList[i]["p"][0] = translatedText
@@ -1610,6 +1871,8 @@ def searchCodes(page, pbar, jobList, filename):
                     regex = r"event_text\s*:\s*(.*)"
                 elif "拡張選択肢" in jaString:
                     regex = r"拡張選択肢.+?\[(.+)"
+                elif "namepop" in jaString:
+                    regex = r"<namepop(.+)>"
                 else:
                     i += 1
                     continue
@@ -1639,7 +1902,7 @@ def searchCodes(page, pbar, jobList, filename):
                         # Textwrap
                         # if codeList[i + 1]["c"] == 408:
                         #     translatedText = textwrap.fill(translatedText, WIDTH)
-                        #     translatedText = translatedText.replace("\n", "\\n")
+                        #     # translatedText = translatedText.replace("\n", "\\n")
 
                         # Remove characters that may break scripts
                         charList = ['"']
@@ -1647,6 +1910,12 @@ def searchCodes(page, pbar, jobList, filename):
                             translatedText = translatedText.replace(char, "")
                         translatedText = translatedText.replace('"', '"')
                         # translatedText = translatedText.replace(" ", "_")
+                        
+                        # Namepop
+                        if "namepop" in jaString:
+                            translatedText = translatedText.replace(" ", "_")
+
+                        # Replace Original String
                         translatedText = jaString.replace(match.group(1), translatedText)
 
                         # Add >
@@ -1793,7 +2062,7 @@ def searchCodes(page, pbar, jobList, filename):
 
                         # Textwrap & Replace Whitespace
                         translatedText = textwrap.fill(translatedText, width=WIDTH)
-                        translatedText = translatedText.replace("\n", "\\n")
+                        # translatedText = translatedText.replace("\n", "\\n")
                         translatedText = translatedText.replace(" ", "_")
 
                         # Replace and Set
@@ -2248,7 +2517,7 @@ Translate 'Taroを倒した！' as 'Taro was defeated!'",
         # Textwrap
         translatedText = descriptionResponse[0]
         translatedText = textwrap.fill(translatedText, width=LISTWIDTH)
-        translatedText = translatedText.replace("\n", "\\n")
+        # translatedText = translatedText.replace("\n", "\\n")
         state["description"] = translatedText.replace('"', "")
     if "message1" in state:
         state["message1"] = message1Response[0].replace('"', "").replace("Taro", "")
