@@ -85,8 +85,8 @@ CODE101 = False
 CODE102 = False
 
 # Set String (Fragile but necessary)
-CODE122 = True
-CODE150 = False
+CODE122 = False
+CODE150 = True
 
 # Other
 CODE210 = False
@@ -265,11 +265,13 @@ def searchCodes(events, pbar, jobList, filename):
         stringList = jobList[0]
         list210 = jobList[1]
         list300 = jobList[2]
+        list150TL = jobList[3]  # Add this line
         setData = True
     else:
         stringList = []
         list210 = []
         list300 = []
+        list150TL = []  # Add this line
         setData = False
 
     # Other
@@ -300,7 +302,7 @@ def searchCodes(events, pbar, jobList, filename):
         while i < len(codeList):
             ### Event Code: 101 Message
             if codeList[i]["code"] == 101 and CODE101 == True:
-                speakerRegex = r"@\d+\r?\n(.*)：\r?\n" # Default: r"@\d+\r?\n(.*)：\r?\n"
+                speakerRegex = r"^(.+?)\n" # Default: r"@\d+\r?\n(.*)：\r?\n"
                 textRegex = r"@?\d*\r?\n?\u3000*([\w\W]+)\r?\n?" # Default: r"@?\d*\r?\n?\u3000*([\w\W]+)\r?\n?"
 
                 # Grab String
@@ -308,7 +310,7 @@ def searchCodes(events, pbar, jobList, filename):
                 speaker = ""
 
                 # Grab Speaker
-                if "：\n" in jaString or "：\r\n" in jaString:
+                if "\n" in jaString:
                     match = re.search(speakerRegex, jaString)
                     if match:
                         # TL Speaker
@@ -370,9 +372,13 @@ def searchCodes(events, pbar, jobList, filename):
                         choiceList.append(jaChoiceList[j])
 
                 # Translate
+                if 'jaString' in locals():
+                    choiceString = f"Previous Line: {jaString}\n\nReply with the {LANGUAGE} translation of the dialogue choice"
+                else:
+                    choiceString = f"Reply with the {LANGUAGE} translation of the dialogue choice"
                 response = translateGPT(
                     choiceList,
-                    f"Reply with the {LANGUAGE} translation of the dialogue choice",
+                    choiceString,
                     True,
                 )
                 translatedChoiceList = response[0]
@@ -439,7 +445,7 @@ def searchCodes(events, pbar, jobList, filename):
                     originalString = jaString
 
                     # Remove Textwrap
-                    jaString = jaString.replace('\n', ' ')
+                    # jaString = jaString.replace('\n', ' ')
 
                     # Translate Conversations
                     if "：Nothing" in jaString:
@@ -497,14 +503,15 @@ def searchCodes(events, pbar, jobList, filename):
                             totalTokens[1] += response[1][1]
 
                             # Textwrap
-                            translatedText = textwrap.fill(translatedText, 30)
+                            # translatedText = textwrap.fill(translatedText, 30)
 
                             # Set String
                             codeList[i]["stringArgs"][0] = codeList[i]["stringArgs"][0].replace(originalString, translatedText)
 
             ### Event Code: 150 Picture String
             if codeList[i]["code"] == 150 and CODE150 == True:
-                if "stringArgs" in codeList[i] and len(codeList[i]["stringArgs"]) > 0:
+                if "stringArgs" in codeList[i] and len(codeList[i]["stringArgs"]) > 0:                    
+                    font150 = "\\f[8]"
                     # Grab String
                     jaString = re.search(r"^\n?(.*)\n?$", codeList[i]["stringArgs"][0])
                     if jaString:
@@ -512,9 +519,14 @@ def searchCodes(events, pbar, jobList, filename):
                     else:
                         jaString = codeList[i]["stringArgs"][0]
 
+                    # Japanses Text Only
+                    if not re.search(r"[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９]+", jaString):
+                        i += 1
+                        continue
+
                     # Remove Textwrap
-                    jaString = jaString.replace("\n", " ")
-                    jaString = jaString.replace("\r", "")
+                    # jaString = jaString.replace("\n", " ")
+                    # jaString = jaString.replace("\r", "")
 
                     # Translate Other Strings [Specific Files Only]
                     if (
@@ -523,24 +535,25 @@ def searchCodes(events, pbar, jobList, filename):
                         and "_" not in jaString
                         and '",' not in jaString
                         and "/" not in jaString
+                        and ">" not in jaString
+                        and "<" not in jaString
                     ):
-                        # Japanese Text Only
-                        if re.search(r"[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９]+", jaString):
-                            # Translate
-                            response = translateGPT(
-                                jaString,
-                                f"Reply with the {LANGUAGE} translation of the text",
-                                True,
-                            )
-                            translatedText = response[0]
-                            totalTokens[0] += response[1][0]
-                            totalTokens[1] += response[1][1]
+                        # Pass 1 (Save Text to List)
+                        if not setData:
+                            list150TL.append(jaString)
+
+                        # Pass 2 (Set Text)
+                        else:
+                            translatedText = list150TL[0]
 
                             # Textwrap
-                            translatedText = textwrap.fill(translatedText, WIDTH)
+                            # translatedText = textwrap.fill(translatedText, WIDTH)
 
-                            # Set String
-                            codeList[i]["stringArgs"][0] = translatedText
+                            # Set String with font formatting
+                            codeList[i]["stringArgs"][0] = re.sub(r'\\f\[(\d+)\]', lambda x: f'\\f[{int(x.group(1))-2}]', translatedText)
+
+                            # Pop processed item
+                            list150TL.pop(0)
 
             ### Event Code: 300 Common Events
             if codeList[i]["code"] == 300 and CODE300 == True and "stringArgs" in codeList[i] and len(codeList[i]["stringArgs"]) > 1:
@@ -750,10 +763,37 @@ def searchCodes(events, pbar, jobList, filename):
             else:
                 setData = True
 
-        # Pass 2
-        if setData:
+        # 150 List
+        if len(list150TL) > 0:
+            # Progress Bar
+            pbar.total = len(list150TL)
+            pbar.refresh()
+
+            # Translate
+            response = translateGPT(
+                list150TL,
+                textHistory,
+                True,
+            )
+            stringList150TL = response[0]
+            totalTokens[0] += response[1][0]
+            totalTokens[1] += response[1][1]
+
+            # Check Mismatch
+            if len(stringList150TL) != len(list150TL):
+                with LOCK:
+                    if filename not in MISMATCH:
+                        MISMATCH.append(filename)
+            else:
+                list150TL = stringList150TL
+                setData = True
+
+        # Update jobList before recursive call
+        if setData == True:
             stringList = []
-            searchCodes(events, pbar, [stringListTL, list210TL, list300TL], filename)
+            jobList = [stringListTL, list210TL, list300TL, list150TL]  # Add list150TL
+            searchCodes(events, pbar, jobList, filename)
+
         else:
             # Set Data
             events = codeList
@@ -974,7 +1014,7 @@ def searchDB(events, pbar, jobList, filename):
                             # Pass 2 (Set Data)
                             else:
                                 if dataList[j].get("value") != "":
-                                    dataList[j].update({"value": choiceList[0][0]})
+                                    dataList[j].update({"value": optionsList[0][0]})
                                     optionsList[0].pop(0)
 
                         # Description
