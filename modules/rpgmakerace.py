@@ -45,7 +45,7 @@ FACENAME101 = False  # Find Speakers in 101 Codes based on Face Name
 NAMES = False  # Output a list of all the character names found
 BRFLAG = False  # If the game uses <br> instead
 FIXTEXTWRAP = True  # Overwrites textwrap
-IGNORETLTEXT = False  # Ignores all translated text.
+IGNORETLTEXT = True  # Ignores all translated text.
 MISMATCH = []  # Lists files that throw a mismatch error (Length of GPT list response is wrong)
 PBAR = None
 FILENAME = None
@@ -83,9 +83,9 @@ POSITION = 0
 LEAVE = False
 
 # Dialogue / Scroll / Choices (Main Codes)
-CODE401 = False
-CODE405 = False
-CODE102 = False
+CODE401 = True
+CODE405 = True
+CODE102 = True
 
 # Optional
 CODE101 = False  # Turn this one when names exist in 101
@@ -320,7 +320,7 @@ def translateNote(event, regex, wrap=True):
                 # translatedText = translatedText.replace("\n", "\\n")
 
             translatedText = translatedText.replace('"', "")
-            translatedText = translatedText.replace(' ', "_")
+            # translatedText = translatedText.replace(' ', "_")
             jaString = jaString.replace(initialJAString, translatedText)
             event["note"] = jaString
             i += 1
@@ -661,8 +661,8 @@ def searchNames(data, pbar, context):
                         tokensResponse = translateNote(data[i], r"ADTs?:(.+?)>")
                         totalTokens[0] += tokensResponse[0]
                         totalTokens[1] += tokensResponse[1]
-                    if "=前提スキル" in data[i]["note"]:
-                        tokensResponse = translateNote(data[i], r"<習得ヘルプ=前提スキル：(.+?)>")
+                    if "習得ヘルプ" in data[i]["note"]:
+                        tokensResponse = translateNote(data[i], r"<習得ヘルプ=(.+?)>")
                         totalTokens[0] += tokensResponse[0]
                         totalTokens[1] += tokensResponse[1]
 
@@ -1553,258 +1553,38 @@ def searchCodes(page, pbar, jobList, filename):
             ## Event Code: 355 or 655 Scripts [Optional]
             if "c" in codeList[i] and (codeList[i]["c"] == 355 or codeList[i]["c"] == 655) and CODE355655 is True:
                 jaString = codeList[i]["p"][0]
+                
+                patterns = {
+                    "テキスト-": (r"テキスト-(.+)", "'"),
+                    "logtxt = ": (r"logtxt\s=\s'(.+)'", "'"), 
+                    ".setNickname": (r'.setNickname\(\\?"(.+?)\\?"\)', "'"),
+                    "_subject=": (r'_subject=(.+?)_', "'"),
+                    "text =": (r'text\s=\s"(.+)"', '"'),
+                    "ex_a_name": (r'ex_a_name\(\d+,"(.+)"\)', '"')
+                }
 
-                if "テキスト-" in jaString:
-                    jaString = codeList[i]["p"][0]
-                    regex = r"テキスト-(.+)"
+                for key, (regex, escape_char) in patterns.items():
+                    if key in jaString:
+                        match = re.search(regex, jaString)
+                        if match:
+                            replaceString = match.group(1)
+                            finalJAString = replaceString.replace("\u3000", "").strip()
+                            
+                            if finalJAString:
+                                # Pass 1
+                                if setData == False:
+                                    list355655.append(finalJAString)
 
-                    # Check Exist
-                    match = re.search(regex, jaString)
-                    if match:
-                        replaceString = match.group(1)
-                        finalJAString = replaceString
+                                # Pass 2
+                                else:
+                                    # Grab and Replace
+                                    translatedText = list355655[0]
+                                    translatedText = re.sub(f'(?<!\\\\){escape_char}', f'\\\\{escape_char}', translatedText)
 
-                        # Remove Textwrap
-                        # finalJAString = finalJAString.replace("\n", " ")
-                        
-                        # Remove Spaces
-                        finalJAString = finalJAString.replace("\u3000", "")
-                        finalJAString = finalJAString.strip()
-                        
-                        # Final Set
-                        if finalJAString:
-                            # Pass 1
-                            if setData:
-                                list355655.append(finalJAString)
-
-                            # Pass 2
-                            else:
-                                # Grab and Replace
-                                translatedText = list355655[0]
-                                translatedText = re.sub(r"(?<!\\)'", r"\\'", translatedText)
-
-                                # Textwrap
-                                # translatedText = textwrap.fill(translatedText, width=WIDTH)
-
-                                # Set
-                                codeList[i]["p"][0] = codeList[i]["p"][0].replace(replaceString, translatedText)
-                                list355655.pop(0)
-
-                elif "logtxt = " in jaString:
-                    jaString = codeList[i]["p"][0]
-                    regex = r"logtxt\s=\s'(.+)'"
-
-                    # Check Exist
-                    match = re.search(regex, jaString)
-                    if match:
-                        replaceString = match.group(1)
-                        finalJAString = replaceString
-
-                        # Remove Textwrap
-                        # finalJAString = finalJAString.replace("\n", " ")
-                        
-                        # Remove Spaces
-                        finalJAString = finalJAString.replace("\u3000", "")
-                        finalJAString = finalJAString.strip()
-                        
-                        # Final Set
-                        if finalJAString:
-                            # Pass 1
-                            if setData:
-                                list355655.append(finalJAString)
-
-                            # Pass 2
-                            else:
-                                # Grab and Replace
-                                translatedText = list355655[0]
-                                translatedText = re.sub(r"(?<!\\)'", r"\\'", translatedText)
-
-                                # Textwrap
-                                # translatedText = textwrap.fill(translatedText, width=WIDTH)
-
-                                # Set
-                                codeList[i]["p"][0] = codeList[i]["p"][0].replace(replaceString, translatedText)
-                                list355655.pop(0)
-
-                elif ".setNickname" in jaString:
-                    jaString = codeList[i]["p"][0]
-                    regex = r'.setNickname\(\\?"(.+?)\\?"\)'
-
-                    # Check Exist
-                    match = re.search(regex, jaString)
-                    if match:
-                        replaceString = match.group(1)
-                        finalJAString = replaceString
-
-                        # Remove Textwrap
-                        # finalJAString = finalJAString.replace("\n", " ")
-                        
-                        # Remove Spaces
-                        finalJAString = finalJAString.replace("\u3000", "")
-                        finalJAString = finalJAString.strip()
-                        
-                        # Final Set
-                        if finalJAString:
-                            # Pass 1
-                            if setData:
-                                list355655.append(finalJAString)
-
-                            # Pass 2
-                            else:
-                                # Grab and Replace
-                                translatedText = list355655[0]
-                                translatedText = re.sub(r"(?<!\\)'", r"\\'", translatedText)
-
-                                # Textwrap
-                                # translatedText = textwrap.fill(translatedText, width=WIDTH)
-
-                                # Set
-                                codeList[i]["p"][0] = codeList[i]["p"][0].replace(replaceString, translatedText)
-                                list355655.pop(0)
-
-                elif "_subject=" in jaString:
-                    jaString = codeList[i]["p"][0]
-                    regex = r'_subject=(.+?)_'
-
-                    # Check Exist
-                    match = re.search(regex, jaString)
-                    if match:
-                        replaceString = match.group(1)
-                        finalJAString = replaceString
-
-                        # Remove Textwrap
-                        # finalJAString = finalJAString.replace("\n", " ")
-                        
-                        # Remove Spaces
-                        finalJAString = finalJAString.replace("\u3000", "")
-                        finalJAString = finalJAString.strip()
-                        
-                        # Final Set
-                        if finalJAString:
-                            # Pass 1
-                            if setData:
-                                list355655.append(finalJAString)
-
-                            # Pass 2
-                            else:
-                                # Grab and Replace
-                                translatedText = list355655[0]
-                                translatedText = re.sub(r"(?<!\\)'", r"\\'", translatedText)
-
-                                # Textwrap
-                                # translatedText = textwrap.fill(translatedText, width=WIDTH)
-
-                                # Set
-                                codeList[i]["p"][0] = codeList[i]["p"][0].replace(replaceString, translatedText)
-                                list355655.pop(0)
-
-                elif "\")" in jaString:
-                    jaString = codeList[i]["p"][0]
-                    regex = r'^([^(]+)"\)$'
-
-                    # Check Exist
-                    match = re.search(regex, jaString)
-                    if match:
-                        replaceString = match.group(1)
-                        finalJAString = replaceString
-
-                        # Remove Textwrap
-                        # finalJAString = finalJAString.replace("\n", " ")
-                        
-                        # Remove Spaces
-                        finalJAString = finalJAString.replace("\u3000", "")
-                        finalJAString = finalJAString.strip()
-                        
-                        # Final Set
-                        if finalJAString:
-                            # Pass 1
-                            if not setData:
-                                list355655.append(finalJAString)
-
-                            # Pass 2
-                            else:
-                                # Grab and Replace
-                                translatedText = list355655[0]
-                                translatedText = re.sub(r"(?<!\\)'", r"\\'", translatedText)
-
-                                # Textwrap
-                                # translatedText = textwrap.fill(translatedText, width=WIDTH)
-
-                                # Set
-                                codeList[i]["p"][0] = codeList[i]["p"][0].replace(replaceString, translatedText)
-                                list355655.pop(0)
-
-                # elif "$game_variables" in jaString:
-                #     jaString = codeList[i]["p"][0]
-                #     regex = r'^\$game_variables\[\d+\]\s=\s"(.+)"'
-
-                #     # Check Exist
-                #     match = re.search(regex, jaString)
-                #     if match:
-                #         replaceString = match.group(1)
-                #         finalJAString = replaceString
-
-                #         # Remove Textwrap
-                #         # finalJAString = finalJAString.replace("\n", " ")
-                        
-                #         # Remove Spaces
-                #         finalJAString = finalJAString.replace("\u3000", "")
-                #         finalJAString = finalJAString.strip()
-                        
-                #         # Final Set
-                #         if finalJAString:
-                #             # Pass 1
-                #             if not setData:
-                #                 list355655.append(finalJAString)
-
-                #             # Pass 2
-                #             else:
-                #                 # Grab and Replace
-                #                 translatedText = list355655[0]
-                #                 translatedText = re.sub(r"(?<!\\)'", r"\\'", translatedText)
-
-                #                 # Textwrap
-                #                 # translatedText = textwrap.fill(translatedText, width=WIDTH)
-
-                #                 # Set
-                #                 codeList[i]["p"][0] = codeList[i]["p"][0].replace(replaceString, translatedText)
-                #                 list355655.pop(0)
-
-                elif "text =" in jaString:
-                    jaString = codeList[i]["p"][0]
-                    regex = r'text\s=\s"(.+)"'
-
-                    # Check Exist
-                    match = re.search(regex, jaString)
-                    if match:
-                        replaceString = match.group(1)
-                        finalJAString = replaceString
-
-                        # Remove Textwrap
-                        # finalJAString = finalJAString.replace("\n", " ")
-                        
-                        # Remove Spaces
-                        finalJAString = finalJAString.replace("\u3000", "")
-                        finalJAString = finalJAString.strip()
-                        
-                        # Final Set
-                        if finalJAString:
-                            # Pass 1
-                            if not setData:
-                                list355655.append(finalJAString)
-
-                            # Pass 2
-                            else:
-                                # Grab and Replace
-                                translatedText = list355655[0]
-                                translatedText = re.sub(r'(?<!\\)"', r'\\"', translatedText)
-
-                                # Textwrap
-                                # translatedText = textwrap.fill(translatedText, width=WIDTH)
-
-                                # Set
-                                codeList[i]["p"][0] = codeList[i]["p"][0].replace(replaceString, translatedText)
-                                list355655.pop(0)
+                                    # Set
+                                    codeList[i]["p"][0] = codeList[i]["p"][0].replace(replaceString, translatedText)
+                                    list355655.pop(0)
+                        break
 
             ## Event Code: 408 (Script)
             if "c" in codeList[i] and (codeList[i]["c"] == 408) and CODE408 is True:

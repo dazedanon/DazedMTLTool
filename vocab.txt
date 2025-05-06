@@ -1,153 +1,19 @@
 Here are some vocabulary and terms so that you know the proper spelling and translation.
 ```
 # Game Characters
-ネイビス (Neibis) - Male
-ビダール (Bidal) - Male
-エルニン (Elnin) - Female
-メマ (Mema) - Female
-教皇 (Pope) - Female
-ボルカヌス (Volcanus) - Male
-トリスリタン (Trisritan) - Female
-ノビッサ (Novissa) - Male
-ルー (Rue) - Female
-エルニン (Elnin) - Female
-ギロ (Giro) - Female
-クスミ (Kusumi) - Female
-パラコーン (Paracon) - Female
-チヤ (Chiya) - Female
-コアンタ (Koanta) - Female
-ハイプリ神官長 (High Priest Haipri) - Female
-メマ (Mema) - Female
-ハノン (Hanon) - Female
-ミッシェル (Michelle) - Female
-エクスキューショナー (Executioner) - Female
-オーガトゥース (Ogretooth) - Female
-ミステルテイン (Misteltein) - Female
-シャシー (Shashi) - Female
-ルセーダ (Luceda) - Female
-プリン (Purin) - Female
-アンベル (Amber) - Female
-アンカープ (Anchorp) - Female
-ヨルク (Yoruku) - Female
-ハーター (Harter) - Female
-コキューン (Cocoon) - Male
-ビルドルフ - Male
-ゼロジー (Zero-G) - Male
-ベルマ (Belma) - Male
-ヴォルゼブ (Volzeb) - Male
-
-# Enemies (Mostly Female)
-透明君 (Transparent-kun)
-ゼリン (Zerin)
-ミリア (Milia)
-マヤ (Maya)
-ミステルテイン (Misteltein)
-怪しい二人組 (Suspicious Duo)
-ガレオン (Galion)
-グリフォン (Griffon)
-キッスプラント (Kiss Plant)
-ゴーレム (Golem)
-所属不明（ゴーグル） (Unknown Affiliation (Goggles))
-所属不明（マスク） (Unknown Affiliation (Mask))
-憲兵 (Military Police)
-トニオ (Tonio)
-ロベルタ (Roberta)
-アモーレ (Amore)
-ビタラ (Vitata)
-軍隊砂漠蟻 (Desert Army Ant)
-盗賊 (Thief)
-鳥人間（槍） (Birdman (Spear))
-鳥人間 (Birdman)
-ガーツ (Gartz)
-アイスアー (Ice Arrow)
-フリーズゴーレム (Freeze Golem)
-ハーティー (Harty)
-トリスリタン (Trisritan)
-ハノン (Hanon)
-マグゼリン (Magzellin)
-バーストリアー (Burstrier)
-インプ (Imp)
-フェーニ (Feny)
-トールドラゴン (Thor Dragon)
-イフリート (Ifrit)
-ターゼリン (Tazerin)
-ハーパキャット (Harpercat)
-ヨヨ (Yoyo)
-野良ガーディアン (Stray Guardian)
-グルームの牙 (Groom's Fang)
-ハプリコーン (Harpricorn)
-聖十字隊 (Holy Cross Squad)
-フレイア教徒 (Freya Cultist)
-プリースト (Priest)
-フレイア神官 (Freya Priest)
-チヤ (Chiya)
-コアンタ (Koanta)
-パラコーン (Paracon)
-ムラタン (Muratan)
-コアハンター (Core Hunter)
-イヴ (Eve)
-レタ (Leta)
-ダークレタ (Dark Leta)
-ババヤン (Babayan)
-沼の魔女 (Swamp Witch)
-マヴィチャ (Mavicha)
-ビヨンド (Beyond)
-セイバーガーディアン (Saber Guardian)
-アーチャーガーディアン (Archer Guardian)
-エクスキューショナー (Executioner)
-オーガトゥース (Orgatous)
-ギロ (Giro)
-ドイレン=ベッシェ (Doiren=Besshe)
-エレメェス=ショーサ (Eremees=Shosa)
-ローレンス=ランブル (Lawrence=Rumble)
-グレムリン (Gremlin)
-ドゲザエ (Dogezae)
-心を失った者 (The Heartless)
-エキューオ (Equio)
-エルニン (Elnin)
-グルームの夜 (Gloom's Night)
-ラギッドグール (Ragged Ghoul)
-デスプードル (Death Poodle)
-グールデストロイ (Ghoul Destroyer)
-ヴァンシィ (Banshee)
-ネクロマンサー (Necromancer)
-ヘルチョンチョニ (Hell Chonchoni)
-羽蟲の魔物 (Winged Insect Monster)
-堕ちた大神官フィーヴァム (Fallen High Priest Fivam)
-ヴィージヨ (Vijyo)
-ヴェルセブブ (Versebub)
-親衛隊トニオ (Royal Guard Tonio)
-親衛隊ロベルタ (Royal Guard Roberta)
-親衛隊アモーレ (Royal Guard Amore)
-女王親衛隊 (Queen's Royal Guard)
-マヤゴールド (Mayagold)
-クィーンハーピー (Queen Harpy)
-イクリプス (Eclipse)
-マスクドフレイア (Masked Freya)
-クルトラナッソス (Cultranassus)
-サイドワインダー (Sidewinder)
-マーリン (Merlin)
-トレント=イニー (Trent=Inny)
-アストロス (Astros)
-タンクウガ (Tankuga)
-ヴィーゴニク (Vigonik)
-スラムのゴロツキ (Slum Thug)
-スライム娘 (Slime Girl)
-ジェネラルマーメイド (General Mermaid)
-ヴァルキリー (Valkyrie)
-防衛装置 (Defense Device)
-ヘルヴァンシー (Helvancy)
-マーガレット=ソニア (Margaret=Sonia)
-ガーディアン改修型 (Modified Guardian)
-イグゼニム (Igzenim)
-アビスガード (Abyss Guard)
-ルカ=ドッペル (Luca=Doppel)
-シグルドリーヴァ (Sigurdrieva)
-オニール (O'Neill)
-訓練兵たち (Trainees)
-没オニール (Dead O'Neill)
-没オニール使う枠 (Dead O'Neill Slot)
-聖十字隊副隊長 (Holy Cross Squad Vice-Captain)
+姫野 彩羽 (Himeno Iroha) - Female
+朝樹 (Asaki) - Male
+リリィ (Lily) - Female
+佐井 民太郎 (Sai Mintaro) - Male
+鐘尾原 真久 (Kaneobara Maku) - Male
+岡根 梨 (Okane Nashi) - Female
+藍場 結奈 (Aiba Yuna) - Female
+スーティ (Suti) - Female
+収集家レティシア (Collector Leticia) - Female
+アルフ (Alf) - Male
+カドーナ (Kadona) - Female
+保田区くん (Potaku-kun) - Male
+衿澄 雫 (Erisumi Shizuku) - Female
 
 # Lewd Terms
 マンコ (pussy)
@@ -241,6 +107,8 @@ ME 音量 (ME Volume)
 魂 (Soul)
 巫女 (Shrine Maiden)
 刀 (Sword)
+龍神神社 (Dragon God Shrine)
+
 
 # Demons/Angels/Monsters
 悪魔 (Devil)  
@@ -267,6 +135,7 @@ ME 音量 (ME Volume)
 幽鬼 (Revenant)
 デーモン (Daemon)
 ローバー (Roper)
+夢魔 (Succubus)
 
 # Other
 w ((lol))
@@ -275,21 +144,16 @@ w ((lol))
 』 (』)
 
 # Game Specific
-フレイア大神殿 (Freya Grand Temple)
-スードリ草原 (Sudri Grasslands)
-ポルナトル渓谷 (Polnator Valley)
-ホテル・ドラゴンエンペラー (Hotel Dragon Emperor)
-バレルゼン路地裏 (Barrelzen Back Alley)
-ビルドルフの部屋 (Bildolf's Room)
-ベインスゥ・酒場 (Veins Tavern)
-ムジョルニア火山01 (Mujornia Volcano 01)
-ラ・フェール歓楽街 (Ra Feele Pleasure District)
-ジェマの部屋 (Jema's Room)
-ベルマの研究室 (Belma's Laboratory)
-エユタヤー (Eyutaya)
-ヴォルゼブの部屋 (Wolfchev's Room)
-モスフィア島 (Mosfia Island)
-バー・止まり木 (Bar・Perch)
-バー・スクサマッド (Bar・Sukusamadd)
-ラフェルムーン (Rafel Moon)
+すけモン (Sukemon)
+夢見町 (Dream Town)
+夢見学 (Dream Academy)
+龍神神社 (Dragon God Shrine)
+鐘尾原 (Kaneohara)
+カドーナ (Kadona)
+助平の湯 (Lewd Bath)
+リーゴ (Ligo)
+サキュバンク (Succubank)
+ジャーク堂書店 (Jerkdo Bookstore)
+風紀委員は女淫魔の夢を見るか？ (Do Disciplinary Committee Members Dream of Succubi?)
+
 ```
