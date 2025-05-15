@@ -76,7 +76,7 @@ BAR_FORMAT = "{l_bar}{bar:10}{r_bar}{bar:-10b}"
 POSITION = 0
 LEAVE = False
 PBAR = None
-ENCODING = "cp932"
+ENCODING = "utf8"
 
 
 def handleCSV(filename, estimate):
@@ -125,7 +125,7 @@ def openFiles(filename, writeFile):
 
 
 def openFilesEstimate(filename):
-    with open("files/" + filename, "r", encoding="cp932") as readFile:
+    with open("files/" + filename, "r", encoding="utf8") as readFile:
         translatedData = parseCSV(readFile, "", filename)
 
     return translatedData
@@ -188,11 +188,11 @@ def parseCSV(readFile, writeFile, filename):
     totalLines = len(readFile.readlines())
     readFile.seek(0)
 
-    reader = csv.reader(readFile, delimiter=",")
+    reader = csv.reader(readFile, delimiter="\t")
     if not ESTIMATE:
         writer = csv.writer(
             writeFile,
-            delimiter=",",
+            delimiter="\t",
         )
     else:
         writer = ""
@@ -338,8 +338,8 @@ def translateCSV(data, pbar, writer, filename, translatedList, format):
                 # Speaker & Text Format
                 case "4":
                     # Set columns to translate. Leave empty to translate all.
-                    speakerColumn = 8
-                    textColumn = 20
+                    speakerColumn = 2
+                    textColumn = 9
                     speaker = ""
 
                     if len(data[i]) > textColumn and data[i][textColumn]:

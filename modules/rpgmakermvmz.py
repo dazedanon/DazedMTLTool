@@ -568,7 +568,9 @@ def searchNames(data, pbar, context):
                 if len(nameList) < BATCHSIZE:
                     nameList.append(data[i]["name"])
                     if "description" in data[i] and data[i]["description"] != "":
-                        descriptionList.append(data[i]["description"].replace("\n", " "))
+                        description = data[i]["description"]
+                        # description = description.replace("\n", " ")
+                        descriptionList.append(description)
                     if "<hint:" in data[i]["note"]:
                         tokensResponse = translateNote(data[i], r"<hint:(.*?)>")
                         totalTokens[0] += tokensResponse[0]
@@ -807,7 +809,7 @@ def searchNames(data, pbar, context):
                                 data[j]["name"] = translatedNameBatch[0]
                                 translatedNameBatch.pop(0)
                                 if "description" in data[j] and data[j]["description"] != "":
-                                    translatedDescriptionBatch[0] = textwrap.fill(translatedDescriptionBatch[0], LISTWIDTH)
+                                    # translatedDescriptionBatch[0] = textwrap.fill(translatedDescriptionBatch[0], LISTWIDTH)
                                     data[j]["description"] = translatedDescriptionBatch[0]
                                     translatedDescriptionBatch.pop(0)
 
@@ -931,6 +933,7 @@ def searchCodes(page, pbar, jobList, filename):
                 code = codeList[i]["code"]
                 j = i
                 endtag = ""
+                instantLineFlag = False
 
                 # Grab String
                 if len(codeList[i]["parameters"]) > 0:
@@ -982,6 +985,13 @@ def searchCodes(page, pbar, jobList, filename):
                 if len(speakerList) == 0:
                     speakerList = re.findall(
                         r"^[\\]+[cC]\[[\d]+\]【?(.+?)】?[\\]+[Cc]\[?[\d]?\]?\\?\\?$",
+                        jaString,
+                    )
+
+                # Colons
+                if len(speakerList) == 0:
+                    speakerList = re.findall(
+                        r"[\\]*[cC]?\[?\d*\]?(.+)：$",
                         jaString,
                     )
 
@@ -1146,6 +1156,11 @@ def searchCodes(page, pbar, jobList, filename):
                         finalJAString = finalJAString.replace("\\ac", "")
                         CLFlag = True
 
+                    # Handle Formatting Codes
+                    if "\\>" in finalJAString:
+                        instantLineFlag = True
+                        finalJAString = finalJAString.replace("\\>", "")
+
                     # Pass 1 (Grabbing Data)
                     if setData:
                         # Remove Textwrap
@@ -1196,6 +1211,11 @@ def searchCodes(page, pbar, jobList, filename):
                                 translatedText = textwrap.fill(translatedText, width=100)
                             elif FIXTEXTWRAP is True:
                                 translatedText = textwrap.fill(translatedText, width=WIDTH)
+
+                            # Formatting Code
+                            if instantLineFlag:
+                                translatedText = translatedText.replace("\n", "\n\\>")
+                                translatedText = f"\\>{translatedText}"
 
                             # BR Flag
                             if BRFLAG is True:
@@ -1261,7 +1281,7 @@ def searchCodes(page, pbar, jobList, filename):
             ## Event Code: 122 [Set Variables]
             if "code" in codeList[i] and codeList[i]["code"] == 122 and CODE122 is True:
                 # This is going to be the var being set. (IMPORTANT)
-                if codeList[i]["parameters"][0] not in list(range(0, 99999)):
+                if codeList[i]["parameters"][0] not in list(range(150, 160)):
                     i += 1
                     continue
 
@@ -1288,9 +1308,9 @@ def searchCodes(page, pbar, jobList, filename):
                 #     continue
 
                 # Validate Japanese Text
-                if not re.search(LANGREGEX, jaString):
-                    i += 1
-                    continue
+                # if not re.search(LANGREGEX, jaString):
+                #     i += 1
+                #     continue
 
                 # Set String
                 matchedText = None
@@ -1321,7 +1341,7 @@ def searchCodes(page, pbar, jobList, filename):
                                 translatedText = re.sub(r'(?<![\\])([\\]{1})(?=\w)', r'\\\\', translatedText)
 
                                 # Textwrap
-                                translatedText = textwrap.fill(translatedText, width=WIDTH)
+                                translatedText = textwrap.fill(translatedText, width=1000)
                                 translatedText = translatedText.replace("\n", "\\n")
 
                                 # Set
@@ -1586,7 +1606,7 @@ def searchCodes(page, pbar, jobList, filename):
                     # "logtxt = ": (r"logtxt\s=\s'(.+)'" 
                     # ".setNickname": (r'.setNickname\(\\?"(.+?)\\?"\)'
                     # "_subject=": (r'_subject=(.+?)_'
-                    "text =": (r"text\s+=\s+'(.+?[^\\])'"),
+                    "text =": (r"text\s*=\s*'(.+[^\\])'"),
                     # "ex_a_name": (r'ex_a_name\(\d+,"(.+)"\)'),
                     # "gameVariables.setValue": (r":\$gameVariables.setValue\(\d+,'(.+)'\)"),
                     # "BattleManager._logWindow.push('addText'": (r"BattleManager._logWindow.push\('addText',\s'(.+)'\)"),
@@ -1607,7 +1627,13 @@ def searchCodes(page, pbar, jobList, filename):
                                 list355655.pop(0)
 
                                 # Only escape if not already escaped 
-                                translatedText = re.sub(r"(?<!\\)'", r"\\'", translatedText)
+                                matchList = re.findall(r"(.+)'\s*[$+].+?'(.+)", translatedText)
+                                if matchList:
+                                    for string in matchList[0]:
+                                        escapedMatch = re.sub(r"(?<!\\)'", r"\\'", string)
+                                        translatedText = translatedText.replace(string, escapedMatch)
+                                else:
+                                    translatedText = re.sub(r"(?<!\\)'", r"\\'", translatedText)
                                 translatedText = re.sub(r'(?<!\\)"', r'"', translatedText)
                                 # Double backslashes before control codes
                                 translatedText = re.sub(r'(?<![\\])([\\]{1})(?=\w)', r'\\\\', translatedText)
@@ -1728,7 +1754,7 @@ def searchCodes(page, pbar, jobList, filename):
 
                 # Want to translate this script
                 if "D_TEXT " in jaString:
-                    regex = r"D_TEXT\s(.*?)\s.+"
+                    regex = r"D_TEXT\s(.+)\s.+"
                 elif "ShowInfo" in jaString:
                     regex = r"ShowInfo\s(.*)"
                 elif "PushGab" in jaString:
