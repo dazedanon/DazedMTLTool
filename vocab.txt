@@ -1,17 +1,38 @@
 Here are some vocabulary and terms so that you know the proper spelling and translation.
 ```
 # Game Characters
-ユスティ (Yusty) - Female
-ユースティテ (Yustitia) - Female
-イリス (Iris) - Female
-ノエル (Noel) - Female
-リーン (Leen) - Female
-サーニャ (Sanya) - Female
-パイネル (Painel) - Female
-ウェイン (Wayne) - Female
-マキナ (Makina) - Female
-リーパー (Reaper) - Female
-大工 (Carpenter) - Male
+アイリス (Iris) - Female
+フランシスカ (Francisca) - Female
+リサ (Lisa) - Female
+エリーゼ (Elise) - Female
+エルフィナ (Elphina) - Female
+カリン (Karin) - Female
+リルナ (Riruna) - Female
+アルフォンス (Alphonse) - Male
+グスタフ (Gustav) - Male
+ルカ (Luca) - Male
+クラウディオ (Claudio) - Male
+ジェフリー (Jeffrey) - Male
+シオン (Sion) - Female
+フォルクレー兄妹 (Forqueray) - Male & Female
+（妹）(Sister) - Female
+アクア (Aqua) - Male
+フィーラ (Fira)
+レイア (Leia)
+サン (Sun)
+ケイ (Kei)
+トリウーニヒ (Triuni)
+エメラルダ (Emeralda)
+転生ちゃん (Reincarnation-chan)
+神楽ちゃん (Kagura-chan) - Female
+ミル (Miru) - Female
+メリッサ (Melissa) - Female
+クレア (Claire) - Female
+コレット (Colette) - Female
+モニカ (Monica) - Female
+ノーラ (Nora) - Female
+ルチア (Lucia) - Female
+悪魔竜アイリス (Devil Dragon Iris) - Female
 
 # Lewd Terms
 マンコ (pussy)
@@ -140,121 +161,10 @@ ME 音量 (ME Volume)
 ローバー (Roper)
 夢魔 (Succubus)
 
-#Enemies
-シコザル (Masturbating Monkey)
-ドクムラサキ (Dokumurasaki)
-シコザル：賢者モード (Masturbating Monkey: Sage Mode)
-シコザル：興奮 (Masturbating Monkey: Aroused)
-キングシコザル (King Masturbating Monkey)
-カブリマラドラゴン (Kaburimara Dragon)
-カブリマラドラゴン亜種 (Kaburimara Dragon Subspecies)
-学園長 (Headmaster)
-パラライズアゲハ (Paralyze Swallowtail)
-クンニリザード (Cunnilingus Lizard)
-ピリジンワーム (Pyridine Worm)
-溶岩塊 (Lava Chunk)
-スノーエイプ (Snow Ape)
-カブリマラドラゴン：突然変異個体 (Kaburimara Dragon: Mutant)
-水流操りし齧歯類 (Rodent that Controls Water Flow)
-3ターン毎に命を貪るワニ (Crocodile that Devours Life Every 3 Turns)
-エレクチオンスコーピオン (Erection Scorpion)
-熱砂の捕食者 (Predator of the Scorching Sands)
-チンゲリオン (Chingerion)
-シコッタハゲタカ (Masturbating Vulture)
-エイミンサボテン (Aiming Cactus)
-奴隷商人 (Slave Trader)
-ハゲタカ3兄弟 (Three Vulture Brothers)
-フローズンバタフライ (Frozen Butterfly)
-アイスバーグ (Iceberg)
-ゴブリン(棍棒) (Goblin (Club))
-ゴブリン(盾) (Goblin (Shield))
-ゴブリン(薬) (Goblin (Potion))
-スノーボア (Snow Boar)
-剛なる右腕 (Mighty Right Arm)
-賢しき左腕 (Wise Left Arm)
-クリスタルゴーレム (Crystal Golem)
-剛なる右腕：熱暴走 (Mighty Right Arm: Overheat)
-賢しき左腕：熱暴走 (Wise Left Arm: Overheat)
-クリスタルゴーレム：熱暴走 (Crystal Golem: Overheat)
-ゴブリンキング (Goblin King)
-クンニリザードエリート (Cunnilingus Lizard Elite)
-デスストーカー (Death Stalker)
-巨人族 (Giant Tribe)
-ゴールデンシコザル (Golden Masturbating Monkey)
-巨人族の長 (Giant Tribe Chief)
-始原竜クレスケンスルーナ (Primordial Dragon Crescensluna)
-現実と理想の相違から訪れる混沌 (Chaos Born from the Gap Between Reality and Ideals)
-チシドクガエル (Poison Blood Frog)
-危険な肉ビラ (Dangerous Meat Flap)
-鏡反の魔蟲 (Mirror-Reflecting Demon Bug)
-シコザルドロップ実験 (Masturbating Monkey Drop Experiment)
-↓以下シコザルの森 (↓Below: Masturbating Monkey Forest)
-シコザル：異常性欲個体 (Masturbating Monkey: Hypersexual Specimen)
-ドクムラサキ (Poison Purple)
-シビレタケ (Numbing Mushroom)
-森林ムカデ (Forest Centipede)
-野生の種馬 (Wild Stud)
-メタルシコザル (Metal Masturbating Monkey)
-大妖花 (Great Demon Flower)
-↓以下マラスル (↓Below: Marasle)
-ベビースノーボア (Baby Snow Boar)
-万年発情ウサギ (Perpetually Horny Rabbit)
-シルバーウルフ (Silver Wolf)
-シロカブト (White Beetle)
-↓以下大陰森 (↓Below: Great Dark Forest)
-チシドクガエル (Poison Dart Frog)
-水流操りし齧歯類 (Rodent That Controls Water Currents)
-3T毎に強攻撃を繰り出すワニ (Crocodile That Unleashes a Strong Attack Every 3T)
-オトノサマガエル (Lord Frog)
-オヒメサマガエル (Princess Frog)
-〇雑魚用耐性 (〇Resistance for Small Fry)
-〇ボス用耐性 (〇Resistance for Boss)
-↓以下失意の沼地 (↓Below: Swamp of Despair)
-マカフシギダケ (Mysterious Mushroom)
-カオスプラント (Chaos Plant)
-ボニウスネーク (Bonious Snake)
-バジリスク (Basilisk)
-↓以下満洪石窟寺院 (↓Below: Mankou Stone Cave Temple)
-ゲイザー (Gazer)
-ワスプ (Wasp)
-クイーンワスプ (Queen Wasp)
-邪神像 (Idol of the Evil God)
-↓以下リズイパ海溝 (↓Below: Rizuipa Trench)
-鏡反の魔蟲 (Mirror-Reflected Demon Bug)
-アビスワーム (Abyss Worm)
-スベスベオマンコガニ (Smooth Pussy Crab)
-デビルオクトパス (Devil Octopus)
-深海不定形生物 (Deep Sea Amorphous Creature)
-チェーンソーシャーク (Chainsaw Shark)
-大海の覇者 (Ruler of the Great Sea)
-海魔マレノストルム (Sea Demon Marenostrum)
-↓以下岬の教会 (↓Below: Cape Church)
-ブラックウィドウ (Black Widow)
-踊り狂う怪鳥 (Frenzied Dancing Bird)
-キングトロル (King Troll)
-キマイラ (Chimera)
-スケルトン (Skeleton)
-塔の守護者 (Guardian of the Tower)
-フォートレスタートル (Fortress Turtle)
-
 # Other
 w ((lol))
 ２万 (20,000)
 『 (『)
 』 (』)
-
-# Game Specific
-ぽんこつ王女ユスティの廃村開拓記 (The Clumsy Princess Yusty and the Abandoned Village Revival)
-試しの塔 (Trial Tower)
-満洪石窟寺院 (Mankou Stone Cave Temple)
-空き家 (Vacant House)
-娼館 (Brothel)
-ヨーデル (Yodel)
-リズイパ海溝 (Rizuipa Trench)
-マラスル (Marasle)
-シコザル (Masturbating Monkey)
-大家族の民家 (Big Family House)
-蛇ヶ淵沼 (Snake Swamp)
-トロッコ洞窟 (Minecart)
 
 ```

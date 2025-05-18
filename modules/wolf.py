@@ -81,17 +81,17 @@ PBAR = None
 FILENAME = None
 
 # Dialogue / Choices
-CODE101 = False
+CODE101 = True
 CODE102 = False
 
 # Set String (Fragile but necessary)
 CODE122 = False
-CODE150 = True
+CODE150 = False
 
 # Other
 CODE210 = False
 CODE300 = False
-CODE250 = False
+CODE250 = True
 
 # Database
 SCENARIOFLAG = False
@@ -102,7 +102,7 @@ DBVALUEFLAG = False
 ITEMFLAG = False
 STATEFLAG = False
 ENEMYFLAG = False
-ARMORFLAG = False
+ARMORFLAG = True
 WEAPONFLAG = False
 SKILLFLAG = False
 
@@ -265,13 +265,15 @@ def searchCodes(events, pbar, jobList, filename):
         stringList = jobList[0]
         list210 = jobList[1]
         list300 = jobList[2]
-        list150TL = jobList[3]  # Add this line
+        list150 = jobList[3]
+        list250 = jobList[4]
         setData = True
     else:
         stringList = []
         list210 = []
         list300 = []
-        list150TL = []  # Add this line
+        list150 = []
+        list250 = []
         setData = False
 
     # Other
@@ -302,7 +304,7 @@ def searchCodes(events, pbar, jobList, filename):
         while i < len(codeList):
             ### Event Code: 101 Message
             if codeList[i]["code"] == 101 and CODE101 == True:
-                speakerRegex = r"^(.+?)\n" # Default: r"@\d+\r?\n(.*)：\r?\n"
+                speakerRegex = r"^(.+?)：\n" # Default: r"@\d+\r?\n(.*)：\r?\n"
                 textRegex = r"@?\d*\r?\n?\u3000*([\w\W]+)\r?\n?" # Default: r"@?\d*\r?\n?\u3000*([\w\W]+)\r?\n?"
 
                 # Grab String
@@ -540,11 +542,11 @@ def searchCodes(events, pbar, jobList, filename):
                     ):
                         # Pass 1 (Save Text to List)
                         if not setData:
-                            list150TL.append(jaString)
+                            list150.append(jaString)
 
                         # Pass 2 (Set Text)
                         else:
-                            translatedText = list150TL[0]
+                            translatedText = list150[0]
 
                             # Textwrap
                             # translatedText = textwrap.fill(translatedText, WIDTH)
@@ -553,14 +555,14 @@ def searchCodes(events, pbar, jobList, filename):
                             codeList[i]["stringArgs"][0] = re.sub(r'\\f\[(\d+)\]', lambda x: f'\\f[{int(x.group(1))-2}]', translatedText)
 
                             # Pop processed item
-                            list150TL.pop(0)
+                            list150.pop(0)
 
             ### Event Code: 300 Common Events
             if codeList[i]["code"] == 300 and CODE300 == True and "stringArgs" in codeList[i] and len(codeList[i]["stringArgs"]) > 1:
                 # Choices
-                if codeList[i]["stringArgs"][0] == "[共]汎用ウィンドウ生成" or codeList[i]["stringArgs"][0] == "[共]選択生成":
+                if codeList[i]["stringArgs"][0] == "[共]汎用ウィンドウ生成" or codeList[i]["stringArgs"][0] == "選択肢/確認":
                     # Grab String
-                    choiceList = codeList[i]["stringArgs"][1].split("\r\n")
+                    choiceList = codeList[i]["stringArgs"][1].split(",")
 
                     # # Translate Question
                     # question = codeList[i]['stringArgs'][2]
@@ -573,7 +575,10 @@ def searchCodes(events, pbar, jobList, filename):
                     # codeList[i]['stringArgs'][2] = translatedText
 
                     # Translate Choices
-                    response = translateGPT(choiceList, translatedText, True)
+                    if 'jaString' in locals() and jaString:
+                        response = translateGPT(choiceList, jaString, True)
+                    else:
+                        response = translateGPT(choiceList, f"Reply with the {LANGUAGE} translation of the dialogue choice", True)
                     choiceListTL = response[0]
                     totalTokens[0] += response[1][0]
                     totalTokens[1] += response[1][1]
@@ -583,7 +588,7 @@ def searchCodes(events, pbar, jobList, filename):
                         choiceListTL[j] = choiceListTL[j].replace(", ", "、")
 
                     # Convert to String and Set
-                    translatedText = "\r\n".join(choiceListTL)
+                    translatedText = ",".join(choiceListTL)
                     codeList[i]["stringArgs"][1] = translatedText
 
                 # Dialogue
@@ -670,44 +675,43 @@ def searchCodes(events, pbar, jobList, filename):
 
             ### Event Code: 250 DB Read/Writes
             if codeList[i]["code"] == 250 and CODE250 == True:
-                foundTerm = False
-
                 # Validate size
                 if len(codeList[i]["stringArgs"]) == 4:
-                    if codeList[i]["stringArgs"][1] == "┣所持アイテム個数" and codeList[i]["stringArgs"][2] != "":
+                    if codeList[i]["stringArgs"][1] == "万能ｳｨﾝﾄﾞｳ一時DB" and codeList[i]["stringArgs"][0] != "":
+                        # Font Size
+                        fontSize = 18
+
                         # Grab String
-                        jaString = codeList[i]["stringArgs"][2]
+                        jaString = codeList[i]["stringArgs"][0]
 
-                        # Catch Vars that may break the TL
-                        varString = ""
-                        matchList = re.findall(r"^[\\_]+[\w]+\[[a-zA-Z0-9\\\[\]\_,\s-]+\]", jaString)
-                        if len(matchList) != 0:
-                            varString = matchList[0]
-                            jaString = jaString.replace(matchList[0], "")
+                        # Remove Textwrap
+                        # jaString = jaString.replace("\r", "")
+                        # jaString = jaString.replace("\n", " ")
 
-                        # Check if term already translated
-                        for j in range(len(TERMSLIST)):
-                            if jaString == TERMSLIST[j][0]:
-                                translatedText = TERMSLIST[j][1]
-                                foundTerm = True
+                        # Pass 1 (Save Text to List)
+                        if not setData:
+                            list250.append(jaString)
 
-                        # Translate
-                        if foundTerm == False:
-                            response = translateGPT(
-                                jaString,
-                                f"Reply with the {LANGUAGE} translation of the text.",
-                                True,
-                            )
-                            translatedText = response[0]
-                            totalTokens[0] += response[1][0]
-                            totalTokens[1] += response[1][1]
-                            TERMSLIST.append([jaString, translatedText])
+                        # Pass 2 (Set Text)
+                        else:
+                            translatedText = list250[0]
+                            list250.pop(0)
 
-                        # Add back Potential Variables in String
-                        translatedText = varString + translatedText
+                            # Textwrap
+                            # translatedText = textwrap.fill(translatedText, WIDTH)
 
-                        # Set Data
-                        codeList[i]["stringArgs"][2] = translatedText
+                            # Add/Replace font formatting
+                            # Remove existing font command if present
+                            translatedText = re.sub(r'\\f\[\d+\]', '', translatedText)
+                            if fontSize:
+                                # Add new font command if fontSize is not 0
+                                if fontSize != "0" and fontSize != 0:
+                                    translatedText = f"\\f[{fontSize}]{translatedText}"
+
+                            # Set Data
+                            codeList[i]["stringArgs"][0] = translatedText
+
+                            
 
             ### Iterate
             i += 1
@@ -715,6 +719,8 @@ def searchCodes(events, pbar, jobList, filename):
         # EOF
         stringListTL = []
         list210TL = []
+        list150TL = []
+        list250TL = []
         list300TL = []
         setData = False
 
@@ -748,6 +754,21 @@ def searchCodes(events, pbar, jobList, filename):
             else:
                 setData = True
 
+        # 250 List
+        if len(list250) > 0:
+            pbar.total = len(list250)
+            pbar.refresh()
+            response = translateGPT(list250, textHistory, True)
+            list250TL = response[0]
+            totalTokens[0] += response[1][0]
+            totalTokens[1] += response[1][1]
+            if len(list250TL) != len(list250):
+                with LOCK:
+                    if filename not in MISMATCH:
+                        MISMATCH.append(filename)
+            else:
+                setData = True
+
         # 300 List
         if len(list300) > 0:
             pbar.total = len(list300)
@@ -764,34 +785,34 @@ def searchCodes(events, pbar, jobList, filename):
                 setData = True
 
         # 150 List
-        if len(list150TL) > 0:
+        if len(list150) > 0:
             # Progress Bar
-            pbar.total = len(list150TL)
+            pbar.total = len(list150)
             pbar.refresh()
 
             # Translate
             response = translateGPT(
-                list150TL,
+                list150,
                 textHistory,
                 True,
             )
-            stringList150TL = response[0]
+            list150TL = response[0]
             totalTokens[0] += response[1][0]
             totalTokens[1] += response[1][1]
 
             # Check Mismatch
-            if len(stringList150TL) != len(list150TL):
+            if len(list150TL) != len(list150):
                 with LOCK:
                     if filename not in MISMATCH:
                         MISMATCH.append(filename)
             else:
-                list150TL = stringList150TL
+                list150 = list150TL
                 setData = True
 
         # Update jobList before recursive call
         if setData == True:
             stringList = []
-            jobList = [stringListTL, list210TL, list300TL, list150TL]  # Add list150TL
+            jobList = [stringListTL, list210TL, list300TL, list150TL, list250TL]  # Add list150TL
             searchCodes(events, pbar, jobList, filename)
 
         else:
@@ -869,7 +890,7 @@ def searchDB(events, pbar, jobList, filename):
         weaponsList = [[], [], [], []]
         skillList = [[], [], [], [], []]
         stateList = [[], [], [], [], [], [], [], []]
-        optionsList = [[], [], [], []]
+        optionsList = [[], [], []]
         dbNameList = [[]]
         dbValueList = [[]]
         setData = False
@@ -889,16 +910,17 @@ def searchDB(events, pbar, jobList, filename):
     try:
         for table in tableList:
             # Grab Armors
-            if table["name"] == "ステータス" and NPCFLAG == True:
+            if table["name"] == "アクター" and NPCFLAG == True:
                 with open("translations.txt", "a", encoding="utf-8") as file:
-                    file.write(f"\n#Actors")
+                    if setData:
+                        file.write(f"\n#Actors\n")
                     for npc in table["data"]:
                         dataList = npc["data"]
 
                         # Parse
                         for j in range(len(dataList)):
                             # Name
-                            if "キャラ名" in dataList[j].get("name"):
+                            if "名前" in dataList[j].get("name"):
                                 # Pass 1 (Grab Data)
                                 if setData == False:
                                     if dataList[j].get("value") != "":
@@ -907,6 +929,10 @@ def searchDB(events, pbar, jobList, filename):
                                 # Pass 2 (Set Data)
                                 else:
                                     if dataList[j].get("value") != "":
+                                        # Write Name
+                                        file.write(f"{dataList[j].get('value')} ({npcList[0][0]})\n")
+
+                                        # Set
                                         dataList[j].update({"value": npcList[0][0]})
                                         npcList[0].pop(0)
 
@@ -998,82 +1024,61 @@ def searchDB(events, pbar, jobList, filename):
                                         dataList[j].update({"value": dataList[j].get("value").replace(jaString, translatedText)})
 
             # Grab Options
-            if table["name"] == "選択肢説明" and OPTIONSFLAG == True:
+            if table["name"] == "if分岐名" and OPTIONSFLAG == True:
                 for option in table["data"]:
                     dataList = option["data"]
 
                     # Parse
                     for j in range(len(dataList)):
                         # Name
-                        if "表示名" in dataList[j].get("name"):
-                            # Pass 1 (Grab Data)
-                            if setData == False:
-                                if dataList[j].get("value") != "":
-                                    optionsList[0].append(dataList[j].get("value"))
+                        if "性癖ヒント" in dataList[j].get("name"):
+                            if dataList[j].get("value"):
+                                jaString = dataList[j].get("value")
+                                # Pass 1 (Grab Data)
+                                if setData == False:
+                                    jaString = jaString.replace("\n", " ")
+                                    jaString = jaString.replace("\r", "")
+                                    optionsList[0].append(jaString)
 
-                            # Pass 2 (Set Data)
-                            else:
-                                if dataList[j].get("value") != "":
-                                    dataList[j].update({"value": optionsList[0][0]})
+                                # Pass 2 (Set Data)
+                                else:
+                                    translatedText = optionsList[0][0]
                                     optionsList[0].pop(0)
+                                    dataList[j].update({"value": dataList[j].get("value").replace(jaString, translatedText)})
 
-                        # Description
-                        if "選択肢1" in dataList[j].get("name"):
-                            if setData == False:
-                                if dataList[j].get("value") != "":
-                                    # Grab Choices
-                                    optionsList[1] = dataList[j].get("value").split("\r\n")
+                        # Description 1
+                        if "プロフ" in dataList[j].get("name"):
+                            if dataList[j].get("value"):
+                                jaString = dataList[j].get("value")
+                                # Pass 1 (Grab Data)
+                                if setData == False:
+                                    jaString = jaString.replace("\n", " ")
+                                    jaString = jaString.replace("\r", "")
+                                    optionsList[1].append(jaString)
 
-                                    # Translate
-                                    response = translateGPT(
-                                        optionsList[1],
-                                        "Reply with the English translation of the dialogue choices",
-                                        True,
-                                    )
-                                    totalTokens[0] += response[1][0]
-                                    totalTokens[1] += response[1][1]
-                                    translatedText = "\r\n".split(response[0])
+                                # Pass 2 (Set Data)
+                                else:
+                                    translatedText = optionsList[1][0]
+                                    optionsList[1].pop(0)
+                                    translatedText = textwrap.fill(translatedText, LISTWIDTH)
+                                    dataList[j].update({"value": dataList[j].get("value").replace(jaString, translatedText)})
 
-                                    # Set Data
-                                    dataList[j].update({"value": translatedText})
-                        # Description
-                        if "選択肢1" in dataList[j].get("name"):
-                            if setData == False:
-                                if dataList[j].get("value") != "":
-                                    # Grab Choices
-                                    optionsList[1] = dataList[j].get("value").split("\r\n")
+                        # Description 2
+                        if "防御破壊文言" in dataList[j].get("name"):
+                            if dataList[j].get("value"):
+                                jaString = dataList[j].get("value")
+                                # Pass 1 (Grab Data)
+                                if setData == False:
+                                    jaString = jaString.replace("\n", " ")
+                                    jaString = jaString.replace("\r", "")
+                                    optionsList[2].append(jaString)
 
-                                    # Translate
-                                    response = translateGPT(
-                                        optionsList[1],
-                                        "Reply with the English translation of the dialogue choices",
-                                        True,
-                                    )
-                                    totalTokens[0] += response[1][0]
-                                    totalTokens[1] += response[1][1]
-                                    translatedText = "\r\n".split(response[0])
-
-                                    # Set Data
-                                    dataList[j].update({"value": translatedText})
-                        # Description
-                        if "選択肢1" in dataList[j].get("name"):
-                            if setData == False:
-                                if dataList[j].get("value") != "":
-                                    # Grab Choices
-                                    optionsList[1] = dataList[j].get("value").split("\r\n")
-
-                                    # Translate
-                                    response = translateGPT(
-                                        optionsList[1],
-                                        "Reply with the English translation of the dialogue choices",
-                                        True,
-                                    )
-                                    totalTokens[0] += response[1][0]
-                                    totalTokens[1] += response[1][1]
-                                    translatedText = "\r\n".split(response[0])
-
-                                    # Set Data
-                                    dataList[j].update({"value": translatedText})
+                                # Pass 2 (Set Data)
+                                else:
+                                    translatedText = optionsList[2][0]
+                                    optionsList[2].pop(0)
+                                    translatedText = textwrap.fill(translatedText, LISTWIDTH)
+                                    dataList[j].update({"value": dataList[j].get("value").replace(jaString, translatedText)})
 
             # Grab DB Names
             if table["name"] == "マップ設定" and DBNAMEFLAG == True:
@@ -1250,14 +1255,14 @@ def searchDB(events, pbar, jobList, filename):
 
             # Grab Armors
             if table["name"] == "防具" and ARMORFLAG == True:
-                font = "16"
+                font = ""
                 for armor in table["data"]:
                     dataList = armor["data"]
 
                     # Parse
                     for j in range(len(dataList)):
                         # Name
-                        if "防具の名前" in dataList[j].get("name"):
+                        if "名前" in dataList[j].get("name"):
                             # Pass 1 (Grab Data)
                             if setData == False:
                                 if dataList[j].get("value") != "":
@@ -1270,7 +1275,7 @@ def searchDB(events, pbar, jobList, filename):
                                     armorList[0].pop(0)
 
                         # Description
-                        if "防具の説明" in dataList[j].get("name"):
+                        if "説明" in dataList[j].get("name"):
                             # Pass 1 (Grab Data)
                             if setData == False:
                                 if dataList[j].get("value") != "":
@@ -1824,6 +1829,7 @@ def searchDB(events, pbar, jobList, filename):
 
         # Translation
         scenarioListTL = [[], [], []]
+        optionsListTL = [[], [], []]
         npcListTL = [[], [], [], []]
         itemListTL = [[], [], [], []]
         stateListTL = [[], [], [], [], [], [], [], []]
@@ -1831,7 +1837,6 @@ def searchDB(events, pbar, jobList, filename):
         enemyListTL = [[], []]
         weaponsListTL = [[], [], []]
         skillListTL = [[], [], [], [], []]
-        optionsListTL = [[], [], [], []]
         dbNameListTL = [[]]
         dbValueListTL = [[]]
 
@@ -1922,13 +1927,50 @@ def searchDB(events, pbar, jobList, filename):
             totalTokens[0] += response[1][0]
             totalTokens[1] += response[1][1]
 
+        # OPTIONS
+        if optionsList[0] or optionsList[1]:
+            # Progress Bar
+            total = 0
+            for optionsArray in optionsList:
+                total += len(optionsArray)
+            pbar.total = total
+            pbar.refresh()
+
+            # Name
+            response = translateGPT(
+                optionsList[0],
+                "Reply with only the " + LANGUAGE + " translation",
+                True,
+            )
+            nameListTL = response[0]
+            totalTokens[0] += response[1][0]
+            totalTokens[1] += response[1][1]
+            # Desc 1
+            response = translateGPT(
+                optionsList[1],
+                "reply with only the gender neutral " + LANGUAGE + " translation of the NPC name",
+                True,
+            )
+            descListTL1 = response[0]
+            totalTokens[0] += response[1][0]
+            totalTokens[1] += response[1][1]
+            # Desc 2
+            response = translateGPT(
+                optionsList[2],
+                "reply with only the gender neutral " + LANGUAGE + " translation of the NPC name",
+                True,
+            )
+            descListTL2 = response[0]
+            totalTokens[0] += response[1][0]
+            totalTokens[1] += response[1][1]
+
             # Check Mismatch
-            if len(nameListTL) != len(scenarioList[0]) or len(descListTL1) != len(scenarioList[1]) or len(descListTL2) != len(scenarioList[2]):
+            if len(nameListTL) != len(optionsList[0]) or len(descListTL1) != len(optionsList[1]) or len(descListTL2) != len(optionsList[2]):
                 with LOCK:
                     if filename not in MISMATCH:
                         MISMATCH.append(filename)
             else:
-                scenarioListTL = [nameListTL, descListTL1, descListTL2]
+                optionsListTL = [nameListTL, descListTL1, descListTL2]
                 translate = True
 
         # ITEMS
@@ -2280,30 +2322,6 @@ def searchDB(events, pbar, jobList, filename):
                         descListTL7,
                     ]
                     translate = True
-
-        # OPTIONS
-        if len(optionsList[0]) > 0 or len(optionsList[1]) > 0:
-            # Progress Bar
-            total = 0
-            for optionsArray in optionsList:
-                total += len(optionsArray)
-            pbar.total = total
-            pbar.refresh()
-
-            # Name
-            response = translateGPT(itemList[0], "Reply with only the " + LANGUAGE + " translation", True)
-            nameListTL = response[0]
-            totalTokens[0] += response[1][0]
-            totalTokens[1] += response[1][1]
-
-            # Check Mismatch
-            if len(nameListTL) != len(optionsList[0]):
-                with LOCK:
-                    if filename not in MISMATCH:
-                        MISMATCH.append(filename)
-            else:
-                optionsListTL = [nameListTL]
-                translate = True
 
         # DB Names
         if len(dbNameList[0]) > 0:
