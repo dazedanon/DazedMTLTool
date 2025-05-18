@@ -189,13 +189,13 @@ def translateWOLF(data, translatedList, pbar, filename):
 
     while i < len(data):
         # Speaker
-        matchList = re.findall(r"(.*)：", data[i])
+        matchList = re.findall(r"^([^/]*)：", data[i])
         if len(matchList) != 0:
             response = getSpeaker(matchList[0])
             speaker = response[0]
             tokens[0] += response[1][0]
             tokens[1] += response[1][1]
-            data[i] = f"{speaker}：\n"
+            data[i] = data[i].replace(matchList[0], f"{speaker}")
             i += 1
         else:
             speaker = ""
@@ -252,7 +252,7 @@ def translateWOLF(data, translatedList, pbar, filename):
 
                 # Add Speaker (If there is one)
                 if speaker != "":
-                    jaString = f"{speaker}: {jaString}"
+                    jaString = f"[{speaker}]: {jaString}"
 
                 # Add String
                 stringList.append(jaString)
@@ -271,8 +271,10 @@ def translateWOLF(data, translatedList, pbar, filename):
                 if len(translatedList) <= 0:
                     translatedList = None
 
-                # Remove added speaker
-                # translatedText = re.sub(r"^.+?:\s", "", translatedText)
+                # Remove speaker
+                matchSpeakerList = re.findall(r"^(\[.+?\]\s?[|:]\s?)\s?", translatedText)
+                if len(matchSpeakerList) > 0:
+                    translatedText = translatedText.replace(matchSpeakerList[0], "")
 
                 # Textwrap
                 translatedText = textwrap.fill(translatedText, width=WIDTH)
