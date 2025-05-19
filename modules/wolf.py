@@ -81,7 +81,7 @@ PBAR = None
 FILENAME = None
 
 # Dialogue / Choices
-CODE101 = True
+CODE101 = False
 CODE102 = False
 
 # Set String (Fragile but necessary)
@@ -91,10 +91,10 @@ CODE150 = False
 # Other
 CODE210 = False
 CODE300 = False
-CODE250 = True
+CODE250 = False
 
 # Database
-SCENARIOFLAG = False
+SCENARIOFLAG = True
 OPTIONSFLAG = False
 NPCFLAG = False
 DBNAMEFLAG = False
@@ -102,7 +102,7 @@ DBVALUEFLAG = False
 ITEMFLAG = False
 STATEFLAG = False
 ENEMYFLAG = False
-ARMORFLAG = True
+ARMORFLAG = False
 WEAPONFLAG = False
 SKILLFLAG = False
 
@@ -592,7 +592,7 @@ def searchCodes(events, pbar, jobList, filename):
                     codeList[i]["stringArgs"][1] = translatedText
 
                 # Dialogue
-                elif codeList[i]["stringArgs"][0] == "○【戦闘】テキスト表示":
+                elif codeList[i]["stringArgs"][0] == "infomessage":
                     jaString = codeList[i]["stringArgs"][1]
 
                     # Pass 1
@@ -679,7 +679,7 @@ def searchCodes(events, pbar, jobList, filename):
                 if len(codeList[i]["stringArgs"]) == 4:
                     if codeList[i]["stringArgs"][1] == "万能ｳｨﾝﾄﾞｳ一時DB" and codeList[i]["stringArgs"][0] != "":
                         # Font Size
-                        fontSize = 18
+                        fontSize = 0
 
                         # Grab String
                         jaString = codeList[i]["stringArgs"][0]
@@ -864,6 +864,24 @@ def formatDramon(jaString):
 
     return cleanedList
 
+def handleScenarioScript(jaString, scriptString=""):
+    # Extract Speaker
+    scriptRegex = r"\n?(//.*?\n|//.+|/b.*?\n|[\w]+：\d*.+?\n)"
+    match = re.search(scriptRegex, jaString)
+    if match:
+        if "//" in match.group(1):
+            scriptStringLocal = match.group(1)
+            jaString = jaString.replace(scriptStringLocal, "")
+            scriptString += scriptStringLocal
+            match = re.search(scriptRegex, jaString)
+            if not match:
+                return None
+            else:
+                if "//" in jaString:
+                    return handleScenarioScript(jaString, scriptString)
+        return [jaString, match.group(1), scriptString]
+    else:
+        return None
 
 # Database
 def searchDB(events, pbar, jobList, filename):
@@ -910,7 +928,7 @@ def searchDB(events, pbar, jobList, filename):
     try:
         for table in tableList:
             # Grab Armors
-            if table["name"] == "アクター" and NPCFLAG == True:
+            if table["name"] == "立絵画像" and NPCFLAG == True:
                 with open("translations.txt", "a", encoding="utf-8") as file:
                     if setData:
                         file.write(f"\n#Actors\n")
@@ -920,7 +938,7 @@ def searchDB(events, pbar, jobList, filename):
                         # Parse
                         for j in range(len(dataList)):
                             # Name
-                            if "名前" in dataList[j].get("name"):
+                            if "キャラ名" in dataList[j].get("name"):
                                 # Pass 1 (Grab Data)
                                 if setData == False:
                                     if dataList[j].get("value") != "":
@@ -963,17 +981,35 @@ def searchDB(events, pbar, jobList, filename):
                                         file.write(f"\n{translatedText}")
 
             # Grab Scenario
-            if "敵ｷｬﾗﾃﾞｰﾀ" in table["name"] and SCENARIOFLAG == True:
+            if "NPC" in table["name"] and SCENARIOFLAG == True:
                 for scenario in table["data"]:
                     dataList = scenario["data"]
 
                     # Parse
                     for j in range(len(dataList)):
                         # Name
-                        if "名前" in dataList[j].get("name"):
+                        if "羞恥心100以下" in dataList[j].get("name"):
                             if dataList[j].get("value"):
-                                jaStringList = dataList[j].get("value").split("\r\nPFD\r\n")
+                                jaStringList = dataList[j].get("value").split("\r\n\r\n")
                                 for jaString in jaStringList:
+                                    speakerNum = None
+                                    ogString = jaString
+                                    # Extract Speaker
+                                    speakerList = handleScenarioScript(jaString)
+                                    if not speakerList:
+                                        continue
+                                    if speakerList[2]:
+                                        jaString = speakerList[0]
+                                    speakerNumMatch = re.search(r"：(\d+)", speakerList[1])
+                                    if speakerNumMatch:
+                                        speakerNum = speakerNumMatch.group(1)
+                                    speaker = re.sub(r"：\d*", "", speakerList[1])
+                                    speaker = re.sub(r"/b", "NPC", speaker)
+                                    speaker = speaker.replace("\r\n", "")
+                                    
+                                    # Add Speaker
+                                    jaString = jaString.replace(speakerList[1], f"[{speaker}]: ")
+
                                     # Pass 1 (Grab Data)
                                     if setData == False:
                                         jaString = jaString.replace("\n", " ")
@@ -984,14 +1020,54 @@ def searchDB(events, pbar, jobList, filename):
                                     else:
                                         translatedText = scenarioList[0][0]
                                         scenarioList[0].pop(0)
-                                        translatedText = textwrap.fill(translatedText, 1000)
-                                        dataList[j].update({"value": dataList[j].get("value").replace(jaString, translatedText)})
+                                        translatedText = textwrap.fill(translatedText, WIDTH)
 
-                        # Description 1
-                        if "文言" in dataList[j].get("name"):
+                                        # Remove Speaker
+                                        speakerMatch = re.search(r"\[(.+?)\]\s?[|:]\s?", translatedText)
+                                        if speakerMatch:
+                                            speaker = speakerMatch.group(1).strip()
+                                        match = re.search(r'(^\[.+?\]\s?[|:]\s?)', translatedText)
+                                        if match:
+                                            translatedText = translatedText.replace(match.group(1), "") 
+
+                                        # Redo Old Speaker Format
+                                        speaker = speaker.replace("Speaker", "\b")
+                                        if speakerNum:
+                                            translatedText = f"{speaker}：{speakerNum}\r\n{translatedText}"
+                                        elif speaker == "NPC":
+                                            translatedText = f"/b\r\n{translatedText}"
+                                        else:
+                                            translatedText = f"{speaker}：\r\n{translatedText}"
+
+                                        # Add Script String
+                                        if speakerList[2]:
+                                            translatedText = f"{speakerList[2]}{translatedText}"
+
+                                        # Set Data
+                                        dataList[j].update({"value": dataList[j].get("value").replace(ogString, translatedText)})
+                        # Description
+                        if "80以下" in dataList[j].get("name"):
                             if dataList[j].get("value"):
-                                jaStringList = dataList[j].get("value").split("\r\nPFD\r\n")
+                                jaStringList = dataList[j].get("value").split("\r\n\r\n")
                                 for jaString in jaStringList:
+                                    speakerNum = None
+                                    ogString = jaString
+                                    # Extract Speaker
+                                    speakerList = handleScenarioScript(jaString)
+                                    if not speakerList:
+                                        continue
+                                    if speakerList[2]:
+                                        jaString = speakerList[0]
+                                    speakerNumMatch = re.search(r"：(\d+)", speakerList[1])
+                                    if speakerNumMatch:
+                                        speakerNum = speakerNumMatch.group(1)
+                                    speaker = re.sub(r"：\d*", "", speakerList[1])
+                                    speaker = re.sub(r"/b", "NPC", speaker)
+                                    speaker = speaker.replace("\r\n", "")
+                                    
+                                    # Add Speaker
+                                    jaString = jaString.replace(speakerList[1], f"[{speaker}]: ")
+
                                     # Pass 1 (Grab Data)
                                     if setData == False:
                                         jaString = jaString.replace("\n", " ")
@@ -1002,14 +1078,55 @@ def searchDB(events, pbar, jobList, filename):
                                     else:
                                         translatedText = scenarioList[1][0]
                                         scenarioList[1].pop(0)
-                                        translatedText = textwrap.fill(translatedText, 30)
-                                        dataList[j].update({"value": dataList[j].get("value").replace(jaString, translatedText)})
+                                        translatedText = textwrap.fill(translatedText, WIDTH)
 
-                        # Description 2
-                        if "防御破壊文言" in dataList[j].get("name"):
+                                        # Remove Speaker
+                                        speakerMatch = re.search(r"\[(.+?)\]\s?[|:]\s?", translatedText)
+                                        if speakerMatch:
+                                            speaker = speakerMatch.group(1).strip()
+                                        match = re.search(r'(^\[.+?\]\s?[|:]\s?)', translatedText)
+                                        if match:
+                                            translatedText = translatedText.replace(match.group(1), "") 
+
+                                        # Redo Old Speaker Format
+                                        speaker = speaker.replace("Speaker", "\b")
+                                        if speakerNum:
+                                            translatedText = f"{speaker}：{speakerNum}\r\n{translatedText}"
+                                        elif speaker == "NPC":
+                                            translatedText = f"/b\r\n{translatedText}"
+                                        else:
+                                            translatedText = f"{speaker}：\r\n{translatedText}"
+
+                                        # Add Script String
+                                        if speakerList[2]:
+                                            translatedText = f"{speakerList[2]}{translatedText}"
+
+                                        # Set Data
+                                        dataList[j].update({"value": dataList[j].get("value").replace(ogString, translatedText)})
+
+                        # Description
+                        if "60以下" in dataList[j].get("name"):
                             if dataList[j].get("value"):
-                                jaStringList = dataList[j].get("value").split("\r\nPFD\r\n")
+                                jaStringList = dataList[j].get("value").split("\r\n\r\n")
                                 for jaString in jaStringList:
+                                    speakerNum = None
+                                    ogString = jaString
+                                    # Extract Speaker
+                                    speakerList = handleScenarioScript(jaString)
+                                    if not speakerList:
+                                        continue
+                                    if speakerList[2]:
+                                        jaString = speakerList[0]
+                                    speakerNumMatch = re.search(r"：(\d+)", speakerList[1])
+                                    if speakerNumMatch:
+                                        speakerNum = speakerNumMatch.group(1)
+                                    speaker = re.sub(r"：\d*", "", speakerList[1])
+                                    speaker = re.sub(r"/b", "NPC", speaker)
+                                    speaker = speaker.replace("\r\n", "")
+                                    
+                                    # Add Speaker
+                                    jaString = jaString.replace(speakerList[1], f"[{speaker}]: ")
+
                                     # Pass 1 (Grab Data)
                                     if setData == False:
                                         jaString = jaString.replace("\n", " ")
@@ -1020,18 +1137,41 @@ def searchDB(events, pbar, jobList, filename):
                                     else:
                                         translatedText = scenarioList[2][0]
                                         scenarioList[2].pop(0)
-                                        translatedText = textwrap.fill(translatedText, 30)
-                                        dataList[j].update({"value": dataList[j].get("value").replace(jaString, translatedText)})
+                                        translatedText = textwrap.fill(translatedText, WIDTH)
+
+                                        # Remove Speaker
+                                        speakerMatch = re.search(r"\[(.+?)\]\s?[|:]\s?", translatedText)
+                                        if speakerMatch:
+                                            speaker = speakerMatch.group(1).strip()
+                                        match = re.search(r'(^\[.+?\]\s?[|:]\s?)', translatedText)
+                                        if match:
+                                            translatedText = translatedText.replace(match.group(1), "") 
+
+                                        # Redo Old Speaker Format
+                                        speaker = speaker.replace("Speaker", "\b")
+                                        if speakerNum:
+                                            translatedText = f"{speaker}：{speakerNum}\r\n{translatedText}"
+                                        elif speaker == "NPC":
+                                            translatedText = f"/b\r\n{translatedText}"
+                                        else:
+                                            translatedText = f"{speaker}：\r\n{translatedText}"
+
+                                        # Add Script String
+                                        if speakerList[2]:
+                                            translatedText = f"{speakerList[2]}{translatedText}"
+
+                                        # Set Data
+                                        dataList[j].update({"value": dataList[j].get("value").replace(ogString, translatedText)})
 
             # Grab Options
-            if table["name"] == "if分岐名" and OPTIONSFLAG == True:
+            if table["name"] == "マップ設定" and OPTIONSFLAG == True:
                 for option in table["data"]:
                     dataList = option["data"]
 
                     # Parse
                     for j in range(len(dataList)):
                         # Name
-                        if "性癖ヒント" in dataList[j].get("name"):
+                        if "表記用マップ名" in dataList[j].get("name"):
                             if dataList[j].get("value"):
                                 jaString = dataList[j].get("value")
                                 # Pass 1 (Grab Data)
@@ -1140,7 +1280,7 @@ def searchDB(events, pbar, jobList, filename):
                                         dbValueList[0].pop(0)
 
             # Grab Items
-            if table["name"] == "アイテム" and ITEMFLAG == True:
+            if table["name"] == "道具" and ITEMFLAG == True:
                 # Write Category
                 if setData:
                     with open("translations.txt", "a", encoding="utf-8") as file:
@@ -1152,9 +1292,9 @@ def searchDB(events, pbar, jobList, filename):
 
                     # Parse
                     for j in range(len(dataList)):
-                        font = "16"
+                        font = None
                         # Name
-                        if "アイテム名" in dataList[j].get("name"):
+                        if "名前" in dataList[j].get("name"):
                             jaString = dataList[j].get("value")
                             if jaString != "":
                                 # Pass 1 (Grab Data)
@@ -1172,7 +1312,7 @@ def searchDB(events, pbar, jobList, filename):
                                     itemList[0].pop(0)
 
                         # Description
-                        if "説明文[2行まで可]" in dataList[j].get("name"):
+                        if "説明" in dataList[j].get("name"):
                             # Pass 1 (Grab Data)
                             if setData == False:
                                 if dataList[j].get("value") != "":
@@ -1198,8 +1338,9 @@ def searchDB(events, pbar, jobList, filename):
                                     # Set Data
                                     dataList[j].update({"value": translatedText})
                                     itemList[1].pop(0)
-                        # Description
-                        if "-------------------------" in dataList[j].get("name"):
+
+                        # Log
+                        if "使用時文章" in dataList[j].get("name"):
                             # Pass 1 (Grab Data)
                             if setData == False:
                                 if dataList[j].get("value") != "":
@@ -1209,6 +1350,16 @@ def searchDB(events, pbar, jobList, filename):
                                     jaString = jaString.replace("\r", "")
                                     jaString = re.sub(r"[\\]+f\[\d+\]", "", jaString)
 
+                                    # Skill Action
+                                    if jaString[0] in [
+                                        "は",
+                                        "を",
+                                        "の",
+                                        "に",
+                                        "が",
+                                    ]:
+                                        jaString = f"Taro{jaString}"
+
                                     # Append Data
                                     itemList[2].append(jaString)
                             # Pass 2 (Set Data)
@@ -1217,14 +1368,15 @@ def searchDB(events, pbar, jobList, filename):
                                     # Textwrap
                                     translatedText = itemList[2][0]
                                     translatedText = textwrap.fill(translatedText, LISTWIDTH)
+                                    # translatedText = font + translatedText
 
-                                    # Font
-                                    if font:
-                                        translatedText = f"\\f[{font}]{translatedText}"
+                                    # Remove Taro
+                                    translatedText = re.sub(r"\bTaro\b", "", translatedText)
 
                                     # Set Data
                                     dataList[j].update({"value": translatedText})
                                     itemList[2].pop(0)
+
                         # Description
                         if "使用時文章[戦](人名~" in dataList[j].get("name"):
                             # Pass 1 (Grab Data)
@@ -1404,7 +1556,7 @@ def searchDB(events, pbar, jobList, filename):
                     # Parse
                     for j in range(len(dataList)):
                         # Name
-                        if "技能の名前" in dataList[j].get("name"):
+                        if "名前" in dataList[j].get("name"):
                             # Pass 1 (Grab Data)
                             if setData == False:
                                 if dataList[j].get("value") != "":
@@ -1442,7 +1594,7 @@ def searchDB(events, pbar, jobList, filename):
                                     skillList[1].pop(0)
 
                         # Log
-                        if "使用時文章[移動](人名~" in dataList[j].get("name"):
+                        if "発動時文章" in dataList[j].get("name"):
                             # Pass 1 (Grab Data)
                             if setData == False:
                                 if dataList[j].get("value") != "":
@@ -1926,6 +2078,15 @@ def searchDB(events, pbar, jobList, filename):
             descListTL2 = response[0]
             totalTokens[0] += response[1][0]
             totalTokens[1] += response[1][1]
+
+            # Check Mismatch
+            if len(nameListTL) != len(scenarioList[0]) or len(descListTL1) != len(scenarioList[1]) or len(descListTL2) != len(scenarioList[2]):
+                with LOCK:
+                    if filename not in MISMATCH:
+                        MISMATCH.append(filename)
+            else:
+                scenarioListTL = [nameListTL, descListTL1, descListTL2]
+                translate = True
 
         # OPTIONS
         if optionsList[0] or optionsList[1]:
