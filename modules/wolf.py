@@ -91,7 +91,7 @@ CODE150 = False
 # Other
 CODE210 = False
 CODE300 = False
-CODE250 = False
+CODE250 = True
 
 # Database
 SCENARIOFLAG = False
@@ -677,11 +677,10 @@ def searchCodes(events, pbar, jobList, filename):
             ### Event Code: 250 DB Read/Writes
             if codeList[i]["code"] == 250 and CODE250 == True:
                 # Validate size
-                stringArg = 0
+                stringArg = 2
                 if len(codeList[i]["stringArgs"]) == 4:
-                    if codeList[i]["stringArgs"][1] == "万能ｳｨﾝﾄﾞｳ一時DB"\
-                        and codeList[i]["stringArgs"][stringArg] != ""\
-                        and codeList[i]["intArgs"][0] == 13:
+                    if codeList[i]["stringArgs"][1] == "unit"\
+                        and codeList[i]["stringArgs"][stringArg] != "":
                         # Font Size
                         fontSize = 0
 
@@ -930,7 +929,7 @@ def searchDB(events, pbar, jobList, filename):
     try:
         for table in tableList:
             # Grab NPCs
-            if table["name"] == "Hシナリオ" and NPCFLAG == True:
+            if table["name"] == "マップ選択画面" and NPCFLAG == True:
                 with open("translations.txt", "a", encoding="utf-8") as file:
                     if setData:
                         file.write(f"\n#Actors\n")
@@ -940,7 +939,7 @@ def searchDB(events, pbar, jobList, filename):
                         # Parse
                         for j in range(len(dataList)):
                             # Name
-                            if dataList[j].get("name") == "タイトル":
+                            if dataList[j].get("name") == "マップ名":
                                 # Pass 1 (Grab Data)
                                 if setData == False:
                                     if dataList[j].get("value") != "":
