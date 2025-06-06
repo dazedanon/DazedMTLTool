@@ -943,8 +943,6 @@ def searchCodes(page, pbar, jobList, filename):
                 # Grab String
                 if len(codeList[i]["parameters"]) > 0:
                     jaString = codeList[i]["parameters"][0]
-                    if "ま、待って！あなたは" in jaString:
-                        print("Test")
                     oldjaString = jaString
                 else:
                     codeList[i]["code"] = -1
@@ -1095,11 +1093,6 @@ def searchCodes(page, pbar, jobList, filename):
                     finalJAString = "\n".join(currentGroup)
                     oldjaString = finalJAString
 
-                    # Check if Empty
-                    if finalJAString == "":
-                        i += 1
-                        continue
-
                     # Set Back
                     if not setData:
                         codeList[i]["parameters"] = [finalJAString]
@@ -1167,6 +1160,11 @@ def searchCodes(page, pbar, jobList, filename):
                     if "\\>" in finalJAString:
                         instantLineFlag = True
                         finalJAString = finalJAString.replace("\\>", "")
+
+                    # Check if Empty
+                    if finalJAString == "":
+                        i += 1
+                        continue
 
                     # Pass 1 (Grabbing Data)
                     if setData:
