@@ -81,8 +81,8 @@ PBAR = None
 FILENAME = None
 
 # Dialogue / Choices
-CODE101 = False
-CODE102 = False
+CODE101 = True
+CODE102 = True
 
 # Set String (Fragile but necessary)
 CODE122 = False
@@ -91,12 +91,12 @@ CODE150 = False
 # Other
 CODE210 = False
 CODE300 = False
-CODE250 = True
+CODE250 = False
 
 # Database
 SCENARIOFLAG = False
 OPTIONSFLAG = False
-NPCFLAG = True
+NPCFLAG = False
 DBNAMEFLAG = False
 DBVALUEFLAG = False
 ITEMFLAG = False
