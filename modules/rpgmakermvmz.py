@@ -943,6 +943,8 @@ def searchCodes(page, pbar, jobList, filename):
                 # Grab String
                 if len(codeList[i]["parameters"]) > 0:
                     jaString = codeList[i]["parameters"][0]
+                    if "ま、待って！あなたは" in jaString:
+                        print("Test")
                     oldjaString = jaString
                 else:
                     codeList[i]["code"] = -1
@@ -1081,7 +1083,8 @@ def searchCodes(page, pbar, jobList, filename):
                         j = i
 
                         jaString = codeList[i]["parameters"][0]
-                        currentGroup.append(jaString)
+                        if jaString.strip():
+                            currentGroup.append(jaString)
 
                         # Make sure not the end of the list.
                         if len(codeList) <= i + 1:
@@ -1102,7 +1105,7 @@ def searchCodes(page, pbar, jobList, filename):
                         codeList[i]["parameters"] = [finalJAString]
 
                     ### \\n<Speaker>
-                    regex = r"([\\]+[kKnN][wWcCrRrEe]?[\[<](.*?)[>\]])"
+                    regex = r"([\\]+[kKnN][wWcCrRrEe]?[\[<](.*?)[>])"
                     match = re.search(regex, finalJAString)
 
                     # Set Name
@@ -1553,7 +1556,7 @@ def searchCodes(page, pbar, jobList, filename):
                     continue
 
                 # Get Speaker
-                match = re.search(r"^([\w\s]+)", jaString)
+                match = re.search(r"^(?:[\\]+[cC]\[\d+?\])?([\w\s]+)", jaString)
                 if match:
                     jaString = match.group(1)
                     response = getSpeaker(jaString)
@@ -1602,12 +1605,12 @@ def searchCodes(page, pbar, jobList, filename):
                 jaString = codeList[i]["parameters"][0]
                 
                 patterns = {
-                    # "テキスト-": (r"テキスト-(.+)"
+                    "テキスト-": (r"テキスト-(.+)")
                     # "var text": (r"var\stext\d+\s=\s\"(.+)\""),
                     # "logtxt = ": (r"logtxt\s=\s'(.+)'" 
                     # ".setNickname": (r'.setNickname\(\\?"(.+?)\\?"\)'
                     # "_subject=": (r'_subject=(.+?)_'
-                    "text =": (r"text\s*=\s*'(.+[^\\])'"),
+                    # "text =": (r"text\s*=\s*'(.+[^\\])'"),
                     # "ex_a_name": (r'ex_a_name\(\d+,"(.+)"\)'),
                     # "gameVariables.setValue": (r":\$gameVariables.setValue\(\d+,'(.+)'\)"),
                     # "BattleManager._logWindow.push('addText'": (r"BattleManager._logWindow.push\('addText',\s'(.+)'\)"),
@@ -2598,7 +2601,7 @@ def countTokens(system, user, history):
     inputTotalTokens += len(enc.encode(user))
 
     # Output
-    outputTotalTokens += round(len(enc.encode(user)) * 3)
+    outputTotalTokens += round(len(enc.encode(user)) * 2.5)
 
     return [inputTotalTokens, outputTotalTokens]
 
