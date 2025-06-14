@@ -1135,7 +1135,7 @@ def searchCodes(page, pbar, jobList, filename):
 
                     # Remove any RPGMaker Code at start
                     ffMatch = re.search(
-                        r"^((?:[\\]+[^cCnNiIkKvV]+\[[\d\w]+\])+)",
+                        r"^((?:[\\]+[^cCnNiIkKvV{}]+\[[\d\w]+\])+)",
                         finalJAString,
                     )
                     if ffMatch != None:
@@ -1163,6 +1163,8 @@ def searchCodes(page, pbar, jobList, filename):
 
                     # Check if Empty
                     if finalJAString == "":
+                        if nametag:
+                            codeList[j]["parameters"][0] = codeList[j]["parameters"][0].replace(match.group(2), tledSpeaker)
                         i += 1
                         continue
 
@@ -1694,13 +1696,13 @@ def searchCodes(page, pbar, jobList, filename):
                     if setData:
                         list108.append(match.group(1))
 
-                        # Grab Next
-                        j = i
-                        while codeList[j + 1]["code"] == 408:
-                            j += 1
-                            list108[0] = list108[0] + codeList[j]["parameters"][0].replace(">", "")
-                            codeList[j]["parameters"][0] = ""
-                            list108[0] = list108[0].replace("\n", " ")
+                        # # Grab Next
+                        # j = i
+                        # while codeList[j + 1]["code"] == 408:
+                        #     j += 1
+                        #     list108[0] = list108[0] + codeList[j]["parameters"][0].replace(">", "")
+                        #     codeList[j]["parameters"][0] = ""
+                        #     list108[0] = list108[0].replace("\n", " ")
 
                     # Pass 2
                     else:
@@ -1709,8 +1711,8 @@ def searchCodes(page, pbar, jobList, filename):
                         list108.pop(0)
 
                         # Textwrap
-                        if codeList[i + 1]["code"] == 408:
-                            translatedText = dazedwrap.wrapText(translatedText, WIDTH)
+                        # if codeList[i + 1]["code"] == 408:
+                        #     translatedText = dazedwrap.wrapText(translatedText, WIDTH)
 
                         # Remove characters that may break scripts
                         charList = ['"']
