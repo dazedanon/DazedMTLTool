@@ -1,19 +1,12 @@
 Here are some vocabulary and terms so that you know the proper spelling and translation.
 ```
 # Game Characters
-ソフィー (Sophie) - Female
-カタリナ (Katarina) - Female
-師匠ドロシア (Master Dorothea) - Female
-ギルド女性受付 (Guild Receptionist) - Female
-娼館受付 (Brothel Receptionist) - Female
-ドミ (Domi) - Unknown
-姫ヶ崎エミリー (Emily Himegasaki) - Female
-冒険者ジャック (Adventurer Jack) - Male
-カボチャ女 (Pumpkin Woman) - Female
-カボチャ男 (Pumpkin Man) - Male
-エマえがお (Emma) - Female
-ジーナ (Gina) - Female
-諸葛霊孔明 (Zhuge Ling Kongming) - Male
+Taro - Male
+羽田 千紗 (Haneda Chisa) - Female
+川村 芳乃 (Kawamura Yoshino) - Female
+御小柴 朱梨 (Mikoshiba Shuri) - Female
+早乙女 恭香 (Saotome Kyouka) - Female
+夢園 蓮美 (Yumezono Hasumi) - Female
 
 # Lewd Terms
 マンコ (pussy)
@@ -157,25 +150,5 @@ w ((lol))
 』 (』)
 
 # Game Specific
-獣の魔女 (Beast Witch)
-ルーンフェリア (Runefellia)
-ミストウッド雪森 (Mistwood Snow Forest)
-ソフィーリアの家 (Sophiria's House)
-聖都ノーブルヘイツ (Holy City Noble Heights)
-ゴルマンの宿 (Golman's Inn)
-華都エルムリッジ (Splendid City Elmridge) 
-炭鉱都グリムストーン (Mining City Grimstone)
-エルムリッジ街道 (Elmridge Highway)
-炭鉱都ギルド (Mining City Guild)
-王都グランヘイツ (Royal Capital Granheights)
-ギルド本部 (Guild Headquarters)
-封鎖坑道 (Sealed Tunnel)
-錆びれた廃城 (Rusty Abandoned Castle/Ruined Castle)
-離島洞穴 (Isolated Island Cave)
-海都シーグレイ (Sea Capital Seagray)
-精霊都 ダストバレー (Spirit Capital Dust Valley)
-シルバーブルック (Silverbrook)
-領主邸 (Lord's Mansion)
-銀の塔 (Silver Tower)
-聖女遺跡 (Saintess Ruins)
+
 ```

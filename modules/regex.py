@@ -42,6 +42,7 @@ FIXTEXTWRAP = True  # Overwrites textwrap
 IGNORETLTEXT = False  # Ignores all translated text.
 MISMATCH = []  # Lists files that throw a mismatch error (Length of GPT list response is wrong)
 FILENAME = None
+TIMETOTAL = 0  # Total Time Taken for all translations
 
 # tqdm Globals
 BAR_FORMAT = "{l_bar}{bar:10}{r_bar}{bar:-10b}"
@@ -121,11 +122,15 @@ def getResultString(translatedData, translationTime, filename):
         + "]" "[Cost: ${:,.4f}".format(((translatedData[1][0] / 1000000) * INPUTAPICOST) + ((translatedData[1][1] / 1000000) * OUTPUTAPICOST))
         + "]"
     )
-    timeString = Fore.BLUE + "[" + str(round(translationTime, 1)) + "s]"
+    if filename != "TOTAL":
+        timeString = Fore.BLUE + "[" + str(round(translationTime, 1)) + "s]"
+        TIMETOTAL += round(translationTime, 1)
+    else:
+        timeString = Fore.BLUE + "[" + str(round(TIMETOTAL, 1)) + "s]"
 
     if translatedData[2] == None:
         # Success
-        return filename + ": " + totalTokenstring + timeString + Fore.GREEN + " \u2713 " + Fore.RESET
+        return filename + ": " + totalTokenstring + timeString + Fore.GREEN + " \u2713 " + Fore.RESET        
 
     else:
         # Fail
@@ -187,8 +192,8 @@ def translateRegex(data, translatedList):
 
     while i < len(data):
         voice = False
-        lineRegexText = r"(^[^*_]+$)"
-        lineRegexSpeaker = r"(主人公)\n"
+        lineRegexText = r"◆B.+?◆(.+)"
+        lineRegexSpeaker = r"◆A.+?◆(.+)"
         choiceRegex = r"\$menu_item.+?,(.*?),"
         titleRegex = r"title\s'(.*)'$"
         speaker = ""
@@ -223,7 +228,7 @@ def translateRegex(data, translatedList):
                     tokens[1] += response[1][1]
                 if translatedList:
                     data[i] = data[i].replace(match.group(1), speaker)
-                i += 1
+                i += 3
             else:
                 speaker = None
         elif data[i] == "Protagonist\n":
@@ -240,24 +245,13 @@ def translateRegex(data, translatedList):
             # Save Original String
             originalString = jaString
 
-            # Check if next lines are strings
-            jaStringLines = [jaString]
-            match = re.search(lineRegexText, data[i + 1])
-            while match and match.group(0) != '\n':
-                jaStringLines.append(match.group(1))
-                del data[i + 1]
-                match = re.search(lineRegexText, data[i + 1])
-
-            # Combine
-            jaString = "".join(jaStringLines)
-
             # Pass 1
             if not translatedList:
                 # Strip Spaces
                 jaString = jaString.strip()
 
                 # Remove Textwrap
-                jaString = jaString.replace('\n', ' ')
+                jaString = jaString.replace('\\n', ' ')
 
                 if jaString:
                     if speaker:
@@ -283,18 +277,18 @@ def translateRegex(data, translatedList):
                     # Escape Quotes
                     translatedText = re.sub(r'(?<!\\)"', r"", translatedText)
 
-                    # Remove Repeating Characters
-                    pattern = re.compile(r"(.)\s*\1(?:\s*\1){" + str(20 - 1) + r",}")
-                    translatedText = pattern.sub(lambda match: match.group(0).replace(" ", "")[:20], translatedText)
+                    # Remove characters that may break scripts
+                    translatedText = translatedText.replace("<", "(")
+                    translatedText = translatedText.replace(">", ")")
 
                     # Textwrap
-                    translatedText = textwrap.fill(translatedText, width=WIDTH)
-
+                    translatedText = textwrap.fill(translatedText, width=WIDTH).replace("\n", "\\n")   
+                    
                     # Set Data
-                    if "『" in originalString and "『" not in translatedText:
-                        data[i] = f"『{translatedText}』\n"
+                    if "「" in data[i-1] and "」" not in translatedText:
+                        data[i] = data[i].replace(originalString, f"「{translatedText}」")
                     else:
-                        data[i] = f"{translatedText}\n"
+                        data[i] = data[i].replace(originalString, f"{translatedText}")            
 
         # Choices
         match = re.search(choiceRegex, data[i])
