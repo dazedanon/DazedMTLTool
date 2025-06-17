@@ -85,7 +85,7 @@ CODE101 = False
 CODE102 = False
 
 # Set String (Fragile but necessary)
-CODE122 = False
+CODE122 = True
 CODE150 = False
 
 # Other
@@ -99,12 +99,12 @@ OPTIONSFLAG = False
 NPCFLAG = False
 DBNAMEFLAG = False
 DBVALUEFLAG = False
-ITEMFLAG = False
+ITEMFLAG = True
 STATEFLAG = False
 ENEMYFLAG = False
 ARMORFLAG = False
 WEAPONFLAG = False
-SKILLFLAG = True
+SKILLFLAG = False
 
 
 def handleWOLF(filename, estimate):
@@ -929,7 +929,7 @@ def searchDB(events, pbar, jobList, filename):
     try:
         for table in tableList:
             # Grab NPCs
-            if table["name"] == "マップ選択画面" and NPCFLAG == True:
+            if table["name"] == "主人公ステータス" and NPCFLAG == True:
                 with open("translations.txt", "a", encoding="utf-8") as file:
                     if setData:
                         file.write(f"\n#Actors\n")
@@ -939,7 +939,7 @@ def searchDB(events, pbar, jobList, filename):
                         # Parse
                         for j in range(len(dataList)):
                             # Name
-                            if dataList[j].get("name") == "マップ名":
+                            if dataList[j].get("name") == "キャラ名":
                                 # Pass 1 (Grab Data)
                                 if setData == False:
                                     if dataList[j].get("value") != "":
@@ -956,7 +956,7 @@ def searchDB(events, pbar, jobList, filename):
                                         npcList[0].pop(0)
 
                             # Description
-                            if dataList[j].get("name") == "NULL":
+                            if dataList[j].get("name") == "肩書き":
                                 # Pass 1 (Grab Data)
                                 if setData == False:
                                     if dataList[j].get("value") != "":
@@ -1290,8 +1290,8 @@ def searchDB(events, pbar, jobList, filename):
                     dataList = item["data"]
 
                     # Parse
+                    font = 20
                     for j in range(len(dataList)):
-                        font = 24
                         # Name
                         if dataList[j].get("name") == "アイテム名":
                             jaString = dataList[j].get("value")
@@ -1311,7 +1311,7 @@ def searchDB(events, pbar, jobList, filename):
                                     itemList[0].pop(0)
 
                         # Description
-                        if dataList[j].get("name") == "説明文[2行まで可]":
+                        if dataList[j].get("name") == "NULL":
                             # Pass 1 (Grab Data)
                             if setData == False:
                                 if dataList[j].get("value") != "":
@@ -1328,7 +1328,7 @@ def searchDB(events, pbar, jobList, filename):
                                 if dataList[j].get("value") != "":
                                     # Textwrap
                                     translatedText = itemList[1][0]
-                                    translatedText = textwrap.fill(translatedText, LISTWIDTH)
+                                    # translatedText = textwrap.fill(translatedText, LISTWIDTH)
 
                                     # Font
                                     if font:
@@ -1339,7 +1339,7 @@ def searchDB(events, pbar, jobList, filename):
                                     itemList[1].pop(0)
 
                         # Log
-                        if dataList[j].get("name") == "使用時文章":
+                        if dataList[j].get("name") == "使用時文章[戦](人名~":
                             # Pass 1 (Grab Data)
                             if setData == False:
                                 if dataList[j].get("value") != "":
@@ -1454,14 +1454,14 @@ def searchDB(events, pbar, jobList, filename):
                                     armorList[1].pop(0)
 
             # Grab Enemies
-            if table["name"] == "敵" and ENEMYFLAG == True:
+            if table["name"] == "敵ｷｬﾗ個体ﾃﾞｰﾀ" and ENEMYFLAG == True:
                 for enemy in table["data"]:
                     dataList = enemy["data"]
 
                     # Parse
                     for j in range(len(dataList)):
                         # Name
-                        if dataList[j].get("name") == "名前":
+                        if dataList[j].get("name") == "敵キャラ名":
                             # Pass 1 (Grab Data)
                             if setData == False:
                                 if dataList[j].get("value") != "":
@@ -1492,7 +1492,10 @@ def searchDB(events, pbar, jobList, filename):
                                     # Textwrap
                                     translatedText = enemyList[1][0]
                                     translatedText = textwrap.fill(translatedText, LISTWIDTH)
-                                    translatedText = font + translatedText
+
+                                    # Font
+                                    if font:
+                                        translatedText = f"\\f[{font}]{translatedText}"
 
                                     # Set Data
                                     dataList[j].update({"value": translatedText})

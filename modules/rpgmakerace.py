@@ -92,10 +92,10 @@ CODE101 = False  # Turn this one when names exist in 101
 CODE408 = False  # Warning, translates comments and can inflate costs.
 
 # Variables
-CODE122 = False
+CODE122 = True
 
 # Other
-CODE355655 = True
+CODE355655 = False
 CODE357 = False
 CODE657 = False
 CODE356 = False
