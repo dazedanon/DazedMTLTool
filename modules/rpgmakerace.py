@@ -49,6 +49,7 @@ IGNORETLTEXT = True  # Ignores all translated text.
 MISMATCH = []  # Lists files that throw a mismatch error (Length of GPT list response is wrong)
 PBAR = None
 FILENAME = None
+TIMETOTAL = 0  # Total Time Taken for all translations
 
 # Regex - Need to change this if you want to translate from/to other languages. Default is Japanese Regex
 LANGREGEX = r"[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]+"
@@ -226,6 +227,7 @@ def openFiles(filename):
 
 
 def getResultString(translatedData, translationTime, filename):
+    global TIMETOTAL
     # File Print String
     totalTokenstring = (
         Fore.YELLOW + "[Input: " + str(translatedData[1][0]) + "]"
@@ -234,7 +236,11 @@ def getResultString(translatedData, translationTime, filename):
         + "]" "[Cost: ${:,.4f}".format(((translatedData[1][0] / 1000000) * INPUTAPICOST) + ((translatedData[1][1] / 1000000) * OUTPUTAPICOST))
         + "]"
     )
-    timeString = Fore.BLUE + "[" + str(round(translationTime, 1)) + "s]"
+    if filename != "TOTAL":
+        timeString = Fore.BLUE + "[" + str(round(translationTime, 1)) + "s]"
+        TIMETOTAL += round(translationTime, 1)
+    else:
+        timeString = Fore.BLUE + "[" + str(round(TIMETOTAL, 1)) + "s]"
 
     if translatedData[2] is None:
         # Success

@@ -43,6 +43,7 @@ IGNORETLTEXT = False  # Ignores all translated text.
 MISMATCH = []  # Lists files that throw a mismatch error (Length of GPT list response is wrong)
 FILENAME = None
 TIMETOTAL = 0  # Total Time Taken for all translations
+TIMETOTAL = 0  # Total Time Taken for all translations
 
 # tqdm Globals
 BAR_FORMAT = "{l_bar}{bar:10}{r_bar}{bar:-10b}"
@@ -114,6 +115,7 @@ def handleRegex(filename, estimate):
 
 
 def getResultString(translatedData, translationTime, filename):
+    global TIMETOTAL
     # File Print String
     totalTokenstring = (
         Fore.YELLOW + "[Input: " + str(translatedData[1][0]) + "]"
