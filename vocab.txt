@@ -1,12 +1,33 @@
 Here are some vocabulary and terms so that you know the proper spelling and translation.
 ```
 # Game Characters
-Taro - Male
-羽田 千紗 (Haneda Chisa) - Female
-川村 芳乃 (Kawamura Yoshino) - Female
-御小柴 朱梨 (Mikoshiba Shuri) - Female
-早乙女 恭香 (Saotome Kyouka) - Female
-夢園 蓮美 (Yumezono Hasumi) - Female
+ミズキ (Mizuki) - Female
+ソウタ (Souta) - Male
+陰陽師シグレ (Onmyoji Shigure) - Male
+ヒネズミ (Hinezumi)
+イヌガミ (Inugami)
+タタリモッケ (Tatarimokke)
+ヤタガラス (Yatagarasu)
+イジコ (Ijiko)
+ムラマサ (Muramasa)
+ライジュウ (Raijuu)
+ヌエ (Nue)
+ウミボウズ (Umibouzu)
+カイナンホウシ (Kainan Houshi)
+ユキンコ (Yukinko)
+ツララオンナ (Tsuraraonna)
+カワタロウ (Kawatarou)
+ネネコ (Neneko)
+イソオトメ (Iso Otome)
+ワダツミ (Wadatsumi)
+ヌリカベ (Nurikabe)
+ダイダラボッチ (Daidarabotchi)
+ジュボッコ (Jubokko)
+ホウコウ (Houkou)
+バク (Baku)
+イチガンキ (Ichiganki)
+ツチグモ (Tsuchigumo)
+ジョロウグモ (Jorougumo)
 
 # Lewd Terms
 マンコ (pussy)
@@ -77,13 +98,13 @@ Taro - Male
 攻撃力 (Attack)
 回避率 (Evasion)
 敏捷性 (Agility)
+命中率 (Accuracy)
 最大ＨＰ (Max HP)
 経験値 (EXP)
 購入する (Buy)
 魔力攻撃 (M. Attack)
 魔力防御 (M. Defense)
 魔法力 (M. Power)
-命中率 (Accuracy)
 %1 の%2を獲得！ (Gained %1 %2)
 持っている数 (Owned)
 ME 音量 (ME Volume)
@@ -143,6 +164,20 @@ ME 音量 (ME Volume)
 吸血鬼 (Vampire)
 ドワーフ (Dwarf)
 
+# Elements
+物理 (Physical)
+吸収 (Absorption)
+火 (Fire)
+氷 (Ice)
+雷 (Thunder)
+水 (Water)
+地 (Earth)
+風 (Wind)
+神聖 (Holy)
+暗黒 (Dark)
+木 (Wood)
+人間 (Human)
+
 # Other
 w ((lol))
 ２万 (20,000)
@@ -150,5 +185,43 @@ w ((lol))
 』 (』)
 
 # Game Specific
+キズヨ神社 (Kizuyo Shrine)
+ミズキの部屋 (Mizuki's Room)
+ソウタの部屋 (Souta's Room)
+カグラ村 (Kagura Village)
+トコヨの森 (Tokoyo Forest)
+ガンクツ院 (Gankutsu Temple)
+ツクヨミ山 (Tsukuyomi Mountain)
+ソウリュウ郷 (Souryuu Village)
+水神の宮 (Water God's Shrine)
+ゲンサイの庵 (Gensai's Hermitage)
+シオサイ村 (Shiosai Village)
+網元の家 (Fisherman's House)
+宝船 (Treasure Ship)
+土蜘蛛の巣 (Tsuchigumo's Nest)
+ヨミの隧道 (Yomi Tunnel)
+トウミョウ院 (Toumyou Temple)
+管主の家 (Head Priest's House)
+慰霊塔 (Memorial Tower)
+奥の院 (Inner Sanctuary)
+博徒の里 (Gambler's Village)
+飛天組 (Hiten Group)
+飛天組のアジト (Hiten Group Hideout)
+キョウラクの都 (City of Kyouraku)
+山賊の根城 (Bandit Stronghold)
+遊郭 (Red-Light District)
+不夜城 (Sleepless Castle)
+太乙縮地盤 (Taiyi Teleportation Platform)
+寺子屋 (Temple School)
+陰陽屋敷 (Onmyoji Mansion)
+顔役宅 (Boss's House)
+安珍宅 (Anchin's House)
+タレ職人宅 (Sauce Artisan's House)
+ミタマ島 (Mitama Island)
+ヤミ島 (Yami Island)
+イザナミ鉱山 (Izanami Mine)
+ホゼ (Hoze)
+ゲンタ (Genta)
+ゲンゾウ (Genzou)
 
 ```

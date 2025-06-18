@@ -2,7 +2,7 @@
 import json
 import os
 import re
-import textwrap
+import util.dazedwrap as dazedwrap
 import threading
 import time
 import traceback
@@ -354,7 +354,7 @@ def searchCodes(events, pbar, jobList, filename):
 
                         # Textwrap
                         if FIXTEXTWRAP is True:
-                            translatedText = textwrap.fill(translatedText, width=WIDTH)
+                            translatedText = dazedwrap.wrapText(translatedText, width=WIDTH)
 
                         # Set Data
                         codeList[i]["stringArgs"][0] = codeList[i]["stringArgs"][0].replace(initialJAString, translatedText)
@@ -426,7 +426,7 @@ def searchCodes(events, pbar, jobList, filename):
 
                         # Textwrap
                         if FIXTEXTWRAP is True:
-                            translatedText = textwrap.fill(translatedText, width=WIDTH)
+                            translatedText = dazedwrap.wrapText(translatedText, width=WIDTH)
 
                         # Set Data
                         codeList[i]["stringArgs"][1] = translatedText
@@ -472,7 +472,7 @@ def searchCodes(events, pbar, jobList, filename):
                         if len(list122) == len(list122TL):
                             # Adjust Speaker and Add Textwrap
                             for j in range(len(list122TL)):
-                                list122TL[j] = textwrap.fill(list122TL[j], WIDTH)
+                                list122TL[j] = dazedwrap.wrapText(list122TL[j], WIDTH)
                                 list122TL[j] = re.sub(r"^\[?(.+?)\]?:", r"\1：", list122TL[j])
                                 list122TL[j] = list122TL[j].replace("：", "：\n")
                                 list122TL[j] = list122TL[j].replace("：\n ", "：\n")
@@ -505,7 +505,7 @@ def searchCodes(events, pbar, jobList, filename):
                             totalTokens[1] += response[1][1]
 
                             # Textwrap
-                            # translatedText = textwrap.fill(translatedText, 30)
+                            # translatedText = dazedwrap.wrapText(translatedText, 30)
 
                             # Set String
                             codeList[i]["stringArgs"][0] = codeList[i]["stringArgs"][0].replace(originalString, translatedText)
@@ -549,7 +549,7 @@ def searchCodes(events, pbar, jobList, filename):
                             translatedText = list150[0]
 
                             # Textwrap
-                            # translatedText = textwrap.fill(translatedText, WIDTH)
+                            # translatedText = dazedwrap.wrapText(translatedText, WIDTH)
 
                             # Set String with font formatting
                             codeList[i]["stringArgs"][0] = re.sub(r'\\f\[(\d+)\]', lambda x: f'\\f[{int(x.group(1))-2}]', translatedText)
@@ -608,7 +608,7 @@ def searchCodes(events, pbar, jobList, filename):
                     # Pass 2
                     else:
                         # Add Textwrap and Font
-                        translatedText = textwrap.fill(list300[0], WIDTH)
+                        translatedText = dazedwrap.wrapText(list300[0], WIDTH)
                         list300.pop(0)
 
                         # Write to File
@@ -666,7 +666,7 @@ def searchCodes(events, pbar, jobList, filename):
 
                             # Textwrap
                             if FIXTEXTWRAP is True:
-                                translatedText = textwrap.fill(translatedText, width=WIDTH)
+                                translatedText = dazedwrap.wrapText(translatedText, width=WIDTH)
 
                             # Set Data
                             codeList[i]["stringArgs"][1] = codeList[i]["stringArgs"][1].replace(initialJAString, translatedText)
@@ -701,7 +701,7 @@ def searchCodes(events, pbar, jobList, filename):
                             list250.pop(0)
 
                             # Textwrap
-                            # translatedText = textwrap.fill(translatedText, WIDTH)
+                            # translatedText = dazedwrap.wrapText(translatedText, WIDTH)
 
                             # Add/Replace font formatting
                             # Remove existing font command if present
@@ -973,7 +973,7 @@ def searchDB(events, pbar, jobList, filename):
                                     if dataList[j].get("value") != "":
                                         # Textwrap
                                         translatedText = npcList[1][0]
-                                        translatedText = textwrap.fill(translatedText, LISTWIDTH)
+                                        translatedText = dazedwrap.wrapText(translatedText, LISTWIDTH)
                                         translatedText = font + translatedText
 
                                         # Set Data
@@ -1021,7 +1021,7 @@ def searchDB(events, pbar, jobList, filename):
                                     else:
                                         translatedText = scenarioList[0][0]
                                         scenarioList[0].pop(0)
-                                        translatedText = textwrap.fill(translatedText, WIDTH)
+                                        translatedText = dazedwrap.wrapText(translatedText, WIDTH)
 
                                         # Remove Speaker
                                         speakerMatch = re.search(r"\[(.+?)\]\s?[|:]\s?", translatedText)
@@ -1079,7 +1079,7 @@ def searchDB(events, pbar, jobList, filename):
                                     else:
                                         translatedText = scenarioList[1][0]
                                         scenarioList[1].pop(0)
-                                        translatedText = textwrap.fill(translatedText, WIDTH)
+                                        translatedText = dazedwrap.wrapText(translatedText, WIDTH)
 
                                         # Remove Speaker
                                         speakerMatch = re.search(r"\[(.+?)\]\s?[|:]\s?", translatedText)
@@ -1138,7 +1138,7 @@ def searchDB(events, pbar, jobList, filename):
                                     else:
                                         translatedText = scenarioList[2][0]
                                         scenarioList[2].pop(0)
-                                        translatedText = textwrap.fill(translatedText, WIDTH)
+                                        translatedText = dazedwrap.wrapText(translatedText, WIDTH)
 
                                         # Remove Speaker
                                         speakerMatch = re.search(r"\[(.+?)\]\s?[|:]\s?", translatedText)
@@ -1199,7 +1199,7 @@ def searchDB(events, pbar, jobList, filename):
                                 else:
                                     translatedText = optionsList[1][0]
                                     optionsList[1].pop(0)
-                                    translatedText = textwrap.fill(translatedText, LISTWIDTH)
+                                    translatedText = dazedwrap.wrapText(translatedText, LISTWIDTH)
                                     dataList[j].update({"value": dataList[j].get("value").replace(jaString, translatedText)})
 
                         # Description 2
@@ -1216,7 +1216,7 @@ def searchDB(events, pbar, jobList, filename):
                                 else:
                                     translatedText = optionsList[2][0]
                                     optionsList[2].pop(0)
-                                    translatedText = textwrap.fill(translatedText, LISTWIDTH)
+                                    translatedText = dazedwrap.wrapText(translatedText, LISTWIDTH)
                                     dataList[j].update({"value": dataList[j].get("value").replace(jaString, translatedText)})
 
             # Grab DB Names
@@ -1267,7 +1267,7 @@ def searchDB(events, pbar, jobList, filename):
                                         translatedText = dbValueList[0][0]
 
                                         # Textwrap
-                                        translatedText = textwrap.fill(translatedText, 30)
+                                        translatedText = dazedwrap.wrapText(translatedText, 30)
                                         translatedText = translatedText.replace("\n", f"\r\n\\f[{font}]")
 
                                         # Subject
@@ -1328,7 +1328,7 @@ def searchDB(events, pbar, jobList, filename):
                                 if dataList[j].get("value") != "":
                                     # Textwrap
                                     translatedText = itemList[1][0]
-                                    # translatedText = textwrap.fill(translatedText, LISTWIDTH)
+                                    # translatedText = dazedwrap.wrapText(translatedText, LISTWIDTH)
 
                                     # Font
                                     if font:
@@ -1366,7 +1366,7 @@ def searchDB(events, pbar, jobList, filename):
                                 if dataList[j].get("value") != "":
                                     # Textwrap
                                     translatedText = itemList[2][0]
-                                    translatedText = textwrap.fill(translatedText, LISTWIDTH)
+                                    translatedText = dazedwrap.wrapText(translatedText, LISTWIDTH)
                                     # translatedText = font + translatedText
 
                                     # Remove Taro
@@ -1394,7 +1394,7 @@ def searchDB(events, pbar, jobList, filename):
                                 if dataList[j].get("value") != "":
                                     # Textwrap
                                     translatedText = itemList[3][0]
-                                    translatedText = textwrap.fill(translatedText, LISTWIDTH)
+                                    translatedText = dazedwrap.wrapText(translatedText, LISTWIDTH)
 
                                     # Font
                                     if font:
@@ -1443,7 +1443,7 @@ def searchDB(events, pbar, jobList, filename):
                                 if dataList[j].get("value") != "":
                                     # Textwrap
                                     translatedText = armorList[1][0]
-                                    translatedText = textwrap.fill(translatedText, LISTWIDTH)
+                                    translatedText = dazedwrap.wrapText(translatedText, LISTWIDTH)
 
                                     # Font
                                     if font:
@@ -1491,7 +1491,7 @@ def searchDB(events, pbar, jobList, filename):
                                 if dataList[j].get("value") != "":
                                     # Textwrap
                                     translatedText = enemyList[1][0]
-                                    translatedText = textwrap.fill(translatedText, LISTWIDTH)
+                                    translatedText = dazedwrap.wrapText(translatedText, LISTWIDTH)
 
                                     # Font
                                     if font:
@@ -1540,7 +1540,7 @@ def searchDB(events, pbar, jobList, filename):
                                 if dataList[j].get("value") != "":
                                     # Textwrap
                                     translatedText = weaponsList[1][0]
-                                    translatedText = textwrap.fill(translatedText, LISTWIDTH)
+                                    translatedText = dazedwrap.wrapText(translatedText, LISTWIDTH)
 
                                     # Font
                                     if font:
@@ -1590,7 +1590,7 @@ def searchDB(events, pbar, jobList, filename):
                                 if dataList[j].get("value") != "":
                                     # Textwrap
                                     translatedText = skillList[1][0]
-                                    translatedText = textwrap.fill(translatedText, LISTWIDTH)
+                                    translatedText = dazedwrap.wrapText(translatedText, LISTWIDTH)
 
                                     # Font
                                     if font:
@@ -1628,7 +1628,7 @@ def searchDB(events, pbar, jobList, filename):
                                 if dataList[j].get("value") != "":
                                     # Textwrap
                                     translatedText = skillList[2][0]
-                                    translatedText = textwrap.fill(translatedText, LISTWIDTH)
+                                    translatedText = dazedwrap.wrapText(translatedText, LISTWIDTH)
                                     translatedText = font + translatedText
 
                                     # Remove Taro
@@ -1666,7 +1666,7 @@ def searchDB(events, pbar, jobList, filename):
                                 if dataList[j].get("value") != "":
                                     # Textwrap
                                     translatedText = skillList[3][0]
-                                    translatedText = textwrap.fill(translatedText, LISTWIDTH)
+                                    translatedText = dazedwrap.wrapText(translatedText, LISTWIDTH)
                                     translatedText = font + translatedText
 
                                     # Remove Taro
@@ -1704,7 +1704,7 @@ def searchDB(events, pbar, jobList, filename):
                                 if dataList[j].get("value") != "":
                                     # Textwrap
                                     translatedText = skillList[4][0]
-                                    translatedText = textwrap.fill(translatedText, LISTWIDTH)
+                                    translatedText = dazedwrap.wrapText(translatedText, LISTWIDTH)
                                     translatedText = font + translatedText
 
                                     # Remove Taro
@@ -1752,7 +1752,7 @@ def searchDB(events, pbar, jobList, filename):
                                 if dataList[j].get("value") != "":
                                     # Textwrap
                                     translatedText = stateList[1][0]
-                                    translatedText = textwrap.fill(translatedText, LISTWIDTH)
+                                    translatedText = dazedwrap.wrapText(translatedText, LISTWIDTH)
                                     translatedText = font + translatedText
 
                                     # Set Data
@@ -1787,7 +1787,7 @@ def searchDB(events, pbar, jobList, filename):
                                 if dataList[j].get("value") != "":
                                     # Textwrap
                                     translatedText = stateList[2][0]
-                                    translatedText = textwrap.fill(translatedText, LISTWIDTH)
+                                    translatedText = dazedwrap.wrapText(translatedText, LISTWIDTH)
                                     translatedText = font + translatedText
 
                                     # Remove Taro
@@ -1825,7 +1825,7 @@ def searchDB(events, pbar, jobList, filename):
                                 if dataList[j].get("value") != "":
                                     # Textwrap
                                     translatedText = stateList[3][0]
-                                    translatedText = textwrap.fill(translatedText, LISTWIDTH)
+                                    translatedText = dazedwrap.wrapText(translatedText, LISTWIDTH)
                                     translatedText = font + translatedText
 
                                     # Remove Taro
@@ -1863,7 +1863,7 @@ def searchDB(events, pbar, jobList, filename):
                                 if dataList[j].get("value") != "":
                                     # Textwrap
                                     translatedText = stateList[4][0]
-                                    translatedText = textwrap.fill(translatedText, LISTWIDTH)
+                                    translatedText = dazedwrap.wrapText(translatedText, LISTWIDTH)
                                     translatedText = font + translatedText
 
                                     # Remove Taro
@@ -1900,7 +1900,7 @@ def searchDB(events, pbar, jobList, filename):
                                 if dataList[j].get("value") != "":
                                     # Textwrap
                                     translatedText = stateList[5][0]
-                                    translatedText = textwrap.fill(translatedText, LISTWIDTH)
+                                    translatedText = dazedwrap.wrapText(translatedText, LISTWIDTH)
                                     translatedText = font + translatedText
 
                                     # Remove Taro
@@ -1938,7 +1938,7 @@ def searchDB(events, pbar, jobList, filename):
                                 if dataList[j].get("value") != "":
                                     # Textwrap
                                     translatedText = stateList[6][0]
-                                    translatedText = textwrap.fill(translatedText, LISTWIDTH)
+                                    translatedText = dazedwrap.wrapText(translatedText, LISTWIDTH)
                                     translatedText = font + translatedText
 
                                     # Remove Taro
@@ -1976,7 +1976,7 @@ def searchDB(events, pbar, jobList, filename):
                                 if dataList[j].get("value") != "":
                                     # Textwrap
                                     translatedText = stateList[7][0]
-                                    translatedText = textwrap.fill(translatedText, LISTWIDTH)
+                                    translatedText = dazedwrap.wrapText(translatedText, LISTWIDTH)
                                     translatedText = font + translatedText
 
                                     # Remove Taro

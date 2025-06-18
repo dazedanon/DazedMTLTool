@@ -2,7 +2,7 @@
 import json
 import os
 import re
-import textwrap
+import util.dazedwrap as dazedwrap
 import threading
 import time
 import traceback
@@ -222,7 +222,7 @@ def translateTxt(data, translatedList):
                     translatedText = re.sub(r"^\[?(.+?)\]?\s?[|:]\s?", "", translatedText)
 
                     # # Textwrap
-                    # translatedText = textwrap.fill(translatedText, width=WIDTH)
+                    # translatedText = dazedwrap.wrapText(translatedText, width=WIDTH)
                     # translatedText = translatedText.replace("\n", "\\n")
 
                     # Set Data

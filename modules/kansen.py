@@ -1,7 +1,7 @@
 # Libraries
 import os
 import re
-import textwrap
+import util.dazedwrap as dazedwrap
 import threading
 import time
 import traceback
@@ -344,7 +344,7 @@ def translateTyrano(data, pbar, totalLines):
                 translatedText = re.sub(r"^.+?:\s", "", translatedText)
 
                 # Textwrap
-                translatedText = textwrap.fill(translatedText, width=WIDTH)
+                translatedText = dazedwrap.wrapText(translatedText, width=WIDTH)
                 textList = translatedText.split("\n")
 
                 # Set Text
@@ -352,7 +352,7 @@ def translateTyrano(data, pbar, totalLines):
                 for line in textList:
                     # Wordwrap Text
                     if "[r]" not in line:
-                        line = textwrap.fill(line, width=WIDTH)
+                        line = dazedwrap.wrapText(line, width=WIDTH)
                         line = line.replace("\n", "[r]")
 
                     # Set

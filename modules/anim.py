@@ -2,7 +2,7 @@
 import json
 import os
 import re
-import textwrap
+import util.dazedwrap as dazedwrap
 import threading
 import time
 import traceback
@@ -232,12 +232,12 @@ def translateJSON(keys, data, pbar):
                     match = re.search(r".*@n(.*)", translatedText)
                     if match != None:
                         tlText = match.group(1)
-                        tlText = textwrap.fill(tlText, width=WIDTH)
+                        tlText = dazedwrap.wrapText(tlText, width=WIDTH)
                         tlText = tlText.replace("\n", "@b")
                         translatedText = translatedText.replace(match.group(1), tlText)
 
                 elif "@b" not in translatedText:
-                    translatedText = textwrap.fill(translatedText, width=WIDTH)
+                    translatedText = dazedwrap.wrapText(translatedText, width=WIDTH)
                     translatedText = translatedText.replace("\n", "@b")
 
                 # Set Data

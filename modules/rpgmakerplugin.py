@@ -2,7 +2,7 @@
 import json
 import os
 import re
-import textwrap
+import util.dazedwrap as dazedwrap
 import threading
 import time
 import traceback
@@ -243,7 +243,7 @@ def translatePlugin(data, pbar, filename, translatedList):
                             translatedText = re.sub(r"([^\\'])\"", r"\1\\'", translatedText)
 
                             # Textwrap
-                            translatedText = textwrap.fill(translatedText, WIDTH)
+                            translatedText = dazedwrap.wrapText(translatedText, WIDTH)
 
                             # Replace \n and \c
                             translatedText = re.sub(r"\\+n", re.escape(newline), translatedText)
@@ -420,7 +420,7 @@ def translatePlugin(data, pbar, filename, translatedList):
                                 translatedList = None
 
                             # Textwrap
-                            translatedText = textwrap.fill(translatedText, width=WIDTH)
+                            translatedText = dazedwrap.wrapText(translatedText, width=WIDTH)
                             translatedText = translatedText.replace("\n", r"\\\\\\\\n")
                             match = match.replace("\\c", r"\\\\\\\\\\\\\\\\c")
 
@@ -461,7 +461,7 @@ def translatePlugin(data, pbar, filename, translatedList):
                                 translatedList = None
 
                             # Textwrap
-                            translatedText = textwrap.fill(translatedText, width=WIDTH)
+                            translatedText = dazedwrap.wrapText(translatedText, width=WIDTH)
                             translatedText = translatedText.replace("\n", r"\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\n")
 
                             # Replace Single Quotes
