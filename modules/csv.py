@@ -2,7 +2,7 @@
 import json
 import os
 import re
-import textwrap
+import util.dazedwrap as dazedwrap
 import threading
 import time
 import traceback
@@ -250,7 +250,7 @@ def translateCSV(data, pbar, writer, filename, translatedList, format):
                             translatedList.pop(0)
 
                             # Add Wordwrap
-                            translatedText = textwrap.fill(translatedText, WIDTH)
+                            translatedText = dazedwrap.wrapText(translatedText, WIDTH)
                             translatedText = translatedText.replace("\n", "\\n")
 
                             # Set Data
@@ -282,7 +282,7 @@ def translateCSV(data, pbar, writer, filename, translatedList, format):
                         translatedList.pop(0)
 
                         # Add Wordwrap
-                        translatedText = textwrap.fill(translatedText, WIDTH)
+                        translatedText = dazedwrap.wrapText(translatedText, WIDTH)
                         translatedText = translatedText.replace("\n", "\\n")
 
                         # Set Data
@@ -324,7 +324,7 @@ def translateCSV(data, pbar, writer, filename, translatedList, format):
                                 translatedList.pop(0)
 
                                 # Add Wordwrap
-                                translatedText = textwrap.fill(translatedText, WIDTH)
+                                translatedText = dazedwrap.wrapText(translatedText, WIDTH)
 
                                 # Set Data
                                 if targetNextRow:
@@ -380,7 +380,7 @@ def translateCSV(data, pbar, writer, filename, translatedList, format):
                                 translatedText = re.sub(r"^\[?(.+?)\]?\s?[|:]\s?", "", translatedText)
 
                             # Add Wordwrap
-                            translatedText = textwrap.fill(translatedText, WIDTH)
+                            translatedText = dazedwrap.wrapText(translatedText, WIDTH)
                             translatedText = translatedText.replace("\n", "\\n")
 
                             # Check for more than 3 newlines (Shoujo Ramune)

@@ -1,7 +1,7 @@
 # Libraries
 import os
 import re
-import textwrap
+import util.dazedwrap as dazedwrap
 import threading
 import time
 import traceback
@@ -273,7 +273,7 @@ def translateLines(linesList, pbar):
 
                     # Textwrap
                     translatedText = translatedText.replace('"', '\\"')
-                    translatedText = textwrap.fill(translatedText, width=WIDTH)
+                    translatedText = dazedwrap.wrapText(translatedText, width=WIDTH)
 
                     # Set Data
                     if multiLine:

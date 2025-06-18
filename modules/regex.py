@@ -2,7 +2,7 @@
 import json
 import os
 import re
-import textwrap
+import util.dazedwrap as dazedwrap
 import threading
 import time
 import traceback
@@ -284,7 +284,7 @@ def translateRegex(data, translatedList):
                     translatedText = translatedText.replace(">", ")")
 
                     # Textwrap
-                    translatedText = textwrap.fill(translatedText, width=WIDTH).replace("\n", "\\n")   
+                    translatedText = dazedwrap.wrapText(translatedText, width=WIDTH).replace("\n", "\\n")   
                     
                     # Set Data
                     if "「" in data[i-1] and "」" not in translatedText:

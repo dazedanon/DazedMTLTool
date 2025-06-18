@@ -2,7 +2,7 @@
 import json
 import os
 import re
-import textwrap
+import util.dazedwrap as dazedwrap
 import threading
 import time
 import traceback
@@ -246,7 +246,7 @@ def translateOnscripter(data, pbar, filename, translatedList):
                         translatedList = None
 
                     # Textwrap & Other Text
-                    translatedText = textwrap.fill(translatedText, width=WIDTH)
+                    translatedText = dazedwrap.wrapText(translatedText, width=WIDTH)
                     translatedText = translatedText.replace("\n", "\n\u3000")
 
                     # Split the string into lines

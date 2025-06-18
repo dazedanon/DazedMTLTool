@@ -2,7 +2,7 @@
 import json
 import os
 import re
-import textwrap
+import util.dazedwrap as dazedwrap
 import threading
 import time
 import traceback
@@ -231,7 +231,7 @@ def translateUnity(data, pbar, filename, translatedList):
                         translatedList = None
 
                     # Textwrap
-                    # translatedText = textwrap.fill(translatedText, width=WIDTH)
+                    # translatedText = dazedwrap.wrapText(translatedText, width=WIDTH)
                     # translatedText = translatedText.replace("\n", "\\n")
 
                     # Remove Double Spaces and =

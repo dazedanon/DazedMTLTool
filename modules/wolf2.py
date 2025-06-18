@@ -2,7 +2,7 @@
 import json
 import os
 import re
-import textwrap
+import util.dazedwrap as dazedwrap
 import threading
 import time
 import traceback
@@ -277,7 +277,7 @@ def translateWOLF(data, translatedList, pbar, filename):
                     translatedText = translatedText.replace(matchSpeakerList[0], "")
 
                 # Textwrap
-                translatedText = textwrap.fill(translatedText, width=WIDTH)
+                translatedText = dazedwrap.wrapText(translatedText, width=WIDTH)
 
                 # Set Data
                 data.insert(i, f"{translatedText}\n")

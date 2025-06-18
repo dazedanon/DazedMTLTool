@@ -2,7 +2,7 @@
 import json
 import os
 import re
-import textwrap
+import util.dazedwrap as dazedwrap
 import threading
 import time
 import traceback
@@ -322,7 +322,7 @@ def translateNote(event, regex, wrap=True):
 
             # Textwrap
             if wrap:
-                translatedText = textwrap.fill(translatedText, width=NOTEWIDTH)
+                translatedText = dazedwrap.wrapText(translatedText, width=NOTEWIDTH)
                 # translatedText = translatedText.replace("\n", "\\n")
 
             translatedText = translatedText.replace('"', "")
@@ -735,7 +735,7 @@ def searchNames(data, pbar, context):
                                 data[j]["nickname"] = translatedNicknameBatch[0]
                                 translatedNicknameBatch.pop(0)
                             if data[j]["description"] != "":
-                                data[j]["description"] = textwrap.fill(translatedProfileBatch[0], LISTWIDTH)
+                                data[j]["description"] = dazedwrap.wrapText(translatedProfileBatch[0], LISTWIDTH)
                                 translatedProfileBatch.pop(0)
 
                             # If Batch is empty. Move on.
@@ -779,7 +779,7 @@ def searchNames(data, pbar, context):
                                 data[j]["name"] = translatedNameBatch[0]
                                 translatedNameBatch.pop(0)
                                 if "description" in data[j] and data[j]["description"] != "":
-                                    translatedText = textwrap.fill(translatedDescriptionBatch[0], LISTWIDTH)
+                                    translatedText = dazedwrap.wrapText(translatedDescriptionBatch[0], LISTWIDTH)
                                     # translatedText = translatedText.replace("\n", "\\n")
                                     data[j]["description"] = translatedText
                                     translatedDescriptionBatch.pop(0)
@@ -1148,12 +1148,9 @@ def searchCodes(page, pbar, jobList, filename):
                             translatedText = list401[0]
 
                             # Remove speaker
-                            if speaker != "":
-                                matchSpeakerList = re.findall(r"^\[?(.+?)\]?\s?[|:]\s?", translatedText)
-                                if len(matchSpeakerList) > 0:
-                                    newSpeaker = matchSpeakerList[0]
-                                    nametag = nametag.replace(speaker, newSpeaker)
-                                translatedText = re.sub(r"^\[?(.+?)\]?\s?[|:]\s?", "", translatedText)
+                            match = re.search(r'(^\[.+?\]\s?[|:]\s?)', translatedText)
+                            if match:
+                                translatedText = translatedText.replace(match.group(1), "")
 
                             # Fix '- '
                             translatedText = translatedText.replace("- ", "-")
@@ -1164,10 +1161,10 @@ def searchCodes(page, pbar, jobList, filename):
                                 finalJAString = finalJAString.replace("<br>", " ")
 
                             if FIXTEXTWRAP is True and "_ABL" in nametag:
-                                translatedText = textwrap.fill(translatedText, width=100)
+                                translatedText = dazedwrap.wrapText(translatedText, width=100)
                                 # # translatedText = translatedText.replace("\n", "\\n")
                             elif FIXTEXTWRAP is True:
-                                translatedText = textwrap.fill(translatedText, width=WIDTH)
+                                translatedText = dazedwrap.wrapText(translatedText, width=WIDTH)
                                 # # translatedText = translatedText.replace("\n", "\\n")
 
                             # BR Flag
@@ -1286,7 +1283,7 @@ def searchCodes(page, pbar, jobList, filename):
                                     translatedText = translatedText.replace(char, "")
 
                                 # Textwrap
-                                translatedText = textwrap.fill(translatedText, width=WIDTH)
+                                translatedText = dazedwrap.wrapText(translatedText, width=WIDTH)
                                 # translatedText = translatedText.replace("\n", "\\n")
 
                                 # Set
@@ -1338,7 +1335,7 @@ def searchCodes(page, pbar, jobList, filename):
                                     translatedText = translatedText.replace(char, "")
 
                                 # Textwrap
-                                # translatedText = textwrap.fill(translatedText, 80)
+                                # translatedText = dazedwrap.wrapText(translatedText, 80)
                                 # # translatedText = translatedText.replace("\n", "\\n")
                                 # translatedText = re.sub(r"[\\]+c", r"\\\\c", translatedText)
                                 translatedText = re.sub(r"[\\]+\*item", r"\\\\*item", translatedText)
@@ -1387,7 +1384,7 @@ def searchCodes(page, pbar, jobList, filename):
                     totalTokens[1] += response[1][1]
 
                     # Textwrap & Set
-                    translatedText = textwrap.fill(translatedText, width=WIDTH)
+                    translatedText = dazedwrap.wrapText(translatedText, width=WIDTH)
                     # translatedText = translatedText.replace("\n", "\\n")
                     codeList[i]["p"][3]["messageText"] = translatedText
 
@@ -1460,7 +1457,7 @@ def searchCodes(page, pbar, jobList, filename):
                         translatedText = translatedText.replace(char, "")
 
                     # Textwrap
-                    translatedText = textwrap.fill(translatedText, width=WIDTH)
+                    translatedText = dazedwrap.wrapText(translatedText, width=WIDTH)
                     # translatedText = translatedText.replace("\n", "\\n")
                     translatedText = startString + translatedText + endString
 
@@ -1633,7 +1630,7 @@ def searchCodes(page, pbar, jobList, filename):
                         translatedText = translatedText.replace(char, "")
 
                     # Textwrap
-                    translatedText = textwrap.fill(translatedText, width=WIDTH)
+                    translatedText = dazedwrap.wrapText(translatedText, width=WIDTH)
                     # translatedText = translatedText.replace("\n", "\\n")
 
                     # Set Data
@@ -1687,7 +1684,7 @@ def searchCodes(page, pbar, jobList, filename):
 
                         # Textwrap
                         # if codeList[i + 1]["c"] == 408:
-                        #     translatedText = textwrap.fill(translatedText, WIDTH)
+                        #     translatedText = dazedwrap.wrapText(translatedText, WIDTH)
                         #     # translatedText = translatedText.replace("\n", "\\n")
 
                         # Remove characters that may break scripts
@@ -1847,7 +1844,7 @@ def searchCodes(page, pbar, jobList, filename):
                         totalTokens[1] += response[1][1]
 
                         # Textwrap & Replace Whitespace
-                        translatedText = textwrap.fill(translatedText, width=WIDTH)
+                        translatedText = dazedwrap.wrapText(translatedText, width=WIDTH)
                         # translatedText = translatedText.replace("\n", "\\n")
                         translatedText = translatedText.replace(" ", "_")
 
@@ -2302,7 +2299,7 @@ Translate 'Taroを倒した！' as 'Taro was defeated!'",
     if "description" in state:
         # Textwrap
         translatedText = descriptionResponse[0]
-        translatedText = textwrap.fill(translatedText, width=LISTWIDTH)
+        translatedText = dazedwrap.wrapText(translatedText, width=LISTWIDTH)
         # translatedText = translatedText.replace("\n", "\\n")
         state["description"] = translatedText.replace('"', "")
     if "message1" in state:

@@ -1,7 +1,7 @@
 import os
 from pathlib import Path
 import re
-import textwrap
+import util.dazedwrap as dazedwrap
 import threading
 import time
 import traceback
@@ -169,7 +169,7 @@ def translateText(data, pbar):
                 textHistory.pop(0)
 
             # Textwrap
-            translatedText = textwrap.fill(translatedText, width=WIDTH)
+            translatedText = dazedwrap.wrapText(translatedText, width=WIDTH)
             translatedText = translatedText.replace("\n", "\\n")
 
             # Write

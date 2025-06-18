@@ -2,7 +2,6 @@
 import json
 import os
 import re
-import textwrap
 import util.dazedwrap as dazedwrap
 import threading
 import time

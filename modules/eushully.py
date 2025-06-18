@@ -1,7 +1,7 @@
 # Libraries
 import os
 import re
-import textwrap
+import util.dazedwrap as dazedwrap
 import threading
 import time
 import traceback
@@ -246,7 +246,7 @@ def translateEushully(data, pbar, filename, translatedList):
                             translatedText = re.sub(r"^\[?(.+?)\]?\s?[|:]\s?", "", translatedText)
 
                         # Textwrap
-                        translatedText = textwrap.fill(translatedText, width=WIDTH)
+                        translatedText = dazedwrap.wrapText(translatedText, width=WIDTH)
                         translatedTextList = translatedText.split("\n")
 
                         # Set Data
@@ -303,7 +303,7 @@ def translateEushully(data, pbar, filename, translatedList):
                         translatedText = translatedText.replace('"', "'")
 
                         # Textwrap
-                        translatedText = textwrap.fill(translatedText, width=LISTWIDTH)
+                        translatedText = dazedwrap.wrapText(translatedText, width=LISTWIDTH)
                         translatedText = translatedText.replace("\n", "\\n")
 
                         # Set Data

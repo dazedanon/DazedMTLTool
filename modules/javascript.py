@@ -1,7 +1,7 @@
 # Libraries
 import os
 import re
-import textwrap
+import util.dazedwrap as dazedwrap
 import threading
 import time
 import traceback
@@ -200,7 +200,7 @@ def translateJS(data, pbar):
                     translatedList[j] = re.sub(r"[^\\](')", "\\'", translatedList[j])
 
                     # Wordwrap [Optional]
-                    translatedList[j] = textwrap.fill(translatedList[j], LISTWIDTH)
+                    translatedList[j] = dazedwrap.wrapText(translatedList[j], LISTWIDTH)
                     translatedList[j] = translatedList[j].replace("\n", r"\\\\\\\\n")
 
                     # Set
