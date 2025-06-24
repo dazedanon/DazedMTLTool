@@ -1130,6 +1130,7 @@ def searchCodes(page, pbar, jobList, filename):
                     finalJAString = finalJAString.replace("　", "")
                     finalJAString = finalJAString.replace("「", '"')
                     finalJAString = finalJAString.replace("」", '"')
+                    finalJAString = finalJAString.replace("\\,", ',')
 
                     ### Remove format codes
                     # Furigana

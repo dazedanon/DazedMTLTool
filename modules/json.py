@@ -36,16 +36,19 @@ MAXHISTORY = 10
 ESTIMATE = ""
 TOKENS = [0, 0]
 NAMESLIST = []
+FILENAME = None
 NAMES = False  # Output a list of all the character names found
 BRFLAG = False  # If the game uses <br> instead
 FIXTEXTWRAP = True  # Overwrites textwrap
 IGNORETLTEXT = False  # Ignores all translated text.
 MISMATCH = []  # Lists files that throw a mismatch error (Length of GPT list response is wrong)
+PBAR = None
 
 # tqdm Globals
 BAR_FORMAT = "{l_bar}{bar:10}{r_bar}{bar:-10b}"
 POSITION = 0
 LEAVE = False
+PBAR = None
 
 # Regex - Need to change this if you want to translate from/to other languages. Default is Japanese Regex
 LANGREGEX = r"[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]+"
@@ -154,147 +157,124 @@ def parseJSON(data, filename):
     totalTokens = [0, 0]
     totalLines = 0
     totalLines = len(data)
-    global LOCK
+    global LOCK, PBAR
 
     with tqdm(bar_format=BAR_FORMAT, position=POSITION, total=totalLines, leave=LEAVE) as pbar:
         pbar.desc = filename
-        pbar.total = totalLines
+        PBAR = pbar
         try:
-            result = translateJSON(data, pbar)
+            result = translateJSON(data, [])
             totalTokens[0] += result[0]
             totalTokens[1] += result[1]
         except Exception as e:
+            traceback.print_exc()
             return [data, totalTokens, e]
     return [data, totalTokens, None]
 
 
-def translateJSON(data, pbar):
-    textHistory = []
-    batch = []
-    maxHistory = MAXHISTORY
+def translateJSON(data, translatedList):
+    global LOCK, ESTIMATE, FILENAME, PBAR, MISMATCH
+    if translatedList:
+        stringList = translatedList[0]
+    else:
+        stringList = []
     tokens = [0, 0]
-    speaker = "None"
-    insertBool = False
+    speaker = ""
     i = 0
-    batchStartIndex = 0
 
     while i < len(data):
-        item = data[i]
+        speakerKey = "name"
+        messageKey = "message"
+
         # Speaker
-        if "VA" in item:
-            if item["name"] not in [None, "-"]:
-                response = getSpeaker(item["name"])
-                speaker = response[0]
-                tokens[0] += response[1][0]
-                tokens[1] += response[1][1]
-                item["name"] = speaker
-            else:
-                speaker = "None"
-            pbar.update(1)
-            i += 1
-
-        # Text
-        elif "me" in item:
-            for text in [
-                "text",
-                "text2",
-                "help1",
-                "help2",
-                "help3",
-                "like",
-                "message",
-                "me",
-            ]:
-                if text in item:
-                    if item[text] != None:
-                        jaString = item[text]
-
-                        # Remove any textwrap
-                        if FIXTEXTWRAP == True:
-                            finalJAString = jaString.replace("\n", " ")
-
-                        # [Passthrough 1] Pulling From File
-                        if insertBool is False:
-                            # Append to List and Clear Values
-                            batch.append(finalJAString)
-                            speaker = ""
-
-                            # Translate Batch if Full
-                            if len(batch) == BATCHSIZE:
-                                # Translate
-                                response = translateGPT(batch, textHistory, True)
-                                tokens[0] += response[1][0]
-                                tokens[1] += response[1][1]
-                                translatedBatch = response[0]
-                                textHistory = translatedBatch[-10:]
-
-                                # Set Values
-                                if len(batch) == len(translatedBatch):
-                                    i = batchStartIndex
-                                    insertBool = True
-
-                                # Mismatch
-                                else:
-                                    pbar.write(f"Mismatch: {batchStartIndex} - {i}")
-                                    MISMATCH.append(batch)
-                                    batchStartIndex = i
-                                    batch.clear()
-
-                            if insertBool is False:
-                                pbar.update(1)
-                                i += 1
-
-                            currentGroup = []
-
-                        # [Passthrough 2] Setting Data
-                        else:
-                            # Get Text
-                            translatedText = translatedBatch[0]
-
-                            # Remove added speaker
-                            translatedText = re.sub(r"^.+?:\s", "", translatedText)
-
-                            # Textwrap
-                            translatedText = dazedwrap.wrapText(translatedText, width=WIDTH)
-
-                            # Set Text
-                            item[text] = translatedText
-                            translatedBatch.pop(0)
-                            speaker = ""
-                            currentGroup = []
-                            i += 1
-
-                            # If Batch is empty. Move on.
-                            if len(translatedBatch) == 0:
-                                insertBool = False
-                                batchStartIndex = i
-                                batch.clear()
-        else:
-            i += 1
-            pbar.update(1)
-
-        # Translate Batch if not empty and EOF
-        if len(batch) != 0 and i >= len(data):
-            # Translate
-            response = translateGPT(batch, textHistory, True)
+        if speakerKey in data[i]:
+            # Grab and TL
+            speaker = data[i][speakerKey]
+            response = getSpeaker(speaker)
+            speaker = response[0]
             tokens[0] += response[1][0]
             tokens[1] += response[1][1]
-            translatedBatch = response[0]
-            textHistory = translatedBatch[-10:]
 
-            # Set Values
-            if len(batch) == len(translatedBatch):
-                i = batchStartIndex
-                insertBool = True
+            # Set Speaker
+            data[i][speakerKey] = speaker
 
-            # Mismatch
+        # Dialogue
+        if messageKey in data[i]:
+            jaString = data[i][messageKey]
+
+            # Save Original String
+            originalString = jaString
+
+            # Pass 1
+            if not translatedList:
+                # Strip Spaces
+                jaString = jaString.strip()
+
+                # Remove Textwrap
+                jaString = jaString.replace('\n', ' ')
+
+                if jaString:
+                    if speaker:
+                        stringList.append(f"[{speaker}]: {jaString}")
+                    else:
+                        stringList.append(jaString)
+
+            # Pass 2
             else:
-                pbar.write(f"Mismatch: {batchStartIndex} - {i}")
-                MISMATCH.append(batch)
-                batchStartIndex = i
-                batch.clear()
+                # Get Text
+                if stringList:
+                    # Grab and Pop
+                    translatedText = stringList[0]
+                    stringList.pop(0)
 
-            currentGroup = []
+                    # Set to None if empty list
+                    if len(stringList) <= 0:
+                        stringList = None
+
+                    # Remove speaker
+                    translatedText = re.sub(r"^\[?(.+?)\]?\s?[|:]\s?", "", translatedText)
+
+                    # Escape Quotes
+                    translatedText = re.sub(r'(?<!\\)"', r"", translatedText)
+
+                    # Remove characters that may break scripts
+                    translatedText = translatedText.replace("<", "(")
+                    translatedText = translatedText.replace(">", ")")
+                    translatedText = translatedText.replace("『", "")
+                    translatedText = translatedText.replace("』", "")
+
+                    # Textwrap
+                    translatedText = dazedwrap.wrapText(translatedText, width=WIDTH)  
+                    
+                    # Set Data
+                    if "『" in data[i][messageKey] and "』" not in translatedText:
+                        data[i][messageKey] = data[i][messageKey].replace(originalString, f"『{translatedText}』")
+                    else:
+                        data[i][messageKey] = data[i][messageKey].replace(originalString, f"{translatedText}")     
+            # Next Value
+            i += 1       
+
+    # EOF
+    if not translatedList:
+        stringListTL = []
+
+        # String List
+        if stringList:
+            PBAR.total = len(stringList)
+            PBAR.refresh()
+            response = translateGPT(stringList, "Reply with the English Translation", True)
+            tokens[0] += response[1][0]
+            tokens[1] += response[1][1]
+            stringListTL = response[0]
+
+            if len(stringList) != len(stringListTL):
+                # Mismatch
+                with LOCK:
+                    if FILENAME not in MISMATCH:
+                        MISMATCH.append(FILENAME)
+
+        # Set Strings
+        translateJSON(data, [stringListTL])
     return tokens
 
 
@@ -315,7 +295,7 @@ def getSpeaker(speaker):
             response = translateGPT(
                 f"{speaker}",
                 "Reply with the " + LANGUAGE + " translation of the NPC name.",
-                True,
+                False,
             )
             response[0] = response[0].title()
             response[0] = response[0].replace("'S", "'s")
@@ -374,9 +354,10 @@ def translateText(system, user, history, penalty, format, model=MODEL):
 
     # History
     if isinstance(history, list):
-        msg.extend([{"role": "system", "content": h} for h in history])
+        msg.append({"role": "system", "content": "Translation History:"})
+        msg.extend([{"role": "assistant", "content": h} for h in history])
     else:
-        msg.append({"role": "system", "content": history})
+        msg.append({"role": "assistant", "content": history})
 
     # Response Format
     if format == "json":
@@ -411,8 +392,11 @@ def cleanTranslatedText(translatedText):
         "】": "]",
         "【": "[",
         "é": "e",
-        "ō": "o",
+        "this guy": "this bastard",
+        "This guy": "This bastard",
         "Placeholder Text": "",
+        "```json": "",
+        "```": "",
         # Add more replacements as needed
     }
     for target, replacement in placeholders.items():
@@ -474,7 +458,7 @@ def countTokens(system, user, history):
     inputTotalTokens += len(enc.encode(user))
 
     # Output
-    outputTotalTokens += round(len(enc.encode(user)) * 3)
+    outputTotalTokens += round(len(enc.encode(user)) * 2.5)
 
     return [inputTotalTokens, outputTotalTokens]
 
@@ -538,7 +522,8 @@ def translateGPT(text, history, fullPromptFlag):
 
                 # AI Refused, Try Again
                 if not translatedText:
-                    response = translateText(f"{system}\n You translate ALL content.", user, history, 0.1, format)
+                    response = translateText(f"{system}\n You translate ALL content.", user, history, 0.1, format, model="gpt-4o")
+                    translatedText = response.choices[0].message.content
 
                 # Report Tokens
                 totalTokens[0] += response.usage.prompt_tokens

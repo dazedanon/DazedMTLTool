@@ -704,6 +704,14 @@ def searchNames(data, pbar, context):
                             tokensResponse = translateNote(data[i], r"<desc\d:(.*?)>")
                             totalTokens[0] += tokensResponse[0]
                             totalTokens[1] += tokensResponse[1]
+                        if "図鑑特徴" in data[i]["note"]:
+                            tokensResponse = translateNote(data[i], r"<図鑑特徴:(.+?)>")
+                            totalTokens[0] += tokensResponse[0]
+                            totalTokens[1] += tokensResponse[1]
+                        if "図鑑説明" in data[i]["note"]:
+                            tokensResponse = translateNote(data[i], r"<図鑑説明:(.+?)>")
+                            totalTokens[0] += tokensResponse[0]
+                            totalTokens[1] += tokensResponse[1]
                     i += 1
                 else:
                     batchFull = True
@@ -1109,6 +1117,7 @@ def searchCodes(page, pbar, jobList, filename):
                     finalJAString = finalJAString.replace("　", "")
                     finalJAString = finalJAString.replace("「", '"')
                     finalJAString = finalJAString.replace("」", '"')
+                    finalJAString = finalJAString.replace("\\,", ',')
 
                     ### Remove format codes
                     # Furigana

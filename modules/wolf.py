@@ -1279,7 +1279,7 @@ def searchDB(events, pbar, jobList, filename):
                                         dbValueList[0].pop(0)
 
             # Grab Items
-            if table["name"] == "アイテム" and ITEMFLAG == True:
+            if table["name"] == "勲章コモン" and ITEMFLAG == True:
                 # Write Category
                 if setData:
                     with open("translations.txt", "a", encoding="utf-8") as file:
@@ -1293,7 +1293,7 @@ def searchDB(events, pbar, jobList, filename):
                     font = 20
                     for j in range(len(dataList)):
                         # Name
-                        if dataList[j].get("name") == "アイテム名":
+                        if dataList[j].get("name") == "勲章名":
                             jaString = dataList[j].get("value")
                             if jaString != "":
                                 # Pass 1 (Grab Data)
@@ -1311,7 +1311,7 @@ def searchDB(events, pbar, jobList, filename):
                                     itemList[0].pop(0)
 
                         # Description
-                        if dataList[j].get("name") == "NULL":
+                        if dataList[j].get("name") == "説明文":
                             # Pass 1 (Grab Data)
                             if setData == False:
                                 if dataList[j].get("value") != "":
@@ -1328,7 +1328,7 @@ def searchDB(events, pbar, jobList, filename):
                                 if dataList[j].get("value") != "":
                                     # Textwrap
                                     translatedText = itemList[1][0]
-                                    # translatedText = dazedwrap.wrapText(translatedText, LISTWIDTH)
+                                    translatedText = dazedwrap.wrapText(translatedText, LISTWIDTH)
 
                                     # Font
                                     if font:
