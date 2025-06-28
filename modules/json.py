@@ -243,6 +243,12 @@ def translateJSON(data, translatedList):
                     translatedText = translatedText.replace("『", "")
                     translatedText = translatedText.replace("』", "")
 
+                    # Remove GPT ' Quotes
+                    if translatedText[0] == "'":
+                        translatedText = translatedText[1:]
+                    if translatedText[-1] == "'":
+                        translatedText = translatedText[:-1]
+
                     # Textwrap
                     translatedText = dazedwrap.wrapText(translatedText, width=WIDTH)  
                     

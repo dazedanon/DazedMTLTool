@@ -1762,8 +1762,8 @@ def searchCodes(page, pbar, jobList, filename):
                     continue
 
                 # Want to translate this script
-                if "D____TEXT " in jaString:
-                    regex = r"D_TEXT\s(.+)\s?.*"
+                if "D_TEXT " in jaString:
+                    regex = r"D_TEXT\s([^\s]+)\s?\d*"
                 elif "ShowInfo" in jaString:
                     regex = r"ShowInfo\s(.*)"
                 elif "PushGab" in jaString:
