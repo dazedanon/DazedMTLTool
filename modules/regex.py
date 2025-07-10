@@ -194,7 +194,7 @@ def translateRegex(data, translatedList):
 
     while i < len(data):
         voice = False
-        lineRegexText = r"◆B.+?◆(.+)"
+        lineRegexText = r'"Text":\s"(.+)",'
         lineRegexSpeaker = r"◆A.+?◆(.+)"
         choiceRegex = r"\$menu_item.+?,(.*?),"
         titleRegex = r"title\s'(.*)'$"

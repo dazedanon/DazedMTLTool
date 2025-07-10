@@ -183,11 +183,11 @@ def translateJSON(data, translatedList):
     i = 0
 
     while i < len(data):
-        speakerKey = "name"
-        messageKey = "message"
+        speakerKey = "character_nameText"
+        messageKey = "m_text"
 
         # Speaker
-        if speakerKey in data[i]:
+        if speakerKey in data[i] and data[i][speakerKey]:
             # Grab and TL
             speaker = data[i][speakerKey]
             response = getSpeaker(speaker)
@@ -199,11 +199,19 @@ def translateJSON(data, translatedList):
             data[i][speakerKey] = speaker
 
         # Dialogue
-        if messageKey in data[i]:
+        if messageKey in data[i]\
+            and data[i][messageKey].strip()\
+            and data[i][messageKey] != "a"\
+            and data[i][messageKey].replace("\u3000", "").strip() != "":
             jaString = data[i][messageKey]
 
             # Save Original String
             originalString = jaString
+
+            # If there isn't any Japanese in the text just skip
+            if not re.search(LANGREGEX, jaString):
+                i += 1
+                continue
 
             # Pass 1
             if not translatedList:
@@ -211,7 +219,7 @@ def translateJSON(data, translatedList):
                 jaString = jaString.strip()
 
                 # Remove Textwrap
-                jaString = jaString.replace('\n', ' ')
+                # jaString = jaString.replace('\n', ' ')
 
                 if jaString:
                     if speaker:
@@ -232,33 +240,38 @@ def translateJSON(data, translatedList):
                         stringList = None
 
                     # Remove speaker
-                    translatedText = re.sub(r"^\[?(.+?)\]?\s?[|:]\s?", "", translatedText)
+                    match = re.search(r'(^\[.+?\]\s?[|:]\s?)', translatedText)
+                    if match:
+                        translatedText = translatedText.replace(match.group(1), "") 
 
                     # Escape Quotes
                     translatedText = re.sub(r'(?<!\\)"', r"", translatedText)
 
                     # Remove characters that may break scripts
-                    translatedText = translatedText.replace("<", "(")
-                    translatedText = translatedText.replace(">", ")")
+                    # translatedText = translatedText.replace("<", "(")
+                    # translatedText = translatedText.replace(">", ")")
                     translatedText = translatedText.replace("『", "")
                     translatedText = translatedText.replace("』", "")
 
                     # Remove GPT ' Quotes
-                    if translatedText[0] == "'":
-                        translatedText = translatedText[1:]
-                    if translatedText[-1] == "'":
-                        translatedText = translatedText[:-1]
+                    if translatedText:
+                        if translatedText[0] == "'":
+                            translatedText = translatedText[1:]
+                        if translatedText[-1] == "'":
+                            translatedText = translatedText[:-1]
+                    else:
+                        print("Warning: Empty Translation for", originalString)
 
                     # Textwrap
-                    translatedText = dazedwrap.wrapText(translatedText, width=WIDTH)  
+                    # translatedText = dazedwrap.wrapText(translatedText, width=WIDTH)  
                     
                     # Set Data
                     if "『" in data[i][messageKey] and "』" not in translatedText:
                         data[i][messageKey] = data[i][messageKey].replace(originalString, f"『{translatedText}』")
                     else:
                         data[i][messageKey] = data[i][messageKey].replace(originalString, f"{translatedText}")     
-            # Next Value
-            i += 1       
+        # Next Value
+        i += 1       
 
     # EOF
     if not translatedList:
