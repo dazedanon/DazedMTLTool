@@ -204,10 +204,14 @@ def translatePlugin(data, pbar, filename, translatedList):
         voice = False
         speaker = ""
         newline = r"\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\n"
-        colorCode = r"\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\C"
+        colorCode = r"\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\c"
 
         # Custom
-        regex = r'=\s\[".+?",\s"(.+)"\]'
+        # Useful Regex's
+        # r'"Text[\\]+":[\\]+"(.+?)[\\]+",'
+        # r'"HelpText[\\]+":[\\]+"(.+?)[\\]+",'
+        # r"this.drawTextEx\(\\'(.+?)\',"
+        regex = r"this.drawTextEx\(\\'(.+?)\',"
         matchList = re.findall(regex, data[i])
         if len(matchList) > 0:
             for match in matchList:
@@ -215,12 +219,17 @@ def translatePlugin(data, pbar, filename, translatedList):
                 jaString = match
                 originalString = jaString
 
+                # Make sure didn't grab \\
+                if re.search(r"^[\\]+$", jaString):
+                    i += 1
+                    continue
+
                 # Replace \n and \c
                 jaString = re.sub(r"\\+n", r"\\n", jaString)
                 jaString = re.sub(r"\\+C", r"\\C", jaString)
 
                 # Remove any textwrap
-                # jaString = jaString.replace(newline, " ")
+                jaString = jaString.replace("\\n", " ")
 
                 if jaString.replace("\u3000", "") and jaString:
                     # Pass 1
@@ -239,15 +248,15 @@ def translatePlugin(data, pbar, filename, translatedList):
                                 translatedList = None
 
                             # Replace Single Quotes
-                            translatedText = re.sub(r"([^\\'])'", r"\1\\'", translatedText)
-                            translatedText = re.sub(r"([^\\'])\"", r"\1\\'", translatedText)
+                            translatedText = re.sub(r"([^\\'])'", r"\1՚", translatedText)
+                            translatedText = re.sub(r"([^\\'])\"", r"\1՚", translatedText)
 
                             # Textwrap
                             translatedText = dazedwrap.wrapText(translatedText, WIDTH)
 
                             # Replace \n and \c
-                            translatedText = re.sub(r"\\+n", re.escape(newline), translatedText)
-                            translatedText = re.sub(r"\\+C", re.escape(colorCode), translatedText)
+                            translatedText = re.sub(r"\n", re.escape(newline), translatedText)
+                            translatedText = re.sub(r"\n", re.escape(colorCode), translatedText)
 
                             # Set Data
                             with open("translations.txt", "a+", encoding="utf-8") as tlFile:

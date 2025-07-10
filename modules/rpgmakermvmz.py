@@ -1025,6 +1025,15 @@ def searchCodes(page, pbar, jobList, filename):
                         and len(codeList[i + 1]["parameters"][0]) > 0
                     ):
                         nextString = codeList[i + 1]["parameters"][0].strip()
+
+                        # Remove any RPGMaker Code at start
+                        ffMatchNS = re.search(
+                            r"^((?:[\\]+[^cCnNiIkKvV{}]+\[[\d\w\W]+\])+)",
+                            nextString,
+                        )
+                        if ffMatchNS != None:
+                            nextString = nextString.replace(ffMatchNS.group(1), "")
+
                         if nextString and nextString[0] in [
                             "「",
                             '"',
@@ -1141,7 +1150,7 @@ def searchCodes(page, pbar, jobList, filename):
 
                     # Remove any RPGMaker Code at start
                     ffMatch = re.search(
-                        r"^((?:[\\]+[^cCnNiIkKvV{}]+\[[\d\w]+\])+)",
+                        r"^((?:[\\]+[^cCnNiIkKvV{}]+\[[\d\w\W]+\])+)",
                         finalJAString,
                     )
                     if ffMatch != None:
@@ -1473,7 +1482,7 @@ def searchCodes(page, pbar, jobList, filename):
 
                         # Replace Strings
                         for j in range(len(matchList)):
-                            translatedText = translatedText.replace(matchList[j], response[0][j])
+                            translatedText = translatedText.replace(matchList[j], response[0][j].replace('"', ''))
 
                         # Set Data
                         codeList[i]["parameters"][3]["choices"] = translatedText
