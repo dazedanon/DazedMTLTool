@@ -10,8 +10,10 @@ def _get_visible_length(text: str) -> int:
     Returns:
         int: The length of the text excluding color codes
     """
-    # Remove all color codes like \c[5] or \C[35]
+    # Remove all color codes like \c[5] or \C[35], and also ignore \\! and \\.
     cleaned_text = re.sub(r'[\\]+[cC]\[\d+\]', '', text)
+    # Remove \\! and \\.
+    cleaned_text = re.sub(r'[\\]+.', '', cleaned_text)
     return len(cleaned_text)
 
 def wrapText(text: str, width: int) -> str:
