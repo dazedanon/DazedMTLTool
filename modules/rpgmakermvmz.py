@@ -549,10 +549,11 @@ def searchNames(data, pbar, context):
         (r"<PE拡張:(.*?)>", False),
         (r"<hint:(.*?)>", False),
         (r"<SGDescription:(.*?)>", False),
-        (r"<SG説明:\n?(.*?)>", False),
+        (r"<SG説明:\n?(.*?)>", True),
         (r"<SG説明2:\n?(.*?)>", False),
         (r"<SG説明3:\n?(.*?)>", False),
         (r"<SG説明4:\n?(.*?)>", False),
+        (r"<SG説明:.+?Client\s?:.+?\n\n(.*?)>", True),
         (r"<SGカテゴリ:(.*?)>", False),
         (r"<Switch Shop Description>\n(.*)\n", False),
         (r"<MapText:(.*?)>", False),
@@ -576,10 +577,19 @@ def searchNames(data, pbar, context):
         note = entry["note"]
         for regex, wordwrap in note_regexes:
             matches = re.findall(regex, note, re.DOTALL)
-            for m in matches:
-                match_text = m if isinstance(m, str) else m[0]
-                notesBatch.append(match_text)
-                notesBatchMap.append((idx, regex, match_text, wordwrap))
+            # Special filter for <SG説明:...> to skip if 'Client' is in the match
+            if regex.startswith(r"<SG説明:"):
+                for m in matches:
+                    match_text = m if isinstance(m, str) else m[0]
+                    if "Client:" in match_text or "Client :":
+                        continue
+                    notesBatch.append(match_text)
+                    notesBatchMap.append((idx, regex, match_text, wordwrap))
+            else:
+                for m in matches:
+                    match_text = m if isinstance(m, str) else m[0]
+                    notesBatch.append(match_text)
+                    notesBatchMap.append((idx, regex, match_text, wordwrap))
 
     # --- Batch translate all notes ---
     translatedNotesBatch = []
