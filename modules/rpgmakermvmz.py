@@ -512,7 +512,9 @@ def searchNames(data, pbar, context):
     profileList = []
     nicknameList = []
     descriptionList = []
-    noteList = []
+    # For batching all note types
+    notesBatch = []  # List of (i, regex, match_text, note_type)
+    notesBatchMap = []  # List of (i, regex, match_text, note_type, groupidx)
     i = 0  # Counter
     j = 0  # Counter 2
     filling = False
@@ -540,13 +542,77 @@ def searchNames(data, pbar, context):
     # Names
     with open("translations.txt", "a", encoding="utf-8") as file:
         file.write(f"\n#{context}\n")
+
+    # --- Batching pass: collect all note texts for all note types ---
+    note_regexes = [
+        (r"<note:(.*?)>", False),
+        (r"<PE拡張:(.*?)>", False),
+        (r"<hint:(.*?)>", False),
+        (r"<SGDescription:(.*?)>", False),
+        (r"<SG説明:\n?(.*?)>", False),
+        (r"<SG説明2:\n?(.*?)>", False),
+        (r"<SG説明3:\n?(.*?)>", False),
+        (r"<SG説明4:\n?(.*?)>", False),
+        (r"<SGカテゴリ:(.*?)>", False),
+        (r"<Switch Shop Description>\n(.*)\n", False),
+        (r"<MapText:(.*?)>", False),
+        (r"WATs:(.+?)>", False),
+        (r"ADTs?:(.+?)>", False),
+        (r"<detail:(.*?)>", False),
+        (r"<Name:(.*?)>", False),
+        (r"<sub_1:([^>]+)", True),
+        (r"<sub_2:([^>]+)", True),
+        (r"<sub_3:([^>]+)", True),
+        (r"<infowindow:(.*?)>", True),
+        (r"<ExtendDesc:(.*?)>", True),
+        (r"<desc\d:(.*?)>", False),
+        (r"<拡張説明:(.+?)>", False),
+        (r"<STS DESC>\n(.+?)\n<", False),
+    ]
+    # For each entry, collect all note matches
+    for idx, entry in enumerate(data):
+        if entry is None or "note" not in entry or not entry["note"]:
+            continue
+        note = entry["note"]
+        for regex, wordwrap in note_regexes:
+            matches = re.findall(regex, note, re.DOTALL)
+            for m in matches:
+                match_text = m if isinstance(m, str) else m[0]
+                notesBatch.append(match_text)
+                notesBatchMap.append((idx, regex, match_text, wordwrap))
+
+    # --- Batch translate all notes ---
+    translatedNotesBatch = []
+    if notesBatch:
+        response = translateGPT(notesBatch, f"Reply with only the {LANGUAGE} translation of the note text.", True)
+        translatedNotesBatch = response[0]
+        totalTokens[0] += response[1][0]
+        totalTokens[1] += response[1][1]
+
+    # --- Insert translated notes back ---
+    note_insert_idx = 0
+    for idx, regex, match_text, wordwrap in notesBatchMap:
+        if note_insert_idx >= len(translatedNotesBatch):
+            break
+        translated = translatedNotesBatch[note_insert_idx]
+        if wordwrap:
+            translated = dazedwrap.wrapText(translated, width=NOTEWIDTH)
+            translated = translated.replace('"', "")
+        # Use a safe literal match for the replacement (no re.escape, just str.replace)
+        data[idx]["note"] = data[idx]["note"].replace(match_text, translated, 1)
+        note_insert_idx += 1
+
+    # Now continue with the rest of the batching logic for names, descriptions, etc.
+    i = 0
+    filling = False
+    batchFull = False
+    mismatch = False
     while i < len(data) or filling == True:
         if i < len(data):
             # Empty Data
             if data[i] is None or data[i]["name"] == "":
                 i += 1
                 continue
-
             # Filling up Batch
             filling = True
             if context in "Actors":
@@ -557,16 +623,6 @@ def searchNames(data, pbar, context):
                         nicknameList.append(data[i]["nickname"])
                     if "profile" in data[i] and data[i]["profile"]:
                         profileList.append(data[i]["profile"].replace("\n", " "))
-
-                    # Notes
-                    if "<note:" in data[i]["note"]:
-                        tokensResponse = translateNote(data[i], r"<note:(.*?)>")
-                        totalTokens[0] += tokensResponse[0]
-                        totalTokens[1] += tokensResponse[1]
-                    if "PE拡張" in data[i]["note"]:
-                        tokensResponse = translateNote(data[i], r"<PE拡張:(.*?)>")
-                        totalTokens[0] += tokensResponse[0]
-                        totalTokens[1] += tokensResponse[1]
                     i += 1
                 else:
                     batchFull = True
@@ -577,80 +633,6 @@ def searchNames(data, pbar, context):
                         description = data[i]["description"]
                         description = description.replace("\n", " ")
                         descriptionList.append(description)
-                    if "<hint:" in data[i]["note"]:
-                        tokensResponse = translateNote(data[i], r"<hint:(.*?)>")
-                        totalTokens[0] += tokensResponse[0]
-                        totalTokens[1] += tokensResponse[1]
-                    if "<SGDescription:" in data[i]["note"]:
-                        tokensResponse = translateNote(data[i], r"<SGDescription:(.*?)>")
-                        totalTokens[0] += tokensResponse[0]
-                        totalTokens[1] += tokensResponse[1]
-                    if "<SG説明:" in data[i]["note"]:
-                        tokensResponse = translateNote(data[i], r"<SG説明:\n?(.*?)>")
-                        totalTokens[0] += tokensResponse[0]
-                        totalTokens[1] += tokensResponse[1]
-                    if "<SG説明2:" in data[i]["note"]:
-                        tokensResponse = translateNote(data[i], r"<SG説明2:\n?(.*?)>")
-                        totalTokens[0] += tokensResponse[0]
-                        totalTokens[1] += tokensResponse[1]
-                    if "<SG説明3:" in data[i]["note"]:
-                        tokensResponse = translateNote(data[i], r"<SG説明3:\n?(.*?)>")
-                        totalTokens[0] += tokensResponse[0]
-                        totalTokens[1] += tokensResponse[1]
-                    if "<SG説明4:" in data[i]["note"]:
-                        tokensResponse = translateNote(data[i], r"<SG説明4:\n?(.*?)>")
-                        totalTokens[0] += tokensResponse[0]
-                        totalTokens[1] += tokensResponse[1]
-                    if "<SGカテゴリ:" in data[i]["note"]:
-                        tokensResponse = translateNote(data[i], r"<SGカテゴリ:(.*?)>")
-                        totalTokens[0] += tokensResponse[0]
-                        totalTokens[1] += tokensResponse[1]
-                    if "Switch Shop Description" in data[i]["note"]:
-                        tokensResponse = translateNote(data[i], r"<Switch Shop Description>\n(.*)\n")
-                        totalTokens[0] += tokensResponse[0]
-                        totalTokens[1] += tokensResponse[1]
-                    if "<MapText:" in data[i]["note"]:
-                        tokensResponse = translateNote(data[i], r"<MapText:(.*?)>")
-                        totalTokens[0] += tokensResponse[0]
-                        totalTokens[1] += tokensResponse[1]
-                    if "<WATs:" in data[i]["note"]:
-                        tokensResponse = translateNote(data[i], r"WATs:(.+?)>")
-                        totalTokens[0] += tokensResponse[0]
-                        totalTokens[1] += tokensResponse[1]
-                    if "<ADT:" in data[i]["note"]:
-                        tokensResponse = translateNote(data[i], r"ADTs?:(.+?)>")
-                        totalTokens[0] += tokensResponse[0]
-                        totalTokens[1] += tokensResponse[1]
-                    if "<detail" in data[i]["note"]:
-                        tokensResponse = translateNote(data[i], r"<detail:(.*?)>")
-                        totalTokens[0] += tokensResponse[0]
-                        totalTokens[1] += tokensResponse[1]
-                    if "<Name" in data[i]["note"]:
-                        tokensResponse = translateNote(data[i], r"<Name:(.*?)>")
-                        totalTokens[0] += tokensResponse[0]
-                        totalTokens[1] += tokensResponse[1]
-                    if "sub_1" in data[i]["note"]:
-                        tokensResponse = translateNote(data[i], r"<sub_1:([^>]+)", True)
-                        totalTokens[0] += tokensResponse[0]
-                        totalTokens[1] += tokensResponse[1]
-                    if "sub_2" in data[i]["note"]:
-                        tokensResponse = translateNote(data[i], r"<sub_2:([^>]+)", True)
-                        totalTokens[0] += tokensResponse[0]
-                        totalTokens[1] += tokensResponse[1]
-                    if "sub_3" in data[i]["note"]:
-                        tokensResponse = translateNote(data[i], r"<sub_3:([^>]+)", True)
-                        totalTokens[0] += tokensResponse[0]
-                        totalTokens[1] += tokensResponse[1]
-                    if "infowindow" in data[i]["note"]:
-                        tokensResponse = translateNote(data[i], r"<infowindow:(.*?)>", True)
-                        totalTokens[0] += tokensResponse[0]
-                        totalTokens[1] += tokensResponse[1]
-                    if "ExtendDesc" in data[i]["note"]:
-                        tokensResponse = translateNote(data[i], r"<ExtendDesc:(.*?)>", True)
-                        totalTokens[0] += tokensResponse[0]
-                        totalTokens[1] += tokensResponse[1]
-                    
-
                     i += 1
                 else:
                     batchFull = True
@@ -659,8 +641,7 @@ def searchNames(data, pbar, context):
                     nameList.append(data[i]["name"])
                     if "description" in data[i] and data[i]["description"]:
                         descriptionList.append(data[i]["description"].replace("\n", " "))
-
-                    # Messages
+                    # Messages (unchanged)
                     number = 1
                     while number < 5:
                         if f"message{number}" in data[i] and data[i][f"message{number}"]:
@@ -676,7 +657,6 @@ def searchNames(data, pbar, context):
                                 totalTokens[0] += msgResponse[1][0]
                                 totalTokens[1] += msgResponse[1][1]
                                 number += 1
-
                             else:
                                 msgResponse = translateGPT(
                                     data[i][f"message{number}"],
@@ -689,42 +669,12 @@ def searchNames(data, pbar, context):
                                 number += 1
                         else:
                             number += 1
-
-                    # Notes
-                    if "<WAT:" in data[i]["note"]:
-                        tokensResponse = translateNote(data[i], r"WATs:(.+?)>")
-                        totalTokens[0] += tokensResponse[0]
-                        totalTokens[1] += tokensResponse[1]
-                    if "<ADT:" in data[i]["note"]:
-                        tokensResponse = translateNote(data[i], r"ADTs?:(.+?)>")
-                        totalTokens[0] += tokensResponse[0]
-                        totalTokens[1] += tokensResponse[1]
-                    if "<拡張説明:" in data[i]["note"]:
-                        tokensResponse = translateNote(data[i], r"<拡張説明:(.+?)>")
-                        totalTokens[0] += tokensResponse[0]
-                        totalTokens[1] += tokensResponse[1]
-                    if "<STS DESC>" in data[i]["note"]:
-                        tokensResponse = translateNote(data[i], r"<STS DESC>\n(.+?)\n<")
-                        totalTokens[0] += tokensResponse[0]
-                        totalTokens[1] += tokensResponse[1]
-
                     i += 1
                 else:
                     batchFull = True
             if context in ["Enemies", "Classes", "MapInfos"]:
                 if len(nameList) < BATCHSIZE:
                     nameList.append(data[i]["name"])
-
-                    # Notes
-                    if "note" in data[i]:
-                        if "<note:" in data[i]["note"]:
-                            tokensResponse = translateNote(data[i], r"<note:(.*?)>")
-                            totalTokens[0] += tokensResponse[0]
-                            totalTokens[1] += tokensResponse[1]
-                        if "<desc" in data[i]["note"]:
-                            tokensResponse = translateNote(data[i], r"<desc\d:(.*?)>")
-                            totalTokens[0] += tokensResponse[0]
-                            totalTokens[1] += tokensResponse[1]
                     i += 1
                 else:
                     batchFull = True
@@ -2311,23 +2261,45 @@ Translate 'Taroを倒した！' as 'Taro was defeated!'",
                 False,
             )
 
-    # Translate State Notes
-    if "help" in state["note"]:
-        noteResponse = translateNote(state, r"<help:([^>]*)>")
-        totalTokens[0] += noteResponse[0]
-        totalTokens[1] += noteResponse[1]
-    if "STATE_HELP" in state["note"]:
-        noteResponse = translateNote(state, r"<STATE_HELP>\n(.*)\n")
-        totalTokens[0] += noteResponse[0]
-        totalTokens[1] += noteResponse[1]
-    if "ShowHoverState" in state["note"]:
-        noteResponse = translateNote(state, r"<ShowHoverState:\s?(.+?)>")
-        totalTokens[0] += noteResponse[0]
-        totalTokens[1] += noteResponse[1]
-    if "<Detail" in state["note"]:
-        noteResponse = translateNote(state, r"<Detail:\s?(.+?)>")
-        totalTokens[0] += noteResponse[0]
-        totalTokens[1] += noteResponse[1]
+    # --- Batching pass: collect all note texts for all note types ---
+    note_regexes = [
+        (r"<help:([^>]*)>", False),
+        (r"<STATE_HELP>\n(.*)\n", False),
+        (r"<ShowHoverState:\s?(.+?)>", False),
+        (r"<Detail:\s?(.+?)>", False),
+    ]
+    notesBatch = []
+    notesBatchMap = []
+    if "note" in state and state["note"]:
+        note = state["note"]
+        for regex, wordwrap in note_regexes:
+            matches = re.findall(regex, note, re.DOTALL)
+            for m in matches:
+                match_text = m if isinstance(m, str) else m[0]
+                notesBatch.append(match_text)
+                notesBatchMap.append((regex, match_text, wordwrap))
+
+    # --- Batch translate all notes ---
+    translatedNotesBatch = []
+    if notesBatch:
+        response = translateGPT(notesBatch, f"Reply with only the {LANGUAGE} translation of the note text.", True)
+        translatedNotesBatch = response[0]
+        totalTokens[0] += response[1][0]
+        totalTokens[1] += response[1][1]
+
+    # --- Insert translated notes back ---
+    note_insert_idx = 0
+    if "note" in state and state["note"]:
+        for regex, match_text, wordwrap in notesBatchMap:
+            if note_insert_idx >= len(translatedNotesBatch):
+                break
+            translated = translatedNotesBatch[note_insert_idx]
+            if wordwrap:
+                translated = dazedwrap.wrapText(translated, width=NOTEWIDTH)
+                translated = translated.replace('"', "")
+            # Replace only the matched text in the note
+            state["note"] = re.sub(re.escape(match_text), translated, state["note"], count=1)
+            note_insert_idx += 1
 
     # Count totalTokens
     totalTokens[0] += nameResponse[1][0] if nameResponse != "" else 0
