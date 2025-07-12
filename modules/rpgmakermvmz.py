@@ -1796,9 +1796,25 @@ def searchCodes(page, pbar, jobList, filename):
                 if textMatch and textMatch.group(0) != "":
                     text = textMatch.group(1)
 
+                    # Capture Speakers
+                    match = re.search(r"[\\]+ow\[\d+\][\\]+c\[\d+\](.+)", text)
+                    if match:
+                        speakerJA = match.group(1)
+
+                        # Translate
+                        response = getSpeaker(speakerJA)
+                        translatedText = response[0]
+                        totalTokens[0] += response[1][0]
+                        totalTokens[1] += response[1][1]
+                        codeList[i]["parameters"][0] = jaString.replace(speakerJA, translatedText)
+                        i += 1
+                        continue
+                    else:
+                        speaker = ""
+
                     # Pass 1
                     if setData:
-                        text = text.replace("_", " ")
+                        text = text.replace("_", " ")                       
                         list356.append(text)
 
                     # Pass 2

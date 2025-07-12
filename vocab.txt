@@ -1,7 +1,44 @@
 Here are some vocabulary and terms so that you know the proper spelling and translation.
 ```
 # Game Characters
-天川 紗雪 (Amakawa Sayuki) - Female
+リムア (Rimua) - Female
+ネロ (Nero) - Male
+アディナス (Adinas) - Male
+アカシャ (Akasha) - Female
+アマルダ (Amalda) - Female
+アメリ (Ameri) - Female
+ビビン (Bibin) - Male
+トロールカーゴ (Troll Cargo) - Male
+カッツ (Katz) - Female
+シエル (Ciel) - Male
+ディック (Dick) - Male
+ガンドレー (Gandore) - Male
+デュオレクス (Duorex) - Male
+ガーラ (Gara) - Female
+ガゼル (Gazel) - Male
+ギタン (Gitan) - Male
+グリッド (Grid) - Male
+イスペリオ (Isperio) - Male
+ケイトリン (Kaitlyn) - Female
+コヴァ (Kova) - Male
+レクス (Lex) - Male
+リィネ (Lynn) - Female
+ミラノ (Mirano) - Male
+ミシェラ (Mishela) - Female
+ネリス (Nelis) - Female
+オルネ (Orne) - Female
+オクヴァン (Oxvan) - Male
+ラジール (Ragil) - Male
+ラシル (Rasil) - Female
+レアリア (Learia) - Female
+スミス (Smith) - Male
+ウーミー (Uumi) - Male
+ヴァルシュ (Valsh) - Male
+ヴィルティ (Vilty) - Female
+ワダツミ (Wadatsumi) - Male
+ユリス (Yuris) - Female
+ザルバー (Zalbar) - Male
+ゼム (Zem) - Male
 
 # Lewd Terms
 マンコ (pussy)
@@ -160,26 +197,48 @@ w ((lol))
 』 (』)
 
 # Game Specific
-お試し空間 (Trial Space)
-ゲーミングちんぽ茶道部 (Gaming Dick Tea Ceremony Club)
-マゾちんぽランド運営部 (Masochist Dick Land Management Club)
-オホ声合唱部 (Moaning Chorus Club)
-ドスケベ物理学部 (Lewd Physics Club)
-バトルファックお嬢様部 (Battle Fuck Ojou-sama Club)
-ご令嬢聖水開発部 (Young Lady's Holy Water Development Club)
-オナニー大会執行部 (Masturbation Tournament Executive Club)
-母乳研究部 (Breast Milk Research Club)
-SM館 (SM Hall)
-ドスケベ学園 (Lewd Academy)
-牢獄 (Prison)
-神社 (Shrine)
-裏山隠し部屋 (Back Mountain Hidden Room)
-体育館管理室 (Gymnasium Management Room)
-監禁部屋 (Confinement Room)
-マリィの部屋 (Mari's Room)
-ペット小屋 (Pet House)
-亀頭漫湖の隠し部屋 (Glans Lake's Secret Room)
-秘密の部屋 (Secret Room)
-特別肉便器棟 (Special Meat Toilet Building)
+青凪の丘 (Aonagi Hill)
+虚空の洞窟 (Void Cave)
+イスペリオ城 (Isperio Castle)
+パマラの村 (Pamara Village)
+パマラ遺跡 (Pamara Ruins)
+カッツァーノ (Katzano)
+ギルド会館 / ギルド本部 (Guild Hall / Guild Headquarters)
+湖の古城 (Lake Old Castle)
+エルフの森 (Elf Forest)
+エルフの里 (Elf Village)
+エルフ祠 (Elf Shrine)
+エルフ族長の家 (Elf Chief's House)
+グルド平原 (Gurdo Plains)
+グルドの村 (Gurdo Village)
+グルド山道 (Gurdo Mountain Path)
+グルド神殿 (Gurdo Temple)
+アグラル監獄 (Agral Prison)
+ベイル採石場 (Bale Quarry)
+ベイル鉱山道 (Bale Mine Road)
+ベイルフォートレス (Bale Fortress)
+スカル・ガゼルのアジト (Skull Gazelle's Hideout)
+グレイヴロイド (Graveloid)
+レグナスの村 (Regnas Village)
+レグナス霊山 (Regnas Sacred Mountain)
+デモンセントラル (Demon Central)
+魔城 (Demon Castle)
+魔窟城塞 (Demon Lair Fortress)
+ザルバーコア (Zarbarkoa)
+ヘプタ (Hepta)
+ヘプタ風霊神殿 (Hepta Wind Spirit Temple)
+ヨグサの家 (Yogusa's House)
+嵐の平原 (Storm Plains)
+西の平原 (Western Plains)
+北西の平原 (Northwestern Plains)
+王都 (Royal Capital)
+王の別荘 (King's Villa)
+自警団本部 (Vigilante HQ)
+対魔物回想 (Monster Recollection)
+回想部屋 (Recollection Room)
+最後の間 (Final Chamber)
+ミシェセヴ (Mischesev)
+おこ 宿 (Oko Inn)
+アメリヤド (Ameriyado)
 
 ```
