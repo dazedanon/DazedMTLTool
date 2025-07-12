@@ -29,28 +29,28 @@ def wrapText(text: str, width: int) -> str:
     """
     if not text:
         return ""
-    
-    words = text.split()
-    lines = []
-    current_line = []
-    current_length = 0
-    
-    for word in words:
-        # Calculate visible length ignoring color codes
-        word_length = _get_visible_length(word)
-        
-        # Check if adding this word would exceed the width
-        if current_length + word_length + len(current_line) <= width:
-            current_line.append(word)
-            current_length += word_length
-        else:
-            if current_line:  # Only add line if we have words
-                lines.append(" ".join(current_line))
-            current_line = [word]
-            current_length = word_length
-    
-    # Add the last line if it has any words
-    if current_line:
-        lines.append(" ".join(current_line))
-    
-    return "\n".join(lines)
+
+    # Split on double newlines (\n\n or \\n\\n)
+    import re
+    segments = re.split(r'(?:\n\n|\\n\\n)', text)
+    wrapped_segments = []
+    for segment in segments:
+        words = segment.split()
+        lines = []
+        current_line = []
+        current_length = 0
+        for word in words:
+            word_length = _get_visible_length(word)
+            if current_length + word_length + len(current_line) <= width:
+                current_line.append(word)
+                current_length += word_length
+            else:
+                if current_line:
+                    lines.append(" ".join(current_line))
+                current_line = [word]
+                current_length = word_length
+        if current_line:
+            lines.append(" ".join(current_line))
+        wrapped_segments.append("\n".join(lines))
+    # Rejoin with double newlines to preserve hard breaks
+    return "\n\n".join(wrapped_segments)
