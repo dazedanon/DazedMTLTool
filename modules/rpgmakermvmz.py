@@ -2481,31 +2481,35 @@ def batchList(input_list, batch_size):
 
 
 def createContext(fullPromptFlag, subbedT, format):
-    def extract_japanese_terms(vocabText):
-        terms = []
+    # Helper to extract (term, line) pairs from VOCAB only once
+    def parseVocab(vocab_text):
+        pairs = []
         seen = set()
-        for line in vocabText.splitlines():
+        for line in vocab_text.splitlines():
             line = line.strip()
             if not line or line.startswith('#') or line.startswith('```'):
                 continue
-            # Match Japanese terms before ' (' or ' – '
-            m = re.match(r'^(.+?)(?:\s[\(–])', line)
+            m = re.match(r'^(.+?)(?:\s?[\(–])', line)  # term is everything before space + '(' or '–'
             if m:
                 term = m.group(1)
                 if term not in seen:
-                    terms.append(term)
+                    pairs.append((term, line))
                     seen.add(term)
-        return terms
+        return pairs
 
-    includeVocab = False
-    vocabTerms = extract_japanese_terms(VOCAB)
-    for term in vocabTerms:
+    matchedVocabLines = []
+    vocabPairs = parseVocab(VOCAB)
+
+    # Use word boundaries for Japanese if appropriate, or allow substring as before.
+    for term, line in vocabPairs:
+        # "term in subbedT" could be false positive; can use regex but Japanese doesn't always have spaces.
         if term in subbedT:
-            includeVocab = True
-            break
+            matchedVocabLines.append(line)
+
+    matchedVocabText = f"```\n{'\n'.join(matchedVocabLines)}\n```" if matchedVocabLines else ""
 
     if fullPromptFlag:
-        system = PROMPT + (VOCAB if includeVocab else "")
+        system = PROMPT + matchedVocabText
     else:
         system = f"\
 You are an expert Eroge Game translator who translates Japanese text to {LANGUAGE}.\n\
@@ -2517,7 +2521,7 @@ Output ONLY the {LANGUAGE} translation in the following format: `Translation: <{
 - Maintain any spacing in the translation.\n\
 - Maintain any code text in brackets if given. (e.g `[Color_0]`, `[Ascii_0]`, `[FCode_1`], etc)\n\
 - `...` can be a part of the dialogue. Translate it as it is.\n\
-{VOCAB if includeVocab else ''}\n\
+{matchedVocabText}\n\
 "
     if format == "json":
         user = f"```json\n{subbedT}\n```"
