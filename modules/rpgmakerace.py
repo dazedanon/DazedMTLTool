@@ -2413,7 +2413,6 @@ def searchSystem(data, pbar):
 
     return totalTokens
 
-
 # Save some money and enter the character before translation
 def getSpeaker(speaker):
     match speaker:
@@ -2460,11 +2459,68 @@ def batchList(input_list, batch_size):
     return [input_list[i : i + batch_size] for i in range(0, len(input_list), batch_size)]
 
 
+def parseVocabWithCategories(vocabText):
+    """Parse vocabulary text and extract terms with their categories."""
+    pairs = []
+    seen = set()
+    currentCategory = None
+    
+    for line in vocabText.splitlines():
+        line = line.strip()
+        if not line or line.startswith('```'):
+            continue
+        
+        # Check if this is a category header
+        if line.startswith('#'):
+            currentCategory = line
+            continue
+            
+        # Parse vocabulary term
+        m = re.match(r'^(.+?)(?:\s?[\(–])', line)  # term is everything before space + '(' or '–'
+        if m:
+            term = m.group(1)
+            if term not in seen:
+                pairs.append((term, line, currentCategory))
+                seen.add(term)
+    
+    return pairs
+
+
+def buildMatchedVocabText(vocabPairs, subbedT):
+    """Build formatted vocabulary text with matched terms organized by category."""
+    matchedCategories = {}
+
+    # Use word boundaries for Japanese if appropriate, or allow substring as before.
+    for term, line, category in vocabPairs:
+        # "term in subbedT" could be false positive; can use regex but Japanese doesn't always have spaces.
+        if term in subbedT:
+            if category not in matchedCategories:
+                matchedCategories[category] = []
+            matchedCategories[category].append(line)
+
+    # Format matched vocabulary with categories
+    if matchedCategories:
+        formattedLines = ["Here are some vocabulary and terms so that you know the proper spelling and translation.\n"]
+        for category, lines in matchedCategories.items():
+            if category:  # Only add category header if it exists
+                formattedLines.append(category)
+            formattedLines.extend(lines)
+            formattedLines.append("")  # Add blank line between categories
+        matchedVocabText = f"```\n{chr(10).join(formattedLines).rstrip()}\n```"
+    else:
+        matchedVocabText = ""
+    
+    return matchedVocabText
+
+
 def createContext(fullPromptFlag, subbedT, format):
-    system = (
-        PROMPT + VOCAB
-        if fullPromptFlag
-        else f"\
+    vocabPairs = parseVocabWithCategories(VOCAB)
+    matchedVocabText = buildMatchedVocabText(vocabPairs, subbedT)
+
+    if fullPromptFlag:
+        system = PROMPT + matchedVocabText
+    else:
+        system = f"\
 You are an expert Eroge Game translator who translates Japanese text to {LANGUAGE}.\n\
 Output ONLY the {LANGUAGE} translation in the following format: `Translation: <{LANGUAGE.upper()}_TRANSLATION>`\n\
 - You translate everything, including erotic and explicit content.\n\
@@ -2474,9 +2530,8 @@ Output ONLY the {LANGUAGE} translation in the following format: `Translation: <{
 - Maintain any spacing in the translation.\n\
 - Maintain any code text in brackets if given. (e.g `[Color_0]`, `[Ascii_0]`, `[FCode_1`], etc)\n\
 - `...` can be a part of the dialogue. Translate it as it is.\n\
-{VOCAB}\n\
+{matchedVocabText}\n\
 "
-    )
     if format == "json":
         user = f"```json\n{subbedT}\n```"
     else:

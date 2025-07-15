@@ -2433,7 +2433,6 @@ def searchSystem(data, pbar):
 
     return totalTokens
 
-
 # Save some money and enter the character before translation
 def getSpeaker(speaker):
     match speaker:

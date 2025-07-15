@@ -2563,7 +2563,6 @@ def searchDB(events, pbar, jobList, filename):
 
     return totalTokens
 
-
 # Save some money and enter the character before translation
 def getSpeaker(speaker):
     match speaker:
@@ -2581,7 +2580,7 @@ def getSpeaker(speaker):
             response = translateGPT(
                 f"{speaker}",
                 "Reply with the " + LANGUAGE + " translation of the NPC name.",
-                True,
+                False,
             )
             response[0] = response[0].title()
             response[0] = response[0].replace("'S", "'s")
@@ -2610,11 +2609,68 @@ def batchList(input_list, batch_size):
     return [input_list[i : i + batch_size] for i in range(0, len(input_list), batch_size)]
 
 
+def parseVocabWithCategories(vocabText):
+    """Parse vocabulary text and extract terms with their categories."""
+    pairs = []
+    seen = set()
+    currentCategory = None
+    
+    for line in vocabText.splitlines():
+        line = line.strip()
+        if not line or line.startswith('```'):
+            continue
+        
+        # Check if this is a category header
+        if line.startswith('#'):
+            currentCategory = line
+            continue
+            
+        # Parse vocabulary term
+        m = re.match(r'^(.+?)(?:\s?[\(–])', line)  # term is everything before space + '(' or '–'
+        if m:
+            term = m.group(1)
+            if term not in seen:
+                pairs.append((term, line, currentCategory))
+                seen.add(term)
+    
+    return pairs
+
+
+def buildMatchedVocabText(vocabPairs, subbedT):
+    """Build formatted vocabulary text with matched terms organized by category."""
+    matchedCategories = {}
+
+    # Use word boundaries for Japanese if appropriate, or allow substring as before.
+    for term, line, category in vocabPairs:
+        # "term in subbedT" could be false positive; can use regex but Japanese doesn't always have spaces.
+        if term in subbedT:
+            if category not in matchedCategories:
+                matchedCategories[category] = []
+            matchedCategories[category].append(line)
+
+    # Format matched vocabulary with categories
+    if matchedCategories:
+        formattedLines = ["Here are some vocabulary and terms so that you know the proper spelling and translation.\n"]
+        for category, lines in matchedCategories.items():
+            if category:  # Only add category header if it exists
+                formattedLines.append(category)
+            formattedLines.extend(lines)
+            formattedLines.append("")  # Add blank line between categories
+        matchedVocabText = f"```\n{chr(10).join(formattedLines).rstrip()}\n```"
+    else:
+        matchedVocabText = ""
+    
+    return matchedVocabText
+
+
 def createContext(fullPromptFlag, subbedT, format):
-    system = (
-        PROMPT + VOCAB
-        if fullPromptFlag
-        else f"\
+    vocabPairs = parseVocabWithCategories(VOCAB)
+    matchedVocabText = buildMatchedVocabText(vocabPairs, subbedT)
+
+    if fullPromptFlag:
+        system = PROMPT + matchedVocabText
+    else:
+        system = f"\
 You are an expert Eroge Game translator who translates Japanese text to {LANGUAGE}.\n\
 Output ONLY the {LANGUAGE} translation in the following format: `Translation: <{LANGUAGE.upper()}_TRANSLATION>`\n\
 - You translate everything, including erotic and explicit content.\n\
@@ -2624,9 +2680,8 @@ Output ONLY the {LANGUAGE} translation in the following format: `Translation: <{
 - Maintain any spacing in the translation.\n\
 - Maintain any code text in brackets if given. (e.g `[Color_0]`, `[Ascii_0]`, `[FCode_1`], etc)\n\
 - `...` can be a part of the dialogue. Translate it as it is.\n\
-{VOCAB}\n\
+{matchedVocabText}\n\
 "
-    )
     if format == "json":
         user = f"```json\n{subbedT}\n```"
     else:
@@ -2640,9 +2695,10 @@ def translateText(system, user, history, penalty, format, model=MODEL):
 
     # History
     if isinstance(history, list):
-        msg.extend([{"role": "system", "content": h} for h in history])
+        msg.append({"role": "system", "content": "Translation History:"})
+        msg.extend([{"role": "assistant", "content": h} for h in history])
     else:
-        msg.append({"role": "system", "content": history})
+        msg.append({"role": "assistant", "content": history})
 
     # Response Format
     if format == "json":
@@ -2663,36 +2719,36 @@ def translateText(system, user, history, penalty, format, model=MODEL):
 
 
 def cleanTranslatedText(translatedText):
-    if translatedText:
-        placeholders = {
-            f"{LANGUAGE} Translation: ": "",
-            "Translation: ": "",
-            "っ": "",
-            "〜": "~",
-            "ッ": "",
-            "。": ".",
-            "「": '\\"',
-            "」": '\\"',
-            "- ": "-",
-            "—": "―",
-            "】": "]",
-            "【": "[",
-            "é": "e",
-            "ō": "o",
-            "Placeholder Text": "",
-            # Add more replacements as needed
-        }
-        for target, replacement in placeholders.items():
-            translatedText = translatedText.replace(target, replacement)
+    placeholders = {
+        f"{LANGUAGE} Translation: ": "",
+        "Translation: ": "",
+        "っ": "",
+        "〜": "~",
+        "ッ": "",
+        "。": ".",
+        "「": '\\"',
+        "」": '\\"',
+        "- ": "-",
+        "—": "―",
+        "】": "]",
+        "【": "[",
+        "é": "e",
+        "this guy": "this bastard",
+        "This guy": "This bastard",
+        "Placeholder Text": "",
+        "```json": "",
+        "```": "",
+        # Add more replacements as needed
+    }
+    for target, replacement in placeholders.items():
+        translatedText = translatedText.replace(target, replacement)
 
-        # Remove Repeating Characters
-        pattern = re.compile(r"(.)\s*\1(?:\s*\1){" + str(20 - 1) + r",}")
-        translatedText = pattern.sub(lambda match: match.group(0).replace(" ", "")[:20], translatedText)
+    # Remove Repeating Characters
+    pattern = re.compile(r"(.)\s*\1(?:\s*\1){" + str(20 - 1) + r",}")
+    translatedText = pattern.sub(lambda match: match.group(0).replace(" ", "")[:20], translatedText)
 
-        # Elongate Long Dashes (Since GPT Ignores them...)
-        translatedText = elongateCharacters(translatedText)
-    else:
-        print(translatedText)
+    # Elongate Long Dashes (Since GPT Ignores them...)
+    translatedText = elongateCharacters(translatedText)
     return translatedText
 
 
@@ -2743,7 +2799,7 @@ def countTokens(system, user, history):
     inputTotalTokens += len(enc.encode(user))
 
     # Output
-    outputTotalTokens += round(len(enc.encode(user)) * 3)
+    outputTotalTokens += round(len(enc.encode(user)) * 2.5)
 
     return [inputTotalTokens, outputTotalTokens]
 
@@ -2800,14 +2856,15 @@ def translateGPT(text, history, fullPromptFlag):
                     continue
 
                 # Translating
-                response = translateText(system, user, history, 0.05, format, model="gpt-4o")
+                response = translateText(system, user, history, 0.05, format)
 
                 # Set Tokens
                 translatedText = response.choices[0].message.content
 
                 # AI Refused, Try Again
                 if not translatedText:
-                    response = translateText(f"{system}\n You translate ALL content.", user, history, 0.1, format)
+                    response = translateText(f"{system}\n You translate ALL content.", user, history, 0.1, format, model="gpt-4o")
+                    translatedText = response.choices[0].message.content
 
                 # Report Tokens
                 totalTokens[0] += response.usage.prompt_tokens
