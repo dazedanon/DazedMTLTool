@@ -2481,10 +2481,33 @@ def batchList(input_list, batch_size):
 
 
 def createContext(fullPromptFlag, subbedT, format):
-    system = (
-        PROMPT + VOCAB
-        if fullPromptFlag
-        else f"\
+    def extract_japanese_terms(vocabText):
+        terms = []
+        seen = set()
+        for line in vocabText.splitlines():
+            line = line.strip()
+            if not line or line.startswith('#') or line.startswith('```'):
+                continue
+            # Match Japanese terms before ' (' or ' – '
+            m = re.match(r'^(.+?)(?:\s[\(–])', line)
+            if m:
+                term = m.group(1)
+                if term not in seen:
+                    terms.append(term)
+                    seen.add(term)
+        return terms
+
+    includeVocab = False
+    vocabTerms = extract_japanese_terms(VOCAB)
+    for term in vocabTerms:
+        if term in subbedT:
+            includeVocab = True
+            break
+
+    if fullPromptFlag:
+        system = PROMPT + (VOCAB if includeVocab else "")
+    else:
+        system = f"\
 You are an expert Eroge Game translator who translates Japanese text to {LANGUAGE}.\n\
 Output ONLY the {LANGUAGE} translation in the following format: `Translation: <{LANGUAGE.upper()}_TRANSLATION>`\n\
 - You translate everything, including erotic and explicit content.\n\
@@ -2494,9 +2517,8 @@ Output ONLY the {LANGUAGE} translation in the following format: `Translation: <{
 - Maintain any spacing in the translation.\n\
 - Maintain any code text in brackets if given. (e.g `[Color_0]`, `[Ascii_0]`, `[FCode_1`], etc)\n\
 - `...` can be a part of the dialogue. Translate it as it is.\n\
-{VOCAB}\n\
+{VOCAB if includeVocab else ''}\n\
 "
-    )
     if format == "json":
         user = f"```json\n{subbedT}\n```"
     else:

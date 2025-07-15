@@ -1,6 +1,24 @@
 Here are some vocabulary and terms so that you know the proper spelling and translation.
 ```
 # Game Characters
+コヴァ – Kova
+ビビン – Bibin
+グリッド – Grid
+アメリ – Ameri
+アディナス – Adinas
+キャスティ – Kasti
+ガンドレー – Gandrei
+ギタン – Gitan
+スミス – Smith
+レクス – Rex
+ミラノ – Mirano
+ケイトリン – Caitlin
+ゼム – Zem
+アカシャ – Akasha
+リィネ – Rine
+ネロ – Nero
+ネリス – Neris
+
 リムア (Rimua) - Female
 ネロ (Nero) - Male
 アディナス (Adinas) - Male
