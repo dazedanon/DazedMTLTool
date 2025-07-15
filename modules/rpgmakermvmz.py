@@ -8,7 +8,6 @@ import time
 import traceback
 import tiktoken
 import openai
-import copy
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from colorama import Fore
@@ -2536,6 +2535,9 @@ def buildMatchedVocabText(vocabPairs, subbedT):
 def createContext(fullPromptFlag, subbedT, format):
     vocabPairs = parseVocabWithCategories(VOCAB)
     matchedVocabText = buildMatchedVocabText(vocabPairs, subbedT)
+
+    if matchedVocabText:
+        print(matchedVocabText)
 
     if fullPromptFlag:
         system = PROMPT + matchedVocabText
