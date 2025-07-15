@@ -35,20 +35,13 @@ these values using an .env file, for an example see .env.example"
 from modules.rpgmakermvmz import handleMVMZ
 from modules.rpgmakerace import handleACE
 from modules.csv import handleCSV
-from modules.eushully import handleEushully
-from modules.alice import handleAlice
 from modules.tyrano import handleTyrano
 from modules.kirikiri import handleKirikiri
 from modules.json import handleJSON
-from modules.kansen import handleKansen
 from modules.lune import handleLune
-from modules.atelier import handleAtelier
-from modules.anim import handleAnim
 from modules.nscript import handleOnscripter
 from modules.wolf import handleWOLF
 from modules.wolf2 import handleWOLF2
-from modules.javascript import handleJavascript
-from modules.irissoft import handleIris
 from modules.regex import handleRegex
 from modules.text import handleText
 from modules.renpy import handleRenpy
@@ -66,20 +59,13 @@ MODULES = [
     ["RPGMaker Plugins", ["js", "rb"], handlePlugin],
     ["RPGMaker ACE", ["yaml"], handleACE],
     ["CSV (From Translator++)", ["csv"], handleCSV],
-    ["Eushully", ["txt"], handleEushully],
-    ["Alice", ["txt"], handleAlice],
     ["Tyrano", ["ks"], handleTyrano],
     ["Kirikiri", ["ks", "tjs", "ssd", "asd"], handleKirikiri],
     ["JSON", ["json"], handleJSON],
-    ["Kansen", ["ks"], handleKansen],
     ["Lune", ["json"], handleLune],
-    ["Atelier", ["txt"], handleAtelier],
-    ["Anim", ["json"], handleAnim],
     ["NScript", ["txt"], handleOnscripter],
     ["Wolf", ["json"], handleWOLF],
     ["Wolf", ["txt"], handleWOLF2],
-    ["Javascript", ["js"], handleJavascript],
-    ["Iris", ["txt"], handleIris],
     ["Regex", ["txt", "json", "script", "csv"], handleRegex],
     ["Text", ["txt", "srt"], handleText],
     ["Renpy", ["rpy"], handleRenpy],
