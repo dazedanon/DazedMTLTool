@@ -1,14 +1,7 @@
 Here are some vocabulary and terms so that you know the proper spelling and translation.
 ```
-# Game Characters - Gender
-音々 (Nene) - Female
-湊 (Minato) - Female
-宇堂 (Udo) - Male
-Taro - Male
-Souta - Male
-園田 (Sonoda) - Male
-浩平 (Kohei) - Male
-マネ (Mane) - Female
+# Game Characters
+イルヴィナ (Illvina)
 
 # Lewd Terms
 マンコ (pussy)
