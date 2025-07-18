@@ -87,12 +87,12 @@ TRANSLATION_CONFIG = TranslationConfig(
 LEAVE = False
 
 # Config (Default)
-FIRSTLINESPEAKERS = False  # If 1st line of 401 is a speaker, set to True (False)
-FACENAME101 = False  # Find Speakers in 101 Codes based on Face Name (False)
-NAMES = False  # Output a list of all the character names found (False)
-BRFLAG = False  # If the game uses <br> instead (False)
-FIXTEXTWRAP = True  # Overwrites textwrap (True)
-IGNORETLTEXT = False  # Ignores all translated text. (False)
+FIRSTLINESPEAKERS = False
+FACENAME101 = False
+NAMES = False
+BRFLAG = False
+FIXTEXTWRAP = True
+IGNORETLTEXT = False
 
 # Dialogue / Scroll / Choices (Main Codes)
 CODE401 = True
@@ -100,8 +100,8 @@ CODE405 = True
 CODE102 = True
 
 # Optional
-CODE101 = False  # Turn this one on when names exist in 101
-CODE408 = False  # Warning, translates comments and can inflate costs.
+CODE101 = False
+CODE408 = False
 
 # Variables
 CODE122 = False
