@@ -22,7 +22,6 @@ from gui.rpgmaker_tab import RPGMakerTab
 from gui.other_modules_tab import OtherModulesTab
 from gui.log_viewer import LogViewer
 from gui.file_manager import FileManager
-from gui.file_manager_tab import FileManagerTab
 from gui.translation_tab import TranslationTab
 
 class DazedMTLGUI(QMainWindow):
@@ -120,11 +119,7 @@ class DazedMTLGUI(QMainWindow):
         self.config_tab.config_changed.connect(self.on_config_changed)
         self.tab_widget.addTab(self.config_tab, "Configuration")
         
-        # File Manager Tab (New)
-        self.file_manager_tab = FileManagerTab()
-        self.tab_widget.addTab(self.file_manager_tab, "File Manager")
-        
-        # Translation Execution Tab
+        # Translation Execution Tab (includes file management)
         self.translation_tab = TranslationTab(self)
         self.tab_widget.addTab(self.translation_tab, "Translation")
         
@@ -336,14 +331,6 @@ class DazedMTLGUI(QMainWindow):
     def set_progress(self, value):
         """Set the progress bar value (0-100)."""
         self.progress_bar.setValue(value)
-        
-    def get_input_files(self):
-        """Get list of input files from the file manager."""
-        try:
-            return self.file_manager_tab.get_input_files()
-        except Exception as e:
-            print(f"Warning: Could not get input files: {e}")
-            return []
 
 
 def main():

@@ -1,489 +1,692 @@
 #!/usr/bin/env python3
 """
-Translation Execution Tab for DazedMTLTool GUI
+Simple Translation Tab for DazedMTLTool GUI
 
-Handles running the translation process with configured settings.
-Each module has its own default settings in its folder without backups.
+Simple file management and translation execution with console log display.
 """
 
 import os
-import json
+import subprocess
+import threading
+import sys
 from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import traceback
+from colorama import Fore
+from tqdm import tqdm
+from dotenv import load_dotenv
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QGroupBox,
-    QComboBox, QTextEdit, QProgressBar, QMessageBox, QListWidget, 
-    QListWidgetItem, QSplitter, QCheckBox
+    QTextEdit, QMessageBox, QListWidget, QListWidgetItem, 
+    QSplitter, QFileDialog, QComboBox, QCheckBox, QProgressBar
 )
-from PyQt5.QtCore import Qt, QThread, pyqtSignal, QTimer
-from PyQt5.QtGui import QFont, QColor
+from PyQt5.QtCore import Qt, QTimer, pyqtSignal, QThread
+from PyQt5.QtGui import QFont
 
 
 class TranslationWorker(QThread):
-    """Worker thread for translation process."""
+    """Worker thread for running translations without blocking the UI."""
     
-    progress_updated = pyqtSignal(int)
-    status_updated = pyqtSignal(str)
-    log_updated = pyqtSignal(str)
-    finished = pyqtSignal(bool)  # True if successful
+    log_signal = pyqtSignal(str)
+    progress_signal = pyqtSignal(int, int, str)  # current_file, total_files, filename
+    finished_signal = pyqtSignal(bool, str)
     
-    def __init__(self, config, files_to_translate):
+    def __init__(self, project_root, module_info, estimate_only=False):
         super().__init__()
-        self.config = config
-        self.files_to_translate = files_to_translate
-        self.is_cancelled = False
+        self.project_root = project_root
+        self.module_info = module_info  # [name, extensions, handler_function]
+        self.estimate_only = estimate_only
+        self.should_stop = False
+        
+    def stop(self):
+        """Stop the translation process."""
+        self.should_stop = True
         
     def run(self):
         """Run the translation process."""
         try:
-            total_files = len(self.files_to_translate)
-            if total_files == 0:
-                self.status_updated.emit("No files to translate")
-                self.finished.emit(False)
+            # Load environment variables
+            load_dotenv()
+            
+            # Check for required environment variables
+            required_envs = ["api", "key", "organization", "model", "language", "timeout", "fileThreads", "threads", "width", "listWidth"]
+            env_missing = False
+            
+            for env in required_envs:
+                if os.getenv(env) is None or str(os.getenv(env))[:1] == "<":
+                    self.log_signal.emit(f"❌ Environment variable {env} is not set!")
+                    env_missing = True
+                    
+            if env_missing:
+                self.log_signal.emit("❌ Some required environment variables are not set. Check your .env file.")
+                self.finished_signal.emit(False, "Environment variables missing")
                 return
                 
-            self.status_updated.emit(f"Starting translation of {total_files} files...")
-            
-            for i, file_path in enumerate(self.files_to_translate):
-                if self.is_cancelled:
-                    self.status_updated.emit("Translation cancelled")
-                    self.finished.emit(False)
-                    return
-                    
-                progress = int((i / total_files) * 100)
-                self.progress_updated.emit(progress)
-                self.status_updated.emit(f"Translating: {file_path.name}")
-                self.log_updated.emit(f"Processing file: {file_path}")
+            # Get files to process
+            files_dir = self.project_root / "files"
+            if not files_dir.exists():
+                self.log_signal.emit("❌ Files directory does not exist!")
+                self.finished_signal.emit(False, "Files directory missing")
+                return
                 
-                # Here we would call the actual translation module
-                success = self.translate_file(file_path)
+            # Find files matching the selected module's extensions
+            matching_files = []
+            for file_path in files_dir.iterdir():
+                if file_path.is_file() and file_path.name != '.gitkeep':
+                    for ext in self.module_info[1]:
+                        if file_path.name.endswith(ext):
+                            matching_files.append(file_path.name)
+                            break
+                            
+            if not matching_files:
+                self.log_signal.emit(f"❌ No files found matching extensions: {', '.join(self.module_info[1])}")
+                self.finished_signal.emit(False, "No matching files")
+                return
                 
-                if not success:
-                    self.log_updated.emit(f"Failed to translate: {file_path.name}")
-                    self.status_updated.emit(f"Error translating {file_path.name}")
-                    self.finished.emit(False)
-                    return
-                else:
-                    self.log_updated.emit(f"Successfully translated: {file_path.name}")
-                    
-            self.progress_updated.emit(100)
-            self.status_updated.emit(f"Translation completed successfully!")
-            self.finished.emit(True)
-            
-        except Exception as e:
-            self.log_updated.emit(f"Translation error: {str(e)}")
-            self.status_updated.emit(f"Translation failed: {str(e)}")
-            self.finished.emit(False)
-            
-    def translate_file(self, file_path):
-        """Translate a single file using the appropriate module."""
-        try:
-            import sys
-            from pathlib import Path
-            
-            # Add project root to path
-            project_root = Path(__file__).parent.parent
-            sys.path.insert(0, str(project_root))
-            
-            # Import the main translation module
-            from modules.main import translate_file
-            
-            # Create module-specific config for this file
-            self.create_module_config(file_path)
-            
-            # Call the translation function
-            result = translate_file(str(file_path))
-            return result
-            
-        except Exception as e:
-            self.log_updated.emit(f"Error in translate_file: {str(e)}")
-            return False
-            
-    def create_module_config(self, file_path):
-        """Create module-specific configuration without backups."""
-        try:
-            # Determine the module based on file extension and content
-            module_name = self.determine_module(file_path)
-            
-            if module_name:
-                # Create module directory if it doesn't exist
-                module_dir = Path(__file__).parent.parent / "modules" / module_name
-                module_dir.mkdir(exist_ok=True)
+            self.log_signal.emit(f"📁 Found {len(matching_files)} files to process:")
+            for filename in matching_files:
+                self.log_signal.emit(f"   • {filename}")
                 
-                # Create default settings file
-                settings_file = module_dir / "settings.json"
-                
-                # Only create if it doesn't exist (no overwriting)
-                if not settings_file.exists():
-                    default_settings = self.get_default_settings(module_name)
-                    with open(settings_file, 'w', encoding='utf-8') as f:
-                        json.dump(default_settings, f, indent=2, ensure_ascii=False)
-                        
-                    self.log_updated.emit(f"Created default settings for {module_name}")
-                    
-        except Exception as e:
-            self.log_updated.emit(f"Error creating module config: {str(e)}")
+            self.log_signal.emit(f"🔧 Using module: {self.module_info[0]}")
+            self.log_signal.emit(f"📊 Estimate only: {'Yes' if self.estimate_only else 'No'}")
+            self.log_signal.emit("")
             
-    def determine_module(self, file_path):
-        """Determine which module to use based on file type."""
-        suffix = file_path.suffix.lower()
-        
-        if suffix == '.json':
-            # Check if it's RPG Maker format
+            # Process files
+            threads = int(os.getenv("fileThreads", "1"))
+            total_cost = "Fail"
+            
+            # Change to project directory for module execution
+            old_cwd = os.getcwd()
+            os.chdir(str(self.project_root))
+            
             try:
-                with open(file_path, 'r', encoding='utf-8') as f:
-                    content = f.read()
-                    if '"code":' in content or '"parameters":' in content:
-                        return "rpgmakermvmz"
-                    else:
-                        return "json"
-            except:
-                return "json"
-        elif suffix == '.txt':
-            return "text"
-        elif suffix == '.csv':
-            return "csv"
-        elif suffix in ['.js', '.py']:
-            return "regex"
-        else:
-            return "text"  # Default fallback
-            
-    def get_default_settings(self, module_name):
-        """Get default settings for a module."""
-        base_settings = {
-            "enabled": True,
-            "backup": False,  # No backups as requested
-            "output_directory": "translated",
-            "preserve_formatting": True
-        }
-        
-        if module_name == "rpgmakermvmz":
-            # Use the same defaults as defined in RPG Maker tab
-            rpg_defaults = {
-                # Main dialogue codes (enabled by default)
-                "CODE401": True,   # Show Text
-                "CODE405": True,   # Show Text (line 4+)
-                "CODE102": True,   # Show Choices
+                with ThreadPoolExecutor(max_workers=threads) as executor:
+                    # Submit all tasks first
+                    future_to_filename = {
+                        executor.submit(self.module_info[2], filename, self.estimate_only): filename
+                        for filename in matching_files
+                    }
+                    
+                    completed_count = 0
+                    total_files = len(matching_files)
+                    
+                    for future in as_completed(future_to_filename):
+                        if self.should_stop:
+                            self.log_signal.emit("🛑 Translation stopped by user")
+                            break
+                            
+                        filename = future_to_filename[future]
+                        completed_count += 1
+                        
+                        # Emit progress signal
+                        self.progress_signal.emit(completed_count, total_files, filename)
+                        
+                        try:
+                            result = future.result()
+                            total_cost = result
+                            self.log_signal.emit(f"✅ Completed {filename} ({completed_count}/{total_files})")
+                        except Exception as e:
+                            tb_line = str(traceback.extract_tb(sys.exc_info()[2])[-1].lineno)
+                            error_msg = f"❌ Error processing {filename}: {str(e)} | Line: {tb_line}"
+                            self.log_signal.emit(error_msg)
+                            
+            finally:
+                os.chdir(old_cwd)
                 
-                # Optional codes (disabled by default)
-                "CODE101": False,  # Show Text (face)
-                "CODE408": False,  # Show Text (line continuation)
+            # Clean up temporary files
+            tmp_file = self.project_root / "csv.tmp"
+            if tmp_file.exists():
+                tmp_file.unlink()
                 
-                # Variable codes (disabled by default)
-                "CODE122": False,  # Control Variables
-                
-                # General settings
-                "FIRSTLINESPEAKERS": False,
-                "FACENAME101": False,
-                "NAMES": False,
-                "BRFLAG": False,
-                "FIXTEXTWRAP": True,
-                "IGNORETLTEXT": False,
-                
-                # All other codes disabled by default
-                "translate_dialogue": True,
-                "translate_choices": True,
-                "translate_items": False,
-                "translate_skills": False,
-                "translate_states": False,
-                "translate_actors": False,
-                "translate_classes": False,
-                "translate_weapons": False,
-                "translate_armors": False,
-                "translate_enemies": False,
-                "event_codes": ["401", "405", "102"]  # Only main dialogue codes enabled
-            }
-            base_settings.update(rpg_defaults)
-        elif module_name == "json":
-            base_settings.update({
-                "translate_strings": True,
-                "skip_keys": ["id", "index", "type"],
-                "nested_translation": True
-            })
-        elif module_name == "text":
-            base_settings.update({
-                "line_by_line": True,
-                "skip_empty_lines": True,
-                "preserve_whitespace": True
-            })
-        elif module_name == "csv":
-            base_settings.update({
-                "has_header": True,
-                "delimiter": ",",
-                "columns_to_translate": []  # Empty means translate all text columns
-            })
-            
-        return base_settings
-        
-    def cancel(self):
-        """Cancel the translation process."""
-        self.is_cancelled = True
+            # Report results
+            if total_cost != "Fail" and not self.should_stop:
+                self.log_signal.emit("")
+                self.log_signal.emit(f"💰 {total_cost}")
+                if not self.estimate_only:
+                    self.log_signal.emit("✅ Translation completed successfully!")
+                else:
+                    self.log_signal.emit("✅ Estimation completed!")
+                self.finished_signal.emit(True, str(total_cost))
+            else:
+                if not self.should_stop:
+                    self.log_signal.emit("❌ Translation failed!")
+                    self.finished_signal.emit(False, "Translation failed")
+                    
+        except Exception as e:
+            error_msg = f"❌ Unexpected error: {str(e)}"
+            self.log_signal.emit(error_msg)
+            self.finished_signal.emit(False, error_msg)
 
 
 class TranslationTab(QWidget):
-    """Translation execution tab."""
+    """Simple translation tab with file management and console log."""
     
     def __init__(self, parent=None):
         super().__init__(parent)
         self.parent_window = parent
-        self.worker = None
+        self.translation_process = None
+        
+        # Set up directories
+        self.project_root = Path(__file__).parent.parent
+        self.files_dir = self.project_root / "files"
+        self.translated_dir = self.project_root / "translated"
+        
+        # Ensure directories exist
+        self.files_dir.mkdir(exist_ok=True)
+        self.translated_dir.mkdir(exist_ok=True)
+        
         self.setup_ui()
+        self.refresh_file_lists()
+        
+        # Auto-refresh timer for file lists
+        self.refresh_timer = QTimer()
+        self.refresh_timer.timeout.connect(self.refresh_file_lists)
+        self.refresh_timer.start(3000)  # Refresh every 3 seconds
         
     def setup_ui(self):
         """Set up the user interface."""
         layout = QVBoxLayout()
+        layout.setSpacing(15)  # Add consistent spacing
         
         # Title
-        title_label = QLabel("Translation Execution")
-        title_label.setStyleSheet("font-size: 16px; font-weight: bold; color: #007acc;")
+        title_label = QLabel("Translation")
+        title_label.setStyleSheet("font-size: 16px; font-weight: bold; color: #007acc; margin-bottom: 5px;")
         layout.addWidget(title_label)
         
         # Description
         desc_label = QLabel(
-            "Execute the translation process on selected files. "
-            "Each module will use its default settings stored in its own folder."
+            "Manage your files and run translations. Add files to 'files' folder, select module, then click translate."
         )
         desc_label.setWordWrap(True)
-        desc_label.setStyleSheet("color: #cccccc; margin-bottom: 10px;")
+        desc_label.setStyleSheet("color: #cccccc; margin-bottom: 15px;")
         layout.addWidget(desc_label)
         
-        # Main content
-        content_splitter = QSplitter(Qt.Vertical)
+        # Module selection section
+        module_group = QGroupBox("Translation Settings")
+        module_group.setStyleSheet("QGroupBox { font-weight: bold; color: #007acc; margin-top: 10px; }")
+        module_layout = QVBoxLayout()
         
-        # File selection and controls
-        controls_group = self.create_controls_section()
-        content_splitter.addWidget(controls_group)
+        # Module selector
+        module_selector_layout = QHBoxLayout()
+        module_label = QLabel("Game Engine:")
+        module_selector_layout.addWidget(module_label)
         
-        # Progress and log section
-        progress_group = self.create_progress_section()
-        content_splitter.addWidget(progress_group)
+        self.module_combo = QComboBox()
+        self.setup_module_list()
+        module_selector_layout.addWidget(self.module_combo)
         
-        content_splitter.setSizes([300, 200])
-        layout.addWidget(content_splitter)
+        # Estimate checkbox
+        self.estimate_checkbox = QCheckBox("Estimate only (don't translate)")
+        module_selector_layout.addWidget(self.estimate_checkbox)
         
-        # Status bar
-        self.status_label = QLabel("Ready to translate")
-        self.status_label.setStyleSheet("color: #cccccc; padding: 5px;")
-        layout.addWidget(self.status_label)
+        module_layout.addLayout(module_selector_layout)
+        module_group.setLayout(module_layout)
+        layout.addWidget(module_group)
         
-        self.setLayout(layout)
+        # File management section at the top
+        file_management_splitter = QSplitter(Qt.Horizontal)
         
-    def create_controls_section(self):
-        """Create the controls section."""
-        group = QGroupBox("Translation Controls")
-        layout = QVBoxLayout()
+        # Input files
+        input_widget = self.create_input_files_widget()
+        file_management_splitter.addWidget(input_widget)
         
-        # File selection
-        file_layout = QHBoxLayout()
+        # Output files
+        output_widget = self.create_output_files_widget()
+        file_management_splitter.addWidget(output_widget)
         
-        file_label = QLabel("Files to translate:")
-        file_label.setStyleSheet("color: #ffffff;")
-        file_layout.addWidget(file_label)
+        file_management_splitter.setSizes([300, 300])
+        layout.addWidget(file_management_splitter)
         
-        self.refresh_files_btn = QPushButton("Refresh File List")
-        self.refresh_files_btn.clicked.connect(self.refresh_file_list)
-        file_layout.addWidget(self.refresh_files_btn)
+        # Console log at the bottom
+        log_widget = self.create_log_widget()
+        layout.addWidget(log_widget)
         
-        file_layout.addStretch()
-        layout.addLayout(file_layout)
-        
-        # File list
-        self.file_list = QListWidget()
-        self.file_list.setSelectionMode(QListWidget.ExtendedSelection)
-        layout.addWidget(self.file_list)
-        
-        # Options
-        options_layout = QHBoxLayout()
-        
-        self.select_all_cb = QCheckBox("Select All Files")
-        self.select_all_cb.stateChanged.connect(self.toggle_select_all)
-        options_layout.addWidget(self.select_all_cb)
-        
-        self.dry_run_cb = QCheckBox("Dry Run (test without translating)")
-        options_layout.addWidget(self.dry_run_cb)
-        
-        options_layout.addStretch()
-        layout.addLayout(options_layout)
-        
-        # Action buttons
+        # Translation button
         button_layout = QHBoxLayout()
+        button_layout.addStretch()
         
-        self.start_btn = QPushButton("Start Translation")
-        self.start_btn.clicked.connect(self.start_translation)
-        self.start_btn.setStyleSheet("QPushButton { background-color: #0a7a0a; }")
-        button_layout.addWidget(self.start_btn)
+        self.translate_button = QPushButton("Start Translation")
+        self.translate_button.clicked.connect(self.start_translation)
+        self.translate_button.setStyleSheet("""
+            QPushButton {
+                background-color: #007acc;
+                color: white;
+                font-weight: bold;
+                padding: 10px 20px;
+                font-size: 14px;
+                border-radius: 5px;
+            }
+            QPushButton:hover {
+                background-color: #106ebe;
+            }
+        """)
+        button_layout.addWidget(self.translate_button)
         
-        self.stop_btn = QPushButton("Stop Translation")
-        self.stop_btn.clicked.connect(self.stop_translation)
-        self.stop_btn.setEnabled(False)
-        self.stop_btn.setStyleSheet("QPushButton { background-color: #aa0000; }")
-        button_layout.addWidget(self.stop_btn)
+        self.stop_button = QPushButton("Stop Translation")
+        self.stop_button.clicked.connect(self.stop_translation)
+        self.stop_button.setEnabled(False)
+        self.stop_button.setStyleSheet("""
+            QPushButton {
+                background-color: #cc0000;
+                color: white;
+                font-weight: bold;
+                padding: 10px 20px;
+                font-size: 14px;
+                border-radius: 5px;
+            }
+            QPushButton:hover {
+                background-color: #aa0000;
+            }
+        """)
+        button_layout.addWidget(self.stop_button)
         
         button_layout.addStretch()
         layout.addLayout(button_layout)
         
-        group.setLayout(layout)
-        return group
+        self.setLayout(layout)
         
-    def create_progress_section(self):
-        """Create the progress and log section."""
-        group = QGroupBox("Translation Progress")
+    def setup_module_list(self):
+        """Set up the module selection list."""
+        # Import modules to get the list
+        try:
+            sys.path.append(str(self.project_root))
+            from modules.rpgmakermvmz import handleMVMZ
+            from modules.rpgmakerace import handleACE
+            from modules.csv import handleCSV
+            from modules.tyrano import handleTyrano
+            from modules.kirikiri import handleKirikiri
+            from modules.json import handleJSON
+            from modules.lune import handleLune
+            from modules.nscript import handleOnscripter
+            from modules.wolf import handleWOLF
+            from modules.wolf2 import handleWOLF2
+            from modules.regex import handleRegex
+            from modules.text import handleText
+            from modules.renpy import handleRenpy
+            from modules.unity import handleUnity
+            from modules.images import handleImages
+            from modules.rpgmakerplugin import handlePlugin
+            
+            self.modules = [
+                ["RPG Maker MV/MZ", [".json"], handleMVMZ],
+                ["RPG Maker Ace", [".yaml"], handleACE],
+                ["CSV", [".csv"], handleCSV],
+                ["Tyrano", [".ks"], handleTyrano],
+                ["Kirikiri", [".ks"], handleKirikiri],
+                ["JSON", [".json"], handleJSON],
+                ["Lune", [".l"], handleLune],
+                ["NScript", [".nscript"], handleOnscripter],
+                ["Wolf RPG", [".txt"], handleWOLF],
+                ["Wolf RPG 2", [".txt"], handleWOLF2],
+                ["Regex", [".txt"], handleRegex],
+                ["Text", [".txt"], handleText],
+                ["RenPy", [".rpy"], handleRenpy],
+                ["Unity", [".unity"], handleUnity],
+                ["Images", [".png", ".jpg", ".jpeg"], handleImages],
+                ["RPG Maker Plugin", [".js"], handlePlugin],
+            ]
+            
+            for module in self.modules:
+                extensions = ", ".join(module[1])
+                self.module_combo.addItem(f"{module[0]} ({extensions})")
+                
+        except Exception as e:
+            self.log_display.append(f"Warning: Could not load modules: {str(e)}")
+            # Add a default option
+            self.module_combo.addItem("RPG Maker MV/MZ (.json)")
+            self.modules = [["RPG Maker MV/MZ", [".json"], None]]
+        
+    def create_input_files_widget(self):
+        """Create the input files widget."""
+        input_group = QGroupBox("Input Files (files folder)")
+        input_group.setStyleSheet("QGroupBox { font-weight: bold; color: #007acc; margin-top: 10px; }")
+        input_layout = QVBoxLayout()
+        
+        self.input_list = QListWidget()
+        self.input_list.setMaximumHeight(120)
+        input_layout.addWidget(self.input_list)
+        
+        input_buttons = QHBoxLayout()
+        add_input_btn = QPushButton("Add Files")
+        add_input_btn.clicked.connect(self.add_input_files)
+        input_buttons.addWidget(add_input_btn)
+        
+        remove_input_btn = QPushButton("Remove Selected")
+        remove_input_btn.clicked.connect(self.remove_input_file)
+        input_buttons.addWidget(remove_input_btn)
+        
+        open_input_btn = QPushButton("Open Folder")
+        open_input_btn.clicked.connect(self.open_input_folder)
+        input_buttons.addWidget(open_input_btn)
+        
+        input_layout.addLayout(input_buttons)
+        input_group.setLayout(input_layout)
+        return input_group
+        
+    def create_output_files_widget(self):
+        """Create the output files widget."""
+        output_group = QGroupBox("Output Files (translated folder)")
+        output_group.setStyleSheet("QGroupBox { font-weight: bold; color: #007acc; margin-top: 10px; }")
+        output_layout = QVBoxLayout()
+        
+        self.output_list = QListWidget()
+        self.output_list.setMaximumHeight(120)
+        output_layout.addWidget(self.output_list)
+        
+        output_buttons = QHBoxLayout()
+        remove_output_btn = QPushButton("Remove Selected")
+        remove_output_btn.clicked.connect(self.remove_output_file)
+        output_buttons.addWidget(remove_output_btn)
+        
+        clear_output_btn = QPushButton("Clear All")
+        clear_output_btn.clicked.connect(self.clear_output_files)
+        output_buttons.addWidget(clear_output_btn)
+        
+        open_output_btn = QPushButton("Open Folder")
+        open_output_btn.clicked.connect(self.open_output_folder)
+        output_buttons.addWidget(open_output_btn)
+        
+        output_layout.addLayout(output_buttons)
+        output_group.setLayout(output_layout)
+        return output_group
+        
+    def create_log_widget(self):
+        """Create the console log widget."""
+        log_group = QGroupBox("Console Output")
+        log_group.setStyleSheet("QGroupBox { font-weight: bold; color: #007acc; margin-top: 10px; }")
         layout = QVBoxLayout()
         
-        # Progress bar
+        # Progress bar for file translation
+        progress_layout = QHBoxLayout()
+        self.progress_label = QLabel("Ready")
+        self.progress_label.setStyleSheet("color: #cccccc; font-weight: bold;")
+        progress_layout.addWidget(self.progress_label)
+        
         self.progress_bar = QProgressBar()
-        self.progress_bar.setRange(0, 100)
-        self.progress_bar.setValue(0)
-        layout.addWidget(self.progress_bar)
+        self.progress_bar.setVisible(False)
+        self.progress_bar.setStyleSheet("""
+            QProgressBar {
+                border: 1px solid #555555;
+                border-radius: 3px;
+                text-align: center;
+                background-color: #2b2b2b;
+                color: white;
+            }
+            QProgressBar::chunk {
+                background-color: #007acc;
+                border-radius: 2px;
+            }
+        """)
+        progress_layout.addWidget(self.progress_bar)
+        layout.addLayout(progress_layout)
         
-        # Log output
-        log_label = QLabel("Translation Log:")
-        log_label.setStyleSheet("color: #ffffff; margin-top: 10px;")
-        layout.addWidget(log_label)
+        self.log_display = QTextEdit()
+        self.log_display.setReadOnly(True)
+        self.log_display.setFont(QFont("Consolas", 9))
+        self.log_display.setMinimumHeight(200)
+        self.log_display.setStyleSheet("""
+            QTextEdit {
+                background-color: #1e1e1e;
+                color: #ffffff;
+                border: 1px solid #555555;
+                font-family: 'Consolas', 'Courier New', monospace;
+            }
+        """)
+        layout.addWidget(self.log_display)
         
-        self.log_output = QTextEdit()
-        self.log_output.setReadOnly(True)
-        self.log_output.setMaximumHeight(150)
-        layout.addWidget(self.log_output)
+        clear_log_btn = QPushButton("Clear Log")
+        clear_log_btn.clicked.connect(self.clear_log)
+        layout.addWidget(clear_log_btn)
         
-        # Clear log button
-        clear_layout = QHBoxLayout()
-        clear_layout.addStretch()
+        log_group.setLayout(layout)
+        return log_group
         
-        self.clear_log_btn = QPushButton("Clear Log")
-        self.clear_log_btn.clicked.connect(self.clear_log)
-        clear_layout.addWidget(self.clear_log_btn)
-        
-        layout.addLayout(clear_layout)
-        
-        group.setLayout(layout)
-        return group
-        
-    def refresh_file_list(self):
-        """Refresh the list of available files."""
-        self.file_list.clear()
-        
-        try:
-            # Get files from the file manager tab
-            if hasattr(self.parent_window, 'file_manager_tab'):
-                input_files = self.parent_window.file_manager_tab.get_input_files()
-                
-                for file_path in input_files:
-                    item = QListWidgetItem(file_path.name)
-                    item.setData(Qt.UserRole, str(file_path))
-                    item.setCheckState(Qt.Checked)  # Default to checked
-                    self.file_list.addItem(item)
+    def refresh_file_lists(self):
+        """Refresh both input and output file lists."""
+        # Refresh input files
+        self.input_list.clear()
+        if self.files_dir.exists():
+            for file_path in self.files_dir.iterdir():
+                if file_path.is_file() and file_path.name != '.gitkeep':
+                    self.input_list.addItem(file_path.name)
                     
-                self.status_label.setText(f"Found {len(input_files)} files ready for translation")
-            else:
-                self.status_label.setText("File manager not available")
+        # Refresh output files
+        self.output_list.clear()
+        if self.translated_dir.exists():
+            for file_path in self.translated_dir.iterdir():
+                if file_path.is_file() and file_path.name != '.gitkeep':
+                    self.output_list.addItem(file_path.name)
+                    
+    def add_input_files(self):
+        """Add files to the input directory."""
+        file_paths, _ = QFileDialog.getOpenFileNames(
+            self,
+            "Select files to add",
+            "",
+            "All Files (*)"
+        )
+        
+        if file_paths:
+            try:
+                import shutil
+                copied_count = 0
+                for file_path in file_paths:
+                    source = Path(file_path)
+                    dest = self.files_dir / source.name
+                    
+                    if dest.exists():
+                        reply = QMessageBox.question(
+                            self,
+                            "File Exists",
+                            f"File '{source.name}' already exists. Overwrite?",
+                            QMessageBox.Yes | QMessageBox.No
+                        )
+                        if reply == QMessageBox.No:
+                            continue
+                    
+                    shutil.copy2(source, dest)
+                    copied_count += 1
                 
+                self.refresh_file_lists()
+                if copied_count > 0:
+                    QMessageBox.information(self, "Files Added", f"Successfully added {copied_count} files.")
+                    
+            except Exception as e:
+                QMessageBox.critical(self, "Error", f"Failed to add files:\n{str(e)}")
+                
+    def remove_input_file(self):
+        """Remove selected input file."""
+        current_item = self.input_list.currentItem()
+        if not current_item:
+            QMessageBox.information(self, "No Selection", "Please select a file to remove.")
+            return
+            
+        file_path = self.files_dir / current_item.text()
+        
+        reply = QMessageBox.question(
+            self,
+            "Confirm Deletion",
+            f"Are you sure you want to delete '{current_item.text()}'?",
+            QMessageBox.Yes | QMessageBox.No
+        )
+        
+        if reply == QMessageBox.Yes:
+            try:
+                file_path.unlink()
+                self.refresh_file_lists()
+            except Exception as e:
+                QMessageBox.critical(self, "Error", f"Failed to delete file:\n{str(e)}")
+                
+    def remove_output_file(self):
+        """Remove selected output file."""
+        current_item = self.output_list.currentItem()
+        if not current_item:
+            QMessageBox.information(self, "No Selection", "Please select a file to remove.")
+            return
+            
+        file_path = self.translated_dir / current_item.text()
+        
+        reply = QMessageBox.question(
+            self,
+            "Confirm Deletion",
+            f"Are you sure you want to delete '{current_item.text()}'?",
+            QMessageBox.Yes | QMessageBox.No
+        )
+        
+        if reply == QMessageBox.Yes:
+            try:
+                file_path.unlink()
+                self.refresh_file_lists()
+            except Exception as e:
+                QMessageBox.critical(self, "Error", f"Failed to delete file:\n{str(e)}")
+                
+    def clear_output_files(self):
+        """Clear all output files."""
+        if self.output_list.count() == 0:
+            QMessageBox.information(self, "No Files", "No output files to clear.")
+            return
+            
+        reply = QMessageBox.question(
+            self,
+            "Confirm Clear",
+            "Are you sure you want to delete ALL translated files?",
+            QMessageBox.Yes | QMessageBox.No
+        )
+        
+        if reply == QMessageBox.Yes:
+            try:
+                count = 0
+                for file_path in self.translated_dir.iterdir():
+                    if file_path.is_file() and file_path.name != '.gitkeep':
+                        file_path.unlink()
+                        count += 1
+                        
+                self.refresh_file_lists()
+                QMessageBox.information(self, "Files Cleared", f"Deleted {count} files.")
+                
+            except Exception as e:
+                QMessageBox.critical(self, "Error", f"Failed to clear files:\n{str(e)}")
+                
+    def open_input_folder(self):
+        """Open the input directory."""
+        self.open_folder(self.files_dir)
+        
+    def open_output_folder(self):
+        """Open the output directory."""
+        self.open_folder(self.translated_dir)
+        
+    def open_folder(self, folder_path):
+        """Open a folder in the file explorer."""
+        try:
+            import platform
+            if platform.system() == "Windows":
+                subprocess.run(["explorer", str(folder_path)])
+            elif platform.system() == "Darwin":  # macOS
+                subprocess.run(["open", str(folder_path)])
+            else:  # Linux
+                subprocess.run(["xdg-open", str(folder_path)])
         except Exception as e:
-            self.status_label.setText(f"Error loading files: {str(e)}")
+            QMessageBox.warning(self, "Error", f"Failed to open folder:\n{str(e)}")
             
-    def toggle_select_all(self, state):
-        """Toggle selection of all files."""
-        check_state = Qt.Checked if state == Qt.Checked else Qt.Unchecked
-        
-        for i in range(self.file_list.count()):
-            item = self.file_list.item(i)
-            item.setCheckState(check_state)
-            
-    def get_selected_files(self):
-        """Get list of selected files."""
-        selected_files = []
-        
-        for i in range(self.file_list.count()):
-            item = self.file_list.item(i)
-            if item.checkState() == Qt.Checked:
-                file_path = Path(item.data(Qt.UserRole))
-                selected_files.append(file_path)
-                
-        return selected_files
-        
     def start_translation(self):
         """Start the translation process."""
-        selected_files = self.get_selected_files()
+        if self.input_list.count() == 0:
+            QMessageBox.warning(self, "No Files", "No files found in the input folder to translate.")
+            return
+            
+        # Get selected module
+        selected_index = self.module_combo.currentIndex()
+        if selected_index < 0 or selected_index >= len(self.modules):
+            QMessageBox.warning(self, "No Module", "Please select a translation module.")
+            return
+            
+        selected_module = self.modules[selected_index]
+        estimate_only = self.estimate_checkbox.isChecked()
         
-        if not selected_files:
-            QMessageBox.warning(self, "No Files Selected", "Please select at least one file to translate.")
-            return
-            
-        # Get configuration from other tabs
-        try:
-            config = {}
-            if hasattr(self.parent_window, 'config_tab'):
-                config.update(self.parent_window.config_tab.get_config())
-            if hasattr(self.parent_window, 'rpgmaker_tab'):
-                config.update(self.parent_window.rpgmaker_tab.get_config())
-                
-        except Exception as e:
-            QMessageBox.critical(self, "Configuration Error", f"Failed to get configuration:\n{str(e)}")
-            return
-            
         # Confirm start
-        if not self.dry_run_cb.isChecked():
-            reply = QMessageBox.question(
-                self,
-                "Confirm Translation",
-                f"Start translation of {len(selected_files)} files?\n\nThis will create translated files in the 'translated' directory.",
-                QMessageBox.Yes | QMessageBox.No
+        action = "estimate" if estimate_only else "translate"
+        reply = QMessageBox.question(
+            self,
+            f"Start {action.title()}",
+            f"Start {action}ing {self.input_list.count()} files using {selected_module[0]}?",
+            QMessageBox.Yes | QMessageBox.No
+        )
+        
+        if reply == QMessageBox.Yes:
+            self.translate_button.setEnabled(False)
+            self.stop_button.setEnabled(True)
+            self.clear_log()
+            
+            # Create and start translation worker
+            self.translation_worker = TranslationWorker(
+                self.project_root, 
+                selected_module, 
+                estimate_only
             )
-            if reply != QMessageBox.Yes:
-                return
-                
-        # Start worker thread
-        self.worker = TranslationWorker(config, selected_files)
-        self.worker.progress_updated.connect(self.progress_bar.setValue)
-        self.worker.status_updated.connect(self.status_label.setText)
-        self.worker.log_updated.connect(self.add_log_message)
-        self.worker.finished.connect(self.on_translation_finished)
-        
-        # Update UI state
-        self.start_btn.setEnabled(False)
-        self.stop_btn.setEnabled(True)
-        self.progress_bar.setValue(0)
-        
-        # Start translation
-        self.worker.start()
-        self.add_log_message(f"Starting translation of {len(selected_files)} files...")
-        
-    def stop_translation(self):
-        """Stop the translation process."""
-        if self.worker and self.worker.isRunning():
-            self.worker.cancel()
-            self.add_log_message("Cancelling translation...")
-            self.status_label.setText("Stopping translation...")
             
-    def on_translation_finished(self, success):
-        """Handle translation completion."""
-        # Update UI state
-        self.start_btn.setEnabled(True)
-        self.stop_btn.setEnabled(False)
-        
-        if success:
-            self.add_log_message("Translation completed successfully!")
-            QMessageBox.information(self, "Translation Complete", "All files have been translated successfully!")
+            # Connect signals
+            self.translation_worker.log_signal.connect(self.append_log)
+            self.translation_worker.progress_signal.connect(self.update_progress)
+            self.translation_worker.finished_signal.connect(self.on_translation_finished)
             
-            # Refresh file manager if available
-            if hasattr(self.parent_window, 'file_manager_tab'):
-                self.parent_window.file_manager_tab.refresh_file_lists()
-        else:
-            self.add_log_message("Translation failed or was cancelled.")
+            # Show progress bar and initialize
+            self.progress_bar.setVisible(True)
+            self.progress_bar.setValue(0)
+            self.progress_label.setText("Starting...")
             
-        self.worker = None
-        
-    def add_log_message(self, message):
-        """Add a message to the log output."""
-        import datetime
-        timestamp = datetime.datetime.now().strftime("%H:%M:%S")
-        formatted_message = f"[{timestamp}] {message}"
-        self.log_output.append(formatted_message)
-        
+            # Start the worker
+            self.translation_worker.start()
+            
+    def append_log(self, message):
+        """Append a message to the log display."""
+        self.log_display.append(message)
         # Auto-scroll to bottom
-        scrollbar = self.log_output.verticalScrollBar()
+        scrollbar = self.log_display.verticalScrollBar()
         scrollbar.setValue(scrollbar.maximum())
         
+    def update_progress(self, current_file, total_files, filename):
+        """Update the progress bar and label."""
+        progress_percentage = int((current_file / total_files) * 100)
+        self.progress_bar.setMaximum(total_files)
+        self.progress_bar.setValue(current_file)
+        self.progress_label.setText(f"Processing {filename} ({current_file}/{total_files})")
+        
+    def on_translation_finished(self, success, message):
+        """Handle translation completion."""
+        self.translate_button.setEnabled(True)
+        self.stop_button.setEnabled(False)
+        self.progress_bar.setVisible(False)
+        self.progress_label.setText("Ready")
+        self.refresh_file_lists()
+        
+        if success:
+            self.append_log("")
+            self.append_log("🎉 Process completed successfully!")
+        else:
+            self.append_log("")
+            self.append_log(f"❌ Process failed: {message}")
+            
+    def stop_translation(self):
+        """Stop the translation process."""
+        if hasattr(self, 'translation_worker') and self.translation_worker.isRunning():
+            self.translation_worker.stop()
+            self.translation_worker.wait(3000)  # Wait up to 3 seconds
+            self.append_log("🛑 Translation process stopped by user.")
+        
+        self.translate_button.setEnabled(True)
+        self.stop_button.setEnabled(False)
+        self.progress_bar.setVisible(False)
+        self.progress_label.setText("Ready")
+        
     def clear_log(self):
-        """Clear the log output."""
-        self.log_output.clear()
-        self.add_log_message("Log cleared")
+        """Clear the log display."""
+        self.log_display.clear()
+        
+    def closeEvent(self, event):
+        """Handle widget close event."""
+        if hasattr(self, 'refresh_timer'):
+            self.refresh_timer.stop()
+        if hasattr(self, 'translation_worker') and self.translation_worker.isRunning():
+            self.translation_worker.stop()
+            self.translation_worker.wait(3000)
+        event.accept()
