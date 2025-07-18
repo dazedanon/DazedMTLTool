@@ -120,18 +120,12 @@ try:
     # Import and run the handler
     {self.get_import_statement()}
     
-    # Capture all output in a string buffer to avoid encoding issues
-    output_buffer = io.StringIO()
-    error_buffer = io.StringIO()
+    # Run the handler and capture the result
+    handler_result = {self.get_handler_call()}(r"{filename}", {estimate_only})
     
-    with redirect_stdout(output_buffer), redirect_stderr(error_buffer):
-        handler_result = {self.get_handler_call()}(r"{filename}", {estimate_only})
-    
-    # Print only the result, avoiding any Unicode characters from tqdm
+    # Print the result
     if handler_result:
-        # Clean the result of any problematic Unicode characters
-        clean_result = str(handler_result).encode('ascii', 'ignore').decode('ascii')
-        print(f"RESULT:{{clean_result}}")
+        print(f"RESULT:{{handler_result}}")
     else:
         print("RESULT:Fail")
     
@@ -179,6 +173,11 @@ except Exception as e:
             # Check if process was terminated by stop signal
             if self.should_stop:
                 return "Stopped"
+            
+            # Forward all stdout output to log (this includes cost information)
+            for line in stdout.strip().split('\n'):
+                if line.strip() and not line.startswith('RESULT:'):
+                    self.emit_log(line)
             
             # Parse result
             if process.returncode == 0:
@@ -372,7 +371,7 @@ except Exception as e:
                         result = future.result()
                         if result and result != "Fail" and result != "Stopped":
                             total_cost = result
-                            self.emit_log(f"✅ Completed {filename} ({completed_count}/{total_files})")
+                            # Don't log completion here since the module already logged the detailed cost info
                         elif result == "Stopped":
                             # Don't log here, already handled
                             break
@@ -706,6 +705,19 @@ class TranslationTab(QWidget):
         progress_layout.addWidget(self.progress_bar)
         layout.addLayout(progress_layout)
         
+        # Cost display on its own row (compact)
+        cost_layout = QHBoxLayout()
+        cost_layout.setContentsMargins(0, 0, 0, 0)  # Remove margins
+        cost_layout.setSpacing(0)  # Remove spacing
+        cost_layout.addStretch()  # Push cost to center
+        self.cost_label = QLabel("")
+        self.cost_label.setStyleSheet("color: #00ff00; font-weight: bold; font-size: 12px;")
+        self.cost_label.setVisible(False)
+        self.cost_label.setAlignment(Qt.AlignCenter)
+        cost_layout.addWidget(self.cost_label)
+        cost_layout.addStretch()  # Push cost to center
+        layout.addLayout(cost_layout)
+        
         self.log_display = QTextEdit()
         self.log_display.setReadOnly(True)
         self.log_display.setFont(QFont("Consolas", 9))
@@ -920,6 +932,10 @@ class TranslationTab(QWidget):
             self.progress_bar.setValue(0)
             self.progress_label.setText("Starting...")
             
+            # Hide cost display initially
+            self.cost_label.setVisible(False)
+            self.cost_label.setText("")
+            
             # Reduce file refresh frequency during translation
             self.refresh_timer.stop()
             
@@ -928,11 +944,47 @@ class TranslationTab(QWidget):
             
     def append_log(self, message):
         """Append a message to the log buffer for batched display."""
-        self.log_buffer.append(message)
+        # Strip ANSI color codes from colorama
+        import re
+        clean_message = re.sub(r'\x1b\[[0-9;]*m', '', message)
+        
+        # Check if this is a cost message and update the cost display
+        if "Cost: $" in clean_message:
+            # Extract cost for display
+            cost_match = re.search(r'Cost: \$([0-9,\.]+)', clean_message)
+            if cost_match:
+                cost_value = cost_match.group(1)
+                if "TOTAL:" in clean_message:
+                    # This is the final total cost
+                    self.update_cost_display(f"Total Cost: ${cost_value}")
+                else:
+                    # This is an individual file cost - extract filename
+                    filename_match = re.search(r'^([^:]+):', clean_message)
+                    if filename_match:
+                        filename = filename_match.group(1).strip()
+                        self.update_cost_display(f"{filename}: ${cost_value}")
+                    else:
+                        # Fallback - just show the cost
+                        self.update_cost_display(f"File Cost: ${cost_value}")
+        
+        # Also check for the final cost display format (with emoji)
+        elif "💰" in message:
+            # Extract cost from the emoji format
+            cost_match = re.search(r'💰\s*(.+)', message)
+            if cost_match:
+                cost_text = cost_match.group(1).strip()
+                self.update_cost_display(f"Total: {cost_text}")
+        
+        self.log_buffer.append(clean_message)
         
         # Start timer if not already running
         if not self.log_timer.isActive():
             self.log_timer.start(100)  # Flush every 100ms
+            
+    def update_cost_display(self, cost_text):
+        """Update the cost display label."""
+        self.cost_label.setText(cost_text)
+        self.cost_label.setVisible(True)
             
     def flush_log_buffer(self):
         """Flush the log buffer to the display."""
