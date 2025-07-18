@@ -903,10 +903,11 @@ class TranslationTab(QWidget):
         
         # Confirm start
         action = "estimate" if estimate_only else "translate"
+        action_ing = "estimation of" if estimate_only else "translating"
         reply = QMessageBox.question(
             self,
             f"Start {action.title()}",
-            f"Start {action}ing {self.input_list.count()} files using {selected_module[0]}?",
+            f"Start {action_ing} {self.input_list.count()} files using {selected_module[0]}?",
             QMessageBox.Yes | QMessageBox.No
         )
         
