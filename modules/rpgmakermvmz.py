@@ -6,7 +6,6 @@ import util.dazedwrap as dazedwrap
 import threading
 import time
 import traceback
-import tiktoken
 import openai
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
@@ -14,6 +13,7 @@ from colorama import Fore
 from dotenv import load_dotenv
 from retry import retry
 from tqdm import tqdm
+from util.translation import TranslationConfig, translateAI as sharedtranslateAI
 
 # Open AI
 load_dotenv()
@@ -72,6 +72,18 @@ else:
 # tqdm Globals
 BAR_FORMAT = "{l_bar}{bar:10}{r_bar}{bar:-10b}"
 POSITION = 0
+
+# Initialize Translation Config
+TRANSLATION_CONFIG = TranslationConfig(
+    model=MODEL,
+    language=LANGUAGE,
+    prompt=PROMPT,
+    vocab=VOCAB,
+    langRegex=LANGREGEX,
+    batchSize=BATCHSIZE,
+    maxHistory=MAXHISTORY,
+    estimateMode=False  # Will be set dynamically based on ESTIMATE
+)
 LEAVE = False
 
 # Config (Default)
@@ -243,7 +255,7 @@ def parseMap(data, filename):
 
     # Translate displayName for Map files
     if "Map" in filename:
-        response = translateGPT(
+        response = translateAI(
             data["displayName"],
             "Reply with only the " + LANGUAGE + " translation of the RPG location name",
             False,
@@ -256,7 +268,7 @@ def parseMap(data, filename):
     for event in events:
         if event:
             if "<LB>" in event["note"]:
-                response = translateGPT(
+                response = translateAI(
                     event["name"],
                     "Reply with only the " + LANGUAGE + " translation of the RPG location name",
                     False,
@@ -318,7 +330,7 @@ def translateNote(event, regex, wordwrap=False):
                 modifiedJAString = modifiedJAString.replace("\n", " ")
 
             # Translate
-            response = translateGPT(
+            response = translateAI(
                 modifiedJAString,
                 "Reply with only the " + LANGUAGE + " translation.",
                 False,
@@ -351,7 +363,7 @@ def translateNoteOmitSpace(event, regex):
         jaString = re.sub(r"\n", " ", oldJAString)
 
         # Translate
-        response = translateGPT(
+        response = translateAI(
             jaString,
             "Reply with the " + LANGUAGE + " translation of the location name.",
             False,
@@ -593,7 +605,7 @@ def searchNames(data, pbar, context):
     # --- Batch translate all notes ---
     translatedNotesBatch = []
     if notesBatch:
-        response = translateGPT(notesBatch, f"Reply with only the {LANGUAGE} translation of the note text.", True)
+        response = translateAI(notesBatch, f"Reply with only the {LANGUAGE} translation of the note text.", True)
         translatedNotesBatch = response[0]
         totalTokens[0] += response[1][0]
         totalTokens[1] += response[1][1]
@@ -655,7 +667,7 @@ def searchNames(data, pbar, context):
                     while number < 5:
                         if f"message{number}" in data[i] and data[i][f"message{number}"]:
                             if data[i][f"message{number}"][0] in ["は", "を", "の", "に", "が"]:
-                                msgResponse = translateGPT(
+                                msgResponse = translateAI(
                                     "Taro" + data[i][f"message{number}"],
                                     "reply with only the gender neutral "
                                     + LANGUAGE
@@ -667,7 +679,7 @@ def searchNames(data, pbar, context):
                                 totalTokens[1] += msgResponse[1][1]
                                 number += 1
                             else:
-                                msgResponse = translateGPT(
+                                msgResponse = translateAI(
                                     data[i][f"message{number}"],
                                     "reply with only the gender neutral " + LANGUAGE + " translation",
                                     False,
@@ -693,21 +705,21 @@ def searchNames(data, pbar, context):
             k = j  # Original Index
             if context in "Actors":
                 # Name
-                response = translateGPT(nameList, newContext, True)
+                response = translateAI(nameList, newContext, True)
                 translatedNameBatch = response[0]
                 totalTokens[0] += response[1][0]
                 totalTokens[1] += response[1][1]
 
                 # Nickname
                 if nicknameList:
-                    response = translateGPT(nicknameList, newContext, True)
+                    response = translateAI(nicknameList, newContext, True)
                     translatedNicknameBatch = response[0]
                     totalTokens[0] += response[1][0]
                     totalTokens[1] += response[1][1]
 
                 # Profile
                 if profileList:
-                    response = translateGPT(profileList, "", True)
+                    response = translateAI(profileList, "", True)
                     translatedProfileBatch = response[0]
                     totalTokens[0] += response[1][0]
                     totalTokens[1] += response[1][1]
@@ -747,14 +759,14 @@ def searchNames(data, pbar, context):
 
             if context in ["Armors", "Weapons", "Items", "Skills"]:
                 # Name
-                response = translateGPT(nameList, newContext, True)
+                response = translateAI(nameList, newContext, True)
                 translatedNameBatch = response[0]
                 totalTokens[0] += response[1][0]
                 totalTokens[1] += response[1][1]
 
                 # Description
                 if descriptionList:
-                    response = translateGPT(
+                    response = translateAI(
                         descriptionList,
                         f"Reply with only the {LANGUAGE} translation of the text.",
                         True,
@@ -792,7 +804,7 @@ def searchNames(data, pbar, context):
                 else:
                     mismatch = True
             if context in ["Enemies", "Classes", "MapInfos"]:
-                response = translateGPT(nameList, newContext, True)
+                response = translateAI(nameList, newContext, True)
                 translatedNameBatch = response[0]
                 totalTokens[0] += response[1][0]
                 totalTokens[1] += response[1][1]
@@ -1414,7 +1426,7 @@ def searchCodes(page, pbar, jobList, filename):
 
                     # Remove any textwrap & TL
                     jaString = re.sub(r"\n", " ", jaString)
-                    response = translateGPT(jaString, "", False)
+                    response = translateAI(jaString, "", False)
                     translatedText = response[0]
                     totalTokens[0] += response[1][0]
                     totalTokens[1] += response[1][1]
@@ -1429,7 +1441,7 @@ def searchCodes(page, pbar, jobList, filename):
                     if matchList != None:
                         # Translate
                         question = codeList[i]["parameters"][3]["messageText"]
-                        response = translateGPT(
+                        response = translateAI(
                             matchList,
                             f"Previous text for context: {question}\n",
                             True,
@@ -1481,7 +1493,7 @@ def searchCodes(page, pbar, jobList, filename):
                     jaString = re.sub(r"\n", " ", jaString)
 
                     # Translate
-                    response = translateGPT(jaString, "", True)
+                    response = translateAI(jaString, "", True)
                     totalTokens[0] += response[1][0]
                     totalTokens[1] += response[1][1]
                     translatedText = response[0]
@@ -1712,7 +1724,7 @@ def searchCodes(page, pbar, jobList, filename):
                     matchList = re.findall(r"Tachie showName (.+)", jaString)
                     if len(matchList) > 0:
                         # Translate
-                        response = translateGPT(
+                        response = translateAI(
                             matchList[0],
                             "Reply with the " + LANGUAGE + " translation of the NPC name.",
                             False,
@@ -1802,7 +1814,7 @@ def searchCodes(page, pbar, jobList, filename):
                     if len(matchList) > 0:
                         # Translate
                         text = matchList[0]
-                        response = translateGPT(text, "Reply with the " + LANGUAGE + " Translation", False)
+                        response = translateAI(text, "Reply with the " + LANGUAGE + " Translation", False)
                         translatedText = response[0]
                         totalTokens[0] += response[1][0]
                         totalTokens[1] += response[1][1]
@@ -1816,7 +1828,7 @@ def searchCodes(page, pbar, jobList, filename):
                     if len(matchList) > 0:
                         # Translate
                         text = matchList[0]
-                        response = translateGPT(text, "Reply with the " + LANGUAGE + " Translation", False)
+                        response = translateAI(text, "Reply with the " + LANGUAGE + " Translation", False)
                         translatedText = response[0]
                         totalTokens[0] += response[1][0]
                         totalTokens[1] += response[1][1]
@@ -1831,7 +1843,7 @@ def searchCodes(page, pbar, jobList, filename):
                     if len(matchList) > 0:
                         # Translate
                         text = matchList[0]
-                        response = translateGPT(text, "Reply with the " + LANGUAGE + " Translation", False)
+                        response = translateAI(text, "Reply with the " + LANGUAGE + " Translation", False)
                         translatedText = response[0]
                         totalTokens[0] += response[1][0]
                         totalTokens[1] += response[1][1]
@@ -1850,7 +1862,7 @@ def searchCodes(page, pbar, jobList, filename):
 
                         # Remove any textwrap & TL
                         jaString = re.sub(r"\n", " ", jaString)
-                        response = translateGPT(jaString, "", False)
+                        response = translateAI(jaString, "", False)
                         translatedText = response[0]
                         totalTokens[0] += response[1][0]
                         totalTokens[1] += response[1][1]
@@ -1872,7 +1884,7 @@ def searchCodes(page, pbar, jobList, filename):
 
                         # Translate
                         question = translatedText
-                        response = translateGPT(
+                        response = translateAI(
                             choiceList,
                             f"Previous text for context: {question}\n",
                             True,
@@ -1916,7 +1928,7 @@ def searchCodes(page, pbar, jobList, filename):
 
                 # Translate
                 if len(textHistory) > 0:
-                    response = translateGPT(
+                    response = translateAI(
                         choiceList,
                         f"Reply with the English translation of the dialogue choice.\n\nPrevious text for context: {str(textHistory)}\n",
                         True,
@@ -1925,7 +1937,7 @@ def searchCodes(page, pbar, jobList, filename):
                     totalTokens[0] += response[1][0]
                     totalTokens[1] += response[1][1]
                 else:
-                    response = translateGPT(choiceList, "Reply with the English translation of the dialogue choice.", True)
+                    response = translateAI(choiceList, "Reply with the English translation of the dialogue choice.", True)
                     translatedTextList = response[0]
                     totalTokens[0] += response[1][0]
                     totalTokens[1] += response[1][1]
@@ -1978,7 +1990,7 @@ def searchCodes(page, pbar, jobList, filename):
                     matchList = re.findall(r"'(.*?)'", jaString)
 
                     for match in matchList:
-                        response = translateGPT(match, "", False)
+                        response = translateAI(match, "", False)
                         translatedText = response[0]
                         totalTokens[0] += response[1][0]
                         totalTokens[1] += response[1][1]
@@ -2041,7 +2053,7 @@ def searchCodes(page, pbar, jobList, filename):
 
         # 401
         if len(list401) > 0:
-            response = translateGPT(list401, "", True)
+            response = translateAI(list401, "", True)
             list401TL = response[0]
             totalTokens[0] += response[1][0]
             totalTokens[1] += response[1][1]
@@ -2052,7 +2064,7 @@ def searchCodes(page, pbar, jobList, filename):
 
         # 122
         if len(list122) > 0:
-            response = translateGPT(list122, "Keep your translation as brief as possible", True)
+            response = translateAI(list122, "Keep your translation as brief as possible", True)
             list122TL = response[0]
             totalTokens[0] += response[1][0]
             totalTokens[1] += response[1][1]
@@ -2063,7 +2075,7 @@ def searchCodes(page, pbar, jobList, filename):
 
         # 355/655
         if len(list355655) > 0:
-            response = translateGPT(list355655, textHistory, True)
+            response = translateAI(list355655, textHistory, True)
             list355655TL = response[0]
             totalTokens[0] += response[1][0]
             totalTokens[1] += response[1][1]
@@ -2074,7 +2086,7 @@ def searchCodes(page, pbar, jobList, filename):
 
         # 108
         if len(list108) > 0:
-            response = translateGPT(list108, textHistory, True)
+            response = translateAI(list108, textHistory, True)
             list108TL = response[0]
             totalTokens[0] += response[1][0]
             totalTokens[1] += response[1][1]
@@ -2085,7 +2097,7 @@ def searchCodes(page, pbar, jobList, filename):
 
         # 356
         if len(list356) > 0:
-            response = translateGPT(list356, textHistory, True)
+            response = translateAI(list356, textHistory, True)
             list356TL = response[0]
             totalTokens[0] += response[1][0]
             totalTokens[1] += response[1][1]
@@ -2096,7 +2108,7 @@ def searchCodes(page, pbar, jobList, filename):
 
         # 357
         if len(list357) > 0:
-            response = translateGPT(list357, textHistory, True)
+            response = translateAI(list357, textHistory, True)
             list357TL = response[0]
             totalTokens[0] += response[1][0]
             totalTokens[1] += response[1][1]
@@ -2107,7 +2119,7 @@ def searchCodes(page, pbar, jobList, filename):
 
         # 408
         if len(list408) > 0:
-            response = translateGPT(list408, "", True)
+            response = translateAI(list408, "", True)
             list408TL = response[0]
             totalTokens[0] += response[1][0]
             totalTokens[1] += response[1][1]
@@ -2151,7 +2163,7 @@ def searchSS(state, pbar):
 
     # Name
     nameResponse = (
-        translateGPT(
+        translateAI(
             state["name"],
             "Reply with only the " + LANGUAGE + " translation of the RPG Skill name.",
             False,
@@ -2162,7 +2174,7 @@ def searchSS(state, pbar):
 
     # Description
     descriptionResponse = (
-        translateGPT(
+        translateAI(
             state["description"],
             "Reply with only the " + LANGUAGE + " translation of the description.",
             False,
@@ -2185,7 +2197,7 @@ def searchSS(state, pbar):
             "に",
             "が",
         ]:
-            message1Response = translateGPT(
+            message1Response = translateAI(
                 "Taro" + state["message1"],
                 "reply with only the gender neutral "
                 + LANGUAGE
@@ -2194,7 +2206,7 @@ Translate 'Taroを倒した！' as 'Taro was defeated!'",
                 False,
             )
         else:
-            message1Response = translateGPT(
+            message1Response = translateAI(
                 state["message1"],
                 "reply with only the gender neutral " + LANGUAGE + " translation",
                 False,
@@ -2208,7 +2220,7 @@ Translate 'Taroを倒した！' as 'Taro was defeated!'",
             "に",
             "が",
         ]:
-            message2Response = translateGPT(
+            message2Response = translateAI(
                 "Taro" + state["message2"],
                 "reply with only the gender neutral "
                 + LANGUAGE
@@ -2217,7 +2229,7 @@ Translate 'Taroを倒した！' as 'Taro was defeated!'",
                 False,
             )
         else:
-            message2Response = translateGPT(
+            message2Response = translateAI(
                 state["message2"],
                 "reply with only the gender neutral " + LANGUAGE + " translation",
                 False,
@@ -2231,7 +2243,7 @@ Translate 'Taroを倒した！' as 'Taro was defeated!'",
             "に",
             "が",
         ]:
-            message3Response = translateGPT(
+            message3Response = translateAI(
                 "Taro" + state["message3"],
                 "reply with only the gender neutral "
                 + LANGUAGE
@@ -2240,7 +2252,7 @@ Translate 'Taroを倒した！' as 'Taro was defeated!'",
                 False,
             )
         else:
-            message3Response = translateGPT(
+            message3Response = translateAI(
                 state["message3"],
                 "reply with only the gender neutral " + LANGUAGE + " translation",
                 False,
@@ -2254,7 +2266,7 @@ Translate 'Taroを倒した！' as 'Taro was defeated!'",
             "に",
             "が",
         ]:
-            message4Response = translateGPT(
+            message4Response = translateAI(
                 "Taro" + state["message4"],
                 "reply with only the gender neutral "
                 + LANGUAGE
@@ -2263,7 +2275,7 @@ Translate 'Taroを倒した！' as 'Taro was defeated!'",
                 False,
             )
         else:
-            message4Response = translateGPT(
+            message4Response = translateAI(
                 state["message4"],
                 "reply with only the gender neutral " + LANGUAGE + " translation",
                 False,
@@ -2290,7 +2302,7 @@ Translate 'Taroを倒した！' as 'Taro was defeated!'",
     # --- Batch translate all notes ---
     translatedNotesBatch = []
     if notesBatch:
-        response = translateGPT(notesBatch, f"Reply with only the {LANGUAGE} translation of the note text.", True)
+        response = translateAI(notesBatch, f"Reply with only the {LANGUAGE} translation of the note text.", True)
         translatedNotesBatch = response[0]
         totalTokens[0] += response[1][0]
         totalTokens[1] += response[1][1]
@@ -2348,7 +2360,7 @@ def searchSystem(data, pbar):
     context = "Reply with only the " + LANGUAGE + ' translation of the UI textbox."'
 
     # Title
-    response = translateGPT(
+    response = translateAI(
         data["gameTitle"],
         " Reply with the " + LANGUAGE + " translation of the game title name",
         False,
@@ -2363,14 +2375,14 @@ def searchSystem(data, pbar):
             termList = data["terms"][term]
             for i in range(len(termList)):  # Last item is a messages object
                 if termList[i] is not None:
-                    response = translateGPT(termList[i], context, False)
+                    response = translateAI(termList[i], context, False)
                     totalTokens[0] += response[1][0]
                     totalTokens[1] += response[1][1]
                     termList[i] = response[0].replace('"', "").strip()
 
     # Armor Types
     for i in range(len(data["armorTypes"])):
-        response = translateGPT(
+        response = translateAI(
             data["armorTypes"][i],
             "Reply with only the " + LANGUAGE + " translation of the armor type",
             False,
@@ -2381,7 +2393,7 @@ def searchSystem(data, pbar):
 
     # Skill Types
     for i in range(len(data["skillTypes"])):
-        response = translateGPT(
+        response = translateAI(
             data["skillTypes"][i],
             "Reply with only the " + LANGUAGE + " translation",
             False,
@@ -2392,7 +2404,7 @@ def searchSystem(data, pbar):
 
     # Equip Types
     for i in range(len(data["equipTypes"])):
-        response = translateGPT(
+        response = translateAI(
             data["equipTypes"][i],
             "Reply with only the " + LANGUAGE + " translation of the equipment type. No disclaimers.",
             False,
@@ -2403,7 +2415,7 @@ def searchSystem(data, pbar):
 
     # # Variables (Optional ususally)
     # for i in range(len(data['variables'])):
-    #     response = translateGPT(data['variables'][i], 'Reply with only the '+ LANGUAGE +' translation of the title', False)
+    #     response = translateAI(data['variables'][i], 'Reply with only the '+ LANGUAGE +' translation of the title', False)
     #     totalTokens[0] += response[1][0]
     #     totalTokens[1] += response[1][1]
     #     data['variables'][i] = response[0].replace('\"', '').strip()
@@ -2411,7 +2423,7 @@ def searchSystem(data, pbar):
     # Messages
     messages = data["terms"]["messages"]
     for key, value in messages.items():
-        response = translateGPT(
+        response = translateAI(
             value,
             "Reply with only the "
             + LANGUAGE
@@ -2445,7 +2457,7 @@ def getSpeaker(speaker):
                     return [NAMESLIST[i][1], [0, 0]]
 
             # Translate and Store Speaker
-            response = translateGPT(
+            response = translateAI(
                 f"{speaker}",
                 "Reply with the " + LANGUAGE + " translation of the NPC name.",
                 False,
@@ -2456,7 +2468,7 @@ def getSpeaker(speaker):
 
             # Retry if name doesn't translate for some reason
             if re.search(r"([a-zA-Z？?])", response[0]) == None:
-                response = translateGPT(
+                response = translateAI(
                     f"{speaker}",
                     "Reply with the " + LANGUAGE + " translation of the NPC name.",
                     False,
@@ -2469,328 +2481,24 @@ def getSpeaker(speaker):
             return response
     return [speaker, [0, 0]]
 
-
-def batchList(input_list, batch_size):
-    if not isinstance(batch_size, int) or batch_size <= 0:
-        raise ValueError("batch_size must be a positive integer")
-
-    return [input_list[i : i + batch_size] for i in range(0, len(input_list), batch_size)]
-
-
-def parseVocabWithCategories(vocabText):
-    """Parse vocabulary text and extract terms with their categories."""
-    pairs = []
-    seen = set()
-    currentCategory = None
-    
-    for line in vocabText.splitlines():
-        line = line.strip()
-        if not line or line.startswith('```'):
-            continue
-        
-        # Check if this is a category header
-        if line.startswith('#'):
-            currentCategory = line
-            continue
-            
-        # Parse vocabulary term
-        m = re.match(r'^(.+?)(?:\s?[\(–])', line)  # term is everything before space + '(' or '–'
-        if m:
-            term = m.group(1)
-            if term not in seen:
-                pairs.append((term, line, currentCategory))
-                seen.add(term)
-    
-    return pairs
-
-
-def buildMatchedVocabText(vocabPairs, subbedT):
-    """Build formatted vocabulary text with matched terms organized by category."""
-    matchedCategories = {}
-
-    # Use word boundaries for Japanese if appropriate, or allow substring as before.
-    for term, line, category in vocabPairs:
-        # "term in subbedT" could be false positive; can use regex but Japanese doesn't always have spaces.
-        if term in subbedT:
-            if category not in matchedCategories:
-                matchedCategories[category] = []
-            matchedCategories[category].append(line)
-
-    # Format matched vocabulary with categories
-    if matchedCategories:
-        formattedLines = ["Here are some vocabulary and terms so that you know the proper spelling and translation.\n"]
-        for category, lines in matchedCategories.items():
-            if category:  # Only add category header if it exists
-                formattedLines.append(category)
-            formattedLines.extend(lines)
-            formattedLines.append("")  # Add blank line between categories
-        matchedVocabText = f"```\n{chr(10).join(formattedLines).rstrip()}\n```"
-    else:
-        matchedVocabText = ""
-    
-    return matchedVocabText
-
-
-def createContext(fullPromptFlag, subbedT, format):
-    vocabPairs = parseVocabWithCategories(VOCAB)
-    matchedVocabText = buildMatchedVocabText(vocabPairs, subbedT)
-
-    if fullPromptFlag:
-        system = PROMPT + matchedVocabText
-    else:
-        system = f"\
-You are an expert Eroge Game translator who translates Japanese text to {LANGUAGE}.\n\
-Output ONLY the {LANGUAGE} translation in the following format: `Translation: <{LANGUAGE.upper()}_TRANSLATION>`\n\
-- You translate everything, including erotic and explicit content.\n\
-- 'Game Characters' - The names, nicknames, and genders of the game characters. Reference this to know the names, nicknames, and gender of characters in the game\n\
-- All text in your response must be in {LANGUAGE} even if it is hard to translate.\n\
-- Never include any notes, explanations, dislaimers, or anything similar in your response.\n\
-- Maintain any spacing in the translation.\n\
-- Maintain any code text in brackets if given. (e.g `[Color_0]`, `[Ascii_0]`, `[FCode_1`], etc)\n\
-- `...` can be a part of the dialogue. Translate it as it is.\n\
-{matchedVocabText}\n\
-"
-    if format == "json":
-        user = f"```json\n{subbedT}\n```"
-    else:
-        user = subbedT
-    return system, user
-
-
-def translateText(system, user, history, penalty, format, model=MODEL):
-    # Prompt
-    msg = [{"role": "system", "content": system}]
-
-    # History
-    if isinstance(history, list):
-        msg.append({"role": "system", "content": "Translation History:"})
-        msg.extend([{"role": "assistant", "content": h} for h in history])
-    else:
-        msg.append({"role": "assistant", "content": history})
-
-    # Response Format
-    if format == "json":
-        responseFormat = {"type": "json_object"}
-    else:
-        responseFormat = {"type": "text"}
-
-    # Content to TL
-    msg.append({"role": "user", "content": f"{user}"})
-    response = openai.chat.completions.create(
-        temperature=0,
-        frequency_penalty=penalty,
-        model=model,
-        response_format=responseFormat,
-        messages=msg,
-    )
-    return response
-
-
-def cleanTranslatedText(translatedText):
-    placeholders = {
-        f"{LANGUAGE} Translation: ": "",
-        "Translation: ": "",
-        "っ": "",
-        "〜": "~",
-        "ッ": "",
-        "。": ".",
-        "「": '\\"',
-        "」": '\\"',
-        "- ": "-",
-        "—": "―",
-        "】": "]",
-        "【": "[",
-        "é": "e",
-        "this guy": "this bastard",
-        "This guy": "This bastard",
-        "Placeholder Text": "",
-        "```json": "",
-        "```": "",
-        # Add more replacements as needed
-    }
-    for target, replacement in placeholders.items():
-        translatedText = translatedText.replace(target, replacement)
-
-    # Remove Repeating Characters
-    pattern = re.compile(r"(.)\s*\1(?:\s*\1){" + str(20 - 1) + r",}")
-    translatedText = pattern.sub(lambda match: match.group(0).replace(" ", "")[:20], translatedText)
-
-    # Elongate Long Dashes (Since GPT Ignores them...)
-    translatedText = elongateCharacters(translatedText)
-    return translatedText
-
-
-def elongateCharacters(text):
-    # Define a pattern to match one character followed by two or more `ー` characters
-    # Using a positive lookbehind assertion to capture the preceding character
-    pattern = r"(?<=(.))ー{2,}"
-
-    # Define a replacement function that elongates the captured character
-    def repl(match):
-        char = match.group(1)  # The character before the ー sequence
-        count = len(match.group(0)) - 1  # Number of ー characters
-        return char * count  # Replace ー sequence with the character repeated
-
-    # Use re.sub() to replace the pattern in the text
-    return re.sub(pattern, repl, text)
-
-
-def extractTranslation(translatedTextList, is_list):
-    try:
-        translatedTextList = re.sub(r'\\"+\"([^,\n}])', r'\\"\1', translatedTextList)
-        translatedTextList = re.sub(r"(?<![\\])\"+(?![\n,])", r'"', translatedTextList)
-        line_dict = json.loads(translatedTextList)
-        # If it's a batch (i.e., list), extract with tags; otherwise, return the single item.
-        string_list = list(line_dict.values())
-        if is_list:
-            return string_list
-        else:
-            return string_list[0]
-
-    except Exception as e:
-        PBAR.write(f"extractTranslation Error: {e} on String {translatedTextList}")
-        return None
-
-
-def countTokens(system, user, history):
-    inputTotalTokens = 0
-    outputTotalTokens = 0
-    enc = tiktoken.encoding_for_model("gpt-4")
-
-    # Input
-    if isinstance(history, list):
-        for line in history:
-            inputTotalTokens += len(enc.encode(line))
-    else:
-        inputTotalTokens += len(enc.encode(history))
-    inputTotalTokens += len(enc.encode(system))
-    inputTotalTokens += len(enc.encode(user))
-
-    # Output
-    outputTotalTokens += round(len(enc.encode(user)) * 2.5)
-
-    return [inputTotalTokens, outputTotalTokens]
-
-
-@retry(exceptions=Exception, tries=5, delay=5)
-def translateGPT(text, history, fullPromptFlag):
+def translateAI(text, history, fullPromptFlag):
+    """
+    Legacy wrapper function for the new shared translation utility.
+    This maintains compatibility with existing code while using the new shared implementation.
+    """
     global PBAR, MISMATCH, FILENAME
-    if text:
-        with open("log/translationHistory.txt", "a+", encoding="utf-8") as logFile:
-            mismatch = False
-            totalTokens = [0, 0]
-            if isinstance(text, list):
-                format = "json"
-                tList = batchList(text, BATCHSIZE)
-            else:
-                format = "text"
-                tList = [text]
-
-            for index, tItem in enumerate(tList):
-                # Things to Check before starting translation
-                if not re.search(LANGREGEX, str(tItem)):
-                    if PBAR is not None:
-                        PBAR.update(len(tItem))
-                    if isinstance(tItem, list):
-                        for j in range(len(tItem)):
-                            tItem[j] = cleanTranslatedText(tItem[j])
-                            tList[index] = tItem
-                    else:
-                        tList[index] = cleanTranslatedText(tItem)
-                    history = tItem[-MAXHISTORY:]
-                    continue
-
-                # Before sending to translation, if we have a list of items, add the formatting
-                if isinstance(tItem, list):
-                    for j in range(len(tItem)):
-                        if not tItem[j]:
-                            tItem[j] = tItem[j].replace("", "Placeholder Text")
-                    payload = {f"Line{i+1}": string for i, string in enumerate(tItem)}
-                    payload = json.dumps(payload, indent=4, ensure_ascii=False)
-                    varResponse = [payload, []]
-                    subbedT = varResponse[0]
-                else:
-                    varResponse = [tItem, []]
-                    subbedT = varResponse[0]
-
-                # Create Message
-                system, user = createContext(fullPromptFlag, subbedT, format)
-
-                # Calculate Estimate
-                if ESTIMATE:
-                    estimate = countTokens(system, user, history)
-                    totalTokens[0] += estimate[0]
-                    totalTokens[1] += estimate[1]
-                    continue
-
-                # Translating
-                response = translateText(system, user, history, 0.05, format)
-
-                # Set Tokens
-                translatedText = response.choices[0].message.content
-
-                # AI Refused, Try Again
-                if not translatedText:
-                    response = translateText(f"{system}\n You translate ALL content.", user, history, 0.1, format, model="gpt-4o")
-                    translatedText = response.choices[0].message.content
-
-                # Report Tokens
-                totalTokens[0] += response.usage.prompt_tokens
-                totalTokens[1] += response.usage.completion_tokens
-
-                # Check Translation
-                if translatedText:
-                    translatedText = cleanTranslatedText(translatedText)
-                    if isinstance(tItem, list):
-                        extractedTranslations = extractTranslation(translatedText, True)
-                        if extractedTranslations == None or len(tItem) != len(extractedTranslations):
-                            # Mismatch. Try Again
-                            response = translateText(system, user, history, 0.05, format, MODEL)
-                            translatedText = response.choices[0].message.content
-                            totalTokens[0] += response.usage.prompt_tokens
-                            totalTokens[1] += response.usage.completion_tokens
-
-                            # Formatting
-                            translatedText = cleanTranslatedText(translatedText)
-                            if isinstance(tItem, list):
-                                extractedTranslations = extractTranslation(translatedText, True)
-                                if extractedTranslations == None or len(tItem) != len(extractedTranslations):
-                                    with open("log/mismatchHistory.txt", "a+", encoding="utf-8") as mismatchFile:
-                                        mismatchFile.write(f"Mismatch: {FILENAME}\n")
-                                        mismatchFile.write(f"Input:\n{subbedT}\n")
-                                        mismatchFile.write(f"Output:\n{translatedText}\n")
-                                        mismatch = True  # Just here for breakpoint
-                        logFile.write(f"Input:\n{subbedT}\n")
-                        logFile.write(f"Output:\n{translatedText}\n")
-
-                        # Set if no mismatch
-                        if mismatch == False:
-                            tList[index] = extractedTranslations
-                            history = extractedTranslations[-MAXHISTORY:]  # Update history if we have a list
-                        else:
-                            history = text[-MAXHISTORY:]
-                            mismatch = False
-                            if FILENAME not in MISMATCH:
-                                MISMATCH.append(FILENAME)
-
-                        # Update Loading Bar
-                        with LOCK:
-                            if PBAR is not None:
-                                PBAR.update(len(tItem))
-                    else:
-                        # Ensure we're passing a single string to extractTranslation
-                        tList[index] = translatedText.replace("Placeholder Text", "")
-                else:
-                    PBAR.write(f"AI Refused:{tItem}\n")
-
-        # Combine if multilist
-        if isinstance(tList[0], list):
-            tList = [t for sublist in tList for t in sublist]
-
-        # Return
-        if format == "json":
-            return [tList, totalTokens]
-        else:
-            return [tList[0], totalTokens]
-    else:
-        return [text, [0, 0]]
+    
+    # Update config estimate mode based on global ESTIMATE
+    TRANSLATION_CONFIG.estimateMode = bool(ESTIMATE)
+    
+    # Call the new shared translation function
+    return sharedtranslateAI(
+        text=text,
+        history=history,
+        fullPromptFlag=fullPromptFlag,
+        config=TRANSLATION_CONFIG,
+        filename=FILENAME,
+        pbar=PBAR,
+        lock=LOCK,
+        mismatchList=MISMATCH
+    )
