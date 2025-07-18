@@ -19,7 +19,6 @@ from PyQt5.QtGui import QIcon, QFont, QPixmap, QScreen
 # Import configuration widgets
 from gui.config_tab import ConfigTab
 from gui.rpgmaker_tab import RPGMakerTab
-from gui.other_modules_tab import OtherModulesTab
 from gui.log_viewer import LogViewer
 from gui.file_manager import FileManager
 from gui.translation_tab import TranslationTab
@@ -176,10 +175,6 @@ class DazedMTLGUI(QMainWindow):
         # RPG Maker MV/MZ Tab
         self.rpgmaker_tab = RPGMakerTab()
         self.tab_widget.addTab(self.rpgmaker_tab, "RPG Maker MV/MZ")
-        
-        # Other Modules Tab
-        self.other_modules_tab = OtherModulesTab()
-        self.tab_widget.addTab(self.other_modules_tab, "Other Modules")
         
     def on_config_changed(self):
         """Handle configuration changes."""
