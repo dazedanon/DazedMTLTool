@@ -519,7 +519,9 @@ class TranslationTab(QWidget):
         output_widget = self.create_output_files_widget()
         file_management_splitter.addWidget(output_widget)
         
-        file_management_splitter.setSizes([300, 300])
+        # Set proportional sizes instead of fixed pixel sizes
+        file_management_splitter.setStretchFactor(0, 1)
+        file_management_splitter.setStretchFactor(1, 1)
         layout.addWidget(file_management_splitter)
         
         # Console log at the bottom
@@ -628,7 +630,8 @@ class TranslationTab(QWidget):
         input_layout = QVBoxLayout()
         
         self.input_list = QListWidget()
-        self.input_list.setMaximumHeight(120)
+        self.input_list.setMinimumHeight(80)
+        self.input_list.setMaximumHeight(150)
         input_layout.addWidget(self.input_list)
         
         input_buttons = QHBoxLayout()
@@ -655,7 +658,8 @@ class TranslationTab(QWidget):
         output_layout = QVBoxLayout()
         
         self.output_list = QListWidget()
-        self.output_list.setMaximumHeight(120)
+        self.output_list.setMinimumHeight(80)
+        self.output_list.setMaximumHeight(150)
         output_layout.addWidget(self.output_list)
         
         output_buttons = QHBoxLayout()
@@ -721,7 +725,8 @@ class TranslationTab(QWidget):
         self.log_display = QTextEdit()
         self.log_display.setReadOnly(True)
         self.log_display.setFont(QFont("Consolas", 9))
-        self.log_display.setMinimumHeight(200)
+        self.log_display.setMinimumHeight(150)
+        self.log_display.setMaximumHeight(300)
         self.log_display.setStyleSheet("""
             QTextEdit {
                 background-color: #1e1e1e;

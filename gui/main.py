@@ -13,8 +13,8 @@ from PyQt5.QtWidgets import (
     QWidget, QPushButton, QLabel, QFileDialog, QMessageBox, QProgressBar,
     QTextEdit, QSplitter, QGroupBox, QStatusBar
 )
-from PyQt5.QtCore import Qt, QThread, pyqtSignal, QTimer
-from PyQt5.QtGui import QIcon, QFont, QPixmap
+from PyQt5.QtCore import Qt, QThread, pyqtSignal, QTimer, QSettings
+from PyQt5.QtGui import QIcon, QFont, QPixmap, QScreen
 
 # Import configuration widgets
 from gui.config_tab import ConfigTab
@@ -29,9 +29,40 @@ class DazedMTLGUI(QMainWindow):
     
     def __init__(self):
         super().__init__()
+        self.settings = QSettings("DazedTranslations", "DazedMTLTool")
         self.init_ui()
         self.setup_status_bar()
         self.setup_font_scaling()
+        self.restore_window_state()
+        
+    def restore_window_state(self):
+        """Restore window geometry and state from settings."""
+        try:
+            # Restore window geometry
+            geometry = self.settings.value("geometry")
+            if geometry:
+                self.restoreGeometry(geometry)
+            
+            # Restore window state (maximized, etc.)
+            window_state = self.settings.value("windowState")
+            if window_state:
+                self.restoreState(window_state)
+                
+        except Exception as e:
+            print(f"Warning: Could not restore window state: {e}")
+            
+    def save_window_state(self):
+        """Save window geometry and state to settings."""
+        try:
+            self.settings.setValue("geometry", self.saveGeometry())
+            self.settings.setValue("windowState", self.saveState())
+        except Exception as e:
+            print(f"Warning: Could not save window state: {e}")
+            
+    def closeEvent(self, event):
+        """Handle application close event."""
+        self.save_window_state()
+        event.accept()
         
     def setup_font_scaling(self):
         """Set up font scaling based on configuration."""
@@ -75,7 +106,23 @@ class DazedMTLGUI(QMainWindow):
     def init_ui(self):
         """Initialize the user interface."""
         self.setWindowTitle("DazedMTLTool - Visual Translation Interface")
-        self.setGeometry(100, 100, 1200, 800)
+        
+        # Get screen geometry and set window size more responsively
+        screen = QApplication.primaryScreen()
+        screen_geometry = screen.availableGeometry()
+        
+        # Set window size to 80% of screen size, with reasonable minimums
+        window_width = max(1200, int(screen_geometry.width() * 0.8))
+        window_height = max(800, int(screen_geometry.height() * 0.8))
+        
+        # Center the window on screen
+        x = (screen_geometry.width() - window_width) // 2
+        y = (screen_geometry.height() - window_height) // 2
+        
+        self.setGeometry(x, y, window_width, window_height)
+        
+        # Set minimum size to prevent the window from becoming too small
+        self.setMinimumSize(1000, 600)
         
         # Set window icon if available
         icon_path = Path("screens/tool.png")
@@ -102,7 +149,10 @@ class DazedMTLGUI(QMainWindow):
         # Add widgets to splitter
         main_splitter.addWidget(self.tab_widget)
         main_splitter.addWidget(self.log_viewer)
-        main_splitter.setSizes([800, 400])
+        
+        # Set proportional sizes instead of fixed pixel sizes
+        main_splitter.setStretchFactor(0, 2)  # Main content gets 2/3
+        main_splitter.setStretchFactor(1, 1)  # Log viewer gets 1/3
         
         # Set main layout
         layout = QVBoxLayout()
@@ -340,7 +390,22 @@ def main():
         QApplication.setAttribute(Qt.AA_EnableHighDpiScaling, True)
         QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps, True)
         
+        # Additional DPI handling for better compatibility
+        if hasattr(Qt, 'AA_DisableWindowContextHelpButton'):
+            QApplication.setAttribute(Qt.AA_DisableWindowContextHelpButton, True)
+            
+        # Set high DPI scale factor policy
+        if hasattr(QApplication, 'setHighDpiScaleFactorRoundingPolicy'):
+            QApplication.setHighDpiScaleFactorRoundingPolicy(Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
+        
         app = QApplication(sys.argv)
+        
+        # Additional screen-aware settings
+        screen = app.primaryScreen()
+        if screen:
+            dpi = screen.logicalDotsPerInch()
+            print(f"Screen DPI: {dpi}")
+            
     except Exception as e:
         print(f"Failed to create QApplication: {e}")
         print("Make sure PyQt5 is properly installed:")
