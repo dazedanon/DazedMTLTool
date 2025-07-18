@@ -987,7 +987,7 @@ def searchCodes(page, pbar, jobList, filename):
 
                         # Remove any RPGMaker Code at start
                         ffMatchNS = re.search(
-                            r"^((?:[\\]+[^cCnNiIkKvV{}]+\[[\d\w\W]+\])+)",
+                            r"^((?:[\\]+[^cCnNiIkKvVSs{}]+\[[\d\w\W]+?\]?\])+)",
                             nextString,
                         )
                         if ffMatchNS != None:
@@ -1071,7 +1071,7 @@ def searchCodes(page, pbar, jobList, filename):
                         codeList[i]["parameters"] = [finalJAString]
 
                     ### \\n<Speaker>
-                    regex = r"([\\]+[kKnN][wWcCrRrEe]?[\[<](.*?)[>])"
+                    regex = r"([\\]+[kKnN][wWcCrRrEe]?[\[<](?:[\\]*\w\[\d+\])?(.*?)(?:[\\]*\w\[\d+\])?[>])"
                     match = re.search(regex, finalJAString)
 
                     # Set Name
@@ -1109,7 +1109,7 @@ def searchCodes(page, pbar, jobList, filename):
 
                     # Remove any RPGMaker Code at start
                     ffMatch = re.search(
-                        r"^((?:[\\]+[^cCnNiIkKvV{}]+\[[\d\w\W]+\])+)",
+                        r"^((?:[\\]+[^cCnNiIkKvVSs{}]+\[[\d\w\W]+?\]?\])+)",
                         finalJAString,
                     )
                     if ffMatch != None:
@@ -1123,11 +1123,10 @@ def searchCodes(page, pbar, jobList, filename):
                         nametag += ffMatch.group(1)
 
                     # Center Lines
-                    if "\\CL" in finalJAString or "\\ac" in finalJAString:
-                        finalJAString = finalJAString.replace("\\CL ", "")
+                    if "\\CL" in finalJAString or "\\ac" in finalJAString or "\\#" in finalJAString:
                         finalJAString = finalJAString.replace("\\CL", "")
-                        finalJAString = finalJAString.replace("\\ac ", "")
                         finalJAString = finalJAString.replace("\\ac", "")
+                        finalJAString = finalJAString.replace("\\#", "")
                         CLFlag = True
 
                     # Handle Formatting Codes
@@ -1210,9 +1209,9 @@ def searchCodes(page, pbar, jobList, filename):
                             ### Add Var Strings
                             # CL Flag
                             if CLFlag:
-                                translatedText = "\\ac " + translatedText
-                                translatedText = translatedText.replace("\n", "\n\\ac ")
-                                translatedText = re.sub(r"[\\]+?ac\s+", r"\\ac ", translatedText)
+                                translatedText = "\\#" + translatedText
+                                translatedText = translatedText.replace("\n", "\n\\#")
+                                translatedText = re.sub(r"[\\]+?#\s+", r"\\#", translatedText)
                                 CLFlag = False
 
                             # Add Nametag Back In
@@ -2536,9 +2535,6 @@ def createContext(fullPromptFlag, subbedT, format):
     vocabPairs = parseVocabWithCategories(VOCAB)
     matchedVocabText = buildMatchedVocabText(vocabPairs, subbedT)
 
-    if matchedVocabText:
-        print(matchedVocabText)
-
     if fullPromptFlag:
         system = PROMPT + matchedVocabText
     else:
@@ -2625,9 +2621,9 @@ def cleanTranslatedText(translatedText):
 
 
 def elongateCharacters(text):
-    # Define a pattern to match one character followed by one or more `ー` characters
+    # Define a pattern to match one character followed by two or more `ー` characters
     # Using a positive lookbehind assertion to capture the preceding character
-    pattern = r"(?<=(.))ー+"
+    pattern = r"(?<=(.))ー{2,}"
 
     # Define a replacement function that elongates the captured character
     def repl(match):

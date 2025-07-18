@@ -1,63 +1,14 @@
 Here are some vocabulary and terms so that you know the proper spelling and translation.
 ```
-# Game Characters
-イルヴィナ (Illyana) - Female
-コヴァ – Kova
-ビビン – Bibin
-グリッド – Grid
-アメリ – Ameri
-アディナス – Adinas
-キャスティ – Kasti
-ガンドレー – Gandrei
-ギタン – Gitan
-スミス – Smith
-レクス – Rex
-ミラノ – Mirano
-ケイトリン – Caitlin
-ゼム – Zem
-アカシャ – Akasha
-リィネ – Rine
-ネロ – Nero
-ネリス – Neris
-
-リムア (Rimua) - Female
-ネロ (Nero) - Male
-アディナス (Adinas) - Male
-アカシャ (Akasha) - Female
-アマルダ (Amalda) - Female
-アメリ (Ameri) - Female
-ビビン (Bibin) - Male
-トロールカーゴ (Troll Cargo) - Male
-カッツ (Katz) - Female
-シエル (Ciel) - Male
-ディック (Dick) - Male
-ガンドレー (Gandrei) - Male
-デュオレクス (Duorex) - Male
-ガーラ (Gara) - Female
-ガゼル (Gazel) - Male
-ギタン (Gitan) - Male
-グリッド (Grid) - Male
-イスペリオ (Isperio) - Male
-ケイトリン (Caitlin) - Female
-コヴァ (Kova) - Male
-レクス (Rex) - Male
-リィネ (Rine) - Female
-ミラノ (Mirano) - Male
-ミシェラ (Mishela) - Female
-ネリス (Neris) - Female
-オルネ (Orne) - Female
-オクヴァン (Oxvan) - Male
-ラジール (Ragil) - Male
-ラシル (Rasil) - Female
-レアリア (Learia) - Female
-スミス (Smith) - Male
-ウーミー (Uumi) - Male
-ヴァルシュ (Valsh) - Male
-ヴィルティ (Vilty) - Female
-ワダツミ (Wadatsumi) - Male
-ユリス (Yuris) - Female
-ザルバー (Zalbar) - Male
-ゼム (Zem) - Male
+# Game Characters - Gender
+音々 (Nene) - Female
+湊 (Minato) - Female
+宇堂 (Udo) - Male
+Taro - Male
+Souta - Male
+園田 (Sonoda) - Male
+浩平 (Kohei) - Male
+マネ (Mane) - Female
 
 # Lewd Terms
 マンコ (pussy)
@@ -156,6 +107,8 @@ ME 音量 (ME Volume)
 猿王 (Monkey King)
 天地開闢 (Genesis)
 紅蓮 (Vermilion)
+12月 (December)
+12日 (12th)
 
 # Demons/Angels/Monsters
 聖女 (Saintess)
@@ -216,48 +169,53 @@ w ((lol))
 』 (』)
 
 # Game Specific
-青凪の丘 (Aonagi Hill)
-虚空の洞窟 (Void Cave)
-イスペリオ城 (Isperio Castle)
-パマラの村 (Pamara Village)
-パマラ遺跡 (Pamara Ruins)
-カッツァーノ (Katzano)
-ギルド会館 / ギルド本部 (Guild Hall / Guild Headquarters)
-湖の古城 (Lake Old Castle)
-エルフの森 (Elf Forest)
-エルフの里 (Elf Village)
-エルフ祠 (Elf Shrine)
-エルフ族長の家 (Elf Chief's House)
-グルド平原 (Gurdo Plains)
-グルドの村 (Gurdo Village)
-グルド山道 (Gurdo Mountain Path)
-グルド神殿 (Gurdo Temple)
-アグラル監獄 (Agral Prison)
-ベイル採石場 (Bale Quarry)
-ベイル鉱山道 (Bale Mine Road)
-ベイルフォートレス (Bale Fortress)
-スカル・ガゼルのアジト (Skull Gazelle's Hideout)
-グレイヴロイド (Graveloid)
-レグナスの村 (Regnas Village)
-レグナス霊山 (Regnas Sacred Mountain)
-デモンセントラル (Demon Central)
-魔城 (Demon Castle)
-魔窟城塞 (Demon Lair Fortress)
-ザルバーコア (Zarbarkoa)
-ヘプタ (Hepta)
-ヘプタ風霊神殿 (Hepta Wind Spirit Temple)
-ヨグサの家 (Yogusa's House)
-嵐の平原 (Storm Plains)
-西の平原 (Western Plains)
-北西の平原 (Northwestern Plains)
-王都 (Royal Capital)
-王の別荘 (King's Villa)
-自警団本部 (Vigilante HQ)
-対魔物回想 (Monster Recollection)
-回想部屋 (Recollection Room)
-最後の間 (Final Chamber)
-ミシェセヴ (Mischesev)
-おこ 宿 (Oko Inn)
-アメリヤド (Ameriyado)
-
-```
+尾道プロ (Onomichi Pro)
+アルターガンズ (Alter Guns)
+尾道プロダクション (Onomichi Production)  
+宇堂の部屋 (Udo's Room)  
+音々の部屋 (Nene's Room)  
+マネの部屋 (Mane's Room)  
+コレクションルーム (Collection Room)  
+モニタールーム (Monitor Room)  
+テレビ局 (TV Station)  
+ラブホテル (Love Hotel)  
+回想ルーム (Recollection Room)  
+別館 (Annex)  
+浴場施設 (Bath Facility)  
+大部屋 (Large Room)  
+小部屋 (Small Room)  
+乱交フロア (Orgy Floor)  
+蝋人形の部屋 (Wax Doll Room)  
+食堂 (Dining Hall)  
+倉庫 (Storage)  
+館内守衛所 (Security Office)  
+衣裳部屋 (Dressing Room)  
+脱衣場 (Changing Room)  
+大浴場 (Large Bath)  
+テラス (Terrace)  
+寝室/ベッドルーム (Bedroom)  
+泉の間 (Fountain Room)  
+書庫 (Library)  
+隠し部屋 (Hidden Room)  
+隠し通路 (Hidden Passage)  
+牢獄の間 (Prison Room)  
+対称の間 (Symmetry Room)  
+本館 (Main Building)  
+西館 (West Wing)  
+東館 (East Wing)  
+洋館 (Mansion)  
+自室 (My Room)  
+小屋 (Shed)  
+控室 (Waiting Room)  
+レッスンルーム (Lesson Room)  
+グラビア撮影会 (Gravure Photo Shoot)  
+青姦日和 (Perfect Day for Outdoor Sex)  
+ポールオナニー (Pole Masturbation)  
+サワフェラ (Sawa Blowjob)  
+モモセックス (Momo Sex)  
+キノセックス (Kino Sex)  
+開拓 (Pioneering)  
+初夜 (First Night)  
+誓いと冒涜 (Oath and Blasphemy)  
+衆恥肉輪 (Public Shame Meat Orgy)  
+救世主 (Savior)
