@@ -91,7 +91,7 @@ def parseVocabWithCategories(vocabText):
     
     for line in vocabText.splitlines():
         line = line.strip()
-        if not line or line.startswith('```'):
+        if not line or line.startswith('```') or line.startswith('Here are some vocabulary'):
             continue
         
         # Check if this is a category header
@@ -99,25 +99,55 @@ def parseVocabWithCategories(vocabText):
             currentCategory = line
             continue
             
-        # Parse vocabulary term
-        m = re.match(r'^(.+?)(?:\s?[\(–])', line)  # term is everything before space + '(' or '–'
-        if m:
-            term = m.group(1)
-            if term not in seen:
+        # Parse vocabulary term - extract both Japanese and English parts
+        # Format: "Japanese term (English translation)" or "Japanese term – English translation"
+        m = re.match(r'^(.+?)(?:\s?[\(–]\s*(.+?)[\)]?\s*$)', line)
+        if m and ('(' in line or '–' in line):  # Only process lines that actually have parentheses or dashes
+            japanese_term = m.group(1).strip()
+            english_term = m.group(2).strip().rstrip(')')  # Remove trailing parenthesis if exists
+            
+            # Create a tuple with both terms for matching
+            term_pair = (japanese_term, english_term)
+            if term_pair not in seen:
+                pairs.append((term_pair, line, currentCategory))
+                seen.add(term_pair)
+        elif line and not line.startswith('#'):
+            # Fallback for lines without parentheses - treat as single term
+            term = line.strip()
+            if term and term not in seen:
                 pairs.append((term, line, currentCategory))
                 seen.add(term)
     
     return pairs
 
 
-def buildMatchedVocabText(vocabPairs, subbedText):
+def buildMatchedVocabText(vocabPairs, subbedText, history=None):
     """Build formatted vocabulary text with matched terms organized by category."""
     matchedCategories = {}
 
+    # Prepare text to search - combine subbedText and history
+    textToSearch = str(subbedText)
+    if history:
+        if isinstance(history, list):
+            textToSearch += " " + " ".join(str(h) for h in history)
+        else:
+            textToSearch += " " + str(history)
+
     # Use word boundaries for Japanese if appropriate, or allow substring as before.
     for term, line, category in vocabPairs:
-        # "term in subbedT" could be false positive; can use regex but Japanese doesn't always have spaces.
-        if term in subbedText:
+        # Check if term is a tuple (Japanese, English) or a single term
+        term_found = False
+        if isinstance(term, tuple):
+            # Check both Japanese and English terms
+            japanese_term, english_term = term
+            if japanese_term in textToSearch or english_term in textToSearch:
+                term_found = True
+        else:
+            # Single term check
+            if term in textToSearch:
+                term_found = True
+        
+        if term_found:
             if category not in matchedCategories:
                 matchedCategories[category] = []
             matchedCategories[category].append(line)
@@ -137,10 +167,10 @@ def buildMatchedVocabText(vocabPairs, subbedText):
     return matchedVocabText
 
 
-def createContext(config, fullPromptFlag, subbedText, formatType):
+def createContext(config, fullPromptFlag, subbedText, formatType, history=None):
     """Create system and user messages for translation"""
     vocabPairs = parseVocabWithCategories(config.vocab)
-    matchedVocabText = buildMatchedVocabText(vocabPairs, subbedText)
+    matchedVocabText = buildMatchedVocabText(vocabPairs, subbedText, history)
 
     if fullPromptFlag:
         system = config.prompt + matchedVocabText
@@ -344,7 +374,7 @@ def translateAI(text, history, fullPromptFlag, config, filename=None, pbar=None,
                 subbedT = tItem
 
             # Create context
-            system, user = createContext(config, fullPromptFlag, subbedT, formatType)
+            system, user = createContext(config, fullPromptFlag, subbedT, formatType, history)
 
             # Calculate estimate if in estimate mode
             if config.estimateMode:
