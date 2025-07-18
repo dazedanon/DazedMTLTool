@@ -20,7 +20,7 @@ from PyQt5.QtWidgets import (
     QTextEdit, QMessageBox, QListWidget, QListWidgetItem, 
     QSplitter, QFileDialog, QComboBox, QCheckBox, QProgressBar
 )
-from PyQt5.QtCore import Qt, QTimer, pyqtSignal, QThread
+from PyQt5.QtCore import Qt, QTimer, pyqtSignal, QThread, QMutex
 from PyQt5.QtGui import QFont
 
 
@@ -37,10 +37,23 @@ class TranslationWorker(QThread):
         self.module_info = module_info  # [name, extensions, handler_function]
         self.estimate_only = estimate_only
         self.should_stop = False
+        self.mutex = QMutex()  # For thread safety
         
     def stop(self):
         """Stop the translation process."""
-        self.should_stop = True
+        self.mutex.lock()
+        try:
+            self.should_stop = True
+        finally:
+            self.mutex.unlock()
+        
+    def emit_log(self, message):
+        """Thread-safe log emission."""
+        self.log_signal.emit(message)
+        
+    def emit_progress(self, current, total, filename):
+        """Thread-safe progress emission."""
+        self.progress_signal.emit(current, total, filename)
         
     def run(self):
         """Run the translation process."""
@@ -54,18 +67,18 @@ class TranslationWorker(QThread):
             
             for env in required_envs:
                 if os.getenv(env) is None or str(os.getenv(env))[:1] == "<":
-                    self.log_signal.emit(f"❌ Environment variable {env} is not set!")
+                    self.emit_log(f"❌ Environment variable {env} is not set!")
                     env_missing = True
                     
             if env_missing:
-                self.log_signal.emit("❌ Some required environment variables are not set. Check your .env file.")
+                self.emit_log("❌ Some required environment variables are not set. Check your .env file.")
                 self.finished_signal.emit(False, "Environment variables missing")
                 return
                 
             # Get files to process
             files_dir = self.project_root / "files"
             if not files_dir.exists():
-                self.log_signal.emit("❌ Files directory does not exist!")
+                self.emit_log("❌ Files directory does not exist!")
                 self.finished_signal.emit(False, "Files directory missing")
                 return
                 
@@ -79,17 +92,17 @@ class TranslationWorker(QThread):
                             break
                             
             if not matching_files:
-                self.log_signal.emit(f"❌ No files found matching extensions: {', '.join(self.module_info[1])}")
+                self.emit_log(f"❌ No files found matching extensions: {', '.join(self.module_info[1])}")
                 self.finished_signal.emit(False, "No matching files")
                 return
                 
-            self.log_signal.emit(f"📁 Found {len(matching_files)} files to process:")
+            self.emit_log(f"📁 Found {len(matching_files)} files to process:")
             for filename in matching_files:
-                self.log_signal.emit(f"   • {filename}")
+                self.emit_log(f"   • {filename}")
                 
-            self.log_signal.emit(f"🔧 Using module: {self.module_info[0]}")
-            self.log_signal.emit(f"📊 Estimate only: {'Yes' if self.estimate_only else 'No'}")
-            self.log_signal.emit("")
+            self.emit_log(f"🔧 Using module: {self.module_info[0]}")
+            self.emit_log(f"📊 Estimate only: {'Yes' if self.estimate_only else 'No'}")
+            self.emit_log("")
             
             # Process files
             threads = int(os.getenv("fileThreads", "1"))
@@ -112,23 +125,24 @@ class TranslationWorker(QThread):
                     
                     for future in as_completed(future_to_filename):
                         if self.should_stop:
-                            self.log_signal.emit("🛑 Translation stopped by user")
+                            self.emit_log("🛑 Translation stopped by user")
                             break
                             
                         filename = future_to_filename[future]
                         completed_count += 1
                         
-                        # Emit progress signal
-                        self.progress_signal.emit(completed_count, total_files, filename)
+                        # Emit progress signal (less frequent updates)
+                        self.emit_progress(completed_count, total_files, filename)
                         
                         try:
                             result = future.result()
                             total_cost = result
-                            self.log_signal.emit(f"✅ Completed {filename} ({completed_count}/{total_files})")
+                            # Only log every file completion, not internal progress
+                            self.emit_log(f"✅ Completed {filename} ({completed_count}/{total_files})")
                         except Exception as e:
                             tb_line = str(traceback.extract_tb(sys.exc_info()[2])[-1].lineno)
                             error_msg = f"❌ Error processing {filename}: {str(e)} | Line: {tb_line}"
-                            self.log_signal.emit(error_msg)
+                            self.emit_log(error_msg)
                             
             finally:
                 os.chdir(old_cwd)
@@ -140,21 +154,21 @@ class TranslationWorker(QThread):
                 
             # Report results
             if total_cost != "Fail" and not self.should_stop:
-                self.log_signal.emit("")
-                self.log_signal.emit(f"💰 {total_cost}")
+                self.emit_log("")
+                self.emit_log(f"💰 {total_cost}")
                 if not self.estimate_only:
-                    self.log_signal.emit("✅ Translation completed successfully!")
+                    self.emit_log("✅ Translation completed successfully!")
                 else:
-                    self.log_signal.emit("✅ Estimation completed!")
+                    self.emit_log("✅ Estimation completed!")
                 self.finished_signal.emit(True, str(total_cost))
             else:
                 if not self.should_stop:
-                    self.log_signal.emit("❌ Translation failed!")
+                    self.emit_log("❌ Translation failed!")
                     self.finished_signal.emit(False, "Translation failed")
                     
         except Exception as e:
             error_msg = f"❌ Unexpected error: {str(e)}"
-            self.log_signal.emit(error_msg)
+            self.emit_log(error_msg)
             self.finished_signal.emit(False, error_msg)
 
 
@@ -165,6 +179,9 @@ class TranslationTab(QWidget):
         super().__init__(parent)
         self.parent_window = parent
         self.translation_process = None
+        self.log_buffer = []  # Buffer for batching log messages
+        self.log_timer = QTimer()  # Timer for flushing log buffer
+        self.log_timer.timeout.connect(self.flush_log_buffer)
         
         # Set up directories
         self.project_root = Path(__file__).parent.parent
@@ -178,7 +195,7 @@ class TranslationTab(QWidget):
         self.setup_ui()
         self.refresh_file_lists()
         
-        # Auto-refresh timer for file lists
+        # Auto-refresh timer for file lists (less frequent during translation)
         self.refresh_timer = QTimer()
         self.refresh_timer.timeout.connect(self.refresh_file_lists)
         self.refresh_timer.start(3000)  # Refresh every 3 seconds
@@ -634,19 +651,37 @@ class TranslationTab(QWidget):
             self.progress_bar.setValue(0)
             self.progress_label.setText("Starting...")
             
+            # Reduce file refresh frequency during translation
+            self.refresh_timer.stop()
+            
             # Start the worker
             self.translation_worker.start()
             
     def append_log(self, message):
-        """Append a message to the log display."""
-        self.log_display.append(message)
-        # Auto-scroll to bottom
-        scrollbar = self.log_display.verticalScrollBar()
-        scrollbar.setValue(scrollbar.maximum())
+        """Append a message to the log buffer for batched display."""
+        self.log_buffer.append(message)
+        
+        # Start timer if not already running
+        if not self.log_timer.isActive():
+            self.log_timer.start(100)  # Flush every 100ms
+            
+    def flush_log_buffer(self):
+        """Flush the log buffer to the display."""
+        if self.log_buffer:
+            # Add all buffered messages at once
+            for message in self.log_buffer:
+                self.log_display.append(message)
+            self.log_buffer.clear()
+            
+            # Auto-scroll to bottom
+            scrollbar = self.log_display.verticalScrollBar()
+            scrollbar.setValue(scrollbar.maximum())
+            
+        # Stop timer if buffer is empty
+        self.log_timer.stop()
         
     def update_progress(self, current_file, total_files, filename):
         """Update the progress bar and label."""
-        progress_percentage = int((current_file / total_files) * 100)
         self.progress_bar.setMaximum(total_files)
         self.progress_bar.setValue(current_file)
         self.progress_label.setText(f"Processing {filename} ({current_file}/{total_files})")
@@ -657,6 +692,12 @@ class TranslationTab(QWidget):
         self.stop_button.setEnabled(False)
         self.progress_bar.setVisible(False)
         self.progress_label.setText("Ready")
+        
+        # Flush any remaining log messages
+        self.flush_log_buffer()
+        
+        # Resume file refresh
+        self.refresh_timer.start(3000)
         self.refresh_file_lists()
         
         if success:
@@ -665,6 +706,9 @@ class TranslationTab(QWidget):
         else:
             self.append_log("")
             self.append_log(f"❌ Process failed: {message}")
+            
+        # Force flush the final messages
+        self.flush_log_buffer()
             
     def stop_translation(self):
         """Stop the translation process."""
@@ -678,14 +722,23 @@ class TranslationTab(QWidget):
         self.progress_bar.setVisible(False)
         self.progress_label.setText("Ready")
         
+        # Resume file refresh
+        self.refresh_timer.start(3000)
+        
+        # Flush any remaining messages
+        self.flush_log_buffer()
+        
     def clear_log(self):
         """Clear the log display."""
+        self.log_buffer.clear()  # Clear buffer too
         self.log_display.clear()
         
     def closeEvent(self, event):
         """Handle widget close event."""
         if hasattr(self, 'refresh_timer'):
             self.refresh_timer.stop()
+        if hasattr(self, 'log_timer'):
+            self.log_timer.stop()
         if hasattr(self, 'translation_worker') and self.translation_worker.isRunning():
             self.translation_worker.stop()
             self.translation_worker.wait(3000)
