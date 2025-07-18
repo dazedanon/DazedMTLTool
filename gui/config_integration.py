@@ -27,11 +27,6 @@ class ConfigIntegration:
             with open(module_path, 'r', encoding='utf-8') as f:
                 content = f.read()
                 
-            # Create backup
-            backup_path = module_path.with_suffix('.py.backup')
-            with open(backup_path, 'w', encoding='utf-8') as f:
-                f.write(content)
-                
             # Update configuration values
             updated_content = self._update_config_values(content, config)
             
@@ -42,12 +37,6 @@ class ConfigIntegration:
             return True
             
         except Exception as e:
-            # Restore from backup if something went wrong
-            if backup_path.exists():
-                with open(backup_path, 'r', encoding='utf-8') as f:
-                    content = f.read()
-                with open(module_path, 'w', encoding='utf-8') as f:
-                    f.write(content)
             raise e
             
     def _update_config_values(self, content: str, config: Dict[str, Any]) -> str:

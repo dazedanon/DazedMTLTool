@@ -21,12 +21,131 @@ except ImportError:
 class RPGMakerTab(QWidget):
     """RPG Maker MV/MZ configuration tab."""
     
+    # Default configuration values for RPG Maker MV/MZ
+    DEFAULT_CONFIG = {
+        # General settings
+        "FIRSTLINESPEAKERS": False,
+        "FACENAME101": False,
+        "NAMES": False,
+        "BRFLAG": False,
+        "FIXTEXTWRAP": True,
+        "IGNORETLTEXT": False,
+        
+        # Main dialogue codes (enabled by default)
+        "CODE401": True,   # Show Text
+        "CODE405": True,   # Show Text (line 4+)
+        "CODE102": True,   # Show Choices
+        
+        # Optional codes (disabled by default)
+        "CODE101": False,  # Show Text (face)
+        "CODE408": False,  # Show Text (line continuation)
+        
+        # Variable codes (disabled by default)
+        "CODE122": False,  # Control Variables
+        
+        # Other codes (all disabled by default)
+        "CODE103": False,  # Input Number
+        "CODE104": False,  # Select Item
+        "CODE111": False,  # Conditional Branch
+        "CODE117": False,  # Common Event
+        "CODE119": False,  # Set Movement Route
+        "CODE121": False,  # Control Switches
+        "CODE125": False,  # Change Gold
+        "CODE126": False,  # Change Items
+        "CODE127": False,  # Change Weapons
+        "CODE128": False,  # Change Armors
+        "CODE129": False,  # Change Party Member
+        "CODE132": False,  # Change Battle BGM
+        "CODE133": False,  # Change Victory ME
+        "CODE134": False,  # Change Save Access
+        "CODE135": False,  # Change Menu Access
+        "CODE136": False,  # Change Encounter
+        "CODE137": False,  # Change Formation Access
+        "CODE138": False,  # Change Window Color
+        "CODE139": False,  # Change Defeat ME
+        "CODE140": False,  # Change Vehicle BGM
+        "CODE201": False,  # Transfer Player
+        "CODE202": False,  # Set Vehicle Location
+        "CODE203": False,  # Set Event Location
+        "CODE204": False,  # Scroll Map
+        "CODE205": False,  # Set Move Route
+        "CODE206": False,  # Get On/Off Vehicle
+        "CODE211": False,  # Change Transparency
+        "CODE212": False,  # Show Animation
+        "CODE213": False,  # Show Balloon Icon
+        "CODE214": False,  # Erase Event
+        "CODE216": False,  # Change Player Followers
+        "CODE217": False,  # Gather Followers
+        "CODE221": False,  # Fadeout Screen
+        "CODE222": False,  # Fadein Screen
+        "CODE223": False,  # Tint Screen
+        "CODE224": False,  # Flash Screen
+        "CODE225": False,  # Shake Screen
+        "CODE230": False,  # Wait
+        "CODE231": False,  # Show Picture
+        "CODE232": False,  # Move Picture
+        "CODE233": False,  # Rotate Picture
+        "CODE234": False,  # Tint Picture
+        "CODE235": False,  # Erase Picture
+        "CODE236": False,  # Set Weather Effect
+        "CODE241": False,  # Play BGM
+        "CODE242": False,  # Fadeout BGM
+        "CODE243": False,  # Save BGM
+        "CODE244": False,  # Resume BGM
+        "CODE245": False,  # Play BGS
+        "CODE246": False,  # Fadeout BGS
+        "CODE249": False,  # Play ME
+        "CODE250": False,  # Play SE
+        "CODE251": False,  # Stop SE
+        "CODE261": False,  # Show Movie
+        "CODE281": False,  # Change Map Name Display
+        "CODE282": False,  # Change Tileset
+        "CODE283": False,  # Change Battle Background
+        "CODE284": False,  # Change Parallax
+        "CODE285": False,  # Get Location Info
+        "CODE301": False,  # Battle Processing
+        "CODE302": False,  # Shop Processing
+        "CODE303": False,  # Name Input Processing
+        "CODE311": False,  # Change HP
+        "CODE312": False,  # Change MP
+        "CODE313": False,  # Change State
+        "CODE314": False,  # Recover All
+        "CODE315": False,  # Change EXP
+        "CODE316": False,  # Change Level
+        "CODE317": False,  # Change Parameters
+        "CODE318": False,  # Change Skills
+        "CODE319": False,  # Change Equipment
+        "CODE320": False,  # Change Name
+        "CODE321": False,  # Change Class
+        "CODE322": False,  # Change Actor Graphic
+        "CODE323": False,  # Change Vehicle Graphic
+        "CODE324": False,  # Change Nickname
+        "CODE325": False,  # Change Profile
+        "CODE326": False,  # Change TP
+        "CODE331": False,  # Change Enemy HP
+        "CODE332": False,  # Change Enemy MP
+        "CODE333": False,  # Change Enemy State
+        "CODE334": False,  # Enemy Recover All
+        "CODE335": False,  # Enemy Appear
+        "CODE336": False,  # Enemy Transform
+        "CODE337": False,  # Show Battle Animation
+        "CODE339": False,  # Force Action
+        "CODE340": False,  # Abort Battle
+        "CODE351": False,  # Open Menu Screen
+        "CODE352": False,  # Open Save Screen
+        "CODE353": False,  # Game Over
+        "CODE354": False,  # Return to Title Screen
+        "CODE355": False,  # Script
+        "CODE356": False,  # Plugin Command
+    }
+    
     config_changed = pyqtSignal()
     
     def __init__(self):
         super().__init__()
         self.config_integration = ConfigIntegration() if ConfigIntegration else None
         self.init_ui()
+        self.connect_auto_apply()  # Connect auto-apply before setting defaults
         self.reset_to_defaults()
         
     def init_ui(self):
@@ -75,18 +194,13 @@ class RPGMakerTab(QWidget):
         button_layout = QHBoxLayout()
         
         self.reset_button = QPushButton("Reset to Defaults")
-        self.reset_button.clicked.connect(self.reset_to_defaults)
+        self.reset_button.clicked.connect(self.reset_to_defaults_with_message)
         
         self.validate_button = QPushButton("Validate Settings")
         self.validate_button.clicked.connect(self.validate_and_show_report)
         
-        self.apply_button = QPushButton("Apply to Module")
-        self.apply_button.clicked.connect(self.apply_to_module)
-        self.apply_button.setToolTip("Apply current settings to the rpgmakermvmz.py module file")
-        
         button_layout.addWidget(self.reset_button)
         button_layout.addWidget(self.validate_button)
-        button_layout.addWidget(self.apply_button)
         button_layout.addStretch()
         
         scroll_layout.addLayout(button_layout)
@@ -263,29 +377,105 @@ class RPGMakerTab(QWidget):
         
     def reset_to_defaults(self):
         """Reset all settings to default values."""
-        # General config defaults
-        self.first_line_speakers_cb.setChecked(False)
-        self.facename_101_cb.setChecked(False)
-        self.names_cb.setChecked(False)
-        self.br_flag_cb.setChecked(False)
-        self.fix_textwrap_cb.setChecked(True)
-        self.ignore_tl_text_cb.setChecked(False)
+        # Temporarily disconnect signals to avoid multiple apply calls
+        self.disconnect_auto_apply()
         
-        # Main dialogue codes (enabled by default)
-        self.code_401_cb.setChecked(True)
-        self.code_405_cb.setChecked(True)
-        self.code_102_cb.setChecked(True)
+        # Apply default values from the DEFAULT_CONFIG constant
+        self.first_line_speakers_cb.setChecked(self.DEFAULT_CONFIG["FIRSTLINESPEAKERS"])
+        self.facename_101_cb.setChecked(self.DEFAULT_CONFIG["FACENAME101"])
+        self.names_cb.setChecked(self.DEFAULT_CONFIG["NAMES"])
+        self.br_flag_cb.setChecked(self.DEFAULT_CONFIG["BRFLAG"])
+        self.fix_textwrap_cb.setChecked(self.DEFAULT_CONFIG["FIXTEXTWRAP"])
+        self.ignore_tl_text_cb.setChecked(self.DEFAULT_CONFIG["IGNORETLTEXT"])
         
-        # Optional codes (disabled by default)
-        self.code_101_cb.setChecked(False)
-        self.code_408_cb.setChecked(False)
+        # Main dialogue codes
+        self.code_401_cb.setChecked(self.DEFAULT_CONFIG["CODE401"])
+        self.code_405_cb.setChecked(self.DEFAULT_CONFIG["CODE405"])
+        self.code_102_cb.setChecked(self.DEFAULT_CONFIG["CODE102"])
         
-        # Variable codes (disabled by default)
-        self.code_122_cb.setChecked(False)
+        # Optional codes
+        self.code_101_cb.setChecked(self.DEFAULT_CONFIG["CODE101"])
+        self.code_408_cb.setChecked(self.DEFAULT_CONFIG["CODE408"])
         
-        # Other codes (all disabled by default)
+        # Variable codes
+        self.code_122_cb.setChecked(self.DEFAULT_CONFIG["CODE122"])
+        
+        # Other codes - apply defaults from the constant
+        for code, cb in self.other_code_checkboxes.items():
+            default_key = f"CODE{code}"
+            if default_key in self.DEFAULT_CONFIG:
+                cb.setChecked(self.DEFAULT_CONFIG[default_key])
+            else:
+                cb.setChecked(False)  # Fallback to False if not in defaults
+                
+        # Reconnect signals and apply changes once
+        self.connect_auto_apply()
+        self.apply_to_module(show_messages=False)
+        
+    def reset_to_defaults_with_message(self):
+        """Reset to defaults and show confirmation message (for button clicks)."""
+        self.reset_to_defaults()
+        QMessageBox.information(
+            self, 
+            "Reset Complete", 
+            "All settings have been reset to their default values and applied to the module."
+        )
+        
+    def disconnect_auto_apply(self):
+        """Disconnect all checkboxes from auto-apply to prevent multiple calls."""
+        try:
+            # General settings checkboxes
+            self.first_line_speakers_cb.stateChanged.disconnect()
+            self.facename_101_cb.stateChanged.disconnect()
+            self.names_cb.stateChanged.disconnect()
+            self.br_flag_cb.stateChanged.disconnect()
+            self.fix_textwrap_cb.stateChanged.disconnect()
+            self.ignore_tl_text_cb.stateChanged.disconnect()
+            
+            # Main dialogue codes
+            self.code_401_cb.stateChanged.disconnect()
+            self.code_405_cb.stateChanged.disconnect()
+            self.code_102_cb.stateChanged.disconnect()
+            
+            # Optional codes
+            self.code_101_cb.stateChanged.disconnect()
+            self.code_408_cb.stateChanged.disconnect()
+            
+            # Variable codes
+            self.code_122_cb.stateChanged.disconnect()
+            
+            # Other codes
+            for cb in self.other_code_checkboxes.values():
+                cb.stateChanged.disconnect()
+        except TypeError:
+            # Ignore if signals are not connected
+            pass
+        
+    def connect_auto_apply(self):
+        """Connect all checkboxes to auto-apply changes when modified."""
+        # General settings checkboxes
+        self.first_line_speakers_cb.stateChanged.connect(lambda: self.apply_to_module(show_messages=False))
+        self.facename_101_cb.stateChanged.connect(lambda: self.apply_to_module(show_messages=False))
+        self.names_cb.stateChanged.connect(lambda: self.apply_to_module(show_messages=False))
+        self.br_flag_cb.stateChanged.connect(lambda: self.apply_to_module(show_messages=False))
+        self.fix_textwrap_cb.stateChanged.connect(lambda: self.apply_to_module(show_messages=False))
+        self.ignore_tl_text_cb.stateChanged.connect(lambda: self.apply_to_module(show_messages=False))
+        
+        # Main dialogue codes
+        self.code_401_cb.stateChanged.connect(lambda: self.apply_to_module(show_messages=False))
+        self.code_405_cb.stateChanged.connect(lambda: self.apply_to_module(show_messages=False))
+        self.code_102_cb.stateChanged.connect(lambda: self.apply_to_module(show_messages=False))
+        
+        # Optional codes
+        self.code_101_cb.stateChanged.connect(lambda: self.apply_to_module(show_messages=False))
+        self.code_408_cb.stateChanged.connect(lambda: self.apply_to_module(show_messages=False))
+        
+        # Variable codes
+        self.code_122_cb.stateChanged.connect(lambda: self.apply_to_module(show_messages=False))
+        
+        # Other codes
         for cb in self.other_code_checkboxes.values():
-            cb.setChecked(False)
+            cb.stateChanged.connect(lambda: self.apply_to_module(show_messages=False))
             
     def get_config(self):
         """Get current configuration as dictionary."""
@@ -427,35 +617,60 @@ class RPGMakerTab(QWidget):
         
         return is_valid
         
-    def apply_to_module(self):
+    def apply_to_module(self, show_messages=False):
         """Apply current configuration to the rpgmakermvmz.py module."""
-        if not self.config_integration:
-            QMessageBox.warning(self, "Warning", "Configuration integration not available")
-            return
-            
         try:
             config = self.get_config()
-            success = self.config_integration.update_rpgmaker_config(config)
             
-            if success:
+            # Direct file modification approach (completely silent)
+            module_path = Path(__file__).parent.parent / "modules" / "rpgmakermvmz.py"
+            
+            if not module_path.exists():
+                if show_messages:
+                    QMessageBox.critical(
+                        self, 
+                        "Error", 
+                        "modules/rpgmakermvmz.py not found!\n\n"
+                        "Make sure you're running the GUI from the correct directory."
+                    )
+                return
+                
+            # Read the current file
+            with open(module_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+            
+            # Update each configuration value
+            for key, value in config.items():
+                # Convert boolean to Python boolean string
+                value_str = str(value)
+                
+                # Find and replace the line with this configuration
+                import re
+                pattern = rf'^{key}\s*=\s*.*$'
+                replacement = f'{key} = {value_str}'
+                
+                content = re.sub(pattern, replacement, content, flags=re.MULTILINE)
+            
+            # Write the updated content back
+            with open(module_path, 'w', encoding='utf-8') as f:
+                f.write(content)
+            
+            # Emit signal for other components (silent)
+            self.config_changed.emit()
+            
+            if show_messages:
                 QMessageBox.information(
                     self, 
                     "Success", 
                     "Configuration has been applied to modules/rpgmakermvmz.py\n\n"
                     "The module will now use these settings when running translations."
                 )
-            else:
-                QMessageBox.warning(self, "Warning", "Failed to apply configuration to module")
                 
-        except FileNotFoundError:
-            QMessageBox.critical(
-                self, 
-                "Error", 
-                "modules/rpgmakermvmz.py not found!\n\n"
-                "Make sure you're running the GUI from the correct directory."
-            )
         except Exception as e:
-            QMessageBox.critical(self, "Error", f"Failed to apply configuration:\n{str(e)}")
+            if show_messages:
+                QMessageBox.critical(self, "Error", f"Failed to apply configuration:\n{str(e)}")
+            # Silent failure for auto-apply - just emit signal anyway
+            self.config_changed.emit()
         
     def load_from_module(self):
         """Load configuration from the actual module file."""
