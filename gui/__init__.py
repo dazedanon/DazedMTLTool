@@ -9,7 +9,6 @@ __author__ = "DazedTranslations"
 from .main import DazedMTLGUI
 from .config_tab import ConfigTab
 from .rpgmaker_tab import RPGMakerTab
-from .other_modules_tab import OtherModulesTab
 from .log_viewer import LogViewer
 from .file_manager import FileManager
 
@@ -17,7 +16,6 @@ __all__ = [
     "DazedMTLGUI",
     "ConfigTab", 
     "RPGMakerTab",
-    "OtherModulesTab",
     "LogViewer",
     "FileManager"
 ]
