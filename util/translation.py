@@ -147,7 +147,8 @@ def buildMatchedVocabText(vocabPairs, subbedText, history=None):
             if term in textToSearch:
                 term_found = True
         
-        if term_found:
+        # Always include "# Game Characters" category and all its terms regardless of matches
+        if term_found or (category and category.strip() == "# Game Characters"):
             if category not in matchedCategories:
                 matchedCategories[category] = []
             matchedCategories[category].append(line)
@@ -160,7 +161,7 @@ def buildMatchedVocabText(vocabPairs, subbedText, history=None):
                 formattedLines.append(category)
             formattedLines.extend(lines)
             formattedLines.append("")  # Add blank line between categories
-        matchedVocabText = f"```\n{chr(10).join(formattedLines).rstrip()}\n```"
+        matchedVocabText = f"\n{chr(10).join(formattedLines).rstrip()}\n"
     else:
         matchedVocabText = ""
     
@@ -199,12 +200,13 @@ Output ONLY the {config.language} translation in the following format: `Translat
 def translateText(system, user, history, penalty, formatType, model):
     """Send translation request to OpenAI API"""
     # Prompt
-    msg = [{"role": "system", "content": system}]
+    msg = [{"role": "system", "content": f"```\n{system}\n```"}]
 
     # History
     if isinstance(history, list):
-        msg.append({"role": "system", "content": "Translation History:"})
+        msg.append({"role": "system", "content": "Translation History:\n```"})
         msg.extend([{"role": "assistant", "content": h} for h in history])
+        msg.append({"role": "system", "content": "```"})
     else:
         msg.append({"role": "assistant", "content": history})
 
@@ -215,7 +217,7 @@ def translateText(system, user, history, penalty, formatType, model):
         responseFormat = {"type": "text"}
 
     # Content to TL
-    msg.append({"role": "user", "content": f"{user}"})
+    msg.append({"role": "user", "content": f"```\n{user}\n```"})
     response = openai.chat.completions.create(
         temperature=0,
         frequency_penalty=penalty,
