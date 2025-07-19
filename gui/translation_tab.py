@@ -497,7 +497,6 @@ class TranslationTab(QWidget):
         module_selector_layout.addWidget(module_label)
         
         self.module_combo = QComboBox()
-        self.setup_module_list()
         module_selector_layout.addWidget(self.module_combo)
         
         # Estimate checkbox
@@ -527,6 +526,8 @@ class TranslationTab(QWidget):
         # Console log at the bottom
         log_widget = self.create_log_widget()
         layout.addWidget(log_widget)
+
+        self.setup_module_list()
         
         # Translation button
         button_layout = QHBoxLayout()
@@ -618,7 +619,8 @@ class TranslationTab(QWidget):
                 self.module_combo.addItem(f"{module[0]} ({extensions})")
                 
         except Exception as e:
-            self.log_display.append(f"Warning: Could not load modules: {str(e)}")
+            # Store error for later logging since log_display might not exist yet
+            self.module_load_error = f"Warning: Could not load modules: {str(e)}"
             # Add a default option
             self.module_combo.addItem("RPG Maker MV/MZ (.json)")
             self.modules = [["RPG Maker MV/MZ", [".json"], None]]
