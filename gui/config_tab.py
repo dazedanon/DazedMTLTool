@@ -424,7 +424,7 @@ class ConfigTab(QWidget):
         self.api_url_edit.clear()
         self.api_key_edit.clear()
         self.organization_edit.clear()
-        self.model_combo.setCurrentText("gpt-4")
+        self.model_combo.setCurrentText("gpt-4.1")
         
         # Translation settings
         self.language_combo.setCurrentText("English")
@@ -433,13 +433,13 @@ class ConfigTab(QWidget):
         # Performance settings
         self.file_threads_spin.setValue(1)
         self.threads_spin.setValue(1)
-        self.batch_size_spin.setValue(10)
+        self.batch_size_spin.setValue(30)
         self.frequency_penalty_spin.setValue(0.2)
         
         # Formatting settings
         self.width_spin.setValue(60)
-        self.list_width_spin.setValue(100)
-        self.note_width_spin.setValue(75)
+        self.list_width_spin.setValue(80)
+        self.note_width_spin.setValue(85)
         
         # Custom API settings
         self.input_cost_spin.setValue(0.002)
