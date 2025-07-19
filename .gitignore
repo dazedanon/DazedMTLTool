@@ -4,6 +4,7 @@
 *.yaml
 *.yml
 *.txt
+!prompt.txt
 *.rpy
 !vocab.txt
 !requirements.txt
