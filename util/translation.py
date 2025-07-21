@@ -174,7 +174,7 @@ def createContext(config, fullPromptFlag, subbedText, formatType, history=None):
     matchedVocabText = buildMatchedVocabText(vocabPairs, subbedText, history)
 
     if fullPromptFlag:
-        system = config.prompt + matchedVocabText
+        system = config.prompt.replace("English", config.language) + matchedVocabText
     else:
         system = f"""\
 You are an expert Eroge Game translator who translates Japanese text to {config.language}.
@@ -184,7 +184,6 @@ Output ONLY the {config.language} translation in the following format: `Translat
 - All text in your response must be in {config.language} even if it is hard to translate.
 - Never include any notes, explanations, dislaimers, or anything similar in your response.
 - Maintain any spacing in the translation.
-- Maintain any code text in brackets if given. (e.g `[Color_0]`, `[Ascii_0]`, `[FCode_1`], etc)
 - `...` can be a part of the dialogue. Translate it as it is.
 {matchedVocabText}
 """

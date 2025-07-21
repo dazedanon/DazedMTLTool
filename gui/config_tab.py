@@ -341,7 +341,7 @@ class ConfigTab(QWidget):
         # Load formatting settings
         self.width_spin.setValue(int(os.getenv("width", "60")))
         self.list_width_spin.setValue(int(os.getenv("listWidth", "100")))
-        self.note_width_spin.setValue(int(os.getenv("noteWidth", "75")))
+        self.note_width_spin.setValue(int(os.getenv("noteWidth", "80")))
         
         # Load custom API settings
         self.input_cost_spin.setValue(float(os.getenv("input_cost", "0.002")))
