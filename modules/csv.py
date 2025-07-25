@@ -43,6 +43,7 @@ BRFLAG = False  # If the game uses <br> instead
 FIXTEXTWRAP = True  # Overwrites textwrap
 IGNORETLTEXT = True  # Ignores all translated text.
 MISMATCH = []  # Lists files that thdata a mismatch error (Length of GPT list response is wrong)
+FILENAME = None
 BRACKETNAMES = False
 
 # Regex - Need to change this if you want to translate from/to other languages. Default is Japanese Regex
@@ -93,8 +94,9 @@ TRANSLATION_CONFIG = TranslationConfig(
 LEAVE = False
 
 def handleCSV(filename, estimate):
-    global ESTIMATE, TOKENS
+    global ESTIMATE, TOKENS, FILENAME
     ESTIMATE = estimate
+    FILENAME = filename
 
     if not ESTIMATE:
         with open("translated/" + filename, "w+t", newline="", encoding=ENCODING, errors="xmlcharrefreplace") as writeFile:
@@ -201,11 +203,11 @@ def parseCSV(readFile, writeFile, filename):
     totalLines = len(readFile.readlines())
     readFile.seek(0)
 
-    reader = csv.reader(readFile, delimiter="\t")
+    reader = csv.reader(readFile, delimiter=",")
     if not ESTIMATE:
         writer = csv.writer(
             writeFile,
-            delimiter="\t",
+            delimiter=",",
         )
     else:
         writer = ""
@@ -307,7 +309,7 @@ def translateCSV(data, pbar, writer, filename, translatedList, format):
                 # In Place Format
                 case "3":
                     # Set columns to translate. Leave empty to translate all.
-                    targetColumns = [0]
+                    targetColumns = [1]
 
                     # False - Place translation in source column
                     # True - Place translation in next column
@@ -322,13 +324,48 @@ def translateCSV(data, pbar, writer, filename, translatedList, format):
                         if j in targetColumns and data[i][j]:
                             # Check if Translated
                             jaString = data[i][j]
+                            speaker = ""
+                            vo = ""
+
+                            if ':name' in jaString:
+                                match = re.search(r":name\[([^\]]+?)\]\n([\w\W]*)", jaString)
+                                if match:
+                                    # TL Speaker
+                                    response = getSpeaker(match.group(1))
+                                    speaker = response[0]
+                                    totalTokens[0] += response[1][0]
+                                    totalTokens[1] += response[1][1]
+                                    data[i][j] = data[i][j].replace(match.group(1), speaker)
+
+                                    # TL Text
+                                    jaString = match.group(2)
+                                    voMatch = re.search(r"\\[vfF]+\[.+]", jaString)
+                                    if voMatch:
+                                        vo = voMatch.group(0)
+                                        jaString = jaString.replace(vo, "")
+                                    jaString = jaString.replace(vo, "")
+                            elif '\\M' in jaString:
+                                match = re.search(r"\\M.+\n([\w\W]*)", jaString)
+                                if match:
+                                    jaString = match.group(1)
+                                    voMatch = re.search(r"\\[vfF]+\[.+]", jaString)
+                                    if voMatch:
+                                        vo = voMatch.group(0)
+                                        jaString = jaString.replace(vo, "")
+                            elif 'comment' in data[i][0]:
+                                # Skip comments
+                                continue
 
                             # Remove Textwrap
+                            ojaString = jaString
                             jaString = jaString.replace("\n", " ")
 
                             # Pass 1
                             if not translatedList:
-                                stringList.append(jaString)
+                                if speaker:
+                                    stringList.append(f"[{speaker}]: {jaString}")
+                                else:
+                                    stringList.append(jaString)
 
                             # Pass 2
                             else:
@@ -336,14 +373,18 @@ def translateCSV(data, pbar, writer, filename, translatedList, format):
                                 translatedText = translatedList[0]
                                 translatedList.pop(0)
 
+                                # Remove speaker
+                                if speaker:
+                                    translatedText = re.sub(r"^\[?(.+?)\]?\s?[|:]\s?", "", translatedText)
+
                                 # Add Wordwrap
                                 translatedText = dazedwrap.wrapText(translatedText, WIDTH)
 
                                 # Set Data
                                 if targetNextRow:
-                                    data[i][j + 1] = translatedText
+                                    data[i][j + 1] = data[i][j + 1].replace(ojaString, f"{translatedText}")
                                 else:
-                                    data[i][j] = translatedText
+                                    data[i][j] = data[i][j].replace(ojaString, f"{translatedText}")
 
                     # Iterate
                     i += 1
@@ -387,10 +428,6 @@ def translateCSV(data, pbar, writer, filename, translatedList, format):
                             # Grab and Pop
                             translatedText = translatedList[0]
                             translatedList.pop(0)
-
-                            # Remove speaker
-                            if speaker:
-                                translatedText = re.sub(r"^\[?(.+?)\]?\s?[|:]\s?", "", translatedText)
 
                             # Add Wordwrap
                             translatedText = dazedwrap.wrapText(translatedText, WIDTH)
@@ -464,6 +501,9 @@ def getSpeaker(speaker):
             for i in range(len(NAMESLIST)):
                 if speaker == NAMESLIST[i][0]:
                     return [NAMESLIST[i][1], [0, 0]]
+                
+            if speaker == "？？？":
+                return ["???", [0, 0]]
 
             # Translate and Store Speaker
             response = translateAI(

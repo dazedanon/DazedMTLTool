@@ -7,6 +7,7 @@ import threading
 import time
 import traceback
 import openai
+import copy
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from colorama import Fore
@@ -1058,7 +1059,7 @@ def searchCodes(page, pbar, jobList, filename):
 
                 # Join Up 401's into single string
                 if len(codeList) > i + 1:
-                    while codeList[i + 1]["code"] in [401, 405, -1] and len(codeList[i]["parameters"]) > 0 and not re.match(r"^(\s*[\\]+[aAbBdDeEfFgGhHjJlLmMoOpPqQrRsStTuUwWxXyYzZ]+\[[\w\d\[\]\\]+\])", codeList[i+1]["parameters"][0]):
+                    while codeList[i + 1]["code"] in [401, 405, -1] and len(codeList[i]["parameters"]) > 0 and len(codeList[i + 1]["parameters"]) > 0 and not re.match(r"^(\s*[\\]+[aAbBdDeEfFgGhHjJlLmMoOpPqQrRsStTuUwWxXyYzZ]+\[[\w\d\[\]\\]+\])", codeList[i+1]["parameters"][0]):
                         if not setData:
                             codeList[i]["parameters"] = []
                             codeList[i]["code"] = -1
@@ -1138,6 +1139,7 @@ def searchCodes(page, pbar, jobList, filename):
                     if "\\CL" in finalJAString or "\\ac" in finalJAString or "\\#" in finalJAString:
                         finalJAString = finalJAString.replace("\\CL", "")
                         finalJAString = finalJAString.replace("\\ac", "")
+                        finalJAString = finalJAString.replace("\\# ", "")
                         finalJAString = finalJAString.replace("\\#", "")
                         CLFlag = True
 
@@ -1148,7 +1150,7 @@ def searchCodes(page, pbar, jobList, filename):
 
                     # Check if Empty
                     if finalJAString == "":
-                        if nametag:
+                        if nametag and match:
                             codeList[j]["parameters"][0] = codeList[j]["parameters"][0].replace(match.group(2), tledSpeaker)
                         i += 1
                         continue
@@ -1221,9 +1223,8 @@ def searchCodes(page, pbar, jobList, filename):
                             ### Add Var Strings
                             # CL Flag
                             if CLFlag:
-                                translatedText = "\\#" + translatedText
-                                translatedText = translatedText.replace("\n", "\n\\#")
-                                translatedText = re.sub(r"[\\]+?#\s+", r"\\#", translatedText)
+                                translatedText = "\\# " + translatedText
+                                translatedText = translatedText.replace("\n", "\n\\# ")
                                 CLFlag = False
 
                             # Add Nametag Back In
@@ -1590,14 +1591,15 @@ def searchCodes(page, pbar, jobList, filename):
                 jaString = codeList[i]["parameters"][0]
                 
                 patterns = {
-                    "テキスト-": (r"テキスト-(.+)")
+                    # "テキスト-": (r"テキスト-(.+)")
+                    "=": (r'=\s?(.*)",'),
                     # "var text": (r"var\stext\d+\s=\s\"(.+)\""),
                     # "logtxt = ": (r"logtxt\s=\s'(.+)'" 
                     # ".setNickname": (r'.setNickname\(\\?"(.+?)\\?"\)'
                     # "_subject=": (r'_subject=(.+?)_'
                     # "text =": (r"text\s*=\s*'(.+[^\\])'"),
                     # "ex_a_name": (r'ex_a_name\(\d+,"(.+)"\)'),
-                    # "gameVariables.setValue": (r":\$gameVariables.setValue\(\d+,'(.+)'\)"),
+                    # "gameVariables.setValue": (r"\$gameVariables.setValue\(\d+,\s?'(.+)'\)"),
                     # "BattleManager._logWindow.push('addText'": (r"BattleManager._logWindow.push\('addText',\s'(.+)'\)"),
                 }
 
@@ -1605,6 +1607,10 @@ def searchCodes(page, pbar, jobList, filename):
                     if key in jaString:
                         match = re.search(regex, jaString)
                         if match:
+                            # Check if the match contains actual text (not just numbers/special chars)
+                            if not re.search(r'[a-zA-Z一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]', match.group(1)):
+                                continue
+
                             # Pass 1
                             if setData:
                                 list355655.append(match.group(1))
@@ -1633,24 +1639,33 @@ def searchCodes(page, pbar, jobList, filename):
 
             ## Event Code: 408 (Script)
             if "code" in codeList[i] and (codeList[i]["code"] == 408) and CODE408 is True:
-                # Remove Textwrap
                 jaString = codeList[i]["parameters"][0]
-                # jaString = jaString.replace("\n", " ")
+                match = re.search(r"(.+)", jaString)
+                if match:
+                    # Remove Textwrap
+                    jaString = codeList[i]["parameters"][0]
+                    ojaString = jaString
+                    jaString = jaString.replace("\n", " ")
 
-                # Pass 1
-                if setData:
-                    list408.append(jaString)
-                
-                # Pass 2
-                else:
-                    translatedText = list408[0]
-                    list408.pop(0)
+                    # If there isn't any Japanese in the text just skip
+                    if not re.search(LANGREGEX, jaString):
+                        i += 1
+                        continue
 
-                    # Textwrap
-                    translatedText = dazedwrap.wrapText(translatedText, width=1000)
+                    # Pass 1
+                    if setData:
+                        list408.append(jaString)
+                    
+                    # Pass 2
+                    else:
+                        translatedText = list408[0]
+                        list408.pop(0)
 
-                    # Set Data
-                    codeList[i]["parameters"][0] = f"{translatedText}"
+                        # Textwrap
+                        translatedText = dazedwrap.wrapText(translatedText, width=LISTWIDTH)
+
+                        # Set Data
+                        codeList[i]["parameters"][0] = codeList[i]["parameters"][0].replace(ojaString, translatedText)
 
             ## Event Code: 108 (Script)
             if "code" in codeList[i] and (codeList[i]["code"] == 108) and CODE108 is True:
@@ -1670,6 +1685,8 @@ def searchCodes(page, pbar, jobList, filename):
                     regex = r"event_text\s*:\s*(.*)"
                 elif "Menu Name" in jaString:
                     regex = r"Menu\sName\s*:\s*(.*)>"
+                elif "text_indicator" in jaString:
+                    regex = r"text_indicator\s?:\s?(.+)"
                 else:
                     i += 1
                     continue
@@ -1742,7 +1759,7 @@ def searchCodes(page, pbar, jobList, filename):
 
                 # Want to translate this script
                 if "D_TEXT " in jaString:
-                    regex = r"D_TEXT\s([^\s]+)\s?\d*"
+                    regex = r"D_TEXT\s*([^\s]+)\s?\d*"
                 elif "ShowInfo" in jaString:
                     regex = r"ShowInfo\s(.*)"
                 elif "PushGab" in jaString:
@@ -1750,7 +1767,7 @@ def searchCodes(page, pbar, jobList, filename):
                 elif "addLog" in jaString:
                     regex = r"addLog\s(.*)"
                 elif "DW_" in jaString:
-                    regex = r"DW_.*?\s(.*)"
+                    regex = r"DW_.*\s\d+\s(.+)"
                 elif "CommonPopup" in jaString:
                     regex = r"CommonPopup\sadd\stext:(.*?)[\\]+}"
                 elif "AddCustomChoice" in jaString:
@@ -1906,12 +1923,15 @@ def searchCodes(page, pbar, jobList, filename):
             if "code" in codeList[i] and codeList[i]["code"] == 102 and CODE102 is True:
                 choiceList = []
                 varList = []
+                choiceIndexMap = []  # Track which original indices we're processing
+                
+                # Process each string in the parameters list
                 for choice in range(len(codeList[i]["parameters"][0])):
                     jaString = codeList[i]["parameters"][0][choice]
                     jaString = jaString.replace(" 。", ".")
 
                     # Avoid Empty Strings
-                    if jaString == "":
+                    if not jaString.strip():
                         continue
 
                     # If and En Statements
@@ -1921,50 +1941,43 @@ def searchCodes(page, pbar, jobList, filename):
                         for var in ifList:
                             jaString = jaString.replace(var, "")
                             ifVar += var
+                    
+                    # Store the formatting and cleaned string
                     varList.append(ifVar)
-
-                    # Append to List
                     choiceList.append(jaString)
+                    choiceIndexMap.append(choice)
 
-                # Translate
-                if len(textHistory) > 0:
-                    response = translateAI(
-                        choiceList,
-                        f"Reply with the English translation of the dialogue choice.\n\nPrevious text for context: {str(textHistory)}\n",
-                        True,
-                    )
+                # Translate the list
+                if len(choiceList) > 0:
+                    if len(textHistory) > 0:
+                        response = translateAI(
+                            choiceList,
+                            f"Reply with the English translation of the dialogue choice.\n\nPrevious text for context: {str(textHistory)}\n",
+                            True,
+                        )
+                    else:
+                        response = translateAI(choiceList, "Reply with the English translation of the dialogue choice.", True)
+                    
                     translatedTextList = response[0]
                     totalTokens[0] += response[1][0]
                     totalTokens[1] += response[1][1]
-                else:
-                    response = translateAI(choiceList, "Reply with the English translation of the dialogue choice.", True)
-                    translatedTextList = response[0]
-                    totalTokens[0] += response[1][0]
-                    totalTokens[1] += response[1][1]
 
-                # Check Mismatch
-                if len(translatedTextList) == len(choiceList):
-                    for choice in range(len(codeList[i]["parameters"][0])):
-                        jaString = codeList[i]["parameters"][0][choice]
-                        jaString = jaString.replace(" 。", ".")
-
-                        # Avoid Empty Strings
-                        if jaString == "":
-                            continue
-
-                        translatedText = translatedTextList[choice]
-
-                        # Set Data
-                        totalTokens[0] += response[1][0]
-                        totalTokens[1] += response[1][1]
-                        if translatedText != "":
-                            translatedText = varList[choice] + translatedText[0].upper() + translatedText[1:]
-                        else:
-                            translatedText = varList[choice] + translatedText
-                        codeList[i]["parameters"][0][choice] = translatedText
-                else:
-                    if filename not in MISMATCH:
-                        MISMATCH.append(filename)
+                    # Check Mismatch and set translations
+                    if len(translatedTextList) == len(choiceList):
+                        for idx, translatedText in enumerate(translatedTextList):
+                            originalIndex = choiceIndexMap[idx]
+                            
+                            # Apply formatting
+                            if translatedText != "":
+                                translatedText = varList[idx] + translatedText[0].upper() + translatedText[1:]
+                            else:
+                                translatedText = varList[idx] + translatedText
+                            
+                            # Set the translation back to the original position
+                            codeList[i]["parameters"][0][originalIndex] = translatedText
+                    else:
+                        if filename not in MISMATCH:
+                            MISMATCH.append(filename)
 
             ### Event Code: 111 Script
             if "code" in codeList[i] and codeList[i]["code"] == 111 and CODE111 is True:
@@ -2086,7 +2099,7 @@ def searchCodes(page, pbar, jobList, filename):
 
         # 108
         if len(list108) > 0:
-            response = translateAI(list108, textHistory, True)
+            response = translateAI(list108, "This text is a label. Use title capitalization and keep it brief.", True)
             list108TL = response[0]
             totalTokens[0] += response[1][0]
             totalTokens[1] += response[1][1]

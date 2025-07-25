@@ -82,30 +82,30 @@ PBAR = None
 FILENAME = None
 
 # Dialogue / Choices
-CODE101 = False
-CODE102 = False
+CODE101 = True
+CODE102 = True
 
 # Set String (Fragile but necessary)
 CODE122 = True
-CODE150 = False
+CODE150 = True
 
 # Other
-CODE210 = False
-CODE300 = False
-CODE250 = False
+CODE210 = True
+CODE300 = True
+CODE250 = True
 
 # Database
-SCENARIOFLAG = False
-OPTIONSFLAG = False
-NPCFLAG = False
-DBNAMEFLAG = False
-DBVALUEFLAG = False
+SCENARIOFLAG = True
+OPTIONSFLAG = True
+NPCFLAG = True
+DBNAMEFLAG = True
+DBVALUEFLAG = True
 ITEMFLAG = True
-STATEFLAG = False
-ENEMYFLAG = False
-ARMORFLAG = False
-WEAPONFLAG = False
-SKILLFLAG = False
+STATEFLAG = True
+ENEMYFLAG = True
+ARMORFLAG = True
+WEAPONFLAG = True
+SKILLFLAG = True
 
 # Initialize Translation Config
 TRANSLATION_CONFIG = TranslationConfig(
