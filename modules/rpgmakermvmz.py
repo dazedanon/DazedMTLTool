@@ -292,7 +292,7 @@ def parseMap(data, filename):
                 if event is not None:
                     # This translates ID of events. (May break the game)
                     if "<namePop:" in event["note"]:
-                        response = translateNoteOmitSpace(event, r"<namePop:(.*?)\s?[\d-]+?")
+                        response = translateNoteOmitSpace(event, r"<namePop:\s?([\w一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]+)")
                         totalTokens[0] += response[0]
                         totalTokens[1] += response[1]
                     if "<LB:" in event["note"]:
@@ -875,7 +875,6 @@ def searchCodes(page, pbar, jobList, filename):
     speaker = ""
     speakerID = None
     syncIndex = 0
-    CLFlag = False
     maxHistory = MAXHISTORY
     VNameValue = None
     global LOCK
@@ -1135,13 +1134,11 @@ def searchCodes(page, pbar, jobList, filename):
                         finalJAString = finalJAString.replace(ffMatch.group(1), "")
                         nametag += ffMatch.group(1)
 
-                    # Center Lines
+                    # Center Lines (We Nuke These)
                     if "\\CL" in finalJAString or "\\ac" in finalJAString or "\\#" in finalJAString:
                         finalJAString = finalJAString.replace("\\CL", "")
                         finalJAString = finalJAString.replace("\\ac", "")
-                        finalJAString = finalJAString.replace("\\# ", "")
                         finalJAString = finalJAString.replace("\\#", "")
-                        CLFlag = True
 
                     # Handle Formatting Codes
                     if "\\>" in finalJAString:
@@ -1219,13 +1216,6 @@ def searchCodes(page, pbar, jobList, filename):
                             if "\\px[200]" in nametag:
                                 translatedText = translatedText.replace("\\px[200]", "")
                                 translatedText = translatedText.replace("\n", "\n\\px[200]")
-
-                            ### Add Var Strings
-                            # CL Flag
-                            if CLFlag:
-                                translatedText = "\\# " + translatedText
-                                translatedText = translatedText.replace("\n", "\n\\# ")
-                                CLFlag = False
 
                             # Add Nametag Back In
                             translatedText = nametag + translatedText
@@ -1591,8 +1581,8 @@ def searchCodes(page, pbar, jobList, filename):
                 jaString = codeList[i]["parameters"][0]
                 
                 patterns = {
-                    # "テキスト-": (r"テキスト-(.+)")
-                    "=": (r'=\s?(.*)",'),
+                    "テキスト-": (r"テキスト-(.+)")
+                    # "=": (r'=\s?(.*)",'),
                     # "var text": (r"var\stext\d+\s=\s\"(.+)\""),
                     # "logtxt = ": (r"logtxt\s=\s'(.+)'" 
                     # ".setNickname": (r'.setNickname\(\\?"(.+?)\\?"\)'
@@ -1827,7 +1817,7 @@ def searchCodes(page, pbar, jobList, filename):
                             list356.pop(0)
 
                 if "namePop" in jaString:
-                    matchList = re.findall(r"<namePop:(.*?)\s?[\d-]+?", jaString)
+                    matchList = re.findall(r"<namePop:\s?([\w一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]+)", jaString)
                     if len(matchList) > 0:
                         # Translate
                         text = matchList[0]
