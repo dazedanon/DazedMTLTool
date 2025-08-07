@@ -218,8 +218,6 @@ def translateText(system, user, history, penalty, formatType, model):
     # Content to TL
     msg.append({"role": "user", "content": f"```\n{user}\n```"})
     response = openai.chat.completions.create(
-        temperature=0,
-        frequency_penalty=penalty,
         model=model,
         response_format=responseFormat,
         messages=msg,
@@ -389,10 +387,10 @@ def translateAI(text, history, fullPromptFlag, config, filename=None, pbar=None,
             translatedText = response.choices[0].message.content
 
             # Retry if AI refused
-            if not translatedText:
+            if not translatedText or '"error":' in translatedText:
                 response = translateText(
                     f"{system}\n You translate ALL content.", 
-                    user, history, 0.1, formatType, "gpt-4o"
+                    user, history, 0.1, formatType, "gpt-4.1" if config.model == "gpt-5" else "gpt-4o"
                 )
                 translatedText = response.choices[0].message.content
 
