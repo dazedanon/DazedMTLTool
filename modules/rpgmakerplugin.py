@@ -60,7 +60,7 @@ if "gpt-3.5" in MODEL:
     OUTPUTAPICOST = 5.00
     BATCHSIZE = 10
     FREQUENCY_PENALTY = 0.2
-elif "gpt-4" in MODEL:
+elif "gpt-5" in MODEL:
     INPUTAPICOST = 1.25
     OUTPUTAPICOST = 10.00
     BATCHSIZE = 30
