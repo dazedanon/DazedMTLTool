@@ -75,6 +75,50 @@ class TranslationConfig:
         self.mismatchLogPath = mismatchLogPath
 
 
+def getPricingConfig(model):
+    """
+    Get pricing configuration for a given model.
+    
+    Args:
+        model: The model name string
+        
+    Returns:
+        dict: Dictionary containing inputAPICost, outputAPICost, batchSize, and frequencyPenalty
+    """
+    # Pricing - Depends on the model https://openai.com/pricing ($ Price Per 1M)
+    # Batch Size - GPT 3.5 Struggles past 15 lines per request. GPT4 struggles past 50 lines per request
+    # If you are getting a MISMATCH LENGTH error, lower the batch size.
+    if "gpt-3.5" in model:
+        return {
+            "inputAPICost": 3.00,
+            "outputAPICost": 5.00,
+            "batchSize": 10,
+            "frequencyPenalty": 0.2
+        }
+    elif "gpt-5" in model:
+        return {
+            "inputAPICost": 1.25,
+            "outputAPICost": 10.00,
+            "batchSize": 30,
+            "frequencyPenalty": 0.05
+        }
+    elif "deepseek" in model:
+        return {
+            "inputAPICost": 0.27,
+            "outputAPICost": 1.10,
+            "batchSize": 30,
+            "frequencyPenalty": 0.05
+        }
+    else:
+        # Fallback to environment variables
+        return {
+            "inputAPICost": float(os.getenv("input_cost", 3.00)),
+            "outputAPICost": float(os.getenv("output_cost", 6.00)),
+            "batchSize": int(os.getenv("batchsize", 10)),
+            "frequencyPenalty": float(os.getenv("frequency_penalty", 0.2))
+        }
+
+
 def batchList(inputList, batchSize):
     """Split a list into batches of specified size"""
     if not isinstance(batchSize, int) or batchSize <= 0:
@@ -292,6 +336,24 @@ def extractTranslation(translatedTextList, isList, pbar=None):
         if pbar:
             pbar.write(f"extractTranslation Error: {e} on String {translatedTextList}")
         return None
+
+
+def calculateCost(inputTokens, outputTokens, model):
+    """
+    Calculate the cost of translation based on token usage and model pricing.
+    
+    Args:
+        inputTokens: Number of input tokens used
+        outputTokens: Number of output tokens generated
+        model: The model name string
+        
+    Returns:
+        float: Total cost in USD
+    """
+    pricing = getPricingConfig(model)
+    inputCost = (inputTokens / 1000000) * pricing["inputAPICost"]
+    outputCost = (outputTokens / 1000000) * pricing["outputAPICost"]
+    return inputCost + outputCost
 
 
 def countTokens(system, user, history):
