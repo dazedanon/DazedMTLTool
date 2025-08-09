@@ -13,7 +13,7 @@ from colorama import Fore
 from dotenv import load_dotenv
 from retry import retry
 from tqdm import tqdm
-from util.translation import TranslationConfig, translateAI as sharedtranslateAI
+from util.translation import TranslationConfig, translateAI as sharedtranslateAI, getPricingConfig, calculateCost
 
 # Open AI
 load_dotenv()
@@ -55,29 +55,12 @@ PBAR = None
 # Regex - Need to change this if you want to translate from/to other languages. Default is Japanese Regex
 LANGREGEX = r"[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]+"
 
-# Pricing - Depends on the model https://openai.com/pricing
-# Batch Size - GPT 3.5 Struggles past 15 lines per request. GPT4 struggles past 50 lines per request
-# If you are getting a MISMATCH LENGTH error, lower the batch size.
-if "gpt-3.5" in MODEL:
-    INPUTAPICOST = 3.00
-    OUTPUTAPICOST = 5.00
-    BATCHSIZE = 10
-    FREQUENCY_PENALTY = 0.2
-elif "gpt-5" in MODEL:
-    INPUTAPICOST = 1.25
-    OUTPUTAPICOST = 10.00
-    BATCHSIZE = 30
-    FREQUENCY_PENALTY = 0.05
-elif "deepseek" in MODEL:
-    INPUTAPICOST = 0.27	
-    OUTPUTAPICOST = 1.10
-    BATCHSIZE = 30
-    FREQUENCY_PENALTY = 0.05
-else:
-    INPUTAPICOST = float(os.getenv("input_cost"))
-    OUTPUTAPICOST = float(os.getenv("output_cost"))
-    BATCHSIZE = int(os.getenv("batchsize"))
-    FREQUENCY_PENALTY = float(os.getenv("frequency_penalty"))
+# Get pricing configuration based on the model
+PRICING_CONFIG = getPricingConfig(MODEL)
+INPUTAPICOST = PRICING_CONFIG["inputAPICost"]
+OUTPUTAPICOST = PRICING_CONFIG["outputAPICost"]
+BATCHSIZE = PRICING_CONFIG["batchSize"]
+FREQUENCY_PENALTY = PRICING_CONFIG["frequencyPenalty"]
 
 # Initialize Translation Config
 TRANSLATION_CONFIG = TranslationConfig(
@@ -130,11 +113,12 @@ def handleRegex(filename, estimate):
 def getResultString(translatedData, translationTime, filename):
     global TIMETOTAL
     # File Print String
+    cost = calculateCost(translatedData[1][0], translatedData[1][1], MODEL)
     totalTokenstring = (
         Fore.YELLOW + "[Input: " + str(translatedData[1][0]) + "]"
         "[Output: "
         + str(translatedData[1][1])
-        + "]" "[Cost: ${:,.4f}".format(((translatedData[1][0] / 1000000) * INPUTAPICOST) + ((translatedData[1][1] / 1000000) * OUTPUTAPICOST))
+        + "]" "[Cost: ${:,.4f}".format(cost)
         + "]"
     )
     if filename != "TOTAL":
