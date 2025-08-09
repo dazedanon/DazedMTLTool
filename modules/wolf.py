@@ -86,26 +86,26 @@ CODE101 = True
 CODE102 = True
 
 # Set String (Fragile but necessary)
-CODE122 = True
-CODE150 = True
+CODE122 = False
+CODE150 = False
 
 # Other
-CODE210 = True
-CODE300 = True
-CODE250 = True
+CODE210 = False
+CODE300 = False
+CODE250 = False
 
 # Database
-SCENARIOFLAG = True
-OPTIONSFLAG = True
-NPCFLAG = True
-DBNAMEFLAG = True
-DBVALUEFLAG = True
-ITEMFLAG = True
-STATEFLAG = True
-ENEMYFLAG = True
-ARMORFLAG = True
-WEAPONFLAG = True
-SKILLFLAG = True
+SCENARIOFLAG = False
+OPTIONSFLAG = False
+NPCFLAG = False
+DBNAMEFLAG = False
+DBVALUEFLAG = False
+ITEMFLAG = False
+STATEFLAG = False
+ENEMYFLAG = False
+ARMORFLAG = False
+WEAPONFLAG = False
+SKILLFLAG = False
 
 # Initialize Translation Config
 TRANSLATION_CONFIG = TranslationConfig(
@@ -317,7 +317,7 @@ def searchCodes(events, pbar, jobList, filename):
         while i < len(codeList):
             ### Event Code: 101 Message
             if codeList[i]["code"] == 101 and CODE101 == True:
-                speakerRegex = r"^((.+?)\n)[「(（\"*\[]" # Default: r"@\d+\r?\n(.*)：\r?\n"
+                speakerRegex = r"@\d+\r?\n(.*)：?\r?\n" # Default: r"@\d+\r?\n(.*)：\r?\n"
                 textRegex = r"@?\d*\r?\n?\u3000*([\w\W]+)\r?\n?" # Default: r"@?\d*\r?\n?\u3000*([\w\W]+)\r?\n?"
 
                 # Grab String
