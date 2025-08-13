@@ -1,8 +1,8 @@
-repos:
-  - repo: local
-    hooks:
-      - id: set-defaults
-        name: Set Defaults in rpgmakermvmz.py
-        entry: python set_defaults.py
-        language: python
-        files: ^modules/rpgmakermvmz.py$
+'repos':
+- 'repo': 'local'
+  'hooks':
+  - 'id': 'set-defaults'
+    'name': 'Set Defaults in rpgmakermvmz.py'
+    'entry': 'python set_defaults.py'
+    'language': 'python'
+    'files': '^modules/rpgmakermvmz.py$'
