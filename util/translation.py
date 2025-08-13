@@ -116,6 +116,13 @@ def getPricingConfig(model):
             "batchSize": 30,
             "frequencyPenalty": 0.05
         }
+    elif "sonnet" in model:
+        return {
+            "inputAPICost": 3.00,
+            "outputAPICost": 15.00,
+            "batchSize": 30,
+            "frequencyPenalty": 0.05
+        }
     else:
         # Fallback to environment variables
         return {
@@ -249,16 +256,24 @@ Output ONLY the {config.language} translation in the following format: `Translat
 
 def translateText(system, user, history, penalty, formatType, model):
     """Send translation request to OpenAI API"""
+    # Ensure system content is not empty
+    if not system or not str(system).strip():
+        raise ValueError("System content cannot be empty")
+    
     # Prompt
     msg = [{"role": "system", "content": f"```\n{system}\n```"}]
 
     # History
     if isinstance(history, list):
-        msg.append({"role": "system", "content": "Translation History:\n```"})
-        msg.extend([{"role": "assistant", "content": h} for h in history])
-        msg.append({"role": "system", "content": "```"})
+        # Filter out empty or None history items to prevent API errors
+        valid_history = [h for h in history if h and str(h).strip()]
+        if valid_history:
+            msg.append({"role": "system", "content": "Translation History:\n```"})
+            msg.extend([{"role": "assistant", "content": h} for h in valid_history])
+            msg.append({"role": "system", "content": "```"})
     else:
-        msg.append({"role": "assistant", "content": history})
+        if history and str(history).strip():
+            msg.append({"role": "assistant", "content": history})
 
     # Response Format
     if formatType == "json":
@@ -266,8 +281,15 @@ def translateText(system, user, history, penalty, formatType, model):
     else:
         responseFormat = {"type": "text"}
 
-    # Content to TL
+    # Content to TL - ensure user content is not empty
+    if not user or not str(user).strip():
+        raise ValueError("User content cannot be empty")
     msg.append({"role": "user", "content": f"```\n{user}\n```"})
+
+    # Debug: Check for any empty messages before API call
+    for i, message in enumerate(msg):
+        if not message.get("content") or not str(message.get("content")).strip():
+            raise ValueError(f"Message {i} has empty content: {message}")
 
     # Call OpenAI API
     if "gpt-5" in model:
@@ -445,8 +467,8 @@ def translateAI(text, history, fullPromptFlag, config, filename=None, pbar=None,
             # Format for translation
             if isinstance(tItem, list):
                 for j in range(len(tItem)):
-                    if not tItem[j]:
-                        tItem[j] = tItem[j].replace("", "Placeholder Text")
+                    if not tItem[j] or not str(tItem[j]).strip():
+                        tItem[j] = "Placeholder Text"
                 payload = {f"Line{i+1}": string for i, string in enumerate(tItem)}
                 payload = json.dumps(payload, indent=4, ensure_ascii=False)
                 subbedT = payload
