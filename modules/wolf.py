@@ -65,12 +65,14 @@ PBAR = None
 FILENAME = None
 
 # Dialogue / Choices
-CODE101 = True
-CODE102 = True
+CODE101 = False
+CODE102 = False
+
+# Picture
+CODE150 = False
 
 # Set String (Fragile but necessary)
-CODE122 = False
-CODE150 = False
+CODE122 = True
 
 # Other
 CODE210 = False
@@ -79,8 +81,8 @@ CODE250 = False
 
 # Database
 SCENARIOFLAG = False
-OPTIONSFLAG = False
-NPCFLAG = False
+OPTIONSFLAG = True
+NPCFLAG = True
 DBNAMEFLAG = False
 DBVALUEFLAG = False
 ITEMFLAG = False
@@ -301,8 +303,8 @@ def searchCodes(events, pbar, jobList, filename):
         while i < len(codeList):
             ### Event Code: 101 Message
             if codeList[i]["code"] == 101 and CODE101 == True:
-                speakerRegex = r"@\d+\r?\n(.*)：?\r?\n" # Default: r"@\d+\r?\n(.*)：\r?\n"
-                textRegex = r"@?\d*\r?\n?\u3000*([\w\W]+)\r?\n?" # Default: r"@?\d*\r?\n?\u3000*([\w\W]+)\r?\n?"
+                speakerRegex = r"@\d+\r?\n(.*?)：?\r?\n" # Default: r"@\d+\r?\n(.*)：?\r?\n""
+                textRegex = r"@\d+\r?\n.*?：?\r?\n(.*)" # Default: r"@\d+\r?\n.*：?\r?\n(.*)"
 
                 # Grab String
                 jaString = codeList[i]["stringArgs"][0]
@@ -318,12 +320,11 @@ def searchCodes(events, pbar, jobList, filename):
                         totalTokens[0] += response[1][0]
                         totalTokens[1] += response[1][1]
 
-                        # Set nametag and remove from string
+                        # Set Name
                         codeList[i]["stringArgs"][0] = codeList[i]["stringArgs"][0].replace(match.group(1), speaker)
-                        jaString = jaString.replace(match.group(1), "")
 
                 # Grab Only Text
-                match = re.search(textRegex, jaString)
+                match = re.search(textRegex, jaString, flags=re.DOTALL)
                 if match:
                     jaString = match.group(1)
                     initialJAString = jaString
@@ -512,11 +513,7 @@ def searchCodes(events, pbar, jobList, filename):
                 if "stringArgs" in codeList[i] and len(codeList[i]["stringArgs"]) > 0:                    
                     font150 = "\\f[8]"
                     # Grab String
-                    jaString = re.search(r"^\n?(.*)\n?$", codeList[i]["stringArgs"][0])
-                    if jaString:
-                        jaString = jaString.group(1)
-                    else:
-                        jaString = codeList[i]["stringArgs"][0]
+                    jaString = codeList[i]["stringArgs"][0]
 
                     # Japanses Text Only
                     if not re.search(r"[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９]+", jaString):
@@ -533,7 +530,6 @@ def searchCodes(events, pbar, jobList, filename):
                         and jaString != ""
                         and "_" not in jaString
                         and '",' not in jaString
-                        and "/" not in jaString
                         and ">" not in jaString
                         and "<" not in jaString
                     ):
@@ -948,7 +944,7 @@ def searchDB(events, pbar, jobList, filename):
                                         # Write Name
                                         file.write(f"{dataList[j].get('value')} ({npcList[0][0]})\n")
 
-                                        # Set
+                                        # Set Data
                                         dataList[j].update({"value": npcList[0][0]})
                                         npcList[0].pop(0)
 
@@ -976,7 +972,6 @@ def searchDB(events, pbar, jobList, filename):
                                         # Set Data
                                         dataList[j].update({"value": translatedText})
                                         npcList[1].pop(0)
-                                        file.write(f"\n{translatedText}")
 
             # Grab Scenario
             if "サブキャラ会話" in table["name"] and SCENARIOFLAG == True:
@@ -1162,7 +1157,7 @@ def searchDB(events, pbar, jobList, filename):
                                         dataList[j].update({"value": dataList[j].get("value").replace(ogString, translatedText)})
 
             # Grab Options
-            if table["name"] == "サブEv" and OPTIONSFLAG == True:
+            if table["name"] == "用語設定" and OPTIONSFLAG == True:
                 for option in table["data"]:
                     dataList = option["data"]
 
