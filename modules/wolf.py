@@ -266,6 +266,7 @@ def searchCodes(events, pbar, jobList, filename):
         list300 = jobList[2]
         list150 = jobList[3]
         list250 = jobList[4]
+        list122 = jobList[5]
         setData = True
     else:
         stringList = []
@@ -273,6 +274,7 @@ def searchCodes(events, pbar, jobList, filename):
         list300 = []
         list150 = []
         list250 = []
+        list122 = []
         setData = False
 
     # Other
@@ -445,68 +447,37 @@ def searchCodes(events, pbar, jobList, filename):
                     originalString = jaString
 
                     # Remove Textwrap
-                    # jaString = jaString.replace('\n', ' ')
+                    jaString = jaString.replace("\r", "")
+                    jaString = jaString.replace("\n", " ")
 
-                    # Translate Conversations
-                    if "：Nothing" in jaString:
-                        # Separate into list
-                        list122 = jaString.split("\n\n")
+                    # Check if this is a translatable string
+                    if (
+                        not re.search(r"\.[\w]+$", jaString)
+                        and jaString != ""
+                        and "_" not in jaString
+                        and '",' not in jaString
+                        and "/" not in jaString
+                        and re.search(LANGREGEX, jaString)
+                    ):
+                        # 1st Pass (Save Text to List)
+                        if not setData:
+                            list122.append(jaString)
 
-                        # Remove Textwrap
-                        # for j in range(len(list122)):
-                        #     list122[j] = list122[j].replace("\n", " ")
+                        # 2nd Pass (Set Text)
+                        else:
+                            if len(list122) > 0:
+                                # Grab Translated String
+                                translatedText = list122[0]
 
-                        # Translate
-                        response = translateAI(
-                            list122,
-                            f"Reply with the {LANGUAGE} translation of the text",
-                            True,
-                        )
-                        list122TL = response[0]
-                        totalTokens[0] += response[1][0]
-                        totalTokens[1] += response[1][1]
+                                # Textwrap
+                                if FIXTEXTWRAP is True:
+                                    translatedText = dazedwrap.wrapText(translatedText, width=WIDTH)
 
-                        # Validate and Set Data
-                        if len(list122) == len(list122TL):
-                            # Adjust Speaker and Add Textwrap
-                            for j in range(len(list122TL)):
-                                list122TL[j] = dazedwrap.wrapText(list122TL[j], WIDTH)
-                                list122TL[j] = re.sub(r"^\[?(.+?)\]?:", r"\1：", list122TL[j])
-                                list122TL[j] = list122TL[j].replace("：", "：\n")
-                                list122TL[j] = list122TL[j].replace("：\n ", "：\n")
+                                # Set Data
+                                codeList[i]["stringArgs"][0] = codeList[i]["stringArgs"][0].replace(originalString, translatedText)
 
-                            # Join back into single string
-                            list122TL = "\n\n".join(list122TL)
-
-                            # Set String
-                            codeList[i]["stringArgs"][0] = list122TL
-
-                    # Translate Other Strings [Specific Files Only]
-                    else:
-                        if (
-                            not re.search(r"\.[\w]+$", jaString)
-                            and jaString != ""
-                            and "_" not in jaString
-                            and '",' not in jaString
-                            and "/" not in jaString
-                        ):
-                            # Japanese Text Only
-                            # if re.search(r"[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９]+", jaString):
-                            # Translate
-                            response = translateAI(
-                                jaString,
-                                f"Maintain any newlines and Reply with the {LANGUAGE} translation of the text",
-                                True,
-                            )
-                            translatedText = response[0]
-                            totalTokens[0] += response[1][0]
-                            totalTokens[1] += response[1][1]
-
-                            # Textwrap
-                            # translatedText = dazedwrap.wrapText(translatedText, 30)
-
-                            # Set String
-                            codeList[i]["stringArgs"][0] = codeList[i]["stringArgs"][0].replace(originalString, translatedText)
+                                # Pop Item
+                                list122.pop(0)
 
             ### Event Code: 150 Picture String
             if codeList[i]["code"] == 150 and CODE150 == True:
@@ -716,6 +687,7 @@ def searchCodes(events, pbar, jobList, filename):
         list150TL = []
         list250TL = []
         list300TL = []
+        list122TL = []
         setData = False
 
         # String List
@@ -803,10 +775,25 @@ def searchCodes(events, pbar, jobList, filename):
                 list150 = list150TL
                 setData = True
 
+        # 122 List
+        if len(list122) > 0:
+            pbar.total = len(list122)
+            pbar.refresh()
+            response = translateAI(list122, textHistory, True)
+            list122TL = response[0]
+            totalTokens[0] += response[1][0]
+            totalTokens[1] += response[1][1]
+            if len(list122TL) != len(list122):
+                with LOCK:
+                    if filename not in MISMATCH:
+                        MISMATCH.append(filename)
+            else:
+                setData = True
+
         # Update jobList before recursive call
         if setData == True:
             stringList = []
-            jobList = [stringListTL, list210TL, list300TL, list150TL, list250TL]  # Add list150TL
+            jobList = [stringListTL, list210TL, list300TL, list150TL, list250TL, list122TL]  # Add list122TL
             searchCodes(events, pbar, jobList, filename)
 
         else:
