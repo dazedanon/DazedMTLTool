@@ -95,6 +95,13 @@ def getPricingConfig(model):
             "batchSize": 10,
             "frequencyPenalty": 0.2
         }
+    elif "gpt-4.1" in model:
+        return {
+            "inputAPICost": 2.00,
+            "outputAPICost": 8.00,
+            "batchSize": 30,
+            "frequencyPenalty": 0.05
+        }
     elif "gpt-5" in model:
         return {
             "inputAPICost": 1.25,
@@ -261,11 +268,23 @@ def translateText(system, user, history, penalty, formatType, model):
 
     # Content to TL
     msg.append({"role": "user", "content": f"```\n{user}\n```"})
-    response = openai.chat.completions.create(
-        model=model,
-        response_format=responseFormat,
-        messages=msg,
-    )
+
+    # Call OpenAI API
+    if "gpt-5" in model:
+        response = openai.chat.completions.create(
+            model=model,
+            response_format=responseFormat,
+            messages=msg,
+            reasoning_effort="minimal"
+        )
+    else:
+        response = openai.chat.completions.create(
+            model=model,
+            response_format=responseFormat,
+            messages=msg,
+            temperature=0,
+            frequency_penalty=penalty
+        )
     return response
 
 

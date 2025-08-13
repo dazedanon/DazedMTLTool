@@ -2,16 +2,16 @@ Here are some vocabulary and terms so that you know the proper spelling and tran
 
 # Game Characters
 かけだし錬金術師 (Novice Alchemist)
-アル=ソレイユ (Al Soleil) - Female
+アル＝ソレイユ (Al Soleil) - Female
 
 月夜の錬金術師 (Moonlit Alchemist)
-ケミィ=ルーン (Chemmy Rune) - Female
+ケミィ＝ルーン (Chemmy Rune) - Female
 
 英雄の娘 (Hero's Daughter)
-ルビナ=ローズストーン (Rubina Rosestone) - Female
+ルビナ＝ローズストーン (Rubina Rosestone) - Female
 
 鋼鉄の意志 (Iron Will)
-スティーリア=ブリュンヒルデ (Stilia Brynhildr) - Female
+スティーリア＝ブリュンヒルデ (Stilia Brynhildr) - Female
 
 # Lewd Terms
 マンコ (pussy)
@@ -73,6 +73,7 @@ Here are some vocabulary and terms so that you know the proper spelling and tran
 お姉ちゃん (onee-chan)
 ねえさん (nee-san)
 おじさん (old man)
+ルビナ=ローズストーン (Rubina Rosestone)
 
 # Terms
 初めから (Start)
