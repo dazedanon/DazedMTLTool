@@ -446,8 +446,52 @@ def parseTroops(data, filename):
 
 def parseNames(data, filename, context):
     totalTokens = [0, 0]
-    # Use dynamic total; we'll grow it inside searchNames as we discover work units
-    with tqdm(total=0, bar_format=BAR_FORMAT, position=POSITION, leave=LEAVE) as pbar:
+
+    # Precompute total work units for progress bar
+    def count_work_units(data, context):
+        total = 0
+
+        for entry in data:
+            if not entry:
+                continue
+
+            # Names and associated fields
+            name = entry.get("name", "")
+            desc = entry.get("description", "")
+            nickname = entry.get("nickname", "")
+            profile = entry.get("profile", "")
+
+            if context == "Actors":
+                if name:
+                    total += 1
+                if nickname:
+                    total += 1
+                if profile:
+                    total += 1
+            elif context in ["Armors", "Weapons", "Items"]:
+                if name:
+                    total += 1
+                if desc:
+                    total += 1
+            elif context == "Skills":
+                if name:
+                    total += 1
+                if desc:
+                    total += 1
+                # Messages translated individually in searchNames
+                for n in range(1, 5):
+                    msg = entry.get(f"message{n}")
+                    if msg:
+                        total += 1
+            elif context in ["Enemies", "Classes", "MapInfos"]:
+                if name:
+                    total += 1
+
+        return total
+
+    total_units = count_work_units(data, context)
+
+    with tqdm(total=total_units, bar_format=BAR_FORMAT, position=POSITION, leave=LEAVE) as pbar:
         pbar.desc = filename
         try:
             result = searchNames(data, pbar, context)
@@ -464,8 +508,25 @@ def parseNames(data, filename, context):
 
 def parseSS(data, filename):
     totalTokens = [0, 0]
-    # Use dynamic total to account for variable work per state
-    with tqdm(total=0, bar_format=BAR_FORMAT, position=POSITION, leave=LEAVE) as pbar:
+
+    # Precompute total units (ignore notes): name, description, message1..4 presence
+    def count_work_units(states):
+        total = 0
+        for st in states:
+            if not st:
+                continue
+            if st.get("name"):
+                total += 1
+            if st.get("description"):
+                total += 1
+            for n in range(1, 5):
+                if st.get(f"message{n}"):
+                    total += 1
+        return total
+
+    total_units = count_work_units(data)
+
+    with tqdm(total=total_units, bar_format=BAR_FORMAT, position=POSITION, leave=LEAVE) as pbar:
         pbar.desc = filename
         for ss in data:
             if ss is not None:
@@ -484,8 +545,32 @@ def parseSS(data, filename):
 
 def parseSystem(data, filename):
     totalTokens = [0, 0]
-    # Use dynamic progress; set total as we process sections
-    with tqdm(total=0, bar_format=BAR_FORMAT, position=POSITION, leave=LEAVE) as pbar:
+
+    # Precompute total units across system sections (exclude notes; count strings)
+    def count_work_units(sys):
+        total = 0
+        # Title
+        if sys.get("gameTitle"):
+            total += 1
+        # Terms (excluding 'messages' object)
+        terms = sys.get("terms", {})
+        for term_key, term_list in terms.items():
+            if term_key == "messages":
+                continue
+            if isinstance(term_list, list):
+                total += sum(1 for x in term_list if x is not None)
+        # Armor, Skill, Equip types
+        total += len(sys.get("armorTypes", []) or [])
+        total += len(sys.get("skillTypes", []) or [])
+        total += len(sys.get("equipTypes", []) or [])
+        # Messages
+        messages = terms.get("messages", {}) or {}
+        total += len(messages)
+        return total
+
+    total_units = count_work_units(data)
+
+    with tqdm(total=total_units, bar_format=BAR_FORMAT, position=POSITION, leave=LEAVE) as pbar:
         pbar.desc = filename
         try:
             result = searchSystem(data, pbar)
@@ -619,11 +704,7 @@ def searchNames(data, pbar, context):
         translatedNotesBatch = response[0]
         totalTokens[0] += response[1][0]
         totalTokens[1] += response[1][1]
-        # Progress: add and complete note translations
-        if pbar is not None:
-            pbar.total += len(notesBatch)
-            pbar.update(len(notesBatch))
-            pbar.refresh()
+        # Notes don't update progress
 
     # --- Insert translated notes back ---
     note_insert_idx = 0
@@ -692,6 +773,9 @@ def searchNames(data, pbar, context):
                                 data[i][f"message{number}"] = msgResponse[0].replace("Taro", "")
                                 totalTokens[0] += msgResponse[1][0]
                                 totalTokens[1] += msgResponse[1][1]
+                                if pbar is not None:
+                                    pbar.update(1)
+                                    pbar.refresh()
                                 number += 1
                             else:
                                 msgResponse = translateAI(
@@ -702,6 +786,9 @@ def searchNames(data, pbar, context):
                                 data[i][f"message{number}"] = msgResponse[0]
                                 totalTokens[0] += msgResponse[1][0]
                                 totalTokens[1] += msgResponse[1][1]
+                                if pbar is not None:
+                                    pbar.update(1)
+                                    pbar.refresh()
                                 number += 1
                         else:
                             number += 1
@@ -725,7 +812,6 @@ def searchNames(data, pbar, context):
                 totalTokens[0] += response[1][0]
                 totalTokens[1] += response[1][1]
                 if pbar is not None and nameList:
-                    pbar.total += len(nameList)
                     pbar.update(len(nameList))
                     pbar.refresh()
 
@@ -736,7 +822,6 @@ def searchNames(data, pbar, context):
                     totalTokens[0] += response[1][0]
                     totalTokens[1] += response[1][1]
                     if pbar is not None:
-                        pbar.total += len(nicknameList)
                         pbar.update(len(nicknameList))
                         pbar.refresh()
 
@@ -747,7 +832,6 @@ def searchNames(data, pbar, context):
                     totalTokens[0] += response[1][0]
                     totalTokens[1] += response[1][1]
                     if pbar is not None:
-                        pbar.total += len(profileList)
                         pbar.update(len(profileList))
                         pbar.refresh()
 
@@ -793,7 +877,6 @@ def searchNames(data, pbar, context):
                 totalTokens[0] += response[1][0]
                 totalTokens[1] += response[1][1]
                 if pbar is not None and nameList:
-                    pbar.total += len(nameList)
                     pbar.update(len(nameList))
                     pbar.refresh()
 
@@ -808,7 +891,6 @@ def searchNames(data, pbar, context):
                     totalTokens[0] += response[1][0]
                     totalTokens[1] += response[1][1]
                     if pbar is not None:
-                        pbar.total += len(descriptionList)
                         pbar.update(len(descriptionList))
                         pbar.refresh()
 
@@ -848,7 +930,6 @@ def searchNames(data, pbar, context):
                 totalTokens[0] += response[1][0]
                 totalTokens[1] += response[1][1]
                 if pbar is not None and nameList:
-                    pbar.total += len(nameList)
                     pbar.update(len(nameList))
                     pbar.refresh()
 
@@ -2353,10 +2434,7 @@ Translate 'Taroを倒した！' as 'Taro was defeated!'",
         translatedNotesBatch = response[0]
         totalTokens[0] += response[1][0]
         totalTokens[1] += response[1][1]
-        if pbar is not None:
-            pbar.total += len(notesBatch)
-            pbar.update(len(notesBatch))
-            pbar.refresh()
+        # Notes don't update progress
 
     # --- Insert translated notes back ---
     note_insert_idx = 0
@@ -2396,7 +2474,6 @@ Translate 'Taroを倒した！' as 'Taro was defeated!'",
         work_units += 1 if message3Response != "" else 0
         work_units += 1 if message4Response != "" else 0
         if work_units:
-            pbar.total += work_units
             pbar.update(work_units)
             pbar.refresh()
 
@@ -2434,7 +2511,6 @@ def searchSystem(data, pbar):
     totalTokens[1] += response[1][1]
     data["gameTitle"] = response[0].strip(".")
     if pbar is not None:
-        pbar.total += 1
         pbar.update(1)
         pbar.refresh()
 
@@ -2449,9 +2525,7 @@ def searchSystem(data, pbar):
                     totalTokens[1] += response[1][1]
                     termList[i] = response[0].replace('"', "").strip()
             if pbar is not None and len(termList) > 0:
-                # Count non-empty entries as completed work units
                 units = sum(1 for x in termList if x is not None)
-                pbar.total += units
                 pbar.update(units)
                 pbar.refresh()
 
@@ -2466,7 +2540,6 @@ def searchSystem(data, pbar):
         totalTokens[1] += response[1][1]
         data["armorTypes"][i] = response[0].replace('"', "").strip()
     if pbar is not None and len(data["armorTypes"]) > 0:
-        pbar.total += len(data["armorTypes"])
         pbar.update(len(data["armorTypes"]))
         pbar.refresh()
 
@@ -2481,7 +2554,6 @@ def searchSystem(data, pbar):
         totalTokens[1] += response[1][1]
         data["skillTypes"][i] = response[0].replace('"', "").strip()
     if pbar is not None and len(data["skillTypes"]) > 0:
-        pbar.total += len(data["skillTypes"])
         pbar.update(len(data["skillTypes"]))
         pbar.refresh()
 
@@ -2496,7 +2568,6 @@ def searchSystem(data, pbar):
         totalTokens[1] += response[1][1]
         data["equipTypes"][i] = response[0].replace('"', "").strip()
     if pbar is not None and len(data["equipTypes"]) > 0:
-        pbar.total += len(data["equipTypes"]) 
         pbar.update(len(data["equipTypes"]))
         pbar.refresh()
 
@@ -2528,7 +2599,6 @@ def searchSystem(data, pbar):
         totalTokens[1] += response[1][1]
         messages[key] = translatedText
     if pbar is not None and len(messages) > 0:
-        pbar.total += len(messages)
         pbar.update(len(messages))
         pbar.refresh()
 
