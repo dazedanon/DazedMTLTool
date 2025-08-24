@@ -12,12 +12,12 @@ def set_defaults(file_path):
         'BRFLAG': 'False',
         'FIXTEXTWRAP': 'True',
         'IGNORETLTEXT': 'False',
-        # Dialogue / Scroll / Choices (Main Codes)
+        # Speakers / Dialogue / Scroll / Choices (Main Codes)
+        'CODE101': 'True',
         'CODE401': 'True',
         'CODE405': 'True',
         'CODE102': 'True',
         # Optional
-        'CODE101': 'False',
         'CODE408': 'False',
         # Variables
         'CODE122': 'False',
