@@ -1153,11 +1153,11 @@ def searchCodes(page, pbar, jobList, filename):
                     finalJAString = finalJAString.replace("\\,", ',')
 
                     ### Remove format codes
-                    # Furigana
-                    rcodeMatch = re.findall(r"([\\]+[r][b]?\[.*?,(.*?)\])", finalJAString)
-                    if len(rcodeMatch) > 0:
-                        for match in rcodeMatch:
-                            finalJAString = finalJAString.replace(match[0], match[1])
+                    # Furigana: \r or \rb [base,reading] -> keep reading/base per pattern
+                    finalJAString = re.sub(r"[\\]+[r][b]?\[(.*?),.*?\]", r"\1", finalJAString)
+
+                    # Curly-brace furigana: {base|reading} -> keep base
+                    finalJAString = re.sub(r"\{([^|{}]+)\|[^|{}]+?\}", r"\1", finalJAString)
 
                     # Remove any RPGMaker Code at start
                     ffMatch = re.search(
