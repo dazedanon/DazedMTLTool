@@ -14,6 +14,7 @@ from dotenv import load_dotenv
 from retry import retry
 from tqdm import tqdm
 from util.translation import TranslationConfig, translateAI as sharedtranslateAI, getPricingConfig, calculateCost, getPricingConfig, calculateCost
+import tempfile
 
 # Open AI
 load_dotenv()
@@ -161,7 +162,7 @@ def parseText(readFile, filename):
         PBAR = pbar
 
         try:
-            result = translateTxt(data, [])
+            result = translateTxt(data, filename, [])
             totalTokens[0] += result[0]
             totalTokens[1] += result[1]
         except Exception as e:
@@ -170,7 +171,28 @@ def parseText(readFile, filename):
     return [data, totalTokens, None]
 
 
-def translateTxt(data, translatedList):
+def save_progress_lines(lines, filename, encoding="utf-8"):
+    """Atomically save current line-based translation progress."""
+    try:
+        if ESTIMATE:
+            return
+        os.makedirs("translated", exist_ok=True)
+        tmp_fd, tmp_path = tempfile.mkstemp(prefix=f"{filename}.", suffix=".tmp", dir="translated")
+        try:
+            with os.fdopen(tmp_fd, "w", encoding=encoding, newline="\n", errors="ignore") as tmp_file:
+                tmp_file.writelines(lines)
+            os.replace(tmp_path, os.path.join("translated", filename))
+        finally:
+            if os.path.exists(tmp_path):
+                try:
+                    os.remove(tmp_path)
+                except OSError:
+                    pass
+    except Exception:
+        traceback.print_exc()
+
+
+def translateTxt(data, filename, translatedList):
     if translatedList:
         stringList = translatedList[0]
         choiceList = translatedList[1]
@@ -224,6 +246,7 @@ def translateTxt(data, translatedList):
 
                     # Set Data
                     data[i] = f"{translatedText}\n"
+                    save_progress_lines(data, filename)
 
             i += 1
         else:
@@ -263,7 +286,7 @@ def translateTxt(data, translatedList):
                         MISMATCH.append(FILENAME)
 
         # Set Strings
-        translateTxt(data, [stringListTL, choiceListTL])
+    translateTxt(data, filename, [stringListTL, choiceListTL])
     return tokens
 
 # Save some money and enter the character before translation

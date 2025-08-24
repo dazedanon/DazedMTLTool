@@ -14,6 +14,7 @@ from dotenv import load_dotenv
 from retry import retry
 from tqdm import tqdm
 from util.translation import TranslationConfig, translateAI as sharedtranslateAI, getPricingConfig, calculateCost
+import tempfile
 
 # Open AI
 load_dotenv()
@@ -168,6 +169,27 @@ def parseJSON(data, filename):
     return [data, totalTokens, None]
 
 
+def save_progress_json(data, filename):
+    """Atomically save current JSON translation progress."""
+    try:
+        if ESTIMATE:
+            return
+        os.makedirs("translated", exist_ok=True)
+        tmp_fd, tmp_path = tempfile.mkstemp(prefix=f"{filename}.", suffix=".tmp", dir="translated")
+        try:
+            with os.fdopen(tmp_fd, "w", encoding="utf-8", newline="\n") as tmp_file:
+                json.dump(data, tmp_file, ensure_ascii=False, indent=4)
+            os.replace(tmp_path, os.path.join("translated", filename))
+        finally:
+            if os.path.exists(tmp_path):
+                try:
+                    os.remove(tmp_path)
+                except OSError:
+                    pass
+    except Exception:
+        traceback.print_exc()
+
+
 def translateJSON(data, pbar):
     global PBAR
     PBAR = pbar
@@ -190,6 +212,7 @@ def translateJSON(data, pbar):
                 tokens[0] += response[1][0]
                 tokens[1] += response[1][1]
                 item["name"] = speaker
+                save_progress_json(data, FILENAME or "output.json")
             else:
                 speaker = "None"
 
@@ -259,6 +282,7 @@ def translateJSON(data, pbar):
 
                             # Set Text
                             item[text] = translatedText
+                            save_progress_json(data, FILENAME or "output.json")
                             translatedBatch.pop(0)
                             speaker = ""
                             currentGroup = []
@@ -295,6 +319,8 @@ def translateJSON(data, pbar):
                 batch.clear()
 
             currentGroup = []
+            # After applying a batch, persist progress
+            save_progress_json(data, FILENAME or "output.json")
     return tokens
 
 # Save some money and enter the character before translation

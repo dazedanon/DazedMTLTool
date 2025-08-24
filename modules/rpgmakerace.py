@@ -9,7 +9,7 @@ import traceback
 import tiktoken
 import openai
 import copy
-from concurrent.futures import ThreadPoolExecutor, as_completed
+# Removed concurrent.futures usage for simplicity; running synchronously
 from pathlib import Path
 from colorama import Fore
 from dotenv import load_dotenv
@@ -242,6 +242,24 @@ def getResultString(translatedData, translationTime, filename):
             return filename + ": " + totalTokenstring + timeString + Fore.RED + " \u2717 " + errorString + Fore.RESET
 
 
+def save_progress_yaml(data, filename):
+    """Atomically write current YAML data to translated/filename; skip in estimate mode."""
+    try:
+        if ESTIMATE:
+            return
+        os.makedirs("translated", exist_ok=True)
+        tmp_path = os.path.join("translated", f"{filename}.tmp")
+        final_path = os.path.join("translated", filename)
+        yaml = YAML(pure=True)
+        yaml.width = 4096
+        yaml.default_style = "'"
+        with open(tmp_path, "w", encoding="utf-8", newline="\n") as outFile:
+            yaml.dump(data, outFile)
+        os.replace(tmp_path, final_path)
+    except Exception:
+        traceback.print_exc()
+
+
 def parseMap(data, filename):
     totalTokens = [0, 0]
     totalLines = 0
@@ -259,26 +277,27 @@ def parseMap(data, filename):
         totalTokens[1] += response[1][1]
         data["display_name"] = response[0].replace('"', "")
 
-    # Thread for each page in file
+    # Process each page synchronously and persist after each
     with tqdm(bar_format=BAR_FORMAT, position=POSITION, leave=LEAVE) as pbar:
         pbar.desc = filename
-        with ThreadPoolExecutor(max_workers=THREADS) as executor:
-            for key in events:
-                if key is not None:
-                    # This translates ID of events. (May break the game)
-                    if "<namepop" in events[key]["name"]:
-                        response = translateNoteOmitSpace(events[key], r"<namepop\s(.*?)\s?\d?>.*")
-                        totalTokens[0] += response[0]
-                        totalTokens[1] += response[1]
-                    futures = [executor.submit(searchCodes, page, pbar, [], filename) for page in events[key]["pages"] if page is not None]
-                    for future in as_completed(futures):
+        for key in events:
+            if key is not None:
+                # This translates ID of events. (May break the game)
+                if "<namepop" in events[key]["name"]:
+                    response = translateNoteOmitSpace(events[key], r"<namepop\s(.*?)\s?\d?>.*")
+                    totalTokens[0] += response[0]
+                    totalTokens[1] += response[1]
+                for page in events[key]["pages"]:
+                    if page is not None:
                         try:
-                            totalTokensFuture = future.result()
-                            totalTokens[0] += totalTokensFuture[0]
-                            totalTokens[1] += totalTokensFuture[1]
+                            tt = searchCodes(page, pbar, [], filename)
+                            totalTokens[0] += tt[0]
+                            totalTokens[1] += tt[1]
                         except Exception as e:
                             traceback.print_exc()
                             return [data, totalTokens, e]
+                        finally:
+                            save_progress_yaml(data, filename)
     return [data, totalTokens, None]
 
 
@@ -356,16 +375,17 @@ def parseCommonEvents(data, filename):
 
     with tqdm(bar_format=BAR_FORMAT, position=POSITION, leave=LEAVE) as pbar:
         pbar.desc = filename
-        with ThreadPoolExecutor(max_workers=THREADS) as executor:
-            futures = [executor.submit(searchCodes, page, pbar, [], filename) for page in data if page is not None]
-            for future in as_completed(futures):
+        for page in data:
+            if page is not None:
                 try:
-                    totalTokensFuture = future.result()
-                    totalTokens[0] += totalTokensFuture[0]
-                    totalTokens[1] += totalTokensFuture[1]
+                    tt = searchCodes(page, pbar, [], filename)
+                    totalTokens[0] += tt[0]
+                    totalTokens[1] += tt[1]
                 except Exception as e:
                     traceback.print_exc()
                     return [data, totalTokens, e]
+                finally:
+                    save_progress_yaml(data, filename)
     return [data, totalTokens, None]
 
 
@@ -384,16 +404,17 @@ def parseTroops(data, filename):
         pbar.desc = filename
         for troop in data:
             if troop is not None:
-                with ThreadPoolExecutor(max_workers=THREADS) as executor:
-                    futures = [executor.submit(searchCodes, page, pbar, [], filename) for page in troop["pages"] if page is not None]
-                    for future in as_completed(futures):
+                for page in troop["pages"]:
+                    if page is not None:
                         try:
-                            totalTokensFuture = future.result()
-                            totalTokens[0] += totalTokensFuture[0]
-                            totalTokens[1] += totalTokensFuture[1]
+                            tt = searchCodes(page, pbar, [], filename)
+                            totalTokens[0] += tt[0]
+                            totalTokens[1] += tt[1]
                         except Exception as e:
                             traceback.print_exc()
                             return [data, totalTokens, e]
+                        finally:
+                            save_progress_yaml(data, filename)
     return [data, totalTokens, None]
 
 
@@ -411,6 +432,8 @@ def parseNames(data, filename, context):
         except Exception as e:
             traceback.print_exc()
             return [data, totalTokens, e]
+        finally:
+            save_progress_yaml(data, filename)
     return [data, totalTokens, None]
 
 
@@ -430,6 +453,8 @@ def parseSS(data, filename):
                 except Exception as e:
                     traceback.print_exc()
                     return [data, totalTokens, e]
+                finally:
+                    save_progress_yaml(data, filename)
     return [data, totalTokens, None]
 
 
@@ -456,6 +481,8 @@ def parseSystem(data, filename):
         except Exception as e:
             traceback.print_exc()
             return [data, totalTokens, e]
+        finally:
+            save_progress_yaml(data, filename)
     return [data, totalTokens, None]
 
 
@@ -470,16 +497,17 @@ def parseScenario(data, filename):
 
     with tqdm(bar_format=BAR_FORMAT, position=POSITION, leave=LEAVE) as pbar:
         pbar.desc = filename
-        with ThreadPoolExecutor(max_workers=THREADS) as executor:
-            futures = [executor.submit(searchCodes, page[1], pbar, [], filename) for page in data.items() if page[1] is not None]
-            for future in as_completed(futures):
+        for page in data.items():
+            if page[1] is not None:
                 try:
-                    totalTokensFuture = future.result()
-                    totalTokens[0] += totalTokensFuture[0]
-                    totalTokens[1] += totalTokensFuture[1]
+                    tt = searchCodes(page[1], pbar, [], filename)
+                    totalTokens[0] += tt[0]
+                    totalTokens[1] += tt[1]
                 except Exception as e:
                     traceback.print_exc()
                     return [data, totalTokens, e]
+                finally:
+                    save_progress_yaml(data, filename)
     return [data, totalTokens, None]
 
 

@@ -14,6 +14,7 @@ from dotenv import load_dotenv
 from retry import retry
 from tqdm import tqdm
 from util.translation import TranslationConfig, translateAI as sharedtranslateAI, getPricingConfig, calculateCost
+import tempfile
 
 # Open AI
 load_dotenv()
@@ -175,6 +176,27 @@ def parseWOLF(readFile, filename):
     return [data, totalTokens, None]
 
 
+def save_progress_lines(lines, filename, encoding="shift_jis"):
+    """Atomically save current line-based translation progress."""
+    try:
+        if ESTIMATE:
+            return
+        os.makedirs("translated", exist_ok=True)
+        tmp_fd, tmp_path = tempfile.mkstemp(prefix=f"{filename}.", suffix=".tmp", dir="translated")
+        try:
+            with os.fdopen(tmp_fd, "w", encoding=encoding, newline="\n", errors="ignore") as tmp_file:
+                tmp_file.writelines(lines)
+            os.replace(tmp_path, os.path.join("translated", filename))
+        finally:
+            if os.path.exists(tmp_path):
+                try:
+                    os.remove(tmp_path)
+                except OSError:
+                    pass
+    except Exception:
+        traceback.print_exc()
+
+
 def translateWOLF(data, translatedList, pbar, filename):
     stringList = []
     currentGroup = []
@@ -193,6 +215,7 @@ def translateWOLF(data, translatedList, pbar, filename):
             tokens[0] += response[1][0]
             tokens[1] += response[1][1]
             data[i] = data[i].replace(matchList[0], f"{speaker}")
+            save_progress_lines(data, filename)
             i += 1
         else:
             speaker = ""
@@ -221,6 +244,7 @@ def translateWOLF(data, translatedList, pbar, filename):
                     data[i] = f"//{choiceListTL[0]}\n"
                     choiceListTL.pop(0)
                     i += 1
+                save_progress_lines(data, filename)
 
             # Mismatch
             else:
@@ -278,6 +302,7 @@ def translateWOLF(data, translatedList, pbar, filename):
 
                 # Set Data
                 data.insert(i, f"{translatedText}\n")
+                save_progress_lines(data, filename)
                 i += 1
 
         # Nothing relevant. Skip Line.

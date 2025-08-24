@@ -14,6 +14,7 @@ from dotenv import load_dotenv
 from retry import retry
 from tqdm import tqdm
 from util.translation import TranslationConfig, translateAI as sharedtranslateAI, getPricingConfig, calculateCost, getPricingConfig, calculateCost
+import tempfile
 
 # Open AI
 load_dotenv()
@@ -172,7 +173,7 @@ def parseRenpy(readFile, filename):
         PBAR = pbar
 
         try:
-            result = translateRenpy(data, [])
+            result = translateRenpy(data, filename, [])
             totalTokens[0] += result[0]
             totalTokens[1] += result[1]
         except Exception as e:
@@ -181,7 +182,28 @@ def parseRenpy(readFile, filename):
     return [data, totalTokens, None]
 
 
-def translateRenpy(data, translatedList):
+def save_progress_lines(lines, filename, encoding="utf-8"):
+    """Atomically save current line-based translation progress."""
+    try:
+        if ESTIMATE:
+            return
+        os.makedirs("translated", exist_ok=True)
+        tmp_fd, tmp_path = tempfile.mkstemp(prefix=f"{filename}.", suffix=".tmp", dir="translated")
+        try:
+            with os.fdopen(tmp_fd, "w", encoding=encoding, newline="\n", errors="ignore") as tmp_file:
+                tmp_file.writelines(lines)
+            os.replace(tmp_path, os.path.join("translated", filename))
+        finally:
+            if os.path.exists(tmp_path):
+                try:
+                    os.remove(tmp_path)
+                except OSError:
+                    pass
+    except Exception:
+        traceback.print_exc()
+
+
+def translateRenpy(data, filename, translatedList):
     stringList = []
     currentGroup = []
     tokens = [0, 0]
@@ -250,6 +272,7 @@ def translateRenpy(data, translatedList):
 
                     # Set Data
                     data[i] = data[i].replace(originalString, translatedText)
+                    save_progress_lines(data, filename)
             i += 1
         else:
             i += 1
@@ -268,7 +291,7 @@ def translateRenpy(data, translatedList):
 
         # Set Strings
         if len(stringList) == len(translatedList):
-            translateRenpy(data, translatedList)
+            translateRenpy(data, filename, translatedList)
 
         # Mismatch
         else:

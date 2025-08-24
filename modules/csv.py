@@ -15,6 +15,7 @@ from dotenv import load_dotenv
 from retry import retry
 from tqdm import tqdm
 from util.translation import TranslationConfig, translateAI as sharedtranslateAI, getPricingConfig, calculateCost
+import tempfile
 
 # Open AI
 load_dotenv()
@@ -206,7 +207,7 @@ def parseCSV(readFile, writeFile, filename):
             data.append(row)
 
         try:
-            response = translateCSV(data, pbar, writer, filename, None, format)
+            response = translateCSV(data, pbar, writeFile, writer, filename, None, format)
             totalTokens[0] = response[0]
             totalTokens[1] = response[1]
         except Exception:
@@ -214,7 +215,24 @@ def parseCSV(readFile, writeFile, filename):
     return [data, totalTokens, None]
 
 
-def translateCSV(data, pbar, writer, filename, translatedList, format):
+def flush_progress_csv(writeFile, writer, rows):
+    """Flush current CSV progress to the already-open output file (Windows-safe)."""
+    try:
+        if ESTIMATE or writeFile is None:
+            return
+        with LOCK:
+            writeFile.seek(0)
+            # Recreate writer at current position to avoid state issues
+            tmp_writer = csv.writer(writeFile, delimiter=",")
+            tmp_writer.writerows(rows)
+            writeFile.truncate()
+            writeFile.flush()
+            os.fsync(writeFile.fileno())
+    except Exception:
+        traceback.print_exc()
+
+
+def translateCSV(data, pbar, writeFile, writer, filename, translatedList, format):
     global LOCK, ESTIMATE, PBAR
     PBAR = pbar
     translatedText = ""
@@ -254,6 +272,7 @@ def translateCSV(data, pbar, writer, filename, translatedList, format):
 
                             # Set Data
                             data[i][1] = translatedText
+                            flush_progress_csv(writeFile, writer, data)
 
                     # Iterate
                     i += 1
@@ -286,6 +305,7 @@ def translateCSV(data, pbar, writer, filename, translatedList, format):
 
                         # Set Data
                         data[i][targetColumn] = translatedText
+                        flush_progress_csv(writeFile, writer, data)
 
                     # Iterate
                     i += 1
@@ -369,6 +389,7 @@ def translateCSV(data, pbar, writer, filename, translatedList, format):
                                     data[i][j + 1] = data[i][j + 1].replace(ojaString, f"{translatedText}")
                                 else:
                                     data[i][j] = data[i][j].replace(ojaString, f"{translatedText}")
+                                flush_progress_csv(writeFile, writer, data)
 
                     # Iterate
                     i += 1
@@ -429,6 +450,7 @@ def translateCSV(data, pbar, writer, filename, translatedList, format):
                                 i += 1
                             else:
                                 data[i][textColumn] = translatedText
+                            flush_progress_csv(writeFile, writer, data)
 
                     # Iterate
                     i += 1
@@ -460,6 +482,7 @@ def translateCSV(data, pbar, writer, filename, translatedList, format):
                 if not ESTIMATE:
                     for row in data:
                         writer.writerow(row)
+            flush_progress_csv(writeFile, writer, data)
 
     except Exception:
         traceback.print_exc()
@@ -469,6 +492,7 @@ def translateCSV(data, pbar, writer, filename, translatedList, format):
             if not ESTIMATE:
                 for row in data:
                     writer.writerow(row)
+        flush_progress_csv(writeFile, writer, data)
         return totalTokens
 
     return totalTokens

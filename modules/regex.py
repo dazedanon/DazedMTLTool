@@ -14,6 +14,7 @@ from dotenv import load_dotenv
 from retry import retry
 from tqdm import tqdm
 from util.translation import TranslationConfig, translateAI as sharedtranslateAI, getPricingConfig, calculateCost
+import tempfile
 
 # Open AI
 load_dotenv()
@@ -168,7 +169,7 @@ def parseRegex(readFile, filename):
         PBAR = pbar
 
         try:
-            result = translateRegex(data, [])
+            result = translateRegex(data, filename, [])
             totalTokens[0] += result[0]
             totalTokens[1] += result[1]
         except Exception as e:
@@ -177,7 +178,28 @@ def parseRegex(readFile, filename):
     return [data, totalTokens, None]
 
 
-def translateRegex(data, translatedList):
+def save_progress_lines(lines, filename, encoding="utf-8-sig"):
+    """Atomically save current line-based translation progress."""
+    try:
+        if ESTIMATE:
+            return
+        os.makedirs("translated", exist_ok=True)
+        tmp_fd, tmp_path = tempfile.mkstemp(prefix=f"{filename}.", suffix=".tmp", dir="translated")
+        try:
+            with os.fdopen(tmp_fd, "w", encoding=encoding, newline="\n", errors="ignore") as tmp_file:
+                tmp_file.writelines(lines)
+            os.replace(tmp_path, os.path.join("translated", filename))
+        finally:
+            if os.path.exists(tmp_path):
+                try:
+                    os.remove(tmp_path)
+                except OSError:
+                    pass
+    except Exception:
+        traceback.print_exc()
+
+
+def translateRegex(data, filename, translatedList):
     if translatedList:
         stringList = translatedList[0]
         choiceList = translatedList[1]
@@ -213,6 +235,7 @@ def translateRegex(data, translatedList):
             if not translatedList:
                 title = re.sub(r"(?<!\\)'", r"\\'", title)
                 data[i] = data[i].replace(match.group(1), title)
+                save_progress_lines(data, filename)
 
         # Speaker
         match = re.search(lineRegexSpeaker, data[i])
@@ -227,6 +250,7 @@ def translateRegex(data, translatedList):
                     tokens[1] += response[1][1]
                 if translatedList:
                     data[i] = data[i].replace(match.group(1), speaker)
+                    save_progress_lines(data, filename)
                 i += 3
             else:
                 speaker = None
@@ -287,7 +311,8 @@ def translateRegex(data, translatedList):
                     if "「" in data[i-1] and "」" not in translatedText:
                         data[i] = data[i].replace(originalString, f"「{translatedText}」")
                     else:
-                        data[i] = data[i].replace(originalString, f"{translatedText}")            
+                        data[i] = data[i].replace(originalString, f"{translatedText}")
+                    save_progress_lines(data, filename)
 
         # Choices
         match = re.search(choiceRegex, data[i])
@@ -311,6 +336,7 @@ def translateRegex(data, translatedList):
 
                 # Set
                 data[i] = data[i].replace(match.group(1), translatedText)
+                save_progress_lines(data, filename)
 
             i += 1
         else:
@@ -350,7 +376,7 @@ def translateRegex(data, translatedList):
                         MISMATCH.append(FILENAME)
 
         # Set Strings
-        translateRegex(data, [stringListTL, choiceListTL])
+    translateRegex(data, filename, [stringListTL, choiceListTL])
     return tokens
 
 # Save some money and enter the character before translation

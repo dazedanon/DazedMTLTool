@@ -14,6 +14,7 @@ from dotenv import load_dotenv
 from retry import retry
 from tqdm import tqdm
 from util.translation import TranslationConfig, translateAI as sharedtranslateAI, getPricingConfig, calculateCost
+import tempfile
 
 # Open AI
 load_dotenv()
@@ -161,7 +162,7 @@ def parseTyrano(readFile, filename):
         PBAR = pbar
 
         try:
-            result = translateTyrano(data, [])
+            result = translateTyrano(data, filename, [])
             totalTokens[0] += result[0]
             totalTokens[1] += result[1]
         except Exception as e:
@@ -170,7 +171,28 @@ def parseTyrano(readFile, filename):
     return [data, totalTokens, None]
 
 
-def translateTyrano(data, translatedList):
+def save_progress_lines(lines, filename, encoding="utf-8"):
+    """Atomically save current line-based translation progress."""
+    try:
+        if ESTIMATE:
+            return
+        os.makedirs("translated", exist_ok=True)
+        tmp_fd, tmp_path = tempfile.mkstemp(prefix=f"{filename}.", suffix=".tmp", dir="translated")
+        try:
+            with os.fdopen(tmp_fd, "w", encoding=encoding, newline="\n", errors="ignore") as tmp_file:
+                tmp_file.writelines(lines)
+            os.replace(tmp_path, os.path.join("translated", filename))
+        finally:
+            if os.path.exists(tmp_path):
+                try:
+                    os.remove(tmp_path)
+                except OSError:
+                    pass
+    except Exception:
+        traceback.print_exc()
+
+
+def translateTyrano(data, filename, translatedList):
     if translatedList:
         stringList = translatedList[0]
         choiceList = translatedList[1]
@@ -291,6 +313,8 @@ def translateTyrano(data, translatedList):
 
                     # Set Data
                     data[i] = data[i].replace(originalString, translatedText)
+                    # Save progress after each line change
+                    save_progress_lines(data, filename)
 
         # Choices
         match = re.search(choiceRegex, data[i])
@@ -311,6 +335,7 @@ def translateTyrano(data, translatedList):
 
                 # Set
                 data[i] = data[i].replace(match.group(1), translatedText)
+                save_progress_lines(data, filename)
 
             i += 1
         else:
@@ -350,7 +375,7 @@ def translateTyrano(data, translatedList):
                         MISMATCH.append(FILENAME)
 
         # Set Strings
-        translateTyrano(data, [stringListTL, choiceListTL])
+    translateTyrano(data, filename, [stringListTL, choiceListTL])
     return tokens
 
 # Save some money and enter the character before translation

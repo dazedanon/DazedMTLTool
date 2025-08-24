@@ -8,7 +8,7 @@ import time
 import traceback
 import tiktoken
 import openai
-from concurrent.futures import ThreadPoolExecutor, as_completed
+# Removed concurrent.futures usage for simplicity; running synchronously
 from pathlib import Path
 from colorama import Fore
 from dotenv import load_dotenv
@@ -190,6 +190,21 @@ def getResultString(translatedData, translationTime, filename):
             return filename + ": " + totalTokenstring + timeString + Fore.RED + " \u2717 " + errorString + Fore.RESET
 
 
+def save_progress_json(data, filename):
+    """Atomically write current JSON data to translated/filename; skip in estimate mode."""
+    try:
+        if ESTIMATE:
+            return
+        os.makedirs("translated", exist_ok=True)
+        tmp_path = os.path.join("translated", f"{filename}.tmp")
+        final_path = os.path.join("translated", filename)
+        with open(tmp_path, "w", encoding="utf-8", newline="\n") as outFile:
+            json.dump(data, outFile, ensure_ascii=False, indent=4)
+        os.replace(tmp_path, final_path)
+    except Exception:
+        traceback.print_exc()
+
+
 def parseOther(data, filename):
     totalTokens = [0, 0]
     totalLines = 0
@@ -206,6 +221,8 @@ def parseOther(data, filename):
             totalTokens[1] += translationData[1]
         except Exception as e:
             return [data, totalTokens, e]
+        finally:
+            save_progress_json(data, filename)
     return [data, totalTokens, None]
 
 
@@ -225,6 +242,8 @@ def parseDB(data, filename):
             totalTokens[1] += translationData[1]
         except Exception as e:
             return [data, totalTokens, e]
+        finally:
+            save_progress_json(data, filename)
     return [data, totalTokens, None]
 
 
@@ -240,21 +259,22 @@ def parseMap(data, filename):
             for page in event["pages"]:
                 totalLines += len(page["list"])
 
-    # Thread for each page in file
+    # Process pages synchronously and persist after each
     with tqdm(bar_format=BAR_FORMAT, position=POSITION, total=totalLines, leave=LEAVE) as pbar:
         pbar.desc = filename
         pbar.total = totalLines
-        with ThreadPoolExecutor(max_workers=THREADS) as executor:
-            for event in events:
-                if event is not None:
-                    futures = [executor.submit(searchCodes, page["list"], pbar, None, filename) for page in event["pages"] if page is not None]
-                    for future in as_completed(futures):
+        for event in events:
+            if event is not None:
+                for page in event["pages"]:
+                    if page is not None:
                         try:
-                            totalTokensFuture = future.result()
-                            totalTokens[0] += totalTokensFuture[0]
-                            totalTokens[1] += totalTokensFuture[1]
+                            tt = searchCodes(page["list"], pbar, None, filename)
+                            totalTokens[0] += tt[0]
+                            totalTokens[1] += tt[1]
                         except Exception as e:
                             return [data, totalTokens, e]
+                        finally:
+                            save_progress_json(data, filename)
     return [data, totalTokens, None]
 
 
