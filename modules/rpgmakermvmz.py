@@ -1243,7 +1243,7 @@ def searchCodes(page, pbar, jobList, filename):
                     speakerList.append(match.group(1))
                     if "\\c" in speakerList[0]:
                         speakerList = re.findall(
-                            r"^[\\]+[cC]\[[\d]+\]【?(.+?)】?[\\]+[Cc]\[[\d]\]\\?\\?$",
+                            r"^[\\]+[cC]\[\d+\]【?(.+?)】?[\\]+[cC]\[\d+\](?:[\\]+[A-Za-z]+(?:\[[^\]]*\])?)*[\\]*$",
                             speakerList[0],
                         )
 
@@ -1259,7 +1259,7 @@ def searchCodes(page, pbar, jobList, filename):
                 # Colors
                 if len(speakerList) == 0:
                     speakerList = re.findall(
-                        r"^[\\]+[cC]\[[\d]+\]【?(.+?)】?[\\]+[Cc]\[?[\d]?\]?\\?\\?$",
+                        r"^[\\]+[cC]\[\d+\]【?(.+?)】?[\\]+[cC]\[\d+\](?:[\\]+[A-Za-z]+(?:\[[^\]]*\])?)*[\\]*$",
                         jaString,
                     )
 
