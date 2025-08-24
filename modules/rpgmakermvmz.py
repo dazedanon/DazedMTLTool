@@ -42,6 +42,8 @@ MISMATCH = []  # Lists files that throw a mismatch error (Length of GPT list res
 PBAR = None
 FILENAME = None
 TIMETOTAL = 0  # Total Time Taken for all translations
+# Dedicated lock for vocab file updates to avoid races when translating multiple files concurrently
+VOCAB_LOCK = threading.Lock()
 
 # Regex - Need to change this if you want to translate from/to other languages. Default is Japanese Regex
 LANGREGEX = r"[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]+"
@@ -260,7 +262,6 @@ def update_vocab_section(category: str, pairs: list[tuple[str, str]]):
     """
     try:
         vocab_path = Path("vocab.txt")
-        existing = vocab_path.read_text(encoding="utf-8") if vocab_path.exists() else ""
 
         # Helper: normalized comparison to detect no-op translations
         def _norm(s: str) -> str:
@@ -283,38 +284,45 @@ def update_vocab_section(category: str, pairs: list[tuple[str, str]]):
         if not dedup:
             return
 
-        lines = [f"{src} ({dst})" for src, dst in dedup.items()]
-        # Always terminate a section with a blank line to separate from next header
-        new_block = f"# {category}\n" + "\n".join(lines)
-        if not new_block.endswith("\n\n"):
-            if not new_block.endswith("\n"):
+        # Guard the read-modify-write with a dedicated lock to avoid races
+        with VOCAB_LOCK:
+            existing = vocab_path.read_text(encoding="utf-8") if vocab_path.exists() else ""
+
+            lines = [f"{src} ({dst})" for src, dst in dedup.items()]
+            # Always terminate a section with a blank line to separate from next header
+            new_block = f"# {category}\n" + "\n".join(lines)
+            if not new_block.endswith("\n\n"):
+                if not new_block.endswith("\n"):
+                    new_block += "\n"
                 new_block += "\n"
-            new_block += "\n"
 
-        # Regex to find the specific section starting at the header for this category
-        # and ending right before the next header (any number of '#') or EOF.
-        # - Handles headers like '#Category', '# Category', '## Category', etc.
-        # - Uses non-greedy matching for the body to avoid spanning multiple sections.
-        pattern = re.compile(
-            rf"^[\t ]*#+\s*{re.escape(category)}\s*$\r?\n.*?(?=^[\t ]*#|\Z)",
-            re.MULTILINE | re.DOTALL,
-        )
-        if pattern.search(existing):
-            # Replace only the first matching section for this category.
-            updated = pattern.sub(lambda m: new_block, existing, count=1)
-        else:
-            updated = existing
-            if updated and not updated.endswith("\n\n"):
-                # Ensure a blank line before appending new section if file not empty
-                if not updated.endswith("\n"):
+            # Regex to find the specific section starting at the header for this category
+            # and ending right before the next header (any number of '#') or EOF.
+            # - Handles headers like '#Category', '# Category', '## Category', etc.
+            # - Uses non-greedy matching for the body to avoid spanning multiple sections.
+            pattern = re.compile(
+                rf"^[\t ]*#+\s*{re.escape(category)}\s*$\r?\n.*?(?=^[\t ]*#|\Z)",
+                re.MULTILINE | re.DOTALL,
+            )
+            if pattern.search(existing):
+                # Replace only the first matching section for this category.
+                updated = pattern.sub(lambda m: new_block, existing, count=1)
+            else:
+                updated = existing
+                if updated and not updated.endswith("\n\n"):
+                    # Ensure a blank line before appending new section if file not empty
+                    if not updated.endswith("\n"):
+                        updated += "\n"
                     updated += "\n"
-                updated += "\n"
-            updated += new_block
+                updated += new_block
 
-        # Avoid writing if nothing changed
-        if updated == existing:
-            return
-        vocab_path.write_text(updated, encoding="utf-8")
+            # Avoid writing if nothing changed
+            if updated == existing:
+                return
+            # Atomic write: write to temp and replace
+            tmp_path = vocab_path.with_suffix(vocab_path.suffix + ".tmp")
+            tmp_path.write_text(updated, encoding="utf-8")
+            os.replace(tmp_path, vocab_path)
     except Exception:
         traceback.print_exc()
 
