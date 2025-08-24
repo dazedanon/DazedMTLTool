@@ -10,6 +10,7 @@ import openai
 import copy
 # Removed concurrent.futures usage for simplicity; running synchronously
 from pathlib import Path
+import shutil
 from colorama import Fore
 from dotenv import load_dotenv
 from retry import retry
@@ -242,12 +243,55 @@ def saveProgress(data, filename):
         if ESTIMATE:
             return
         os.makedirs("translated", exist_ok=True)
-        tmp_path = os.path.join("translated", f"{filename}.tmp")
+        # Use a unique temp file name to avoid collisions across threads/processes
+        tmp_path = os.path.join(
+            "translated",
+            f"{filename}.{os.getpid()}.{threading.get_ident()}.tmp",
+        )
         final_path = os.path.join("translated", filename)
         with open(tmp_path, "w", encoding="utf-8", newline="\n") as outFile:
             json.dump(data, outFile, ensure_ascii=False, indent=4)
-        # Replace atomically when possible
-        os.replace(tmp_path, final_path)
+            outFile.flush()
+            try:
+                os.fsync(outFile.fileno())
+            except Exception:
+                # fsync may not be available on some platforms; ignore best-effort
+                pass
+
+        # Replace atomically when possible, with retries to mitigate transient locks on Windows
+        attempts = 6
+        delay = 0.1
+        last_err = None
+        for attempt in range(attempts):
+            try:
+                os.replace(tmp_path, final_path)
+                last_err = None
+                break
+            except PermissionError as e:
+                last_err = e
+                # Try to relax permissions on target if it exists, then back off
+                try:
+                    if os.path.exists(final_path):
+                        os.chmod(final_path, 0o666)
+                except Exception:
+                    pass
+                time.sleep(delay)
+                delay = min(1.0, delay * 2)
+            except Exception as e:
+                last_err = e
+                break
+        if last_err is not None:
+            # Fallback: try move via shutil (not guaranteed atomic), then raise on failure
+            try:
+                shutil.move(tmp_path, final_path)
+            except Exception:
+                # Ensure tmp is cleaned up if move failed
+                try:
+                    if os.path.exists(tmp_path):
+                        os.remove(tmp_path)
+                except Exception:
+                    pass
+                raise last_err
     except Exception:
         # Best-effort; don't crash the translation if saving fails
         traceback.print_exc()
@@ -319,10 +363,41 @@ def update_vocab_section(category: str, pairs: list[tuple[str, str]]):
             # Avoid writing if nothing changed
             if updated == existing:
                 return
-            # Atomic write: write to temp and replace
-            tmp_path = vocab_path.with_suffix(vocab_path.suffix + ".tmp")
+            # Atomic write: write to unique temp and replace with retries on Windows
+            tmp_path = vocab_path.with_suffix(vocab_path.suffix + f".{os.getpid()}.{threading.get_ident()}.tmp")
             tmp_path.write_text(updated, encoding="utf-8")
-            os.replace(tmp_path, vocab_path)
+
+            attempts = 6
+            delay = 0.1
+            last_err = None
+            for attempt in range(attempts):
+                try:
+                    os.replace(tmp_path, vocab_path)
+                    last_err = None
+                    break
+                except PermissionError as e:
+                    last_err = e
+                    # Try relaxing permissions then retry
+                    try:
+                        if vocab_path.exists():
+                            os.chmod(vocab_path, 0o666)
+                    except Exception:
+                        pass
+                    time.sleep(delay)
+                    delay = min(1.0, delay * 2)
+                except Exception as e:
+                    last_err = e
+                    break
+            if last_err is not None:
+                try:
+                    shutil.move(str(tmp_path), str(vocab_path))
+                except Exception:
+                    try:
+                        if tmp_path.exists():
+                            tmp_path.unlink(missing_ok=True)
+                    except Exception:
+                        pass
+                    raise last_err
     except Exception:
         traceback.print_exc()
 
