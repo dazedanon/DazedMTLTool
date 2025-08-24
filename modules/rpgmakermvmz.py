@@ -983,7 +983,7 @@ def searchCodes(page, pbar, jobList, filename):
 
                         # Remove any RPGMaker Code at start
                         ffMatchNS = re.search(
-                            r"^((?:[\\]+[^cCnNiIkKvVSs{}]+\[[\d\w\W]+?\]?\])+)",
+                            r"^((?:[\\]+[^cCnNiIkKvVSs{}]+?\[[\d\w\W]+?\]?\])+)",
                             nextString,
                         )
                         if ffMatchNS != None:
@@ -1105,7 +1105,7 @@ def searchCodes(page, pbar, jobList, filename):
 
                     # Remove any RPGMaker Code at start
                     ffMatch = re.search(
-                        r"^((?:[\\]+[^cCnNiIkKvVSs{}]+\[[\d\w\W]+?\]?\])+)",
+                        r"^((?:[\\]+[^cCnNiIkKvVSs{}]+?\[[\d\w\W]+?\]?\])+)",
                         finalJAString,
                     )
                     if ffMatch != None:

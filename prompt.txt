@@ -78,11 +78,13 @@ Output:
 Input:
 {
     "Line1": "ハートが可愛いピンク色のチャーム。\n女の子らしさが増すワンポイントアクセサリー。\\\\n\\}\\C[16]«効果»\\C[0] [防御力+1][敏捷性+1][魅力+8][最大HP+10]"
-    "Line2": "　\\{\\{\\{“滅茶苦茶に汚してやりてぇ”"
+    "Line2": "　\\{\\{\\{“滅茶苦茶に汚してやりてぇ”",
+    "Line3": "イぐぅぅぅう～～～～～～♡♡♡"
 }
 
 Output:
 {
     "Line1": "A cute pink heart charm.\nA girly accessory that adds a feminine touch.\\\\n\\}\\C[16]«Effect»\\C[0] [Defense +1][Agility +1][Charm +8][Max HP +10]"
-    "Line2": "　\\{\\{\\{“I wanna mess her up so fucking bad.”"
+    "Line2": "　\\{\\{\\{“I wanna mess her up so fucking bad.”",
+    "Line3": "I'm cummingggg～～～～～～♡♡♡"
 }
