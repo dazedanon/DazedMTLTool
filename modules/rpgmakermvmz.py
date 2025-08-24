@@ -249,7 +249,7 @@ def parseMap(data, filename):
         totalTokens[1] += response[1][1]
         data["displayName"] = response[0].replace('"', "")
 
-    # Get total for progress bar
+    # Get total for progress bar (sum of all command list lengths across pages)
     for event in events:
         if event:
             if "<LB>" in event["note"]:
@@ -269,7 +269,7 @@ def parseMap(data, filename):
                 totalLines += len(page["list"])
 
     # Thread for each page in file
-    with tqdm(bar_format=BAR_FORMAT, position=POSITION, leave=LEAVE) as pbar:
+    with tqdm(total=totalLines, bar_format=BAR_FORMAT, position=POSITION, leave=LEAVE) as pbar:
         pbar.desc = filename
         with ThreadPoolExecutor(max_workers=THREADS) as executor:
             for event in events:
@@ -288,7 +288,16 @@ def parseMap(data, filename):
                         totalTokens[0] += response[0]
                         totalTokens[1] += response[1]
 
-                    futures = [executor.submit(searchCodes, page, pbar, [], filename) for page in event["pages"] if page is not None]
+                    # Submit futures and track work units per page for accurate progress
+                    future_to_len = {}
+                    futures = []
+                    for page in event["pages"]:
+                        if page is not None:
+                            # Pass None as pbar to avoid inner translateAI progress updates
+                            f = executor.submit(searchCodes, page, None, [], filename)
+                            futures.append(f)
+                            future_to_len[f] = len(page.get("list", []))
+
                     for future in as_completed(futures):
                         try:
                             totalTokensFuture = future.result()
@@ -297,6 +306,9 @@ def parseMap(data, filename):
                         except Exception as e:
                             traceback.print_exc()
                             return [data, totalTokens, e]
+                        finally:
+                            # Advance progress based on the size of the processed page
+                            pbar.update(future_to_len.get(future, 0))
     return [data, totalTokens, None]
 
 
@@ -372,10 +384,18 @@ def parseCommonEvents(data, filename):
         if page is not None:
             totalLines += len(page["list"])
 
-    with tqdm(bar_format=BAR_FORMAT, position=POSITION, leave=LEAVE) as pbar:
+    with tqdm(total=totalLines, bar_format=BAR_FORMAT, position=POSITION, leave=LEAVE) as pbar:
         pbar.desc = filename
         with ThreadPoolExecutor(max_workers=THREADS) as executor:
-            futures = [executor.submit(searchCodes, page, pbar, [], filename) for page in data if page is not None]
+            future_to_len = {}
+            futures = []
+            for page in data:
+                if page is not None:
+                    # Pass None as pbar to avoid inner translateAI progress updates
+                    f = executor.submit(searchCodes, page, None, [], filename)
+                    futures.append(f)
+                    future_to_len[f] = len(page.get("list", []))
+
             for future in as_completed(futures):
                 try:
                     totalTokensFuture = future.result()
@@ -384,6 +404,8 @@ def parseCommonEvents(data, filename):
                 except Exception as e:
                     traceback.print_exc()
                     return [data, totalTokens, e]
+                finally:
+                    pbar.update(future_to_len.get(future, 0))
     return [data, totalTokens, None]
 
 
@@ -396,14 +418,23 @@ def parseTroops(data, filename):
     for troop in data:
         if troop is not None:
             for page in troop["pages"]:
-                totalLines += len(page["list"]) + 1  # The +1 is because each page has a name.
+                # Progress measured by number of commands in each page's list
+                totalLines += len(page["list"])
 
-    with tqdm(bar_format=BAR_FORMAT, position=POSITION, leave=LEAVE) as pbar:
+    with tqdm(total=totalLines, bar_format=BAR_FORMAT, position=POSITION, leave=LEAVE) as pbar:
         pbar.desc = filename
         for troop in data:
             if troop is not None:
                 with ThreadPoolExecutor(max_workers=THREADS) as executor:
-                    futures = [executor.submit(searchCodes, page, pbar, [], filename) for page in troop["pages"] if page is not None]
+                    future_to_len = {}
+                    futures = []
+                    for page in troop["pages"]:
+                        if page is not None:
+                            # Pass None as pbar to avoid inner translateAI progress updates
+                            f = executor.submit(searchCodes, page, None, [], filename)
+                            futures.append(f)
+                            future_to_len[f] = len(page.get("list", []))
+
                     for future in as_completed(futures):
                         try:
                             totalTokensFuture = future.result()
@@ -412,15 +443,15 @@ def parseTroops(data, filename):
                         except Exception as e:
                             traceback.print_exc()
                             return [data, totalTokens, e]
+                        finally:
+                            pbar.update(future_to_len.get(future, 0))
     return [data, totalTokens, None]
 
 
 def parseNames(data, filename, context):
     totalTokens = [0, 0]
-    totalLines = 0
-    totalLines += len(data)
-
-    with tqdm(bar_format=BAR_FORMAT, position=POSITION, leave=LEAVE) as pbar:
+    # Use dynamic total; we'll grow it inside searchNames as we discover work units
+    with tqdm(total=0, bar_format=BAR_FORMAT, position=POSITION, leave=LEAVE) as pbar:
         pbar.desc = filename
         try:
             result = searchNames(data, pbar, context)
@@ -434,10 +465,8 @@ def parseNames(data, filename, context):
 
 def parseSS(data, filename):
     totalTokens = [0, 0]
-    totalLines = 0
-    totalLines += len(data)
-
-    with tqdm(bar_format=BAR_FORMAT, position=POSITION, leave=LEAVE) as pbar:
+    # Use dynamic total to account for variable work per state
+    with tqdm(total=0, bar_format=BAR_FORMAT, position=POSITION, leave=LEAVE) as pbar:
         pbar.desc = filename
         for ss in data:
             if ss is not None:
@@ -453,20 +482,8 @@ def parseSS(data, filename):
 
 def parseSystem(data, filename):
     totalTokens = [0, 0]
-    totalLines = 0
-
-    # Calculate Total Lines
-    for term in data["terms"]:
-        termList = data["terms"][term]
-        totalLines += len(termList)
-    totalLines += len(data["gameTitle"])
-    totalLines += len(data["terms"]["messages"])
-    totalLines += len(data["variables"])
-    totalLines += len(data["equipTypes"])
-    totalLines += len(data["armorTypes"])
-    totalLines += len(data["skillTypes"])
-
-    with tqdm(bar_format=BAR_FORMAT, position=POSITION, leave=LEAVE) as pbar:
+    # Use dynamic progress; set total as we process sections
+    with tqdm(total=0, bar_format=BAR_FORMAT, position=POSITION, leave=LEAVE) as pbar:
         pbar.desc = filename
         try:
             result = searchSystem(data, pbar)
@@ -487,10 +504,18 @@ def parseScenario(data, filename):
     for page in data.items():
         totalLines += len(page[1])
 
-    with tqdm(bar_format=BAR_FORMAT, position=POSITION, leave=LEAVE) as pbar:
+    with tqdm(total=totalLines, bar_format=BAR_FORMAT, position=POSITION, leave=LEAVE) as pbar:
         pbar.desc = filename
         with ThreadPoolExecutor(max_workers=THREADS) as executor:
-            futures = [executor.submit(searchCodes, page[1], pbar, [], filename) for page in data.items() if page[1] is not None]
+            future_to_len = {}
+            futures = []
+            for page in data.items():
+                if page[1] is not None:
+                    # Pass None as pbar to avoid inner translateAI progress updates
+                    f = executor.submit(searchCodes, page[1], None, [], filename)
+                    futures.append(f)
+                    future_to_len[f] = len(page[1])
+
             for future in as_completed(futures):
                 try:
                     totalTokensFuture = future.result()
@@ -499,6 +524,8 @@ def parseScenario(data, filename):
                 except Exception as e:
                     traceback.print_exc()
                     return [data, totalTokens, e]
+                finally:
+                    pbar.update(future_to_len.get(future, 0))
     return [data, totalTokens, None]
 
 
@@ -594,6 +621,11 @@ def searchNames(data, pbar, context):
         translatedNotesBatch = response[0]
         totalTokens[0] += response[1][0]
         totalTokens[1] += response[1][1]
+        # Progress: add and complete note translations
+        if pbar is not None:
+            pbar.total += len(notesBatch)
+            pbar.update(len(notesBatch))
+            pbar.refresh()
 
     # --- Insert translated notes back ---
     note_insert_idx = 0
@@ -694,6 +726,10 @@ def searchNames(data, pbar, context):
                 translatedNameBatch = response[0]
                 totalTokens[0] += response[1][0]
                 totalTokens[1] += response[1][1]
+                if pbar is not None and nameList:
+                    pbar.total += len(nameList)
+                    pbar.update(len(nameList))
+                    pbar.refresh()
 
                 # Nickname
                 if nicknameList:
@@ -701,6 +737,10 @@ def searchNames(data, pbar, context):
                     translatedNicknameBatch = response[0]
                     totalTokens[0] += response[1][0]
                     totalTokens[1] += response[1][1]
+                    if pbar is not None:
+                        pbar.total += len(nicknameList)
+                        pbar.update(len(nicknameList))
+                        pbar.refresh()
 
                 # Profile
                 if profileList:
@@ -708,6 +748,10 @@ def searchNames(data, pbar, context):
                     translatedProfileBatch = response[0]
                     totalTokens[0] += response[1][0]
                     totalTokens[1] += response[1][1]
+                    if pbar is not None:
+                        pbar.total += len(profileList)
+                        pbar.update(len(profileList))
+                        pbar.refresh()
 
                 # Set Data
                 if len(nameList) == len(translatedNameBatch):
@@ -748,6 +792,10 @@ def searchNames(data, pbar, context):
                 translatedNameBatch = response[0]
                 totalTokens[0] += response[1][0]
                 totalTokens[1] += response[1][1]
+                if pbar is not None and nameList:
+                    pbar.total += len(nameList)
+                    pbar.update(len(nameList))
+                    pbar.refresh()
 
                 # Description
                 if descriptionList:
@@ -759,6 +807,10 @@ def searchNames(data, pbar, context):
                     translatedDescriptionBatch = response[0]
                     totalTokens[0] += response[1][0]
                     totalTokens[1] += response[1][1]
+                    if pbar is not None:
+                        pbar.total += len(descriptionList)
+                        pbar.update(len(descriptionList))
+                        pbar.refresh()
 
                 # Set Data
                 if len(nameList) == len(translatedNameBatch):
@@ -793,6 +845,10 @@ def searchNames(data, pbar, context):
                 translatedNameBatch = response[0]
                 totalTokens[0] += response[1][0]
                 totalTokens[1] += response[1][1]
+                if pbar is not None and nameList:
+                    pbar.total += len(nameList)
+                    pbar.update(len(nameList))
+                    pbar.refresh()
 
                 # Set Data
                 if len(nameList) == len(translatedNameBatch):
@@ -2293,6 +2349,10 @@ Translate 'Taroを倒した！' as 'Taro was defeated!'",
         translatedNotesBatch = response[0]
         totalTokens[0] += response[1][0]
         totalTokens[1] += response[1][1]
+        if pbar is not None:
+            pbar.total += len(notesBatch)
+            pbar.update(len(notesBatch))
+            pbar.refresh()
 
     # --- Insert translated notes back ---
     note_insert_idx = 0
@@ -2321,6 +2381,20 @@ Translate 'Taroを倒した！' as 'Taro was defeated!'",
     totalTokens[1] += message3Response[1][1] if message3Response != "" else 0
     totalTokens[0] += message4Response[1][0] if message4Response != "" else 0
     totalTokens[1] += message4Response[1][1] if message4Response != "" else 0
+
+    # Progress accounting for this state: name + description + messages present
+    if pbar is not None:
+        work_units = 0
+        work_units += 1 if nameResponse != "" else 0
+        work_units += 1 if descriptionResponse != "" else 0
+        work_units += 1 if message1Response != "" else 0
+        work_units += 1 if message2Response != "" else 0
+        work_units += 1 if message3Response != "" else 0
+        work_units += 1 if message4Response != "" else 0
+        if work_units:
+            pbar.total += work_units
+            pbar.update(work_units)
+            pbar.refresh()
 
     # Set Data
     if "name" in state:
@@ -2355,6 +2429,10 @@ def searchSystem(data, pbar):
     totalTokens[0] += response[1][0]
     totalTokens[1] += response[1][1]
     data["gameTitle"] = response[0].strip(".")
+    if pbar is not None:
+        pbar.total += 1
+        pbar.update(1)
+        pbar.refresh()
 
     # Terms
     for term in data["terms"]:
@@ -2366,6 +2444,12 @@ def searchSystem(data, pbar):
                     totalTokens[0] += response[1][0]
                     totalTokens[1] += response[1][1]
                     termList[i] = response[0].replace('"', "").strip()
+            if pbar is not None and len(termList) > 0:
+                # Count non-empty entries as completed work units
+                units = sum(1 for x in termList if x is not None)
+                pbar.total += units
+                pbar.update(units)
+                pbar.refresh()
 
     # Armor Types
     for i in range(len(data["armorTypes"])):
@@ -2377,6 +2461,10 @@ def searchSystem(data, pbar):
         totalTokens[0] += response[1][0]
         totalTokens[1] += response[1][1]
         data["armorTypes"][i] = response[0].replace('"', "").strip()
+    if pbar is not None and len(data["armorTypes"]) > 0:
+        pbar.total += len(data["armorTypes"])
+        pbar.update(len(data["armorTypes"]))
+        pbar.refresh()
 
     # Skill Types
     for i in range(len(data["skillTypes"])):
@@ -2388,6 +2476,10 @@ def searchSystem(data, pbar):
         totalTokens[0] += response[1][0]
         totalTokens[1] += response[1][1]
         data["skillTypes"][i] = response[0].replace('"', "").strip()
+    if pbar is not None and len(data["skillTypes"]) > 0:
+        pbar.total += len(data["skillTypes"])
+        pbar.update(len(data["skillTypes"]))
+        pbar.refresh()
 
     # Equip Types
     for i in range(len(data["equipTypes"])):
@@ -2399,6 +2491,10 @@ def searchSystem(data, pbar):
         totalTokens[0] += response[1][0]
         totalTokens[1] += response[1][1]
         data["equipTypes"][i] = response[0].replace('"', "").strip()
+    if pbar is not None and len(data["equipTypes"]) > 0:
+        pbar.total += len(data["equipTypes"]) 
+        pbar.update(len(data["equipTypes"]))
+        pbar.refresh()
 
     # # Variables (Optional ususally)
     # for i in range(len(data['variables'])):
@@ -2427,6 +2523,10 @@ def searchSystem(data, pbar):
         totalTokens[0] += response[1][0]
         totalTokens[1] += response[1][1]
         messages[key] = translatedText
+    if pbar is not None and len(messages) > 0:
+        pbar.total += len(messages)
+        pbar.update(len(messages))
+        pbar.refresh()
 
     return totalTokens
 
