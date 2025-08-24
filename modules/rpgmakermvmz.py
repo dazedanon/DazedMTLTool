@@ -253,6 +253,7 @@ def saveProgress(data, filename):
 
 def update_vocab_section(category: str, pairs: list[tuple[str, str]]):
     """Update or insert a section in vocab.txt for the given category with provided pairs.
+    Only writes when there's an actual translation (dst is non-empty and differs from src after normalization).
     - category: e.g., "Items", "Weapons", etc. Section header will be "# {category}".
     - pairs: list of (source, translated) strings. Duplicates by source are deduped (last wins).
     The existing section is replaced entirely; other sections are preserved.
@@ -261,12 +262,26 @@ def update_vocab_section(category: str, pairs: list[tuple[str, str]]):
         vocab_path = Path("vocab.txt")
         existing = vocab_path.read_text(encoding="utf-8") if vocab_path.exists() else ""
 
-        # Deduplicate by source term, keep last mapping
+        # Helper: normalized comparison to detect no-op translations
+        def _norm(s: str) -> str:
+            if s is None:
+                return ""
+            # Collapse whitespace and case-fold; leave punctuation to avoid over-matching
+            return re.sub(r"\s+", " ", str(s)).strip().casefold()
+
+        # Filter and deduplicate by source term (last mapping wins)
         dedup: dict[str, str] = {}
         for src, dst in pairs:
             if not src:
                 continue
+            # Skip when no destination or no actual change
+            if dst is None or _norm(dst) == "" or _norm(dst) == _norm(src):
+                continue
             dedup[src] = dst
+
+        # If nothing to add after filtering, skip touching the file
+        if not dedup:
+            return
 
         lines = [f"{src} ({dst})" for src, dst in dedup.items()]
         # Always terminate a section with a blank line to separate from next header
@@ -286,7 +301,6 @@ def update_vocab_section(category: str, pairs: list[tuple[str, str]]):
         )
         if pattern.search(existing):
             # Replace only the first matching section for this category.
-            # Use a function to keep replacement literal (avoid interpreting backslashes like \V)
             updated = pattern.sub(lambda m: new_block, existing, count=1)
         else:
             updated = existing
@@ -297,6 +311,9 @@ def update_vocab_section(category: str, pairs: list[tuple[str, str]]):
                 updated += "\n"
             updated += new_block
 
+        # Avoid writing if nothing changed
+        if updated == existing:
+            return
         vocab_path.write_text(updated, encoding="utf-8")
     except Exception:
         traceback.print_exc()
