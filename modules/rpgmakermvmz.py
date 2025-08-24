@@ -232,6 +232,25 @@ def getResultString(translatedData, translationTime, filename):
             return filename + ": " + totalTokenstring + timeString + Fore.RED + " \u2717 " + errorString + Fore.RESET
 
 
+def saveProgress(data, filename):
+    """Atomically write current data to translated/filename to avoid progress loss.
+    Skips when running in estimate mode.
+    """
+    try:
+        if ESTIMATE:
+            return
+        os.makedirs("translated", exist_ok=True)
+        tmp_path = os.path.join("translated", f"{filename}.tmp")
+        final_path = os.path.join("translated", filename)
+        with open(tmp_path, "w", encoding="utf-8", newline="\n") as outFile:
+            json.dump(data, outFile, ensure_ascii=False, indent=4)
+        # Replace atomically when possible
+        os.replace(tmp_path, final_path)
+    except Exception:
+        # Best-effort; don't crash the translation if saving fails
+        traceback.print_exc()
+
+
 def parseMap(data, filename):
     totalTokens = [0, 0]
     totalLines = 0
@@ -298,6 +317,8 @@ def parseMap(data, filename):
                             return [data, totalTokens, e]
                         finally:
                             pbar.update(len(page.get("list", [])))
+                            # Persist progress after each page
+                            saveProgress(data, filename)
     return [data, totalTokens, None]
 
 
@@ -386,6 +407,8 @@ def parseCommonEvents(data, filename):
                     return [data, totalTokens, e]
                 finally:
                     pbar.update(len(page.get("list", [])))
+                    # Persist progress after each page
+                    saveProgress(data, filename)
     return [data, totalTokens, None]
 
 
@@ -416,6 +439,8 @@ def parseTroops(data, filename):
                             return [data, totalTokens, e]
                         finally:
                             pbar.update(len(page.get("list", [])))
+                            # Persist progress after each page
+                            saveProgress(data, filename)
     return [data, totalTokens, None]
 
 
@@ -431,6 +456,9 @@ def parseNames(data, filename, context):
         except Exception as e:
             traceback.print_exc()
             return [data, totalTokens, e]
+        finally:
+            # Persist progress after completing names pass/batches
+            saveProgress(data, filename)
     return [data, totalTokens, None]
 
 
@@ -448,6 +476,9 @@ def parseSS(data, filename):
                 except Exception as e:
                     traceback.print_exc()
                     return [data, totalTokens, e]
+                finally:
+                    # Persist progress after each state
+                    saveProgress(data, filename)
     return [data, totalTokens, None]
 
 
@@ -463,6 +494,9 @@ def parseSystem(data, filename):
         except Exception as e:
             traceback.print_exc()
             return [data, totalTokens, e]
+        finally:
+            # Persist after system sections processed
+            saveProgress(data, filename)
     return [data, totalTokens, None]
 
 
@@ -488,6 +522,8 @@ def parseScenario(data, filename):
                     return [data, totalTokens, e]
                 finally:
                     pbar.update(len(page[1]))
+                    # Persist progress after each page
+                    saveProgress(data, filename)
     return [data, totalTokens, None]
 
 
@@ -745,6 +781,8 @@ def searchNames(data, pbar, context):
                                 batchFull = False
                                 filling = False
                             j += 1
+                    # Persist after applying this batch
+                    saveProgress(data, FILENAME)
                 else:
                     mismatch = True
 
@@ -785,7 +823,7 @@ def searchNames(data, pbar, context):
                                 continue
                             else:
                                 # Get Text
-                                file.write(f'{data[j]['name']} ({translatedNameBatch[0]})\n')
+                                file.write(f"{data[j]['name']} ({translatedNameBatch[0]})\n")
                                 data[j]["name"] = translatedNameBatch[0]
                                 translatedNameBatch.pop(0)
                                 if "description" in data[j] and data[j]["description"] != "":
@@ -800,6 +838,8 @@ def searchNames(data, pbar, context):
                                 batchFull = False
                                 filling = False
                             j += 1
+                    # Persist after applying this batch
+                    saveProgress(data, FILENAME)
                 else:
                     mismatch = True
             if context in ["Enemies", "Classes", "MapInfos"]:
@@ -833,6 +873,8 @@ def searchNames(data, pbar, context):
                                 batchFull = False
                                 filling = False
                             j += 1
+                    # Persist after applying this batch
+                    saveProgress(data, FILENAME)
                 else:
                     mismatch = True
 
