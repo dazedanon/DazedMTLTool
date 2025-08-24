@@ -79,12 +79,12 @@ FIXTEXTWRAP = True
 IGNORETLTEXT = False
 
 # Dialogue / Scroll / Choices (Main Codes)
+CODE101 = True
 CODE401 = True
 CODE405 = True
 CODE102 = True
 
 # Optional
-CODE101 = True
 CODE408 = False
 
 # Variables
