@@ -8,7 +8,7 @@ import time
 import traceback
 import openai
 import copy
-from concurrent.futures import ThreadPoolExecutor, as_completed
+# Removed concurrent.futures usage for simplicity; running synchronously
 from pathlib import Path
 from colorama import Fore
 from dotenv import load_dotenv
@@ -268,47 +268,36 @@ def parseMap(data, filename):
             for page in event["pages"]:
                 totalLines += len(page["list"])
 
-    # Thread for each page in file
+    # Process each page synchronously with progress updates
     with tqdm(total=totalLines, bar_format=BAR_FORMAT, position=POSITION, leave=LEAVE) as pbar:
         pbar.desc = filename
-        with ThreadPoolExecutor(max_workers=THREADS) as executor:
-            for event in events:
-                if event is not None:
-                    # This translates ID of events. (May break the game)
-                    if "<namePop:" in event["note"]:
-                        response = translateNoteOmitSpace(event, r"<namePop:\s?([\w一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]+)")
-                        totalTokens[0] += response[0]
-                        totalTokens[1] += response[1]
-                    if "<LB:" in event["note"]:
-                        response = translateNoteOmitSpace(event, r"<LB:(.*?)\s?>.*")
-                        totalTokens[0] += response[0]
-                        totalTokens[1] += response[1]
-                    if "<dn:" in event["note"]:
-                        response = translateNoteOmitSpace(event, r"<dn:\s*(.*)>.*")
-                        totalTokens[0] += response[0]
-                        totalTokens[1] += response[1]
+        for event in events:
+            if event is not None:
+                # This translates ID of events. (May break the game)
+                if "<namePop:" in event["note"]:
+                    response = translateNoteOmitSpace(event, r"<namePop:\s?([\w一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]+)")
+                    totalTokens[0] += response[0]
+                    totalTokens[1] += response[1]
+                if "<LB:" in event["note"]:
+                    response = translateNoteOmitSpace(event, r"<LB:(.*?)\s?>.*")
+                    totalTokens[0] += response[0]
+                    totalTokens[1] += response[1]
+                if "<dn:" in event["note"]:
+                    response = translateNoteOmitSpace(event, r"<dn:\s*(.*)>.*")
+                    totalTokens[0] += response[0]
+                    totalTokens[1] += response[1]
 
-                    # Submit futures and track work units per page for accurate progress
-                    future_to_len = {}
-                    futures = []
-                    for page in event["pages"]:
-                        if page is not None:
-                            # Pass None as pbar to avoid inner translateAI progress updates
-                            f = executor.submit(searchCodes, page, None, [], filename)
-                            futures.append(f)
-                            future_to_len[f] = len(page.get("list", []))
-
-                    for future in as_completed(futures):
+                for page in event["pages"]:
+                    if page is not None:
                         try:
-                            totalTokensFuture = future.result()
-                            totalTokens[0] += totalTokensFuture[0]
-                            totalTokens[1] += totalTokensFuture[1]
+                            totalTokensPage = searchCodes(page, None, [], filename)
+                            totalTokens[0] += totalTokensPage[0]
+                            totalTokens[1] += totalTokensPage[1]
                         except Exception as e:
                             traceback.print_exc()
                             return [data, totalTokens, e]
                         finally:
-                            # Advance progress based on the size of the processed page
-                            pbar.update(future_to_len.get(future, 0))
+                            pbar.update(len(page.get("list", [])))
     return [data, totalTokens, None]
 
 
@@ -386,26 +375,17 @@ def parseCommonEvents(data, filename):
 
     with tqdm(total=totalLines, bar_format=BAR_FORMAT, position=POSITION, leave=LEAVE) as pbar:
         pbar.desc = filename
-        with ThreadPoolExecutor(max_workers=THREADS) as executor:
-            future_to_len = {}
-            futures = []
-            for page in data:
-                if page is not None:
-                    # Pass None as pbar to avoid inner translateAI progress updates
-                    f = executor.submit(searchCodes, page, None, [], filename)
-                    futures.append(f)
-                    future_to_len[f] = len(page.get("list", []))
-
-            for future in as_completed(futures):
+        for page in data:
+            if page is not None:
                 try:
-                    totalTokensFuture = future.result()
-                    totalTokens[0] += totalTokensFuture[0]
-                    totalTokens[1] += totalTokensFuture[1]
+                    totalTokensPage = searchCodes(page, None, [], filename)
+                    totalTokens[0] += totalTokensPage[0]
+                    totalTokens[1] += totalTokensPage[1]
                 except Exception as e:
                     traceback.print_exc()
                     return [data, totalTokens, e]
                 finally:
-                    pbar.update(future_to_len.get(future, 0))
+                    pbar.update(len(page.get("list", [])))
     return [data, totalTokens, None]
 
 
@@ -425,26 +405,17 @@ def parseTroops(data, filename):
         pbar.desc = filename
         for troop in data:
             if troop is not None:
-                with ThreadPoolExecutor(max_workers=THREADS) as executor:
-                    future_to_len = {}
-                    futures = []
-                    for page in troop["pages"]:
-                        if page is not None:
-                            # Pass None as pbar to avoid inner translateAI progress updates
-                            f = executor.submit(searchCodes, page, None, [], filename)
-                            futures.append(f)
-                            future_to_len[f] = len(page.get("list", []))
-
-                    for future in as_completed(futures):
+                for page in troop["pages"]:
+                    if page is not None:
                         try:
-                            totalTokensFuture = future.result()
-                            totalTokens[0] += totalTokensFuture[0]
-                            totalTokens[1] += totalTokensFuture[1]
+                            totalTokensPage = searchCodes(page, None, [], filename)
+                            totalTokens[0] += totalTokensPage[0]
+                            totalTokens[1] += totalTokensPage[1]
                         except Exception as e:
                             traceback.print_exc()
                             return [data, totalTokens, e]
                         finally:
-                            pbar.update(future_to_len.get(future, 0))
+                            pbar.update(len(page.get("list", [])))
     return [data, totalTokens, None]
 
 
@@ -506,26 +477,17 @@ def parseScenario(data, filename):
 
     with tqdm(total=totalLines, bar_format=BAR_FORMAT, position=POSITION, leave=LEAVE) as pbar:
         pbar.desc = filename
-        with ThreadPoolExecutor(max_workers=THREADS) as executor:
-            future_to_len = {}
-            futures = []
-            for page in data.items():
-                if page[1] is not None:
-                    # Pass None as pbar to avoid inner translateAI progress updates
-                    f = executor.submit(searchCodes, page[1], None, [], filename)
-                    futures.append(f)
-                    future_to_len[f] = len(page[1])
-
-            for future in as_completed(futures):
+        for page in data.items():
+            if page[1] is not None:
                 try:
-                    totalTokensFuture = future.result()
-                    totalTokens[0] += totalTokensFuture[0]
-                    totalTokens[1] += totalTokensFuture[1]
+                    totalTokensPage = searchCodes(page[1], None, [], filename)
+                    totalTokens[0] += totalTokensPage[0]
+                    totalTokens[1] += totalTokensPage[1]
                 except Exception as e:
                     traceback.print_exc()
                     return [data, totalTokens, e]
                 finally:
-                    pbar.update(future_to_len.get(future, 0))
+                    pbar.update(len(page[1]))
     return [data, totalTokens, None]
 
 
