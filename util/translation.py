@@ -254,7 +254,30 @@ Output ONLY the {config.language} translation in the following format: `Translat
     return system, user
 
 
-def translateText(system, user, history, penalty, formatType, model):
+def createTranslationSchema(numLines):
+    """Create a JSON schema for translation response based on number of lines"""
+    properties = {}
+    required = []
+    
+    for i in range(1, numLines + 1):
+        line_key = f"Line{i}"
+        properties[line_key] = {
+            "type": "string",
+            "description": f"The translated text for Line{i}"
+        }
+        required.append(line_key)
+    
+    schema = {
+        "type": "object",
+        "properties": properties,
+        "required": required,
+        "additionalProperties": False
+    }
+    
+    return schema
+
+
+def translateText(system, user, history, penalty, formatType, model, numLines=None):
     """Send translation request to OpenAI API"""
     # Ensure system content is not empty
     if not system or not str(system).strip():
@@ -276,8 +299,17 @@ def translateText(system, user, history, penalty, formatType, model):
             msg.append({"role": "assistant", "content": history})
 
     # Response Format
-    if formatType == "json":
-        responseFormat = {"type": "json_object"}
+    if formatType == "json" and numLines is not None:
+        # Use structured output with JSON schema
+        schema = createTranslationSchema(numLines)
+        responseFormat = {
+            "type": "json_schema",
+            "json_schema": {
+                "name": "translation_response",
+                "strict": True,
+                "schema": schema
+            }
+        }
     else:
         responseFormat = {"type": "text"}
 
@@ -292,21 +324,44 @@ def translateText(system, user, history, penalty, formatType, model):
             raise ValueError(f"Message {i} has empty content: {message}")
 
     # Call OpenAI API
-    if "gpt-5" in model:
-        response = openai.chat.completions.create(
-            model=model,
-            response_format=responseFormat,
-            messages=msg,
-            reasoning_effort="minimal"
-        )
-    else:
-        response = openai.chat.completions.create(
-            model=model,
-            response_format=responseFormat,
-            messages=msg,
-            temperature=0,
-            frequency_penalty=penalty
-        )
+    try:
+        if "gpt-5" in model:
+            response = openai.chat.completions.create(
+                model=model,
+                response_format=responseFormat,
+                messages=msg,
+                reasoning_effort="minimal"
+            )
+        else:
+            response = openai.chat.completions.create(
+                model=model,
+                response_format=responseFormat,
+                messages=msg,
+                temperature=0,
+                frequency_penalty=penalty
+            )
+    except Exception as e:
+        # If structured output fails, fallback to json_object
+        if formatType == "json" and "json_schema" in str(responseFormat):
+            responseFormat = {"type": "json_object"}
+            if "gpt-5" in model:
+                response = openai.chat.completions.create(
+                    model=model,
+                    response_format=responseFormat,
+                    messages=msg,
+                    reasoning_effort="minimal"
+                )
+            else:
+                response = openai.chat.completions.create(
+                    model=model,
+                    response_format=responseFormat,
+                    messages=msg,
+                    temperature=0,
+                    frequency_penalty=penalty
+                )
+        else:
+            raise e
+    
     return response
 
 
@@ -326,6 +381,7 @@ def cleanTranslatedText(translatedText, language):
         "】": "]",
         "【": "[",
         "é": "e",
+        "’": "'",
         "this guy": "this bastard",
         "This guy": "This bastard",
         "Placeholder Text": "",
@@ -363,8 +419,6 @@ def elongateCharacters(text):
 def extractTranslation(translatedTextList, isList, pbar=None):
     """Extract translation from JSON response"""
     try:
-        translatedTextList = re.sub(r'\\"+\"([^,\n}])', r'\\"\1', translatedTextList)
-        translatedTextList = re.sub(r"(?<![\\])\"+(?![\n,])", r'"', translatedTextList)
         lineDict = json.loads(translatedTextList)
         # If it's a batch (i.e., list), extract with tags; otherwise, return the single item.
         stringList = list(lineDict.values())
@@ -486,14 +540,15 @@ def translateAI(text, history, fullPromptFlag, config, filename=None, pbar=None,
                 continue
 
             # Translate
-            response = translateText(system, user, history, 0.05, formatType, config.model)
+            numLines = len(tItem) if isinstance(tItem, list) else None
+            response = translateText(system, user, history, 0.05, formatType, config.model, numLines)
             translatedText = response.choices[0].message.content
 
             # Retry if AI refused
             if not translatedText or '"error":' in translatedText:
                 response = translateText(
                     f"{system}\n You translate ALL content.", 
-                    user, history, 0.1, formatType, "gpt-4.1" if config.model == "gpt-5" else "gpt-4o"
+                    user, history, 0.1, formatType, "gpt-4.1" if config.model == "gpt-5" else "gpt-4o", numLines
                 )
                 translatedText = response.choices[0].message.content
 
@@ -501,33 +556,51 @@ def translateAI(text, history, fullPromptFlag, config, filename=None, pbar=None,
             totalTokens[0] += response.usage.prompt_tokens
             totalTokens[1] += response.usage.completion_tokens
 
+            # Clean the translation first for consistency
+            translatedText = cleanTranslatedText(translatedText, config.language)
+
             # Process translation result
             if translatedText:
-                translatedText = cleanTranslatedText(translatedText, config.language)
-                
                 if isinstance(tItem, list):
                     extractedTranslations = extractTranslation(translatedText, True, pbar)
                     if extractedTranslations is None or len(tItem) != len(extractedTranslations):
                         # Mismatch, try again
-                        response = translateText(system, user, history, 0.05, formatType, config.model)
+                        response = translateText(system, user, history, 0.05, formatType, config.model, numLines)
                         translatedText = response.choices[0].message.content
                         totalTokens[0] += response.usage.prompt_tokens
                         totalTokens[1] += response.usage.completion_tokens
 
-                        # Format and check again
+                        # Clean and extract again
                         translatedText = cleanTranslatedText(translatedText, config.language)
-                        if isinstance(tItem, list):
-                            extractedTranslations = extractTranslation(translatedText, True, pbar)
-                            if extractedTranslations is None or len(tItem) != len(extractedTranslations):
-                                # Log mismatch
-                                with open(config.mismatchLogPath, "a+", encoding="utf-8") as mismatchFile:
-                                    mismatchFile.write(f"Mismatch: {filename}\n")
-                                    mismatchFile.write(f"Input:\n{subbedT}\n")
-                                    mismatchFile.write(f"Output:\n{translatedText}\n")
-                                    mismatch = True
+                        extractedTranslations = extractTranslation(translatedText, True, pbar)
+                        if extractedTranslations is None or len(tItem) != len(extractedTranslations):
+                            # Format the JSON output for consistent mismatch logging
+                            formatted_mismatch_output = translatedText
+                            try:
+                                parsed_json = json.loads(translatedText)
+                                formatted_mismatch_output = json.dumps(parsed_json, indent=4, ensure_ascii=False)
+                            except (json.JSONDecodeError, ValueError):
+                                pass
+
+                            # Log mismatch
+                            with open(config.mismatchLogPath, "a+", encoding="utf-8") as mismatchFile:
+                                mismatchFile.write(f"Mismatch: {filename}\n")
+                                mismatchFile.write(f"Input:\n{subbedT}\n")
+                                mismatchFile.write(f"Output:\n{formatted_mismatch_output}\n")
+                                mismatch = True
+
+                    # Format the JSON output for consistent logging
+                    formatted_output = translatedText
+                    try:
+                        # Try to parse and reformat the JSON for consistent formatting
+                        parsed_json = json.loads(translatedText)
+                        formatted_output = json.dumps(parsed_json, indent=4, ensure_ascii=False)
+                    except (json.JSONDecodeError, ValueError):
+                        # If it's not valid JSON, keep the original
+                        pass
 
                     logFile.write(f"Input:\n{subbedT}\n")
-                    logFile.write(f"Output:\n{translatedText}\n")
+                    logFile.write(f"Output:\n{formatted_output}\n")
 
                     # Set results if no mismatch
                     if not mismatch:
@@ -544,8 +617,9 @@ def translateAI(text, history, fullPromptFlag, config, filename=None, pbar=None,
                         with lock:
                             pbar.update(len(tItem))
                 else:
-                    # Single string translation
-                    tList[index] = translatedText.replace("Placeholder Text", "")
+                    # Single string translation - clean after getting the raw response
+                    cleanedText = cleanTranslatedText(translatedText, config.language)
+                    tList[index] = cleanedText.replace("Placeholder Text", "")
             else:
                 if pbar:
                     pbar.write(f"AI Refused: {tItem}\n")
