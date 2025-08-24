@@ -417,20 +417,86 @@ def elongateCharacters(text):
 
 
 def extractTranslation(translatedTextList, isList, pbar=None):
-    """Extract translation from JSON response"""
+    """Extract translation from JSON response.
+
+    This function is resilient to a few common model mistakes:
+    - Wraps output in code fences or outer quotes
+    - Uses smart quotes instead of straight quotes
+    - Inserts an extra leading quote in values (e.g. :""Word" -> :"Word")
+    - Trailing commas before } or ]
+
+    If strict JSON parsing fails, falls back to a regex-based extractor that
+    captures LineN values in numeric order.
+    """
+    s = str(translatedTextList or "").strip()
+
+    # Fast exit
+    if not s:
+        return None
+
+    # Remove code fences if present
+    if s.startswith("```"):
+        s = re.sub(r"^```(?:json)?\s*", "", s, flags=re.IGNORECASE)
+        s = re.sub(r"\s*```$", "", s)
+
+    # Trim wrapping quotes around the whole JSON blob (common in logs)
+    if len(s) >= 2 and s[0] == s[-1] and s[0] in {'"', "'"}:
+        # Only strip if it still looks like JSON inside
+        if s[1:2] == "{" and s[-2:-1] == "}":
+            s = s[1:-1]
+
+    # Normalize quotes
+    s = s.replace("“", '"').replace("”", '"').replace("’", "'")
+
+    # Remove trailing commas before object/array closures
+    s = re.sub(r",(\s*[}\]])", r"\1", s)
+
+    # Repair common doubled leading quote in values: :""Word" -> :"Word"
+    # Ensure we don't alter legitimate empty strings (:"")
+    s = re.sub(r":\s*\"\"(?=[^\",}\]\s])", r':"', s)
+
+    # Attempt strict parse first
     try:
-        lineDict = json.loads(translatedTextList)
-        # If it's a batch (i.e., list), extract with tags; otherwise, return the single item.
-        stringList = list(lineDict.values())
-        if isList:
-            return stringList
+        lineDict = json.loads(s)
+
+        # Build list in numeric order if keys are LineN
+        numeric_keys = []
+        for k in lineDict.keys():
+            m = re.fullmatch(r"Line(\d+)", str(k))
+            if m:
+                numeric_keys.append(int(m.group(1)))
+
+        if numeric_keys:
+            stringList = [lineDict.get(f"Line{n}", "") for n in sorted(numeric_keys)]
         else:
-            return stringList[0]
+            # Fallback to values order if no LineN keys found
+            stringList = list(lineDict.values())
+
+        return stringList if isList else (stringList[0] if stringList else None)
 
     except Exception as e:
-        if pbar:
-            pbar.write(f"extractTranslation Error: {e} on String {translatedTextList}")
-        return None
+        # Fallback: regex-based extraction tolerant to one or two opening quotes
+        # Captures escaped quotes within values too
+        try:
+            pairs = re.findall(r'"Line(\d+)"\s*:\s*"{1,2}((?:\\.|[^"\\])*)"', s)
+            if not pairs:
+                raise ValueError("No LineN pairs found")
+
+            # Sort numerically and unescape JSON string content
+            items = []
+            for n_str, v in sorted(((int(n), v) for n, v in pairs), key=lambda x: x[0]):
+                try:
+                    # Decode JSON escapes reliably by round-tripping as a JSON string
+                    decoded = json.loads(f'"{v}"')
+                except Exception:
+                    decoded = v
+                items.append(decoded)
+
+            return items if isList else (items[0] if items else None)
+        except Exception as e2:
+            if pbar:
+                pbar.write(f"extractTranslation Error: {e2} after JSON error {e} on String {translatedTextList}")
+            return None
 
 
 def calculateCost(inputTokens, outputTokens, model):

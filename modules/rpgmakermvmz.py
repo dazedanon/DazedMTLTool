@@ -251,6 +251,56 @@ def saveProgress(data, filename):
         traceback.print_exc()
 
 
+def update_vocab_section(category: str, pairs: list[tuple[str, str]]):
+    """Update or insert a section in vocab.txt for the given category with provided pairs.
+    - category: e.g., "Items", "Weapons", etc. Section header will be "# {category}".
+    - pairs: list of (source, translated) strings. Duplicates by source are deduped (last wins).
+    The existing section is replaced entirely; other sections are preserved.
+    """
+    try:
+        vocab_path = Path("vocab.txt")
+        existing = vocab_path.read_text(encoding="utf-8") if vocab_path.exists() else ""
+
+        # Deduplicate by source term, keep last mapping
+        dedup: dict[str, str] = {}
+        for src, dst in pairs:
+            if not src:
+                continue
+            dedup[src] = dst
+
+        lines = [f"{src} ({dst})" for src, dst in dedup.items()]
+        # Always terminate a section with a blank line to separate from next header
+        new_block = f"# {category}\n" + "\n".join(lines)
+        if not new_block.endswith("\n\n"):
+            if not new_block.endswith("\n"):
+                new_block += "\n"
+            new_block += "\n"
+
+        # Regex to find the specific section starting at the header for this category
+        # and ending right before the next header (any number of '#') or EOF.
+        # - Handles headers like '#Category', '# Category', '## Category', etc.
+        # - Uses non-greedy matching for the body to avoid spanning multiple sections.
+        pattern = re.compile(
+            rf"^[\t ]*#+\s*{re.escape(category)}\s*$\r?\n.*?(?=^[\t ]*#|\Z)",
+            re.MULTILINE | re.DOTALL,
+        )
+        if pattern.search(existing):
+            # Replace only the first matching section for this category
+            updated = pattern.sub(new_block, existing, count=1)
+        else:
+            updated = existing
+            if updated and not updated.endswith("\n\n"):
+                # Ensure a blank line before appending new section if file not empty
+                if not updated.endswith("\n"):
+                    updated += "\n"
+                updated += "\n"
+            updated += new_block
+
+        vocab_path.write_text(updated, encoding="utf-8")
+    except Exception:
+        traceback.print_exc()
+
+
 def parseMap(data, filename):
     totalTokens = [0, 0]
     totalLines = 0
@@ -618,6 +668,9 @@ def searchNames(data, pbar, context):
     profileList = []
     nicknameList = []
     descriptionList = []
+    # Collect name mappings for vocab per run
+    vocab_pairs: list[tuple[str, str]] = []
+    vocab_enabled = context in ["Armors", "Weapons", "Items", "MapInfos", "Classes", "Enemies", "Skills"]
     # For batching all note types
     notesBatch = []  # List of (i, regex, match_text, note_type)
     notesBatchMap = []  # List of (i, regex, match_text, note_type, groupidx)
@@ -848,6 +901,7 @@ def searchNames(data, pbar, context):
                             if data[j]["name"] != "":
                                 with open("translations.txt", "a", encoding="utf-8") as file:
                                     file.write(f'{data[j]["name"]} ({translatedNameBatch[0]})\n')
+                                # Actors are excluded from vocab updates
                                     data[j]["name"] = translatedNameBatch[0]
                                 translatedNameBatch.pop(0)
                             if "nickname" in data[j] and data[j]["nickname"]:
@@ -906,6 +960,11 @@ def searchNames(data, pbar, context):
                             else:
                                 # Get Text
                                 file.write(f"{data[j]['name']} ({translatedNameBatch[0]})\n")
+                                if vocab_enabled:
+                                    try:
+                                        vocab_pairs.append((data[j]['name'], translatedNameBatch[0]))
+                                    except Exception:
+                                        pass
                                 data[j]["name"] = translatedNameBatch[0]
                                 translatedNameBatch.pop(0)
                                 if "description" in data[j] and data[j]["description"] != "":
@@ -945,6 +1004,11 @@ def searchNames(data, pbar, context):
                             with open("translations.txt", "a", encoding="utf-8") as file:
                                 file.write(f'{data[j]["name"]} ({translatedNameBatch[0]})\n')
                             # Get Text
+                            if vocab_enabled:
+                                try:
+                                    vocab_pairs.append((data[j]["name"], translatedNameBatch[0]))
+                                except Exception:
+                                    pass
                             data[j]["name"] = translatedNameBatch[0]
                             translatedNameBatch.pop(0)
 
@@ -970,6 +1034,10 @@ def searchNames(data, pbar, context):
                 batchFull = False
 
                 i += 1
+
+    # Update vocab section once per context after processing all names
+    if vocab_enabled and vocab_pairs:
+        update_vocab_section(context, vocab_pairs)
 
     return totalTokens
 
