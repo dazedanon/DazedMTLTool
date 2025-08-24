@@ -14,6 +14,7 @@ from dotenv import load_dotenv
 from retry import retry
 from tqdm import tqdm
 from util.translation import TranslationConfig, translateAI as sharedtranslateAI, getPricingConfig, calculateCost, getPricingConfig, calculateCost
+import tempfile
 
 # Open AI
 load_dotenv()
@@ -75,8 +76,9 @@ TRANSLATION_CONFIG = TranslationConfig(
 LEAVE = False
 
 def handleJSON(filename, estimate):
-    global ESTIMATE, totalTokens
+    global ESTIMATE, totalTokens, FILENAME
     ESTIMATE = estimate
+    FILENAME = filename
 
     if estimate:
         start = time.time()
@@ -160,7 +162,7 @@ def parseJSON(data, filename):
         pbar.desc = filename
         PBAR = pbar
         try:
-            result = translateJSON(data, [])
+            result = translateJSON(data, filename, [])
             totalTokens[0] += result[0]
             totalTokens[1] += result[1]
         except Exception as e:
@@ -169,7 +171,30 @@ def parseJSON(data, filename):
     return [data, totalTokens, None]
 
 
-def translateJSON(data, translatedList):
+def save_progress_json(data, filename):
+    """Atomically save current JSON translation progress."""
+    try:
+        if ESTIMATE:
+            return
+        os.makedirs("translated", exist_ok=True)
+        tmp_fd, tmp_path = tempfile.mkstemp(prefix=f"{filename}.", suffix=".tmp", dir="translated")
+        try:
+            with os.fdopen(tmp_fd, "w", encoding="utf-8", newline="\n") as tmp_file:
+                json.dump(data, tmp_file, ensure_ascii=False, indent=4)
+            os.replace(tmp_path, os.path.join("translated", filename))
+        finally:
+            # In case of exception before replace
+            if os.path.exists(tmp_path):
+                try:
+                    os.remove(tmp_path)
+                except OSError:
+                    pass
+    except Exception:
+        # Best-effort; don't crash the run on save failures
+        traceback.print_exc()
+
+
+def translateJSON(data, filename, translatedList):
     global LOCK, ESTIMATE, FILENAME, PBAR, MISMATCH
     if translatedList:
         stringList = translatedList[0]
@@ -266,7 +291,10 @@ def translateJSON(data, translatedList):
                     if "『" in data[i][messageKey] and "』" not in translatedText:
                         data[i][messageKey] = data[i][messageKey].replace(originalString, f"『{translatedText}』")
                     else:
-                        data[i][messageKey] = data[i][messageKey].replace(originalString, f"{translatedText}")     
+                        data[i][messageKey] = data[i][messageKey].replace(originalString, f"{translatedText}")
+
+                    # Save progress after each message replacement
+                    save_progress_json(data, filename)
         # Next Value
         i += 1       
 
@@ -290,7 +318,7 @@ def translateJSON(data, translatedList):
                         MISMATCH.append(FILENAME)
 
         # Set Strings
-        translateJSON(data, [stringListTL])
+    translateJSON(data, filename, [stringListTL])
     return tokens
 
 # Save some money and enter the character before translation

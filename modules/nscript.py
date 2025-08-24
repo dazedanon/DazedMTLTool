@@ -14,6 +14,7 @@ from dotenv import load_dotenv
 from retry import retry
 from tqdm import tqdm
 from util.translation import TranslationConfig, translateAI as sharedtranslateAI, getPricingConfig, calculateCost
+import tempfile
 
 # Open AI
 load_dotenv()
@@ -185,6 +186,27 @@ def parseOnscripter(readFile, filename):
     return [data, totalTokens, None]
 
 
+def save_progress_lines(lines, filename, encoding="cp932"):
+    """Atomically save current line-based translation progress."""
+    try:
+        if ESTIMATE:
+            return
+        os.makedirs("translated", exist_ok=True)
+        tmp_fd, tmp_path = tempfile.mkstemp(prefix=f"{filename}.", suffix=".tmp", dir="translated")
+        try:
+            with os.fdopen(tmp_fd, "w", encoding=encoding, newline="\n", errors="ignore") as tmp_file:
+                tmp_file.writelines(lines)
+            os.replace(tmp_path, os.path.join("translated", filename))
+        finally:
+            if os.path.exists(tmp_path):
+                try:
+                    os.remove(tmp_path)
+                except OSError:
+                    pass
+    except Exception:
+        traceback.print_exc()
+
+
 def translateOnscripter(data, pbar, filename, translatedList):
     stringList = []
     currentGroup = []
@@ -272,6 +294,7 @@ def translateOnscripter(data, pbar, filename, translatedList):
 
                     # Set Data
                     data[i] = data[i].replace(originalString, f"{translatedText}")
+                    save_progress_lines(data, filename)
             i += 1
 
         # Choices
@@ -295,6 +318,7 @@ def translateOnscripter(data, pbar, filename, translatedList):
 
                     # Set
                     data[i] = data[i].replace(choiceList[j], translatedText)
+                save_progress_lines(data, filename)
             i += 1
 
         # Nothing relevant. Skip Line.

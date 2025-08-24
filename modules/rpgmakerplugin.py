@@ -14,6 +14,7 @@ from dotenv import load_dotenv
 from retry import retry
 from tqdm import tqdm
 from util.translation import TranslationConfig, translateAI as sharedtranslateAI, getPricingConfig, calculateCost
+import tempfile
 
 # Open AI
 load_dotenv()
@@ -176,6 +177,27 @@ def parsePlugin(readFile, filename):
     return [data, totalTokens, None]
 
 
+def save_progress_lines(lines, filename, encoding="utf_8"):
+    """Atomically save current line-based translation progress."""
+    try:
+        if ESTIMATE:
+            return
+        os.makedirs("translated", exist_ok=True)
+        tmp_fd, tmp_path = tempfile.mkstemp(prefix=f"{filename}.", suffix=".tmp", dir="translated")
+        try:
+            with os.fdopen(tmp_fd, "w", encoding=encoding, newline="\n", errors="ignore") as tmp_file:
+                tmp_file.writelines(lines)
+            os.replace(tmp_path, os.path.join("translated", filename))
+        finally:
+            if os.path.exists(tmp_path):
+                try:
+                    os.remove(tmp_path)
+                except OSError:
+                    pass
+    except Exception:
+        traceback.print_exc()
+
+
 def translatePlugin(data, pbar, filename, translatedList):
     if len(translatedList) > 0:
         questList = translatedList[0]
@@ -259,6 +281,7 @@ def translatePlugin(data, pbar, filename, translatedList):
                             with open("translations.txt", "a+", encoding="utf-8") as tlFile:
                                 tlFile.write(f"{originalString} ({translatedText})\n")
                             data[i] = data[i].replace(originalString, translatedText)
+                            save_progress_lines(data, filename)
 
         # Quest Name
         regex = r'[\\]+"QuestName[\\]+":[\\]+"(.*?)[\\]+"'
@@ -295,6 +318,7 @@ def translatePlugin(data, pbar, filename, translatedList):
 
                             # Set Data
                             data[i] = data[i].replace(originalString, translatedText)
+                            save_progress_lines(data, filename)
 
         # Quest Client
         regex = r'QuestClientName[\\]+":[\\]+"(.*?)[\\]+"'
@@ -328,6 +352,7 @@ def translatePlugin(data, pbar, filename, translatedList):
 
                             # Set Data
                             data[i] = data[i].replace(originalString, translatedText)
+                            save_progress_lines(data, filename)
 
         # Quest Location
         regex = r'QuestLocation[\\]+":[\\]+"(.*?)[\\]+"'
@@ -361,6 +386,7 @@ def translatePlugin(data, pbar, filename, translatedList):
 
                             # Set Data
                             data[i] = data[i].replace(originalString, translatedText)
+                            save_progress_lines(data, filename)
 
         # Quest Target
         regex = r'PlaceInformation[\\]+":[\\]+"(.*?)[\\]+"'
@@ -394,6 +420,7 @@ def translatePlugin(data, pbar, filename, translatedList):
 
                             # Set Data
                             data[i] = data[i].replace(originalString, translatedText)
+                            save_progress_lines(data, filename)
 
         # Quest Summary
         regex = r'[\\]+"QuestContent[\\]+":[\\]+"[\\]+"(.*?)[\\]+"[\\]+"'
@@ -436,6 +463,7 @@ def translatePlugin(data, pbar, filename, translatedList):
 
                             # Set Data
                             data[i] = data[i].replace(originalString, translatedText)
+                            save_progress_lines(data, filename)
 
         # Quest Goal 1
         regex = r'ObjectiveContent[\\]+":[\\]+"[\\]+"(.*?)[\\]+"'
@@ -476,6 +504,7 @@ def translatePlugin(data, pbar, filename, translatedList):
 
                             # Set Data
                             data[i] = data[i].replace(originalString, translatedText)
+                            save_progress_lines(data, filename)
 
         # Next Line
         i += 1
