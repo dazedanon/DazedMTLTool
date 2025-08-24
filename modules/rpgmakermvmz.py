@@ -285,8 +285,9 @@ def update_vocab_section(category: str, pairs: list[tuple[str, str]]):
             re.MULTILINE | re.DOTALL,
         )
         if pattern.search(existing):
-            # Replace only the first matching section for this category
-            updated = pattern.sub(new_block, existing, count=1)
+            # Replace only the first matching section for this category.
+            # Use a function to keep replacement literal (avoid interpreting backslashes like \V)
+            updated = pattern.sub(lambda m: new_block, existing, count=1)
         else:
             updated = existing
             if updated and not updated.endswith("\n\n"):
