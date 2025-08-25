@@ -32,6 +32,8 @@ PROMPT = Path("prompt.txt").read_text(encoding="utf-8")
 VOCAB = Path("vocab.txt").read_text(encoding="utf-8")
 THREADS = int(os.getenv("threads"))
 LOCK = threading.Lock()
+# Thread-local context to carry per-thread filename safely
+THREAD_CTX = threading.local()
 WIDTH = int(os.getenv("width"))
 LISTWIDTH = int(os.getenv("listWidth"))
 NOTEWIDTH = int(os.getenv("noteWidth"))
@@ -112,6 +114,11 @@ def handleMVMZ(filename, estimate):
     global ESTIMATE, TOKENS, FILENAME
     ESTIMATE = estimate
     FILENAME = filename
+    # Also record per-thread filename to avoid cross-thread interference
+    try:
+        THREAD_CTX.filename = filename
+    except Exception:
+        pass
 
     # Translate
     start = time.time()
@@ -649,7 +656,8 @@ def parseNames(data, filename, context):
     with tqdm(total=total_units, bar_format=BAR_FORMAT, position=POSITION, leave=LEAVE) as pbar:
         pbar.desc = filename
         try:
-            result = searchNames(data, pbar, context)
+            # Thread the filename through so progress saves write to the right file
+            result = searchNames(data, pbar, context, filename)
             totalTokens[0] += result[0]
             totalTokens[1] += result[1]
         except Exception as e:
@@ -767,7 +775,7 @@ def parseScenario(data, filename):
     return [data, totalTokens, None]
 
 
-def searchNames(data, pbar, context):
+def searchNames(data, pbar, context, filename):
     totalTokens = [0, 0]
     nameList = []
     profileList = []
@@ -1025,7 +1033,7 @@ def searchNames(data, pbar, context):
                                 filling = False
                             j += 1
                     # Persist after applying this batch
-                    saveProgress(data, FILENAME)
+                    saveProgress(data, filename)
                 else:
                     mismatch = True
 
@@ -1085,7 +1093,7 @@ def searchNames(data, pbar, context):
                                 filling = False
                             j += 1
                     # Persist after applying this batch
-                    saveProgress(data, FILENAME)
+                    saveProgress(data, filename)
                 else:
                     mismatch = True
             if context in ["Enemies", "Classes", "MapInfos"]:
@@ -1124,7 +1132,7 @@ def searchNames(data, pbar, context):
                                 filling = False
                             j += 1
                     # Persist after applying this batch
-                    saveProgress(data, FILENAME)
+                    saveProgress(data, filename)
                 else:
                     mismatch = True
 
@@ -2826,12 +2834,18 @@ def translateAI(text, history, fullPromptFlag):
     TRANSLATION_CONFIG.estimateMode = bool(ESTIMATE)
     
     # Call the new shared translation function
+    # Prefer thread-local filename for logging; fall back to global
+    try:
+        tl_filename = getattr(THREAD_CTX, "filename", FILENAME)
+    except Exception:
+        tl_filename = FILENAME
+
     return sharedtranslateAI(
         text=text,
         history=history,
         fullPromptFlag=fullPromptFlag,
         config=TRANSLATION_CONFIG,
-        filename=FILENAME,
+        filename=tl_filename,
         pbar=PBAR,
         lock=LOCK,
         mismatchList=MISMATCH
