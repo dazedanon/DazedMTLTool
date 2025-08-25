@@ -106,6 +106,7 @@ ME 音量 (ME Volume)
 紅蓮 (Vermilion)
 12月 (December)
 12日 (12th)
+邪気 (Miasma)
 
 # Demons/Angels/Monsters
 聖女 (Saintess)
