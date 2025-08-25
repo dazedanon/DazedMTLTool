@@ -8,7 +8,6 @@ def set_defaults(file_path):
     defaults = {
         'FIRSTLINESPEAKERS': 'False',
         'FACENAME101': 'False',
-        'NAMES': 'False',
         'BRFLAG': 'False',
         'FIXTEXTWRAP': 'True',
         'IGNORETLTEXT': 'False',

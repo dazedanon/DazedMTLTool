@@ -74,11 +74,15 @@ TRANSLATION_CONFIG = TranslationConfig(
 LEAVE = False
 
 # Config (Default)
+# FIRSTLINESPEAKERS: Guess speaker from first line.
 FIRSTLINESPEAKERS = False
+# FACENAME101: Map face name -> speaker.
 FACENAME101 = False
-NAMES = False
+# BRFLAG: Newlines -> <br>.
 BRFLAG = False
+# FIXTEXTWRAP: Rewrap text to WIDTH/NOTEWIDTH.
 FIXTEXTWRAP = True
+# IGNORETLTEXT: Skip Translated Text.
 IGNORETLTEXT = False
 
 # Dialogue / Scroll / Choices (Main Codes)
