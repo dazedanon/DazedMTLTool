@@ -821,7 +821,7 @@ def searchNames(data, pbar, context, filename):
         (r"<PE拡張:(.*?)>", False),
         (r"<hint:(.*?)>", False),
         (r"<SGDescription:(.*?)>", False),
-        (r"<SG説明:\n?(.*?)>", True),
+        (r"<SG説明:\n?(.*?)>", False),
         (r"<SG説明2:\n?(.*?)>", False),
         (r"<SG説明3:\n?(.*?)>", False),
         (r"<SG説明4:\n?(.*?)>", False),
@@ -853,7 +853,8 @@ def searchNames(data, pbar, context, filename):
             if regex.startswith(r"<SG説明:"):
                 for m in matches:
                     match_text = m if isinstance(m, str) else m[0]
-                    if "Client:" in match_text or "Client :":
+                    # Skip SG説明 blocks that include a Client: section header
+                    if "Client:" in match_text or "Client :" in match_text:
                         continue
                     notesBatch.append(match_text)
                     notesBatchMap.append((idx, regex, match_text, wordwrap))
@@ -1887,7 +1888,7 @@ def searchCodes(page, pbar, jobList, filename):
                 jaString = codeList[i]["parameters"][0]
                 
                 patterns = {
-                    "テキスト-": (r"テキスト-(.+)")
+                    # "テキスト-": (r"テキスト-(.+)")
                     # "=": (r'=\s?(.*)",'),
                     # "var text": (r"var\stext\d+\s=\s\"(.+)\""),
                     # "logtxt = ": (r"logtxt\s=\s'(.+)'" 
@@ -1896,7 +1897,8 @@ def searchCodes(page, pbar, jobList, filename):
                     # "text =": (r"text\s*=\s*'(.+[^\\])'"),
                     # "ex_a_name": (r'ex_a_name\(\d+,"(.+)"\)'),
                     # "gameVariables.setValue": (r"\$gameVariables.setValue\(\d+,\s?'(.+)'\)"),
-                    # "BattleManager._logWindow.push('addText'": (r"BattleManager._logWindow.push\('addText',\s'(.+)'\)"),
+                    "BattleManager._logWindow.push('addText'": (r"BattleManager._logWindow.push\('addText',\s'(.+)'\)"),
+                    "BattleManager._logWindow.addText": (r"BattleManager._logWindow.addText\('(.+)'\)"),
                 }
 
                 for key, (regex) in patterns.items():
@@ -2123,7 +2125,12 @@ def searchCodes(page, pbar, jobList, filename):
                             list356.pop(0)
 
                 if "namePop" in jaString:
-                    matchList = re.findall(r"<namePop:\s?([\w一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]+)", jaString)
+                    # Support both "<namePop: text>" and "namePop [num] text" formats
+                    matchList = re.findall(r"<namePop:\s*([^>]+)>", jaString)
+                    if not matchList:
+                        m = re.search(r"\bnamePop\b\s*(?:-?\d+)?\s*([^\r\n<>]+)", jaString)
+                        if m:
+                            matchList = [m.group(1).strip()]
                     if len(matchList) > 0:
                         # Translate
                         text = matchList[0]
@@ -2133,8 +2140,8 @@ def searchCodes(page, pbar, jobList, filename):
                         totalTokens[1] += response[1][1]
 
                         # Set Data
-                        translatedText = jaString.replace(text, translatedText)
-                        codeList[i]["parameters"][0] = translatedText
+                        updated = jaString.replace(text, translatedText.replace(" ", "_"))
+                        codeList[i]["parameters"][0] = updated
 
                 if "LL_InfoPopupWIndowMV" in jaString:
                     matchList = re.findall(r"LL_InfoPopupWIndowMV\sshowWindow\s(.+?) .+", jaString)
