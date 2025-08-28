@@ -135,6 +135,21 @@ files to translate are in the /files folder and that you picked the right game e
     if os.path.isfile("csv.tmp"):
         os.remove("csv.tmp")
 
+    # Sweep any leftover temp files in translated/
+    try:
+        translated_dir = os.path.join("translated")
+        if os.path.isdir(translated_dir):
+            for fname in os.listdir(translated_dir):
+                if fname.endswith(".tmp"):
+                    fpath = os.path.join(translated_dir, fname)
+                    try:
+                        os.remove(fpath)
+                    except Exception:
+                        # Best-effort cleanup; ignore files locked by other processes
+                        pass
+    except Exception:
+        pass
+
     # Finish
     if totalCost != "Fail":
         # if estimate is False:

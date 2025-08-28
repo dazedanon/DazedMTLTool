@@ -1,5 +1,6 @@
 # Libraries
 import json
+import io
 import os
 import re
 import util.dazedwrap as dazedwrap
@@ -43,6 +44,7 @@ BRFLAG = False  # If the game uses <br> instead
 FIXTEXTWRAP = True  # Overwrites textwrap
 IGNORETLTEXT = False  # Ignores all translated text.
 MISMATCH = []  # Lists files that throw a mismatch error (Length of GPT list response is wrong)
+FILENAME = ""  # Current file being processed, used by translateAI wrapper
 
 # tqdm Globals
 BAR_FORMAT = "{l_bar}{bar:10}{r_bar}{bar:-10b}"
@@ -73,8 +75,9 @@ TRANSLATION_CONFIG = TranslationConfig(
 LEAVE = False
 
 def handleWOLF2(filename, estimate):
-    global ESTIMATE
+    global ESTIMATE, FILENAME
     ESTIMATE = estimate
+    FILENAME = filename
 
     if ESTIMATE:
         start = time.time()
@@ -143,15 +146,37 @@ def getResultString(translatedData, translationTime, filename):
 
 
 def openFiles(filename):
-    with open("files/" + filename, "r", encoding="shift_jis") as readFile:
+    # Use a robust reader to handle cp932/Shift_JIS variants and occasional bad bytes
+    def read_file_lines_with_fallback(path: str):
+        encodings = ["cp932", "shift_jis", "utf-8-sig", "utf-8"]
+        for enc in encodings:
+            try:
+                with open(path, "r", encoding=enc) as f:
+                    return f.readlines()
+            except UnicodeDecodeError:
+                continue
+        # Last resort: ignore undecodable bytes under cp932
+        with open(path, "rb") as f:
+            raw = f.read()
+        try:
+            text = raw.decode("cp932", errors="ignore")
+        except Exception:
+            text = raw.decode("latin-1", errors="ignore")
+        return text.splitlines(keepends=True)
+
+    path = os.path.join("files", filename)
+    lines = read_file_lines_with_fallback(path)
+
+    # Keep parseWOLF API by wrapping lines in a file-like object
+    with io.StringIO("".join(lines)) as readFile:
         translatedData = parseWOLF(readFile, filename)
 
-        # Delete lines marked for deletion
-        finalData = []
-        for line in translatedData[0]:
-            if line != "\\d\n":
-                finalData.append(line)
-        translatedData[0] = finalData
+    # Delete lines marked for deletion
+    finalData = []
+    for line in translatedData[0]:
+        if line != "\\d\n":
+            finalData.append(line)
+    translatedData[0] = finalData
 
     return translatedData
 
