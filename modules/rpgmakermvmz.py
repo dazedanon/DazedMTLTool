@@ -460,7 +460,21 @@ def parseMap(data, filename):
                     totalTokens[0] += response[0]
                     totalTokens[1] += response[1]
                 if "<LB:" in event["note"]:
-                    response = translateNoteOmitSpace(event, r"<LB:(.*?)\s?>.*")
+                    for event in events:
+                        if event is not None:
+                            # This translates ID of events. (May break the game)
+                            if "<namePop:" in event["note"]:
+                                response = translateNoteOmitSpace(event, r"<namePop:\s?([\w一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]+)")
+                                totalTokens[0] += response[0]
+                                totalTokens[1] += response[1]
+                            if "<LB:" in event["note"]:
+                                response = translateNoteOmitSpace(event, r"<LB:(.*?)\s?>.*")
+                                totalTokens[0] += response[0]
+                                totalTokens[1] += response[1]
+                            if "<dn:" in event["note"]:
+                                response = translateNoteOmitSpace(event, r"<dn:\s*(.*)>.*")
+                                totalTokens[0] += response[0]
+                                totalTokens[1] += response[1]
                     totalTokens[0] += response[0]
                     totalTokens[1] += response[1]
                 if "<dn:" in event["note"]:
@@ -1717,6 +1731,69 @@ def searchCodes(page, pbar, jobList, filename):
                 for key, (argVar, font) in headerMappings.items():
                     if key in headerString:
                         translatePlugins(argVar, font)
+
+                # AdvExtention plugin support (message event)
+                if headerString == "AdvExtention" and len(codeList[i]["parameters"]) > 3:
+                    try:
+                        params_obj = codeList[i]["parameters"][3]
+                    except Exception:
+                        params_obj = None
+
+                    if isinstance(params_obj, dict):
+                        # 1) Speaker comes from 'name', fallback to 'altName' if missing/empty
+                        speaker_name = ""
+                        if isinstance(params_obj.get("altName", None), str) and params_obj["altName"].strip():
+                            speaker_name = params_obj["altName"].strip()
+                            if speaker_name:
+                                response = getSpeaker(speaker_name)
+                                params_obj["altName"] = response[0]
+                                totalTokens[0] += response[1][0]
+                                totalTokens[1] += response[1][1]
+                                speaker = response[0]
+                        if isinstance(params_obj.get("name", None), str) and params_obj["name"].strip():
+                            speaker_name = params_obj["name"].strip()
+                            if speaker_name:
+                                response = getSpeaker(speaker_name)
+                                params_obj["name"] = response[0]
+                                totalTokens[0] += response[1][0]
+                                totalTokens[1] += response[1][1]
+                                speaker = response[0]
+                        speaker = ""
+
+                        # 2) Line comes from 'comment' if present, else 'text'
+                        chosen_key = None
+                        if isinstance(params_obj.get("comment", None), str) and params_obj["comment"].strip():
+                            chosen_key = "comment"
+                        elif isinstance(params_obj.get("text", None), str):
+                            chosen_key = "text"
+
+                        if chosen_key is not None:
+                            jaString = params_obj.get(chosen_key, "")
+                            if isinstance(jaString, str):
+                                # Pass 1 (collect data)
+                                if setData:
+                                    if FIXTEXTWRAP:
+                                        jaString = jaString.replace("\n", " ")
+                                    # Include speaker context like 401 does
+                                    if 'speaker' in locals() and isinstance(speaker, str) and speaker.strip():
+                                        list357.append(f"[{speaker}]: {jaString}")
+                                    else:
+                                        list357.append(jaString)
+                                # Pass 2 (apply translation)
+                                else:
+                                    if len(list357) > 0:
+                                        translatedText = list357[0]
+                                        list357.pop(0)
+
+                                        # Remove speaker prefix if present (same pattern used for 401)
+                                        m = re.search(r'(^\[.+?\]\s?[|:]\s?)', translatedText)
+                                        if m:
+                                            translatedText = translatedText.replace(m.group(1), "")
+
+                                        if FIXTEXTWRAP:
+                                            translatedText = dazedwrap.wrapText(translatedText, width=WIDTH)
+
+                                        params_obj[chosen_key] = translatedText
 
                 if headerString == "LL_GalgeChoiceWindow":
                     ### Message Text First
