@@ -222,6 +222,16 @@ def save_progress_lines(lines, filename, encoding="shift_jis"):
         traceback.print_exc()
 
 
+def saveCheckLines(lines, filename, tokens=None, encoding="shift_jis"):
+    try:
+        if tokens is not None:
+            if not (isinstance(tokens, (list, tuple)) and len(tokens) >= 2 and (tokens[0] or tokens[1])):
+                return
+        save_progress_lines(lines, filename, encoding=encoding)
+    except Exception:
+        traceback.print_exc()
+
+
 def translateWOLF(data, translatedList, pbar, filename):
     stringList = []
     currentGroup = []
@@ -240,7 +250,7 @@ def translateWOLF(data, translatedList, pbar, filename):
             tokens[0] += response[1][0]
             tokens[1] += response[1][1]
             data[i] = data[i].replace(matchList[0], f"{speaker}")
-            save_progress_lines(data, filename)
+            saveCheckLines(data, filename)
             i += 1
         else:
             speaker = ""
@@ -269,7 +279,7 @@ def translateWOLF(data, translatedList, pbar, filename):
                     data[i] = f"//{choiceListTL[0]}\n"
                     choiceListTL.pop(0)
                     i += 1
-                save_progress_lines(data, filename)
+                    saveCheckLines(data, filename)
 
             # Mismatch
             else:
@@ -327,7 +337,7 @@ def translateWOLF(data, translatedList, pbar, filename):
 
                 # Set Data
                 data.insert(i, f"{translatedText}\n")
-                save_progress_lines(data, filename)
+                saveCheckLines(data, filename)
                 i += 1
 
         # Nothing relevant. Skip Line.
