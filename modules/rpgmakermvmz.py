@@ -308,6 +308,20 @@ def saveProgress(data, filename):
         traceback.print_exc()
 
 
+def checkSave(data, filename, tokens):
+    """Save progress only if the given tokens reflect an actual translation.
+    tokens should be a [input_tokens, output_tokens] pair returned by a search/translate call.
+    """
+    try:
+        if not tokens:
+            return
+        if (isinstance(tokens, (list, tuple)) and len(tokens) >= 2 and (tokens[0] or tokens[1])):
+            saveProgress(data, filename)
+    except Exception:
+        # Don't let saving issues affect the translation flow
+        traceback.print_exc()
+
+
 def update_vocab_section(category: str, pairs: list[tuple[str, str]]):
     """Update or insert a section in vocab.txt for the given category with provided pairs.
     Only writes when there's an actual translation (dst is non-empty and differs from src after normalization).
@@ -493,8 +507,8 @@ def parseMap(data, filename):
                             return [data, totalTokens, e]
                         finally:
                             pbar.update(len(page.get("list", [])))
-                            # Persist progress after each page
-                            saveProgress(data, filename)
+                            # Persist progress only if this page produced tokens
+                            checkSave(data, filename, totalTokensPage)
     return [data, totalTokens, None]
 
 
@@ -583,8 +597,8 @@ def parseCommonEvents(data, filename):
                     return [data, totalTokens, e]
                 finally:
                     pbar.update(len(page.get("list", [])))
-                    # Persist progress after each page
-                    saveProgress(data, filename)
+                    # Persist progress only if this page produced tokens
+                    checkSave(data, filename, totalTokensPage)
     return [data, totalTokens, None]
 
 
@@ -615,8 +629,8 @@ def parseTroops(data, filename):
                             return [data, totalTokens, e]
                         finally:
                             pbar.update(len(page.get("list", [])))
-                            # Persist progress after each page
-                            saveProgress(data, filename)
+                            # Persist progress only if this page produced tokens
+                            checkSave(data, filename, totalTokensPage)
     return [data, totalTokens, None]
 
 
@@ -678,8 +692,8 @@ def parseNames(data, filename, context):
             traceback.print_exc()
             return [data, totalTokens, e]
         finally:
-            # Persist progress after completing names pass/batches
-            saveProgress(data, filename)
+            # Persist progress only if this names pass produced tokens
+            checkSave(data, filename, totalTokens)
     return [data, totalTokens, None]
 
 
@@ -715,8 +729,8 @@ def parseSS(data, filename):
                     traceback.print_exc()
                     return [data, totalTokens, e]
                 finally:
-                    # Persist progress after each state
-                    saveProgress(data, filename)
+                    # Persist progress only if this state produced tokens
+                    checkSave(data, filename, result)
     return [data, totalTokens, None]
 
 
@@ -757,8 +771,8 @@ def parseSystem(data, filename):
             traceback.print_exc()
             return [data, totalTokens, e]
         finally:
-            # Persist after system sections processed
-            saveProgress(data, filename)
+            # Persist only if system sections produced tokens
+            checkSave(data, filename, result)
     return [data, totalTokens, None]
 
 
@@ -784,8 +798,8 @@ def parseScenario(data, filename):
                     return [data, totalTokens, e]
                 finally:
                     pbar.update(len(page[1]))
-                    # Persist progress after each page
-                    saveProgress(data, filename)
+                    # Persist progress only if this page produced tokens
+                    checkSave(data, filename, totalTokensPage)
     return [data, totalTokens, None]
 
 
@@ -987,11 +1001,15 @@ def searchNames(data, pbar, context, filename):
         if batchFull == True or i >= len(data):
             k = j  # Original Index
             if context in "Actors":
+                # Track tokens for this batch
+                batchTokens = [0, 0]
                 # Name
                 response = translateAI(nameList, newContext, True)
                 translatedNameBatch = response[0]
                 totalTokens[0] += response[1][0]
                 totalTokens[1] += response[1][1]
+                batchTokens[0] += response[1][0]
+                batchTokens[1] += response[1][1]
                 if pbar is not None and nameList:
                     pbar.update(len(nameList))
                     pbar.refresh()
@@ -1002,6 +1020,8 @@ def searchNames(data, pbar, context, filename):
                     translatedNicknameBatch = response[0]
                     totalTokens[0] += response[1][0]
                     totalTokens[1] += response[1][1]
+                    batchTokens[0] += response[1][0]
+                    batchTokens[1] += response[1][1]
                     if pbar is not None:
                         pbar.update(len(nicknameList))
                         pbar.refresh()
@@ -1012,6 +1032,8 @@ def searchNames(data, pbar, context, filename):
                     translatedProfileBatch = response[0]
                     totalTokens[0] += response[1][0]
                     totalTokens[1] += response[1][1]
+                    batchTokens[0] += response[1][0]
+                    batchTokens[1] += response[1][1]
                     if pbar is not None:
                         pbar.update(len(profileList))
                         pbar.refresh()
@@ -1047,17 +1069,21 @@ def searchNames(data, pbar, context, filename):
                                 batchFull = False
                                 filling = False
                             j += 1
-                    # Persist after applying this batch
-                    saveProgress(data, filename)
+                    # Persist after applying this batch only if we actually translated something in this batch
+                    checkSave(data, filename, batchTokens)
                 else:
                     mismatch = True
 
             if context in ["Armors", "Weapons", "Items", "Skills"]:
+                # Track tokens for this batch
+                batchTokens = [0, 0]
                 # Name
                 response = translateAI(nameList, newContext, True)
                 translatedNameBatch = response[0]
                 totalTokens[0] += response[1][0]
                 totalTokens[1] += response[1][1]
+                batchTokens[0] += response[1][0]
+                batchTokens[1] += response[1][1]
                 if pbar is not None and nameList:
                     pbar.update(len(nameList))
                     pbar.refresh()
@@ -1072,6 +1098,8 @@ def searchNames(data, pbar, context, filename):
                     translatedDescriptionBatch = response[0]
                     totalTokens[0] += response[1][0]
                     totalTokens[1] += response[1][1]
+                    batchTokens[0] += response[1][0]
+                    batchTokens[1] += response[1][1]
                     if pbar is not None:
                         pbar.update(len(descriptionList))
                         pbar.refresh()
@@ -1107,15 +1135,19 @@ def searchNames(data, pbar, context, filename):
                                 batchFull = False
                                 filling = False
                             j += 1
-                    # Persist after applying this batch
-                    saveProgress(data, filename)
+                    # Persist after applying this batch only if we actually translated something in this batch
+                    checkSave(data, filename, batchTokens)
                 else:
                     mismatch = True
             if context in ["Enemies", "Classes", "MapInfos"]:
+                # Track tokens for this batch
+                batchTokens = [0, 0]
                 response = translateAI(nameList, newContext, True)
                 translatedNameBatch = response[0]
                 totalTokens[0] += response[1][0]
                 totalTokens[1] += response[1][1]
+                batchTokens[0] += response[1][0]
+                batchTokens[1] += response[1][1]
                 if pbar is not None and nameList:
                     pbar.update(len(nameList))
                     pbar.refresh()
@@ -1146,8 +1178,8 @@ def searchNames(data, pbar, context, filename):
                                 batchFull = False
                                 filling = False
                             j += 1
-                    # Persist after applying this batch
-                    saveProgress(data, filename)
+                    # Persist after applying this batch only if we actually translated something in this batch
+                    checkSave(data, filename, batchTokens)
                 else:
                     mismatch = True
 

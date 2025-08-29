@@ -198,6 +198,17 @@ def save_progress_lines(lines, filename, encoding="utf_8"):
         traceback.print_exc()
 
 
+def saveCheckLines(lines, filename, tokens=None, encoding="utf_8"):
+    """Save progress only when tokens indicate work or when explicitly called after a mutation."""
+    try:
+        if tokens is not None:
+            if not (isinstance(tokens, (list, tuple)) and len(tokens) >= 2 and (tokens[0] or tokens[1])):
+                return
+        save_progress_lines(lines, filename, encoding=encoding)
+    except Exception:
+        traceback.print_exc()
+
+
 def translatePlugin(data, pbar, filename, translatedList):
     if len(translatedList) > 0:
         questList = translatedList[0]
@@ -281,7 +292,7 @@ def translatePlugin(data, pbar, filename, translatedList):
                             with open("translations.txt", "a+", encoding="utf-8") as tlFile:
                                 tlFile.write(f"{originalString} ({translatedText})\n")
                             data[i] = data[i].replace(originalString, translatedText)
-                            save_progress_lines(data, filename)
+                            saveCheckLines(data, filename)
 
         # Quest Name
         regex = r'[\\]+"QuestName[\\]+":[\\]+"(.*?)[\\]+"'
@@ -318,7 +329,7 @@ def translatePlugin(data, pbar, filename, translatedList):
 
                             # Set Data
                             data[i] = data[i].replace(originalString, translatedText)
-                            save_progress_lines(data, filename)
+                            saveCheckLines(data, filename)
 
         # Quest Client
         regex = r'QuestClientName[\\]+":[\\]+"(.*?)[\\]+"'
@@ -352,7 +363,7 @@ def translatePlugin(data, pbar, filename, translatedList):
 
                             # Set Data
                             data[i] = data[i].replace(originalString, translatedText)
-                            save_progress_lines(data, filename)
+                            saveCheckLines(data, filename)
 
         # Quest Location
         regex = r'QuestLocation[\\]+":[\\]+"(.*?)[\\]+"'
@@ -386,7 +397,7 @@ def translatePlugin(data, pbar, filename, translatedList):
 
                             # Set Data
                             data[i] = data[i].replace(originalString, translatedText)
-                            save_progress_lines(data, filename)
+                            saveCheckLines(data, filename)
 
         # Quest Target
         regex = r'PlaceInformation[\\]+":[\\]+"(.*?)[\\]+"'
@@ -420,7 +431,7 @@ def translatePlugin(data, pbar, filename, translatedList):
 
                             # Set Data
                             data[i] = data[i].replace(originalString, translatedText)
-                            save_progress_lines(data, filename)
+                            saveCheckLines(data, filename)
 
         # Quest Summary
         regex = r'[\\]+"QuestContent[\\]+":[\\]+"[\\]+"(.*?)[\\]+"[\\]+"'
@@ -463,7 +474,7 @@ def translatePlugin(data, pbar, filename, translatedList):
 
                             # Set Data
                             data[i] = data[i].replace(originalString, translatedText)
-                            save_progress_lines(data, filename)
+                            saveCheckLines(data, filename)
 
         # Quest Goal 1
         regex = r'ObjectiveContent[\\]+":[\\]+"[\\]+"(.*?)[\\]+"'
@@ -504,7 +515,7 @@ def translatePlugin(data, pbar, filename, translatedList):
 
                             # Set Data
                             data[i] = data[i].replace(originalString, translatedText)
-                            save_progress_lines(data, filename)
+                            saveCheckLines(data, filename)
 
         # Next Line
         i += 1

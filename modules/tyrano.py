@@ -192,6 +192,18 @@ def save_progress_lines(lines, filename, encoding="utf-8"):
         traceback.print_exc()
 
 
+def saveCheckLines(lines, filename, tokens=None, encoding="utf-8"):
+    """Save progress only when tokens indicate work or when tokens is None but we know a mutation occurred."""
+    try:
+        # If explicit tokens provided, gate on tokens; otherwise assume we were called on actual mutation
+        if tokens is not None:
+            if not (isinstance(tokens, (list, tuple)) and len(tokens) >= 2 and (tokens[0] or tokens[1])):
+                return
+        save_progress_lines(lines, filename, encoding=encoding)
+    except Exception:
+        traceback.print_exc()
+
+
 def translateTyrano(data, filename, translatedList):
     if translatedList:
         stringList = translatedList[0]
@@ -313,8 +325,8 @@ def translateTyrano(data, filename, translatedList):
 
                     # Set Data
                     data[i] = data[i].replace(originalString, translatedText)
-                    # Save progress after each line change
-                    save_progress_lines(data, filename)
+                    # Save progress after each line change (we mutated, so tokens gate optional)
+                    saveCheckLines(data, filename)
 
         # Choices
         match = re.search(choiceRegex, data[i])
@@ -335,7 +347,7 @@ def translateTyrano(data, filename, translatedList):
 
                 # Set
                 data[i] = data[i].replace(match.group(1), translatedText)
-                save_progress_lines(data, filename)
+                saveCheckLines(data, filename)
 
             i += 1
         else:

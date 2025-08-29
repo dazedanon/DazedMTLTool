@@ -260,6 +260,17 @@ def save_progress_yaml(data, filename):
         traceback.print_exc()
 
 
+def maybe_save_progress_yaml(data, filename, tokens):
+    """Save YAML progress only when tokens indicate actual translation work."""
+    try:
+        if not tokens:
+            return
+        if isinstance(tokens, (list, tuple)) and len(tokens) >= 2 and (tokens[0] or tokens[1]):
+            save_progress_yaml(data, filename)
+    except Exception:
+        traceback.print_exc()
+
+
 def parseMap(data, filename):
     totalTokens = [0, 0]
     totalLines = 0
@@ -297,7 +308,7 @@ def parseMap(data, filename):
                             traceback.print_exc()
                             return [data, totalTokens, e]
                         finally:
-                            save_progress_yaml(data, filename)
+                            maybe_save_progress_yaml(data, filename, tt)
     return [data, totalTokens, None]
 
 
@@ -385,7 +396,7 @@ def parseCommonEvents(data, filename):
                     traceback.print_exc()
                     return [data, totalTokens, e]
                 finally:
-                    save_progress_yaml(data, filename)
+                    maybe_save_progress_yaml(data, filename, tt)
     return [data, totalTokens, None]
 
 
@@ -467,7 +478,7 @@ def parseNames(data, filename, context):
             traceback.print_exc()
             return [data, totalTokens, e]
         finally:
-            save_progress_yaml(data, filename)
+            maybe_save_progress_yaml(data, filename, result)
     return [data, totalTokens, None]
 
 
@@ -503,7 +514,7 @@ def parseSS(data, filename):
                     traceback.print_exc()
                     return [data, totalTokens, e]
                 finally:
-                    save_progress_yaml(data, filename)
+                    maybe_save_progress_yaml(data, filename, result)
     return [data, totalTokens, None]
 
 
@@ -541,7 +552,7 @@ def parseSystem(data, filename):
             traceback.print_exc()
             return [data, totalTokens, e]
         finally:
-            save_progress_yaml(data, filename)
+            maybe_save_progress_yaml(data, filename, result)
     return [data, totalTokens, None]
 
 
@@ -566,7 +577,7 @@ def parseScenario(data, filename):
                     traceback.print_exc()
                     return [data, totalTokens, e]
                 finally:
-                    save_progress_yaml(data, filename)
+                    maybe_save_progress_yaml(data, filename, tt)
     return [data, totalTokens, None]
 
 

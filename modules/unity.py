@@ -206,6 +206,17 @@ def save_progress_lines(lines, filename, encoding="utf-8"):
         traceback.print_exc()
 
 
+def saveCheckLines(lines, filename, tokens=None, encoding="utf-8"):
+    """Save progress only when tokens indicate work or when explicitly called after a mutation."""
+    try:
+        if tokens is not None:
+            if not (isinstance(tokens, (list, tuple)) and len(tokens) >= 2 and (tokens[0] or tokens[1])):
+                return
+        save_progress_lines(lines, filename, encoding=encoding)
+    except Exception:
+        traceback.print_exc()
+
+
 def translateUnity(data, pbar, filename, translatedList):
     stringList = []
     tokens = [0, 0]
@@ -259,7 +270,7 @@ def translateUnity(data, pbar, filename, translatedList):
 
                     # Set Data
                     data[i] = f"{leftString}={translatedText}\n"
-                    save_progress_lines(data, filename)
+                    saveCheckLines(data, filename)
             i += 1
 
         # Nothing relevant. Skip Line.

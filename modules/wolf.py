@@ -205,6 +205,17 @@ def save_progress_json(data, filename):
         traceback.print_exc()
 
 
+def maybe_save_progress_json(data, filename, tokens):
+    """Save JSON progress only when tokens indicate actual translation work."""
+    try:
+        if not tokens:
+            return
+        if isinstance(tokens, (list, tuple)) and len(tokens) >= 2 and (tokens[0] or tokens[1]):
+            save_progress_json(data, filename)
+    except Exception:
+        traceback.print_exc()
+
+
 def parseOther(data, filename):
     totalTokens = [0, 0]
     totalLines = 0
@@ -222,7 +233,7 @@ def parseOther(data, filename):
         except Exception as e:
             return [data, totalTokens, e]
         finally:
-            save_progress_json(data, filename)
+            maybe_save_progress_json(data, filename, translationData)
     return [data, totalTokens, None]
 
 
@@ -243,7 +254,7 @@ def parseDB(data, filename):
         except Exception as e:
             return [data, totalTokens, e]
         finally:
-            save_progress_json(data, filename)
+            maybe_save_progress_json(data, filename, translationData)
     return [data, totalTokens, None]
 
 
@@ -274,7 +285,7 @@ def parseMap(data, filename):
                         except Exception as e:
                             return [data, totalTokens, e]
                         finally:
-                            save_progress_json(data, filename)
+                            maybe_save_progress_json(data, filename, tt)
     return [data, totalTokens, None]
 
 
