@@ -1758,6 +1758,7 @@ def searchCodes(page, pbar, jobList, filename):
                     "DTextPicture": ("text", None),
                     "TextPicture": ("text", None),
                     "TRP_SkitMZ": ("name", None),
+                    "LogWindow": ("text", None),
                 }
 
                 for key, (argVar, font) in headerMappings.items():
@@ -1765,7 +1766,7 @@ def searchCodes(page, pbar, jobList, filename):
                         translatePlugins(argVar, font)
 
                 # AdvExtention plugin support (message event)
-                if headerString == "AdvExtention" and len(codeList[i]["parameters"]) > 3:
+                if headerString == "AdvExtentionllk" and len(codeList[i]["parameters"]) > 3:
                     try:
                         params_obj = codeList[i]["parameters"][3]
                     except Exception:
@@ -2004,10 +2005,11 @@ def searchCodes(page, pbar, jobList, filename):
                     # ".setNickname": (r'.setNickname\(\\?"(.+?)\\?"\)'
                     # "_subject=": (r'_subject=(.+?)_'
                     # "text =": (r"text\s*=\s*'(.+[^\\])'"),
+                    # "const text": (r'(const\stext\s?=\s?"(.+)";?)'),
                     # "ex_a_name": (r'ex_a_name\(\d+,"(.+)"\)'),
                     # "gameVariables.setValue": (r"\$gameVariables.setValue\(\d+,\s?'(.+)'\)"),
-                    "BattleManager._logWindow.push('addText'": (r"BattleManager._logWindow.push\('addText',\s'(.+)'\)"),
-                    "BattleManager._logWindow.addText": (r"BattleManager._logWindow.addText\('(.+)'\)"),
+                    # "BattleManager._logWindow.push('addText'": (r"BattleManager._logWindow.push\('addText',\s'(.+)'\)"),
+                    # "BattleManager._logWindow.addText": (r"BattleManager._logWindow.addText\('(.+)'\)"),
                 }
 
                 for key, (regex) in patterns.items():
@@ -2712,6 +2714,7 @@ Translate 'Taroを倒した！' as 'Taro was defeated!'",
         (r"<STATE_HELP>\n(.*)\n", False),
         (r"<ShowHoverState:\s?(.+?)>", False),
         (r"<Detail:\s?(.+?)>", False),
+        (r"(.+)", True),
     ]
     notesBatch = []
     notesBatchMap = []
@@ -2743,8 +2746,10 @@ Translate 'Taroを倒した！' as 'Taro was defeated!'",
             if wordwrap:
                 translated = dazedwrap.wrapText(translated, width=NOTEWIDTH)
                 translated = translated.replace('"', "")
-            # Replace only the matched text in the note
-            state["note"] = re.sub(re.escape(match_text), translated, state["note"], count=1)
+            # Replace only the matched text in the note using a literal replacement
+            # Avoid re.sub here because replacement strings with backslashes (e.g., \I)
+            # are interpreted as escapes and can raise re.PatternError.
+            state["note"] = state["note"].replace(match_text, translated, 1)
             note_insert_idx += 1
 
     # Count totalTokens
