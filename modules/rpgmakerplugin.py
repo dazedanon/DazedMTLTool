@@ -43,6 +43,7 @@ BRFLAG = False  # If the game uses <br> instead
 FIXTEXTWRAP = True  # Overwrites textwrap
 IGNORETLTEXT = False  # Ignores all translated text.
 MISMATCH = []  # Lists files that throw a mismatch error (Length of GPT list response is wrong)
+FILENAME = None
 
 # tqdm Globals
 BAR_FORMAT = "{l_bar}{bar:10}{r_bar}{bar:-10b}"
@@ -74,8 +75,9 @@ TRANSLATION_CONFIG = TranslationConfig(
 LEAVE = False
 
 def handlePlugin(filename, estimate):
-    global ESTIMATE, PBAR
+    global ESTIMATE, PBAR, FILENAME
     ESTIMATE = estimate
+    FILENAME = filename
 
     if ESTIMATE:
         start = time.time()
