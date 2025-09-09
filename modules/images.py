@@ -32,6 +32,7 @@ ESTIMATE = ""
 TOKENS = [0, 0]
 NAMESLIST = []
 MISMATCH = []  # Lists files that throw a mismatch error (Length of GPT list response is wrong)
+FILENAME = None
 
 # Open AI
 load_dotenv()
@@ -70,8 +71,9 @@ LEAVE = False
 
 
 def handleImages(folderName, estimate):
-    global ESTIMATE, TOKENS
+    global ESTIMATE, TOKENS, FILENAME
     ESTIMATE = estimate
+    FILENAME = folderName
     start = time.time()
 
     # Translate Strings
