@@ -941,7 +941,7 @@ def searchDB(events, pbar, jobList, filename):
         for table in tableList:
             # Grab NPCs
             if table["name"] == "戦闘コマンド" and NPCFLAG == True:
-                with open("translations.txt", "a", encoding="utf-8") as file:
+                with open("log/translations.txt", "a", encoding="utf-8") as file:
                     if setData:
                         file.write(f"\n#Actors\n")
                     for npc in table["data"]:
@@ -1292,7 +1292,7 @@ def searchDB(events, pbar, jobList, filename):
             if table["name"] == "アイテム" and ITEMFLAG == True:
                 # Write Category
                 if setData:
-                    with open("translations.txt", "a", encoding="utf-8") as file:
+                    with open("log/translations.txt", "a", encoding="utf-8") as file:
                         file.write(f"\n#Items\n")
 
                 # Begin Translation
@@ -1314,7 +1314,7 @@ def searchDB(events, pbar, jobList, filename):
                                 # Pass 2 (Set Data)
                                 else:
                                     # Write to TL File
-                                    with open("translations.txt", "a", encoding="utf-8") as file:
+                                    with open("log/translations.txt", "a", encoding="utf-8") as file:
                                         file.write(f"{jaString} ({itemList[0][0]})\n")
 
                                     dataList[j].update({"value": itemList[0][0]})
