@@ -19,7 +19,11 @@ except ImportError:
 
 
 class RPGMakerTab(QWidget):
-    """RPG Maker MV/MZ configuration tab."""
+    """RPG Maker MV/MZ & Ace configuration tab.
+
+    This widget now supports both MV/MZ and Ace engines. Pass engine="ACE" to
+    target rpgmakerace.py; otherwise it will default to MV/MZ (rpgmakermvmz.py).
+    """
     
     # Default configuration values for RPG Maker MV/MZ
     DEFAULT_CONFIG = {
@@ -141,8 +145,9 @@ class RPGMakerTab(QWidget):
     
     config_changed = pyqtSignal()
     
-    def __init__(self):
+    def __init__(self, engine: str = "MVMZ"):
         super().__init__()
+        self.engine = engine.upper()
         self.config_integration = ConfigIntegration() if ConfigIntegration else None
         self.init_ui()
         self.connect_auto_apply()  # Connect auto-apply before setting defaults
@@ -158,10 +163,11 @@ class RPGMakerTab(QWidget):
         scroll_layout = QVBoxLayout()
         
         # Title and description
-        title_label = QLabel("RPG Maker MV/MZ Translation Settings")
+        title = "RPG Maker MV/MZ" if self.engine != "ACE" else "RPG Maker Ace"
+        title_label = QLabel(f"{title} Translation Settings")
         title_label.setStyleSheet("font-size: 16px; font-weight: bold; color: #007acc;")
         scroll_layout.addWidget(title_label)
-        
+
         description_label = QLabel(
             "Configure which RPG Maker event codes to translate and additional options. "
             "Each code represents a specific type of game content."
@@ -618,12 +624,12 @@ class RPGMakerTab(QWidget):
         return is_valid
         
     def apply_to_module(self, show_messages=False):
-        """Apply current configuration to the rpgmakermvmz.py module."""
+        """Apply current configuration to the correct RPG Maker module (MV/MZ or Ace)."""
         try:
             config = self.get_config()
-            
-            # Direct file modification approach (completely silent)
-            module_path = Path(__file__).parent.parent / "modules" / "rpgmakermvmz.py"
+            # Select module filename based on engine
+            module_filename = "rpgmakermvmz.py" if self.engine != "ACE" else "rpgmakerace.py"
+            module_path = Path(__file__).parent.parent / "modules" / module_filename
             
             if not module_path.exists():
                 if show_messages:
@@ -662,7 +668,7 @@ class RPGMakerTab(QWidget):
                 QMessageBox.information(
                     self, 
                     "Success", 
-                    "Configuration has been applied to modules/rpgmakermvmz.py\n\n"
+                    f"Configuration has been applied to modules/{module_filename}\n\n"
                     "The module will now use these settings when running translations."
                 )
                 
@@ -673,16 +679,18 @@ class RPGMakerTab(QWidget):
             self.config_changed.emit()
         
     def load_from_module(self):
-        """Load configuration from the actual module file."""
+        """Load configuration from the actual module file based on engine."""
         if not self.config_integration:
             return
-            
+
         try:
-            config = self.config_integration.read_current_config()
+            module_filename = "rpgmakermvmz.py" if self.engine != "ACE" else "rpgmakerace.py"
+            module_path = Path("modules") / module_filename
+            config = self.config_integration.read_current_config(module_path)
             if config:
                 self.set_config(config)
-                QMessageBox.information(self, "Success", "Configuration loaded from module file")
+                QMessageBox.information(self, "Success", f"Configuration loaded from {module_filename}")
             else:
-                QMessageBox.warning(self, "Warning", "No configuration found in module file")
+                QMessageBox.warning(self, "Warning", f"No configuration found in {module_filename}")
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to load from module:\n{str(e)}")

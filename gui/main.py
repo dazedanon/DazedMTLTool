@@ -18,7 +18,7 @@ from PyQt5.QtGui import QIcon, QFont, QPixmap, QScreen
 
 # Import configuration widgets
 from gui.config_tab import ConfigTab
-from gui.rpgmaker_tab import RPGMakerTab
+from gui.engine_config_tab import EngineConfigTab
 from gui.log_viewer import LogViewer
 from gui.file_manager import FileManager
 from gui.translation_tab import TranslationTab
@@ -170,11 +170,32 @@ class DazedMTLGUI(QMainWindow):
         
         # Translation Execution Tab (includes file management)
         self.translation_tab = TranslationTab(self)
+        try:
+            self.translation_tab.engine_changed.connect(self.show_engine_tab)
+        except Exception:
+            pass
         self.tab_widget.addTab(self.translation_tab, "Translation")
-        
-        # RPG Maker MV/MZ Tab
-        self.rpgmaker_tab = RPGMakerTab()
-        self.tab_widget.addTab(self.rpgmaker_tab, "RPG Maker MV/MZ")
+
+        # Unified Engine Configuration Tab
+        self.engine_config_tab = EngineConfigTab()
+        self.tab_widget.addTab(self.engine_config_tab, "Engine Config")
+        # Default to MV/MZ config on first load
+        try:
+            self.show_engine_tab("mvmz")
+        except Exception:
+            pass
+
+    def show_engine_tab(self, engine: str):
+        """Select engine config tab and display appropriate engine sub-widget."""
+        try:
+            # Switch to Engine Config tab
+            for i in range(self.tab_widget.count()):
+                if self.tab_widget.tabText(i) == "Engine Config":
+                    self.tab_widget.setCurrentIndex(i)
+                    break
+            self.engine_config_tab.show_engine(engine)
+        except Exception:
+            pass
         
     def on_config_changed(self):
         """Handle configuration changes."""

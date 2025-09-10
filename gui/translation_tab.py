@@ -441,7 +441,12 @@ except Exception as e:
 
 
 class TranslationTab(QWidget):
-    """Simple translation tab with file management and console log."""
+    """Simple translation tab with file management and console log.
+
+    Emits engine_changed(str) when the selected module implies a different
+    engine configuration tab should be displayed.
+    """
+    engine_changed = pyqtSignal(str)
     
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -471,13 +476,13 @@ class TranslationTab(QWidget):
     def setup_ui(self):
         """Set up the user interface."""
         layout = QVBoxLayout()
-        layout.setSpacing(15)  # Add consistent spacing
-        
+        layout.setSpacing(15)
+
         # Title
         title_label = QLabel("Translation")
         title_label.setStyleSheet("font-size: 16px; font-weight: bold; color: #007acc; margin-bottom: 5px;")
         layout.addWidget(title_label)
-        
+
         # Description
         desc_label = QLabel(
             "Manage your files and run translations. Add files to 'files' folder, select module, then click translate."
@@ -485,54 +490,42 @@ class TranslationTab(QWidget):
         desc_label.setWordWrap(True)
         desc_label.setStyleSheet("color: #cccccc; margin-bottom: 15px;")
         layout.addWidget(desc_label)
-        
-        # Module selection section
+
+        # Module selection
         module_group = QGroupBox("Translation Settings")
         module_group.setStyleSheet("QGroupBox { font-weight: bold; color: #007acc; margin-top: 10px; }")
         module_layout = QVBoxLayout()
-        
-        # Module selector
-        module_selector_layout = QHBoxLayout()
-        module_label = QLabel("Game Engine:")
-        module_selector_layout.addWidget(module_label)
-        
+        selector_layout = QHBoxLayout()
+        selector_layout.addWidget(QLabel("Game Engine:"))
         self.module_combo = QComboBox()
-        module_selector_layout.addWidget(self.module_combo)
-        
-        # Estimate checkbox
+        self.module_combo.currentTextChanged.connect(self._on_module_changed)
+        selector_layout.addWidget(self.module_combo)
         self.estimate_checkbox = QCheckBox("Estimate only (don't translate)")
-        module_selector_layout.addWidget(self.estimate_checkbox)
-        
-        module_layout.addLayout(module_selector_layout)
+        selector_layout.addWidget(self.estimate_checkbox)
+        module_layout.addLayout(selector_layout)
         module_group.setLayout(module_layout)
         layout.addWidget(module_group)
-        
-        # File management section at the top
-        file_management_splitter = QSplitter(Qt.Horizontal)
-        
-        # Input files
+
+        # File management splitter
+        file_splitter = QSplitter(Qt.Horizontal)
         input_widget = self.create_input_files_widget()
-        file_management_splitter.addWidget(input_widget)
-        
-        # Output files
+        file_splitter.addWidget(input_widget)
         output_widget = self.create_output_files_widget()
-        file_management_splitter.addWidget(output_widget)
-        
-        # Set proportional sizes instead of fixed pixel sizes
-        file_management_splitter.setStretchFactor(0, 1)
-        file_management_splitter.setStretchFactor(1, 1)
-        layout.addWidget(file_management_splitter)
-        
-        # Console log at the bottom
+        file_splitter.addWidget(output_widget)
+        file_splitter.setStretchFactor(0, 1)
+        file_splitter.setStretchFactor(1, 1)
+        layout.addWidget(file_splitter)
+
+        # Log
         log_widget = self.create_log_widget()
         layout.addWidget(log_widget)
 
+        # Modules list
         self.setup_module_list()
-        
-        # Translation button
+
+        # Buttons
         button_layout = QHBoxLayout()
         button_layout.addStretch()
-        
         self.translate_button = QPushButton("Start Translation")
         self.translate_button.clicked.connect(self.start_translation)
         self.translate_button.setStyleSheet("""
@@ -549,7 +542,6 @@ class TranslationTab(QWidget):
             }
         """)
         button_layout.addWidget(self.translate_button)
-        
         self.stop_button = QPushButton("Stop Translation")
         self.stop_button.clicked.connect(self.stop_translation)
         self.stop_button.setEnabled(False)
@@ -567,10 +559,8 @@ class TranslationTab(QWidget):
             }
         """)
         button_layout.addWidget(self.stop_button)
-        
         button_layout.addStretch()
         layout.addLayout(button_layout)
-        
         self.setLayout(layout)
         
     def setup_module_list(self):
@@ -617,6 +607,8 @@ class TranslationTab(QWidget):
             for module in self.modules:
                 extensions = ", ".join(module[1])
                 self.module_combo.addItem(f"{module[0]} ({extensions})")
+            if self.module_combo.count():
+                self._on_module_changed(self.module_combo.currentText())
                 
         except Exception as e:
             # Store error for later logging since log_display might not exist yet
@@ -624,6 +616,16 @@ class TranslationTab(QWidget):
             # Add a default option
             self.module_combo.addItem("RPG Maker MV/MZ (.json)")
             self.modules = [["RPG Maker MV/MZ", [".json"], None]]
+            self._on_module_changed(self.module_combo.currentText())
+
+    def _on_module_changed(self, text: str):
+        lowered = text.lower()
+        if "ace" in lowered:
+            self.engine_changed.emit("ace")
+        elif "wolf" in lowered and "wolf rpg 2" not in lowered:
+            self.engine_changed.emit("wolf")
+        elif "mv/mz" in lowered:
+            self.engine_changed.emit("mvmz")
         
     def create_input_files_widget(self):
         """Create the input files widget."""
