@@ -840,7 +840,7 @@ def searchNames(data, pbar, context, filename):
         newContext = "Reply with only the " + LANGUAGE + " translation of the RPG skill name"
 
     # Names
-    with open("translations.txt", "a", encoding="utf-8") as file:
+    with open("log/translations.txt", "a", encoding="utf-8") as file:
         file.write(f"\n#{context}\n")
 
     # --- Batching pass: collect all note texts for all note types ---
@@ -1049,7 +1049,7 @@ def searchNames(data, pbar, context, filename):
                         else:
                             # Get Text
                             if data[j]["name"] != "":
-                                with open("translations.txt", "a", encoding="utf-8") as file:
+                                with open("log/translations.txt", "a", encoding="utf-8") as file:
                                     file.write(f'{data[j]["name"]} ({translatedNameBatch[0]})\n')
                                 # Actors are excluded from vocab updates
                                     data[j]["name"] = translatedNameBatch[0]
@@ -1107,7 +1107,7 @@ def searchNames(data, pbar, context, filename):
                 # Set Data
                 if len(nameList) == len(translatedNameBatch):
                     j = k
-                    with open("translations.txt", "a", encoding="utf-8") as file:
+                    with open("log/translations.txt", "a", encoding="utf-8") as file:
                         while j < i:
                             # Empty Data
                             if data[j] is None or data[j]["name"] == "":
@@ -1161,7 +1161,7 @@ def searchNames(data, pbar, context, filename):
                             j += 1
                             continue
                         else:
-                            with open("translations.txt", "a", encoding="utf-8") as file:
+                            with open("log/translations.txt", "a", encoding="utf-8") as file:
                                 file.write(f'{data[j]["name"]} ({translatedNameBatch[0]})\n')
                             # Get Text
                             if vocab_enabled:

@@ -228,7 +228,7 @@ def translatePlugin(data, pbar, filename, translatedList):
     i = 0
 
     # Category
-    with open("translations.txt", "a+", encoding="utf-8") as tlFile:
+    with open("log/translations.txt", "a+", encoding="utf-8") as tlFile:
                 tlFile.write(f"\nCustom:\n")
                 tlFile.close()
 
@@ -291,7 +291,7 @@ def translatePlugin(data, pbar, filename, translatedList):
                             translatedText = re.sub(r"\n", re.escape(colorCode), translatedText)
 
                             # Set Data
-                            with open("translations.txt", "a+", encoding="utf-8") as tlFile:
+                            with open("log/translations.txt", "a+", encoding="utf-8") as tlFile:
                                 tlFile.write(f"{originalString} ({translatedText})\n")
                             data[i] = data[i].replace(originalString, translatedText)
                             saveCheckLines(data, filename)
