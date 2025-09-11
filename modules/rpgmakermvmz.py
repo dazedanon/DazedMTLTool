@@ -8,7 +8,6 @@ import time
 import traceback
 import openai
 import copy
-# Removed concurrent.futures usage for simplicity; running synchronously
 from pathlib import Path
 import shutil
 from colorama import Fore
@@ -32,7 +31,6 @@ PROMPT = Path("prompt.txt").read_text(encoding="utf-8")
 VOCAB = Path("vocab.txt").read_text(encoding="utf-8")
 THREADS = int(os.getenv("threads"))
 LOCK = threading.Lock()
-# Thread-local context to carry per-thread filename safely
 THREAD_CTX = threading.local()
 WIDTH = int(os.getenv("width"))
 LISTWIDTH = int(os.getenv("listWidth"))
@@ -40,13 +38,17 @@ NOTEWIDTH = int(os.getenv("noteWidth"))
 MAXHISTORY = 10
 ESTIMATE = ""
 TOKENS = [0, 0]
-NAMESLIST = []
 MISMATCH = []  # Lists files that throw a mismatch error (Length of GPT list response is wrong)
 PBAR = None
 FILENAME = None
 TIMETOTAL = 0  # Total Time Taken for all translations
-# Dedicated lock for vocab file updates to avoid races when translating multiple files concurrently
 VOCAB_LOCK = threading.Lock()
+
+# Speakers
+NAMESLIST = []
+SPEAKER_PARSE_MODE = False
+_speakerCache = {}
+_speakerCacheLock = threading.Lock()
 
 # Regex - Need to change this if you want to translate from/to other languages. Default is Japanese Regex
 LANGREGEX = r"[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]+"
@@ -2907,42 +2909,67 @@ def searchSystem(data, pbar):
     return totalTokens
 
 # Save some money and enter the character before translation
-def getSpeaker(speaker):
-    match speaker:
-        case "ファイン":
-            return ["Fine", [0, 0]]
-        case "":
-            return ["", [0, 0]]
-        case _:
-            # Find Speaker
-            for i in range(len(NAMESLIST)):
-                if speaker == NAMESLIST[i][0]:
-                    return [NAMESLIST[i][1], [0, 0]]
+def getSpeaker(speaker: str):
+    """Translate a speaker name with caching (thread-safe).
 
-            # Translate and Store Speaker
-            response = translateAI(
-                f"{speaker}",
-                "Reply with the " + LANGUAGE + " translation of the NPC name.",
-                False,
-            )
-            response[0] = response[0].title()
-            response[0] = response[0].replace("'S", "'s")
-            response[0] = response[0].replace("Speaker: ", "")
+    Behavior:
+      - Empty string returns immediately.
+      - Hard-coded JP -> EN fast map for known names.
+      - Uses a global dict `_speakerCache` protected by `_speakerCacheLock` to prevent duplicate API calls.
+      - Maintains legacy `NAMESLIST` (list of [jp, en]) for any downstream code expecting order; first insertion order preserved.
+      - In speaker-parse mode all speakers are still translated (non-speaker text skipped elsewhere).
+    Returns: [translated_name, [in_tokens, out_tokens]] like legacy translateAI results.
+    """
+    if speaker == "":
+        return ["", [0, 0]]
 
-            # Retry if name doesn't translate for some reason
-            if re.search(r"([a-zA-Z？?])", response[0]) == None:
-                response = translateAI(
-                    f"{speaker}",
-                    "Reply with the " + LANGUAGE + " translation of the NPC name.",
-                    False,
-                )
-                response[0] = response[0].title()
-                response[0] = response[0].replace("'S", "'s")
+    # Fast dictionary check under lock
+    with _speakerCacheLock:
+        cached = _speakerCache.get(speaker)
+        if cached is not None:
+            return [cached, [0, 0]]
 
-            speakerList = [speaker, response[0]]
-            NAMESLIST.append(speakerList)
-            return response
-    return [speaker, [0, 0]]
+    # Need to translate; mark context to force translation even in parse mode
+    try:
+        THREAD_CTX.in_speaker = True
+    except Exception:
+        pass
+    response = translateAI(
+        speaker,
+        "Reply with the " + LANGUAGE + " translation of the NPC name.",
+        False,
+    )
+    try:
+        THREAD_CTX.in_speaker = False
+    except Exception:
+        pass
+
+    translated = response[0].title().replace("'S", "'s").replace("Speaker: ", "")
+
+    # Retry if translation looks empty of latin / punctuation (heuristic)
+    if re.search(r"([a-zA-Z？?])", translated) is None:
+        try:
+            THREAD_CTX.in_speaker = True
+        except Exception:
+            pass
+        response = translateAI(
+            speaker,
+            "Reply with the " + LANGUAGE + " translation of the NPC name.",
+            False,
+        )
+        try:
+            THREAD_CTX.in_speaker = False
+        except Exception:
+            pass
+        translated = response[0].title().replace("'S", "'s")
+
+    # Store in cache (double-checked lock)
+    with _speakerCacheLock:
+        if speaker not in _speakerCache:
+            _speakerCache[speaker] = translated
+            NAMESLIST.append([speaker, translated])  # Maintain legacy structure & order
+
+    return [translated, response[1]]
 
 def translateAI(text, history, fullPromptFlag):
     """
@@ -2961,6 +2988,11 @@ def translateAI(text, history, fullPromptFlag):
     except Exception:
         tl_filename = FILENAME
 
+    # Speaker-parse mode: bypass all non-speaker translations to save tokens
+    if SPEAKER_PARSE_MODE and not getattr(THREAD_CTX, "in_speaker", False):
+        # Return original text unmodified with zero tokens
+        return [text, [0, 0]]
+
     return sharedtranslateAI(
         text=text,
         history=history,
@@ -2971,3 +3003,83 @@ def translateAI(text, history, fullPromptFlag):
         lock=LOCK,
         mismatchList=MISMATCH
     )
+
+def setSpeakerParseMode(flag: bool):
+    """Enable/disable speaker-only parse mode."""
+    global SPEAKER_PARSE_MODE
+    SPEAKER_PARSE_MODE = bool(flag)
+
+def finalizeSpeakerParse():
+    """Finalize speaker parse by writing a fresh # Speakers section.
+    Rules:
+      - Always REPLACE existing # Speakers section (not additive).
+      - Insert the section right after the # Game Characters section (before the next header, typically # Lewd Terms).
+      - If # Game Characters not found, prepend near top.
+    """
+    if not SPEAKER_PARSE_MODE:
+        return
+    try:
+        vocab_path = Path("vocab.txt")
+        if not vocab_path.exists():
+            return
+        content = vocab_path.read_text(encoding="utf-8")
+
+        # Collect and dedupe speakers preserving first-seen order
+        seen = set()
+        lines = []
+        for orig, tl in NAMESLIST:
+            if not orig or not tl:
+                continue
+            if orig in seen:
+                continue
+            seen.add(orig)
+            lines.append(f"{orig} ({tl})")
+        if not lines:
+            return
+
+        section_block = "# Speakers\n" + "\n".join(lines) + "\n\n"
+
+        # Remove any existing # Speakers section anywhere in file
+        speakers_pattern = re.compile(r"^[\t ]*#+\s*Speakers\s*$\r?\n.*?(?=^[\t ]*#|\Z)", re.MULTILINE | re.DOTALL)
+        content = speakers_pattern.sub("", content)
+
+        # Find # Game Characters section end (blank line after its block) and insert after it
+        game_char_header = re.compile(r"^[\t ]*#\s*Game Characters\s*$", re.MULTILINE)
+        match_gc = game_char_header.search(content)
+        insert_index = 0
+        if match_gc:
+            # Find end of that section: next header or double newline after header lines without starting '#'
+            # Simplest: locate first header after match_gc
+            subsequent_headers = list(re.finditer(r"^[\t ]*#\s+.*$", content[match_gc.end():], re.MULTILINE))
+            if subsequent_headers:
+                # Insert before the first header that isn't the same line (which should be # Lewd Terms)
+                first_header_rel = subsequent_headers[0].start()
+                # Walk backwards from that header start to remove leading blank lines for clean insertion
+                insert_index = match_gc.end() + first_header_rel
+            else:
+                insert_index = len(content)
+        else:
+            # Prepend below initial intro line if any
+            insert_index = 0
+
+        # Ensure exactly one blank line before section
+        before = content[:insert_index]
+        after = content[insert_index:]
+        if not before.endswith("\n\n"):
+            if not before.endswith("\n"):
+                before += "\n"
+            before += "\n"
+        new_content = before + section_block + after.lstrip("\n")
+
+        # Write atomically
+        tmp_path = vocab_path.with_suffix(vocab_path.suffix + f".{os.getpid()}.{threading.get_ident()}.tmp")
+        tmp_path.write_text(new_content, encoding="utf-8")
+        try:
+            os.replace(tmp_path, vocab_path)
+        except Exception:
+            try:
+                shutil.move(str(tmp_path), str(vocab_path))
+            except Exception:
+                pass
+    except Exception:
+        traceback.print_exc()
