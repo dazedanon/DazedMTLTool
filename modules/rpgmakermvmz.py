@@ -49,6 +49,7 @@ NAMESLIST = []
 SPEAKER_PARSE_MODE = False
 _speakerCache = {}
 _speakerCacheLock = threading.Lock()
+SPEAKER_COLLECTED = []  # Original speaker names collected during parse mode (untranslated)
 
 # Regex - Need to change this if you want to translate from/to other languages. Default is Japanese Regex
 LANGREGEX = r"[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]+"
@@ -2910,26 +2911,31 @@ def searchSystem(data, pbar):
 
 # Save some money and enter the character before translation
 def getSpeaker(speaker: str):
-    """Translate a speaker name with caching (thread-safe).
+    """Return (and possibly collect) speaker name.
 
-    Behavior:
-      - Empty string returns immediately.
-      - Hard-coded JP -> EN fast map for known names.
-      - Uses a global dict `_speakerCache` protected by `_speakerCacheLock` to prevent duplicate API calls.
-      - Maintains legacy `NAMESLIST` (list of [jp, en]) for any downstream code expecting order; first insertion order preserved.
-      - In speaker-parse mode all speakers are still translated (non-speaker text skipped elsewhere).
-    Returns: [translated_name, [in_tokens, out_tokens]] like legacy translateAI results.
+    Parse mode (SPEAKER_PARSE_MODE=True):
+      - Don't translate immediately. Collect unique originals in SPEAKER_COLLECTED.
+      - Return original so caller logic works; token cost is zero.
+
+    Normal mode: translate immediately with caching.
     """
     if speaker == "":
         return ["", [0, 0]]
 
-    # Fast dictionary check under lock
+    if SPEAKER_PARSE_MODE:
+        with _speakerCacheLock:
+            if speaker in _speakerCache:
+                return [_speakerCache[speaker], [0, 0]]
+            if speaker not in SPEAKER_COLLECTED:
+                SPEAKER_COLLECTED.append(speaker)
+        return [speaker, [0, 0]]
+
+    # Normal mode translation path
     with _speakerCacheLock:
         cached = _speakerCache.get(speaker)
         if cached is not None:
             return [cached, [0, 0]]
 
-    # Need to translate; mark context to force translation even in parse mode
     try:
         THREAD_CTX.in_speaker = True
     except Exception:
@@ -2943,10 +2949,8 @@ def getSpeaker(speaker: str):
         THREAD_CTX.in_speaker = False
     except Exception:
         pass
-
     translated = response[0].title().replace("'S", "'s").replace("Speaker: ", "")
 
-    # Retry if translation looks empty of latin / punctuation (heuristic)
     if re.search(r"([a-zA-Z？?])", translated) is None:
         try:
             THREAD_CTX.in_speaker = True
@@ -2963,12 +2967,10 @@ def getSpeaker(speaker: str):
             pass
         translated = response[0].title().replace("'S", "'s")
 
-    # Store in cache (double-checked lock)
     with _speakerCacheLock:
         if speaker not in _speakerCache:
             _speakerCache[speaker] = translated
-            NAMESLIST.append([speaker, translated])  # Maintain legacy structure & order
-
+            NAMESLIST.append([speaker, translated])
     return [translated, response[1]]
 
 def translateAI(text, history, fullPromptFlag):
@@ -3010,21 +3012,45 @@ def setSpeakerParseMode(flag: bool):
     SPEAKER_PARSE_MODE = bool(flag)
 
 def finalizeSpeakerParse():
-    """Finalize speaker parse by writing a fresh # Speakers section.
-    Rules:
-      - Always REPLACE existing # Speakers section (not additive).
-      - Insert the section right after the # Game Characters section (before the next header, typically # Lewd Terms).
-      - If # Game Characters not found, prepend near top.
-    """
+    """Batch translate collected speakers and write fresh # Speakers section."""
     if not SPEAKER_PARSE_MODE:
         return
     try:
+        # Step 1: batch translate any collected speakers not already translated
+        to_translate = []
+        with _speakerCacheLock:
+            for s in SPEAKER_COLLECTED:
+                if s not in _speakerCache and s != "":
+                    to_translate.append(s)
+        if to_translate:
+            try:
+                THREAD_CTX.in_speaker = True
+            except Exception:
+                pass
+            resp = translateAI(
+                to_translate,
+                "Reply with the " + LANGUAGE + " translation of the NPC name.",
+                True,
+            )
+            try:
+                THREAD_CTX.in_speaker = False
+            except Exception:
+                pass
+            tl_list = resp[0]
+            with _speakerCacheLock:
+                for orig, tl in zip(to_translate, tl_list):
+                    norm = tl.title().replace("'S", "'s").replace("Speaker: ", "")
+                    if re.search(r"([a-zA-Z？?])", norm) is None:
+                        norm = tl  # keep raw if heuristic fails
+                    if orig not in _speakerCache:
+                        _speakerCache[orig] = norm
+                        NAMESLIST.append([orig, norm])
+
         vocab_path = Path("vocab.txt")
         if not vocab_path.exists():
             return
         content = vocab_path.read_text(encoding="utf-8")
 
-        # Collect and dedupe speakers preserving first-seen order
         seen = set()
         lines = []
         for orig, tl in NAMESLIST:
@@ -3036,33 +3062,22 @@ def finalizeSpeakerParse():
             lines.append(f"{orig} ({tl})")
         if not lines:
             return
-
         section_block = "# Speakers\n" + "\n".join(lines) + "\n\n"
 
-        # Remove any existing # Speakers section anywhere in file
         speakers_pattern = re.compile(r"^[\t ]*#+\s*Speakers\s*$\r?\n.*?(?=^[\t ]*#|\Z)", re.MULTILINE | re.DOTALL)
         content = speakers_pattern.sub("", content)
 
-        # Find # Game Characters section end (blank line after its block) and insert after it
         game_char_header = re.compile(r"^[\t ]*#\s*Game Characters\s*$", re.MULTILINE)
         match_gc = game_char_header.search(content)
-        insert_index = 0
         if match_gc:
-            # Find end of that section: next header or double newline after header lines without starting '#'
-            # Simplest: locate first header after match_gc
             subsequent_headers = list(re.finditer(r"^[\t ]*#\s+.*$", content[match_gc.end():], re.MULTILINE))
             if subsequent_headers:
-                # Insert before the first header that isn't the same line (which should be # Lewd Terms)
-                first_header_rel = subsequent_headers[0].start()
-                # Walk backwards from that header start to remove leading blank lines for clean insertion
-                insert_index = match_gc.end() + first_header_rel
+                insert_index = match_gc.end() + subsequent_headers[0].start()
             else:
                 insert_index = len(content)
         else:
-            # Prepend below initial intro line if any
             insert_index = 0
 
-        # Ensure exactly one blank line before section
         before = content[:insert_index]
         after = content[insert_index:]
         if not before.endswith("\n\n"):
@@ -3071,7 +3086,6 @@ def finalizeSpeakerParse():
             before += "\n"
         new_content = before + section_block + after.lstrip("\n")
 
-        # Write atomically
         tmp_path = vocab_path.with_suffix(vocab_path.suffix + f".{os.getpid()}.{threading.get_ident()}.tmp")
         tmp_path.write_text(new_content, encoding="utf-8")
         try:
