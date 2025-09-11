@@ -32,7 +32,7 @@ if envMissing:
 these values using an .env file, for an example see .env.example"
     )
 
-from modules.rpgmakermvmz import handleMVMZ
+from modules.rpgmakermvmz import handleMVMZ, setSpeakerParseMode, finalizeSpeakerParse
 from modules.rpgmakerace import handleACE
 from modules.csv import handleCSV
 from modules.tyrano import handleTyrano
@@ -87,8 +87,9 @@ to worry about being charged twice. You can simply copy the file generated in /t
 
 def main():
     estimate = ""
+    speaker_parse = False  # Deferred until after engine select
     while estimate == "":
-        estimate = input("Select Translation or Cost Estimation:\n\n 1. Translate\n 2. Estimate\n")
+        estimate = input("Select Mode:\n\n 1. Translate\n 2. Estimate\n")
         match estimate:
             case "1":
                 estimate = False
@@ -116,20 +117,38 @@ def main():
 files to translate are in the /files folder and that you picked the right game engine."
     )
 
+    # If translating RPGMaker MV/MZ (index 0) prompt for speaker parse mode
+    if version == 0 and not estimate:
+        sub = ""
+        while sub == "":
+            sub = input("RPGMaker MV/MZ options:\n\n 1. Standard Translate\n 2. Parse Speakers (collect speaker names only)\n")
+            match sub:
+                case "1":
+                    speaker_parse = False
+                case "2":
+                    speaker_parse = True
+                case _:
+                    sub = ""
+        if speaker_parse:
+            setSpeakerParseMode(True)
+
     # Open File (Threads)
     with ThreadPoolExecutor(max_workers=THREADS) as executor:
-        futures = [
-            executor.submit(MODULES[version][2], filename, estimate)
-            for filename in os.listdir("files")
-            for m in MODULES[version][1]
-            if filename.endswith(m) and filename != ".gitkeep"
-        ]
+        futures = []
+        for filename in os.listdir("files"):
+            for m in MODULES[version][1]:
+                if filename.endswith(m) and filename != ".gitkeep":
+                    futures.append(executor.submit(MODULES[version][2], filename, estimate))
         for future in as_completed(futures):
             try:
                 totalCost = future.result()
             except Exception as e:
                 tracebackLineNo = str(traceback.extract_tb(sys.exc_info()[2])[-1].lineno)
                 tqdm.write(Fore.RED + str(e) + "|" + tracebackLineNo + Fore.RESET)
+
+    # Finalize speaker parse mode by writing collected speakers to vocab
+    if speaker_parse:
+        finalizeSpeakerParse()
 
     # Delete Tmp Files
     if os.path.isfile("csv.tmp"):
