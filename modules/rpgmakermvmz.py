@@ -3058,6 +3058,26 @@ def finalizeSpeakerParse():
                 THREAD_CTX.in_speaker = False
             except Exception:
                 pass
+            # Record token usage so it appears in the TOTAL string
+            try:
+                with LOCK:
+                    TOKENS[0] += resp[1][0]
+                    TOKENS[1] += resp[1][1]
+            except Exception:
+                pass
+            # Emit a one-time summary line for speaker translation using the same format
+            try:
+                cost = calculateCost(resp[1][0], resp[1][1], MODEL)
+                totalTokenstring = (
+                    Fore.YELLOW + "[Input: " + str(resp[1][0]) + "]"
+                    "[Output: "
+                    + str(resp[1][1])
+                    + "]" "[Cost: ${:,.4f}".format(cost)
+                    + "]"
+                )
+                tqdm.write("Speakers: " + totalTokenstring + Fore.GREEN + " \u2713 " + Fore.RESET)
+            except Exception:
+                pass
             tl_list = resp[0]
             with _speakerCacheLock:
                 for orig, tl in zip(to_translate, tl_list):
