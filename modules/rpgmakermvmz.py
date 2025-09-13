@@ -128,7 +128,8 @@ def handleMVMZ(filename, estimate):
     translatedData = openFiles(filename)
 
     # Translate
-    if not estimate:
+    # Skip writing output file during speaker-parse mode
+    if not estimate and not SPEAKER_PARSE_MODE:
         try:
             with open("translated/" + filename, "w", encoding="utf-8", newline="\n") as outFile:
                 json.dump(translatedData[0], outFile, ensure_ascii=False, indent=4)
@@ -254,7 +255,8 @@ def saveProgress(data, filename):
     Skips when running in estimate mode.
     """
     try:
-        if ESTIMATE:
+        # Also skip progress saves during speaker-parse mode
+        if ESTIMATE or SPEAKER_PARSE_MODE:
             return
         os.makedirs("translated", exist_ok=True)
         # Use a unique temp file name to avoid collisions across threads/processes
@@ -316,6 +318,9 @@ def checkSave(data, filename, tokens):
     tokens should be a [input_tokens, output_tokens] pair returned by a search/translate call.
     """
     try:
+        # Never save progress to translated/ during speaker-parse mode
+        if SPEAKER_PARSE_MODE:
+            return
         if not tokens:
             return
         if (isinstance(tokens, (list, tuple)) and len(tokens) >= 2 and (tokens[0] or tokens[1])):
@@ -1778,6 +1783,7 @@ def searchCodes(page, pbar, jobList, filename):
                     "TextPicture": ("text", None),
                     "TRP_SkitMZ": ("name", None),
                     "LogWindow": ("text", None),
+                    "BattleLogOutput": ("message", None),
                 }
 
                 for key, (argVar, font) in headerMappings.items():
