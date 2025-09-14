@@ -213,8 +213,8 @@ def translateRegex(data, filename, translatedList):
 
     while i < len(data):
         voice = False
-        lineRegexText = r'"profile": "(.*)"'
-        lineRegexSpeaker = r"◆A.+?◆(.+)"
+        lineRegexText = r'●(?:「|　|（)(.+?)(?:[」）]|$)'
+        lineRegexSpeaker = r"●.+●([^　「（].+)"
         choiceRegex = r"\$menu_item.+?,(.*?),"
         titleRegex = r"title\s'(.*)'$"
         speaker = ""
@@ -376,7 +376,7 @@ def translateRegex(data, filename, translatedList):
                         MISMATCH.append(FILENAME)
 
         # Set Strings
-    translateRegex(data, filename, [stringListTL, choiceListTL])
+        translateRegex(data, filename, [stringListTL, choiceListTL])
     return tokens
 
 # Save some money and enter the character before translation

@@ -297,7 +297,7 @@ def translateTxt(data, filename, translatedList):
                         MISMATCH.append(FILENAME)
 
         # Set Strings
-    translateTxt(data, filename, [stringListTL, choiceListTL])
+        translateTxt(data, filename, [stringListTL, choiceListTL])
     return tokens
 
 # Save some money and enter the character before translation
