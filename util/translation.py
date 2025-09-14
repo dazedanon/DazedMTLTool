@@ -95,6 +95,13 @@ def getPricingConfig(model):
             "batchSize": 10,
             "frequencyPenalty": 0.2
         }
+    elif "gpt-4.1-mini" in model:
+        return {
+            "inputAPICost": 0.40,
+            "outputAPICost": 1.60,
+            "batchSize": 30,
+            "frequencyPenalty": 0.05
+        }
     elif "gpt-4.1" in model:
         return {
             "inputAPICost": 2.00,
