@@ -213,7 +213,7 @@ def translateRegex(data, filename, translatedList):
 
     while i < len(data):
         voice = False
-        lineRegexText = r'●(?:「|　|（)(.+?)(?:[」）]|$)'
+        lineRegexText = r'●(?:「|　|（)+(.+?)(?:[」）]|$)+'
         lineRegexSpeaker = r"●.+●([^　「（].+)"
         choiceRegex = r"\$menu_item.+?,(.*?),"
         titleRegex = r"title\s'(.*)'$"
