@@ -105,10 +105,6 @@ def handleKirikiri(filename, estimate):
             return totalString
 
     else:
-        # We no longer keep the destination file open during translation because
-        # incremental progress saves (save_progress_lines) need to atomically
-        # replace the file on Windows. Holding an open handle prevents os.replace
-        # from succeeding (WinError 5 Access is denied).
         try:
             start = time.time()
             translatedData = openFiles(filename)
