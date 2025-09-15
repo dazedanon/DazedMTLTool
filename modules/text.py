@@ -249,7 +249,7 @@ def translateTxt(data, filename, translatedList):
                         stringList = None
 
                     # Remove speaker
-                    translatedText = re.sub(r"^\[?(.+?)\]?\s?[|:]\s?", "", translatedText)
+                    translatedText = re.sub(r"(^\[.+?\]\s?[|:]\s?)", "", translatedText)
 
                     # # Textwrap
                     # translatedText = dazedwrap.wrapText(translatedText, width=WIDTH)
