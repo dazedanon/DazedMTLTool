@@ -455,16 +455,22 @@ def parseMap(data, filename):
     # Get total for progress bar (sum of all command list lengths across pages)
     for event in events:
         if event:
-            if "<LB>" in event["note"]:
-                response = translateAI(
-                    event["name"],
-                    "Reply with only the " + LANGUAGE + " translation of the RPG location name",
-                    False,
-                )
-                totalTokens[0] += response[1][0]
-                totalTokens[1] += response[1][1]
-                event["name"] = response[0].replace('"', "")
-            if "<msgText:" in event["note"]:
+            note_val = event.get("note") or ""
+            if not isinstance(note_val, str):
+                note_val = str(note_val) if note_val is not None else ""
+            if "<LB>" in note_val:
+                # Translate event name when flagged with <LB>
+                name_val = event.get("name") or ""
+                if isinstance(name_val, str) and name_val:
+                    response = translateAI(
+                        name_val,
+                        "Reply with only the " + LANGUAGE + " translation of the RPG location name",
+                        False,
+                    )
+                    totalTokens[0] += response[1][0]
+                    totalTokens[1] += response[1][1]
+                    event["name"] = response[0].replace('"', "")
+            if "<msgText:" in note_val:
                 tokensResponse = translateNote(event, r"<msgText:\"(.*?)\">", False)
                 totalTokens[0] += tokensResponse[0]
                 totalTokens[1] += tokensResponse[1]
@@ -476,33 +482,27 @@ def parseMap(data, filename):
         pbar.desc = filename
         for event in events:
             if event is not None:
+                # Normalize note to a safe string
+                note_val = event.get("note") or ""
+                if not isinstance(note_val, str):
+                    note_val = str(note_val) if note_val is not None else ""
+
                 # This translates ID of events. (May break the game)
-                if "<namePop:" in event["note"]:
-                    response = translateNoteOmitSpace(event, r"<namePop:\s?([\w一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]+)")
-                    totalTokens[0] += response[0]
-                    totalTokens[1] += response[1]
-                if "<LB:" in event["note"]:
-                    for event in events:
-                        if event is not None:
-                            # This translates ID of events. (May break the game)
-                            if "<namePop:" in event["note"]:
-                                response = translateNoteOmitSpace(event, r"<namePop:\s?([\w一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]+)")
-                                totalTokens[0] += response[0]
-                                totalTokens[1] += response[1]
-                            if "<LB:" in event["note"]:
-                                response = translateNoteOmitSpace(event, r"<LB:(.*?)\s?>.*")
-                                totalTokens[0] += response[0]
-                                totalTokens[1] += response[1]
-                            if "<dn:" in event["note"]:
-                                response = translateNoteOmitSpace(event, r"<dn:\s*(.*)>.*")
-                                totalTokens[0] += response[0]
-                                totalTokens[1] += response[1]
-                    totalTokens[0] += response[0]
-                    totalTokens[1] += response[1]
-                if "<dn:" in event["note"]:
-                    response = translateNoteOmitSpace(event, r"<dn:\s*(.*)>.*")
-                    totalTokens[0] += response[0]
-                    totalTokens[1] += response[1]
+                if "<namePop:" in note_val:
+                    tok = translateNoteOmitSpace(event, r"<namePop:\s?([\w一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]+)")
+                    if tok and isinstance(tok, (list, tuple)):
+                        totalTokens[0] += tok[0]
+                        totalTokens[1] += tok[1]
+                if "<LB:" in note_val:
+                    tok = translateNoteOmitSpace(event, r"<LB:(.*?)\s?>.*")
+                    if tok and isinstance(tok, (list, tuple)):
+                        totalTokens[0] += tok[0]
+                        totalTokens[1] += tok[1]
+                if "<dn:" in note_val:
+                    tok = translateNoteOmitSpace(event, r"<dn:\s*(.*)>.*")
+                    if tok and isinstance(tok, (list, tuple)):
+                        totalTokens[0] += tok[0]
+                        totalTokens[1] += tok[1]
 
                 for page in event["pages"]:
                     if page is not None:
@@ -522,7 +522,9 @@ def parseMap(data, filename):
 
 def translateNote(event, regex, wordwrap=False):
     # Regex String
-    jaString = event["note"]
+    jaString = event.get("note") or ""
+    if not isinstance(jaString, str):
+        jaString = str(jaString) if jaString is not None else ""
     match = re.findall(regex, jaString, re.DOTALL)
     if match:
         tokens = [0, 0]
@@ -559,7 +561,9 @@ def translateNote(event, regex, wordwrap=False):
 # For notes that can't have spaces.
 def translateNoteOmitSpace(event, regex):
     # Regex that only matches text inside LB.
-    jaString = event["note"]
+    jaString = event.get("note") or ""
+    if not isinstance(jaString, str):
+        jaString = str(jaString) if jaString is not None else ""
 
     match = re.findall(regex, jaString, re.DOTALL)
     if match:
@@ -573,12 +577,23 @@ def translateNoteOmitSpace(event, regex):
             "Reply with the " + LANGUAGE + " translation of the location name.",
             False,
         )
-        translatedText = response[0]
+        # Defend against unexpected response shapes
+        try:
+            translatedText = response[0]
+            token_info = response[1] if isinstance(response, (list, tuple)) and len(response) > 1 else [0, 0]
+            if not (isinstance(token_info, (list, tuple)) and len(token_info) >= 2):
+                token_info = [0, 0]
+        except Exception:
+            translatedText = str(response) if response is not None else ""
+            token_info = [0, 0]
 
         translatedText = translatedText.replace('"', "")
         translatedText = translatedText.replace(" ", "_")
-        event["note"] = event["note"].replace(oldJAString, translatedText)
-        return response[1]
+        # Safely update the note if it exists and is a string
+        current_note = event.get("note")
+        if isinstance(current_note, str):
+            event["note"] = current_note.replace(oldJAString, translatedText)
+        return token_info
     return [0, 0]
 
 
