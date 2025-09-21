@@ -89,6 +89,8 @@ BRFLAG = False
 FIXTEXTWRAP = True
 # IGNORETLTEXT: Skip Translated Text.
 IGNORETLTEXT = False
+# TLSYSTEMVARIABLES: Translate System Variables. (Optional but sometimes necessary. Can break stuff.)
+TLSYSTEMVARIABLES = True
 
 # Dialogue / Scroll / Choices (Main Codes)
 CODE101 = True
@@ -892,6 +894,7 @@ def searchNames(data, pbar, context, filename):
         (r"<desc\d:(.*?)>", False),
         (r"<拡張説明:(.+?)>", False),
         (r"<STS DESC>\n(.+?)\n<", False),
+        (r"text:(.+)>", False),
     ]
     # For each entry, collect all note matches
     for idx, entry in enumerate(data):
@@ -1401,23 +1404,33 @@ def searchCodes(page, pbar, jobList, filename):
 
                 # Replace Speaker
                 if len(speakerList) != 0 and codeList[i + 1]["code"] in [401, 405, -1]:
-                    # Translate all bracketed names and replace them in order
-                    jaStringUpdated = jaString
-                    for idx, sp in enumerate(speakerList):
-                        response = getSpeaker(sp)
-                        tled = response[0]
+                    # Single
+                    if len(speakerList) == 1:
+                        response = getSpeaker(speakerList[0])
+                        speaker = response[0]
                         totalTokens[0] += response[1][0]
                         totalTokens[1] += response[1][1]
-                        if not setData:
-                            pattern = r"【\s*" + re.escape(sp) + r"\s*】"
-                            jaStringUpdated = re.sub(pattern, lambda m: f"【{tled}】", jaStringUpdated)
-                        # Back-compat: set 'speaker' to the first translated name
-                        if idx == 0:
-                            speaker = tled
+
+                    # Multiple (Brackets)
+                    elif len(speakerList) > 1:
+                        jaStringUpdated = jaString
+                        for idx, sp in enumerate(speakerList):
+                            response = getSpeaker(sp)
+                            tled = response[0]
+                            totalTokens[0] += response[1][0]
+                            totalTokens[1] += response[1][1]
+                            if not setData:
+                                pattern = r"【\s*" + re.escape(sp) + r"\s*】"
+                                jaStringUpdated = re.sub(pattern, lambda m: f"【{tled}】", jaStringUpdated)
+                            # Back-compat: set 'speaker' to the first translated name
+                            if idx == 0:
+                                speaker = tled
 
                     # Set Data
-                    if not setData:
+                    if not setData and len(speakerList) > 1:
                         codeList[i]["parameters"][0] = nametag + jaStringUpdated
+                    elif not setData and len(speakerList) == 1:
+                        codeList[i]["parameters"][0] = nametag + jaString.replace(speakerList[0], speaker)
                     nametag = ""
 
                     # Iterate to next string
@@ -1799,6 +1812,7 @@ def searchCodes(page, pbar, jobList, filename):
                     "TRP_SkitMZ": ("name", None),
                     "LogWindow": ("text", None),
                     "BattleLogOutput": ("message", None),
+                    "TorigoyaMZ_NotifyMessage_CommandMessage": ("message", None),
                 }
 
                 for key, (argVar, font) in headerMappings.items():
@@ -2913,12 +2927,29 @@ def searchSystem(data, pbar):
         pbar.update(len(data["equipTypes"]))
         pbar.refresh()
 
-    # # Variables (Optional ususally)
-    # for i in range(len(data['variables'])):
-    #     response = translateAI(data['variables'][i], 'Reply with only the '+ LANGUAGE +' translation of the title', False)
-    #     totalTokens[0] += response[1][0]
-    #     totalTokens[1] += response[1][1]
-    #     data['variables'][i] = response[0].replace('\"', '').strip()
+    # Variables (Optional usually) — batch translate to reduce calls
+    if TLSYSTEMVARIABLES and "variables" in data and isinstance(data["variables"], list):
+        var_indices = []
+        var_values = []
+        for idx, val in enumerate(data["variables"]):
+            if isinstance(val, str) and val.strip():
+                var_indices.append(idx)
+                var_values.append(val)
+        if var_values:
+            response = translateAI(
+                var_values,
+                'Reply with only the ' + LANGUAGE + ' translation of the title',
+                True,
+            )
+            totalTokens[0] += response[1][0]
+            totalTokens[1] += response[1][1]
+            tl_list = response[0]
+            # Assign back translations to corresponding indices
+            for n, idx in enumerate(var_indices[: len(tl_list)]):
+                data["variables"][idx] = tl_list[n].replace('"', '').strip()
+            if pbar is not None:
+                pbar.update(len(var_values))
+                pbar.refresh()
 
     # Messages
     messages = data["terms"]["messages"]
