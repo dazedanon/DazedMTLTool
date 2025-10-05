@@ -90,7 +90,7 @@ FIXTEXTWRAP = True
 # IGNORETLTEXT: Skip Translated Text.
 IGNORETLTEXT = False
 # TLSYSTEMVARIABLES: Translate System Variables. (Optional but sometimes necessary. Can break stuff.)
-TLSYSTEMVARIABLES = True
+TLSYSTEMVARIABLES = False
 
 # Dialogue / Scroll / Choices (Main Codes)
 CODE101 = True
@@ -1389,8 +1389,11 @@ def searchCodes(page, pbar, jobList, filename):
                             r"^((?:[\\]+[^cCnNiIkKvVSs{}]+?\[[\d\w\W]+?\]?\])+)",
                             nextString,
                         )
+                        formatMatch = re.search(r"(^[\\]+[\W]+?)", nextString)
                         if ffMatchNS != None:
                             nextString = nextString.replace(ffMatchNS.group(1), "")
+                        if formatMatch != None:
+                            nextString = nextString.replace(formatMatch.group(1), "")
 
                         if nextString and nextString[0] in [
                             "「",
@@ -1813,6 +1816,7 @@ def searchCodes(page, pbar, jobList, filename):
                     "LogWindow": ("text", None),
                     "BattleLogOutput": ("message", None),
                     "TorigoyaMZ_NotifyMessage_CommandMessage": ("message", None),
+                    "NUUN_SaveScreen": ("AnyName", None),
                 }
 
                 for key, (argVar, font) in headerMappings.items():
