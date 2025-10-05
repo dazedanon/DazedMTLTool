@@ -215,8 +215,20 @@ def translateTxt(data, filename, translatedList):
     global LOCK, ESTIMATE, FILENAME, PBAR, MISMATCH
     i = 0
 
+    # Regex
+    lineTextRegex = r"(?:^\[.+?\]:)?(.+)"
+    speakerTextRegex = r"^\[(.+?)\]"
+
     while i < len(data):
-        lineTextRegex = r"(.+)"
+        # Speaker
+        match = re.search(speakerTextRegex, data[i])
+        if match:
+            # Get Speaker
+            speakerData = getSpeaker(match.group(1))
+            speaker = speakerData[0]
+            tokens[0] += speakerData[1][0]
+            tokens[1] += speakerData[1][1]
+            data[i] = data[i].replace(match.group(1), speaker)
 
         # Dialogue
         match = re.search(lineTextRegex, data[i])
