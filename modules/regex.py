@@ -214,7 +214,7 @@ def translateRegex(data, filename, translatedList):
     while i < len(data):
         voice = False
         lineRegexText = r'●(?:「|　|（)+(.+?)(?:[」）]|$)+'
-        lineRegexSpeaker = r"●.+●([^　「（].+)"
+        lineRegexSpeaker = r"text\(\"(.+)\"\)"
         choiceRegex = r"\$menu_item.+?,(.*?),"
         titleRegex = r"title\s'(.*)'$"
         speaker = ""
@@ -240,41 +240,34 @@ def translateRegex(data, filename, translatedList):
         # Speaker
         match = re.search(lineRegexSpeaker, data[i])
         if match:
-            if match.group(1):
-                if match.group(1) == "主人公":
-                    speaker = "Protagonist"
-                else:
-                    response = getSpeaker(match.group(1))
-                    speaker = response[0]
-                    tokens[0] += response[1][0]
-                    tokens[1] += response[1][1]
-                if translatedList:
-                    data[i] = data[i].replace(match.group(1), speaker)
-                    save_progress_lines(data, filename)
-                i += 3
-            else:
-                speaker = None
-        elif data[i] == "Protagonist\n":
-            speaker = "Protagonist"
-            i += 1
+            response = getSpeaker(match.group(1))
+            speaker = response[0]
+            tokens[0] += response[1][0]
+            tokens[1] += response[1][1] 
+            data[i] = data[i].replace(match.group(1), speaker)
 
         # Dialogue
-        match = re.search(lineRegexText, data[i])
-        jaString = None
-        if match and match.group(0).replace("\u3000", "") != '\n':
-            # Set String
-            jaString = match.group(1)
-
-            # Save Original String
-            originalString = jaString
+        # Grab multi-line text
+        if "\\text" in data[i].strip():
+            lines = []
+            i += 1                              
 
             # Pass 1
             if not translatedList:
+                while "\\endtext" not in data[i].strip():
+                    lines.append(data[i])
+                    i += 1
+                if lines:
+                    jaString = "".join(lines).replace("\n", "")  
+
+                # Save Original String
+                originalString = jaString
+
                 # Strip Spaces
                 jaString = jaString.strip()
 
                 # Remove Textwrap
-                jaString = jaString.replace('\\n', ' ')
+                jaString = jaString.replace('\n', ' ')
 
                 if jaString:
                     if speaker:
@@ -305,13 +298,12 @@ def translateRegex(data, filename, translatedList):
                     translatedText = translatedText.replace(">", ")")
 
                     # Textwrap
-                    translatedText = dazedwrap.wrapText(translatedText, width=WIDTH).replace("\n", "\\n")   
+                    translatedText = dazedwrap.wrapText(translatedText, width=WIDTH)   
                     
                     # Set Data
-                    if "「" in data[i-1] and "」" not in translatedText:
-                        data[i] = data[i].replace(originalString, f"「{translatedText}」")
-                    else:
-                        data[i] = data[i].replace(originalString, f"{translatedText}")
+                    while "\\endtext" not in data[i].strip():
+                        del data[i]
+                    data.insert(i, f"{translatedText}\n")
                     save_progress_lines(data, filename)
 
         # Choices

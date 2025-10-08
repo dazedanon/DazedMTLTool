@@ -101,17 +101,21 @@ def handlePlugin(filename, estimate):
 
     else:
         try:
-            with open("translated/" + filename, "w", encoding="utf_8", errors="ignore") as outFile:
-                start = time.time()
-                translatedData = openFiles(filename)
+            # Perform translation first; incremental progress writes happen during translation.
+            # We no longer keep the destination file open simultaneously to avoid Windows locking issues
+            # during atomic os.replace operations inside save_progress_lines.
+            start = time.time()
+            translatedData = openFiles(filename)
 
-                # Print Result
-                end = time.time()
-                outFile.writelines(translatedData[0])
-                tqdm.write(getResultString(translatedData, end - start, filename))
-                with LOCK:
-                    TOKENS[0] += translatedData[1][0]
-                    TOKENS[1] += translatedData[1][1]
+            # Ensure final state is flushed (in case no incremental writes occurred for some reason).
+            save_progress_lines(translatedData[0], filename)
+
+            # Print Result
+            end = time.time()
+            tqdm.write(getResultString(translatedData, end - start, filename))
+            with LOCK:
+                TOKENS[0] += translatedData[1][0]
+                TOKENS[1] += translatedData[1][1]
         except Exception:
             traceback.print_exc()
             return "Fail"
@@ -184,18 +188,31 @@ def save_progress_lines(lines, filename, encoding="utf_8"):
     try:
         if ESTIMATE:
             return
+        global LOCK
         os.makedirs("translated", exist_ok=True)
-        tmp_fd, tmp_path = tempfile.mkstemp(prefix=f"{filename}.", suffix=".tmp", dir="translated")
-        try:
-            with os.fdopen(tmp_fd, "w", encoding=encoding, newline="\n", errors="ignore") as tmp_file:
-                tmp_file.writelines(lines)
-            os.replace(tmp_path, os.path.join("translated", filename))
-        finally:
-            if os.path.exists(tmp_path):
-                try:
-                    os.remove(tmp_path)
-                except OSError:
-                    pass
+        # Use a single lock to prevent concurrent replace attempts on Windows (which causes PermissionError)
+        with LOCK:
+            tmp_fd, tmp_path = tempfile.mkstemp(prefix=f"{filename}.", suffix=".tmp", dir="translated")
+            try:
+                with os.fdopen(tmp_fd, "w", encoding=encoding, newline="\n", errors="ignore") as tmp_file:
+                    tmp_file.writelines(lines)
+
+                dest_path = os.path.join("translated", filename)
+                # Retry a few times in case another process/thread still has the file open momentarily.
+                for attempt in range(5):
+                    try:
+                        os.replace(tmp_path, dest_path)
+                        break
+                    except PermissionError:
+                        if attempt == 4:
+                            raise
+                        time.sleep(0.1 * (attempt + 1))
+            finally:
+                if os.path.exists(tmp_path):
+                    try:
+                        os.remove(tmp_path)
+                    except OSError:
+                        pass
     except Exception:
         traceback.print_exc()
 
@@ -235,37 +252,44 @@ def translatePlugin(data, pbar, filename, translatedList):
     while i < len(data):
         voice = False
         speaker = ""
-        newline = r"\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\n"
-        colorCode = r"\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\c"
 
         # Custom
         # Useful Regex's
         # r'"Text[\\]+":[\\]+"(.+?)[\\]+",'
         # r'"HelpText[\\]+":[\\]+"(.+?)[\\]+",'
         # r"this.drawTextEx\(\\'(.+?)\',"
-        regex = r"this.drawTextEx\(\\'(.+?)\',"
+        regex = r'Text[\\]+":[\\]+"(.*?)[\\]+?[\\]'
         matchList = re.findall(regex, data[i])
         if len(matchList) > 0:
             for match in matchList:
                 # Save Original String
                 jaString = match
                 originalString = jaString
+                newline = None
+                colorCode = None
+
+                # Make sure it contains Japanese
+                if not re.search(LANGREGEX, jaString):
+                    continue
 
                 # Make sure didn't grab \\
                 if re.search(r"^[\\]+$", jaString):
-                    i += 1
                     continue
 
                 # Replace \n and \c
-                jaString = re.sub(r"\\+n", r"\\n", jaString)
-                jaString = re.sub(r"\\+C", r"\\C", jaString)
+                if re.search(r"\\+n", jaString):
+                    newline = re.search(r"\\+n", jaString).group(0)
+                    jaString = re.sub(r"\\+n", r"\\n", jaString)
+                if re.search(r"\\+C", jaString):
+                    colorCode = re.search(r"\\+C", jaString).group(0)
+                    jaString = re.sub(r"\\+C", r"\\C", jaString)
 
                 # Remove any textwrap
                 jaString = jaString.replace("\\n", " ")
 
                 if jaString.replace("\u3000", "") and jaString:
                     # Pass 1
-                    if setData == False:
+                    if setData == False and jaString.strip():
                         custom.append(jaString.strip())
 
                     # Pass 2
@@ -283,12 +307,13 @@ def translatePlugin(data, pbar, filename, translatedList):
                             translatedText = re.sub(r"([^\\'])'", r"\1՚", translatedText)
                             translatedText = re.sub(r"([^\\'])\"", r"\1՚", translatedText)
 
-                            # Textwrap
-                            translatedText = dazedwrap.wrapText(translatedText, WIDTH)
-
                             # Replace \n and \c
-                            translatedText = re.sub(r"\n", re.escape(newline), translatedText)
-                            translatedText = re.sub(r"\n", re.escape(colorCode), translatedText)
+                            if newline:
+                                # Textwrap
+                                # translatedText = dazedwrap.wrapText(translatedText, WIDTH)
+                                translatedText = re.sub(r"\n", re.escape(newline), translatedText)
+                            if colorCode:
+                                translatedText = re.sub(r"\n", re.escape(colorCode), translatedText)
 
                             # Set Data
                             with open("log/translations.txt", "a+", encoding="utf-8") as tlFile:
