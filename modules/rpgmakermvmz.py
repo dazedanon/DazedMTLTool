@@ -52,7 +52,7 @@ _speakerCacheLock = threading.Lock()
 SPEAKER_COLLECTED = []  # Original speaker names collected during parse mode (untranslated)
 
 # Regex - Need to change this if you want to translate from/to other languages. Default is Japanese Regex
-LANGREGEX = r"[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]+"
+LANGREGEX = r"[\u3000-\u303F\u3040-\u309F\u30A0-\u30FF\u31F0-\u31FF\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF\uFF00-\uFFEF]+"
 
 # Get pricing configuration based on the model
 PRICING_CONFIG = getPricingConfig(MODEL)
@@ -1450,6 +1450,7 @@ def searchCodes(page, pbar, jobList, filename):
                 jaString = jaString.replace("･", ".")
                 jaString = jaString.replace("「", '"')
                 jaString = jaString.replace("」", '"')
+                jaString = jaString.replace("～", '~')
 
                 # Check if there is text to translate
                 if not re.search(r"\w+", jaString):

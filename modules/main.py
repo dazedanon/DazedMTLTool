@@ -75,11 +75,8 @@ MODULES = [
 
 # Info Message
 tqdm.write(
-    Fore.LIGHTYELLOW_EX
-    + "WARNING: Once the translation starts do not close it unless you want to lose your \
-translated data. If a file fails or gets stuck, translated lines will remain translated so you don't have \
-to worry about being charged twice. You can simply copy the file generated in /translations back over to \
-/files and start the script again. It will skip over any translated text."
+    Fore.CYAN
+    + "-Dazed MTL Tool -"
     + Fore.RESET,
     end="\n\n",
 )
