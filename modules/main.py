@@ -48,6 +48,7 @@ from modules.renpy import handleRenpy
 from modules.unity import handleUnity
 from modules.images import handleImages
 from modules.rpgmakerplugin import handlePlugin
+from modules.srpg import handleSRPG
 
 # For GPT4 rate limit will be hit if you have more than 1 thread.
 # 1 Thread for each file. Controls how many files are worked on at once.
@@ -70,6 +71,7 @@ MODULES = [
     ["Text", ["txt", "srt"], handleText],
     ["Renpy", ["rpy"], handleRenpy],
     ["Unity", ["txt"], handleUnity],
+    ["SRPG Studio", ["json"], handleSRPG],
     ["Images", [""], handleImages],
 ]
 
