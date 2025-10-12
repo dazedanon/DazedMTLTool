@@ -258,7 +258,8 @@ def translatePlugin(data, pbar, filename, translatedList):
         # r'"Text[\\]+":[\\]+"(.+?)[\\]+",'
         # r'"HelpText[\\]+":[\\]+"(.+?)[\\]+",'
         # r"this.drawTextEx\(\\'(.+?)\',"
-        regex = r'Text[\\]+":[\\]+"(.*?)[\\]+?[\\]'
+        # r'txtSubject.+?"(.+)'
+        regex = r'txtSubject.+?"(.+)"'
         matchList = re.findall(regex, data[i])
         if len(matchList) > 0:
             for match in matchList:

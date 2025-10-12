@@ -52,7 +52,7 @@ _speakerCacheLock = threading.Lock()
 SPEAKER_COLLECTED = []  # Original speaker names collected during parse mode (untranslated)
 
 # Regex - Need to change this if you want to translate from/to other languages. Default is Japanese Regex
-LANGREGEX = r"[\u3000-\u303F\u3040-\u309F\u30A0-\u30FF\u31F0-\u31FF\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF\uFF00-\uFFEF]+"
+LANGREGEX = r"[\u3000-\u303F\u3040-\u309F\u30A0-\u30FF\u31F0-\u31FF\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF\uFF00-\uFF5D\uFF5F-\uFFEF]+"
 
 # Get pricing configuration based on the model
 PRICING_CONFIG = getPricingConfig(MODEL)
@@ -1444,14 +1444,6 @@ def searchCodes(page, pbar, jobList, filename):
                         j = i
                     jaString = codeList[i]["parameters"][0]
 
-                # Replace Symbols
-                jaString = jaString.replace("…", "...")
-                jaString = jaString.replace("。", ".")
-                jaString = jaString.replace("･", ".")
-                jaString = jaString.replace("「", '"')
-                jaString = jaString.replace("」", '"')
-                jaString = jaString.replace("～", '~')
-
                 # Check if there is text to translate
                 if not re.search(r"\w+", jaString):
                     i += 1
@@ -2146,7 +2138,7 @@ def searchCodes(page, pbar, jobList, filename):
 
                 # Translate
                 if "info:" in jaString:
-                    regex = r"info:(.*)"
+                    regex = r"info:([^,]+)"
                 elif "ActiveMessage:" in jaString:
                     regex = r"<ActiveMessage:(.*)>?"
                 elif "event_text" in jaString:
@@ -2930,6 +2922,36 @@ def searchSystem(data, pbar):
         data["equipTypes"][i] = response[0].replace('"', "").strip()
     if pbar is not None and len(data["equipTypes"]) > 0:
         pbar.update(len(data["equipTypes"]))
+        pbar.refresh()
+
+    # Elements
+    for i in range(len(data["elements"])):
+        if data["elements"][i]:  # Skip empty strings
+            response = translateAI(
+                data["elements"][i],
+                "Reply with only the " + LANGUAGE + " translation of the element type",
+                False,
+            )
+            totalTokens[0] += response[1][0]
+            totalTokens[1] += response[1][1]
+            data["elements"][i] = response[0].replace('"', "").strip()
+    if pbar is not None and len(data["elements"]) > 0:
+        pbar.update(len(data["elements"]))
+        pbar.refresh()
+
+    # Weapon Types
+    for i in range(len(data["weaponTypes"])):
+        if data["weaponTypes"][i]:  # Skip empty strings
+            response = translateAI(
+                data["weaponTypes"][i],
+                "Reply with only the " + LANGUAGE + " translation of the weapon type",
+                False,
+            )
+            totalTokens[0] += response[1][0]
+            totalTokens[1] += response[1][1]
+            data["weaponTypes"][i] = response[0].replace('"', "").strip()
+    if pbar is not None and len(data["weaponTypes"]) > 0:
+        pbar.update(len(data["weaponTypes"]))
         pbar.refresh()
 
     # Variables (Optional usually) — batch translate to reduce calls
