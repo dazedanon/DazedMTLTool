@@ -813,8 +813,9 @@ def translateGeneric(data, filename, translatedDataList=None, pbar=None):
         originalMsgCount = len(msgList)
         originalCommandArrayCount = len(commandArrayList)
         
-        # Keep a copy of original names for vocab update (for characters.json)
-        originalNameList = nameList.copy() if "characters" in filename.lower() else []
+        # Keep a copy of original names for vocab update (for characters/items/skills/classes/weapons)
+        vocab_name_files = ["characters", "items", "skills", "classes", "weapons"]
+        originalNameList = nameList.copy() if any(tag in filename.lower() for tag in vocab_name_files) else []
         
         # Batch translate names
         if nameList:
@@ -829,12 +830,25 @@ def translateGeneric(data, filename, translatedDataList=None, pbar=None):
             totalTokens[0] += response[1][0]
             totalTokens[1] += response[1][1]
         
-        # Update vocab.txt for characters.json
-        if "characters" in filename.lower() and originalNameList and nameList:
+        # Update vocab.txt for name-bearing files
+        if originalNameList and nameList:
             try:
-                # Create pairs of (original, translated) for vocab
-                vocab_pairs = list(zip(originalNameList, nameList))
-                update_vocab_section("Speakers", vocab_pairs)
+                file_lower = filename.lower()
+                section = None
+                if "characters" in file_lower:
+                    section = "Speakers"
+                elif "items" in file_lower:
+                    section = "Items"
+                elif "skills" in file_lower:
+                    section = "Skills"
+                elif "classes" in file_lower:
+                    section = "Classes"
+                elif "weapons" in file_lower:
+                    section = "Weapons"
+
+                if section:
+                    vocab_pairs = list(zip(originalNameList, nameList))
+                    update_vocab_section(section, vocab_pairs)
             except Exception:
                 traceback.print_exc()
         
