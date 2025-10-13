@@ -89,6 +89,11 @@ GENERIC_FILES = [
     "talkevents",
     "characters",
     "glossary",
+    "npc",
+    "screens",
+    "strings",
+    "originalterrains",
+    "runtimeterrains",
     
     # Add more file patterns here, e.g.:
     # "items",
@@ -316,6 +321,14 @@ def parseGeneric(data, filename):
                     for page in entry["pages"]:
                         if page:
                             total_units += 1
+                
+                # Handle terrains array (nested structure)
+                if "terrains" in entry and entry["terrains"] and isinstance(entry["terrains"], list):
+                    for terrain in entry["terrains"]:
+                        if terrain:
+                            for field in ["name", "desc"]:
+                                if field in terrain and terrain[field]:
+                                    total_units += 1
         
         # Setup progress bar
         with LOCK:
@@ -445,6 +458,34 @@ def translateGeneric(data, filename, translatedDataList=None):
                             # Set Data
                             entry["pages"][i] = translatedText
                             pagesList.pop(0)
+        
+        # Handle terrains field (nested array with name and desc)
+        if "terrains" in entry and entry["terrains"] and isinstance(entry["terrains"], list):
+            for terrain in entry["terrains"]:
+                if not terrain:
+                    continue
+                
+                # Handle terrain name
+                if "name" in terrain and terrain["name"]:
+                    # PASS 1: Collect original
+                    if translatedDataList is None:
+                        nameList.append(terrain["name"])
+                    # PASS 2: Apply translation
+                    else:
+                        if nameList:
+                            terrain["name"] = nameList[0]
+                            nameList.pop(0)
+                
+                # Handle terrain desc
+                if "desc" in terrain and terrain["desc"]:
+                    # PASS 1: Collect original
+                    if translatedDataList is None:
+                        descList.append(terrain["desc"])
+                    # PASS 2: Apply translation
+                    else:
+                        if descList:
+                            terrain["desc"] = descList[0]
+                            descList.pop(0)
     
     # If this was Pass 1, do the translation and recurse for Pass 2
     if translatedDataList is None:
