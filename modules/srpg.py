@@ -79,12 +79,24 @@ IGNORETLTEXT = False  # Skip Translated Text
 GENERIC_FILES = [
     "quests",
     "shops",
+    "shoplayout",
     "bonuses",
     "base",
     "battleprep",
     "manage",
     "mapcommands",
     "title",
+    "classes",
+    "classesgroups",
+    "classtypes",
+    "races",
+    "skills",
+    "weapons",
+    "states",
+    "difficulties",
+    "fonts",
+    "fusionsettings",
+    "transformations",
     "placeevents",
     "talkevents",
     "characters",
@@ -272,12 +284,21 @@ def openFiles(filename):
         # Check if filename matches recollection pattern
         if "recollection" in filename.lower():
             translatedData = parseRecollection(data, filename)
+        # mapcommonevents is a list of events like recollection
+        elif "mapcommonevents" in filename.lower():
+            translatedData = parseRecollection(data, filename)
         # Bookmark events use the same structure as recollection (list of events with pages/commands)
         elif "bookmarkevents" in filename.lower():
             translatedData = parseRecollection(data, filename)
         # Check if filename matches bookmark pattern (top-level entries with name/desc + events)
         elif "bookmark" in filename.lower():
             translatedData = parseBookmark(data, filename)
+        # Players have the same shape as bookmark entries
+        elif "players" in filename.lower():
+            translatedData = parseBookmark(data, filename)
+        # Titles.json is a small dict of title strings
+        elif os.path.basename(filename).lower() == "titles.json":
+            translatedData = parseTitles(data, filename)
         # Check if filename matches map pattern
         elif any(pattern in filename.lower() for pattern in MAP_FILES):
             translatedData = parseMap(data, filename)
@@ -564,13 +585,22 @@ def parseGeneric(data, filename):
             if entry:
                 for field in translatable_fields:
                     if field in entry and entry[field]:
-                        total_units += 1
+                        # If command is a list (e.g., fusionsettings), count per element
+                        if field == "command" and isinstance(entry[field], list):
+                            total_units += sum(1 for x in entry[field] if x)
+                        # Otherwise simple increment
+                        elif not isinstance(entry[field], list):
+                            total_units += 1
                 
                 # Handle pages array separately
                 if "pages" in entry and entry["pages"] and isinstance(entry["pages"], list):
                     for page in entry["pages"]:
                         if page:
                             total_units += 1
+
+                # Handle msg arrays (e.g., shoplayout)
+                if "msg" in entry and isinstance(entry["msg"], list):
+                    total_units += sum(1 for m in entry["msg"] if m)
                 
                 # Handle terrains array (nested structure)
                 if "terrains" in entry and entry["terrains"] and isinstance(entry["terrains"], list):
@@ -638,6 +668,8 @@ def translateGeneric(data, filename, translatedDataList=None, pbar=None):
         commandNameList = []
         commandList = []
         pagesList = []
+        msgList = []
+        commandArrayList = []
     else:
         # PASS 2: Use provided translated lists
         nameList = translatedDataList[0]
@@ -645,6 +677,8 @@ def translateGeneric(data, filename, translatedDataList=None, pbar=None):
         commandNameList = translatedDataList[2]
         commandList = translatedDataList[3]
         pagesList = translatedDataList[4]
+        msgList = translatedDataList[5]
+        commandArrayList = translatedDataList[6]
     
     # Single loop - behavior depends on which pass we're in
     for entry in data:
@@ -684,16 +718,28 @@ def translateGeneric(data, filename, translatedDataList=None, pbar=None):
                     entry["commandName"] = commandNameList[0]
                     commandNameList.pop(0)
         
-        # Handle command field
-        if "command" in entry and entry["command"]:
-            # PASS 1: Collect original
-            if translatedDataList is None:
-                commandList.append(entry["command"])
-            # PASS 2: Apply translation
-            else:
-                if commandList:
-                    entry["command"] = commandList[0]
-                    commandList.pop(0)
+        # Handle command field (string or list)
+        if "command" in entry and entry["command"] is not None:
+            # If list of strings
+            if isinstance(entry["command"], list):
+                for i, val in enumerate(entry["command"]):
+                    if val:
+                        if translatedDataList is None:
+                            # Nuke Wrap
+                            commandArrayList.append(val.replace("\n", " "))
+                        else:
+                            if commandArrayList:
+                                translatedText = dazedwrap.wrapText(commandArrayList[0], width=WIDTH)
+                                entry["command"][i] = translatedText
+                                commandArrayList.pop(0)
+            # If simple string
+            elif isinstance(entry["command"], str):
+                if translatedDataList is None:
+                    commandList.append(entry["command"])
+                else:
+                    if commandList:
+                        entry["command"] = commandList[0]
+                        commandList.pop(0)
         
         # Handle pages field (array of strings)
         if "pages" in entry and entry["pages"] and isinstance(entry["pages"], list):
@@ -715,6 +761,18 @@ def translateGeneric(data, filename, translatedDataList=None, pbar=None):
                             # Set Data
                             entry["pages"][i] = translatedText
                             pagesList.pop(0)
+
+        # Handle msg field (array of strings)
+        if "msg" in entry and isinstance(entry["msg"], list):
+            for i, val in enumerate(entry["msg"]):
+                if val is not None:
+                    if translatedDataList is None:
+                        msgList.append(str(val).replace("\n", " "))
+                    else:
+                        if msgList:
+                            translatedText = dazedwrap.wrapText(msgList[0], width=WIDTH)
+                            entry["msg"][i] = translatedText
+                            msgList.pop(0)
         
         # Handle terrains field (nested array with name and desc)
         if "terrains" in entry and entry["terrains"] and isinstance(entry["terrains"], list):
@@ -752,6 +810,8 @@ def translateGeneric(data, filename, translatedDataList=None, pbar=None):
         originalCommandNameCount = len(commandNameList)
         originalCommandCount = len(commandList)
         originalPagesCount = len(pagesList)
+        originalMsgCount = len(msgList)
+        originalCommandArrayCount = len(commandArrayList)
         
         # Keep a copy of original names for vocab update (for characters.json)
         originalNameList = nameList.copy() if "characters" in filename.lower() else []
@@ -829,6 +889,32 @@ def translateGeneric(data, filename, translatedDataList=None, pbar=None):
             pagesList = response[0]
             totalTokens[0] += response[1][0]
             totalTokens[1] += response[1][1]
+
+        # Batch translate msg arrays
+        if msgList:
+            response = translateAI(
+                msgList,
+                "Reply with only the " + LANGUAGE + " translation of the message text.",
+                True,
+                filename,
+                pbar
+            )
+            msgList = response[0]
+            totalTokens[0] += response[1][0]
+            totalTokens[1] += response[1][1]
+
+        # Batch translate command arrays
+        if commandArrayList:
+            response = translateAI(
+                commandArrayList,
+                "Reply with only the " + LANGUAGE + " translation of the command text.",
+                True,
+                filename,
+                pbar
+            )
+            commandArrayList = response[0]
+            totalTokens[0] += response[1][0]
+            totalTokens[1] += response[1][1]
         
         # Check for mismatch errors
         if len(nameList) != originalNameCount:
@@ -855,11 +941,70 @@ def translateGeneric(data, filename, translatedDataList=None, pbar=None):
             with LOCK:
                 if filename not in MISMATCH:
                     MISMATCH.append(filename)
+        if len(msgList) != originalMsgCount:
+            with LOCK:
+                if filename not in MISMATCH:
+                    MISMATCH.append(filename)
+        if len(commandArrayList) != originalCommandArrayCount:
+            with LOCK:
+                if filename not in MISMATCH:
+                    MISMATCH.append(filename)
         
         # PASS 2: Recursively call to apply translations
-        translateGeneric(data, filename, [nameList, descList, commandNameList, commandList, pagesList], pbar)
+        translateGeneric(
+            data,
+            filename,
+            [nameList, descList, commandNameList, commandList, pagesList, msgList, commandArrayList],
+            pbar,
+        )
     
     return totalTokens
+
+
+def parseTitles(data, filename):
+    """Parser for titles.json (small dict of title strings)."""
+    totalTokens = [0, 0]
+    pbar = None
+    try:
+        # Collect fields to translate
+        keys = [k for k in ["windowTitle", "gameTitle", "saveFileTitle"] if k in data and data[k]]
+        values = [data[k] for k in keys]
+
+        with LOCK:
+            pbar = tqdm(
+                desc=filename,
+                total=len(values),
+                bar_format=BAR_FORMAT,
+                position=POSITION,
+                leave=LEAVE,
+            )
+
+        if values:
+            response = translateAI(
+                values,
+                "Reply with only the " + LANGUAGE + " translation of the title text.",
+                True,
+                filename,
+                pbar,
+            )
+            translations = response[0]
+            totalTokens[0] += response[1][0]
+            totalTokens[1] += response[1][1]
+
+            # Apply
+            for i, k in enumerate(keys):
+                data[k] = translations[i]
+
+        return (data, totalTokens, None)
+    except Exception as e:
+        traceback.print_exc()
+        return (data, totalTokens, e)
+    finally:
+        try:
+            if pbar is not None:
+                pbar.close()
+        except Exception:
+            pass
 
 
 def parseRecollection(data, filename):
