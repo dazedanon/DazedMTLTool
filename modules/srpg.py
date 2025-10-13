@@ -88,6 +88,7 @@ GENERIC_FILES = [
     "placeevents",
     "talkevents",
     "characters",
+    "glossary",
     
     # Add more file patterns here, e.g.:
     # "items",
