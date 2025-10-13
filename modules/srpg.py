@@ -332,20 +332,10 @@ def parseGeneric(data, filename):
         totalTokens[0] += result[0]
         totalTokens[1] += result[1]
         
-        # Close progress bar
-        with LOCK:
-            if PBAR:
-                PBAR.close()
-                PBAR = None
-        
         return (data, totalTokens, None)
         
     except Exception as e:
         traceback.print_exc()
-        if PBAR:
-            with LOCK:
-                PBAR.close()
-                PBAR = None
         return (data, totalTokens, e)
 
 
@@ -623,20 +613,10 @@ def parseRecollection(data, filename):
         totalTokens[0] += result[0]
         totalTokens[1] += result[1]
         
-        # Close progress bar
-        with LOCK:
-            if PBAR:
-                PBAR.close()
-                PBAR = None
-        
         return (data, totalTokens, None)
         
     except Exception as e:
         traceback.print_exc()
-        if PBAR:
-            with LOCK:
-                PBAR.close()
-                PBAR = None
         return (data, totalTokens, e)
 
 
@@ -913,20 +893,10 @@ def parseMap(data, filename):
         totalTokens[0] += result[0]
         totalTokens[1] += result[1]
         
-        # Close progress bar
-        with LOCK:
-            if PBAR:
-                PBAR.close()
-                PBAR = None
-        
         return (data, totalTokens, None)
         
     except Exception as e:
         traceback.print_exc()
-        if PBAR:
-            with LOCK:
-                PBAR.close()
-                PBAR = None
         return (data, totalTokens, e)
 
 
