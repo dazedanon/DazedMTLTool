@@ -96,6 +96,11 @@ GENERIC_FILES = [
     # "classes",
 ]
 
+# List of file patterns that use parseMap
+MAP_FILES = [
+    "map",
+]
+
 
 def update_vocab_section(category: str, pairs: list[tuple[str, str]]):
     """Update or insert a section in vocab.txt for the given category with provided pairs.
@@ -263,6 +268,9 @@ def openFiles(filename):
         # Check if filename matches recollection pattern
         if "recollection" in filename.lower():
             translatedData = parseRecollection(data, filename)
+        # Check if filename matches map pattern
+        elif any(pattern in filename.lower() for pattern in MAP_FILES):
+            translatedData = parseMap(data, filename)
         # Check if filename matches any pattern in GENERIC_FILES
         elif any(pattern in filename.lower() for pattern in GENERIC_FILES):
             translatedData = parseGeneric(data, filename)
@@ -772,6 +780,525 @@ def translateRecollection(data, filename, translatedDataList=None):
         
         # PASS 2: Recursively call to apply translations
         translateRecollection(data, filename, [dataList, speakerList])
+    
+    return totalTokens
+
+
+def parseMap(data, filename):
+    """
+    Parser for SRPG Studio map.json files.
+    Structure: Single object with:
+      - id, name, desc, mapName
+      - victoryConds (array of strings)
+      - defeatConds (array of strings)
+      - EnemyUnits (array of objects with id, name, desc, events structure similar to recollection)
+    
+    Args:
+        data: Parsed JSON data (single map object)
+        filename: Name of the file being parsed
+    
+    Returns:
+        Tuple of (data, token counts, error)
+    """
+    global PBAR
+    
+    totalTokens = [0, 0]
+    
+    try:
+        # Count work units (all translatable fields)
+        total_units = 0
+        
+        # Count top-level fields: desc, mapName (name is an identifier and should not be translated)
+        for field in ["desc", "mapName"]:
+            if field in data and data[field]:
+                total_units += 1
+        
+        # Count victoryConds array items
+        if "victoryConds" in data and isinstance(data["victoryConds"], list):
+            for cond in data["victoryConds"]:
+                if cond:
+                    total_units += 1
+        
+        # Count defeatConds array items
+        if "defeatConds" in data and isinstance(data["defeatConds"], list):
+            for cond in data["defeatConds"]:
+                if cond:
+                    total_units += 1
+        
+        # Count units with events (EnemyUnits, EvEnemyUnits)
+        for unitsKey in ["EnemyUnits", "EvEnemyUnits"]:
+            if unitsKey in data and isinstance(data[unitsKey], list):
+                for unit in data[unitsKey]:
+                    if not unit:
+                        continue
+                    
+                    # Count unit name and desc
+                    for field in ["name", "desc"]:
+                        if field in unit and unit[field]:
+                            total_units += 1
+                    
+                    # Count events->pages->commands->data and speaker
+                    if "events" in unit and isinstance(unit["events"], list):
+                        for event in unit["events"]:
+                            if not event or "pages" not in event:
+                                continue
+                            
+                            if not isinstance(event["pages"], list):
+                                continue
+                            
+                            for page in event["pages"]:
+                                if not page or "commands" not in page:
+                                    continue
+                                
+                                if not isinstance(page["commands"], list):
+                                    continue
+                                
+                                for command in page["commands"]:
+                                    if not command:
+                                        continue
+                                    
+                                    # Count data array items
+                                    if "data" in command and isinstance(command["data"], list):
+                                        for text in command["data"]:
+                                            if text:
+                                                total_units += 1
+                                    
+                                    # Count speaker field
+                                    if "speaker" in command and command["speaker"]:
+                                        total_units += 1
+        
+        # Count events (placeEvents, autoEvents, openingEvents, communicationEvents)
+        for eventsKey in ["placeEvents", "autoEvents", "openingEvents", "communicationEvents"]:
+            if eventsKey in data and isinstance(data[eventsKey], list):
+                for event in data[eventsKey]:
+                    if not event or "pages" not in event:
+                        continue
+                    
+                    if not isinstance(event["pages"], list):
+                        continue
+                    
+                    for page in event["pages"]:
+                        if not page or "commands" not in page:
+                            continue
+                        
+                        if not isinstance(page["commands"], list):
+                            continue
+                        
+                        for command in page["commands"]:
+                            if not command:
+                                continue
+                            
+                            # Count data array items
+                            if "data" in command and isinstance(command["data"], list):
+                                for text in command["data"]:
+                                    if text:
+                                        total_units += 1
+                            
+                            # Count speaker field
+                            if "speaker" in command and command["speaker"]:
+                                total_units += 1
+        
+        # Setup progress bar
+        with LOCK:
+            PBAR = tqdm(
+                desc=filename,
+                total=total_units,
+                bar_format=BAR_FORMAT,
+                position=POSITION,
+                leave=LEAVE,
+            )
+        
+        # Translate the data using two-pass approach
+        result = translateMap(data, filename)
+        totalTokens[0] += result[0]
+        totalTokens[1] += result[1]
+        
+        # Close progress bar
+        with LOCK:
+            if PBAR:
+                PBAR.close()
+                PBAR = None
+        
+        return (data, totalTokens, None)
+        
+    except Exception as e:
+        traceback.print_exc()
+        if PBAR:
+            with LOCK:
+                PBAR.close()
+                PBAR = None
+        return (data, totalTokens, e)
+
+
+def translateMap(data, filename, translatedDataList=None):
+    """
+    Translates map.json data structure.
+    Uses two-pass approach via recursion:
+    - Pass 1 (translatedDataList=None): Collect strings and batch translate
+    - Pass 2 (translatedDataList set): Apply translations back to the data
+    
+    Args:
+        data: Single map object with name, desc, mapName, victoryConds, defeatConds, and EnemyUnits
+        filename: Name of the file being translated
+        translatedDataList: List containing translation lists
+                           - Pass 1: Empty lists to collect originals
+                           - Pass 2: Filled lists with translations
+    
+    Returns:
+        Tuple of [input tokens, output tokens]
+    """
+    global PBAR
+    
+    totalTokens = [0, 0]
+    
+    # Initialize or extract lists
+    if translatedDataList is None:
+        # PASS 1: Create empty lists to collect strings
+        descList = []
+        mapNameList = []
+        victoryCondsList = []
+        defeatCondsList = []
+        unitNameList = []
+        unitDescList = []
+        dataList = []
+        speakerList = []
+        originalSpeakerList = []  # For vocab update
+    else:
+        # PASS 2: Use provided translated lists
+        descList = translatedDataList[0]
+        mapNameList = translatedDataList[1]
+        victoryCondsList = translatedDataList[2]
+        defeatCondsList = translatedDataList[3]
+        unitNameList = translatedDataList[4]
+        unitDescList = translatedDataList[5]
+        dataList = translatedDataList[6]
+        speakerList = translatedDataList[7]
+    
+    # Note: name field is not translated as it's an identifier (e.g., "ch3_瘴気の森")
+    
+    # Handle desc field
+    if "desc" in data and data["desc"]:
+        # PASS 1: Collect original
+        if translatedDataList is None:
+            descList.append(data["desc"])
+        # PASS 2: Apply translation
+        else:
+            if descList:
+                data["desc"] = descList[0]
+                descList.pop(0)
+    
+    # Handle mapName field
+    if "mapName" in data and data["mapName"]:
+        # PASS 1: Collect original
+        if translatedDataList is None:
+            mapNameList.append(data["mapName"])
+        # PASS 2: Apply translation
+        else:
+            if mapNameList:
+                data["mapName"] = mapNameList[0]
+                mapNameList.pop(0)
+    
+    # Handle victoryConds array
+    if "victoryConds" in data and isinstance(data["victoryConds"], list):
+        for i, cond in enumerate(data["victoryConds"]):
+            if cond:
+                # PASS 1: Collect original
+                if translatedDataList is None:
+                    victoryCondsList.append(cond)
+                # PASS 2: Apply translation
+                else:
+                    if victoryCondsList:
+                        data["victoryConds"][i] = victoryCondsList[0]
+                        victoryCondsList.pop(0)
+    
+    # Handle defeatConds array
+    if "defeatConds" in data and isinstance(data["defeatConds"], list):
+        for i, cond in enumerate(data["defeatConds"]):
+            if cond:
+                # PASS 1: Collect original
+                if translatedDataList is None:
+                    defeatCondsList.append(cond)
+                # PASS 2: Apply translation
+                else:
+                    if defeatCondsList:
+                        data["defeatConds"][i] = defeatCondsList[0]
+                        defeatCondsList.pop(0)
+    
+    # Process all unit arrays (EnemyUnits, EvEnemyUnits)
+    for unitsKey in ["EnemyUnits", "EvEnemyUnits"]:
+        if unitsKey in data and isinstance(data[unitsKey], list):
+            for unit in data[unitsKey]:
+                if not unit:
+                    continue
+                
+                # Handle unit name
+                if "name" in unit and unit["name"]:
+                    if translatedDataList is None:
+                        unitNameList.append(unit["name"])
+                    else:
+                        if unitNameList:
+                            unit["name"] = unitNameList[0]
+                            unitNameList.pop(0)
+                
+                # Handle unit desc
+                if "desc" in unit and unit["desc"]:
+                    if translatedDataList is None:
+                        unitDescList.append(unit["desc"])
+                    else:
+                        if unitDescList:
+                            unit["desc"] = unitDescList[0]
+                            unitDescList.pop(0)
+                
+                # Process events within units
+                if "events" in unit and isinstance(unit["events"], list):
+                    for event in unit["events"]:
+                        if not event or "pages" not in event:
+                            continue
+                        
+                        if not isinstance(event["pages"], list):
+                            continue
+                        
+                        for page in event["pages"]:
+                            if not page or "commands" not in page:
+                                continue
+                            
+                            if not isinstance(page["commands"], list):
+                                continue
+                            
+                            for command in page["commands"]:
+                                if not command:
+                                    continue
+                                
+                                speaker = command.get("speaker", "")
+                                
+                                # Handle data array
+                                if "data" in command and isinstance(command["data"], list):
+                                    for i, text in enumerate(command["data"]):
+                                        if text:
+                                            if translatedDataList is None:
+                                                text = text.replace("\n", " ")
+                                                if speaker:
+                                                    dataList.append(f"[{speaker}]: {text}")
+                                                else:
+                                                    dataList.append(text)
+                                            else:
+                                                if dataList:
+                                                    translated = dataList[0]
+                                                    if speaker:
+                                                        match = re.search(r'(^\[.+?\]\s?[|:]\s?)', translated)
+                                                        if match:
+                                                            translated = translated.replace(match.group(1), "")
+                                                    translated = dazedwrap.wrapText(translated, width=WIDTH)
+                                                    command["data"][i] = translated
+                                                    dataList.pop(0)
+                                
+                                # Handle speaker field
+                                if "speaker" in command and command["speaker"]:
+                                    if translatedDataList is None:
+                                        originalSpeakerList.append(command["speaker"])
+                                        speakerList.append(command["speaker"])
+                                    else:
+                                        if speakerList:
+                                            command["speaker"] = speakerList[0]
+                                            speakerList.pop(0)
+    
+    # Process all event arrays (placeEvents, autoEvents, openingEvents, communicationEvents)
+    for eventsKey in ["placeEvents", "autoEvents", "openingEvents", "communicationEvents"]:
+        if eventsKey in data and isinstance(data[eventsKey], list):
+            for event in data[eventsKey]:
+                if not event or "pages" not in event:
+                    continue
+                
+                if not isinstance(event["pages"], list):
+                    continue
+                
+                for page in event["pages"]:
+                    if not page or "commands" not in page:
+                        continue
+                    
+                    if not isinstance(page["commands"], list):
+                        continue
+                    
+                    for command in page["commands"]:
+                        if not command:
+                            continue
+                        
+                        speaker = command.get("speaker", "")
+                        
+                        # Handle data array
+                        if "data" in command and isinstance(command["data"], list):
+                            for i, text in enumerate(command["data"]):
+                                if text:
+                                    if translatedDataList is None:
+                                        text = text.replace("\n", " ")
+                                        if speaker:
+                                            dataList.append(f"[{speaker}]: {text}")
+                                        else:
+                                            dataList.append(text)
+                                    else:
+                                        if dataList:
+                                            translated = dataList[0]
+                                            if speaker:
+                                                match = re.search(r'(^\[.+?\]\s?[|:]\s?)', translated)
+                                                if match:
+                                                    translated = translated.replace(match.group(1), "")
+                                            translated = dazedwrap.wrapText(translated, width=WIDTH)
+                                            command["data"][i] = translated
+                                            dataList.pop(0)
+                        
+                        # Handle speaker field
+                        if "speaker" in command and command["speaker"]:
+                            if translatedDataList is None:
+                                originalSpeakerList.append(command["speaker"])
+                                speakerList.append(command["speaker"])
+                            else:
+                                if speakerList:
+                                    command["speaker"] = speakerList[0]
+                                    speakerList.pop(0)
+    
+    # If this was Pass 1, do the translation and recurse for Pass 2
+    if translatedDataList is None:
+        # Store original counts for mismatch checking
+        originalDescCount = len(descList)
+        originalMapNameCount = len(mapNameList)
+        originalVictoryCondsCount = len(victoryCondsList)
+        originalDefeatCondsCount = len(defeatCondsList)
+        originalUnitNameCount = len(unitNameList)
+        originalUnitDescCount = len(unitDescList)
+        originalDataCount = len(dataList)
+        originalSpeakerCount = len(speakerList)
+        
+        # Batch translate map descriptions
+        if descList:
+            response = translateAI(
+                descList,
+                "Reply with only the " + LANGUAGE + " translation of the map description.",
+                True
+            )
+            descList = response[0]
+            totalTokens[0] += response[1][0]
+            totalTokens[1] += response[1][1]
+        
+        # Batch translate map display names
+        if mapNameList:
+            response = translateAI(
+                mapNameList,
+                "Reply with only the " + LANGUAGE + " translation of the map display name.",
+                True
+            )
+            mapNameList = response[0]
+            totalTokens[0] += response[1][0]
+            totalTokens[1] += response[1][1]
+        
+        # Batch translate victory conditions
+        if victoryCondsList:
+            response = translateAI(
+                victoryCondsList,
+                "Reply with only the " + LANGUAGE + " translation of the victory condition.",
+                True
+            )
+            victoryCondsList = response[0]
+            totalTokens[0] += response[1][0]
+            totalTokens[1] += response[1][1]
+        
+        # Batch translate defeat conditions
+        if defeatCondsList:
+            response = translateAI(
+                defeatCondsList,
+                "Reply with only the " + LANGUAGE + " translation of the defeat condition.",
+                True
+            )
+            defeatCondsList = response[0]
+            totalTokens[0] += response[1][0]
+            totalTokens[1] += response[1][1]
+        
+        # Batch translate unit names
+        if unitNameList:
+            response = translateAI(
+                unitNameList,
+                "Reply with only the " + LANGUAGE + " translation of the enemy unit name.",
+                True
+            )
+            unitNameList = response[0]
+            totalTokens[0] += response[1][0]
+            totalTokens[1] += response[1][1]
+        
+        # Batch translate unit descriptions
+        if unitDescList:
+            response = translateAI(
+                unitDescList,
+                "Reply with only the " + LANGUAGE + " translation of the enemy unit description.",
+                True
+            )
+            unitDescList = response[0]
+            totalTokens[0] += response[1][0]
+            totalTokens[1] += response[1][1]
+        
+        # Batch translate dialogue data
+        if dataList:
+            response = translateAI(
+                dataList,
+                "Reply with only the " + LANGUAGE + " translation of the dialogue text.",
+                True
+            )
+            dataList = response[0]
+            totalTokens[0] += response[1][0]
+            totalTokens[1] += response[1][1]
+        
+        # Batch translate speakers
+        if speakerList:
+            response = translateAI(
+                speakerList,
+                "Reply with only the " + LANGUAGE + " translation of the speaker name.",
+                True
+            )
+            speakerList = response[0]
+            totalTokens[0] += response[1][0]
+            totalTokens[1] += response[1][1]
+        
+        # Check for mismatch errors
+        if len(descList) != originalDescCount:
+            with LOCK:
+                if filename not in MISMATCH:
+                    MISMATCH.append(filename)
+        
+        if len(mapNameList) != originalMapNameCount:
+            with LOCK:
+                if filename not in MISMATCH:
+                    MISMATCH.append(filename)
+        
+        if len(victoryCondsList) != originalVictoryCondsCount:
+            with LOCK:
+                if filename not in MISMATCH:
+                    MISMATCH.append(filename)
+        
+        if len(defeatCondsList) != originalDefeatCondsCount:
+            with LOCK:
+                if filename not in MISMATCH:
+                    MISMATCH.append(filename)
+        
+        if len(unitNameList) != originalUnitNameCount:
+            with LOCK:
+                if filename not in MISMATCH:
+                    MISMATCH.append(filename)
+        
+        if len(unitDescList) != originalUnitDescCount:
+            with LOCK:
+                if filename not in MISMATCH:
+                    MISMATCH.append(filename)
+        
+        if len(dataList) != originalDataCount:
+            with LOCK:
+                if filename not in MISMATCH:
+                    MISMATCH.append(filename)
+        
+        if len(speakerList) != originalSpeakerCount:
+            with LOCK:
+                if filename not in MISMATCH:
+                    MISMATCH.append(filename)
+        
+        # PASS 2: Recursively call to apply translations
+        translateMap(data, filename, [descList, mapNameList, victoryCondsList, defeatCondsList, unitNameList, unitDescList, dataList, speakerList])
     
     return totalTokens
 
