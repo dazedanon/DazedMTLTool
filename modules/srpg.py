@@ -94,6 +94,11 @@ GENERIC_FILES = [
     "strings",
     "originalterrains",
     "runtimeterrains",
+    "archers",
+    "fighters",
+    "items",
+    "mages",
+
     
     # Add more file patterns here, e.g.:
     # "items",
@@ -305,6 +310,7 @@ def parseGeneric(data, filename):
     
     totalTokens = [0, 0]
     
+    pbar = None
     try:
         # Count work units (all translatable fields that need translation)
         total_units = 0
@@ -330,9 +336,9 @@ def parseGeneric(data, filename):
                                 if field in terrain and terrain[field]:
                                     total_units += 1
         
-        # Setup progress bar
+        # Setup progress bar (use a per-file instance to avoid cross-thread clashes)
         with LOCK:
-            PBAR = tqdm(
+            pbar = tqdm(
                 desc=filename,
                 total=total_units,
                 bar_format=BAR_FORMAT,
@@ -341,18 +347,25 @@ def parseGeneric(data, filename):
             )
         
         # Translate the data using two-pass approach
-        result = translateGeneric(data, filename)
+        result = translateGeneric(data, filename, pbar=pbar)
         totalTokens[0] += result[0]
         totalTokens[1] += result[1]
         
         return (data, totalTokens, None)
-        
+    
     except Exception as e:
         traceback.print_exc()
         return (data, totalTokens, e)
+    finally:
+        # Ensure progress bar is closed
+        try:
+            if pbar is not None:
+                pbar.close()
+        except Exception:
+            pass
 
 
-def translateGeneric(data, filename, translatedDataList=None):
+def translateGeneric(data, filename, translatedDataList=None, pbar=None):
     """
     Translates generic SRPG Studio data with id, name, desc, commandName, command, pages structure.
     Uses two-pass approach via recursion:
@@ -504,7 +517,9 @@ def translateGeneric(data, filename, translatedDataList=None):
             response = translateAI(
                 nameList,
                 "Reply with only the " + LANGUAGE + " translation of the quest name.",
-                True
+                True,
+                filename,
+                pbar
             )
             nameList = response[0]
             totalTokens[0] += response[1][0]
@@ -524,7 +539,9 @@ def translateGeneric(data, filename, translatedDataList=None):
             response = translateAI(
                 descList,
                 "Reply with only the " + LANGUAGE + " translation of the quest description.",
-                True
+                True,
+                filename,
+                pbar
             )
             descList = response[0]
             totalTokens[0] += response[1][0]
@@ -535,7 +552,9 @@ def translateGeneric(data, filename, translatedDataList=None):
             response = translateAI(
                 commandNameList,
                 "Reply with only the " + LANGUAGE + " translation of the command name.",
-                True
+                True,
+                filename,
+                pbar
             )
             commandNameList = response[0]
             totalTokens[0] += response[1][0]
@@ -546,7 +565,9 @@ def translateGeneric(data, filename, translatedDataList=None):
             response = translateAI(
                 commandList,
                 "Reply with only the " + LANGUAGE + " translation of the command.",
-                True
+                True,
+                filename,
+                pbar
             )
             commandList = response[0]
             totalTokens[0] += response[1][0]
@@ -557,7 +578,9 @@ def translateGeneric(data, filename, translatedDataList=None):
             response = translateAI(
                 pagesList,
                 "Reply with only the " + LANGUAGE + " translation of the page content.",
-                True
+                True,
+                filename,
+                pbar
             )
             pagesList = response[0]
             totalTokens[0] += response[1][0]
@@ -590,7 +613,7 @@ def translateGeneric(data, filename, translatedDataList=None):
                     MISMATCH.append(filename)
         
         # PASS 2: Recursively call to apply translations
-        translateGeneric(data, filename, [nameList, descList, commandNameList, commandList, pagesList])
+        translateGeneric(data, filename, [nameList, descList, commandNameList, commandList, pagesList], pbar)
     
     return totalTokens
 
@@ -611,6 +634,7 @@ def parseRecollection(data, filename):
     
     totalTokens = [0, 0]
     
+    pbar = None
     try:
         # Count work units (data entries and speakers that need translation)
         total_units = 0
@@ -639,9 +663,9 @@ def parseRecollection(data, filename):
                         if re.search(LANGREGEX, command["speaker"]):
                             total_units += 1
         
-        # Setup progress bar
+        # Setup progress bar (per-file instance)
         with LOCK:
-            PBAR = tqdm(
+            pbar = tqdm(
                 desc=filename,
                 total=total_units,
                 bar_format=BAR_FORMAT,
@@ -650,18 +674,24 @@ def parseRecollection(data, filename):
             )
         
         # Translate the data using two-pass approach
-        result = translateRecollection(data, filename)
+        result = translateRecollection(data, filename, pbar=pbar)
         totalTokens[0] += result[0]
         totalTokens[1] += result[1]
         
         return (data, totalTokens, None)
-        
+    
     except Exception as e:
         traceback.print_exc()
         return (data, totalTokens, e)
+    finally:
+        try:
+            if pbar is not None:
+                pbar.close()
+        except Exception:
+            pass
 
 
-def translateRecollection(data, filename, translatedDataList=None):
+def translateRecollection(data, filename, translatedDataList=None, pbar=None):
     """
     Translates recollection.json data structure.
     Uses two-pass approach via recursion:
@@ -771,7 +801,9 @@ def translateRecollection(data, filename, translatedDataList=None):
             response = translateAI(
                 dataList,
                 "Reply with only the " + LANGUAGE + " translation of the dialogue text.",
-                True
+                True,
+                filename,
+                pbar
             )
             dataList = response[0]
             totalTokens[0] += response[1][0]
@@ -782,7 +814,9 @@ def translateRecollection(data, filename, translatedDataList=None):
             response = translateAI(
                 speakerList,
                 "Reply with only the " + LANGUAGE + " translation of the speaker name.",
-                True
+                True,
+                filename,
+                pbar
             )
             speakerList = response[0]
             totalTokens[0] += response[1][0]
@@ -800,7 +834,7 @@ def translateRecollection(data, filename, translatedDataList=None):
                     MISMATCH.append(filename)
         
         # PASS 2: Recursively call to apply translations
-        translateRecollection(data, filename, [dataList, speakerList])
+        translateRecollection(data, filename, [dataList, speakerList], pbar)
     
     return totalTokens
 
@@ -825,6 +859,7 @@ def parseMap(data, filename):
     
     totalTokens = [0, 0]
     
+    pbar = None
     try:
         # Count work units (all translatable fields)
         total_units = 0
@@ -919,9 +954,9 @@ def parseMap(data, filename):
                             if "speaker" in command and command["speaker"]:
                                 total_units += 1
         
-        # Setup progress bar
+        # Setup progress bar (per-file instance)
         with LOCK:
-            PBAR = tqdm(
+            pbar = tqdm(
                 desc=filename,
                 total=total_units,
                 bar_format=BAR_FORMAT,
@@ -930,18 +965,24 @@ def parseMap(data, filename):
             )
         
         # Translate the data using two-pass approach
-        result = translateMap(data, filename)
+        result = translateMap(data, filename, pbar=pbar)
         totalTokens[0] += result[0]
         totalTokens[1] += result[1]
         
         return (data, totalTokens, None)
-        
+    
     except Exception as e:
         traceback.print_exc()
         return (data, totalTokens, e)
+    finally:
+        try:
+            if pbar is not None:
+                pbar.close()
+        except Exception:
+            pass
 
 
-def translateMap(data, filename, translatedDataList=None):
+def translateMap(data, filename, translatedDataList=None, pbar=None):
     """
     Translates map.json data structure.
     Uses two-pass approach via recursion:
@@ -1184,7 +1225,9 @@ def translateMap(data, filename, translatedDataList=None):
             response = translateAI(
                 descList,
                 "Reply with only the " + LANGUAGE + " translation of the map description.",
-                True
+                True,
+                filename,
+                pbar
             )
             descList = response[0]
             totalTokens[0] += response[1][0]
@@ -1195,7 +1238,9 @@ def translateMap(data, filename, translatedDataList=None):
             response = translateAI(
                 mapNameList,
                 "Reply with only the " + LANGUAGE + " translation of the map display name.",
-                True
+                True,
+                filename,
+                pbar
             )
             mapNameList = response[0]
             totalTokens[0] += response[1][0]
@@ -1206,7 +1251,9 @@ def translateMap(data, filename, translatedDataList=None):
             response = translateAI(
                 victoryCondsList,
                 "Reply with only the " + LANGUAGE + " translation of the victory condition.",
-                True
+                True,
+                filename,
+                pbar
             )
             victoryCondsList = response[0]
             totalTokens[0] += response[1][0]
@@ -1217,7 +1264,9 @@ def translateMap(data, filename, translatedDataList=None):
             response = translateAI(
                 defeatCondsList,
                 "Reply with only the " + LANGUAGE + " translation of the defeat condition.",
-                True
+                True,
+                filename,
+                pbar
             )
             defeatCondsList = response[0]
             totalTokens[0] += response[1][0]
@@ -1228,7 +1277,9 @@ def translateMap(data, filename, translatedDataList=None):
             response = translateAI(
                 unitNameList,
                 "Reply with only the " + LANGUAGE + " translation of the enemy unit name.",
-                True
+                True,
+                filename,
+                pbar
             )
             unitNameList = response[0]
             totalTokens[0] += response[1][0]
@@ -1239,7 +1290,9 @@ def translateMap(data, filename, translatedDataList=None):
             response = translateAI(
                 unitDescList,
                 "Reply with only the " + LANGUAGE + " translation of the enemy unit description.",
-                True
+                True,
+                filename,
+                pbar
             )
             unitDescList = response[0]
             totalTokens[0] += response[1][0]
@@ -1250,7 +1303,9 @@ def translateMap(data, filename, translatedDataList=None):
             response = translateAI(
                 dataList,
                 "Reply with only the " + LANGUAGE + " translation of the dialogue text.",
-                True
+                True,
+                filename,
+                pbar
             )
             dataList = response[0]
             totalTokens[0] += response[1][0]
@@ -1261,7 +1316,9 @@ def translateMap(data, filename, translatedDataList=None):
             response = translateAI(
                 speakerList,
                 "Reply with only the " + LANGUAGE + " translation of the speaker name.",
-                True
+                True,
+                filename,
+                pbar
             )
             speakerList = response[0]
             totalTokens[0] += response[1][0]
@@ -1309,7 +1366,7 @@ def translateMap(data, filename, translatedDataList=None):
                     MISMATCH.append(filename)
         
         # PASS 2: Recursively call to apply translations
-        translateMap(data, filename, [descList, mapNameList, victoryCondsList, defeatCondsList, unitNameList, unitDescList, dataList, speakerList])
+        translateMap(data, filename, [descList, mapNameList, victoryCondsList, defeatCondsList, unitNameList, unitDescList, dataList, speakerList], pbar)
     
     return totalTokens
 
@@ -1409,7 +1466,7 @@ def getSpeaker(speaker):
     return response
 
 
-def translateAI(text, history, fullPromptFlag):
+def translateAI(text, history, fullPromptFlag, filename_param=None, pbar_param=None):
     """
     Legacy wrapper function for the new shared translation utility.
     This maintains compatibility with existing code while using the new shared implementation.
@@ -1433,8 +1490,8 @@ def translateAI(text, history, fullPromptFlag):
         history=history,
         fullPromptFlag=fullPromptFlag,
         config=TRANSLATION_CONFIG,
-        filename=FILENAME,
-        pbar=PBAR,
+        filename=(filename_param if filename_param is not None else FILENAME),
+        pbar=(pbar_param if pbar_param is not None else PBAR),
         lock=LOCK,
         mismatchList=MISMATCH
     )
