@@ -96,14 +96,8 @@ GENERIC_FILES = [
     "runtimeterrains",
     "archers",
     "fighters",
-    "items",
     "mages",
-
-    
-    # Add more file patterns here, e.g.:
-    # "items",
-    # "skills",
-    # "classes",
+    "items",
 ]
 
 # List of file patterns that use parseMap
@@ -278,6 +272,12 @@ def openFiles(filename):
         # Check if filename matches recollection pattern
         if "recollection" in filename.lower():
             translatedData = parseRecollection(data, filename)
+        # Bookmark events use the same structure as recollection (list of events with pages/commands)
+        elif "bookmarkevents" in filename.lower():
+            translatedData = parseRecollection(data, filename)
+        # Check if filename matches bookmark pattern (top-level entries with name/desc + events)
+        elif "bookmark" in filename.lower():
+            translatedData = parseBookmark(data, filename)
         # Check if filename matches map pattern
         elif any(pattern in filename.lower() for pattern in MAP_FILES):
             translatedData = parseMap(data, filename)
@@ -290,6 +290,250 @@ def openFiles(filename):
             raise NameError(filename + " Not Supported")
 
     return translatedData
+
+
+def parseBookmark(data, filename):
+    """
+    Parser for SRPG Studio bookmark.json files.
+    Structure: List of entries, each with id, name, desc, and events containing pages -> commands
+               where commands have data (array of strings) and optional speaker.
+
+    Args:
+        data: Parsed JSON data (list of bookmark entries)
+        filename: Name of the file being parsed
+
+    Returns:
+        Tuple of (data, token counts, error)
+    """
+    totalTokens = [0, 0]
+
+    pbar = None
+    try:
+        # Count work units: names, descs, dialogue lines, and speakers
+        total_units = 0
+
+        for entry in data:
+            if not entry:
+                continue
+
+            # name and desc
+            for field in ["name", "desc"]:
+                if field in entry and entry[field]:
+                    total_units += 1
+
+            # events -> pages -> commands
+            if "events" in entry and isinstance(entry["events"], list):
+                for event in entry["events"]:
+                    if not event or "pages" not in event or not isinstance(event["pages"], list):
+                        continue
+                    for page in event["pages"]:
+                        if not page or "commands" not in page or not isinstance(page["commands"], list):
+                            continue
+                        for command in page["commands"]:
+                            if not command:
+                                continue
+                            if "data" in command and isinstance(command["data"], list):
+                                for text in command["data"]:
+                                    if text:
+                                        total_units += 1
+                            if "speaker" in command and command["speaker"]:
+                                total_units += 1
+
+        # Setup progress bar
+        with LOCK:
+            pbar = tqdm(
+                desc=filename,
+                total=total_units,
+                bar_format=BAR_FORMAT,
+                position=POSITION,
+                leave=LEAVE,
+            )
+
+        # Translate using two-pass approach
+        result = translateBookmark(data, filename, pbar=pbar)
+        totalTokens[0] += result[0]
+        totalTokens[1] += result[1]
+
+        return (data, totalTokens, None)
+
+    except Exception as e:
+        traceback.print_exc()
+        return (data, totalTokens, e)
+    finally:
+        try:
+            if pbar is not None:
+                pbar.close()
+        except Exception:
+            pass
+
+
+def translateBookmark(data, filename, translatedDataList=None, pbar=None):
+    """
+    Translates bookmark.json data structure.
+    Two-pass approach via recursion:
+    - Pass 1: Collect strings (names, descs, dialogue data with speaker prefix, speakers)
+    - Pass 2: Apply translations back into data
+
+    Returns:
+        [input tokens, output tokens]
+    """
+    totalTokens = [0, 0]
+
+    # Initialize or extract lists
+    if translatedDataList is None:
+        nameList = []
+        descList = []
+        dataList = []
+        speakerList = []
+    else:
+        nameList = translatedDataList[0]
+        descList = translatedDataList[1]
+        dataList = translatedDataList[2]
+        speakerList = translatedDataList[3]
+
+    for entry in data:
+        if not entry:
+            continue
+
+        # name
+        if "name" in entry and entry["name"]:
+            if translatedDataList is None:
+                nameList.append(entry["name"])
+            else:
+                if nameList:
+                    entry["name"] = nameList[0]
+                    nameList.pop(0)
+
+        # desc
+        if "desc" in entry and entry["desc"]:
+            if translatedDataList is None:
+                descList.append(entry["desc"])
+            else:
+                if descList:
+                    entry["desc"] = descList[0]
+                    descList.pop(0)
+
+        # events -> pages -> commands
+        if "events" in entry and isinstance(entry["events"], list):
+            for event in entry["events"]:
+                if not event or "pages" not in event or not isinstance(event["pages"], list):
+                    continue
+                for page in event["pages"]:
+                    if not page or "commands" not in page or not isinstance(page["commands"], list):
+                        continue
+                    for command in page["commands"]:
+                        if not command:
+                            continue
+
+                        speaker = command.get("speaker", "")
+
+                        # data array
+                        if "data" in command and isinstance(command["data"], list):
+                            for i, text in enumerate(command["data"]):
+                                if text:
+                                    if translatedDataList is None:
+                                        text = text.replace("\n", " ")
+                                        if speaker:
+                                            dataList.append(f"[{speaker}]: {text}")
+                                        else:
+                                            dataList.append(text)
+                                    else:
+                                        if dataList:
+                                            translated = dataList[0]
+                                            if speaker:
+                                                match = re.search(r'(^\[.+?\]\s?[|:]\s?)', translated)
+                                                if match:
+                                                    translated = translated.replace(match.group(1), "")
+                                            translated = dazedwrap.wrapText(translated, width=WIDTH)
+                                            command["data"][i] = translated
+                                            dataList.pop(0)
+
+                        # speaker field
+                        if "speaker" in command and command["speaker"]:
+                            if translatedDataList is None:
+                                speakerList.append(command["speaker"])
+                            else:
+                                if speakerList:
+                                    command["speaker"] = speakerList[0]
+                                    speakerList.pop(0)
+
+    # If this was Pass 1, perform translations and recurse
+    if translatedDataList is None:
+        originalNameCount = len(nameList)
+        originalDescCount = len(descList)
+        originalDataCount = len(dataList)
+        originalSpeakerCount = len(speakerList)
+
+        if nameList:
+            response = translateAI(
+                nameList,
+                "Reply with only the " + LANGUAGE + " translation of the bookmark name.",
+                True,
+                filename,
+                pbar,
+            )
+            nameList = response[0]
+            totalTokens[0] += response[1][0]
+            totalTokens[1] += response[1][1]
+
+        if descList:
+            response = translateAI(
+                descList,
+                "Reply with only the " + LANGUAGE + " translation of the bookmark description.",
+                True,
+                filename,
+                pbar,
+            )
+            descList = response[0]
+            totalTokens[0] += response[1][0]
+            totalTokens[1] += response[1][1]
+
+        if dataList:
+            response = translateAI(
+                dataList,
+                "Reply with only the " + LANGUAGE + " translation of the dialogue text.",
+                True,
+                filename,
+                pbar,
+            )
+            dataList = response[0]
+            totalTokens[0] += response[1][0]
+            totalTokens[1] += response[1][1]
+
+        if speakerList:
+            response = translateAI(
+                speakerList,
+                "Reply with only the " + LANGUAGE + " translation of the speaker name.",
+                True,
+                filename,
+                pbar,
+            )
+            speakerList = response[0]
+            totalTokens[0] += response[1][0]
+            totalTokens[1] += response[1][1]
+
+        # Mismatch checks
+        if len(nameList) != originalNameCount:
+            with LOCK:
+                if filename not in MISMATCH:
+                    MISMATCH.append(filename)
+        if len(descList) != originalDescCount:
+            with LOCK:
+                if filename not in MISMATCH:
+                    MISMATCH.append(filename)
+        if len(dataList) != originalDataCount:
+            with LOCK:
+                if filename not in MISMATCH:
+                    MISMATCH.append(filename)
+        if len(speakerList) != originalSpeakerCount:
+            with LOCK:
+                if filename not in MISMATCH:
+                    MISMATCH.append(filename)
+
+        # PASS 2
+        translateBookmark(data, filename, [nameList, descList, dataList, speakerList], pbar)
+
+    return totalTokens
 
 
 def parseGeneric(data, filename):
