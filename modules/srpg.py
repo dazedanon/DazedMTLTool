@@ -72,6 +72,27 @@ TRANSLATION_CONFIG = TranslationConfig(
 FIXTEXTWRAP = True  # Rewrap text to WIDTH
 IGNORETLTEXT = False  # Skip Translated Text
 
+# List of file patterns that use parseGeneric
+# Add more patterns here as needed
+GENERIC_FILES = [
+    "quests",
+    "shops",
+    "bonuses",
+    "base",
+    "battleprep",
+    "manage",
+    "mapcommands",
+    "title",
+    "placeevents",
+    "talkevents",
+    "characters",
+    
+    # Add more file patterns here, e.g.:
+    # "items",
+    # "skills",
+    # "classes",
+]
+
 
 def handleSRPG(filename, estimate):
     """
@@ -131,8 +152,8 @@ def openFiles(filename):
     with open("files/" + filename, "r", encoding="utf-8-sig") as f:
         data = json.load(f)
 
-        # Quests File
-        if "quests" in filename.lower():
+        # Check if filename matches any pattern in GENERIC_FILES
+        if any(pattern in filename.lower() for pattern in GENERIC_FILES):
             translatedData = parseGeneric(data, filename)
         
         # TODO: Add other SRPG Studio file types here
@@ -161,13 +182,21 @@ def parseGeneric(data, filename):
     totalTokens = [0, 0]
     
     try:
-        # Count work units (name and desc fields that need translation)
+        # Count work units (all translatable fields that need translation)
         total_units = 0
+        translatable_fields = ["name", "desc", "commandName", "command"]
+        
         for entry in data:
-            if entry and "name" in entry and entry["name"] and re.search(LANGREGEX, entry["name"]):
-                total_units += 1
-            if entry and "desc" in entry and entry["desc"] and re.search(LANGREGEX, entry["desc"]):
-                total_units += 1
+            if entry:
+                for field in translatable_fields:
+                    if field in entry and entry[field]:
+                        total_units += 1
+                
+                # Handle pages array separately
+                if "pages" in entry and entry["pages"] and isinstance(entry["pages"], list):
+                    for page in entry["pages"]:
+                        if page:
+                            total_units += 1
         
         # Setup progress bar
         with LOCK:
@@ -186,8 +215,9 @@ def parseGeneric(data, filename):
         
         # Close progress bar
         with LOCK:
-            PBAR.close()
-            PBAR = None
+            if PBAR:
+                PBAR.close()
+                PBAR = None
         
         return (data, totalTokens, None)
         
@@ -202,15 +232,15 @@ def parseGeneric(data, filename):
 
 def translateGeneric(data, filename, translatedDataList=None):
     """
-    Translates generic SRPG Studio data with id, name, desc structure.
+    Translates generic SRPG Studio data with id, name, desc, commandName, command, pages structure.
     Uses two-pass approach via recursion:
     - Pass 1 (translatedDataList=None): Collect strings and batch translate
     - Pass 2 (translatedDataList set): Apply translations back to the data
     
     Args:
-        data: List of objects with id, name, desc keys
+        data: List of objects with id, name, desc, commandName, command, pages keys
         filename: Name of the file being translated
-        translatedDataList: List containing [nameList, descList] 
+        translatedDataList: List containing [nameList, descList, commandNameList, commandList, pagesList] 
                            - Pass 1: Empty lists to collect originals
                            - Pass 2: Filled lists with translations
     
@@ -226,10 +256,16 @@ def translateGeneric(data, filename, translatedDataList=None):
         # PASS 1: Create empty lists to collect strings
         nameList = []
         descList = []
+        commandNameList = []
+        commandList = []
+        pagesList = []
     else:
         # PASS 2: Use provided translated lists
         nameList = translatedDataList[0]
         descList = translatedDataList[1]
+        commandNameList = translatedDataList[2]
+        commandList = translatedDataList[3]
+        pagesList = translatedDataList[4]
     
     # Single loop - behavior depends on which pass we're in
     for entry in data:
@@ -237,7 +273,7 @@ def translateGeneric(data, filename, translatedDataList=None):
             continue
         
         # Handle name field
-        if "name" in entry and entry["name"] and re.search(LANGREGEX, entry["name"]):
+        if "name" in entry and entry["name"]:
             # PASS 1: Collect original
             if translatedDataList is None:
                 nameList.append(entry["name"])
@@ -248,7 +284,7 @@ def translateGeneric(data, filename, translatedDataList=None):
                     nameList.pop(0)
         
         # Handle desc field
-        if "desc" in entry and entry["desc"] and re.search(LANGREGEX, entry["desc"]):
+        if "desc" in entry and entry["desc"]:
             # PASS 1: Collect original
             if translatedDataList is None:
                 descList.append(entry["desc"])
@@ -257,12 +293,58 @@ def translateGeneric(data, filename, translatedDataList=None):
                 if descList:
                     entry["desc"] = descList[0]
                     descList.pop(0)
+        
+        # Handle commandName field
+        if "commandName" in entry and entry["commandName"]:
+            # PASS 1: Collect original
+            if translatedDataList is None:
+                commandNameList.append(entry["commandName"])
+            # PASS 2: Apply translation
+            else:
+                if commandNameList:
+                    entry["commandName"] = commandNameList[0]
+                    commandNameList.pop(0)
+        
+        # Handle command field
+        if "command" in entry and entry["command"]:
+            # PASS 1: Collect original
+            if translatedDataList is None:
+                commandList.append(entry["command"])
+            # PASS 2: Apply translation
+            else:
+                if commandList:
+                    entry["command"] = commandList[0]
+                    commandList.pop(0)
+        
+        # Handle pages field (array of strings)
+        if "pages" in entry and entry["pages"] and isinstance(entry["pages"], list):
+            for i, page in enumerate(entry["pages"]):
+                if page:
+                    # PASS 1: Collect original
+                    if translatedDataList is None:
+                        # Nuke Wordwrap
+                        page = page.replace("\n", " ")
+                        pagesList.append(page)
+                    # PASS 2: Apply translation
+                    else:
+                        if pagesList:
+                            translatedText = pagesList[0]
+
+                            # Wordwrap
+                            translatedText = dazedwrap.wrapText(translatedText, width=WIDTH)
+
+                            # Set Data
+                            entry["pages"][i] = translatedText
+                            pagesList.pop(0)
     
     # If this was Pass 1, do the translation and recurse for Pass 2
     if translatedDataList is None:
         # Store original counts for mismatch checking
         originalNameCount = len(nameList)
         originalDescCount = len(descList)
+        originalCommandNameCount = len(commandNameList)
+        originalCommandCount = len(commandList)
+        originalPagesCount = len(pagesList)
         
         # Batch translate names
         if nameList:
@@ -286,6 +368,39 @@ def translateGeneric(data, filename, translatedDataList=None):
             totalTokens[0] += response[1][0]
             totalTokens[1] += response[1][1]
         
+        # Batch translate command names
+        if commandNameList:
+            response = translateAI(
+                commandNameList,
+                "Reply with only the " + LANGUAGE + " translation of the command name.",
+                True
+            )
+            commandNameList = response[0]
+            totalTokens[0] += response[1][0]
+            totalTokens[1] += response[1][1]
+        
+        # Batch translate commands
+        if commandList:
+            response = translateAI(
+                commandList,
+                "Reply with only the " + LANGUAGE + " translation of the command.",
+                True
+            )
+            commandList = response[0]
+            totalTokens[0] += response[1][0]
+            totalTokens[1] += response[1][1]
+        
+        # Batch translate pages
+        if pagesList:
+            response = translateAI(
+                pagesList,
+                "Reply with only the " + LANGUAGE + " translation of the page content.",
+                True
+            )
+            pagesList = response[0]
+            totalTokens[0] += response[1][0]
+            totalTokens[1] += response[1][1]
+        
         # Check for mismatch errors
         if len(nameList) != originalNameCount:
             with LOCK:
@@ -297,8 +412,23 @@ def translateGeneric(data, filename, translatedDataList=None):
                 if filename not in MISMATCH:
                     MISMATCH.append(filename)
         
+        if len(commandNameList) != originalCommandNameCount:
+            with LOCK:
+                if filename not in MISMATCH:
+                    MISMATCH.append(filename)
+        
+        if len(commandList) != originalCommandCount:
+            with LOCK:
+                if filename not in MISMATCH:
+                    MISMATCH.append(filename)
+        
+        if len(pagesList) != originalPagesCount:
+            with LOCK:
+                if filename not in MISMATCH:
+                    MISMATCH.append(filename)
+        
         # PASS 2: Recursively call to apply translations
-        translateGeneric(data, filename, [nameList, descList])
+        translateGeneric(data, filename, [nameList, descList, commandNameList, commandList, pagesList])
     
     return totalTokens
 
