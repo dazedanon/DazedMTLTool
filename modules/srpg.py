@@ -210,7 +210,9 @@ def translateGeneric(data, filename, translatedDataList=None):
     Args:
         data: List of objects with id, name, desc keys
         filename: Name of the file being translated
-        translatedDataList: List containing [translatedNameList, translatedDescList] (None on first pass)
+        translatedDataList: List containing [nameList, descList] 
+                           - Pass 1: Empty lists to collect originals
+                           - Pass 2: Filled lists with translations
     
     Returns:
         Tuple of [input tokens, output tokens]
@@ -219,45 +221,48 @@ def translateGeneric(data, filename, translatedDataList=None):
     
     totalTokens = [0, 0]
     
-    # Lists to store strings for translation (Pass 1 only)
-    nameList = []
-    descList = []
+    # Initialize or extract lists
+    if translatedDataList is None:
+        # PASS 1: Create empty lists to collect strings
+        nameList = []
+        descList = []
+    else:
+        # PASS 2: Use provided translated lists
+        nameList = translatedDataList[0]
+        descList = translatedDataList[1]
     
-    # Extract translated lists if provided
-    translatedNameList = translatedDataList[0] if translatedDataList else None
-    translatedDescList = translatedDataList[1] if translatedDataList else None
-    
-    # Single loop - behavior depends on whether we have translated lists
+    # Single loop - behavior depends on which pass we're in
     for entry in data:
         if not entry:
             continue
         
         # Handle name field
         if "name" in entry and entry["name"] and re.search(LANGREGEX, entry["name"]):
-            # PASS 1: Collect
-            if translatedNameList is None:
+            # PASS 1: Collect original
+            if translatedDataList is None:
                 nameList.append(entry["name"])
-            # PASS 2: Apply
+            # PASS 2: Apply translation
             else:
-                if translatedNameList:
-                    entry["name"] = translatedNameList[0]
-                    translatedNameList.pop(0)
+                if nameList:
+                    entry["name"] = nameList[0]
+                    nameList.pop(0)
         
         # Handle desc field
         if "desc" in entry and entry["desc"] and re.search(LANGREGEX, entry["desc"]):
-            # PASS 1: Collect
-            if translatedDescList is None:
+            # PASS 1: Collect original
+            if translatedDataList is None:
                 descList.append(entry["desc"])
-            # PASS 2: Apply
+            # PASS 2: Apply translation
             else:
-                if translatedDescList:
-                    entry["desc"] = translatedDescList[0]
-                    translatedDescList.pop(0)
+                if descList:
+                    entry["desc"] = descList[0]
+                    descList.pop(0)
     
     # If this was Pass 1, do the translation and recurse for Pass 2
     if translatedDataList is None:
-        translatedNameList = []
-        translatedDescList = []
+        # Store original counts for mismatch checking
+        originalNameCount = len(nameList)
+        originalDescCount = len(descList)
         
         # Batch translate names
         if nameList:
@@ -266,15 +271,9 @@ def translateGeneric(data, filename, translatedDataList=None):
                 "Reply with only the " + LANGUAGE + " translation of the quest name.",
                 True
             )
-            translatedNameList = response[0]
+            nameList = response[0]
             totalTokens[0] += response[1][0]
             totalTokens[1] += response[1][1]
-            
-            # Update progress bar for names
-            if PBAR:
-                with LOCK:
-                    PBAR.update(len(nameList))
-                    PBAR.refresh()
         
         # Batch translate descriptions
         if descList:
@@ -283,29 +282,23 @@ def translateGeneric(data, filename, translatedDataList=None):
                 "Reply with only the " + LANGUAGE + " translation of the quest description.",
                 True
             )
-            translatedDescList = response[0]
+            descList = response[0]
             totalTokens[0] += response[1][0]
             totalTokens[1] += response[1][1]
-            
-            # Update progress bar for descriptions
-            if PBAR:
-                with LOCK:
-                    PBAR.update(len(descList))
-                    PBAR.refresh()
         
         # Check for mismatch errors
-        if len(translatedNameList) != len(nameList):
+        if len(nameList) != originalNameCount:
             with LOCK:
                 if filename not in MISMATCH:
                     MISMATCH.append(filename)
         
-        if len(translatedDescList) != len(descList):
+        if len(descList) != originalDescCount:
             with LOCK:
                 if filename not in MISMATCH:
                     MISMATCH.append(filename)
         
         # PASS 2: Recursively call to apply translations
-        translateGeneric(data, filename, [translatedNameList, translatedDescList])
+        translateGeneric(data, filename, [nameList, descList])
     
     return totalTokens
 
