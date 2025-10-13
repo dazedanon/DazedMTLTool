@@ -576,27 +576,6 @@ def parseRecollection(data, filename):
         # Count work units (data entries and speakers that need translation)
         total_units = 0
         
-        def process_command(command, callback):
-            """Helper to process commands - used for both counting and translating."""
-            if not command:
-                return
-            
-            # Handle data array
-            if "data" in command and isinstance(command["data"], list):
-                for i, text in enumerate(command["data"]):
-                    if text and re.search(LANGREGEX, text):
-                        callback('data', command, i, text)
-            
-            # Handle speaker field
-            if "speaker" in command and command["speaker"]:
-                if re.search(LANGREGEX, command["speaker"]):
-                    callback('speaker', command, None, command["speaker"])
-        
-        def count_callback(field_type, command, index, text):
-            """Callback for counting translatable items."""
-            nonlocal total_units
-            total_units += 1
-        
         # Iterate through structure and count
         for entry in data:
             if not entry or "pages" not in entry or not isinstance(entry["pages"], list):
@@ -607,7 +586,19 @@ def parseRecollection(data, filename):
                     continue
                 
                 for command in page["commands"]:
-                    process_command(command, count_callback)
+                    if not command:
+                        continue
+                    
+                    # Count data array items
+                    if "data" in command and isinstance(command["data"], list):
+                        for text in command["data"]:
+                            if text and re.search(LANGREGEX, text):
+                                total_units += 1
+                    
+                    # Count speaker field
+                    if "speaker" in command and command["speaker"]:
+                        if re.search(LANGREGEX, command["speaker"]):
+                            total_units += 1
         
         # Setup progress bar
         with LOCK:
@@ -692,40 +683,59 @@ def translateRecollection(data, filename, translatedDataList=None):
                 if not command:
                     continue
                 
+                # Get the speaker for this command (if available)
+                speaker = command.get("speaker", "")
+                
                 # Handle data array
                 if "data" in command and isinstance(command["data"], list):
                     for i, text in enumerate(command["data"]):
-                        if text and re.search(LANGREGEX, text):
-                            # PASS 1: Collect original
+                        if text:
+                            # PASS 1: Collect original with speaker prefix
                             if translatedDataList is None:
-                                dataList.append(text)
-                            # PASS 2: Apply translation
+                                # Remove Wrap
+                                text = text.replace("\n", " ")
+
+                                # Attach speaker to data for translation
+                                if speaker:
+                                    dataList.append(f"[{speaker}]: {text}")
+                                else:
+                                    dataList.append(text)
+
+                            # PASS 2: Apply translation and strip speaker prefix
                             else:
                                 if dataList:
-                                    command["data"][i] = dataList[0]
+                                    translated = dataList[0]
+
+                                    # Remove speaker
+                                    if speaker:
+                                        match = re.search(r'(^\[.+?\]\s?[|:]\s?)', translated)
+                                        if match:
+                                            translated = translated.replace(match.group(1), "")
+                                    
+                                    # Textwrap
+                                    translated = dazedwrap.wrapText(translated, width=WIDTH)
+
+                                    # Set Data
+                                    command["data"][i] = translated
                                     dataList.pop(0)
                 
                 # Handle speaker field
                 if "speaker" in command and command["speaker"]:
-                    if re.search(LANGREGEX, command["speaker"]):
-                        # PASS 1: Collect original
-                        if translatedDataList is None:
-                            originalSpeakerList.append(command["speaker"])
-                            speakerList.append(command["speaker"])
-                        # PASS 2: Apply translation
-                        else:
-                            if speakerList:
-                                command["speaker"] = speakerList[0]
-                                speakerList.pop(0)
+                    # PASS 1: Collect original
+                    if translatedDataList is None:
+                        originalSpeakerList.append(command["speaker"])
+                        speakerList.append(command["speaker"])
+                    # PASS 2: Apply translation
+                    else:
+                        if speakerList:
+                            command["speaker"] = speakerList[0]
+                            speakerList.pop(0)
     
     # If this was Pass 1, do the translation and recurse for Pass 2
     if translatedDataList is None:
         # Store original counts for mismatch checking
         originalDataCount = len(dataList)
         originalSpeakerCount = len(speakerList)
-        
-        # Keep copy of original speakers for vocab
-        speakerOriginals = originalSpeakerList.copy()
         
         # Batch translate data text
         if dataList:
@@ -748,14 +758,6 @@ def translateRecollection(data, filename, translatedDataList=None):
             speakerList = response[0]
             totalTokens[0] += response[1][0]
             totalTokens[1] += response[1][1]
-        
-        # Update vocab.txt with speaker translations
-        if speakerOriginals and speakerList:
-            try:
-                vocab_pairs = list(zip(speakerOriginals, speakerList))
-                update_vocab_section("Speakers", vocab_pairs)
-            except Exception:
-                traceback.print_exc()
         
         # Check for mismatch errors
         if len(dataList) != originalDataCount:
