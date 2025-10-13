@@ -131,45 +131,183 @@ def openFiles(filename):
     with open("files/" + filename, "r", encoding="utf-8-sig") as f:
         data = json.load(f)
 
-        # TODO: Add specific file type detection and parsing
-        # For now, return a basic structure
-        # This will be expanded based on SRPG Studio file formats
+        # Quests File
+        if "quests" in filename.lower():
+            translatedData = parseGeneric(data, filename)
         
-        # Placeholder - you'll need to implement specific parsers
-        # based on SRPG Studio's actual file structure
-        translatedData = parseGeneric(data, filename)
+        # TODO: Add other SRPG Studio file types here
+        else:
+            raise NameError(filename + " Not Supported")
 
     return translatedData
 
 
 def parseGeneric(data, filename):
     """
-    Generic parser for SRPG Studio files.
-    This is a placeholder that should be replaced with specific parsers.
+    Generic parser for SRPG Studio files with id, name, desc structure.
+    Handles files like quests.json.
+    Uses a two-pass approach: first pass collects all strings to translate,
+    then batch translates them, then second pass applies translations.
     
     Args:
-        data: Parsed JSON data
+        data: Parsed JSON data (list of objects with id, name, desc)
         filename: Name of the file being parsed
     
     Returns:
         Tuple of (data, token counts, error)
     """
-    global ESTIMATE, TOKENS
+    global PBAR
     
     totalTokens = [0, 0]
-    totalLines = 0
     
     try:
-        # TODO: Implement actual parsing logic based on SRPG Studio format
-        # This is a placeholder structure
-        tqdm.write(f"Parsing {filename}...")
+        # Count work units (name and desc fields that need translation)
+        total_units = 0
+        for entry in data:
+            if entry and "name" in entry and entry["name"] and re.search(LANGREGEX, entry["name"]):
+                total_units += 1
+            if entry and "desc" in entry and entry["desc"] and re.search(LANGREGEX, entry["desc"]):
+                total_units += 1
         
-        # For now, just return the data unchanged
+        # Setup progress bar
+        with LOCK:
+            PBAR = tqdm(
+                desc=filename,
+                total=total_units,
+                bar_format=BAR_FORMAT,
+                position=POSITION,
+                leave=LEAVE,
+            )
+        
+        # Translate the data using two-pass approach
+        result = translateGeneric(data, filename)
+        totalTokens[0] += result[0]
+        totalTokens[1] += result[1]
+        
+        # Close progress bar
+        with LOCK:
+            PBAR.close()
+            PBAR = None
+        
         return (data, totalTokens, None)
         
     except Exception as e:
         traceback.print_exc()
+        if PBAR:
+            with LOCK:
+                PBAR.close()
+                PBAR = None
         return (data, totalTokens, e)
+
+
+def translateGeneric(data, filename, translatedDataList=None):
+    """
+    Translates generic SRPG Studio data with id, name, desc structure.
+    Uses two-pass approach via recursion:
+    - Pass 1 (translatedDataList=None): Collect strings and batch translate
+    - Pass 2 (translatedDataList set): Apply translations back to the data
+    
+    Args:
+        data: List of objects with id, name, desc keys
+        filename: Name of the file being translated
+        translatedDataList: List containing [translatedNameList, translatedDescList] (None on first pass)
+    
+    Returns:
+        Tuple of [input tokens, output tokens]
+    """
+    global PBAR
+    
+    totalTokens = [0, 0]
+    
+    # Lists to store strings for translation (Pass 1 only)
+    nameList = []
+    descList = []
+    
+    # Extract translated lists if provided
+    translatedNameList = translatedDataList[0] if translatedDataList else None
+    translatedDescList = translatedDataList[1] if translatedDataList else None
+    
+    # Single loop - behavior depends on whether we have translated lists
+    for entry in data:
+        if not entry:
+            continue
+        
+        # Handle name field
+        if "name" in entry and entry["name"] and re.search(LANGREGEX, entry["name"]):
+            # PASS 1: Collect
+            if translatedNameList is None:
+                nameList.append(entry["name"])
+            # PASS 2: Apply
+            else:
+                if translatedNameList:
+                    entry["name"] = translatedNameList[0]
+                    translatedNameList.pop(0)
+        
+        # Handle desc field
+        if "desc" in entry and entry["desc"] and re.search(LANGREGEX, entry["desc"]):
+            # PASS 1: Collect
+            if translatedDescList is None:
+                descList.append(entry["desc"])
+            # PASS 2: Apply
+            else:
+                if translatedDescList:
+                    entry["desc"] = translatedDescList[0]
+                    translatedDescList.pop(0)
+    
+    # If this was Pass 1, do the translation and recurse for Pass 2
+    if translatedDataList is None:
+        translatedNameList = []
+        translatedDescList = []
+        
+        # Batch translate names
+        if nameList:
+            response = translateAI(
+                nameList,
+                "Reply with only the " + LANGUAGE + " translation of the quest name.",
+                True
+            )
+            translatedNameList = response[0]
+            totalTokens[0] += response[1][0]
+            totalTokens[1] += response[1][1]
+            
+            # Update progress bar for names
+            if PBAR:
+                with LOCK:
+                    PBAR.update(len(nameList))
+                    PBAR.refresh()
+        
+        # Batch translate descriptions
+        if descList:
+            response = translateAI(
+                descList,
+                "Reply with only the " + LANGUAGE + " translation of the quest description.",
+                True
+            )
+            translatedDescList = response[0]
+            totalTokens[0] += response[1][0]
+            totalTokens[1] += response[1][1]
+            
+            # Update progress bar for descriptions
+            if PBAR:
+                with LOCK:
+                    PBAR.update(len(descList))
+                    PBAR.refresh()
+        
+        # Check for mismatch errors
+        if len(translatedNameList) != len(nameList):
+            with LOCK:
+                if filename not in MISMATCH:
+                    MISMATCH.append(filename)
+        
+        if len(translatedDescList) != len(descList):
+            with LOCK:
+                if filename not in MISMATCH:
+                    MISMATCH.append(filename)
+        
+        # PASS 2: Recursively call to apply translations
+        translateGeneric(data, filename, [translatedNameList, translatedDescList])
+    
+    return totalTokens
 
 
 def getResultString(translatedData, translationTime, filename):
