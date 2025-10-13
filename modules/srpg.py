@@ -260,8 +260,11 @@ def openFiles(filename):
     with open("files/" + filename, "r", encoding="utf-8-sig") as f:
         data = json.load(f)
 
+        # Check if filename matches recollection pattern
+        if "recollection" in filename.lower():
+            translatedData = parseRecollection(data, filename)
         # Check if filename matches any pattern in GENERIC_FILES
-        if any(pattern in filename.lower() for pattern in GENERIC_FILES):
+        elif any(pattern in filename.lower() for pattern in GENERIC_FILES):
             translatedData = parseGeneric(data, filename)
         
         # TODO: Add other SRPG Studio file types here
@@ -549,6 +552,224 @@ def translateGeneric(data, filename, translatedDataList=None):
         
         # PASS 2: Recursively call to apply translations
         translateGeneric(data, filename, [nameList, descList, commandNameList, commandList, pagesList])
+    
+    return totalTokens
+
+
+def parseRecollection(data, filename):
+    """
+    Parser for SRPG Studio recollection.json files.
+    Structure: List of entries, each with pages containing commands with data arrays and speakers.
+    
+    Args:
+        data: Parsed JSON data (list of objects with id, pages structure)
+        filename: Name of the file being parsed
+    
+    Returns:
+        Tuple of (data, token counts, error)
+    """
+    global PBAR
+    
+    totalTokens = [0, 0]
+    
+    try:
+        # Count work units (data entries and speakers that need translation)
+        total_units = 0
+        
+        def process_command(command, callback):
+            """Helper to process commands - used for both counting and translating."""
+            if not command:
+                return
+            
+            # Handle data array
+            if "data" in command and isinstance(command["data"], list):
+                for i, text in enumerate(command["data"]):
+                    if text and re.search(LANGREGEX, text):
+                        callback('data', command, i, text)
+            
+            # Handle speaker field
+            if "speaker" in command and command["speaker"]:
+                if re.search(LANGREGEX, command["speaker"]):
+                    callback('speaker', command, None, command["speaker"])
+        
+        def count_callback(field_type, command, index, text):
+            """Callback for counting translatable items."""
+            nonlocal total_units
+            total_units += 1
+        
+        # Iterate through structure and count
+        for entry in data:
+            if not entry or "pages" not in entry or not isinstance(entry["pages"], list):
+                continue
+            
+            for page in entry["pages"]:
+                if not page or "commands" not in page or not isinstance(page["commands"], list):
+                    continue
+                
+                for command in page["commands"]:
+                    process_command(command, count_callback)
+        
+        # Setup progress bar
+        with LOCK:
+            PBAR = tqdm(
+                desc=filename,
+                total=total_units,
+                bar_format=BAR_FORMAT,
+                position=POSITION,
+                leave=LEAVE,
+            )
+        
+        # Translate the data using two-pass approach
+        result = translateRecollection(data, filename)
+        totalTokens[0] += result[0]
+        totalTokens[1] += result[1]
+        
+        # Close progress bar
+        with LOCK:
+            if PBAR:
+                PBAR.close()
+                PBAR = None
+        
+        return (data, totalTokens, None)
+        
+    except Exception as e:
+        traceback.print_exc()
+        if PBAR:
+            with LOCK:
+                PBAR.close()
+                PBAR = None
+        return (data, totalTokens, e)
+
+
+def translateRecollection(data, filename, translatedDataList=None):
+    """
+    Translates recollection.json data structure.
+    Uses two-pass approach via recursion:
+    - Pass 1 (translatedDataList=None): Collect strings and batch translate
+    - Pass 2 (translatedDataList set): Apply translations back to the data
+    
+    Args:
+        data: List of objects with pages->commands->data structure
+        filename: Name of the file being translated
+        translatedDataList: List containing [dataList, speakerList] 
+                           - Pass 1: Empty lists to collect originals
+                           - Pass 2: Filled lists with translations
+    
+    Returns:
+        Tuple of [input tokens, output tokens]
+    """
+    global PBAR
+    
+    totalTokens = [0, 0]
+    
+    # Initialize or extract lists
+    if translatedDataList is None:
+        # PASS 1: Create empty lists to collect strings
+        dataList = []
+        speakerList = []
+        originalSpeakerList = []  # For vocab update
+    else:
+        # PASS 2: Use provided translated lists
+        dataList = translatedDataList[0]
+        speakerList = translatedDataList[1]
+    
+    # Single loop - behavior depends on which pass we're in
+    for entry in data:
+        if not entry or "pages" not in entry:
+            continue
+        
+        if not isinstance(entry["pages"], list):
+            continue
+            
+        for page in entry["pages"]:
+            if not page or "commands" not in page:
+                continue
+            
+            if not isinstance(page["commands"], list):
+                continue
+                
+            for command in page["commands"]:
+                if not command:
+                    continue
+                
+                # Handle data array
+                if "data" in command and isinstance(command["data"], list):
+                    for i, text in enumerate(command["data"]):
+                        if text and re.search(LANGREGEX, text):
+                            # PASS 1: Collect original
+                            if translatedDataList is None:
+                                dataList.append(text)
+                            # PASS 2: Apply translation
+                            else:
+                                if dataList:
+                                    command["data"][i] = dataList[0]
+                                    dataList.pop(0)
+                
+                # Handle speaker field
+                if "speaker" in command and command["speaker"]:
+                    if re.search(LANGREGEX, command["speaker"]):
+                        # PASS 1: Collect original
+                        if translatedDataList is None:
+                            originalSpeakerList.append(command["speaker"])
+                            speakerList.append(command["speaker"])
+                        # PASS 2: Apply translation
+                        else:
+                            if speakerList:
+                                command["speaker"] = speakerList[0]
+                                speakerList.pop(0)
+    
+    # If this was Pass 1, do the translation and recurse for Pass 2
+    if translatedDataList is None:
+        # Store original counts for mismatch checking
+        originalDataCount = len(dataList)
+        originalSpeakerCount = len(speakerList)
+        
+        # Keep copy of original speakers for vocab
+        speakerOriginals = originalSpeakerList.copy()
+        
+        # Batch translate data text
+        if dataList:
+            response = translateAI(
+                dataList,
+                "Reply with only the " + LANGUAGE + " translation of the dialogue text.",
+                True
+            )
+            dataList = response[0]
+            totalTokens[0] += response[1][0]
+            totalTokens[1] += response[1][1]
+        
+        # Batch translate speakers
+        if speakerList:
+            response = translateAI(
+                speakerList,
+                "Reply with only the " + LANGUAGE + " translation of the speaker name.",
+                True
+            )
+            speakerList = response[0]
+            totalTokens[0] += response[1][0]
+            totalTokens[1] += response[1][1]
+        
+        # Update vocab.txt with speaker translations
+        if speakerOriginals and speakerList:
+            try:
+                vocab_pairs = list(zip(speakerOriginals, speakerList))
+                update_vocab_section("Speakers", vocab_pairs)
+            except Exception:
+                traceback.print_exc()
+        
+        # Check for mismatch errors
+        if len(dataList) != originalDataCount:
+            with LOCK:
+                if filename not in MISMATCH:
+                    MISMATCH.append(filename)
+        
+        if len(speakerList) != originalSpeakerCount:
+            with LOCK:
+                if filename not in MISMATCH:
+                    MISMATCH.append(filename)
+        
+        # PASS 2: Recursively call to apply translations
+        translateRecollection(data, filename, [dataList, speakerList])
     
     return totalTokens
 
