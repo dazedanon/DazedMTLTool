@@ -131,13 +131,71 @@ files to translate are in the /files folder and that you picked the right game e
         if speaker_parse:
             setSpeakerParseMode(True)
 
-    # Open File (Threads)
+    # Open File (Threads) - recursively walk 'files' and preserve directory structure
     with ThreadPoolExecutor(max_workers=THREADS) as executor:
         futures = []
-        for filename in os.listdir("files"):
-            for m in MODULES[version][1]:
-                if filename.endswith(m) and filename != ".gitkeep":
-                    futures.append(executor.submit(MODULES[version][2], filename, estimate))
+        files_root = "files"
+
+        # Special-case: Images engine expects a folder, not a file; schedule per directory containing assets
+        if MODULES[version][0] == "Images":
+            for root, dirs, filenames in os.walk(files_root):
+                # Skip hidden/system directories
+                dirs[:] = [d for d in dirs if d not in {".git", "__pycache__"}]
+
+                # Skip the root 'files' itself to avoid processing everything twice
+                # We'll still allow scheduling for root if it contains assets
+
+                # Only schedule directories that contain potential assets
+                has_assets = any(fn.lower().endswith((".png", ".txt")) for fn in filenames)
+                if not has_assets:
+                    continue
+
+                # Compute relative directory path and ensure translated mirror exists
+                rel_dir = os.path.relpath(root, files_root).replace(os.sep, "/")
+                if rel_dir == ".":
+                    # Represent root as empty string so handler creates files under translated/ directly
+                    rel_dir = ""
+                try:
+                    target_dir = os.path.join("translated", rel_dir.replace("/", os.sep)) if rel_dir else "translated"
+                    os.makedirs(target_dir, exist_ok=True)
+                except Exception:
+                    pass
+
+                futures.append(
+                    executor.submit(MODULES[version][2], rel_dir, estimate)
+                )
+        else:
+            # Gather all candidate files recursively
+            for root, dirs, filenames in os.walk(files_root):
+                # Skip hidden/system directories if any
+                dirs[:] = [d for d in dirs if d not in {".git", "__pycache__"}]
+
+                for fname in filenames:
+                    if fname == ".gitkeep":
+                        continue
+
+                    abs_path = os.path.join(root, fname)
+                    # Build relative path from 'files' root using POSIX-style separators so handlers can do 'files/' + rel
+                    rel_path = os.path.relpath(abs_path, files_root)
+                    rel_path_posix = rel_path.replace(os.sep, "/")
+
+                    # Check extension match for the selected module version
+                    for m in MODULES[version][1]:
+                        if rel_path_posix.endswith(m):
+                            # Ensure the corresponding directory exists under 'translated'
+                            rel_dir = os.path.dirname(rel_path_posix)
+                            if rel_dir:
+                                try:
+                                    os.makedirs(os.path.join("translated", rel_dir.replace("/", os.sep)), exist_ok=True)
+                                except Exception:
+                                    # Best-effort; handler may attempt write and fail if permissions are insufficient
+                                    pass
+
+                            futures.append(
+                                executor.submit(MODULES[version][2], rel_path_posix, estimate)
+                            )
+                            break  # Avoid double-adding if multiple ext entries match
+
         for future in as_completed(futures):
             try:
                 totalCost = future.result()
