@@ -113,8 +113,10 @@ GENERIC_FILES = [
 ]
 
 # List of file patterns that use parseMap
+# Be specific to avoid catching non-map files like CommandLayout/mapcommands.json
+# SRPG Studio map files in this project follow the pattern Maps/map_XXX.json
 MAP_FILES = [
-    "map",
+    "map_",  # e.g., Maps/map_000.json
 ]
 
 
