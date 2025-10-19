@@ -702,11 +702,17 @@ def translateGeneric(data, filename, translatedDataList=None, pbar=None):
         if "desc" in entry and entry["desc"]:
             # PASS 1: Collect original
             if translatedDataList is None:
-                descList.append(entry["desc"])
+                # Nuke Wordwrap
+                descList.append(entry["desc"].replace("\n", " "))
             # PASS 2: Apply translation
             else:
                 if descList:
-                    entry["desc"] = descList[0]
+                    translatedText = descList[0]
+                    # Wordwrap
+                    translatedText = dazedwrap.wrapText(translatedText, width=WIDTH)
+
+                    # Set Data
+                    entry["desc"] = translatedText
                     descList.pop(0)
         
         # Handle commandName field
@@ -797,11 +803,16 @@ def translateGeneric(data, filename, translatedDataList=None, pbar=None):
                 if "desc" in terrain and terrain["desc"]:
                     # PASS 1: Collect original
                     if translatedDataList is None:
-                        descList.append(terrain["desc"])
+                        descList.append(terrain["desc"]).replace("\n", " ")
                     # PASS 2: Apply translation
                     else:
                         if descList:
-                            terrain["desc"] = descList[0]
+                            translatedText = descList[0]
+                            # Wordwrap
+                            translatedText = dazedwrap.wrapText(translatedText, width=WIDTH)
+                            
+                            # Set Data
+                            terrain["desc"] = translatedText
                             descList.pop(0)
     
     # If this was Pass 1, do the translation and recurse for Pass 2
@@ -1057,16 +1068,15 @@ def parseRecollection(data, filename):
                     if not command:
                         continue
                     
-                    # Count data array items
+                    # Count data array items (count any non-empty text; do not gate on LANGREGEX)
                     if "data" in command and isinstance(command["data"], list):
                         for text in command["data"]:
-                            if text and re.search(LANGREGEX, text):
+                            if text:
                                 total_units += 1
-                    
-                    # Count speaker field
+
+                    # Count speaker field (count any non-empty speaker; do not gate on LANGREGEX)
                     if "speaker" in command and command["speaker"]:
-                        if re.search(LANGREGEX, command["speaker"]):
-                            total_units += 1
+                        total_units += 1
         
         # Setup progress bar (per-file instance)
         with LOCK:
@@ -1437,11 +1447,14 @@ def translateMap(data, filename, translatedDataList=None, pbar=None):
     if "desc" in data and data["desc"]:
         # PASS 1: Collect original
         if translatedDataList is None:
-            descList.append(data["desc"])
+            descList.append(data["desc"].replace("\n", " "))
         # PASS 2: Apply translation
         else:
             if descList:
-                data["desc"] = descList[0]
+                translatedText = descList[0]
+                # Wordwrap
+                translatedText = dazedwrap.wrapText(translatedText, width=WIDTH)
+                data["desc"] = translatedText
                 descList.pop(0)
     
     # Handle mapName field
@@ -1500,10 +1513,13 @@ def translateMap(data, filename, translatedDataList=None, pbar=None):
                 # Handle unit desc
                 if "desc" in unit and unit["desc"]:
                     if translatedDataList is None:
-                        unitDescList.append(unit["desc"])
+                        unitDescList.append(unit["desc"].replace("\n", " "))
                     else:
                         if unitDescList:
-                            unit["desc"] = unitDescList[0]
+                            translatedText = unitDescList[0]
+                            # Wordwrap
+                            translatedText = dazedwrap.wrapText(translatedText, width=WIDTH)
+                            unit["desc"] = translatedText
                             unitDescList.pop(0)
                 
                 # Process events within units
