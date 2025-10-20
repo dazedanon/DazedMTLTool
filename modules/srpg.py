@@ -347,8 +347,17 @@ def parseBookmark(data, filename):
             # events -> pages -> commands
             if "events" in entry and isinstance(entry["events"], list):
                 for event in entry["events"]:
-                    if not event or "pages" not in event or not isinstance(event["pages"], list):
+                    if not event:
                         continue
+                    
+                    # Count event-level name and desc fields
+                    for field in ["name", "desc"]:
+                        if field in event and event[field]:
+                            total_units += 1
+                    
+                    if "pages" not in event or not isinstance(event["pages"], list):
+                        continue
+                        
                     for page in event["pages"]:
                         if not page or "commands" not in page or not isinstance(page["commands"], list):
                             continue
@@ -430,17 +439,47 @@ def translateBookmark(data, filename, translatedDataList=None, pbar=None):
         # desc
         if "desc" in entry and entry["desc"]:
             if translatedDataList is None:
-                descList.append(entry["desc"])
+                # Remove newlines for translation
+                descList.append(entry["desc"].replace("\n", " "))
             else:
                 if descList:
-                    entry["desc"] = descList[0]
+                    translatedText = descList[0]
+                    # Apply text wrapping
+                    translatedText = dazedwrap.wrapText(translatedText, width=WIDTH)
+                    entry["desc"] = translatedText
                     descList.pop(0)
 
         # events -> pages -> commands
         if "events" in entry and isinstance(entry["events"], list):
             for event in entry["events"]:
-                if not event or "pages" not in event or not isinstance(event["pages"], list):
+                if not event:
                     continue
+                
+                # Handle event-level name field
+                if "name" in event and event["name"]:
+                    if translatedDataList is None:
+                        nameList.append(event["name"])
+                    else:
+                        if nameList:
+                            event["name"] = nameList[0]
+                            nameList.pop(0)
+                
+                # Handle event-level desc field
+                if "desc" in event and event["desc"]:
+                    if translatedDataList is None:
+                        # Remove newlines for translation
+                        descList.append(event["desc"].replace("\n", " "))
+                    else:
+                        if descList:
+                            translatedText = descList[0]
+                            # Apply text wrapping
+                            translatedText = dazedwrap.wrapText(translatedText, width=WIDTH)
+                            event["desc"] = translatedText
+                            descList.pop(0)
+                
+                if "pages" not in event or not isinstance(event["pages"], list):
+                    continue
+                    
                 for page in event["pages"]:
                     if not page or "commands" not in page or not isinstance(page["commands"], list):
                         continue
@@ -1057,7 +1096,21 @@ def parseRecollection(data, filename):
         
         # Iterate through structure and count
         for entry in data:
-            if not entry or "pages" not in entry or not isinstance(entry["pages"], list):
+            if not entry:
+                continue
+            
+            # Count name and desc fields at entry level
+            for field in ["name", "desc"]:
+                if field in entry and entry[field]:
+                    total_units += 1
+            
+            # Count customParameters hints
+            if "customParameters" in entry and entry["customParameters"]:
+                match = re.search(r'hint:"((?:[^"\\]|\\.)*)"', entry["customParameters"])
+                if match:
+                    total_units += 1
+            
+            if "pages" not in entry or not isinstance(entry["pages"], list):
                 continue
             
             for page in entry["pages"]:
@@ -1114,9 +1167,9 @@ def translateRecollection(data, filename, translatedDataList=None, pbar=None):
     - Pass 2 (translatedDataList set): Apply translations back to the data
     
     Args:
-        data: List of objects with pages->commands->data structure and customParameters
+        data: List of objects with name, desc, customParameters, and pages->commands->data structure
         filename: Name of the file being translated
-        translatedDataList: List containing [dataList, speakerList, customParamsList] 
+        translatedDataList: List containing [nameList, descList, dataList, speakerList, customParamsList] 
                            - Pass 1: Empty lists to collect originals
                            - Pass 2: Filled lists with translations
     
@@ -1130,20 +1183,50 @@ def translateRecollection(data, filename, translatedDataList=None, pbar=None):
     # Initialize or extract lists
     if translatedDataList is None:
         # PASS 1: Create empty lists to collect strings
+        nameList = []
+        descList = []
         dataList = []
         speakerList = []
         customParamsList = []
         originalSpeakerList = []  # For vocab update
     else:
         # PASS 2: Use provided translated lists
-        dataList = translatedDataList[0]
-        speakerList = translatedDataList[1]
-        customParamsList = translatedDataList[2]
+        nameList = translatedDataList[0]
+        descList = translatedDataList[1]
+        dataList = translatedDataList[2]
+        speakerList = translatedDataList[3]
+        customParamsList = translatedDataList[4]
     
     # Single loop - behavior depends on which pass we're in
     for entry in data:
-        if not entry or "pages" not in entry:
+        if not entry:
             continue
+        
+        # Handle name field
+        if "name" in entry and entry["name"]:
+            # PASS 1: Collect original
+            if translatedDataList is None:
+                nameList.append(entry["name"])
+            # PASS 2: Apply translation
+            else:
+                if nameList:
+                    entry["name"] = nameList[0]
+                    nameList.pop(0)
+        
+        # Handle desc field
+        if "desc" in entry and entry["desc"]:
+            # PASS 1: Collect original
+            if translatedDataList is None:
+                # Remove newlines for translation
+                descList.append(entry["desc"].replace("\n", " "))
+            # PASS 2: Apply translation
+            else:
+                if descList:
+                    translatedText = descList[0]
+                    # Apply text wrapping
+                    translatedText = dazedwrap.wrapText(translatedText, width=WIDTH)
+                    entry["desc"] = translatedText
+                    descList.pop(0)
         
         # Handle customParameters at entry level
         if "customParameters" in entry and entry["customParameters"]:
@@ -1177,7 +1260,8 @@ def translateRecollection(data, filename, translatedDataList=None, pbar=None):
                             entry["customParameters"]
                         )
         
-        if not isinstance(entry["pages"], list):
+        # Check if pages exists before processing
+        if "pages" not in entry or not isinstance(entry["pages"], list):
             continue
             
         for page in entry["pages"]:
@@ -1242,9 +1326,37 @@ def translateRecollection(data, filename, translatedDataList=None, pbar=None):
     # If this was Pass 1, do the translation and recurse for Pass 2
     if translatedDataList is None:
         # Store original counts for mismatch checking
+        originalNameCount = len(nameList)
+        originalDescCount = len(descList)
         originalDataCount = len(dataList)
         originalSpeakerCount = len(speakerList)
         originalCustomParamsCount = len(customParamsList)
+        
+        # Batch translate names
+        if nameList:
+            response = translateAI(
+                nameList,
+                "Reply with only the " + LANGUAGE + " translation of the name.",
+                True,
+                filename,
+                pbar
+            )
+            nameList = response[0]
+            totalTokens[0] += response[1][0]
+            totalTokens[1] += response[1][1]
+        
+        # Batch translate descriptions
+        if descList:
+            response = translateAI(
+                descList,
+                "Reply with only the " + LANGUAGE + " translation of the description.",
+                True,
+                filename,
+                pbar
+            )
+            descList = response[0]
+            totalTokens[0] += response[1][0]
+            totalTokens[1] += response[1][1]
         
         # Batch translate data text
         if dataList:
@@ -1296,6 +1408,16 @@ def translateRecollection(data, filename, translatedDataList=None, pbar=None):
                         translatedIndex += 1
         
         # Check for mismatch errors
+        if len(nameList) != originalNameCount:
+            with LOCK:
+                if filename not in MISMATCH:
+                    MISMATCH.append(filename)
+        
+        if len(descList) != originalDescCount:
+            with LOCK:
+                if filename not in MISMATCH:
+                    MISMATCH.append(filename)
+        
         if len(dataList) != originalDataCount:
             with LOCK:
                 if filename not in MISMATCH:
@@ -1312,7 +1434,7 @@ def translateRecollection(data, filename, translatedDataList=None, pbar=None):
                     MISMATCH.append(filename)
         
         # PASS 2: Recursively call to apply translations
-        translateRecollection(data, filename, [dataList, speakerList, customParamsList], pbar)
+        translateRecollection(data, filename, [nameList, descList, dataList, speakerList, customParamsList], pbar)
     
     return totalTokens
 
