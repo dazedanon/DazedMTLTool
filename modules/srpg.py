@@ -97,8 +97,6 @@ GENERIC_FILES = [
     "fonts",
     "fusionsettings",
     "transformations",
-    "placeevents",
-    "talkevents",
     "characters",
     "glossary",
     "npc",
@@ -291,6 +289,10 @@ def openFiles(filename):
             translatedData = parseRecollection(data, filename)
         # Bookmark events use the same structure as recollection (list of events with pages/commands)
         elif "bookmarkevents" in filename.lower():
+            translatedData = parseRecollection(data, filename)
+        # Event files (autoevents, placeevents, talkevents, communicationevents, openingevents, endingevents)
+        # all have name, desc, and pages->commands structure like recollection
+        elif any(event_type in filename.lower() for event_type in ["autoevents", "placeevents", "talkevents", "communicationevents", "openingevents", "endingevents"]):
             translatedData = parseRecollection(data, filename)
         # Check if filename matches bookmark pattern (top-level entries with name/desc + events)
         elif "bookmark" in filename.lower():
