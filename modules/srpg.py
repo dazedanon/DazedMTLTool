@@ -1114,9 +1114,9 @@ def translateRecollection(data, filename, translatedDataList=None, pbar=None):
     - Pass 2 (translatedDataList set): Apply translations back to the data
     
     Args:
-        data: List of objects with pages->commands->data structure
+        data: List of objects with pages->commands->data structure and customParameters
         filename: Name of the file being translated
-        translatedDataList: List containing [dataList, speakerList] 
+        translatedDataList: List containing [dataList, speakerList, customParamsList] 
                            - Pass 1: Empty lists to collect originals
                            - Pass 2: Filled lists with translations
     
@@ -1132,16 +1132,50 @@ def translateRecollection(data, filename, translatedDataList=None, pbar=None):
         # PASS 1: Create empty lists to collect strings
         dataList = []
         speakerList = []
+        customParamsList = []
         originalSpeakerList = []  # For vocab update
     else:
         # PASS 2: Use provided translated lists
         dataList = translatedDataList[0]
         speakerList = translatedDataList[1]
+        customParamsList = translatedDataList[2]
     
     # Single loop - behavior depends on which pass we're in
     for entry in data:
         if not entry or "pages" not in entry:
             continue
+        
+        # Handle customParameters at entry level
+        if "customParameters" in entry and entry["customParameters"]:
+            # PASS 1: Collect hint text
+            if translatedDataList is None:
+                # Extract hint value using regex (captures content between hint:" and ")
+                match = re.search(r'hint:"((?:[^"\\]|\\.)*)"', entry["customParameters"])
+                if match:
+                    hintText = match.group(1)
+                    hintText = hintText.replace("\\n", " ")
+                    customParamsList.append(hintText)
+                else:
+                    # No hint found, add empty string as placeholder
+                    customParamsList.append("")
+            # PASS 2: Apply translation
+            else:
+                if customParamsList:
+                    translatedHint = customParamsList[0]
+                    customParamsList.pop(0)
+                    
+                    if translatedHint:  # Only replace if we translated something
+                        # Replace double quotes with single quotes since \" is used as delimiter
+                        translatedHint = translatedHint.replace('"', "'")
+                        # Wrap text using dazedwrap with WIDTH and replace newlines with \\n
+                        translatedHint = dazedwrap.wrapText(translatedHint, width=WIDTH)
+                        translatedHint = translatedHint.replace("\n", "\\\\n")
+                        # Replace the hint value in customParameters
+                        entry["customParameters"] = re.sub(
+                            r'(hint:")((?:[^"\\]|\\.)*)"',
+                            r'\1' + translatedHint + '"',
+                            entry["customParameters"]
+                        )
         
         if not isinstance(entry["pages"], list):
             continue
@@ -1210,6 +1244,7 @@ def translateRecollection(data, filename, translatedDataList=None, pbar=None):
         # Store original counts for mismatch checking
         originalDataCount = len(dataList)
         originalSpeakerCount = len(speakerList)
+        originalCustomParamsCount = len(customParamsList)
         
         # Batch translate data text
         if dataList:
@@ -1237,6 +1272,29 @@ def translateRecollection(data, filename, translatedDataList=None, pbar=None):
             totalTokens[0] += response[1][0]
             totalTokens[1] += response[1][1]
         
+        # Batch translate customParameters hints (only non-empty ones)
+        if customParamsList:
+            # Filter out empty strings for translation
+            hintsToTranslate = [h for h in customParamsList if h]
+            if hintsToTranslate:
+                response = translateAI(
+                    hintsToTranslate,
+                    "Reply with only the " + LANGUAGE + " translation of the hint text.",
+                    True,
+                    filename,
+                    pbar
+                )
+                translatedHints = response[0]
+                totalTokens[0] += response[1][0]
+                totalTokens[1] += response[1][1]
+                
+                # Reconstruct customParamsList with translations in place
+                translatedIndex = 0
+                for i, hint in enumerate(customParamsList):
+                    if hint:  # If it was non-empty, use the translation
+                        customParamsList[i] = translatedHints[translatedIndex]
+                        translatedIndex += 1
+        
         # Check for mismatch errors
         if len(dataList) != originalDataCount:
             with LOCK:
@@ -1248,8 +1306,13 @@ def translateRecollection(data, filename, translatedDataList=None, pbar=None):
                 if filename not in MISMATCH:
                     MISMATCH.append(filename)
         
+        if len(customParamsList) != originalCustomParamsCount:
+            with LOCK:
+                if filename not in MISMATCH:
+                    MISMATCH.append(filename)
+        
         # PASS 2: Recursively call to apply translations
-        translateRecollection(data, filename, [dataList, speakerList], pbar)
+        translateRecollection(data, filename, [dataList, speakerList, customParamsList], pbar)
     
     return totalTokens
 
