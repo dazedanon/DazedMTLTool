@@ -130,24 +130,38 @@ def getPricingConfig(model):
             "batchSize": 30,
             "frequencyPenalty": 0.05
         }
-    elif "gemini-1.5-flash" in model:
+    elif "gemini-2.0-flash-lite" in model:
         return {
-            "inputAPICost": 0.35,
-            "outputAPICost": 1.05,
+            "inputAPICost": 0.075,
+            "outputAPICost": 0.30,
             "batchSize": 30,
             "frequencyPenalty": 0.0
         }
-    elif "gemini-1.5-pro" in model:
+    elif "gemini-2.0-flash" in model:
         return {
-            "inputAPICost": 3.50,
-            "outputAPICost": 10.50,
+            "inputAPICost": 0.10,
+            "outputAPICost": 0.40,
             "batchSize": 30,
             "frequencyPenalty": 0.0
         }
-    elif "gemini" in model:
+    elif "gemini-2.5-flash-lite" in model:
         return {
-            "inputAPICost": 0.50,
-            "outputAPICost": 1.50,
+            "inputAPICost": 0.10,
+            "outputAPICost": 0.40,
+            "batchSize": 30,
+            "frequencyPenalty": 0.0
+        }
+    elif "gemini-2.5-flash" in model:
+        return {
+            "inputAPICost": 0.30,
+            "outputAPICost": 2.50,
+            "batchSize": 30,
+            "frequencyPenalty": 0.0
+        }
+    elif "gemini-2.5-pro" in model:
+        return {
+            "inputAPICost": 1.25,
+            "outputAPICost": 10.00,
             "batchSize": 30,
             "frequencyPenalty": 0.0
         }
