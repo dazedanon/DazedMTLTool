@@ -130,6 +130,27 @@ def getPricingConfig(model):
             "batchSize": 30,
             "frequencyPenalty": 0.05
         }
+    elif "gemini-1.5-flash" in model:
+        return {
+            "inputAPICost": 0.35,
+            "outputAPICost": 1.05,
+            "batchSize": 30,
+            "frequencyPenalty": 0.0
+        }
+    elif "gemini-1.5-pro" in model:
+        return {
+            "inputAPICost": 3.50,
+            "outputAPICost": 10.50,
+            "batchSize": 30,
+            "frequencyPenalty": 0.0
+        }
+    elif "gemini" in model:
+        return {
+            "inputAPICost": 0.50,
+            "outputAPICost": 1.50,
+            "batchSize": 30,
+            "frequencyPenalty": 0.0
+        }
     else:
         # Fallback to environment variables
         return {
@@ -285,7 +306,7 @@ def createTranslationSchema(numLines):
 
 
 def translateText(system, user, history, penalty, formatType, model, numLines=None):
-    """Send translation request to OpenAI API"""
+    """Send translation request to the selected API"""
     # Ensure system content is not empty
     if not system or not str(system).strip():
         raise ValueError("System content cannot be empty")
@@ -330,42 +351,53 @@ def translateText(system, user, history, penalty, formatType, model, numLines=No
         if not message.get("content") or not str(message.get("content")).strip():
             raise ValueError(f"Message {i} has empty content: {message}")
 
-    # Call OpenAI API
-    try:
+    # --- API Call Logic ---
+    api_provider = os.getenv("API_PROVIDER", "openai").lower()
+
+    # Base parameters for the API call
+    params = {
+        "model": model,
+        "response_format": responseFormat,
+        "messages": msg,
+    }
+
+    # Provider-specific parameters
+    if api_provider == "gemini":
+        params["temperature"] = 0
+        
+        # Handle thinking budget for Gemini
+        thinking_budget_str = os.getenv("GEMINI_THINKING_BUDGET")
+        if thinking_budget_str:
+            try:
+                thinking_budget = int(thinking_budget_str)
+                params["extra_body"] = {
+                    'google': {
+                        'thinking_config': {
+                            'thinking_budget': thinking_budget
+                        }
+                    }
+                }
+            except (ValueError, TypeError):
+                # Ignore if the value is not a valid integer
+                pass
+        
+        # frequency_penalty is not supported via the OpenAI compatibility layer for Gemini
+    else:  # Default to OpenAI behavior
         if "gpt-5" in model:
-            response = openai.chat.completions.create(
-                model=model,
-                response_format=responseFormat,
-                messages=msg,
-                reasoning_effort="minimal"
-            )
+            params["reasoning_effort"] = "minimal"
         else:
-            response = openai.chat.completions.create(
-                model=model,
-                response_format=responseFormat,
-                messages=msg,
-                temperature=0,
-                frequency_penalty=penalty
-            )
+            params["temperature"] = 0
+            params["frequency_penalty"] = penalty
+
+    # Call API
+    try:
+        response = openai.chat.completions.create(**params)
     except Exception as e:
         # If structured output fails, fallback to json_object
         if formatType == "json" and "json_schema" in str(responseFormat):
             responseFormat = {"type": "json_object"}
-            if "gpt-5" in model:
-                response = openai.chat.completions.create(
-                    model=model,
-                    response_format=responseFormat,
-                    messages=msg,
-                    reasoning_effort="minimal"
-                )
-            else:
-                response = openai.chat.completions.create(
-                    model=model,
-                    response_format=responseFormat,
-                    messages=msg,
-                    temperature=0,
-                    frequency_penalty=penalty
-                )
+            params["response_format"] = responseFormat
+            response = openai.chat.completions.create(**params)
         else:
             raise e
     
@@ -567,7 +599,6 @@ def translateAI(text, history, fullPromptFlag, config, filename=None, pbar=None,
         return [text, [0, 0]]
     
     with open(config.logFilePath, "a+", encoding="utf-8") as logFile:
-        mismatch = False
         totalTokens = [0, 0]
         
         if isinstance(text, list):
@@ -612,93 +643,112 @@ def translateAI(text, history, fullPromptFlag, config, filename=None, pbar=None,
                 totalTokens[1] += estimate[1]
                 continue
 
-            # Translate
+            # --- Translation and Validation Retry Block ---
+            max_retries = 2  # 1 initial attempt + 2 retries
+            final_translations = None
+            last_raw_translation = ""
             numLines = len(tItem) if isinstance(tItem, list) else None
-            response = translateText(system, user, history, 0.05, formatType, config.model, numLines)
-            translatedText = response.choices[0].message.content
 
-            # Retry if AI refused
-            if not translatedText or '"error":' in translatedText:
-                response = translateText(
-                    f"{system}\n You translate ALL content.", 
-                    user, history, 0.1, formatType, "gpt-4.1" if config.model == "gpt-5" else "gpt-4o", numLines
-                )
+            for attempt in range(max_retries + 1):
+                is_valid = True
+                
+                # On retries, add a note to the system prompt
+                current_system = system
+                if attempt > 0:
+                    current_system += f"\n\nIMPORTANT: Your previous attempt was incorrect or incomplete. Please ensure the entire output is translated to {config.language} and contains no untranslated characters. Translate the following text again, ensuring the JSON structure is correct."
+                    if pbar:
+                        pbar.write(f"Retrying translation... (Attempt {attempt + 1}/{max_retries + 1})")
+
+                # Translate
+                response = translateText(current_system, user, history, 0.05, formatType, config.model, numLines)
                 translatedText = response.choices[0].message.content
+                last_raw_translation = translatedText
 
-            # Update token count
-            totalTokens[0] += response.usage.prompt_tokens
-            totalTokens[1] += response.usage.completion_tokens
+                # Update token count for this attempt
+                totalTokens[0] += response.usage.prompt_tokens
+                totalTokens[1] += response.usage.completion_tokens
 
-            # Clean the translation first for consistency
-            translatedText = cleanTranslatedText(translatedText, config.language)
+                # Clean the translation first for consistency
+                cleaned_text = cleanTranslatedText(translatedText, config.language)
 
-            # Process translation result
-            if translatedText:
-                if isinstance(tItem, list):
-                    extractedTranslations = extractTranslation(translatedText, True, pbar)
-                    if extractedTranslations is None or len(tItem) != len(extractedTranslations):
-                        # Mismatch, try again
-                        response = translateText(system, user, history, 0.05, formatType, config.model, numLines)
-                        translatedText = response.choices[0].message.content
-                        totalTokens[0] += response.usage.prompt_tokens
-                        totalTokens[1] += response.usage.completion_tokens
-
-                        # Clean and extract again
-                        translatedText = cleanTranslatedText(translatedText, config.language)
-                        extractedTranslations = extractTranslation(translatedText, True, pbar)
-                        if extractedTranslations is None or len(tItem) != len(extractedTranslations):
-                            # Format the JSON output for consistent mismatch logging
-                            formatted_mismatch_output = translatedText
-                            try:
-                                parsed_json = json.loads(translatedText)
-                                formatted_mismatch_output = json.dumps(parsed_json, indent=4, ensure_ascii=False)
-                            except (json.JSONDecodeError, ValueError):
-                                pass
-
-                            # Log mismatch
-                            with open(config.mismatchLogPath, "a+", encoding="utf-8") as mismatchFile:
-                                mismatchFile.write(f"Mismatch: {filename}\n")
-                                mismatchFile.write(f"Input:\n{subbedT}\n")
-                                mismatchFile.write(f"Output:\n{formatted_mismatch_output}\n")
-                                mismatch = True
-
-                    # Format the JSON output for consistent logging
-                    formatted_output = translatedText
-                    try:
-                        # Try to parse and reformat the JSON for consistent formatting
-                        parsed_json = json.loads(translatedText)
-                        formatted_output = json.dumps(parsed_json, indent=4, ensure_ascii=False)
-                    except (json.JSONDecodeError, ValueError):
-                        # If it's not valid JSON, keep the original
-                        pass
-
-                    logFile.write(f"Input:\n{subbedT}\n")
-                    logFile.write(f"Output:\n{formatted_output}\n")
-
-                    # Set results if no mismatch
-                    if not mismatch:
-                        tList[index] = extractedTranslations
-                        history = extractedTranslations[-config.maxHistory:]
+                # Process and validate translation result
+                if cleaned_text:
+                    if isinstance(tItem, list):
+                        extracted = extractTranslation(cleaned_text, True, pbar)
+                        
+                        # Check 1: Mismatch in length
+                        if extracted is None or len(tItem) != len(extracted):
+                            is_valid = False
+                        
+                        # Check 2: Untranslated content
+                        else:
+                            for line in extracted:
+                                if re.search(config.langRegex, str(line)):
+                                    is_valid = False
+                                    break
+                            
+                            if is_valid:
+                                final_translations = extracted
                     else:
-                        history = text[-config.maxHistory:] if isinstance(text, list) else text
-                        mismatch = False
-                        if filename and mismatchList is not None and filename not in mismatchList:
-                            mismatchList.append(filename)
-
-                    # Update progress bar
-                    if lock and pbar is not None:
-                        with lock:
-                            pbar.update(len(tItem))
+                        # Check for untranslated content in single string
+                        if re.search(config.langRegex, cleaned_text):
+                            is_valid = False
+                        else:
+                            final_translations = cleaned_text.replace("Placeholder Text", "")
                 else:
-                    # Single string translation - clean after getting the raw response
-                    cleanedText = cleanTranslatedText(translatedText, config.language)
-                    tList[index] = cleanedText.replace("Placeholder Text", "")
-            else:
-                if pbar:
-                    pbar.write(f"AI Refused: {tItem}\n")
+                    is_valid = False
+                    if pbar: pbar.write(f"AI Refused: {tItem}\n")
+
+                # If translation is valid, break the retry loop
+                if is_valid:
+                    break
+            
+            # --- End of Retry Block ---
+
+            # After the loop, handle the final result
+            if final_translations is not None: # Success case
+                formatted_output = last_raw_translation
+                try:
+                    parsed_json = json.loads(last_raw_translation)
+                    formatted_output = json.dumps(parsed_json, indent=4, ensure_ascii=False)
+                except (json.JSONDecodeError, ValueError):
+                    pass
+                logFile.write(f"Input:\n{subbedT}\n")
+                logFile.write(f"Output:\n{formatted_output}\n")
+
+                if isinstance(tItem, list):
+                    tList[index] = final_translations
+                    history = final_translations[-config.maxHistory:]
+                else:
+                    tList[index] = final_translations
+                    history = final_translations
+
+                if lock and pbar is not None:
+                    with lock:
+                        pbar.update(len(tItem) if isinstance(tItem, list) else 1)
+
+            else: # Failure case after all retries
+                if pbar: pbar.write(f"Translation failed after {max_retries + 1} attempts. Check mismatch log.")
+                
+                formatted_mismatch_output = last_raw_translation
+                try:
+                    parsed_json = json.loads(last_raw_translation)
+                    formatted_mismatch_output = json.dumps(parsed_json, indent=4, ensure_ascii=False)
+                except (json.JSONDecodeError, ValueError):
+                    pass
+                with open(config.mismatchLogPath, "a+", encoding="utf-8") as mismatchFile:
+                    mismatchFile.write(f"Failed after retries: {filename}\n")
+                    mismatchFile.write(f"Input:\n{subbedT}\n")
+                    mismatchFile.write(f"Final Output:\n{formatted_mismatch_output}\n")
+
+                if filename and mismatchList is not None and filename not in mismatchList:
+                    mismatchList.append(filename)
+                
+                tList[index] = tItem
+                history = text[-config.maxHistory:] if isinstance(text, list) else text
 
     # Combine if multilist
-    if isinstance(tList[0], list):
+    if tList and isinstance(tList[0], list):
         tList = [t for sublist in tList for t in sublist]
 
     # Return result
