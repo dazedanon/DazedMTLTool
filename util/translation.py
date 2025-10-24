@@ -700,13 +700,14 @@ def translateAI(text, history, fullPromptFlag, config, filename=None, pbar=None,
                         
                         # Check 2: Untranslated content
                         else:
+                            # Set translations first (line count matches)
+                            final_translations = extracted
+                            
+                            # Then check for untranslated content as a warning, not a blocker
                             for line in extracted:
                                 if re.search(config.langRegex, str(line)):
                                     is_valid = False
                                     break
-                            
-                            if is_valid:
-                                final_translations = extracted
                     else:
                         # Check for untranslated content in single string
                         if re.search(config.langRegex, cleaned_text):
