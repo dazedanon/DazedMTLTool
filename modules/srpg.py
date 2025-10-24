@@ -645,6 +645,16 @@ def parseGeneric(data, filename):
                 if "msg" in entry and isinstance(entry["msg"], list):
                     total_units += sum(1 for m in entry["msg"] if m)
                 
+                # Handle rewardData arrays (e.g., quests)
+                if "rewardData" in entry and isinstance(entry["rewardData"], list):
+                    total_units += sum(1 for r in entry["rewardData"] if r)
+                
+                # Handle customParameters name field (e.g., {name:'シャルロット強制売春'})
+                if "customParameters" in entry and entry["customParameters"]:
+                    match = re.search(r"name:\s*['\"]([^'\"]+)['\"]", entry["customParameters"])
+                    if match:
+                        total_units += 1
+                
                 # Handle terrains array (nested structure)
                 if "terrains" in entry and entry["terrains"] and isinstance(entry["terrains"], list):
                     for terrain in entry["terrains"]:
@@ -713,6 +723,8 @@ def translateGeneric(data, filename, translatedDataList=None, pbar=None):
         pagesList = []
         msgList = []
         commandArrayList = []
+        rewardDataList = []
+        customParametersNameList = []
     else:
         # PASS 2: Use provided translated lists
         nameList = translatedDataList[0]
@@ -722,6 +734,8 @@ def translateGeneric(data, filename, translatedDataList=None, pbar=None):
         pagesList = translatedDataList[4]
         msgList = translatedDataList[5]
         commandArrayList = translatedDataList[6]
+        rewardDataList = translatedDataList[7]
+        customParametersNameList = translatedDataList[8]
     
     # Single loop - behavior depends on which pass we're in
     for entry in data:
@@ -823,6 +837,40 @@ def translateGeneric(data, filename, translatedDataList=None, pbar=None):
                             entry["msg"][i] = translatedText
                             msgList.pop(0)
         
+        # Handle rewardData field (array of strings)
+        if "rewardData" in entry and isinstance(entry["rewardData"], list):
+            for i, val in enumerate(entry["rewardData"]):
+                if val:
+                    # PASS 1: Collect original
+                    if translatedDataList is None:
+                        rewardDataList.append(str(val).replace("\n", " "))
+                    # PASS 2: Apply translation
+                    else:
+                        if rewardDataList:
+                            translatedText = rewardDataList[0]
+                            # Set Data (no wordwrap for reward data)
+                            entry["rewardData"][i] = translatedText
+                            rewardDataList.pop(0)
+        
+        # Handle customParameters name field (e.g., {name:'シャルロット強制売春'})
+        if "customParameters" in entry and entry["customParameters"]:
+            match = re.search(r"name:\s*['\"]([^'\"]+)['\"]", entry["customParameters"])
+            if match:
+                # PASS 1: Collect original
+                if translatedDataList is None:
+                    customParametersNameList.append(match.group(1))
+                # PASS 2: Apply translation
+                else:
+                    if customParametersNameList:
+                        translatedName = customParametersNameList[0]
+                        # Replace the name value in customParameters
+                        entry["customParameters"] = re.sub(
+                            r"(name:\s*['\"])([^'\"]+)(['\"])",
+                            r"\1" + translatedName.replace("\\", "\\\\") + r"\3",
+                            entry["customParameters"]
+                        )
+                        customParametersNameList.pop(0)
+        
         # Handle terrains field (nested array with name and desc)
         if "terrains" in entry and entry["terrains"] and isinstance(entry["terrains"], list):
             for terrain in entry["terrains"]:
@@ -866,6 +914,8 @@ def translateGeneric(data, filename, translatedDataList=None, pbar=None):
         originalPagesCount = len(pagesList)
         originalMsgCount = len(msgList)
         originalCommandArrayCount = len(commandArrayList)
+        originalRewardDataCount = len(rewardDataList)
+        originalCustomParametersNameCount = len(customParametersNameList)
         
         # Keep a copy of original names for vocab update (for characters/items/skills/classes/weapons)
         vocab_name_files = ["characters", "items", "skills", "classes", "weapons"]
@@ -983,6 +1033,32 @@ def translateGeneric(data, filename, translatedDataList=None, pbar=None):
             commandArrayList = response[0]
             totalTokens[0] += response[1][0]
             totalTokens[1] += response[1][1]
+
+        # Batch translate rewardData arrays
+        if rewardDataList:
+            response = translateAI(
+                rewardDataList,
+                "Reply with only the " + LANGUAGE + " translation of the reward data text.",
+                True,
+                filename,
+                pbar
+            )
+            rewardDataList = response[0]
+            totalTokens[0] += response[1][0]
+            totalTokens[1] += response[1][1]
+
+        # Batch translate customParameters name fields
+        if customParametersNameList:
+            response = translateAI(
+                customParametersNameList,
+                "Reply with only the " + LANGUAGE + " translation of the custom parameter name.",
+                True,
+                filename,
+                pbar
+            )
+            customParametersNameList = response[0]
+            totalTokens[0] += response[1][0]
+            totalTokens[1] += response[1][1]
         
         # Check for mismatch errors
         if len(nameList) != originalNameCount:
@@ -1017,12 +1093,20 @@ def translateGeneric(data, filename, translatedDataList=None, pbar=None):
             with LOCK:
                 if filename not in MISMATCH:
                     MISMATCH.append(filename)
+        if len(rewardDataList) != originalRewardDataCount:
+            with LOCK:
+                if filename not in MISMATCH:
+                    MISMATCH.append(filename)
+        if len(customParametersNameList) != originalCustomParametersNameCount:
+            with LOCK:
+                if filename not in MISMATCH:
+                    MISMATCH.append(filename)
         
         # PASS 2: Recursively call to apply translations
         translateGeneric(
             data,
             filename,
-            [nameList, descList, commandNameList, commandList, pagesList, msgList, commandArrayList],
+            [nameList, descList, commandNameList, commandList, pagesList, msgList, commandArrayList, rewardDataList, customParametersNameList],
             pbar,
         )
     
@@ -1529,10 +1613,15 @@ def parseMap(data, filename):
         for eventsKey in ["placeEvents", "autoEvents", "openingEvents", "communicationEvents"]:
             if eventsKey in data and isinstance(data[eventsKey], list):
                 for event in data[eventsKey]:
-                    if not event or "pages" not in event:
+                    if not event:
                         continue
                     
-                    if not isinstance(event["pages"], list):
+                    # Count event-level name and desc fields
+                    for field in ["name", "desc"]:
+                        if field in event and event[field]:
+                            total_units += 1
+                    
+                    if "pages" not in event or not isinstance(event["pages"], list):
                         continue
                     
                     for page in event["pages"]:
@@ -1614,6 +1703,8 @@ def translateMap(data, filename, translatedDataList=None, pbar=None):
         defeatCondsList = []
         unitNameList = []
         unitDescList = []
+        eventNameList = []
+        eventDescList = []
         dataList = []
         speakerList = []
         originalSpeakerList = []  # For vocab update
@@ -1625,8 +1716,10 @@ def translateMap(data, filename, translatedDataList=None, pbar=None):
         defeatCondsList = translatedDataList[3]
         unitNameList = translatedDataList[4]
         unitDescList = translatedDataList[5]
-        dataList = translatedDataList[6]
-        speakerList = translatedDataList[7]
+        eventNameList = translatedDataList[6]
+        eventDescList = translatedDataList[7]
+        dataList = translatedDataList[8]
+        speakerList = translatedDataList[9]
     
     # Note: name field is not translated as it's an identifier (e.g., "ch3_瘴気の森")
     
@@ -1766,10 +1859,32 @@ def translateMap(data, filename, translatedDataList=None, pbar=None):
     for eventsKey in ["placeEvents", "autoEvents", "openingEvents", "communicationEvents"]:
         if eventsKey in data and isinstance(data[eventsKey], list):
             for event in data[eventsKey]:
-                if not event or "pages" not in event:
+                if not event:
                     continue
                 
-                if not isinstance(event["pages"], list):
+                # Handle event-level name field
+                if "name" in event and event["name"]:
+                    if translatedDataList is None:
+                        eventNameList.append(event["name"])
+                    else:
+                        if eventNameList:
+                            event["name"] = eventNameList[0]
+                            eventNameList.pop(0)
+                
+                # Handle event-level desc field
+                if "desc" in event and event["desc"]:
+                    if translatedDataList is None:
+                        # Remove newlines for translation
+                        eventDescList.append(event["desc"].replace("\n", " "))
+                    else:
+                        if eventDescList:
+                            translatedText = eventDescList[0]
+                            # Apply text wrapping
+                            translatedText = dazedwrap.wrapText(translatedText, width=WIDTH)
+                            event["desc"] = translatedText
+                            eventDescList.pop(0)
+                
+                if "pages" not in event or not isinstance(event["pages"], list):
                     continue
                 
                 for page in event["pages"]:
@@ -1825,6 +1940,8 @@ def translateMap(data, filename, translatedDataList=None, pbar=None):
         originalDefeatCondsCount = len(defeatCondsList)
         originalUnitNameCount = len(unitNameList)
         originalUnitDescCount = len(unitDescList)
+        originalEventNameCount = len(eventNameList)
+        originalEventDescCount = len(eventDescList)
         originalDataCount = len(dataList)
         originalSpeakerCount = len(speakerList)
         
@@ -1906,6 +2023,32 @@ def translateMap(data, filename, translatedDataList=None, pbar=None):
             totalTokens[0] += response[1][0]
             totalTokens[1] += response[1][1]
         
+        # Batch translate event names
+        if eventNameList:
+            response = translateAI(
+                eventNameList,
+                "Reply with only the " + LANGUAGE + " translation of the event name.",
+                True,
+                filename,
+                pbar
+            )
+            eventNameList = response[0]
+            totalTokens[0] += response[1][0]
+            totalTokens[1] += response[1][1]
+        
+        # Batch translate event descriptions
+        if eventDescList:
+            response = translateAI(
+                eventDescList,
+                "Reply with only the " + LANGUAGE + " translation of the event description.",
+                True,
+                filename,
+                pbar
+            )
+            eventDescList = response[0]
+            totalTokens[0] += response[1][0]
+            totalTokens[1] += response[1][1]
+        
         # Batch translate dialogue data
         if dataList:
             response = translateAI(
@@ -1963,6 +2106,16 @@ def translateMap(data, filename, translatedDataList=None, pbar=None):
                 if filename not in MISMATCH:
                     MISMATCH.append(filename)
         
+        if len(eventNameList) != originalEventNameCount:
+            with LOCK:
+                if filename not in MISMATCH:
+                    MISMATCH.append(filename)
+        
+        if len(eventDescList) != originalEventDescCount:
+            with LOCK:
+                if filename not in MISMATCH:
+                    MISMATCH.append(filename)
+        
         if len(dataList) != originalDataCount:
             with LOCK:
                 if filename not in MISMATCH:
@@ -1974,7 +2127,7 @@ def translateMap(data, filename, translatedDataList=None, pbar=None):
                     MISMATCH.append(filename)
         
         # PASS 2: Recursively call to apply translations
-        translateMap(data, filename, [descList, mapNameList, victoryCondsList, defeatCondsList, unitNameList, unitDescList, dataList, speakerList], pbar)
+        translateMap(data, filename, [descList, mapNameList, victoryCondsList, defeatCondsList, unitNameList, unitDescList, eventNameList, eventDescList, dataList, speakerList], pbar)
     
     return totalTokens
 
