@@ -18,9 +18,14 @@ import tempfile
 
 # Open AI
 load_dotenv()
-if os.getenv("api").replace(" ", "") != "":
-    openai.base_url = os.getenv("api")
-openai.organization = os.getenv("org")
+if os.getenv("API_PROVIDER") == "gemini":
+    openai.base_url = "https://generativelanguage.googleapis.com/v1beta/openai/"
+    openai.organization = None
+else:
+    api_url = os.getenv("api")
+    if api_url and api_url.replace(" ", "") != "":
+        openai.base_url = api_url
+    openai.organization = os.getenv("org")
 openai.api_key = os.getenv("key")
 
 # Globals
