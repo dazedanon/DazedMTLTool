@@ -834,6 +834,8 @@ def searchNames(data, pbar, context, filename):
     profileList = []
     nicknameList = []
     descriptionList = []
+    # For Skills: collect messages across all entries for batch translation
+    messagesList = []  # List of tuples: (entry_idx, message_field, message_text, needs_taro)
     # Collect name mappings for vocab per run
     vocab_pairs: list[tuple[str, str]] = []
     vocab_enabled = context in ["Armors", "Weapons", "Items", "MapInfos", "Classes", "Enemies", "Skills"]
@@ -940,6 +942,50 @@ def searchNames(data, pbar, context, filename):
         data[idx]["note"] = data[idx]["note"].replace(match_text, translated, 1)
         note_insert_idx += 1
 
+    # --- For Skills: Batch translate all messages ---
+    if context in ["Skills"]:
+        messages_batch = []
+        messages_map = []  # List of (entry_idx, message_field, needs_taro)
+        
+        for idx, entry in enumerate(data):
+            if entry is None:
+                continue
+            # Collect all message1-4 fields
+            for msg_num in range(1, 5):
+                msg_field = f"message{msg_num}"
+                if msg_field in entry and entry[msg_field]:
+                    msg_text = entry[msg_field]
+                    needs_taro = len(msg_text) > 0 and msg_text[0] in ["は", "を", "の", "に", "が"]
+                    if needs_taro:
+                        messages_batch.append("Taro" + msg_text)
+                    else:
+                        messages_batch.append(msg_text)
+                    messages_map.append((idx, msg_field, needs_taro))
+        
+        # Batch translate all messages
+        if messages_batch:
+            response = translateAI(
+                messages_batch,
+                "reply with only the gender neutral " + LANGUAGE + " translation of the action log. For messages starting with Taro, always start the sentence with Taro. For example, translate 'Taroを倒した！' as 'Taro was defeated!'",
+                False,
+            )
+            translated_messages = response[0]
+            totalTokens[0] += response[1][0]
+            totalTokens[1] += response[1][1]
+            
+            # Apply translations back to data
+            for msg_idx, (entry_idx, msg_field, needs_taro) in enumerate(messages_map):
+                if msg_idx < len(translated_messages):
+                    translation = translated_messages[msg_idx]
+                    if needs_taro:
+                        translation = translation.replace("Taro", "")
+                    data[entry_idx][msg_field] = translation
+            
+            # Update progress for messages
+            if pbar is not None:
+                pbar.update(len(messages_batch))
+                pbar.refresh()
+
     # Now continue with the rest of the batching logic for names, descriptions, etc.
     i = 0
     filling = False
@@ -979,40 +1025,6 @@ def searchNames(data, pbar, context, filename):
                     nameList.append(data[i]["name"])
                     if "description" in data[i] and data[i]["description"]:
                         descriptionList.append(data[i]["description"].replace("\n", " "))
-                    # Messages (unchanged)
-                    number = 1
-                    while number < 5:
-                        if f"message{number}" in data[i] and data[i][f"message{number}"]:
-                            if data[i][f"message{number}"][0] in ["は", "を", "の", "に", "が"]:
-                                msgResponse = translateAI(
-                                    "Taro" + data[i][f"message{number}"],
-                                    "reply with only the gender neutral "
-                                    + LANGUAGE
-                                    + " translation of the action log. Always start the sentence with Taro. For example, Translate 'Taroを倒した！' as 'Taro was defeated!'",
-                                    False,
-                                )
-                                data[i][f"message{number}"] = msgResponse[0].replace("Taro", "")
-                                totalTokens[0] += msgResponse[1][0]
-                                totalTokens[1] += msgResponse[1][1]
-                                if pbar is not None:
-                                    pbar.update(1)
-                                    pbar.refresh()
-                                number += 1
-                            else:
-                                msgResponse = translateAI(
-                                    data[i][f"message{number}"],
-                                    "reply with only the gender neutral " + LANGUAGE + " translation",
-                                    False,
-                                )
-                                data[i][f"message{number}"] = msgResponse[0]
-                                totalTokens[0] += msgResponse[1][0]
-                                totalTokens[1] += msgResponse[1][1]
-                                if pbar is not None:
-                                    pbar.update(1)
-                                    pbar.refresh()
-                                number += 1
-                        else:
-                            number += 1
                     i += 1
                 else:
                     batchFull = True
@@ -2639,125 +2651,67 @@ def searchCodes(page, pbar, jobList, filename):
 def searchSS(state, pbar):
     totalTokens = [0, 0]
 
+    # --- Batch collection for basic fields and messages ---
+    batch_texts = []
+    batch_map = []  # [(field_type, field_name, needs_taro_prefix), ...]
+    
     # Name
-    nameResponse = (
-        translateAI(
-            state["name"],
-            "Reply with only the " + LANGUAGE + " translation of the RPG Skill name.",
-            False,
-        )
-        if "name" in state
-        else ""
-    )
-
+    if "name" in state and state["name"]:
+        batch_texts.append(state["name"])
+        batch_map.append(("name", "name", False))
+    
     # Description
-    descriptionResponse = (
-        translateAI(
-            state["description"],
-            "Reply with only the " + LANGUAGE + " translation of the description.",
-            False,
-        )
-        if "description" in state
-        else ""
-    )
-
-    # Messages
+    if "description" in state and state["description"]:
+        batch_texts.append(state["description"])
+        batch_map.append(("description", "description", False))
+    
+    # Messages - collect all with Taro prefix handling
+    for msg_field in ["message1", "message2", "message3", "message4"]:
+        if msg_field in state and state[msg_field]:
+            msg_text = state[msg_field]
+            needs_taro = len(msg_text) > 0 and msg_text[0] in ["は", "を", "の", "に", "が"]
+            if needs_taro:
+                batch_texts.append("Taro" + msg_text)
+            else:
+                batch_texts.append(msg_text)
+            batch_map.append(("message", msg_field, needs_taro))
+    
+    # --- Batch translate all basic fields ---
+    nameResponse = ""
+    descriptionResponse = ""
     message1Response = ""
-    message4Response = ""
     message2Response = ""
     message3Response = ""
-
-    if "message1" in state:
-        if len(state["message1"]) > 0 and state["message1"][0] in [
-            "は",
-            "を",
-            "の",
-            "に",
-            "が",
-        ]:
-            message1Response = translateAI(
-                "Taro" + state["message1"],
-                "reply with only the gender neutral "
-                + LANGUAGE
-                + " translation of the action log. Always start the sentence with Taro. For example,\
-Translate 'Taroを倒した！' as 'Taro was defeated!'",
-                False,
-            )
-        else:
-            message1Response = translateAI(
-                state["message1"],
-                "reply with only the gender neutral " + LANGUAGE + " translation",
-                False,
-            )
-
-    if "message2" in state:
-        if len(state["message2"]) > 0 and state["message2"][0] in [
-            "は",
-            "を",
-            "の",
-            "に",
-            "が",
-        ]:
-            message2Response = translateAI(
-                "Taro" + state["message2"],
-                "reply with only the gender neutral "
-                + LANGUAGE
-                + " translation of the action log. Always start the sentence with Taro. For example,\
-Translate 'Taroを倒した！' as 'Taro was defeated!'",
-                False,
-            )
-        else:
-            message2Response = translateAI(
-                state["message2"],
-                "reply with only the gender neutral " + LANGUAGE + " translation",
-                False,
-            )
-
-    if "message3" in state:
-        if len(state["message3"]) > 0 and state["message3"][0] in [
-            "は",
-            "を",
-            "の",
-            "に",
-            "が",
-        ]:
-            message3Response = translateAI(
-                "Taro" + state["message3"],
-                "reply with only the gender neutral "
-                + LANGUAGE
-                + " translation of the action log. Always start the sentence with Taro. For example,\
-Translate 'Taroを倒した！' as 'Taro was defeated!'",
-                False,
-            )
-        else:
-            message3Response = translateAI(
-                state["message3"],
-                "reply with only the gender neutral " + LANGUAGE + " translation",
-                False,
-            )
-
-    if "message4" in state:
-        if len(state["message4"]) > 0 and state["message4"][0] in [
-            "は",
-            "を",
-            "の",
-            "に",
-            "が",
-        ]:
-            message4Response = translateAI(
-                "Taro" + state["message4"],
-                "reply with only the gender neutral "
-                + LANGUAGE
-                + " translation of the action log. Always start the sentence with Taro. For example,\
-Translate 'Taroを倒した！' as 'Taro was defeated!'",
-                False,
-            )
-        else:
-            message4Response = translateAI(
-                state["message4"],
-                "reply with only the gender neutral " + LANGUAGE + " translation",
-                False,
-            )
+    message4Response = ""
+    
+    if batch_texts:
+        response = translateAI(
+            batch_texts,
+            "reply with only the gender neutral " + LANGUAGE + " translation. For messages starting with Taro, always start the sentence with Taro. For example, translate 'Taroを倒した！' as 'Taro was defeated!'",
+            False,
+        )
+        translated_batch = response[0]
+        totalTokens[0] += response[1][0]
+        totalTokens[1] += response[1][1]
+        
+        # Map translations back to their fields
+        for idx, (field_type, field_name, needs_taro) in enumerate(batch_map):
+            if idx < len(translated_batch):
+                translation = translated_batch[idx]
+                if field_type == "name":
+                    nameResponse = [translation, [0, 0]]
+                elif field_type == "description":
+                    descriptionResponse = [translation, [0, 0]]
+                elif field_type == "message":
+                    response_obj = [translation, [0, 0]]
+                    if field_name == "message1":
+                        message1Response = response_obj
+                    elif field_name == "message2":
+                        message2Response = response_obj
+                    elif field_name == "message3":
+                        message3Response = response_obj
+                    elif field_name == "message4":
+                        message4Response = response_obj
 
     # --- Batching pass: collect all note texts for all note types ---
     note_regexes = [
@@ -2803,20 +2757,6 @@ Translate 'Taroを倒した！' as 'Taro was defeated!'",
             state["note"] = state["note"].replace(match_text, translated, 1)
             note_insert_idx += 1
 
-    # Count totalTokens
-    totalTokens[0] += nameResponse[1][0] if nameResponse != "" else 0
-    totalTokens[1] += nameResponse[1][1] if nameResponse != "" else 0
-    totalTokens[0] += descriptionResponse[1][0] if descriptionResponse != "" else 0
-    totalTokens[1] += descriptionResponse[1][1] if descriptionResponse != "" else 0
-    totalTokens[0] += message1Response[1][0] if message1Response != "" else 0
-    totalTokens[1] += message1Response[1][1] if message1Response != "" else 0
-    totalTokens[0] += message2Response[1][0] if message2Response != "" else 0
-    totalTokens[1] += message2Response[1][1] if message2Response != "" else 0
-    totalTokens[0] += message3Response[1][0] if message3Response != "" else 0
-    totalTokens[1] += message3Response[1][1] if message3Response != "" else 0
-    totalTokens[0] += message4Response[1][0] if message4Response != "" else 0
-    totalTokens[1] += message4Response[1][1] if message4Response != "" else 0
-
     # Progress accounting for this state: name + description + messages present
     if pbar is not None:
         work_units = 0
@@ -2831,20 +2771,20 @@ Translate 'Taroを倒した！' as 'Taro was defeated!'",
             pbar.refresh()
 
     # Set Data
-    if "name" in state:
+    if "name" in state and nameResponse != "":
         state["name"] = nameResponse[0].replace('"', "")
-    if "description" in state:
+    if "description" in state and descriptionResponse != "":
         # Textwrap
         translatedText = descriptionResponse[0]
         translatedText = dazedwrap.wrapText(translatedText, width=LISTWIDTH)
         state["description"] = translatedText.replace('"', "")
-    if "message1" in state:
+    if "message1" in state and message1Response != "":
         state["message1"] = message1Response[0].replace('"', "").replace("Taro", "")
-    if "message2" in state:
+    if "message2" in state and message2Response != "":
         state["message2"] = message2Response[0].replace('"', "").replace("Taro", "")
-    if "message3" in state:
+    if "message3" in state and message3Response != "":
         state["message3"] = message3Response[0].replace('"', "").replace("Taro", "")
-    if "message4" in state:
+    if "message4" in state and message4Response != "":
         state["message4"] = message4Response[0].replace('"', "").replace("Taro", "")
 
     return totalTokens
@@ -2854,105 +2794,139 @@ def searchSystem(data, pbar):
     totalTokens = [0, 0]
     context = "Reply with only the " + LANGUAGE + ' translation of the UI textbox."'
 
-    # Title
+    # Title - batch as a single-item list
     response = translateAI(
-        data["gameTitle"],
+        [data["gameTitle"]],
         " Reply with the " + LANGUAGE + " translation of the game title name",
         False,
     )
     totalTokens[0] += response[1][0]
     totalTokens[1] += response[1][1]
-    data["gameTitle"] = response[0].strip(".")
+    data["gameTitle"] = response[0][0].strip(".")
     if pbar is not None:
         pbar.update(1)
         pbar.refresh()
 
-    # Terms
+    # Terms - batch translate all term items
     for term in data["terms"]:
         if term != "messages":
             termList = data["terms"][term]
-            for i in range(len(termList)):  # Last item is a messages object
+            term_values = []
+            term_indices = []
+            for i in range(len(termList)):
                 if termList[i] is not None:
-                    response = translateAI(termList[i], context, False)
-                    totalTokens[0] += response[1][0]
-                    totalTokens[1] += response[1][1]
-                    termList[i] = response[0].replace('"', "").strip()
-            if pbar is not None and len(termList) > 0:
-                units = sum(1 for x in termList if x is not None)
-                pbar.update(units)
-                pbar.refresh()
+                    term_values.append(termList[i])
+                    term_indices.append(i)
+            
+            if term_values:
+                response = translateAI(term_values, context, False)
+                totalTokens[0] += response[1][0]
+                totalTokens[1] += response[1][1]
+                tl_list = response[0]
+                
+                for n, idx in enumerate(term_indices[: len(tl_list)]):
+                    termList[idx] = tl_list[n].replace('"', "").strip()
+                
+                if pbar is not None:
+                    pbar.update(len(term_values))
+                    pbar.refresh()
 
-    # Armor Types
-    for i in range(len(data["armorTypes"])):
+    # Armor Types - batch translate all
+    armor_values = [data["armorTypes"][i] for i in range(len(data["armorTypes"]))]
+    if armor_values:
         response = translateAI(
-            data["armorTypes"][i],
+            armor_values,
             "Reply with only the " + LANGUAGE + " translation of the armor type",
             False,
         )
         totalTokens[0] += response[1][0]
         totalTokens[1] += response[1][1]
-        data["armorTypes"][i] = response[0].replace('"', "").strip()
-    if pbar is not None and len(data["armorTypes"]) > 0:
-        pbar.update(len(data["armorTypes"]))
-        pbar.refresh()
+        tl_list = response[0]
+        for i in range(min(len(tl_list), len(data["armorTypes"]))):
+            data["armorTypes"][i] = tl_list[i].replace('"', "").strip()
+        if pbar is not None:
+            pbar.update(len(armor_values))
+            pbar.refresh()
 
-    # Skill Types
-    for i in range(len(data["skillTypes"])):
+    # Skill Types - batch translate all
+    skill_values = [data["skillTypes"][i] for i in range(len(data["skillTypes"]))]
+    if skill_values:
         response = translateAI(
-            data["skillTypes"][i],
+            skill_values,
             "Reply with only the " + LANGUAGE + " translation",
             False,
         )
         totalTokens[0] += response[1][0]
         totalTokens[1] += response[1][1]
-        data["skillTypes"][i] = response[0].replace('"', "").strip()
-    if pbar is not None and len(data["skillTypes"]) > 0:
-        pbar.update(len(data["skillTypes"]))
-        pbar.refresh()
+        tl_list = response[0]
+        for i in range(min(len(tl_list), len(data["skillTypes"]))):
+            data["skillTypes"][i] = tl_list[i].replace('"', "").strip()
+        if pbar is not None:
+            pbar.update(len(skill_values))
+            pbar.refresh()
 
-    # Equip Types
-    for i in range(len(data["equipTypes"])):
+    # Equip Types - batch translate all
+    equip_values = [data["equipTypes"][i] for i in range(len(data["equipTypes"]))]
+    if equip_values:
         response = translateAI(
-            data["equipTypes"][i],
+            equip_values,
             "Reply with only the " + LANGUAGE + " translation of the equipment type. No disclaimers.",
             False,
         )
         totalTokens[0] += response[1][0]
         totalTokens[1] += response[1][1]
-        data["equipTypes"][i] = response[0].replace('"', "").strip()
-    if pbar is not None and len(data["equipTypes"]) > 0:
-        pbar.update(len(data["equipTypes"]))
-        pbar.refresh()
+        tl_list = response[0]
+        for i in range(min(len(tl_list), len(data["equipTypes"]))):
+            data["equipTypes"][i] = tl_list[i].replace('"', "").strip()
+        if pbar is not None:
+            pbar.update(len(equip_values))
+            pbar.refresh()
 
-    # Elements
+    # Elements - batch translate all (skip empty)
+    element_values = []
+    element_indices = []
     for i in range(len(data["elements"])):
         if data["elements"][i]:  # Skip empty strings
-            response = translateAI(
-                data["elements"][i],
-                "Reply with only the " + LANGUAGE + " translation of the element type",
-                False,
-            )
-            totalTokens[0] += response[1][0]
-            totalTokens[1] += response[1][1]
-            data["elements"][i] = response[0].replace('"', "").strip()
-    if pbar is not None and len(data["elements"]) > 0:
-        pbar.update(len(data["elements"]))
-        pbar.refresh()
+            element_values.append(data["elements"][i])
+            element_indices.append(i)
+    
+    if element_values:
+        response = translateAI(
+            element_values,
+            "Reply with only the " + LANGUAGE + " translation of the element type",
+            False,
+        )
+        totalTokens[0] += response[1][0]
+        totalTokens[1] += response[1][1]
+        tl_list = response[0]
+        for n, idx in enumerate(element_indices[: len(tl_list)]):
+            data["elements"][idx] = tl_list[n].replace('"', "").strip()
+        if pbar is not None:
+            pbar.update(len(element_values))
+            pbar.refresh()
 
-    # Weapon Types
+    # Weapon Types - batch translate all (skip empty)
+    weapon_values = []
+    weapon_indices = []
     for i in range(len(data["weaponTypes"])):
         if data["weaponTypes"][i]:  # Skip empty strings
-            response = translateAI(
-                data["weaponTypes"][i],
-                "Reply with only the " + LANGUAGE + " translation of the weapon type",
-                False,
-            )
-            totalTokens[0] += response[1][0]
-            totalTokens[1] += response[1][1]
-            data["weaponTypes"][i] = response[0].replace('"', "").strip()
-    if pbar is not None and len(data["weaponTypes"]) > 0:
-        pbar.update(len(data["weaponTypes"]))
-        pbar.refresh()
+            weapon_values.append(data["weaponTypes"][i])
+            weapon_indices.append(i)
+    
+    if weapon_values:
+        response = translateAI(
+            weapon_values,
+            "Reply with only the " + LANGUAGE + " translation of the weapon type",
+            False,
+        )
+        totalTokens[0] += response[1][0]
+        totalTokens[1] += response[1][1]
+        tl_list = response[0]
+        for n, idx in enumerate(weapon_indices[: len(tl_list)]):
+            data["weaponTypes"][idx] = tl_list[n].replace('"', "").strip()
+        if pbar is not None:
+            pbar.update(len(weapon_values))
+            pbar.refresh()
 
     # Variables (Optional usually) — batch translate to reduce calls
     if TLSYSTEMVARIABLES and "variables" in data and isinstance(data["variables"], list):
@@ -2978,29 +2952,41 @@ def searchSystem(data, pbar):
                 pbar.update(len(var_values))
                 pbar.refresh()
 
-    # Messages
+    # Messages — batch translate to reduce calls
     messages = data["terms"]["messages"]
-    for key, value in messages.items():
-        response = translateAI(
-            value,
-            "Reply with only the "
-            + LANGUAGE
-            + ' translation of the battle text.\nTranslate "常時ダッシュ" as "Always Dash"\nTranslate "次の%1まで" as Next %1.',
-            False,
-        )
-        translatedText = response[0]
-
-        # Remove characters that may break scripts
-        charList = [".", '"', "\\n"]
-        for char in charList:
-            translatedText = translatedText.replace(char, "")
-
-        totalTokens[0] += response[1][0]
-        totalTokens[1] += response[1][1]
-        messages[key] = translatedText
-    if pbar is not None and len(messages) > 0:
-        pbar.update(len(messages))
-        pbar.refresh()
+    if messages:
+        msg_keys = []
+        msg_values = []
+        for key, value in messages.items():
+            if isinstance(value, str) and value.strip():
+                msg_keys.append(key)
+                msg_values.append(value)
+        
+        if msg_values:
+            response = translateAI(
+                msg_values,
+                "Reply with only the "
+                + LANGUAGE
+                + ' translation of the battle text.\nTranslate "常時ダッシュ" as "Always Dash"\nTranslate "次の%1まで" as Next %1.',
+                False,
+            )
+            totalTokens[0] += response[1][0]
+            totalTokens[1] += response[1][1]
+            tl_list = response[0]
+            
+            # Remove characters that may break scripts
+            charList = [".", '"', "\\n"]
+            
+            # Assign back translations to corresponding keys
+            for n, key in enumerate(msg_keys[: len(tl_list)]):
+                translatedText = tl_list[n]
+                for char in charList:
+                    translatedText = translatedText.replace(char, "")
+                messages[key] = translatedText
+            
+            if pbar is not None:
+                pbar.update(len(msg_values))
+                pbar.refresh()
 
     return totalTokens
 
