@@ -645,7 +645,11 @@ def translateAI(text, history, fullPromptFlag, config, filename=None, pbar=None,
                 payload = json.dumps(payload, indent=4, ensure_ascii=False)
                 subbedT = payload
             else:
-                subbedT = tItem
+                # Check for empty/whitespace strings in non-list items
+                if not tItem or not str(tItem).strip():
+                    subbedT = "Placeholder Text"
+                else:
+                    subbedT = tItem
 
             # Create context
             system, user = createContext(config, fullPromptFlag, subbedT, formatType, history)
