@@ -89,7 +89,7 @@ CODE102 = True
 
 # Optional
 CODE101 = False
-CODE408 = False
+CODE408 = True
 
 # Variables
 CODE122 = False
@@ -544,15 +544,61 @@ def parseSystem(data, filename):
 
     with tqdm(total=total_units, bar_format=BAR_FORMAT, position=POSITION, leave=LEAVE) as pbar:
         pbar.desc = filename
+        input_log = {}
+        output_log = {}
         try:
+            # Helper to flatten lists to Line1, Line2, ...
+            def flatten_lines(prefix, values, target):
+                for idx, v in enumerate(values):
+                    target[f"{prefix}Line{idx+1}"] = v
+
+            # Capture pre-translation values
+            if "terms" in data:
+                for key, value in data["terms"].items():
+                    if isinstance(value, list):
+                        flatten_lines(key, value, input_log)
+                    else:
+                        input_log[key] = value
+            for key in ["gameTitle", "game_title", "armor_types", "skill_types", "weapon_types"]:
+                if key in data:
+                    val = data[key]
+                    if isinstance(val, list):
+                        flatten_lines(key, val, input_log)
+                    else:
+                        input_log[key] = val
+            # Run translation
             result = searchSystem(data, pbar)
             totalTokens[0] += result[0]
             totalTokens[1] += result[1]
+            # Capture post-translation values
+            if "terms" in data:
+                for key, value in data["terms"].items():
+                    if isinstance(value, list):
+                        flatten_lines(key, value, output_log)
+                    else:
+                        output_log[key] = value
+            for key in ["gameTitle", "game_title", "armor_types", "skill_types", "weapon_types"]:
+                if key in data:
+                    val = data[key]
+                    if isinstance(val, list):
+                        flatten_lines(key, val, output_log)
+                    else:
+                        output_log[key] = val
         except Exception as e:
             traceback.print_exc()
             return [data, totalTokens, e]
         finally:
             maybe_save_progress_yaml(data, filename, result)
+            # Log translation history for system.yaml in established line-by-line format
+            try:
+                with open("log/translationHistory.txt", "a", encoding="utf-8") as log_file:
+                    log_file.write("Input:\n")
+                    log_file.write(json.dumps(input_log, ensure_ascii=False, indent=4))
+                    log_file.write("\nOutput:\n")
+                    log_file.write(json.dumps(output_log, ensure_ascii=False, indent=4))
+                    log_file.write("\n")
+            except Exception:
+                pass
     return [data, totalTokens, None]
 
 
@@ -1091,7 +1137,7 @@ def searchCodes(page, pbar, jobList, filename):
 
                 # Brackets
                 if len(speakerList) == 0:
-                    speakerList = re.findall(r"^【(.*?)】$|^【(.*?)】[\\]*[a-zA-Z]*\[.*\]$", jaString)
+                    speakerList = re.findall(r"^(?:[\\]+[rlRL]\[[\w\d\-]+\])?【(.*?)】$|^(?:[\\]+[rlRL]\[[\w\d\-]+\])?【(.*?)】[\\]*[a-zA-Z]*\[.*\]$", jaString)
                     if speakerList:
                         if speakerList[0][0]:
                             speakerList = [speakerList[0][0]]
@@ -1114,9 +1160,9 @@ def searchCodes(page, pbar, jobList, filename):
 
                 # First Line Speakers
                 if len(speakerList) == 0 and FIRSTLINESPEAKERS is True:
-                    # Remove any RPGMaker Code at start
+                    # Remove any RPGMaker Code at start (including \r[...] and \l[...] patterns)
                     ffMatch = re.search(
-                        r"^((?:[\\]+[^cCnNiIkKvV]+\[[\d\w]+\])+)",
+                        r"^((?:[\\]+[^cCnNiIkKvV]+\[[\d\w]+\])+|(?:[\\]+[rlRL]\[[\w\d\-]+\]))",
                         jaString,
                     )
                     if ffMatch != None:
@@ -1152,7 +1198,13 @@ def searchCodes(page, pbar, jobList, filename):
 
                     # Set Data
                     if not setData:
-                        codeList[i]["p"][0] = nametag + jaString.replace(speakerList[0], speaker)
+                        # Check if there's a \r[...] or \l[...] code at the beginning
+                        codePrefix = re.search(r"^([\\]+[rlRL]\[[\w\d\-]+\])", jaString)
+                        if codePrefix:
+                            # Replace only the speaker name, preserving the code and brackets
+                            codeList[i]["p"][0] = jaString.replace(f"【{speakerList[0]}】", f"【{speaker}】")
+                        else:
+                            codeList[i]["p"][0] = nametag + jaString.replace(speakerList[0], speaker)
                     nametag = ""
 
                     # Iterate to next string
@@ -1761,24 +1813,40 @@ def searchCodes(page, pbar, jobList, filename):
 
             ## Event Code: 408 (Script)
             if "c" in codeList[i] and (codeList[i]["c"] == 408) and CODE408 is True:
-                # Remove Textwrap
-                jaString = codeList[i]["p"][0]
-                # jaString = jaString.replace("\n", " ")
+                # Save starting index
+                j = i
+                jaString = codeList[i]["p"][0] if len(codeList[i]["p"]) > 0 else ""
+                
+                # Join consecutive 408 codes
+                combinedText = jaString
+                if len(codeList) > i + 1:
+                    while i + 1 < len(codeList) and "c" in codeList[i + 1] and codeList[i + 1]["c"] == 408:
+                        i += 1
+                        if len(codeList[i]["p"]) > 0:
+                            combinedText += " " + codeList[i]["p"][0]
+                        # Mark as -1 only in Pass 2
+                        if not setData:
+                            codeList[i]["p"] = []
+                            codeList[i]["c"] = -1
 
                 # Pass 1
                 if setData:
-                    list408.append(jaString)
+                    if combinedText.strip():  # Only add non-empty text
+                        list408.append(combinedText)
                 
                 # Pass 2
                 else:
-                    translatedText = list408[0]
-                    list408.pop(0)
+                    if len(list408) > 0:
+                        translatedText = list408[0]
+                        list408.pop(0)
 
-                    # Textwrap
-                    translatedText = dazedwrap.wrapText(translatedText, width=1000)
+                        # Textwrap
+                        translatedText = dazedwrap.wrapText(translatedText, width=WIDTH)
 
-                    # Set Data
-                    codeList[i]["p"][0] = f"{translatedText}"
+                        # Set Data - ensure list has at least one element
+                        if len(codeList[j]["p"]) == 0:
+                            codeList[j]["p"] = [""]
+                        codeList[j]["p"][0] = f"{translatedText}"
 
             ## Event Code: 108 (Script)
             if "c" in codeList[i] and (codeList[i]["c"] == 108) and CODE108 is True:
@@ -2449,15 +2517,23 @@ def searchSystem(data, pbar):
     totalTokens = [0, 0]
     context = "Reply with only the " + LANGUAGE + ' translation of the UI textbox."'
 
-    # Title
-    response = translateAI(
-        data["gameTitle"],
-        " Reply with the " + LANGUAGE + " translation of the game title name",
-        False,
-    )
-    totalTokens[0] += response[1][0]
-    totalTokens[1] += response[1][1]
-    data["gameTitle"] = response[0].strip(".")
+    # Title (handle both 'gameTitle' and 'game_title', skip if missing)
+    game_title = data.get("gameTitle")
+    if game_title is None:
+        game_title = data.get("game_title")
+    if game_title is not None:
+        response = translateAI(
+            game_title,
+            " Reply with the " + LANGUAGE + " translation of the game title name",
+            False,
+        )
+        totalTokens[0] += response[1][0]
+        totalTokens[1] += response[1][1]
+        # Write back to whichever key existed
+        if "gameTitle" in data:
+            data["gameTitle"] = response[0].strip(".")
+        else:
+            data["game_title"] = response[0].strip(".")
 
     # Terms
     for term in data["terms"]:
@@ -2510,26 +2586,44 @@ def searchSystem(data, pbar):
     #     totalTokens[1] += response[1][1]
     #     data['variables'][i] = response[0].replace('\"', '').strip()
 
-    # Messages
+    # Messages and lists (handle both string and list values, log as Line1, Line2, ...)
     messages = data["terms"]
     for key, value in messages.items():
-        response = translateAI(
-            value,
-            "Reply with only the "
-            + LANGUAGE
-            + ' translation of the battle text.\nTranslate "常時ダッシュ" as "Always Dash"\nTranslate "次の%1まで" as Next %1.',
-            False,
-        )
-        translatedText = response[0]
-
-        # Remove characters that may break scripts
-        charList = [".", '"', "\\n"]
-        for char in charList:
-            translatedText = translatedText.replace(char, "")
-
-        totalTokens[0] += response[1][0]
-        totalTokens[1] += response[1][1]
-        messages[key] = translatedText
+        if isinstance(value, list):
+            new_list = []
+            for idx, item in enumerate(value):
+                if isinstance(item, str):
+                    response = translateAI(
+                        item,
+                        f"Reply with only the {LANGUAGE} translation of the battle text.\nTranslate '常時ダッシュ' as 'Always Dash'\nTranslate '次の%1まで' as Next %1.",
+                        False,
+                    )
+                    translatedText = response[0]
+                    charList = [".", '"', "\\n"]
+                    for char in charList:
+                        translatedText = translatedText.replace(char, "")
+                    totalTokens[0] += response[1][0]
+                    totalTokens[1] += response[1][1]
+                    new_list.append(translatedText)
+                else:
+                    new_list.append(item)
+            # For logging: create Line1, Line2, ... keys for this list
+            messages[key] = new_list
+        elif isinstance(value, str):
+            response = translateAI(
+                value,
+                f"Reply with only the {LANGUAGE} translation of the battle text.\nTranslate '常時ダッシュ' as 'Always Dash'\nTranslate '次の%1まで' as Next %1.",
+                False,
+            )
+            translatedText = response[0]
+            charList = [".", '"', "\\n"]
+            for char in charList:
+                translatedText = translatedText.replace(char, "")
+            totalTokens[0] += response[1][0]
+            totalTokens[1] += response[1][1]
+            messages[key] = translatedText
+        else:
+            messages[key] = value
 
     return totalTokens
 
