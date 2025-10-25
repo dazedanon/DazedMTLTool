@@ -62,7 +62,7 @@ BATCHSIZE = PRICING_CONFIG["batchSize"]
 FREQUENCY_PENALTY = PRICING_CONFIG["frequencyPenalty"]
 
 # tqdm Globals
-BAR_FORMAT = "{l_bar}{bar:10}{r_bar}{bar:-10b}"
+BAR_FORMAT = "{desc}: {percentage:3.0f}%|{bar:10}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}{postfix}]"
 POSITION = 0
 
 # Initialize Translation Config
@@ -479,10 +479,11 @@ def parseMap(data, filename):
                 totalTokens[1] += tokensResponse[1]
             for page in event["pages"]:
                 totalLines += len(page["list"])
+    global PBAR
 
     # Process each page synchronously with progress updates
-    with tqdm(total=totalLines, bar_format=BAR_FORMAT, position=POSITION, leave=LEAVE) as pbar:
-        pbar.desc = filename
+    with tqdm(total=totalLines, bar_format=BAR_FORMAT, position=POSITION, leave=LEAVE, desc=filename) as pbar:
+        PBAR = pbar
         for event in events:
             if event is not None:
                 # Normalize note to a safe string
@@ -609,9 +610,10 @@ def parseCommonEvents(data, filename):
     for page in data:
         if page is not None:
             totalLines += len(page["list"])
+    global PBAR
 
-    with tqdm(total=totalLines, bar_format=BAR_FORMAT, position=POSITION, leave=LEAVE) as pbar:
-        pbar.desc = filename
+    with tqdm(total=totalLines, bar_format=BAR_FORMAT, position=POSITION, leave=LEAVE, desc=filename) as pbar:
+        PBAR = pbar
         for page in data:
             if page is not None:
                 try:
@@ -639,9 +641,10 @@ def parseTroops(data, filename):
             for page in troop["pages"]:
                 # Progress measured by number of commands in each page's list
                 totalLines += len(page["list"])
+    global PBAR
 
-    with tqdm(total=totalLines, bar_format=BAR_FORMAT, position=POSITION, leave=LEAVE) as pbar:
-        pbar.desc = filename
+    with tqdm(total=totalLines, bar_format=BAR_FORMAT, position=POSITION, leave=LEAVE, desc=filename) as pbar:
+        PBAR = pbar
         for troop in data:
             if troop is not None:
                 for page in troop["pages"]:
@@ -706,9 +709,10 @@ def parseNames(data, filename, context):
         return total
 
     total_units = count_work_units(data, context)
+    global PBAR
 
-    with tqdm(total=total_units, bar_format=BAR_FORMAT, position=POSITION, leave=LEAVE) as pbar:
-        pbar.desc = filename
+    with tqdm(total=total_units, bar_format=BAR_FORMAT, position=POSITION, leave=LEAVE, desc=filename) as pbar:
+        PBAR = pbar
         try:
             # Thread the filename through so progress saves write to the right file
             result = searchNames(data, pbar, context, filename)
@@ -742,9 +746,10 @@ def parseSS(data, filename):
         return total
 
     total_units = count_work_units(data)
+    global PBAR
 
-    with tqdm(total=total_units, bar_format=BAR_FORMAT, position=POSITION, leave=LEAVE) as pbar:
-        pbar.desc = filename
+    with tqdm(total=total_units, bar_format=BAR_FORMAT, position=POSITION, leave=LEAVE, desc=filename) as pbar:
+        PBAR = pbar
         for ss in data:
             if ss is not None:
                 try:
@@ -786,9 +791,10 @@ def parseSystem(data, filename):
         return total
 
     total_units = count_work_units(data)
+    global PBAR
 
-    with tqdm(total=total_units, bar_format=BAR_FORMAT, position=POSITION, leave=LEAVE) as pbar:
-        pbar.desc = filename
+    with tqdm(total=total_units, bar_format=BAR_FORMAT, position=POSITION, leave=LEAVE, desc=filename) as pbar:
+        PBAR = pbar
         try:
             result = searchSystem(data, pbar)
             totalTokens[0] += result[0]
@@ -810,9 +816,10 @@ def parseScenario(data, filename):
     # Get total for progress bar
     for page in data.items():
         totalLines += len(page[1])
+    global PBAR
 
-    with tqdm(total=totalLines, bar_format=BAR_FORMAT, position=POSITION, leave=LEAVE) as pbar:
-        pbar.desc = filename
+    with tqdm(total=totalLines, bar_format=BAR_FORMAT, position=POSITION, leave=LEAVE, desc=filename) as pbar:
+        PBAR = pbar
         for page in data.items():
             if page[1] is not None:
                 try:
