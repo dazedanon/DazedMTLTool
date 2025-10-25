@@ -130,18 +130,18 @@ class ConfigTab(QWidget):
         
         self.api_url_edit = QLineEdit()
         self.api_url_edit.setPlaceholderText("Leave blank for OpenAI API")
-        self.api_url_edit.setMaximumWidth(400)
+        self.api_url_edit.setFixedWidth(350)  # Large
         api_form.addRow("API URL:", self.api_url_edit)
         
         self.api_key_edit = QLineEdit()
         self.api_key_edit.setEchoMode(QLineEdit.Password)
         self.api_key_edit.setPlaceholderText("Enter your API key")
-        self.api_key_edit.setMaximumWidth(400)
+        self.api_key_edit.setFixedWidth(350)  # Large
         api_form.addRow("API Key:", self.api_key_edit)
         
         self.organization_edit = QLineEdit()
         self.organization_edit.setPlaceholderText("Optional organization key")
-        self.organization_edit.setMaximumWidth(400)
+        self.organization_edit.setFixedWidth(350)  # Large
         api_form.addRow("Organization:", self.organization_edit)
         
         self.model_combo = QComboBox()
@@ -151,7 +151,7 @@ class ConfigTab(QWidget):
             "deepseek-chat", "claude-3-sonnet-20240229",
             "gemini-2.0-flash", "gemini-2.5-flash", "gemini-2.5-pro"
         ])
-        self.model_combo.setMaximumWidth(400)
+        self.model_combo.setFixedWidth(200)  # Medium
         api_form.addRow("Model:", self.model_combo)
         
         left_column.addLayout(api_form)
@@ -169,14 +169,15 @@ class ConfigTab(QWidget):
             "English", "Spanish", "French", "German", "Italian",
             "Portuguese", "Russian", "Chinese", "Korean", "Japanese"
         ])
-        self.language_combo.setMaximumWidth(250)
+        self.language_combo.setFixedWidth(200)  # Medium
         trans_form.addRow("Target Language:", self.language_combo)
         
         self.timeout_spin = QSpinBox()
+        self.timeout_spin.setButtonSymbols(QSpinBox.NoButtons)
         self.timeout_spin.setRange(30, 300)
-        self.timeout_spin.setValue(120)
+        self.timeout_spin.setValue(90)
         self.timeout_spin.setSuffix(" sec")
-        self.timeout_spin.setMaximumWidth(150)
+        self.timeout_spin.setFixedWidth(90)  # Small
         trans_form.addRow("Timeout:", self.timeout_spin)
         
         left_column.addLayout(trans_form)
@@ -190,28 +191,32 @@ class ConfigTab(QWidget):
         perf_form.setFieldGrowthPolicy(QFormLayout.ExpandingFieldsGrow)
         
         self.file_threads_spin = QSpinBox()
+        self.file_threads_spin.setButtonSymbols(QSpinBox.NoButtons)
         self.file_threads_spin.setRange(1, 10)
         self.file_threads_spin.setValue(1)
-        self.file_threads_spin.setMaximumWidth(150)
+        self.file_threads_spin.setFixedWidth(90)  # Small
         perf_form.addRow("File Threads:", self.file_threads_spin)
         
         self.threads_spin = QSpinBox()
+        self.threads_spin.setButtonSymbols(QSpinBox.NoButtons)
         self.threads_spin.setRange(1, 20)
         self.threads_spin.setValue(1)
-        self.threads_spin.setMaximumWidth(150)
+        self.threads_spin.setFixedWidth(90)  # Small
         perf_form.addRow("Threads per File:", self.threads_spin)
         
         self.batch_size_spin = QSpinBox()
+        self.batch_size_spin.setButtonSymbols(QSpinBox.NoButtons)
         self.batch_size_spin.setRange(1, 100)
         self.batch_size_spin.setValue(30)
-        self.batch_size_spin.setMaximumWidth(150)
+        self.batch_size_spin.setFixedWidth(90)  # Small
         perf_form.addRow("Batch Size:", self.batch_size_spin)
         
         self.frequency_penalty_spin = QDoubleSpinBox()
+        self.frequency_penalty_spin.setButtonSymbols(QDoubleSpinBox.NoButtons)
         self.frequency_penalty_spin.setRange(0.0, 2.0)
         self.frequency_penalty_spin.setSingleStep(0.05)
         self.frequency_penalty_spin.setValue(0.05)
-        self.frequency_penalty_spin.setMaximumWidth(150)
+        self.frequency_penalty_spin.setFixedWidth(90)  # Small
         perf_form.addRow("Frequency Penalty:", self.frequency_penalty_spin)
         
         left_column.addLayout(perf_form)
@@ -229,24 +234,27 @@ class ConfigTab(QWidget):
         format_form.setFieldGrowthPolicy(QFormLayout.ExpandingFieldsGrow)
         
         self.width_spin = QSpinBox()
+        self.width_spin.setButtonSymbols(QSpinBox.NoButtons)
         self.width_spin.setRange(20, 200)
         self.width_spin.setValue(60)
         self.width_spin.setSuffix(" chars")
-        self.width_spin.setMaximumWidth(150)
+        self.width_spin.setFixedWidth(90)  # Small
         format_form.addRow("Dialogue Width:", self.width_spin)
         
         self.list_width_spin = QSpinBox()
+        self.list_width_spin.setButtonSymbols(QSpinBox.NoButtons)
         self.list_width_spin.setRange(20, 200)
         self.list_width_spin.setValue(100)
         self.list_width_spin.setSuffix(" chars")
-        self.list_width_spin.setMaximumWidth(150)
+        self.list_width_spin.setFixedWidth(90)  # Small
         format_form.addRow("List Width:", self.list_width_spin)
         
         self.note_width_spin = QSpinBox()
+        self.note_width_spin.setButtonSymbols(QSpinBox.NoButtons)
         self.note_width_spin.setRange(20, 200)
         self.note_width_spin.setValue(75)
         self.note_width_spin.setSuffix(" chars")
-        self.note_width_spin.setMaximumWidth(150)
+        self.note_width_spin.setFixedWidth(90)  # Small
         format_form.addRow("Note Width:", self.note_width_spin)
         
         right_column.addLayout(format_form)
@@ -266,21 +274,23 @@ class ConfigTab(QWidget):
         price_form.setFieldGrowthPolicy(QFormLayout.ExpandingFieldsGrow)
         
         self.input_cost_spin = QDoubleSpinBox()
+        self.input_cost_spin.setButtonSymbols(QDoubleSpinBox.NoButtons)
         self.input_cost_spin.setRange(0.0, 100.0)
         self.input_cost_spin.setDecimals(4)
         self.input_cost_spin.setSingleStep(0.1)
         self.input_cost_spin.setValue(2.0)
         self.input_cost_spin.setSuffix(" per 1M tokens")
-        self.input_cost_spin.setMaximumWidth(200)
+        self.input_cost_spin.setFixedWidth(200)  # Medium
         price_form.addRow("Input Cost:", self.input_cost_spin)
         
         self.output_cost_spin = QDoubleSpinBox()
+        self.output_cost_spin.setButtonSymbols(QDoubleSpinBox.NoButtons)
         self.output_cost_spin.setRange(0.0, 100.0)
         self.output_cost_spin.setDecimals(4)
         self.output_cost_spin.setSingleStep(0.1)
         self.output_cost_spin.setValue(8.0)
         self.output_cost_spin.setSuffix(" per 1M tokens")
-        self.output_cost_spin.setMaximumWidth(200)
+        self.output_cost_spin.setFixedWidth(200)  # Medium
         price_form.addRow("Output Cost:", self.output_cost_spin)
         
         right_column.addLayout(price_form)
@@ -314,7 +324,7 @@ class ConfigTab(QWidget):
         
         # Load translation settings
         self.language_combo.setCurrentText(os.getenv("language", "English"))
-        self.timeout_spin.setValue(int(os.getenv("timeout", "120")))
+        self.timeout_spin.setValue(int(os.getenv("timeout", "90")))
         
         # Load performance settings
         self.file_threads_spin.setValue(int(os.getenv("fileThreads", "1")))
@@ -397,7 +407,7 @@ class ConfigTab(QWidget):
         
         # Translation settings
         self.language_combo.setCurrentText("English")
-        self.timeout_spin.setValue(120)
+        self.timeout_spin.setValue(90)
         
         # Performance settings
         self.file_threads_spin.setValue(1)

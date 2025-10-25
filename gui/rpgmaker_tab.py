@@ -7,7 +7,7 @@ from pathlib import Path
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QFormLayout, QCheckBox, 
     QPushButton, QGroupBox, QLabel, QMessageBox, QScrollArea,
-    QTextEdit, QSpinBox, QFrame
+    QTextEdit, QSpinBox, QFrame, QGridLayout
 )
 from PyQt5.QtCore import Qt, pyqtSignal
 
@@ -16,6 +16,21 @@ try:
 except ImportError:
     # Fallback if config_integration is not available
     ConfigIntegration = None
+
+
+def create_section_label(text):
+    """Create a section label for grouping checkboxes."""
+    label = QLabel(text)
+    label.setStyleSheet("""
+        QLabel {
+            font-size: 12px;
+            font-weight: bold;
+            color: #007acc;
+            padding: 5px 0px 3px 0px;
+            background-color: transparent;
+        }
+    """)
+    return label
 
 
 class RPGMakerTab(QWidget):
@@ -154,232 +169,148 @@ class RPGMakerTab(QWidget):
         self.reset_to_defaults()
         
     def init_ui(self):
-        """Initialize the user interface."""
+        """Initialize the user interface with compact two-column layout."""
         main_layout = QVBoxLayout()
-        
-        # Create scroll area
-        scroll_area = QScrollArea()
-        scroll_content = QWidget()
-        scroll_layout = QVBoxLayout()
+        main_layout.setContentsMargins(10, 10, 10, 10)
+        main_layout.setSpacing(10)
         
         # Title and description
         title = "RPG Maker MV/MZ" if self.engine != "ACE" else "RPG Maker Ace"
         title_label = QLabel(f"{title} Translation Settings")
-        title_label.setStyleSheet("font-size: 16px; font-weight: bold; color: #007acc;")
-        scroll_layout.addWidget(title_label)
+        title_label.setStyleSheet("font-size: 14px; font-weight: bold; color: #007acc;")
+        main_layout.addWidget(title_label)
 
         description_label = QLabel(
-            "Configure which RPG Maker event codes to translate and additional options. "
-            "Each code represents a specific type of game content."
+            "Enable event codes to translate. Only enable what you need to reduce translation time and costs."
         )
         description_label.setWordWrap(True)
-        description_label.setStyleSheet("color: #cccccc; margin-bottom: 10px;")
-        scroll_layout.addWidget(description_label)
+        description_label.setStyleSheet("color: #888888; font-size: 11px; margin-bottom: 5px;")
+        main_layout.addWidget(description_label)
         
-        # General Config Group
-        general_group = self.create_general_config_group()
-        scroll_layout.addWidget(general_group)
+        # Two-column layout for checkboxes
+        columns_layout = QHBoxLayout()
+        columns_layout.setSpacing(30)
         
-        # Main Dialogue Codes Group
-        dialogue_group = self.create_dialogue_codes_group()
-        scroll_layout.addWidget(dialogue_group)
+        # LEFT COLUMN
+        left_column = QVBoxLayout()
+        left_column.setSpacing(3)
         
-        # Optional Codes Group
-        optional_group = self.create_optional_codes_group()
-        scroll_layout.addWidget(optional_group)
-        
-        # Variable Codes Group
-        variable_group = self.create_variable_codes_group()
-        scroll_layout.addWidget(variable_group)
-        
-        # Other Codes Group
-        other_group = self.create_other_codes_group()
-        scroll_layout.addWidget(other_group)
-        
-        # Buttons
-        button_layout = QHBoxLayout()
-        
-        self.reset_button = QPushButton("Reset to Defaults")
-        self.reset_button.clicked.connect(self.reset_to_defaults_with_message)
-        
-        self.validate_button = QPushButton("Validate Settings")
-        self.validate_button.clicked.connect(self.validate_and_show_report)
-        
-        button_layout.addWidget(self.reset_button)
-        button_layout.addWidget(self.validate_button)
-        button_layout.addStretch()
-        
-        scroll_layout.addLayout(button_layout)
-        
-        # Add separator
-        separator = QFrame()
-        separator.setFrameShape(QFrame.HLine)
-        separator.setFrameShadow(QFrame.Sunken)
-        scroll_layout.addWidget(separator)
-        
-        # Add note about performance
-        note_text = QTextEdit()
-        note_text.setMaximumHeight(100)
-        note_text.setReadOnly(True)
-        note_text.setHtml("""
-        <b>Performance Notes:</b><br>
-        • Enable only the codes you need to reduce translation time and costs<br>
-        • CODE408 can significantly increase costs as it translates comments<br>
-        • Main dialogue codes (401, 405, 102) are typically required for story content<br>
-        • Test with a small file first to verify settings work correctly
-        """)
-        scroll_layout.addWidget(note_text)
-        
-        scroll_content.setLayout(scroll_layout)
-        scroll_area.setWidget(scroll_content)
-        scroll_area.setWidgetResizable(True)
-        
-        main_layout.addWidget(scroll_area)
-        self.setLayout(main_layout)
-        
-    def create_general_config_group(self):
-        """Create general configuration group."""
-        group = QGroupBox("General Configuration")
-        layout = QVBoxLayout()
-        
-        # FIRSTLINESPEAKERS
+        # General Configuration
+        left_column.addWidget(create_section_label("⚙️ General Options"))
         self.first_line_speakers_cb = QCheckBox("First Line Speakers")
-        self.first_line_speakers_cb.setToolTip(
-            "If the first line of event code 401 contains a speaker name, enable this option"
-        )
-        layout.addWidget(self.first_line_speakers_cb)
+        self.first_line_speakers_cb.setToolTip("Enable if first line of CODE401 contains speaker name")
+        left_column.addWidget(self.first_line_speakers_cb)
         
-        # FACENAME101
-        self.facename_101_cb = QCheckBox("Find Speakers in 101 Codes based on Face Name")
-        self.facename_101_cb.setToolTip(
-            "Use character face names to identify speakers in event code 101"
-        )
-        layout.addWidget(self.facename_101_cb)
+        self.facename101_cb = QCheckBox("Face Name in CODE101")
+        self.facename101_cb.setToolTip("Enable to translate face names in CODE101")
+        left_column.addWidget(self.facename101_cb)
         
-        # NAMES
-        self.names_cb = QCheckBox("Output Character Names List")
-        self.names_cb.setToolTip(
-            "Generate a list of all character names found during translation"
-        )
-        layout.addWidget(self.names_cb)
+        self.names_cb = QCheckBox("Translate Names")
+        self.names_cb.setToolTip("Enable to translate character names")
+        left_column.addWidget(self.names_cb)
         
-        # BRFLAG
-        self.br_flag_cb = QCheckBox("Use <br> Tags")
-        self.br_flag_cb.setToolTip(
-            "Use <br> HTML tags instead of newlines for line breaks"
-        )
-        layout.addWidget(self.br_flag_cb)
+        self.brflag_cb = QCheckBox("Line Break Flag")
+        self.brflag_cb.setToolTip("Enable line break handling")
+        left_column.addWidget(self.brflag_cb)
         
-        # FIXTEXTWRAP
-        self.fix_textwrap_cb = QCheckBox("Fix Text Wrapping")
-        self.fix_textwrap_cb.setToolTip(
-            "Automatically fix text wrapping for better display"
-        )
-        layout.addWidget(self.fix_textwrap_cb)
+        self.fixtextwrap_cb = QCheckBox("Fix Text Wrap")
+        self.fixtextwrap_cb.setToolTip("Automatically fix text wrapping issues")
+        left_column.addWidget(self.fixtextwrap_cb)
         
-        # IGNORETLTEXT
-        self.ignore_tl_text_cb = QCheckBox("Ignore Already Translated Text")
-        self.ignore_tl_text_cb.setToolTip(
-            "Skip text that appears to already be translated"
-        )
-        layout.addWidget(self.ignore_tl_text_cb)
+        self.ignoretltext_cb = QCheckBox("Ignore TL Text")
+        self.ignoretltext_cb.setToolTip("Ignore already translated text")
+        left_column.addWidget(self.ignoretltext_cb)
         
-        group.setLayout(layout)
-        return group
+        left_column.addSpacing(8)
         
-    def create_dialogue_codes_group(self):
-        """Create dialogue codes group."""
-        group = QGroupBox("Main Dialogue Codes (Recommended)")
-        layout = QVBoxLayout()
+        # Main Dialogue Codes
+        left_column.addWidget(create_section_label("💬 Main Dialogue (Recommended)"))
+        self.code401_cb = QCheckBox("CODE401 - Show Text")
+        left_column.addWidget(self.code401_cb)
         
-        # CODE401
-        self.code_401_cb = QCheckBox("CODE 401 - Show Text")
-        self.code_401_cb.setToolTip(
-            "Translate dialogue text displayed in message windows. Essential for story content."
-        )
-        layout.addWidget(self.code_401_cb)
+        self.code405_cb = QCheckBox("CODE405 - Show Text (line 4+)")
+        left_column.addWidget(self.code405_cb)
         
-        # CODE405  
-        self.code_405_cb = QCheckBox("CODE 405 - Show Text (Scrolling)")
-        self.code_405_cb.setToolTip(
-            "Translate scrolling text messages. Used for longer dialogue passages."
-        )
-        layout.addWidget(self.code_405_cb)
+        self.code102_cb = QCheckBox("CODE102 - Show Choices")
+        left_column.addWidget(self.code102_cb)
         
-        # CODE102
-        self.code_102_cb = QCheckBox("CODE 102 - Show Choices")
-        self.code_102_cb.setToolTip(
-            "Translate choice options presented to the player."
-        )
-        layout.addWidget(self.code_102_cb)
+        left_column.addSpacing(8)
         
-        group.setLayout(layout)
-        return group
+        # Optional Dialogue Codes
+        left_column.addWidget(create_section_label("📝 Optional Dialogue"))
+        self.code101_cb = QCheckBox("CODE101 - Show Text (face)")
+        left_column.addWidget(self.code101_cb)
         
-    def create_optional_codes_group(self):
-        """Create optional codes group."""
-        group = QGroupBox("Optional Codes")
-        layout = QVBoxLayout()
+        self.code408_cb = QCheckBox("CODE408 - Show Text (continuation)")
+        self.code408_cb.setToolTip("Can significantly increase costs")
+        left_column.addWidget(self.code408_cb)
         
-        # CODE101
-        self.code_101_cb = QCheckBox("CODE 101 - Character Names")
-        self.code_101_cb.setToolTip(
-            "Translate character names. Enable only when names are stored in code 101."
-        )
-        layout.addWidget(self.code_101_cb)
+        self.code122_cb = QCheckBox("CODE122 - Control Variables")
+        left_column.addWidget(self.code122_cb)
         
-        # CODE408
-        self.code_408_cb = QCheckBox("CODE 408 - Comments (Warning: High Cost)")
-        self.code_408_cb.setToolTip(
-            "Translate comment text. WARNING: This can significantly increase translation costs!"
-        )
-        self.code_408_cb.setStyleSheet("QCheckBox { color: #ff6b6b; }")
-        layout.addWidget(self.code_408_cb)
+        left_column.addStretch()
         
-        group.setLayout(layout)
-        return group
+        # RIGHT COLUMN  
+        right_column = QVBoxLayout()
+        right_column.setSpacing(3)
         
-    def create_variable_codes_group(self):
-        """Create variable codes group."""
-        group = QGroupBox("Variable Codes")
-        layout = QVBoxLayout()
+        # Event Codes (compact grid layout)
+        right_column.addWidget(create_section_label("🎮 Event Codes"))
         
-        # CODE122
-        self.code_122_cb = QCheckBox("CODE 122 - Control Variables")
-        self.code_122_cb.setToolTip(
-            "Translate text stored in game variables."
-        )
-        layout.addWidget(self.code_122_cb)
+        # Create a grid for better space usage
+        event_grid = QGridLayout()
+        event_grid.setSpacing(2)
+        event_grid.setHorizontalSpacing(15)
         
-        group.setLayout(layout)
-        return group
-        
-    def create_other_codes_group(self):
-        """Create other codes group."""
-        group = QGroupBox("Other Event Codes")
-        layout = QVBoxLayout()
-        
-        codes_info = [
-            ("355655", "Scripts", "Translate text within script commands"),
-            ("357", "Picture Text", "Translate text displayed on pictures"),
-            ("657", "Picture Text Extended", "Extended picture text translation"),
-            ("356", "Plugin Commands", "Translate plugin command parameters"),
-            ("320", "Change Name Input", "Translate name input prompts"),
-            ("324", "Change Nickname", "Translate nickname changes"),
-            ("111", "Conditional Branch", "Translate conditional text"),
-            ("108", "Comments", "Translate comment blocks")
+        # Event codes in a more compact format
+        event_codes = [
+            ("CODE103", "Input Number"), ("CODE104", "Select Item"),
+            ("CODE111", "Conditional Branch"), ("CODE117", "Common Event"),
+            ("CODE119", "Set Movement"), ("CODE121", "Control Switches"),
+            ("CODE125", "Change Gold"), ("CODE126", "Change Items"),
+            ("CODE127", "Change Weapons"), ("CODE128", "Change Armors"),
+            ("CODE129", "Change Party"), ("CODE201", "Transfer Player"),
+            ("CODE202", "Set Vehicle Loc"), ("CODE203", "Set Event Loc"),
+            ("CODE211", "Change Transparency"), ("CODE212", "Show Animation"),
+            ("CODE213", "Show Balloon"), ("CODE214", "Erase Event"),
+            ("CODE221", "Fadeout Screen"), ("CODE222", "Fadein Screen"),
+            ("CODE231", "Show Picture"), ("CODE232", "Move Picture"),
+            ("CODE241", "Play BGM"), ("CODE242", "Fadeout BGM"),
         ]
         
-        self.other_code_checkboxes = {}
+        self.event_checkboxes = {}
+        for idx, (code, label) in enumerate(event_codes):
+            cb = QCheckBox(f"{code} - {label}")
+            cb.setStyleSheet("QCheckBox { font-size: 10px; }")
+            event_grid.addWidget(cb, idx // 2, idx % 2)
+            self.event_checkboxes[code] = cb
         
-        for code, name, tooltip in codes_info:
-            cb = QCheckBox(f"CODE {code} - {name}")
-            cb.setToolTip(tooltip)
-            layout.addWidget(cb)
-            self.other_code_checkboxes[code] = cb
+        right_column.addLayout(event_grid)
+        right_column.addStretch()
         
-        group.setLayout(layout)
-        return group
+        # Add both columns
+        columns_layout.addLayout(left_column, 1)
+        columns_layout.addLayout(right_column, 1)
+        main_layout.addLayout(columns_layout)
+        
+        # Bottom buttons
+        button_layout = QHBoxLayout()
+        button_layout.setSpacing(10)
+        
+        self.reset_button = QPushButton("🔄 Reset to Defaults")
+        self.reset_button.clicked.connect(self.reset_to_defaults_with_message)
+        self.reset_button.setMaximumWidth(200)
+        
+        self.apply_button = QPushButton("✓ Apply Settings")
+        self.apply_button.clicked.connect(self.apply_to_module)
+        self.apply_button.setMaximumWidth(200)
+        
+        button_layout.addWidget(self.reset_button)
+        button_layout.addWidget(self.apply_button)
+        button_layout.addStretch()
+        
+        main_layout.addLayout(button_layout)
+        self.setLayout(main_layout)
         
     def reset_to_defaults(self):
         """Reset all settings to default values."""
@@ -388,31 +319,27 @@ class RPGMakerTab(QWidget):
         
         # Apply default values from the DEFAULT_CONFIG constant
         self.first_line_speakers_cb.setChecked(self.DEFAULT_CONFIG["FIRSTLINESPEAKERS"])
-        self.facename_101_cb.setChecked(self.DEFAULT_CONFIG["FACENAME101"])
+        self.facename101_cb.setChecked(self.DEFAULT_CONFIG["FACENAME101"])
         self.names_cb.setChecked(self.DEFAULT_CONFIG["NAMES"])
-        self.br_flag_cb.setChecked(self.DEFAULT_CONFIG["BRFLAG"])
-        self.fix_textwrap_cb.setChecked(self.DEFAULT_CONFIG["FIXTEXTWRAP"])
-        self.ignore_tl_text_cb.setChecked(self.DEFAULT_CONFIG["IGNORETLTEXT"])
+        self.brflag_cb.setChecked(self.DEFAULT_CONFIG["BRFLAG"])
+        self.fixtextwrap_cb.setChecked(self.DEFAULT_CONFIG["FIXTEXTWRAP"])
+        self.ignoretltext_cb.setChecked(self.DEFAULT_CONFIG["IGNORETLTEXT"])
         
         # Main dialogue codes
-        self.code_401_cb.setChecked(self.DEFAULT_CONFIG["CODE401"])
-        self.code_405_cb.setChecked(self.DEFAULT_CONFIG["CODE405"])
-        self.code_102_cb.setChecked(self.DEFAULT_CONFIG["CODE102"])
+        self.code401_cb.setChecked(self.DEFAULT_CONFIG["CODE401"])
+        self.code405_cb.setChecked(self.DEFAULT_CONFIG["CODE405"])
+        self.code102_cb.setChecked(self.DEFAULT_CONFIG["CODE102"])
         
         # Optional codes
-        self.code_101_cb.setChecked(self.DEFAULT_CONFIG["CODE101"])
-        self.code_408_cb.setChecked(self.DEFAULT_CONFIG["CODE408"])
+        self.code101_cb.setChecked(self.DEFAULT_CONFIG["CODE101"])
+        self.code408_cb.setChecked(self.DEFAULT_CONFIG["CODE408"])
         
         # Variable codes
-        self.code_122_cb.setChecked(self.DEFAULT_CONFIG["CODE122"])
+        self.code122_cb.setChecked(self.DEFAULT_CONFIG["CODE122"])
         
-        # Other codes - apply defaults from the constant
-        for code, cb in self.other_code_checkboxes.items():
-            default_key = f"CODE{code}"
-            if default_key in self.DEFAULT_CONFIG:
-                cb.setChecked(self.DEFAULT_CONFIG[default_key])
-            else:
-                cb.setChecked(False)  # Fallback to False if not in defaults
+        # Event codes
+        for code, cb in self.event_checkboxes.items():
+            cb.setChecked(self.DEFAULT_CONFIG.get(code, False))
                 
         # Reconnect signals and apply changes once
         self.connect_auto_apply()
@@ -432,26 +359,26 @@ class RPGMakerTab(QWidget):
         try:
             # General settings checkboxes
             self.first_line_speakers_cb.stateChanged.disconnect()
-            self.facename_101_cb.stateChanged.disconnect()
+            self.facename101_cb.stateChanged.disconnect()
             self.names_cb.stateChanged.disconnect()
-            self.br_flag_cb.stateChanged.disconnect()
-            self.fix_textwrap_cb.stateChanged.disconnect()
-            self.ignore_tl_text_cb.stateChanged.disconnect()
+            self.brflag_cb.stateChanged.disconnect()
+            self.fixtextwrap_cb.stateChanged.disconnect()
+            self.ignoretltext_cb.stateChanged.disconnect()
             
             # Main dialogue codes
-            self.code_401_cb.stateChanged.disconnect()
-            self.code_405_cb.stateChanged.disconnect()
-            self.code_102_cb.stateChanged.disconnect()
+            self.code401_cb.stateChanged.disconnect()
+            self.code405_cb.stateChanged.disconnect()
+            self.code102_cb.stateChanged.disconnect()
             
             # Optional codes
-            self.code_101_cb.stateChanged.disconnect()
-            self.code_408_cb.stateChanged.disconnect()
+            self.code101_cb.stateChanged.disconnect()
+            self.code408_cb.stateChanged.disconnect()
             
             # Variable codes
-            self.code_122_cb.stateChanged.disconnect()
+            self.code122_cb.stateChanged.disconnect()
             
-            # Other codes
-            for cb in self.other_code_checkboxes.values():
+            # Event codes
+            for cb in self.event_checkboxes.values():
                 cb.stateChanged.disconnect()
         except TypeError:
             # Ignore if signals are not connected
@@ -461,26 +388,26 @@ class RPGMakerTab(QWidget):
         """Connect all checkboxes to auto-apply changes when modified."""
         # General settings checkboxes
         self.first_line_speakers_cb.stateChanged.connect(lambda: self.apply_to_module(show_messages=False))
-        self.facename_101_cb.stateChanged.connect(lambda: self.apply_to_module(show_messages=False))
+        self.facename101_cb.stateChanged.connect(lambda: self.apply_to_module(show_messages=False))
         self.names_cb.stateChanged.connect(lambda: self.apply_to_module(show_messages=False))
-        self.br_flag_cb.stateChanged.connect(lambda: self.apply_to_module(show_messages=False))
-        self.fix_textwrap_cb.stateChanged.connect(lambda: self.apply_to_module(show_messages=False))
-        self.ignore_tl_text_cb.stateChanged.connect(lambda: self.apply_to_module(show_messages=False))
+        self.brflag_cb.stateChanged.connect(lambda: self.apply_to_module(show_messages=False))
+        self.fixtextwrap_cb.stateChanged.connect(lambda: self.apply_to_module(show_messages=False))
+        self.ignoretltext_cb.stateChanged.connect(lambda: self.apply_to_module(show_messages=False))
         
         # Main dialogue codes
-        self.code_401_cb.stateChanged.connect(lambda: self.apply_to_module(show_messages=False))
-        self.code_405_cb.stateChanged.connect(lambda: self.apply_to_module(show_messages=False))
-        self.code_102_cb.stateChanged.connect(lambda: self.apply_to_module(show_messages=False))
+        self.code401_cb.stateChanged.connect(lambda: self.apply_to_module(show_messages=False))
+        self.code405_cb.stateChanged.connect(lambda: self.apply_to_module(show_messages=False))
+        self.code102_cb.stateChanged.connect(lambda: self.apply_to_module(show_messages=False))
         
         # Optional codes
-        self.code_101_cb.stateChanged.connect(lambda: self.apply_to_module(show_messages=False))
-        self.code_408_cb.stateChanged.connect(lambda: self.apply_to_module(show_messages=False))
+        self.code101_cb.stateChanged.connect(lambda: self.apply_to_module(show_messages=False))
+        self.code408_cb.stateChanged.connect(lambda: self.apply_to_module(show_messages=False))
         
         # Variable codes
-        self.code_122_cb.stateChanged.connect(lambda: self.apply_to_module(show_messages=False))
+        self.code122_cb.stateChanged.connect(lambda: self.apply_to_module(show_messages=False))
         
-        # Other codes
-        for cb in self.other_code_checkboxes.values():
+        # Event codes
+        for cb in self.event_checkboxes.values():
             cb.stateChanged.connect(lambda: self.apply_to_module(show_messages=False))
             
     def get_config(self):
@@ -488,28 +415,28 @@ class RPGMakerTab(QWidget):
         config = {
             # General settings
             "FIRSTLINESPEAKERS": self.first_line_speakers_cb.isChecked(),
-            "FACENAME101": self.facename_101_cb.isChecked(),
+            "FACENAME101": self.facename101_cb.isChecked(),
             "NAMES": self.names_cb.isChecked(),
-            "BRFLAG": self.br_flag_cb.isChecked(),
-            "FIXTEXTWRAP": self.fix_textwrap_cb.isChecked(),
-            "IGNORETLTEXT": self.ignore_tl_text_cb.isChecked(),
+            "BRFLAG": self.brflag_cb.isChecked(),
+            "FIXTEXTWRAP": self.fixtextwrap_cb.isChecked(),
+            "IGNORETLTEXT": self.ignoretltext_cb.isChecked(),
             
             # Main dialogue codes
-            "CODE401": self.code_401_cb.isChecked(),
-            "CODE405": self.code_405_cb.isChecked(),
-            "CODE102": self.code_102_cb.isChecked(),
+            "CODE401": self.code401_cb.isChecked(),
+            "CODE405": self.code405_cb.isChecked(),
+            "CODE102": self.code102_cb.isChecked(),
             
             # Optional codes
-            "CODE101": self.code_101_cb.isChecked(),
-            "CODE408": self.code_408_cb.isChecked(),
+            "CODE101": self.code101_cb.isChecked(),
+            "CODE408": self.code408_cb.isChecked(),
             
             # Variable codes
-            "CODE122": self.code_122_cb.isChecked(),
+            "CODE122": self.code122_cb.isChecked(),
         }
         
-        # Other codes
-        for code, cb in self.other_code_checkboxes.items():
-            config[f"CODE{code}"] = cb.isChecked()
+        # Event codes
+        for code, cb in self.event_checkboxes.items():
+            config[code] = cb.isChecked()
             
         return config
         
@@ -517,27 +444,27 @@ class RPGMakerTab(QWidget):
         """Set configuration from dictionary."""
         # General settings
         self.first_line_speakers_cb.setChecked(config.get("FIRSTLINESPEAKERS", False))
-        self.facename_101_cb.setChecked(config.get("FACENAME101", False))
+        self.facename101_cb.setChecked(config.get("FACENAME101", False))
         self.names_cb.setChecked(config.get("NAMES", False))
-        self.br_flag_cb.setChecked(config.get("BRFLAG", False))
-        self.fix_textwrap_cb.setChecked(config.get("FIXTEXTWRAP", True))
-        self.ignore_tl_text_cb.setChecked(config.get("IGNORETLTEXT", False))
+        self.brflag_cb.setChecked(config.get("BRFLAG", False))
+        self.fixtextwrap_cb.setChecked(config.get("FIXTEXTWRAP", True))
+        self.ignoretltext_cb.setChecked(config.get("IGNORETLTEXT", False))
         
         # Main dialogue codes
-        self.code_401_cb.setChecked(config.get("CODE401", True))
-        self.code_405_cb.setChecked(config.get("CODE405", True))
-        self.code_102_cb.setChecked(config.get("CODE102", True))
+        self.code401_cb.setChecked(config.get("CODE401", True))
+        self.code405_cb.setChecked(config.get("CODE405", True))
+        self.code102_cb.setChecked(config.get("CODE102", True))
         
         # Optional codes
-        self.code_101_cb.setChecked(config.get("CODE101", False))
-        self.code_408_cb.setChecked(config.get("CODE408", False))
+        self.code101_cb.setChecked(config.get("CODE101", False))
+        self.code408_cb.setChecked(config.get("CODE408", False))
         
         # Variable codes
-        self.code_122_cb.setChecked(config.get("CODE122", False))
+        self.code122_cb.setChecked(config.get("CODE122", False))
         
-        # Other codes
-        for code, cb in self.other_code_checkboxes.items():
-            cb.setChecked(config.get(f"CODE{code}", False))
+        # Event codes
+        for code, cb in self.event_checkboxes.items():
+            cb.setChecked(config.get(code, False))
             
     def load_from_file(self, file_path):
         """Load configuration from file."""
@@ -555,20 +482,20 @@ class RPGMakerTab(QWidget):
         
         # Check if any main dialogue codes are enabled
         main_codes_enabled = (
-            self.code_401_cb.isChecked() or 
-            self.code_405_cb.isChecked() or 
-            self.code_102_cb.isChecked()
+            self.code401_cb.isChecked() or 
+            self.code405_cb.isChecked() or 
+            self.code102_cb.isChecked()
         )
         
         if not main_codes_enabled:
             warnings.append("No main dialogue codes are enabled. You may not get any translated content.")
             
         # Check for high-cost options
-        if self.code_408_cb.isChecked():
+        if self.code408_cb.isChecked():
             warnings.append("CODE 408 (Comments) is enabled. This can significantly increase translation costs!")
             
         # Check for conflicting options
-        if self.br_flag_cb.isChecked() and self.fix_textwrap_cb.isChecked():
+        if self.brflag_cb.isChecked() and self.fixtextwrap_cb.isChecked():
             warnings.append("Both BR tags and text wrapping are enabled. This might cause formatting issues.")
             
         return len(errors) == 0, warnings, errors

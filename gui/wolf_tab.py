@@ -5,10 +5,16 @@ what gets translated. This can be expanded later.
 """
 from pathlib import Path
 from PyQt5.QtWidgets import (
-    QWidget, QVBoxLayout, QGroupBox, QCheckBox, QPushButton, QMessageBox, QLabel, QHBoxLayout, QScrollArea
+    QWidget, QVBoxLayout, QCheckBox, QPushButton, QMessageBox, QLabel, QHBoxLayout, QGridLayout
 )
 from PyQt5.QtCore import pyqtSignal
 import re
+
+def create_section_label(text):
+    """Create a styled section header label."""
+    label = QLabel(text)
+    label.setStyleSheet("font-size: 12px; font-weight: bold; color: #007acc; padding: 2px 0px;")
+    return label
 
 class WolfTab(QWidget):
     config_changed = pyqtSignal()
@@ -45,67 +51,183 @@ class WolfTab(QWidget):
         self.reset_to_defaults()
 
     def init_ui(self):
+        """Initialize the user interface with compact two-column layout."""
         main_layout = QVBoxLayout()
-        scroll = QScrollArea()
-        content = QWidget()
-        v = QVBoxLayout()
+        main_layout.setContentsMargins(10, 10, 10, 10)
+        main_layout.setSpacing(10)
+        
+        # Title and description
+        title = QLabel("Wolf RPG Editor Translation Settings")
+        title.setStyleSheet("font-size: 14px; font-weight: bold; color: #007acc;")
+        main_layout.addWidget(title)
 
-        title = QLabel("Wolf RPG Settings")
-        title.setStyleSheet("font-size:16px;font-weight:bold;color:#007acc")
-        v.addWidget(title)
-        desc = QLabel("Toggle which parts of Wolf RPG data are translated. This is a minimal first pass; more options can be added later.")
-        desc.setWordWrap(True)
-        desc.setStyleSheet("color:#cccccc")
-        v.addWidget(desc)
-
-        # Groups
-        self.checkboxes = {}
-        self.add_group(v, "Dialogue / Choices", ["CODE101", "CODE102"])
-        self.add_group(v, "Pictures / Variables", ["CODE150", "CODE122"])    
-        self.add_group(v, "Other Event Codes", ["CODE210", "CODE300", "CODE250"])    
-        self.add_group(v, "Database Sections", [
-            "SCENARIOFLAG", "OPTIONSFLAG", "NPCFLAG", "DBNAMEFLAG", "DBVALUEFLAG",
-            "ITEMFLAG", "STATEFLAG", "ENEMYFLAG", "ARMORFLAG", "WEAPONFLAG", "SKILLFLAG"
-        ])
-
-        # Buttons
-        btn_row = QHBoxLayout()
-        self.reset_btn = QPushButton("Reset")
-        self.reset_btn.clicked.connect(self.reset_to_defaults)
-        self.apply_btn = QPushButton("Apply Now")
-        self.apply_btn.clicked.connect(self.apply_to_module)
-        btn_row.addWidget(self.reset_btn)
-        btn_row.addWidget(self.apply_btn)
-        btn_row.addStretch()
-        v.addLayout(btn_row)
-
-        content.setLayout(v)
-        scroll.setWidget(content)
-        scroll.setWidgetResizable(True)
-        main_layout.addWidget(scroll)
+        description = QLabel(
+            "Enable translation options for Wolf RPG Editor projects. Only enable what you need."
+        )
+        description.setWordWrap(True)
+        description.setStyleSheet("color: #888888; font-size: 11px; margin-bottom: 5px;")
+        main_layout.addWidget(description)
+        
+        # Two-column layout for checkboxes
+        columns_layout = QHBoxLayout()
+        columns_layout.setSpacing(30)
+        
+        # LEFT COLUMN
+        left_column = QVBoxLayout()
+        left_column.setSpacing(3)
+        
+        # Dialogue & Choices
+        left_column.addWidget(create_section_label("💬 Dialogue & Choices"))
+        self.code101_cb = QCheckBox("CODE101 - Show Text")
+        self.code101_cb.setToolTip("Enable translation of dialogue text")
+        left_column.addWidget(self.code101_cb)
+        
+        self.code102_cb = QCheckBox("CODE102 - Show Choices")
+        self.code102_cb.setToolTip("Enable translation of choice options")
+        left_column.addWidget(self.code102_cb)
+        
+        left_column.addSpacing(8)
+        
+        # Pictures & Variables
+        left_column.addWidget(create_section_label("🖼️ Pictures & Variables"))
+        self.code150_cb = QCheckBox("CODE150 - Show Picture")
+        self.code150_cb.setToolTip("Enable translation of picture-related text")
+        left_column.addWidget(self.code150_cb)
+        
+        self.code122_cb = QCheckBox("CODE122 - String Operations")
+        self.code122_cb.setToolTip("Enable translation of string variables")
+        left_column.addWidget(self.code122_cb)
+        
+        left_column.addSpacing(8)
+        
+        # Other Event Codes
+        left_column.addWidget(create_section_label("🎮 Other Event Codes"))
+        self.code210_cb = QCheckBox("CODE210 - Conditional Branch")
+        left_column.addWidget(self.code210_cb)
+        
+        self.code300_cb = QCheckBox("CODE300 - Set Variable")
+        left_column.addWidget(self.code300_cb)
+        
+        self.code250_cb = QCheckBox("CODE250 - Sound Effect")
+        left_column.addWidget(self.code250_cb)
+        
+        left_column.addStretch()
+        
+        # RIGHT COLUMN
+        right_column = QVBoxLayout()
+        right_column.setSpacing(3)
+        
+        # Database Sections
+        right_column.addWidget(create_section_label("📚 Database Sections"))
+        
+        # Database flags in compact 2-column grid
+        db_grid = QGridLayout()
+        db_grid.setSpacing(2)
+        db_grid.setHorizontalSpacing(10)
+        
+        database_flags = [
+            ("SCENARIOFLAG", "Scenario Text"),
+            ("OPTIONSFLAG", "Options"),
+            ("NPCFLAG", "NPC Data"),
+            ("DBNAMEFLAG", "Database Names"),
+            ("DBVALUEFLAG", "Database Values"),
+            ("ITEMFLAG", "Items"),
+            ("STATEFLAG", "States"),
+            ("ENEMYFLAG", "Enemies"),
+            ("ARMORFLAG", "Armor"),
+            ("WEAPONFLAG", "Weapons"),
+            ("SKILLFLAG", "Skills"),
+        ]
+        
+        self.db_checkboxes = {}
+        for idx, (key, label) in enumerate(database_flags):
+            cb = QCheckBox(label)
+            cb.setStyleSheet("QCheckBox { font-size: 10px; }")
+            db_grid.addWidget(cb, idx // 2, idx % 2)
+            self.db_checkboxes[key] = cb
+        
+        right_column.addLayout(db_grid)
+        right_column.addStretch()
+        
+        # Add both columns
+        columns_layout.addLayout(left_column, 1)
+        columns_layout.addLayout(right_column, 1)
+        main_layout.addLayout(columns_layout)
+        
+        # Bottom buttons
+        button_layout = QHBoxLayout()
+        button_layout.setSpacing(10)
+        
+        self.reset_btn = QPushButton("🔄 Reset to Defaults")
+        self.reset_btn.clicked.connect(self.reset_to_defaults_with_message)
+        self.reset_btn.setMaximumWidth(200)
+        
+        self.apply_btn = QPushButton("✓ Apply Settings")
+        self.apply_btn.clicked.connect(lambda: self.apply_to_module(True))
+        self.apply_btn.setMaximumWidth(200)
+        
+        button_layout.addWidget(self.reset_btn)
+        button_layout.addWidget(self.apply_btn)
+        button_layout.addStretch()
+        
+        main_layout.addLayout(button_layout)
         self.setLayout(main_layout)
+        
+        # Connect auto-apply
+        self.code101_cb.stateChanged.connect(lambda: self.apply_to_module(False))
+        self.code102_cb.stateChanged.connect(lambda: self.apply_to_module(False))
+        self.code150_cb.stateChanged.connect(lambda: self.apply_to_module(False))
+        self.code122_cb.stateChanged.connect(lambda: self.apply_to_module(False))
+        self.code210_cb.stateChanged.connect(lambda: self.apply_to_module(False))
+        self.code300_cb.stateChanged.connect(lambda: self.apply_to_module(False))
+        self.code250_cb.stateChanged.connect(lambda: self.apply_to_module(False))
+        
+        for cb in self.db_checkboxes.values():
+            cb.stateChanged.connect(lambda: self.apply_to_module(False))
 
-    def add_group(self, parent_layout, title, keys):
-        box = QGroupBox(title)
-        v = QVBoxLayout()
-        for k in keys:
-            cb = QCheckBox(k)
-            cb.stateChanged.connect(lambda _=None: self.apply_to_module(False))
-            v.addWidget(cb)
-            self.checkboxes[k] = cb
-        box.setLayout(v)
-        parent_layout.addWidget(box)
 
     def get_config(self):
-        return {k: cb.isChecked() for k, cb in self.checkboxes.items()}
+        """Get current configuration as dictionary."""
+        config = {
+            "CODE101": self.code101_cb.isChecked(),
+            "CODE102": self.code102_cb.isChecked(),
+            "CODE150": self.code150_cb.isChecked(),
+            "CODE122": self.code122_cb.isChecked(),
+            "CODE210": self.code210_cb.isChecked(),
+            "CODE300": self.code300_cb.isChecked(),
+            "CODE250": self.code250_cb.isChecked(),
+        }
+        # Add database checkboxes
+        for key, cb in self.db_checkboxes.items():
+            config[key] = cb.isChecked()
+        return config
 
     def reset_to_defaults(self):
-        for k, val in self.DEFAULT_CONFIG.items():
-            if k in self.checkboxes:
-                self.checkboxes[k].setChecked(val)
-        self.apply_to_module()
+        """Reset all settings to default values without showing message."""
+        self.code101_cb.setChecked(self.DEFAULT_CONFIG["CODE101"])
+        self.code102_cb.setChecked(self.DEFAULT_CONFIG["CODE102"])
+        self.code150_cb.setChecked(self.DEFAULT_CONFIG["CODE150"])
+        self.code122_cb.setChecked(self.DEFAULT_CONFIG["CODE122"])
+        self.code210_cb.setChecked(self.DEFAULT_CONFIG["CODE210"])
+        self.code300_cb.setChecked(self.DEFAULT_CONFIG["CODE300"])
+        self.code250_cb.setChecked(self.DEFAULT_CONFIG["CODE250"])
+        
+        for key, cb in self.db_checkboxes.items():
+            cb.setChecked(self.DEFAULT_CONFIG.get(key, False))
+        
+        self.apply_to_module(False)
+    
+    def reset_to_defaults_with_message(self):
+        """Reset to defaults and show confirmation message."""
+        self.reset_to_defaults()
+        QMessageBox.information(
+            self,
+            "Reset Complete",
+            "All settings have been reset to their default values."
+        )
 
     def apply_to_module(self, show_message=False):
+        """Apply current configuration to wolf.py module."""
         module_path = Path(__file__).parent.parent / 'modules' / 'wolf.py'
         if not module_path.exists():
             if show_message:
@@ -123,4 +245,3 @@ class WolfTab(QWidget):
         except Exception as e:
             if show_message:
                 QMessageBox.critical(self, 'Error', f'Failed to apply settings: {e}')
-
