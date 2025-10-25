@@ -11,7 +11,7 @@ from pathlib import Path
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QTabWidget, QVBoxLayout, QHBoxLayout,
     QWidget, QPushButton, QLabel, QFileDialog, QMessageBox, QProgressBar,
-    QTextEdit, QSplitter, QGroupBox, QStatusBar
+    QTextEdit, QSplitter, QGroupBox, QStatusBar, QStackedWidget, QToolButton
 )
 from PyQt5.QtCore import Qt, QThread, pyqtSignal, QTimer, QSettings
 from PyQt5.QtGui import QIcon, QFont, QPixmap, QScreen
@@ -129,33 +129,103 @@ class DazedMTLGUI(QMainWindow):
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
         
-        # Create tab widget
-        self.tab_widget = QTabWidget()
-        self.tab_widget.setTabPosition(QTabWidget.North)
+        # Create main layout with VSCode-style sidebar
+        main_layout = QHBoxLayout()
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
         
-        # Add tabs
+        # Create sidebar for navigation
+        sidebar = QWidget()
+        sidebar.setFixedWidth(60)
+        sidebar.setStyleSheet("""
+            QWidget {
+                background-color: #2d2d30;
+            }
+        """)
+        sidebar_layout = QVBoxLayout()
+        sidebar_layout.setContentsMargins(0, 10, 0, 10)
+        sidebar_layout.setSpacing(2)
+        
+        # Create navigation buttons
+        self.nav_buttons = []
+        
+        # Translation button (first)
+        btn_translation = self.create_nav_button("🌐", "Translation")
+        btn_translation.clicked.connect(lambda: self.switch_page(0))
+        sidebar_layout.addWidget(btn_translation)
+        self.nav_buttons.append(btn_translation)
+        
+        # Configuration button (second)
+        btn_config = self.create_nav_button("⚙️", "Configuration")
+        btn_config.clicked.connect(lambda: self.switch_page(1))
+        sidebar_layout.addWidget(btn_config)
+        self.nav_buttons.append(btn_config)
+        
+        sidebar_layout.addStretch()
+        sidebar.setLayout(sidebar_layout)
+        
+        # Create stacked widget for content pages
+        self.content_stack = QStackedWidget()
+        
+        # Add tabs to stacked widget
         self.setup_tabs()
         
-        # Set main layout
-        layout = QVBoxLayout()
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(0)
-        layout.addWidget(self.tab_widget)
-        central_widget.setLayout(layout)
+        # Add sidebar and content to main layout
+        main_layout.addWidget(sidebar)
+        main_layout.addWidget(self.content_stack)
+        central_widget.setLayout(main_layout)
         
         # Create menu bar
         self.create_menu_bar()
         
+        # Select first page by default
+        self.switch_page(0)
+    
+    def create_nav_button(self, icon_text, tooltip):
+        """Create a navigation button for the sidebar."""
+        btn = QToolButton()
+        btn.setText(icon_text)
+        btn.setToolTip(tooltip)
+        btn.setFixedSize(60, 50)
+        btn.setCheckable(True)
+        btn.setStyleSheet("""
+            QToolButton {
+                background-color: transparent;
+                border: none;
+                border-left: 3px solid transparent;
+                color: #cccccc;
+                font-size: 24px;
+                padding: 5px;
+            }
+            QToolButton:hover {
+                background-color: #3e3e42;
+            }
+            QToolButton:checked {
+                background-color: #37373d;
+                border-left: 3px solid #007acc;
+                color: #ffffff;
+            }
+        """)
+        return btn
+    
+    def switch_page(self, index):
+        """Switch to the specified page and update button states."""
+        self.content_stack.setCurrentIndex(index)
+        
+        # Update button checked states
+        for i, btn in enumerate(self.nav_buttons):
+            btn.setChecked(i == index)
+        
     def setup_tabs(self):
         """Set up all the tabs in the interface."""
-        # Configuration Tab
+        # Translation Execution Tab (first)
+        self.translation_tab = TranslationTab(self)
+        self.content_stack.addWidget(self.translation_tab)
+        
+        # Configuration Tab (second)
         self.config_tab = ConfigTab()
         self.config_tab.config_changed.connect(self.on_config_changed)
-        self.tab_widget.addTab(self.config_tab, "Configuration")
-        
-        # Translation Execution Tab (includes file management)
-        self.translation_tab = TranslationTab(self)
-        self.tab_widget.addTab(self.translation_tab, "Translation")
+        self.content_stack.addWidget(self.config_tab)
         
     def on_config_changed(self):
         """Handle configuration changes."""
