@@ -59,23 +59,19 @@ class ConfigTab(QWidget):
         # Create tab widget for different configuration categories
         self.config_tabs = QTabWidget()
         
-        # Tab 1: API & Translation Settings
-        api_tab = self.create_api_translation_tab()
-        self.config_tabs.addTab(api_tab, "API & Translation")
+        # Tab 1: General Settings (Everything in one place!)
+        general_tab = self.create_general_settings_tab()
+        self.config_tabs.addTab(general_tab, "General Settings")
         
-        # Tab 2: Performance & Formatting
-        perf_tab = self.create_performance_formatting_tab()
-        self.config_tabs.addTab(perf_tab, "Performance & Format")
-        
-        # Tab 3: RPG Maker MV/MZ Engine
+        # Tab 2: RPG Maker MV/MZ Engine
         self.mvmz_tab = RPGMakerTab("MVMZ")
         self.config_tabs.addTab(self.mvmz_tab, "RPG Maker MV/MZ")
         
-        # Tab 4: RPG Maker Ace Engine
+        # Tab 3: RPG Maker Ace Engine
         self.ace_tab = RPGMakerTab("ACE")
         self.config_tabs.addTab(self.ace_tab, "RPG Maker Ace")
         
-        # Tab 5: Wolf RPG Engine
+        # Tab 4: Wolf RPG Engine
         self.wolf_tab = WolfTab()
         self.config_tabs.addTab(self.wolf_tab, "Wolf RPG")
         
@@ -105,8 +101,8 @@ class ConfigTab(QWidget):
         main_layout.addLayout(button_layout)
         self.setLayout(main_layout)
     
-    def create_api_translation_tab(self):
-        """Create compact API and translation settings tab."""
+    def create_general_settings_tab(self):
+        """Create combined general settings tab with API, Translation, Performance, and UI settings."""
         widget = QWidget()
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
@@ -117,23 +113,35 @@ class ConfigTab(QWidget):
         layout.setSpacing(5)
         layout.setContentsMargins(10, 10, 10, 10)
         
+        # Create a two-column layout for better space utilization
+        columns_layout = QHBoxLayout()
+        columns_layout.setSpacing(20)
+        
+        # LEFT COLUMN
+        left_column = QVBoxLayout()
+        left_column.setSpacing(5)
+        
         # API Configuration Section
-        layout.addWidget(create_section_header("🔑 API Configuration"))
+        left_column.addWidget(create_section_header("🔑 API Configuration"))
         api_form = QFormLayout()
         api_form.setSpacing(5)
         api_form.setContentsMargins(0, 0, 0, 10)
+        api_form.setFieldGrowthPolicy(QFormLayout.ExpandingFieldsGrow)
         
         self.api_url_edit = QLineEdit()
         self.api_url_edit.setPlaceholderText("Leave blank for OpenAI API")
+        self.api_url_edit.setMaximumWidth(400)
         api_form.addRow("API URL:", self.api_url_edit)
         
         self.api_key_edit = QLineEdit()
         self.api_key_edit.setEchoMode(QLineEdit.Password)
         self.api_key_edit.setPlaceholderText("Enter your API key")
+        self.api_key_edit.setMaximumWidth(400)
         api_form.addRow("API Key:", self.api_key_edit)
         
         self.organization_edit = QLineEdit()
         self.organization_edit.setPlaceholderText("Optional organization key")
+        self.organization_edit.setMaximumWidth(400)
         api_form.addRow("Organization:", self.organization_edit)
         
         self.model_combo = QComboBox()
@@ -143,149 +151,119 @@ class ConfigTab(QWidget):
             "deepseek-chat", "claude-3-sonnet-20240229",
             "gemini-2.0-flash", "gemini-2.5-flash", "gemini-2.5-pro"
         ])
+        self.model_combo.setMaximumWidth(400)
         api_form.addRow("Model:", self.model_combo)
         
-        layout.addLayout(api_form)
-        layout.addWidget(create_horizontal_line())
+        left_column.addLayout(api_form)
+        left_column.addWidget(create_horizontal_line())
         
         # Translation Settings Section
-        layout.addWidget(create_section_header("🌐 Translation Settings"))
+        left_column.addWidget(create_section_header("🌐 Translation Settings"))
         trans_form = QFormLayout()
         trans_form.setSpacing(5)
         trans_form.setContentsMargins(0, 0, 0, 10)
+        trans_form.setFieldGrowthPolicy(QFormLayout.ExpandingFieldsGrow)
         
         self.language_combo = QComboBox()
         self.language_combo.addItems([
             "English", "Spanish", "French", "German", "Italian",
             "Portuguese", "Russian", "Chinese", "Korean", "Japanese"
         ])
+        self.language_combo.setMaximumWidth(250)
         trans_form.addRow("Target Language:", self.language_combo)
         
         self.timeout_spin = QSpinBox()
         self.timeout_spin.setRange(30, 300)
         self.timeout_spin.setValue(120)
         self.timeout_spin.setSuffix(" sec")
+        self.timeout_spin.setMaximumWidth(150)
         trans_form.addRow("Timeout:", self.timeout_spin)
         
-        layout.addLayout(trans_form)
-        layout.addWidget(create_horizontal_line())
-        
-        # UI Settings Section
-        layout.addWidget(create_section_header("🎨 UI Settings"))
-        ui_form = QFormLayout()
-        ui_form.setSpacing(5)
-        ui_form.setContentsMargins(0, 0, 0, 10)
-        
-        font_layout = QHBoxLayout()
-        self.font_scale_spin = QDoubleSpinBox()
-        self.font_scale_spin.setRange(0.5, 3.0)
-        self.font_scale_spin.setSingleStep(0.1)
-        self.font_scale_spin.setValue(1.0)
-        self.font_scale_spin.setDecimals(1)
-        self.font_scale_spin.setSuffix("x")
-        self.font_scale_spin.valueChanged.connect(self.on_font_scale_changed)
-        font_layout.addWidget(self.font_scale_spin)
-        
-        # Quick preset buttons (smaller)
-        for label, value in [("S", 0.8), ("M", 1.0), ("L", 1.5), ("XL", 2.0)]:
-            btn = QPushButton(label)
-            btn.clicked.connect(lambda checked, v=value: self.font_scale_spin.setValue(v))
-            btn.setMaximumWidth(40)
-            font_layout.addWidget(btn)
-        
-        ui_form.addRow("Font Scale:", font_layout)
-        
-        self.theme_combo = QComboBox()
-        self.theme_combo.addItems(["Dark", "Light", "System"])
-        self.theme_combo.setCurrentText("Dark")
-        ui_form.addRow("Theme:", self.theme_combo)
-        
-        layout.addLayout(ui_form)
-        layout.addStretch()
-        
-        content.setLayout(layout)
-        scroll.setWidget(content)
-        
-        wrapper = QVBoxLayout()
-        wrapper.setContentsMargins(0, 0, 0, 0)
-        wrapper.addWidget(scroll)
-        widget.setLayout(wrapper)
-        return widget
-    
-    def create_performance_formatting_tab(self):
-        """Create compact performance and formatting settings tab."""
-        widget = QWidget()
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QFrame.NoFrame)
-        
-        content = QWidget()
-        layout = QVBoxLayout()
-        layout.setSpacing(5)
-        layout.setContentsMargins(10, 10, 10, 10)
+        left_column.addLayout(trans_form)
+        left_column.addWidget(create_horizontal_line())
         
         # Performance Settings Section
-        layout.addWidget(create_section_header("⚡ Performance Settings"))
+        left_column.addWidget(create_section_header("⚡ Performance Settings"))
         perf_form = QFormLayout()
         perf_form.setSpacing(5)
         perf_form.setContentsMargins(0, 0, 0, 10)
+        perf_form.setFieldGrowthPolicy(QFormLayout.ExpandingFieldsGrow)
         
         self.file_threads_spin = QSpinBox()
         self.file_threads_spin.setRange(1, 10)
         self.file_threads_spin.setValue(1)
+        self.file_threads_spin.setMaximumWidth(150)
         perf_form.addRow("File Threads:", self.file_threads_spin)
         
         self.threads_spin = QSpinBox()
         self.threads_spin.setRange(1, 20)
         self.threads_spin.setValue(1)
+        self.threads_spin.setMaximumWidth(150)
         perf_form.addRow("Threads per File:", self.threads_spin)
         
         self.batch_size_spin = QSpinBox()
         self.batch_size_spin.setRange(1, 100)
         self.batch_size_spin.setValue(30)
+        self.batch_size_spin.setMaximumWidth(150)
         perf_form.addRow("Batch Size:", self.batch_size_spin)
         
         self.frequency_penalty_spin = QDoubleSpinBox()
         self.frequency_penalty_spin.setRange(0.0, 2.0)
         self.frequency_penalty_spin.setSingleStep(0.05)
         self.frequency_penalty_spin.setValue(0.05)
+        self.frequency_penalty_spin.setMaximumWidth(150)
         perf_form.addRow("Frequency Penalty:", self.frequency_penalty_spin)
         
-        layout.addLayout(perf_form)
-        layout.addWidget(create_horizontal_line())
+        left_column.addLayout(perf_form)
+        left_column.addStretch()
+        
+        # RIGHT COLUMN
+        right_column = QVBoxLayout()
+        right_column.setSpacing(5)
         
         # Text Formatting Section
-        layout.addWidget(create_section_header("📝 Text Formatting"))
+        right_column.addWidget(create_section_header("📝 Text Formatting"))
         format_form = QFormLayout()
         format_form.setSpacing(5)
         format_form.setContentsMargins(0, 0, 0, 10)
+        format_form.setFieldGrowthPolicy(QFormLayout.ExpandingFieldsGrow)
         
         self.width_spin = QSpinBox()
         self.width_spin.setRange(20, 200)
         self.width_spin.setValue(60)
         self.width_spin.setSuffix(" chars")
+        self.width_spin.setMaximumWidth(150)
         format_form.addRow("Dialogue Width:", self.width_spin)
         
         self.list_width_spin = QSpinBox()
         self.list_width_spin.setRange(20, 200)
         self.list_width_spin.setValue(100)
         self.list_width_spin.setSuffix(" chars")
+        self.list_width_spin.setMaximumWidth(150)
         format_form.addRow("List Width:", self.list_width_spin)
         
         self.note_width_spin = QSpinBox()
         self.note_width_spin.setRange(20, 200)
         self.note_width_spin.setValue(75)
         self.note_width_spin.setSuffix(" chars")
+        self.note_width_spin.setMaximumWidth(150)
         format_form.addRow("Note Width:", self.note_width_spin)
         
-        layout.addLayout(format_form)
-        layout.addWidget(create_horizontal_line())
+        right_column.addLayout(format_form)
+        right_column.addWidget(create_horizontal_line())
         
         # Custom API Pricing Section
-        layout.addWidget(create_section_header("💰 Custom API Pricing"))
+        right_column.addWidget(create_section_header("💰 Custom API Pricing"))
+        
+        pricing_note = QLabel("Only used if your model isn't in the built-in pricing list")
+        pricing_note.setStyleSheet("color: #888888; font-style: italic; font-size: 10px;")
+        pricing_note.setWordWrap(True)
+        right_column.addWidget(pricing_note)
+        
         price_form = QFormLayout()
         price_form.setSpacing(5)
-        price_form.setContentsMargins(0, 0, 0, 10)
+        price_form.setContentsMargins(0, 5, 0, 10)
+        price_form.setFieldGrowthPolicy(QFormLayout.ExpandingFieldsGrow)
         
         self.input_cost_spin = QDoubleSpinBox()
         self.input_cost_spin.setRange(0.0, 100.0)
@@ -293,6 +271,7 @@ class ConfigTab(QWidget):
         self.input_cost_spin.setSingleStep(0.1)
         self.input_cost_spin.setValue(2.0)
         self.input_cost_spin.setSuffix(" per 1M tokens")
+        self.input_cost_spin.setMaximumWidth(200)
         price_form.addRow("Input Cost:", self.input_cost_spin)
         
         self.output_cost_spin = QDoubleSpinBox()
@@ -301,10 +280,17 @@ class ConfigTab(QWidget):
         self.output_cost_spin.setSingleStep(0.1)
         self.output_cost_spin.setValue(8.0)
         self.output_cost_spin.setSuffix(" per 1M tokens")
+        self.output_cost_spin.setMaximumWidth(200)
         price_form.addRow("Output Cost:", self.output_cost_spin)
         
-        layout.addLayout(price_form)
-        layout.addStretch()
+        right_column.addLayout(price_form)
+        right_column.addStretch()
+        
+        # Add columns to layout
+        columns_layout.addLayout(left_column, 1)
+        columns_layout.addLayout(right_column, 1)
+        
+        layout.addLayout(columns_layout)
         
         content.setLayout(layout)
         scroll.setWidget(content)
@@ -345,13 +331,6 @@ class ConfigTab(QWidget):
         self.input_cost_spin.setValue(float(os.getenv("input_cost", "2.0")))
         self.output_cost_spin.setValue(float(os.getenv("output_cost", "8.0")))
         
-        # Load UI settings
-        self.font_scale_spin.setValue(float(os.getenv("font_scale", "1.0")))
-        self.theme_combo.setCurrentText(os.getenv("theme", "Dark"))
-        
-        # Apply font scaling
-        self.apply_font_scaling(self.font_scale_spin.value())
-        
     def save_to_env(self):
         """Save configuration to .env file."""
         try:
@@ -383,10 +362,6 @@ class ConfigTab(QWidget):
             # Save custom API settings
             set_key(self.env_file_path, "input_cost", str(self.input_cost_spin.value()))
             set_key(self.env_file_path, "output_cost", str(self.output_cost_spin.value()))
-            
-            # Save UI settings
-            set_key(self.env_file_path, "font_scale", str(self.font_scale_spin.value()))
-            set_key(self.env_file_path, "theme", self.theme_combo.currentText())
             
             QMessageBox.information(self, "Success", "Configuration saved successfully!")
             self.config_changed.emit()
@@ -439,37 +414,10 @@ class ConfigTab(QWidget):
         self.input_cost_spin.setValue(2.0)
         self.output_cost_spin.setValue(8.0)
         
-        # UI settings
-        self.font_scale_spin.setValue(1.0)
-        self.theme_combo.setCurrentText("Dark")
-        
         # Reset engine tabs
         self.mvmz_tab.reset_to_defaults()
         self.ace_tab.reset_to_defaults()
         self.wolf_tab.reset_to_defaults()
-        
-        # Apply font scaling
-        self.apply_font_scaling(1.0)
-        
-    def on_font_scale_changed(self, value):
-        """Handle font scale change."""
-        self.config_changed.emit()
-        # Apply font scaling immediately
-        self.apply_font_scaling(value)
-        
-    def apply_font_scaling(self, scale_factor):
-        """Apply font scaling to the entire application."""
-        app = QApplication.instance()
-        if app:
-            # Get the default font
-            font = app.font()
-            base_size = 9  # Base font size
-            new_size = int(base_size * scale_factor)
-            font.setPointSize(new_size)
-            app.setFont(font)
-            
-            # Emit signal to notify other components
-            self.config_changed.emit()
         
     def get_config(self):
         """Get current configuration as dictionary."""
@@ -488,9 +436,7 @@ class ConfigTab(QWidget):
             "listWidth": self.list_width_spin.value(),
             "noteWidth": self.note_width_spin.value(),
             "input_cost": self.input_cost_spin.value(),
-            "output_cost": self.output_cost_spin.value(),
-            "font_scale": self.font_scale_spin.value(),
-            "theme": self.theme_combo.currentText()
+            "output_cost": self.output_cost_spin.value()
         }
         
     def validate(self):
