@@ -138,6 +138,8 @@ class DazedMTLGUI(QMainWindow):
         
         # Set main layout
         layout = QVBoxLayout()
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
         layout.addWidget(self.tab_widget)
         central_widget.setLayout(layout)
         
@@ -176,8 +178,6 @@ class DazedMTLGUI(QMainWindow):
             
             # Save to .env file
             self.config_tab.save_to_env()
-            
-            self.status_label.setText(f"Font scale set to {scale_factor:.1f}x")
             
         except Exception as e:
             QMessageBox.warning(self, "Warning", f"Failed to set font scale: {str(e)}")
@@ -240,17 +240,9 @@ class DazedMTLGUI(QMainWindow):
         about_action.triggered.connect(self.show_about)
         
     def setup_status_bar(self):
-        """Set up the status bar."""
-        self.status_bar = QStatusBar()
-        self.setStatusBar(self.status_bar)
-        
-        # Add status labels
-        self.status_label = QLabel("Ready")
-        self.progress_bar = QProgressBar()
-        self.progress_bar.setVisible(False)
-        
-        self.status_bar.addWidget(self.status_label)
-        self.status_bar.addPermanentWidget(self.progress_bar)
+        """Set up the status bar (removed to save space)."""
+        # Status bar removed to maximize space for content
+        pass
         
     def load_project(self):
         """Load a project configuration."""
@@ -265,7 +257,6 @@ class DazedMTLGUI(QMainWindow):
             try:
                 # Load configuration from file
                 self.config_tab.load_from_file(file_path)
-                self.status_label.setText(f"Loaded project: {Path(file_path).name}")
             except Exception as e:
                 QMessageBox.critical(self, "Error", f"Failed to load project:\n{str(e)}")
                 
@@ -287,7 +278,6 @@ class DazedMTLGUI(QMainWindow):
                 with open(file_path, 'w', encoding='utf-8') as f:
                     json.dump(config_data, f, indent=2, ensure_ascii=False)
                     
-                self.status_label.setText(f"Saved project: {Path(file_path).name}")
             except Exception as e:
                 QMessageBox.critical(self, "Error", f"Failed to save project:\n{str(e)}")
                 
@@ -303,7 +293,6 @@ class DazedMTLGUI(QMainWindow):
         
         if reply == QMessageBox.Yes:
             self.config_tab.reset_to_defaults()
-            self.status_label.setText("Reset to defaults")
             
     def validate_configuration(self):
         """Validate the current configuration."""
@@ -313,7 +302,6 @@ class DazedMTLGUI(QMainWindow):
             
             if config_valid:
                 QMessageBox.information(self, "Validation", "Configuration is valid!")
-                self.status_label.setText("Configuration validated")
             else:
                 QMessageBox.warning(self, "Validation", "Configuration has issues. Check the warnings.")
                 
@@ -340,16 +328,16 @@ class DazedMTLGUI(QMainWindow):
         )
         
     def update_status(self, message):
-        """Update the status bar message."""
-        self.status_label.setText(message)
+        """Update the status bar message (removed to save space)."""
+        pass
         
     def show_progress(self, show=True):
-        """Show or hide the progress bar."""
-        self.progress_bar.setVisible(show)
+        """Show or hide the progress bar (removed to save space)."""
+        pass
         
     def set_progress(self, value):
-        """Set the progress bar value (0-100)."""
-        self.progress_bar.setValue(value)
+        """Set the progress bar value (removed to save space)."""
+        pass
 
 
 def main():

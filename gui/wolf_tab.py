@@ -53,28 +53,28 @@ class WolfTab(QWidget):
     def init_ui(self):
         """Initialize the user interface with compact two-column layout."""
         main_layout = QVBoxLayout()
-        main_layout.setContentsMargins(10, 10, 10, 10)
+        main_layout.setContentsMargins(15, 15, 15, 15)
         main_layout.setSpacing(10)
         
         # Title and description
         title = QLabel("Wolf RPG Editor Translation Settings")
-        title.setStyleSheet("font-size: 14px; font-weight: bold; color: #007acc;")
+        title.setStyleSheet("font-size: 15px; font-weight: bold; color: #007acc;")
         main_layout.addWidget(title)
 
         description = QLabel(
             "Enable translation options for Wolf RPG Editor projects. Only enable what you need."
         )
         description.setWordWrap(True)
-        description.setStyleSheet("color: #888888; font-size: 11px; margin-bottom: 5px;")
+        description.setStyleSheet("color: #888888; font-size: 10px; margin-bottom: 5px;")
         main_layout.addWidget(description)
         
         # Two-column layout for checkboxes
         columns_layout = QHBoxLayout()
-        columns_layout.setSpacing(30)
+        columns_layout.setSpacing(40)
         
         # LEFT COLUMN
         left_column = QVBoxLayout()
-        left_column.setSpacing(3)
+        left_column.setSpacing(5)
         
         # Dialogue & Choices
         left_column.addWidget(create_section_label("💬 Dialogue & Choices"))
@@ -86,7 +86,7 @@ class WolfTab(QWidget):
         self.code102_cb.setToolTip("Enable translation of choice options")
         left_column.addWidget(self.code102_cb)
         
-        left_column.addSpacing(8)
+        left_column.addSpacing(15)
         
         # Pictures & Variables
         left_column.addWidget(create_section_label("🖼️ Pictures & Variables"))
@@ -98,7 +98,7 @@ class WolfTab(QWidget):
         self.code122_cb.setToolTip("Enable translation of string variables")
         left_column.addWidget(self.code122_cb)
         
-        left_column.addSpacing(8)
+        left_column.addSpacing(15)
         
         # Other Event Codes
         left_column.addWidget(create_section_label("🎮 Other Event Codes"))
@@ -115,15 +115,16 @@ class WolfTab(QWidget):
         
         # RIGHT COLUMN
         right_column = QVBoxLayout()
-        right_column.setSpacing(3)
+        right_column.setSpacing(5)
         
         # Database Sections
         right_column.addWidget(create_section_label("📚 Database Sections"))
         
         # Database flags in compact 2-column grid
         db_grid = QGridLayout()
-        db_grid.setSpacing(2)
-        db_grid.setHorizontalSpacing(10)
+        db_grid.setSpacing(5)
+        db_grid.setHorizontalSpacing(25)
+        db_grid.setVerticalSpacing(6)
         
         database_flags = [
             ("SCENARIOFLAG", "Scenario Text"),
@@ -142,7 +143,6 @@ class WolfTab(QWidget):
         self.db_checkboxes = {}
         for idx, (key, label) in enumerate(database_flags):
             cb = QCheckBox(label)
-            cb.setStyleSheet("QCheckBox { font-size: 10px; }")
             db_grid.addWidget(cb, idx // 2, idx % 2)
             self.db_checkboxes[key] = cb
         
@@ -155,16 +155,20 @@ class WolfTab(QWidget):
         main_layout.addLayout(columns_layout)
         
         # Bottom buttons
+        main_layout.addSpacing(12)
         button_layout = QHBoxLayout()
         button_layout.setSpacing(10)
         
         self.reset_btn = QPushButton("🔄 Reset to Defaults")
         self.reset_btn.clicked.connect(self.reset_to_defaults_with_message)
-        self.reset_btn.setMaximumWidth(200)
+        self.reset_btn.setMaximumWidth(180)
+        self.reset_btn.setMinimumHeight(32)
         
         self.apply_btn = QPushButton("✓ Apply Settings")
         self.apply_btn.clicked.connect(lambda: self.apply_to_module(True))
-        self.apply_btn.setMaximumWidth(200)
+        self.apply_btn.setMaximumWidth(180)
+        self.apply_btn.setMinimumHeight(32)
+        self.apply_btn.setStyleSheet("font-weight: bold;")
         
         button_layout.addWidget(self.reset_btn)
         button_layout.addWidget(self.apply_btn)
