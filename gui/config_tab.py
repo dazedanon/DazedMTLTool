@@ -8,9 +8,10 @@ from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QFormLayout, QLineEdit, 
     QSpinBox, QDoubleSpinBox, QComboBox, QPushButton, QGroupBox,
     QLabel, QFileDialog, QMessageBox, QScrollArea, QTextEdit,
-    QCheckBox, QApplication, QTabWidget, QFrame
+    QCheckBox, QApplication, QTabWidget, QFrame, QStackedWidget, QToolButton
 )
 from PyQt5.QtCore import Qt, pyqtSignal
+from PyQt5.QtGui import QIcon
 from dotenv import load_dotenv, set_key
 
 from gui.rpgmaker_tab import RPGMakerTab
@@ -52,33 +53,114 @@ class ConfigTab(QWidget):
         self.load_from_env()
         
     def init_ui(self):
-        """Initialize the user interface with tabs for different config categories."""
+        """Initialize the user interface with horizontal icon navigation at top."""
         main_layout = QVBoxLayout()
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
         
-        # Create tab widget for different configuration categories
-        self.config_tabs = QTabWidget()
-        self.config_tabs.setDocumentMode(True)  # Remove frame for more space
+        # Create top navigation bar
+        nav_bar = QWidget()
+        nav_bar.setFixedHeight(50)
+        nav_bar.setStyleSheet("""
+            QWidget {
+                background-color: #2d2d30;
+            }
+        """)
+        nav_layout = QHBoxLayout()
+        nav_layout.setContentsMargins(10, 0, 10, 0)
+        nav_layout.setSpacing(5)
         
-        # Tab 1: General Settings (Everything in one place!)
+        # Create navigation buttons
+        self.nav_buttons = []
+        
+        # General Settings button
+        btn_general = self.create_nav_button("🔧", "General Settings")
+        btn_general.clicked.connect(lambda: self.switch_page(0))
+        nav_layout.addWidget(btn_general)
+        self.nav_buttons.append(btn_general)
+        
+        # RPG Maker MV/MZ button
+        btn_mvmz = self.create_nav_button("🎮", "RPG Maker MV/MZ")
+        btn_mvmz.clicked.connect(lambda: self.switch_page(1))
+        nav_layout.addWidget(btn_mvmz)
+        self.nav_buttons.append(btn_mvmz)
+        
+        # RPG Maker Ace button
+        btn_ace = self.create_nav_button("🎲", "RPG Maker Ace")
+        btn_ace.clicked.connect(lambda: self.switch_page(2))
+        nav_layout.addWidget(btn_ace)
+        self.nav_buttons.append(btn_ace)
+        
+        # Wolf RPG button
+        btn_wolf = self.create_nav_button("🐺", "Wolf RPG")
+        btn_wolf.clicked.connect(lambda: self.switch_page(3))
+        nav_layout.addWidget(btn_wolf)
+        self.nav_buttons.append(btn_wolf)
+        
+        nav_layout.addStretch()
+        nav_bar.setLayout(nav_layout)
+        
+        # Create stacked widget for content pages
+        self.content_stack = QStackedWidget()
+        
+        # Page 1: General Settings
         general_tab = self.create_general_settings_tab()
-        self.config_tabs.addTab(general_tab, "General Settings")
+        self.content_stack.addWidget(general_tab)
         
-        # Tab 2: RPG Maker MV/MZ Engine
+        # Page 2: RPG Maker MV/MZ Engine
         self.mvmz_tab = RPGMakerTab("MVMZ")
-        self.config_tabs.addTab(self.mvmz_tab, "RPG Maker MV/MZ")
+        self.content_stack.addWidget(self.mvmz_tab)
         
-        # Tab 3: RPG Maker Ace Engine
+        # Page 3: RPG Maker Ace Engine
         self.ace_tab = RPGMakerTab("ACE")
-        self.config_tabs.addTab(self.ace_tab, "RPG Maker Ace")
+        self.content_stack.addWidget(self.ace_tab)
         
-        # Tab 4: Wolf RPG Engine
+        # Page 4: Wolf RPG Engine
         self.wolf_tab = WolfTab()
-        self.config_tabs.addTab(self.wolf_tab, "Wolf RPG")
+        self.content_stack.addWidget(self.wolf_tab)
         
-        main_layout.addWidget(self.config_tabs)
+        # Add navigation bar and content to main layout
+        main_layout.addWidget(nav_bar)
+        main_layout.addWidget(self.content_stack)
         self.setLayout(main_layout)
+        
+        # Select first page by default
+        self.switch_page(0)
+    
+    def create_nav_button(self, icon_text, tooltip):
+        """Create a navigation button for the top bar."""
+        btn = QToolButton()
+        btn.setText(icon_text)
+        btn.setToolTip(tooltip)
+        btn.setFixedSize(50, 50)
+        btn.setCheckable(True)
+        btn.setStyleSheet("""
+            QToolButton {
+                background-color: transparent;
+                border: none;
+                border-bottom: 3px solid transparent;
+                color: #cccccc;
+                font-size: 24px;
+                padding: 5px;
+            }
+            QToolButton:hover {
+                background-color: #3e3e42;
+            }
+            QToolButton:checked {
+                background-color: #37373d;
+                border-bottom: 3px solid #007acc;
+                color: #ffffff;
+            }
+        """)
+        return btn
+    
+    def switch_page(self, index):
+        """Switch to the specified page and update button states."""
+        self.content_stack.setCurrentIndex(index)
+        
+        # Update button checked states
+        for i, btn in enumerate(self.nav_buttons):
+            btn.setChecked(i == index)
     
     def create_general_settings_tab(self):
         """Create combined general settings tab with API, Translation, Performance, and UI settings."""
