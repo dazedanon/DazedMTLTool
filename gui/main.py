@@ -501,23 +501,29 @@ def main():
             background-color: #404040;
             color: #ffffff;
             border: 1px solid #555555;
-            padding: 5px 8px;
+            padding: 5px;
+            padding-right: 30px;
             border-radius: 2px;
         }
         QComboBox:focus {
             border: 1px solid #007acc;
         }
         QComboBox::drop-down {
-            border: none;
+            subcontrol-origin: padding;
+            subcontrol-position: center right;
+            width: 25px;
+            border-left: 1px solid #555555;
             background-color: #555555;
-            width: 20px;
+        }
+        QComboBox::drop-down:hover {
+            background-color: #007acc;
         }
         QComboBox::down-arrow {
-            image: none;
-            border-left: 4px solid transparent;
-            border-right: 4px solid transparent;
-            border-top: 5px solid #ffffff;
-            margin-right: 5px;
+            width: 0;
+            height: 0;
+            border-left: 5px solid transparent;
+            border-right: 5px solid transparent;
+            border-top: 6px solid #ffffff;
         }
         QComboBox QAbstractItemView {
             background-color: #404040;
