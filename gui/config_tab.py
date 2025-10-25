@@ -55,9 +55,11 @@ class ConfigTab(QWidget):
         """Initialize the user interface with tabs for different config categories."""
         main_layout = QVBoxLayout()
         main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
         
         # Create tab widget for different configuration categories
         self.config_tabs = QTabWidget()
+        self.config_tabs.setDocumentMode(True)  # Remove frame for more space
         
         # Tab 1: General Settings (Everything in one place!)
         general_tab = self.create_general_settings_tab()
@@ -76,74 +78,61 @@ class ConfigTab(QWidget):
         self.config_tabs.addTab(self.wolf_tab, "Wolf RPG")
         
         main_layout.addWidget(self.config_tabs)
-        
-        # Bottom buttons row
-        button_layout = QHBoxLayout()
-        button_layout.setSpacing(10)
-        
-        self.save_button = QPushButton("💾 Save Configuration")
-        self.save_button.clicked.connect(self.save_to_env)
-        self.save_button.setMinimumHeight(35)
-        
-        self.load_button = QPushButton("📂 Load from File")
-        self.load_button.clicked.connect(self.load_from_file_dialog)
-        self.load_button.setMinimumHeight(35)
-        
-        self.reset_button = QPushButton("🔄 Reset to Defaults")
-        self.reset_button.clicked.connect(self.reset_to_defaults)
-        self.reset_button.setMinimumHeight(35)
-        
-        button_layout.addWidget(self.save_button)
-        button_layout.addWidget(self.load_button)
-        button_layout.addWidget(self.reset_button)
-        button_layout.addStretch()
-        
-        main_layout.addLayout(button_layout)
         self.setLayout(main_layout)
     
     def create_general_settings_tab(self):
         """Create combined general settings tab with API, Translation, Performance, and UI settings."""
         widget = QWidget()
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QFrame.NoFrame)
         
         content = QWidget()
         layout = QVBoxLayout()
-        layout.setSpacing(5)
-        layout.setContentsMargins(10, 10, 10, 10)
+        layout.setSpacing(8)
+        layout.setContentsMargins(15, 15, 15, 15)
         
         # Create a two-column layout for better space utilization
         columns_layout = QHBoxLayout()
-        columns_layout.setSpacing(20)
+        columns_layout.setSpacing(30)
         
         # LEFT COLUMN
         left_column = QVBoxLayout()
-        left_column.setSpacing(5)
+        left_column.setSpacing(8)
         
         # API Configuration Section
         left_column.addWidget(create_section_header("🔑 API Configuration"))
         api_form = QFormLayout()
-        api_form.setSpacing(5)
-        api_form.setContentsMargins(0, 0, 0, 10)
-        api_form.setFieldGrowthPolicy(QFormLayout.ExpandingFieldsGrow)
+        api_form.setSpacing(6)
+        api_form.setContentsMargins(0, 0, 0, 12)
+        api_form.setFieldGrowthPolicy(QFormLayout.FieldsStayAtSizeHint)
+        api_form.setLabelAlignment(Qt.AlignRight | Qt.AlignVCenter)
         
+        api_url_label = QLabel("API URL:")
+        api_url_label.setFixedWidth(150)
+        api_url_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         self.api_url_edit = QLineEdit()
         self.api_url_edit.setPlaceholderText("Leave blank for OpenAI API")
         self.api_url_edit.setFixedWidth(350)  # Large
-        api_form.addRow("API URL:", self.api_url_edit)
+        api_form.addRow(api_url_label, self.api_url_edit)
         
+        api_key_label = QLabel("API Key:")
+        api_key_label.setFixedWidth(150)
+        api_key_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         self.api_key_edit = QLineEdit()
         self.api_key_edit.setEchoMode(QLineEdit.Password)
         self.api_key_edit.setPlaceholderText("Enter your API key")
         self.api_key_edit.setFixedWidth(350)  # Large
-        api_form.addRow("API Key:", self.api_key_edit)
+        api_form.addRow(api_key_label, self.api_key_edit)
         
+        org_label = QLabel("Organization:")
+        org_label.setFixedWidth(150)
+        org_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         self.organization_edit = QLineEdit()
         self.organization_edit.setPlaceholderText("Optional organization key")
         self.organization_edit.setFixedWidth(350)  # Large
-        api_form.addRow("Organization:", self.organization_edit)
+        api_form.addRow(org_label, self.organization_edit)
         
+        model_label = QLabel("Model:")
+        model_label.setFixedWidth(150)
+        model_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         self.model_combo = QComboBox()
         self.model_combo.setEditable(True)
         self.model_combo.addItems([
@@ -152,7 +141,7 @@ class ConfigTab(QWidget):
             "gemini-2.0-flash", "gemini-2.5-flash", "gemini-2.5-pro"
         ])
         self.model_combo.setFixedWidth(200)  # Medium
-        api_form.addRow("Model:", self.model_combo)
+        api_form.addRow(model_label, self.model_combo)
         
         left_column.addLayout(api_form)
         left_column.addWidget(create_horizontal_line())
@@ -160,25 +149,32 @@ class ConfigTab(QWidget):
         # Translation Settings Section
         left_column.addWidget(create_section_header("🌐 Translation Settings"))
         trans_form = QFormLayout()
-        trans_form.setSpacing(5)
-        trans_form.setContentsMargins(0, 0, 0, 10)
-        trans_form.setFieldGrowthPolicy(QFormLayout.ExpandingFieldsGrow)
+        trans_form.setSpacing(6)
+        trans_form.setContentsMargins(0, 0, 0, 12)
+        trans_form.setFieldGrowthPolicy(QFormLayout.FieldsStayAtSizeHint)
+        trans_form.setLabelAlignment(Qt.AlignRight | Qt.AlignVCenter)
         
+        lang_label = QLabel("Target Language:")
+        lang_label.setFixedWidth(150)
+        lang_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         self.language_combo = QComboBox()
         self.language_combo.addItems([
             "English", "Spanish", "French", "German", "Italian",
             "Portuguese", "Russian", "Chinese", "Korean", "Japanese"
         ])
         self.language_combo.setFixedWidth(200)  # Medium
-        trans_form.addRow("Target Language:", self.language_combo)
+        trans_form.addRow(lang_label, self.language_combo)
         
+        timeout_label = QLabel("Timeout:")
+        timeout_label.setFixedWidth(150)
+        timeout_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         self.timeout_spin = QSpinBox()
         self.timeout_spin.setButtonSymbols(QSpinBox.NoButtons)
         self.timeout_spin.setRange(30, 300)
         self.timeout_spin.setValue(90)
         self.timeout_spin.setSuffix(" sec")
-        self.timeout_spin.setFixedWidth(90)  # Small
-        trans_form.addRow("Timeout:", self.timeout_spin)
+        self.timeout_spin.setFixedWidth(120)  # Small
+        trans_form.addRow(timeout_label, self.timeout_spin)
         
         left_column.addLayout(trans_form)
         left_column.addWidget(create_horizontal_line())
@@ -186,76 +182,99 @@ class ConfigTab(QWidget):
         # Performance Settings Section
         left_column.addWidget(create_section_header("⚡ Performance Settings"))
         perf_form = QFormLayout()
-        perf_form.setSpacing(5)
-        perf_form.setContentsMargins(0, 0, 0, 10)
-        perf_form.setFieldGrowthPolicy(QFormLayout.ExpandingFieldsGrow)
+        perf_form.setSpacing(6)
+        perf_form.setContentsMargins(0, 0, 0, 12)
+        perf_form.setFieldGrowthPolicy(QFormLayout.FieldsStayAtSizeHint)
+        perf_form.setLabelAlignment(Qt.AlignRight | Qt.AlignVCenter)
         
+        file_threads_label = QLabel("File Threads:")
+        file_threads_label.setFixedWidth(150)
+        file_threads_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         self.file_threads_spin = QSpinBox()
         self.file_threads_spin.setButtonSymbols(QSpinBox.NoButtons)
         self.file_threads_spin.setRange(1, 10)
         self.file_threads_spin.setValue(1)
-        self.file_threads_spin.setFixedWidth(90)  # Small
-        perf_form.addRow("File Threads:", self.file_threads_spin)
+        self.file_threads_spin.setFixedWidth(120)  # Small
+        perf_form.addRow(file_threads_label, self.file_threads_spin)
         
+        threads_label = QLabel("Threads per File:")
+        threads_label.setFixedWidth(150)
+        threads_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         self.threads_spin = QSpinBox()
         self.threads_spin.setButtonSymbols(QSpinBox.NoButtons)
         self.threads_spin.setRange(1, 20)
         self.threads_spin.setValue(1)
-        self.threads_spin.setFixedWidth(90)  # Small
-        perf_form.addRow("Threads per File:", self.threads_spin)
+        self.threads_spin.setFixedWidth(120)  # Small
+        perf_form.addRow(threads_label, self.threads_spin)
         
+        batch_label = QLabel("Batch Size:")
+        batch_label.setFixedWidth(150)
+        batch_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         self.batch_size_spin = QSpinBox()
         self.batch_size_spin.setButtonSymbols(QSpinBox.NoButtons)
         self.batch_size_spin.setRange(1, 100)
         self.batch_size_spin.setValue(30)
-        self.batch_size_spin.setFixedWidth(90)  # Small
-        perf_form.addRow("Batch Size:", self.batch_size_spin)
+        self.batch_size_spin.setFixedWidth(120)  # Small
+        perf_form.addRow(batch_label, self.batch_size_spin)
         
+        freq_label = QLabel("Frequency Penalty:")
+        freq_label.setFixedWidth(150)
+        freq_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         self.frequency_penalty_spin = QDoubleSpinBox()
         self.frequency_penalty_spin.setButtonSymbols(QDoubleSpinBox.NoButtons)
         self.frequency_penalty_spin.setRange(0.0, 2.0)
         self.frequency_penalty_spin.setSingleStep(0.05)
         self.frequency_penalty_spin.setValue(0.05)
-        self.frequency_penalty_spin.setFixedWidth(90)  # Small
-        perf_form.addRow("Frequency Penalty:", self.frequency_penalty_spin)
+        self.frequency_penalty_spin.setFixedWidth(120)  # Small
+        perf_form.addRow(freq_label, self.frequency_penalty_spin)
         
         left_column.addLayout(perf_form)
         left_column.addStretch()
         
         # RIGHT COLUMN
         right_column = QVBoxLayout()
-        right_column.setSpacing(5)
+        right_column.setSpacing(8)
         
         # Text Formatting Section
         right_column.addWidget(create_section_header("📝 Text Formatting"))
         format_form = QFormLayout()
-        format_form.setSpacing(5)
-        format_form.setContentsMargins(0, 0, 0, 10)
-        format_form.setFieldGrowthPolicy(QFormLayout.ExpandingFieldsGrow)
+        format_form.setSpacing(6)
+        format_form.setContentsMargins(0, 0, 0, 12)
+        format_form.setFieldGrowthPolicy(QFormLayout.FieldsStayAtSizeHint)
+        format_form.setLabelAlignment(Qt.AlignRight | Qt.AlignVCenter)
         
+        dialogue_label = QLabel("Dialogue Width:")
+        dialogue_label.setFixedWidth(150)
+        dialogue_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         self.width_spin = QSpinBox()
         self.width_spin.setButtonSymbols(QSpinBox.NoButtons)
         self.width_spin.setRange(20, 200)
         self.width_spin.setValue(60)
         self.width_spin.setSuffix(" chars")
-        self.width_spin.setFixedWidth(90)  # Small
-        format_form.addRow("Dialogue Width:", self.width_spin)
+        self.width_spin.setFixedWidth(120)  # Small
+        format_form.addRow(dialogue_label, self.width_spin)
         
+        list_label = QLabel("List Width:")
+        list_label.setFixedWidth(150)
+        list_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         self.list_width_spin = QSpinBox()
         self.list_width_spin.setButtonSymbols(QSpinBox.NoButtons)
         self.list_width_spin.setRange(20, 200)
         self.list_width_spin.setValue(100)
         self.list_width_spin.setSuffix(" chars")
-        self.list_width_spin.setFixedWidth(90)  # Small
-        format_form.addRow("List Width:", self.list_width_spin)
+        self.list_width_spin.setFixedWidth(120)  # Small
+        format_form.addRow(list_label, self.list_width_spin)
         
+        note_label = QLabel("Note Width:")
+        note_label.setFixedWidth(150)
+        note_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         self.note_width_spin = QSpinBox()
         self.note_width_spin.setButtonSymbols(QSpinBox.NoButtons)
         self.note_width_spin.setRange(20, 200)
         self.note_width_spin.setValue(75)
         self.note_width_spin.setSuffix(" chars")
-        self.note_width_spin.setFixedWidth(90)  # Small
-        format_form.addRow("Note Width:", self.note_width_spin)
+        self.note_width_spin.setFixedWidth(120)  # Small
+        format_form.addRow(note_label, self.note_width_spin)
         
         right_column.addLayout(format_form)
         right_column.addWidget(create_horizontal_line())
@@ -263,16 +282,20 @@ class ConfigTab(QWidget):
         # Custom API Pricing Section
         right_column.addWidget(create_section_header("💰 Custom API Pricing"))
         
-        pricing_note = QLabel("Only used if your model isn't in the built-in pricing list")
-        pricing_note.setStyleSheet("color: #888888; font-style: italic; font-size: 10px;")
+        pricing_note = QLabel("Only used if model isn't in built-in pricing list")
+        pricing_note.setStyleSheet("color: #888888; font-style: italic; font-size: 9px;")
         pricing_note.setWordWrap(True)
         right_column.addWidget(pricing_note)
         
         price_form = QFormLayout()
-        price_form.setSpacing(5)
-        price_form.setContentsMargins(0, 5, 0, 10)
-        price_form.setFieldGrowthPolicy(QFormLayout.ExpandingFieldsGrow)
+        price_form.setSpacing(6)
+        price_form.setContentsMargins(0, 3, 0, 12)
+        price_form.setFieldGrowthPolicy(QFormLayout.FieldsStayAtSizeHint)
+        price_form.setLabelAlignment(Qt.AlignRight | Qt.AlignVCenter)
         
+        input_label = QLabel("Input Cost:")
+        input_label.setFixedWidth(150)
+        input_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         self.input_cost_spin = QDoubleSpinBox()
         self.input_cost_spin.setButtonSymbols(QDoubleSpinBox.NoButtons)
         self.input_cost_spin.setRange(0.0, 100.0)
@@ -281,8 +304,11 @@ class ConfigTab(QWidget):
         self.input_cost_spin.setValue(2.0)
         self.input_cost_spin.setSuffix(" per 1M tokens")
         self.input_cost_spin.setFixedWidth(200)  # Medium
-        price_form.addRow("Input Cost:", self.input_cost_spin)
+        price_form.addRow(input_label, self.input_cost_spin)
         
+        output_label = QLabel("Output Cost:")
+        output_label.setFixedWidth(150)
+        output_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         self.output_cost_spin = QDoubleSpinBox()
         self.output_cost_spin.setButtonSymbols(QDoubleSpinBox.NoButtons)
         self.output_cost_spin.setRange(0.0, 100.0)
@@ -291,7 +317,7 @@ class ConfigTab(QWidget):
         self.output_cost_spin.setValue(8.0)
         self.output_cost_spin.setSuffix(" per 1M tokens")
         self.output_cost_spin.setFixedWidth(200)  # Medium
-        price_form.addRow("Output Cost:", self.output_cost_spin)
+        price_form.addRow(output_label, self.output_cost_spin)
         
         right_column.addLayout(price_form)
         right_column.addStretch()
@@ -302,13 +328,35 @@ class ConfigTab(QWidget):
         
         layout.addLayout(columns_layout)
         
-        content.setLayout(layout)
-        scroll.setWidget(content)
+        # Add buttons at the bottom of General Settings tab
+        layout.addSpacing(15)
+        button_layout = QHBoxLayout()
+        button_layout.setSpacing(10)
         
-        wrapper = QVBoxLayout()
-        wrapper.setContentsMargins(0, 0, 0, 0)
-        wrapper.addWidget(scroll)
-        widget.setLayout(wrapper)
+        save_button = QPushButton("💾 Save Configuration")
+        save_button.clicked.connect(self.save_to_env)
+        save_button.setMinimumHeight(32)
+        save_button.setStyleSheet("font-weight: bold;")
+        
+        load_button = QPushButton("📂 Load from File")
+        load_button.clicked.connect(self.load_from_file_dialog)
+        load_button.setMinimumHeight(32)
+        
+        reset_button = QPushButton("🔄 Reset to Defaults")
+        reset_button.clicked.connect(self.reset_to_defaults)
+        reset_button.setMinimumHeight(32)
+        
+        button_layout.addWidget(save_button)
+        button_layout.addWidget(load_button)
+        button_layout.addWidget(reset_button)
+        button_layout.addStretch()
+        
+        layout.addLayout(button_layout)
+        
+        content.setLayout(layout)
+        widget.setLayout(QVBoxLayout())
+        widget.layout().setContentsMargins(0, 0, 0, 0)
+        widget.layout().addWidget(content)
         return widget
         
     def load_from_env(self):

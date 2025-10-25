@@ -104,7 +104,7 @@ CODE408 = False
 # Variables
 CODE122 = False
 
-# Other
+# Plugins / Scripts
 CODE355655 = False
 CODE357 = False
 CODE657 = False

@@ -171,29 +171,29 @@ class RPGMakerTab(QWidget):
     def init_ui(self):
         """Initialize the user interface with compact two-column layout."""
         main_layout = QVBoxLayout()
-        main_layout.setContentsMargins(10, 10, 10, 10)
+        main_layout.setContentsMargins(15, 15, 15, 15)
         main_layout.setSpacing(10)
         
         # Title and description
         title = "RPG Maker MV/MZ" if self.engine != "ACE" else "RPG Maker Ace"
         title_label = QLabel(f"{title} Translation Settings")
-        title_label.setStyleSheet("font-size: 14px; font-weight: bold; color: #007acc;")
+        title_label.setStyleSheet("font-size: 15px; font-weight: bold; color: #007acc;")
         main_layout.addWidget(title_label)
 
         description_label = QLabel(
             "Enable event codes to translate. Only enable what you need to reduce translation time and costs."
         )
         description_label.setWordWrap(True)
-        description_label.setStyleSheet("color: #888888; font-size: 11px; margin-bottom: 5px;")
+        description_label.setStyleSheet("color: #888888; font-size: 10px; margin-bottom: 5px;")
         main_layout.addWidget(description_label)
         
         # Two-column layout for checkboxes
         columns_layout = QHBoxLayout()
-        columns_layout.setSpacing(30)
+        columns_layout.setSpacing(40)
         
         # LEFT COLUMN
         left_column = QVBoxLayout()
-        left_column.setSpacing(3)
+        left_column.setSpacing(5)
         
         # General Configuration
         left_column.addWidget(create_section_label("⚙️ General Options"))
@@ -221,7 +221,7 @@ class RPGMakerTab(QWidget):
         self.ignoretltext_cb.setToolTip("Ignore already translated text")
         left_column.addWidget(self.ignoretltext_cb)
         
-        left_column.addSpacing(8)
+        left_column.addSpacing(15)
         
         # Main Dialogue Codes
         left_column.addWidget(create_section_label("💬 Main Dialogue (Recommended)"))
@@ -234,7 +234,7 @@ class RPGMakerTab(QWidget):
         self.code102_cb = QCheckBox("CODE102 - Show Choices")
         left_column.addWidget(self.code102_cb)
         
-        left_column.addSpacing(8)
+        left_column.addSpacing(15)
         
         # Optional Dialogue Codes
         left_column.addWidget(create_section_label("📝 Optional Dialogue"))
@@ -243,6 +243,7 @@ class RPGMakerTab(QWidget):
         
         self.code408_cb = QCheckBox("CODE408 - Show Text (continuation)")
         self.code408_cb.setToolTip("Can significantly increase costs")
+        self.code408_cb.setStyleSheet("QCheckBox { color: #ff9999; }")
         left_column.addWidget(self.code408_cb)
         
         self.code122_cb = QCheckBox("CODE122 - Control Variables")
@@ -252,40 +253,38 @@ class RPGMakerTab(QWidget):
         
         # RIGHT COLUMN  
         right_column = QVBoxLayout()
-        right_column.setSpacing(3)
+        right_column.setSpacing(5)
         
-        # Event Codes (compact grid layout)
-        right_column.addWidget(create_section_label("🎮 Event Codes"))
+        # Plugins / Scripts / Other Codes
+        right_column.addWidget(create_section_label("🔧 Plugins / Scripts / Other"))
         
-        # Create a grid for better space usage
-        event_grid = QGridLayout()
-        event_grid.setSpacing(2)
-        event_grid.setHorizontalSpacing(15)
+        self.code355655_cb = QCheckBox("CODE355/655 - Script/Plugin Commands (MZ)")
+        right_column.addWidget(self.code355655_cb)
         
-        # Event codes in a more compact format
-        event_codes = [
-            ("CODE103", "Input Number"), ("CODE104", "Select Item"),
-            ("CODE111", "Conditional Branch"), ("CODE117", "Common Event"),
-            ("CODE119", "Set Movement"), ("CODE121", "Control Switches"),
-            ("CODE125", "Change Gold"), ("CODE126", "Change Items"),
-            ("CODE127", "Change Weapons"), ("CODE128", "Change Armors"),
-            ("CODE129", "Change Party"), ("CODE201", "Transfer Player"),
-            ("CODE202", "Set Vehicle Loc"), ("CODE203", "Set Event Loc"),
-            ("CODE211", "Change Transparency"), ("CODE212", "Show Animation"),
-            ("CODE213", "Show Balloon"), ("CODE214", "Erase Event"),
-            ("CODE221", "Fadeout Screen"), ("CODE222", "Fadein Screen"),
-            ("CODE231", "Show Picture"), ("CODE232", "Move Picture"),
-            ("CODE241", "Play BGM"), ("CODE242", "Fadeout BGM"),
-        ]
+        self.code357_cb = QCheckBox("CODE357 - Plugin Commands")
+        right_column.addWidget(self.code357_cb)
         
-        self.event_checkboxes = {}
-        for idx, (code, label) in enumerate(event_codes):
-            cb = QCheckBox(f"{code} - {label}")
-            cb.setStyleSheet("QCheckBox { font-size: 10px; }")
-            event_grid.addWidget(cb, idx // 2, idx % 2)
-            self.event_checkboxes[code] = cb
+        self.code657_cb = QCheckBox("CODE657 - Plugin Commands (Extended)")
+        right_column.addWidget(self.code657_cb)
         
-        right_column.addLayout(event_grid)
+        self.code356_cb = QCheckBox("CODE356 - System Settings")
+        right_column.addWidget(self.code356_cb)
+        
+        self.code320_cb = QCheckBox("CODE320 - Change Name")
+        right_column.addWidget(self.code320_cb)
+        
+        self.code324_cb = QCheckBox("CODE324 - Change Nickname")
+        right_column.addWidget(self.code324_cb)
+        
+        self.code325_cb = QCheckBox("CODE325 - Change Profile")
+        right_column.addWidget(self.code325_cb)
+        
+        self.code111_cb = QCheckBox("CODE111 - Conditional Branch")
+        right_column.addWidget(self.code111_cb)
+        
+        self.code108_cb = QCheckBox("CODE108 - Comments")
+        right_column.addWidget(self.code108_cb)
+        
         right_column.addStretch()
         
         # Add both columns
@@ -294,16 +293,20 @@ class RPGMakerTab(QWidget):
         main_layout.addLayout(columns_layout)
         
         # Bottom buttons
+        main_layout.addSpacing(12)
         button_layout = QHBoxLayout()
         button_layout.setSpacing(10)
         
         self.reset_button = QPushButton("🔄 Reset to Defaults")
         self.reset_button.clicked.connect(self.reset_to_defaults_with_message)
-        self.reset_button.setMaximumWidth(200)
+        self.reset_button.setMaximumWidth(180)
+        self.reset_button.setMinimumHeight(32)
         
         self.apply_button = QPushButton("✓ Apply Settings")
         self.apply_button.clicked.connect(self.apply_to_module)
-        self.apply_button.setMaximumWidth(200)
+        self.apply_button.setMaximumWidth(180)
+        self.apply_button.setMinimumHeight(32)
+        self.apply_button.setStyleSheet("font-weight: bold;")
         
         button_layout.addWidget(self.reset_button)
         button_layout.addWidget(self.apply_button)
@@ -337,9 +340,16 @@ class RPGMakerTab(QWidget):
         # Variable codes
         self.code122_cb.setChecked(self.DEFAULT_CONFIG["CODE122"])
         
-        # Event codes
-        for code, cb in self.event_checkboxes.items():
-            cb.setChecked(self.DEFAULT_CONFIG.get(code, False))
+        # Plugins / Scripts / Other codes
+        self.code355655_cb.setChecked(self.DEFAULT_CONFIG.get("CODE355655", False))
+        self.code357_cb.setChecked(self.DEFAULT_CONFIG.get("CODE357", False))
+        self.code657_cb.setChecked(self.DEFAULT_CONFIG.get("CODE657", False))
+        self.code356_cb.setChecked(self.DEFAULT_CONFIG.get("CODE356", False))
+        self.code320_cb.setChecked(self.DEFAULT_CONFIG.get("CODE320", False))
+        self.code324_cb.setChecked(self.DEFAULT_CONFIG.get("CODE324", False))
+        self.code325_cb.setChecked(self.DEFAULT_CONFIG.get("CODE325", False))
+        self.code111_cb.setChecked(self.DEFAULT_CONFIG.get("CODE111", False))
+        self.code108_cb.setChecked(self.DEFAULT_CONFIG.get("CODE108", False))
                 
         # Reconnect signals and apply changes once
         self.connect_auto_apply()
@@ -377,9 +387,16 @@ class RPGMakerTab(QWidget):
             # Variable codes
             self.code122_cb.stateChanged.disconnect()
             
-            # Event codes
-            for cb in self.event_checkboxes.values():
-                cb.stateChanged.disconnect()
+            # Plugins / Scripts / Other codes
+            self.code355655_cb.stateChanged.disconnect()
+            self.code357_cb.stateChanged.disconnect()
+            self.code657_cb.stateChanged.disconnect()
+            self.code356_cb.stateChanged.disconnect()
+            self.code320_cb.stateChanged.disconnect()
+            self.code324_cb.stateChanged.disconnect()
+            self.code325_cb.stateChanged.disconnect()
+            self.code111_cb.stateChanged.disconnect()
+            self.code108_cb.stateChanged.disconnect()
         except TypeError:
             # Ignore if signals are not connected
             pass
@@ -406,9 +423,16 @@ class RPGMakerTab(QWidget):
         # Variable codes
         self.code122_cb.stateChanged.connect(lambda: self.apply_to_module(show_messages=False))
         
-        # Event codes
-        for cb in self.event_checkboxes.values():
-            cb.stateChanged.connect(lambda: self.apply_to_module(show_messages=False))
+        # Plugins / Scripts / Other codes
+        self.code355655_cb.stateChanged.connect(lambda: self.apply_to_module(show_messages=False))
+        self.code357_cb.stateChanged.connect(lambda: self.apply_to_module(show_messages=False))
+        self.code657_cb.stateChanged.connect(lambda: self.apply_to_module(show_messages=False))
+        self.code356_cb.stateChanged.connect(lambda: self.apply_to_module(show_messages=False))
+        self.code320_cb.stateChanged.connect(lambda: self.apply_to_module(show_messages=False))
+        self.code324_cb.stateChanged.connect(lambda: self.apply_to_module(show_messages=False))
+        self.code325_cb.stateChanged.connect(lambda: self.apply_to_module(show_messages=False))
+        self.code111_cb.stateChanged.connect(lambda: self.apply_to_module(show_messages=False))
+        self.code108_cb.stateChanged.connect(lambda: self.apply_to_module(show_messages=False))
             
     def get_config(self):
         """Get current configuration as dictionary."""
@@ -432,11 +456,18 @@ class RPGMakerTab(QWidget):
             
             # Variable codes
             "CODE122": self.code122_cb.isChecked(),
+            
+            # Plugins / Scripts / Other codes
+            "CODE355655": self.code355655_cb.isChecked(),
+            "CODE357": self.code357_cb.isChecked(),
+            "CODE657": self.code657_cb.isChecked(),
+            "CODE356": self.code356_cb.isChecked(),
+            "CODE320": self.code320_cb.isChecked(),
+            "CODE324": self.code324_cb.isChecked(),
+            "CODE325": self.code325_cb.isChecked(),
+            "CODE111": self.code111_cb.isChecked(),
+            "CODE108": self.code108_cb.isChecked(),
         }
-        
-        # Event codes
-        for code, cb in self.event_checkboxes.items():
-            config[code] = cb.isChecked()
             
         return config
         
@@ -462,9 +493,16 @@ class RPGMakerTab(QWidget):
         # Variable codes
         self.code122_cb.setChecked(config.get("CODE122", False))
         
-        # Event codes
-        for code, cb in self.event_checkboxes.items():
-            cb.setChecked(config.get(code, False))
+        # Plugins / Scripts / Other codes
+        self.code355655_cb.setChecked(config.get("CODE355655", False))
+        self.code357_cb.setChecked(config.get("CODE357", False))
+        self.code657_cb.setChecked(config.get("CODE657", False))
+        self.code356_cb.setChecked(config.get("CODE356", False))
+        self.code320_cb.setChecked(config.get("CODE320", False))
+        self.code324_cb.setChecked(config.get("CODE324", False))
+        self.code325_cb.setChecked(config.get("CODE325", False))
+        self.code111_cb.setChecked(config.get("CODE111", False))
+        self.code108_cb.setChecked(config.get("CODE108", False))
             
     def load_from_file(self, file_path):
         """Load configuration from file."""
