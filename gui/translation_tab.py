@@ -514,47 +514,17 @@ class TranslationTab(QWidget):
         layout.setSpacing(8)
         layout.setContentsMargins(15, 15, 15, 15)
 
-        # Translation Settings Section
-        layout.addWidget(create_section_header("🌐 Translation Settings"))
-        
-        trans_form = QFormLayout()
-        trans_form.setSpacing(6)
-        trans_form.setContentsMargins(0, 0, 0, 12)
-        trans_form.setFieldGrowthPolicy(QFormLayout.FieldsStayAtSizeHint)
-        trans_form.setLabelAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        
-        engine_label = QLabel("Game Engine:")
-        engine_label.setFixedWidth(150)
-        engine_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        self.module_combo = QComboBox()
-        self.module_combo.currentTextChanged.connect(self._on_module_changed)
-        self.module_combo.setFixedWidth(300)
-        trans_form.addRow(engine_label, self.module_combo)
-        
-        mode_label = QLabel("Mode:")
-        mode_label.setFixedWidth(150)
-        mode_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        self.mode_combo = QComboBox()
-        self.mode_combo.addItem("Translate")
-        self.mode_combo.addItem("Estimate")
-        self.mode_combo.setFixedWidth(200)
-        self.mode_combo.currentTextChanged.connect(self._on_mode_changed)
-        trans_form.addRow(mode_label, self.mode_combo)
-        
-        layout.addLayout(trans_form)
-        layout.addWidget(create_horizontal_line())
-        
-        # Files Section
+        # Files Section (at the top)
         layout.addWidget(create_section_header("📁 Input Files"))
         
         # Files Section with side buttons
         files_container = QHBoxLayout()
-        files_container.setSpacing(0)  # No spacing between list and buttons
+        files_container.setSpacing(5)  # Add spacing between list and buttons
         
         # File list with checkboxes
         self.file_list = QListWidget()
-        self.file_list.setMinimumHeight(150)
-        self.file_list.setMaximumHeight(250)
+        self.file_list.setMinimumHeight(350)
+        # No max height - let it expand
         self.file_list.setSelectionMode(QListWidget.NoSelection)  # Disable selection highlighting
         self.file_list.itemClicked.connect(self._toggle_file_checkbox)
         self.file_list.setFocusPolicy(Qt.NoFocus)  # Remove focus outline
@@ -562,7 +532,6 @@ class TranslationTab(QWidget):
             QListWidget {
                 outline: none;
                 border: 1px solid #555555;
-                border-right: none;
             }
             QListWidget::item {
                 border: none;
@@ -670,7 +639,40 @@ class TranslationTab(QWidget):
         layout.addLayout(files_container)
         layout.addWidget(create_horizontal_line())
         
-        # Progress Section
+        # Translation Settings Section (in the middle)
+        layout.addWidget(create_section_header("🌐 Translation Settings"))
+        
+        trans_form = QFormLayout()
+        trans_form.setSpacing(6)
+        trans_form.setContentsMargins(0, 0, 0, 12)
+        trans_form.setFieldGrowthPolicy(QFormLayout.FieldsStayAtSizeHint)
+        trans_form.setLabelAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        
+        engine_label = QLabel("Game Engine:")
+        engine_label.setFixedWidth(100)
+        engine_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        self.module_combo = QComboBox()
+        self.module_combo.currentTextChanged.connect(self._on_module_changed)
+        self.module_combo.setFixedWidth(300)
+        trans_form.addRow(engine_label, self.module_combo)
+        
+        mode_label = QLabel("Mode:")
+        mode_label.setFixedWidth(100)
+        mode_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        self.mode_combo = QComboBox()
+        self.mode_combo.addItem("Translate")
+        self.mode_combo.addItem("Estimate")
+        self.mode_combo.setFixedWidth(300)
+        self.mode_combo.currentTextChanged.connect(self._on_mode_changed)
+        trans_form.addRow(mode_label, self.mode_combo)
+        
+        layout.addLayout(trans_form)
+        layout.addWidget(create_horizontal_line())
+        
+        # Spacer to push progress and buttons to bottom
+        layout.addStretch()
+        
+        # Progress Section (at the bottom, right above buttons)
         layout.addWidget(create_section_header("📊 Translation Progress"))
         
         progress_layout = QVBoxLayout()
@@ -722,11 +724,8 @@ class TranslationTab(QWidget):
         progress_layout.addWidget(self.item_progress_bar)
         
         layout.addLayout(progress_layout)
-        
-        # Spacer to push buttons to bottom
-        layout.addStretch()
 
-        # Buttons
+        # Buttons (right below progress section)
         button_layout = QHBoxLayout()
         button_layout.addStretch()
         self.translate_button = QPushButton("Start Translation")
