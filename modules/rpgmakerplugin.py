@@ -258,7 +258,7 @@ def translatePlugin(data, pbar, filename, translatedList):
         # r'"Text[\\]+":[\\]+"(.+?)[\\]+",'
         # r'"HelpText[\\]+":[\\]+"(.+?)[\\]+",'
         # r"this.drawTextEx\(\\'(.+?)\',"
-        # r'txtSubject.+?"(.+)'
+        # r'txtSubject.+?"(.+)"'
         regex = r'txtSubject.+?"(.+)"'
         matchList = re.findall(regex, data[i])
         if len(matchList) > 0:

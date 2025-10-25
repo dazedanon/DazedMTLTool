@@ -111,6 +111,7 @@ CODE657 = False
 CODE356 = False
 CODE320 = False
 CODE324 = False
+CODE325 = False
 CODE111 = False
 CODE108 = False
 
@@ -2498,6 +2499,37 @@ def searchCodes(page, pbar, jobList, filename):
 
             ### Event Code: 320 Set Variable
             if "code" in codeList[i] and codeList[i]["code"] == 320 and CODE320 is True:
+                jaString = codeList[i]["parameters"][1]
+                if not isinstance(jaString, str):
+                    i += 1
+                    continue
+
+                # Definitely don't want to mess with files
+                if "■" in jaString or "_" in jaString:
+                    i += 1
+                    continue
+
+                # If there isn't any Japanese in the text just skip
+                if not re.search(LANGREGEX, jaString):
+                    i += 1
+                    continue
+
+                # Translate
+                response = getSpeaker(jaString)
+                translatedText = response[0]
+                totalTokens[0] += response[1][0]
+                totalTokens[1] += response[1][1]
+
+                # Remove characters that may break scripts
+                charList = [".", '"', "'", "\\n"]
+                for char in charList:
+                    translatedText = translatedText.replace(char, "")
+
+                # Set Data
+                codeList[i]["parameters"][1] = translatedText
+
+            ### Event Code: 325
+            if "code" in codeList[i] and codeList[i]["code"] == 325 and CODE325 is True:
                 jaString = codeList[i]["parameters"][1]
                 if not isinstance(jaString, str):
                     i += 1
