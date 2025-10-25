@@ -24,6 +24,7 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import Qt, QTimer, pyqtSignal, QThread, QMutex, QProcess
 from PyQt5.QtGui import QFont
+from gui.log_viewer import LogViewer
 
 
 class TranslationWorker(QThread):
@@ -475,6 +476,11 @@ class TranslationTab(QWidget):
         
     def setup_ui(self):
         """Set up the user interface."""
+        # Create main splitter to separate translation controls from log viewer
+        main_splitter = QSplitter(Qt.Horizontal)
+        
+        # Left side - translation controls
+        left_widget = QWidget()
         layout = QVBoxLayout()
         layout.setSpacing(15)
 
@@ -561,7 +567,24 @@ class TranslationTab(QWidget):
         button_layout.addWidget(self.stop_button)
         button_layout.addStretch()
         layout.addLayout(button_layout)
-        self.setLayout(layout)
+        left_widget.setLayout(layout)
+        
+        # Right side - translation history log viewer
+        self.translation_log_viewer = LogViewer()
+        
+        # Add both to splitter
+        main_splitter.addWidget(left_widget)
+        main_splitter.addWidget(self.translation_log_viewer)
+        
+        # Set proportional sizes (translation controls: 60%, log viewer: 40%)
+        main_splitter.setStretchFactor(0, 3)
+        main_splitter.setStretchFactor(1, 2)
+        
+        # Set main layout for this tab
+        tab_layout = QVBoxLayout()
+        tab_layout.addWidget(main_splitter)
+        tab_layout.setContentsMargins(0, 0, 0, 0)
+        self.setLayout(tab_layout)
         
     def setup_module_list(self):
         """Set up the module selection list."""

@@ -18,9 +18,6 @@ from PyQt5.QtGui import QIcon, QFont, QPixmap, QScreen
 
 # Import configuration widgets
 from gui.config_tab import ConfigTab
-from gui.engine_config_tab import EngineConfigTab
-from gui.log_viewer import LogViewer
-from gui.file_manager import FileManager
 from gui.translation_tab import TranslationTab
 
 class DazedMTLGUI(QMainWindow):
@@ -132,9 +129,6 @@ class DazedMTLGUI(QMainWindow):
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
         
-        # Create main splitter
-        main_splitter = QSplitter(Qt.Horizontal)
-        
         # Create tab widget
         self.tab_widget = QTabWidget()
         self.tab_widget.setTabPosition(QTabWidget.North)
@@ -142,20 +136,9 @@ class DazedMTLGUI(QMainWindow):
         # Add tabs
         self.setup_tabs()
         
-        # Create log viewer
-        self.log_viewer = LogViewer()
-        
-        # Add widgets to splitter
-        main_splitter.addWidget(self.tab_widget)
-        main_splitter.addWidget(self.log_viewer)
-        
-        # Set proportional sizes instead of fixed pixel sizes
-        main_splitter.setStretchFactor(0, 2)  # Main content gets 2/3
-        main_splitter.setStretchFactor(1, 1)  # Log viewer gets 1/3
-        
         # Set main layout
         layout = QVBoxLayout()
-        layout.addWidget(main_splitter)
+        layout.addWidget(self.tab_widget)
         central_widget.setLayout(layout)
         
         # Create menu bar
@@ -170,32 +153,7 @@ class DazedMTLGUI(QMainWindow):
         
         # Translation Execution Tab (includes file management)
         self.translation_tab = TranslationTab(self)
-        try:
-            self.translation_tab.engine_changed.connect(self.show_engine_tab)
-        except Exception:
-            pass
         self.tab_widget.addTab(self.translation_tab, "Translation")
-
-        # Unified Engine Configuration Tab
-        self.engine_config_tab = EngineConfigTab()
-        self.tab_widget.addTab(self.engine_config_tab, "Engine Config")
-        # Default to MV/MZ config on first load
-        try:
-            self.show_engine_tab("mvmz")
-        except Exception:
-            pass
-
-    def show_engine_tab(self, engine: str):
-        """Select engine config tab and display appropriate engine sub-widget."""
-        try:
-            # Switch to Engine Config tab
-            for i in range(self.tab_widget.count()):
-                if self.tab_widget.tabText(i) == "Engine Config":
-                    self.tab_widget.setCurrentIndex(i)
-                    break
-            self.engine_config_tab.show_engine(engine)
-        except Exception:
-            pass
         
     def on_config_changed(self):
         """Handle configuration changes."""
@@ -307,7 +265,6 @@ class DazedMTLGUI(QMainWindow):
             try:
                 # Load configuration from file
                 self.config_tab.load_from_file(file_path)
-                self.rpgmaker_tab.load_from_file(file_path)
                 self.status_label.setText(f"Loaded project: {Path(file_path).name}")
             except Exception as e:
                 QMessageBox.critical(self, "Error", f"Failed to load project:\n{str(e)}")
@@ -324,9 +281,7 @@ class DazedMTLGUI(QMainWindow):
         if file_path:
             try:
                 # Save configuration to file
-                config_data = {}
-                config_data.update(self.config_tab.get_config())
-                config_data.update(self.rpgmaker_tab.get_config())
+                config_data = self.config_tab.get_config()
                 
                 import json
                 with open(file_path, 'w', encoding='utf-8') as f:
@@ -348,7 +303,6 @@ class DazedMTLGUI(QMainWindow):
         
         if reply == QMessageBox.Yes:
             self.config_tab.reset_to_defaults()
-            self.rpgmaker_tab.reset_to_defaults()
             self.status_label.setText("Reset to defaults")
             
     def validate_configuration(self):
@@ -356,13 +310,12 @@ class DazedMTLGUI(QMainWindow):
         try:
             # Validate configuration settings
             config_valid = self.config_tab.validate()
-            rpgmaker_valid = self.rpgmaker_tab.validate()
             
-            if config_valid and rpgmaker_valid:
+            if config_valid:
                 QMessageBox.information(self, "Validation", "Configuration is valid!")
                 self.status_label.setText("Configuration validated")
             else:
-                QMessageBox.warning(self, "Validation", "Configuration has issues. Check the log for details.")
+                QMessageBox.warning(self, "Validation", "Configuration has issues. Check the warnings.")
                 
         except Exception as e:
             QMessageBox.critical(self, "Validation Error", f"Failed to validate configuration:\n{str(e)}")
@@ -433,7 +386,7 @@ def main():
     app.setApplicationVersion("1.0")
     app.setOrganizationName("DazedTranslations")
     
-    # Apply dark theme (optional)
+    # Apply dark theme with cleaner, more compact styling
     app.setStyleSheet("""
         QMainWindow {
             background-color: #2b2b2b;
@@ -446,13 +399,15 @@ def main():
         QTabWidget::pane {
             border: 1px solid #555555;
             background-color: #3c3c3c;
+            padding: 5px;
         }
         QTabBar::tab {
             background-color: #555555;
             color: #ffffff;
-            padding: 8px 12px;
+            padding: 8px 16px;
             margin-right: 2px;
             border: 1px solid #666666;
+            border-bottom: none;
         }
         QTabBar::tab:selected {
             background-color: #007acc;
@@ -463,26 +418,28 @@ def main():
             color: #ffffff;
         }
         QGroupBox {
-            font-weight: bold;
-            border: 2px solid #555555;
-            border-radius: 5px;
-            margin: 10px 0px;
-            padding-top: 10px;
+            font-weight: normal;
+            border: 1px solid #444444;
+            border-radius: 3px;
+            margin-top: 8px;
+            padding: 8px;
             color: #ffffff;
-            background-color: #3c3c3c;
+            background-color: transparent;
         }
         QGroupBox::title {
             subcontrol-origin: margin;
-            left: 10px;
-            padding: 0 5px 0 5px;
+            subcontrol-position: top left;
+            left: 8px;
+            padding: 2px 5px;
             color: #007acc;
-            background-color: transparent;
+            background-color: #2b2b2b;
+            font-weight: bold;
         }
         QPushButton {
             background-color: #0078d4;
             color: white;
             border: none;
-            padding: 6px 12px;
+            padding: 7px 14px;
             border-radius: 3px;
             font-weight: bold;
         }
@@ -492,10 +449,15 @@ def main():
         QPushButton:pressed {
             background-color: #005a9e;
         }
+        QPushButton:disabled {
+            background-color: #404040;
+            color: #888888;
+        }
         QCheckBox {
             color: #ffffff;
-            spacing: 5px;
+            spacing: 6px;
             background-color: transparent;
+            padding: 2px;
         }
         QCheckBox::indicator {
             width: 16px;
@@ -504,112 +466,142 @@ def main():
         QCheckBox::indicator:unchecked {
             background-color: #404040;
             border: 1px solid #555555;
+            border-radius: 2px;
         }
         QCheckBox::indicator:checked {
             background-color: #0078d4;
             border: 1px solid #0078d4;
+            border-radius: 2px;
         }
         QLabel {
             color: #ffffff;
             background-color: transparent;
+            padding: 2px;
         }
         QLineEdit {
             background-color: #404040;
             color: #ffffff;
             border: 1px solid #555555;
-            padding: 4px;
+            padding: 5px 8px;
             border-radius: 2px;
+            selection-background-color: #007acc;
         }
         QLineEdit:focus {
-            border: 2px solid #007acc;
+            border: 1px solid #007acc;
         }
         QSpinBox, QDoubleSpinBox {
             background-color: #404040;
             color: #ffffff;
             border: 1px solid #555555;
-            padding: 4px;
+            padding: 5px 8px;
             border-radius: 2px;
         }
         QSpinBox:focus, QDoubleSpinBox:focus {
-            border: 2px solid #007acc;
+            border: 1px solid #007acc;
+        }
+        QSpinBox::up-button, QDoubleSpinBox::up-button {
+            background-color: #555555;
+            border: none;
+            border-radius: 0;
+        }
+        QSpinBox::down-button, QDoubleSpinBox::down-button {
+            background-color: #555555;
+            border: none;
+            border-radius: 0;
         }
         QComboBox {
             background-color: #404040;
             color: #ffffff;
             border: 1px solid #555555;
-            padding: 4px;
+            padding: 5px 8px;
             border-radius: 2px;
         }
         QComboBox:focus {
-            border: 2px solid #007acc;
+            border: 1px solid #007acc;
         }
         QComboBox::drop-down {
             border: none;
             background-color: #555555;
+            width: 20px;
         }
         QComboBox::down-arrow {
             image: none;
             border-left: 4px solid transparent;
             border-right: 4px solid transparent;
-            border-top: 4px solid #ffffff;
+            border-top: 5px solid #ffffff;
+            margin-right: 5px;
         }
         QComboBox QAbstractItemView {
             background-color: #404040;
             color: #ffffff;
             selection-background-color: #007acc;
             border: 1px solid #555555;
+            padding: 3px;
         }
         QTextEdit {
             background-color: #1e1e1e;
             color: #ffffff;
             border: 1px solid #555555;
             selection-background-color: #007acc;
+            padding: 5px;
+        }
+        QTextEdit:focus {
+            border: 1px solid #007acc;
         }
         QScrollArea {
-            background-color: #2b2b2b;
+            background-color: transparent;
             border: none;
         }
         QScrollBar:vertical {
-            background-color: #404040;
+            background-color: #2b2b2b;
             width: 12px;
-            border-radius: 6px;
+            border: none;
         }
         QScrollBar::handle:vertical {
-            background-color: #666666;
+            background-color: #555555;
             border-radius: 6px;
+            min-height: 20px;
             margin: 2px;
         }
         QScrollBar::handle:vertical:hover {
             background-color: #007acc;
         }
+        QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+            height: 0px;
+        }
         QScrollBar:horizontal {
-            background-color: #404040;
+            background-color: #2b2b2b;
             height: 12px;
-            border-radius: 6px;
+            border: none;
         }
         QScrollBar::handle:horizontal {
-            background-color: #666666;
+            background-color: #555555;
             border-radius: 6px;
+            min-width: 20px;
             margin: 2px;
         }
         QScrollBar::handle:horizontal:hover {
             background-color: #007acc;
         }
-        QTreeWidget {
+        QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
+            width: 0px;
+        }
+        QListWidget {
             background-color: #1e1e1e;
             color: #ffffff;
             border: 1px solid #555555;
             selection-background-color: #007acc;
+            padding: 3px;
         }
-        QTreeWidget::item {
-            padding: 4px;
+        QListWidget::item {
+            padding: 5px;
             border-bottom: 1px solid #333333;
         }
-        QTreeWidget::item:selected {
+        QListWidget::item:selected {
             background-color: #007acc;
             color: #ffffff;
         }
-        QTreeWidget::item:hover {
+        QListWidget::item:hover {
             background-color: #404040;
         }
         QHeaderView::section {
@@ -629,6 +621,7 @@ def main():
             border-radius: 3px;
             text-align: center;
             color: #ffffff;
+            height: 20px;
         }
         QProgressBar::chunk {
             background-color: #007acc;
@@ -652,16 +645,19 @@ def main():
             border: 1px solid #555555;
         }
         QMenu::item {
-            padding: 6px 12px;
+            padding: 6px 20px;
         }
         QMenu::item:selected {
             background-color: #007acc;
         }
-        QFrame[frameShape="4"] {
+        QFrame[frameShape="4"], QFrame[frameShape="5"] {
             color: #555555;
         }
-        QFrame[frameShape="5"] {
-            color: #555555;
+        QSplitter::handle {
+            background-color: #555555;
+        }
+        QSplitter::handle:hover {
+            background-color: #007acc;
         }
     """)
     
