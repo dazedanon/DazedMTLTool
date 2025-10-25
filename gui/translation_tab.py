@@ -122,79 +122,92 @@ class TranslationWorker(QThread):
     def run_module_in_process(self, filename, estimate_only):
         """Run a module handler in a separate process for better control."""
         try:
-            # Create a separate Python process to run the module
-            # This allows us to terminate it if needed
-            script_content = f'''
-import sys
-import os
-from pathlib import Path
-import io
-from contextlib import redirect_stdout, redirect_stderr
-
-# Set UTF-8 encoding for stdout to handle Unicode characters
-sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
-sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
-
-# Add project root to path
-project_root = Path(r"{self.project_root}")
-sys.path.insert(0, str(project_root))
-
-try:
-    # Change to project directory
-    os.chdir(str(project_root))
-    
-    # Import and run the handler
-    {self.get_import_statement()}
-    
-    # Run the handler and capture the result
-    handler_result = {self.get_handler_call()}(r"{filename}", {estimate_only})
-    
-    # Print the result
-    if handler_result:
-        print(f"RESULT:{{handler_result}}")
-    else:
-        print("RESULT:Fail")
-    
-except Exception as e:
-    import traceback
-    error_msg = str(e).encode('ascii', 'ignore').decode('ascii')
-    print(f"ERROR:{{error_msg}}")
-    sys.exit(1)
-'''
-            
-            # Write script to temporary file
-            temp_script = self.project_root / "temp_translation_script.py"
-            with open(temp_script, 'w', encoding='utf-8') as f:
-                f.write(script_content)
+            # Use the external subprocess runner script
+            runner_script = self.project_root / "util" / "subprocess_runner.py"
+            if not runner_script.exists():
+                self.emit_log(f"❌ Subprocess runner script not found: {runner_script}")
+                return "Fail"
             
             # Run the script in a separate process
             env = os.environ.copy()
             env['PYTHONIOENCODING'] = 'utf-8'  # Force UTF-8 encoding
             
             process = subprocess.Popen(
-                [sys.executable, str(temp_script)],
+                [
+                    sys.executable,
+                    str(runner_script),
+                    str(self.project_root),
+                    self.module_info[0],  # module name
+                    filename,
+                    str(estimate_only)
+                ],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
                 encoding='utf-8',
                 errors='replace',
                 cwd=str(self.project_root),
-                env=env
+                env=env,
+                bufsize=1  # Line buffered
             )
             
             # Track the process for potential termination
             self.running_processes.append(process)
             
-            # Wait for completion
-            stdout, stderr = process.communicate()
+            # Read output in real-time to capture progress
+            stdout_lines = []
+            stderr_lines = []
+            
+            def read_stdout():
+                """Read stdout line by line."""
+                for line in iter(process.stdout.readline, ''):
+                    if not line:
+                        break
+                    line = line.strip()
+                    if line.startswith('PROGRESS:'):
+                        # Parse progress: PROGRESS:filename:current:total
+                        try:
+                            parts = line.split(':', 3)
+                            if len(parts) == 4:
+                                _, desc, current, total = parts
+                                self.item_progress_signal.emit(int(current), int(total))
+                                # Update translating label with filename
+                                if desc:
+                                    self.emit_log(f"📝 Translating: {desc} ({current}/{total})")
+                        except Exception:
+                            pass  # Ignore malformed progress lines
+                    else:
+                        stdout_lines.append(line)
+                process.stdout.close()
+            
+            def read_stderr():
+                """Read stderr line by line."""
+                for line in iter(process.stderr.readline, ''):
+                    if not line:
+                        break
+                    stderr_lines.append(line.strip())
+                process.stderr.close()
+            
+            # Start reader threads
+            stdout_thread = threading.Thread(target=read_stdout, daemon=True)
+            stderr_thread = threading.Thread(target=read_stderr, daemon=True)
+            stdout_thread.start()
+            stderr_thread.start()
+            
+            # Wait for process completion
+            process.wait()
+            
+            # Wait for reader threads to finish
+            stdout_thread.join(timeout=1.0)
+            stderr_thread.join(timeout=1.0)
+            
+            # Combine output
+            stdout = '\n'.join(stdout_lines)
+            stderr = '\n'.join(stderr_lines)
             
             # Remove from tracking
             if process in self.running_processes:
                 self.running_processes.remove(process)
-            
-            # Clean up temp file
-            if temp_script.exists():
-                temp_script.unlink()
             
             # Check if process was terminated by stop signal
             if self.should_stop:
@@ -229,82 +242,6 @@ except Exception as e:
         except Exception as e:
             self.emit_log(f"❌ Failed to run module process: {str(e)}")
             return "Fail"
-            
-    def get_import_statement(self):
-        """Get the import statement for the selected module."""
-        module_name = self.module_info[0]
-        if "RPG Maker MV/MZ" in module_name:
-            return "from modules.rpgmakermvmz import handleMVMZ"
-        elif "RPG Maker Ace" in module_name:
-            return "from modules.rpgmakerace import handleACE"
-        elif "CSV" in module_name:
-            return "from modules.csv import handleCSV"
-        elif "Tyrano" in module_name:
-            return "from modules.tyrano import handleTyrano"
-        elif "Kirikiri" in module_name:
-            return "from modules.kirikiri import handleKirikiri"
-        elif "JSON" in module_name:
-            return "from modules.json import handleJSON"
-        elif "Lune" in module_name:
-            return "from modules.lune import handleLune"
-        elif "NScript" in module_name:
-            return "from modules.nscript import handleOnscripter"
-        elif "Wolf RPG 2" in module_name:
-            return "from modules.wolf2 import handleWOLF2"
-        elif "Wolf RPG" in module_name:
-            return "from modules.wolf import handleWOLF"
-        elif "Regex" in module_name:
-            return "from modules.regex import handleRegex"
-        elif "Text" in module_name:
-            return "from modules.text import handleText"
-        elif "RenPy" in module_name:
-            return "from modules.renpy import handleRenpy"
-        elif "Unity" in module_name:
-            return "from modules.unity import handleUnity"
-        elif "Images" in module_name:
-            return "from modules.images import handleImages"
-        elif "Plugin" in module_name:
-            return "from modules.rpgmakerplugin import handlePlugin"
-        else:
-            return "# Unknown module"
-    
-    def get_handler_call(self):
-        """Get the handler function call for the selected module."""
-        module_name = self.module_info[0]
-        if "RPG Maker MV/MZ" in module_name:
-            return "handleMVMZ"
-        elif "RPG Maker Ace" in module_name:
-            return "handleACE"
-        elif "CSV" in module_name:
-            return "handleCSV"
-        elif "Tyrano" in module_name:
-            return "handleTyrano"
-        elif "Kirikiri" in module_name:
-            return "handleKirikiri"
-        elif "JSON" in module_name:
-            return "handleJSON"
-        elif "Lune" in module_name:
-            return "handleLune"
-        elif "NScript" in module_name:
-            return "handleOnscripter"
-        elif "Wolf RPG 2" in module_name:
-            return "handleWOLF2"
-        elif "Wolf RPG" in module_name:
-            return "handleWOLF"
-        elif "Regex" in module_name:
-            return "handleRegex"
-        elif "Text" in module_name:
-            return "handleText"
-        elif "RenPy" in module_name:
-            return "handleRenpy"
-        elif "Unity" in module_name:
-            return "handleUnity"
-        elif "Images" in module_name:
-            return "handleImages"
-        elif "Plugin" in module_name:
-            return "handlePlugin"
-        else:
-            return "lambda f, e: 'Unknown module'"
         
     def run(self):
         """Run the translation process."""
