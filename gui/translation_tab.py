@@ -20,7 +20,7 @@ from dotenv import load_dotenv
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QGroupBox,
     QTextEdit, QMessageBox, QListWidget, QListWidgetItem, 
-    QSplitter, QFileDialog, QComboBox, QCheckBox, QProgressBar, QFrame, QFormLayout
+    QSplitter, QFileDialog, QComboBox, QCheckBox, QProgressBar, QFrame, QFormLayout, QStackedWidget
 )
 from PyQt5.QtCore import Qt, QTimer, pyqtSignal, QThread, QMutex, QProcess
 from PyQt5.QtGui import QFont
@@ -55,7 +55,7 @@ class TranslationWorker(QThread):
     
     log_signal = pyqtSignal(str)
     progress_signal = pyqtSignal(int, int, str)  # current_file, total_files, filename
-    item_progress_signal = pyqtSignal(int, int)  # current_item, total_items (for tqdm within file)
+    item_progress_signal = pyqtSignal(str, int, int)  # filename, current_item, total_items (for tqdm within file)
     finished_signal = pyqtSignal(bool, str)
     
     def __init__(self, project_root, module_info, estimate_only=False, selected_files=None):
@@ -170,10 +170,8 @@ class TranslationWorker(QThread):
                             parts = line.split(':', 3)
                             if len(parts) == 4:
                                 _, desc, current, total = parts
-                                self.item_progress_signal.emit(int(current), int(total))
-                                # Update translating label with filename
-                                if desc:
-                                    self.emit_log(f"📝 Translating: {desc} ({current}/{total})")
+                                # Emit with filename included
+                                self.item_progress_signal.emit(desc, int(current), int(total))
                         except Exception:
                             pass  # Ignore malformed progress lines
                     else:
@@ -435,6 +433,8 @@ class TranslationTab(QWidget):
         # Initialize tracking variables
         self.files_completed = 0
         self.files_total = 0
+        self.file_progress_items = {}  # filename -> {widget, label, progress_bar, checkbox}
+        self.current_translating_file = None
         
         self.setup_ui()
         self.setup_module_list()
@@ -453,6 +453,14 @@ class TranslationTab(QWidget):
 
         # Files Section (at the top)
         layout.addWidget(create_section_header("📁 Input Files"))
+        
+        # Create stacked widget to switch between file list and progress view
+        self.file_stack = QStackedWidget()
+        
+        # Page 0: Normal file list with buttons
+        file_list_page = QWidget()
+        file_list_layout = QVBoxLayout()
+        file_list_layout.setContentsMargins(0, 0, 0, 0)
         
         # Files Section with side buttons
         files_container = QHBoxLayout()
@@ -572,8 +580,64 @@ class TranslationTab(QWidget):
         # Add button column to the container
         files_container.addLayout(file_buttons)
         
-        # Add the entire container to main layout
-        layout.addLayout(files_container)
+        # Add the container to file list page
+        file_list_layout.addLayout(files_container)
+        file_list_page.setLayout(file_list_layout)
+        self.file_stack.addWidget(file_list_page)  # Index 0
+        
+        # Page 1: Progress view (shown during translation)
+        progress_view_page = QWidget()
+        progress_view_layout = QVBoxLayout()
+        progress_view_layout.setContentsMargins(0, 0, 0, 0)
+        
+        self.progress_list = QListWidget()
+        self.progress_list.setMinimumHeight(350)
+        self.progress_list.setSelectionMode(QListWidget.NoSelection)
+        self.progress_list.setFocusPolicy(Qt.NoFocus)
+        self.progress_list.setSpacing(1)  # Minimal spacing between items
+        self.progress_list.setStyleSheet("""
+            QListWidget {
+                outline: none;
+                border: 1px solid #555555;
+                border-radius: 3px;
+                background-color: #1e1e1e;
+                color: white;
+                font-size: 13px;
+            }
+            QListWidget::item {
+                padding: 0px;
+                border-bottom: 1px solid #333333;
+            }
+            QListWidget::item:last {
+                border-bottom: none;
+            }
+        """)
+        progress_view_layout.addWidget(self.progress_list)
+        
+        # Summary button (shown after completion)
+        self.reset_view_button = QPushButton("Back to File Selection")
+        self.reset_view_button.clicked.connect(self.reset_to_file_view)
+        self.reset_view_button.setVisible(False)
+        self.reset_view_button.setStyleSheet("""
+            QPushButton {
+                background-color: #0e639c;
+                color: white;
+                font-weight: bold;
+                padding: 8px 16px;
+                font-size: 13px;
+                border-radius: 3px;
+            }
+            QPushButton:hover {
+                background-color: #1177bb;
+            }
+        """)
+        progress_view_layout.addWidget(self.reset_view_button)
+        
+        progress_view_page.setLayout(progress_view_layout)
+        self.file_stack.addWidget(progress_view_page)  # Index 1
+        
+        # Add stacked widget to main layout
+        layout.addWidget(self.file_stack)
         layout.addWidget(create_horizontal_line())
         
         # Translation Settings Section (in the middle)
@@ -942,6 +1006,94 @@ class TranslationTab(QWidget):
                 subprocess.run(["xdg-open", str(folder_path)])
         except Exception as e:
             QMessageBox.warning(self, "Error", f"Failed to open folder:\n{str(e)}")
+    
+    def create_progress_item(self, filename):
+        """Create a progress item widget for a file."""
+        widget = QWidget()
+        widget.setFixedHeight(36)  # Fixed height instead of minimum
+        layout = QHBoxLayout()
+        layout.setContentsMargins(6, 4, 6, 4)  # Reduced margins
+        layout.setSpacing(10)
+        
+        # Checkbox (initially unchecked, will check when done)
+        checkbox = QCheckBox()
+        checkbox.setEnabled(False)  # Not interactive
+        checkbox.setFixedSize(18, 18)  # Slightly smaller
+        layout.addWidget(checkbox)
+        
+        # Filename label
+        filename_label = QLabel(filename)
+        filename_label.setStyleSheet("font-weight: bold; color: white; font-size: 13px;")
+        filename_label.setFixedWidth(250)  # Fixed width for consistent alignment
+        layout.addWidget(filename_label)
+        
+        # Progress label
+        progress_label = QLabel("Waiting...")
+        progress_label.setStyleSheet("color: #888888; font-size: 12px;")
+        progress_label.setFixedWidth(120)
+        layout.addWidget(progress_label)
+        
+        # Progress bar (stretch to fill remaining space)
+        progress_bar = QProgressBar()
+        progress_bar.setMaximum(100)
+        progress_bar.setValue(0)
+        progress_bar.setFixedHeight(18)  # Fixed height instead of minimum
+        progress_bar.setStyleSheet("""
+            QProgressBar {
+                border: 1px solid #555555;
+                border-radius: 2px;
+                text-align: center;
+                background-color: #2b2b2b;
+                color: white;
+            }
+            QProgressBar::chunk {
+                background-color: #007acc;
+                border-radius: 1px;
+            }
+        """)
+        layout.addWidget(progress_bar, 1)  # Stretch factor of 1 to fill remaining space
+        
+        widget.setLayout(layout)
+        
+        # Store references
+        self.file_progress_items[filename] = {
+            'widget': widget,
+            'checkbox': checkbox,
+            'label': progress_label,
+            'progress_bar': progress_bar
+        }
+        
+        return widget
+    
+    def update_file_item_progress(self, filename, current, total):
+        """Update progress for a specific file."""
+        if filename in self.file_progress_items:
+            item = self.file_progress_items[filename]
+            item['progress_bar'].setMaximum(total if total > 0 else 100)
+            item['progress_bar'].setValue(current)
+            item['label'].setText(f"{current}/{total}")
+            item['label'].setStyleSheet("color: #007acc; font-weight: bold;")
+    
+    def mark_file_complete(self, filename, success=True):
+        """Mark a file as complete."""
+        if filename in self.file_progress_items:
+            item = self.file_progress_items[filename]
+            item['checkbox'].setChecked(True)
+            if success:
+                item['label'].setText("✓ Complete")
+                item['label'].setStyleSheet("color: #4ec9b0; font-weight: bold;")
+                item['progress_bar'].setValue(item['progress_bar'].maximum())
+            else:
+                item['label'].setText("✗ Failed")
+                item['label'].setStyleSheet("color: #f48771; font-weight: bold;")
+    
+    def reset_to_file_view(self):
+        """Reset back to file selection view."""
+        self.file_stack.setCurrentIndex(0)
+        self.reset_view_button.setVisible(False)
+        self.translate_button.setVisible(True)
+        self.stop_button.setVisible(False)
+        self.refresh_file_lists()
             
     def start_translation(self):
         """Start the translation process."""
@@ -975,6 +1127,22 @@ class TranslationTab(QWidget):
         )
         
         if reply == QMessageBox.Yes:
+            # Switch to progress view
+            self.file_stack.setCurrentIndex(1)
+            
+            # Initialize progress list with all files
+            self.progress_list.clear()
+            self.file_progress_items.clear()
+            
+            for filename in selected_files:
+                item_widget = self.create_progress_item(filename)
+                list_item = QListWidgetItem(self.progress_list)
+                # Set fixed size hint to match widget height
+                from PyQt5.QtCore import QSize
+                list_item.setSizeHint(QSize(0, 36))  # Width 0 = auto, height 36px
+                self.progress_list.addItem(list_item)
+                self.progress_list.setItemWidget(list_item, item_widget)
+            
             # Toggle button visibility
             self.translate_button.setVisible(False)
             self.stop_button.setVisible(True)
@@ -1016,12 +1184,32 @@ class TranslationTab(QWidget):
         self.files_completed = current_file
         self.files_translated_label.setText(f"{current_file}/{total_files}")
         self.translating_label.setText(filename)
+        
+        # Mark previous file as complete if there was one
+        if self.current_translating_file and self.current_translating_file != filename:
+            self.mark_file_complete(self.current_translating_file, success=True)
+        
+        # Update current file
+        self.current_translating_file = filename
+        if filename in self.file_progress_items:
+            self.file_progress_items[filename]['label'].setText("Translating...")
+            self.file_progress_items[filename]['label'].setStyleSheet("color: #007acc; font-weight: bold;")
     
-    def update_item_progress(self, current_item, total_items):
+    def update_item_progress(self, filename, current_item, total_items):
         """Update the item-level progress (from tqdm)."""
+        # Update the overall progress display with the current file
         self.item_progress_label.setText(f"{current_item}/{total_items}")
         self.item_progress_bar.setMaximum(total_items if total_items > 0 else 100)
         self.item_progress_bar.setValue(current_item)
+        self.translating_label.setText(filename)
+        
+        # Update the specific file's progress bar in the list
+        if filename in self.file_progress_items:
+            self.update_file_item_progress(filename, current_item, total_items)
+            # Mark as translating if not already done
+            if self.file_progress_items[filename]['label'].text() == "Waiting...":
+                self.file_progress_items[filename]['label'].setText("Translating...")
+                self.file_progress_items[filename]['label'].setStyleSheet("color: #007acc; font-weight: bold;")
             
     def flush_log_buffer(self):
         """No longer needed - kept for compatibility."""
@@ -1034,9 +1222,13 @@ class TranslationTab(QWidget):
         
     def on_translation_finished(self, success, message):
         """Handle translation completion."""
-        # Toggle button visibility
-        self.translate_button.setVisible(True)
+        # Mark the last file as complete
+        if self.current_translating_file:
+            self.mark_file_complete(self.current_translating_file, success=success)
+        
+        # Show reset button instead of translate button
         self.stop_button.setVisible(False)
+        self.reset_view_button.setVisible(True)
         
         # Update progress display
         if success:
