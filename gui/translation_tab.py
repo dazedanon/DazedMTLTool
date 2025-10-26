@@ -23,7 +23,7 @@ from PyQt5.QtWidgets import (
     QSplitter, QFileDialog, QComboBox, QCheckBox, QProgressBar, QFrame, QFormLayout, QStackedWidget
 )
 from PyQt5.QtWidgets import QSizePolicy
-from PyQt5.QtCore import Qt, QTimer, pyqtSignal, QThread, QMutex, QProcess
+from PyQt5.QtCore import Qt, QTimer, pyqtSignal, QThread, QMutex, QProcess, QEvent, QRect
 from PyQt5.QtGui import QFont
 from gui.log_viewer import LogViewer
 
@@ -482,7 +482,11 @@ class TranslationTab(QWidget):
         self.file_list.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         # No max height - let it expand
         self.file_list.setSelectionMode(QListWidget.NoSelection)  # Disable selection highlighting
-        self.file_list.itemClicked.connect(self._toggle_file_checkbox)
+        # Use an event filter installed on the viewport so we reliably
+        # intercept mouse events that occur over the item rows and
+        # checkbox indicator. Installing on the viewport is more
+        # reliable cross-platform than installing on the list itself.
+        self.file_list.viewport().installEventFilter(self)
         self.file_list.setFocusPolicy(Qt.NoFocus)  # Remove focus outline
         self.file_list.setStyleSheet("""
             QListWidget {
@@ -932,10 +936,59 @@ class TranslationTab(QWidget):
     
     def _toggle_file_checkbox(self, item):
         """Toggle checkbox when clicking anywhere on the item."""
-        if item.checkState() == Qt.Checked:
-            item.setCheckState(Qt.Unchecked)
-        else:
-            item.setCheckState(Qt.Checked)
+        # Toggle the built-in QListWidgetItem checkbox state
+        try:
+            if item.checkState() == Qt.Checked:
+                item.setCheckState(Qt.Unchecked)
+            else:
+                item.setCheckState(Qt.Checked)
+        except Exception:
+            pass
+
+    def eventFilter(self, obj, event):
+        """Intercept mouse presses on the file list.
+
+        If the click is inside the checkbox indicator area, allow the
+        default Qt handling to toggle the checkbox. If the click is
+        on the rest of the row, manually toggle the item's check state
+        and consume the event to prevent further handling (avoids
+        double toggles).
+        """
+        # We install the filter on the QListWidget viewport, so the
+        # obj will be the viewport widget when mouse events arrive.
+        if (obj is self.file_list.viewport() or obj is self.file_list) and event.type() == QEvent.MouseButtonPress:
+            pos = event.pos()
+            index = self.file_list.indexAt(pos)
+            if not index.isValid():
+                return False
+
+            rect = self.file_list.visualRect(index)
+            # Approximate checkbox indicator rectangle (style may vary).
+            # Use a small left inset and a ~20x20 indicator area vertically centered.
+            indicator_w = 20
+            indicator_h = 20
+            indicator_x = rect.left() + 4
+            indicator_y = rect.top() + (rect.height() - indicator_h) // 2
+            indicator_rect = QRect(indicator_x, indicator_y, indicator_w, indicator_h)
+
+            # If the click is inside the indicator area, let Qt handle it
+            # (it will toggle the check state). Otherwise toggle manually
+            # and consume the event.
+            if indicator_rect.contains(pos):
+                return False
+
+            # Toggle the item and consume the event
+            item = self.file_list.item(index.row())
+            try:
+                if item.checkState() == Qt.Checked:
+                    item.setCheckState(Qt.Unchecked)
+                else:
+                    item.setCheckState(Qt.Checked)
+            except Exception:
+                pass
+            return True
+
+        return super().eventFilter(obj, event)
     
     def _on_mode_changed(self, mode_text):
         """Update the translate button text based on selected mode."""
@@ -948,20 +1001,24 @@ class TranslationTab(QWidget):
         
     def refresh_file_lists(self):
         """Refresh the file list with checkboxes, preserving checked states."""
-        # Save current check states
+        # Save current check states from existing QListWidgetItems
         checked_files = set()
         for i in range(self.file_list.count()):
             item = self.file_list.item(i)
-            if item.checkState() == Qt.Checked:
-                checked_files.add(item.text())
-        
-        # Rebuild the list
+            try:
+                if item.checkState() == Qt.Checked:
+                    checked_files.add(item.text())
+            except Exception:
+                pass
+
+        # Rebuild the list using simple QListWidgetItems with checkboxes
         self.file_list.clear()
         if self.files_dir.exists():
-            for file_path in self.files_dir.iterdir():
+            for file_path in sorted(self.files_dir.iterdir()):
                 if file_path.is_file() and file_path.name != '.gitkeep':
                     item = QListWidgetItem(file_path.name)
-                    item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
+                    # Ensure the item is enabled, selectable, and user-checkable
+                    item.setFlags(item.flags() | Qt.ItemIsUserCheckable | Qt.ItemIsEnabled | Qt.ItemIsSelectable)
                     # Restore checked state if it was previously checked
                     if file_path.name in checked_files:
                         item.setCheckState(Qt.Checked)
@@ -973,21 +1030,30 @@ class TranslationTab(QWidget):
         """Select all files in the list."""
         for i in range(self.file_list.count()):
             item = self.file_list.item(i)
-            item.setCheckState(Qt.Checked)
+            try:
+                item.setCheckState(Qt.Checked)
+            except Exception:
+                pass
     
     def deselect_all_files(self):
         """Deselect all files in the list."""
         for i in range(self.file_list.count()):
             item = self.file_list.item(i)
-            item.setCheckState(Qt.Unchecked)
+            try:
+                item.setCheckState(Qt.Unchecked)
+            except Exception:
+                pass
     
     def get_selected_files(self):
         """Get list of checked files."""
         selected = []
         for i in range(self.file_list.count()):
             item = self.file_list.item(i)
-            if item.checkState() == Qt.Checked:
-                selected.append(item.text())
+            try:
+                if item.checkState() == Qt.Checked:
+                    selected.append(item.text())
+            except Exception:
+                pass
         return selected
     
     def add_input_files(self):
