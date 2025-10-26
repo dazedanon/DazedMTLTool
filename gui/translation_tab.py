@@ -303,9 +303,7 @@ class TranslationWorker(QThread):
             os.chdir(str(self.project_root))
             
             try:
-                # Use a simpler approach with limited parallelism
-                # to have better control over stopping
-                max_workers = threads  # Limit to 2 concurrent processes max
+                max_workers = threads
                 self.executor = ThreadPoolExecutor(max_workers=max_workers)
                 
                 # Submit tasks to run modules in separate processes
@@ -1181,19 +1179,29 @@ class TranslationTab(QWidget):
     
     def update_file_progress(self, current_file, total_files, filename):
         """Update the file-level progress."""
+        # The worker emits this when a file's task completes. Treat the
+        # provided filename as the file that just finished and mark it
+        # complete immediately instead of setting it back to
+        # "Translating..." (which caused it to appear incomplete until the
+        # next file finished).
         self.files_completed = current_file
         self.files_translated_label.setText(f"{current_file}/{total_files}")
-        self.translating_label.setText(filename)
-        
-        # Mark previous file as complete if there was one
-        if self.current_translating_file and self.current_translating_file != filename:
-            self.mark_file_complete(self.current_translating_file, success=True)
-        
-        # Update current file
-        self.current_translating_file = filename
-        if filename in self.file_progress_items:
-            self.file_progress_items[filename]['label'].setText("Translating...")
-            self.file_progress_items[filename]['label'].setStyleSheet("color: #007acc; font-weight: bold;")
+
+        # Mark this filename as complete right away
+        self.mark_file_complete(filename, success=True)
+
+        # Clear current_translating_file if it was the same file
+        if self.current_translating_file == filename:
+            self.current_translating_file = None
+
+        # Update the top-level translating label: if there are more files
+        # remaining, keep it as a generic "Translating..." until the next
+        # file emits item-level progress (which will set the actual
+        # filename). If this was the final file, show a neutral state.
+        if current_file < total_files:
+            self.translating_label.setText("Translating...")
+        else:
+            self.translating_label.setText("—")
     
     def update_item_progress(self, filename, current_item, total_items):
         """Update the item-level progress (from tqdm)."""
