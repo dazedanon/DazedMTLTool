@@ -625,25 +625,60 @@ class TranslationTab(QWidget):
             }
         """)
         progress_view_layout.addWidget(self.progress_list)
-        
-        # Summary button (shown after completion)
-        self.reset_view_button = QPushButton("Back to File Selection")
+
+        # Summary button (shown after completion) - icon-only
+        # Use a simple left-arrow for the back action and place it on the left
+        self.reset_view_button = QPushButton("←")
+        self.reset_view_button.setToolTip("Back to File Selection")
         self.reset_view_button.clicked.connect(self.reset_to_file_view)
         self.reset_view_button.setVisible(False)
-        self.reset_view_button.setStyleSheet("""
+        # Button to open the translations (translated) folder - icon-only
+        self.open_translations_button = QPushButton("📂")
+        self.open_translations_button.setToolTip("Open the translated files folder")
+        self.open_translations_button.clicked.connect(self.open_output_folder)
+        self.open_translations_button.setVisible(False)
+
+        # Make both buttons the same fixed size and style (icon-only)
+        icon_btn_style = """
             QPushButton {
-                background-color: #0e639c;
+                background-color: #2d2d30;
                 color: white;
                 font-weight: bold;
-                padding: 8px 16px;
-                font-size: 13px;
-                border-radius: 3px;
+                font-size: 16px;
+                border: 1px solid #555555;
+                border-radius: 4px;
+                min-width: 40px;
+                max-width: 40px;
+                min-height: 36px;
+                max-height: 36px;
             }
             QPushButton:hover {
-                background-color: #1177bb;
+                background-color: #3e3e42;
+                border-left-color: #007acc;
             }
-        """)
-        progress_view_layout.addWidget(self.reset_view_button)
+            QPushButton:pressed {
+                background-color: #007acc;
+            }
+        """
+
+        self.reset_view_button.setStyleSheet(icon_btn_style)
+        self.open_translations_button.setStyleSheet(icon_btn_style)
+        # Ensure emoji/icons are readable
+        self.reset_view_button.setFont(QFont('', 12))
+        self.open_translations_button.setFont(QFont('', 12))
+
+        # Place both buttons side-by-side (icons centered)
+        buttons_container = QWidget()
+        buttons_hbox = QHBoxLayout()
+        buttons_hbox.setContentsMargins(0, 0, 0, 0)
+        buttons_hbox.setSpacing(8)
+        buttons_hbox.addStretch()
+        # Back button on the left
+        buttons_hbox.addWidget(self.reset_view_button)
+        buttons_hbox.addWidget(self.open_translations_button)
+        buttons_hbox.addStretch()
+        buttons_container.setLayout(buttons_hbox)
+        progress_view_layout.addWidget(buttons_container)
         
         progress_view_page.setLayout(progress_view_layout)
         self.file_stack.addWidget(progress_view_page)  # Index 1
@@ -1122,6 +1157,11 @@ class TranslationTab(QWidget):
         """Reset back to file selection view."""
         self.file_stack.setCurrentIndex(0)
         self.reset_view_button.setVisible(False)
+        # Also hide the open translations button when returning to file view
+        try:
+            self.open_translations_button.setVisible(False)
+        except Exception:
+            pass
         self.translate_button.setVisible(True)
         self.stop_button.setVisible(False)
         self.refresh_file_lists()
@@ -1177,6 +1217,11 @@ class TranslationTab(QWidget):
             # Toggle button visibility
             self.translate_button.setVisible(False)
             self.stop_button.setVisible(True)
+            # Ensure the open translations button is hidden while running
+            try:
+                self.open_translations_button.setVisible(False)
+            except Exception:
+                pass
             
             # Initialize progress tracking
             self.files_completed = 0
@@ -1282,6 +1327,11 @@ class TranslationTab(QWidget):
         # Show reset button instead of translate button
         self.stop_button.setVisible(False)
         self.reset_view_button.setVisible(True)
+        # Show the button to open the translated files folder
+        try:
+            self.open_translations_button.setVisible(True)
+        except Exception:
+            pass
         
         # Update progress display
         if success:
