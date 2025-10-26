@@ -16,6 +16,12 @@ try:
 except ImportError:
     # Fallback if config_integration is not available
     ConfigIntegration = None
+try:
+    # Prefer importing the project's canonical defaults if available
+    import set_defaults
+    CANONICAL_DEFAULTS = getattr(set_defaults, 'DEFAULTS', None)
+except Exception:
+    CANONICAL_DEFAULTS = None
 
 
 def create_section_label(text):
@@ -165,8 +171,38 @@ class RPGMakerTab(QWidget):
         self.engine = engine.upper()
         self.config_integration = ConfigIntegration() if ConfigIntegration else None
         self.init_ui()
-        self.connect_auto_apply()  # Connect auto-apply before setting defaults
-        self.reset_to_defaults()
+
+        # Load configuration from the module when available. We must avoid
+        # auto-applying/writing to the module at startup. Therefore:
+        # - Set the UI state from the module config if present
+        # - Otherwise fall back to DEFAULT_CONFIG
+        # - Only after the UI is initialized and set, connect auto-apply
+        try:
+            # Ensure signals are not connected yet (safe no-op if not)
+            self.disconnect_auto_apply()
+
+            loaded_config = None
+            if self.config_integration:
+                module_filename = "rpgmakermvmz.py" if self.engine != "ACE" else "rpgmakerace.py"
+                module_path = Path("modules") / module_filename
+                loaded_config = self.config_integration.read_current_config(module_path)
+
+            # Use loaded module config if available, otherwise use canonical defaults
+            if loaded_config:
+                self.set_config(loaded_config)
+            else:
+                # Prefer project-level canonical defaults when present
+                defaults = CANONICAL_DEFAULTS if CANONICAL_DEFAULTS is not None else self.DEFAULT_CONFIG
+                # Ensure boolean values (set_config expects booleans)
+                self.set_config(defaults)
+
+        except Exception:
+            # On any problem while reading module config, fall back to canonical/defaults
+            defaults = CANONICAL_DEFAULTS if CANONICAL_DEFAULTS is not None else self.DEFAULT_CONFIG
+            self.set_config(defaults)
+
+        # Now connect auto-apply so user changes will update the module
+        self.connect_auto_apply()
         
     def init_ui(self):
         """Initialize the user interface with compact two-column layout."""
@@ -302,14 +338,7 @@ class RPGMakerTab(QWidget):
         self.reset_button.setMaximumWidth(180)
         self.reset_button.setMinimumHeight(32)
         
-        self.apply_button = QPushButton("✓ Apply Settings")
-        self.apply_button.clicked.connect(self.apply_to_module)
-        self.apply_button.setMaximumWidth(180)
-        self.apply_button.setMinimumHeight(32)
-        self.apply_button.setStyleSheet("font-weight: bold;")
-        
         button_layout.addWidget(self.reset_button)
-        button_layout.addWidget(self.apply_button)
         button_layout.addStretch()
         
         main_layout.addLayout(button_layout)
@@ -319,40 +348,16 @@ class RPGMakerTab(QWidget):
         """Reset all settings to default values."""
         # Temporarily disconnect signals to avoid multiple apply calls
         self.disconnect_auto_apply()
-        
-        # Apply default values from the DEFAULT_CONFIG constant
-        self.first_line_speakers_cb.setChecked(self.DEFAULT_CONFIG["FIRSTLINESPEAKERS"])
-        self.facename101_cb.setChecked(self.DEFAULT_CONFIG["FACENAME101"])
-        self.names_cb.setChecked(self.DEFAULT_CONFIG["NAMES"])
-        self.brflag_cb.setChecked(self.DEFAULT_CONFIG["BRFLAG"])
-        self.fixtextwrap_cb.setChecked(self.DEFAULT_CONFIG["FIXTEXTWRAP"])
-        self.ignoretltext_cb.setChecked(self.DEFAULT_CONFIG["IGNORETLTEXT"])
-        
-        # Main dialogue codes
-        self.code401_cb.setChecked(self.DEFAULT_CONFIG["CODE401"])
-        self.code405_cb.setChecked(self.DEFAULT_CONFIG["CODE405"])
-        self.code102_cb.setChecked(self.DEFAULT_CONFIG["CODE102"])
-        
-        # Optional codes
-        self.code101_cb.setChecked(self.DEFAULT_CONFIG["CODE101"])
-        self.code408_cb.setChecked(self.DEFAULT_CONFIG["CODE408"])
-        
-        # Variable codes
-        self.code122_cb.setChecked(self.DEFAULT_CONFIG["CODE122"])
-        
-        # Plugins / Scripts / Other codes
-        self.code355655_cb.setChecked(self.DEFAULT_CONFIG.get("CODE355655", False))
-        self.code357_cb.setChecked(self.DEFAULT_CONFIG.get("CODE357", False))
-        self.code657_cb.setChecked(self.DEFAULT_CONFIG.get("CODE657", False))
-        self.code356_cb.setChecked(self.DEFAULT_CONFIG.get("CODE356", False))
-        self.code320_cb.setChecked(self.DEFAULT_CONFIG.get("CODE320", False))
-        self.code324_cb.setChecked(self.DEFAULT_CONFIG.get("CODE324", False))
-        self.code325_cb.setChecked(self.DEFAULT_CONFIG.get("CODE325", False))
-        self.code111_cb.setChecked(self.DEFAULT_CONFIG.get("CODE111", False))
-        self.code108_cb.setChecked(self.DEFAULT_CONFIG.get("CODE108", False))
-                
+        # Prefer canonical defaults when available (imported as CANONICAL_DEFAULTS)
+        defaults = CANONICAL_DEFAULTS if 'CANONICAL_DEFAULTS' in globals() and CANONICAL_DEFAULTS is not None else self.DEFAULT_CONFIG
+
+        # Set the UI state from the defaults dictionary using set_config
+        # This keeps the logic centralized and ensures correct types.
+        self.set_config(defaults)
+
         # Reconnect signals and apply changes once
         self.connect_auto_apply()
+        # Apply to module (silent)
         self.apply_to_module(show_messages=False)
         
     def reset_to_defaults_with_message(self):
