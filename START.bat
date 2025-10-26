@@ -6,69 +6,142 @@ echo    DazedMTLTool Startup Script
 echo ==========================================
 echo.
 
-:: Check if Python is installed and get version
-echo [1/4] Checking Python installation...
-python --version >nul 2>&1
-if errorlevel 1 (
-    echo ERROR: Python is not installed or not in PATH.
-    echo Please install Python 3.12 or higher from https://python.org
+:: Track whether we actually need to create a new venv
+set "NEED_VENV_CREATE=0"
+
+:: Determine which venv directory to use (.venv or venv)
+set "VENV_DIR="
+if exist ".venv" set "VENV_DIR=.venv"
+if not defined VENV_DIR if exist "venv" set "VENV_DIR=venv"
+set "CREATE_VENV_DIR="
+
+
+:: Step 1: Check if a virtual environment exists (.venv or venv)
+echo [1/4] Checking for a virtual environment...
+if defined VENV_DIR (
+    echo !VENV_DIR! found. Checking its Python version...
+    if not exist "!VENV_DIR!\Scripts\python.exe" (
+        echo ERROR: Python executable not found at "!VENV_DIR!\Scripts\python.exe".
+        set "CREATE_VENV_DIR=!VENV_DIR!"
+        call :BackupVenv "!VENV_DIR!"
+        set "NEED_VENV_CREATE=1"
+    ) else (
+        for /f "tokens=2" %%i in ('"!VENV_DIR!\Scripts\python.exe" --version 2^>^&1') do set VENV_PYTHON_VERSION=%%i
+        if not defined VENV_PYTHON_VERSION (
+            echo ERROR: Could not determine Python version from "!VENV_DIR!\Scripts\python.exe".
+            set "CREATE_VENV_DIR=!VENV_DIR!"
+            call :BackupVenv "!VENV_DIR!"
+            set "NEED_VENV_CREATE=1"
+        ) else (
+            echo Detected Python version: !VENV_PYTHON_VERSION!
+            for /f "tokens=1,2 delims=." %%a in ("!VENV_PYTHON_VERSION!") do (
+                set VENV_MAJOR=%%a
+                set VENV_MINOR=%%b
+            )
+            if !VENV_MAJOR! EQU 3 if !VENV_MINOR! GEQ 12 if !VENV_MINOR! LSS 14 (
+                echo ✓ !VENV_DIR! Python version !VENV_PYTHON_VERSION! is compatible ^(^>^=3.12 and ^<3.14^).
+                goto :activate_venv
+            ) else (
+                echo !VENV_DIR! Python version !VENV_PYTHON_VERSION! is not supported ^(requires ^>^=3.12 and ^<3.14^)
+                echo Backing up !VENV_DIR!...
+                set "CREATE_VENV_DIR=!VENV_DIR!"
+                call :BackupVenv "!VENV_DIR!"
+                set "NEED_VENV_CREATE=1"
+            )
+        )
+    )
+) else (
+    echo No existing virtual environment found.
+    set "CREATE_VENV_DIR=.venv"
+    set "NEED_VENV_CREATE=1"
+)
+echo.
+
+:: If we don't need to create a new venv, skip straight to activation
+if "%NEED_VENV_CREATE%"=="0" goto :activate_venv
+
+:: Step 2: Find suitable global Python and create a virtual environment
+
+set "FOUND_PYTHON="
+for /f "delims=" %%p in ('where python') do (
+    call :CheckPythonVersion "%%p"
+)
+
+if not defined FOUND_PYTHON (
+    echo ERROR: No suitable Python ^(>=3.12 and <3.14^) found in PATH.
+    echo Please install Python 3.12 or 3.13 and ensure it is in your PATH.
     pause
     exit /b 1
 )
 
-:: Get Python version and check if it's 3.12 or higher
-for /f "tokens=2" %%i in ('python --version 2^>^&1') do set PYTHON_VERSION=%%i
+:create_venv
+if not defined CREATE_VENV_DIR set "CREATE_VENV_DIR=.venv"
+echo Creating new !CREATE_VENV_DIR! using !FOUND_PYTHON! ...
+"!FOUND_PYTHON!" -m venv !CREATE_VENV_DIR!
+if errorlevel 1 (
+    echo ERROR: Failed to create virtual environment.
+    pause
+    exit /b 1
+)
+echo ✓ Virtual environment created
+echo.
+
+:: Proceed to activation after creating the venv to avoid falling through into subroutines
+set "VENV_DIR=!CREATE_VENV_DIR!"
+goto :activate_venv
+
+:CheckPythonVersion
+rem -- %1 is the python executable path
+for /f "tokens=2" %%i in ('"%~1" --version 2^>^&1') do set PYTHON_VERSION=%%i
 for /f "tokens=1,2 delims=." %%a in ("%PYTHON_VERSION%") do (
     set MAJOR=%%a
     set MINOR=%%b
 )
-
-if !MAJOR! LSS 3 (
-    echo ERROR: Python version !PYTHON_VERSION! is too old.
-    echo Please install Python 3.12 or higher.
-    pause
-    exit /b 1
+if !MAJOR! EQU 3 if !MINOR! GEQ 12 if !MINOR! LSS 14 (
+    set "FOUND_PYTHON=%~1"
 )
+goto :eof
 
-if !MAJOR! EQU 3 if !MINOR! LSS 12 (
-    echo ERROR: Python version !PYTHON_VERSION! is too old.
-    echo Please install Python 3.12 or higher.
-    pause
-    exit /b 1
-)
-
-echo ✓ Python !PYTHON_VERSION! detected (compatible)
-echo.
-
-:: Check if virtual environment exists
-echo [2/4] Checking virtual environment...
-if not exist "venv" (
-    echo Creating virtual environment...
-    python -m venv venv
-    if errorlevel 1 (
-        echo ERROR: Failed to create virtual environment.
+:activate_venv
+echo Activating virtual environment...
+call !VENV_DIR!\Scripts\activate.bat
+if errorlevel 1 (
+    echo ERROR: Failed to activate virtual environment at "!VENV_DIR!".
+    echo Attempting to recreate the virtual environment with a compatible Python...
+    set "CREATE_VENV_DIR=!VENV_DIR!"
+    call :BackupVenv "!VENV_DIR!"
+    set "FOUND_PYTHON="
+    for /f "delims=" %%p in ('where python') do (
+        call :CheckPythonVersion "%%p"
+    )
+    if not defined FOUND_PYTHON (
+        echo ERROR: No suitable Python ^(^>^=3.12 and ^<3.14^) found in PATH for recreation.
         pause
         exit /b 1
     )
-    echo ✓ Virtual environment created
-) else (
-    echo ✓ Virtual environment already exists
-)
-echo.
-
-:: Activate virtual environment
-echo [3/4] Activating virtual environment...
-call venv\Scripts\activate.bat
-if errorlevel 1 (
-    echo ERROR: Failed to activate virtual environment.
-    pause
-    exit /b 1
+    echo Recreating !CREATE_VENV_DIR! using !FOUND_PYTHON! ...
+    "!FOUND_PYTHON!" -m venv !CREATE_VENV_DIR!
+    if errorlevel 1 (
+        echo ERROR: Failed to create virtual environment during recreation.
+        pause
+        exit /b 1
+    )
+    set "VENV_DIR=!CREATE_VENV_DIR!"
+    echo Retrying activation...
+    call !VENV_DIR!\Scripts\activate.bat
+    if errorlevel 1 (
+        echo ERROR: Activation failed after recreation.
+        pause
+        exit /b 1
+    )
 )
 echo ✓ Virtual environment activated
 echo.
 
+:: (proceeding to dependency checks and launch)
+
 :: Check and install dependencies
-echo [4/4] Checking dependencies...
+echo Checking dependencies...
 echo Checking if requirements are satisfied...
 
 :: Try importing key packages to see if they're installed
@@ -107,3 +180,25 @@ if errorlevel 1 (
 echo.
 echo GUI closed successfully.
 pause
+
+:: End of main flow - prevent falling through into subroutines below
+goto :eof
+
+:: Backup venv subroutine (supports .venv or venv)
+:BackupVenv
+set "TARGET_DIR=%~1"
+if not defined TARGET_DIR set "TARGET_DIR=.venv"
+set BAK_IDX=1
+:BackupLoop
+if exist "%TARGET_DIR%.bak_!BAK_IDX!" (
+    set /a BAK_IDX+=1
+    goto BackupLoop
+)
+move /Y "%TARGET_DIR%" "%TARGET_DIR%.bak_!BAK_IDX!" >nul 2>&1
+if errorlevel 1 (
+    echo ERROR: Failed to back up %TARGET_DIR% to %TARGET_DIR%.bak_!BAK_IDX!.
+    echo Please ensure no files are locked and try again.
+    goto :eof
+)
+echo %TARGET_DIR% renamed to %TARGET_DIR%.bak_!BAK_IDX!
+goto :eof
