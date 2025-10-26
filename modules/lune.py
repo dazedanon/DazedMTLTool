@@ -264,7 +264,6 @@ def translateJSON(data, pbar):
                                     batch.clear()
 
                             if insertBool is False:
-                                pbar.update(1)
                                 i += 1
 
                             currentGroup = []
@@ -295,7 +294,6 @@ def translateJSON(data, pbar):
                                 batch.clear()
         else:
             i += 1
-            pbar.update(1)
 
         # Translate Batch if not empty and EOF
         if len(batch) != 0 and i >= len(data):

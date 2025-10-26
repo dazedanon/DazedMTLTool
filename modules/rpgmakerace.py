@@ -797,7 +797,6 @@ def searchNames(data, pbar, context):
                                 totalTokens[0] += msgResponse[1][0]
                                 totalTokens[1] += msgResponse[1][1]
                                 if pbar is not None:
-                                    pbar.update(1)
                                     pbar.refresh()
                                 number += 1
 
@@ -811,7 +810,6 @@ def searchNames(data, pbar, context):
                                 totalTokens[0] += msgResponse[1][0]
                                 totalTokens[1] += msgResponse[1][1]
                                 if pbar is not None:
-                                    pbar.update(1)
                                     pbar.refresh()
                                 number += 1
                         else:
@@ -874,7 +872,6 @@ def searchNames(data, pbar, context):
                 totalTokens[0] += response[1][0]
                 totalTokens[1] += response[1][1]
                 if pbar is not None and nameList:
-                    pbar.update(len(nameList))
                     pbar.refresh()
 
                 # Nickname
@@ -884,7 +881,6 @@ def searchNames(data, pbar, context):
                     totalTokens[0] += response[1][0]
                     totalTokens[1] += response[1][1]
                     if pbar is not None:
-                        pbar.update(len(nicknameList))
                         pbar.refresh()
 
                 # Profile
@@ -894,7 +890,6 @@ def searchNames(data, pbar, context):
                     totalTokens[0] += response[1][0]
                     totalTokens[1] += response[1][1]
                     if pbar is not None:
-                        pbar.update(len(profileList))
                         pbar.refresh()
 
                 # Set Data
@@ -937,7 +932,6 @@ def searchNames(data, pbar, context):
                 totalTokens[0] += response[1][0]
                 totalTokens[1] += response[1][1]
                 if pbar is not None and nameList:
-                    pbar.update(len(nameList))
                     pbar.refresh()
 
                 # Description
@@ -951,7 +945,6 @@ def searchNames(data, pbar, context):
                     totalTokens[0] += response[1][0]
                     totalTokens[1] += response[1][1]
                     if pbar is not None:
-                        pbar.update(len(descriptionList))
                         pbar.refresh()
 
                 # Set Data
@@ -988,7 +981,6 @@ def searchNames(data, pbar, context):
                 totalTokens[0] += response[1][0]
                 totalTokens[1] += response[1][1]
                 if pbar is not None and nameList:
-                    pbar.update(len(nameList))
                     pbar.refresh()
 
                 # Set Data
