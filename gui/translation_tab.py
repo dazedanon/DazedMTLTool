@@ -14,6 +14,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed, Future
 import traceback
 import signal
 import multiprocessing
+import re
 from colorama import Fore
 from tqdm import tqdm
 from dotenv import load_dotenv
@@ -434,6 +435,13 @@ class TranslationTab(QWidget):
         self.files_total = 0
         self.file_progress_items = {}  # filename -> {widget, label, progress_bar, checkbox}
         self.current_translating_file = None
+        # Totals tracking
+        self.totals_input_tokens = 0
+        self.totals_output_tokens = 0
+        self.totals_cost = 0.0
+        self.totals_time = 0.0
+        # Totals widget reference
+        self.totals_widget = None
         
         self.setup_ui()
         self.setup_module_list()
@@ -501,8 +509,7 @@ class TranslationTab(QWidget):
                 background-color: #3e3e42;
             }
         """)
-        files_container.addWidget(self.file_list)
-        
+        # Place the two main file buttons on the left and totals on the right
         # File management buttons (icon-based, vertical on the side)
         file_buttons = QVBoxLayout()
         file_buttons.setSpacing(0)
@@ -591,13 +598,19 @@ class TranslationTab(QWidget):
         
         # Add stretch to push buttons to top
         file_buttons.addStretch()
-        
-        # Add button column to the container
+
+        # Add button column to the container on the LEFT
         files_container.addLayout(file_buttons)
-        
+        # Then add the file list (center)
+        files_container.addWidget(self.file_list)
+
+        # (Totals footer will be created below and shown only when translation starts)
+
         # Add the container to file list page and allow it to expand so
         # the file list can grow and push settings to the bottom.
         file_list_layout.addLayout(files_container, 1)
+        # (Totals footer removed here; totals will be shown next to the
+        # back/open buttons in the progress view as requested.)
         file_list_page.setLayout(file_list_layout)
         self.file_stack.addWidget(file_list_page)  # Index 0
         
@@ -671,16 +684,77 @@ class TranslationTab(QWidget):
         self.reset_view_button.setFont(QFont('', 12))
         self.open_translations_button.setFont(QFont('', 12))
 
-        # Place both buttons side-by-side (icons centered)
+        # Create the stop button here so it sits in the same row as the
+        # back/open buttons. Use a compact icon style to match them but
+        # make it visually distinct (red) to indicate a destructive action.
+        stop_button_style = """
+            QPushButton {
+                background-color: #c0392b; /* red */
+                color: white;
+                font-weight: bold;
+                font-size: 16px;
+                border: 1px solid #7f2e28;
+                border-radius: 4px;
+                min-width: 40px;
+                max-width: 40px;
+                min-height: 36px;
+                max-height: 36px;
+            }
+            QPushButton:hover {
+                background-color: #e04b43;
+                border-left-color: #ff6b60;
+            }
+            QPushButton:pressed {
+                background-color: #a82a20;
+            }
+        """
+
+        # Use a clear stop-sign emoji so the glyph is rendered as a stop icon
+        # and not as a colored square on some platforms.
+        self.stop_button = QPushButton("🛑")
+        self.stop_button.setToolTip("Stop Translation")
+        self.stop_button.clicked.connect(self.stop_translation)
+        self.stop_button.setStyleSheet(stop_button_style)
+        # Slightly larger font for the emoji to make it visually clear
+        self.stop_button.setFont(QFont('', 14))
+        self.stop_button.setVisible(False)
+
+        # Place both buttons on the left and totals on the right
         buttons_container = QWidget()
+        # Prevent the buttons row from changing the file list box size when
+        # buttons/totals are shown — keep a fixed height for the row.
+        buttons_container.setFixedHeight(64)
+        buttons_container.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         buttons_hbox = QHBoxLayout()
         buttons_hbox.setContentsMargins(0, 0, 0, 0)
         buttons_hbox.setSpacing(8)
-        buttons_hbox.addStretch()
-        # Back button on the left
+        # Back/Open/Stop buttons on the left (stop shown while running)
+        buttons_hbox.addWidget(self.stop_button)
         buttons_hbox.addWidget(self.reset_view_button)
         buttons_hbox.addWidget(self.open_translations_button)
+        # Spacer between buttons and totals
         buttons_hbox.addStretch()
+        # Totals widget on the right (hidden until start)
+        self.totals_widget = QWidget()
+        # Keep totals widget a fixed height so showing it doesn't expand the
+        # input files box vertically.
+        self.totals_widget.setFixedHeight(64)
+        self.totals_widget.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        totals_layout = QVBoxLayout()
+        totals_layout.setContentsMargins(6, 2, 6, 2)
+        totals_layout.setSpacing(2)
+        self.totals_tokens_label = QLabel("Tokens: 0 in / 0 out")
+        self.totals_tokens_label.setStyleSheet("color: #f1c40f; font-weight: bold;")
+        totals_layout.addWidget(self.totals_tokens_label)
+        self.totals_cost_label = QLabel("Cost: $0.0000")
+        self.totals_cost_label.setStyleSheet("color: #4ec9b0; font-weight: bold;")
+        totals_layout.addWidget(self.totals_cost_label)
+        self.totals_time_label = QLabel("Time: 0.0s")
+        self.totals_time_label.setStyleSheet("color: #4da6ff; font-weight: bold;")
+        totals_layout.addWidget(self.totals_time_label)
+        self.totals_widget.setLayout(totals_layout)
+        self.totals_widget.setVisible(False)
+        buttons_hbox.addWidget(self.totals_widget)
         buttons_container.setLayout(buttons_hbox)
         progress_view_layout.addWidget(buttons_container)
         
@@ -801,23 +875,6 @@ class TranslationTab(QWidget):
             }
         """)
         button_layout.addWidget(self.translate_button)
-        self.stop_button = QPushButton("Stop Translation")
-        self.stop_button.clicked.connect(self.stop_translation)
-        self.stop_button.setVisible(False)  # Hidden by default
-        self.stop_button.setStyleSheet("""
-            QPushButton {
-                background-color: #cc0000;
-                color: white;
-                font-weight: bold;
-                padding: 10px 20px;
-                font-size: 14px;
-                border-radius: 5px;
-            }
-            QPushButton:hover {
-                background-color: #aa0000;
-            }
-        """)
-        button_layout.addWidget(self.stop_button)
         button_layout.addStretch()
         layout.addLayout(button_layout)
         left_widget.setLayout(layout)
@@ -1164,7 +1221,26 @@ class TranslationTab(QWidget):
         progress_label.setStyleSheet("color: #888888; font-size: 12px;")
         progress_label.setFixedWidth(120)
         layout.addWidget(progress_label)
-        
+
+        # Inline result labels (hidden until completion)
+        tokens_label = QLabel("")
+        tokens_label.setStyleSheet("color: #f1c40f; font-weight: bold; font-size: 12px;")
+        tokens_label.setFixedWidth(140)
+        tokens_label.setVisible(False)
+        layout.addWidget(tokens_label)
+
+        cost_label = QLabel("")
+        cost_label.setStyleSheet("color: #4ec9b0; font-weight: bold; font-size: 12px;")
+        cost_label.setFixedWidth(110)
+        cost_label.setVisible(False)
+        layout.addWidget(cost_label)
+
+        time_label = QLabel("")
+        time_label.setStyleSheet("color: #4da6ff; font-weight: bold; font-size: 12px;")
+        time_label.setFixedWidth(90)
+        time_label.setVisible(False)
+        layout.addWidget(time_label)
+
         # Progress bar (stretch to fill remaining space)
         progress_bar = QProgressBar()
         progress_bar.setMaximum(100)
@@ -1192,7 +1268,10 @@ class TranslationTab(QWidget):
             'widget': widget,
             'checkbox': checkbox,
             'label': progress_label,
-            'progress_bar': progress_bar
+            'progress_bar': progress_bar,
+            'tokens_label': tokens_label,
+            'cost_label': cost_label,
+            'time_label': time_label
         }
         
         return widget
@@ -1211,10 +1290,24 @@ class TranslationTab(QWidget):
         if filename in self.file_progress_items:
             item = self.file_progress_items[filename]
             item['checkbox'].setChecked(True)
+            # If we have detailed result labels already set (via append_log),
+            # show them and hide the progress bar to make room.
             if success:
-                item['label'].setText("✓ Complete")
-                item['label'].setStyleSheet("color: #4ec9b0; font-weight: bold;")
-                item['progress_bar'].setValue(item['progress_bar'].maximum())
+                # If tokens/cost/time were already filled by parse, they'll be visible.
+                if item.get('tokens_label') and item['tokens_label'].text():
+                    item['tokens_label'].setVisible(True)
+                    item['cost_label'].setVisible(True)
+                    item['time_label'].setVisible(True)
+                    item['label'].setText("✓ Complete")
+                    item['label'].setStyleSheet("color: #4ec9b0; font-weight: bold;")
+                    try:
+                        item['progress_bar'].setVisible(False)
+                    except Exception:
+                        pass
+                else:
+                    item['label'].setText("✓ Complete")
+                    item['label'].setStyleSheet("color: #4ec9b0; font-weight: bold;")
+                    item['progress_bar'].setValue(item['progress_bar'].maximum())
             else:
                 item['label'].setText("✗ Failed")
                 item['label'].setStyleSheet("color: #f48771; font-weight: bold;")
@@ -1226,6 +1319,12 @@ class TranslationTab(QWidget):
         # Also hide the open translations button when returning to file view
         try:
             self.open_translations_button.setVisible(False)
+        except Exception:
+            pass
+        # Hide totals when returning to file view
+        try:
+            if hasattr(self, 'totals_widget') and self.totals_widget:
+                self.totals_widget.setVisible(False)
         except Exception:
             pass
         self.translate_button.setVisible(True)
@@ -1283,6 +1382,22 @@ class TranslationTab(QWidget):
             # Toggle button visibility
             self.translate_button.setVisible(False)
             self.stop_button.setVisible(True)
+            # Show totals footer and reset totals when starting translation
+            try:
+                self.totals_input_tokens = 0
+                self.totals_output_tokens = 0
+                self.totals_cost = 0.0
+                self.totals_time = 0.0
+                if hasattr(self, 'totals_tokens_label'):
+                    self.totals_tokens_label.setText("Tokens: 0 in / 0 out")
+                if hasattr(self, 'totals_cost_label'):
+                    self.totals_cost_label.setText("Cost: $0.0000")
+                if hasattr(self, 'totals_time_label'):
+                    self.totals_time_label.setText("Time: 0.0s")
+                if hasattr(self, 'totals_widget') and self.totals_widget:
+                    self.totals_widget.setVisible(True)
+            except Exception:
+                pass
             # Ensure the open translations button is hidden while running
             try:
                 self.open_translations_button.setVisible(False)
@@ -1330,8 +1445,68 @@ class TranslationTab(QWidget):
         # Forwarding worker messages here caused non-file messages to appear
         # in the log window. Modules write to the log file themselves, so
         # we no longer push worker messages into the UI.
-        # Keep this method as a no-op to preserve the signal connection.
+        # Parse worker/module output lines for per-file result details.
+        # Example line: "Enemies.json: [Input: 8865][Output: 663][Cost: $0.0230][20.1s] ✓"
+        try:
+            pattern = r'^(?P<filename>[^:]+):.*?\[Input:\s*(?P<input>\d+)\].*?\[Output:\s*(?P<output>\d+)\].*?\[Cost:\s*\$(?P<cost>[\d\.]+)\].*?\[(?P<time>[\d\.]+)s\]'
+            m = re.search(pattern, message)
+            if m:
+                filename = m.group('filename').strip()
+                input_tokens = int(m.group('input'))
+                output_tokens = int(m.group('output'))
+                cost = float(m.group('cost'))
+                time_s = float(m.group('time'))
+                # Apply the parsed results to the UI
+                try:
+                    self._apply_file_result(filename, input_tokens, output_tokens, cost, time_s)
+                except Exception:
+                    pass
+        except Exception:
+            # If parsing fails, ignore and do not forward to log viewer
+            pass
+        # Do not forward this message into the LogViewer (we tail the log file separately).
         return
+
+    def _apply_file_result(self, filename, input_tokens, output_tokens, cost, time_s):
+        """Update a file's item UI with parsed result details and update totals."""
+        # Update per-item display
+        if filename in self.file_progress_items:
+            item = self.file_progress_items[filename]
+            try:
+                item['tokens_label'].setText(f"Input: {input_tokens} | Output: {output_tokens}")
+                item['cost_label'].setText(f"${cost:.4f}")
+                item['time_label'].setText(f"{time_s:.1f}s")
+                item['tokens_label'].setVisible(True)
+                item['cost_label'].setVisible(True)
+                item['time_label'].setVisible(True)
+                try:
+                    item['progress_bar'].setVisible(False)
+                except Exception:
+                    pass
+            except Exception:
+                pass
+
+        # Update totals
+        try:
+            self.totals_input_tokens += int(input_tokens)
+            self.totals_output_tokens += int(output_tokens)
+            self.totals_cost += float(cost)
+            # Total time should be the longest single-file time (not the sum)
+            self.totals_time = max(self.totals_time, float(time_s))
+            # Refresh totals labels
+            if hasattr(self, 'totals_tokens_label'):
+                self.totals_tokens_label.setText(f"Tokens: {self.totals_input_tokens} in / {self.totals_output_tokens} out")
+            if hasattr(self, 'totals_cost_label'):
+                self.totals_cost_label.setText(f"Cost: ${self.totals_cost:.4f}")
+            if hasattr(self, 'totals_time_label'):
+                self.totals_time_label.setText(f"Time: {self.totals_time:.1f}s")
+        except Exception:
+            pass
+        # Mark file as complete (this will ensure checkbox and label updated)
+        try:
+            self.mark_file_complete(filename, success=True)
+        except Exception:
+            pass
     
     def update_file_progress(self, current_file, total_files, filename):
         """Update the file-level progress."""
