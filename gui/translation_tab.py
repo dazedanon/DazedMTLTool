@@ -1242,37 +1242,38 @@ class TranslationTab(QWidget):
         """)
         layout.addWidget(progress_bar, 1)  # Stretch factor of 1 to fill remaining space
 
-        # Inline result labels (hidden until completion) - anchored to the right
-        # Order: tokens | time | status(check) | cost
+    # Inline result labels (hidden until completion) - anchored to the right
+    # Order (visual): tokens | time | cost | status(check)
         tokens_label = QLabel("")
-        tokens_label.setStyleSheet("color: #f1c40f; font-weight: bold; font-size: 11px;")
+        tokens_label.setStyleSheet("color: #f1c40f; font-weight: bold; font-size: 9px;")
         tokens_label.setFixedWidth(100)
         tokens_label.setVisible(False)
         tokens_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         layout.addWidget(tokens_label)
 
         time_label = QLabel("")
-        time_label.setStyleSheet("color: #4da6ff; font-weight: bold; font-size: 11px;")
-        time_label.setFixedWidth(70)
+        time_label.setStyleSheet("color: #4da6ff; font-weight: bold; font-size: 9px;")
+        time_label.setFixedWidth(90)
         time_label.setVisible(False)
         time_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         layout.addWidget(time_label)
 
-        # Small status label (checkmark or X) placed between time and cost
-        status_label = QLabel("")
-        status_label.setStyleSheet("font-weight: bold; font-size: 11px;")
-        status_label.setFixedWidth(22)
-        status_label.setVisible(False)
-        status_label.setAlignment(Qt.AlignCenter)
-        layout.addWidget(status_label)
-
+        # Cost label (to the left of the status/checkmark)
         cost_label = QLabel("")
-        cost_label.setStyleSheet("color: #4ec9b0; font-weight: bold; font-size: 11px;")
-        cost_label.setFixedWidth(80)
+        cost_label.setStyleSheet("color: #4ec9b0; font-weight: bold; font-size: 9px;")
+        cost_label.setFixedWidth(100)
         cost_label.setVisible(False)
         cost_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         layout.addWidget(cost_label)
-        
+
+        # Small status label (checkmark or X) placed to the right of cost
+        status_label = QLabel("")
+        status_label.setStyleSheet("font-weight: bold; font-size: 11px;")
+        status_label.setFixedWidth(100)
+        status_label.setVisible(False)
+        status_label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(status_label)
+            
         widget.setLayout(layout)
         
         # Store references
