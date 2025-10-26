@@ -9,6 +9,11 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import pyqtSignal
 import re
+try:
+    import set_defaults
+    CANONICAL_DEFAULTS = getattr(set_defaults, 'DEFAULTS', None)
+except Exception:
+    CANONICAL_DEFAULTS = None
 
 def create_section_label(text):
     """Create a styled section header label."""
@@ -47,8 +52,15 @@ class WolfTab(QWidget):
 
     def __init__(self):
         super().__init__()
+        # Initialize UI, set values from module/canonical defaults, then connect auto-apply
         self.init_ui()
-        self.reset_to_defaults()
+
+        # Prefer canonical defaults when present; do not apply to module on init
+        defaults = CANONICAL_DEFAULTS if CANONICAL_DEFAULTS is not None else self.DEFAULT_CONFIG
+        # Ensure UI uses these defaults without triggering writes (connect_auto_apply is called after)
+        self.set_config(defaults)
+        # Now connect auto-apply handlers
+        self.connect_auto_apply()
 
     def init_ui(self):
         """Initialize the user interface with compact two-column layout."""
@@ -164,30 +176,14 @@ class WolfTab(QWidget):
         self.reset_btn.setMaximumWidth(180)
         self.reset_btn.setMinimumHeight(32)
         
-        self.apply_btn = QPushButton("✓ Apply Settings")
-        self.apply_btn.clicked.connect(lambda: self.apply_to_module(True))
-        self.apply_btn.setMaximumWidth(180)
-        self.apply_btn.setMinimumHeight(32)
-        self.apply_btn.setStyleSheet("font-weight: bold;")
-        
         button_layout.addWidget(self.reset_btn)
-        button_layout.addWidget(self.apply_btn)
         button_layout.addStretch()
         
         main_layout.addLayout(button_layout)
         self.setLayout(main_layout)
         
-        # Connect auto-apply
-        self.code101_cb.stateChanged.connect(lambda: self.apply_to_module(False))
-        self.code102_cb.stateChanged.connect(lambda: self.apply_to_module(False))
-        self.code150_cb.stateChanged.connect(lambda: self.apply_to_module(False))
-        self.code122_cb.stateChanged.connect(lambda: self.apply_to_module(False))
-        self.code210_cb.stateChanged.connect(lambda: self.apply_to_module(False))
-        self.code300_cb.stateChanged.connect(lambda: self.apply_to_module(False))
-        self.code250_cb.stateChanged.connect(lambda: self.apply_to_module(False))
-        
-        for cb in self.db_checkboxes.values():
-            cb.stateChanged.connect(lambda: self.apply_to_module(False))
+        # Note: auto-apply connections are established by connect_auto_apply()
+        pass
 
 
     def get_config(self):
@@ -206,19 +202,35 @@ class WolfTab(QWidget):
             config[key] = cb.isChecked()
         return config
 
+    def set_config(self, config: dict):
+        """Set configuration from dictionary (does not write to module)."""
+        self.code101_cb.setChecked(config.get("CODE101", False))
+        self.code102_cb.setChecked(config.get("CODE102", False))
+        self.code150_cb.setChecked(config.get("CODE150", False))
+        self.code122_cb.setChecked(config.get("CODE122", False))
+        self.code210_cb.setChecked(config.get("CODE210", False))
+        self.code300_cb.setChecked(config.get("CODE300", False))
+        self.code250_cb.setChecked(config.get("CODE250", False))
+        for key, cb in self.db_checkboxes.items():
+            cb.setChecked(config.get(key, False))
+
+    def connect_auto_apply(self):
+        """Connect widget changes to auto-apply behavior."""
+        self.code101_cb.stateChanged.connect(lambda: self.apply_to_module(False))
+        self.code102_cb.stateChanged.connect(lambda: self.apply_to_module(False))
+        self.code150_cb.stateChanged.connect(lambda: self.apply_to_module(False))
+        self.code122_cb.stateChanged.connect(lambda: self.apply_to_module(False))
+        self.code210_cb.stateChanged.connect(lambda: self.apply_to_module(False))
+        self.code300_cb.stateChanged.connect(lambda: self.apply_to_module(False))
+        self.code250_cb.stateChanged.connect(lambda: self.apply_to_module(False))
+        for cb in self.db_checkboxes.values():
+            cb.stateChanged.connect(lambda: self.apply_to_module(False))
+
     def reset_to_defaults(self):
         """Reset all settings to default values without showing message."""
-        self.code101_cb.setChecked(self.DEFAULT_CONFIG["CODE101"])
-        self.code102_cb.setChecked(self.DEFAULT_CONFIG["CODE102"])
-        self.code150_cb.setChecked(self.DEFAULT_CONFIG["CODE150"])
-        self.code122_cb.setChecked(self.DEFAULT_CONFIG["CODE122"])
-        self.code210_cb.setChecked(self.DEFAULT_CONFIG["CODE210"])
-        self.code300_cb.setChecked(self.DEFAULT_CONFIG["CODE300"])
-        self.code250_cb.setChecked(self.DEFAULT_CONFIG["CODE250"])
-        
-        for key, cb in self.db_checkboxes.items():
-            cb.setChecked(self.DEFAULT_CONFIG.get(key, False))
-        
+        defaults = CANONICAL_DEFAULTS if 'CANONICAL_DEFAULTS' in globals() and CANONICAL_DEFAULTS is not None else self.DEFAULT_CONFIG
+        self.set_config(defaults)
+        # Apply changes after resetting
         self.apply_to_module(False)
     
     def reset_to_defaults_with_message(self):

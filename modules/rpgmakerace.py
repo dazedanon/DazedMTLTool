@@ -88,7 +88,7 @@ CODE405 = True
 CODE102 = True
 
 # Optional
-CODE101 = False
+CODE101 = True
 CODE408 = False
 
 # Variables
