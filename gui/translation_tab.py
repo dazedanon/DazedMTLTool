@@ -1216,30 +1216,11 @@ class TranslationTab(QWidget):
         filename_label.setFixedWidth(250)  # Fixed width for consistent alignment
         layout.addWidget(filename_label)
         
-        # Progress label
+        # Progress label (small) shown next to filename
         progress_label = QLabel("Waiting...")
-        progress_label.setStyleSheet("color: #888888; font-size: 12px;")
-        progress_label.setFixedWidth(120)
+        progress_label.setStyleSheet("color: #888888; font-size: 11px;")
+        progress_label.setFixedWidth(80)
         layout.addWidget(progress_label)
-
-        # Inline result labels (hidden until completion)
-        tokens_label = QLabel("")
-        tokens_label.setStyleSheet("color: #f1c40f; font-weight: bold; font-size: 12px;")
-        tokens_label.setFixedWidth(140)
-        tokens_label.setVisible(False)
-        layout.addWidget(tokens_label)
-
-        cost_label = QLabel("")
-        cost_label.setStyleSheet("color: #4ec9b0; font-weight: bold; font-size: 12px;")
-        cost_label.setFixedWidth(110)
-        cost_label.setVisible(False)
-        layout.addWidget(cost_label)
-
-        time_label = QLabel("")
-        time_label.setStyleSheet("color: #4da6ff; font-weight: bold; font-size: 12px;")
-        time_label.setFixedWidth(90)
-        time_label.setVisible(False)
-        layout.addWidget(time_label)
 
         # Progress bar (stretch to fill remaining space)
         progress_bar = QProgressBar()
@@ -1260,6 +1241,37 @@ class TranslationTab(QWidget):
             }
         """)
         layout.addWidget(progress_bar, 1)  # Stretch factor of 1 to fill remaining space
+
+        # Inline result labels (hidden until completion) - anchored to the right
+        # Order: tokens | time | status(check) | cost
+        tokens_label = QLabel("")
+        tokens_label.setStyleSheet("color: #f1c40f; font-weight: bold; font-size: 11px;")
+        tokens_label.setFixedWidth(100)
+        tokens_label.setVisible(False)
+        tokens_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        layout.addWidget(tokens_label)
+
+        time_label = QLabel("")
+        time_label.setStyleSheet("color: #4da6ff; font-weight: bold; font-size: 11px;")
+        time_label.setFixedWidth(70)
+        time_label.setVisible(False)
+        time_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        layout.addWidget(time_label)
+
+        # Small status label (checkmark or X) placed between time and cost
+        status_label = QLabel("")
+        status_label.setStyleSheet("font-weight: bold; font-size: 11px;")
+        status_label.setFixedWidth(22)
+        status_label.setVisible(False)
+        status_label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(status_label)
+
+        cost_label = QLabel("")
+        cost_label.setStyleSheet("color: #4ec9b0; font-weight: bold; font-size: 11px;")
+        cost_label.setFixedWidth(80)
+        cost_label.setVisible(False)
+        cost_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        layout.addWidget(cost_label)
         
         widget.setLayout(layout)
         
@@ -1271,7 +1283,8 @@ class TranslationTab(QWidget):
             'progress_bar': progress_bar,
             'tokens_label': tokens_label,
             'cost_label': cost_label,
-            'time_label': time_label
+            'time_label': time_label,
+            'status_label': status_label
         }
         
         return widget
@@ -1298,19 +1311,49 @@ class TranslationTab(QWidget):
                     item['tokens_label'].setVisible(True)
                     item['cost_label'].setVisible(True)
                     item['time_label'].setVisible(True)
-                    item['label'].setText("✓ Complete")
-                    item['label'].setStyleSheet("color: #4ec9b0; font-weight: bold;")
+                    # Show compact status in the middle column
+                    try:
+                        item['status_label'].setText("✓")
+                        item['status_label'].setStyleSheet("color: #4ec9b0; font-weight: bold; font-size: 11px;")
+                        item['status_label'].setVisible(True)
+                    except Exception:
+                        pass
                     try:
                         item['progress_bar'].setVisible(False)
                     except Exception:
                         pass
+                    # Clear the transient progress text so completed rows don't show "x/y"
+                    try:
+                        item['label'].setText("")
+                        item['label'].setStyleSheet("color: #888888; font-size: 11px;")
+                    except Exception:
+                        pass
                 else:
-                    item['label'].setText("✓ Complete")
-                    item['label'].setStyleSheet("color: #4ec9b0; font-weight: bold;")
+                    # No parsed results available - show status in status_label
+                    try:
+                        item['status_label'].setText("✓")
+                        item['status_label'].setStyleSheet("color: #4ec9b0; font-weight: bold; font-size: 11px;")
+                        item['status_label'].setVisible(True)
+                    except Exception:
+                        pass
                     item['progress_bar'].setValue(item['progress_bar'].maximum())
+                    try:
+                        item['label'].setText("")
+                        item['label'].setStyleSheet("color: #888888; font-size: 11px;")
+                    except Exception:
+                        pass
             else:
-                item['label'].setText("✗ Failed")
-                item['label'].setStyleSheet("color: #f48771; font-weight: bold;")
+                try:
+                    item['status_label'].setText("✗")
+                    item['status_label'].setStyleSheet("color: #f48771; font-weight: bold; font-size: 11px;")
+                    item['status_label'].setVisible(True)
+                except Exception:
+                    pass
+                try:
+                    item['label'].setText("")
+                    item['label'].setStyleSheet("color: #f48771; font-size: 11px;")
+                except Exception:
+                    pass
     
     def reset_to_file_view(self):
         """Reset back to file selection view."""
@@ -1473,7 +1516,8 @@ class TranslationTab(QWidget):
         if filename in self.file_progress_items:
             item = self.file_progress_items[filename]
             try:
-                item['tokens_label'].setText(f"Input: {input_tokens} | Output: {output_tokens}")
+                # Compact token display: input/output
+                item['tokens_label'].setText(f"{input_tokens}/{output_tokens}")
                 item['cost_label'].setText(f"${cost:.4f}")
                 item['time_label'].setText(f"{time_s:.1f}s")
                 item['tokens_label'].setVisible(True)
