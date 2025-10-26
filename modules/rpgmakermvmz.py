@@ -511,7 +511,7 @@ def parseMap(data, filename):
                 for page in event["pages"]:
                     if page is not None:
                         try:
-                            totalTokensPage = searchCodes(page, None, [], filename)
+                            totalTokensPage = searchCodes(page, pbar, [], filename)
                             totalTokens[0] += totalTokensPage[0]
                             totalTokens[1] += totalTokensPage[1]
                         except Exception as e:
@@ -617,7 +617,7 @@ def parseCommonEvents(data, filename):
         for page in data:
             if page is not None:
                 try:
-                    totalTokensPage = searchCodes(page, None, [], filename)
+                    totalTokensPage = searchCodes(page, pbar, [], filename)
                     totalTokens[0] += totalTokensPage[0]
                     totalTokens[1] += totalTokensPage[1]
                 except Exception as e:
@@ -650,7 +650,7 @@ def parseTroops(data, filename):
                 for page in troop["pages"]:
                     if page is not None:
                         try:
-                            totalTokensPage = searchCodes(page, None, [], filename)
+                            totalTokensPage = searchCodes(page, pbar, [], filename)
                             totalTokens[0] += totalTokensPage[0]
                             totalTokens[1] += totalTokensPage[1]
                         except Exception as e:
@@ -823,7 +823,7 @@ def parseScenario(data, filename):
         for page in data.items():
             if page[1] is not None:
                 try:
-                    totalTokensPage = searchCodes(page[1], None, [], filename)
+                    totalTokensPage = searchCodes(page[1], pbar, [], filename)
                     totalTokens[0] += totalTokensPage[0]
                     totalTokens[1] += totalTokensPage[1]
                 except Exception as e:

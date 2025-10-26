@@ -305,7 +305,7 @@ class TranslationWorker(QThread):
             try:
                 # Use a simpler approach with limited parallelism
                 # to have better control over stopping
-                max_workers = min(threads, 2)  # Limit to 2 concurrent processes max
+                max_workers = threads  # Limit to 2 concurrent processes max
                 self.executor = ThreadPoolExecutor(max_workers=max_workers)
                 
                 # Submit tasks to run modules in separate processes
