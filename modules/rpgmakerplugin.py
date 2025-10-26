@@ -565,42 +565,36 @@ def translatePlugin(data, pbar, filename, translatedList):
         tokens[0] += response[1][0]
         tokens[1] += response[1][1]
         questName = response[0]
-        pbar.update(len(questList[0]))
 
         # Quest Client
         response = translateAI(questList[1], "Quest Client", True)
         tokens[0] += response[1][0]
         tokens[1] += response[1][1]
         questClient = response[0]
-        pbar.update(len(questList[1]))
 
         # Quest Location
         response = translateAI(questList[2], "Quest Location", True)
         tokens[0] += response[1][0]
         tokens[1] += response[1][1]
         questLocation = response[0]
-        pbar.update(len(questList[2]))
 
         # Quest Target
         response = translateAI(questList[3], "Quest Location", True)
         tokens[0] += response[1][0]
         tokens[1] += response[1][1]
         questTarget = response[0]
-        pbar.update(len(questList[3]))
 
         # Quest Summary
         response = translateAI(questList[4], "Quest Summary", True)
         tokens[0] += response[1][0]
         tokens[1] += response[1][1]
         questSummary = response[0]
-        pbar.update(len(questList[4]))
 
         # Quest Goal 1
         response = translateAI(questList[5], "Quest Goal", True)
         tokens[0] += response[1][0]
         tokens[1] += response[1][1]
         questGoal1 = response[0]
-        pbar.update(len(questList[5]))
 
         # Check Mismatch
         if (
@@ -633,7 +627,6 @@ def translatePlugin(data, pbar, filename, translatedList):
         tokens[0] += response[1][0]
         tokens[1] += response[1][1]
         customResponse = response[0]
-        pbar.update(len(custom))
 
         # Check Mismatch
         if len(custom) == len(customResponse):

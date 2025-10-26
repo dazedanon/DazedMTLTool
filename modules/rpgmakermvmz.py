@@ -518,7 +518,6 @@ def parseMap(data, filename):
                             traceback.print_exc()
                             return [data, totalTokens, e]
                         finally:
-                            pbar.update(len(page.get("list", [])))
                             # Persist progress only if this page produced tokens
                             checkSave(data, filename, totalTokensPage)
     return [data, totalTokens, None]
@@ -624,7 +623,6 @@ def parseCommonEvents(data, filename):
                     traceback.print_exc()
                     return [data, totalTokens, e]
                 finally:
-                    pbar.update(len(page.get("list", [])))
                     # Persist progress only if this page produced tokens
                     checkSave(data, filename, totalTokensPage)
     return [data, totalTokens, None]
@@ -657,7 +655,6 @@ def parseTroops(data, filename):
                             traceback.print_exc()
                             return [data, totalTokens, e]
                         finally:
-                            pbar.update(len(page.get("list", [])))
                             # Persist progress only if this page produced tokens
                             checkSave(data, filename, totalTokensPage)
     return [data, totalTokens, None]
@@ -830,7 +827,6 @@ def parseScenario(data, filename):
                     traceback.print_exc()
                     return [data, totalTokens, e]
                 finally:
-                    pbar.update(len(page[1]))
                     # Persist progress only if this page produced tokens
                     checkSave(data, filename, totalTokensPage)
     return [data, totalTokens, None]
@@ -991,7 +987,6 @@ def searchNames(data, pbar, context, filename):
             
             # Update progress for messages
             if pbar is not None:
-                pbar.update(len(messages_batch))
                 pbar.refresh()
 
     # Now continue with the rest of the batching logic for names, descriptions, etc.
@@ -1057,7 +1052,6 @@ def searchNames(data, pbar, context, filename):
                 batchTokens[0] += response[1][0]
                 batchTokens[1] += response[1][1]
                 if pbar is not None and nameList:
-                    pbar.update(len(nameList))
                     pbar.refresh()
 
                 # Nickname
@@ -1069,7 +1063,6 @@ def searchNames(data, pbar, context, filename):
                     batchTokens[0] += response[1][0]
                     batchTokens[1] += response[1][1]
                     if pbar is not None:
-                        pbar.update(len(nicknameList))
                         pbar.refresh()
 
                 # Profile
@@ -1081,7 +1074,6 @@ def searchNames(data, pbar, context, filename):
                     batchTokens[0] += response[1][0]
                     batchTokens[1] += response[1][1]
                     if pbar is not None:
-                        pbar.update(len(profileList))
                         pbar.refresh()
 
                 # Set Data
@@ -1131,7 +1123,6 @@ def searchNames(data, pbar, context, filename):
                 batchTokens[0] += response[1][0]
                 batchTokens[1] += response[1][1]
                 if pbar is not None and nameList:
-                    pbar.update(len(nameList))
                     pbar.refresh()
 
                 # Description
@@ -1147,7 +1138,6 @@ def searchNames(data, pbar, context, filename):
                     batchTokens[0] += response[1][0]
                     batchTokens[1] += response[1][1]
                     if pbar is not None:
-                        pbar.update(len(descriptionList))
                         pbar.refresh()
 
                 # Set Data
@@ -1195,7 +1185,6 @@ def searchNames(data, pbar, context, filename):
                 batchTokens[0] += response[1][0]
                 batchTokens[1] += response[1][1]
                 if pbar is not None and nameList:
-                    pbar.update(len(nameList))
                     pbar.refresh()
 
                 # Set Data
@@ -2806,7 +2795,6 @@ def searchSS(state, pbar):
         work_units += 1 if message3Response != "" else 0
         work_units += 1 if message4Response != "" else 0
         if work_units:
-            pbar.update(work_units)
             pbar.refresh()
 
     # Set Data
@@ -2843,7 +2831,6 @@ def searchSystem(data, pbar):
     totalTokens[1] += response[1][1]
     data["gameTitle"] = response[0][0].strip(".")
     if pbar is not None:
-        pbar.update(1)
         pbar.refresh()
 
     # Terms - batch translate all term items
@@ -2867,7 +2854,6 @@ def searchSystem(data, pbar):
                     termList[idx] = tl_list[n].replace('"', "").strip()
                 
                 if pbar is not None:
-                    pbar.update(len(term_values))
                     pbar.refresh()
 
     # Armor Types - batch translate all
@@ -2884,7 +2870,6 @@ def searchSystem(data, pbar):
         for i in range(min(len(tl_list), len(data["armorTypes"]))):
             data["armorTypes"][i] = tl_list[i].replace('"', "").strip()
         if pbar is not None:
-            pbar.update(len(armor_values))
             pbar.refresh()
 
     # Skill Types - batch translate all
@@ -2901,7 +2886,6 @@ def searchSystem(data, pbar):
         for i in range(min(len(tl_list), len(data["skillTypes"]))):
             data["skillTypes"][i] = tl_list[i].replace('"', "").strip()
         if pbar is not None:
-            pbar.update(len(skill_values))
             pbar.refresh()
 
     # Equip Types - batch translate all
@@ -2918,7 +2902,6 @@ def searchSystem(data, pbar):
         for i in range(min(len(tl_list), len(data["equipTypes"]))):
             data["equipTypes"][i] = tl_list[i].replace('"', "").strip()
         if pbar is not None:
-            pbar.update(len(equip_values))
             pbar.refresh()
 
     # Elements - batch translate all (skip empty)
@@ -2941,7 +2924,6 @@ def searchSystem(data, pbar):
         for n, idx in enumerate(element_indices[: len(tl_list)]):
             data["elements"][idx] = tl_list[n].replace('"', "").strip()
         if pbar is not None:
-            pbar.update(len(element_values))
             pbar.refresh()
 
     # Weapon Types - batch translate all (skip empty)
@@ -2964,7 +2946,6 @@ def searchSystem(data, pbar):
         for n, idx in enumerate(weapon_indices[: len(tl_list)]):
             data["weaponTypes"][idx] = tl_list[n].replace('"', "").strip()
         if pbar is not None:
-            pbar.update(len(weapon_values))
             pbar.refresh()
 
     # Variables (Optional usually) — batch translate to reduce calls
@@ -2988,7 +2969,6 @@ def searchSystem(data, pbar):
             for n, idx in enumerate(var_indices[: len(tl_list)]):
                 data["variables"][idx] = tl_list[n].replace('"', '').strip()
             if pbar is not None:
-                pbar.update(len(var_values))
                 pbar.refresh()
 
     # Messages — batch translate to reduce calls
@@ -3024,7 +3004,6 @@ def searchSystem(data, pbar):
                 messages[key] = translatedText
             
             if pbar is not None:
-                pbar.update(len(msg_values))
                 pbar.refresh()
 
     return totalTokens
