@@ -1,6 +1,8 @@
 import sys
 import os
 import traceback
+import datetime
+from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from colorama import Fore
 from tqdm import tqdm
@@ -132,6 +134,37 @@ files to translate are in the /files folder and that you picked the right game e
             setSpeakerParseMode(True)
 
     # Open File (Threads) - recursively walk 'files' and preserve directory structure
+    # Prepare per-run log file so CLI runs also write to a run-specific history file
+    try:
+        hist_dir = Path("log") / "history"
+        hist_dir.mkdir(parents=True, exist_ok=True)
+        fname = datetime.datetime.now().strftime("translationHistory_%Y%m%d_%H%M%S.txt")
+        run_log_path = hist_dir / fname
+        run_log_path.touch(exist_ok=True)
+        # Export env var so other modules/util functions pick it up
+        try:
+            os.environ['TRANSLATION_RUN_LOG'] = str(run_log_path)
+        except Exception:
+            pass
+
+        # Try to create a hard link from legacy path to this run file for compatibility
+        legacy = Path("log") / "translationHistory.txt"
+        try:
+            if legacy.exists():
+                try:
+                    legacy.unlink()
+                except Exception:
+                    pass
+            os.link(str(run_log_path), str(legacy))
+        except Exception:
+            # Fallback: ensure legacy file exists so modules writing to it won't fail
+            try:
+                legacy.parent.mkdir(parents=True, exist_ok=True)
+                legacy.touch(exist_ok=True)
+            except Exception:
+                pass
+    except Exception:
+        pass
     with ThreadPoolExecutor(max_workers=THREADS) as executor:
         futures = []
         files_root = "files"
