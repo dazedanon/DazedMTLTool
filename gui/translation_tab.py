@@ -60,12 +60,14 @@ class TranslationWorker(QThread):
     item_progress_signal = pyqtSignal(str, int, int)  # filename, current_item, total_items (for tqdm within file)
     finished_signal = pyqtSignal(bool, str)
     
-    def __init__(self, project_root, module_info, estimate_only=False, selected_files=None):
+    def __init__(self, project_root, module_info, estimate_only=False, selected_files=None, parse_speakers=False):
         super().__init__()
         self.project_root = project_root
         self.module_info = module_info  # [name, extensions, handler_function]
         self.estimate_only = estimate_only
         self.selected_files = selected_files  # List of files to process
+        # Whether we should run in speaker-parse mode (special-case for MV/MZ)
+        self.parse_speakers = parse_speakers
         self.should_stop = False
         self.mutex = QMutex()  # For thread safety
         self.executor = None  # Store reference to executor for proper shutdown
@@ -299,54 +301,130 @@ class TranslationWorker(QThread):
             # Process files
             threads = int(os.getenv("fileThreads", "1"))
             total_cost = "Fail"
-            
+
+            # If we're doing Parse Speakers for RPGMaker MV/MZ, run handlers in-process so
+            # speaker collection is shared in this process and finalizeSpeakerParse() can run once.
+            is_mvmz = "mv/mz" in (self.module_info[0].lower() if isinstance(self.module_info[0], str) else "")
+
             # Change to project directory for module execution
             old_cwd = os.getcwd()
             os.chdir(str(self.project_root))
-            
+
             try:
-                max_workers = threads
-                self.executor = ThreadPoolExecutor(max_workers=max_workers)
-                
-                # Submit tasks to run modules in separate processes
-                future_to_filename = {
-                    self.executor.submit(self.run_module_in_process, filename, self.estimate_only): filename
-                    for filename in matching_files
-                }
-                
-                completed_count = 0
-                total_files = len(matching_files)
-                
-                for future in as_completed(future_to_filename):
-                    if self.should_stop:
-                        # Don't log here, the stop() method already logged
-                        # Cancel remaining futures
-                        for remaining_future in future_to_filename:
-                            if not remaining_future.done():
-                                remaining_future.cancel()
-                        break
-                        
-                    filename = future_to_filename[future]
-                    completed_count += 1
-                    
-                    # Emit progress signal (less frequent updates)
-                    self.emit_progress(completed_count, total_files, filename)
-                    
+                if self.parse_speakers and is_mvmz:
+                    # Run handlers sequentially in this worker process so globals are shared
                     try:
-                        result = future.result()
-                        if result and result != "Fail" and result != "Stopped":
-                            total_cost = result
-                            # Don't log completion here since the module already logged the detailed cost info
-                        elif result == "Stopped":
-                            # Don't log here, already handled
-                            break
-                        else:
-                            self.emit_log(f"❌ Failed processing {filename}")
+                        from modules.rpgmakermvmz import handleMVMZ, setSpeakerParseMode, finalizeSpeakerParse, TOKENS, calculateCost, MODEL
                     except Exception as e:
-                        tb_line = str(traceback.extract_tb(sys.exc_info()[2])[-1].lineno)
-                        error_msg = f"❌ Error processing {filename}: {str(e)} | Line: {tb_line}"
-                        self.emit_log(error_msg)
+                        self.emit_log(f"❌ Could not import rpgmakermvmz for speaker-parse: {e}")
+                        self.finished_signal.emit(False, str(e))
+                        return
+
+                    # Enable speaker parse mode in this process
+                    try:
+                        setSpeakerParseMode(True)
+                    except Exception:
+                        pass
+
+                    completed_count = 0
+                    total_files = len(matching_files)
+
+                    for filename in matching_files:
+                        if self.should_stop:
+                            break
+                        # Run handler in-process
+                        try:
+                            result = handleMVMZ(filename, self.estimate_only)
+                            completed_count += 1
+                            self.emit_progress(completed_count, total_files, filename)
+                            # Handler prints cost lines via tqdm.write; capture nothing here
+                        except Exception as e:
+                            tb_line = str(traceback.extract_tb(sys.exc_info()[2])[-1].lineno)
+                            self.emit_log(f"❌ Error processing {filename}: {str(e)} | Line: {tb_line}")
+
+                    # After all files processed, finalize speaker parse (translates collected speakers)
+                    try:
+                        # Record tokens before finalize
+                        before_in, before_out = (0, 0)
+                        try:
+                            before_in, before_out = (int(TOKENS[0]), int(TOKENS[1]))
+                        except Exception:
+                            pass
+
+                        finalizeSpeakerParse()
+
+                        # Tokens after finalize
+                        after_in, after_out = (0, 0)
+                        try:
+                            after_in, after_out = (int(TOKENS[0]), int(TOKENS[1]))
+                        except Exception:
+                            pass
+
+                        delta_in = max(0, after_in - before_in)
+                        delta_out = max(0, after_out - before_out)
+                        if delta_in or delta_out:
+                            try:
+                                cost = calculateCost(delta_in, delta_out, MODEL)
+                                total_str = f"[Input: {delta_in}][Output: {delta_out}][Cost: ${cost:.4f}]"
+                                self.emit_log(f"Speakers: {total_str} \u2713")
+                                # Ensure totals will be refreshed by _apply_file_result via append_log parsing
+                            except Exception:
+                                pass
+
+                    except Exception as e:
+                        self.emit_log(f"❌ Failed to finalize speaker parse: {e}")
+
+                    # Disable speaker parse mode
+                    try:
+                        setSpeakerParseMode(False)
+                    except Exception:
+                        pass
+
+                    # mark total_cost as Success so UI treats run as successful
+                    total_cost = "Success"
+                else:
+                    # Default behavior: run each file in a separate process (unchanged)
+                    max_workers = threads
+                    self.executor = ThreadPoolExecutor(max_workers=max_workers)
+
+                    # Submit tasks to run modules in separate processes
+                    future_to_filename = {
+                        self.executor.submit(self.run_module_in_process, filename, self.estimate_only): filename
+                        for filename in matching_files
+                    }
+
+                    completed_count = 0
+                    total_files = len(matching_files)
+
+                    for future in as_completed(future_to_filename):
+                        if self.should_stop:
+                            # Don't log here, the stop() method already logged
+                            # Cancel remaining futures
+                            for remaining_future in future_to_filename:
+                                if not remaining_future.done():
+                                    remaining_future.cancel()
+                            break
+                            
+                        filename = future_to_filename[future]
+                        completed_count += 1
                         
+                        # Emit progress signal (less frequent updates)
+                        self.emit_progress(completed_count, total_files, filename)
+                        
+                        try:
+                            result = future.result()
+                            if result and result != "Fail" and result != "Stopped":
+                                total_cost = result
+                                # Don't log completion here since the module already logged the detailed cost info
+                            elif result == "Stopped":
+                                # Don't log here, already handled
+                                break
+                            else:
+                                self.emit_log(f"❌ Failed processing {filename}")
+                        except Exception as e:
+                            tb_line = str(traceback.extract_tb(sys.exc_info()[2])[-1].lineno)
+                            error_msg = f"❌ Error processing {filename}: {str(e)} | Line: {tb_line}"
+                            self.emit_log(error_msg)
             finally:
                 # Properly shutdown the executor
                 if self.executor:
@@ -1462,7 +1540,8 @@ class TranslationTab(QWidget):
                 self.project_root, 
                 selected_module, 
                 estimate_only,
-                selected_files  # Pass selected files
+                selected_files,  # Pass selected files
+                parse_speakers=parse_speakers
             )
             
             # Connect signals
