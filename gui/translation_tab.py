@@ -6,6 +6,7 @@ Simple file management and translation execution with console log display.
 """
 
 import os
+import datetime
 import subprocess
 import threading
 import sys
@@ -1549,13 +1550,53 @@ class TranslationTab(QWidget):
             self.translation_worker.progress_signal.connect(self.update_file_progress)
             self.translation_worker.item_progress_signal.connect(self.update_item_progress)
             self.translation_worker.finished_signal.connect(self.on_translation_finished)
-            # Clear and start tailing the translation history so only new
-            # lines are shown in the right-hand log panel.
+            # Prepare a per-run log file in log/history and start tailing it so
+            # the right-hand log panel shows only this run's new lines.
             try:
+                history_dir = self.project_root / 'log' / 'history'
+                history_dir.mkdir(parents=True, exist_ok=True)
+                # Use timestamp (safe filename) for sorting
+                fname = datetime.datetime.now().strftime('translationHistory_%Y%m%d_%H%M%S.txt')
+                run_log_path = history_dir / fname
+                # Create/touch the file so tailer can open and seek to end
+                run_log_path.touch(exist_ok=True)
+
+                # Export env var so subprocess workers inherit the path
+                try:
+                    os.environ['TRANSLATION_RUN_LOG'] = str(run_log_path)
+                except Exception:
+                    pass
+
+                # Try to create a hard link at legacy location so modules that
+                # still write to log/translationHistory.txt end up in this file.
+                legacy = self.project_root / 'log' / 'translationHistory.txt'
+                try:
+                    # Remove any existing legacy file and create hard link
+                    if legacy.exists():
+                        try:
+                            legacy.unlink()
+                        except Exception:
+                            pass
+                    os.link(str(run_log_path), str(legacy))
+                except Exception:
+                    # If hard link fails (Windows permissions or cross-device),
+                    # fallback to ensuring the legacy file exists but do not fail.
+                    try:
+                        legacy.parent.mkdir(parents=True, exist_ok=True)
+                        legacy.touch(exist_ok=True)
+                    except Exception:
+                        pass
+
+                # Clear UI log and start tailing the per-run file
                 self.translation_log_viewer.clear_log()
-                self.translation_log_viewer.start_tail(self.project_root / 'log' / 'translationHistory.txt')
+                self.translation_log_viewer.start_tail(run_log_path)
             except Exception:
-                pass
+                # Fallback to legacy file if anything goes wrong
+                try:
+                    self.translation_log_viewer.clear_log()
+                    self.translation_log_viewer.start_tail(self.project_root / 'log' / 'translationHistory.txt')
+                except Exception:
+                    pass
 
             # Start the worker
             self.translation_worker.start()

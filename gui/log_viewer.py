@@ -73,7 +73,12 @@ class LogViewer(QWidget):
         self._tail_timer.timeout.connect(self._poll_tail)
         self._tail_interval = 300  # ms
         self._tail_f = None
-        self._tail_path = Path("log/translationHistory.txt")
+        # Default: prefer the most recent file in log/history, else legacy path
+        try:
+            latest = self._latest_history_file()
+        except Exception:
+            latest = None
+        self._tail_path = latest or Path("log/translationHistory.txt")
         
     def toggle_auto_refresh(self, enabled):
         """Toggle auto-refresh functionality."""
@@ -124,8 +129,9 @@ class LogViewer(QWidget):
     def start_tail(self, file_path: str | Path = None, interval_ms: int = None):
         """Start tailing the given log file and append new lines as they arrive.
 
-        By default tails `log/translationHistory.txt`. Seeks to the end so
-        only new lines after this call are shown.
+        By default tails the most recent file in `log/history/` (if present),
+        otherwise falls back to `log/translationHistory.txt`.
+        Seeks to the end so only new lines after this call are shown.
         """
         if file_path:
             self._tail_path = Path(file_path)
@@ -213,3 +219,16 @@ class LogViewer(QWidget):
         """Handle widget hide event - pause refresh to save resources."""
         super().hideEvent(event)
         # No-op for simplified viewer
+
+    def _latest_history_file(self):
+        """Return the most recent file in log/history or None if not found."""
+        try:
+            hist_dir = Path("log") / "history"
+            # Ensure history directory exists so callers can rely on it
+            hist_dir.mkdir(parents=True, exist_ok=True)
+            files = [p for p in hist_dir.iterdir() if p.is_file()]
+            if not files:
+                return None
+            return max(files, key=lambda p: p.stat().st_mtime)
+        except Exception:
+            return None

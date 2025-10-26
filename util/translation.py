@@ -611,7 +611,23 @@ def translateAI(text, history, fullPromptFlag, config, filename=None, pbar=None,
     """
     if not text:
         return [text, [0, 0]]
-    
+
+    # If a per-run log file is specified via environment variable, prefer it.
+    run_log = os.getenv("TRANSLATION_RUN_LOG")
+    if run_log:
+        # Make sure parent dir exists
+        try:
+            Path(run_log).parent.mkdir(parents=True, exist_ok=True)
+        except Exception:
+            pass
+        config.logFilePath = run_log
+
+    # Ensure log directory exists for the configured path
+    try:
+        Path(config.logFilePath).parent.mkdir(parents=True, exist_ok=True)
+    except Exception:
+        pass
+
     with open(config.logFilePath, "a+", encoding="utf-8") as logFile:
         totalTokens = [0, 0]
         
@@ -693,27 +709,17 @@ def translateAI(text, history, fullPromptFlag, config, filename=None, pbar=None,
                 if cleaned_text:
                     if isinstance(tItem, list):
                         extracted = extractTranslation(cleaned_text, True, pbar)
-                        
-                        # Check 1: Mismatch in length
+
+                        # Check 1: Mismatch in length -> still a hard failure
                         if extracted is None or len(tItem) != len(extracted):
                             is_valid = False
-                        
-                        # Check 2: Untranslated content
                         else:
-                            # Set translations first (line count matches)
+                            # Set translations (line count matches)
                             final_translations = extracted
-                            
-                            # Then check for untranslated content as a warning, not a blocker
-                            for line in extracted:
-                                if re.search(config.langRegex, str(line)):
-                                    is_valid = False
-                                    break
                     else:
-                        # Check for untranslated content in single string
-                        if re.search(config.langRegex, cleaned_text):
-                            is_valid = False
-                        else:
-                            final_translations = cleaned_text.replace("Placeholder Text", "")
+                        # Single string: accept output even if it contains characters
+                        # matching langRegex (allow names or untranslated tokens).
+                        final_translations = cleaned_text.replace("Placeholder Text", "")
                 else:
                     is_valid = False
                     if pbar: pbar.write(f"AI Refused: {tItem}\n")

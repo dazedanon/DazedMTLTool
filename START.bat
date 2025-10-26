@@ -179,7 +179,6 @@ if errorlevel 1 (
 
 echo.
 echo GUI closed successfully.
-pause
 
 :: End of main flow - prevent falling through into subroutines below
 goto :eof
