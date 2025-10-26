@@ -111,7 +111,7 @@ CODE657 = False
 CODE356 = False
 CODE320 = False
 CODE324 = False
-CODE325 = False
+CODE325 = True
 CODE111 = False
 CODE108 = False
 
@@ -1247,6 +1247,7 @@ def searchCodes(page, pbar, jobList, filename):
         list357 = jobList[5]
         list324 = jobList[6]
         list408 = jobList[7]
+        list325 = jobList[8]
         setData = False
     else:
         list401 = []
@@ -1257,6 +1258,7 @@ def searchCodes(page, pbar, jobList, filename):
         list357 = []
         list324 = []
         list408 = []
+        list325 = []
         setData = True
     textHistory = []
     match = []
@@ -2528,34 +2530,34 @@ def searchCodes(page, pbar, jobList, filename):
 
             ### Event Code: 325
             if "code" in codeList[i] and codeList[i]["code"] == 325 and CODE325 is True:
+                # Expect parameters like [index, "text"] where parameters[1] is the string
+                if len(codeList[i]["parameters"]) <= 1:
+                    i += 1
+                    continue
+
                 jaString = codeList[i]["parameters"][1]
                 if not isinstance(jaString, str):
                     i += 1
                     continue
 
-                # Definitely don't want to mess with files
-                if "■" in jaString or "_" in jaString:
-                    i += 1
-                    continue
+                # Remove Textwrap
+                collectString = jaString.replace("\n", " ")
 
-                # If there isn't any Japanese in the text just skip
-                if not re.search(LANGREGEX, jaString):
-                    i += 1
-                    continue
+                # Pass 1: collect into batch
+                if setData:
+                    list325.append(collectString)
 
-                # Translate
-                response = getSpeaker(jaString)
-                translatedText = response[0]
-                totalTokens[0] += response[1][0]
-                totalTokens[1] += response[1][1]
+                # Pass 2: apply translations from batch
+                else:
+                    if len(list325) > 0:
+                        translatedText = list325[0]
+                        list325.pop(0)
 
-                # Remove characters that may break scripts
-                charList = [".", '"', "'", "\\n"]
-                for char in charList:
-                    translatedText = translatedText.replace(char, "")
+                        # Textwrap
+                        translatedText = dazedwrap.wrapText(translatedText, width=WIDTH)
 
-                # Set Data
-                codeList[i]["parameters"][1] = translatedText
+                        # Set translated value back into parameters[1]
+                        codeList[i]["parameters"][1] = "\\}\\}" + translatedText
 
             ### Event Code: 324
             if "code" in codeList[i] and codeList[i]["code"] == 324 and CODE324 is True:
@@ -2605,6 +2607,7 @@ def searchCodes(page, pbar, jobList, filename):
         list357TL = []
         list355655TL = []
         list108TL = []
+        list325TL = []
         PBAR = pbar
 
         # 401
@@ -2696,12 +2699,34 @@ def searchCodes(page, pbar, jobList, filename):
                     if filename not in MISMATCH:
                         MISMATCH.append(filename)
 
+        # 325
+        if len(list325) > 0:
+            # Use same short-text speaker-style translation as other name fields
+            response = translateAI(list325, "Reply with the " + LANGUAGE + " translation of the NPC name.", True)
+            list325TL = response[0]
+            totalTokens[0] += response[1][0]
+            totalTokens[1] += response[1][1]
+            if len(list325TL) != len(list325):
+                with LOCK:
+                    if filename not in MISMATCH:
+                        MISMATCH.append(filename)
+
         # Start Pass 2
         if setData:
             searchCodes(
                 page,
                 pbar,
-                [list401TL, list122TL, list355655TL, list108TL, list356TL, list357TL, list324TL, list408TL],
+                [
+                    list401TL,
+                    list122TL,
+                    list355655TL,
+                    list108TL,
+                    list356TL,
+                    list357TL,
+                    list324TL,
+                    list408TL,
+                    list325TL,
+                ],
                 filename,
             )
 
