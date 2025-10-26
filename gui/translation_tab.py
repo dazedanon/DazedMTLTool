@@ -22,6 +22,7 @@ from PyQt5.QtWidgets import (
     QTextEdit, QMessageBox, QListWidget, QListWidgetItem, 
     QSplitter, QFileDialog, QComboBox, QCheckBox, QProgressBar, QFrame, QFormLayout, QStackedWidget
 )
+from PyQt5.QtWidgets import QSizePolicy
 from PyQt5.QtCore import Qt, QTimer, pyqtSignal, QThread, QMutex, QProcess
 from PyQt5.QtGui import QFont
 from gui.log_viewer import LogViewer
@@ -440,14 +441,24 @@ class TranslationTab(QWidget):
         
     def setup_ui(self):
         """Set up the user interface."""
-        # Create main splitter to separate translation controls from log viewer
-        main_splitter = QSplitter(Qt.Horizontal)
-        
+        # Create a fixed horizontal layout to separate translation controls from log viewer.
+        # Using a layout instead of QSplitter prevents the user from resizing panes.
+        main_container = QWidget()
+        main_hbox = QHBoxLayout()
+        # Match left side padding so headers align at the top of the boxes
+        main_hbox.setContentsMargins(15, 15, 15, 15)
+        main_hbox.setSpacing(8)
+    # Align child widgets individually when needed; avoid setting a
+    # global AlignTop on the HBox so children with Expanding size
+    # policies can grow vertically to fill available space.
+
         # Left side - translation controls
         left_widget = QWidget()
         layout = QVBoxLayout()
         layout.setSpacing(8)
-        layout.setContentsMargins(15, 15, 15, 15)
+        # Remove the top internal margin so the left header lines up with the
+        # right header (main_hbox already provides top padding).
+        layout.setContentsMargins(15, 0, 15, 15)
 
         # Files Section (at the top)
         layout.addWidget(create_section_header("📁 Input Files"))
@@ -766,18 +777,30 @@ class TranslationTab(QWidget):
         
         # Right side - translation history log viewer
         self.translation_log_viewer = LogViewer()
-        
-        # Add both to splitter
-        main_splitter.addWidget(left_widget)
-        main_splitter.addWidget(self.translation_log_viewer)
-        
-        # Set proportional sizes (translation controls: 60%, log viewer: 40%)
-        main_splitter.setStretchFactor(0, 3)
-        main_splitter.setStretchFactor(1, 2)
-        
+
+        # Allow both left and right widgets to expand vertically so the
+        # log viewer fills the full height to the bottom of the tab.
+        left_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.translation_log_viewer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+
+        # Add both widgets to the fixed HBox with stretch factors (left 40%, right 60%).
+        # Keep the left column top-aligned so its header stays at the top,
+        # but allow the right-hand log viewer to expand vertically to the
+        # bottom of the tab so it fills available space.
+        main_hbox.addWidget(left_widget, 2, Qt.AlignTop)
+        # Do NOT force AlignTop on the log viewer; with an Expanding
+        # vertical size policy it will grow to fill the available height.
+        main_hbox.addWidget(self.translation_log_viewer, 3)
+
+        main_container.setLayout(main_hbox)
+
+        # Ensure main container will expand to fill the tab vertically
+        main_container.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+
         # Set main layout for this tab
         tab_layout = QVBoxLayout()
-        tab_layout.addWidget(main_splitter)
+        # Add with stretch so the container expands to fill available space
+        tab_layout.addWidget(main_container, 1)
         tab_layout.setContentsMargins(0, 0, 0, 0)
         self.setLayout(tab_layout)
         
@@ -1167,15 +1190,27 @@ class TranslationTab(QWidget):
             self.translation_worker.progress_signal.connect(self.update_file_progress)
             self.translation_worker.item_progress_signal.connect(self.update_item_progress)
             self.translation_worker.finished_signal.connect(self.on_translation_finished)
-            
+            # Clear and start tailing the translation history so only new
+            # lines are shown in the right-hand log panel.
+            try:
+                self.translation_log_viewer.clear_log()
+                self.translation_log_viewer.start_tail(self.project_root / 'log' / 'translationHistory.txt')
+            except Exception:
+                pass
+
             # Start the worker
             self.translation_worker.start()
             
     def append_log(self, message):
         """Append a message to the log - now just for internal tracking."""
-        # We no longer display logs in the UI, but we can keep this for debugging
-        # or future use with the log viewer
-        pass
+        # IMPORTANT: Do NOT forward worker messages directly to the
+        # LogViewer when tailing a file. The LogViewer is intended to
+        # show only the contents of the log file (e.g. log/translationHistory.txt).
+        # Forwarding worker messages here caused non-file messages to appear
+        # in the log window. Modules write to the log file themselves, so
+        # we no longer push worker messages into the UI.
+        # Keep this method as a no-op to preserve the signal connection.
+        return
     
     def update_file_progress(self, current_file, total_files, filename):
         """Update the file-level progress."""
@@ -1246,6 +1281,12 @@ class TranslationTab(QWidget):
         
         # Refresh file list to show any new translated files
         self.refresh_file_lists()
+        # Stop tailing the log when finished
+        try:
+            if hasattr(self, 'translation_log_viewer') and self.translation_log_viewer:
+                self.translation_log_viewer.stop_tail()
+        except Exception:
+            pass
             
     def stop_translation(self):
         """Stop the translation process."""
