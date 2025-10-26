@@ -49,8 +49,15 @@ class ConfigTab(QWidget):
     def __init__(self):
         super().__init__()
         self.env_file_path = Path(".env")
+        # Initialize UI first so widgets/tabs exist for resetting or loading
         self.init_ui()
-        self.load_from_env()
+
+        # If a .env file doesn't exist, show defaults in the UI
+        # (prevents showing stale values from the process/OS environment)
+        if not self.env_file_path.exists():
+            self.reset_to_defaults()
+        else:
+            self.load_from_env()
         
     def init_ui(self):
         """Initialize the user interface with horizontal icon navigation at top."""
