@@ -477,7 +477,9 @@ class TranslationTab(QWidget):
         
         # File list with checkboxes
         self.file_list = QListWidget()
-        self.file_list.setMinimumHeight(350)
+        # Allow the file list to expand vertically to fill available space
+        # (remove fixed minimum height so it can stretch).
+        self.file_list.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         # No max height - let it expand
         self.file_list.setSelectionMode(QListWidget.NoSelection)  # Disable selection highlighting
         self.file_list.itemClicked.connect(self._toggle_file_checkbox)
@@ -589,8 +591,9 @@ class TranslationTab(QWidget):
         # Add button column to the container
         files_container.addLayout(file_buttons)
         
-        # Add the container to file list page
-        file_list_layout.addLayout(files_container)
+        # Add the container to file list page and allow it to expand so
+        # the file list can grow and push settings to the bottom.
+        file_list_layout.addLayout(files_container, 1)
         file_list_page.setLayout(file_list_layout)
         self.file_stack.addWidget(file_list_page)  # Index 0
         
@@ -645,45 +648,15 @@ class TranslationTab(QWidget):
         progress_view_page.setLayout(progress_view_layout)
         self.file_stack.addWidget(progress_view_page)  # Index 1
         
-        # Add stacked widget to main layout
-        layout.addWidget(self.file_stack)
-        layout.addWidget(create_horizontal_line())
-        
-        # Translation Settings Section (in the middle)
-        layout.addWidget(create_section_header("🌐 Translation Settings"))
-        
-        trans_form = QFormLayout()
-        trans_form.setSpacing(6)
-        trans_form.setContentsMargins(0, 0, 0, 12)
-        trans_form.setFieldGrowthPolicy(QFormLayout.FieldsStayAtSizeHint)
-        trans_form.setLabelAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        
-        engine_label = QLabel("Game Engine:")
-        engine_label.setFixedWidth(100)
-        engine_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-        self.module_combo = QComboBox()
-        self.module_combo.currentTextChanged.connect(self._on_module_changed)
-        self.module_combo.setFixedWidth(300)
-        trans_form.addRow(engine_label, self.module_combo)
-        
-        mode_label = QLabel("Mode:")
-        mode_label.setFixedWidth(100)
-        mode_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-        self.mode_combo = QComboBox()
-        self.mode_combo.addItem("Translate")
-        self.mode_combo.addItem("Estimate")
-        self.mode_combo.setFixedWidth(300)
-        self.mode_combo.currentTextChanged.connect(self._on_mode_changed)
-        trans_form.addRow(mode_label, self.mode_combo)
-        
-        layout.addLayout(trans_form)
-        layout.addWidget(create_horizontal_line())
-        
-        # Spacer to push progress and buttons to bottom
-        layout.addStretch()
-        
-        # Progress Section (at the bottom, right above buttons)
-        layout.addWidget(create_section_header("📊 Translation Progress"))
+        # Add stacked widget to main layout and allow it to stretch
+        # so the input files area can take up available vertical space.
+        layout.addWidget(self.file_stack, 1)
+            
+        # Progress Section (removed from UI)
+        # The visible progress UI was removed per user request. We keep the
+        # underlying widgets as attributes so existing logic can update them
+        # without raising AttributeError, but we do not add them to the
+        # layout so they are not shown.
         
         progress_layout = QVBoxLayout()
         progress_layout.setSpacing(8)
@@ -733,7 +706,42 @@ class TranslationTab(QWidget):
         """)
         progress_layout.addWidget(self.item_progress_bar)
         
-        layout.addLayout(progress_layout)
+        # NOTE: Do not add progress_layout to the UI. Kept in memory only.
+
+        # Ensure any remaining space is consumed above the settings so
+        # the Translation Settings block stays anchored to the bottom.
+        layout.addStretch()
+
+        # Translation Settings Section (moved to bottom)
+        layout.addWidget(create_horizontal_line())
+        layout.addWidget(create_section_header("🌐 Translation Settings"))
+
+        trans_form = QFormLayout()
+        trans_form.setSpacing(6)
+        trans_form.setContentsMargins(0, 0, 0, 12)
+        trans_form.setFieldGrowthPolicy(QFormLayout.FieldsStayAtSizeHint)
+        trans_form.setLabelAlignment(Qt.AlignRight | Qt.AlignVCenter)
+
+        engine_label = QLabel("Game Engine:")
+        engine_label.setFixedWidth(100)
+        engine_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        self.module_combo = QComboBox()
+        self.module_combo.currentTextChanged.connect(self._on_module_changed)
+        self.module_combo.setFixedWidth(300)
+        trans_form.addRow(engine_label, self.module_combo)
+
+        mode_label = QLabel("Mode:")
+        mode_label.setFixedWidth(100)
+        mode_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        self.mode_combo = QComboBox()
+        self.mode_combo.addItem("Translate")
+        self.mode_combo.addItem("Estimate")
+        self.mode_combo.setFixedWidth(300)
+        self.mode_combo.currentTextChanged.connect(self._on_mode_changed)
+        trans_form.addRow(mode_label, self.mode_combo)
+
+        layout.addLayout(trans_form)
+        layout.addWidget(create_horizontal_line())
 
         # Buttons (right below progress section)
         button_layout = QHBoxLayout()
@@ -787,7 +795,9 @@ class TranslationTab(QWidget):
         # Keep the left column top-aligned so its header stays at the top,
         # but allow the right-hand log viewer to expand vertically to the
         # bottom of the tab so it fills available space.
-        main_hbox.addWidget(left_widget, 2, Qt.AlignTop)
+        # Let the left widget expand vertically (do not force AlignTop)
+        # so its internal stretch can push the settings block to the bottom.
+        main_hbox.addWidget(left_widget, 2)
         # Do NOT force AlignTop on the log viewer; with an Expanding
         # vertical size policy it will grow to fill the available height.
         main_hbox.addWidget(self.translation_log_viewer, 3)
