@@ -9,7 +9,6 @@ import os
 from pathlib import Path
 import io
 import threading
-import time
 
 # Set UTF-8 encoding for stdout to handle Unicode characters
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
@@ -18,6 +17,7 @@ sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='repla
 # Progress monitoring thread
 progress_active = True
 last_reported = {'state': None}
+progress_event = threading.Event()
 
 
 def monitor_progress():
@@ -42,7 +42,10 @@ def monitor_progress():
                         break
         except Exception:
             pass
-        time.sleep(0.1)
+        # Wait with timeout so we don't busy-wait. Using an Event allows
+        # the main thread to wake this monitor immediately when stopping
+        # instead of waiting for the full timeout.
+        progress_event.wait(0.1)
 
 
 def run_handler(project_root, module_name, filename, estimate_only):
@@ -120,6 +123,11 @@ def run_handler(project_root, module_name, filename, estimate_only):
         
         # Stop progress monitoring
         progress_active = False
+        # Wake monitor thread if it's waiting so it can exit promptly
+        try:
+            progress_event.set()
+        except Exception:
+            pass
         
         # Print the result
         if handler_result:
@@ -129,6 +137,11 @@ def run_handler(project_root, module_name, filename, estimate_only):
         
     except Exception as e:
         progress_active = False
+        # Wake monitor thread if it's waiting so it can exit promptly
+        try:
+            progress_event.set()
+        except Exception:
+            pass
         import traceback
         error_msg = str(e).encode('ascii', 'ignore').decode('ascii')
         print(f"ERROR:{error_msg}")
