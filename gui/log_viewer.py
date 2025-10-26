@@ -3,10 +3,9 @@ Log Viewer - Real-time log display and monitoring
 """
 
 from PyQt5.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QTextEdit, QPushButton,
-    QLabel, QCheckBox, QComboBox, QGroupBox, QSplitter, QSpinBox
+    QWidget, QVBoxLayout, QTextEdit, QLabel, QSizePolicy
 )
-from PyQt5.QtCore import Qt, QTimer, pyqtSignal
+from PyQt5.QtCore import Qt, pyqtSignal, QTimer
 from PyQt5.QtGui import QTextCursor, QFont
 from pathlib import Path
 import datetime
@@ -20,65 +19,35 @@ class LogViewer(QWidget):
     
     def __init__(self):
         super().__init__()
-        self.log_files = {
-            "Translation History": "log/translationHistory.txt",
-            "Mismatch History": "log/mismatchHistory.txt"
-        }
-        self.auto_refresh_timer = QTimer()
-        self.auto_refresh_timer.timeout.connect(self.refresh_logs)
-        
-        # Performance optimization tracking
-        self.file_mod_times = {}  # Track file modification times
-        self.file_positions = {}  # Track file read positions for tail-only updates
-        self.max_lines = 1000  # Maximum lines to display
-        self.refresh_interval = 2000  # Default refresh interval in ms
-        
+        # Lightweight append-only log viewer. Logs are provided by the
+        # translation worker via signals so we don't poll files or provide
+        # controls here. This keeps the UI responsive.
         self.init_ui()
         
     def init_ui(self):
         """Initialize the user interface."""
         layout = QVBoxLayout()
-        
-        # Control panel
-        control_group = QGroupBox("Log Controls")
-        control_layout = QHBoxLayout()
-        
-        # Log file selector
-        self.log_selector = QComboBox()
-        self.log_selector.addItems(list(self.log_files.keys()))
-        self.log_selector.currentTextChanged.connect(self.load_selected_log)
-        control_layout.addWidget(QLabel("Log File:"))
-        control_layout.addWidget(self.log_selector)
-        
-        # Auto-refresh checkbox
-        self.auto_refresh_cb = QCheckBox("Auto Refresh")
-        self.auto_refresh_cb.toggled.connect(self.toggle_auto_refresh)
-        control_layout.addWidget(self.auto_refresh_cb)
-        
-        # Max lines control
-        control_layout.addWidget(QLabel("Max Lines:"))
-        self.max_lines_spinbox = QSpinBox()
-        self.max_lines_spinbox.setRange(100, 10000)
-        self.max_lines_spinbox.setValue(self.max_lines)
-        self.max_lines_spinbox.setSingleStep(100)
-        self.max_lines_spinbox.valueChanged.connect(self.update_max_lines)
-        control_layout.addWidget(self.max_lines_spinbox)
-        
-        # Manual refresh button
-        self.refresh_button = QPushButton("Refresh")
-        self.refresh_button.clicked.connect(self.refresh_logs)
-        control_layout.addWidget(self.refresh_button)
-        
-        # Clear button
-        self.clear_button = QPushButton("Clear")
-        self.clear_button.clicked.connect(self.clear_log)
-        control_layout.addWidget(self.clear_button)
-        
-        control_layout.addStretch()
-        control_group.setLayout(control_layout)
-        layout.addWidget(control_group)
-        
-        # Log display area
+        # Remove internal margins so header aligns with the left column's header
+        layout.setContentsMargins(0, 0, 0, 0)
+
+        # Simple header to match left-side styling (use same look as create_section_header)
+        header = QLabel("📝 Translation Log")
+        header.setStyleSheet("""
+            QLabel {
+                font-size: 13px;
+                font-weight: bold;
+                color: #007acc;
+                padding: 8px 0px 5px 0px;
+                background-color: transparent;
+            }
+        """)
+        layout.addWidget(header, 0)
+
+        # Match spacing used in left column so the gap between header and
+        # content lines up visually.
+        layout.setSpacing(8)
+
+        # Log display area (append-only)
         self.log_display = QTextEdit()
         self.log_display.setReadOnly(True)
         self.log_display.setFont(QFont("Consolas", 10))
@@ -89,182 +58,143 @@ class LogViewer(QWidget):
                 border: 1px solid #555555;
             }
         """)
-        layout.addWidget(self.log_display)
-        
-        # Status bar
+        # Make the log display expand to take available vertical space
+        self.log_display.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        layout.addWidget(self.log_display, 1)
+
+        # Lightweight status label
         self.status_label = QLabel("Ready")
         self.status_label.setStyleSheet("color: #cccccc; padding: 5px;")
-        layout.addWidget(self.status_label)
-        
+        layout.addWidget(self.status_label, 0)
+
         self.setLayout(layout)
-        
-        # Initial load
-        self.load_selected_log()
+        # Tail-related fields
+        self._tail_timer = QTimer(self)
+        self._tail_timer.timeout.connect(self._poll_tail)
+        self._tail_interval = 300  # ms
+        self._tail_f = None
+        self._tail_path = Path("log/translationHistory.txt")
         
     def toggle_auto_refresh(self, enabled):
         """Toggle auto-refresh functionality."""
-        if enabled:
-            # Adjust refresh interval based on file size
-            self.adjust_refresh_interval()
-            self.auto_refresh_timer.start(self.refresh_interval)
-            self.status_label.setText(f"Auto-refresh enabled ({self.refresh_interval/1000:.1f}s interval)")
-        else:
-            self.auto_refresh_timer.stop()
-            self.status_label.setText("Auto-refresh disabled")
+        # No-op: controls removed in simplified viewer
+        pass
             
     def adjust_refresh_interval(self):
         """Adjust refresh interval based on current log file size."""
-        selected_log = self.log_selector.currentText()
-        if selected_log in self.log_files:
-            log_path = Path(self.log_files[selected_log])
-            if log_path.exists():
-                file_size = log_path.stat().st_size
-                # Increase interval for larger files
-                if file_size > 500000:  # > 500KB
-                    self.refresh_interval = 5000  # 5 seconds
-                elif file_size > 100000:  # > 100KB
-                    self.refresh_interval = 3000  # 3 seconds
-                else:
-                    self.refresh_interval = 2000  # 2 seconds
-                    
+        # No-op in simplified viewer
+        pass
+
     def update_max_lines(self, value):
-        """Update maximum lines to display."""
-        self.max_lines = value
-        self.load_selected_log()  # Reload with new limit
+        """No-op in simplified viewer (controls removed)."""
+        pass
             
     def load_selected_log(self):
         """Load the currently selected log file."""
-        selected_log = self.log_selector.currentText()
-        if selected_log in self.log_files:
-            self.load_log_file(self.log_files[selected_log])
+        # No-op in simplified viewer
+        pass
             
     def load_log_file(self, file_path):
         """Load content from a specific log file with optimization."""
-        try:
-            log_path = Path(file_path)
-            if not log_path.exists():
-                self.log_display.setPlainText(f"Log file not found: {file_path}")
-                self.status_label.setText("Log file not found")
-                return
-                
-            # Check if file has been modified since last read
-            current_mod_time = log_path.stat().st_mtime
-            last_mod_time = self.file_mod_times.get(file_path, 0)
-            
-            if current_mod_time <= last_mod_time and file_path in self.file_mod_times:
-                # File hasn't changed, no need to reload
-                return
-                
-            # Update modification time
-            self.file_mod_times[file_path] = current_mod_time
-            
-            # Read file efficiently
-            file_size = log_path.stat().st_size
-            
-            if file_size > 1000000:  # > 1MB, read only tail
-                content = self.read_file_tail(log_path, self.max_lines)
-            else:
-                # For smaller files, read normally but limit lines
-                with open(log_path, 'r', encoding='utf-8', errors='ignore') as f:
-                    content = f.read()
-                    
-                # Limit to max lines if content is too long
-                lines = content.splitlines()
-                if len(lines) > self.max_lines:
-                    content = '\n'.join(lines[-self.max_lines:])
-                    content = f"... (showing last {self.max_lines} lines) ...\n" + content
-                    
-            self.log_display.setPlainText(content)
-            
-            # Scroll to bottom
-            cursor = self.log_display.textCursor()
-            cursor.movePosition(QTextCursor.End)
-            self.log_display.setTextCursor(cursor)
-            
-            # Update status
-            lines_count = len(content.splitlines())
-            self.status_label.setText(f"Loaded {log_path.name} ({file_size:,} bytes, {lines_count:,} lines)")
-            
-        except Exception as e:
-            self.log_display.setPlainText(f"Error loading log file: {str(e)}")
-            self.status_label.setText(f"Error: {str(e)}")
+        # File-based loading removed in simplified viewer
+        pass
             
     def read_file_tail(self, file_path, max_lines):
         """Efficiently read the last N lines of a large file."""
-        try:
-            with open(file_path, 'rb') as f:
-                # Start from end of file
-                f.seek(0, 2)  # Seek to end
-                file_size = f.tell()
-                
-                # Read chunks from end until we have enough lines
-                lines = []
-                chunk_size = min(8192, file_size)  # 8KB chunks
-                pos = file_size
-                
-                while len(lines) < max_lines and pos > 0:
-                    # Calculate chunk position
-                    chunk_start = max(0, pos - chunk_size)
-                    f.seek(chunk_start)
-                    
-                    # Read chunk
-                    chunk = f.read(pos - chunk_start).decode('utf-8', errors='ignore')
-                    chunk_lines = chunk.splitlines()
-                    
-                    # Prepend to lines list
-                    if chunk_lines:
-                        if lines and not chunk.endswith('\n'):
-                            # Merge partial line at end of chunk with first existing line
-                            chunk_lines[-1] += lines[0]
-                            lines = chunk_lines + lines[1:]
-                        else:
-                            lines = chunk_lines + lines
-                            
-                    pos = chunk_start
-                    
-                # Return last max_lines
-                if len(lines) > max_lines:
-                    lines = lines[-max_lines:]
-                    return f"... (showing last {max_lines} lines) ...\n" + '\n'.join(lines)
-                else:
-                    return '\n'.join(lines)
-                    
-        except Exception as e:
-            return f"Error reading file tail: {str(e)}"
+        # No-op in simplified viewer
+        return ""
             
     def refresh_logs(self):
         """Refresh the current log display - only if tab is visible and file changed."""
-        # Only refresh if widget is visible (optimization for when tab is not active)
-        if not self.isVisible():
-            return
-            
-        self.load_selected_log()
-        
-        # Readjust refresh interval if auto-refresh is enabled
-        if self.auto_refresh_cb.isChecked():
-            self.adjust_refresh_interval()
-            if self.auto_refresh_timer.interval() != self.refresh_interval:
-                self.auto_refresh_timer.stop()
-                self.auto_refresh_timer.start(self.refresh_interval)
+        # No-op for simplified viewer
+        pass
         
     def clear_log(self):
         """Clear the log display and reset tracking."""
         self.log_display.clear()
-        # Reset modification time tracking to force reload on next refresh
-        selected_log = self.log_selector.currentText()
-        if selected_log in self.log_files:
-            file_path = self.log_files[selected_log]
-            if file_path in self.file_mod_times:
-                del self.file_mod_times[file_path]
         self.status_label.setText("Log cleared")
+        # Reset tail file pointer if active
+        if self._tail_f:
+            try:
+                # Move pointer to end so we continue only with new lines
+                self._tail_f.seek(0, os.SEEK_END)
+            except Exception:
+                pass
+
+    def start_tail(self, file_path: str | Path = None, interval_ms: int = None):
+        """Start tailing the given log file and append new lines as they arrive.
+
+        By default tails `log/translationHistory.txt`. Seeks to the end so
+        only new lines after this call are shown.
+        """
+        if file_path:
+            self._tail_path = Path(file_path)
+        if interval_ms:
+            self._tail_interval = interval_ms
+
+        # Ensure directory exists
+        try:
+            self._tail_path.parent.mkdir(parents=True, exist_ok=True)
+            # Ensure file exists
+            self._tail_path.touch(exist_ok=True)
+        except Exception:
+            pass
+
+        # Close previous handle
+        if self._tail_f:
+            try:
+                self._tail_f.close()
+            except Exception:
+                pass
+            self._tail_f = None
+
+        try:
+            self._tail_f = open(self._tail_path, 'r', encoding='utf-8', errors='ignore')
+            # Seek to end so we only read new lines
+            self._tail_f.seek(0, os.SEEK_END)
+        except Exception as e:
+            self.status_label.setText(f"Log error: {str(e)}")
+            self._tail_f = None
+            return
+
+        self._tail_timer.start(self._tail_interval)
+
+    def stop_tail(self):
+        """Stop tailing the log file and close internal file handle."""
+        try:
+            self._tail_timer.stop()
+        except Exception:
+            pass
+        if self._tail_f:
+            try:
+                self._tail_f.close()
+            except Exception:
+                pass
+            self._tail_f = None
+
+    def _poll_tail(self):
+        """Timer callback: read any new data from the tailed file and append it."""
+        if not self._tail_f:
+            return
+        try:
+            new_data = self._tail_f.read()
+            if not new_data:
+                return
+            # Split into lines and append
+            for line in new_data.splitlines():
+                if line.strip():
+                    self.append_log_message(line)
+        except Exception:
+            # If anything goes wrong, stop the tail to avoid repeated errors
+            self.stop_tail()
         
     def append_log_message(self, message):
         """Append a message to the log display."""
-        timestamp = datetime.datetime.now().strftime("%H:%M:%S")
-        formatted_message = f"[{timestamp}] {message}"
-        
-        self.log_display.append(formatted_message)
-        
+        # Append raw message (worker already includes any desired context).
+        # We intentionally avoid adding timestamps here so wrapped lines stay
+        # readable and do not misalign JSON-like outputs.
+        self.log_display.append(message)
+
         # Scroll to bottom
         cursor = self.log_display.textCursor()
         cursor.movePosition(QTextCursor.End)
@@ -277,11 +207,9 @@ class LogViewer(QWidget):
     def showEvent(self, event):
         """Handle widget show event - resume refresh if auto-refresh is enabled."""
         super().showEvent(event)
-        if self.auto_refresh_cb.isChecked() and not self.auto_refresh_timer.isActive():
-            self.auto_refresh_timer.start(self.refresh_interval)
+        # No-op for simplified viewer
             
     def hideEvent(self, event):
         """Handle widget hide event - pause refresh to save resources."""
         super().hideEvent(event)
-        # Note: Don't stop timer completely as other parts may depend on it
-        # The refresh_logs method now checks visibility anyway
+        # No-op for simplified viewer
