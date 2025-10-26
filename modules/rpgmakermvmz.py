@@ -1245,7 +1245,8 @@ def searchCodes(page, pbar, jobList, filename):
         list108 = jobList[3]
         list356 = jobList[4]
         list357 = jobList[5]
-        list408 = jobList[6]
+        list324 = jobList[6]
+        list408 = jobList[7]
         setData = False
     else:
         list401 = []
@@ -1254,6 +1255,7 @@ def searchCodes(page, pbar, jobList, filename):
         list108 = []
         list356 = []
         list357 = []
+        list324 = []
         list408 = []
         setData = True
     textHistory = []
@@ -2555,13 +2557,49 @@ def searchCodes(page, pbar, jobList, filename):
                 # Set Data
                 codeList[i]["parameters"][1] = translatedText
 
+            ### Event Code: 324
+            if "code" in codeList[i] and codeList[i]["code"] == 324 and CODE324 is True:
+                # Expect parameters like [1, "text"] where index 1 is the string to translate
+                if len(codeList[i]["parameters"]) <= 1:
+                    i += 1
+                    continue
+
+                jaString = codeList[i]["parameters"][1]
+                if not isinstance(jaString, str):
+                    i += 1
+                    continue
+
+                # Remove any textwrap for collection
+                collectString = jaString.replace("\n", " ")
+
+                # Pass 1: collect
+                if setData:
+                    list324.append(collectString)
+                    i += 1
+
+                # Pass 2: apply translations from list324
+                else:
+                    if len(list324) > 0:
+                        translatedText = list324[0]
+                        list324.pop(0)
+
+                        # Clean translation
+                        for ch in ['"', "\\n"]:
+                            translatedText = translatedText.replace(ch, "")
+
+                        # Textwrap to reasonable width
+                        translatedText = dazedwrap.wrapText(translatedText, width=LISTWIDTH)
+
+                        # Set translated value back into parameters[1]
+                        codeList[i]["parameters"][1] = translatedText
+
             # Iterate
-            else:
-                i += 1
+            i += 1
 
         # EOF
         list401TL = []
         list408TL = []
+        list324TL = []
         list122TL = []
         list356TL = []
         list357TL = []
@@ -2646,12 +2684,24 @@ def searchCodes(page, pbar, jobList, filename):
                     if filename not in MISMATCH:
                         MISMATCH.append(filename)
 
+        # 324
+        if len(list324) > 0:
+            # Generic short-text translation for parameter index 1
+            response = translateAI(list324, "Reply with only the " + LANGUAGE + " translation of the text.", True)
+            list324TL = response[0]
+            totalTokens[0] += response[1][0]
+            totalTokens[1] += response[1][1]
+            if len(list324TL) != len(list324):
+                with LOCK:
+                    if filename not in MISMATCH:
+                        MISMATCH.append(filename)
+
         # Start Pass 2
         if setData:
             searchCodes(
                 page,
                 pbar,
-                [list401TL, list122TL, list355655TL, list108TL, list356TL, list357TL, list408TL],
+                [list401TL, list122TL, list355655TL, list108TL, list356TL, list357TL, list324TL, list408TL],
                 filename,
             )
 
