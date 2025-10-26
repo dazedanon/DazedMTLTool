@@ -57,7 +57,41 @@ class DazedMTLGUI(QMainWindow):
             
     def closeEvent(self, event):
         """Handle application close event."""
-        self.save_window_state()
+        # Save window geometry/state
+        try:
+            self.save_window_state()
+        except Exception:
+            pass
+
+        # Attempt to stop any running translation worker to ensure
+        # ThreadPoolExecutors and subprocesses are shut down so the
+        # Python process can exit cleanly.
+        try:
+            if hasattr(self, 'translation_tab') and self.translation_tab:
+                tt = self.translation_tab
+                # Stop log tailing first (if active)
+                try:
+                    if hasattr(tt, 'translation_log_viewer') and tt.translation_log_viewer:
+                        tt.translation_log_viewer.stop_tail()
+                except Exception:
+                    pass
+
+                # If a worker exists and is running, request it to stop and wait
+                try:
+                    if hasattr(tt, 'translation_worker') and tt.translation_worker and tt.translation_worker.isRunning():
+                        tt.translation_worker.stop()
+                        # Wait up to 5s for graceful stop, otherwise terminate
+                        if not tt.translation_worker.wait(5000):
+                            try:
+                                tt.translation_worker.terminate()
+                                tt.translation_worker.wait(2000)
+                            except Exception:
+                                pass
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
         event.accept()
         
     def setup_font_scaling(self):
@@ -724,6 +758,40 @@ def main():
         # Create and show the main window
         window = DazedMTLGUI()
         window.show()
+
+        # Safety: ensure any running translation worker is stopped when the
+        # application is quitting (aboutToQuit). This helps guarantee the
+        # ThreadPoolExecutor threads and subprocesses are shut down so the
+        # Python interpreter can exit cleanly.
+        def _on_about_to_quit():
+            try:
+                if hasattr(window, 'translation_tab') and window.translation_tab:
+                    tt = window.translation_tab
+                    try:
+                        if hasattr(tt, 'translation_log_viewer') and tt.translation_log_viewer:
+                            tt.translation_log_viewer.stop_tail()
+                    except Exception:
+                        pass
+
+                    try:
+                        if hasattr(tt, 'translation_worker') and tt.translation_worker and tt.translation_worker.isRunning():
+                            tt.translation_worker.stop()
+                            # Wait briefly for graceful shutdown
+                            if not tt.translation_worker.wait(3000):
+                                try:
+                                    tt.translation_worker.terminate()
+                                    tt.translation_worker.wait(2000)
+                                except Exception:
+                                    pass
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+
+        try:
+            app.aboutToQuit.connect(_on_about_to_quit)
+        except Exception:
+            pass
         
         # Show font adjustment tip on first run (optional)
         try:
