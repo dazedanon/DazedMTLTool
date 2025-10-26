@@ -243,11 +243,20 @@ class DazedMTLGUI(QMainWindow):
             # Apply the scaling immediately
             self.apply_font_scaling(scale_factor)
             
-            # Update the configuration tab
-            self.config_tab.font_scale_spin.setValue(scale_factor)
-            
-            # Save to .env file
-            self.config_tab.save_to_env()
+            # Update the configuration tab if it provides a font_scale widget
+            try:
+                if hasattr(self.config_tab, "font_scale_spin"):
+                    self.config_tab.font_scale_spin.setValue(scale_factor)
+            except Exception:
+                # If the widget isn't present or fails to update, continue silently
+                pass
+
+            # Save to .env file if the config tab provides save functionality
+            try:
+                if hasattr(self.config_tab, "save_to_env"):
+                    self.config_tab.save_to_env()
+            except Exception:
+                pass
             
         except Exception as e:
             QMessageBox.warning(self, "Warning", f"Failed to set font scale: {str(e)}")
@@ -276,21 +285,7 @@ class DazedMTLGUI(QMainWindow):
         # Tools menu
         tools_menu = menubar.addMenu('Tools')
         
-        # Font Size submenu
-        font_menu = tools_menu.addMenu('Font Size')
-        
-        # Font size actions
-        small_font_action = font_menu.addAction('Small (0.8x)')
-        small_font_action.triggered.connect(lambda: self.set_font_scale(0.8))
-        
-        normal_font_action = font_menu.addAction('Normal (1.0x)')
-        normal_font_action.triggered.connect(lambda: self.set_font_scale(1.0))
-        
-        large_font_action = font_menu.addAction('Large (1.5x)')
-        large_font_action.triggered.connect(lambda: self.set_font_scale(1.5))
-        
-        xlarge_font_action = font_menu.addAction('Extra Large (2.0x)')
-        xlarge_font_action.triggered.connect(lambda: self.set_font_scale(2.0))
+    # Font Size submenu removed — font scaling menu was unreliable and has been removed
         
         tools_menu.addSeparator()
         
