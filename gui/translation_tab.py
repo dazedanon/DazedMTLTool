@@ -25,7 +25,7 @@ from PyQt5.QtWidgets import (
     QSplitter, QFileDialog, QComboBox, QCheckBox, QProgressBar, QFrame, QFormLayout, QStackedWidget
 )
 from PyQt5.QtWidgets import QSizePolicy
-from PyQt5.QtCore import Qt, QTimer, pyqtSignal, QThread, QMutex, QProcess, QEvent, QRect
+from PyQt5.QtCore import Qt, QTimer, pyqtSignal, QThread, QMutex, QProcess, QEvent, QRect, QSettings
 from PyQt5.QtGui import QFont
 from gui.log_viewer import LogViewer
 
@@ -495,6 +495,11 @@ class TranslationTab(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.parent_window = parent
+        # Persistent settings (remember last directory used in file dialogs)
+        try:
+            self.settings = QSettings("DazedTranslations", "DazedMTLTool")
+        except Exception:
+            self.settings = None
         self.translation_process = None
         self.log_buffer = []  # Buffer for batching log messages
         self.log_timer = QTimer()  # Timer for flushing log buffer
@@ -1193,15 +1198,31 @@ class TranslationTab(QWidget):
         return selected
     
     def add_input_files(self):
-        """Add files to the input directory."""
+        """Add files to the input directory, remembering last used directory."""
+        # Restore last used directory from settings if available
+        start_dir = ""
+        try:
+            if self.settings:
+                start_dir = self.settings.value("last_open_dir", "") or ""
+        except Exception:
+            start_dir = ""
+
         file_paths, _ = QFileDialog.getOpenFileNames(
             self,
             "Select files to add",
-            "",
+            start_dir,
             "All Files (*)"
         )
         
         if file_paths:
+            # Save the directory used so next time we open the same place
+            try:
+                if self.settings and len(file_paths) > 0:
+                    import os
+                    dir_used = os.path.dirname(file_paths[0])
+                    self.settings.setValue("last_open_dir", dir_used)
+            except Exception:
+                pass
             try:
                 import shutil
                 copied_count = 0
