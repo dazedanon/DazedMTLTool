@@ -1335,6 +1335,15 @@ def searchCodes(page, pbar, jobList, filename):
                 # Speaker Check
                 speakerList = []
 
+                # Remove any RPGMaker Code at start
+                ffMatch = re.search(
+                    r"^((?:[\\]+[^cCnNiIkKvV]+\[[\d\w]+\])+)",
+                    jaString,
+                )
+                if ffMatch != None:
+                    jaString = jaString.replace(ffMatch.group(0), "")
+                    nametag += ffMatch.group(0)
+
                 # m and z Codes
                 match = re.search(r"(.*?)[\\]+m\[\d+?\][\\]+z\[\d+?\]", jaString)
                 if match:
@@ -1378,15 +1387,6 @@ def searchCodes(page, pbar, jobList, filename):
 
                 # First Line Speakers
                 if len(speakerList) == 0 and FIRSTLINESPEAKERS is True:
-                    # Remove any RPGMaker Code at start
-                    ffMatch = re.search(
-                        r"^((?:[\\]+[^cCnNiIkKvV]+\[[\d\w]+\])+)",
-                        jaString,
-                    )
-                    if ffMatch != None:
-                        jaString = jaString.replace(ffMatch.group(0), "")
-                        nametag += ffMatch.group(0)
-
                     # Test Speaker
                     if (
                         len(jaString) < 40
