@@ -2321,17 +2321,27 @@ def searchCodes(page, pbar, jobList, filename):
                 if "LL_InfoPopupWIndowMV" in jaString:
                     matchList = re.findall(r"LL_InfoPopupWIndowMV\sshowWindow\s(.+?) .+", jaString)
                     if len(matchList) > 0:
-                        # Translate
                         text = matchList[0]
-                        response = translateAI(text, "Reply with the " + LANGUAGE + " Translation", False)
-                        translatedText = response[0]
-                        totalTokens[0] += response[1][0]
-                        totalTokens[1] += response[1][1]
 
-                        # Set Data
-                        translatedText = translatedText.replace(" ", "_")
-                        translatedText = jaString.replace(text, translatedText)
-                        codeList[i]["parameters"][0] = translatedText
+                        # Pass 1: collect into batch
+                        if setData:
+                            # store without underscores for cleaner translation later
+                            list356.append(text.replace("_", " "))
+
+                        # Pass 2: apply translations from list356
+                        else:
+                            if len(list356) > 0:
+                                translatedText = list356[0]
+                                list356.pop(0)
+
+                                # Replace spaces with underscores as original format expects
+                                translatedText = translatedText.replace(" ", "_")
+
+                                # Put Args Back
+                                translatedText = jaString.replace(text, translatedText)
+
+                                # Set Data
+                                codeList[i]["parameters"][0] = translatedText
 
                 if "OriginMenuStatus SetParam" in jaString:
                     matchList = re.findall(r"OriginMenuStatus\sSetParam\sparam[\d]\s(.*)", jaString)
