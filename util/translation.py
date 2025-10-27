@@ -498,8 +498,12 @@ def extractTranslation(translatedTextList, isList, pbar=None):
         if s[1:2] == "{" and s[-2:-1] == "}":
             s = s[1:-1]
 
-    # Normalize quotes
-    s = s.replace("“", '"').replace("”", '"').replace("’", "'")
+    # Normalize a broad set of Unicode “smart” quotes to ASCII equivalents.
+    translation_table = {
+        0x201C: '"',  # “ left double quotation mark
+        0x201D: '"',  # ” right double quotation mark
+    }
+    s = s.translate(translation_table)
 
     # Remove trailing commas before object/array closures
     s = re.sub(r",(\s*[}\]])", r"\1", s)
