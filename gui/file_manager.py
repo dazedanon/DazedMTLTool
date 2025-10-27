@@ -8,7 +8,7 @@ from PyQt5.QtWidgets import (
     QPushButton, QLabel, QFileDialog, QMessageBox, QGroupBox,
     QSplitter, QTextEdit, QProgressBar, QCheckBox
 )
-from PyQt5.QtCore import Qt, QThread, pyqtSignal
+from PyQt5.QtCore import Qt, QThread, pyqtSignal, QSettings
 import json
 
 
@@ -19,6 +19,11 @@ class FileManager(QWidget):
     
     def __init__(self):
         super().__init__()
+        # Persistent settings for remembering last-open directory
+        try:
+            self.settings = QSettings("DazedTranslations", "DazedMTLTool")
+        except Exception:
+            self.settings = None
         self.input_files = []
         self.output_directory = Path("translated")
         self.init_ui()
@@ -168,16 +173,32 @@ class FileManager(QWidget):
         
     def add_input_files(self):
         """Add input files via dialog."""
+        # Try to restore last used directory
+        start_dir = ""
+        try:
+            if self.settings:
+                start_dir = self.settings.value("last_open_dir", "") or ""
+        except Exception:
+            start_dir = ""
+
         files, _ = QFileDialog.getOpenFileNames(
             self,
             "Select Input Files",
-            "",
+            start_dir,
             "JSON Files (*.json);;All Files (*)"
         )
         
         for file_path in files:
             if file_path not in self.input_files:
                 self.input_files.append(file_path)
+
+        # Persist directory used
+        try:
+            if self.settings and len(files) > 0:
+                import os
+                self.settings.setValue("last_open_dir", os.path.dirname(files[0]))
+        except Exception:
+            pass
                 
         self.refresh_input_files()
         
