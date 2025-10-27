@@ -502,6 +502,13 @@ def extractTranslation(translatedTextList, isList, pbar=None):
     translation_table = {
         0x201C: '"',  # “ left double quotation mark
         0x201D: '"',  # ” right double quotation mark
+        0xFF02: '"',  # ＂ fullwidth quotation mark
+
+        0x2018: "'",  # ‘ left single quotation mark
+        0x2019: "'",  # ’ right single quotation mark
+        0x201B: "'",  # ‛ single high-reversed-9 quotation mark
+        0x02BC: "'",  # ʼ modifier letter apostrophe
+        0xFF07: "'",  # ＇ fullwidth apostrophe
     }
     s = s.translate(translation_table)
 
