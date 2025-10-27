@@ -500,6 +500,10 @@ class TranslationTab(QWidget):
             self.settings = QSettings("DazedTranslations", "DazedMTLTool")
         except Exception:
             self.settings = None
+        # If the worker signals finished before all file progress updates
+        # have been received, we queue the finalization until the last
+        # file progress update arrives.
+        self._finish_pending = None
         self.translation_process = None
         self.log_buffer = []  # Buffer for batching log messages
         self.log_timer = QTimer()  # Timer for flushing log buffer
@@ -1720,6 +1724,19 @@ class TranslationTab(QWidget):
         else:
             self.translating_label.setText("—")
     
+        # If the translation worker already signaled finished but we
+        # hadn't yet shown the final UI (because the worker finished
+        # before this last progress update), apply the pending finish
+        # now that all files have reported completion.
+        try:
+            if self._finish_pending and self.files_completed >= self.files_total:
+                success, message = self._finish_pending
+                self._finish_pending = None
+                # Finalize UI now
+                self._apply_finish_ui(success, message)
+        except Exception:
+            pass
+
     def update_item_progress(self, filename, current_item, total_items):
         """Update the item-level progress (from tqdm)."""
         # Update the overall progress display with the current file
@@ -1747,27 +1764,57 @@ class TranslationTab(QWidget):
         
     def on_translation_finished(self, success, message):
         """Handle translation completion."""
-        # Mark the last file as complete
+        # Mark the last file as complete if needed
         if self.current_translating_file:
             self.mark_file_complete(self.current_translating_file, success=success)
-        
-        # Show reset button instead of translate button
-        self.stop_button.setVisible(False)
-        self.reset_view_button.setVisible(True)
+
+        # If not all files have reported completion yet, defer final UI
+        # changes until the final file progress update arrives. This
+        # prevents the back/reset button from showing prematurely.
+        try:
+            if self.files_total and self.files_completed < self.files_total:
+                self._finish_pending = (success, message)
+                return
+        except Exception:
+            # If anything goes wrong with counts, fall through and finalize.
+            pass
+
+        # Otherwise finalize immediately
+        self._apply_finish_ui(success, message)
+
+    def _apply_finish_ui(self, success, message):
+        """Apply UI changes for a finished translation run."""
+        # Hide the stop button and show the reset/back button
+        try:
+            self.stop_button.setVisible(False)
+        except Exception:
+            pass
+        try:
+            self.reset_view_button.setVisible(True)
+        except Exception:
+            pass
+
         # Show the button to open the translated files folder
         try:
             self.open_translations_button.setVisible(True)
         except Exception:
             pass
-        
+
         # Update progress display
-        if success:
-            self.translating_label.setText("Completed!")
-        else:
-            self.translating_label.setText(f"Failed: {message}")
-        
+        try:
+            if success:
+                self.translating_label.setText("Completed!")
+            else:
+                self.translating_label.setText(f"Failed: {message}")
+        except Exception:
+            pass
+
         # Refresh file list to show any new translated files
-        self.refresh_file_lists()
+        try:
+            self.refresh_file_lists()
+        except Exception:
+            pass
+
         # Stop tailing the log when finished
         try:
             if hasattr(self, 'translation_log_viewer') and self.translation_log_viewer:
@@ -1788,6 +1835,20 @@ class TranslationTab(QWidget):
         # Toggle button visibility
         self.translate_button.setVisible(True)
         self.stop_button.setVisible(False)
+        # If a finish was pending (worker signaled finished before
+        # file progress completed), clear it and finalize UI now since
+        # the user requested a stop and no further progress updates
+        # are expected.
+        try:
+            self._finish_pending = None
+        except Exception:
+            pass
+
+        try:
+            # Apply final UI for stopped run
+            self._apply_finish_ui(False, "Translation stopped by user")
+        except Exception:
+            pass
         self.translating_label.setText("Stopped")
         
     def closeEvent(self, event):
