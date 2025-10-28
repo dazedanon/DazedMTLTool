@@ -730,35 +730,13 @@ def translateAI(text, history, fullPromptFlag, config, filename=None, pbar=None,
 
     with open(config.logFilePath, "a+", encoding="utf-8") as logFile:
         totalTokens = [0, 0]
-        cache_hits = 0
-        cache_misses = 0
         
         if isinstance(text, list):
             formatType = "json"
-            
-            # Deduplicate strings to avoid translating the same text multiple times
-            # This is crucial for files with many repeated strings
-            unique_texts = []
-            text_to_indices = {}  # Maps unique text to list of original indices
-            
-            for i, item in enumerate(text):
-                item_str = str(item) if item is not None else ""
-                if item_str in text_to_indices:
-                    text_to_indices[item_str].append(i)
-                else:
-                    text_to_indices[item_str] = [i]
-                    unique_texts.append(item)
-            
-            # Only batch the unique texts
-            tList = batchList(unique_texts, config.batchSize)
-            
-            # Track which unique items we've translated
-            translated_unique = [None] * len(unique_texts)
+            tList = batchList(text, config.batchSize)
         else:
             formatType = "text"
             tList = [text]
-            text_to_indices = None
-            translated_unique = None
 
         for index, tItem in enumerate(tList):
             # Check if text contains target language
@@ -766,18 +744,9 @@ def translateAI(text, history, fullPromptFlag, config, filename=None, pbar=None,
                 if pbar is not None:
                     pbar.update(len(tItem) if isinstance(tItem, list) else 1)
                 if isinstance(tItem, list):
-                    # For deduplication: store cleaned items in translated_unique
-                    if translated_unique is not None:
-                        batch_start = index * config.batchSize
-                        for i in range(len(tItem)):
-                            tItem[i] = cleanTranslatedText(tItem[i], config.language)
-                            unique_idx = batch_start + i
-                            if unique_idx < len(translated_unique):
-                                translated_unique[unique_idx] = tItem[i]
-                    else:
-                        for j in range(len(tItem)):
-                            tItem[j] = cleanTranslatedText(tItem[j], config.language)
-                        tList[index] = tItem
+                    for j in range(len(tItem)):
+                        tItem[j] = cleanTranslatedText(tItem[j], config.language)
+                    tList[index] = tItem
                 else:
                     tList[index] = cleanTranslatedText(tItem, config.language)
                 history = tItem[-config.maxHistory:] if isinstance(tItem, list) else tItem
@@ -801,17 +770,8 @@ def translateAI(text, history, fullPromptFlag, config, filename=None, pbar=None,
             # Check cache for this exact payload
             cached_result = get_cached_translation(subbedT, config.language)
             if cached_result is not None:
-                cache_hits += 1
-                
                 if isinstance(tItem, list):
-                    if translated_unique is not None:
-                        batch_start = index * config.batchSize
-                        for i, cached_item in enumerate(cached_result):
-                            unique_idx = batch_start + i
-                            if unique_idx < len(translated_unique):
-                                translated_unique[unique_idx] = cached_item
-                    else:
-                        tList[index] = cached_result
+                    tList[index] = cached_result
                     history = cached_result[-config.maxHistory:]
                 else:
                     tList[index] = cached_result
@@ -828,7 +788,6 @@ def translateAI(text, history, fullPromptFlag, config, filename=None, pbar=None,
 
             # Calculate estimate if in estimate mode
             if config.estimateMode:
-                cache_misses += 1
                 estimate = countTokens(system, user, history)
                 totalTokens[0] += estimate[0]
                 totalTokens[1] += estimate[1]
@@ -910,15 +869,7 @@ def translateAI(text, history, fullPromptFlag, config, filename=None, pbar=None,
                     cache_translation(subbedT, final_translations, config.language)
 
                 if isinstance(tItem, list):
-                    # For deduplication: store the translated batch items in translated_unique
-                    if translated_unique is not None:
-                        batch_start = index * config.batchSize
-                        for i, translated_item in enumerate(final_translations):
-                            unique_idx = batch_start + i
-                            if unique_idx < len(translated_unique):
-                                translated_unique[unique_idx] = translated_item
-                    else:
-                        tList[index] = final_translations
+                    tList[index] = final_translations
                     history = final_translations[-config.maxHistory:]
                 else:
                     tList[index] = final_translations
@@ -945,43 +896,16 @@ def translateAI(text, history, fullPromptFlag, config, filename=None, pbar=None,
                 if filename and mismatchList is not None and filename not in mismatchList:
                     mismatchList.append(filename)
                 
-                if translated_unique is not None:
-                    # For deduplication: mark failed items in translated_unique
-                    batch_start = index * config.batchSize
-                    for i, original_item in enumerate(tItem):
-                        unique_idx = batch_start + i
-                        if unique_idx < len(translated_unique):
-                            translated_unique[unique_idx] = original_item
-                else:
-                    tList[index] = tItem
+                tList[index] = tItem
                 history = text[-config.maxHistory:] if isinstance(text, list) else text
 
-    # Reconstruct the full list from deduplicated translations
-    if text_to_indices is not None and translated_unique is not None:
-        # Create result list with all original positions
-        result_list = [None] * len(text)
-        
-        # Apply newly translated items
-        for unique_idx, unique_text in enumerate(unique_texts):
-            unique_text_str = str(unique_text) if unique_text is not None else ""
-            translated_item = translated_unique[unique_idx]
-            
-            # If translation is still None, use the original text
-            if translated_item is None:
-                translated_item = unique_text
-            
-            # Get all indices that had this unique text
-            for original_idx in text_to_indices[unique_text_str]:
-                result_list[original_idx] = translated_item
-        
-        tList = result_list
-        
-        # Save cache after processing
-        if not config.estimateMode:
-            save_cache()
-    # Combine if multilist (original logic for non-deduplicated batches)
-    elif tList and isinstance(tList[0], list):
+    # Combine if multilist
+    if tList and isinstance(tList[0], list):
         tList = [t for sublist in tList for t in sublist]
+    
+    # Save cache after processing
+    if not config.estimateMode:
+        save_cache()
 
     # Return result
     if formatType == "json":
