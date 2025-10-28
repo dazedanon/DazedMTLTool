@@ -9,8 +9,29 @@ import re
 import json
 import tiktoken
 import openai
+from dotenv import load_dotenv
 from pathlib import Path
 from retry import retry
+
+# (from .env if present), strip accidental whitespace, and set the base URL,
+# organization, and API key. It also handles the Gemini compatibility layer.
+load_dotenv()
+api_provider = os.getenv("API_PROVIDER", "openai").lower()
+env_api = os.getenv("api", "").strip()
+if api_provider == "gemini":
+    # Use Google Generative Language compatibility endpoint when running Gemini
+    openai.base_url = "https://generativelanguage.googleapis.com/v1beta/openai/"
+    openai.organization = None
+else:
+    if env_api:
+        openai.base_url = env_api
+    # Support both 'organization' (gui/.env.example) and legacy 'org' names
+    org = os.getenv("organization") or os.getenv("org")
+    if org:
+        openai.organization = org.strip()
+
+# Always set API key from 'key' env var (trim whitespace)
+openai.api_key = os.getenv("key", "").strip()
 
 
 class TranslationConfig:

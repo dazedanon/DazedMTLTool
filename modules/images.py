@@ -7,7 +7,6 @@ import threading
 import time
 import traceback
 import tiktoken
-import openai
 from pathlib import Path
 from colorama import Fore
 from dotenv import load_dotenv
@@ -33,13 +32,6 @@ TOKENS = [0, 0]
 NAMESLIST = []
 MISMATCH = []  # Lists files that throw a mismatch error (Length of GPT list response is wrong)
 FILENAME = None
-
-# Open AI
-load_dotenv()
-if os.getenv("api").replace(" ", "") != "":
-    openai.base_url = os.getenv("api")
-openai.organization = os.getenv("org")
-openai.api_key = os.getenv("key")
 
 # Regex - Need to change this if you want to translate from/to other languages. Default is Japanese Regex
 LANGREGEX = r"[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]+"

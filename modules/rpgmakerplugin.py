@@ -7,7 +7,6 @@ import threading
 import time
 import traceback
 import tiktoken
-import openai
 from pathlib import Path
 from colorama import Fore
 from dotenv import load_dotenv
@@ -15,13 +14,6 @@ from retry import retry
 from tqdm import tqdm
 from util.translation import TranslationConfig, translateAI as sharedtranslateAI, getPricingConfig, calculateCost
 import tempfile
-
-# Open AI
-load_dotenv()
-if os.getenv("api").replace(" ", "") != "":
-    openai.base_url = os.getenv("api")
-openai.organization = os.getenv("org")
-openai.api_key = os.getenv("key")
 
 # Globals
 MODEL = os.getenv("model")

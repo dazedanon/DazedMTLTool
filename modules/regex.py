@@ -7,7 +7,6 @@ import threading
 import time
 import traceback
 import tiktoken
-import openai
 from pathlib import Path
 from colorama import Fore
 from dotenv import load_dotenv
@@ -15,18 +14,6 @@ from retry import retry
 from tqdm import tqdm
 from util.translation import TranslationConfig, translateAI as sharedtranslateAI, getPricingConfig, calculateCost
 import tempfile
-
-# Open AI
-load_dotenv()
-if os.getenv("API_PROVIDER") == "gemini":
-    openai.base_url = "https://generativelanguage.googleapis.com/v1beta/openai/"
-    openai.organization = None
-else:
-    api_url = os.getenv("api")
-    if api_url and api_url.replace(" ", "") != "":
-        openai.base_url = api_url
-    openai.organization = os.getenv("org")
-openai.api_key = os.getenv("key")
 
 # Globals
 MODEL = os.getenv("model")
