@@ -453,11 +453,11 @@ class ConfigTab(QWidget):
         if self.env_file_path.exists():
             load_dotenv(self.env_file_path)
             
-        # Load API settings
-        self.api_url_edit.setText(os.getenv("api", ""))
-        self.api_key_edit.setText(os.getenv("key", ""))
-        self.organization_edit.setText(os.getenv("organization", ""))
-        self.model_combo.setCurrentText(os.getenv("model", "gpt-4.1"))
+            # Load API settings (trim whitespace to avoid accidental trailing spaces)
+            self.api_url_edit.setText(os.getenv("api", "").strip())
+            self.api_key_edit.setText(os.getenv("key", "").strip())
+            self.organization_edit.setText(os.getenv("organization", "").strip())
+            self.model_combo.setCurrentText(os.getenv("model", "gpt-4.1"))
         
         # Load translation settings
         self.language_combo.setCurrentText(os.getenv("language", "English"))
@@ -485,10 +485,10 @@ class ConfigTab(QWidget):
             if not self.env_file_path.exists():
                 self.env_file_path.touch()
                 
-            # Save API settings
-            set_key(self.env_file_path, "api", self.api_url_edit.text())
-            set_key(self.env_file_path, "key", self.api_key_edit.text())
-            set_key(self.env_file_path, "organization", self.organization_edit.text())
+            # Save API settings (trim whitespace to prevent accidental spaces in .env)
+            set_key(self.env_file_path, "api", self.api_url_edit.text().strip())
+            set_key(self.env_file_path, "key", self.api_key_edit.text().strip())
+            set_key(self.env_file_path, "organization", self.organization_edit.text().strip())
             set_key(self.env_file_path, "model", self.model_combo.currentText())
             
             # Save translation settings

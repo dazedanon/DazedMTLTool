@@ -7,7 +7,6 @@ import threading
 import time
 import traceback
 import tiktoken
-import openai
 import copy
 # Removed concurrent.futures usage for simplicity; running synchronously
 from pathlib import Path
@@ -18,13 +17,6 @@ from tqdm import tqdm
 from util.translation import TranslationConfig, translateAI as sharedtranslateAI, getPricingConfig, calculateCost
 from ruamel.yaml import YAML
 
-
-# Open AI
-load_dotenv()
-if os.getenv("api").replace(" ", "") != "":
-    openai.base_url = os.getenv("api")
-openai.organization = os.getenv("org")
-openai.api_key = os.getenv("key")
 
 # Globals
 MODEL = os.getenv("model")

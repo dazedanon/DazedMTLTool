@@ -7,7 +7,6 @@ import threading
 import time
 import traceback
 import tiktoken
-import openai
 # Removed concurrent.futures usage for simplicity; running synchronously
 from pathlib import Path
 from colorama import Fore
@@ -16,12 +15,7 @@ from retry import retry
 from tqdm import tqdm
 from util.translation import TranslationConfig, translateAI as sharedtranslateAI, getPricingConfig, calculateCost, getPricingConfig, calculateCost
 
-# Open AI
-load_dotenv()
-if os.getenv("api").replace(" ", "") != "":
-    openai.base_url = os.getenv("api")
-openai.organization = os.getenv("org")
-openai.api_key = os.getenv("key")
+# OpenAI initialization centralized in util/translation.py
 
 # Globals
 MODEL = os.getenv("model")
