@@ -9,6 +9,8 @@ import re
 import json
 import tiktoken
 import openai
+import hashlib
+import threading
 from dotenv import load_dotenv
 from pathlib import Path
 from retry import retry
@@ -32,6 +34,72 @@ else:
 
 # Always set API key from 'key' env var (trim whitespace)
 openai.api_key = os.getenv("key", "").strip()
+
+# Translation cache management
+CACHE_FILE = Path("log/translation_cache.json")
+CACHE_LOCK = threading.Lock()
+_cache = None
+
+def clear_cache():
+    """Clear the translation cache (called at start of each run)"""
+    global _cache
+    with CACHE_LOCK:
+        _cache = {}
+
+def load_cache():
+    """Load the translation cache from disk"""
+    global _cache
+    if _cache is not None:
+        return _cache
+    
+    with CACHE_LOCK:
+        if _cache is not None:  # Double-check after acquiring lock
+            return _cache
+        
+        # Start with empty cache each run
+        _cache = {}
+        return _cache
+
+def save_cache():
+    """Save the translation cache to disk"""
+    global _cache
+    if _cache is None:
+        return
+    
+    try:
+        CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
+        # Use atomic write
+        tmp_file = CACHE_FILE.with_suffix(".tmp")
+        with open(tmp_file, "w", encoding="utf-8") as f:
+            json.dump(_cache, f, ensure_ascii=False, indent=2)
+        tmp_file.replace(CACHE_FILE)
+    except Exception:
+        pass
+
+def get_cache_key(payload, language):
+    """Generate a cache key for a payload (can be single string or JSON batch)"""
+    # Use hash to keep keys short but unique
+    payload_str = str(payload) if payload is not None else ""
+    combined = f"{payload_str}|{language}"
+    return hashlib.md5(combined.encode("utf-8")).hexdigest()
+
+def get_cached_translation(payload, language):
+    """Get cached translation if it exists"""
+    cache = load_cache()
+    key = get_cache_key(payload, language)
+    return cache.get(key)
+
+def cache_translation(payload, translation, language):
+    """Cache a translation payload and its response"""
+    global _cache
+    cache = load_cache()
+    key = get_cache_key(payload, language)
+    
+    with CACHE_LOCK:
+        cache[key] = translation
+        # Save every 10 new entries to avoid excessive disk writes
+        if len(cache) % 10 == 0:
+            save_cache()
 
 
 class TranslationConfig:
@@ -662,13 +730,35 @@ def translateAI(text, history, fullPromptFlag, config, filename=None, pbar=None,
 
     with open(config.logFilePath, "a+", encoding="utf-8") as logFile:
         totalTokens = [0, 0]
+        cache_hits = 0
+        cache_misses = 0
         
         if isinstance(text, list):
             formatType = "json"
-            tList = batchList(text, config.batchSize)
+            
+            # Deduplicate strings to avoid translating the same text multiple times
+            # This is crucial for files with many repeated strings
+            unique_texts = []
+            text_to_indices = {}  # Maps unique text to list of original indices
+            
+            for i, item in enumerate(text):
+                item_str = str(item) if item is not None else ""
+                if item_str in text_to_indices:
+                    text_to_indices[item_str].append(i)
+                else:
+                    text_to_indices[item_str] = [i]
+                    unique_texts.append(item)
+            
+            # Only batch the unique texts
+            tList = batchList(unique_texts, config.batchSize)
+            
+            # Track which unique items we've translated
+            translated_unique = [None] * len(unique_texts)
         else:
             formatType = "text"
             tList = [text]
+            text_to_indices = None
+            translated_unique = None
 
         for index, tItem in enumerate(tList):
             # Check if text contains target language
@@ -676,8 +766,17 @@ def translateAI(text, history, fullPromptFlag, config, filename=None, pbar=None,
                 if pbar is not None:
                     pbar.update(len(tItem) if isinstance(tItem, list) else 1)
                 if isinstance(tItem, list):
-                    for j in range(len(tItem)):
-                        tItem[j] = cleanTranslatedText(tItem[j], config.language)
+                    # For deduplication: store cleaned items in translated_unique
+                    if translated_unique is not None:
+                        batch_start = index * config.batchSize
+                        for i in range(len(tItem)):
+                            tItem[i] = cleanTranslatedText(tItem[i], config.language)
+                            unique_idx = batch_start + i
+                            if unique_idx < len(translated_unique):
+                                translated_unique[unique_idx] = tItem[i]
+                    else:
+                        for j in range(len(tItem)):
+                            tItem[j] = cleanTranslatedText(tItem[j], config.language)
                         tList[index] = tItem
                 else:
                     tList[index] = cleanTranslatedText(tItem, config.language)
@@ -699,14 +798,47 @@ def translateAI(text, history, fullPromptFlag, config, filename=None, pbar=None,
                 else:
                     subbedT = tItem
 
+            # Check cache for this exact payload
+            cached_result = get_cached_translation(subbedT, config.language)
+            if cached_result is not None:
+                cache_hits += 1
+                
+                if isinstance(tItem, list):
+                    if translated_unique is not None:
+                        batch_start = index * config.batchSize
+                        for i, cached_item in enumerate(cached_result):
+                            unique_idx = batch_start + i
+                            if unique_idx < len(translated_unique):
+                                translated_unique[unique_idx] = cached_item
+                    else:
+                        tList[index] = cached_result
+                    history = cached_result[-config.maxHistory:]
+                else:
+                    tList[index] = cached_result
+                    history = cached_result
+                
+                if lock and pbar is not None:
+                    with lock:
+                        pbar.update(len(tItem) if isinstance(tItem, list) else 1)
+                
+                continue
+
             # Create context
             system, user = createContext(config, fullPromptFlag, subbedT, formatType, history)
 
             # Calculate estimate if in estimate mode
             if config.estimateMode:
+                cache_misses += 1
                 estimate = countTokens(system, user, history)
                 totalTokens[0] += estimate[0]
                 totalTokens[1] += estimate[1]
+                
+                # Cache the payload with original text as placeholder for future estimates
+                if isinstance(tItem, list):
+                    cache_translation(subbedT, tItem, config.language)
+                else:
+                    cache_translation(subbedT, [tItem], config.language)
+                
                 continue
 
             # --- Translation and Validation Retry Block ---
@@ -773,8 +905,20 @@ def translateAI(text, history, fullPromptFlag, config, filename=None, pbar=None,
                 logFile.write(f"Input:\n{subbedT}\n")
                 logFile.write(f"Output:\n{formatted_output}\n")
 
+                # Cache the entire payload and its translation
+                if not config.estimateMode:
+                    cache_translation(subbedT, final_translations, config.language)
+
                 if isinstance(tItem, list):
-                    tList[index] = final_translations
+                    # For deduplication: store the translated batch items in translated_unique
+                    if translated_unique is not None:
+                        batch_start = index * config.batchSize
+                        for i, translated_item in enumerate(final_translations):
+                            unique_idx = batch_start + i
+                            if unique_idx < len(translated_unique):
+                                translated_unique[unique_idx] = translated_item
+                    else:
+                        tList[index] = final_translations
                     history = final_translations[-config.maxHistory:]
                 else:
                     tList[index] = final_translations
@@ -801,11 +945,42 @@ def translateAI(text, history, fullPromptFlag, config, filename=None, pbar=None,
                 if filename and mismatchList is not None and filename not in mismatchList:
                     mismatchList.append(filename)
                 
-                tList[index] = tItem
+                if translated_unique is not None:
+                    # For deduplication: mark failed items in translated_unique
+                    batch_start = index * config.batchSize
+                    for i, original_item in enumerate(tItem):
+                        unique_idx = batch_start + i
+                        if unique_idx < len(translated_unique):
+                            translated_unique[unique_idx] = original_item
+                else:
+                    tList[index] = tItem
                 history = text[-config.maxHistory:] if isinstance(text, list) else text
 
-    # Combine if multilist
-    if tList and isinstance(tList[0], list):
+    # Reconstruct the full list from deduplicated translations
+    if text_to_indices is not None and translated_unique is not None:
+        # Create result list with all original positions
+        result_list = [None] * len(text)
+        
+        # Apply newly translated items
+        for unique_idx, unique_text in enumerate(unique_texts):
+            unique_text_str = str(unique_text) if unique_text is not None else ""
+            translated_item = translated_unique[unique_idx]
+            
+            # If translation is still None, use the original text
+            if translated_item is None:
+                translated_item = unique_text
+            
+            # Get all indices that had this unique text
+            for original_idx in text_to_indices[unique_text_str]:
+                result_list[original_idx] = translated_item
+        
+        tList = result_list
+        
+        # Save cache after processing
+        if not config.estimateMode:
+            save_cache()
+    # Combine if multilist (original logic for non-deduplicated batches)
+    elif tList and isinstance(tList[0], list):
         tList = [t for sublist in tList for t in sublist]
 
     # Return result
