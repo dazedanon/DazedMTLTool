@@ -1520,7 +1520,7 @@ def searchCodes(page, pbar, jobList, filename):
 
                     ### Remove format codes
                     # Furigana: \r or \rb [base,reading] -> keep reading/base per pattern
-                    finalJAString = re.sub(r"[\\]+[r][b]?\[(.*?),.*?\]", r"\1", finalJAString)
+                    finalJAString = re.sub(r"[\\]+[rR][bB]?\[(.*?),.*?\]", r"\1", finalJAString)
 
                     # Curly-brace furigana: {base|reading} -> keep base
                     finalJAString = re.sub(r"\{([^|{}]+)\|[^|{}]+?\}", r"\1", finalJAString)
