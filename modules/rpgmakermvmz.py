@@ -1373,7 +1373,7 @@ def searchCodes(page, pbar, jobList, filename):
                 # Colons
                 if len(speakerList) == 0:
                     speakerList = re.findall(
-                        r"[\\]*[cC]?\[?\d*\]?(.+)：$",
+                        r"(.+)：$",
                         jaString,
                     )
 
