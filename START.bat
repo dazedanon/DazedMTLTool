@@ -39,7 +39,7 @@ if defined VENV_DIR (
                 set VENV_MINOR=%%b
             )
             if !VENV_MAJOR! EQU 3 if !VENV_MINOR! GEQ 12 if !VENV_MINOR! LSS 14 (
-                echo ✓ !VENV_DIR! Python version !VENV_PYTHON_VERSION! is compatible ^(^>^=3.12 and ^<3.14^).
+                echo !VENV_DIR! Python version !VENV_PYTHON_VERSION! is compatible ^(^>^=3.12 and ^<3.14^).
                 goto :activate_venv
             ) else (
                 echo !VENV_DIR! Python version !VENV_PYTHON_VERSION! is not supported ^(requires ^>^=3.12 and ^<3.14^)
@@ -83,7 +83,7 @@ if errorlevel 1 (
     pause
     exit /b 1
 )
-echo ✓ Virtual environment created
+echo Virtual environment created
 echo.
 
 :: Proceed to activation after creating the venv to avoid falling through into subroutines
@@ -135,7 +135,7 @@ if errorlevel 1 (
         exit /b 1
     )
 )
-echo ✓ Virtual environment activated
+echo Virtual environment activated
 echo.
 
 :: (proceeding to dependency checks and launch)
@@ -154,9 +154,9 @@ if errorlevel 1 (
         pause
         exit /b 1
     )
-    echo ✓ Dependencies installed successfully
+    echo Dependencies installed successfully
 ) else (
-    echo ✓ All dependencies are already satisfied
+    echo All dependencies are already satisfied
 )
 echo.
 
@@ -165,6 +165,27 @@ echo ==========================================
 echo    Launching DazedMTLTool GUI...
 echo ==========================================
 echo.
+
+:: Ensure vocab.txt exists (create from example if available)
+if not exist "vocab.txt" (
+    if exist "vocab.txt.example" (
+        echo vocab.txt not found - creating from vocab.txt.example...
+        copy /Y "vocab.txt.example" "vocab.txt" >nul 2>&1
+        if errorlevel 1 (
+            echo ERROR: Failed to copy vocab.txt.example to vocab.txt.
+        ) else (
+            echo Created vocab.txt from vocab.txt.example
+        )
+    ) else (
+        echo vocab.txt and vocab.txt.example not found - creating empty vocab.txt to avoid import errors...
+        type NUL > "vocab.txt"
+        if errorlevel 1 (
+            echo ERROR: Failed to create empty vocab.txt.
+        ) else (
+            echo Created empty vocab.txt
+        )
+    )
+)
 
 python start_gui.py
 
