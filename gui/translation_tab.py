@@ -59,6 +59,7 @@ class TranslationWorker(QThread):
     log_signal = pyqtSignal(str)
     progress_signal = pyqtSignal(int, int, str)  # current_file, total_files, filename
     item_progress_signal = pyqtSignal(str, int, int)  # filename, current_item, total_items (for tqdm within file)
+    file_error_signal = pyqtSignal(str, str)  # filename, error_message
     finished_signal = pyqtSignal(bool, str)
     
     def __init__(self, project_root, module_info, estimate_only=False, selected_files=None, parse_speakers=False):
@@ -233,14 +234,31 @@ class TranslationWorker(QThread):
                             return result_text.encode('ascii', 'ignore').decode('ascii')
                 return "Success"
             else:
+                # Extract error message from stderr
                 error_msg = stderr.strip() if stderr.strip() else "Unknown error"
                 # Handle potential Unicode errors in error messages
                 try:
                     clean_error = error_msg.encode('ascii', 'ignore').decode('ascii')
                 except:
                     clean_error = "Unicode encoding error in process output"
-                self.emit_log(f"❌ Process error: {clean_error}")
-                return "Fail"
+                
+                # Check if stderr contains the actual exception message
+                # Format from subprocess_runner.py: "ERROR:actual error message"
+                actual_error = clean_error
+                for line in clean_error.split('\n'):
+                    if line.startswith('ERROR:'):
+                        actual_error = line[6:]  # Remove 'ERROR:' prefix
+                        break
+                    # Check for exception lines in traceback
+                    if 'NameError:' in line or 'Error:' in line:
+                        # Extract just the error message part
+                        if ':' in line:
+                            actual_error = line.split(':', 1)[1].strip()
+                            break
+                
+                self.emit_log(f"❌ Process error: {actual_error}")
+                # Return the actual error so it can be used to determine if file is unsupported
+                return ("SUBPROCESS_ERROR", actual_error)
                 
         except Exception as e:
             self.emit_log(f"❌ Failed to run module process: {str(e)}")
@@ -347,7 +365,12 @@ class TranslationWorker(QThread):
                             # Handler prints cost lines via tqdm.write; capture nothing here
                         except Exception as e:
                             tb_line = str(traceback.extract_tb(sys.exc_info()[2])[-1].lineno)
-                            self.emit_log(f"❌ Error processing {filename}: {str(e)} | Line: {tb_line}")
+                            error_msg = f"❌ Error processing {filename}: {str(e)} | Line: {tb_line}"
+                            self.emit_log(error_msg)
+                            # Emit file error signal to mark this file as failed
+                            self.file_error_signal.emit(filename, str(e))
+                            completed_count += 1
+                            self.emit_progress(completed_count, total_files, filename)
 
                     # After all files processed, finalize speaker parse (translates collected speakers)
                     try:
@@ -420,18 +443,27 @@ class TranslationWorker(QThread):
                         
                         try:
                             result = future.result()
-                            if result and result != "Fail" and result != "Stopped":
+                            # Check if result is an error tuple from subprocess
+                            if isinstance(result, tuple) and len(result) == 2 and result[0] == "SUBPROCESS_ERROR":
+                                error_message = result[1]
+                                self.file_error_signal.emit(filename, error_message)
+                            elif result and result != "Fail" and result != "Stopped":
                                 total_cost = result
                                 # Don't log completion here since the module already logged the detailed cost info
                             elif result == "Stopped":
                                 # Don't log here, already handled
                                 break
                             else:
-                                self.emit_log(f"❌ Failed processing {filename}")
+                                error_msg = f"❌ Failed processing {filename}"
+                                self.emit_log(error_msg)
+                                # Emit file error signal to mark this file as failed
+                                self.file_error_signal.emit(filename, "Translation failed")
                         except Exception as e:
                             tb_line = str(traceback.extract_tb(sys.exc_info()[2])[-1].lineno)
                             error_msg = f"❌ Error processing {filename}: {str(e)} | Line: {tb_line}"
                             self.emit_log(error_msg)
+                            # Emit file error signal to mark this file as failed
+                            self.file_error_signal.emit(filename, str(e))
             finally:
                 # Properly shutdown the executor
                 if self.executor:
@@ -1349,8 +1381,8 @@ class TranslationTab(QWidget):
         
         # Progress label (small) shown next to filename
         progress_label = QLabel("Waiting...")
-        progress_label.setStyleSheet("color: #888888; font-size: 11px;")
-        progress_label.setFixedWidth(80)
+        progress_label.setStyleSheet("color: #888888; font-size: 10px;")
+        progress_label.setFixedWidth(110)
         layout.addWidget(progress_label)
 
         # Progress bar (stretch to fill remaining space)
@@ -1430,15 +1462,14 @@ class TranslationTab(QWidget):
             item['label'].setText(f"{current}/{total}")
             item['label'].setStyleSheet("color: #007acc; font-weight: bold;")
     
-    def mark_file_complete(self, filename, success=True):
-        """Mark a file as complete."""
+    def mark_file_complete(self, filename, success=True, error_message=None):
+        """Mark a file as complete or failed."""
         if filename in self.file_progress_items:
             item = self.file_progress_items[filename]
-            item['checkbox'].setChecked(True)
             # If we have detailed result labels already set (via append_log),
             # show them and hide the progress bar to make room.
             if success:
-                # If tokens/cost/time were already filled by parse, they'll be visible.
+                item['checkbox'].setChecked(True)
                 if item.get('tokens_label') and item['tokens_label'].text():
                     item['tokens_label'].setVisible(True)
                     item['cost_label'].setVisible(True)
@@ -1475,15 +1506,46 @@ class TranslationTab(QWidget):
                     except Exception:
                         pass
             else:
+                # Check if this is an unsupported file type error
+                is_unsupported = False
+                if error_message:
+                    error_lower = error_message.lower()
+                    is_unsupported = (
+                        " not supported" in error_lower or
+                        "not supported" == error_lower or
+                        "unsupported" in error_lower or
+                        "invalid file" in error_lower or
+                        "wrong file type" in error_lower
+                    )
+                
+                # Mark as failed - checkbox unchecked, red X or warning icon
+                item['checkbox'].setChecked(False)
                 try:
-                    item['status_label'].setText("✗")
-                    item['status_label'].setStyleSheet("color: #f48771; font-weight: bold; font-size: 11px;")
+                    if is_unsupported:
+                        item['status_label'].setText("⚠")
+                        item['status_label'].setStyleSheet("color: #f1c40f; font-weight: bold; font-size: 13px;")
+                    else:
+                        item['status_label'].setText("✗")
+                        item['status_label'].setStyleSheet("color: #f48771; font-weight: bold; font-size: 11px;")
                     item['status_label'].setVisible(True)
+                    # Set tooltip with error message if provided
+                    if error_message:
+                        item['status_label'].setToolTip(f"Error: {error_message}")
+                        item['widget'].setToolTip(f"Error: {error_message}")
                 except Exception:
                     pass
                 try:
-                    item['label'].setText("")
-                    item['label'].setStyleSheet("color: #f48771; font-size: 11px;")
+                    if is_unsupported:
+                        item['label'].setText("Not Supported")
+                        item['label'].setStyleSheet("color: #f1c40f; font-weight: bold; font-size: 10px;")
+                    else:
+                        item['label'].setText("Failed")
+                        item['label'].setStyleSheet("color: #f48771; font-weight: bold; font-size: 10px;")
+                except Exception:
+                    pass
+                try:
+                    # Hide progress bar and show error state
+                    item['progress_bar'].setVisible(False)
                 except Exception:
                     pass
     
@@ -1606,6 +1668,7 @@ class TranslationTab(QWidget):
             self.translation_worker.log_signal.connect(self.append_log)
             self.translation_worker.progress_signal.connect(self.update_file_progress)
             self.translation_worker.item_progress_signal.connect(self.update_item_progress)
+            self.translation_worker.file_error_signal.connect(self.on_file_error)
             self.translation_worker.finished_signal.connect(self.on_translation_finished)
             # Prepare a per-run log file in log/history and start tailing it so
             # the right-hand log panel shows only this run's new lines.
@@ -1777,6 +1840,11 @@ class TranslationTab(QWidget):
             if self.file_progress_items[filename]['label'].text() == "Waiting...":
                 self.file_progress_items[filename]['label'].setText("Translating...")
                 self.file_progress_items[filename]['label'].setStyleSheet("color: #007acc; font-weight: bold;")
+    
+    def on_file_error(self, filename, error_message):
+        """Handle a file translation error."""
+        # Mark the file as failed with the error message
+        self.mark_file_complete(filename, success=False, error_message=error_message)
             
     def flush_log_buffer(self):
         """No longer needed - kept for compatibility."""
