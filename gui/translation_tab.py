@@ -528,6 +528,8 @@ class TranslationTab(QWidget):
         self.totals_output_tokens = 0
         self.totals_cost = 0.0
         self.totals_time = 0.0
+        # Track which filenames' totals have been applied (prevents double-counting)
+        self._applied_file_totals = set()
         # Totals widget reference
         self.totals_widget = None
         
@@ -1536,6 +1538,11 @@ class TranslationTab(QWidget):
                 self.totals_output_tokens = 0
                 self.totals_cost = 0.0
                 self.totals_time = 0.0
+                # Reset seen filenames for this run so totals can be applied anew
+                try:
+                    self._applied_file_totals.clear()
+                except Exception:
+                    self._applied_file_totals = set()
                 if hasattr(self, 'totals_tokens_label'):
                     self.totals_tokens_label.setText("Tokens: 0 in / 0 out")
                 if hasattr(self, 'totals_cost_label'):
@@ -1627,31 +1634,21 @@ class TranslationTab(QWidget):
             self.translation_worker.start()
             
     def append_log(self, message):
-        """Append a message to the log - now just for internal tracking."""
-        # IMPORTANT: Do NOT forward worker messages directly to the
-        # LogViewer when tailing a file. The LogViewer is intended to
-        # show only the contents of the log file (e.g. log/translationHistory.txt).
-        # Forwarding worker messages here caused non-file messages to appear
-        # in the log window. Modules write to the log file themselves, so
-        # we no longer push worker messages into the UI.
-        # Parse worker/module output lines for per-file result details.
-        # Example line: "Enemies.json: [Input: 8865][Output: 663][Cost: $0.0230][20.1s] ✓"
         try:
-            pattern = r'^(?P<filename>[^:]+):.*?\[Input:\s*(?P<input>\d+)\].*?\[Output:\s*(?P<output>\d+)\].*?\[Cost:\s*\$(?P<cost>[\d\.]+)\].*?\[(?P<time>[\d\.]+)s\]'
+            pattern = r'^\W*(?P<filename>[^:]+):.*?\[Input:\s*(?P<input>\d+)\].*?\[Output:\s*(?P<output>\d+)\].*?\[Cost:\s*\$(?P<cost>[\d\.]+)\].*?\[(?P<time>[\d\.]+)s\]'
             m = re.search(pattern, message)
-            if m:
-                filename = m.group('filename').strip()
-                input_tokens = int(m.group('input'))
-                output_tokens = int(m.group('output'))
-                cost = float(m.group('cost'))
-                time_s = float(m.group('time'))
-                # Apply the parsed results to the UI
-                try:
-                    self._apply_file_result(filename, input_tokens, output_tokens, cost, time_s)
-                except Exception:
-                    pass
+            if not m:
+                return
+            filename = re.sub(r'^[^\w]+', '', m.group('filename')).strip()
+            if filename.lower() == 'total':
+                return
+            input_tokens = int(m.group('input'))
+            output_tokens = int(m.group('output'))
+            cost = float(m.group('cost'))
+            time_s = float(m.group('time'))
+            self._apply_file_result(filename, input_tokens, output_tokens, cost, time_s)
         except Exception:
-            # If parsing fails, ignore and do not forward to log viewer
+            # Ignore parse/logging errors
             pass
         # Do not forward this message into the LogViewer (we tail the log file separately).
         return
@@ -1676,11 +1673,14 @@ class TranslationTab(QWidget):
             except Exception:
                 pass
 
-        # Update totals
         try:
-            self.totals_input_tokens += int(input_tokens)
-            self.totals_output_tokens += int(output_tokens)
-            self.totals_cost += float(cost)
+            if not hasattr(self, '_applied_file_totals'):
+                self._applied_file_totals = set()
+            if filename not in self._applied_file_totals:
+                self._applied_file_totals.add(filename)
+                self.totals_input_tokens += int(input_tokens)
+                self.totals_output_tokens += int(output_tokens)
+                self.totals_cost += float(cost)
             # Total time should be the longest single-file time (not the sum)
             self.totals_time = max(self.totals_time, float(time_s))
             # Refresh totals labels
