@@ -303,21 +303,27 @@ class TranslationWorker(QThread):
             threads = int(os.getenv("fileThreads", "1"))
             total_cost = "Fail"
 
-            # If we're doing Parse Speakers for RPGMaker MV/MZ, run handlers in-process so
+            # If we're doing Parse Speakers for RPGMaker MV/MZ or ACE, run handlers in-process so
             # speaker collection is shared in this process and finalizeSpeakerParse() can run once.
-            is_mvmz = "mv/mz" in (self.module_info[0].lower() if isinstance(self.module_info[0], str) else "")
+            module_name_lower = self.module_info[0].lower() if isinstance(self.module_info[0], str) else ""
+            is_mvmz = "mv/mz" in module_name_lower
+            is_ace = "ace" in module_name_lower
 
             # Change to project directory for module execution
             old_cwd = os.getcwd()
             os.chdir(str(self.project_root))
 
             try:
-                if self.parse_speakers and is_mvmz:
+                if self.parse_speakers and (is_mvmz or is_ace):
                     # Run handlers sequentially in this worker process so globals are shared
                     try:
-                        from modules.rpgmakermvmz import handleMVMZ, setSpeakerParseMode, finalizeSpeakerParse, TOKENS, calculateCost, MODEL
+                        if is_mvmz:
+                            from modules.rpgmakermvmz import handleMVMZ as handler, setSpeakerParseMode, finalizeSpeakerParse, TOKENS, calculateCost, MODEL
+                        elif is_ace:
+                            from modules.rpgmakerace import handleACE as handler, setSpeakerParseMode, finalizeSpeakerParse, TOKENS, calculateCost, MODEL
                     except Exception as e:
-                        self.emit_log(f"❌ Could not import rpgmakermvmz for speaker-parse: {e}")
+                        engine_name = "rpgmakermvmz" if is_mvmz else "rpgmakerace"
+                        self.emit_log(f"❌ Could not import {engine_name} for speaker-parse: {e}")
                         self.finished_signal.emit(False, str(e))
                         return
 
@@ -335,7 +341,7 @@ class TranslationWorker(QThread):
                             break
                         # Run handler in-process
                         try:
-                            result = handleMVMZ(filename, self.estimate_only)
+                            result = handler(filename, self.estimate_only)
                             completed_count += 1
                             self.emit_progress(completed_count, total_files, filename)
                             # Handler prints cost lines via tqdm.write; capture nothing here
@@ -1070,8 +1076,8 @@ class TranslationTab(QWidget):
         self.mode_combo.addItem("Translate")
         self.mode_combo.addItem("Estimate")
         
-        # Add Parse Speakers for RPG Maker MV/MZ
-        if "mv/mz" in lowered:
+        # Add Parse Speakers for RPG Maker MV/MZ and RPG Maker Ace
+        if "mv/mz" in lowered or "ace" in lowered:
             self.mode_combo.addItem("Parse Speakers")
         
         # Restore previous selection if it still exists
