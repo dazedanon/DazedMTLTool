@@ -1086,6 +1086,9 @@ class TranslationTab(QWidget):
             self.mode_combo.setCurrentIndex(index)
         else:
             self.mode_combo.setCurrentIndex(0)
+        
+        # Refresh file list to show only files matching the selected module's extensions
+        self.refresh_file_lists()
     
     def _toggle_file_checkbox(self, item):
         """Toggle checkbox when clicking anywhere on the item."""
@@ -1164,11 +1167,27 @@ class TranslationTab(QWidget):
             except Exception:
                 pass
 
+        # Get accepted extensions for the currently selected module
+        accepted_extensions = []
+        try:
+            selected_index = self.module_combo.currentIndex()
+            if 0 <= selected_index < len(self.modules):
+                accepted_extensions = self.modules[selected_index][1]  # List of extensions like [".json", ".yaml"]
+        except Exception:
+            pass
+
         # Rebuild the list using simple QListWidgetItems with checkboxes
         self.file_list.clear()
         if self.files_dir.exists():
             for file_path in sorted(self.files_dir.iterdir()):
                 if file_path.is_file() and file_path.name != '.gitkeep':
+                    # Filter by accepted extensions if any are defined
+                    if accepted_extensions:
+                        file_ext = file_path.suffix.lower()
+                        # Skip files that don't match any accepted extension
+                        if not any(file_ext == ext.lower() for ext in accepted_extensions):
+                            continue
+                    
                     item = QListWidgetItem(file_path.name)
                     # Ensure the item is enabled, selectable, and user-checkable
                     item.setFlags(item.flags() | Qt.ItemIsUserCheckable | Qt.ItemIsEnabled | Qt.ItemIsSelectable)
