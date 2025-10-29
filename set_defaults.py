@@ -9,6 +9,7 @@ DEFAULTS = {
     'BRFLAG': False,
     'FIXTEXTWRAP': True,
     'IGNORETLTEXT': False,
+    'JOIN408': False,
     # Speakers / Dialogue / Scroll / Choices (Main Codes)
     'CODE101': True,
     'CODE401': True,
