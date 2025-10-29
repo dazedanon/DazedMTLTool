@@ -55,7 +55,7 @@ class RPGMakerTab(QWidget):
         "FIXTEXTWRAP": True,
         "IGNORETLTEXT": False,
         
-        # Main dialogue codes (enabled by default)
+        # Main Codes (enabled by default)
         "CODE401": True,   # Show Text
         "CODE405": True,   # Show Text (line 4+)
         "CODE102": True,   # Show Choices
@@ -258,10 +258,14 @@ class RPGMakerTab(QWidget):
 
         left_column.addSpacing(15)
         
-        # Main Dialogue Codes
+        # Main Codes
         left_column.addWidget(create_section_label("💬 Main Dialogue (Recommended)"))
         self.code401_cb = QCheckBox("CODE401 - Dialogue Text")
         left_column.addWidget(self.code401_cb)
+
+        self.code101_cb = QCheckBox("CODE101 - Speakers and Faces")
+        self.code101_cb.setToolTip("Many games use this for speaker names")
+        left_column.addWidget(self.code101_cb)
         
         self.code405_cb = QCheckBox("CODE405 - Scrolling Text")
         left_column.addWidget(self.code405_cb)
@@ -271,11 +275,8 @@ class RPGMakerTab(QWidget):
         
         left_column.addSpacing(15)
         
-        # Optional Dialogue Codes
-        left_column.addWidget(create_section_label("📝 Optional Dialogue"))
-        self.code101_cb = QCheckBox("CODE101 - Speakers and Faces")
-        left_column.addWidget(self.code101_cb)
-        
+        # Optional Codes
+        left_column.addWidget(create_section_label("📝 Optional Codes"))
         self.code408_cb = QCheckBox("CODE408 - Comments and Alternative Text")
         self.code408_cb.setToolTip("Can significantly increase costs")
         self.code408_cb.setStyleSheet("QCheckBox { color: #ff9999; }")
@@ -379,7 +380,7 @@ class RPGMakerTab(QWidget):
             self.ignoretltext_cb.stateChanged.disconnect()
             self.join408_cb.stateChanged.disconnect()
             
-            # Main dialogue codes
+            # Main Codes
             self.code401_cb.stateChanged.disconnect()
             self.code405_cb.stateChanged.disconnect()
             self.code102_cb.stateChanged.disconnect()
@@ -415,7 +416,7 @@ class RPGMakerTab(QWidget):
         self.ignoretltext_cb.stateChanged.connect(lambda: self.apply_to_module(show_messages=False))
         self.join408_cb.stateChanged.connect(lambda: self.apply_to_module(show_messages=False))
 
-        # Main dialogue codes
+        # Main Codes
         self.code401_cb.stateChanged.connect(lambda: self.apply_to_module(show_messages=False))
         self.code405_cb.stateChanged.connect(lambda: self.apply_to_module(show_messages=False))
         self.code102_cb.stateChanged.connect(lambda: self.apply_to_module(show_messages=False))
@@ -449,7 +450,7 @@ class RPGMakerTab(QWidget):
             "IGNORETLTEXT": self.ignoretltext_cb.isChecked(),
             "JOIN408": self.join408_cb.isChecked(),
 
-            # Main dialogue codes
+            # Main Codes
             "CODE401": self.code401_cb.isChecked(),
             "CODE405": self.code405_cb.isChecked(),
             "CODE102": self.code102_cb.isChecked(),
@@ -485,7 +486,7 @@ class RPGMakerTab(QWidget):
         self.ignoretltext_cb.setChecked(config.get("IGNORETLTEXT", False))
         self.join408_cb.setChecked(config.get("JOIN408", False))
 
-        # Main dialogue codes
+        # Main Codes
         self.code401_cb.setChecked(config.get("CODE401", True))
         self.code405_cb.setChecked(config.get("CODE405", True))
         self.code102_cb.setChecked(config.get("CODE102", True))
@@ -522,7 +523,7 @@ class RPGMakerTab(QWidget):
         warnings = []
         errors = []
         
-        # Check if any main dialogue codes are enabled
+        # Check if any Main Codes are enabled
         main_codes_enabled = (
             self.code401_cb.isChecked() or 
             self.code405_cb.isChecked() or 
@@ -530,7 +531,7 @@ class RPGMakerTab(QWidget):
         )
         
         if not main_codes_enabled:
-            warnings.append("No main dialogue codes are enabled. You may not get any translated content.")
+            warnings.append("No Main Codes are enabled. You may not get any translated content.")
             
         # Check for high-cost options
         if self.code408_cb.isChecked():

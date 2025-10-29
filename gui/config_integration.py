@@ -158,7 +158,7 @@ class ConfigIntegration:
             "FIXTEXTWRAP": True,
             "IGNORETLTEXT": False,
             
-            # Main dialogue codes
+            # Main Codes
             "CODE401": True,
             "CODE405": True,
             "CODE102": True,
