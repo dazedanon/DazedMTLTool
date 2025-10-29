@@ -51,7 +51,6 @@ class RPGMakerTab(QWidget):
         # General settings
         "FIRSTLINESPEAKERS": False,
         "FACENAME101": False,
-        "NAMES": False,
         "BRFLAG": False,
         "FIXTEXTWRAP": True,
         "IGNORETLTEXT": False,
@@ -241,12 +240,8 @@ class RPGMakerTab(QWidget):
         self.facename101_cb.setToolTip("Enable to translate face names in CODE101")
         left_column.addWidget(self.facename101_cb)
         
-        self.names_cb = QCheckBox("Translate Names")
-        self.names_cb.setToolTip("Enable to translate character names")
-        left_column.addWidget(self.names_cb)
-        
-        self.brflag_cb = QCheckBox("Line Break Flag")
-        self.brflag_cb.setToolTip("Enable line break handling")
+        self.brflag_cb = QCheckBox("Scan <br> For Newlines")
+        self.brflag_cb.setToolTip("Changes scanning for newlines from \\n to &lt;br&gt;")
         left_column.addWidget(self.brflag_cb)
         
         self.fixtextwrap_cb = QCheckBox("Fix Text Wrap")
@@ -265,23 +260,23 @@ class RPGMakerTab(QWidget):
         
         # Main Dialogue Codes
         left_column.addWidget(create_section_label("💬 Main Dialogue (Recommended)"))
-        self.code401_cb = QCheckBox("CODE401 - Show Text")
+        self.code401_cb = QCheckBox("CODE401 - Dialogue Text")
         left_column.addWidget(self.code401_cb)
         
-        self.code405_cb = QCheckBox("CODE405 - Show Text (line 4+)")
+        self.code405_cb = QCheckBox("CODE405 - Scrolling Text")
         left_column.addWidget(self.code405_cb)
         
-        self.code102_cb = QCheckBox("CODE102 - Show Choices")
+        self.code102_cb = QCheckBox("CODE102 - Choices")
         left_column.addWidget(self.code102_cb)
         
         left_column.addSpacing(15)
         
         # Optional Dialogue Codes
         left_column.addWidget(create_section_label("📝 Optional Dialogue"))
-        self.code101_cb = QCheckBox("CODE101 - Show Text (face)")
+        self.code101_cb = QCheckBox("CODE101 - Speakers and Faces")
         left_column.addWidget(self.code101_cb)
         
-        self.code408_cb = QCheckBox("CODE408 - Show Text (continuation)")
+        self.code408_cb = QCheckBox("CODE408 - Comments and Alternative Text")
         self.code408_cb.setToolTip("Can significantly increase costs")
         self.code408_cb.setStyleSheet("QCheckBox { color: #ff9999; }")
         left_column.addWidget(self.code408_cb)
@@ -379,7 +374,6 @@ class RPGMakerTab(QWidget):
             # General settings checkboxes
             self.first_line_speakers_cb.stateChanged.disconnect()
             self.facename101_cb.stateChanged.disconnect()
-            self.names_cb.stateChanged.disconnect()
             self.brflag_cb.stateChanged.disconnect()
             self.fixtextwrap_cb.stateChanged.disconnect()
             self.ignoretltext_cb.stateChanged.disconnect()
@@ -416,7 +410,6 @@ class RPGMakerTab(QWidget):
         # General settings checkboxes
         self.first_line_speakers_cb.stateChanged.connect(lambda: self.apply_to_module(show_messages=False))
         self.facename101_cb.stateChanged.connect(lambda: self.apply_to_module(show_messages=False))
-        self.names_cb.stateChanged.connect(lambda: self.apply_to_module(show_messages=False))
         self.brflag_cb.stateChanged.connect(lambda: self.apply_to_module(show_messages=False))
         self.fixtextwrap_cb.stateChanged.connect(lambda: self.apply_to_module(show_messages=False))
         self.ignoretltext_cb.stateChanged.connect(lambda: self.apply_to_module(show_messages=False))
@@ -451,7 +444,6 @@ class RPGMakerTab(QWidget):
             # General settings
             "FIRSTLINESPEAKERS": self.first_line_speakers_cb.isChecked(),
             "FACENAME101": self.facename101_cb.isChecked(),
-            "NAMES": self.names_cb.isChecked(),
             "BRFLAG": self.brflag_cb.isChecked(),
             "FIXTEXTWRAP": self.fixtextwrap_cb.isChecked(),
             "IGNORETLTEXT": self.ignoretltext_cb.isChecked(),
@@ -488,7 +480,6 @@ class RPGMakerTab(QWidget):
         # General settings
         self.first_line_speakers_cb.setChecked(config.get("FIRSTLINESPEAKERS", False))
         self.facename101_cb.setChecked(config.get("FACENAME101", False))
-        self.names_cb.setChecked(config.get("NAMES", False))
         self.brflag_cb.setChecked(config.get("BRFLAG", False))
         self.fixtextwrap_cb.setChecked(config.get("FIXTEXTWRAP", True))
         self.ignoretltext_cb.setChecked(config.get("IGNORETLTEXT", False))
