@@ -85,6 +85,8 @@ FIXTEXTWRAP = True
 IGNORETLTEXT = False
 # TLSYSTEMVARIABLES: Translate System Variables. (Optional but sometimes necessary. Can break stuff.)
 TLSYSTEMVARIABLES = False
+# Join 408 codes into a single string like 401.
+JOIN408 = False
 
 # Dialogue / Scroll / Choices (Main Codes)
 CODE101 = False
@@ -2125,13 +2127,27 @@ def searchCodes(page, pbar, jobList, filename):
                     ojaString = jaString
                     jaString = jaString.replace("\n", " ")
 
-                    # If there isn't any Japanese in the text just skip
-                    if not re.search(LANGREGEX, jaString):
-                        i += 1
-                        continue
+                    # Join Up 408's into single string
+                    if len(codeList) > i + 1 and JOIN408 is True:
+                        while codeList[i + 1]["c"] in [408] and len(codeList[i]["p"]) > 0 and len(codeList[i + 1]["p"]) > 0 and not re.match(r"^(\s*[\\]+[aAbBdDeEfFgGhHjJlLmMoOpPqQrRsStTuUwWxXyYzZ]+\[[\w\d\[\]\\]+\])", codeList[i+1]["p"][0]):
+                            if not setData:
+                                codeList[i]["p"] = []
+                                codeList[i]["c"] = -1
+                            i += 1
+                            j = i
+
+                            jaString = codeList[i]["p"][0]
+                            if jaString.strip():
+                                currentGroup.append(jaString)
+
+                            # Make sure not the end of the list.
+                            if len(codeList) <= i + 1:
+                                break
 
                     # Pass 1
                     if setData:
+                        # Remove Textwrap
+                        jaString = jaString.replace("\n", " ")
                         list408.append(jaString)
                     
                     # Pass 2
@@ -2140,7 +2156,7 @@ def searchCodes(page, pbar, jobList, filename):
                         list408.pop(0)
 
                         # Textwrap
-                        translatedText = dazedwrap.wrapText(translatedText, width=LISTWIDTH)
+                        translatedText = dazedwrap.wrapText(translatedText, width=WIDTH)
 
                         # Set Data
                         codeList[i]["p"][0] = codeList[i]["p"][0].replace(ojaString, translatedText)
