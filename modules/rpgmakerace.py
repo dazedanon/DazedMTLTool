@@ -74,7 +74,7 @@ LEAVE = False
 
 # Config (Default)
 # FIRSTLINESPEAKERS: Guess speaker from first line.
-FIRSTLINESPEAKERS = True
+FIRSTLINESPEAKERS = False
 # FACENAME101: Map face name -> speaker.
 FACENAME101 = False
 # BRFLAG: Newlines -> <br>.
@@ -89,13 +89,13 @@ TLSYSTEMVARIABLES = False
 JOIN408 = False
 
 # Dialogue / Scroll / Choices (Main Codes)
-CODE101 = False
+CODE101 = True
 CODE401 = True
 CODE405 = True
 CODE102 = True
 
 # Optional
-CODE408 = True
+CODE408 = False
 
 # Variables
 CODE122 = False
