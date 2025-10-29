@@ -143,16 +143,30 @@ files to translate are in the /files folder and that you picked the right game e
     try:
         hist_dir = Path("log") / "history"
         hist_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Clean up old log files, keeping only the 10 most recent
+        try:
+            log_files = sorted(hist_dir.glob("translationHistory_*.txt"), key=lambda p: p.stat().st_mtime, reverse=True)
+            # Keep only the 10 most recent, delete the rest
+            for old_log in log_files[10:]:
+                try:
+                    old_log.unlink()
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        
         fname = datetime.datetime.now().strftime("translationHistory_%Y%m%d_%H%M%S.txt")
         run_log_path = hist_dir / fname
-        run_log_path.touch(exist_ok=True)
-        # Export env var so other modules/util functions pick it up
+        # Don't create the file yet - it will be created when first log is written
+        # Store the path in environment variable
         try:
             os.environ['TRANSLATION_RUN_LOG'] = str(run_log_path)
         except Exception:
             pass
 
         # Try to create a hard link from legacy path to this run file for compatibility
+        # This will be created when the run_log_path file is first written to
         legacy = Path("log") / "translationHistory.txt"
         try:
             if legacy.exists():
@@ -160,14 +174,8 @@ files to translate are in the /files folder and that you picked the right game e
                     legacy.unlink()
                 except Exception:
                     pass
-            os.link(str(run_log_path), str(legacy))
         except Exception:
-            # Fallback: ensure legacy file exists so modules writing to it won't fail
-            try:
-                legacy.parent.mkdir(parents=True, exist_ok=True)
-                legacy.touch(exist_ok=True)
-            except Exception:
-                pass
+            pass
     except Exception:
         pass
     with ThreadPoolExecutor(max_workers=THREADS) as executor:
