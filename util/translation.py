@@ -728,176 +728,182 @@ def translateAI(text, history, fullPromptFlag, config, filename=None, pbar=None,
     except Exception:
         pass
 
-    with open(config.logFilePath, "a+", encoding="utf-8") as logFile:
-        totalTokens = [0, 0]
-        
-        if isinstance(text, list):
-            formatType = "json"
-            tList = batchList(text, config.batchSize)
-        else:
-            formatType = "text"
-            tList = [text]
+    # Don't open log file here - we'll open it only when we need to write
+    totalTokens = [0, 0]
+    
+    if isinstance(text, list):
+        formatType = "json"
+        tList = batchList(text, config.batchSize)
+    else:
+        formatType = "text"
+        tList = [text]
 
-        for index, tItem in enumerate(tList):
-            # Check if text contains target language
-            if not re.search(config.langRegex, str(tItem)):
-                if pbar is not None:
-                    pbar.update(len(tItem) if isinstance(tItem, list) else 1)
-                if isinstance(tItem, list):
-                    for j in range(len(tItem)):
-                        tItem[j] = cleanTranslatedText(tItem[j], config.language)
-                    tList[index] = tItem
-                else:
-                    tList[index] = cleanTranslatedText(tItem, config.language)
-                history = tItem[-config.maxHistory:] if isinstance(tItem, list) else tItem
-                continue
-
-            # Format for translation
+    for index, tItem in enumerate(tList):
+        # Check if text contains target language
+        if not re.search(config.langRegex, str(tItem)):
+            if pbar is not None:
+                pbar.update(len(tItem) if isinstance(tItem, list) else 1)
             if isinstance(tItem, list):
                 for j in range(len(tItem)):
-                    if not tItem[j] or not str(tItem[j]).strip():
-                        tItem[j] = "Placeholder Text"
-                payload = {f"Line{i+1}": string for i, string in enumerate(tItem)}
-                payload = json.dumps(payload, indent=4, ensure_ascii=False)
-                subbedT = payload
-            else:
-                # Check for empty/whitespace strings in non-list items
-                if not tItem or not str(tItem).strip():
-                    subbedT = "Placeholder Text"
-                else:
-                    subbedT = tItem
-
-            # Check cache for this exact payload
-            cached_result = get_cached_translation(subbedT, config.language)
-            if cached_result is not None:
-                if isinstance(tItem, list):
-                    tList[index] = cached_result
-                    history = cached_result[-config.maxHistory:]
-                else:
-                    tList[index] = cached_result
-                    history = cached_result
-                
-                if lock and pbar is not None:
-                    with lock:
-                        pbar.update(len(tItem) if isinstance(tItem, list) else 1)
-                
-                continue
-
-            # Create context
-            system, user = createContext(config, fullPromptFlag, subbedT, formatType, history)
-
-            # Calculate estimate if in estimate mode
-            if config.estimateMode:
-                estimate = countTokens(system, user, history)
-                totalTokens[0] += estimate[0]
-                totalTokens[1] += estimate[1]
-                
-                # Cache the payload with original text as placeholder for future estimates
-                if isinstance(tItem, list):
-                    cache_translation(subbedT, tItem, config.language)
-                else:
-                    cache_translation(subbedT, [tItem], config.language)
-                
-                continue
-
-            # --- Translation and Validation Retry Block ---
-            max_retries = 2  # 1 initial attempt + 2 retries
-            final_translations = None
-            last_raw_translation = ""
-            numLines = len(tItem) if isinstance(tItem, list) else None
-
-            for attempt in range(max_retries + 1):
-                is_valid = True
-                
-                # On retries, add a note to the system prompt
-                current_system = system
-                if attempt > 0:
-                    current_system += f"\n\nIMPORTANT: Your previous attempt was incorrect or incomplete. Please ensure the entire output is translated to {config.language} and contains no untranslated characters. Translate the following text again, ensuring the JSON structure is correct."
-                    if pbar:
-                        pbar.write(f"Retrying translation... (Attempt {attempt + 1}/{max_retries + 1})")
-
-                # Translate
-                response = translateText(current_system, user, history, 0.05, formatType, config.model, numLines)
-                translatedText = response.choices[0].message.content
-                last_raw_translation = translatedText
-
-                # Update token count for this attempt
-                totalTokens[0] += response.usage.prompt_tokens
-                totalTokens[1] += response.usage.completion_tokens
-
-                # Clean the translation first for consistency
-                cleaned_text = cleanTranslatedText(translatedText, config.language)
-
-                # Process and validate translation result
-                if cleaned_text:
-                    if isinstance(tItem, list):
-                        extracted = extractTranslation(cleaned_text, True, pbar)
-
-                        # Check 1: Mismatch in length -> still a hard failure
-                        if extracted is None or len(tItem) != len(extracted):
-                            is_valid = False
-                        else:
-                            # Set translations (line count matches)
-                            final_translations = extracted
-                    else:
-                        # Single string: accept output even if it contains characters
-                        # matching langRegex (allow names or untranslated tokens).
-                        final_translations = cleaned_text.replace("Placeholder Text", "")
-                else:
-                    is_valid = False
-                    if pbar: pbar.write(f"AI Refused: {tItem}\n")
-
-                # If translation is valid, break the retry loop
-                if is_valid:
-                    break
-            
-            # --- End of Retry Block ---
-
-            # After the loop, handle the final result
-            if final_translations is not None: # Success case
-                formatted_output = last_raw_translation
-                try:
-                    parsed_json = json.loads(last_raw_translation)
-                    formatted_output = json.dumps(parsed_json, indent=4, ensure_ascii=False)
-                except (json.JSONDecodeError, ValueError):
-                    pass
-                logFile.write(f"Input:\n{subbedT}\n")
-                logFile.write(f"Output:\n{formatted_output}\n")
-
-                # Cache the entire payload and its translation
-                if not config.estimateMode:
-                    cache_translation(subbedT, final_translations, config.language)
-
-                if isinstance(tItem, list):
-                    tList[index] = final_translations
-                    history = final_translations[-config.maxHistory:]
-                else:
-                    tList[index] = final_translations
-                    history = final_translations
-
-                if lock and pbar is not None:
-                    with lock:
-                        pbar.update(len(tItem) if isinstance(tItem, list) else 1)
-
-            else: # Failure case after all retries
-                if pbar: pbar.write(f"Translation failed after {max_retries + 1} attempts. Check mismatch log.")
-                
-                formatted_mismatch_output = last_raw_translation
-                try:
-                    parsed_json = json.loads(last_raw_translation)
-                    formatted_mismatch_output = json.dumps(parsed_json, indent=4, ensure_ascii=False)
-                except (json.JSONDecodeError, ValueError):
-                    pass
-                with open(config.mismatchLogPath, "a+", encoding="utf-8") as mismatchFile:
-                    mismatchFile.write(f"Failed after retries: {filename}\n")
-                    mismatchFile.write(f"Input:\n{subbedT}\n")
-                    mismatchFile.write(f"Final Output:\n{formatted_mismatch_output}\n")
-
-                if filename and mismatchList is not None and filename not in mismatchList:
-                    mismatchList.append(filename)
-                
+                    tItem[j] = cleanTranslatedText(tItem[j], config.language)
                 tList[index] = tItem
-                history = text[-config.maxHistory:] if isinstance(text, list) else text
+            else:
+                tList[index] = cleanTranslatedText(tItem, config.language)
+            history = tItem[-config.maxHistory:] if isinstance(tItem, list) else tItem
+            continue
+
+        # Format for translation
+        if isinstance(tItem, list):
+            for j in range(len(tItem)):
+                if not tItem[j] or not str(tItem[j]).strip():
+                    tItem[j] = "Placeholder Text"
+            payload = {f"Line{i+1}": string for i, string in enumerate(tItem)}
+            payload = json.dumps(payload, indent=4, ensure_ascii=False)
+            subbedT = payload
+        else:
+            # Check for empty/whitespace strings in non-list items
+            if not tItem or not str(tItem).strip():
+                subbedT = "Placeholder Text"
+            else:
+                subbedT = tItem
+
+        # Check cache for this exact payload
+        cached_result = get_cached_translation(subbedT, config.language)
+        if cached_result is not None:
+            if isinstance(tItem, list):
+                tList[index] = cached_result
+                history = cached_result[-config.maxHistory:]
+            else:
+                tList[index] = cached_result
+                history = cached_result
+            
+            if lock and pbar is not None:
+                with lock:
+                    pbar.update(len(tItem) if isinstance(tItem, list) else 1)
+            
+            continue
+
+        # Create context
+        system, user = createContext(config, fullPromptFlag, subbedT, formatType, history)
+
+        # Calculate estimate if in estimate mode
+        if config.estimateMode:
+            estimate = countTokens(system, user, history)
+            totalTokens[0] += estimate[0]
+            totalTokens[1] += estimate[1]
+            
+            # Cache the payload with original text as placeholder for future estimates
+            if isinstance(tItem, list):
+                cache_translation(subbedT, tItem, config.language)
+            else:
+                cache_translation(subbedT, [tItem], config.language)
+            
+            continue
+
+        # --- Translation and Validation Retry Block ---
+        max_retries = 2  # 1 initial attempt + 2 retries
+        final_translations = None
+        last_raw_translation = ""
+        numLines = len(tItem) if isinstance(tItem, list) else None
+
+        for attempt in range(max_retries + 1):
+            is_valid = True
+            
+            # On retries, add a note to the system prompt
+            current_system = system
+            if attempt > 0:
+                current_system += f"\n\nIMPORTANT: Your previous attempt was incorrect or incomplete. Please ensure the entire output is translated to {config.language} and contains no untranslated characters. Translate the following text again, ensuring the JSON structure is correct."
+                if pbar:
+                    pbar.write(f"Retrying translation... (Attempt {attempt + 1}/{max_retries + 1})")
+
+            # Translate
+            response = translateText(current_system, user, history, 0.05, formatType, config.model, numLines)
+            translatedText = response.choices[0].message.content
+            last_raw_translation = translatedText
+
+            # Update token count for this attempt
+            totalTokens[0] += response.usage.prompt_tokens
+            totalTokens[1] += response.usage.completion_tokens
+
+            # Clean the translation first for consistency
+            cleaned_text = cleanTranslatedText(translatedText, config.language)
+
+            # Process and validate translation result
+            if cleaned_text:
+                if isinstance(tItem, list):
+                    extracted = extractTranslation(cleaned_text, True, pbar)
+
+                    # Check 1: Mismatch in length -> still a hard failure
+                    if extracted is None or len(tItem) != len(extracted):
+                        is_valid = False
+                    else:
+                        # Set translations (line count matches)
+                        final_translations = extracted
+                else:
+                    # Single string: accept output even if it contains characters
+                    # matching langRegex (allow names or untranslated tokens).
+                    final_translations = cleaned_text.replace("Placeholder Text", "")
+            else:
+                is_valid = False
+                if pbar: pbar.write(f"AI Refused: {tItem}\n")
+
+            # If translation is valid, break the retry loop
+            if is_valid:
+                break
+        
+        # --- End of Retry Block ---
+
+        # After the loop, handle the final result
+        if final_translations is not None: # Success case
+            formatted_output = last_raw_translation
+            try:
+                parsed_json = json.loads(last_raw_translation)
+                formatted_output = json.dumps(parsed_json, indent=4, ensure_ascii=False)
+            except (json.JSONDecodeError, ValueError):
+                pass
+            
+            # Only open and write to log file when we have something to log
+            try:
+                with open(config.logFilePath, "a", encoding="utf-8") as logFile:
+                    logFile.write(f"Input:\n{subbedT}\n")
+                    logFile.write(f"Output:\n{formatted_output}\n")
+            except Exception:
+                pass  # Don't fail if logging fails
+
+            # Cache the entire payload and its translation
+            if not config.estimateMode:
+                cache_translation(subbedT, final_translations, config.language)
+
+            if isinstance(tItem, list):
+                tList[index] = final_translations
+                history = final_translations[-config.maxHistory:]
+            else:
+                tList[index] = final_translations
+                history = final_translations
+
+            if lock and pbar is not None:
+                with lock:
+                    pbar.update(len(tItem) if isinstance(tItem, list) else 1)
+
+        else: # Failure case after all retries
+            if pbar: pbar.write(f"Translation failed after {max_retries + 1} attempts. Check mismatch log.")
+            
+            formatted_mismatch_output = last_raw_translation
+            try:
+                parsed_json = json.loads(last_raw_translation)
+                formatted_mismatch_output = json.dumps(parsed_json, indent=4, ensure_ascii=False)
+            except (json.JSONDecodeError, ValueError):
+                pass
+            with open(config.mismatchLogPath, "a+", encoding="utf-8") as mismatchFile:
+                mismatchFile.write(f"Failed after retries: {filename}\n")
+                mismatchFile.write(f"Input:\n{subbedT}\n")
+                mismatchFile.write(f"Final Output:\n{formatted_mismatch_output}\n")
+
+            if filename and mismatchList is not None and filename not in mismatchList:
+                mismatchList.append(filename)
+            
+            tList[index] = tItem
+            history = text[-config.maxHistory:] if isinstance(text, list) else text
 
     # Combine if multilist
     if tList and isinstance(tList[0], list):

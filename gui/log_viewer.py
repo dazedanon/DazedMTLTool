@@ -138,11 +138,9 @@ class LogViewer(QWidget):
         if interval_ms:
             self._tail_interval = interval_ms
 
-        # Ensure directory exists
+        # Ensure directory exists but don't create the file
         try:
             self._tail_path.parent.mkdir(parents=True, exist_ok=True)
-            # Ensure file exists
-            self._tail_path.touch(exist_ok=True)
         except Exception:
             pass
 
@@ -154,14 +152,17 @@ class LogViewer(QWidget):
                 pass
             self._tail_f = None
 
-        try:
-            self._tail_f = open(self._tail_path, 'r', encoding='utf-8', errors='ignore')
-            # Seek to end so we only read new lines
-            self._tail_f.seek(0, os.SEEK_END)
-        except Exception as e:
-            self.status_label.setText(f"Log error: {str(e)}")
-            self._tail_f = None
-            return
+        # Only open the file if it exists
+        # If it doesn't exist yet, the timer will keep checking
+        if self._tail_path.exists():
+            try:
+                self._tail_f = open(self._tail_path, 'r', encoding='utf-8', errors='ignore')
+                # Seek to end so we only read new lines
+                self._tail_f.seek(0, os.SEEK_END)
+            except Exception as e:
+                self.status_label.setText(f"Log error: {str(e)}")
+                self._tail_f = None
+                return
 
         self._tail_timer.start(self._tail_interval)
 
@@ -180,6 +181,15 @@ class LogViewer(QWidget):
 
     def _poll_tail(self):
         """Timer callback: read any new data from the tailed file and append it."""
+        # If file handle doesn't exist yet, try to open it if the file was created
+        if not self._tail_f and self._tail_path.exists():
+            try:
+                self._tail_f = open(self._tail_path, 'r', encoding='utf-8', errors='ignore')
+                # Seek to end so we only read new lines
+                self._tail_f.seek(0, os.SEEK_END)
+            except Exception:
+                pass  # Will try again next poll
+        
         if not self._tail_f:
             return
         try:

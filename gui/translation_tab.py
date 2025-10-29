@@ -1675,12 +1675,24 @@ class TranslationTab(QWidget):
             try:
                 history_dir = self.project_root / 'log' / 'history'
                 history_dir.mkdir(parents=True, exist_ok=True)
+                
+                # Clean up old log files, keeping only the 10 most recent
+                try:
+                    log_files = sorted(history_dir.glob("translationHistory_*.txt"), key=lambda p: p.stat().st_mtime, reverse=True)
+                    # Keep only the 10 most recent, delete the rest
+                    for old_log in log_files[10:]:
+                        try:
+                            old_log.unlink()
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
+                
                 # Use timestamp (safe filename) for sorting
                 fname = datetime.datetime.now().strftime('translationHistory_%Y%m%d_%H%M%S.txt')
                 run_log_path = history_dir / fname
-                # Create/touch the file so tailer can open and seek to end
-                run_log_path.touch(exist_ok=True)
-
+                # Don't create the file yet - it will be created when first log is written
+                
                 # Export env var so subprocess workers inherit the path
                 try:
                     os.environ['TRANSLATION_RUN_LOG'] = str(run_log_path)
@@ -1689,25 +1701,19 @@ class TranslationTab(QWidget):
 
                 # Try to create a hard link at legacy location so modules that
                 # still write to log/translationHistory.txt end up in this file.
+                # This will be created when the run_log_path file is first written to
                 legacy = self.project_root / 'log' / 'translationHistory.txt'
                 try:
-                    # Remove any existing legacy file and create hard link
+                    # Remove any existing legacy file
                     if legacy.exists():
                         try:
                             legacy.unlink()
                         except Exception:
                             pass
-                    os.link(str(run_log_path), str(legacy))
                 except Exception:
-                    # If hard link fails (Windows permissions or cross-device),
-                    # fallback to ensuring the legacy file exists but do not fail.
-                    try:
-                        legacy.parent.mkdir(parents=True, exist_ok=True)
-                        legacy.touch(exist_ok=True)
-                    except Exception:
-                        pass
+                    pass
 
-                # Clear UI log and start tailing the per-run file
+                # Clear UI log and start tailing the per-run file (tailer will handle non-existent files)
                 self.translation_log_viewer.clear_log()
                 self.translation_log_viewer.start_tail(run_log_path)
             except Exception:
