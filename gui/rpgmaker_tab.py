@@ -256,7 +256,11 @@ class RPGMakerTab(QWidget):
         self.ignoretltext_cb = QCheckBox("Ignore TL Text")
         self.ignoretltext_cb.setToolTip("Ignore already translated text")
         left_column.addWidget(self.ignoretltext_cb)
-        
+
+        self.join408_cb = QCheckBox("Join 408 Codes")
+        self.join408_cb.setToolTip("Join 408 codes into a single string")
+        left_column.addWidget(self.join408_cb)
+
         left_column.addSpacing(15)
         
         # Main Dialogue Codes
@@ -379,6 +383,7 @@ class RPGMakerTab(QWidget):
             self.brflag_cb.stateChanged.disconnect()
             self.fixtextwrap_cb.stateChanged.disconnect()
             self.ignoretltext_cb.stateChanged.disconnect()
+            self.join408_cb.stateChanged.disconnect()
             
             # Main dialogue codes
             self.code401_cb.stateChanged.disconnect()
@@ -415,7 +420,8 @@ class RPGMakerTab(QWidget):
         self.brflag_cb.stateChanged.connect(lambda: self.apply_to_module(show_messages=False))
         self.fixtextwrap_cb.stateChanged.connect(lambda: self.apply_to_module(show_messages=False))
         self.ignoretltext_cb.stateChanged.connect(lambda: self.apply_to_module(show_messages=False))
-        
+        self.join408_cb.stateChanged.connect(lambda: self.apply_to_module(show_messages=False))
+
         # Main dialogue codes
         self.code401_cb.stateChanged.connect(lambda: self.apply_to_module(show_messages=False))
         self.code405_cb.stateChanged.connect(lambda: self.apply_to_module(show_messages=False))
@@ -449,7 +455,8 @@ class RPGMakerTab(QWidget):
             "BRFLAG": self.brflag_cb.isChecked(),
             "FIXTEXTWRAP": self.fixtextwrap_cb.isChecked(),
             "IGNORETLTEXT": self.ignoretltext_cb.isChecked(),
-            
+            "JOIN408": self.join408_cb.isChecked(),
+
             # Main dialogue codes
             "CODE401": self.code401_cb.isChecked(),
             "CODE405": self.code405_cb.isChecked(),
@@ -485,7 +492,8 @@ class RPGMakerTab(QWidget):
         self.brflag_cb.setChecked(config.get("BRFLAG", False))
         self.fixtextwrap_cb.setChecked(config.get("FIXTEXTWRAP", True))
         self.ignoretltext_cb.setChecked(config.get("IGNORETLTEXT", False))
-        
+        self.join408_cb.setChecked(config.get("JOIN408", False))
+
         # Main dialogue codes
         self.code401_cb.setChecked(config.get("CODE401", True))
         self.code405_cb.setChecked(config.get("CODE405", True))
