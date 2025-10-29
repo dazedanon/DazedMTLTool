@@ -74,7 +74,7 @@ LEAVE = False
 
 # Config (Default)
 # FIRSTLINESPEAKERS: Guess speaker from first line.
-FIRSTLINESPEAKERS = False
+FIRSTLINESPEAKERS = True
 # FACENAME101: Map face name -> speaker.
 FACENAME101 = False
 # BRFLAG: Newlines -> <br>.
@@ -87,13 +87,13 @@ IGNORETLTEXT = False
 TLSYSTEMVARIABLES = False
 
 # Dialogue / Scroll / Choices (Main Codes)
-CODE101 = True
+CODE101 = False
 CODE401 = True
 CODE405 = True
 CODE102 = True
 
 # Optional
-CODE408 = False
+CODE408 = True
 
 # Variables
 CODE122 = False
@@ -459,8 +459,8 @@ def parseMap(data, filename):
         data["display_name"] = response[0].replace('"', "")
 
     # Get total for progress bar (sum of all command list lengths across pages)
-    for event in events:
-        if event:
+    for event in events.values():
+        if event and isinstance(event, dict):
             note_val = event.get("note") or ""
             if not isinstance(note_val, str):
                 note_val = str(note_val) if note_val is not None else ""
@@ -487,8 +487,8 @@ def parseMap(data, filename):
     # Process each page synchronously with progress updates
     with tqdm(total=totalLines, bar_format=BAR_FORMAT, position=POSITION, leave=LEAVE, desc=filename) as pbar:
         PBAR = pbar
-        for event in events:
-            if event is not None:
+        for event in events.values():
+            if event is not None and isinstance(event, dict):
                 # Normalize note to a safe string
                 note_val = event.get("note") or ""
                 if not isinstance(note_val, str):
@@ -1356,12 +1356,13 @@ def searchCodes(page, pbar, jobList, filename):
                         )
 
                 # Brackets (support multiple names like 【A】【B】)
+                # This now properly detects speakers after control codes are removed
                 if len(speakerList) == 0:
-                    # Only consider bracketed names when the line starts with '【' and
-                    # ends with either '】' or trailing variable/control codes like \n[2], \FF[\w[3]], etc.
+                    # Check if the line contains bracketed names 【name】
+                    # After control codes are stripped, check for pattern
                     startsWithBracket = re.match(r"^\s*【", jaString) is not None
                     endsWithBracket = re.search(
-                        r"(】\s*|(?:[\\]+[A-Za-z]+(?:\[(?:[^\[\]]|\[[^\]]*\])*\])+\s*)$)",
+                        r"(】\s*$|】\s*(?:[\\]+[A-Za-z]+(?:\[(?:[^\[\]]|\[[^\]]*\])*\])+\s*)$)",
                         jaString,
                     ) is not None
 
@@ -1403,12 +1404,15 @@ def searchCodes(page, pbar, jobList, filename):
                             r"^((?:[\\]+[^cCnNiIkKvVSs{}]+?\[[\d\w\W]+?\]?\])+)",
                             nextString,
                         )
-                        formatMatch = re.search(r"(^[\\]+[\W]+?)", nextString)
                         if ffMatchNS != None:
                             nextString = nextString.replace(ffMatchNS.group(1), "")
+                        
+                        # Remove other format codes
+                        formatMatch = re.search(r"(^[\\]+[\W]+?)", nextString)
                         if formatMatch != None:
                             nextString = nextString.replace(formatMatch.group(1), "")
 
+                        # If next line starts with dialogue marker, current line is likely a speaker
                         if nextString and nextString[0] in [
                             "「",
                             '"',
