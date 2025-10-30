@@ -74,7 +74,7 @@ LEAVE = False
 
 # Config (Default)
 # FIRSTLINESPEAKERS: Guess speaker from first line.
-FIRSTLINESPEAKERS = False
+FIRSTLINESPEAKERS = True
 # FACENAME101: Map face name -> speaker.
 FACENAME101 = False
 # BRFLAG: Newlines -> <br>.
@@ -86,7 +86,9 @@ IGNORETLTEXT = False
 # TLSYSTEMVARIABLES: Translate System Variables. (Optional but sometimes necessary. Can break stuff.)
 TLSYSTEMVARIABLES = False
 # Join 408 codes into a single string like 401.
-JOIN408 = False
+JOIN408 = True
+# SPEAKERS408: Process speakers in code 408 the same way as code 401.
+SPEAKERS408 = False
 
 # Dialogue / Scroll / Choices (Main Codes)
 CODE101 = True
@@ -95,7 +97,7 @@ CODE405 = True
 CODE102 = True
 
 # Optional
-CODE408 = False
+CODE408 = True
 
 # Variables
 CODE122 = False
@@ -1360,16 +1362,18 @@ def searchCodes(page, pbar, jobList, filename):
                 # Brackets (support multiple names like 【A】【B】)
                 # This now properly detects speakers after control codes are removed
                 if len(speakerList) == 0:
+                    # Strip \sp, \l, \r control codes to check for bracketed speakers
+                    testString = re.sub(r"^(?:[\\]+[splrSPLR]\[[^\]]*\]\s*)+", "", jaString)
+                    
                     # Check if the line contains bracketed names 【name】
-                    # After control codes are stripped, check for pattern
-                    startsWithBracket = re.match(r"^\s*【", jaString) is not None
+                    startsWithBracket = re.match(r"^\s*【", testString) is not None
                     endsWithBracket = re.search(
                         r"(】\s*$|】\s*(?:[\\]+[A-Za-z]+(?:\[(?:[^\[\]]|\[[^\]]*\])*\])+\s*)$)",
-                        jaString,
+                        testString,
                     ) is not None
 
                     if startsWithBracket and endsWithBracket:
-                        candidates = re.findall(r"【(.*?)】", jaString)
+                        candidates = re.findall(r"【(.*?)】", testString)
                         if candidates:
                             candidates = [c.strip() for c in candidates]
                             if candidates:
@@ -2122,10 +2126,144 @@ def searchCodes(page, pbar, jobList, filename):
                 jaString = codeList[i]["p"][0]
                 match = re.search(r"(.+)", jaString)
                 if match:
-                    # Remove Textwrap
-                    jaString = codeList[i]["p"][0]
-                    ojaString = jaString
-                    jaString = jaString.replace("\n", " ")
+                    # Save starting index
+                    j = i
+                    nametag = ""
+                    
+                    # Speaker Check (if SPEAKERS408 is enabled)
+                    if SPEAKERS408:
+                        speakerList = []
+
+                        # Remove any RPGMaker Code at start
+                        ffMatch = re.search(
+                            r"^((?:[\\]+[^cCnNiIkKvVrRlL]+\[[\d\w]+\])+)",
+                            jaString,
+                        )
+                        if ffMatch != None:
+                            jaString = jaString.replace(ffMatch.group(0), "")
+                            nametag += ffMatch.group(0)
+
+                        # m and z Codes
+                        matchSpeaker = re.search(r"(.*?)[\\]+m\[\d+?\][\\]+z\[\d+?\]", jaString)
+                        if matchSpeaker:
+                            speakerList.append(matchSpeaker.group(1))
+                            if "\\c" in speakerList[0]:
+                                speakerList = re.findall(
+                                    r"^[\\]+[cC]\[\d+\]【?(.+?)】?[\\]+[cC]\[\d+\](?:[\\]+[A-Za-z]+(?:\[[^\]]*\])?)*[\\]*$",
+                                    speakerList[0],
+                                )
+
+                        # Brackets (support multiple names like 【A】【B】)
+                        if len(speakerList) == 0:
+                            # Strip \sp, \l, \r control codes to check for bracketed speakers
+                            testString = re.sub(r"^(?:[\\]+[splrSPLR]\[[^\]]*\]\s*)+", "", jaString)
+                            
+                            # Check if the line contains bracketed names 【name】
+                            startsWithBracket = re.match(r"^\s*【", testString) is not None
+                            endsWithBracket = re.search(
+                                r"(】\s*$|】\s*(?:[\\]+[A-Za-z]+(?:\[(?:[^\[\]]|\[[^\]]*\])*\])+\s*)$)",
+                                testString,
+                            ) is not None
+
+                            if startsWithBracket and endsWithBracket:
+                                candidates = re.findall(r"【(.*?)】", testString)
+                                if candidates:
+                                    candidates = [c.strip() for c in candidates]
+                                    if candidates:
+                                        speakerList = candidates
+
+                        # Colors
+                        if len(speakerList) == 0:
+                            speakerList = re.findall(
+                                r"^[\\]+[cC]\[\d+\]【?(.+?)】?[\\]+[cC]\[\d+\](?:[\\]+[A-Za-z]+(?:\[[^\]]*\])?)*[\\]*$",
+                                jaString,
+                            )
+
+                        # Colons
+                        if len(speakerList) == 0:
+                            speakerList = re.findall(
+                                r"(.+)：$",
+                                jaString,
+                            )
+
+                        # First Line Speakers
+                        if len(speakerList) == 0 and FIRSTLINESPEAKERS is True:
+                            # Test Speaker
+                            if (
+                                len(jaString) < 40
+                                and len(codeList) > i + 1
+                                and "c" in codeList[i + 1]
+                                and codeList[i + 1]["c"] in [408, -1]
+                                and len(codeList[i + 1]["p"]) > 0
+                                and len(codeList[i + 1]["p"][0]) > 0
+                            ):
+                                nextString = codeList[i + 1]["p"][0].strip()
+
+                                # Remove any RPGMaker Code at start
+                                ffMatchNS = re.search(
+                                    r"^((?:[\\]+[^cCnNiIkKvVSsrRlL{}]+?\[[\d\w\W]+?\]?\])+)",
+                                    nextString,
+                                )
+                                if ffMatchNS != None:
+                                    nextString = nextString.replace(ffMatchNS.group(1), "")
+                                
+                                # Remove other format codes
+                                formatMatch = re.search(r"(^[\\]+[\W]+?)", nextString)
+                                if formatMatch != None:
+                                    nextString = nextString.replace(formatMatch.group(1), "")
+
+                                # If next line starts with dialogue marker, current line is likely a speaker
+                                if nextString and nextString[0] in [
+                                    "「",
+                                    '"',
+                                    "(",
+                                    "（",
+                                    "*",
+                                    "[",
+                                ]:
+                                    speakerList = re.findall(r".+", jaString)
+
+                        # Replace Speaker
+                        if len(speakerList) != 0 and len(codeList) > i + 1 and codeList[i + 1]["c"] in [408, -1]:
+                            # Single
+                            if len(speakerList) == 1:
+                                response = getSpeaker(speakerList[0])
+                                speaker = response[0]
+                                totalTokens[0] += response[1][0]
+                                totalTokens[1] += response[1][1]
+
+                            # Multiple (Brackets)
+                            elif len(speakerList) > 1:
+                                jaStringUpdated = jaString
+                                for idx, sp in enumerate(speakerList):
+                                    response = getSpeaker(sp)
+                                    tled = response[0]
+                                    totalTokens[0] += response[1][0]
+                                    totalTokens[1] += response[1][1]
+                                    if not setData:
+                                        pattern = r"【\s*" + re.escape(sp) + r"\s*】"
+                                        jaStringUpdated = re.sub(pattern, lambda m: f"【{tled}】", jaStringUpdated)
+                                    # Back-compat: set 'speaker' to the first translated name
+                                    if idx == 0:
+                                        speaker = tled
+
+                            # Set Data
+                            if not setData and len(speakerList) > 1:
+                                codeList[i]["p"][0] = nametag + jaStringUpdated
+                            elif not setData and len(speakerList) == 1:
+                                codeList[i]["p"][0] = nametag + jaString.replace(speakerList[0], speaker)
+                            nametag = ""
+
+                            # Iterate to next string
+                            i += 1
+                            j = i
+                            while codeList[i]["c"] in [-1]:
+                                i += 1
+                                j = i
+                            jaString = codeList[i]["p"][0]
+                    
+                    # Using this to keep track of 408's in a row.
+                    currentGroup.append(jaString)
 
                     # Join Up 408's into single string
                     if len(codeList) > i + 1 and JOIN408 is True:
@@ -2144,22 +2282,78 @@ def searchCodes(page, pbar, jobList, filename):
                             if len(codeList) <= i + 1:
                                 break
 
+                    # Format String
+                    if len(currentGroup) > 0:
+                        finalJAString = "\n".join(currentGroup)
+                        
+                        # Set Back
+                        if not setData:
+                            codeList[j]["p"] = [finalJAString]
+
+                        # Process speaker name tag if SPEAKERS408 enabled
+                        if SPEAKERS408:
+                            ### \\n<Speaker>
+                            regex = r"([\\]+[kKnN][wWcCrRrEe]?[\[<](?:[\\]*\w\[\d+\])?(.*?)(?:[\\]*\w\[\d+\])?[>])"
+                            matchSpeaker = re.search(regex, finalJAString)
+
+                            # Set Name
+                            if matchSpeaker:
+                                nametag = matchSpeaker.group(1)
+                                speakerName = matchSpeaker.group(2)
+
+                                # Translate Speaker
+                                response = getSpeaker(speakerName)
+                                tledSpeaker = response[0]
+                                totalTokens[0] += response[1][0]
+                                totalTokens[1] += response[1][1]
+
+                                # Set Nametag and Remove from Final String
+                                finalJAString = finalJAString.replace(nametag, "")
+                                nametag = nametag.replace(speakerName, tledSpeaker)
+                                speaker = tledSpeaker
+
                     # Pass 1
                     if setData:
                         # Remove Textwrap
-                        jaString = jaString.replace("\n", " ")
-                        list408.append(jaString)
+                        finalJAString = finalJAString.replace("\n", " ")
+                        
+                        # Append with or without speaker
+                        if SPEAKERS408 and speaker != "" and finalJAString != "":
+                            list408.append(f"[{speaker}]: {finalJAString}")
+                        else:
+                            list408.append(finalJAString)
+                        
+                        speaker = ""
+                        currentGroup = []
+                        syncIndex = i + 1
                     
                     # Pass 2
                     else:
-                        translatedText = list408[0]
-                        list408.pop(0)
+                        if len(list408) > 0:
+                            translatedText = list408[0]
+                            list408.pop(0)
 
-                        # Textwrap
-                        translatedText = dazedwrap.wrapText(translatedText, width=WIDTH)
+                            # Remove speaker if SPEAKERS408 enabled
+                            if SPEAKERS408:
+                                matchSpeaker = re.search(r'(^\[.+?\]\s?[|:]\s?)', translatedText)
+                                if matchSpeaker:
+                                    translatedText = translatedText.replace(matchSpeaker.group(1), "")
 
-                        # Set Data
-                        codeList[i]["p"][0] = codeList[i]["p"][0].replace(ojaString, translatedText)
+                            # Textwrap
+                            translatedText = dazedwrap.wrapText(translatedText, width=WIDTH)
+
+                            # Add Nametag Back In if SPEAKERS408 enabled
+                            if SPEAKERS408 and nametag:
+                                translatedText = nametag + translatedText
+                                nametag = ""
+
+                            # Set Data
+                            codeList[j]["p"][0] = translatedText
+                            
+                            # Reset
+                            speaker = ""
+                            currentGroup = []
+                            syncIndex = i + 1
 
             ## Event Code: 108 (Script)
             if "c" in codeList[i] and (codeList[i]["c"] == 108) and CODE108 is True:
