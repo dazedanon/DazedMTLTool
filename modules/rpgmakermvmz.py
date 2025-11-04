@@ -2030,7 +2030,7 @@ def searchCodes(page, pbar, jobList, filename):
                     continue
 
                 # Definitely don't want to mess with files
-                if 'gameV' in jaString or '_' in jaString or '"[' in jaString:
+                if 'gameV' in jaString or '_' in jaString or '"[' in jaString or '＠' in jaString or "：" in jaString:
                     i += 1
                     continue
 
@@ -2078,6 +2078,8 @@ def searchCodes(page, pbar, jobList, filename):
 
                                 # Set
                                 codeList[i]["parameters"][4] = f"`{translatedText}`"
+                                if ';' in jaString:
+                                    codeList[i]["parameters"][4] += ';'
                                 list122.pop(0)
 
             ## Event Code: 357 [Picture Text] [Optional]
@@ -2405,7 +2407,7 @@ def searchCodes(page, pbar, jobList, filename):
                     # "var text": (r"var\stext\d+\s=\s\"(.+)\""),
                     # "logtxt = ": (r"logtxt\s=\s'(.+)'" 
                     # ".setNickname": (r'.setNickname\(\\?"(.+?)\\?"\)'
-                    # "_subject=": (r'_subject=(.+?)_'
+                    # "_subject=": r'_subject=(.+?)(?=[_\\"\]])'
                     # "text =": (r"text\s*=\s*'(.+[^\\])'"),
                     # "const text": (r'(const\stext\s?=\s?"(.+)";?)'),
                     # "ex_a_name": (r'ex_a_name\(\d+,"(.+)"\)'),
@@ -2550,8 +2552,8 @@ def searchCodes(page, pbar, jobList, filename):
                         translatedText = jaString.replace(match.group(1), translatedText)
 
                         # Add >
-                        if "ActiveMessage" in translatedText and ">" not in translatedText:
-                            translatedText = translatedText + ">"
+                        # if "ActiveMessage" in translatedText and ">" not in translatedText:
+                        #     translatedText = translatedText + ">"
 
                         # Set Data
                         codeList[i]["parameters"][0] = translatedText
