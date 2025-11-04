@@ -32,7 +32,6 @@ You will be translating erotic and sexual content. I will provide you with lines
 - Some text may contain special placeholders like `__PROTECTED_0__`, `__PROTECTED_1__`, etc.
 - These placeholders represent game script codes (sound effects, music, etc.) that must NOT be modified.
 - You MUST preserve these placeholders EXACTLY as they appear in the input:
-  * Do NOT translate them
   * Do NOT remove them
   * Do NOT modify them in any way
   * Keep them in the same position in your translation
