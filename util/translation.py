@@ -15,6 +15,106 @@ from dotenv import load_dotenv
 from pathlib import Path
 from retry import retry
 
+
+# ===== Placeholder Protection System =====
+# Patterns to protect from translation (sound effects, control codes, etc.)
+PROTECTED_PATTERNS = [
+    r'\\SE\[[^\]]+\]',      # \SE[sound_effect_name]
+    r'\\ME\[[^\]]+\]',      # \ME[music_effect_name]
+    r'\\BGM\[[^\]]+\]',     # \BGM[background_music_name]
+    r'\\BGS\[[^\]]+\]',     # \BGS[background_sound_name]
+]
+
+def protect_script_codes(text):
+    """
+    Replace script codes (like \\SE[タイプライター]) with unique placeholders before translation.
+    Returns: (protected_text, replacements_dict)
+    """
+    if not text or not isinstance(text, str):
+        return text, {}
+    
+    replacements = {}
+    protected_text = text
+    counter = 0
+    
+    # Combine all patterns
+    combined_pattern = '|'.join(f'({pattern})' for pattern in PROTECTED_PATTERNS)
+    
+    def replace_match(match):
+        nonlocal counter
+        original = match.group(0)
+        # Create a unique placeholder that won't be translated
+        placeholder = f"__PROTECTED_{counter}__"
+        replacements[placeholder] = original
+        counter += 1
+        return placeholder
+    
+    if combined_pattern:
+        protected_text = re.sub(combined_pattern, replace_match, protected_text)
+    
+    return protected_text, replacements
+
+
+def restore_script_codes(text, replacements):
+    """
+    Restore protected script codes from placeholders after translation.
+    """
+    if not text or not replacements:
+        return text
+    
+    if isinstance(text, str):
+        result = text
+        for placeholder, original in replacements.items():
+            result = result.replace(placeholder, original)
+        return result
+    elif isinstance(text, list):
+        return [restore_script_codes(item, replacements) for item in text]
+    else:
+        return text
+
+
+def validate_placeholders(original_text, translated_text, replacements):
+    """
+    Validate that all placeholders from the original text appear in the translation.
+    Returns: (is_valid, missing_placeholders, extra_placeholders)
+    """
+    if not replacements:
+        return True, [], []
+    
+    # Get all placeholders
+    all_placeholders = set(replacements.keys())
+    
+    # Count placeholders in original
+    original_counts = {}
+    for placeholder in all_placeholders:
+        if isinstance(original_text, str):
+            original_counts[placeholder] = original_text.count(placeholder)
+        elif isinstance(original_text, list):
+            original_counts[placeholder] = sum(str(item).count(placeholder) for item in original_text)
+    
+    # Count placeholders in translation
+    translated_counts = {}
+    for placeholder in all_placeholders:
+        if isinstance(translated_text, str):
+            translated_counts[placeholder] = translated_text.count(placeholder)
+        elif isinstance(translated_text, list):
+            translated_counts[placeholder] = sum(str(item).count(placeholder) for item in translated_text)
+    
+    # Find mismatches
+    missing = []
+    extra = []
+    for placeholder in all_placeholders:
+        orig_count = original_counts.get(placeholder, 0)
+        trans_count = translated_counts.get(placeholder, 0)
+        
+        if trans_count < orig_count:
+            missing.append(f"{placeholder} (expected {orig_count}, found {trans_count})")
+        elif trans_count > orig_count:
+            extra.append(f"{placeholder} (expected {orig_count}, found {trans_count})")
+    
+    is_valid = len(missing) == 0 and len(extra) == 0
+    return is_valid, missing, extra
+
 # (from .env if present), strip accidental whitespace, and set the base URL,
 # organization, and API key. It also handles the Gemini compatibility layer.
 load_dotenv()
@@ -752,20 +852,33 @@ def translateAI(text, history, fullPromptFlag, config, filename=None, pbar=None,
             history = tItem[-config.maxHistory:] if isinstance(tItem, list) else tItem
             continue
 
-        # Format for translation
+        # Protect script codes before translation
+        protected_items = []
+        all_replacements = {}
+        
         if isinstance(tItem, list):
             for j in range(len(tItem)):
                 if not tItem[j] or not str(tItem[j]).strip():
-                    tItem[j] = "Placeholder Text"
-            payload = {f"Line{i+1}": string for i, string in enumerate(tItem)}
+                    protected_items.append("Placeholder Text")
+                    all_replacements[j] = {}
+                else:
+                    protected_text, replacements = protect_script_codes(tItem[j])
+                    protected_items.append(protected_text)
+                    all_replacements[j] = replacements
+        else:
+            if not tItem or not str(tItem).strip():
+                protected_items = "Placeholder Text"
+                all_replacements[0] = {}
+            else:
+                protected_items, all_replacements[0] = protect_script_codes(tItem)
+        
+        # Format for translation
+        if isinstance(tItem, list):
+            payload = {f"Line{i+1}": string for i, string in enumerate(protected_items)}
             payload = json.dumps(payload, indent=4, ensure_ascii=False)
             subbedT = payload
         else:
-            # Check for empty/whitespace strings in non-list items
-            if not tItem or not str(tItem).strip():
-                subbedT = "Placeholder Text"
-            else:
-                subbedT = tItem
+            subbedT = protected_items
 
         # Check cache for this exact payload
         cached_result = get_cached_translation(subbedT, config.language)
@@ -812,7 +925,12 @@ def translateAI(text, history, fullPromptFlag, config, filename=None, pbar=None,
             # On retries, add a note to the system prompt
             current_system = system
             if attempt > 0:
-                current_system += f"\n\nIMPORTANT: Your previous attempt was incorrect or incomplete. Please ensure the entire output is translated to {config.language} and contains no untranslated characters. Translate the following text again, ensuring the JSON structure is correct."
+                current_system += f"\n\nIMPORTANT: Your previous attempt was incorrect or incomplete. Please ensure:\n"
+                current_system += f"1. The entire output is translated to {config.language} with no untranslated characters\n"
+                current_system += f"2. The JSON structure is correct\n"
+                current_system += f"3. ALL placeholders (like __PROTECTED_0__, __PROTECTED_1__, etc.) are preserved EXACTLY as they appear in the input\n"
+                current_system += f"   - Do not modify, translate, or remove any __PROTECTED_N__ placeholders\n"
+                current_system += f"   - Keep them in the exact same position in your translation"
                 if pbar:
                     pbar.write(f"Retrying translation... (Attempt {attempt + 1}/{max_retries + 1})")
 
@@ -836,13 +954,39 @@ def translateAI(text, history, fullPromptFlag, config, filename=None, pbar=None,
                     # Check 1: Mismatch in length -> still a hard failure
                     if extracted is None or len(tItem) != len(extracted):
                         is_valid = False
+                        if pbar:
+                            pbar.write(f"Length mismatch: expected {len(tItem)}, got {len(extracted) if extracted else 0}")
                     else:
-                        # Set translations (line count matches)
-                        final_translations = extracted
+                        # Check 2: Validate placeholders are preserved
+                        # Flatten all_replacements for batch validation
+                        all_protected_text = protected_items  # The list we sent
+                        placeholder_valid, missing, extra = validate_placeholders(all_protected_text, extracted, 
+                                                                                  {k: v for replacements in all_replacements.values() for k, v in replacements.items()})
+                        
+                        if not placeholder_valid:
+                            is_valid = False
+                            if pbar:
+                                if missing:
+                                    pbar.write(f"Missing placeholders: {', '.join(missing)}")
+                                if extra:
+                                    pbar.write(f"Extra placeholders: {', '.join(extra)}")
+                        else:
+                            # Set translations (line count matches and placeholders valid)
+                            final_translations = extracted
                 else:
-                    # Single string: accept output even if it contains characters
-                    # matching langRegex (allow names or untranslated tokens).
-                    final_translations = cleaned_text.replace("Placeholder Text", "")
+                    # Single string: validate placeholders
+                    placeholder_valid, missing, extra = validate_placeholders(protected_items, cleaned_text, all_replacements[0])
+                    
+                    if not placeholder_valid:
+                        is_valid = False
+                        if pbar:
+                            if missing:
+                                pbar.write(f"Missing placeholders: {', '.join(missing)}")
+                            if extra:
+                                pbar.write(f"Extra placeholders: {', '.join(extra)}")
+                    else:
+                        # Accept output even if it contains characters matching langRegex
+                        final_translations = cleaned_text.replace("Placeholder Text", "")
             else:
                 is_valid = False
                 if pbar: pbar.write(f"AI Refused: {tItem}\n")
@@ -855,6 +999,14 @@ def translateAI(text, history, fullPromptFlag, config, filename=None, pbar=None,
 
         # After the loop, handle the final result
         if final_translations is not None: # Success case
+            # Restore protected script codes
+            if isinstance(tItem, list):
+                for j in range(len(final_translations)):
+                    if j in all_replacements:
+                        final_translations[j] = restore_script_codes(final_translations[j], all_replacements[j])
+            else:
+                final_translations = restore_script_codes(final_translations, all_replacements[0])
+            
             formatted_output = last_raw_translation
             try:
                 parsed_json = json.loads(last_raw_translation)
