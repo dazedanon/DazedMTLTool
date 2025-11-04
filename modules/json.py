@@ -87,17 +87,19 @@ def handleJSON(filename, estimate):
 
     else:
         try:
-            with open("translated/" + filename, "w", encoding="utf-8", newline="\n") as outFile:
-                start = time.time()
-                translatedData = openFiles(filename)
+            start = time.time()
+            translatedData = openFiles(filename)
 
-                # Print Result
-                end = time.time()
+            # Write final result after translation is complete
+            with open("translated/" + filename, "w", encoding="utf-8", newline="\n") as outFile:
                 json.dump(translatedData[0], outFile, ensure_ascii=False, indent=4)
-                tqdm.write(getResultString(translatedData, end - start, filename))
-                with LOCK:
-                    TOKENS[0] += translatedData[1][0]
-                    TOKENS[1] += translatedData[1][1]
+            
+            # Print Result
+            end = time.time()
+            tqdm.write(getResultString(translatedData, end - start, filename))
+            with LOCK:
+                TOKENS[0] += translatedData[1][0]
+                TOKENS[1] += translatedData[1][1]
         except Exception:
             return "Fail"
 
@@ -164,25 +166,17 @@ def parseJSON(data, filename):
 
 
 def save_progress_json(data, filename):
-    """Atomically save current JSON translation progress."""
+    """Save current JSON translation progress."""
     try:
         if ESTIMATE:
             return
         os.makedirs("translated", exist_ok=True)
-        tmp_fd, tmp_path = tempfile.mkstemp(prefix=f"{filename}.", suffix=".tmp", dir="translated")
-        try:
-            with os.fdopen(tmp_fd, "w", encoding="utf-8", newline="\n") as tmp_file:
-                json.dump(data, tmp_file, ensure_ascii=False, indent=4)
-            os.replace(tmp_path, os.path.join("translated", filename))
-        finally:
-            # In case of exception before replace
-            if os.path.exists(tmp_path):
-                try:
-                    os.remove(tmp_path)
-                except OSError:
-                    pass
+        tmp_path = os.path.join("translated", f"{filename}.tmp")
+        final_path = os.path.join("translated", filename)
+        with open(tmp_path, "w", encoding="utf-8", newline="\n") as outFile:
+            json.dump(data, outFile, ensure_ascii=False, indent=4)
+        os.replace(tmp_path, final_path)
     except Exception:
-        # Best-effort; don't crash the run on save failures
         traceback.print_exc()
 
 
@@ -190,15 +184,77 @@ def translateJSON(data, filename, translatedList):
     global LOCK, ESTIMATE, FILENAME, PBAR, MISMATCH
     if translatedList:
         stringList = translatedList[0]
+        eventList = translatedList[1]
     else:
         stringList = []
+        eventList = [[], [], []]  # [title, process, text]
     tokens = [0, 0]
     speaker = ""
     i = 0
+    stringListTL = []
+    eventListTL = [[], [], []]
 
     while i < len(data):
         speakerKey = "character_nameText"
         messageKey = "m_text"
+
+        # Event List Format - Title
+        if "title" in data[i] and data[i]["title"]:
+            jaString = data[i]["title"]
+            
+            # Pass 1
+            if not translatedList:
+                eventList[0].append(jaString.strip())
+            
+            # Pass 2
+            else:
+                if eventList[0]:
+                    translatedText = eventList[0][0]
+                    eventList[0].pop(0)
+                    
+                    # Set Data
+                    data[i]["title"] = translatedText
+                    save_progress_json(data, filename)
+
+        # Event List Format - Process
+        if "process" in data[i] and data[i]["process"]:
+            jaString = data[i]["process"]
+            
+            # Pass 1
+            if not translatedList:
+                eventList[1].append(jaString.strip())
+            
+            # Pass 2
+            else:
+                if eventList[1]:
+                    translatedText = eventList[1][0]
+                    eventList[1].pop(0)
+                    
+                    # Set Data
+                    data[i]["process"] = translatedText
+                    save_progress_json(data, filename)
+
+        # Event List Format - Text
+        if "text" in data[i] and data[i]["text"]:
+            jaString = data[i]["text"]
+            # Pass 1
+            if not translatedList:
+                # Replace \n with space for translation
+                jaStringClean = jaString.replace("\n", " ")
+                eventList[2].append(jaStringClean.strip())
+            
+            # Pass 2
+            else:
+                if eventList[2]:
+                    translatedText = eventList[2][0]
+                    eventList[2].pop(0)
+                    
+                    # Apply text wrapping and restore linebreaks
+                    translatedText = dazedwrap.wrapText(translatedText, 55)
+                    
+                    # Set Data
+                    data[i]["text"] = translatedText
+                    save_progress_json(data, filename)
 
         # Speaker
         if speakerKey in data[i] and data[i][speakerKey]:
@@ -290,9 +346,48 @@ def translateJSON(data, filename, translatedList):
         # Next Value
         i += 1       
 
-    # EOF
+    # EOF - Only do translation if this is Pass 1 (collecting strings)
     if not translatedList:
-        stringListTL = []
+        # Event List
+        if any(eventList):
+            PBAR.total = sum(len(event) for event in eventList)
+            PBAR.refresh()
+            
+            # Event Title
+            if eventList[0]:
+                response = translateAI(eventList[0], "Event Title", True)
+                tokens[0] += response[1][0]
+                tokens[1] += response[1][1]
+                eventListTL[0] = response[0]
+                
+                if len(eventList[0]) != len(eventListTL[0]):
+                    with LOCK:
+                        if FILENAME not in MISMATCH:
+                            MISMATCH.append(FILENAME)
+
+            # Event Process
+            if eventList[1]:
+                response = translateAI(eventList[1], "Event Process", True)
+                tokens[0] += response[1][0]
+                tokens[1] += response[1][1]
+                eventListTL[1] = response[0]
+                
+                if len(eventList[1]) != len(eventListTL[1]):
+                    with LOCK:
+                        if FILENAME not in MISMATCH:
+                            MISMATCH.append(FILENAME)
+
+            # Event Text
+            if eventList[2]:
+                response = translateAI(eventList[2], "Event Description", True)
+                tokens[0] += response[1][0]
+                tokens[1] += response[1][1]
+                eventListTL[2] = response[0]
+                
+                if len(eventList[2]) != len(eventListTL[2]):
+                    with LOCK:
+                        if FILENAME not in MISMATCH:
+                            MISMATCH.append(FILENAME)
 
         # String List
         if stringList:
@@ -309,8 +404,9 @@ def translateJSON(data, filename, translatedList):
                     if FILENAME not in MISMATCH:
                         MISMATCH.append(FILENAME)
 
-        # Set Strings
-    translateJSON(data, filename, [stringListTL])
+        # Pass 2: Set Strings (recursive call)
+        translateJSON(data, filename, [stringListTL, eventListTL])
+    
     return tokens
 
 # Save some money and enter the character before translation
