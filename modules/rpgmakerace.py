@@ -46,6 +46,12 @@ _speakerCache = {}
 _speakerCacheLock = threading.Lock()
 SPEAKER_COLLECTED = []  # Original speaker names collected during parse mode (untranslated)
 
+def clearSpeakerCache():
+    """Clear the speaker cache between passes to ensure fresh translations"""
+    global _speakerCache
+    with _speakerCacheLock:
+        _speakerCache.clear()
+
 # Regex - Need to change this if you want to translate from/to other languages. Default is Japanese Regex
 LANGREGEX = r"[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]+"
 
@@ -89,7 +95,7 @@ TLSYSTEMVARIABLES = False
 # Join 408 codes into a single string like 401.
 JOIN408 = True
 # SPEAKERS408: Process speakers in code 408 the same way as code 401.
-SPEAKERS408 = False
+SPEAKERS408 = True
 
 # Dialogue / Scroll / Choices (Main Codes)
 CODE101 = True
@@ -1695,7 +1701,7 @@ def searchCodes(page, pbar, jobList, filename):
                     speakerList.append(match.group(1))
                     if "\\c" in speakerList[0]:
                         speakerList = re.findall(
-                            r"^[\\]+[cC]\[\d+\]【?(.+?)】?[\\]+[cC]\[\d+\](?:[\\]+[A-Za-z]+(?:\[[^\]]*\])?)*[\\]*$",
+                            r"^[\\]+[cC]\[[^\]]+\]【(.+?)】[\\]+[cC]\[[^\]]+\](?:[\\]+[A-Za-z]+(?:\[[^\]]*\])?)*[\\]*$",
                             speakerList[0],
                         )
 
@@ -1719,10 +1725,11 @@ def searchCodes(page, pbar, jobList, filename):
                             if candidates:
                                 speakerList = candidates
 
-                # Colors
+                # Colors (strict): require a bracketed name inside color codes to count as a speaker
+                # This prevents arbitrary color-wrapped sentences from being misclassified as speakers.
                 if len(speakerList) == 0:
                     speakerList = re.findall(
-                        r"^[\\]+[cC]\[\d+\]【?(.+?)】?[\\]+[cC]\[\d+\](?:[\\]+[A-Za-z]+(?:\[[^\]]*\])?)*[\\]*$",
+                        r"^[\\]+[cC]\[[^\]]+\]【(.+?)】[\\]+[cC]\[[^\]]+\](?:[\\]+[A-Za-z]+(?:\[[^\]]*\])?)*[\\]*$",
                         jaString,
                     )
 
@@ -2489,7 +2496,7 @@ def searchCodes(page, pbar, jobList, filename):
                             speakerList.append(matchSpeaker.group(1))
                             if "\\c" in speakerList[0]:
                                 speakerList = re.findall(
-                                    r"^[\\]+[cC]\[\d+\]【?(.+?)】?[\\]+[cC]\[\d+\](?:[\\]+[A-Za-z]+(?:\[[^\]]*\])?)*[\\]*$",
+                                    r"^[\\]+[cC]\[[^\]]+\]【(.+?)】[\\]+[cC]\[[^\]]+\](?:[\\]+[A-Za-z]+(?:\[[^\]]*\])?)*[\\]*$",
                                     speakerList[0],
                                 )
 
@@ -2512,10 +2519,10 @@ def searchCodes(page, pbar, jobList, filename):
                                     if candidates:
                                         speakerList = candidates
 
-                        # Colors
+                        # Colors (strict): require a bracketed name inside color codes to count as a speaker
                         if len(speakerList) == 0:
                             speakerList = re.findall(
-                                r"^[\\]+[cC]\[\d+\]【?(.+?)】?[\\]+[cC]\[\d+\](?:[\\]+[A-Za-z]+(?:\[[^\]]*\])?)*[\\]*$",
+                                r"^[\\]+[cC]\[[^\]]+\]【(.+?)】[\\]+[cC]\[[^\]]+\](?:[\\]+[A-Za-z]+(?:\[[^\]]*\])?)*[\\]*$",
                                 jaString,
                             )
 
@@ -3278,6 +3285,7 @@ def searchCodes(page, pbar, jobList, filename):
 
         # Start Pass 2
         if setData:
+            clearSpeakerCache()  # Clear cache to ensure fresh speaker translations in Pass 2
             searchCodes(
                 page,
                 pbar,
