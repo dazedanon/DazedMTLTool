@@ -3504,53 +3504,56 @@ def searchSystem(data, pbar):
                 if pbar is not None:
                     pbar.refresh()
 
-    # Armor Types - batch translate all
-    armor_values = [data["armor_types"][i] for i in range(len(data["armor_types"]))]
-    if armor_values:
-        response = translateAI(
-            armor_values,
-            "Reply with only the " + LANGUAGE + " translation of the armor type",
-            False,
-        )
-        totalTokens[0] += response[1][0]
-        totalTokens[1] += response[1][1]
-        tl_list = response[0]
-        for i in range(min(len(tl_list), len(data["armor_types"]))):
-            data["armor_types"][i] = tl_list[i].replace('"', "").strip()
-        if pbar is not None:
-            pbar.refresh()
+    # Armor Types - batch translate all (check if exists)
+    if "armor_types" in data and data["armor_types"]:
+        armor_values = [data["armor_types"][i] for i in range(len(data["armor_types"]))]
+        if armor_values:
+            response = translateAI(
+                armor_values,
+                "Reply with only the " + LANGUAGE + " translation of the armor type",
+                False,
+            )
+            totalTokens[0] += response[1][0]
+            totalTokens[1] += response[1][1]
+            tl_list = response[0]
+            for i in range(min(len(tl_list), len(data["armor_types"]))):
+                data["armor_types"][i] = tl_list[i].replace('"', "").strip()
+            if pbar is not None:
+                pbar.refresh()
 
-    # Skill Types - batch translate all
-    skill_values = [data["skill_types"][i] for i in range(len(data["skill_types"]))]
-    if skill_values:
-        response = translateAI(
-            skill_values,
-            "Reply with only the " + LANGUAGE + " translation",
-            False,
-        )
-        totalTokens[0] += response[1][0]
-        totalTokens[1] += response[1][1]
-        tl_list = response[0]
-        for i in range(min(len(tl_list), len(data["skill_types"]))):
-            data["skill_types"][i] = tl_list[i].replace('"', "").strip()
-        if pbar is not None:
-            pbar.refresh()
+    # Skill Types - batch translate all (check if exists)
+    if "skill_types" in data and data["skill_types"]:
+        skill_values = [data["skill_types"][i] for i in range(len(data["skill_types"]))]
+        if skill_values:
+            response = translateAI(
+                skill_values,
+                "Reply with only the " + LANGUAGE + " translation",
+                False,
+            )
+            totalTokens[0] += response[1][0]
+            totalTokens[1] += response[1][1]
+            tl_list = response[0]
+            for i in range(min(len(tl_list), len(data["skill_types"]))):
+                data["skill_types"][i] = tl_list[i].replace('"', "").strip()
+            if pbar is not None:
+                pbar.refresh()
 
-    # Equip Types - batch translate all
-    equip_values = [data["equip_types"][i] for i in range(len(data["equip_types"]))]
-    if equip_values:
-        response = translateAI(
-            equip_values,
-            "Reply with only the " + LANGUAGE + " translation of the equipment type. No disclaimers.",
-            False,
-        )
-        totalTokens[0] += response[1][0]
-        totalTokens[1] += response[1][1]
-        tl_list = response[0]
-        for i in range(min(len(tl_list), len(data["equip_types"]))):
-            data["equip_types"][i] = tl_list[i].replace('"', "").strip()
-        if pbar is not None:
-            pbar.refresh()
+    # Equip Types - batch translate all (check if exists)
+    if "equip_types" in data and data["equip_types"]:
+        equip_values = [data["equip_types"][i] for i in range(len(data["equip_types"]))]
+        if equip_values:
+            response = translateAI(
+                equip_values,
+                "Reply with only the " + LANGUAGE + " translation of the equipment type. No disclaimers.",
+                False,
+            )
+            totalTokens[0] += response[1][0]
+            totalTokens[1] += response[1][1]
+            tl_list = response[0]
+            for i in range(min(len(tl_list), len(data["equip_types"]))):
+                data["equip_types"][i] = tl_list[i].replace('"', "").strip()
+            if pbar is not None:
+                pbar.refresh()
 
     # Elements - batch translate all (skip empty)
     element_values = []
@@ -3575,26 +3578,28 @@ def searchSystem(data, pbar):
             pbar.refresh()
 
     # Weapon Types - batch translate all (skip empty)
-    weapon_values = []
-    weapon_indices = []
-    for i in range(len(data["weaponTypes"])):
-        if data["weaponTypes"][i]:  # Skip empty strings
-            weapon_values.append(data["weaponTypes"][i])
-            weapon_indices.append(i)
-    
-    if weapon_values:
-        response = translateAI(
-            weapon_values,
-            "Reply with only the " + LANGUAGE + " translation of the weapon type",
-            False,
-        )
-        totalTokens[0] += response[1][0]
-        totalTokens[1] += response[1][1]
-        tl_list = response[0]
-        for n, idx in enumerate(weapon_indices[: len(tl_list)]):
-            data["weaponTypes"][idx] = tl_list[n].replace('"', "").strip()
-        if pbar is not None:
-            pbar.refresh()
+    weapon_key = "weaponTypes" if "weaponTypes" in data else "weapon_types"
+    if weapon_key in data and data[weapon_key]:
+        weapon_values = []
+        weapon_indices = []
+        for i in range(len(data[weapon_key])):
+            if data[weapon_key][i]:  # Skip empty strings
+                weapon_values.append(data[weapon_key][i])
+                weapon_indices.append(i)
+        
+        if weapon_values:
+            response = translateAI(
+                weapon_values,
+                "Reply with only the " + LANGUAGE + " translation of the weapon type",
+                False,
+            )
+            totalTokens[0] += response[1][0]
+            totalTokens[1] += response[1][1]
+            tl_list = response[0]
+            for n, idx in enumerate(weapon_indices[: len(tl_list)]):
+                data[weapon_key][idx] = tl_list[n].replace('"', "").strip()
+            if pbar is not None:
+                pbar.refresh()
 
     # Variables (Optional usually) — batch translate to reduce calls
     if TLSYSTEMVARIABLES and "variables" in data and isinstance(data["variables"], list):
@@ -3619,40 +3624,41 @@ def searchSystem(data, pbar):
             if pbar is not None:
                 pbar.refresh()
 
-    # Messages — batch translate to reduce calls
-    messages = data["terms"]["messages"]
-    if messages:
-        msg_keys = []
-        msg_values = []
-        for key, value in messages.items():
-            if isinstance(value, str) and value.strip():
-                msg_keys.append(key)
-                msg_values.append(value)
-        
-        if msg_values:
-            response = translateAI(
-                msg_values,
-                "Reply with only the "
-                + LANGUAGE
-                + ' translation of the battle text.\nTranslate "常時ダッシュ" as "Always Dash"\nTranslate "次の%1まで" as Next %1.',
-                False,
-            )
-            totalTokens[0] += response[1][0]
-            totalTokens[1] += response[1][1]
-            tl_list = response[0]
+    # Messages — batch translate to reduce calls (check if exists)
+    if "messages" in data["terms"]:
+        messages = data["terms"]["messages"]
+        if messages:
+            msg_keys = []
+            msg_values = []
+            for key, value in messages.items():
+                if isinstance(value, str) and value.strip():
+                    msg_keys.append(key)
+                    msg_values.append(value)
             
-            # Remove characters that may break scripts
-            charList = [".", '"', "\\n"]
-            
-            # Assign back translations to corresponding keys
-            for n, key in enumerate(msg_keys[: len(tl_list)]):
-                translatedText = tl_list[n]
-                for char in charList:
-                    translatedText = translatedText.replace(char, "")
-                messages[key] = translatedText
-            
-            if pbar is not None:
-                pbar.refresh()
+            if msg_values:
+                response = translateAI(
+                    msg_values,
+                    "Reply with only the "
+                    + LANGUAGE
+                    + ' translation of the battle text.\nTranslate "常時ダッシュ" as "Always Dash"\nTranslate "次の%1まで" as Next %1.',
+                    False,
+                )
+                totalTokens[0] += response[1][0]
+                totalTokens[1] += response[1][1]
+                tl_list = response[0]
+                
+                # Remove characters that may break scripts
+                charList = [".", '"', "\\n"]
+                
+                # Assign back translations to corresponding keys
+                for n, key in enumerate(msg_keys[: len(tl_list)]):
+                    translatedText = tl_list[n]
+                    for char in charList:
+                        translatedText = translatedText.replace(char, "")
+                    messages[key] = translatedText
+                
+                if pbar is not None:
+                    pbar.refresh()
 
     return totalTokens
 
