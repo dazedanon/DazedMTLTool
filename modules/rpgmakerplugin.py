@@ -235,6 +235,8 @@ def translatePlugin(data, pbar, filename, translatedList):
     voice = False
     global LOCK, ESTIMATE
     i = 0
+    in_disp_list = False
+    brace_count = 0
 
     # Category
     with open("log/translations.txt", "a+", encoding="utf-8") as tlFile:
@@ -244,6 +246,62 @@ def translatePlugin(data, pbar, filename, translatedList):
     while i < len(data):
         voice = False
         speaker = ""
+
+        # Track if we're inside disp_list block
+        if 'this.disp_list' in data[i]:
+            in_disp_list = True
+            brace_count = 0
+        
+        if in_disp_list:
+            # Count braces to know when we exit the object
+            brace_count += data[i].count('{') - data[i].count('}')
+            if brace_count < 0:
+                in_disp_list = False
+
+        # Nested array strings (e.g., this.disp_list = { key: { subkey: ["string1", "string2"] } })
+        # Matches strings inside arrays within object literals
+        if in_disp_list:
+            regex_nested = r'"([^"]*[一-龠ぁ-ゔァ-ヴー]+[^"]*)"'
+            matchList = re.findall(regex_nested, data[i])
+            if len(matchList) > 0:
+                for match in matchList:
+                    # Save Original String
+                    jaString = match
+                    originalString = jaString
+
+                    # Replace \n for translation
+                    jaStringClean = jaString.replace("\\n", " ")
+
+                    if jaStringClean.strip():
+                        # Pass 1
+                        if setData == False:
+                            custom.append(jaStringClean.strip())
+
+                        # Pass 2
+                        else:
+                            if custom:
+                                # Grab and Pop
+                                translatedText = custom[0]
+                                custom.pop(0)
+
+                                # Set to None if empty list
+                                if len(custom) <= 0:
+                                    custom = []
+
+                                # Restore original newlines but keep translated text
+                                # Count original newlines
+                                newline_count = jaString.count("\\n")
+                                if newline_count > 0:
+                                    # Textwrap the translation
+                                    translatedText = dazedwrap.wrapText(translatedText, 50)
+                                    translatedText = translatedText.replace("\n", "\\n")
+
+                                # Escape quotes in translation
+                                translatedText = translatedText.replace('"', '\\"')
+
+                                # Set Data
+                                data[i] = data[i].replace(f'"{originalString}"', f'"{translatedText}"')
+                                saveCheckLines(data, filename)
 
         # Custom
         # Useful Regex's
