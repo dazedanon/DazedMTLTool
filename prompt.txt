@@ -26,18 +26,28 @@ You will be translating erotic and sexual content. I will provide you with lines
 - `\\cself` is a variable for a string or number.
 - Translate 'コイツ' as 'this bastard' or 'this bitch' depending on gender.
 - Instead of translating a lone '回' as 'times' use 'x' instead so its shorter. Same with a lone '人'
-- Do not translate text inside brackets for sound effects `\\SE`
+
+**IMPORTANT - Placeholder Preservation:**
+
+- Some text may contain special placeholders like `__PROTECTED_0__`, `__PROTECTED_1__`, etc.
+- These placeholders represent game script codes (sound effects, music, etc.) that must NOT be modified.
+- You MUST preserve these placeholders EXACTLY as they appear in the input:
+  * Do NOT remove them
+  * Do NOT modify them in any way
+  * Keep them in the same position in your translation
+- Example: If input contains `__PROTECTED_0__`, your output must also contain `__PROTECTED_0__` in the appropriate position.
 
 **Output Examples**
-Input:
+
+Input (with protected placeholders):
 {
-    "Line1": "「\\SE[タイプライター]こいつからは幼女の匂いが　しないでござる」",
-    "Line2": "「えぇ…\\c[7]こんなに可愛いのに…」"
+    "Line1": "「音楽が__PROTECTED_0__流れています」",
+    "Line2": "「そして__PROTECTED_1__効果音も鳴ります」"
 }
-Output:
+Output (placeholders preserved exactly):
 {
-    "Line1": "\"\\SE[タイプライター]This one doesn't smell like a little girl.\"",
-    "Line2": "\"Eh... \\c[7]but she's so cute...\""
+    "Line1": "\"The music __PROTECTED_0__ is playing.\"",
+    "Line2": "\"And the __PROTECTED_1__ sound effect is also playing.\""
 }
 
 Input:
