@@ -187,16 +187,34 @@ def translateJSON(data, filename, translatedList):
         eventList = translatedList[1]
     else:
         stringList = []
-        eventList = [[], [], []]  # [title, process, text]
+        eventList = [[], [], [], [], [], [], []]  # [title, process, text, key, target, job, place]
     tokens = [0, 0]
     speaker = ""
     i = 0
     stringListTL = []
-    eventListTL = [[], [], []]
+    eventListTL = [[], [], [], [], [], [], []]
 
     while i < len(data):
         speakerKey = "character_nameText"
         messageKey = "m_text"
+
+        # Event List Format - Key
+        if "key" in data[i] and data[i]["key"]:
+            jaString = data[i]["key"]
+            
+            # Pass 1
+            if not translatedList:
+                eventList[3].append(jaString.strip())
+            
+            # Pass 2
+            else:
+                if eventList[3]:
+                    translatedText = eventList[3][0]
+                    eventList[3].pop(0)
+                    
+                    # Set Data
+                    data[i]["key"] = translatedText
+                    save_progress_json(data, filename)
 
         # Event List Format - Title
         if "title" in data[i] and data[i]["title"]:
@@ -214,6 +232,60 @@ def translateJSON(data, filename, translatedList):
                     
                     # Set Data
                     data[i]["title"] = translatedText
+                    save_progress_json(data, filename)
+
+        # Event List Format - Target
+        if "target" in data[i] and data[i]["target"]:
+            jaString = data[i]["target"]
+            
+            # Pass 1
+            if not translatedList:
+                eventList[4].append(jaString.strip())
+            
+            # Pass 2
+            else:
+                if eventList[4]:
+                    translatedText = eventList[4][0]
+                    eventList[4].pop(0)
+                    
+                    # Set Data
+                    data[i]["target"] = translatedText
+                    save_progress_json(data, filename)
+
+        # Event List Format - Job
+        if "job" in data[i] and data[i]["job"]:
+            jaString = data[i]["job"]
+            
+            # Pass 1
+            if not translatedList:
+                eventList[5].append(jaString.strip())
+            
+            # Pass 2
+            else:
+                if eventList[5]:
+                    translatedText = eventList[5][0]
+                    eventList[5].pop(0)
+                    
+                    # Set Data
+                    data[i]["job"] = translatedText
+                    save_progress_json(data, filename)
+
+        # Event List Format - Place
+        if "place" in data[i] and data[i]["place"]:
+            jaString = data[i]["place"]
+            
+            # Pass 1
+            if not translatedList:
+                eventList[6].append(jaString.strip())
+            
+            # Pass 2
+            else:
+                if eventList[6]:
+                    translatedText = eventList[6][0]
+                    eventList[6].pop(0)
+                    
+                    # Set Data
+                    data[i]["place"] = translatedText
                     save_progress_json(data, filename)
 
         # Event List Format - Process
@@ -250,7 +322,7 @@ def translateJSON(data, filename, translatedList):
                     eventList[2].pop(0)
                     
                     # Apply text wrapping and restore linebreaks
-                    translatedText = dazedwrap.wrapText(translatedText, 55)
+                    translatedText = dazedwrap.wrapText(translatedText, 70)
                     
                     # Set Data
                     data[i]["text"] = translatedText
@@ -385,6 +457,54 @@ def translateJSON(data, filename, translatedList):
                 eventListTL[2] = response[0]
                 
                 if len(eventList[2]) != len(eventListTL[2]):
+                    with LOCK:
+                        if FILENAME not in MISMATCH:
+                            MISMATCH.append(FILENAME)
+
+            # Event Key
+            if eventList[3]:
+                response = translateAI(eventList[3], "Event Key", True)
+                tokens[0] += response[1][0]
+                tokens[1] += response[1][1]
+                eventListTL[3] = response[0]
+                
+                if len(eventList[3]) != len(eventListTL[3]):
+                    with LOCK:
+                        if FILENAME not in MISMATCH:
+                            MISMATCH.append(FILENAME)
+
+            # Event Target
+            if eventList[4]:
+                response = translateAI(eventList[4], "Character Name", True)
+                tokens[0] += response[1][0]
+                tokens[1] += response[1][1]
+                eventListTL[4] = response[0]
+                
+                if len(eventList[4]) != len(eventListTL[4]):
+                    with LOCK:
+                        if FILENAME not in MISMATCH:
+                            MISMATCH.append(FILENAME)
+
+            # Event Job
+            if eventList[5]:
+                response = translateAI(eventList[5], "Job/Occupation", True)
+                tokens[0] += response[1][0]
+                tokens[1] += response[1][1]
+                eventListTL[5] = response[0]
+                
+                if len(eventList[5]) != len(eventListTL[5]):
+                    with LOCK:
+                        if FILENAME not in MISMATCH:
+                            MISMATCH.append(FILENAME)
+
+            # Event Place
+            if eventList[6]:
+                response = translateAI(eventList[6], "Location Name", True)
+                tokens[0] += response[1][0]
+                tokens[1] += response[1][1]
+                eventListTL[6] = response[0]
+                
+                if len(eventList[6]) != len(eventListTL[6]):
                     with LOCK:
                         if FILENAME not in MISMATCH:
                             MISMATCH.append(FILENAME)

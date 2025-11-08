@@ -1669,7 +1669,7 @@ def searchCodes(page, pbar, jobList, filename):
             ## Event Code: 122 [Set Variables]
             if "code" in codeList[i] and codeList[i]["code"] == 122 and CODE122 is True:
                 # This is going to be the var being set. (IMPORTANT)
-                if codeList[i]["parameters"][0] not in list(range(0, 2000)):
+                if codeList[i]["parameters"][0] not in list(range(2, 3)):
                     i += 1
                     continue
 
@@ -2067,7 +2067,7 @@ def searchCodes(page, pbar, jobList, filename):
                     # "text =": (r"text\s*=\s*'(.+[^\\])'"),
                     # "const text": (r'(const\stext\s?=\s?"(.+)";?)'),
                     # "ex_a_name": (r'ex_a_name\(\d+,"(.+)"\)'),
-                    # "gameVariables.setValue": (r"\$gameVariables.setValue\(\d+,\s?'(.+)'\)"),
+                    "gameVariables.setValue": (r'\$gameVariables\.setValue\(\d+,\s*"([^"]*)"\)'),
                     # "BattleManager._logWindow.push('addText'": (r"BattleManager._logWindow.push\('addText',\s'(.+)'\)"),
                     # "BattleManager._logWindow.addText": (r"BattleManager._logWindow.addText\('(.+)'\)"),
                 }
@@ -2101,6 +2101,10 @@ def searchCodes(page, pbar, jobList, filename):
                                 translatedText = re.sub(r'(?<!\\)"', r'"', translatedText)
                                 # Double backslashes before control codes
                                 translatedText = re.sub(r'(?<![\\])([\\]{1})(?=\w)', r'\\\\', translatedText)
+
+                                # setValue
+                                if "gameVariables.setValue" in codeList[i]["parameters"][0]:
+                                    translatedText = translatedText.replace('\"', "'")
 
                                 # Set
                                 codeList[i]["parameters"][0] = jaString.replace(match.group(1), translatedText)
