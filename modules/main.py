@@ -178,7 +178,10 @@ files to translate are in the /files folder and that you picked the right game e
             pass
     except Exception:
         pass
-    with ThreadPoolExecutor(max_workers=THREADS) as executor:
+    
+    # Use single worker for estimate mode to prevent race conditions
+    max_workers = 1 if estimate else THREADS
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures = []
         files_root = "files"
 
