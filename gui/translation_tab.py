@@ -270,6 +270,10 @@ class TranslationWorker(QThread):
             # Load environment variables
             load_dotenv()
             
+            # Clear the translation cache at the start of the run
+            from util.translation import clear_cache
+            clear_cache()
+            
             # Check for required environment variables
             required_envs = ["api", "key", "organization", "model", "language", "timeout", "fileThreads", "threads", "width", "listWidth"]
             env_missing = False

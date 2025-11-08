@@ -145,6 +145,12 @@ def clear_cache():
     global _cache
     with CACHE_LOCK:
         _cache = {}
+        # Also clear the cache file on disk
+        try:
+            if CACHE_FILE.exists():
+                CACHE_FILE.unlink()
+        except Exception:
+            pass
 
 def load_cache():
     """Load the translation cache from disk"""
@@ -156,8 +162,16 @@ def load_cache():
         if _cache is not None:  # Double-check after acquiring lock
             return _cache
         
-        # Start with empty cache each run
+        # Try to load existing cache from disk
         _cache = {}
+        try:
+            if CACHE_FILE.exists():
+                with open(CACHE_FILE, "r", encoding="utf-8") as f:
+                    _cache = json.load(f)
+        except Exception:
+            # If cache file is corrupted or unreadable, start fresh
+            _cache = {}
+        
         return _cache
 
 def save_cache():
@@ -1061,9 +1075,8 @@ def translateAI(text, history, fullPromptFlag, config, filename=None, pbar=None,
     if tList and isinstance(tList[0], list):
         tList = [t for sublist in tList for t in sublist]
     
-    # Save cache after processing
-    if not config.estimateMode:
-        save_cache()
+    # Save cache after processing (for both estimate and translation modes)
+    save_cache()
 
     # Return result
     if formatType == "json":

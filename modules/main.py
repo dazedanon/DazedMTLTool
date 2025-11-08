@@ -87,6 +87,10 @@ tqdm.write(
 
 
 def main():
+    # Clear the translation cache at the start of the run
+    from util.translation import clear_cache
+    clear_cache()
+    
     estimate = ""
     speaker_parse = False  # Deferred until after engine select
     while estimate == "":
