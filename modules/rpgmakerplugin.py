@@ -247,8 +247,8 @@ def translatePlugin(data, pbar, filename, translatedList):
         voice = False
         speaker = ""
 
-        # Track if we're inside disp_list block
-        if 'this.disp_list' in data[i]:
+        # Track if we're inside CBR_travel_data block
+        if 'data_map_name_list' in data[i]:
             in_disp_list = True
             brace_count = 0
         
