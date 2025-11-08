@@ -414,7 +414,8 @@ class TranslationWorker(QThread):
                     total_cost = "Success"
                 else:
                     # Default behavior: run each file in a separate process (unchanged)
-                    max_workers = threads
+                    # Use single worker for estimate mode to prevent race conditions
+                    max_workers = 1 if self.estimate_only else threads
                     self.executor = ThreadPoolExecutor(max_workers=max_workers)
 
                     # Submit tasks to run modules in separate processes
