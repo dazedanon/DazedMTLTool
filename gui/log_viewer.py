@@ -73,6 +73,7 @@ class LogViewer(QWidget):
         self._tail_timer.timeout.connect(self._poll_tail)
         self._tail_interval = 300  # ms
         self._tail_f = None
+        self._tail_buffer = ""  # Buffer for incomplete lines
         # Default: prefer the most recent file in log/history, else legacy path
         try:
             latest = self._latest_history_file()
@@ -118,7 +119,8 @@ class LogViewer(QWidget):
         """Clear the log display and reset tracking."""
         self.log_display.clear()
         self.status_label.setText("Log cleared")
-        # Reset tail file pointer if active
+        # Reset tail file pointer and buffer if active
+        self._tail_buffer = ""
         if self._tail_f:
             try:
                 # Move pointer to end so we continue only with new lines
@@ -196,8 +198,26 @@ class LogViewer(QWidget):
             new_data = self._tail_f.read()
             if not new_data:
                 return
-            # Split into lines and append
-            for line in new_data.splitlines():
+            
+            # Combine buffer with new data
+            combined = self._tail_buffer + new_data
+            
+            # Split by newlines, keeping the separator info
+            lines = combined.split('\n')
+            
+            # If the data ends with a newline, the last element will be empty
+            # Otherwise, it's an incomplete line that should be buffered
+            if combined.endswith('\n'):
+                # All lines are complete
+                self._tail_buffer = ""
+                complete_lines = lines[:-1]  # Exclude the empty last element
+            else:
+                # Last line is incomplete, save it for next time
+                self._tail_buffer = lines[-1]
+                complete_lines = lines[:-1]
+            
+            # Append complete lines to the display
+            for line in complete_lines:
                 if line.strip():
                     self.append_log_message(line)
         except Exception:

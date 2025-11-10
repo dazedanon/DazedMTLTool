@@ -23,6 +23,7 @@ PROTECTED_PATTERNS = [
     r'\\ME\[[^\]]+\]',      # \ME[music_effect_name]
     r'\\BGM\[[^\]]+\]',     # \BGM[background_music_name]
     r'\\BGS\[[^\]]+\]',     # \BGS[background_sound_name]
+    r'_pum\[[^\]]+\]',     # \BGS[background_sound_name]
 ]
 
 def protect_script_codes(text):
@@ -1033,6 +1034,7 @@ def translateAI(text, history, fullPromptFlag, config, filename=None, pbar=None,
                 with open(config.logFilePath, "a", encoding="utf-8") as logFile:
                     logFile.write(f"Input:\n{subbedT}\n")
                     logFile.write(f"Output:\n{formatted_output}\n")
+                    logFile.flush()  # Ensure data is written to disk immediately
             except Exception:
                 pass  # Don't fail if logging fails
 
@@ -1064,6 +1066,7 @@ def translateAI(text, history, fullPromptFlag, config, filename=None, pbar=None,
                 mismatchFile.write(f"Failed after retries: {filename}\n")
                 mismatchFile.write(f"Input:\n{subbedT}\n")
                 mismatchFile.write(f"Final Output:\n{formatted_mismatch_output}\n")
+                mismatchFile.flush()  # Ensure data is written to disk immediately
 
             if filename and mismatchList is not None and filename not in mismatchList:
                 mismatchList.append(filename)
