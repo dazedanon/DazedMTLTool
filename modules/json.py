@@ -156,7 +156,15 @@ def parseJSON(data, filename):
         pbar.desc = filename
         PBAR = pbar
         try:
-            result = translateJSON(data, filename, [])
+            # Check if data is a simple key-value dict (not a list)
+            if isinstance(data, dict) and not isinstance(data, list):
+                # Check if it's a simple key-value format (all values are strings, not nested objects)
+                if all(isinstance(v, str) for v in data.values()):
+                    result = translateSimpleKeyValueJSON(data, filename)
+                else:
+                    result = translateJSON(data, filename, [])
+            else:
+                result = translateJSON(data, filename, [])
             totalTokens[0] += result[0]
             totalTokens[1] += result[1]
         except Exception as e:
@@ -178,6 +186,61 @@ def save_progress_json(data, filename):
         os.replace(tmp_path, final_path)
     except Exception:
         traceback.print_exc()
+
+
+def translateSimpleKeyValueJSON(data, filename):
+    """
+    Translate simple key-value JSON format where keys contain Japanese text
+    and values are placeholder strings like "TODO".
+    
+    Format example:
+    {
+        "\\r\\nスタビライザー": "TODO",
+        "\\r\\nプラグインなし": "TODO"
+    }
+    """
+    global LOCK, ESTIMATE, FILENAME, PBAR, MISMATCH
+    tokens = [0, 0]
+    stringList = []
+    keyList = []
+    
+    # Pass 1: Collect all keys that need translation
+    for key, value in data.items():
+        # Check if the key contains text matching the language regex
+        if re.search(LANGREGEX, key):
+            # Strip whitespace and newline characters for translation
+            # cleanKey = key.strip().replace("\r\n", "").replace("\n", "").replace("\r", "")
+            # if cleanKey:
+            stringList.append(key)
+            keyList.append(key)  # Store original key for reference
+    
+    # Translate all keys if any were found
+    if stringList:
+        PBAR.total = len(stringList)
+        PBAR.refresh()
+        
+        response = translateAI(stringList, "Reply with the English Translation", True)
+        tokens[0] += response[1][0]
+        tokens[1] += response[1][1]
+        translatedList = response[0]
+        
+        # Check for mismatch
+        if len(stringList) != len(translatedList):
+            with LOCK:
+                if FILENAME not in MISMATCH:
+                    MISMATCH.append(FILENAME)
+        
+        # Pass 2: Update the values with translations
+        for i, key in enumerate(keyList):
+            if i < len(translatedList):
+                translatedText = translatedList[i]
+                # Set the translated text as the value
+                data[key] = translatedText
+                
+                # Save progress after each translation
+                save_progress_json(data, filename)
+    
+    return tokens
 
 
 def translateJSON(data, filename, translatedList):
