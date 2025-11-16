@@ -172,7 +172,7 @@ def openFiles(filename):
     with open("files/" + filename, "r", encoding="UTF-8") as f:
         data = yaml.load(f)
         # Map Files
-        if "Map" in filename and filename != "MapInfos.json":
+        if "Map" in filename and "MapInfos" not in filename:
             translatedData = parseMap(data, filename)
 
         # CommonEvents Files

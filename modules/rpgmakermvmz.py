@@ -156,7 +156,7 @@ def openFiles(filename):
         data = json.load(f)
 
         # Map Files
-        if "Map" in filename and filename != "MapInfos.json":
+        if "Map" in filename and "MapInfos" not in filename:
             translatedData = parseMap(data, filename)
 
         # CommonEvents Files
