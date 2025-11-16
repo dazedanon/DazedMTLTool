@@ -20,7 +20,6 @@ TIMEOUT = int(os.getenv("timeout"))
 LANGUAGE = os.getenv("language").capitalize()
 PROMPT = Path("prompt.txt").read_text(encoding="utf-8")
 VOCAB = Path("vocab.txt").read_text(encoding="utf-8")
-THREADS = int(os.getenv("threads"))
 LOCK = threading.Lock()
 PBAR = None
 WIDTH = int(os.getenv("width"))
