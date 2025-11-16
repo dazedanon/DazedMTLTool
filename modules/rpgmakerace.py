@@ -23,7 +23,6 @@ TIMEOUT = int(os.getenv("timeout"))
 LANGUAGE = os.getenv("language").capitalize()
 PROMPT = Path("prompt.txt").read_text(encoding="utf-8")
 VOCAB = Path("vocab.txt").read_text(encoding="utf-8")
-THREADS = int(os.getenv("threads"))
 LOCK = threading.Lock()
 THREAD_CTX = threading.local()
 WIDTH = int(os.getenv("width"))
@@ -37,6 +36,7 @@ PBAR = None
 FILENAME = None
 TIMETOTAL = 0  # Total Time Taken for all translations
 VOCAB_LOCK = threading.Lock()
+PREFLIGHT_COUNT_MODE = False  # When True, translateAI wrapper only counts units and never calls API
 
 # Speakers
 NAMESLIST = []
@@ -44,6 +44,12 @@ SPEAKER_PARSE_MODE = False
 _speakerCache = {}
 _speakerCacheLock = threading.Lock()
 SPEAKER_COLLECTED = []  # Original speaker names collected during parse mode (untranslated)
+
+def clearSpeakerCache():
+    """Clear the speaker cache between passes to ensure fresh translations"""
+    global _speakerCache
+    with _speakerCacheLock:
+        _speakerCache.clear()
 
 # Regex - Need to change this if you want to translate from/to other languages. Default is Japanese Regex
 LANGREGEX = r"[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]+"
@@ -74,7 +80,7 @@ LEAVE = False
 
 # Config (Default)
 # FIRSTLINESPEAKERS: Guess speaker from first line.
-FIRSTLINESPEAKERS = False
+FIRSTLINESPEAKERS = True
 # FACENAME101: Map face name -> speaker.
 FACENAME101 = False
 # BRFLAG: Newlines -> <br>.
@@ -86,7 +92,9 @@ IGNORETLTEXT = False
 # TLSYSTEMVARIABLES: Translate System Variables. (Optional but sometimes necessary. Can break stuff.)
 TLSYSTEMVARIABLES = False
 # Join 408 codes into a single string like 401.
-JOIN408 = False
+JOIN408 = True
+# SPEAKERS408: Process speakers in code 408 the same way as code 401.
+SPEAKERS408 = True
 
 # Dialogue / Scroll / Choices (Main Codes)
 CODE101 = True
@@ -95,7 +103,7 @@ CODE405 = True
 CODE102 = True
 
 # Optional
-CODE408 = False
+CODE408 = True
 
 # Variables
 CODE122 = False
@@ -445,9 +453,100 @@ def update_vocab_section(category: str, pairs: list[tuple[str, str]]):
 
 def parseMap(data, filename):
     totalTokens = [0, 0]
-    totalLines = 0
     events = data["events"]
     global LOCK
+
+    # --- Preflight: estimate exact progress total using the same translation batching ---
+    class _CountingBar:
+        def __init__(self):
+            self.n = 0
+        def update(self, n=1):
+            try:
+                self.n += int(n) if n is not None else 1
+            except Exception:
+                self.n += 1
+        def write(self, *args, **kwargs):
+            pass
+        def refresh(self):
+            pass
+
+    def _estimate_map_units(d, fname) -> int:
+        dcopy = copy.deepcopy(d)
+        bar = _CountingBar()
+        global PREFLIGHT_COUNT_MODE
+        saved_preflight = PREFLIGHT_COUNT_MODE
+        global PBAR
+        saved_pbar = PBAR
+        PREFLIGHT_COUNT_MODE = True
+        PBAR = bar
+        try:
+            # Count display name TL (1 unit if present)
+            if "Map" in fname and isinstance(dcopy.get("display_name", None), str):
+                try:
+                    translateAI(
+                        dcopy["display_name"],
+                        "Reply with only the " + LANGUAGE + " translation of the RPG location name",
+                        False,
+                    )
+                except Exception:
+                    pass
+
+            # Notes and pages
+            evts = dcopy.get("events", {}) or {}
+            for evt in evts.values():
+                if not evt:
+                    continue
+                note_val = evt.get("note") or ""
+                if not isinstance(note_val, str):
+                    note_val = str(note_val) if note_val is not None else ""
+
+                # <LB> name translation
+                if "<LB>" in note_val:
+                    name_val = evt.get("name") or ""
+                    if isinstance(name_val, str) and name_val:
+                        try:
+                            translateAI(
+                                name_val,
+                                "Reply with only the " + LANGUAGE + " translation of the RPG location name",
+                                False,
+                            )
+                        except Exception:
+                            pass
+
+                # <msgText:"...">
+                if "<msgText:" in note_val:
+                    try:
+                        translateNote(evt, r"<msgText:\"(.*?)\">", False)
+                    except Exception:
+                        pass
+
+                # <namePop:...>, <LB:...>, <dn:...> handled before page processing in real run
+                if "<namePop:" in note_val:
+                    try:
+                        translateNoteOmitSpace(evt, r"<namePop:\s?([\w一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]+)")
+                    except Exception:
+                        pass
+                if "<LB:" in note_val:
+                    try:
+                        translateNoteOmitSpace(evt, r"<LB:(.*?)\s?>.*")
+                    except Exception:
+                        pass
+                if "<dn:" in note_val:
+                    try:
+                        translateNoteOmitSpace(evt, r"<dn:\s*(.*)>.*")
+                    except Exception:
+                        pass
+
+                for page in (evt.get("pages", []) or []):
+                    try:
+                        searchCodes(page, bar, [], fname)
+                    except Exception:
+                        pass
+
+            return getattr(bar, "n", 0) or 0
+        finally:
+            PREFLIGHT_COUNT_MODE = saved_preflight
+            PBAR = saved_pbar
 
     # Translate display_name for Map files
     if "Map" in filename:
@@ -460,30 +559,17 @@ def parseMap(data, filename):
         totalTokens[1] += response[1][1]
         data["display_name"] = response[0].replace('"', "")
 
-    # Get total for progress bar (sum of all command list lengths across pages)
-    for event in events.values():
-        if event and isinstance(event, dict):
-            note_val = event.get("note") or ""
-            if not isinstance(note_val, str):
-                note_val = str(note_val) if note_val is not None else ""
-            if "<LB>" in note_val:
-                # Translate event name when flagged with <LB>
-                name_val = event.get("name") or ""
-                if isinstance(name_val, str) and name_val:
-                    response = translateAI(
-                        name_val,
-                        "Reply with only the " + LANGUAGE + " translation of the RPG location name",
-                        False,
-                    )
-                    totalTokens[0] += response[1][0]
-                    totalTokens[1] += response[1][1]
-                    event["name"] = response[0].replace('"', "")
-            if "<msgText:" in note_val:
-                tokensResponse = translateNote(event, r"<msgText:\"(.*?)\">", False)
-                totalTokens[0] += tokensResponse[0]
-                totalTokens[1] += tokensResponse[1]
-            for page in event["pages"]:
-                totalLines += len(page["list"])
+    totalLines = _estimate_map_units(data, filename)
+    if not isinstance(totalLines, int) or totalLines <= 0:
+        # Fallback to naive count so a bar still renders
+        totalLines = 0
+        for evt in events.values():
+            if evt:
+                for page in (evt.get("pages", []) or []):
+                    try:
+                        totalLines += len(page.get("list", []))
+                    except Exception:
+                        pass
     global PBAR
 
     # Process each page synchronously with progress updates
@@ -607,13 +693,52 @@ def translateNoteOmitSpace(event, regex):
 
 def parseCommonEvents(data, filename):
     totalTokens = [0, 0]
-    totalLines = 0
     global LOCK
 
-    # Get total for progress bar
-    for page in data:
-        if page is not None:
-            totalLines += len(page["list"])
+    # --- Preflight: estimate exact progress total using same batching ---
+    class _CountingBar:
+        def __init__(self):
+            self.n = 0
+        def update(self, n=1):
+            try:
+                self.n += int(n) if n is not None else 1
+            except Exception:
+                self.n += 1
+        def write(self, *args, **kwargs):
+            pass
+        def refresh(self):
+            pass
+
+    def _estimate_units(pages, fname) -> int:
+        dcopy = copy.deepcopy(pages)
+        bar = _CountingBar()
+        global PREFLIGHT_COUNT_MODE, PBAR
+        saved_flag = PREFLIGHT_COUNT_MODE
+        saved_pbar = PBAR
+        PREFLIGHT_COUNT_MODE = True
+        PBAR = bar
+        try:
+            for page in dcopy:
+                if page is not None:
+                    try:
+                        searchCodes(page, bar, [], fname)
+                    except Exception:
+                        pass
+            return getattr(bar, "n", 0) or 0
+        finally:
+            PREFLIGHT_COUNT_MODE = saved_flag
+            PBAR = saved_pbar
+
+    totalLines = _estimate_units(data, filename)
+    if not isinstance(totalLines, int) or totalLines <= 0:
+        # Fallback to naive command count
+        totalLines = 0
+        for page in data:
+            if page is not None:
+                try:
+                    totalLines += len(page.get("list", []))
+                except Exception:
+                    pass
     global PBAR
 
     with tqdm(total=totalLines, bar_format=BAR_FORMAT, position=POSITION, leave=LEAVE, desc=filename) as pbar:
@@ -635,15 +760,55 @@ def parseCommonEvents(data, filename):
 
 def parseTroops(data, filename):
     totalTokens = [0, 0]
-    totalLines = 0
     global LOCK
 
-    # Get total for progress bar
-    for troop in data:
-        if troop is not None:
-            for page in troop["pages"]:
-                # Progress measured by number of commands in each page's list
-                totalLines += len(page["list"])
+    # --- Preflight total using same code paths ---
+    class _CountingBar:
+        def __init__(self):
+            self.n = 0
+        def update(self, n=1):
+            try:
+                self.n += int(n) if n is not None else 1
+            except Exception:
+                self.n += 1
+        def write(self, *args, **kwargs):
+            pass
+        def refresh(self):
+            pass
+
+    def _estimate_units(troops, fname) -> int:
+        tcopy = copy.deepcopy(troops)
+        bar = _CountingBar()
+        global PREFLIGHT_COUNT_MODE, PBAR
+        saved_flag = PREFLIGHT_COUNT_MODE
+        saved_pbar = PBAR
+        PREFLIGHT_COUNT_MODE = True
+        PBAR = bar
+        try:
+            for troop in tcopy:
+                if troop is None:
+                    continue
+                for page in (troop.get("pages", []) or []):
+                    if page is not None:
+                        try:
+                            searchCodes(page, bar, [], fname)
+                        except Exception:
+                            pass
+            return getattr(bar, "n", 0) or 0
+        finally:
+            PREFLIGHT_COUNT_MODE = saved_flag
+            PBAR = saved_pbar
+
+    totalLines = _estimate_units(data, filename)
+    if not isinstance(totalLines, int) or totalLines <= 0:
+        totalLines = 0
+        for troop in data:
+            if troop is not None:
+                for page in troop.get("pages", []) or []:
+                    try:
+                        totalLines += len(page.get("list", []))
+                    except Exception:
+                        pass
     global PBAR
 
     with tqdm(total=totalLines, bar_format=BAR_FORMAT, position=POSITION, leave=LEAVE, desc=filename) as pbar:
@@ -668,49 +833,138 @@ def parseTroops(data, filename):
 def parseNames(data, filename, context):
     totalTokens = [0, 0]
 
-    # Precompute total work units for progress bar
-    def count_work_units(data, context):
-        total = 0
+    # --- Preflight: custom estimator that mirrors searchNames increments (incl. notes/messages) ---
+    class _CountingBar:
+        def __init__(self):
+            self.n = 0
+        def update(self, n=1):
+            try:
+                self.n += int(n) if n is not None else 1
+            except Exception:
+                self.n += 1
+        def write(self, *args, **kwargs):
+            pass
+        def refresh(self):
+            pass
 
+    def _estimate_names_units(entries, ctx, fname) -> int:
+        ecopy = copy.deepcopy(entries)
+        bar = _CountingBar()
+        global PREFLIGHT_COUNT_MODE, PBAR
+        saved_flag = PREFLIGHT_COUNT_MODE
+        saved_pbar = PBAR
+        PREFLIGHT_COUNT_MODE = True
+        PBAR = bar
+        try:
+            # Counts
+            name_cnt = 0
+            desc_cnt = 0
+            profile_cnt = 0
+            nickname_cnt = 0
+            msg_cnt = 0
+            notes_cnt = 0
+
+            note_regexes = [
+                (r"<note:(.*?)>", False),
+                (r"<PE拡張:(.*?)>", False),
+                (r"<hint:(.*?)>", False),
+                (r"<SGDescription:(.*?)>", False),
+                (r"<SG説明:\n?(.*?)>", False),
+                (r"<SG説明2:\n?(.*?)>", False),
+                (r"<SG説明3:\n?(.*?)>", False),
+                (r"<SG説明4:\n?(.*?)>", False),
+                (r"<SG説明:.+?Client\s?:.+?\n\n(.*?)>", True),
+                (r"<SGカテゴリ:(.*?)>", False),
+                (r"<Switch Shop Description>\n(.*)\n", False),
+                (r"<MapText:(.*?)>", False),
+                (r"WATs:(.+?)>", False),
+                (r"ADTs?:(.+?)>", False),
+                (r"<detail:(.*?)>", False),
+                (r"<Name:(.*?)>", False),
+                (r"<sub_1:([^>]+)", True),
+                (r"<sub_2:([^>]+)", True),
+                (r"<sub_3:([^>]+)", True),
+                (r"<infowindow:(.*?)>", True),
+                (r"<ExtendDesc:(.*?)>", True),
+                (r"<desc\d:(.*?)>", False),
+                (r"<拡張説明:(.+?)>", False),
+                (r"<STS DESC>\n(.+?)\n<", False),
+                (r"text:(.+)>", False),
+            ]
+
+            for entry in ecopy:
+                if not entry:
+                    continue
+                nm = entry.get("name") or ""
+                ds = entry.get("description") or ""
+                nn = entry.get("nickname") or ""
+                pf = entry.get("profile") or ""
+                if ctx == "Actors":
+                    if nm: name_cnt += 1
+                    if nn: nickname_cnt += 1
+                    if pf: profile_cnt += 1
+                elif ctx in ["Armors", "Weapons", "Items"]:
+                    if nm: name_cnt += 1
+                    if ds: desc_cnt += 1
+                elif ctx == "Skills":
+                    if nm: name_cnt += 1
+                    if ds: desc_cnt += 1
+                    for k in range(1,5):
+                        if entry.get(f"message{k}"): msg_cnt += 1
+                elif ctx in ["Enemies", "Classes", "MapInfos"]:
+                    if nm: name_cnt += 1
+
+                # Notes counting
+                note = entry.get("note") or ""
+                if isinstance(note, str) and note:
+                    for regex, _ww in note_regexes:
+                        try:
+                            matches = re.findall(regex, note, re.DOTALL)
+                        except Exception:
+                            matches = []
+                        if regex.startswith(r"<SG説明:"):
+                            for m in matches:
+                                s = m if isinstance(m, str) else (m[0] if m else "")
+                                if "Client:" in s or "Client :" in s:
+                                    continue
+                                notes_cnt += 1
+                        else:
+                            notes_cnt += len(matches)
+
+            # Simulate increments via wrapper (updates bar.n)
+            if name_cnt:
+                translateAI([""] * name_cnt, "", True)
+            if desc_cnt:
+                translateAI([""] * desc_cnt, "", True)
+            if profile_cnt:
+                translateAI([""] * profile_cnt, "", True)
+            if nickname_cnt:
+                translateAI([""] * nickname_cnt, "", True)
+            if msg_cnt:
+                translateAI([""] * msg_cnt, "", True)
+            if notes_cnt:
+                translateAI([""] * notes_cnt, "", True)
+
+            return getattr(bar, "n", 0) or 0
+        finally:
+            PREFLIGHT_COUNT_MODE = saved_flag
+            PBAR = saved_pbar
+
+    total_units = _estimate_names_units(data, context, filename)
+    if not isinstance(total_units, int) or total_units <= 0:
+        # Reasonable fallback: count visible fields/messages (no notes)
+        total_units = 0
         for entry in data:
             if not entry:
                 continue
-
-            # Names and associated fields
-            name = entry.get("name", "")
-            desc = entry.get("description", "")
-            nickname = entry.get("nickname", "")
-            profile = entry.get("profile", "")
-
+            if entry.get("name"): total_units += 1
+            if context in ["Armors", "Weapons", "Items", "Skills"] and entry.get("description"): total_units += 1
             if context == "Actors":
-                if name:
-                    total += 1
-                if nickname:
-                    total += 1
-                if profile:
-                    total += 1
-            elif context in ["Armors", "Weapons", "Items"]:
-                if name:
-                    total += 1
-                if desc:
-                    total += 1
-            elif context == "Skills":
-                if name:
-                    total += 1
-                if desc:
-                    total += 1
-                # Messages translated individually in searchNames
-                for n in range(1, 5):
-                    msg = entry.get(f"message{n}")
-                    if msg:
-                        total += 1
-            elif context in ["Enemies", "Classes", "MapInfos"]:
-                if name:
-                    total += 1
-
-        return total
-
-    total_units = count_work_units(data, context)
+                if entry.get("nickname"): total_units += 1
+                if entry.get("profile"): total_units += 1
+            if context == "Skills":
+                for k in range(1,5):
+                    if entry.get(f"message{k}"): total_units += 1
     global PBAR
 
     with tqdm(total=total_units, bar_format=BAR_FORMAT, position=POSITION, leave=LEAVE, desc=filename) as pbar:
@@ -732,22 +986,50 @@ def parseNames(data, filename, context):
 def parseSS(data, filename):
     totalTokens = [0, 0]
 
-    # Precompute total units (ignore notes): name, description, message1..4 presence
-    def count_work_units(states):
-        total = 0
-        for st in states:
+    # --- Preflight using searchSS over deep copy ---
+    class _CountingBar:
+        def __init__(self):
+            self.n = 0
+        def update(self, n=1):
+            try:
+                self.n += int(n) if n is not None else 1
+            except Exception:
+                self.n += 1
+        def write(self, *args, **kwargs):
+            pass
+        def refresh(self):
+            pass
+
+    def _estimate_units(states, fname) -> int:
+        scopy = copy.deepcopy(states)
+        bar = _CountingBar()
+        global PREFLIGHT_COUNT_MODE, PBAR
+        saved_flag = PREFLIGHT_COUNT_MODE
+        saved_pbar = PBAR
+        PREFLIGHT_COUNT_MODE = True
+        PBAR = bar
+        try:
+            for ss in scopy:
+                if ss is not None:
+                    try:
+                        searchSS(ss, bar)
+                    except Exception:
+                        pass
+            return getattr(bar, "n", 0) or 0
+        finally:
+            PREFLIGHT_COUNT_MODE = saved_flag
+            PBAR = saved_pbar
+
+    total_units = _estimate_units(data, filename)
+    if not isinstance(total_units, int) or total_units <= 0:
+        total_units = 0
+        for st in data:
             if not st:
                 continue
-            if st.get("name"):
-                total += 1
-            if st.get("description"):
-                total += 1
-            for n in range(1, 5):
-                if st.get(f"message{n}"):
-                    total += 1
-        return total
-
-    total_units = count_work_units(data)
+            if st.get("name"): total_units += 1
+            if st.get("description"): total_units += 1
+            for n in range(1,5):
+                if st.get(f"message{n}"): total_units += 1
     global PBAR
 
     with tqdm(total=total_units, bar_format=BAR_FORMAT, position=POSITION, leave=LEAVE, desc=filename) as pbar:
@@ -770,27 +1052,54 @@ def parseSS(data, filename):
 def parseSystem(data, filename):
     totalTokens = [0, 0]
 
-    # Precompute total units for Ace schema
-    def count_work_units(sys):
-        total = 0
-        # Terms: sum list lengths of each term list
-        for term in sys.get("terms", {}):
-            termList = sys["terms"][term]
-            if isinstance(termList, list):
-                total += len(termList)
-        # game_title might be a string; count as 1 if non-empty
-        gt = sys.get("game_title")
-        if isinstance(gt, str) and gt:
-            total += 1
-        # variables is a list
-        total += len(sys.get("variables", []) or [])
-        total += len(sys.get("weapon_types", []) or [])
-        total += len(sys.get("armor_types", []) or [])
-        total += len(sys.get("skill_types", []) or [])
-        total += len(sys.get("equip_types", []) or [])
-        return total
+    # --- Preflight: call searchSystem on deep copy to count increments ---
+    class _CountingBar:
+        def __init__(self):
+            self.n = 0
+        def update(self, n=1):
+            try:
+                self.n += int(n) if n is not None else 1
+            except Exception:
+                self.n += 1
+        def write(self, *args, **kwargs):
+            pass
+        def refresh(self):
+            pass
 
-    total_units = count_work_units(data)
+    def _estimate_units(sysobj, fname) -> int:
+        scopy = copy.deepcopy(sysobj)
+        bar = _CountingBar()
+        global PREFLIGHT_COUNT_MODE, PBAR
+        saved_flag = PREFLIGHT_COUNT_MODE
+        saved_pbar = PBAR
+        PREFLIGHT_COUNT_MODE = True
+        PBAR = bar
+        try:
+            try:
+                searchSystem(scopy, bar)
+            except Exception:
+                pass
+            return getattr(bar, "n", 0) or 0
+        finally:
+            PREFLIGHT_COUNT_MODE = saved_flag
+            PBAR = saved_pbar
+
+    total_units = _estimate_units(data, filename)
+    if not isinstance(total_units, int) or total_units <= 0:
+        # Fallback: rough count
+        total_units = 0
+        for term in data.get("terms", {}) or {}:
+            termList = data["terms"][term]
+            if isinstance(termList, list):
+                total_units += len(termList)
+        gt = data.get("game_title")
+        if isinstance(gt, str) and gt:
+            total_units += 1
+        total_units += len(data.get("variables", []) or [])
+        total_units += len(data.get("weapon_types", []) or [])
+        total_units += len(data.get("armor_types", []) or [])
+        total_units += len(data.get("skill_types", []) or [])
+        total_units += len(data.get("equip_types", []) or [])
     global PBAR
 
     with tqdm(total=total_units, bar_format=BAR_FORMAT, position=POSITION, leave=LEAVE, desc=filename) as pbar:
@@ -810,12 +1119,50 @@ def parseSystem(data, filename):
 
 def parseScenario(data, filename):
     totalTokens = [0, 0]
-    totalLines = 0
     global LOCK
 
-    # Get total for progress bar
-    for page in data.items():
-        totalLines += len(page[1])
+    # --- Preflight: run searchCodes on each page list ---
+    class _CountingBar:
+        def __init__(self):
+            self.n = 0
+        def update(self, n=1):
+            try:
+                self.n += int(n) if n is not None else 1
+            except Exception:
+                self.n += 1
+        def write(self, *args, **kwargs):
+            pass
+        def refresh(self):
+            pass
+
+    def _estimate_units(scenario, fname) -> int:
+        scopy = copy.deepcopy(scenario)
+        bar = _CountingBar()
+        global PREFLIGHT_COUNT_MODE, PBAR
+        saved_flag = PREFLIGHT_COUNT_MODE
+        saved_pbar = PBAR
+        PREFLIGHT_COUNT_MODE = True
+        PBAR = bar
+        try:
+            for key, lst in scopy.items():
+                if lst is not None:
+                    try:
+                        searchCodes(lst, bar, [], fname)
+                    except Exception:
+                        pass
+            return getattr(bar, "n", 0) or 0
+        finally:
+            PREFLIGHT_COUNT_MODE = saved_flag
+            PBAR = saved_pbar
+
+    totalLines = _estimate_units(data, filename)
+    if not isinstance(totalLines, int) or totalLines <= 0:
+        totalLines = 0
+        for _, lst in data.items():
+            try:
+                totalLines += len(lst or [])
+            except Exception:
+                pass
     global PBAR
 
     with tqdm(total=totalLines, bar_format=BAR_FORMAT, position=POSITION, leave=LEAVE, desc=filename) as pbar:
@@ -1353,32 +1700,35 @@ def searchCodes(page, pbar, jobList, filename):
                     speakerList.append(match.group(1))
                     if "\\c" in speakerList[0]:
                         speakerList = re.findall(
-                            r"^[\\]+[cC]\[\d+\]【?(.+?)】?[\\]+[cC]\[\d+\](?:[\\]+[A-Za-z]+(?:\[[^\]]*\])?)*[\\]*$",
+                            r"^[\\]+[cC]\[[^\]]+\]【(.+?)】[\\]+[cC]\[[^\]]+\](?:[\\]+[A-Za-z]+(?:\[[^\]]*\])?)*[\\]*$",
                             speakerList[0],
                         )
 
                 # Brackets (support multiple names like 【A】【B】)
                 # This now properly detects speakers after control codes are removed
                 if len(speakerList) == 0:
+                    # Strip \sp, \l, \r control codes to check for bracketed speakers
+                    testString = re.sub(r"^(?:[\\]+[splrSPLR]\[[^\]]*\]\s*)+", "", jaString)
+                    
                     # Check if the line contains bracketed names 【name】
-                    # After control codes are stripped, check for pattern
-                    startsWithBracket = re.match(r"^\s*【", jaString) is not None
+                    startsWithBracket = re.match(r"^\s*【", testString) is not None
                     endsWithBracket = re.search(
                         r"(】\s*$|】\s*(?:[\\]+[A-Za-z]+(?:\[(?:[^\[\]]|\[[^\]]*\])*\])+\s*)$)",
-                        jaString,
+                        testString,
                     ) is not None
 
                     if startsWithBracket and endsWithBracket:
-                        candidates = re.findall(r"【(.*?)】", jaString)
+                        candidates = re.findall(r"【(.*?)】", testString)
                         if candidates:
                             candidates = [c.strip() for c in candidates]
                             if candidates:
                                 speakerList = candidates
 
-                # Colors
+                # Colors (strict): require a bracketed name inside color codes to count as a speaker
+                # This prevents arbitrary color-wrapped sentences from being misclassified as speakers.
                 if len(speakerList) == 0:
                     speakerList = re.findall(
-                        r"^[\\]+[cC]\[\d+\]【?(.+?)】?[\\]+[cC]\[\d+\](?:[\\]+[A-Za-z]+(?:\[[^\]]*\])?)*[\\]*$",
+                        r"^[\\]+[cC]\[[^\]]+\]【(.+?)】[\\]+[cC]\[[^\]]+\](?:[\\]+[A-Za-z]+(?:\[[^\]]*\])?)*[\\]*$",
                         jaString,
                     )
 
@@ -2122,10 +2472,144 @@ def searchCodes(page, pbar, jobList, filename):
                 jaString = codeList[i]["p"][0]
                 match = re.search(r"(.+)", jaString)
                 if match:
-                    # Remove Textwrap
-                    jaString = codeList[i]["p"][0]
-                    ojaString = jaString
-                    jaString = jaString.replace("\n", " ")
+                    # Save starting index
+                    j = i
+                    nametag = ""
+                    
+                    # Speaker Check (if SPEAKERS408 is enabled)
+                    if SPEAKERS408:
+                        speakerList = []
+
+                        # Remove any RPGMaker Code at start
+                        ffMatch = re.search(
+                            r"^((?:[\\]+[^cCnNiIkKvVrRlL]+\[[\d\w]+\])+)",
+                            jaString,
+                        )
+                        if ffMatch != None:
+                            jaString = jaString.replace(ffMatch.group(0), "")
+                            nametag += ffMatch.group(0)
+
+                        # m and z Codes
+                        matchSpeaker = re.search(r"(.*?)[\\]+m\[\d+?\][\\]+z\[\d+?\]", jaString)
+                        if matchSpeaker:
+                            speakerList.append(matchSpeaker.group(1))
+                            if "\\c" in speakerList[0]:
+                                speakerList = re.findall(
+                                    r"^[\\]+[cC]\[[^\]]+\]【(.+?)】[\\]+[cC]\[[^\]]+\](?:[\\]+[A-Za-z]+(?:\[[^\]]*\])?)*[\\]*$",
+                                    speakerList[0],
+                                )
+
+                        # Brackets (support multiple names like 【A】【B】)
+                        if len(speakerList) == 0:
+                            # Strip \sp, \l, \r control codes to check for bracketed speakers
+                            testString = re.sub(r"^(?:[\\]+[splrSPLR]\[[^\]]*\]\s*)+", "", jaString)
+                            
+                            # Check if the line contains bracketed names 【name】
+                            startsWithBracket = re.match(r"^\s*【", testString) is not None
+                            endsWithBracket = re.search(
+                                r"(】\s*$|】\s*(?:[\\]+[A-Za-z]+(?:\[(?:[^\[\]]|\[[^\]]*\])*\])+\s*)$)",
+                                testString,
+                            ) is not None
+
+                            if startsWithBracket and endsWithBracket:
+                                candidates = re.findall(r"【(.*?)】", testString)
+                                if candidates:
+                                    candidates = [c.strip() for c in candidates]
+                                    if candidates:
+                                        speakerList = candidates
+
+                        # Colors (strict): require a bracketed name inside color codes to count as a speaker
+                        if len(speakerList) == 0:
+                            speakerList = re.findall(
+                                r"^[\\]+[cC]\[[^\]]+\]【(.+?)】[\\]+[cC]\[[^\]]+\](?:[\\]+[A-Za-z]+(?:\[[^\]]*\])?)*[\\]*$",
+                                jaString,
+                            )
+
+                        # Colons
+                        if len(speakerList) == 0:
+                            speakerList = re.findall(
+                                r"(.+)：$",
+                                jaString,
+                            )
+
+                        # First Line Speakers
+                        if len(speakerList) == 0 and FIRSTLINESPEAKERS is True:
+                            # Test Speaker
+                            if (
+                                len(jaString) < 40
+                                and len(codeList) > i + 1
+                                and "c" in codeList[i + 1]
+                                and codeList[i + 1]["c"] in [408, -1]
+                                and len(codeList[i + 1]["p"]) > 0
+                                and len(codeList[i + 1]["p"][0]) > 0
+                            ):
+                                nextString = codeList[i + 1]["p"][0].strip()
+
+                                # Remove any RPGMaker Code at start
+                                ffMatchNS = re.search(
+                                    r"^((?:[\\]+[^cCnNiIkKvVSsrRlL{}]+?\[[\d\w\W]+?\]?\])+)",
+                                    nextString,
+                                )
+                                if ffMatchNS != None:
+                                    nextString = nextString.replace(ffMatchNS.group(1), "")
+                                
+                                # Remove other format codes
+                                formatMatch = re.search(r"(^[\\]+[\W]+?)", nextString)
+                                if formatMatch != None:
+                                    nextString = nextString.replace(formatMatch.group(1), "")
+
+                                # If next line starts with dialogue marker, current line is likely a speaker
+                                if nextString and nextString[0] in [
+                                    "「",
+                                    '"',
+                                    "(",
+                                    "（",
+                                    "*",
+                                    "[",
+                                ]:
+                                    speakerList = re.findall(r".+", jaString)
+
+                        # Replace Speaker
+                        if len(speakerList) != 0 and len(codeList) > i + 1 and codeList[i + 1]["c"] in [408, -1]:
+                            # Single
+                            if len(speakerList) == 1:
+                                response = getSpeaker(speakerList[0])
+                                speaker = response[0]
+                                totalTokens[0] += response[1][0]
+                                totalTokens[1] += response[1][1]
+
+                            # Multiple (Brackets)
+                            elif len(speakerList) > 1:
+                                jaStringUpdated = jaString
+                                for idx, sp in enumerate(speakerList):
+                                    response = getSpeaker(sp)
+                                    tled = response[0]
+                                    totalTokens[0] += response[1][0]
+                                    totalTokens[1] += response[1][1]
+                                    if not setData:
+                                        pattern = r"【\s*" + re.escape(sp) + r"\s*】"
+                                        jaStringUpdated = re.sub(pattern, lambda m: f"【{tled}】", jaStringUpdated)
+                                    # Back-compat: set 'speaker' to the first translated name
+                                    if idx == 0:
+                                        speaker = tled
+
+                            # Set Data
+                            if not setData and len(speakerList) > 1:
+                                codeList[i]["p"][0] = nametag + jaStringUpdated
+                            elif not setData and len(speakerList) == 1:
+                                codeList[i]["p"][0] = nametag + jaString.replace(speakerList[0], speaker)
+                            nametag = ""
+
+                            # Iterate to next string
+                            i += 1
+                            j = i
+                            while codeList[i]["c"] in [-1]:
+                                i += 1
+                                j = i
+                            jaString = codeList[i]["p"][0]
+                    
+                    # Using this to keep track of 408's in a row.
+                    currentGroup.append(jaString)
 
                     # Join Up 408's into single string
                     if len(codeList) > i + 1 and JOIN408 is True:
@@ -2144,22 +2628,78 @@ def searchCodes(page, pbar, jobList, filename):
                             if len(codeList) <= i + 1:
                                 break
 
+                    # Format String
+                    if len(currentGroup) > 0:
+                        finalJAString = "\n".join(currentGroup)
+                        
+                        # Set Back
+                        if not setData:
+                            codeList[j]["p"] = [finalJAString]
+
+                        # Process speaker name tag if SPEAKERS408 enabled
+                        if SPEAKERS408:
+                            ### \\n<Speaker>
+                            regex = r"([\\]+[kKnN][wWcCrRrEe]?[\[<](?:[\\]*\w\[\d+\])?(.*?)(?:[\\]*\w\[\d+\])?[>])"
+                            matchSpeaker = re.search(regex, finalJAString)
+
+                            # Set Name
+                            if matchSpeaker:
+                                nametag = matchSpeaker.group(1)
+                                speakerName = matchSpeaker.group(2)
+
+                                # Translate Speaker
+                                response = getSpeaker(speakerName)
+                                tledSpeaker = response[0]
+                                totalTokens[0] += response[1][0]
+                                totalTokens[1] += response[1][1]
+
+                                # Set Nametag and Remove from Final String
+                                finalJAString = finalJAString.replace(nametag, "")
+                                nametag = nametag.replace(speakerName, tledSpeaker)
+                                speaker = tledSpeaker
+
                     # Pass 1
                     if setData:
                         # Remove Textwrap
-                        jaString = jaString.replace("\n", " ")
-                        list408.append(jaString)
+                        finalJAString = finalJAString.replace("\n", " ")
+                        
+                        # Append with or without speaker
+                        if SPEAKERS408 and speaker != "" and finalJAString != "":
+                            list408.append(f"[{speaker}]: {finalJAString}")
+                        else:
+                            list408.append(finalJAString)
+                        
+                        speaker = ""
+                        currentGroup = []
+                        syncIndex = i + 1
                     
                     # Pass 2
                     else:
-                        translatedText = list408[0]
-                        list408.pop(0)
+                        if len(list408) > 0:
+                            translatedText = list408[0]
+                            list408.pop(0)
 
-                        # Textwrap
-                        translatedText = dazedwrap.wrapText(translatedText, width=WIDTH)
+                            # Remove speaker if SPEAKERS408 enabled
+                            if SPEAKERS408:
+                                matchSpeaker = re.search(r'(^\[.+?\]\s?[|:]\s?)', translatedText)
+                                if matchSpeaker:
+                                    translatedText = translatedText.replace(matchSpeaker.group(1), "")
 
-                        # Set Data
-                        codeList[i]["p"][0] = codeList[i]["p"][0].replace(ojaString, translatedText)
+                            # Textwrap
+                            translatedText = dazedwrap.wrapText(translatedText, width=WIDTH)
+
+                            # Add Nametag Back In if SPEAKERS408 enabled
+                            if SPEAKERS408 and nametag:
+                                translatedText = nametag + translatedText
+                                nametag = ""
+
+                            # Set Data
+                            codeList[j]["p"][0] = translatedText
+                            
+                            # Reset
+                            speaker = ""
+                            currentGroup = []
+                            syncIndex = i + 1
 
             ## Event Code: 108 (Script)
             if "c" in codeList[i] and (codeList[i]["c"] == 108) and CODE108 is True:
@@ -2744,6 +3284,7 @@ def searchCodes(page, pbar, jobList, filename):
 
         # Start Pass 2
         if setData:
+            clearSpeakerCache()  # Clear cache to ensure fresh speaker translations in Pass 2
             searchCodes(
                 page,
                 pbar,
@@ -2962,53 +3503,56 @@ def searchSystem(data, pbar):
                 if pbar is not None:
                     pbar.refresh()
 
-    # Armor Types - batch translate all
-    armor_values = [data["armor_types"][i] for i in range(len(data["armor_types"]))]
-    if armor_values:
-        response = translateAI(
-            armor_values,
-            "Reply with only the " + LANGUAGE + " translation of the armor type",
-            False,
-        )
-        totalTokens[0] += response[1][0]
-        totalTokens[1] += response[1][1]
-        tl_list = response[0]
-        for i in range(min(len(tl_list), len(data["armor_types"]))):
-            data["armor_types"][i] = tl_list[i].replace('"', "").strip()
-        if pbar is not None:
-            pbar.refresh()
+    # Armor Types - batch translate all (check if exists)
+    if "armor_types" in data and data["armor_types"]:
+        armor_values = [data["armor_types"][i] for i in range(len(data["armor_types"]))]
+        if armor_values:
+            response = translateAI(
+                armor_values,
+                "Reply with only the " + LANGUAGE + " translation of the armor type",
+                False,
+            )
+            totalTokens[0] += response[1][0]
+            totalTokens[1] += response[1][1]
+            tl_list = response[0]
+            for i in range(min(len(tl_list), len(data["armor_types"]))):
+                data["armor_types"][i] = tl_list[i].replace('"', "").strip()
+            if pbar is not None:
+                pbar.refresh()
 
-    # Skill Types - batch translate all
-    skill_values = [data["skill_types"][i] for i in range(len(data["skill_types"]))]
-    if skill_values:
-        response = translateAI(
-            skill_values,
-            "Reply with only the " + LANGUAGE + " translation",
-            False,
-        )
-        totalTokens[0] += response[1][0]
-        totalTokens[1] += response[1][1]
-        tl_list = response[0]
-        for i in range(min(len(tl_list), len(data["skill_types"]))):
-            data["skill_types"][i] = tl_list[i].replace('"', "").strip()
-        if pbar is not None:
-            pbar.refresh()
+    # Skill Types - batch translate all (check if exists)
+    if "skill_types" in data and data["skill_types"]:
+        skill_values = [data["skill_types"][i] for i in range(len(data["skill_types"]))]
+        if skill_values:
+            response = translateAI(
+                skill_values,
+                "Reply with only the " + LANGUAGE + " translation",
+                False,
+            )
+            totalTokens[0] += response[1][0]
+            totalTokens[1] += response[1][1]
+            tl_list = response[0]
+            for i in range(min(len(tl_list), len(data["skill_types"]))):
+                data["skill_types"][i] = tl_list[i].replace('"', "").strip()
+            if pbar is not None:
+                pbar.refresh()
 
-    # Equip Types - batch translate all
-    equip_values = [data["equip_types"][i] for i in range(len(data["equip_types"]))]
-    if equip_values:
-        response = translateAI(
-            equip_values,
-            "Reply with only the " + LANGUAGE + " translation of the equipment type. No disclaimers.",
-            False,
-        )
-        totalTokens[0] += response[1][0]
-        totalTokens[1] += response[1][1]
-        tl_list = response[0]
-        for i in range(min(len(tl_list), len(data["equip_types"]))):
-            data["equip_types"][i] = tl_list[i].replace('"', "").strip()
-        if pbar is not None:
-            pbar.refresh()
+    # Equip Types - batch translate all (check if exists)
+    if "equip_types" in data and data["equip_types"]:
+        equip_values = [data["equip_types"][i] for i in range(len(data["equip_types"]))]
+        if equip_values:
+            response = translateAI(
+                equip_values,
+                "Reply with only the " + LANGUAGE + " translation of the equipment type. No disclaimers.",
+                False,
+            )
+            totalTokens[0] += response[1][0]
+            totalTokens[1] += response[1][1]
+            tl_list = response[0]
+            for i in range(min(len(tl_list), len(data["equip_types"]))):
+                data["equip_types"][i] = tl_list[i].replace('"', "").strip()
+            if pbar is not None:
+                pbar.refresh()
 
     # Elements - batch translate all (skip empty)
     element_values = []
@@ -3033,26 +3577,28 @@ def searchSystem(data, pbar):
             pbar.refresh()
 
     # Weapon Types - batch translate all (skip empty)
-    weapon_values = []
-    weapon_indices = []
-    for i in range(len(data["weaponTypes"])):
-        if data["weaponTypes"][i]:  # Skip empty strings
-            weapon_values.append(data["weaponTypes"][i])
-            weapon_indices.append(i)
-    
-    if weapon_values:
-        response = translateAI(
-            weapon_values,
-            "Reply with only the " + LANGUAGE + " translation of the weapon type",
-            False,
-        )
-        totalTokens[0] += response[1][0]
-        totalTokens[1] += response[1][1]
-        tl_list = response[0]
-        for n, idx in enumerate(weapon_indices[: len(tl_list)]):
-            data["weaponTypes"][idx] = tl_list[n].replace('"', "").strip()
-        if pbar is not None:
-            pbar.refresh()
+    weapon_key = "weaponTypes" if "weaponTypes" in data else "weapon_types"
+    if weapon_key in data and data[weapon_key]:
+        weapon_values = []
+        weapon_indices = []
+        for i in range(len(data[weapon_key])):
+            if data[weapon_key][i]:  # Skip empty strings
+                weapon_values.append(data[weapon_key][i])
+                weapon_indices.append(i)
+        
+        if weapon_values:
+            response = translateAI(
+                weapon_values,
+                "Reply with only the " + LANGUAGE + " translation of the weapon type",
+                False,
+            )
+            totalTokens[0] += response[1][0]
+            totalTokens[1] += response[1][1]
+            tl_list = response[0]
+            for n, idx in enumerate(weapon_indices[: len(tl_list)]):
+                data[weapon_key][idx] = tl_list[n].replace('"', "").strip()
+            if pbar is not None:
+                pbar.refresh()
 
     # Variables (Optional usually) — batch translate to reduce calls
     if TLSYSTEMVARIABLES and "variables" in data and isinstance(data["variables"], list):
@@ -3077,40 +3623,41 @@ def searchSystem(data, pbar):
             if pbar is not None:
                 pbar.refresh()
 
-    # Messages — batch translate to reduce calls
-    messages = data["terms"]["messages"]
-    if messages:
-        msg_keys = []
-        msg_values = []
-        for key, value in messages.items():
-            if isinstance(value, str) and value.strip():
-                msg_keys.append(key)
-                msg_values.append(value)
-        
-        if msg_values:
-            response = translateAI(
-                msg_values,
-                "Reply with only the "
-                + LANGUAGE
-                + ' translation of the battle text.\nTranslate "常時ダッシュ" as "Always Dash"\nTranslate "次の%1まで" as Next %1.',
-                False,
-            )
-            totalTokens[0] += response[1][0]
-            totalTokens[1] += response[1][1]
-            tl_list = response[0]
+    # Messages — batch translate to reduce calls (check if exists)
+    if "messages" in data["terms"]:
+        messages = data["terms"]["messages"]
+        if messages:
+            msg_keys = []
+            msg_values = []
+            for key, value in messages.items():
+                if isinstance(value, str) and value.strip():
+                    msg_keys.append(key)
+                    msg_values.append(value)
             
-            # Remove characters that may break scripts
-            charList = [".", '"', "\\n"]
-            
-            # Assign back translations to corresponding keys
-            for n, key in enumerate(msg_keys[: len(tl_list)]):
-                translatedText = tl_list[n]
-                for char in charList:
-                    translatedText = translatedText.replace(char, "")
-                messages[key] = translatedText
-            
-            if pbar is not None:
-                pbar.refresh()
+            if msg_values:
+                response = translateAI(
+                    msg_values,
+                    "Reply with only the "
+                    + LANGUAGE
+                    + ' translation of the battle text.\nTranslate "常時ダッシュ" as "Always Dash"\nTranslate "次の%1まで" as Next %1.',
+                    False,
+                )
+                totalTokens[0] += response[1][0]
+                totalTokens[1] += response[1][1]
+                tl_list = response[0]
+                
+                # Remove characters that may break scripts
+                charList = [".", '"', "\\n"]
+                
+                # Assign back translations to corresponding keys
+                for n, key in enumerate(msg_keys[: len(tl_list)]):
+                    translatedText = tl_list[n]
+                    for char in charList:
+                        translatedText = translatedText.replace(char, "")
+                    messages[key] = translatedText
+                
+                if pbar is not None:
+                    pbar.refresh()
 
     return totalTokens
 
@@ -3198,6 +3745,21 @@ def translateAI(text, history, fullPromptFlag):
     # Speaker-parse mode: bypass all non-speaker translations to save tokens
     if SPEAKER_PARSE_MODE and not getattr(THREAD_CTX, "in_speaker", False):
         # Return original text unmodified with zero tokens
+        return [text, [0, 0]]
+
+    # Preflight count mode: don't hit API; just simulate progress units
+    if 'PREFLIGHT_COUNT_MODE' in globals() and PREFLIGHT_COUNT_MODE:
+        try:
+            n = len(text) if isinstance(text, list) else 1
+        except Exception:
+            n = 1
+        if PBAR is not None:
+            try:
+                with LOCK:
+                    PBAR.update(n)
+            except Exception:
+                pass
+        # Return original payload and zero tokens so totals aren't affected
         return [text, [0, 0]]
 
     return sharedtranslateAI(

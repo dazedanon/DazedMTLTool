@@ -256,6 +256,13 @@ class RPGMakerTab(QWidget):
         self.join408_cb.setToolTip("Join 408 codes into a single string")
         left_column.addWidget(self.join408_cb)
 
+        self.speakers408_cb = QCheckBox("Process Speakers in 408")
+        self.speakers408_cb.setToolTip("Apply speaker detection and processing to code 408 (same as code 401)")
+        left_column.addWidget(self.speakers408_cb)
+        # Only show SPEAKERS408 for ACE engine (rpgmakerace.py)
+        if self.engine != "ACE":
+            self.speakers408_cb.hide()
+
         left_column.addSpacing(15)
         
         # Main Codes
@@ -379,6 +386,8 @@ class RPGMakerTab(QWidget):
             self.fixtextwrap_cb.stateChanged.disconnect()
             self.ignoretltext_cb.stateChanged.disconnect()
             self.join408_cb.stateChanged.disconnect()
+            if self.engine == "ACE":
+                self.speakers408_cb.stateChanged.disconnect()
             
             # Main Codes
             self.code401_cb.stateChanged.disconnect()
@@ -415,6 +424,8 @@ class RPGMakerTab(QWidget):
         self.fixtextwrap_cb.stateChanged.connect(lambda: self.apply_to_module(show_messages=False))
         self.ignoretltext_cb.stateChanged.connect(lambda: self.apply_to_module(show_messages=False))
         self.join408_cb.stateChanged.connect(lambda: self.apply_to_module(show_messages=False))
+        if self.engine == "ACE":
+            self.speakers408_cb.stateChanged.connect(lambda: self.apply_to_module(show_messages=False))
 
         # Main Codes
         self.code401_cb.stateChanged.connect(lambda: self.apply_to_module(show_messages=False))
@@ -473,6 +484,10 @@ class RPGMakerTab(QWidget):
             "CODE111": self.code111_cb.isChecked(),
             "CODE108": self.code108_cb.isChecked(),
         }
+        
+        # Only include SPEAKERS408 for ACE engine
+        if self.engine == "ACE":
+            config["SPEAKERS408"] = self.speakers408_cb.isChecked()
             
         return config
         
@@ -485,6 +500,10 @@ class RPGMakerTab(QWidget):
         self.fixtextwrap_cb.setChecked(config.get("FIXTEXTWRAP", True))
         self.ignoretltext_cb.setChecked(config.get("IGNORETLTEXT", False))
         self.join408_cb.setChecked(config.get("JOIN408", False))
+        
+        # Only set SPEAKERS408 for ACE engine
+        if self.engine == "ACE":
+            self.speakers408_cb.setChecked(config.get("SPEAKERS408", False))
 
         # Main Codes
         self.code401_cb.setChecked(config.get("CODE401", True))
