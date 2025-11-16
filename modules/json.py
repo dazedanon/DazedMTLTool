@@ -36,7 +36,6 @@ BRFLAG = False  # If the game uses <br> instead
 FIXTEXTWRAP = True  # Overwrites textwrap
 IGNORETLTEXT = False  # Ignores all translated text.
 MISMATCH = []  # Lists files that throw a mismatch error (Length of GPT list response is wrong)
-PBAR = None
 
 # tqdm Globals
 BAR_FORMAT = "{l_bar}{bar:10}{r_bar}{bar:-10b}"
