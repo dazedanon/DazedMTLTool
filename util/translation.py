@@ -634,7 +634,6 @@ def cleanTranslatedText(translatedText, language):
         "。": ".",
         "「": '\"',
         "」": '\"',
-        "- ": "-",
         "—": "―",
         "】": "]",
         "【": "[",
