@@ -24,6 +24,7 @@ PROTECTED_PATTERNS = [
     r'\\BGM\[[^\]]+\]',     # \BGM[background_music_name]
     r'\\BGS\[[^\]]+\]',     # \BGS[background_sound_name]
     r'_pum\[[^\]]+\]',     # \BGS[background_sound_name]
+    r'\\VS\[[^\]]+\]',     # \BGS[background_sound_name]
 ]
 
 def protect_script_codes(text):
