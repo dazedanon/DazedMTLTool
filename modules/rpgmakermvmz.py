@@ -1814,7 +1814,7 @@ def searchCodes(page, pbar, jobList, filename):
                     "DarkPlasma_CharacterText": ("text", None),
                     "DTextPicture": ("text", None),
                     "TextPicture": ("text", None),
-                    "TRP_SkitMZ": ("name", None),
+                    # "TRP_SkitMZ": ("name", None),
                     "LogWindow": ("text", None),
                     "BattleLogOutput": ("message", None),
                     "TorigoyaMZ_NotifyMessage_CommandMessage": ("message", None),
