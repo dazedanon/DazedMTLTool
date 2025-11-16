@@ -21,7 +21,6 @@ TIMEOUT = int(os.getenv("timeout"))
 LANGUAGE = os.getenv("language").capitalize()
 PROMPT = Path("prompt.txt").read_text(encoding="utf-8")
 VOCAB = Path("vocab.txt").read_text(encoding="utf-8")
-THREADS = int(os.getenv("threads"))
 LOCK = threading.Lock()
 VOCAB_LOCK = threading.Lock()  # Dedicated lock for vocab.txt updates
 WIDTH = int(os.getenv("width"))
