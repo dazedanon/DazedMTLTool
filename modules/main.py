@@ -51,6 +51,7 @@ from modules.unity import handleUnity
 from modules.images import handleImages
 from modules.rpgmakerplugin import handlePlugin
 from modules.srpg import handleSRPG
+from modules.aquedi4 import handleAquedi4
 
 # For GPT4 rate limit will be hit if you have more than 1 thread.
 # 1 Thread for each file. Controls how many files are worked on at once.
@@ -75,6 +76,7 @@ MODULES = [
     ["Unity", ["txt"], handleUnity],
     ["SRPG Studio", ["json"], handleSRPG],
     ["Images", [""], handleImages],
+    ["Aquedi4 Prepared JSON", [".json"], handleAquedi4],
 ]
 
 # Info Message

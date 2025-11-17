@@ -1064,6 +1064,7 @@ class TranslationTab(QWidget):
             from modules.unity import handleUnity
             from modules.images import handleImages
             from modules.rpgmakerplugin import handlePlugin
+            from modules.aquedi4 import handleAquedi4
             
             self.modules = [
                 ["RPG Maker MV/MZ", [".json"], handleMVMZ],
@@ -1082,6 +1083,7 @@ class TranslationTab(QWidget):
                 ["Unity", [".unity"], handleUnity],
                 ["Images", [".png", ".jpg", ".jpeg"], handleImages],
                 ["RPG Maker Plugin", [".js"], handlePlugin],
+                ["Aquedi4 Prepared JSON", [".json"], handleAquedi4],
             ]
             
             for module in self.modules:
