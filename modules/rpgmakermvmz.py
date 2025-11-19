@@ -1606,6 +1606,7 @@ def searchCodes(page, pbar, jobList, filename):
     syncIndex = 0
     maxHistory = MAXHISTORY
     VNameValue = None
+    reduceWidthFlag = False  # Track if 101 code has non-empty first parameter
     global LOCK
     global NAMESLIST
     global MISMATCH
@@ -1949,10 +1950,16 @@ def searchCodes(page, pbar, jobList, filename):
                                 finalJAString = re.sub(r"\n", " ", finalJAString)
                                 finalJAString = finalJAString.replace("<br>", " ")
 
+                            # Determine width based on reduceWidthFlag
+                            currentWidth = WIDTH - 15 if reduceWidthFlag else WIDTH
+
                             if FIXTEXTWRAP is True and "_ABL" in nametag:
                                 translatedText = dazedwrap.wrapText(translatedText, width=100)
                             elif FIXTEXTWRAP is True:
-                                translatedText = dazedwrap.wrapText(translatedText, width=WIDTH)
+                                translatedText = dazedwrap.wrapText(translatedText, width=currentWidth)
+
+                            # Reset the flag after using it
+                            reduceWidthFlag = False
 
                             # Formatting Code
                             if instantLineFlag:
@@ -2328,6 +2335,9 @@ def searchCodes(page, pbar, jobList, filename):
                 # Grab String
                 jaString = ""
                 if len(codeList[i]["parameters"]) > 4:
+                    # Set flag if first parameter has a non-empty string
+                    if isinstance(codeList[i]["parameters"][0], str) and codeList[i]["parameters"][0].strip():
+                        reduceWidthFlag = True
                     jaString = codeList[i]["parameters"][4]
                 # Check for Var
                 elif len(codeList[i]["parameters"]) > 0:
@@ -2375,8 +2385,8 @@ def searchCodes(page, pbar, jobList, filename):
                         speaker = ""
                 elif FACENAME101:
                     faceName = codeList[i]["parameters"][0]
-                    if faceName == "Actor1_1":
-                        speaker = "Sakura"
+                    if "kaogura" in faceName:
+                        speaker = "Rienie"
                     if faceName == "Actor2_1":
                         speaker = "Suzune"
                     if faceName == "Actor3_1":
@@ -2401,7 +2411,7 @@ def searchCodes(page, pbar, jobList, filename):
                 jaString = codeList[i]["parameters"][0]
                 
                 patterns = {
-                    # "テキスト-": (r"テキスト-(.+)")
+                    "テキスト-": (r"テキスト-(.+)")
                     # "=": (r'=\s?(.*)",'),
                     # "var text": (r"var\stext\d+\s=\s\"(.+)\""),
                     # "logtxt = ": (r"logtxt\s=\s'(.+)'" 
@@ -2410,7 +2420,7 @@ def searchCodes(page, pbar, jobList, filename):
                     # "text =": (r"text\s*=\s*'(.+[^\\])'"),
                     # "const text": (r'(const\stext\s?=\s?"(.+)";?)'),
                     # "ex_a_name": (r'ex_a_name\(\d+,"(.+)"\)'),
-                    "gameVariables.setValue": (r'\$gameVariables\.setValue\(\d+,\s*"([^"]*)"\)'),
+                    # "gameVariables.setValue": (r'\$gameVariables\.setValue\(\d+,\s*"([^"]*)"\)'),
                     # "BattleManager._logWindow.push('addText'": (r"BattleManager._logWindow.push\('addText',\s'(.+)'\)"),
                     # "BattleManager._logWindow.addText": (r"BattleManager._logWindow.addText\('(.+)'\)"),
                 }
@@ -2433,17 +2443,11 @@ def searchCodes(page, pbar, jobList, filename):
                                 translatedText = list355655[0]
                                 list355655.pop(0)
 
-                                # Only escape if not already escaped 
-                                matchList = re.findall(r"(.+)'\s*[$+].+?'(.+)", translatedText)
-                                if matchList:
-                                    for string in matchList[0]:
-                                        escapedMatch = re.sub(r"(?<!\\)'", r"\\'", string)
-                                        translatedText = translatedText.replace(string, escapedMatch)
-                                else:
-                                    translatedText = re.sub(r"(?<!\\)'", r"\\'", translatedText)
-                                translatedText = re.sub(r'(?<!\\)"', r'"', translatedText)
+                                # Escape Quotes
+                                translatedText = re.sub(r'(?<!\\)"', r'\"', translatedText)
+
                                 # Double backslashes before control codes
-                                translatedText = re.sub(r'(?<![\\])([\\]{1})(?=\w)', r'\\\\', translatedText)
+                                translatedText = re.sub(r'(?<![\\])([\\]{1})(?=\w)', r'\\', translatedText)
 
                                 # setValue
                                 if "gameVariables.setValue" in codeList[i]["parameters"][0]:
