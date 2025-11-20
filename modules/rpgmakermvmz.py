@@ -3469,6 +3469,10 @@ def getSpeaker(speaker: str):
     if speaker == "":
         return ["", [0, 0]]
 
+    # Preflight count mode: skip translation and caching entirely
+    if 'PREFLIGHT_COUNT_MODE' in globals() and PREFLIGHT_COUNT_MODE:
+        return [speaker, [0, 0]]
+
     if SPEAKER_PARSE_MODE:
         with _speakerCacheLock:
             if speaker in _speakerCache:
