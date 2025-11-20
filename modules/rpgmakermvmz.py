@@ -2153,27 +2153,29 @@ def searchCodes(page, pbar, jobList, filename):
 
                 # Map Plugins
                 headerMappings = {
-                    "LL_InfoPopupWIndow": ("messageText", None),
-                    "QuestSystem": ("DetailNote", None),
-                    "BalloonInBattle": ("text", None),
-                    "MNKR_CommonPopupCoreMZ": ("text", None),
-                    "DestinationWindow": ("destination", None),
-                    "_TMLogWindowMZ": ("text", None),
-                    "TorigoyaMZ_NotifyMessage": ("message", None),
-                    "SoR_GabWindow": ("arg1", None),
-                    "DarkPlasma_CharacterText": ("text", None),
-                    "DTextPicture": ("text", None),
-                    "TextPicture": ("text", None),
-                    # "TRP_SkitMZ": ("name", None),
-                    "LogWindow": ("text", None),
-                    "BattleLogOutput": ("message", None),
-                    "TorigoyaMZ_NotifyMessage_CommandMessage": ("message", None),
-                    "NUUN_SaveScreen": ("AnyName", None),
+                    "LL_InfoPopupWIndow": (["messageText"], None),
+                    "QuestSystem": (["DetailNote"], None),
+                    "BalloonInBattle": (["text"], None),
+                    "MNKR_CommonPopupCoreMZ": (["text"], None),
+                    "DestinationWindow": (["destination"], None),
+                    "_TMLogWindowMZ": (["text"], None),
+                    "TorigoyaMZ_NotifyMessage": (["message"], None),
+                    "SoR_GabWindow": (["arg1"], None),
+                    "DarkPlasma_CharacterText": (["text"], None),
+                    "DTextPicture": (["text"], None),
+                    "TextPicture": (["text"], None),
+                    # "TRP_SkitMZ": (["name"], None),
+                    "LogWindow": (["text"], None),
+                    "BattleLogOutput": (["message"], None),
+                    "TorigoyaMZ_NotifyMessage_CommandMessage": (["message"], None),
+                    "NUUN_SaveScreen": (["AnyName"], None),
+                    "build/ARPG_Core": (["Text", "SkillByName"], None),
                 }
 
-                for key, (argVar, font) in headerMappings.items():
+                for key, (argVars, font) in headerMappings.items():
                     if key in headerString:
-                        translatePlugins(argVar, font)
+                        for argVar in argVars:
+                            translatePlugins(argVar, font)
 
                 # AdvExtention plugin support (message event)
                 if headerString == "AdvExtentionllk" and len(codeList[i]["parameters"]) > 3:
