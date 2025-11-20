@@ -118,6 +118,65 @@ def validate_placeholders(original_text, translated_text, replacements):
     is_valid = len(missing) == 0 and len(extra) == 0
     return is_valid, missing, extra
 
+
+def validate_translation_content(original_items, translated_items, langRegex):
+    """
+    Validate that translated items are not empty or nearly empty.
+    Returns: (is_valid, invalid_indices, reason)
+    
+    Rules:
+    1. If original has content, translation must not be empty or just whitespace
+    2. If original has Japanese text, translation must not be a single punctuation mark
+    3. Translation should have meaningful content (more than 1-2 characters for substantial originals)
+    """
+    if not isinstance(original_items, list):
+        original_items = [original_items]
+        translated_items = [translated_items]
+    
+    invalid_indices = []
+    reasons = []
+    
+    for i, (orig, trans) in enumerate(zip(original_items, translated_items)):
+        orig_str = str(orig).strip()
+        trans_str = str(trans).strip()
+        
+        # Skip if original is empty or placeholder
+        if not orig_str or orig_str == "Placeholder Text":
+            continue
+        
+        # Check if original has content that needs translation
+        has_source_text = bool(re.search(langRegex, orig_str))
+        
+        if has_source_text:
+            # Original has Japanese text - translation must be substantial
+            
+            # Check 1: Translation is empty or just whitespace
+            if not trans_str:
+                invalid_indices.append(i)
+                reasons.append(f"Line{i+1}: Empty translation for '{orig_str[:50]}...'")
+                continue
+            
+            # Check 2: Translation is just a single punctuation mark or very short
+            # Allow control codes like \\C[27]\\V[45] but not just ":" or ""
+            if len(trans_str) <= 2 and not re.search(r'\\[A-Z]\[', trans_str):
+                # Exception: if original is also very short (like "回" -> "x"), that's ok
+                if len(orig_str) > 3:
+                    invalid_indices.append(i)
+                    reasons.append(f"Line{i+1}: Translation too short ('{trans_str}') for '{orig_str[:50]}...'")
+                    continue
+            
+            # Check 3: For longer originals (>10 chars), translation should be more than just 1-2 chars
+            # unless it's a special case like numbers or codes
+            if len(orig_str) > 10 and len(trans_str) <= 2:
+                # Allow if it contains control codes or is just a replacement word
+                if not re.search(r'\\[A-Z]\[', trans_str) and not trans_str.isalnum():
+                    invalid_indices.append(i)
+                    reasons.append(f"Line{i+1}: Translation suspiciously short ('{trans_str}') for '{orig_str[:50]}...'")
+                    continue
+    
+    is_valid = len(invalid_indices) == 0
+    return is_valid, invalid_indices, reasons
+
 # (from .env if present), strip accidental whitespace, and set the base URL,
 # organization, and API key. It also handles the Gemini compatibility layer.
 load_dotenv()
@@ -967,7 +1026,9 @@ def translateAI(text, history, fullPromptFlag, config, filename=None, pbar=None,
             if attempt > 0:
                 current_system += f"\n\nIMPORTANT: Your previous attempt was incorrect or incomplete. Please ensure:\n"
                 current_system += f"1. The entire output is translated to {config.language} with no untranslated characters\n"
-                current_system += f"2. The JSON structure is correct\n"
+                current_system += f"2. The JSON structure is correct with NO EMPTY or near-empty translations\n"
+                current_system += f"   - Every line with Japanese text MUST be fully translated\n"
+                current_system += f"   - Do NOT leave translations empty (\"\") or as single punctuation marks (\":\")\n"
                 current_system += f"3. ALL placeholders (like __PROTECTED_0__, __PROTECTED_1__, etc.) are preserved EXACTLY as they appear in the input\n"
                 current_system += f"   - Do not modify, translate, or remove any __PROTECTED_N__ placeholders\n"
                 current_system += f"   - Keep them in the exact same position in your translation"
@@ -1011,8 +1072,22 @@ def translateAI(text, history, fullPromptFlag, config, filename=None, pbar=None,
                                 if extra:
                                     pbar.write(f"Extra placeholders: {', '.join(extra)}")
                         else:
-                            # Set translations (line count matches and placeholders valid)
-                            final_translations = extracted
+                            # Check 3: Validate that translations are not empty or nearly empty
+                            content_valid, invalid_indices, content_reasons = validate_translation_content(
+                                tItem, extracted, config.langRegex
+                            )
+                            
+                            if not content_valid:
+                                is_valid = False
+                                if pbar:
+                                    pbar.write(f"Invalid translation content detected:")
+                                    for reason in content_reasons[:5]:  # Show first 5 issues
+                                        pbar.write(f"  - {reason}")
+                                    if len(content_reasons) > 5:
+                                        pbar.write(f"  ... and {len(content_reasons) - 5} more issues")
+                            else:
+                                # Set translations (line count matches, placeholders valid, and content is good)
+                                final_translations = extracted
                 else:
                     # Single string: validate placeholders
                     placeholder_valid, missing, extra = validate_placeholders(protected_items, cleaned_text, all_replacements[0])
@@ -1025,8 +1100,21 @@ def translateAI(text, history, fullPromptFlag, config, filename=None, pbar=None,
                             if extra:
                                 pbar.write(f"Extra placeholders: {', '.join(extra)}")
                     else:
-                        # Accept output even if it contains characters matching langRegex
-                        final_translations = cleaned_text.replace("Placeholder Text", "")
+                        # Validate content for single string
+                        final_cleaned = cleaned_text.replace("Placeholder Text", "")
+                        content_valid, _, content_reasons = validate_translation_content(
+                            tItem, final_cleaned, config.langRegex
+                        )
+                        
+                        if not content_valid:
+                            is_valid = False
+                            if pbar:
+                                pbar.write(f"Invalid translation content:")
+                                for reason in content_reasons:
+                                    pbar.write(f"  - {reason}")
+                        else:
+                            # Accept output - all validations passed
+                            final_translations = final_cleaned
             else:
                 is_valid = False
                 if pbar: pbar.write(f"AI Refused: {tItem}\n")
