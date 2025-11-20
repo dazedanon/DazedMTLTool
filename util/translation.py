@@ -9,6 +9,7 @@ import re
 import json
 import tiktoken
 import openai
+from openai import APIError, APIConnectionError, RateLimitError, APIStatusError
 import hashlib
 import threading
 from dotenv import load_dotenv
@@ -611,14 +612,38 @@ def translateText(system, user, history, penalty, formatType, model, numLines=No
     # Call API
     try:
         response = openai.chat.completions.create(**params)
+    except APIStatusError as e:
+        # Handle HTTP status errors (404, 500, etc.)
+        if e.status_code == 404:
+            raise Exception(f"API endpoint not found (404) - check your API_PROVIDER and base URL settings. Error: {e}")
+        elif e.status_code >= 500:
+            raise Exception(f"API server error ({e.status_code}) - retrying... Error: {e}")
+        else:
+            raise Exception(f"API status error ({e.status_code}): {e}")
+    except (APIConnectionError, RateLimitError) as e:
+        # These should always be retried
+        raise Exception(f"API connection/rate limit error - retrying... Error: {e}")
     except Exception as e:
+        # Check if it's a 404 error or other HTTP error that should be retried
+        error_str = str(e).lower()
+        if "404" in error_str or "not found" in error_str:
+            raise Exception(f"API returned 404 Not Found - check your API configuration. Original error: {e}")
+        
         # If structured output fails, fallback to json_object
         if formatType == "json" and "json_schema" in str(responseFormat):
             responseFormat = {"type": "json_object"}
             params["response_format"] = responseFormat
-            response = openai.chat.completions.create(**params)
+            try:
+                response = openai.chat.completions.create(**params)
+            except Exception as fallback_error:
+                # If fallback also fails, raise the original error for retry
+                raise Exception(f"API call failed: {e}. Fallback also failed: {fallback_error}")
         else:
             raise e
+    
+    # Validate response before returning
+    if not response or not hasattr(response, 'choices') or not response.choices:
+        raise Exception("API returned invalid or empty response - retrying...")
     
     return response
 
