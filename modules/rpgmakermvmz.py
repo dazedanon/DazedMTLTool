@@ -2358,8 +2358,48 @@ def searchCodes(page, pbar, jobList, filename):
                     speaker = "Tina"
                     i += 1
                     continue
-                elif "\\ap" in jaString:
-                    speaker = re.search(r"[\\]+AP\[(.*?)\]", jaString).group(1)
+                elif "\\ap" in jaString.lower():
+                    # Extract actor ID from format like \\AP[2左] or \\AP[2]仙人
+                    apMatch = re.search(r"[\\]+[aA][pP]\[(\d+)[^\]]*\](.*)$", jaString, re.IGNORECASE)
+                    if apMatch:
+                        actorId = int(apMatch.group(1))
+                        additionalText = apMatch.group(2).strip()
+                        
+                        # Load Actors.json to get the actor name
+                        try:
+                            actorsPath = Path("files/Actors.json")
+                            if actorsPath.exists():
+                                with open(actorsPath, 'r', encoding='utf-8') as f:
+                                    actorsData = json.load(f)
+                                
+                                # Find the actor with matching ID
+                                actorName = None
+                                for actor in actorsData:
+                                    if actor and isinstance(actor, dict) and actor.get("id") == actorId:
+                                        actorName = actor.get("name", "")
+                                        break
+                                
+                                if actorName:
+                                    speaker = actorName
+                                    
+                                    # If there's additional text after \\AP[ID], translate it
+                                    if additionalText:
+                                        response = getSpeaker(additionalText)
+                                        translatedAdditionalText = response[0]
+                                        totalTokens[0] += response[1][0]
+                                        totalTokens[1] += response[1][1]
+                                        
+                                        # Replace the text in the parameter
+                                        if isVar == False and len(codeList[i]["parameters"]) > 4:
+                                            codeList[i]["parameters"][4] = codeList[i]["parameters"][4].replace(additionalText, translatedAdditionalText)
+                                        else:
+                                            codeList[i]["parameters"][0] = codeList[i]["parameters"][0].replace(additionalText, translatedAdditionalText)
+                        except Exception as e:
+                            # If there's any error loading actors, just extract what's in the brackets
+                            speaker = apMatch.group(1)
+                    else:
+                        # Fallback to old behavior
+                        speaker = re.search(r"[\\]+AP\[(.*?)\]", jaString).group(1)
                     i += 1
                     continue
 
