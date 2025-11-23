@@ -1757,43 +1757,57 @@ def searchCodes(page, pbar, jobList, filename):
                             speakerList = re.findall(r".+", jaString)
 
                 # Replace Speaker
-                if len(speakerList) != 0 and codeList[i + 1]["code"] in [401, 405, -1]:
-                    # Single
-                    if len(speakerList) == 1:
+                if len(speakerList) != 0:
+                    # Check if speaker+dialogue are on same line (【speaker】dialogue)
+                    sameLineMatch = re.match(r"^\s*【([^】]+)】(.+)", jaString)
+                    
+                    if sameLineMatch and len(speakerList) == 1:
+                        # Translate speaker
                         response = getSpeaker(speakerList[0])
                         speaker = response[0]
                         totalTokens[0] += response[1][0]
                         totalTokens[1] += response[1][1]
-
-                    # Multiple (Brackets)
-                    elif len(speakerList) > 1:
-                        jaStringUpdated = jaString
-                        for idx, sp in enumerate(speakerList):
-                            response = getSpeaker(sp)
-                            tled = response[0]
+                        # Remove speaker bracket from jaString, let dialogue get translated
+                        jaString = sameLineMatch.group(2)
+                        # Don't skip to next line - continue with current line
+                    elif codeList[i + 1]["code"] in [401, 405, -1]:
+                        # Original behavior: speaker on its own line, dialogue on next line
+                        # Single
+                        if len(speakerList) == 1:
+                            response = getSpeaker(speakerList[0])
+                            speaker = response[0]
                             totalTokens[0] += response[1][0]
                             totalTokens[1] += response[1][1]
-                            if not setData:
-                                pattern = r"【\s*" + re.escape(sp) + r"\s*】"
-                                jaStringUpdated = re.sub(pattern, lambda m: f"【{tled}】", jaStringUpdated)
-                            # Back-compat: set 'speaker' to the first translated name
-                            if idx == 0:
-                                speaker = tled
 
-                    # Set Data
-                    if not setData and len(speakerList) > 1:
-                        codeList[i]["parameters"][0] = nametag + jaStringUpdated
-                    elif not setData and len(speakerList) == 1:
-                        codeList[i]["parameters"][0] = nametag + jaString.replace(speakerList[0], speaker)
-                    nametag = ""
+                        # Multiple (Brackets)
+                        elif len(speakerList) > 1:
+                            jaStringUpdated = jaString
+                            for idx, sp in enumerate(speakerList):
+                                response = getSpeaker(sp)
+                                tled = response[0]
+                                totalTokens[0] += response[1][0]
+                                totalTokens[1] += response[1][1]
+                                if not setData:
+                                    pattern = r"【\s*" + re.escape(sp) + r"\s*】"
+                                    jaStringUpdated = re.sub(pattern, lambda m: f"【{tled}】", jaStringUpdated)
+                                # Back-compat: set 'speaker' to the first translated name
+                                if idx == 0:
+                                    speaker = tled
 
-                    # Iterate to next string
-                    i += 1
-                    j = i
-                    while codeList[i]["code"] in [-1]:
+                        # Set Data
+                        if not setData and len(speakerList) > 1:
+                            codeList[i]["parameters"][0] = nametag + jaStringUpdated
+                        elif not setData and len(speakerList) == 1:
+                            codeList[i]["parameters"][0] = nametag + jaString.replace(speakerList[0], speaker)
+                        nametag = ""
+
+                        # Iterate to next string
                         i += 1
                         j = i
-                    jaString = codeList[i]["parameters"][0]
+                        while codeList[i]["code"] in [-1]:
+                            i += 1
+                            j = i
+                        jaString = codeList[i]["parameters"][0]
 
                 # Check if there is text to translate
                 if not re.search(r"\w+", jaString):
@@ -1937,9 +1951,11 @@ def searchCodes(page, pbar, jobList, filename):
                         if len(list401) > 0:
                             translatedText = list401[0]
 
-                            # Remove speaker
-                            match = re.search(r'(^\[.+?\]\s?[|:]\s?)', translatedText)
+                            # Remove speaker and save bracket format if present
+                            speakerBracket = ""
+                            match = re.search(r'(^\[(.+?)\]\s?[|:]\s?)', translatedText)
                             if match:
+                                speakerBracket = f"【{match.group(2)}】"
                                 translatedText = translatedText.replace(match.group(1), "") 
 
                             # Fix '- '
@@ -1974,6 +1990,10 @@ def searchCodes(page, pbar, jobList, filename):
                             if "\\px[200]" in nametag:
                                 translatedText = translatedText.replace("\\px[200]", "")
                                 translatedText = translatedText.replace("\n", "\n\\px[200]")
+
+                            # Add speaker bracket back if it was on same line
+                            if speakerBracket:
+                                translatedText = speakerBracket + translatedText
 
                             # Add Nametag Back In
                             translatedText = nametag + translatedText
