@@ -1759,7 +1759,7 @@ def searchCodes(page, pbar, jobList, filename):
                 # Replace Speaker
                 if len(speakerList) != 0:
                     # Check if speaker+dialogue are on same line (【speaker】dialogue)
-                    sameLineMatch = re.match(r"^\s*【([^】]+)】(.+)", jaString)
+                    sameLineMatch = re.match(r"^\s*【([^】]+)】(.+)", jaString, re.DOTALL)
                     
                     if sameLineMatch and len(speakerList) == 1:
                         # Translate speaker
