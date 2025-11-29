@@ -2424,7 +2424,7 @@ def searchCodes(page, pbar, jobList, filename):
                     continue
 
                 # Get Speaker
-                match = re.search(r"^(?:[\\]+[cC]\[\d+?\])?([\w\s]+)", jaString)
+                match = re.search(r"^(?:[\\]+[cC]\[\d+?\])?([^\\]+)", jaString)
                 if match:
                     jaString = match.group(1)
                     response = getSpeaker(jaString)
