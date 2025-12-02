@@ -1951,11 +1951,9 @@ def searchCodes(page, pbar, jobList, filename):
                         if len(list401) > 0:
                             translatedText = list401[0]
 
-                            # Remove speaker and save bracket format if present
-                            speakerBracket = ""
+                            # Remove speaker prefix if present
                             match = re.search(r'(^\[(.+?)\]\s?[|:]\s?)', translatedText)
                             if match:
-                                speakerBracket = f"【{match.group(2)}】"
                                 translatedText = translatedText.replace(match.group(1), "") 
 
                             # Fix '- '
@@ -1990,10 +1988,6 @@ def searchCodes(page, pbar, jobList, filename):
                             if "\\px[200]" in nametag:
                                 translatedText = translatedText.replace("\\px[200]", "")
                                 translatedText = translatedText.replace("\n", "\n\\px[200]")
-
-                            # Add speaker bracket back if it was on same line
-                            if speakerBracket:
-                                translatedText = speakerBracket + translatedText
 
                             # Add Nametag Back In
                             translatedText = nametag + translatedText
