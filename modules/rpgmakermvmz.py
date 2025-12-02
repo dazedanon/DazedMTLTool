@@ -1819,11 +1819,6 @@ def searchCodes(page, pbar, jobList, filename):
                             j = i
                         jaString = codeList[i]["parameters"][0]
 
-                # Check if there is text to translate
-                if not re.search(r"\w+", jaString):
-                    i += 1
-                    continue
-
                 # Validate Japanese Text
                 if not re.search(LANGREGEX, jaString) and IGNORETLTEXT:
                     i += 1
