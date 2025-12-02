@@ -1694,20 +1694,27 @@ def searchCodes(page, pbar, jobList, filename):
 
                 # Brackets (support multiple names like 【A】【B】)
                 if len(speakerList) == 0:
-                    # Only consider bracketed names when the line starts with '【' and
-                    # ends with either '】' or trailing variable/control codes like \n[2], \FF[\w[3]], etc.
-                    startsWithBracket = re.match(r"^\s*【", jaString) is not None
-                    endsWithBracket = re.search(
-                        r"(】\s*|(?:[\\]+[A-Za-z]+(?:\[(?:[^\[\]]|\[[^\]]*\])*\])+\s*)$)",
-                        jaString,
-                    ) is not None
+                    # Check for bracket at start with dialogue following (【name】dialogue...)
+                    inlineBracketMatch = re.match(r"^\s*【([^】]+)】(.+)", jaString, re.DOTALL)
+                    
+                    if inlineBracketMatch:
+                        # Inline bracket with dialogue on same line
+                        speakerList = [inlineBracketMatch.group(1).strip()]
+                    else:
+                        # Only consider bracketed names when the line starts with '【' and
+                        # ends with either '】' or trailing variable/control codes like \n[2], \FF[\w[3]], etc.
+                        startsWithBracket = re.match(r"^\s*【", jaString) is not None
+                        endsWithBracket = re.search(
+                            r"(】\s*|(?:[\\]+[A-Za-z]+(?:\[(?:[^\[\]]|\[[^\]]*\])*\])+\s*)$)",
+                            jaString,
+                        ) is not None
 
-                    if startsWithBracket and endsWithBracket:
-                        candidates = re.findall(r"【(.*?)】", jaString)
-                        if candidates:
-                            candidates = [c.strip() for c in candidates]
+                        if startsWithBracket and endsWithBracket:
+                            candidates = re.findall(r"【(.*?)】", jaString)
                             if candidates:
-                                speakerList = candidates
+                                candidates = [c.strip() for c in candidates]
+                                if candidates:
+                                    speakerList = candidates
 
                 # Colors
                 if len(speakerList) == 0:
@@ -1769,6 +1776,9 @@ def searchCodes(page, pbar, jobList, filename):
                         totalTokens[1] += response[1][1]
                         # Remove speaker bracket from jaString, let dialogue get translated
                         jaString = sameLineMatch.group(2)
+                        # Store the translated bracket to add back later
+                        if not setData:
+                            nametag = f"【{speaker}】" + nametag
                         # Don't skip to next line - continue with current line
                     elif codeList[i + 1]["code"] in [401, 405, -1]:
                         # Original behavior: speaker on its own line, dialogue on next line
