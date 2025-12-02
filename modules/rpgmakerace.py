@@ -80,7 +80,7 @@ LEAVE = False
 
 # Config (Default)
 # FIRSTLINESPEAKERS: Guess speaker from first line.
-FIRSTLINESPEAKERS = True
+FIRSTLINESPEAKERS = False
 # FACENAME101: Map face name -> speaker.
 FACENAME101 = False
 # BRFLAG: Newlines -> <br>.
@@ -92,9 +92,9 @@ IGNORETLTEXT = False
 # TLSYSTEMVARIABLES: Translate System Variables. (Optional but sometimes necessary. Can break stuff.)
 TLSYSTEMVARIABLES = False
 # Join 408 codes into a single string like 401.
-JOIN408 = True
+JOIN408 = False
 # SPEAKERS408: Process speakers in code 408 the same way as code 401.
-SPEAKERS408 = True
+SPEAKERS408 = False
 
 # Dialogue / Scroll / Choices (Main Codes)
 CODE101 = True
@@ -106,7 +106,7 @@ CODE102 = True
 CODE408 = True
 
 # Variables
-CODE122 = False
+CODE122 = True
 
 # Plugins / Scripts
 CODE355655 = False
@@ -471,28 +471,15 @@ def parseMap(data, filename):
             pass
 
     def _estimate_map_units(d, fname) -> int:
-        dcopy = copy.deepcopy(d)
-        bar = _CountingBar()
-        global PREFLIGHT_COUNT_MODE
-        saved_preflight = PREFLIGHT_COUNT_MODE
-        global PBAR
-        saved_pbar = PBAR
-        PREFLIGHT_COUNT_MODE = True
-        PBAR = bar
+        # Avoid deep copy - just count items directly
+        count = 0
         try:
             # Count display name TL (1 unit if present)
-            if "Map" in fname and isinstance(dcopy.get("display_name", None), str):
-                try:
-                    translateAI(
-                        dcopy["display_name"],
-                        "Reply with only the " + LANGUAGE + " translation of the RPG location name",
-                        False,
-                    )
-                except Exception:
-                    pass
+            if "Map" in fname and isinstance(d.get("display_name", None), str):
+                count += 1
 
-            # Notes and pages
-            evts = dcopy.get("events", {}) or {}
+            # Notes and pages - count actual translatable items
+            evts = d.get("events", {}) or {}
             for evt in evts.values():
                 if not evt:
                     continue
@@ -500,53 +487,41 @@ def parseMap(data, filename):
                 if not isinstance(note_val, str):
                     note_val = str(note_val) if note_val is not None else ""
 
-                # <LB> name translation
+                # Count note-based translations
                 if "<LB>" in note_val:
                     name_val = evt.get("name") or ""
                     if isinstance(name_val, str) and name_val:
-                        try:
-                            translateAI(
-                                name_val,
-                                "Reply with only the " + LANGUAGE + " translation of the RPG location name",
-                                False,
-                            )
-                        except Exception:
-                            pass
+                        count += 1
 
-                # <msgText:"...">
                 if "<msgText:" in note_val:
-                    try:
-                        translateNote(evt, r"<msgText:\"(.*?)\">", False)
-                    except Exception:
-                        pass
+                    matches = re.findall(r"<msgText:\"(.*?)\">", note_val, re.DOTALL)
+                    count += len(matches)
 
-                # <namePop:...>, <LB:...>, <dn:...> handled before page processing in real run
                 if "<namePop:" in note_val:
-                    try:
-                        translateNoteOmitSpace(evt, r"<namePop:\s?([\w一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]+)")
-                    except Exception:
-                        pass
+                    matches = re.findall(r"<namePop:\s?([\w一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]+)", note_val)
+                    count += len(matches)
                 if "<LB:" in note_val:
-                    try:
-                        translateNoteOmitSpace(evt, r"<LB:(.*?)\s?>.*")
-                    except Exception:
-                        pass
+                    matches = re.findall(r"<LB:(.*?)\s?>.*", note_val)
+                    count += len(matches)
                 if "<dn:" in note_val:
-                    try:
-                        translateNoteOmitSpace(evt, r"<dn:\s*(.*)>.*")
-                    except Exception:
-                        pass
+                    matches = re.findall(r"<dn:\s*(.*)>.*", note_val)
+                    count += len(matches)
 
+                # Count commands in pages (rough estimate)
                 for page in (evt.get("pages", []) or []):
-                    try:
-                        searchCodes(page, bar, [], fname)
-                    except Exception:
-                        pass
+                    if page and "list" in page:
+                        # Count translatable codes
+                        for cmd in page.get("list", []):
+                            if cmd and "c" in cmd:
+                                code = cmd["c"]
+                                # Count common translatable codes
+                                if code in [401, 405, 102, 122, 408, 355, 655, 356, 357, 320, 324, 325, 111, 108, 657]:
+                                    count += 1
 
-            return getattr(bar, "n", 0) or 0
-        finally:
-            PREFLIGHT_COUNT_MODE = saved_preflight
-            PBAR = saved_pbar
+            return count if count > 0 else 1
+        except Exception:
+            return 1
+        
 
     # Translate display_name for Map files
     if "Map" in filename:
@@ -710,24 +685,19 @@ def parseCommonEvents(data, filename):
             pass
 
     def _estimate_units(pages, fname) -> int:
-        dcopy = copy.deepcopy(pages)
-        bar = _CountingBar()
-        global PREFLIGHT_COUNT_MODE, PBAR
-        saved_flag = PREFLIGHT_COUNT_MODE
-        saved_pbar = PBAR
-        PREFLIGHT_COUNT_MODE = True
-        PBAR = bar
+        # Avoid deep copy - just count commands directly
+        count = 0
         try:
-            for page in dcopy:
-                if page is not None:
-                    try:
-                        searchCodes(page, bar, [], fname)
-                    except Exception:
-                        pass
-            return getattr(bar, "n", 0) or 0
-        finally:
-            PREFLIGHT_COUNT_MODE = saved_flag
-            PBAR = saved_pbar
+            for page in pages:
+                if page is not None and "list" in page:
+                    for cmd in page.get("list", []):
+                        if cmd and "c" in cmd:
+                            code = cmd["c"]
+                            if code in [401, 405, 102, 122, 408, 355, 655, 356, 357, 320, 324, 325, 111, 108, 657]:
+                                count += 1
+            return count if count > 0 else 1
+        except Exception:
+            return 1
 
     totalLines = _estimate_units(data, filename)
     if not isinstance(totalLines, int) or totalLines <= 0:
@@ -777,27 +747,22 @@ def parseTroops(data, filename):
             pass
 
     def _estimate_units(troops, fname) -> int:
-        tcopy = copy.deepcopy(troops)
-        bar = _CountingBar()
-        global PREFLIGHT_COUNT_MODE, PBAR
-        saved_flag = PREFLIGHT_COUNT_MODE
-        saved_pbar = PBAR
-        PREFLIGHT_COUNT_MODE = True
-        PBAR = bar
+        # Avoid deep copy - just count commands directly
+        count = 0
         try:
-            for troop in tcopy:
+            for troop in troops:
                 if troop is None:
                     continue
                 for page in (troop.get("pages", []) or []):
-                    if page is not None:
-                        try:
-                            searchCodes(page, bar, [], fname)
-                        except Exception:
-                            pass
-            return getattr(bar, "n", 0) or 0
-        finally:
-            PREFLIGHT_COUNT_MODE = saved_flag
-            PBAR = saved_pbar
+                    if page is not None and "list" in page:
+                        for cmd in page.get("list", []):
+                            if cmd and "c" in cmd:
+                                code = cmd["c"]
+                                if code in [401, 405, 102, 122, 408, 355, 655, 356, 357, 320, 324, 325, 111, 108, 657]:
+                                    count += 1
+            return count if count > 0 else 1
+        except Exception:
+            return 1
 
     totalLines = _estimate_units(data, filename)
     if not isinstance(totalLines, int) or totalLines <= 0:
@@ -848,22 +813,9 @@ def parseNames(data, filename, context):
             pass
 
     def _estimate_names_units(entries, ctx, fname) -> int:
-        ecopy = copy.deepcopy(entries)
-        bar = _CountingBar()
-        global PREFLIGHT_COUNT_MODE, PBAR
-        saved_flag = PREFLIGHT_COUNT_MODE
-        saved_pbar = PBAR
-        PREFLIGHT_COUNT_MODE = True
-        PBAR = bar
+        # Avoid deep copy - just count fields directly
+        count = 0
         try:
-            # Counts
-            name_cnt = 0
-            desc_cnt = 0
-            profile_cnt = 0
-            nickname_cnt = 0
-            msg_cnt = 0
-            notes_cnt = 0
-
             note_regexes = [
                 (r"<note:(.*?)>", False),
                 (r"<PE拡張:(.*?)>", False),
@@ -892,7 +844,7 @@ def parseNames(data, filename, context):
                 (r"text:(.+)>", False),
             ]
 
-            for entry in ecopy:
+            for entry in entries:
                 if not entry:
                     continue
                 nm = entry.get("name") or ""
@@ -900,19 +852,19 @@ def parseNames(data, filename, context):
                 nn = entry.get("nickname") or ""
                 pf = entry.get("profile") or ""
                 if ctx == "Actors":
-                    if nm: name_cnt += 1
-                    if nn: nickname_cnt += 1
-                    if pf: profile_cnt += 1
+                    if nm: count += 1
+                    if nn: count += 1
+                    if pf: count += 1
                 elif ctx in ["Armors", "Weapons", "Items"]:
-                    if nm: name_cnt += 1
-                    if ds: desc_cnt += 1
+                    if nm: count += 1
+                    if ds: count += 1
                 elif ctx == "Skills":
-                    if nm: name_cnt += 1
-                    if ds: desc_cnt += 1
+                    if nm: count += 1
+                    if ds: count += 1
                     for k in range(1,5):
-                        if entry.get(f"message{k}"): msg_cnt += 1
+                        if entry.get(f"message{k}"): count += 1
                 elif ctx in ["Enemies", "Classes", "MapInfos"]:
-                    if nm: name_cnt += 1
+                    if nm: count += 1
 
                 # Notes counting
                 note = entry.get("note") or ""
@@ -927,28 +879,13 @@ def parseNames(data, filename, context):
                                 s = m if isinstance(m, str) else (m[0] if m else "")
                                 if "Client:" in s or "Client :" in s:
                                     continue
-                                notes_cnt += 1
+                                count += 1
                         else:
-                            notes_cnt += len(matches)
+                            count += len(matches)
 
-            # Simulate increments via wrapper (updates bar.n)
-            if name_cnt:
-                translateAI([""] * name_cnt, "", True)
-            if desc_cnt:
-                translateAI([""] * desc_cnt, "", True)
-            if profile_cnt:
-                translateAI([""] * profile_cnt, "", True)
-            if nickname_cnt:
-                translateAI([""] * nickname_cnt, "", True)
-            if msg_cnt:
-                translateAI([""] * msg_cnt, "", True)
-            if notes_cnt:
-                translateAI([""] * notes_cnt, "", True)
-
-            return getattr(bar, "n", 0) or 0
-        finally:
-            PREFLIGHT_COUNT_MODE = saved_flag
-            PBAR = saved_pbar
+            return count if count > 0 else 1
+        except Exception:
+            return 1
 
     total_units = _estimate_names_units(data, context, filename)
     if not isinstance(total_units, int) or total_units <= 0:
@@ -1001,24 +938,19 @@ def parseSS(data, filename):
             pass
 
     def _estimate_units(states, fname) -> int:
-        scopy = copy.deepcopy(states)
-        bar = _CountingBar()
-        global PREFLIGHT_COUNT_MODE, PBAR
-        saved_flag = PREFLIGHT_COUNT_MODE
-        saved_pbar = PBAR
-        PREFLIGHT_COUNT_MODE = True
-        PBAR = bar
+        # Avoid deep copy - just count fields directly
+        count = 0
         try:
-            for ss in scopy:
-                if ss is not None:
-                    try:
-                        searchSS(ss, bar)
-                    except Exception:
-                        pass
-            return getattr(bar, "n", 0) or 0
-        finally:
-            PREFLIGHT_COUNT_MODE = saved_flag
-            PBAR = saved_pbar
+            for st in states:
+                if not st:
+                    continue
+                if st.get("name"): count += 1
+                if st.get("description"): count += 1
+                for n in range(1,5):
+                    if st.get(f"message{n}"): count += 1
+            return count if count > 0 else 1
+        except Exception:
+            return 1
 
     total_units = _estimate_units(data, filename)
     if not isinstance(total_units, int) or total_units <= 0:
@@ -1067,22 +999,24 @@ def parseSystem(data, filename):
             pass
 
     def _estimate_units(sysobj, fname) -> int:
-        scopy = copy.deepcopy(sysobj)
-        bar = _CountingBar()
-        global PREFLIGHT_COUNT_MODE, PBAR
-        saved_flag = PREFLIGHT_COUNT_MODE
-        saved_pbar = PBAR
-        PREFLIGHT_COUNT_MODE = True
-        PBAR = bar
+        # Avoid deep copy - just count fields directly
+        count = 0
         try:
-            try:
-                searchSystem(scopy, bar)
-            except Exception:
-                pass
-            return getattr(bar, "n", 0) or 0
-        finally:
-            PREFLIGHT_COUNT_MODE = saved_flag
-            PBAR = saved_pbar
+            for term in sysobj.get("terms", {}) or {}:
+                termList = sysobj["terms"][term]
+                if isinstance(termList, list):
+                    count += len(termList)
+            gt = sysobj.get("game_title")
+            if isinstance(gt, str) and gt:
+                count += 1
+            count += len(sysobj.get("variables", []) or [])
+            count += len(sysobj.get("weapon_types", []) or [])
+            count += len(sysobj.get("armor_types", []) or [])
+            count += len(sysobj.get("skill_types", []) or [])
+            count += len(sysobj.get("equip_types", []) or [])
+            return count if count > 0 else 1
+        except Exception:
+            return 1
 
     total_units = _estimate_units(data, filename)
     if not isinstance(total_units, int) or total_units <= 0:
@@ -1136,24 +1070,19 @@ def parseScenario(data, filename):
             pass
 
     def _estimate_units(scenario, fname) -> int:
-        scopy = copy.deepcopy(scenario)
-        bar = _CountingBar()
-        global PREFLIGHT_COUNT_MODE, PBAR
-        saved_flag = PREFLIGHT_COUNT_MODE
-        saved_pbar = PBAR
-        PREFLIGHT_COUNT_MODE = True
-        PBAR = bar
+        # Avoid deep copy - just count commands directly
+        count = 0
         try:
-            for key, lst in scopy.items():
-                if lst is not None:
-                    try:
-                        searchCodes(lst, bar, [], fname)
-                    except Exception:
-                        pass
-            return getattr(bar, "n", 0) or 0
-        finally:
-            PREFLIGHT_COUNT_MODE = saved_flag
-            PBAR = saved_pbar
+            for key, lst in scenario.items():
+                if lst is not None and "list" in lst:
+                    for cmd in lst.get("list", []):
+                        if cmd and "c" in cmd:
+                            code = cmd["c"]
+                            if code in [401, 405, 102, 122, 408, 355, 655, 356, 357, 320, 324, 325, 111, 108, 657]:
+                                count += 1
+            return count if count > 0 else 1
+        except Exception:
+            return 1
 
     totalLines = _estimate_units(data, filename)
     if not isinstance(totalLines, int) or totalLines <= 0:
