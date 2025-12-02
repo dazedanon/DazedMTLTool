@@ -206,12 +206,14 @@ def translateTyrano(data, filename, translatedList):
         choiceList = []
     tokens = [0, 0]
     speaker = ""
+    stringListTL = []
+    choiceListTL = []
     global LOCK, ESTIMATE, FILENAME, PBAR, MISMATCH
     i = 0
 
     while i < len(data):
         voice = False
-        lineRegexNoSpeaker = r"^([^\[#;*@\n]+)\[l\]\[[rp]\]|^([^\[#;*@\n]+)\[[rpl]\]|^([^\[#;*@_\n]+)\n$"
+        lineRegexNoSpeaker = r"^([^\[#;*@\n]+)\[p\]|^([^\[#;*@\n]+)\[l\]\[[rp]\]|^([^\[#;*@\n]+)\[[rpl]\]|^([^\[#;*@_\n]+)\n$"
         lineRegexSpeaker = r"^#(.*)"
         furiganaRegex = r"(\[ruby\stext=(.*?)\])"
         choiceRegex = r'\[glink.+?text="(.*?)"'
@@ -250,24 +252,36 @@ def translateTyrano(data, filename, translatedList):
         match = re.search(lineRegexNoSpeaker, data[i])
         jaString = None
         if match:
-            jaString = match.group(1)
+            # Find which group matched
+            for group_num in range(1, 5):
+                try:
+                    if match.group(group_num):
+                        jaString = match.group(group_num)
+                        break
+                except IndexError:
+                    break
+            
+            # Skip if no valid string found
             if not jaString:
-                jaString = match.group(2)
-            if not jaString:
-                jaString = match.group(3)
+                i += 1
+                continue
 
             # Combine w/ next line if necessary
             repeatRegex = r"(.+?)\[[rpl]\]"
-            match = re.search(repeatRegex, data[i + 1])
-            while match and "[p]" not in data[i]:
-                jaString = jaString + match.group(1)
-                jaString = jaString.replace("_　", "")
-                if "[p]" in data[i + 1]:
-                    data[i] = f"{jaString}[p]\n"
-                else:
-                    data[i] = jaString
-                del data[i + 1]
+            if i + 1 < len(data):
                 match = re.search(repeatRegex, data[i + 1])
+                while match and "[p]" not in data[i]:
+                    jaString = jaString + match.group(1)
+                    jaString = jaString.replace("_　", "")
+                    if "[p]" in data[i + 1]:
+                        data[i] = f"{jaString}[p]\n"
+                    else:
+                        data[i] = jaString
+                    del data[i + 1]
+                    if i + 1 < len(data):
+                        match = re.search(repeatRegex, data[i + 1])
+                    else:
+                        break
 
             originalString = jaString
 
@@ -348,9 +362,6 @@ def translateTyrano(data, filename, translatedList):
 
     # EOF
     if not translatedList:
-        stringListTL = []
-        choiceListTL = []
-
         # String List
         if stringList:
             PBAR.total = len(stringList)
@@ -379,8 +390,11 @@ def translateTyrano(data, filename, translatedList):
                     if FILENAME not in MISMATCH:
                         MISMATCH.append(FILENAME)
 
-        # Set Strings
-    translateTyrano(data, filename, [stringListTL, choiceListTL])
+        # Recursive call for Pass 2 with translated strings
+        result = translateTyrano(data, filename, [stringListTL, choiceListTL])
+        tokens[0] += result[0]
+        tokens[1] += result[1]
+    
     return tokens
 
 # Save some money and enter the character before translation
