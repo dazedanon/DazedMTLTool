@@ -205,25 +205,48 @@ def translateRegex(data, filename, translatedList):
     while i < len(data):
         voice = False
         lineRegexText = r'●(?:「|　|（)+(.+?)(?:[」）]|$)+'
-        lineRegexSpeaker = r"text\(\"(.+)\"\)"
+        lineRegexSpeaker = r"\\text\(\"(.+?)\"\)"
         choiceRegex = r"\$menu_item.+?,(.*?),"
         titleRegex = r"title\s'(.*)'$"
+        setgamedatatitleRegex = r'\\setgamedatatitle\("(.+?)"\)'
+        dlgRegex = r'\\dlg\("(.+?)"\)'
+        selRegex = r'\\sel\((.+)\)'
         speaker = ""
+
+        # Setgamedatatitle
+        match = re.search(setgamedatatitleRegex, data[i])
+        if match:
+            # Pass 1 - Translate immediately (not batched)
+            if not translatedList:
+                response = translateAI(
+                    match.group(1).replace('\\n', '\n'),
+                    f"Reply with the {LANGUAGE} translation of the chapter title",
+                    True,
+                )
+                tokens[0] += response[1][0]
+                tokens[1] += response[1][1]
+                title = response[0]
+                
+                # Convert newlines back to escape sequences and escape quotes
+                title = title.replace('\n', '\\n').replace('"', '\\"')
+                data[i] = data[i].replace(match.group(1), title)
+                save_progress_lines(data, filename)
 
         # Title
         match = re.search(titleRegex, data[i])
         if match:
-            response = translateAI(
-                match.group(1),
-                f"Reply with the {LANGUAGE} translation of the chapter title",
-                True,
-            )
-            tokens[0] += response[1][0]
-            tokens[1] += response[1][1]
-            title = response[0]
-
-            # Set
+            # Pass 1 - Translate immediately (not batched)
             if not translatedList:
+                response = translateAI(
+                    match.group(1),
+                    f"Reply with the {LANGUAGE} translation of the chapter title",
+                    True,
+                )
+                tokens[0] += response[1][0]
+                tokens[1] += response[1][1]
+                title = response[0]
+
+                # Set
                 title = re.sub(r"(?<!\\)'", r"\\'", title)
                 data[i] = data[i].replace(match.group(1), title)
                 save_progress_lines(data, filename)
@@ -236,6 +259,68 @@ def translateRegex(data, filename, translatedList):
             tokens[0] += response[1][0]
             tokens[1] += response[1][1] 
             data[i] = data[i].replace(match.group(1), speaker)
+
+        # Dlg (Dialogue prompt/choice)
+        match = re.search(dlgRegex, data[i])
+        if match:
+            # Pass 1 - Collect for batch translation
+            if not translatedList:
+                choiceList.append(match.group(1))
+
+            # Pass 2 - Apply translated text
+            else:
+                if choiceList:
+                    # Grab and Pop
+                    translatedText = choiceList[0]
+                    choiceList.pop(0)
+
+                    # Set to None if empty list
+                    if len(choiceList) <= 0:
+                        choiceList = None
+
+                    # Escape Quotes
+                    translatedText = translatedText.replace('"', '\\"')
+
+                    # Set
+                    data[i] = data[i].replace(match.group(1), translatedText)
+                    save_progress_lines(data, filename)
+
+        # Sel (Selection menu)
+        match = re.search(selRegex, data[i])
+        if match:
+            # Split the selection items
+            selItems = [item.strip().strip('"') for item in match.group(1).split(',')]
+            
+            # Pass 1 - Collect all items for batch translation
+            if not translatedList:
+                for item in selItems:
+                    if item:  # Skip empty strings
+                        choiceList.append(item)
+
+            # Pass 2 - Apply translated items
+            else:
+                if choiceList:
+                    translatedItems = []
+                    for item in selItems:
+                        if item:
+                            # Grab and Pop
+                            translatedText = choiceList[0]
+                            choiceList.pop(0)
+
+                            # Set to None if empty list
+                            if len(choiceList) <= 0:
+                                choiceList = None
+                            
+                            # Escape Quotes
+                            translatedText = translatedText.replace('"', '\\"')
+                            translatedItems.append(f'"{translatedText}"')
+                        else:
+                            translatedItems.append('""')
+                    
+                    # Rebuild the sel line
+                    newSelContent = ','.join(translatedItems)
+                    data[i] = data[i].replace(match.group(1), newSelContent)
+                    save_progress_lines(data, filename)
 
         # Dialogue
         # Grab multi-line text

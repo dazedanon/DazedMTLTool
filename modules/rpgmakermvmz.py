@@ -2480,7 +2480,7 @@ def searchCodes(page, pbar, jobList, filename):
                         list408.pop(0)
 
                         # Textwrap
-                        translatedText = dazedwrap.wrapText(translatedText, width=WIDTH)
+                        # translatedText = dazedwrap.wrapText(translatedText, width=WIDTH)
 
                         # Set Data
                         codeList[i]["parameters"][0] = codeList[i]["parameters"][0].replace(ojaString, translatedText)
