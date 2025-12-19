@@ -532,6 +532,12 @@ def parseMap(data, filename):
     # Process each page synchronously with progress updates
     with tqdm(total=totalLines, bar_format=BAR_FORMAT, position=POSITION, leave=LEAVE, desc=filename) as pbar:
         PBAR = pbar
+        
+        # Batch translate <LB> event names
+        lbTokens = translateLBNames(events)
+        totalTokens[0] += lbTokens[0]
+        totalTokens[1] += lbTokens[1]
+        
         for event in events:
             if event is not None:
                 # Normalize note to a safe string
@@ -646,6 +652,47 @@ def translateNoteOmitSpace(event, regex):
             event["note"] = current_note.replace(oldJAString, translatedText)
         return token_info
     return [0, 0]
+
+
+def translateLBNames(events):
+    """Batch translate event names for events with <LB> tag.
+    Collects all names, translates in a single batch, then applies results.
+    Returns [input_tokens, output_tokens].
+    """
+    totalTokens = [0, 0]
+    
+    # Collect events with <LB> tag that have translatable names
+    lb_events = []  # List of (event_index, original_name)
+    for idx, event in enumerate(events):
+        if event is None:
+            continue
+        note_val = event.get("note") or ""
+        if not isinstance(note_val, str):
+            note_val = str(note_val) if note_val is not None else ""
+        
+        if "<LB>" in note_val:
+            name_val = event.get("name") or ""
+            if isinstance(name_val, str) and name_val and re.search(LANGREGEX, name_val):
+                lb_events.append((idx, name_val))
+    
+    # Batch translate if we have any
+    if lb_events:
+        names_to_translate = [item[1] for item in lb_events]
+        response = translateAI(
+            names_to_translate,
+            "Reply with only the " + LANGUAGE + " translation of the name.",
+            True,
+        )
+        translated_names = response[0] if isinstance(response[0], list) else [response[0]]
+        totalTokens[0] += response[1][0]
+        totalTokens[1] += response[1][1]
+        
+        # Apply translations back to events
+        for i, (evt_idx, _) in enumerate(lb_events):
+            if i < len(translated_names):
+                events[evt_idx]["name"] = translated_names[i].replace('"', "").replace(" ", "_")
+    
+    return totalTokens
 
 
 def parseCommonEvents(data, filename):
@@ -1815,7 +1862,7 @@ def searchCodes(page, pbar, jobList, filename):
 
                     # Remove any RPGMaker Code at start
                     ffMatch = re.search(
-                        r"^((?:[\\]+[^cCnNiIkKvVSs{}]+?\[[\d\w\W]+?\]?\])+)",
+                        r"^((?:[\\]+[^cCnNiIkKvV{}]+?\[[\d\w\W]+?\]?\])+)",
                         finalJAString,
                     )
                     if ffMatch != None:
@@ -1978,7 +2025,7 @@ def searchCodes(page, pbar, jobList, filename):
                     continue
 
                 # Definitely don't want to mess with files
-                if 'gameV' in jaString or '_' in jaString or '"[' in jaString or '＠' in jaString or "：" in jaString:
+                if 'gameV' in jaString or '_' in jaString or '"[' in jaString or '＠' in jaString:
                     i += 1
                     continue
 
@@ -2395,7 +2442,7 @@ def searchCodes(page, pbar, jobList, filename):
                 jaString = codeList[i]["parameters"][0]
                 
                 patterns = {
-                    "テキスト-": (r"テキスト-(.+)")
+                    # "テキスト-": (r"テキスト-(.+)")
                     # "=": (r'=\s?(.*)",'),
                     # "var text": (r"var\stext\d+\s=\s\"(.+)\""),
                     # "logtxt = ": (r"logtxt\s=\s'(.+)'" 
@@ -2406,7 +2453,7 @@ def searchCodes(page, pbar, jobList, filename):
                     # "ex_a_name": (r'ex_a_name\(\d+,"(.+)"\)'),
                     # "gameVariables.setValue": (r'\$gameVariables\.setValue\(\d+,\s*"([^"]*)"\)'),
                     # "BattleManager._logWindow.push('addText'": (r"BattleManager._logWindow.push\('addText',\s'(.+)'\)"),
-                    # "BattleManager._logWindow.addText": (r"BattleManager._logWindow.addText\('(.+)'\)"),
+                    "BattleManager._logWindow.addText": (r"BattleManager._logWindow.addText\('(.+)'\)"),
                 }
 
                 for key, (regex) in patterns.items():
