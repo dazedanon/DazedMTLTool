@@ -2474,15 +2474,14 @@ def searchCodes(page, pbar, jobList, filename):
                                 translatedText = list355655[0]
                                 list355655.pop(0)
 
-                                # Escape Quotes
-                                translatedText = re.sub(r'(?<!\\)"', r'\"', translatedText)
 
-                                # Double backslashes before control codes
-                                translatedText = re.sub(r'(?<![\\])([\\]{1})(?=\w)', r'\\', translatedText)
-
-                                # setValue
+                                # Ensure no quotes in gameVariables
                                 if "gameVariables.setValue" in codeList[i]["parameters"][0]:
                                     translatedText = translatedText.replace('\"', "'")
+                                
+                                # Ensure ' has exactly 2 backslashes (don't double-escape if already escaped)
+                                if "BattleManager" in codeList[i]["parameters"][0]:
+                                    translatedText = re.sub(r"(?<!\\)'", r"\\'", translatedText)
 
                                 # Set
                                 codeList[i]["parameters"][0] = jaString.replace(match.group(1), translatedText)
