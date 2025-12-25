@@ -2474,7 +2474,6 @@ def searchCodes(page, pbar, jobList, filename):
                                 translatedText = list355655[0]
                                 list355655.pop(0)
 
-
                                 # Ensure no quotes in gameVariables
                                 if "gameVariables.setValue" in codeList[i]["parameters"][0]:
                                     translatedText = translatedText.replace('\"', "'")
