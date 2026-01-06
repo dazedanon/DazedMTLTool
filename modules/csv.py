@@ -39,6 +39,18 @@ MISMATCH = []  # Lists files that thdata a mismatch error (Length of GPT list re
 FILENAME = None
 BRACKETNAMES = False
 
+# CSV Configuration Settings (configurable via GUI)
+SOURCE_COLUMN = 2  # Which column has the source text to translate
+TARGET_COLUMN = 3  # Which column to write translations to
+SPEAKER_COLUMN = -1  # Which column has speaker names (-1 = none)
+SKIP_HEADER_ROW = True  # Skip the first row (header)
+USE_TARGET_IF_NOT_EMPTY = False  # Use target column text if not empty (T++ style)
+WRITE_TO_NEXT_COLUMN = False  # Write to column after target instead of overwriting
+PARSE_NAME_TAGS = False  # Parse :name[] tags in text
+PARSE_M_MARKERS = False  # Parse \M markers in text
+REMOVE_FURIGANA = False  # Remove furigana annotations ＜＝＞
+SKIP_COMMENT_ROWS = False  # Skip rows starting with 'comment'
+
 # Regex - Need to change this if you want to translate from/to other languages. Default is Japanese Regex
 LANGREGEX = r"[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]+"
 
@@ -152,30 +164,6 @@ def parseCSV(readFile, writeFile, filename):
     totalLines = 0
     global LOCK
 
-    # Read from tmp files
-    if os.path.isfile("csv.tmp"):
-        with open("csv.tmp") as tmpFile:
-            format = tmpFile.readline()
-    else:
-        format = ""
-
-    # Choices
-    while format not in ["1", "2", "3", "4"]:
-        format = input("\n\nSelect the CSV Format:\n\n1. Translator++\n2. Single\n3. Multiple\n4. Speaker&Text\n")
-        match format:
-            case "1":
-                format = "1"
-            case "2":
-                format = "2"
-            case "3":
-                format = "3"
-            case "4":
-                format = "4"
-
-        # Write to file for later use
-        with open("csv.tmp", "w", encoding="utf-8") as tmpFile:
-            tmpFile.write(f"{format}")
-
     # Get total for progress bar
     totalLines = len(readFile.readlines())
     readFile.seek(0)
@@ -199,7 +187,7 @@ def parseCSV(readFile, writeFile, filename):
             data.append(row)
 
         try:
-            response = translateCSV(data, pbar, writeFile, writer, filename, None, format)
+            response = translateCSV(data, pbar, writeFile, writer, filename, None)
             totalTokens[0] = response[0]
             totalTokens[1] = response[1]
         except Exception:
@@ -224,7 +212,22 @@ def flush_progress_csv(writeFile, writer, rows):
         traceback.print_exc()
 
 
-def translateCSV(data, pbar, writeFile, writer, filename, translatedList, format):
+def translateCSV(data, pbar, writeFile, writer, filename, translatedList):
+    """
+    Unified CSV translation function using configurable settings.
+    
+    Uses global settings:
+    - SOURCE_COLUMN: column index for source text
+    - TARGET_COLUMN: column index to write translations
+    - SPEAKER_COLUMN: column index for speaker names (-1 = none)
+    - SKIP_HEADER_ROW: whether to skip first row
+    - USE_TARGET_IF_NOT_EMPTY: use existing target text if present (T++ style)
+    - WRITE_TO_NEXT_COLUMN: write to column after target
+    - PARSE_NAME_TAGS: parse :name[] tags
+    - PARSE_M_MARKERS: parse \\M markers
+    - REMOVE_FURIGANA: remove furigana
+    - SKIP_COMMENT_ROWS: skip rows with 'comment' in first column
+    """
     global LOCK, ESTIMATE, PBAR
     PBAR = pbar
     translatedText = ""
@@ -235,219 +238,123 @@ def translateCSV(data, pbar, writeFile, writer, filename, translatedList, format
     try:
         # Translate
         while i < len(data):
-            match format:
-                # T++ Format: Source Text on column 1. TL Target on Column 2
-                case "1":
-                    # Get String
-                    if i != 0:
-                        if data[i][1] == "":
-                            jaString = data[i][0]
-                        else:
-                            jaString = data[i][1]
+            # Skip header row if configured
+            if SKIP_HEADER_ROW and i == 0:
+                i += 1
+                continue
+            
+            # Skip comment rows if configured
+            if SKIP_COMMENT_ROWS and len(data[i]) > 0 and 'comment' in str(data[i][0]).lower():
+                i += 1
+                continue
+            
+            # Check if row has enough columns
+            if len(data[i]) <= SOURCE_COLUMN:
+                i += 1
+                continue
+            
+            # Get source text
+            jaString = ""
+            speaker = ""
+            
+            # If USE_TARGET_IF_NOT_EMPTY is enabled (T++ style), check target column first
+            if USE_TARGET_IF_NOT_EMPTY and len(data[i]) > TARGET_COLUMN and data[i][TARGET_COLUMN]:
+                jaString = data[i][TARGET_COLUMN]
+            else:
+                jaString = data[i][SOURCE_COLUMN] if data[i][SOURCE_COLUMN] else ""
+            
+            # Skip empty strings
+            if not jaString:
+                i += 1
+                continue
+            
+            # Handle speaker column if configured
+            if SPEAKER_COLUMN >= 0 and len(data[i]) > SPEAKER_COLUMN and data[i][SPEAKER_COLUMN]:
+                speakerResponse = getSpeaker(data[i][SPEAKER_COLUMN])
+                totalTokens[0] += speakerResponse[1][0]
+                totalTokens[1] += speakerResponse[1][1]
+                speaker = speakerResponse[0]
+                data[i][SPEAKER_COLUMN] = speaker
+            
+            # Parse :name[] tags if configured
+            if PARSE_NAME_TAGS and ':name' in jaString:
+                match = re.search(r":name\[([^\]]+?)\]\n([\w\W]*)", jaString)
+                if match:
+                    # Translate speaker name
+                    response = getSpeaker(match.group(1))
+                    speaker = response[0]
+                    totalTokens[0] += response[1][0]
+                    totalTokens[1] += response[1][1]
+                    data[i][SOURCE_COLUMN] = data[i][SOURCE_COLUMN].replace(match.group(1), speaker)
+                    
+                    # Extract text portion
+                    jaString = match.group(2)
+                    # Remove voice markers
+                    voMatch = re.search(r"\\[vfF]+\[.+]", jaString)
+                    if voMatch:
+                        jaString = jaString.replace(voMatch.group(0), "")
+            
+            # Parse \M markers if configured
+            if PARSE_M_MARKERS and '\\M' in jaString:
+                match = re.search(r"\\M.+\n([\w\W]*)", jaString)
+                if match:
+                    jaString = match.group(1)
+                    voMatch = re.search(r"\\[vfF]+\[.+]", jaString)
+                    if voMatch:
+                        jaString = jaString.replace(voMatch.group(0), "")
+            
+            # Remove furigana if configured
+            if REMOVE_FURIGANA:
+                jaString = re.sub(r"＜(.*)＝.*＞", r"\1", jaString)
+            
+            # Store original for replacement
+            ojaString = jaString
+            
+            # Remove textwrap
+            jaString = jaString.replace("\\n", " ")
+            jaString = jaString.replace("\n", " ")
+            
+            # Pass 1: Collect strings
+            if not translatedList:
+                if speaker:
+                    stringList.append(f"[{speaker}]: {jaString}")
+                else:
+                    stringList.append(jaString)
+            
+            # Pass 2: Apply translations
+            else:
+                # Grab and pop translation
+                translatedText = translatedList[0]
+                translatedList.pop(0)
+                
+                # Remove speaker prefix from translation if present
+                if speaker:
+                    translatedText = re.sub(r"^\[?(.+?)\]?\s?[|:]\s?", "", translatedText)
+                
+                # Add wordwrap
+                translatedText = dazedwrap.wrapText(translatedText, WIDTH)
+                translatedText = translatedText.replace("\n", "\\n")
+                
+                # Determine target column
+                actual_target = TARGET_COLUMN + 1 if WRITE_TO_NEXT_COLUMN else TARGET_COLUMN
+                
+                # Ensure row has enough columns
+                while len(data[i]) <= actual_target:
+                    data[i].append("")
+                
+                # Set data
+                if PARSE_NAME_TAGS or PARSE_M_MARKERS:
+                    # Replace original text portion
+                    data[i][actual_target] = data[i][actual_target].replace(ojaString, translatedText) if data[i][actual_target] else translatedText
+                else:
+                    data[i][actual_target] = translatedText
+                
+                flush_progress_csv(writeFile, writer, data)
+            
+            # Iterate
+            i += 1
 
-                        # Remove Textwrap
-                        jaString = jaString.replace("\\n", " ")
-
-                        # Pass 1
-                        if not translatedList:
-                            stringList.append(jaString)
-
-                        # Pass 2
-                        else:
-                            # Grab and Pop
-                            translatedText = translatedList[0]
-                            translatedList.pop(0)
-
-                            # Add Wordwrap
-                            translatedText = dazedwrap.wrapText(translatedText, WIDTH)
-                            translatedText = translatedText.replace("\n", "\\n")
-
-                            # Set Data
-                            data[i][1] = translatedText
-                            flush_progress_csv(writeFile, writer, data)
-
-                    # Iterate
-                    i += 1
-
-                # Target Format
-                case "2":
-                    # Set Values
-                    sourceColumn = 0
-                    targetColumn = 1
-
-                    # Check if Translated
-                    jaString = data[i][sourceColumn]
-
-                    # Remove Textwrap
-                    jaString = jaString.replace("\\n", " ")
-
-                    # Pass 1
-                    if not translatedList:
-                        stringList.append(jaString)
-
-                    # Pass 2
-                    else:
-                        # Grab and Pop
-                        translatedText = translatedList[0]
-                        translatedList.pop(0)
-
-                        # Add Wordwrap
-                        translatedText = dazedwrap.wrapText(translatedText, WIDTH)
-                        translatedText = translatedText.replace("\n", "\\n")
-
-                        # Set Data
-                        data[i][targetColumn] = translatedText
-                        flush_progress_csv(writeFile, writer, data)
-
-                    # Iterate
-                    i += 1
-
-                # In Place Format
-                case "3":
-                    # Set columns to translate. Leave empty to translate all.
-                    targetColumns = [1]
-
-                    # False - Place translation in source column
-                    # True - Place translation in next column
-                    targetNextRow = False
-
-                    # Skip 1st Row
-                    skipFirstRow = True
-
-                    for j in range(len(data[i])):
-                        if skipFirstRow and i == 0:
-                            continue
-                        if j in targetColumns and data[i][j]:
-                            # Check if Translated
-                            jaString = data[i][j]
-                            speaker = ""
-                            vo = ""
-
-                            if ':name' in jaString:
-                                match = re.search(r":name\[([^\]]+?)\]\n([\w\W]*)", jaString)
-                                if match:
-                                    # TL Speaker
-                                    response = getSpeaker(match.group(1))
-                                    speaker = response[0]
-                                    totalTokens[0] += response[1][0]
-                                    totalTokens[1] += response[1][1]
-                                    data[i][j] = data[i][j].replace(match.group(1), speaker)
-
-                                    # TL Text
-                                    jaString = match.group(2)
-                                    voMatch = re.search(r"\\[vfF]+\[.+]", jaString)
-                                    if voMatch:
-                                        vo = voMatch.group(0)
-                                        jaString = jaString.replace(vo, "")
-                                    jaString = jaString.replace(vo, "")
-                            elif '\\M' in jaString:
-                                match = re.search(r"\\M.+\n([\w\W]*)", jaString)
-                                if match:
-                                    jaString = match.group(1)
-                                    voMatch = re.search(r"\\[vfF]+\[.+]", jaString)
-                                    if voMatch:
-                                        vo = voMatch.group(0)
-                                        jaString = jaString.replace(vo, "")
-                            elif 'comment' in data[i][0]:
-                                # Skip comments
-                                continue
-
-                            # Remove Textwrap
-                            ojaString = jaString
-                            jaString = jaString.replace("\n", " ")
-
-                            # Pass 1
-                            if not translatedList:
-                                if speaker:
-                                    stringList.append(f"[{speaker}]: {jaString}")
-                                else:
-                                    stringList.append(jaString)
-
-                            # Pass 2
-                            else:
-                                # Grab and Pop
-                                translatedText = translatedList[0]
-                                translatedList.pop(0)
-
-                                # Remove speaker
-                                if speaker:
-                                    translatedText = re.sub(r"^\[?(.+?)\]?\s?[|:]\s?", "", translatedText)
-
-                                # Add Wordwrap
-                                translatedText = dazedwrap.wrapText(translatedText, WIDTH)
-
-                                # Set Data
-                                if targetNextRow:
-                                    data[i][j + 1] = data[i][j + 1].replace(ojaString, f"{translatedText}")
-                                else:
-                                    data[i][j] = data[i][j].replace(ojaString, f"{translatedText}")
-                                flush_progress_csv(writeFile, writer, data)
-
-                    # Iterate
-                    i += 1
-
-                # Speaker & Text Format
-                case "4":
-                    # Set columns to translate. Leave empty to translate all.
-                    speakerColumn = 2
-                    textColumn = 9
-                    speaker = ""
-
-                    if len(data[i]) > textColumn and data[i][textColumn]:
-                        # Speaker
-                        if data[i][speakerColumn]:
-                            speakerResponse = getSpeaker(data[i][speakerColumn])
-                            totalTokens[0] += speakerResponse[1][0]
-                            totalTokens[1] += speakerResponse[1][1]
-                            speaker = speakerResponse[0]
-                            data[i][speakerColumn] = speaker
-
-                        # Get Text
-                        jaString = data[i][textColumn]
-
-                        # Remove Textwrap
-                        jaString = jaString.replace("\\n", " ")
-
-                        # Remove Furigana
-                        jaString = re.sub(r"＜(.*)＝.*＞", r"\1", jaString)
-
-                        # Pass 1
-                        if not translatedList:
-                            # Append Speaker
-                            if speaker:
-                                jaString = f"[{speaker}]: {jaString}"
-
-                            # Append to List
-                            stringList.append(jaString)
-
-                        # Pass 2
-                        else:
-                            # Grab and Pop
-                            translatedText = translatedList[0]
-                            translatedList.pop(0)
-
-                            # Add Wordwrap
-                            translatedText = dazedwrap.wrapText(translatedText, WIDTH)
-                            translatedText = translatedText.replace("\n", "\\n")
-
-                            # Check for more than 3 newlines (Shoujo Ramune)
-                            newline_count = translatedText.count("\\n")
-                            if newline_count >= 3:
-                                parts = translatedText.split("\\n", 3)
-                                data[i][textColumn] = parts[0] + "\\n" + parts[1] + "\\n" + parts[2]
-                                new_row = data[i].copy()
-                                new_row[textColumn] = parts[3]
-                                new_row[0] = str(int(new_row[0]) + 1)  # Add 1 to the line number
-                                data.insert(i + 1, new_row)
-                                i += 1
-                            else:
-                                data[i][textColumn] = translatedText
-                            flush_progress_csv(writeFile, writer, data)
-
-                    # Iterate
-                    i += 1
-
-        # EOF
+        # EOF - Process collected strings
         if len(stringList) > 0:
             # Set Progress
             pbar.total = len(stringList)
@@ -461,8 +368,7 @@ def translateCSV(data, pbar, writeFile, writer, filename, translatedList, format
 
             # Set Strings
             if len(stringList) == len(translatedList):
-                translateCSV(data, pbar, writer, filename, translatedList, format)
-
+                translateCSV(data, pbar, writeFile, writer, filename, translatedList)
             # Mismatch
             else:
                 with LOCK:

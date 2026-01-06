@@ -16,6 +16,7 @@ from dotenv import load_dotenv, set_key
 
 from gui.rpgmaker_tab import RPGMakerTab
 from gui.wolf_tab import WolfTab
+from gui.csv_tab import CSVTab
 
 
 def create_section_header(title):
@@ -104,6 +105,12 @@ class ConfigTab(QWidget):
         nav_layout.addWidget(btn_wolf)
         self.nav_buttons.append(btn_wolf)
         
+        # CSV button
+        btn_csv = self.create_nav_button("📄", "CSV")
+        btn_csv.clicked.connect(lambda: self.switch_page(4))
+        nav_layout.addWidget(btn_csv)
+        self.nav_buttons.append(btn_csv)
+        
         nav_layout.addStretch()
         nav_bar.setLayout(nav_layout)
         
@@ -125,6 +132,10 @@ class ConfigTab(QWidget):
         # Page 4: Wolf RPG Engine
         self.wolf_tab = WolfTab()
         self.content_stack.addWidget(self.wolf_tab)
+        
+        # Page 5: CSV Settings
+        self.csv_tab = CSVTab()
+        self.content_stack.addWidget(self.csv_tab)
         
         # Add navigation bar and content to main layout
         main_layout.addWidget(nav_bar)
@@ -589,6 +600,7 @@ class ConfigTab(QWidget):
         self.mvmz_tab.reset_to_defaults()
         self.ace_tab.reset_to_defaults()
         self.wolf_tab.reset_to_defaults()
+        self.csv_tab.reset_to_defaults()
         
     def get_config(self):
         """Get current configuration as dictionary."""
