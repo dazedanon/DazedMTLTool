@@ -986,21 +986,6 @@ class TranslationTab(QWidget):
         self.mode_combo.currentTextChanged.connect(self._on_mode_changed)
         trans_form.addRow(mode_label, self.mode_combo)
 
-        # CSV Format dropdown (only visible when CSV engine is selected)
-        self.csv_format_label = QLabel("CSV Format:")
-        self.csv_format_label.setFixedWidth(100)
-        self.csv_format_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-        self.csv_format_combo = QComboBox()
-        self.csv_format_combo.addItem("Translator++")
-        self.csv_format_combo.addItem("Single")
-        self.csv_format_combo.addItem("Multiple")
-        self.csv_format_combo.addItem("Speaker&Text")
-        self.csv_format_combo.setFixedWidth(300)
-        trans_form.addRow(self.csv_format_label, self.csv_format_combo)
-        # Hide by default (shown when CSV is selected)
-        self.csv_format_label.setVisible(False)
-        self.csv_format_combo.setVisible(False)
-
         layout.addLayout(trans_form)
         layout.addWidget(create_horizontal_line())
 
@@ -1140,11 +1125,6 @@ class TranslationTab(QWidget):
             self.mode_combo.setCurrentIndex(index)
         else:
             self.mode_combo.setCurrentIndex(0)
-        
-        # Show/hide CSV format dropdown based on engine selection
-        is_csv = "csv" in lowered
-        self.csv_format_label.setVisible(is_csv)
-        self.csv_format_combo.setVisible(is_csv)
         
         # Refresh file list to show only files matching the selected module's extensions
         self.refresh_file_lists()
@@ -1627,13 +1607,6 @@ class TranslationTab(QWidget):
         )
         
         if reply == QMessageBox.Yes:
-            # Write CSV format to csv.tmp if CSV module is selected
-            if "csv" in selected_module[0].lower():
-                csv_format_index = self.csv_format_combo.currentIndex() + 1  # 1-based (1-4)
-                csv_tmp_path = self.project_root / "csv.tmp"
-                with open(csv_tmp_path, "w", encoding="utf-8") as f:
-                    f.write(str(csv_format_index))
-            
             # Switch to progress view
             self.file_stack.setCurrentIndex(1)
             
