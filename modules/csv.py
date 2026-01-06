@@ -26,6 +26,7 @@ LOCK = threading.Lock()
 WIDTH = int(os.getenv("width"))
 LISTWIDTH = int(os.getenv("listWidth"))
 NOTEWIDTH = int(os.getenv("noteWidth"))
+CSV_DELIMITER = os.getenv("csvDelimiter", ",")  # CSV delimiter character (comma, semicolon, tab)
 MAXHISTORY = 10
 ESTIMATE = ""
 TOKENS = [0, 0]
@@ -179,11 +180,11 @@ def parseCSV(readFile, writeFile, filename):
     totalLines = len(readFile.readlines())
     readFile.seek(0)
 
-    reader = csv.reader(readFile, delimiter=",")
+    reader = csv.reader(readFile, delimiter=CSV_DELIMITER)
     if not ESTIMATE:
         writer = csv.writer(
             writeFile,
-            delimiter=",",
+            delimiter=CSV_DELIMITER,
         )
     else:
         writer = ""
@@ -214,7 +215,7 @@ def flush_progress_csv(writeFile, writer, rows):
         with LOCK:
             writeFile.seek(0)
             # Recreate writer at current position to avoid state issues
-            tmp_writer = csv.writer(writeFile, delimiter=",")
+            tmp_writer = csv.writer(writeFile, delimiter=CSV_DELIMITER)
             tmp_writer.writerows(rows)
             writeFile.truncate()
             writeFile.flush()

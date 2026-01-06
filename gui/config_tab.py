@@ -365,6 +365,15 @@ class ConfigTab(QWidget):
         self.note_width_spin.setFixedWidth(120)  # Small
         format_form.addRow(note_label, self.note_width_spin)
         
+        csv_delim_label = QLabel("CSV Delimiter:")
+        csv_delim_label.setFixedWidth(150)
+        csv_delim_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        self.csv_delimiter_combo = QComboBox()
+        self.csv_delimiter_combo.addItems([",", ";", "\t"])
+        self.csv_delimiter_combo.setItemText(2, "Tab")  # Display "Tab" instead of actual tab character
+        self.csv_delimiter_combo.setFixedWidth(120)  # Small
+        format_form.addRow(csv_delim_label, self.csv_delimiter_combo)
+        
         right_column.addLayout(format_form)
         right_column.addWidget(create_horizontal_line())
         
@@ -474,6 +483,15 @@ class ConfigTab(QWidget):
         self.list_width_spin.setValue(int(os.getenv("listWidth", "100")))
         self.note_width_spin.setValue(int(os.getenv("noteWidth", "75")))
         
+        # Load CSV delimiter
+        csv_delim = os.getenv("csvDelimiter", ",")
+        if csv_delim == "\t":
+            self.csv_delimiter_combo.setCurrentIndex(2)  # Tab
+        elif csv_delim == ";":
+            self.csv_delimiter_combo.setCurrentIndex(1)  # Semicolon
+        else:
+            self.csv_delimiter_combo.setCurrentIndex(0)  # Comma (default)
+        
         # Load custom API settings
         self.input_cost_spin.setValue(float(os.getenv("input_cost", "2.0")))
         self.output_cost_spin.setValue(float(os.getenv("output_cost", "8.0")))
@@ -505,6 +523,11 @@ class ConfigTab(QWidget):
             set_key(self.env_file_path, "width", str(self.width_spin.value()))
             set_key(self.env_file_path, "listWidth", str(self.list_width_spin.value()))
             set_key(self.env_file_path, "noteWidth", str(self.note_width_spin.value()))
+            
+            # Save CSV delimiter
+            csv_delim_index = self.csv_delimiter_combo.currentIndex()
+            csv_delim_value = [",", ";", "\t"][csv_delim_index]
+            set_key(self.env_file_path, "csvDelimiter", csv_delim_value)
             
             # Save custom API settings
             set_key(self.env_file_path, "input_cost", str(self.input_cost_spin.value()))
@@ -556,6 +579,7 @@ class ConfigTab(QWidget):
         self.width_spin.setValue(60)
         self.list_width_spin.setValue(100)
         self.note_width_spin.setValue(75)
+        self.csv_delimiter_combo.setCurrentIndex(0)  # Comma (default)
         
         # Custom API settings
         self.input_cost_spin.setValue(2.0)
@@ -582,6 +606,7 @@ class ConfigTab(QWidget):
             "width": self.width_spin.value(),
             "listWidth": self.list_width_spin.value(),
             "noteWidth": self.note_width_spin.value(),
+            "csvDelimiter": [",", ";", "\t"][self.csv_delimiter_combo.currentIndex()],
             "input_cost": self.input_cost_spin.value(),
             "output_cost": self.output_cost_spin.value()
         }
