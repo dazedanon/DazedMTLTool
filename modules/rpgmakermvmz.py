@@ -97,6 +97,8 @@ CODE408 = False
 
 # Variables
 CODE122 = False
+CODE122_VAR_MIN = 0
+CODE122_VAR_MAX = 2000
 
 # Plugins / Scripts
 CODE355655 = False
@@ -2008,9 +2010,8 @@ def searchCodes(page, pbar, jobList, filename):
             ## Event Code: 122 [Set Variables]
             if "code" in codeList[i] and codeList[i]["code"] == 122 and CODE122 is True:
                 # This is going to be the var being translated.
-                # (Range is non-inclusive at the top end.)
-                # e.g 0-10 -> range(0, 11)
-                if codeList[i]["parameters"][0] not in list(range(0, 2000)):
+                # Only translate variables within the specified range.
+                if codeList[i]["parameters"][0] not in list(range(CODE122_VAR_MIN, CODE122_VAR_MAX)):
                     i += 1
                     continue
 

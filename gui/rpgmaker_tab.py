@@ -66,6 +66,8 @@ class RPGMakerTab(QWidget):
         
         # Variable codes (disabled by default)
         "CODE122": False,  # Control Variables
+        "CODE122_VAR_MIN": 0,  # Minimum variable ID to translate
+        "CODE122_VAR_MAX": 2000,  # Maximum variable ID to translate
         
         # Other codes (all disabled by default)
         "CODE103": False,  # Input Number
@@ -290,7 +292,36 @@ class RPGMakerTab(QWidget):
         left_column.addWidget(self.code408_cb)
         
         self.code122_cb = QCheckBox("CODE122 - Control Variables")
+        self.code122_cb.setToolTip("Translate text stored in game variables (e.g. dynamic dialogue)")
         left_column.addWidget(self.code122_cb)
+        
+        # CODE122 Variable Range
+        var_range_layout = QHBoxLayout()
+        var_range_layout.setContentsMargins(20, 0, 0, 0)  # Indent to show it's related to CODE122
+        
+        var_range_label = QLabel("Variable ID Range:")
+        var_range_label.setToolTip("Only variables with IDs in this range will be translated.\\nUseful for limiting translation to specific game variables.")
+        var_range_label.setStyleSheet("color: #888888; font-size: 10px;")
+        var_range_layout.addWidget(var_range_label)
+        
+        self.code122_var_min_spin = QSpinBox()
+        self.code122_var_min_spin.setRange(0, 99999)
+        self.code122_var_min_spin.setValue(0)
+        self.code122_var_min_spin.setMinimumWidth(70)
+        self.code122_var_min_spin.setToolTip("Minimum variable ID (inclusive)")
+        var_range_layout.addWidget(self.code122_var_min_spin)
+        
+        var_range_layout.addWidget(QLabel("to"))
+        
+        self.code122_var_max_spin = QSpinBox()
+        self.code122_var_max_spin.setRange(1, 99999)
+        self.code122_var_max_spin.setValue(2000)
+        self.code122_var_max_spin.setMinimumWidth(70)
+        self.code122_var_max_spin.setToolTip("Maximum variable ID (exclusive)")
+        var_range_layout.addWidget(self.code122_var_max_spin)
+        
+        var_range_layout.addStretch()
+        left_column.addLayout(var_range_layout)
         
         left_column.addStretch()
         
@@ -400,6 +431,8 @@ class RPGMakerTab(QWidget):
             
             # Variable codes
             self.code122_cb.stateChanged.disconnect()
+            self.code122_var_min_spin.valueChanged.disconnect()
+            self.code122_var_max_spin.valueChanged.disconnect()
             
             # Plugins / Scripts / Other codes
             self.code355655_cb.stateChanged.disconnect()
@@ -438,6 +471,8 @@ class RPGMakerTab(QWidget):
         
         # Variable codes
         self.code122_cb.stateChanged.connect(lambda: self.apply_to_module(show_messages=False))
+        self.code122_var_min_spin.valueChanged.connect(lambda: self.apply_to_module(show_messages=False))
+        self.code122_var_max_spin.valueChanged.connect(lambda: self.apply_to_module(show_messages=False))
         
         # Plugins / Scripts / Other codes
         self.code355655_cb.stateChanged.connect(lambda: self.apply_to_module(show_messages=False))
@@ -472,6 +507,8 @@ class RPGMakerTab(QWidget):
             
             # Variable codes
             "CODE122": self.code122_cb.isChecked(),
+            "CODE122_VAR_MIN": self.code122_var_min_spin.value(),
+            "CODE122_VAR_MAX": self.code122_var_max_spin.value(),
             
             # Plugins / Scripts / Other codes
             "CODE355655": self.code355655_cb.isChecked(),
@@ -516,6 +553,8 @@ class RPGMakerTab(QWidget):
         
         # Variable codes
         self.code122_cb.setChecked(config.get("CODE122", False))
+        self.code122_var_min_spin.setValue(config.get("CODE122_VAR_MIN", 0))
+        self.code122_var_max_spin.setValue(config.get("CODE122_VAR_MAX", 2000))
         
         # Plugins / Scripts / Other codes
         self.code355655_cb.setChecked(config.get("CODE355655", False))
