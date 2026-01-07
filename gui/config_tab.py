@@ -60,6 +60,9 @@ class ConfigTab(QWidget):
         else:
             self.load_from_env()
         
+        # Connect auto-save after initial load
+        self.connect_auto_save()
+        
     def init_ui(self):
         """Initialize the user interface with horizontal icon navigation at top."""
         main_layout = QVBoxLayout()
@@ -433,20 +436,14 @@ class ConfigTab(QWidget):
         button_layout = QHBoxLayout()
         button_layout.setSpacing(10)
         
-        save_button = QPushButton("💾 Save Configuration")
-        save_button.clicked.connect(self.save_to_env)
-        save_button.setMinimumHeight(32)
-        save_button.setStyleSheet("font-weight: bold;")
-        
         load_button = QPushButton("📂 Load from File")
         load_button.clicked.connect(self.load_from_file_dialog)
         load_button.setMinimumHeight(32)
         
         reset_button = QPushButton("🔄 Reset to Defaults")
-        reset_button.clicked.connect(self.reset_to_defaults)
+        reset_button.clicked.connect(self.reset_to_defaults_with_save)
         reset_button.setMinimumHeight(32)
         
-        button_layout.addWidget(save_button)
         button_layout.addWidget(load_button)
         button_layout.addWidget(reset_button)
         button_layout.addStretch()
@@ -489,7 +486,55 @@ class ConfigTab(QWidget):
         self.input_cost_spin.setValue(float(os.getenv("input_cost", "2.0")))
         self.output_cost_spin.setValue(float(os.getenv("output_cost", "8.0")))
         
-    def save_to_env(self):
+    def connect_auto_save(self):
+        """Connect all widgets to auto-save on change."""
+        # Text fields - use editingFinished to avoid saving on every keystroke
+        self.api_url_edit.editingFinished.connect(self.auto_save)
+        self.api_key_edit.editingFinished.connect(self.auto_save)
+        self.organization_edit.editingFinished.connect(self.auto_save)
+        
+        # Combo boxes
+        self.model_combo.currentTextChanged.connect(self.auto_save)
+        self.language_combo.currentTextChanged.connect(self.auto_save)
+        
+        # Spin boxes
+        self.timeout_spin.valueChanged.connect(self.auto_save)
+        self.file_threads_spin.valueChanged.connect(self.auto_save)
+        self.threads_spin.valueChanged.connect(self.auto_save)
+        self.batch_size_spin.valueChanged.connect(self.auto_save)
+        self.frequency_penalty_spin.valueChanged.connect(self.auto_save)
+        self.width_spin.valueChanged.connect(self.auto_save)
+        self.list_width_spin.valueChanged.connect(self.auto_save)
+        self.note_width_spin.valueChanged.connect(self.auto_save)
+        self.input_cost_spin.valueChanged.connect(self.auto_save)
+        self.output_cost_spin.valueChanged.connect(self.auto_save)
+    
+    def disconnect_auto_save(self):
+        """Disconnect all widgets from auto-save."""
+        try:
+            self.api_url_edit.editingFinished.disconnect(self.auto_save)
+            self.api_key_edit.editingFinished.disconnect(self.auto_save)
+            self.organization_edit.editingFinished.disconnect(self.auto_save)
+            self.model_combo.currentTextChanged.disconnect(self.auto_save)
+            self.language_combo.currentTextChanged.disconnect(self.auto_save)
+            self.timeout_spin.valueChanged.disconnect(self.auto_save)
+            self.file_threads_spin.valueChanged.disconnect(self.auto_save)
+            self.threads_spin.valueChanged.disconnect(self.auto_save)
+            self.batch_size_spin.valueChanged.disconnect(self.auto_save)
+            self.frequency_penalty_spin.valueChanged.disconnect(self.auto_save)
+            self.width_spin.valueChanged.disconnect(self.auto_save)
+            self.list_width_spin.valueChanged.disconnect(self.auto_save)
+            self.note_width_spin.valueChanged.disconnect(self.auto_save)
+            self.input_cost_spin.valueChanged.disconnect(self.auto_save)
+            self.output_cost_spin.valueChanged.disconnect(self.auto_save)
+        except (TypeError, RuntimeError):
+            pass
+    
+    def auto_save(self):
+        """Auto-save configuration without showing message."""
+        self.save_to_env(show_message=False)
+    
+    def save_to_env(self, show_message=True):
         """Save configuration to .env file."""
         try:
             # Ensure .env file exists
@@ -521,11 +566,13 @@ class ConfigTab(QWidget):
             set_key(self.env_file_path, "input_cost", str(self.input_cost_spin.value()))
             set_key(self.env_file_path, "output_cost", str(self.output_cost_spin.value()))
             
-            QMessageBox.information(self, "Success", "Configuration saved successfully!")
+            if show_message:
+                QMessageBox.information(self, "Success", "Configuration saved successfully!")
             self.config_changed.emit()
             
         except Exception as e:
-            QMessageBox.critical(self, "Error", f"Failed to save configuration:\n{str(e)}")
+            if show_message:
+                QMessageBox.critical(self, "Error", f"Failed to save configuration:\n{str(e)}")
             
     def load_from_file_dialog(self):
         """Load configuration from a file via dialog."""
@@ -547,6 +594,8 @@ class ConfigTab(QWidget):
             
     def reset_to_defaults(self):
         """Reset all settings to default values."""
+        self.disconnect_auto_save()
+        
         # API settings
         self.api_url_edit.clear()
         self.api_key_edit.clear()
@@ -567,6 +616,13 @@ class ConfigTab(QWidget):
         self.width_spin.setValue(60)
         self.list_width_spin.setValue(100)
         self.note_width_spin.setValue(75)
+        
+        self.connect_auto_save()
+    
+    def reset_to_defaults_with_save(self):
+        """Reset to defaults, save, and show confirmation."""
+        self.reset_to_defaults()
+        self.save_to_env(show_message=False)
         
         # Custom API settings
         self.input_cost_spin.setValue(2.0)
