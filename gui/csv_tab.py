@@ -44,6 +44,9 @@ class CSVTab(QWidget):
     
     # Default configuration values (0-indexed internally)
     DEFAULT_CONFIG = {
+        # Delimiter
+        "CSV_DELIMITER": ",",
+        
         # Column settings (stored as 0-indexed)
         "SOURCE_COLUMN": 0,
         "TARGET_COLUMN": 1,
@@ -105,6 +108,30 @@ class CSVTab(QWidget):
         description_label.setStyleSheet("color: #888888; font-size: 10px; margin-bottom: 5px;")
         main_layout.addWidget(description_label)
         
+        # Quick Presets at the top, spaced equally
+        main_layout.addWidget(create_section_label("⚡ Quick Presets"))
+        
+        preset_layout = QHBoxLayout()
+        preset_layout.setSpacing(15)
+        
+        preset_tpp = QPushButton("Translator++")
+        preset_tpp.setToolTip("Source col 1, Target col 2, skip header, use target if not empty")
+        preset_tpp.clicked.connect(self.apply_preset_tpp)
+        preset_layout.addWidget(preset_tpp, 1)  # stretch factor 1 for equal spacing
+        
+        preset_simple = QPushButton("Simple")
+        preset_simple.setToolTip("Source col 1, Target col 2, no special processing")
+        preset_simple.clicked.connect(self.apply_preset_simple)
+        preset_layout.addWidget(preset_simple, 1)
+        
+        preset_speaker = QPushButton("Speaker & Text")
+        preset_speaker.setToolTip("Speaker col 3, Text col 10, with furigana removal")
+        preset_speaker.clicked.connect(self.apply_preset_speaker)
+        preset_layout.addWidget(preset_speaker, 1)
+        
+        main_layout.addLayout(preset_layout)
+        main_layout.addWidget(create_horizontal_line())
+        
         # Two-column layout
         columns_layout = QHBoxLayout()
         columns_layout.setSpacing(40)
@@ -126,7 +153,7 @@ class CSVTab(QWidget):
         self.source_column_spin = QSpinBox()
         self.source_column_spin.setRange(1, 100)
         self.source_column_spin.setValue(1)
-        self.source_column_spin.setFixedWidth(80)
+        self.source_column_spin.setMinimumWidth(100)
         column_form.addRow(source_label, self.source_column_spin)
         
         # Target Column
@@ -135,17 +162,17 @@ class CSVTab(QWidget):
         self.target_column_spin = QSpinBox()
         self.target_column_spin.setRange(1, 100)
         self.target_column_spin.setValue(2)
-        self.target_column_spin.setFixedWidth(80)
+        self.target_column_spin.setMinimumWidth(100)
         column_form.addRow(target_label, self.target_column_spin)
         
         # Speaker Column
         speaker_label = QLabel("Speaker Column:")
-        speaker_label.setToolTip("Which column contains speaker names (0 = none)")
+        speaker_label.setToolTip("Which column contains speaker names (None = disabled)")
         self.speaker_column_spin = QSpinBox()
         self.speaker_column_spin.setRange(0, 100)
         self.speaker_column_spin.setValue(0)
         self.speaker_column_spin.setSpecialValueText("None")
-        self.speaker_column_spin.setFixedWidth(80)
+        self.speaker_column_spin.setMinimumWidth(100)
         column_form.addRow(speaker_label, self.speaker_column_spin)
         
         left_column.addLayout(column_form)
@@ -175,6 +202,18 @@ class CSVTab(QWidget):
         self.write_next_column_cb.setToolTip("Write translation to the column after target instead of overwriting")
         right_column.addWidget(self.write_next_column_cb)
         
+        # CSV Delimiter
+        delim_layout = QHBoxLayout()
+        delim_label = QLabel("Delimiter:")
+        delim_label.setToolTip("Character used to separate columns in the CSV file")
+        self.csv_delimiter_combo = QComboBox()
+        self.csv_delimiter_combo.addItems([",", ";", "Tab"])
+        self.csv_delimiter_combo.setMinimumWidth(80)
+        delim_layout.addWidget(delim_label)
+        delim_layout.addWidget(self.csv_delimiter_combo)
+        delim_layout.addStretch()
+        right_column.addLayout(delim_layout)
+        
         right_column.addWidget(create_horizontal_line())
         
         # Special Parsing
@@ -202,34 +241,6 @@ class CSVTab(QWidget):
         columns_layout.addLayout(left_column, 1)
         columns_layout.addLayout(right_column, 1)
         main_layout.addLayout(columns_layout)
-        
-        # Preset buttons
-        main_layout.addWidget(create_horizontal_line())
-        main_layout.addWidget(create_section_label("⚡ Quick Presets"))
-        
-        preset_layout = QHBoxLayout()
-        preset_layout.setSpacing(10)
-        
-        preset_tpp = QPushButton("Translator++")
-        preset_tpp.setToolTip("Source col 1, Target col 2, skip header, use target if not empty")
-        preset_tpp.clicked.connect(self.apply_preset_tpp)
-        preset_tpp.setMaximumWidth(120)
-        preset_layout.addWidget(preset_tpp)
-        
-        preset_simple = QPushButton("Simple")
-        preset_simple.setToolTip("Source col 1, Target col 2, no special processing")
-        preset_simple.clicked.connect(self.apply_preset_simple)
-        preset_simple.setMaximumWidth(120)
-        preset_layout.addWidget(preset_simple)
-        
-        preset_speaker = QPushButton("Speaker & Text")
-        preset_speaker.setToolTip("Speaker col 3, Text col 10, with furigana removal")
-        preset_speaker.clicked.connect(self.apply_preset_speaker)
-        preset_speaker.setMaximumWidth(120)
-        preset_layout.addWidget(preset_speaker)
-        
-        preset_layout.addStretch()
-        main_layout.addLayout(preset_layout)
         
         # Bottom buttons
         main_layout.addSpacing(12)
@@ -317,6 +328,7 @@ class CSVTab(QWidget):
             self.source_column_spin.valueChanged.disconnect()
             self.target_column_spin.valueChanged.disconnect()
             self.speaker_column_spin.valueChanged.disconnect()
+            self.csv_delimiter_combo.currentIndexChanged.disconnect()
             self.skip_header_cb.stateChanged.disconnect()
             self.use_target_if_not_empty_cb.stateChanged.disconnect()
             self.write_next_column_cb.stateChanged.disconnect()
@@ -332,6 +344,7 @@ class CSVTab(QWidget):
         self.source_column_spin.valueChanged.connect(lambda: self.apply_to_module(show_messages=False))
         self.target_column_spin.valueChanged.connect(lambda: self.apply_to_module(show_messages=False))
         self.speaker_column_spin.valueChanged.connect(lambda: self.apply_to_module(show_messages=False))
+        self.csv_delimiter_combo.currentIndexChanged.connect(lambda: self.apply_to_module(show_messages=False))
         self.skip_header_cb.stateChanged.connect(lambda: self.apply_to_module(show_messages=False))
         self.use_target_if_not_empty_cb.stateChanged.connect(lambda: self.apply_to_module(show_messages=False))
         self.write_next_column_cb.stateChanged.connect(lambda: self.apply_to_module(show_messages=False))
@@ -348,10 +361,16 @@ class CSVTab(QWidget):
         speaker_ui = self.speaker_column_spin.value()
         speaker_internal = speaker_ui - 1 if speaker_ui > 0 else -1
         
+        # Get delimiter value
+        delim_index = self.csv_delimiter_combo.currentIndex()
+        delim_values = [",", ";", "\t"]
+        delimiter = delim_values[delim_index] if delim_index < len(delim_values) else ","
+        
         return {
             "SOURCE_COLUMN": self.source_column_spin.value() - 1,
             "TARGET_COLUMN": self.target_column_spin.value() - 1,
             "SPEAKER_COLUMN": speaker_internal,
+            "CSV_DELIMITER": delimiter,
             "SKIP_HEADER_ROW": self.skip_header_cb.isChecked(),
             "USE_TARGET_IF_NOT_EMPTY": self.use_target_if_not_empty_cb.isChecked(),
             "WRITE_TO_NEXT_COLUMN": self.write_next_column_cb.isChecked(),
@@ -372,6 +391,16 @@ class CSVTab(QWidget):
         self.source_column_spin.setValue(config.get("SOURCE_COLUMN", 0) + 1)
         self.target_column_spin.setValue(config.get("TARGET_COLUMN", 1) + 1)
         self.speaker_column_spin.setValue(speaker_ui)
+        
+        # Set delimiter
+        delimiter = config.get("CSV_DELIMITER", ",")
+        if delimiter == "\t":
+            self.csv_delimiter_combo.setCurrentIndex(2)
+        elif delimiter == ";":
+            self.csv_delimiter_combo.setCurrentIndex(1)
+        else:
+            self.csv_delimiter_combo.setCurrentIndex(0)
+        
         self.skip_header_cb.setChecked(config.get("SKIP_HEADER_ROW", True))
         self.use_target_if_not_empty_cb.setChecked(config.get("USE_TARGET_IF_NOT_EMPTY", False))
         self.write_next_column_cb.setChecked(config.get("WRITE_TO_NEXT_COLUMN", False))
@@ -400,6 +429,11 @@ class CSVTab(QWidget):
                 "SPEAKER_COLUMN": r'^SPEAKER_COLUMN\s*=\s*(-?\d+)',
             }
             
+            # Read string values (delimiter)
+            string_patterns = {
+                "CSV_DELIMITER": r'^CSV_DELIMITER\s*=\s*["\'](.+?)["\']',
+            }
+            
             # Read boolean values
             bool_patterns = {
                 "SKIP_HEADER_ROW": r'^SKIP_HEADER_ROW\s*=\s*(True|False)',
@@ -418,6 +452,11 @@ class CSVTab(QWidget):
                     match = re.match(pattern, line)
                     if match:
                         config[key] = int(match.group(1))
+                
+                for key, pattern in string_patterns.items():
+                    match = re.match(pattern, line)
+                    if match:
+                        config[key] = match.group(1)
                 
                 for key, pattern in bool_patterns.items():
                     match = re.match(pattern, line)
@@ -487,6 +526,9 @@ class CSVTab(QWidget):
                     # Format value appropriately
                     if isinstance(value, bool):
                         value_str = str(value)
+                    elif isinstance(value, str):
+                        # String values need quotes
+                        value_str = f'"{value}"'
                     else:
                         value_str = str(value)
                     
