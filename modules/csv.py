@@ -26,7 +26,6 @@ LOCK = threading.Lock()
 WIDTH = int(os.getenv("width"))
 LISTWIDTH = int(os.getenv("listWidth"))
 NOTEWIDTH = int(os.getenv("noteWidth"))
-CSV_DELIMITER = os.getenv("csvDelimiter", ",")  # CSV delimiter character (comma, semicolon, tab)
 MAXHISTORY = 10
 ESTIMATE = ""
 TOKENS = [0, 0]
@@ -40,10 +39,11 @@ FILENAME = None
 BRACKETNAMES = False
 
 # CSV Configuration Settings (configurable via GUI)
-SOURCE_COLUMN = 2  # Which column has the source text to translate
-TARGET_COLUMN = 3  # Which column to write translations to
+CSV_DELIMITER = ","  # CSV delimiter character (comma, semicolon, tab)
+SOURCE_COLUMN = 0  # Which column has the source text to translate (0-indexed)
+TARGET_COLUMN = 1  # Which column to write translations to
 SPEAKER_COLUMN = -1  # Which column has speaker names (-1 = none)
-SKIP_HEADER_ROW = True  # Skip the first row (header)
+SKIP_HEADER_ROW = False  # Skip the first row (header)
 USE_TARGET_IF_NOT_EMPTY = False  # Use target column text if not empty (T++ style)
 WRITE_TO_NEXT_COLUMN = False  # Write to column after target instead of overwriting
 PARSE_NAME_TAGS = False  # Parse :name[] tags in text
