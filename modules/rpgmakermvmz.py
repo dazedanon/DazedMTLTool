@@ -1225,11 +1225,17 @@ def searchNames(data, pbar, context, filename):
                     # Skip SG説明 blocks that include a Client: section header
                     if "Client:" in match_text or "Client :" in match_text:
                         continue
+                    # Skip if IGNORETLTEXT is enabled and no Japanese text
+                    if IGNORETLTEXT and not re.search(LANGREGEX, match_text):
+                        continue
                     notesBatch.append(match_text)
                     notesBatchMap.append((idx, regex, match_text, wordwrap))
             else:
                 for m in matches:
                     match_text = m if isinstance(m, str) else m[0]
+                    # Skip if IGNORETLTEXT is enabled and no Japanese text
+                    if IGNORETLTEXT and not re.search(LANGREGEX, match_text):
+                        continue
                     notesBatch.append(match_text)
                     notesBatchMap.append((idx, regex, match_text, wordwrap))
 
@@ -1268,6 +1274,9 @@ def searchNames(data, pbar, context, filename):
                 msg_field = f"message{msg_num}"
                 if msg_field in entry and entry[msg_field]:
                     msg_text = entry[msg_field]
+                    # Skip if IGNORETLTEXT is enabled and no Japanese text
+                    if IGNORETLTEXT and not re.search(LANGREGEX, msg_text):
+                        continue
                     needs_taro = len(msg_text) > 0 and msg_text[0] in ["は", "を", "の", "に", "が"]
                     if needs_taro:
                         messages_batch.append("Taro" + msg_text)
@@ -1314,35 +1323,51 @@ def searchNames(data, pbar, context, filename):
             if context in "Actors":
                 if len(nameList) < BATCHSIZE:
                     if data[i]["name"] != "":
-                        nameList.append(data[i]["name"])
+                        # Skip if IGNORETLTEXT is enabled and no Japanese text
+                        if not (IGNORETLTEXT and not re.search(LANGREGEX, data[i]["name"])):
+                            nameList.append(data[i]["name"])
                     if "nickname" in data[i] and data[i]["nickname"]:
-                        nicknameList.append(data[i]["nickname"])
+                        # Skip if IGNORETLTEXT is enabled and no Japanese text
+                        if not (IGNORETLTEXT and not re.search(LANGREGEX, data[i]["nickname"])):
+                            nicknameList.append(data[i]["nickname"])
                     if "profile" in data[i] and data[i]["profile"]:
-                        profileList.append(data[i]["profile"].replace("\n", " "))
+                        # Skip if IGNORETLTEXT is enabled and no Japanese text
+                        if not (IGNORETLTEXT and not re.search(LANGREGEX, data[i]["profile"])):
+                            profileList.append(data[i]["profile"].replace("\n", " "))
                     i += 1
                 else:
                     batchFull = True
             if context in ["Armors", "Weapons", "Items"]:
                 if len(nameList) < BATCHSIZE:
-                    nameList.append(data[i]["name"])
+                    # Skip if IGNORETLTEXT is enabled and no Japanese text
+                    if not (IGNORETLTEXT and not re.search(LANGREGEX, data[i]["name"])):
+                        nameList.append(data[i]["name"])
                     if "description" in data[i] and data[i]["description"] != "":
                         description = data[i]["description"]
-                        description = description.replace("\n", " ")
-                        descriptionList.append(description)
+                        # Skip if IGNORETLTEXT is enabled and no Japanese text
+                        if not (IGNORETLTEXT and not re.search(LANGREGEX, description)):
+                            description = description.replace("\n", " ")
+                            descriptionList.append(description)
                     i += 1
                 else:
                     batchFull = True
             if context in ["Skills"]:
                 if len(nameList) < BATCHSIZE:
-                    nameList.append(data[i]["name"])
+                    # Skip if IGNORETLTEXT is enabled and no Japanese text
+                    if not (IGNORETLTEXT and not re.search(LANGREGEX, data[i]["name"])):
+                        nameList.append(data[i]["name"])
                     if "description" in data[i] and data[i]["description"]:
-                        descriptionList.append(data[i]["description"].replace("\n", " "))
+                        # Skip if IGNORETLTEXT is enabled and no Japanese text
+                        if not (IGNORETLTEXT and not re.search(LANGREGEX, data[i]["description"])):
+                            descriptionList.append(data[i]["description"].replace("\n", " "))
                     i += 1
                 else:
                     batchFull = True
             if context in ["Enemies", "Classes", "MapInfos"]:
                 if len(nameList) < BATCHSIZE:
-                    nameList.append(data[i]["name"])
+                    # Skip if IGNORETLTEXT is enabled and no Japanese text
+                    if not (IGNORETLTEXT and not re.search(LANGREGEX, data[i]["name"])):
+                        nameList.append(data[i]["name"])
                     i += 1
                 else:
                     batchFull = True
@@ -3163,18 +3188,25 @@ def searchSS(state, pbar):
     
     # Name
     if "name" in state and state["name"]:
-        batch_texts.append(state["name"])
-        batch_map.append(("name", "name", False))
+        # Skip if IGNORETLTEXT is enabled and no Japanese text
+        if not (IGNORETLTEXT and not re.search(LANGREGEX, state["name"])):
+            batch_texts.append(state["name"])
+            batch_map.append(("name", "name", False))
     
     # Description
     if "description" in state and state["description"]:
-        batch_texts.append(state["description"])
-        batch_map.append(("description", "description", False))
+        # Skip if IGNORETLTEXT is enabled and no Japanese text
+        if not (IGNORETLTEXT and not re.search(LANGREGEX, state["description"])):
+            batch_texts.append(state["description"])
+            batch_map.append(("description", "description", False))
     
     # Messages - collect all with Taro prefix handling
     for msg_field in ["message1", "message2", "message3", "message4"]:
         if msg_field in state and state[msg_field]:
             msg_text = state[msg_field]
+            # Skip if IGNORETLTEXT is enabled and no Japanese text
+            if IGNORETLTEXT and not re.search(LANGREGEX, msg_text):
+                continue
             needs_taro = len(msg_text) > 0 and msg_text[0] in ["は", "を", "の", "に", "が"]
             if needs_taro:
                 batch_texts.append("Taro" + msg_text)
@@ -3235,6 +3267,9 @@ def searchSS(state, pbar):
             matches = re.findall(regex, note, re.DOTALL)
             for m in matches:
                 match_text = m if isinstance(m, str) else m[0]
+                # Skip if IGNORETLTEXT is enabled and no Japanese text
+                if IGNORETLTEXT and not re.search(LANGREGEX, match_text):
+                    continue
                 notesBatch.append(match_text)
                 notesBatchMap.append((regex, match_text, wordwrap))
 
@@ -3300,14 +3335,16 @@ def searchSystem(data, pbar):
     context = "Reply with only the " + LANGUAGE + ' translation of the UI textbox."'
 
     # Title - batch as a single-item list
-    response = translateAI(
-        [data["gameTitle"]],
-        " Reply with the " + LANGUAGE + " translation of the game title name",
-        False,
-    )
-    totalTokens[0] += response[1][0]
-    totalTokens[1] += response[1][1]
-    data["gameTitle"] = response[0][0].strip(".")
+    # Skip if IGNORETLTEXT is enabled and no Japanese text
+    if not (IGNORETLTEXT and not re.search(LANGREGEX, data["gameTitle"])):
+        response = translateAI(
+            [data["gameTitle"]],
+            " Reply with the " + LANGUAGE + " translation of the game title name",
+            False,
+        )
+        totalTokens[0] += response[1][0]
+        totalTokens[1] += response[1][1]
+        data["gameTitle"] = response[0][0].strip(".")
     if pbar is not None:
         pbar.refresh()
 
@@ -3319,6 +3356,9 @@ def searchSystem(data, pbar):
             term_indices = []
             for i in range(len(termList)):
                 if termList[i] is not None:
+                    # Skip if IGNORETLTEXT is enabled and no Japanese text
+                    if IGNORETLTEXT and not re.search(LANGREGEX, str(termList[i])):
+                        continue
                     term_values.append(termList[i])
                     term_indices.append(i)
             
@@ -3335,7 +3375,15 @@ def searchSystem(data, pbar):
                     pbar.refresh()
 
     # Armor Types - batch translate all
-    armor_values = [data["armorTypes"][i] for i in range(len(data["armorTypes"]))]
+    armor_values = []
+    armor_indices = []
+    for i in range(len(data["armorTypes"])):
+        val = data["armorTypes"][i]
+        # Skip if IGNORETLTEXT is enabled and no Japanese text
+        if IGNORETLTEXT and (not val or not re.search(LANGREGEX, str(val))):
+            continue
+        armor_values.append(val)
+        armor_indices.append(i)
     if armor_values:
         response = translateAI(
             armor_values,
@@ -3345,13 +3393,21 @@ def searchSystem(data, pbar):
         totalTokens[0] += response[1][0]
         totalTokens[1] += response[1][1]
         tl_list = response[0]
-        for i in range(min(len(tl_list), len(data["armorTypes"]))):
-            data["armorTypes"][i] = tl_list[i].replace('"', "").strip()
+        for n, idx in enumerate(armor_indices[: len(tl_list)]):
+            data["armorTypes"][idx] = tl_list[n].replace('"', "").strip()
         if pbar is not None:
             pbar.refresh()
 
     # Skill Types - batch translate all
-    skill_values = [data["skillTypes"][i] for i in range(len(data["skillTypes"]))]
+    skill_values = []
+    skill_indices = []
+    for i in range(len(data["skillTypes"])):
+        val = data["skillTypes"][i]
+        # Skip if IGNORETLTEXT is enabled and no Japanese text
+        if IGNORETLTEXT and (not val or not re.search(LANGREGEX, str(val))):
+            continue
+        skill_values.append(val)
+        skill_indices.append(i)
     if skill_values:
         response = translateAI(
             skill_values,
@@ -3361,13 +3417,21 @@ def searchSystem(data, pbar):
         totalTokens[0] += response[1][0]
         totalTokens[1] += response[1][1]
         tl_list = response[0]
-        for i in range(min(len(tl_list), len(data["skillTypes"]))):
-            data["skillTypes"][i] = tl_list[i].replace('"', "").strip()
+        for n, idx in enumerate(skill_indices[: len(tl_list)]):
+            data["skillTypes"][idx] = tl_list[n].replace('"', "").strip()
         if pbar is not None:
             pbar.refresh()
 
     # Equip Types - batch translate all
-    equip_values = [data["equipTypes"][i] for i in range(len(data["equipTypes"]))]
+    equip_values = []
+    equip_indices = []
+    for i in range(len(data["equipTypes"])):
+        val = data["equipTypes"][i]
+        # Skip if IGNORETLTEXT is enabled and no Japanese text
+        if IGNORETLTEXT and (not val or not re.search(LANGREGEX, str(val))):
+            continue
+        equip_values.append(val)
+        equip_indices.append(i)
     if equip_values:
         response = translateAI(
             equip_values,
@@ -3377,8 +3441,8 @@ def searchSystem(data, pbar):
         totalTokens[0] += response[1][0]
         totalTokens[1] += response[1][1]
         tl_list = response[0]
-        for i in range(min(len(tl_list), len(data["equipTypes"]))):
-            data["equipTypes"][i] = tl_list[i].replace('"', "").strip()
+        for n, idx in enumerate(equip_indices[: len(tl_list)]):
+            data["equipTypes"][idx] = tl_list[n].replace('"', "").strip()
         if pbar is not None:
             pbar.refresh()
 
@@ -3387,6 +3451,9 @@ def searchSystem(data, pbar):
     element_indices = []
     for i in range(len(data["elements"])):
         if data["elements"][i]:  # Skip empty strings
+            # Skip if IGNORETLTEXT is enabled and no Japanese text
+            if IGNORETLTEXT and not re.search(LANGREGEX, str(data["elements"][i])):
+                continue
             element_values.append(data["elements"][i])
             element_indices.append(i)
     
@@ -3409,6 +3476,9 @@ def searchSystem(data, pbar):
     weapon_indices = []
     for i in range(len(data["weaponTypes"])):
         if data["weaponTypes"][i]:  # Skip empty strings
+            # Skip if IGNORETLTEXT is enabled and no Japanese text
+            if IGNORETLTEXT and not re.search(LANGREGEX, str(data["weaponTypes"][i])):
+                continue
             weapon_values.append(data["weaponTypes"][i])
             weapon_indices.append(i)
     
@@ -3432,6 +3502,9 @@ def searchSystem(data, pbar):
         var_values = []
         for idx, val in enumerate(data["variables"]):
             if isinstance(val, str) and val.strip():
+                # Skip if IGNORETLTEXT is enabled and no Japanese text
+                if IGNORETLTEXT and not re.search(LANGREGEX, val):
+                    continue
                 var_indices.append(idx)
                 var_values.append(val)
         if var_values:
@@ -3456,6 +3529,9 @@ def searchSystem(data, pbar):
         msg_values = []
         for key, value in messages.items():
             if isinstance(value, str) and value.strip():
+                # Skip if IGNORETLTEXT is enabled and no Japanese text
+                if IGNORETLTEXT and not re.search(LANGREGEX, value):
+                    continue
                 msg_keys.append(key)
                 msg_values.append(value)
         
