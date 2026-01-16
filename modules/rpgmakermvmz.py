@@ -2072,6 +2072,11 @@ def searchCodes(page, pbar, jobList, filename):
                 if len(re.findall(r"([\'\"\`])", jaString)) >= 2:
                     matchedText = re.search(r"[\'\"\`](.*)[\'\"\`]", jaString)
                     if matchedText and matchedText.group(1).strip():
+                        # Skip if IGNORETLTEXT is enabled and no Japanese text
+                        if IGNORETLTEXT and not re.search(LANGREGEX, matchedText.group(1)):
+                            i += 1
+                            continue
+
                         # Remove Textwrap
                         finalJAString = matchedText.group(1).replace("\\n", " ")
 
@@ -2122,13 +2127,17 @@ def searchCodes(page, pbar, jobList, filename):
                         else:
                             acExist = False
 
+                        # Skip if IGNORETLTEXT is enabled and no Japanese text
+                        if IGNORETLTEXT and not re.search(LANGREGEX, jaString):
+                            return
+
                         # If there isn't any Japanese in the text just skip
                         # if not re.search(r'[一-龠]+|[ぁ-ゔ]+|[ァ-ヴー]+', jaString):
                         #     i += 1
                         #     continue
 
                         # Remove any textwrap & TL
-                        jaString = jaString.replace("\\n", " ")
+                        jaString = jaString.replace("\n", " ")
                         if acExist:
                             jaString = jaString.replace("\\ac ", " ")
                             jaString = jaString.replace("\\ac", "")
@@ -2145,7 +2154,7 @@ def searchCodes(page, pbar, jobList, filename):
                                 translatedText = jaString.replace(jaString, translatedText)
 
                                 # Remove characters that may break scripts
-                                charList = ['"', "\\n"]
+                                charList = ['"', "\n"]
                                 for char in charList:
                                     translatedText = translatedText.replace(char, "")
 
@@ -2307,8 +2316,8 @@ def searchCodes(page, pbar, jobList, filename):
                         i += 1
                         continue
 
-                    # If there isn't any Japanese in the text just skip
-                    if not re.search(LANGREGEX, jaString):
+                    # Skip if IGNORETLTEXT is enabled and no Japanese text
+                    if IGNORETLTEXT and not re.search(LANGREGEX, jaString):
                         i += 1
                         continue
 
@@ -2492,6 +2501,10 @@ def searchCodes(page, pbar, jobList, filename):
                             if not re.search(r'[a-zA-Z一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]', match.group(1)):
                                 continue
 
+                            # Skip if IGNORETLTEXT is enabled and no Japanese text
+                            if IGNORETLTEXT and not re.search(LANGREGEX, match.group(1)):
+                                continue
+
                             # Pass 1
                             if setData:
                                 list355655.append(match.group(1))
@@ -2519,6 +2532,11 @@ def searchCodes(page, pbar, jobList, filename):
                 jaString = codeList[i]["parameters"][0]
                 match = re.search(r"(.+)", jaString)
                 if match:
+                    # Skip if IGNORETLTEXT is enabled and no Japanese text
+                    if IGNORETLTEXT and not re.search(LANGREGEX, jaString):
+                        i += 1
+                        continue
+
                     # Remove Textwrap
                     jaString = codeList[i]["parameters"][0]
                     ojaString = jaString
@@ -2562,8 +2580,8 @@ def searchCodes(page, pbar, jobList, filename):
             if "code" in codeList[i] and (codeList[i]["code"] == 108) and CODE108 is True:
                 jaString = codeList[i]["parameters"][0]
 
-                # If there isn't any Japanese in the text just skip
-                if not re.search(LANGREGEX, jaString):
+                # Skip if IGNORETLTEXT is enabled and no Japanese text
+                if IGNORETLTEXT and not re.search(LANGREGEX, jaString):
                     i += 1
                     continue
 
@@ -2626,6 +2644,11 @@ def searchCodes(page, pbar, jobList, filename):
             if "code" in codeList[i] and codeList[i]["code"] == 356 and CODE356 is True:
                 jaString = codeList[i]["parameters"][0]
                 oldjaString = jaString
+
+                # Skip if IGNORETLTEXT is enabled and no Japanese text
+                if IGNORETLTEXT and not re.search(LANGREGEX, jaString):
+                    i += 1
+                    continue
 
                 # Grab Speaker
                 if "Tachie showName" in jaString:
@@ -2840,6 +2863,10 @@ def searchCodes(page, pbar, jobList, filename):
                     if not jaString.strip():
                         continue
 
+                    # Skip if IGNORETLTEXT is enabled and no Japanese text
+                    if IGNORETLTEXT and not re.search(LANGREGEX, jaString):
+                        continue
+
                     # If and En Statements
                     ifVar = ""
                     ifList = re.findall(r"([ei][nf]\(.+?\)\)?\)?)", jaString)
@@ -2909,6 +2936,10 @@ def searchCodes(page, pbar, jobList, filename):
                     matchList = re.findall(r"'(.*?)'", jaString)
 
                     for match in matchList:
+                        # Skip if IGNORETLTEXT is enabled and no Japanese text
+                        if IGNORETLTEXT and not re.search(LANGREGEX, match):
+                            continue
+
                         response = translateAI(match, "", False)
                         translatedText = response[0]
                         totalTokens[0] += response[1][0]
@@ -2937,8 +2968,8 @@ def searchCodes(page, pbar, jobList, filename):
                     i += 1
                     continue
 
-                # If there isn't any Japanese in the text just skip
-                if not re.search(LANGREGEX, jaString):
+                # Skip if IGNORETLTEXT is enabled and no Japanese text
+                if IGNORETLTEXT and not re.search(LANGREGEX, jaString):
                     i += 1
                     continue
 
@@ -2965,6 +2996,11 @@ def searchCodes(page, pbar, jobList, filename):
 
                 jaString = codeList[i]["parameters"][1]
                 if not isinstance(jaString, str):
+                    i += 1
+                    continue
+
+                # Skip if IGNORETLTEXT is enabled and no Japanese text
+                if IGNORETLTEXT and not re.search(LANGREGEX, jaString):
                     i += 1
                     continue
 
@@ -2996,6 +3032,11 @@ def searchCodes(page, pbar, jobList, filename):
 
                 jaString = codeList[i]["parameters"][1]
                 if not isinstance(jaString, str):
+                    i += 1
+                    continue
+
+                # Skip if IGNORETLTEXT is enabled and no Japanese text
+                if IGNORETLTEXT and not re.search(LANGREGEX, jaString):
                     i += 1
                     continue
 
