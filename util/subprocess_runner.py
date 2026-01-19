@@ -9,6 +9,11 @@ import os
 from pathlib import Path
 import io
 import threading
+from dotenv import load_dotenv
+
+# Load environment variables from .env with override=True to ensure
+# we always use the latest saved config, not inherited/stale values
+load_dotenv(override=True)
 
 # Set UTF-8 encoding for stdout to handle Unicode characters
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')

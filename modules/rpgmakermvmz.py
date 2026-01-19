@@ -44,7 +44,7 @@ _speakerCacheLock = threading.Lock()
 SPEAKER_COLLECTED = []  # Original speaker names collected during parse mode (untranslated)
 
 # Regex - Need to change this if you want to translate from/to other languages. Default is Japanese Regex
-LANGREGEX = r"[\u3000-\u303F\u3040-\u309F\u30A0-\u30FF\u31F0-\u31FF\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF\uFF00-\uFF5D\uFF5F-\uFFEF]+"
+LANGREGEX = r"[\u3000-\u303F\u3040-\u309F\u30A0-\u30FB\u30FD-\u30FF\u31F0-\u31FF\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF\uFF02-\uFF5D\uFF5F-\uFFEF]+"
 
 # Get pricing configuration based on the model
 PRICING_CONFIG = getPricingConfig(MODEL)
@@ -2360,6 +2360,83 @@ def searchCodes(page, pbar, jobList, filename):
             if "code" in codeList[i] and codeList[i]["code"] == 101 and CODE101 is True:
                 isVar = False
 
+                # Check for Ta_ face name mappings first (before other processing)
+                if FACENAME101 and len(codeList[i]["parameters"]) > 0:
+                    faceName = codeList[i]["parameters"][0]
+                    if isinstance(faceName, str):
+                        if "Ta_Leona" in faceName:
+                            speaker = "Leona"
+                            i += 1
+                            continue
+                        if "Ta_Rury" in faceName:
+                            speaker = "Rury"
+                            i += 1
+                            continue
+                        if "Ta_Eve" in faceName:
+                            speaker = "Eve"
+                            i += 1
+                            continue
+                        if "Ta_Rebekka" in faceName:
+                            speaker = "Rebecca"
+                            i += 1
+                            continue
+                        if "Ta_Lapis" in faceName:
+                            speaker = "Lapis"
+                            i += 1
+                            continue
+                        if "Ta_Bighand" in faceName:
+                            speaker = "Bighand"
+                            i += 1
+                            continue
+                        if "Ta_Frank" in faceName:
+                            speaker = "Frank"
+                            i += 1
+                            continue
+                        if "Ta_Gang" in faceName:
+                            speaker = "Gang"
+                            i += 1
+                            continue
+                        if "Ta_Gunjin1" in faceName:
+                            speaker = "Soldier 1"
+                            i += 1
+                            continue
+                        if "Ta_Gunjin2" in faceName:
+                            speaker = "Soldier 2"
+                            i += 1
+                            continue
+                        if "Ta_Jesse" in faceName:
+                            speaker = "Jesse"
+                            i += 1
+                            continue
+                        if "Ta_Kotaro" in faceName:
+                            speaker = "Kotaro"
+                            i += 1
+                            continue
+                        if "Ta_Marcus" in faceName:
+                            speaker = "Marcus"
+                            i += 1
+                            continue
+                        if "Ta_Maxwell" in faceName:
+                            speaker = "Maxwell"
+                            i += 1
+                            continue
+                        if "Ta_mitsubai" in faceName:
+                            speaker = "Mitsubai"
+                            i += 1
+                            continue
+                        if "Ta_Ronin" in faceName:
+                            speaker = "Ronin"
+                            i += 1
+                            continue
+                        if "Ta_Shonin" in faceName:
+                            speaker = "Merchant"
+                            i += 1
+                            continue
+                        if "Ta_Yen" in faceName:
+                            speaker = "Yen"
+                            i += 1
+                            continue
+
                 # Grab String
                 jaString = ""
                 if len(codeList[i]["parameters"]) > 4:
@@ -2451,28 +2528,7 @@ def searchCodes(page, pbar, jobList, filename):
                             continue
                     else:
                         speaker = ""
-                elif FACENAME101:
-                    faceName = codeList[i]["parameters"][0]
-                    if "kaogura" in faceName:
-                        speaker = "Rienie"
-                    if faceName == "Actor2_1":
-                        speaker = "Suzune"
-                    if faceName == "Actor3_1":
-                        speaker = "Kaji"
-                    if faceName == "Actor4_1":
-                        speaker = "Kirari"
-                    if faceName == "Actor5_1":
-                        speaker = "Onsen"
-                    if faceName == "Actor6_1":
-                        speaker = "Gufu"
-                    if faceName == "Actor7_1":
-                        speaker = "Kahimeru"
-                    if faceName == "Actor10_1":
-                        speaker = "Miuma"
-                    if faceName == "Actor11_1":
-                        speaker = "Nurari"
-                    if faceName == "Actor12_1":
-                        speaker = "Kokotsuzumi"
+
 
             ## Event Code: 355 or 655 Scripts [Optional]
             if "code" in codeList[i] and (codeList[i]["code"] == 355 or codeList[i]["code"] == 655) and CODE355655 is True:
