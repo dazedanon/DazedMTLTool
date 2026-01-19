@@ -540,31 +540,30 @@ class ConfigTab(QWidget):
             # Ensure .env file exists
             if not self.env_file_path.exists():
                 self.env_file_path.touch()
-                
-            # Save API settings (trim whitespace to prevent accidental spaces in .env)
-            set_key(self.env_file_path, "api", self.api_url_edit.text().strip())
-            set_key(self.env_file_path, "key", self.api_key_edit.text().strip())
-            set_key(self.env_file_path, "organization", self.organization_edit.text().strip())
-            set_key(self.env_file_path, "model", self.model_combo.currentText())
             
-            # Save translation settings
-            set_key(self.env_file_path, "language", self.language_combo.currentText())
-            set_key(self.env_file_path, "timeout", str(self.timeout_spin.value()))
+            # Build config dict for both file and os.environ updates
+            config = {
+                "api": self.api_url_edit.text().strip(),
+                "key": self.api_key_edit.text().strip(),
+                "organization": self.organization_edit.text().strip(),
+                "model": self.model_combo.currentText(),
+                "language": self.language_combo.currentText(),
+                "timeout": str(self.timeout_spin.value()),
+                "fileThreads": str(self.file_threads_spin.value()),
+                "threads": str(self.threads_spin.value()),
+                "batchsize": str(self.batch_size_spin.value()),
+                "frequency_penalty": str(self.frequency_penalty_spin.value()),
+                "width": str(self.width_spin.value()),
+                "listWidth": str(self.list_width_spin.value()),
+                "noteWidth": str(self.note_width_spin.value()),
+                "input_cost": str(self.input_cost_spin.value()),
+                "output_cost": str(self.output_cost_spin.value()),
+            }
             
-            # Save performance settings
-            set_key(self.env_file_path, "fileThreads", str(self.file_threads_spin.value()))
-            set_key(self.env_file_path, "threads", str(self.threads_spin.value()))
-            set_key(self.env_file_path, "batchsize", str(self.batch_size_spin.value()))
-            set_key(self.env_file_path, "frequency_penalty", str(self.frequency_penalty_spin.value()))
-            
-            # Save formatting settings
-            set_key(self.env_file_path, "width", str(self.width_spin.value()))
-            set_key(self.env_file_path, "listWidth", str(self.list_width_spin.value()))
-            set_key(self.env_file_path, "noteWidth", str(self.note_width_spin.value()))
-            
-            # Save custom API settings
-            set_key(self.env_file_path, "input_cost", str(self.input_cost_spin.value()))
-            set_key(self.env_file_path, "output_cost", str(self.output_cost_spin.value()))
+            # Save to .env file and update os.environ so subprocesses inherit new values
+            for key, value in config.items():
+                set_key(self.env_file_path, key, value)
+                os.environ[key] = value
             
             if show_message:
                 QMessageBox.information(self, "Success", "Configuration saved successfully!")
