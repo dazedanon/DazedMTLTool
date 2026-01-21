@@ -264,8 +264,8 @@ def translateRegex(data, filename, translatedList):
         if match:
             jaString = match.group(1)
             
-            # Replace \n with > for translation
-            jaString = jaString.replace('\\n', '>')
+            # Replace linebreaks
+            jaString = jaString.replace('\n', ' ')
             
             # Pass 1 - Collect for batch translation
             if not translatedList:
@@ -291,11 +291,8 @@ def translateRegex(data, filename, translatedList):
                     # Remove speaker prefix from translation
                     translatedText = re.sub(r"^\[?(.+?)\]?\s?[|:]\s?", "", translatedText)
                     
-                    # Convert > back to \n
-                    translatedText = translatedText.replace('>', '\\n')
-
-                    # Escape Quotes
-                    translatedText = translatedText.replace('"', '\\"')
+                    # Textwrap
+                    translatedText = dazedwrap.wrapText(translatedText, width=WIDTH)
 
                     # Set
                     data[i] = data[i].replace(match.group(1), translatedText)
