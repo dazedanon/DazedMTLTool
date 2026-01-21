@@ -293,6 +293,7 @@ def translateRegex(data, filename, translatedList):
                     
                     # Textwrap
                     translatedText = dazedwrap.wrapText(translatedText, width=WIDTH)
+                    translatedText = translatedText.replace('\n', '\\n')
 
                     # Set
                     data[i] = data[i].replace(match.group(1), translatedText)
