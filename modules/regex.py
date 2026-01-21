@@ -265,7 +265,7 @@ def translateRegex(data, filename, translatedList):
             jaString = match.group(1)
             
             # Replace linebreaks
-            jaString = jaString.replace('\n', ' ')
+            jaString = jaString.replace('\\n', ' ')
             
             # Pass 1 - Collect for batch translation
             if not translatedList:
