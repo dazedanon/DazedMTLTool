@@ -295,6 +295,9 @@ def translateRegex(data, filename, translatedList):
                     translatedText = dazedwrap.wrapText(translatedText, width=WIDTH)
                     translatedText = translatedText.replace('\n', '\\n')
 
+                    # Escape Quotes (Required for JSON)
+                    translatedText = re.sub(r'(?<!\\)"', r'\\"', translatedText)
+
                     # Set
                     data[i] = data[i].replace(match.group(1), translatedText)
                     save_progress_lines(data, filename)
