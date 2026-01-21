@@ -2534,54 +2534,94 @@ def searchCodes(page, pbar, jobList, filename):
             if "code" in codeList[i] and (codeList[i]["code"] == 355 or codeList[i]["code"] == 655) and CODE355655 is True:
                 jaString = codeList[i]["parameters"][0]
                 
+                # Patterns: (regex, multiline) - multiline=True means it spans 355 + following 655 codes
                 patterns = {
-                    # "テキスト-": (r"テキスト-(.+)")
-                    # "=": (r'=\s?(.*)",'),
-                    # "var text": (r"var\stext\d+\s=\s\"(.+)\""),
-                    # "logtxt = ": (r"logtxt\s=\s'(.+)'" 
-                    # ".setNickname": (r'.setNickname\(\\?"(.+?)\\?"\)'
-                    # "_subject=": r'_subject=(.+?)(?=[_\\"\]])'
-                    # "text =": (r"text\s*=\s*'(.+[^\\])'"),
-                    # "const text": (r'(const\stext\s?=\s?"(.+)";?)'),
-                    # "ex_a_name": (r'ex_a_name\(\d+,"(.+)"\)'),
-                    # "gameVariables.setValue": (r'\$gameVariables\.setValue\(\d+,\s*"([^"]*)"\)'),
-                    # "BattleManager._logWindow.push('addText'": (r"BattleManager._logWindow.push\('addText',\s'(.+)'\)"),
-                    "BattleManager._logWindow.addText": (r"BattleManager._logWindow.addText\('(.+)'\)"),
+                    # "テキスト-": (r"テキスト-(.+)", False),
+                    # "=": (r'=\s?(.*)",', False),
+                    # "var text": (r"var\stext\d+\s=\s\"(.+)\"", False),
+                    # "logtxt = ": (r"logtxt\s=\s'(.+)'", False),
+                    # ".setNickname": (r'.setNickname\(\\?"(.+?)\\?"\)', False),
+                    # "_subject=": (r'_subject=(.+?)(?=[_\\"\]])', False),
+                    # "text =": (r"text\s*=\s*'(.+[^\\])'", False),
+                    # "const text": (r'(const\stext\s?=\s?"(.+)";?)', False),
+                    # "ex_a_name": (r'ex_a_name\(\d+,"(.+)"\)', False),
+                    # "gameVariables.setValue": (r'\$gameVariables\.setValue\(\d+,\s*"([^"]*)"\)', False),
+                    # "BattleManager._logWindow.push('addText'": (r"BattleManager._logWindow.push\('addText',\s'(.+)'\)", False),
+                    # "BattleManager._logWindow.addText": (r"BattleManager._logWindow.addText\('(.+)'\)", False),
+                    # "this.BLogAdd": (r'this\.BLogAdd\([\s,\d]+"(.+)"\);', False),
+                    # "Fuki_Set": (r'Fuki_Set\([\s,\d\w\W]+?"(.+?)",', False),
+                    # "_EventSetting": (r'_EventSetting[\s,\d\w\W]+?"(.+?)";', False),
+                    # "this.Menu_SexTxtSet(": (r'"(.+)"', True),
+                    # "Rn_RsltTxtArr": (r'"(.+)"', True),
                 }
 
-                for key, (regex) in patterns.items():
+                for key, (regex, multiline) in patterns.items():
                     if key in jaString:
-                        match = re.search(regex, jaString)
-                        if match:
-                            # Check if the match contains actual text (not just numbers/special chars)
-                            if not re.search(r'[a-zA-Z一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]', match.group(1)):
-                                continue
-
-                            # Skip if IGNORETLTEXT is enabled and no Japanese text
-                            if IGNORETLTEXT and not re.search(LANGREGEX, match.group(1)):
-                                continue
-
-                            # Pass 1
-                            if setData:
-                                list355655.append(match.group(1))
-
-                            # Pass 2
-                            else:
-                                # Grab and Replace
-                                translatedText = list355655[0]
-                                list355655.pop(0)
-
-                                # Ensure no quotes in gameVariables
-                                if "gameVariables.setValue" in codeList[i]["parameters"][0]:
-                                    translatedText = translatedText.replace('\"', "'")
+                        # Multi-line pattern: spans 355 + subsequent 655 codes
+                        # Each 655 line is translated separately (as a batch) and stays in its own line
+                        if multiline and codeList[i]["code"] == 355:
+                            textLines = []
+                            textLineIndices = []
+                            j = i + 1
+                            
+                            while j < len(codeList) and codeList[j]["code"] == 655:
+                                param = codeList[j]["parameters"][0] if codeList[j]["parameters"] else ""
+                                textMatch = re.search(regex, param)
+                                if textMatch:
+                                    text = textMatch.group(1)
+                                    if not (IGNORETLTEXT and not re.search(LANGREGEX, text)):
+                                        textLines.append(text)
+                                        textLineIndices.append(j)
+                                j += 1
+                            
+                            if textLines:
+                                if setData:
+                                    # Store each line separately for batch translation
+                                    for text in textLines:
+                                        list355655.append(text)
+                                else:
+                                    # Apply each translated line back to its corresponding 655 code
+                                    for lineIdx in textLineIndices:
+                                        if len(list355655) > 0:
+                                            translatedText = list355655[0]
+                                            list355655.pop(0)
+                                            
+                                            # Replace quotes with apostrophes to avoid breaking plugin
+                                            translatedText = translatedText.replace('\\"', "'")
+                                            translatedText = translatedText.replace('"', "'")
+                                            
+                                            origParam = codeList[lineIdx]["parameters"][0]
+                                            origMatch = re.search(regex, origParam)
+                                            if origMatch:
+                                                codeList[lineIdx]["parameters"][0] = origParam.replace(origMatch.group(1), translatedText)
                                 
-                                # Ensure ' has exactly 2 backslashes (don't double-escape if already escaped)
-                                if "BattleManager" in codeList[i]["parameters"][0]:
-                                    translatedText = re.sub(r"(?<!\\)'", r"\\'", translatedText)
+                                i = j - 1
+                            break
+                        
+                        # Single-line pattern
+                        else:
+                            match = re.search(regex, jaString)
+                            if match:
+                                if not re.search(r'[a-zA-Z一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]', match.group(1)):
+                                    continue
 
-                                # Set
-                                codeList[i]["parameters"][0] = jaString.replace(match.group(1), translatedText)
-                        break
+                                if IGNORETLTEXT and not re.search(LANGREGEX, match.group(1)):
+                                    continue
+
+                                if setData:
+                                    list355655.append(match.group(1))
+                                else:
+                                    translatedText = list355655[0]
+                                    list355655.pop(0)
+
+                                    if "gameVariables.setValue" in codeList[i]["parameters"][0]:
+                                        translatedText = translatedText.replace('\"', "'")
+                                    
+                                    if "BattleManager" in codeList[i]["parameters"][0]:
+                                        translatedText = re.sub(r"(?<!\\)'", r"\\'", translatedText)
+
+                                    codeList[i]["parameters"][0] = jaString.replace(match.group(1), translatedText)
+                            break
 
             ## Event Code: 408 (Script)
             if "code" in codeList[i] and (codeList[i]["code"] == 408) and CODE408 is True:

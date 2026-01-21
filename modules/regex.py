@@ -201,17 +201,16 @@ def translateRegex(data, filename, translatedList):
     speaker = ""
     global LOCK, ESTIMATE, FILENAME, PBAR, MISMATCH
     i = 0
+    
+    # Define regex patterns outside loop
+    lineRegexSpeaker = r'"name":\s?"(.+)",'
+    choiceRegex = r"\$menu_item.+?,(.*?),"
+    titleRegex = r"title\s'(.*)'$"
+    setgamedatatitleRegex = r'\\setgamedatatitle\("(.+?)"\)'
+    dlgRegex = r'\"text\":\s?\"(.+)\",'
+    selRegex = r'\\sel\((.+)\)'
 
     while i < len(data):
-        voice = False
-        lineRegexText = r'●(?:「|　|（)+(.+?)(?:[」）]|$)+'
-        lineRegexSpeaker = r"\\text\(\"(.+?)\"\)"
-        choiceRegex = r"\$menu_item.+?,(.*?),"
-        titleRegex = r"title\s'(.*)'$"
-        setgamedatatitleRegex = r'\\setgamedatatitle\("(.+?)"\)'
-        dlgRegex = r'\\dlg\("(.+?)"\)'
-        selRegex = r'\\sel\((.+)\)'
-        speaker = ""
 
         # Setgamedatatitle
         match = re.search(setgamedatatitleRegex, data[i])
@@ -260,23 +259,34 @@ def translateRegex(data, filename, translatedList):
             tokens[1] += response[1][1] 
             data[i] = data[i].replace(match.group(1), speaker)
 
-        # Dlg (Dialogue prompt/choice)
+        # Dlg (JSON text field)
         match = re.search(dlgRegex, data[i])
         if match:
+            jaString = match.group(1)
+            
             # Pass 1 - Collect for batch translation
             if not translatedList:
-                choiceList.append(match.group(1))
+                # Add with speaker prefix if available
+                if speaker:
+                    stringList.append(f"[{speaker}]: {jaString}")
+                else:
+                    stringList.append(jaString)
+                # Reset speaker after using it
+                speaker = ""
 
             # Pass 2 - Apply translated text
             else:
-                if choiceList:
+                if stringList:
                     # Grab and Pop
-                    translatedText = choiceList[0]
-                    choiceList.pop(0)
+                    translatedText = stringList[0]
+                    stringList.pop(0)
 
                     # Set to None if empty list
-                    if len(choiceList) <= 0:
-                        choiceList = None
+                    if len(stringList) <= 0:
+                        stringList = None
+
+                    # Remove speaker prefix from translation
+                    translatedText = re.sub(r"^\[?(.+?)\]?\s?[|:]\s?", "", translatedText)
 
                     # Escape Quotes
                     translatedText = translatedText.replace('"', '\\"')
@@ -414,11 +424,15 @@ def translateRegex(data, filename, translatedList):
     if not translatedList:
         stringListTL = []
         choiceListTL = []
+        
+        # Set total progress bar for all items
+        totalItems = len(stringList) + len(choiceList)
+        if totalItems > 0:
+            PBAR.total = totalItems
+            PBAR.refresh()
 
         # String List
         if stringList:
-            PBAR.total = len(stringList)
-            PBAR.refresh()
             response = translateAI(stringList, "Reply with the English Translation", True)
             tokens[0] += response[1][0]
             tokens[1] += response[1][1]
