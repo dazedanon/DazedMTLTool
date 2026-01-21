@@ -39,16 +39,16 @@ FILENAME = None
 BRACKETNAMES = False
 
 # CSV Configuration Settings (configurable via GUI)
-CSV_DELIMITER = ","  # CSV delimiter character (comma, semicolon, tab)
-SOURCE_COLUMN = 0  # Which column has the source text to translate (0-indexed)
-TARGET_COLUMN = 1  # Which column to write translations to
-SPEAKER_COLUMN = -1  # Which column has speaker names (-1 = none)
+CSV_DELIMITER = "	"  # CSV delimiter character (comma, semicolon, tab)
+SOURCE_COLUMN = 2  # Which column has the source text to translate (0-indexed)
+TARGET_COLUMN = 3  # Which column to write translations to
+SPEAKER_COLUMN = 1  # Which column has speaker names (-1 = none)
 SKIP_HEADER_ROW = False  # Skip the first row (header)
 USE_TARGET_IF_NOT_EMPTY = False  # Use target column text if not empty (T++ style)
 WRITE_TO_NEXT_COLUMN = False  # Write to column after target instead of overwriting
 PARSE_NAME_TAGS = False  # Parse :name[] tags in text
 PARSE_M_MARKERS = False  # Parse \M markers in text
-REMOVE_FURIGANA = False  # Remove furigana annotations ＜＝＞
+REMOVE_FURIGANA = True  # Remove furigana annotations ＜＝＞
 SKIP_COMMENT_ROWS = False  # Skip rows starting with 'comment'
 
 # Regex - Need to change this if you want to translate from/to other languages. Default is Japanese Regex
