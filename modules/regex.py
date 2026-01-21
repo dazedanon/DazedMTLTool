@@ -203,11 +203,11 @@ def translateRegex(data, filename, translatedList):
     i = 0
     
     # Define regex patterns outside loop
+    dialogueRegex = r'\"text\":\s?\"(.+)\",'
     lineRegexSpeaker = r'"name":\s?"(.+)",'
     choiceRegex = r"\$menu_item.+?,(.*?),"
     titleRegex = r"title\s'(.*)'$"
     setgamedatatitleRegex = r'\\setgamedatatitle\("(.+?)"\)'
-    dlgRegex = r'\"text\":\s?\"(.+)\",'
     selRegex = r'\\sel\((.+)\)'
 
     while i < len(data):
@@ -259,10 +259,13 @@ def translateRegex(data, filename, translatedList):
             tokens[1] += response[1][1] 
             data[i] = data[i].replace(match.group(1), speaker)
 
-        # Dlg (JSON text field)
-        match = re.search(dlgRegex, data[i])
+        # Dialogue (JSON text field)
+        match = re.search(dialogueRegex, data[i])
         if match:
             jaString = match.group(1)
+            
+            # Replace \n with > for translation
+            jaString = jaString.replace('\\n', '>')
             
             # Pass 1 - Collect for batch translation
             if not translatedList:
@@ -287,6 +290,9 @@ def translateRegex(data, filename, translatedList):
 
                     # Remove speaker prefix from translation
                     translatedText = re.sub(r"^\[?(.+?)\]?\s?[|:]\s?", "", translatedText)
+                    
+                    # Convert > back to \n
+                    translatedText = translatedText.replace('>', '\\n')
 
                     # Escape Quotes
                     translatedText = translatedText.replace('"', '\\"')
