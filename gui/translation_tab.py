@@ -1075,7 +1075,7 @@ class TranslationTab(QWidget):
                 ["JSON", [".json"], handleJSON],
                 ["Lune", [".l"], handleLune],
                 ["NScript", [".nscript"], handleOnscripter],
-                ["Wolf RPG", [".txt"], handleWOLF],
+                ["Wolf RPG", [".json"], handleWOLF],
                 ["Wolf RPG 2", [".txt"], handleWOLF2],
                 ["Regex", [".txt", ".json", ".script", ".csv"], handleRegex],
                 ["Text", [".txt", ".srt"], handleText],
