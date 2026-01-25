@@ -73,17 +73,17 @@ CODE300 = False
 CODE250 = False
 
 # Database
-SCENARIOFLAG = False
-OPTIONSFLAG = False
-NPCFLAG = False
-DBNAMEFLAG = False
-DBVALUEFLAG = False
-ITEMFLAG = False
-STATEFLAG = False
-ENEMYFLAG = False
-ARMORFLAG = False
-WEAPONFLAG = False
-SKILLFLAG = False
+SCENARIOFLAG = True
+OPTIONSFLAG = True
+NPCFLAG = True
+DBNAMEFLAG = True
+DBVALUEFLAG = True
+ITEMFLAG = True
+STATEFLAG = True
+ENEMYFLAG = True
+ARMORFLAG = True
+WEAPONFLAG = True
+SKILLFLAG = True
 
 # Initialize Translation Config
 TRANSLATION_CONFIG = TranslationConfig(
@@ -331,6 +331,9 @@ def searchCodes(events, pbar, jobList, filename):
             if codeList[i]["code"] == 101 and CODE101 == True:
                 speakerRegex = r"@\d+\r?\n(.*?)：?\r?\n" # Default: r"@\d+\r?\n(.*)：?\r?\n""
                 textRegex = r"@\d+\r?\n.*?：?\r?\n(.*)" # Default: r"@\d+\r?\n.*：?\r?\n(.*)"
+                # Alternative patterns for messages without @\d+ prefix
+                speakerRegexAlt = r"^(.*?)：\r?\n" # Matches "Name：\n"
+                textRegexAlt = r"^.*?：\r?\n(.*)" # Matches text after "Name：\n"
 
                 # Grab String
                 jaString = codeList[i]["stringArgs"][0]
@@ -339,6 +342,9 @@ def searchCodes(events, pbar, jobList, filename):
                 # Grab Speaker
                 if "\n" in jaString:
                     match = re.search(speakerRegex, jaString)
+                    if not match:
+                        # Try alternative pattern without @\d+ prefix
+                        match = re.search(speakerRegexAlt, jaString)
                     if match:
                         # TL Speaker
                         response = getSpeaker(match.group(1))
@@ -351,9 +357,20 @@ def searchCodes(events, pbar, jobList, filename):
 
                 # Grab Only Text
                 match = re.search(textRegex, jaString, flags=re.DOTALL)
-                if match:
+                if not match:
+                    # Try alternative pattern without @\d+ prefix
+                    match = re.search(textRegexAlt, jaString, flags=re.DOTALL)
+                if not match and re.search(LANGREGEX, jaString):
+                    # No speaker pattern found, treat entire string as text to translate
+                    jaString = jaString
+                    initialJAString = jaString
+                elif match:
                     jaString = match.group(1)
                     initialJAString = jaString
+                else:
+                    jaString = None  # Skip non-translatable text
+                
+                if jaString is not None:
 
                     # Remove Textwrap
                     jaString = jaString.replace("\r", "")
@@ -1168,7 +1185,7 @@ def searchDB(events, pbar, jobList, filename):
                                         dataList[j].update({"value": dataList[j].get("value").replace(ogString, translatedText)})
 
             # Grab Options
-            if table["name"] == "用語設定" and OPTIONSFLAG == True:
+            if table["name"] == "コンフィグ" and OPTIONSFLAG == True:
                 for option in table["data"]:
                     dataList = option["data"]
 
@@ -1282,7 +1299,7 @@ def searchDB(events, pbar, jobList, filename):
                                         dbValueList[0].pop(0)
 
             # Grab Items
-            if table["name"] == "アイテム" and ITEMFLAG == True:
+            if table["name"] == "道具" and ITEMFLAG == True:
                 # Write Category
                 if setData:
                     with open("log/translations.txt", "a", encoding="utf-8") as file:
@@ -1296,7 +1313,7 @@ def searchDB(events, pbar, jobList, filename):
                     font = 20
                     for j in range(len(dataList)):
                         # Name
-                        if dataList[j].get("name") == "アイテム名":
+                        if dataList[j].get("name") == "名前":
                             jaString = dataList[j].get("value")
                             if jaString != "":
                                 # Pass 1 (Grab Data)
@@ -1314,7 +1331,7 @@ def searchDB(events, pbar, jobList, filename):
                                     itemList[0].pop(0)
 
                         # Description
-                        if dataList[j].get("name") == "説明文[2行まで可]":
+                        if dataList[j].get("name") == "説明":
                             # Pass 1 (Grab Data)
                             if setData == False:
                                 if dataList[j].get("value") != "":
@@ -1416,7 +1433,7 @@ def searchDB(events, pbar, jobList, filename):
                     # Parse
                     for j in range(len(dataList)):
                         # Name
-                        if dataList[j].get("name") == "防具の名前":
+                        if dataList[j].get("name") == "名前":
                             # Pass 1 (Grab Data)
                             if setData == False:
                                 if dataList[j].get("value") != "":
@@ -1429,7 +1446,7 @@ def searchDB(events, pbar, jobList, filename):
                                     armorList[0].pop(0)
 
                         # Description
-                        if dataList[j].get("name") == "防具の説明[2行まで可]":
+                        if dataList[j].get("name") == "説明":
                             # Pass 1 (Grab Data)
                             if setData == False:
                                 if dataList[j].get("value") != "":
@@ -1457,7 +1474,7 @@ def searchDB(events, pbar, jobList, filename):
                                     armorList[1].pop(0)
 
             # Grab Enemies
-            if table["name"] == "敵ｷｬﾗ個体ﾃﾞｰﾀ" and ENEMYFLAG == True:
+            if table["name"] == "敵" and ENEMYFLAG == True:
                 for enemy in table["data"]:
                     dataList = enemy["data"]
 
@@ -1513,7 +1530,7 @@ def searchDB(events, pbar, jobList, filename):
                     # Parse
                     for j in range(len(dataList)):
                         # Name
-                        if dataList[j].get("name") == "武器の名前":
+                        if dataList[j].get("name") == "名前":
                             # Pass 1 (Grab Data)
                             if setData == False:
                                 if dataList[j].get("value") != "":
@@ -1526,7 +1543,7 @@ def searchDB(events, pbar, jobList, filename):
                                     weaponsList[0].pop(0)
 
                         # Description
-                        if dataList[j].get("name") == "武器の説明[2行まで可]":
+                        if dataList[j].get("name") == "説明":
                             # Pass 1 (Grab Data)
                             if setData == False:
                                 if dataList[j].get("value") != "":
@@ -1562,7 +1579,7 @@ def searchDB(events, pbar, jobList, filename):
                     # Parse
                     for j in range(len(dataList)):
                         # Name
-                        if dataList[j].get("name") == "技能の名前":
+                        if dataList[j].get("name") == "名前":
                             # Pass 1 (Grab Data)
                             if setData == False:
                                 if dataList[j].get("value") != "":
@@ -1720,14 +1737,14 @@ def searchDB(events, pbar, jobList, filename):
                                     skillList[4].pop(0)
 
             # Grab States
-            if table["name"] == "状態設定" and STATEFLAG == True:
+            if table["name"] == "ステート" and STATEFLAG == True:
                 for state in table["data"]:
                     dataList = state["data"]
 
                     # Parse
                     for j in range(len(dataList)):
                         # Name
-                        if dataList[j].get("name") == "状態名":
+                        if dataList[j].get("name") == "名前":
                             # Pass 1 (Grab Data)
                             if setData == False:
                                 if dataList[j].get("value") != "":
@@ -1765,7 +1782,7 @@ def searchDB(events, pbar, jobList, filename):
                                     stateList[1].pop(0)
 
                         # Log
-                        if dataList[j].get("name") == "発生時の文章[(人名)～]":
+                        if dataList[j].get("name") == "付与時文章":
                             # Pass 1 (Grab Data)
                             if setData == False:
                                 if dataList[j].get("value") != "":
@@ -1803,7 +1820,7 @@ def searchDB(events, pbar, jobList, filename):
                                     stateList[2].pop(0)
 
                         # Log
-                        if dataList[j].get("name") == "行動制限時文章(空欄:ﾅｼ":
+                        if dataList[j].get("name") == "解除時文章":
                             # Pass 1 (Grab Data)
                             if setData == False:
                                 if dataList[j].get("value") != "":

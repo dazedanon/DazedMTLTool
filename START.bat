@@ -38,11 +38,11 @@ if defined VENV_DIR (
                 set VENV_MAJOR=%%a
                 set VENV_MINOR=%%b
             )
-            if !VENV_MAJOR! EQU 3 if !VENV_MINOR! GEQ 12 if !VENV_MINOR! LSS 14 (
-                echo !VENV_DIR! Python version !VENV_PYTHON_VERSION! is compatible ^(^>^=3.12 and ^<3.14^).
+            if !VENV_MAJOR! EQU 3 if !VENV_MINOR! GEQ 12 if !VENV_MINOR! LSS 15 (
+                echo !VENV_DIR! Python version !VENV_PYTHON_VERSION! is compatible ^(^>^=3.12 and ^<3.15^).
                 goto :activate_venv
             ) else (
-                echo !VENV_DIR! Python version !VENV_PYTHON_VERSION! is not supported ^(requires ^>^=3.12 and ^<3.14^)
+                echo !VENV_DIR! Python version !VENV_PYTHON_VERSION! is not supported ^(requires ^>^=3.12 and ^<3.15^)
                 echo Backing up !VENV_DIR!...
                 set "CREATE_VENV_DIR=!VENV_DIR!"
                 call :BackupVenv "!VENV_DIR!"
@@ -63,13 +63,21 @@ if "%NEED_VENV_CREATE%"=="0" goto :activate_venv
 :: Step 2: Find suitable global Python and create a virtual environment
 
 set "FOUND_PYTHON="
-for /f "delims=" %%p in ('where python') do (
+for /f "delims=" %%p in ('where python 2^>nul') do (
     call :CheckPythonVersion "%%p"
 )
 
+:: Fallback: try 'python' directly if 'where' found nothing (handles Windows Store alias)
 if not defined FOUND_PYTHON (
-    echo ERROR: No suitable Python ^(>=3.12 and <3.14^) found in PATH.
-    echo Please install Python 3.12 or 3.13 and ensure it is in your PATH.
+    python --version >nul 2>&1
+    if not errorlevel 1 (
+        call :CheckPythonVersion "python"
+    )
+)
+
+if not defined FOUND_PYTHON (
+    echo ERROR: No suitable Python ^(>=3.12 and <3.15^) found in PATH.
+    echo Please install Python 3.12, 3.13, or 3.14 and ensure it is in your PATH.
     pause
     exit /b 1
 )
@@ -92,12 +100,20 @@ goto :activate_venv
 
 :CheckPythonVersion
 rem -- %1 is the python executable path
-for /f "tokens=2" %%i in ('"%~1" --version 2^>^&1') do set PYTHON_VERSION=%%i
+rem -- Skip if we already found a suitable Python
+if defined FOUND_PYTHON goto :eof
+set "PYTHON_VERSION="
+set "MAJOR="
+set "MINOR="
+for /f "tokens=2" %%i in ('"%~1" --version 2^>nul') do set PYTHON_VERSION=%%i
+if not defined PYTHON_VERSION goto :eof
 for /f "tokens=1,2 delims=." %%a in ("%PYTHON_VERSION%") do (
     set MAJOR=%%a
     set MINOR=%%b
 )
-if !MAJOR! EQU 3 if !MINOR! GEQ 12 if !MINOR! LSS 14 (
+if not defined MAJOR goto :eof
+if not defined MINOR goto :eof
+if !MAJOR! EQU 3 if !MINOR! GEQ 12 if !MINOR! LSS 15 (
     set "FOUND_PYTHON=%~1"
 )
 goto :eof
@@ -115,7 +131,7 @@ if errorlevel 1 (
         call :CheckPythonVersion "%%p"
     )
     if not defined FOUND_PYTHON (
-        echo ERROR: No suitable Python ^(^>^=3.12 and ^<3.14^) found in PATH for recreation.
+        echo ERROR: No suitable Python ^(^>^=3.12 and ^<3.15^) found in PATH for recreation.
         pause
         exit /b 1
     )
