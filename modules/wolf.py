@@ -58,8 +58,8 @@ PBAR = None
 FILENAME = None
 
 # Dialogue / Choices
-CODE101 = True
-CODE102 = True
+CODE101 = False
+CODE102 = False
 
 # Picture
 CODE150 = False
@@ -70,10 +70,10 @@ CODE122 = False
 # Other
 CODE210 = False
 CODE300 = False
-CODE250 = False
+CODE250 = True
 
 # Database
-SCENARIOFLAG = True
+SCENARIOFLAG = False
 OPTIONSFLAG = False
 NPCFLAG = False
 DBNAMEFLAG = False
@@ -682,9 +682,9 @@ def searchCodes(events, pbar, jobList, filename):
             ### Event Code: 250 DB Read/Writes
             if codeList[i]["code"] == 250 and CODE250 == True:
                 # Validate size
-                stringArg = 2
+                stringArg = 0
                 if len(codeList[i]["stringArgs"]) == 4:
-                    if codeList[i]["stringArgs"][1] == "unit"\
+                    if codeList[i]["stringArgs"][1] == "万能ｳｨﾝﾄﾞｳ一時DB"\
                         and codeList[i]["stringArgs"][stringArg] != "":
                         # Font Size
                         fontSize = 0
@@ -888,7 +888,9 @@ def formatDramon(jaString):
 
 def handleScenarioScript(jaString, scriptString=""):
     # Extract Speaker
-    scriptRegex = r"\n?(//.*?\n|//.*|/b.*?\n|[\w]+：\d*.*?\n)"
+    # Updated regex to match speaker names with spaces, hyphens, and other characters
+    # [^\n：]+ matches any character except newline and ： (the speaker name)
+    scriptRegex = r"\n?(//.*?\n|//.*|/b.*?\n|[^\n：]+：\d*\r?\n)"
     match = re.search(scriptRegex, jaString)
     if match:
         if "//" in match.group(1):
@@ -1017,8 +1019,23 @@ def searchDB(events, pbar, jobList, filename):
                                     ogString = jaString
                                     # Extract Speaker
                                     speakerList = handleScenarioScript(jaString)
+                                    
+                                    # Handle simple names without speaker pattern
                                     if not speakerList:
+                                        # Pass 1 (Grab Data) - Simple name
+                                        if setData == False:
+                                            jaString = jaString.replace("\n", " ")
+                                            jaString = jaString.replace("\r", "")
+                                            if jaString.strip():
+                                                scenarioList[0].append(jaString)
+                                        # Pass 2 (Set Data) - Simple name
+                                        else:
+                                            if ogString.strip():
+                                                translatedText = scenarioList[0][0]
+                                                scenarioList[0].pop(0)
+                                                dataList[j].update({"value": dataList[j].get("value").replace(ogString, translatedText)})
                                         continue
+                                        
                                     if speakerList[2]:
                                         jaString = speakerList[0]
                                     speakerNumMatch = re.search(r"：(\d+)", speakerList[1])
@@ -1041,15 +1058,17 @@ def searchDB(events, pbar, jobList, filename):
                                     else:
                                         translatedText = scenarioList[0][0]
                                         scenarioList[0].pop(0)
-                                        translatedText = dazedwrap.wrapText(translatedText, WIDTH)
 
-                                        # Remove Speaker
+                                        # Remove Speaker before wrapping so WIDTH applies to dialogue only
                                         speakerMatch = re.search(r"\[(.+?)\]\s?[|:]\s?", translatedText)
                                         if speakerMatch:
                                             speaker = speakerMatch.group(1).strip()
                                         match = re.search(r'(^\[.+?\]\s?[|:]\s?)', translatedText)
                                         if match:
-                                            translatedText = translatedText.replace(match.group(1), "") 
+                                            translatedText = translatedText.replace(match.group(1), "")
+
+                                        # Wrap text after removing speaker
+                                        translatedText = dazedwrap.wrapText(translatedText, WIDTH) 
 
                                         # Redo Old Speaker Format
                                         speaker = speaker.replace("Speaker", "\b")
@@ -1075,8 +1094,24 @@ def searchDB(events, pbar, jobList, filename):
                                     ogString = jaString
                                     # Extract Speaker
                                     speakerList = handleScenarioScript(jaString)
+                                    
+                                    # Handle simple text without speaker pattern
                                     if not speakerList:
+                                        # Pass 1 (Grab Data) - Simple text
+                                        if setData == False:
+                                            jaString = jaString.replace("\n", " ")
+                                            jaString = jaString.replace("\r", "")
+                                            if jaString.strip():
+                                                scenarioList[1].append(jaString)
+                                        # Pass 2 (Set Data) - Simple text
+                                        else:
+                                            if ogString.strip():
+                                                translatedText = scenarioList[1][0]
+                                                scenarioList[1].pop(0)
+                                                translatedText = dazedwrap.wrapText(translatedText, WIDTH)
+                                                dataList[j].update({"value": dataList[j].get("value").replace(ogString, translatedText)})
                                         continue
+                                        
                                     if speakerList[2]:
                                         jaString = speakerList[0]
                                     speakerNumMatch = re.search(r"：(\d+)", speakerList[1])
@@ -1099,15 +1134,17 @@ def searchDB(events, pbar, jobList, filename):
                                     else:
                                         translatedText = scenarioList[1][0]
                                         scenarioList[1].pop(0)
-                                        translatedText = dazedwrap.wrapText(translatedText, WIDTH)
 
-                                        # Remove Speaker
+                                        # Remove Speaker before wrapping so WIDTH applies to dialogue only
                                         speakerMatch = re.search(r"\[(.+?)\]\s?[|:]\s?", translatedText)
                                         if speakerMatch:
                                             speaker = speakerMatch.group(1).strip()
                                         match = re.search(r'(^\[.+?\]\s?[|:]\s?)', translatedText)
                                         if match:
-                                            translatedText = translatedText.replace(match.group(1), "") 
+                                            translatedText = translatedText.replace(match.group(1), "")
+
+                                        # Wrap text after removing speaker
+                                        translatedText = dazedwrap.wrapText(translatedText, WIDTH) 
 
                                         # Redo Old Speaker Format
                                         speaker = speaker.replace("Speaker", "\b")
@@ -1134,7 +1171,22 @@ def searchDB(events, pbar, jobList, filename):
                                     ogString = jaString
                                     # Extract Speaker
                                     speakerList = handleScenarioScript(jaString)
+                                    
+                                    # Handle simple text without speaker pattern
                                     if not speakerList:
+                                        # Pass 1 (Grab Data) - Simple text
+                                        if setData == False:
+                                            jaString = jaString.replace("\n", " ")
+                                            jaString = jaString.replace("\r", "")
+                                            if jaString.strip():
+                                                scenarioList[2].append(jaString)
+                                        # Pass 2 (Set Data) - Simple text
+                                        else:
+                                            if ogString.strip():
+                                                translatedText = scenarioList[2][0]
+                                                scenarioList[2].pop(0)
+                                                translatedText = dazedwrap.wrapText(translatedText, WIDTH)
+                                                dataList[j].update({"value": dataList[j].get("value").replace(ogString, translatedText)})
                                         continue
                                     if speakerList[2]:
                                         jaString = speakerList[0]
@@ -1158,15 +1210,17 @@ def searchDB(events, pbar, jobList, filename):
                                     else:
                                         translatedText = scenarioList[2][0]
                                         scenarioList[2].pop(0)
-                                        translatedText = dazedwrap.wrapText(translatedText, WIDTH)
 
-                                        # Remove Speaker
+                                        # Remove Speaker before wrapping so WIDTH applies to dialogue only
                                         speakerMatch = re.search(r"\[(.+?)\]\s?[|:]\s?", translatedText)
                                         if speakerMatch:
                                             speaker = speakerMatch.group(1).strip()
                                         match = re.search(r'(^\[.+?\]\s?[|:]\s?)', translatedText)
                                         if match:
-                                            translatedText = translatedText.replace(match.group(1), "") 
+                                            translatedText = translatedText.replace(match.group(1), "")
+
+                                        # Wrap text after removing speaker
+                                        translatedText = dazedwrap.wrapText(translatedText, WIDTH)
 
                                         # Redo Old Speaker Format
                                         speaker = speaker.replace("Speaker", "\b")

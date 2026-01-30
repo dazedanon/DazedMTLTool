@@ -3015,17 +3015,14 @@ def searchCodes(page, pbar, jobList, filename):
 
                     # Check if String
                     if not isinstance(jaString, str):
-                        i += 1
                         continue
 
                     # Only TL the Game Variable
                     if "$gameVariables" not in jaString:
-                        i += 1
                         continue
 
                     # This is going to be the var being set. (IMPORTANT)
                     if "1045" not in jaString:
-                        i += 1
                         continue
 
                     # Need to remove outside code and put it back later
@@ -3142,7 +3139,6 @@ def searchCodes(page, pbar, jobList, filename):
                 # Pass 1: collect
                 if setData:
                     list324.append(collectString)
-                    i += 1
 
                 # Pass 2: apply translations from list324
                 else:
