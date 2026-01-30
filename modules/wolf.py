@@ -74,16 +74,16 @@ CODE250 = False
 
 # Database
 SCENARIOFLAG = True
-OPTIONSFLAG = True
-NPCFLAG = True
-DBNAMEFLAG = True
-DBVALUEFLAG = True
-ITEMFLAG = True
-STATEFLAG = True
-ENEMYFLAG = True
-ARMORFLAG = True
-WEAPONFLAG = True
-SKILLFLAG = True
+OPTIONSFLAG = False
+NPCFLAG = False
+DBNAMEFLAG = False
+DBVALUEFLAG = False
+ITEMFLAG = False
+STATEFLAG = False
+ENEMYFLAG = False
+ARMORFLAG = False
+WEAPONFLAG = False
+SKILLFLAG = False
 
 # Initialize Translation Config
 TRANSLATION_CONFIG = TranslationConfig(
@@ -598,7 +598,7 @@ def searchCodes(events, pbar, jobList, filename):
                     codeList[i]["stringArgs"][1] = translatedText
 
                 # Dialogue
-                elif codeList[i]["stringArgs"][0] == "サイド通知" or codeList[i]["stringArgs"][0] == "X[移]メニュー時文章表示":
+                elif codeList[i]["stringArgs"][0] == "BTLメッセージ" or codeList[i]["stringArgs"][0] == "X[移]メニュー時文章表示":
                     jaString = codeList[i]["stringArgs"][1]
 
                     # Pass 1
@@ -950,7 +950,7 @@ def searchDB(events, pbar, jobList, filename):
     try:
         for table in tableList:
             # Grab NPCs
-            if table["name"] == "戦闘コマンド" and NPCFLAG == True:
+            if table["name"] == "アイドル" and NPCFLAG == True:
                 with open("log/translations.txt", "a", encoding="utf-8") as file:
                     if setData:
                         file.write(f"\n#Actors\n")
@@ -960,7 +960,7 @@ def searchDB(events, pbar, jobList, filename):
                         # Parse
                         for j in range(len(dataList)):
                             # Name
-                            if dataList[j].get("name") == "コマンド名":
+                            if dataList[j].get("name") == "出身":
                                 # Pass 1 (Grab Data)
                                 if setData == False:
                                     if dataList[j].get("value") != "":
@@ -977,7 +977,7 @@ def searchDB(events, pbar, jobList, filename):
                                         npcList[0].pop(0)
 
                             # Description
-                            if dataList[j].get("name") == "コマンドの説明文":
+                            if dataList[j].get("name") == "説明":
                                 # Pass 1 (Grab Data)
                                 if setData == False:
                                     if dataList[j].get("value") != "":
@@ -1002,14 +1002,14 @@ def searchDB(events, pbar, jobList, filename):
                                         npcList[1].pop(0)
 
             # Grab Scenario
-            if "サブキャラ会話" in table["name"] and SCENARIOFLAG == True:
+            if "NPC" in table["name"] and SCENARIOFLAG == True:
                 for scenario in table["data"]:
                     dataList = scenario["data"]
 
                     # Parse
                     for j in range(len(dataList)):
                         # Name
-                        if dataList[j].get("name") == "ルカ好感度MAX":
+                        if dataList[j].get("name") == "名前":
                             if dataList[j].get("value"):
                                 jaStringList = re.split(r'\r\n\r\n|\n\n', dataList[j].get("value"))
                                 for jaString in jaStringList:
@@ -1067,7 +1067,7 @@ def searchDB(events, pbar, jobList, filename):
                                         # Set Data
                                         dataList[j].update({"value": dataList[j].get("value").replace(ogString, translatedText)})
                         # Description
-                        if dataList[j].get("name") == "NULL":
+                        if dataList[j].get("name") == "会話内容":
                             if dataList[j].get("value"):
                                 jaStringList = re.split(r'\r\n\r\n|\n\n', dataList[j].get("value"))
                                 for jaString in jaStringList:
@@ -1185,14 +1185,14 @@ def searchDB(events, pbar, jobList, filename):
                                         dataList[j].update({"value": dataList[j].get("value").replace(ogString, translatedText)})
 
             # Grab Options
-            if table["name"] == "コンフィグ" and OPTIONSFLAG == True:
+            if table["name"] == "NPC" and OPTIONSFLAG == True:
                 for option in table["data"]:
                     dataList = option["data"]
 
                     # Parse
                     for j in range(len(dataList)):
                         # Name
-                        if dataList[j].get("name") == "イベント名":
+                        if dataList[j].get("name") == "名前":
                             if dataList[j].get("value"):
                                 jaString = dataList[j].get("value")
                                 # Pass 1 (Grab Data)
@@ -1310,7 +1310,7 @@ def searchDB(events, pbar, jobList, filename):
                     dataList = item["data"]
 
                     # Parse
-                    font = 20
+                    font = 18
                     for j in range(len(dataList)):
                         # Name
                         if dataList[j].get("name") == "名前":
