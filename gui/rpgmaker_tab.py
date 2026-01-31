@@ -250,37 +250,37 @@ class RPGMakerTab(QWidget):
         col1.addWidget(create_section_label("⚙️ Processing Options"))
         
         self.first_line_speakers_cb, layout = self._create_checkbox_with_description(
-            "First Line = Speaker", "Name on line 1", "First line of text is treated as speaker."
+            "First Line = Speaker", "Treats first line as speaker name", "First line of text is treated as speaker."
         )
         col1.addLayout(layout)
         
         self.facename101_cb, layout = self._create_checkbox_with_description(
-            "Face → Speaker", "Map faces to names", "Uses face filenames to identify speakers."
+            "Face → Speaker", "Use face image as speaker name", "Uses face filenames to identify speakers."
         )
         col1.addLayout(layout)
         
         self.brflag_cb, layout = self._create_checkbox_with_description(
-            "<br> Line Breaks", "HTML-style breaks", "For games using <br> instead of \\n."
+            "<br> Line Breaks", "Use br instead of newlines", "For games using <br> instead of \\n."
         )
         col1.addLayout(layout)
         
         self.fixtextwrap_cb, layout = self._create_checkbox_with_description(
-            "Auto Text Wrap", "Fit to text boxes", "Re-wraps translated text to fit width."
+            "Dazed Text Wrap", "Re-wrap text to fit dialogue box", "Re-wraps translated text based on width settings."
         )
         col1.addLayout(layout)
         
         self.ignoretltext_cb, layout = self._create_checkbox_with_description(
-            "Skip Translated", "Ignore non-JP text", "Skips already translated content."
+            "Skip Translated", "Skip lines without Japanese text", "Skips already translated content."
         )
         col1.addLayout(layout)
 
         self.join408_cb, layout = self._create_checkbox_with_description(
-            "Merge 408 Lines", "Combine comments", "Joins CODE408 lines into one string."
+            "Merge 408 Lines", "Join multi-line comments together", "Joins CODE408 lines into one string."
         )
         col1.addLayout(layout)
 
         self.speakers408_cb, layout = self._create_checkbox_with_description(
-            "408 Speakers", "Detect in comments", "Apply speaker logic to comment blocks."
+            "408 Speakers", "Detect speakers in comment blocks", "Apply speaker logic to comment blocks."
         )
         col1.addLayout(layout)
         
@@ -293,22 +293,22 @@ class RPGMakerTab(QWidget):
         col2.addWidget(create_section_label("💬 Dialogue Content"))
         
         self.code401_cb, layout = self._create_checkbox_with_description(
-            "Show Text (401)", "Main dialogue boxes", "Translates standard message window text."
+            "Show Text (401)", "Standard dialogue text boxes", "Translates standard message window text."
         )
         col2.addLayout(layout)
         
         self.code101_cb, layout = self._create_checkbox_with_description(
-            "Speakers (101)", "Speaker names", "Translates speaker names from Show Text header."
+            "Speakers (101)", "Speaker name field in Show Text", "Translates speaker names from Show Text header."
         )
         col2.addLayout(layout)
         
         self.code405_cb, layout = self._create_checkbox_with_description(
-            "Scrolling Text (405)", "Credits, intros", "Text that scrolls across the screen."
+            "Scrolling Text (405)", "Credits, intros, scroll text", "Text that scrolls across the screen."
         )
         col2.addLayout(layout)
         
         self.code102_cb, layout = self._create_checkbox_with_description(
-            "Choices (102)", "Yes/No options", "Player choice selection menus."
+            "Choices (102)", "Player choice menus (Yes/No)", "Player choice selection menus."
         )
         col2.addLayout(layout)
         
@@ -318,13 +318,13 @@ class RPGMakerTab(QWidget):
         col2.addWidget(create_section_label("📝 Extended Content"))
         
         self.code408_cb, layout = self._create_checkbox_with_description(
-            "Comments (408)", "⚠️ Can be costly!", "Plugin dialogue in comment text."
+            "Comments (408)", "⚠️ Plugin text in comments (costly!)", "Plugin dialogue in comment text."
         )
         self.code408_cb.setStyleSheet("QCheckBox { font-size: 11px; color: #ffaa66; }")
         col2.addLayout(layout)
         
         self.code122_cb, layout = self._create_checkbox_with_description(
-            "Variables (122)", "Dynamic text", "String values in game variables."
+            "Variables (122)", "Text stored in game variables", "String values in game variables."
         )
         col2.addLayout(layout)
         
@@ -367,17 +367,17 @@ class RPGMakerTab(QWidget):
         col3.addWidget(create_section_label("👤 Actor Changes"))
         
         self.code320_cb, layout = self._create_checkbox_with_description(
-            "Change Name (320)", "Rename actors", "Dynamic character name changes."
+            "Change Name (320)", "Actor name change commands", "Dynamic character name changes."
         )
         col3.addLayout(layout)
         
         self.code324_cb, layout = self._create_checkbox_with_description(
-            "Nickname (324)", "Titles like 'Hero'", "Character nickname changes."
+            "Nickname (324)", "Actor nickname/title changes", "Character nickname changes."
         )
         col3.addLayout(layout)
         
         self.code325_cb, layout = self._create_checkbox_with_description(
-            "Profile (325)", "Character bios", "Profile/biography text."
+            "Profile (325)", "Actor profile/biography text", "Profile/biography text."
         )
         col3.addLayout(layout)
         
@@ -386,32 +386,32 @@ class RPGMakerTab(QWidget):
         col3.addWidget(create_section_label("🔧 Scripts & Plugins"))
         
         self.code355655_cb, layout = self._create_checkbox_with_description(
-            "Scripts (355/655)", "Inline JS text", "Text within script commands."
+            "Scripts (355/655)", "Text in inline JavaScript calls", "Text within script commands."
         )
         col3.addLayout(layout)
         
         self.code356_cb, layout = self._create_checkbox_with_description(
-            "Plugin MV (356)", "MV commands", "MV-style plugin parameters."
+            "Plugin MV (356)", "MV plugin command parameters", "MV-style plugin parameters."
         )
         col3.addLayout(layout)
         
         self.code357_cb, layout = self._create_checkbox_with_description(
-            "Plugin MZ (357)", "MZ commands", "MZ-style plugin parameters."
+            "Plugin MZ (357)", "MZ plugin command parameters", "MZ-style plugin parameters."
         )
         col3.addLayout(layout)
         
         self.code657_cb, layout = self._create_checkbox_with_description(
-            "Plugin Ext (657)", "Multi-line data", "Extended plugin command lines."
+            "Plugin Ext (657)", "Extended multi-line plugin data", "Extended plugin command lines."
         )
         col3.addLayout(layout)
         
         self.code111_cb, layout = self._create_checkbox_with_description(
-            "Conditionals (111)", "If/else text", "Text in conditional branches."
+            "Conditionals (111)", "Text in conditional branch checks", "Text in conditional branches."
         )
         col3.addLayout(layout)
         
         self.code108_cb, layout = self._create_checkbox_with_description(
-            "Comments (108)", "Plugin config", "Comment blocks for plugins."
+            "Comments (108)", "Event comment blocks (plugins)", "Comment blocks for plugins."
         )
         col3.addLayout(layout)
         
