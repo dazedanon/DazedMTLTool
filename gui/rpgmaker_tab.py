@@ -29,10 +29,10 @@ def create_section_label(text):
     label = QLabel(text)
     label.setStyleSheet("""
         QLabel {
-            font-size: 12px;
+            font-size: 13px;
             font-weight: bold;
             color: #007acc;
-            padding: 5px 0px 3px 0px;
+            padding: 6px 0px 4px 0px;
             background-color: transparent;
         }
     """)
@@ -206,293 +206,258 @@ class RPGMakerTab(QWidget):
         self.connect_auto_apply()
         
     def _create_checkbox_with_description(self, label_text, description_text, tooltip_text=None):
-        """Create a checkbox with an indented description label below it."""
-        container = QVBoxLayout()
-        container.setSpacing(1)
-        container.setContentsMargins(0, 0, 0, 6)
+        """Create a checkbox with description on the same line."""
+        container = QHBoxLayout()
+        container.setSpacing(8)
+        container.setContentsMargins(0, 2, 0, 2)
         
         checkbox = QCheckBox(label_text)
-        checkbox.setMinimumHeight(22)
-        checkbox.setStyleSheet("QCheckBox { padding: 2px 0px; }")
+        checkbox.setStyleSheet("QCheckBox { font-size: 11px; }")
+        checkbox.setMinimumWidth(175)
+        checkbox.setMaximumWidth(180)
         if tooltip_text:
             checkbox.setToolTip(tooltip_text)
         container.addWidget(checkbox)
         
         if description_text:
-            desc_label = QLabel(description_text)
-            desc_label.setWordWrap(True)
-            desc_label.setMinimumHeight(16)
-            desc_label.setStyleSheet("color: #888888; font-size: 9px; padding-left: 20px; padding-right: 5px;")
-            container.addWidget(desc_label)
+            desc_label = QLabel(f"— {description_text}")
+            desc_label.setStyleSheet("color: #888888; font-size: 10px;")
+            desc_label.setWordWrap(False)
+            container.addWidget(desc_label, 1)
         
         return checkbox, container
     
     def init_ui(self):
-        """Initialize the user interface with compact two-column layout."""
+        """Initialize the user interface with three-column layout."""
         main_layout = QVBoxLayout()
         main_layout.setContentsMargins(15, 15, 15, 15)
-        main_layout.setSpacing(10)
+        main_layout.setSpacing(12)
         
-        # Title and description
+        # Title
         title = "RPG Maker MV/MZ" if self.engine != "ACE" else "RPG Maker Ace"
         title_label = QLabel(f"{title} Translation Settings")
-        title_label.setStyleSheet("font-size: 15px; font-weight: bold; color: #007acc;")
+        title_label.setStyleSheet("font-size: 16px; font-weight: bold; color: #007acc;")
         main_layout.addWidget(title_label)
-
-        description_label = QLabel(
-            "Configure which event codes to translate. Only enable what you need to reduce translation time and costs."
-        )
-        description_label.setWordWrap(True)
-        description_label.setStyleSheet("color: #888888; font-size: 10px; margin-bottom: 5px;")
-        main_layout.addWidget(description_label)
         
-        # Two-column layout for checkboxes
+        # Three-column layout
         columns_layout = QHBoxLayout()
-        columns_layout.setSpacing(40)
+        columns_layout.setSpacing(30)
         
-        # LEFT COLUMN
-        left_column = QVBoxLayout()
-        left_column.setSpacing(3)
+        # ==================== COLUMN 1: PROCESSING ====================
+        col1 = QVBoxLayout()
+        col1.setSpacing(4)
         
-        # ===== DIALOGUE CONTENT SECTION =====
-        left_column.addWidget(create_section_label("💬 Dialogue Content"))
-        
-        self.code401_cb, layout = self._create_checkbox_with_description(
-            "Show Text (401)",
-            "Main dialogue boxes - the primary text players see in conversation.",
-            "Translates standard message window text. This is the core dialogue code."
-        )
-        left_column.addLayout(layout)
-        
-        self.code101_cb, layout = self._create_checkbox_with_description(
-            "Text Setup / Speakers (101)",
-            "Speaker names and face images shown with dialogue.",
-            "Translates speaker names from the Show Text command's header. Enable if your game displays character names."
-        )
-        left_column.addLayout(layout)
-        
-        self.code405_cb, layout = self._create_checkbox_with_description(
-            "Scrolling Text (405)",
-            "Credits, story intros, and scrolling narrative text.",
-            "Translates text that scrolls across the screen, commonly used for introductions or endings."
-        )
-        left_column.addLayout(layout)
-        
-        self.code102_cb, layout = self._create_checkbox_with_description(
-            "Choice Options (102)",
-            "Player choice menus like 'Yes/No' or dialogue options.",
-            "Translates the text shown in player choice selection menus."
-        )
-        left_column.addLayout(layout)
-        
-        left_column.addSpacing(10)
-        
-        # ===== PROCESSING OPTIONS SECTION =====
-        left_column.addWidget(create_section_label("⚙️ Processing Options"))
+        col1.addWidget(create_section_label("⚙️ Processing Options"))
         
         self.first_line_speakers_cb, layout = self._create_checkbox_with_description(
-            "Detect Speaker from First Line",
-            "Treats the first line of dialogue as the speaker's name.",
-            "Enable if your game embeds speaker names in the first line of text rather than using CODE101."
+            "First Line = Speaker", "Name on line 1", "First line of text is treated as speaker."
         )
-        left_column.addLayout(layout)
+        col1.addLayout(layout)
         
         self.facename101_cb, layout = self._create_checkbox_with_description(
-            "Map Face Images to Speakers",
-            "Uses character face filenames to identify speakers.",
-            "Maps face image filenames to speaker names for better context in translations."
+            "Face → Speaker", "Map faces to names", "Uses face filenames to identify speakers."
         )
-        left_column.addLayout(layout)
+        col1.addLayout(layout)
         
         self.brflag_cb, layout = self._create_checkbox_with_description(
-            "Use <br> for Line Breaks",
-            "Parse <br> tags instead of \\n for newlines.",
-            "Some games use HTML-style <br> tags for line breaks instead of standard newline characters."
+            "<br> Line Breaks", "HTML-style breaks", "For games using <br> instead of \\n."
         )
-        left_column.addLayout(layout)
+        col1.addLayout(layout)
         
         self.fixtextwrap_cb, layout = self._create_checkbox_with_description(
-            "Auto-Wrap Translated Text",
-            "Automatically adjusts line lengths to fit text boxes.",
-            "Re-wraps translated text to match the game's text box width settings (WIDTH/NOTEWIDTH)."
+            "Auto Text Wrap", "Fit to text boxes", "Re-wraps translated text to fit width."
         )
-        left_column.addLayout(layout)
+        col1.addLayout(layout)
         
         self.ignoretltext_cb, layout = self._create_checkbox_with_description(
-            "Skip Already-Translated Text",
-            "Ignores text that doesn't match the source language.",
-            "Skips text that appears to already be translated (no Japanese characters detected)."
+            "Skip Translated", "Ignore non-JP text", "Skips already translated content."
         )
-        left_column.addLayout(layout)
+        col1.addLayout(layout)
 
         self.join408_cb, layout = self._create_checkbox_with_description(
-            "Merge Comment Lines (408)",
-            "Combines multi-line comments into single translation units.",
-            "Joins consecutive CODE408 lines into one string, similar to how CODE401 dialogue is handled."
+            "Merge 408 Lines", "Combine comments", "Joins CODE408 lines into one string."
         )
-        left_column.addLayout(layout)
+        col1.addLayout(layout)
 
         self.speakers408_cb, layout = self._create_checkbox_with_description(
-            "Speaker Detection in Comments",
-            "Apply speaker parsing to comment text.",
-            "Enables the same speaker detection logic used for dialogue (401) on comment blocks (408)."
+            "408 Speakers", "Detect in comments", "Apply speaker logic to comment blocks."
         )
-        left_column.addLayout(layout)
-        # Only show SPEAKERS408 for ACE engine (rpgmakerace.py)
-        if self.engine != "ACE":
-            self.speakers408_cb.hide()
+        col1.addLayout(layout)
         
-        left_column.addStretch()
+        col1.addStretch()
         
-        # RIGHT COLUMN  
-        right_column = QVBoxLayout()
-        right_column.setSpacing(3)
+        # ==================== COLUMN 2: DIALOGUE ====================
+        col2 = QVBoxLayout()
+        col2.setSpacing(4)
         
-        # ===== EXTENDED CONTENT SECTION =====
-        right_column.addWidget(create_section_label("📝 Extended Content"))
+        col2.addWidget(create_section_label("💬 Dialogue Content"))
+        
+        self.code401_cb, layout = self._create_checkbox_with_description(
+            "Show Text (401)", "Main dialogue boxes", "Translates standard message window text."
+        )
+        col2.addLayout(layout)
+        
+        self.code101_cb, layout = self._create_checkbox_with_description(
+            "Speakers (101)", "Speaker names", "Translates speaker names from Show Text header."
+        )
+        col2.addLayout(layout)
+        
+        self.code405_cb, layout = self._create_checkbox_with_description(
+            "Scrolling Text (405)", "Credits, intros", "Text that scrolls across the screen."
+        )
+        col2.addLayout(layout)
+        
+        self.code102_cb, layout = self._create_checkbox_with_description(
+            "Choices (102)", "Yes/No options", "Player choice selection menus."
+        )
+        col2.addLayout(layout)
+        
+        col2.addSpacing(15)
+        
+        # Extended Content in column 2
+        col2.addWidget(create_section_label("📝 Extended Content"))
         
         self.code408_cb, layout = self._create_checkbox_with_description(
-            "Comments / Event Text (408)",
-            "⚠️ Plugin-based dialogue and developer comments. Can be costly!",
-            "Translates comment text that some plugins use for displaying dialogue. Enable only if needed."
+            "Comments (408)", "⚠️ Can be costly!", "Plugin dialogue in comment text."
         )
-        self.code408_cb.setStyleSheet("QCheckBox { color: #ffaa66; }")
-        right_column.addLayout(layout)
+        self.code408_cb.setStyleSheet("QCheckBox { font-size: 11px; color: #ffaa66; }")
+        col2.addLayout(layout)
         
         self.code122_cb, layout = self._create_checkbox_with_description(
-            "Control Variables (122)",
-            "Text stored in game variables for dynamic content.",
-            "Translates string values assigned to variables. Used for dynamic dialogue or quest objectives."
+            "Variables (122)", "Dynamic text", "String values in game variables."
         )
-        right_column.addLayout(layout)
+        col2.addLayout(layout)
         
-        # CODE122 Variable Range
-        var_range_layout = QHBoxLayout()
-        var_range_layout.setContentsMargins(20, 0, 0, 0)  # Indent to show it's related to CODE122
+        # Variable Range
+        var_layout = QHBoxLayout()
+        var_layout.setContentsMargins(20, 4, 0, 0)
+        var_layout.setSpacing(6)
+        lbl = QLabel("Variables ID Range:")
+        lbl.setStyleSheet("color: #888; font-size: 10px;")
+        var_layout.addWidget(lbl)
+        from PyQt5.QtWidgets import QLineEdit
+        from PyQt5.QtGui import QIntValidator
         
-        var_range_label = QLabel("Variable ID Range:")
-        var_range_label.setToolTip("Only variables with IDs in this range will be translated.\nUseful for limiting translation to specific game variables.")
-        var_range_label.setStyleSheet("color: #888888; font-size: 10px;")
-        var_range_layout.addWidget(var_range_label)
+        self.code122_var_min_spin = QLineEdit()
+        self.code122_var_min_spin.setValidator(QIntValidator(0, 99999))
+        self.code122_var_min_spin.setText("0")
+        self.code122_var_min_spin.setFixedWidth(60)
+        self.code122_var_min_spin.setAlignment(Qt.AlignCenter)
+        self.code122_var_min_spin.setStyleSheet("QLineEdit { padding: 4px; font-size: 11px; }")
+        var_layout.addWidget(self.code122_var_min_spin)
+        dash_lbl = QLabel("-")
+        dash_lbl.setStyleSheet("font-size: 11px;")
+        var_layout.addWidget(dash_lbl)
+        self.code122_var_max_spin = QLineEdit()
+        self.code122_var_max_spin.setValidator(QIntValidator(1, 99999))
+        self.code122_var_max_spin.setText("2000")
+        self.code122_var_max_spin.setFixedWidth(60)
+        self.code122_var_max_spin.setAlignment(Qt.AlignCenter)
+        self.code122_var_max_spin.setStyleSheet("QLineEdit { padding: 4px; font-size: 11px; }")
+        var_layout.addWidget(self.code122_var_max_spin)
+        var_layout.addStretch()
+        col2.addLayout(var_layout)
         
-        self.code122_var_min_spin = QSpinBox()
-        self.code122_var_min_spin.setRange(0, 99999)
-        self.code122_var_min_spin.setValue(0)
-        self.code122_var_min_spin.setMinimumWidth(70)
-        self.code122_var_min_spin.setToolTip("Minimum variable ID (inclusive)")
-        var_range_layout.addWidget(self.code122_var_min_spin)
+        col2.addStretch()
         
-        var_range_layout.addWidget(QLabel("to"))
+        # ==================== COLUMN 3: ACTORS & SCRIPTS ====================
+        col3 = QVBoxLayout()
+        col3.setSpacing(4)
         
-        self.code122_var_max_spin = QSpinBox()
-        self.code122_var_max_spin.setRange(1, 99999)
-        self.code122_var_max_spin.setValue(2000)
-        self.code122_var_max_spin.setMinimumWidth(70)
-        self.code122_var_max_spin.setToolTip("Maximum variable ID (exclusive)")
-        var_range_layout.addWidget(self.code122_var_max_spin)
-        
-        var_range_layout.addStretch()
-        right_column.addLayout(var_range_layout)
-        
-        right_column.addSpacing(10)
-        
-        # ===== ACTOR CHANGES SECTION =====
-        right_column.addWidget(create_section_label("👤 Actor Modifications"))
+        col3.addWidget(create_section_label("👤 Actor Changes"))
         
         self.code320_cb, layout = self._create_checkbox_with_description(
-            "Change Actor Name (320)",
-            "Commands that rename characters during gameplay.",
-            "Translates text used when the game changes a character's display name via event commands."
+            "Change Name (320)", "Rename actors", "Dynamic character name changes."
         )
-        right_column.addLayout(layout)
+        col3.addLayout(layout)
         
         self.code324_cb, layout = self._create_checkbox_with_description(
-            "Change Nickname (324)",
-            "Commands that change character titles/nicknames.",
-            "Translates nickname/title changes like 'Hero' or 'The Brave' assigned during gameplay."
+            "Nickname (324)", "Titles like 'Hero'", "Character nickname changes."
         )
-        right_column.addLayout(layout)
+        col3.addLayout(layout)
         
         self.code325_cb, layout = self._create_checkbox_with_description(
-            "Change Profile (325)",
-            "Commands that update character biography text.",
-            "Translates profile/biography text updates for characters shown in status screens."
+            "Profile (325)", "Character bios", "Profile/biography text."
         )
-        right_column.addLayout(layout)
+        col3.addLayout(layout)
         
-        right_column.addSpacing(10)
+        col3.addSpacing(15)
         
-        # ===== SCRIPTS & PLUGINS SECTION =====
-        right_column.addWidget(create_section_label("🔧 Scripts & Plugins"))
+        col3.addWidget(create_section_label("🔧 Scripts & Plugins"))
         
         self.code355655_cb, layout = self._create_checkbox_with_description(
-            "Script Calls (355/655)",
-            "Inline JavaScript code that may contain text strings.",
-            "Translates text within script commands. Use carefully - may affect code execution."
+            "Scripts (355/655)", "Inline JS text", "Text within script commands."
         )
-        right_column.addLayout(layout)
+        col3.addLayout(layout)
         
         self.code356_cb, layout = self._create_checkbox_with_description(
-            "Plugin Commands MV (356)",
-            "MV-style plugin commands with text parameters.",
-            "Translates parameters passed to plugins. Common in games with custom dialogue systems."
+            "Plugin MV (356)", "MV commands", "MV-style plugin parameters."
         )
-        right_column.addLayout(layout)
+        col3.addLayout(layout)
         
         self.code357_cb, layout = self._create_checkbox_with_description(
-            "Plugin Commands MZ (357)",
-            "MZ-style plugin commands with structured data.",
-            "Translates the newer MZ plugin command format introduced in RPG Maker MZ."
+            "Plugin MZ (357)", "MZ commands", "MZ-style plugin parameters."
         )
-        right_column.addLayout(layout)
+        col3.addLayout(layout)
         
         self.code657_cb, layout = self._create_checkbox_with_description(
-            "Plugin Commands Extended (657)",
-            "Additional plugin command continuation lines.",
-            "Translates extended plugin command data that spans multiple lines."
+            "Plugin Ext (657)", "Multi-line data", "Extended plugin command lines."
         )
-        right_column.addLayout(layout)
-        
-        right_column.addSpacing(10)
-        
-        # ===== CONDITIONAL & COMMENTS SECTION =====
-        right_column.addWidget(create_section_label("🔀 Logic & Comments"))
+        col3.addLayout(layout)
         
         self.code111_cb, layout = self._create_checkbox_with_description(
-            "Conditional Branches (111)",
-            "Text in if/else conditions and script checks.",
-            "Translates text within conditional branch commands. May contain dialogue triggers."
+            "Conditionals (111)", "If/else text", "Text in conditional branches."
         )
-        right_column.addLayout(layout)
+        col3.addLayout(layout)
         
         self.code108_cb, layout = self._create_checkbox_with_description(
-            "Developer Comments (108)",
-            "Event comments often used by plugins for config.",
-            "Translates comment blocks. Many plugins use comments for dialogue or notetags."
+            "Comments (108)", "Plugin config", "Comment blocks for plugins."
         )
-        right_column.addLayout(layout)
+        col3.addLayout(layout)
         
-        right_column.addStretch()
+        col3.addStretch()
         
-        # Add both columns
-        columns_layout.addLayout(left_column, 1)
-        columns_layout.addLayout(right_column, 1)
-        main_layout.addLayout(columns_layout)
+        # Add all three columns
+        columns_layout.addLayout(col1, 1)
+        columns_layout.addLayout(col2, 1)
+        columns_layout.addLayout(col3, 1)
+        main_layout.addLayout(columns_layout, 1)
         
-        # Bottom buttons
-        main_layout.addSpacing(12)
+        # ==================== WORKFLOW GUIDE ====================
+        workflow_label = create_section_label("📋 Translation Workflow")
+        main_layout.addWidget(workflow_label)
+        
+        workflow_text = QLabel(
+            "<table style='font-size: 11px; color: #aaa;' cellspacing='4'>"
+            "<tr><td><b style='color:#007acc'>1.</b></td><td>Parse Speakers → vocab.txt</td>"
+            "<td width='30'></td><td><b style='color:#007acc'>6.</b></td><td>Replace any \\\\n[0-999] variables with actor names</td></tr>"
+            "<tr><td><b style='color:#007acc'>2.</b></td><td>Identify speaker genders (use Copilot with map files)</td>"
+            "<td></td><td><b style='color:#007acc'>7.</b></td><td>Translate Maps & CommonEvents</td></tr>"
+            "<tr><td><b style='color:#007acc'>3.</b></td><td>Translate Actors.json, MapInfos.json</td>"
+            "<td></td><td><b style='color:#007acc'>8.</b></td><td>Edit plugins for menus/text</td></tr>"
+            "<tr><td><b style='color:#007acc'>4.</b></td><td>Translate Items, System, Weapons, etc.</td>"
+            "<td></td><td><b style='color:#007acc'>9.</b></td><td>Translate CODE 122 vars, 356 plugins as needed</td></tr>"
+            "<tr><td><b style='color:#007acc'>5.</b></td><td>Find speaker names (101, brackets, first lines)</td>"
+            "<td></td><td><b style='color:#007acc'>10.</b></td><td>Playtest → OCR → Search → Fix → Repeat</td></tr>"
+            "</table>"
+            "<div style='margin-top: 8px; color: #cc9944;'>⚠️ Some text (e.g. CODE 122 variables) may only update on a new save file.</div>"
+        )
+        workflow_text.setWordWrap(True)
+        workflow_text.setTextFormat(Qt.RichText)
+        workflow_text.setStyleSheet("background-color: #252525; padding: 12px; border-radius: 5px;")
+        main_layout.addWidget(workflow_text)
+        
+        # Reset button
         button_layout = QHBoxLayout()
-        button_layout.setSpacing(10)
-        
         self.reset_button = QPushButton("🔄 Reset to Defaults")
         self.reset_button.clicked.connect(self.reset_to_defaults_with_message)
-        self.reset_button.setMaximumWidth(180)
         self.reset_button.setMinimumHeight(32)
-        
+        self.reset_button.setMaximumWidth(160)
+        self.reset_button.setStyleSheet("font-size: 11px;")
         button_layout.addWidget(self.reset_button)
         button_layout.addStretch()
-        
         main_layout.addLayout(button_layout)
+        
         self.setLayout(main_layout)
         
     def reset_to_defaults(self):
@@ -544,8 +509,8 @@ class RPGMakerTab(QWidget):
             
             # Variable codes
             self.code122_cb.stateChanged.disconnect()
-            self.code122_var_min_spin.valueChanged.disconnect()
-            self.code122_var_max_spin.valueChanged.disconnect()
+            self.code122_var_min_spin.editingFinished.disconnect()
+            self.code122_var_max_spin.editingFinished.disconnect()
             
             # Plugins / Scripts / Other codes
             self.code355655_cb.stateChanged.disconnect()
@@ -584,8 +549,8 @@ class RPGMakerTab(QWidget):
         
         # Variable codes
         self.code122_cb.stateChanged.connect(lambda: self.apply_to_module(show_messages=False))
-        self.code122_var_min_spin.valueChanged.connect(lambda: self.apply_to_module(show_messages=False))
-        self.code122_var_max_spin.valueChanged.connect(lambda: self.apply_to_module(show_messages=False))
+        self.code122_var_min_spin.editingFinished.connect(lambda: self.apply_to_module(show_messages=False))
+        self.code122_var_max_spin.editingFinished.connect(lambda: self.apply_to_module(show_messages=False))
         
         # Plugins / Scripts / Other codes
         self.code355655_cb.stateChanged.connect(lambda: self.apply_to_module(show_messages=False))
@@ -620,8 +585,8 @@ class RPGMakerTab(QWidget):
             
             # Variable codes
             "CODE122": self.code122_cb.isChecked(),
-            "CODE122_VAR_MIN": self.code122_var_min_spin.value(),
-            "CODE122_VAR_MAX": self.code122_var_max_spin.value(),
+            "CODE122_VAR_MIN": int(self.code122_var_min_spin.text() or 0),
+            "CODE122_VAR_MAX": int(self.code122_var_max_spin.text() or 2000),
             
             # Plugins / Scripts / Other codes
             "CODE355655": self.code355655_cb.isChecked(),
@@ -666,8 +631,8 @@ class RPGMakerTab(QWidget):
         
         # Variable codes
         self.code122_cb.setChecked(config.get("CODE122", False))
-        self.code122_var_min_spin.setValue(config.get("CODE122_VAR_MIN", 0))
-        self.code122_var_max_spin.setValue(config.get("CODE122_VAR_MAX", 2000))
+        self.code122_var_min_spin.setText(str(config.get("CODE122_VAR_MIN", 0)))
+        self.code122_var_max_spin.setText(str(config.get("CODE122_VAR_MAX", 2000)))
         
         # Plugins / Scripts / Other codes
         self.code355655_cb.setChecked(config.get("CODE355655", False))
