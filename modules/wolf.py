@@ -82,7 +82,7 @@ ITEMFLAG = False
 STATEFLAG = False
 ENEMYFLAG = False
 ARMORFLAG = False
-WEAPONFLAG = False
+WEAPONFLAG = True
 SKILLFLAG = False
 
 # Initialize Translation Config
@@ -1004,14 +1004,14 @@ def searchDB(events, pbar, jobList, filename):
                                         npcList[1].pop(0)
 
             # Grab Scenario
-            if "NPC" in table["name"] and SCENARIOFLAG == True:
+            if "デートキャラ" in table["name"] and SCENARIOFLAG == True:
                 for scenario in table["data"]:
                     dataList = scenario["data"]
 
                     # Parse
                     for j in range(len(dataList)):
                         # Name
-                        if dataList[j].get("name") == "名前":
+                        if dataList[j].get("name") == "NULL":
                             if dataList[j].get("value"):
                                 jaStringList = re.split(r'\r\n\r\n|\n\n', dataList[j].get("value"))
                                 for jaString in jaStringList:
@@ -1086,7 +1086,7 @@ def searchDB(events, pbar, jobList, filename):
                                         # Set Data
                                         dataList[j].update({"value": dataList[j].get("value").replace(ogString, translatedText)})
                         # Description
-                        if dataList[j].get("name") == "会話内容":
+                        if dataList[j].get("name") == "不正解会話":
                             if dataList[j].get("value"):
                                 jaStringList = re.split(r'\r\n\r\n|\n\n', dataList[j].get("value"))
                                 for jaString in jaStringList:
@@ -1163,7 +1163,7 @@ def searchDB(events, pbar, jobList, filename):
                                         dataList[j].update({"value": dataList[j].get("value").replace(ogString, translatedText)})
 
                         # Description
-                        if dataList[j].get("name") == "NULL":
+                        if dataList[j].get("name") == "正解会話":
                             if dataList[j].get("value"):
                                 jaStringList = re.split(r'\r\n\r\n|\n\n', dataList[j].get("value"))
                                 for jaString in jaStringList:
