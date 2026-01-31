@@ -205,6 +205,28 @@ class RPGMakerTab(QWidget):
         # Now connect auto-apply so user changes will update the module
         self.connect_auto_apply()
         
+    def _create_checkbox_with_description(self, label_text, description_text, tooltip_text=None):
+        """Create a checkbox with an indented description label below it."""
+        container = QVBoxLayout()
+        container.setSpacing(1)
+        container.setContentsMargins(0, 0, 0, 6)
+        
+        checkbox = QCheckBox(label_text)
+        checkbox.setMinimumHeight(22)
+        checkbox.setStyleSheet("QCheckBox { padding: 2px 0px; }")
+        if tooltip_text:
+            checkbox.setToolTip(tooltip_text)
+        container.addWidget(checkbox)
+        
+        if description_text:
+            desc_label = QLabel(description_text)
+            desc_label.setWordWrap(True)
+            desc_label.setMinimumHeight(16)
+            desc_label.setStyleSheet("color: #888888; font-size: 9px; padding-left: 20px; padding-right: 5px;")
+            container.addWidget(desc_label)
+        
+        return checkbox, container
+    
     def init_ui(self):
         """Initialize the user interface with compact two-column layout."""
         main_layout = QVBoxLayout()
@@ -218,7 +240,7 @@ class RPGMakerTab(QWidget):
         main_layout.addWidget(title_label)
 
         description_label = QLabel(
-            "Enable event codes to translate. Only enable what you need to reduce translation time and costs."
+            "Configure which event codes to translate. Only enable what you need to reduce translation time and costs."
         )
         description_label.setWordWrap(True)
         description_label.setStyleSheet("color: #888888; font-size: 10px; margin-bottom: 5px;")
@@ -230,77 +252,126 @@ class RPGMakerTab(QWidget):
         
         # LEFT COLUMN
         left_column = QVBoxLayout()
-        left_column.setSpacing(5)
+        left_column.setSpacing(3)
         
-        # General Configuration
-        left_column.addWidget(create_section_label("⚙️ General Options"))
-        self.first_line_speakers_cb = QCheckBox("First Line Speakers")
-        self.first_line_speakers_cb.setToolTip("Enable if first line of CODE401 contains speaker name")
-        left_column.addWidget(self.first_line_speakers_cb)
+        # ===== DIALOGUE CONTENT SECTION =====
+        left_column.addWidget(create_section_label("💬 Dialogue Content"))
         
-        self.facename101_cb = QCheckBox("Face Name in CODE101")
-        self.facename101_cb.setToolTip("Enable to translate face names in CODE101")
-        left_column.addWidget(self.facename101_cb)
+        self.code401_cb, layout = self._create_checkbox_with_description(
+            "Show Text (401)",
+            "Main dialogue boxes - the primary text players see in conversation.",
+            "Translates standard message window text. This is the core dialogue code."
+        )
+        left_column.addLayout(layout)
         
-        self.brflag_cb = QCheckBox("Scan <br> For Newlines")
-        self.brflag_cb.setToolTip("Changes scanning for newlines from \\n to &lt;br&gt;")
-        left_column.addWidget(self.brflag_cb)
+        self.code101_cb, layout = self._create_checkbox_with_description(
+            "Text Setup / Speakers (101)",
+            "Speaker names and face images shown with dialogue.",
+            "Translates speaker names from the Show Text command's header. Enable if your game displays character names."
+        )
+        left_column.addLayout(layout)
         
-        self.fixtextwrap_cb = QCheckBox("Fix Text Wrap")
-        self.fixtextwrap_cb.setToolTip("Automatically fix text wrapping issues")
-        left_column.addWidget(self.fixtextwrap_cb)
+        self.code405_cb, layout = self._create_checkbox_with_description(
+            "Scrolling Text (405)",
+            "Credits, story intros, and scrolling narrative text.",
+            "Translates text that scrolls across the screen, commonly used for introductions or endings."
+        )
+        left_column.addLayout(layout)
         
-        self.ignoretltext_cb = QCheckBox("Ignore TL Text")
-        self.ignoretltext_cb.setToolTip("Ignore already translated text")
-        left_column.addWidget(self.ignoretltext_cb)
+        self.code102_cb, layout = self._create_checkbox_with_description(
+            "Choice Options (102)",
+            "Player choice menus like 'Yes/No' or dialogue options.",
+            "Translates the text shown in player choice selection menus."
+        )
+        left_column.addLayout(layout)
+        
+        left_column.addSpacing(10)
+        
+        # ===== PROCESSING OPTIONS SECTION =====
+        left_column.addWidget(create_section_label("⚙️ Processing Options"))
+        
+        self.first_line_speakers_cb, layout = self._create_checkbox_with_description(
+            "Detect Speaker from First Line",
+            "Treats the first line of dialogue as the speaker's name.",
+            "Enable if your game embeds speaker names in the first line of text rather than using CODE101."
+        )
+        left_column.addLayout(layout)
+        
+        self.facename101_cb, layout = self._create_checkbox_with_description(
+            "Map Face Images to Speakers",
+            "Uses character face filenames to identify speakers.",
+            "Maps face image filenames to speaker names for better context in translations."
+        )
+        left_column.addLayout(layout)
+        
+        self.brflag_cb, layout = self._create_checkbox_with_description(
+            "Use <br> for Line Breaks",
+            "Parse <br> tags instead of \\n for newlines.",
+            "Some games use HTML-style <br> tags for line breaks instead of standard newline characters."
+        )
+        left_column.addLayout(layout)
+        
+        self.fixtextwrap_cb, layout = self._create_checkbox_with_description(
+            "Auto-Wrap Translated Text",
+            "Automatically adjusts line lengths to fit text boxes.",
+            "Re-wraps translated text to match the game's text box width settings (WIDTH/NOTEWIDTH)."
+        )
+        left_column.addLayout(layout)
+        
+        self.ignoretltext_cb, layout = self._create_checkbox_with_description(
+            "Skip Already-Translated Text",
+            "Ignores text that doesn't match the source language.",
+            "Skips text that appears to already be translated (no Japanese characters detected)."
+        )
+        left_column.addLayout(layout)
 
-        self.join408_cb = QCheckBox("Join 408 Codes")
-        self.join408_cb.setToolTip("Join 408 codes into a single string")
-        left_column.addWidget(self.join408_cb)
+        self.join408_cb, layout = self._create_checkbox_with_description(
+            "Merge Comment Lines (408)",
+            "Combines multi-line comments into single translation units.",
+            "Joins consecutive CODE408 lines into one string, similar to how CODE401 dialogue is handled."
+        )
+        left_column.addLayout(layout)
 
-        self.speakers408_cb = QCheckBox("Process Speakers in 408")
-        self.speakers408_cb.setToolTip("Apply speaker detection and processing to code 408 (same as code 401)")
-        left_column.addWidget(self.speakers408_cb)
+        self.speakers408_cb, layout = self._create_checkbox_with_description(
+            "Speaker Detection in Comments",
+            "Apply speaker parsing to comment text.",
+            "Enables the same speaker detection logic used for dialogue (401) on comment blocks (408)."
+        )
+        left_column.addLayout(layout)
         # Only show SPEAKERS408 for ACE engine (rpgmakerace.py)
         if self.engine != "ACE":
             self.speakers408_cb.hide()
-
-        left_column.addSpacing(15)
         
-        # Main Codes
-        left_column.addWidget(create_section_label("💬 Main Dialogue (Recommended)"))
-        self.code401_cb = QCheckBox("CODE401 - Dialogue Text")
-        left_column.addWidget(self.code401_cb)
-
-        self.code101_cb = QCheckBox("CODE101 - Speakers and Faces")
-        self.code101_cb.setToolTip("Many games use this for speaker names")
-        left_column.addWidget(self.code101_cb)
+        left_column.addStretch()
         
-        self.code405_cb = QCheckBox("CODE405 - Scrolling Text")
-        left_column.addWidget(self.code405_cb)
+        # RIGHT COLUMN  
+        right_column = QVBoxLayout()
+        right_column.setSpacing(3)
         
-        self.code102_cb = QCheckBox("CODE102 - Choices")
-        left_column.addWidget(self.code102_cb)
+        # ===== EXTENDED CONTENT SECTION =====
+        right_column.addWidget(create_section_label("📝 Extended Content"))
         
-        left_column.addSpacing(15)
+        self.code408_cb, layout = self._create_checkbox_with_description(
+            "Comments / Event Text (408)",
+            "⚠️ Plugin-based dialogue and developer comments. Can be costly!",
+            "Translates comment text that some plugins use for displaying dialogue. Enable only if needed."
+        )
+        self.code408_cb.setStyleSheet("QCheckBox { color: #ffaa66; }")
+        right_column.addLayout(layout)
         
-        # Optional Codes
-        left_column.addWidget(create_section_label("📝 Optional Codes"))
-        self.code408_cb = QCheckBox("CODE408 - Comments and Alternative Text")
-        self.code408_cb.setToolTip("Can significantly increase costs")
-        self.code408_cb.setStyleSheet("QCheckBox { color: #ff9999; }")
-        left_column.addWidget(self.code408_cb)
-        
-        self.code122_cb = QCheckBox("CODE122 - Control Variables")
-        self.code122_cb.setToolTip("Translate text stored in game variables (e.g. dynamic dialogue)")
-        left_column.addWidget(self.code122_cb)
+        self.code122_cb, layout = self._create_checkbox_with_description(
+            "Control Variables (122)",
+            "Text stored in game variables for dynamic content.",
+            "Translates string values assigned to variables. Used for dynamic dialogue or quest objectives."
+        )
+        right_column.addLayout(layout)
         
         # CODE122 Variable Range
         var_range_layout = QHBoxLayout()
         var_range_layout.setContentsMargins(20, 0, 0, 0)  # Indent to show it's related to CODE122
         
         var_range_label = QLabel("Variable ID Range:")
-        var_range_label.setToolTip("Only variables with IDs in this range will be translated.\\nUseful for limiting translation to specific game variables.")
+        var_range_label.setToolTip("Only variables with IDs in this range will be translated.\nUseful for limiting translation to specific game variables.")
         var_range_label.setStyleSheet("color: #888888; font-size: 10px;")
         var_range_layout.addWidget(var_range_label)
         
@@ -321,43 +392,85 @@ class RPGMakerTab(QWidget):
         var_range_layout.addWidget(self.code122_var_max_spin)
         
         var_range_layout.addStretch()
-        left_column.addLayout(var_range_layout)
+        right_column.addLayout(var_range_layout)
         
-        left_column.addStretch()
+        right_column.addSpacing(10)
         
-        # RIGHT COLUMN  
-        right_column = QVBoxLayout()
-        right_column.setSpacing(5)
+        # ===== ACTOR CHANGES SECTION =====
+        right_column.addWidget(create_section_label("👤 Actor Modifications"))
         
-        # Plugins / Scripts / Other Codes
-        right_column.addWidget(create_section_label("🔧 Plugins / Scripts / Other"))
+        self.code320_cb, layout = self._create_checkbox_with_description(
+            "Change Actor Name (320)",
+            "Commands that rename characters during gameplay.",
+            "Translates text used when the game changes a character's display name via event commands."
+        )
+        right_column.addLayout(layout)
         
-        self.code355655_cb = QCheckBox("CODE355/655 - Script/Plugin Commands (MZ)")
-        right_column.addWidget(self.code355655_cb)
+        self.code324_cb, layout = self._create_checkbox_with_description(
+            "Change Nickname (324)",
+            "Commands that change character titles/nicknames.",
+            "Translates nickname/title changes like 'Hero' or 'The Brave' assigned during gameplay."
+        )
+        right_column.addLayout(layout)
         
-        self.code357_cb = QCheckBox("CODE357 - Plugin Commands")
-        right_column.addWidget(self.code357_cb)
+        self.code325_cb, layout = self._create_checkbox_with_description(
+            "Change Profile (325)",
+            "Commands that update character biography text.",
+            "Translates profile/biography text updates for characters shown in status screens."
+        )
+        right_column.addLayout(layout)
         
-        self.code657_cb = QCheckBox("CODE657 - Plugin Commands (Extended)")
-        right_column.addWidget(self.code657_cb)
+        right_column.addSpacing(10)
         
-        self.code356_cb = QCheckBox("CODE356 - System Settings")
-        right_column.addWidget(self.code356_cb)
+        # ===== SCRIPTS & PLUGINS SECTION =====
+        right_column.addWidget(create_section_label("🔧 Scripts & Plugins"))
         
-        self.code320_cb = QCheckBox("CODE320 - Change Name")
-        right_column.addWidget(self.code320_cb)
+        self.code355655_cb, layout = self._create_checkbox_with_description(
+            "Script Calls (355/655)",
+            "Inline JavaScript code that may contain text strings.",
+            "Translates text within script commands. Use carefully - may affect code execution."
+        )
+        right_column.addLayout(layout)
         
-        self.code324_cb = QCheckBox("CODE324 - Change Nickname")
-        right_column.addWidget(self.code324_cb)
+        self.code356_cb, layout = self._create_checkbox_with_description(
+            "Plugin Commands MV (356)",
+            "MV-style plugin commands with text parameters.",
+            "Translates parameters passed to plugins. Common in games with custom dialogue systems."
+        )
+        right_column.addLayout(layout)
         
-        self.code325_cb = QCheckBox("CODE325 - Change Profile")
-        right_column.addWidget(self.code325_cb)
+        self.code357_cb, layout = self._create_checkbox_with_description(
+            "Plugin Commands MZ (357)",
+            "MZ-style plugin commands with structured data.",
+            "Translates the newer MZ plugin command format introduced in RPG Maker MZ."
+        )
+        right_column.addLayout(layout)
         
-        self.code111_cb = QCheckBox("CODE111 - Conditional Branch")
-        right_column.addWidget(self.code111_cb)
+        self.code657_cb, layout = self._create_checkbox_with_description(
+            "Plugin Commands Extended (657)",
+            "Additional plugin command continuation lines.",
+            "Translates extended plugin command data that spans multiple lines."
+        )
+        right_column.addLayout(layout)
         
-        self.code108_cb = QCheckBox("CODE108 - Comments")
-        right_column.addWidget(self.code108_cb)
+        right_column.addSpacing(10)
+        
+        # ===== CONDITIONAL & COMMENTS SECTION =====
+        right_column.addWidget(create_section_label("🔀 Logic & Comments"))
+        
+        self.code111_cb, layout = self._create_checkbox_with_description(
+            "Conditional Branches (111)",
+            "Text in if/else conditions and script checks.",
+            "Translates text within conditional branch commands. May contain dialogue triggers."
+        )
+        right_column.addLayout(layout)
+        
+        self.code108_cb, layout = self._create_checkbox_with_description(
+            "Developer Comments (108)",
+            "Event comments often used by plugins for config.",
+            "Translates comment blocks. Many plugins use comments for dialogue or notetags."
+        )
+        right_column.addLayout(layout)
         
         right_column.addStretch()
         
