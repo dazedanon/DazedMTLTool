@@ -1636,7 +1636,7 @@ def searchCodes(page, pbar, jobList, filename):
             nametag = ""
 
             ## Event Code: 401 Show Text
-            if "code" in codeList[i] and codeList[i]["code"] in [401, 405, -1] and (CODE401 or CODE405):
+            if "code" in codeList[i] and codeList[i]["code"] in [401, 405, -1] and ((codeList[i]["code"] in [401, -1] and CODE401) or (codeList[i]["code"] == 405 and CODE405)):
                 # Save Code and starting index (j)
                 code = codeList[i]["code"]
                 j = i
@@ -1895,6 +1895,12 @@ def searchCodes(page, pbar, jobList, filename):
                     if ffMatch != None:
                         finalJAString = finalJAString.replace(ffMatch.group(1), "")
                         nametag = ffMatch.group(1) + nametag
+
+                    # Remove bare escape codes at start (e.g. \\mn\\tmn, \\tmn, \\mn, \\vc)
+                    bareMatch = re.match(r"^(\\mn\\tmn|\\tmn|\\mn|\\vc)", finalJAString)
+                    if bareMatch is not None:
+                        finalJAString = finalJAString[len(bareMatch.group(0)):]
+                        nametag = bareMatch.group(0) + nametag
 
                     # Remove _ABL Codes
                     ffMatch = re.search(r"^(_ABL).*", finalJAString)

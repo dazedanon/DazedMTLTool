@@ -70,11 +70,11 @@ CODE122 = False
 # Other
 CODE210 = False
 CODE300 = False
-CODE250 = True
+CODE250 = False
 
 # Database
 SCENARIOFLAG = False
-OPTIONSFLAG = False
+OPTIONSFLAG = True
 NPCFLAG = False
 DBNAMEFLAG = False
 DBVALUEFLAG = False
@@ -82,7 +82,7 @@ ITEMFLAG = False
 STATEFLAG = False
 ENEMYFLAG = False
 ARMORFLAG = False
-WEAPONFLAG = True
+WEAPONFLAG = False
 SKILLFLAG = False
 
 # Initialize Translation Config
@@ -1239,14 +1239,14 @@ def searchDB(events, pbar, jobList, filename):
                                         dataList[j].update({"value": dataList[j].get("value").replace(ogString, translatedText)})
 
             # Grab Options
-            if table["name"] == "NPC" and OPTIONSFLAG == True:
+            if table["name"] == "クイズ" and OPTIONSFLAG == True:
                 for option in table["data"]:
                     dataList = option["data"]
 
                     # Parse
                     for j in range(len(dataList)):
                         # Name
-                        if dataList[j].get("name") == "名前":
+                        if dataList[j].get("name") == "問":
                             if dataList[j].get("value"):
                                 jaString = dataList[j].get("value")
                                 # Pass 1 (Grab Data)
@@ -1260,7 +1260,7 @@ def searchDB(events, pbar, jobList, filename):
                                     dataList[j].update({"value": dataList[j].get("value").replace(jaString, translatedText)})
 
                         # Description 1
-                        if dataList[j].get("name") == "プロフ":
+                        if dataList[j].get("name") == "3":
                             if dataList[j].get("value"):
                                 jaString = dataList[j].get("value")
                                 # Pass 1 (Grab Data)
@@ -1277,7 +1277,7 @@ def searchDB(events, pbar, jobList, filename):
                                     dataList[j].update({"value": dataList[j].get("value").replace(jaString, translatedText)})
 
                         # Description 2
-                        if dataList[j].get("name") == "防御破壊文言":
+                        if dataList[j].get("name") == "4":
                             if dataList[j].get("value"):
                                 jaString = dataList[j].get("value")
                                 # Pass 1 (Grab Data)
