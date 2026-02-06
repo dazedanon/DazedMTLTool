@@ -223,10 +223,16 @@ def translatePlugin(data, pbar, filename, translatedList):
     if len(translatedList) > 0:
         questList = translatedList[0]
         custom = translatedList[1]
+        sceneMenuText = translatedList[2] if len(translatedList) > 2 else []
+        sceneMenuCommonHelpText = translatedList[3] if len(translatedList) > 3 else []
+        sceneMenuHelpText = translatedList[4] if len(translatedList) > 4 else []
         setData = True
     else:
         questList = [[], [], [], [], [], []]
         custom = []
+        sceneMenuText = []
+        sceneMenuCommonHelpText = []
+        sceneMenuHelpText = []
         setData = False
     currentGroup = []
     tokens = [0, 0]
@@ -594,6 +600,117 @@ def translatePlugin(data, pbar, filename, translatedList):
                             data[i] = data[i].replace(originalString, translatedText)
                             saveCheckLines(data, filename)
 
+        # SceneCustomMenu - Text (Command Labels)
+        regex = r'[\\]+"Text[\\]+":[\\]+"(.+?)[\\]+"'
+        matchList = re.findall(regex, data[i])
+        if len(matchList) > 0:
+            for match in matchList:
+                if match:
+                    jaString = match
+                    originalString = jaString
+
+                    # Make sure it contains Japanese
+                    if not re.search(LANGREGEX, jaString):
+                        continue
+
+                    # Make sure didn't grab only backslashes
+                    if re.search(r"^[\\]+$", jaString):
+                        continue
+
+                    if jaString.replace("\u3000", "").strip():
+                        # Pass 1
+                        if setData == False:
+                            sceneMenuText.append(jaString.strip())
+
+                        # Pass 2
+                        else:
+                            if sceneMenuText:
+                                # Grab and Pop
+                                translatedText = sceneMenuText[0]
+                                sceneMenuText.pop(0)
+
+                                # Replace quotes
+                                translatedText = translatedText.replace('"', "'")
+                                translatedText = re.sub(r"([^\\'])'" , r"\1\\'", translatedText)
+
+                                # Set Data
+                                data[i] = data[i].replace(originalString, translatedText)
+                                saveCheckLines(data, filename)
+
+        # SceneCustomMenu - CommonHelpText
+        regex = r'[\\]+"CommonHelpText[\\]+":[\\]+"(.+?)[\\]+"'
+        matchList = re.findall(regex, data[i])
+        if len(matchList) > 0:
+            for match in matchList:
+                if match:
+                    jaString = match
+                    originalString = jaString
+
+                    # Make sure it contains Japanese
+                    if not re.search(LANGREGEX, jaString):
+                        continue
+
+                    # Make sure didn't grab only backslashes
+                    if re.search(r"^[\\]+$", jaString):
+                        continue
+
+                    if jaString.replace("\u3000", "").strip():
+                        # Pass 1
+                        if setData == False:
+                            sceneMenuCommonHelpText.append(jaString.strip())
+
+                        # Pass 2
+                        else:
+                            if sceneMenuCommonHelpText:
+                                # Grab and Pop
+                                translatedText = sceneMenuCommonHelpText[0]
+                                sceneMenuCommonHelpText.pop(0)
+
+                                # Replace quotes
+                                translatedText = translatedText.replace('"', "'")
+                                translatedText = re.sub(r"([^\\'])'" , r"\1\\'", translatedText)
+
+                                # Set Data
+                                data[i] = data[i].replace(originalString, translatedText)
+                                saveCheckLines(data, filename)
+
+        # SceneCustomMenu - HelpText (Command Help)
+        regex = r'[\\]+"HelpText[\\]+":[\\]+"(.+?)[\\]+"'
+        matchList = re.findall(regex, data[i])
+        if len(matchList) > 0:
+            for match in matchList:
+                if match:
+                    jaString = match
+                    originalString = jaString
+
+                    # Make sure it contains Japanese
+                    if not re.search(LANGREGEX, jaString):
+                        continue
+
+                    # Make sure didn't grab only backslashes
+                    if re.search(r"^[\\]+$", jaString):
+                        continue
+
+                    if jaString.replace("\u3000", "").strip():
+                        # Pass 1
+                        if setData == False:
+                            sceneMenuHelpText.append(jaString.strip())
+
+                        # Pass 2
+                        else:
+                            if sceneMenuHelpText:
+                                # Grab and Pop
+                                translatedText = sceneMenuHelpText[0]
+                                sceneMenuHelpText.pop(0)
+
+                                # Replace quotes
+                                translatedText = translatedText.replace('"', "'")
+                                translatedText = re.sub(r"([^\\'])'" , r"\1\\'", translatedText)
+
+                                # Set Data
+                                data[i] = data[i].replace(originalString, translatedText)
+                                saveCheckLines(data, filename)
+
         # Next Line
         i += 1
 
@@ -688,9 +805,85 @@ def translatePlugin(data, pbar, filename, translatedList):
                 if filename not in MISMATCH:
                     MISMATCH.append(filename)
 
+    # SceneCustomMenu Text
+    sceneMenuTextTL = []
+    sceneMenuCommonHelpTextTL = []
+    sceneMenuHelpTextTL = []
+
+    if sceneMenuText:
+        # Set Progress
+        pbar.total = len(sceneMenuText)
+        pbar.refresh()
+        PBAR = pbar
+
+        # TL
+        response = translateAI(sceneMenuText, "Menu Item", True)
+        tokens[0] += response[1][0]
+        tokens[1] += response[1][1]
+        sceneMenuTextResponse = response[0]
+
+        # Check Mismatch
+        if len(sceneMenuText) == len(sceneMenuTextResponse):
+            sceneMenuTextTL = sceneMenuTextResponse
+            translate = True
+
+        # Mismatch
+        else:
+            with LOCK:
+                if filename not in MISMATCH:
+                    MISMATCH.append(filename)
+
+    # SceneCustomMenu CommonHelpText
+    if sceneMenuCommonHelpText:
+        # Set Progress
+        pbar.total = len(sceneMenuCommonHelpText)
+        pbar.refresh()
+        PBAR = pbar
+
+        # TL
+        response = translateAI(sceneMenuCommonHelpText, "Menu Help Text", True)
+        tokens[0] += response[1][0]
+        tokens[1] += response[1][1]
+        sceneMenuCommonHelpTextResponse = response[0]
+
+        # Check Mismatch
+        if len(sceneMenuCommonHelpText) == len(sceneMenuCommonHelpTextResponse):
+            sceneMenuCommonHelpTextTL = sceneMenuCommonHelpTextResponse
+            translate = True
+
+        # Mismatch
+        else:
+            with LOCK:
+                if filename not in MISMATCH:
+                    MISMATCH.append(filename)
+
+    # SceneCustomMenu HelpText
+    if sceneMenuHelpText:
+        # Set Progress
+        pbar.total = len(sceneMenuHelpText)
+        pbar.refresh()
+        PBAR = pbar
+
+        # TL
+        response = translateAI(sceneMenuHelpText, "Menu Help Text", True)
+        tokens[0] += response[1][0]
+        tokens[1] += response[1][1]
+        sceneMenuHelpTextResponse = response[0]
+
+        # Check Mismatch
+        if len(sceneMenuHelpText) == len(sceneMenuHelpTextResponse):
+            sceneMenuHelpTextTL = sceneMenuHelpTextResponse
+            translate = True
+
+        # Mismatch
+        else:
+            with LOCK:
+                if filename not in MISMATCH:
+                    MISMATCH.append(filename)
+
     # Pass 2
     if translate and not setData:
-        translatePlugin(data, pbar, filename, [questListTL, customTL])
+        translatePlugin(data, pbar, filename, [questListTL, customTL, sceneMenuTextTL, sceneMenuCommonHelpTextTL, sceneMenuHelpTextTL])
     return tokens
 
 # Save some money and enter the character before translation

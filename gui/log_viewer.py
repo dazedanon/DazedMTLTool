@@ -187,8 +187,8 @@ class LogViewer(QWidget):
         if not self._tail_f and self._tail_path.exists():
             try:
                 self._tail_f = open(self._tail_path, 'r', encoding='utf-8', errors='ignore')
-                # Seek to end so we only read new lines
-                self._tail_f.seek(0, os.SEEK_END)
+                # Read from the beginning since this is a per-run file that was
+                # created after we started tailing — we want all its content.
             except Exception:
                 pass  # Will try again next poll
         
