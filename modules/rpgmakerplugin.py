@@ -155,6 +155,7 @@ def openFiles(filename):
 
 
 def parsePlugin(readFile, filename):
+    global PBAR
     totalTokens = [0, 0]
 
     # Read File into data
@@ -163,6 +164,7 @@ def parsePlugin(readFile, filename):
     # Create Progress Bar
     with tqdm(bar_format=BAR_FORMAT, position=POSITION, leave=LEAVE) as pbar:
         pbar.desc = filename
+        PBAR = pbar
 
         try:
             result = translatePlugin(data, pbar, filename, [])
@@ -719,13 +721,20 @@ def translatePlugin(data, pbar, filename, translatedList):
     questListTL = [[], [], [], [], [], []]
     customTL = []
 
+    # Compute combined total for progress bar across all categories
+    combinedTotal = (
+        sum(len(quest) for quest in questList)
+        + len(custom)
+        + len(sceneMenuText)
+        + len(sceneMenuCommonHelpText)
+        + len(sceneMenuHelpText)
+    )
+    if combinedTotal > 0:
+        pbar.total = combinedTotal
+        pbar.refresh()
+
     # Quest
     if len(questList) > 0:
-        # Set Progress
-        pbar.total = sum(len(quest) for quest in questList)
-        pbar.refresh()
-        PBAR = pbar
-
         # Quest Name
         response = translateAI(questList[0], "Quest Name", True)
         tokens[0] += response[1][0]
@@ -783,11 +792,6 @@ def translatePlugin(data, pbar, filename, translatedList):
 
     # Custom
     if custom:
-        # Set Progress
-        pbar.total = len(custom)
-        pbar.refresh()
-        PBAR = pbar
-
         # TL
         response = translateAI(custom, "Relic Name", True)
         tokens[0] += response[1][0]
@@ -811,11 +815,6 @@ def translatePlugin(data, pbar, filename, translatedList):
     sceneMenuHelpTextTL = []
 
     if sceneMenuText:
-        # Set Progress
-        pbar.total = len(sceneMenuText)
-        pbar.refresh()
-        PBAR = pbar
-
         # TL
         response = translateAI(sceneMenuText, "Menu Item", True)
         tokens[0] += response[1][0]
@@ -835,11 +834,6 @@ def translatePlugin(data, pbar, filename, translatedList):
 
     # SceneCustomMenu CommonHelpText
     if sceneMenuCommonHelpText:
-        # Set Progress
-        pbar.total = len(sceneMenuCommonHelpText)
-        pbar.refresh()
-        PBAR = pbar
-
         # TL
         response = translateAI(sceneMenuCommonHelpText, "Menu Help Text", True)
         tokens[0] += response[1][0]
@@ -859,11 +853,6 @@ def translatePlugin(data, pbar, filename, translatedList):
 
     # SceneCustomMenu HelpText
     if sceneMenuHelpText:
-        # Set Progress
-        pbar.total = len(sceneMenuHelpText)
-        pbar.refresh()
-        PBAR = pbar
-
         # TL
         response = translateAI(sceneMenuHelpText, "Menu Help Text", True)
         tokens[0] += response[1][0]
