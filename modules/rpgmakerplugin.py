@@ -228,6 +228,9 @@ def translatePlugin(data, pbar, filename, translatedList):
         sceneMenuText = translatedList[2] if len(translatedList) > 2 else []
         sceneMenuCommonHelpText = translatedList[3] if len(translatedList) > 3 else []
         sceneMenuHelpText = translatedList[4] if len(translatedList) > 4 else []
+        sceneMenuDrawText = translatedList[5] if len(translatedList) > 5 else []
+        sceneMenuStatLabel = translatedList[6] if len(translatedList) > 6 else []
+        saveParamName = translatedList[7] if len(translatedList) > 7 else []
         setData = True
     else:
         questList = [[], [], [], [], [], []]
@@ -235,6 +238,9 @@ def translatePlugin(data, pbar, filename, translatedList):
         sceneMenuText = []
         sceneMenuCommonHelpText = []
         sceneMenuHelpText = []
+        sceneMenuDrawText = []
+        sceneMenuStatLabel = []
+        saveParamName = []
         setData = False
     currentGroup = []
     tokens = [0, 0]
@@ -244,6 +250,8 @@ def translatePlugin(data, pbar, filename, translatedList):
     i = 0
     in_disp_list = False
     brace_count = 0
+    _pending_drawtext = {}   # Deferred drawTextEx brace label replacements (longest-first)
+    _pending_statlabel = {}  # Deferred drawTextEx stat label replacements (longest-first)
 
     # Category
     with open("log/translations.txt", "a+", encoding="utf-8") as tlFile:
@@ -713,6 +721,135 @@ def translatePlugin(data, pbar, filename, translatedList):
                                 data[i] = data[i].replace(originalString, translatedText)
                                 saveCheckLines(data, filename)
 
+        # NUUN_SaveScreen - ParamName (save screen labels like 現在地, プレイ時間, 所持金)
+        regex = r'[\\]+"ParamName[\\]+":[\\]+"(.+?)[\\]+"'
+        matchList = re.findall(regex, data[i])
+        if len(matchList) > 0:
+            for match in matchList:
+                if match:
+                    jaString = match
+                    originalString = jaString
+
+                    # Make sure it contains Japanese
+                    if not re.search(LANGREGEX, jaString):
+                        continue
+
+                    # Make sure didn't grab only backslashes
+                    if re.search(r"^[\\]+$", jaString):
+                        continue
+
+                    if jaString.replace("\u3000", "").strip():
+                        # Pass 1
+                        if setData == False:
+                            saveParamName.append(jaString.strip())
+
+                        # Pass 2
+                        else:
+                            if saveParamName:
+                                # Grab and Pop
+                                translatedText = saveParamName[0]
+                                saveParamName.pop(0)
+
+                                # Replace quotes
+                                translatedText = translatedText.replace('"', "'")
+                                translatedText = re.sub(r"([^\\'])'" , r"\1\\'", translatedText)
+
+                                # Set Data
+                                data[i] = data[i].replace(originalString, translatedText)
+                                saveCheckLines(data, filename)
+
+        # DrawTextEx - Brace-delimited labels (e.g., \}【口づけ】\{, \}回数：\{)
+        # Only process lines containing drawTextEx calls
+        if 'drawTextEx' in data[i]:
+            regex = r'[\\]+\}(.+?)[\\]+\{'
+            matchList = re.findall(regex, data[i])
+            if len(matchList) > 0:
+                for match in matchList:
+                    if match:
+                        jaString = match
+                        originalString = jaString
+
+                        # Skip game variable references (handled separately)
+                        if '$gameVariables' in jaString:
+                            continue
+
+                        # Make sure it contains Japanese
+                        if not re.search(LANGREGEX, jaString):
+                            continue
+
+                        if jaString.replace("\u3000", "").strip():
+                            # Pass 1 (deduplicated)
+                            if setData == False:
+                                if jaString.strip() not in sceneMenuDrawText:
+                                    sceneMenuDrawText.append(jaString.strip())
+
+                            # Pass 2 (collect mapping, skip duplicates)
+                            else:
+                                if sceneMenuDrawText and originalString not in _pending_drawtext:
+                                    # Grab and Pop
+                                    translatedText = sceneMenuDrawText[0]
+                                    sceneMenuDrawText.pop(0)
+
+                                    # Replace quotes
+                                    translatedText = translatedText.replace('"', "'")
+
+                                    # Queue for deferred replacement
+                                    _pending_drawtext[originalString] = translatedText
+
+            # Apply deferred replacements longest-first to avoid substring collisions
+            # (e.g., replacing 回数： before 使用回数： would corrupt the longer string)
+            if setData and _pending_drawtext:
+                for orig in sorted(_pending_drawtext, key=len, reverse=True):
+                    data[i] = data[i].replace(orig, _pending_drawtext[orig])
+                _pending_drawtext.clear()
+                saveCheckLines(data, filename)
+
+        # DrawTextEx - Stat labels (e.g., C[16]攻撃力\\...C[0])
+        if 'drawTextEx' in data[i]:
+            regex = r'C\[\d+\]([^C\\,`\[\]]+?)[\\]+C\[0\]'
+            matchList = re.findall(regex, data[i])
+            if len(matchList) > 0:
+                for match in matchList:
+                    if match:
+                        jaString = match
+                        originalString = jaString
+
+                        # Make sure it contains Japanese
+                        if not re.search(LANGREGEX, jaString):
+                            continue
+
+                        if jaString.replace("\u3000", "").strip():
+                            # Pass 1 (deduplicated)
+                            if setData == False:
+                                if jaString.strip() not in sceneMenuStatLabel:
+                                    sceneMenuStatLabel.append(jaString.strip())
+
+                            # Pass 2 (collect mapping, skip duplicates)
+                            else:
+                                if sceneMenuStatLabel and originalString not in _pending_statlabel:
+                                    # Grab and Pop
+                                    translatedText = sceneMenuStatLabel[0]
+                                    sceneMenuStatLabel.pop(0)
+
+                                    # Queue for deferred replacement
+                                    _pending_statlabel[originalString] = translatedText
+
+            # Apply deferred replacements longest-first to avoid substring collisions
+            if setData and _pending_statlabel:
+                for orig in sorted(_pending_statlabel, key=len, reverse=True):
+                    data[i] = data[i].replace(orig, _pending_statlabel[orig])
+                _pending_statlabel.clear()
+                saveCheckLines(data, filename)
+
+        # DrawTextEx - Game variable counter word (hardcoded: 回 → time(s))
+        if setData and 'drawTextEx' in data[i] and '$gameVariables' in data[i]:
+            data[i] = re.sub(
+                r'(\$\{\$gameVariables\.value\(\d+\)\}\s*)回',
+                r'\1x',
+                data[i]
+            )
+            saveCheckLines(data, filename)
+
         # Next Line
         i += 1
 
@@ -728,6 +865,9 @@ def translatePlugin(data, pbar, filename, translatedList):
         + len(sceneMenuText)
         + len(sceneMenuCommonHelpText)
         + len(sceneMenuHelpText)
+        + len(sceneMenuDrawText)
+        + len(sceneMenuStatLabel)
+        + len(saveParamName)
     )
     if combinedTotal > 0:
         pbar.total = combinedTotal
@@ -813,6 +953,9 @@ def translatePlugin(data, pbar, filename, translatedList):
     sceneMenuTextTL = []
     sceneMenuCommonHelpTextTL = []
     sceneMenuHelpTextTL = []
+    sceneMenuDrawTextTL = []
+    sceneMenuStatLabelTL = []
+    saveParamNameTL = []
 
     if sceneMenuText:
         # TL
@@ -870,9 +1013,66 @@ def translatePlugin(data, pbar, filename, translatedList):
                 if filename not in MISMATCH:
                     MISMATCH.append(filename)
 
+    # DrawTextEx - Brace-delimited labels (tracker section headers and field labels)
+    if sceneMenuDrawText:
+        # TL
+        response = translateAI(sceneMenuDrawText, "Status Tracker Label", True)
+        tokens[0] += response[1][0]
+        tokens[1] += response[1][1]
+        sceneMenuDrawTextResponse = response[0]
+
+        # Check Mismatch
+        if len(sceneMenuDrawText) == len(sceneMenuDrawTextResponse):
+            sceneMenuDrawTextTL = sceneMenuDrawTextResponse
+            translate = True
+
+        # Mismatch
+        else:
+            with LOCK:
+                if filename not in MISMATCH:
+                    MISMATCH.append(filename)
+
+    # DrawTextEx - Stat labels (e.g., 攻撃力, 魔力, etc.)
+    if sceneMenuStatLabel:
+        # TL
+        response = translateAI(sceneMenuStatLabel, "Character Stat Name", True)
+        tokens[0] += response[1][0]
+        tokens[1] += response[1][1]
+        sceneMenuStatLabelResponse = response[0]
+
+        # Check Mismatch
+        if len(sceneMenuStatLabel) == len(sceneMenuStatLabelResponse):
+            sceneMenuStatLabelTL = sceneMenuStatLabelResponse
+            translate = True
+
+        # Mismatch
+        else:
+            with LOCK:
+                if filename not in MISMATCH:
+                    MISMATCH.append(filename)
+
+    # NUUN_SaveScreen ParamName
+    if saveParamName:
+        # TL
+        response = translateAI(saveParamName, "Save Screen Label", True)
+        tokens[0] += response[1][0]
+        tokens[1] += response[1][1]
+        saveParamNameResponse = response[0]
+
+        # Check Mismatch
+        if len(saveParamName) == len(saveParamNameResponse):
+            saveParamNameTL = saveParamNameResponse
+            translate = True
+
+        # Mismatch
+        else:
+            with LOCK:
+                if filename not in MISMATCH:
+                    MISMATCH.append(filename)
+
     # Pass 2
     if translate and not setData:
-        translatePlugin(data, pbar, filename, [questListTL, customTL, sceneMenuTextTL, sceneMenuCommonHelpTextTL, sceneMenuHelpTextTL])
+        translatePlugin(data, pbar, filename, [questListTL, customTL, sceneMenuTextTL, sceneMenuCommonHelpTextTL, sceneMenuHelpTextTL, sceneMenuDrawTextTL, sceneMenuStatLabelTL, saveParamNameTL])
     return tokens
 
 # Save some money and enter the character before translation
