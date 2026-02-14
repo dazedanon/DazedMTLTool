@@ -13,7 +13,7 @@ from colorama import Fore
 from dotenv import load_dotenv
 from retry import retry
 from tqdm import tqdm
-from util.translation import TranslationConfig, translateAI as sharedtranslateAI, getPricingConfig, calculateCost, getPricingConfig, calculateCost
+from util.translation import TranslationConfig, translateAI as sharedtranslateAI, getPricingConfig, calculateCost, getPricingConfig, calculateCost, get_var_translation, set_var_translations_batch
 
 # Globals
 MODEL = os.getenv("model")
@@ -75,6 +75,48 @@ LEAVE = False
 FIRSTLINESPEAKERS = False
 # FACENAME101: Map face name -> speaker.
 FACENAME101 = False
+# Face name -> speaker mapping for FACENAME101.
+# Matching: if face string contains "_talk", split on it and look up the prefix;
+# otherwise try startswith against each key (longest key first).
+FACENAME101_MAP = {
+    "aglo": "Agro",
+    "Ai": "AI",
+    "cron": "Cron",
+    "diado": "Diad",
+    "doctor": "Doctor",
+    "dragon": "Dragon",
+    "dragonpeaple": "Dragonpeople",
+    "Eno": "Eno",
+    "fight": "Fight",
+    "kajua": "Kajua",
+    "last_boss": "Last Boss",
+    "MC": "MC",
+    "mizel": "Mizel",
+    "peaple": "People",
+    "professor": "Professor",
+    "ReceptionWoman": "ReceptionWoman",
+    "risa": "Risalue",
+    "roma": "Romasha",
+    "romasha": "Romasha",
+    "spina_dragonewt": "Spina Dragonewt",
+    "spina": "Spina",
+    "supi": "Supi",
+    "TMob": "TMob",
+    "TMobBlue": "TMobBlue",
+    "TMobGreen": "TMobGreen",
+    "TMobOrange": "TMobOrange",
+    "TMobPink": "TMobPink",
+    "TMobsyota": "TMobsyota",
+    "TMobYellow": "TMobYellow",
+    "TMobZERO": "TMobZERO",
+    "Trash": "Trash",
+    "underpeaple": "Underpeople",
+    "vanila": "Vanilla",
+    "Yudo": "Yudonge",
+    "zizi": "Zizi",
+}
+# Pre-sorted by key length descending so longer prefixes match first.
+FACENAME101_MAP_SORTED = sorted(FACENAME101_MAP.items(), key=lambda x: len(x[0]), reverse=True)
 # BRFLAG: Newlines -> <br>.
 BRFLAG = False
 # FIXTEXTWRAP: Rewrap text to WIDTH/NOTEWIDTH.
@@ -2114,6 +2156,7 @@ def searchCodes(page, pbar, jobList, filename):
                                 codeList[i]["parameters"][4] = f"`{translatedText}`"
                                 if ';' in jaString:
                                     codeList[i]["parameters"][4] += ';'
+
                                 list122.pop(0)
 
             ## Event Code: 357 [Picture Text] [Optional]
@@ -2366,80 +2409,26 @@ def searchCodes(page, pbar, jobList, filename):
             if "code" in codeList[i] and codeList[i]["code"] == 101 and CODE101 is True:
                 isVar = False
 
-                # Check for Ta_ face name mappings first (before other processing)
+                # Check for face name mappings first (before other processing)
                 if FACENAME101 and len(codeList[i]["parameters"]) > 0:
                     faceName = codeList[i]["parameters"][0]
-                    if isinstance(faceName, str):
-                        if "Ta_Leona" in faceName:
-                            speaker = "Leona"
-                            i += 1
-                            continue
-                        if "Ta_Rury" in faceName:
-                            speaker = "Rury"
-                            i += 1
-                            continue
-                        if "Ta_Eve" in faceName:
-                            speaker = "Eve"
-                            i += 1
-                            continue
-                        if "Ta_Rebekka" in faceName:
-                            speaker = "Rebecca"
-                            i += 1
-                            continue
-                        if "Ta_Lapis" in faceName:
-                            speaker = "Lapis"
-                            i += 1
-                            continue
-                        if "Ta_Bighand" in faceName:
-                            speaker = "Bighand"
-                            i += 1
-                            continue
-                        if "Ta_Frank" in faceName:
-                            speaker = "Frank"
-                            i += 1
-                            continue
-                        if "Ta_Gang" in faceName:
-                            speaker = "Gang"
-                            i += 1
-                            continue
-                        if "Ta_Gunjin1" in faceName:
-                            speaker = "Soldier 1"
-                            i += 1
-                            continue
-                        if "Ta_Gunjin2" in faceName:
-                            speaker = "Soldier 2"
-                            i += 1
-                            continue
-                        if "Ta_Jesse" in faceName:
-                            speaker = "Jesse"
-                            i += 1
-                            continue
-                        if "Ta_Kotaro" in faceName:
-                            speaker = "Kotaro"
-                            i += 1
-                            continue
-                        if "Ta_Marcus" in faceName:
-                            speaker = "Marcus"
-                            i += 1
-                            continue
-                        if "Ta_Maxwell" in faceName:
-                            speaker = "Maxwell"
-                            i += 1
-                            continue
-                        if "Ta_mitsubai" in faceName:
-                            speaker = "Mitsubai"
-                            i += 1
-                            continue
-                        if "Ta_Ronin" in faceName:
-                            speaker = "Ronin"
-                            i += 1
-                            continue
-                        if "Ta_Shonin" in faceName:
-                            speaker = "Merchant"
-                            i += 1
-                            continue
-                        if "Ta_Yen" in faceName:
-                            speaker = "Yen"
+                    if isinstance(faceName, str) and faceName:
+                        matchedSpeaker = None
+
+                        # 1) _talk_ pattern: split on "_talk" and exact-match the prefix
+                        if "_talk" in faceName:
+                            prefix = faceName.split("_talk")[0]
+                            matchedSpeaker = FACENAME101_MAP.get(prefix)
+
+                        # 2) Longest-prefix startswith match
+                        if matchedSpeaker is None:
+                            for prefix, name in FACENAME101_MAP_SORTED:
+                                if faceName.startswith(prefix):
+                                    matchedSpeaker = name
+                                    break
+
+                        if matchedSpeaker is not None:
+                            speaker = matchedSpeaker
                             i += 1
                             continue
 
@@ -2559,6 +2548,7 @@ def searchCodes(page, pbar, jobList, filename):
                     # "_EventSetting": (r'_EventSetting[\s,\d\w\W]+?"(.+?)";', False),
                     # "this.Menu_SexTxtSet(": (r'"(.+)"', True),
                     # "Rn_RsltTxtArr": (r'"(.+)"', True),
+                    "_章切り替えStart": (r'_章切り替えStart\(\s*\\?"(.+?)\\?"', False),
                 }
 
                 for key, (regex, multiline) in patterns.items():
@@ -2631,6 +2621,17 @@ def searchCodes(page, pbar, jobList, filename):
 
             ## Event Code: 408 (Script)
             if "code" in codeList[i] and (codeList[i]["code"] == 408) and CODE408 is True:
+                # Only translate if preceded by a 108 with "選択肢ヘルプ" or another 408
+                if i > 0:
+                    prevCode = codeList[i - 1].get("code", None)
+                    if prevCode == 408:
+                        pass  # Consecutive 408s are allowed
+                    elif prevCode == 108 and len(codeList[i - 1].get("parameters", [])) > 0 and codeList[i - 1]["parameters"][0] == "選択肢ヘルプ":
+                        pass  # 108 with 選択肢ヘルプ is allowed
+                    else:
+                        i += 1
+                        continue
+
                 jaString = codeList[i]["parameters"][0]
                 match = re.search(r"(.+)", jaString)
                 if match:
@@ -3027,33 +3028,22 @@ def searchCodes(page, pbar, jobList, filename):
                     if "$gameVariables" not in jaString:
                         continue
 
-                    # This is going to be the var being set. (IMPORTANT)
-                    if "1045" not in jaString:
-                        continue
-
                     # Need to remove outside code and put it back later
-                    matchList = re.findall(r"'(.*?)'", jaString)
+                    matchList = re.findall(r"['\"`](.*?)['\"`]", jaString)
 
                     for match in matchList:
                         # Skip if IGNORETLTEXT is enabled and no Japanese text
                         if IGNORETLTEXT and not re.search(LANGREGEX, match):
                             continue
 
-                        response = translateAI(match, "", False)
-                        translatedText = response[0]
-                        totalTokens[0] += response[1][0]
-                        totalTokens[1] += response[1][1]
+                        # Look up translation from code 122 cache (file-backed)
+                        cachedTranslation = get_var_translation(match)
 
-                        # Remove characters that may break scripts
-                        charList = [".", '"', "'", "\\n"]
-                        for char in charList:
-                            translatedText = translatedText.replace(char, "")
-
-                        jaString = jaString.replace(match, translatedText)
+                        if cachedTranslation is not None:
+                            jaString = jaString.replace(match, cachedTranslation)
 
                     # Set Data
-                    translatedText = jaString
-                    codeList[i]["parameters"][j] = translatedText
+                    codeList[i]["parameters"][j] = jaString
 
             ### Event Code: 320 Set Variable
             if "code" in codeList[i] and codeList[i]["code"] == 320 and CODE320 is True:
@@ -3198,6 +3188,9 @@ def searchCodes(page, pbar, jobList, filename):
                 with LOCK:
                     if filename not in MISMATCH:
                         MISMATCH.append(filename)
+            else:
+                # Store each original→translated pair for code 111 consistency (file-backed)
+                set_var_translations_batch(list(zip(list122, list122TL)))
 
         # 355/655
         if len(list355655) > 0:

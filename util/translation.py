@@ -16,6 +16,9 @@ from dotenv import load_dotenv
 from pathlib import Path
 from retry import retry
 
+# Set to True to print input/output token counts and content for each API call
+DEBUG_LOGGING = False
+
 
 # ===== Placeholder Protection System =====
 # Patterns to protect from translation (sound effects, control codes, etc.)
@@ -276,6 +279,91 @@ def cache_translation(payload, translation, language):
         # Save every 10 new entries to avoid excessive disk writes
         if len(cache) % 10 == 0:
             save_cache()
+
+
+# Variable translation map (code 122 <-> code 111 consistency)
+VAR_MAP_FILE = Path("log/var_translation_map.json")
+VAR_MAP_LOCK = threading.Lock()
+_var_map = None
+
+def clear_var_map():
+    """Clear the variable translation map (called at start of each run)"""
+    global _var_map
+    with VAR_MAP_LOCK:
+        _var_map = {}
+        try:
+            if VAR_MAP_FILE.exists():
+                VAR_MAP_FILE.unlink()
+        except Exception:
+            pass
+
+def _load_var_map():
+    """Load the variable translation map from disk (always re-reads to pick up
+    entries written by other subprocesses)."""
+    global _var_map
+    _var_map = {}
+    try:
+        if VAR_MAP_FILE.exists():
+            with open(VAR_MAP_FILE, "r", encoding="utf-8") as f:
+                _var_map = json.load(f)
+    except Exception:
+        _var_map = {}
+    return _var_map
+
+def _save_var_map():
+    """Save the variable translation map to disk.
+    Re-reads the file first and merges so entries from other subprocesses
+    are never lost."""
+    global _var_map
+    if _var_map is None:
+        return
+    try:
+        VAR_MAP_FILE.parent.mkdir(parents=True, exist_ok=True)
+        # Re-read the on-disk version and merge our entries on top
+        disk_map = {}
+        try:
+            if VAR_MAP_FILE.exists():
+                with open(VAR_MAP_FILE, "r", encoding="utf-8") as f:
+                    disk_map = json.load(f)
+        except Exception:
+            disk_map = {}
+        disk_map.update(_var_map)
+        _var_map = disk_map
+        tmp_file = VAR_MAP_FILE.with_suffix(".tmp")
+        with open(tmp_file, "w", encoding="utf-8") as f:
+            json.dump(_var_map, f, ensure_ascii=False, indent=2)
+        tmp_file.replace(VAR_MAP_FILE)
+    except Exception:
+        pass
+
+def get_var_translation(original):
+    """Look up a cached variable translation. Returns the translation or None."""
+    with VAR_MAP_LOCK:
+        m = _load_var_map()
+        return m.get(original)
+
+def set_var_translation(original, translated):
+    """Store a variable translation and persist to disk.
+    Skips if the translation is identical to the original (untranslated).
+    """
+    if original == translated:
+        return
+    with VAR_MAP_LOCK:
+        m = _load_var_map()
+        m[original] = translated
+        _save_var_map()
+
+def set_var_translations_batch(pairs):
+    """Store multiple variable translations at once and persist to disk.
+    pairs: list of (original, translated) tuples
+    Skips pairs where the translation is identical to the original (untranslated).
+    """
+    with VAR_MAP_LOCK:
+        m = _load_var_map()
+        for original, translated in pairs:
+            if original != translated:
+                m[original] = translated
+        _save_var_map()
 
 
 class TranslationConfig:
@@ -1043,6 +1131,13 @@ def translateAI(text, history, fullPromptFlag, config, filename=None, pbar=None,
             # Update token count for this attempt
             totalTokens[0] += response.usage.prompt_tokens
             totalTokens[1] += response.usage.completion_tokens
+
+            # --- Debug Token Logging ---
+            if DEBUG_LOGGING:
+                print(f"\nInput ({response.usage.prompt_tokens} tokens):")
+                print(f"{current_system}\n{user}")
+                print(f"\nOutput ({response.usage.completion_tokens} tokens):")
+                print(f"{translatedText}")
 
             # Clean the translation first for consistency
             cleaned_text = cleanTranslatedText(translatedText, config.language)
