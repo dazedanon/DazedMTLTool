@@ -2543,12 +2543,14 @@ def searchCodes(page, pbar, jobList, filename):
                     # "gameVariables.setValue": (r'\$gameVariables\.setValue\(\d+,\s*"([^"]*)"\)', False),
                     # "BattleManager._logWindow.push('addText'": (r"BattleManager._logWindow.push\('addText',\s'(.+)'\)", False),
                     # "BattleManager._logWindow.addText": (r"BattleManager._logWindow.addText\('(.+)'\)", False),
-                    # "this.BLogAdd": (r'this\.BLogAdd\([\s,\d]+"(.+)"\);', False),
+                    "this.BLogAdd": (r'this\.BLogAdd\(.+?\\?"(.+?)\\?"\)', False),
                     # "Fuki_Set": (r'Fuki_Set\([\s,\d\w\W]+?"(.+?)",', False),
                     # "_EventSetting": (r'_EventSetting[\s,\d\w\W]+?"(.+?)";', False),
                     # "this.Menu_SexTxtSet(": (r'"(.+)"', True),
                     # "Rn_RsltTxtArr": (r'"(.+)"', True),
-                    "_章切り替えStart": (r'_章切り替えStart\(\s*\\?"(.+?)\\?"', False),
+                    # "_章切り替えStart": (r'_章切り替えStart\(\s*\\?"(.+?)\\?"', False),
+                    # "MobNameSet": (r'MobNameSet\(\\?"(.+?)\\?"\)', False),
+                    
                 }
 
                 for key, (regex, multiline) in patterns.items():
