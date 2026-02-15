@@ -159,6 +159,9 @@ def parseJSON(data, filename):
                 # Check if it's a simple key-value format (all values are strings, not nested objects)
                 if all(isinstance(v, str) for v in data.values()):
                     result = translateSimpleKeyValueJSON(data, filename)
+                # PSData format (Nupu_PSData.json - MailDatas, MemoryData, ShopDatas, hStData)
+                elif any(k in data for k in ["MailDatas", "MemoryData", "ShopDatas", "hStData"]):
+                    result = translatePSData(data, filename)
                 else:
                     result = translateJSON(data, filename, [])
             else:
@@ -238,6 +241,233 @@ def translateSimpleKeyValueJSON(data, filename):
                 # Save progress after each translation
                 save_progress_json(data, filename)
     
+    return tokens
+
+
+def translatePSData(data, filename):
+    """Translate PSData JSON format (e.g. Nupu_PSData.json).
+    
+    Handles four sections:
+    - MailDatas: In-game mail/message system
+    - MemoryData: Scene/CG gallery memories  
+    - ShopDatas: Shop configurations and dialogue
+    - hStData: Status rank descriptions
+    
+    Only translates player-visible text fields.
+    """
+    global LOCK, ESTIMATE, FILENAME, PBAR, MISMATCH
+    tokens = [0, 0]
+
+    def batchTranslate(stringList, context):
+        """Translate a list of strings and return translations. Returns [] on mismatch."""
+        nonlocal tokens
+        if not stringList:
+            return []
+        response = translateAI(stringList, context, True)
+        tokens[0] += response[1][0]
+        tokens[1] += response[1][1]
+        if len(stringList) != len(response[0]):
+            with LOCK:
+                if FILENAME not in MISMATCH:
+                    MISMATCH.append(FILENAME)
+            return []
+        return response[0]
+
+    # ================================================================
+    # PASS 1: Collect all translatable strings from every section
+    # ================================================================
+
+    # -- MailDatas --
+    mailNameS, mailNameI = [], []
+    mailTitleS, mailTitleI = [], []
+    mailListNameS, mailListNameI = [], []
+    mailTextS, mailTextI = [], []
+
+    if "MailDatas" in data:
+        for i, m in enumerate(data["MailDatas"]):
+            if m.get("Name") and re.search(LANGREGEX, m["Name"]):
+                mailNameS.append(m["Name"])
+                mailNameI.append(i)
+            if m.get("Title") and re.search(LANGREGEX, m["Title"]):
+                mailTitleS.append(m["Title"])
+                mailTitleI.append(i)
+            if m.get("MailListName") and re.search(LANGREGEX, m["MailListName"]):
+                mailListNameS.append(m["MailListName"])
+                mailListNameI.append(i)
+            if m.get("MailText") and re.search(LANGREGEX, m["MailText"]):
+                mailTextS.append(m["MailText"].replace("\r\n", " ").replace("\n", " ").strip())
+                mailTextI.append(i)
+
+    # -- MemoryData --
+    memTitleS, memTitleI = [], []
+    memSetuS, memSetuI = [], []
+    memHintS, memHintI = [], []
+    memPtnS, memPtnI = [], []        # indices are (memIdx, ptnIdx)
+    memDtlSetuS, memDtlSetuI = [], []  # indices are (memIdx, dtlIdx)
+
+    if "MemoryData" in data:
+        for i, mem in enumerate(data["MemoryData"]):
+            if mem.get("_Title") and re.search(LANGREGEX, mem["_Title"]):
+                memTitleS.append(mem["_Title"])
+                memTitleI.append(i)
+            if mem.get("_Setu") and re.search(LANGREGEX, mem["_Setu"]):
+                memSetuS.append(mem["_Setu"].replace("\r\n", " ").replace("\n", " ").strip())
+                memSetuI.append(i)
+            if mem.get("_Hint") and re.search(LANGREGEX, mem["_Hint"]):
+                memHintS.append(mem["_Hint"])
+                memHintI.append(i)
+            if "_Ptn" in mem and isinstance(mem["_Ptn"], list):
+                for j, p in enumerate(mem["_Ptn"]):
+                    if p and re.search(LANGREGEX, p):
+                        memPtnS.append(p)
+                        memPtnI.append((i, j))
+            if "_DtlCheck" in mem and isinstance(mem["_DtlCheck"], list):
+                for j, dtl in enumerate(mem["_DtlCheck"]):
+                    if isinstance(dtl, dict) and dtl.get("_Setu") and re.search(LANGREGEX, dtl["_Setu"]):
+                        memDtlSetuS.append(dtl["_Setu"].replace("\r\n", " ").replace("\n", " ").strip())
+                        memDtlSetuI.append((i, j))
+
+    # -- ShopDatas --
+    shopNameS, shopNameI = [], []
+    shopTextFields = ["buySelf", "emptySelf", "firstSelf", "husokuSelf",
+                      "randSelf1", "randSelf2", "randSelf3"]
+    shopTextS = {f: [] for f in shopTextFields}
+    shopTextI = {f: [] for f in shopTextFields}
+
+    if "ShopDatas" in data:
+        for i, shop in enumerate(data["ShopDatas"]):
+            if shop.get("name") and re.search(LANGREGEX, shop["name"]):
+                shopNameS.append(shop["name"])
+                shopNameI.append(i)
+            for field in shopTextFields:
+                if field in shop and isinstance(shop[field], dict):
+                    text = shop[field].get("text", "")
+                    if text and re.search(LANGREGEX, text):
+                        shopTextS[field].append(text.replace("\r\n", " ").replace("\n", " ").strip())
+                        shopTextI[field].append(i)
+
+    # -- hStData --
+    rankArrayNames = ["KutiRankDatas", "MuneRankDatas", "SiriRankDatas", "TituRankDatas"]
+    rankSetuS, rankSetuI = [], []      # indices are (arrayName, idx)
+    rankText1S, rankText1I = [], []
+    rankText2S, rankText2I = [], []
+
+    if "hStData" in data:
+        hst = data["hStData"]
+        for arrName in rankArrayNames:
+            if arrName in hst and isinstance(hst[arrName], list):
+                for i, rank in enumerate(hst[arrName]):
+                    if rank.get("rankSetu") and re.search(LANGREGEX, rank["rankSetu"]):
+                        rankSetuS.append(rank["rankSetu"].replace("\r\n", " ").replace("\n", " ").strip())
+                        rankSetuI.append((arrName, i))
+                    if rank.get("rankText1") and re.search(LANGREGEX, rank["rankText1"]):
+                        rankText1S.append(rank["rankText1"])
+                        rankText1I.append((arrName, i))
+                    if rank.get("rankText2") and re.search(LANGREGEX, rank["rankText2"]):
+                        rankText2S.append(rank["rankText2"])
+                        rankText2I.append((arrName, i))
+
+    # Set progress bar total
+    totalItems = (
+        len(mailNameS) + len(mailTitleS) + len(mailListNameS) + len(mailTextS)
+        + len(memTitleS) + len(memSetuS) + len(memHintS) + len(memPtnS) + len(memDtlSetuS)
+        + len(shopNameS) + sum(len(v) for v in shopTextS.values())
+        + len(rankSetuS) + len(rankText1S) + len(rankText2S)
+    )
+    PBAR.total = totalItems
+    PBAR.refresh()
+
+    # ================================================================
+    # PASS 2: Translate each batch and apply results back to data
+    # ================================================================
+
+    # -- MailDatas --
+    if "MailDatas" in data:
+        mails = data["MailDatas"]
+
+        for tl, idx in zip(batchTranslate(mailNameS, "Character Name"), mailNameI):
+            mails[idx]["Name"] = tl
+        if mailNameS:
+            save_progress_json(data, filename)
+
+        for tl, idx in zip(batchTranslate(mailTitleS, "Mail Subject"), mailTitleI):
+            mails[idx]["Title"] = tl
+        if mailTitleS:
+            save_progress_json(data, filename)
+
+        for tl, idx in zip(batchTranslate(mailListNameS, "Mail List Entry"), mailListNameI):
+            mails[idx]["MailListName"] = tl
+        if mailListNameS:
+            save_progress_json(data, filename)
+
+        for tl, idx in zip(batchTranslate(mailTextS, "Mail Body Text"), mailTextI):
+            mails[idx]["MailText"] = dazedwrap.wrapText(tl, WIDTH)
+        if mailTextS:
+            save_progress_json(data, filename)
+
+    # -- MemoryData --
+    if "MemoryData" in data:
+        memories = data["MemoryData"]
+
+        for tl, idx in zip(batchTranslate(memTitleS, "Scene Title"), memTitleI):
+            memories[idx]["_Title"] = tl
+        if memTitleS:
+            save_progress_json(data, filename)
+
+        for tl, idx in zip(batchTranslate(memSetuS, "Scene Description"), memSetuI):
+            memories[idx]["_Setu"] = tl
+        if memSetuS:
+            save_progress_json(data, filename)
+
+        for tl, idx in zip(batchTranslate(memHintS, "Hint Text"), memHintI):
+            memories[idx]["_Hint"] = tl
+        if memHintS:
+            save_progress_json(data, filename)
+
+        for tl, (mi, pi) in zip(batchTranslate(memPtnS, "Scene Description"), memPtnI):
+            memories[mi]["_Ptn"][pi] = tl
+        if memPtnS:
+            save_progress_json(data, filename)
+
+        for tl, (mi, di) in zip(batchTranslate(memDtlSetuS, "Character Commentary"), memDtlSetuI):
+            memories[mi]["_DtlCheck"][di]["_Setu"] = dazedwrap.wrapText(tl, WIDTH)
+        if memDtlSetuS:
+            save_progress_json(data, filename)
+
+    # -- ShopDatas --
+    if "ShopDatas" in data:
+        shops = data["ShopDatas"]
+
+        for tl, idx in zip(batchTranslate(shopNameS, "Shop Name"), shopNameI):
+            shops[idx]["name"] = tl
+        if shopNameS:
+            save_progress_json(data, filename)
+
+        for field in shopTextFields:
+            for tl, idx in zip(batchTranslate(shopTextS[field], "Shop Dialogue"), shopTextI[field]):
+                shops[idx][field]["text"] = dazedwrap.wrapText(tl, WIDTH)
+            if shopTextS[field]:
+                save_progress_json(data, filename)
+
+    # -- hStData --
+    if "hStData" in data:
+        hst = data["hStData"]
+
+        for tl, (an, idx) in zip(batchTranslate(rankSetuS, "Rank Description"), rankSetuI):
+            hst[an][idx]["rankSetu"] = dazedwrap.wrapText(tl, WIDTH)
+        if rankSetuS:
+            save_progress_json(data, filename)
+
+        for tl, (an, idx) in zip(batchTranslate(rankText1S, "Rank Label"), rankText1I):
+            hst[an][idx]["rankText1"] = tl
+        if rankText1S:
+            save_progress_json(data, filename)
+
+        for tl, (an, idx) in zip(batchTranslate(rankText2S, "Rank Subtitle"), rankText2I):
+            hst[an][idx]["rankText2"] = tl
+        if rankText2S:
+            save_progress_json(data, filename)
+
     return tokens
 
 
