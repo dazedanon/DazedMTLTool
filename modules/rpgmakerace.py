@@ -91,6 +91,8 @@ FIXTEXTWRAP = True
 IGNORETLTEXT = False
 # TLSYSTEMVARIABLES: Translate System Variables. (Optional but sometimes necessary. Can break stuff.)
 TLSYSTEMVARIABLES = False
+# TLSYSTEMSWITCHES: Translate System Switches. (Optional. Translates switch names in System.json.)
+TLSYSTEMSWITCHES = False
 # Join 408 codes into a single string like 401.
 JOIN408 = False
 # SPEAKERS408: Process speakers in code 408 the same way as code 401.
@@ -1012,6 +1014,7 @@ def parseSystem(data, filename):
             if isinstance(gt, str) and gt:
                 count += 1
             count += len(sysobj.get("variables", []) or [])
+            count += len(sysobj.get("switches", []) or [])
             count += len(sysobj.get("weapon_types", []) or [])
             count += len(sysobj.get("armor_types", []) or [])
             count += len(sysobj.get("skill_types", []) or [])
@@ -3548,6 +3551,29 @@ def searchSystem(data, pbar):
             # Assign back translations to corresponding indices
             for n, idx in enumerate(var_indices[: len(tl_list)]):
                 data["variables"][idx] = tl_list[n].replace('"', '').strip()
+            if pbar is not None:
+                pbar.refresh()
+
+    # Switches (Optional) — batch translate to reduce calls
+    if TLSYSTEMSWITCHES and "switches" in data and isinstance(data["switches"], list):
+        switch_indices = []
+        switch_values = []
+        for idx, val in enumerate(data["switches"]):
+            if isinstance(val, str) and val.strip():
+                switch_indices.append(idx)
+                switch_values.append(val)
+        if switch_values:
+            response = translateAI(
+                switch_values,
+                'Reply with only the ' + LANGUAGE + ' translation of the switch name',
+                True,
+            )
+            totalTokens[0] += response[1][0]
+            totalTokens[1] += response[1][1]
+            tl_list = response[0]
+            # Assign back translations to corresponding indices
+            for n, idx in enumerate(switch_indices[: len(tl_list)]):
+                data["switches"][idx] = tl_list[n].replace('"', '').strip()
             if pbar is not None:
                 pbar.refresh()
 

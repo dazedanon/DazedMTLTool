@@ -54,6 +54,8 @@ class RPGMakerTab(QWidget):
         "BRFLAG": False,
         "FIXTEXTWRAP": True,
         "IGNORETLTEXT": False,
+        "TLSYSTEMVARIABLES": False,
+        "TLSYSTEMSWITCHES": False,
         
         # Main Codes (enabled by default)
         "CODE401": True,   # Show Text
@@ -271,6 +273,16 @@ class RPGMakerTab(QWidget):
         
         self.ignoretltext_cb, layout = self._create_checkbox_with_description(
             "Skip Translated", "Skip lines without Japanese text", "Skips already translated content."
+        )
+        col1.addLayout(layout)
+
+        self.tlsystemvariables_cb, layout = self._create_checkbox_with_description(
+            "System Variables", "Translate variable names in System.json", "Translates the variables array in System.json. Can break stuff."
+        )
+        col1.addLayout(layout)
+
+        self.tlsystemswitches_cb, layout = self._create_checkbox_with_description(
+            "System Switches", "Translate switch names in System.json", "Translates the switches array in System.json."
         )
         col1.addLayout(layout)
 
@@ -494,6 +506,8 @@ class RPGMakerTab(QWidget):
             self.brflag_cb.stateChanged.disconnect()
             self.fixtextwrap_cb.stateChanged.disconnect()
             self.ignoretltext_cb.stateChanged.disconnect()
+            self.tlsystemvariables_cb.stateChanged.disconnect()
+            self.tlsystemswitches_cb.stateChanged.disconnect()
             self.join408_cb.stateChanged.disconnect()
             if self.engine == "ACE":
                 self.speakers408_cb.stateChanged.disconnect()
@@ -534,6 +548,8 @@ class RPGMakerTab(QWidget):
         self.brflag_cb.stateChanged.connect(lambda: self.apply_to_module(show_messages=False))
         self.fixtextwrap_cb.stateChanged.connect(lambda: self.apply_to_module(show_messages=False))
         self.ignoretltext_cb.stateChanged.connect(lambda: self.apply_to_module(show_messages=False))
+        self.tlsystemvariables_cb.stateChanged.connect(lambda: self.apply_to_module(show_messages=False))
+        self.tlsystemswitches_cb.stateChanged.connect(lambda: self.apply_to_module(show_messages=False))
         self.join408_cb.stateChanged.connect(lambda: self.apply_to_module(show_messages=False))
         if self.engine == "ACE":
             self.speakers408_cb.stateChanged.connect(lambda: self.apply_to_module(show_messages=False))
@@ -572,6 +588,8 @@ class RPGMakerTab(QWidget):
             "BRFLAG": self.brflag_cb.isChecked(),
             "FIXTEXTWRAP": self.fixtextwrap_cb.isChecked(),
             "IGNORETLTEXT": self.ignoretltext_cb.isChecked(),
+            "TLSYSTEMVARIABLES": self.tlsystemvariables_cb.isChecked(),
+            "TLSYSTEMSWITCHES": self.tlsystemswitches_cb.isChecked(),
             "JOIN408": self.join408_cb.isChecked(),
 
             # Main Codes
@@ -614,6 +632,8 @@ class RPGMakerTab(QWidget):
         self.brflag_cb.setChecked(config.get("BRFLAG", False))
         self.fixtextwrap_cb.setChecked(config.get("FIXTEXTWRAP", True))
         self.ignoretltext_cb.setChecked(config.get("IGNORETLTEXT", False))
+        self.tlsystemvariables_cb.setChecked(config.get("TLSYSTEMVARIABLES", False))
+        self.tlsystemswitches_cb.setChecked(config.get("TLSYSTEMSWITCHES", False))
         self.join408_cb.setChecked(config.get("JOIN408", False))
         
         # Only set SPEAKERS408 for ACE engine
