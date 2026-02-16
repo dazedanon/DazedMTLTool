@@ -2543,13 +2543,14 @@ def searchCodes(page, pbar, jobList, filename):
                     # "gameVariables.setValue": (r'\$gameVariables\.setValue\(\d+,\s*"([^"]*)"\)', False),
                     # "BattleManager._logWindow.push('addText'": (r"BattleManager._logWindow.push\('addText',\s'(.+)'\)", False),
                     # "BattleManager._logWindow.addText": (r"BattleManager._logWindow.addText\('(.+)'\)", False),
-                    "this.BLogAdd": (r'this\.BLogAdd\(.+?\\?"(.+?)\\?"\)', False),
+                    # "this.BLogAdd": (r'this\.BLogAdd\?(.+?\\?"(.+?)\\?"\)', False),
                     # "Fuki_Set": (r'Fuki_Set\([\s,\d\w\W]+?"(.+?)",', False),
                     # "_EventSetting": (r'_EventSetting[\s,\d\w\W]+?"(.+?)";', False),
                     # "this.Menu_SexTxtSet(": (r'"(.+)"', True),
                     # "Rn_RsltTxtArr": (r'"(.+)"', True),
                     # "_章切り替えStart": (r'_章切り替えStart\(\s*\\?"(.+?)\\?"', False),
                     # "MobNameSet": (r'MobNameSet\(\\?"(.+?)\\?"\)', False),
+                    "AddAddress": (r'AddAddress\(\d+,\s*\\?"(.+?)\\?"', False),
                     
                 }
 
@@ -2620,6 +2621,236 @@ def searchCodes(page, pbar, jobList, filename):
 
                                     codeList[i]["parameters"][0] = jaString.replace(match.group(1), translatedText)
                             break
+
+                # AddCmnt handler - extract strings from array and name parameter
+                if "AddCmnt(" in jaString:
+                    arrayMatch = re.search(r'AddCmnt\s*\(\s*\[(.+?)\]', jaString)
+                    if arrayMatch:
+                        arrayContent = arrayMatch.group(1)
+                        strings = re.findall(r'\\?"(.+?)\\?"', arrayContent)
+                        
+                        # Also grab the name argument after the array: , "name")
+                        nameMatch = re.search(r'AddCmnt\s*\(\s*\[.+?\]\s*,\s*\\?"(.+?)\\?"\s*\)', jaString)
+                        
+                        translatable = []
+                        for s in strings:
+                            if not re.search(r'[a-zA-Z一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]', s):
+                                continue
+                            if IGNORETLTEXT and not re.search(LANGREGEX, s):
+                                continue
+                            translatable.append(s)
+                        
+                        # Translate and cache the speaker name via getSpeaker
+                        nameStr = None
+                        translatedName = ""
+                        if nameMatch:
+                            n = nameMatch.group(1)
+                            if re.search(r'[a-zA-Z一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]', n):
+                                if not (IGNORETLTEXT and not re.search(LANGREGEX, n)):
+                                    nameStr = n
+                                    response = getSpeaker(n)
+                                    translatedName = response[0]
+                                    totalTokens[0] += response[1][0]
+                                    totalTokens[1] += response[1][1]
+                        
+                        if translatable or nameStr:
+                            # Use the translated speaker name for context prefix
+                            speakerPrefix = translatedName if translatedName else ""
+                            
+                            if setData:
+                                textHistory.append('"These comments are always about Romasha or her squad"')
+                                for s in translatable:
+                                    if speakerPrefix:
+                                        list355655.append(f"[{speakerPrefix}]: {s}")
+                                    else:
+                                        list355655.append(s)
+                            else:
+                                for s in translatable:
+                                    if len(list355655) > 0:
+                                        translatedText = list355655[0]
+                                        list355655.pop(0)
+                                        # Strip speaker prefix if present
+                                        translatedText = re.sub(r'^\[.*?\]\s*[|:]\s*', '', translatedText)
+                                        # Replace double quotes to avoid breaking the JSON/JS syntax
+                                        translatedText = translatedText.replace('\\"', "'")
+                                        translatedText = translatedText.replace('"', "'")
+                                        jaString = jaString.replace(s, translatedText, 1)
+                                # Replace the speaker name directly (already translated via getSpeaker)
+                                if nameStr and translatedName:
+                                    translatedName = translatedName.replace('\\"', "'")
+                                    translatedName = translatedName.replace('"', "'")
+                                    jaString = jaString.replace(nameStr, translatedName, 1)
+                                codeList[i]["parameters"][0] = jaString
+
+                # AddMaill handler - translate sender name (3rd quoted arg) and title (4th quoted arg)
+                # Example: this.AddMaill("M_IcoMail","liliy","リリィ","お得なクーポン配布",_MTxt,[24],193,true,504,1)
+                if "AddMaill(" in jaString:
+                    # Extract all quoted strings in order
+                    allQuoted = re.findall(r'\\?"([^"]*?)\\?"', jaString)
+                    # args: [0]=icon, [1]=id, [2]=sender, [3]=title, ...
+                    translatable = []
+                    translatableIndices = []
+                    for idx in [2, 3]:
+                        if idx < len(allQuoted):
+                            s = allQuoted[idx]
+                            if not s.strip():
+                                continue
+                            if not re.search(r'[a-zA-Z一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]', s):
+                                continue
+                            if IGNORETLTEXT and not re.search(LANGREGEX, s):
+                                continue
+                            translatable.append(s)
+                            translatableIndices.append(idx)
+
+                    if translatable:
+                        if setData:
+                            for s in translatable:
+                                list355655.append(s)
+                        else:
+                            for s in translatable:
+                                if len(list355655) > 0:
+                                    translatedText = list355655[0]
+                                    list355655.pop(0)
+                                    translatedText = translatedText.replace('\\"', "'")
+                                    translatedText = translatedText.replace('"', "'")
+                                    jaString = jaString.replace(s, translatedText, 1)
+                            codeList[i]["parameters"][0] = jaString
+
+                # # AddBbs handler - translate arrays of posts/replies, username, and location
+                # # Example: AddBbs(["この開発したパッチを..."], "コンピューターおじいちゃん","場所:猪鹿蝶",["良きパッチが..."],"patch_npc")
+                # if "AddBbs(" in jaString:
+                #     translatable = []
+
+                #     # Extract strings from the first array (topic posts)
+                #     # Anchor with ],\s*\\?" after ] to skip past inner brackets like \\C[3]
+                #     firstArrayMatch = re.search(r'AddBbs\s*\(\s*\[(.+?)\]\s*,\s*\\?"', jaString)
+                #     firstArrayStrings = []
+                #     if firstArrayMatch:
+                #         firstArrayStrings = re.findall(r'\\?"([^"]+?)\\?"', firstArrayMatch.group(1))
+                #         for s in firstArrayStrings:
+                #             if not re.search(r'[a-zA-Z一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]', s):
+                #                 continue
+                #             if IGNORETLTEXT and not re.search(LANGREGEX, s):
+                #                 continue
+                #             translatable.append(s)
+
+                #     # After the first array, extract: "username","location",["replies"],"picture_id"
+                #     afterFirstArray = re.search(r'AddBbs\s*\(\s*\[.+?\]\s*,\s*(.*)\)\s*;?\s*$', jaString)
+                #     nameStr = None
+                #     translatedName = ""
+                #     locationStr = None
+                #     secondArrayStrings = []
+
+                #     if afterFirstArray:
+                #         rest = afterFirstArray.group(1)
+
+                #         # Username (first quoted string after the array)
+                #         nameMatch = re.match(r'\s*\\?"([^"]+?)\\?"', rest)
+                #         if nameMatch:
+                #             n = nameMatch.group(1)
+                #             if re.search(r'[a-zA-Z一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]', n):
+                #                 if not (IGNORETLTEXT and not re.search(LANGREGEX, n)):
+                #                     nameStr = n
+                #                     response = getSpeaker(n)
+                #                     translatedName = response[0]
+                #                     totalTokens[0] += response[1][0]
+                #                     totalTokens[1] += response[1][1]
+
+                #         # Location (second quoted string after array, before second array)
+                #         locMatch = re.match(r'\s*\\?"[^"]*?\\?"\s*,\s*\\?"([^"]+?)\\?"', rest)
+                #         if locMatch:
+                #             loc = locMatch.group(1)
+                #             if re.search(r'[a-zA-Z一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]', loc):
+                #                 if not (IGNORETLTEXT and not re.search(LANGREGEX, loc)):
+                #                     locationStr = loc
+                #                     translatable.append(loc)
+
+                #         # Second array (replies)
+                #         # Anchor with ],\s*\\?" after ] to skip past inner brackets like \\C[3]
+                #         secondArrayMatch = re.search(r',\s*\[(.+?)\]\s*,\s*\\?"', rest)
+                #         if secondArrayMatch:
+                #             secondArrayStrings = re.findall(r'\\?"([^"]+?)\\?"', secondArrayMatch.group(1))
+                #             for s in secondArrayStrings:
+                #                 if not re.search(r'[a-zA-Z一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]', s):
+                #                     continue
+                #                 if IGNORETLTEXT and not re.search(LANGREGEX, s):
+                #                     continue
+                #                 translatable.append(s)
+
+                #     if translatable or nameStr:
+                #         speakerPrefix = translatedName if translatedName else ""
+
+                #         if setData:
+                #             for s in translatable:
+                #                 if speakerPrefix:
+                #                     list355655.append(f"[{speakerPrefix}]: {s}")
+                #                 else:
+                #                     list355655.append(s)
+                #         else:
+                #             for s in translatable:
+                #                 if len(list355655) > 0:
+                #                     translatedText = list355655[0]
+                #                     list355655.pop(0)
+                #                     translatedText = re.sub(r'^\[.*?\]\s*[|:]\s*', '', translatedText)
+                #                     translatedText = translatedText.replace('\\"', "'")
+                #                     translatedText = translatedText.replace('"', "'")
+                #                     jaString = jaString.replace(s, translatedText, 1)
+                #             # Replace the username directly (already translated via getSpeaker)
+                #             if nameStr and translatedName:
+                #                 translatedName = translatedName.replace('\\"', "'")
+                #                 translatedName = translatedName.replace('"', "'")
+                #                 jaString = jaString.replace(nameStr, translatedName, 1)
+                #             # Normalize \\C and \\N codes to always have exactly 4 backslashes
+                #             jaString = re.sub(r'\\+([cCnN]\[\d+\])', r'\\\\\1', jaString)
+                #             codeList[i]["parameters"][0] = jaString
+
+                # _MTxt handler - translates var _MTxt = "text" + "\n"; across 355 + 655 lines
+                # Code 355: var _MTxt = "text" + "\n";
+                # Code 655: _MTxt += "text" + "\n";
+                if "_MTxt" in jaString and codeList[i]["code"] == 355:
+                    mtxtRegex = r'"(.+?)"\s*\+\s*"\\n"'
+                    textLines = []
+                    textLineIndices = []
+
+                    # Extract text from the 355 line itself
+                    match355 = re.search(mtxtRegex, jaString)
+                    if match355:
+                        text = match355.group(1)
+                        if not (IGNORETLTEXT and not re.search(LANGREGEX, text)):
+                            textLines.append(text)
+                            textLineIndices.append(i)
+
+                    # Extract text from subsequent 655 lines
+                    j = i + 1
+                    while j < len(codeList) and codeList[j]["code"] == 655:
+                        param = codeList[j]["parameters"][0] if codeList[j]["parameters"] else ""
+                        if "_MTxt" in param:
+                            textMatch = re.search(mtxtRegex, param)
+                            if textMatch:
+                                text = textMatch.group(1)
+                                if not (IGNORETLTEXT and not re.search(LANGREGEX, text)):
+                                    textLines.append(text)
+                                    textLineIndices.append(j)
+                        j += 1
+
+                    if textLines:
+                        if setData:
+                            for text in textLines:
+                                list355655.append(text)
+                        else:
+                            for lineIdx in textLineIndices:
+                                if len(list355655) > 0:
+                                    translatedText = list355655[0]
+                                    list355655.pop(0)
+                                    translatedText = translatedText.replace('\\"', "'")
+                                    translatedText = translatedText.replace('"', "'")
+
+                                    origParam = codeList[lineIdx]["parameters"][0]
+                                    origMatch = re.search(mtxtRegex, origParam)
+                                    if origMatch:
+                                        codeList[lineIdx]["parameters"][0] = origParam.replace(origMatch.group(1), translatedText)
+
+                        i = j - 1
 
             ## Event Code: 408 (Script)
             if "code" in codeList[i] and (codeList[i]["code"] == 408) and CODE408 is True:
@@ -3741,6 +3972,7 @@ def getSpeaker(speaker: str):
     except Exception:
         pass
     translated = response[0].title().replace("'S", "'s").replace("Speaker: ", "")
+    translated = re.sub(r'(\d)(St|Nd|Rd|Th)\b', lambda m: m.group(1) + m.group(2).lower(), translated)
 
     if re.search(r"([a-zA-Z？?])", translated) is None:
         try:
@@ -3757,6 +3989,7 @@ def getSpeaker(speaker: str):
         except Exception:
             pass
         translated = response[0].title().replace("'S", "'s")
+        translated = re.sub(r'(\d)(St|Nd|Rd|Th)\b', lambda m: m.group(1) + m.group(2).lower(), translated)
 
     with _speakerCacheLock:
         if speaker not in _speakerCache:

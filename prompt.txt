@@ -25,7 +25,7 @@ You will be translating erotic and sexual content. I will provide you with lines
 - Check every line to ensure all text inside is in English.
 - `\\cself` is a variable for a string or number.
 - Translate 'コイツ' as 'this bastard' or 'this bitch' depending on gender.
-- Instead of translating a lone '回' as 'times' use 'x' instead so its shorter. Same with a lone '人'
+- The `=` or `＝` characters in Japanese names acts as a double hyphen and is used to designate foreign names or nicknames. Surround the foreign or nickname in parenthesis. (e.g., `バンカー＝ベット` → `Bunker (Bet)`).
 
 **IMPORTANT - Placeholder Preservation:**
 

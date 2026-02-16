@@ -162,6 +162,9 @@ def parseJSON(data, filename):
                 # PSData format (Nupu_PSData.json - MailDatas, MemoryData, ShopDatas, hStData)
                 elif any(k in data for k in ["MailDatas", "MemoryData", "ShopDatas", "hStData"]):
                     result = translatePSData(data, filename)
+                # RdData format (RdData.json - dgnDatas with dungeon/dialogue data)
+                elif "dgnDatas" in data:
+                    result = translateRdData(data, filename)
                 else:
                     result = translateJSON(data, filename, [])
             else:
@@ -467,6 +470,258 @@ def translatePSData(data, filename):
             hst[an][idx]["rankText2"] = tl
         if rankText2S:
             save_progress_json(data, filename)
+
+    return tokens
+
+
+def translateRdData(data, filename):
+    """Translate RdData JSON format (e.g. RdData.json).
+    
+    Handles dungeon data with nested dialogue, choices, and UI text.
+    Only translates player-visible text fields.
+    """
+    global LOCK, ESTIMATE, FILENAME, PBAR, MISMATCH
+    tokens = [0, 0]
+
+    def batchTranslate(stringList, context):
+        """Translate a list of strings and return translations. Returns [] on mismatch."""
+        nonlocal tokens
+        if not stringList:
+            return []
+        response = translateAI(stringList, context, True)
+        tokens[0] += response[1][0]
+        tokens[1] += response[1][1]
+        if len(stringList) != len(response[0]):
+            with LOCK:
+                if FILENAME not in MISMATCH:
+                    MISMATCH.append(FILENAME)
+            return []
+        return response[0]
+
+    if "dgnDatas" not in data:
+        return tokens
+
+    dgns = data["dgnDatas"]
+
+    # ================================================================
+    # PASS 1: Collect all translatable strings
+    # ================================================================
+
+    # -- Dungeon-level short fields --
+    dgnNameS, dgnNameI = [], []
+    clearTxtS, clearTxtI = [], []
+    hosyuTxtS, hosyuTxtI = [], []
+    firstHosyuTxtS, firstHosyuTxtI = [], []
+    memoTxtS, memoTxtI = [], []
+    appMemoTxtS, appMemoTxtI = [], []
+    areaMemoS, areaMemoI = [], []
+
+    # -- Dungeon-level long text fields --
+    naiyoTxtS, naiyoTxtI = [], []
+    naiyoTxtExS, naiyoTxtExI = [], []
+    johoTxtS, johoTxtI = [], []
+    johoTxtExS, johoTxtExI = [], []
+
+    # -- Floor names --
+    kaisoNameS, kaisoNameI = [], []  # (dgnIdx, kaisoIdx)
+
+    # -- Dialogue (talkDatas / talkDatasEx) --
+    talkNameS, talkNameI = [], []               # (dgnIdx, talkKey, talkIdx)
+    speakerNameS, speakerNameI = [], []         # (dgnIdx, talkKey, talkIdx, speechIdx)
+    dialogueS, dialogueI = [], []               # (dgnIdx, talkKey, talkIdx, speechIdx)
+
+    # -- Choice events (sijiDatas) --
+    sijiNameS, sijiNameI = [], []               # (dgnIdx, sijiIdx)
+    sijiChoiceS, sijiChoiceI = [], []           # (dgnIdx, sijiIdx)
+
+    for di, dgn in enumerate(dgns):
+        if dgn is None:
+            continue
+
+        # Dungeon short fields
+        if dgn.get("name") and re.search(LANGREGEX, dgn["name"]):
+            dgnNameS.append(dgn["name"])
+            dgnNameI.append(di)
+        if dgn.get("clearTxt") and re.search(LANGREGEX, dgn["clearTxt"]):
+            clearTxtS.append(dgn["clearTxt"])
+            clearTxtI.append(di)
+        if dgn.get("hosyuTxt") and re.search(LANGREGEX, dgn["hosyuTxt"]):
+            hosyuTxtS.append(dgn["hosyuTxt"])
+            hosyuTxtI.append(di)
+        if dgn.get("firstHosyuTxt") and re.search(LANGREGEX, dgn["firstHosyuTxt"]):
+            firstHosyuTxtS.append(dgn["firstHosyuTxt"])
+            firstHosyuTxtI.append(di)
+        if dgn.get("memoTxt") and re.search(LANGREGEX, dgn["memoTxt"]):
+            memoTxtS.append(dgn["memoTxt"])
+            memoTxtI.append(di)
+        if dgn.get("appMemoTxt") and re.search(LANGREGEX, dgn["appMemoTxt"]):
+            appMemoTxtS.append(dgn["appMemoTxt"])
+            appMemoTxtI.append(di)
+        if dgn.get("areaMemo") and re.search(LANGREGEX, dgn["areaMemo"]):
+            areaMemoS.append(dgn["areaMemo"])
+            areaMemoI.append(di)
+
+        # Dungeon long text fields (strip line breaks for translation)
+        if dgn.get("naiyoTxt") and re.search(LANGREGEX, dgn["naiyoTxt"]):
+            naiyoTxtS.append(dgn["naiyoTxt"].replace("\r\n", " ").replace("\n", " ").strip())
+            naiyoTxtI.append(di)
+        if dgn.get("naiyoTxtEx") and re.search(LANGREGEX, dgn["naiyoTxtEx"]):
+            naiyoTxtExS.append(dgn["naiyoTxtEx"].replace("\r\n", " ").replace("\n", " ").strip())
+            naiyoTxtExI.append(di)
+        if dgn.get("johoTxt") and re.search(LANGREGEX, dgn["johoTxt"]):
+            johoTxtS.append(dgn["johoTxt"].replace("\r\n", " ").replace("\n", " ").strip())
+            johoTxtI.append(di)
+        if dgn.get("johoTxtEx") and re.search(LANGREGEX, dgn["johoTxtEx"]):
+            johoTxtExS.append(dgn["johoTxtEx"].replace("\r\n", " ").replace("\n", " ").strip())
+            johoTxtExI.append(di)
+
+        # Floor names
+        if "kaisoDatas" in dgn and isinstance(dgn["kaisoDatas"], list):
+            for ki, kaiso in enumerate(dgn["kaisoDatas"]):
+                if isinstance(kaiso, dict) and kaiso.get("kaisoName") and re.search(LANGREGEX, kaiso["kaisoName"]):
+                    kaisoNameS.append(kaiso["kaisoName"])
+                    kaisoNameI.append((di, ki))
+
+        # Dialogue from talkDatas and talkDatasEx
+        for talkKey in ["talkDatas", "talkDatasEx"]:
+            if talkKey in dgn and isinstance(dgn[talkKey], list):
+                for ti, talk in enumerate(dgn[talkKey]):
+                    if not isinstance(talk, dict):
+                        continue
+                    if talk.get("name") and re.search(LANGREGEX, talk["name"]):
+                        talkNameS.append(talk["name"])
+                        talkNameI.append((di, talkKey, ti))
+                    if "speachDatas" in talk and isinstance(talk["speachDatas"], list):
+                        for si, speech in enumerate(talk["speachDatas"]):
+                            if not isinstance(speech, dict):
+                                continue
+                            if speech.get("name") and re.search(LANGREGEX, speech["name"]):
+                                speakerNameS.append(speech["name"])
+                                speakerNameI.append((di, talkKey, ti, si))
+                            if speech.get("text") and re.search(LANGREGEX, speech["text"]):
+                                dialogueS.append(speech["text"].replace("\r\n", " ").replace("\n", " ").strip())
+                                dialogueI.append((di, talkKey, ti, si))
+
+        # Choice events (sijiDatas)
+        if "sijiDatas" in dgn and isinstance(dgn["sijiDatas"], list):
+            for si, siji in enumerate(dgn["sijiDatas"]):
+                if not isinstance(siji, dict):
+                    continue
+                if siji.get("name") and re.search(LANGREGEX, siji["name"]):
+                    sijiNameS.append(siji["name"])
+                    sijiNameI.append((di, si))
+                if siji.get("choiceSijiTxt") and re.search(LANGREGEX, siji["choiceSijiTxt"]):
+                    sijiChoiceS.append(siji["choiceSijiTxt"].replace("\r\n", " ").replace("\n", " ").strip())
+                    sijiChoiceI.append((di, si))
+
+    # Set progress bar total
+    totalItems = (
+        len(dgnNameS) + len(clearTxtS) + len(hosyuTxtS) + len(firstHosyuTxtS)
+        + len(memoTxtS) + len(appMemoTxtS) + len(areaMemoS)
+        + len(naiyoTxtS) + len(naiyoTxtExS) + len(johoTxtS) + len(johoTxtExS)
+        + len(kaisoNameS)
+        + len(talkNameS) + len(speakerNameS) + len(dialogueS)
+        + len(sijiNameS) + len(sijiChoiceS)
+    )
+    PBAR.total = totalItems
+    PBAR.refresh()
+
+    # ================================================================
+    # PASS 2: Translate each batch and apply results back to data
+    # ================================================================
+
+    # -- Dungeon short fields --
+    for tl, idx in zip(batchTranslate(dgnNameS, "Dungeon Name"), dgnNameI):
+        dgns[idx]["name"] = tl
+    if dgnNameS:
+        save_progress_json(data, filename)
+
+    for tl, idx in zip(batchTranslate(clearTxtS, "Clear Condition"), clearTxtI):
+        dgns[idx]["clearTxt"] = tl
+    if clearTxtS:
+        save_progress_json(data, filename)
+
+    for tl, idx in zip(batchTranslate(hosyuTxtS, "Reward Description"), hosyuTxtI):
+        dgns[idx]["hosyuTxt"] = tl
+    if hosyuTxtS:
+        save_progress_json(data, filename)
+
+    for tl, idx in zip(batchTranslate(firstHosyuTxtS, "First Clear Reward"), firstHosyuTxtI):
+        dgns[idx]["firstHosyuTxt"] = tl
+    if firstHosyuTxtS:
+        save_progress_json(data, filename)
+
+    for tl, idx in zip(batchTranslate(memoTxtS, "Memo Label"), memoTxtI):
+        dgns[idx]["memoTxt"] = tl
+    if memoTxtS:
+        save_progress_json(data, filename)
+
+    for tl, idx in zip(batchTranslate(appMemoTxtS, "App Memo"), appMemoTxtI):
+        dgns[idx]["appMemoTxt"] = tl
+    if appMemoTxtS:
+        save_progress_json(data, filename)
+
+    for tl, idx in zip(batchTranslate(areaMemoS, "Area Label"), areaMemoI):
+        dgns[idx]["areaMemo"] = tl
+    if areaMemoS:
+        save_progress_json(data, filename)
+
+    # -- Dungeon long text fields (with word wrap) --
+    for tl, idx in zip(batchTranslate(naiyoTxtS, "Mission Description"), naiyoTxtI):
+        dgns[idx]["naiyoTxt"] = dazedwrap.wrapText(tl, WIDTH)
+    if naiyoTxtS:
+        save_progress_json(data, filename)
+
+    for tl, idx in zip(batchTranslate(naiyoTxtExS, "Extended Mission Description"), naiyoTxtExI):
+        dgns[idx]["naiyoTxtEx"] = dazedwrap.wrapText(tl, WIDTH)
+    if naiyoTxtExS:
+        save_progress_json(data, filename)
+
+    for tl, idx in zip(batchTranslate(johoTxtS, "Info Text"), johoTxtI):
+        dgns[idx]["johoTxt"] = dazedwrap.wrapText(tl, WIDTH)
+    if johoTxtS:
+        save_progress_json(data, filename)
+
+    for tl, idx in zip(batchTranslate(johoTxtExS, "Extended Info Text"), johoTxtExI):
+        dgns[idx]["johoTxtEx"] = dazedwrap.wrapText(tl, WIDTH)
+    if johoTxtExS:
+        save_progress_json(data, filename)
+
+    # -- Floor names --
+    for tl, (di, ki) in zip(batchTranslate(kaisoNameS, "Floor Name"), kaisoNameI):
+        dgns[di]["kaisoDatas"][ki]["kaisoName"] = tl
+    if kaisoNameS:
+        save_progress_json(data, filename)
+
+    # -- Dialogue event names --
+    for tl, (di, tk, ti) in zip(batchTranslate(talkNameS, "Event Label"), talkNameI):
+        dgns[di][tk][ti]["name"] = tl
+    if talkNameS:
+        save_progress_json(data, filename)
+
+    # -- Speaker names --
+    for tl, (di, tk, ti, si) in zip(batchTranslate(speakerNameS, "Character Name"), speakerNameI):
+        dgns[di][tk][ti]["speachDatas"][si]["name"] = tl
+    if speakerNameS:
+        save_progress_json(data, filename)
+
+    # -- Dialogue text (with word wrap) --
+    for tl, (di, tk, ti, si) in zip(batchTranslate(dialogueS, "Dialogue"), dialogueI):
+        dgns[di][tk][ti]["speachDatas"][si]["text"] = dazedwrap.wrapText(tl, WIDTH)
+    if dialogueS:
+        save_progress_json(data, filename)
+
+    # -- Choice event names --
+    for tl, (di, si) in zip(batchTranslate(sijiNameS, "Event Name"), sijiNameI):
+        dgns[di]["sijiDatas"][si]["name"] = tl
+    if sijiNameS:
+        save_progress_json(data, filename)
+
+    # -- Choice text (with word wrap) --
+    for tl, (di, si) in zip(batchTranslate(sijiChoiceS, "Choice Event Text"), sijiChoiceI):
+        dgns[di]["sijiDatas"][si]["choiceSijiTxt"] = dazedwrap.wrapText(tl, WIDTH)
+    if sijiChoiceS:
+        save_progress_json(data, filename)
 
     return tokens
 
