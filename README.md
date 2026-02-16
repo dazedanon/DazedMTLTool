@@ -1,213 +1,184 @@
-# Supported Engines
-* RPGM Games
-* Text Files
-* Certain VN Engines (Renpy, Tyrano, Kirikiri, etc.)
+# DazedMTLTool
 
-# Overview
-This is a translation tool that can be used to translate games, specifically text files from games, and the tool will handle most of the hard work. There is no GUI at the moment; everything is done through the command line. This tool mainly uses GPT for translation, but it can be configured with other models as long as they share the same format.
+An AI-powered game translation tool with a GUI. Translate RPG Maker, Ren'Py, Tyrano, Wolf RPG, Kirikiri, and other game engines from Japanese to English using GPT or compatible AI models.
 
-# Setup
-Note that this will likely require a bit of programming experience or the motivation and time to learn. This will also assume you are using Windows 11 (though it should work on Windows 10 as well).
+## Supported Engines
 
-## Tools
-* [VSCode](https://code.visualstudio.com/) - Code Editor I use. **During installation, enable the following:**
-  - Add "Open with Code" action to Windows Explorer file context menu
-  - Add "Open with Code" action to Windows Explorer directory context menu
+- RPG Maker (MV, MZ, Ace, and more)
+- Wolf RPG Editor
+- Ren'Py
+- TyranoBuilder / TyranoScript
+- Kirikiri
+- NScripter
+- CSV / Text files
 
-* [Python & Pip](https://www.python.org/downloads/) - Language. Google guides if pip isn't found in later steps.
-* [Git](https://git-scm.com/) - Version Control. It will show you what has been changed. Amazing for translation. You may also need to set up your [credentials](https://docs.github.com/en/get-started/getting-started-with-git/setting-your-username-in-git), which can be whatever you want.
-* [GPT API Account](https://platform.openai.com/playground/chat) - You will need to create an [API Key](https://platform.openai.com/settings/organization/api-keys).
+---
 
-You will know Python and Git are installed properly by opening a command prompt or terminal and typing the following:
+## Requirements
 
-```shell
-python -V
-git -v
+- **Python 3.12 – 3.14** — [Download here](https://www.python.org/downloads/). During installation, **check "Add Python to PATH"**.
+- **An AI API Key** — You'll need an API key from [OpenAI](https://platform.openai.com/settings/organization/api-keys), [Google Gemini](https://aistudio.google.com/apikey), or a compatible provider.
+
+> **Tip:** You can verify Python is installed by opening a terminal and running `python -V`. It should print something like `Python 3.13.x`.
+
+---
+
+## Quick Start
+
+### 1. Download the Tool
+
+1. Click the green **Code** button at the top of this page and select **Download ZIP**.
+2. Extract the ZIP to a folder of your choice (e.g., `C:\DazedMTLTool`).
+
+### 2. Set Up Your API Key
+
+1. Inside the tool folder, find `.env.example` and make a copy of it named `.env`.
+2. Open `.env` in any text editor (Notepad works fine) and fill in your API details:
+   - `key` — Your API key.
+   - `organization` — Your organization key (make something up if using a self-hosted or non-OpenAI API).
+   - `API_PROVIDER` — Set to `openai` or `gemini` depending on your provider.
+3. The rest of the settings (wordwrap, batch size, etc.) can be left as defaults for now. You can tweak them later.
+
+### 3. Launch the GUI
+
+**Double-click `START.bat`**. It will:
+- Create a virtual environment automatically.
+- Install all dependencies.
+- Launch the GUI.
+
+That's it! From now on, just double-click `START.bat` to open the tool.
+
+---
+
+## Using the GUI
+
+The GUI has several tabs that handle different parts of the translation process:
+
+### Config Tab
+This is where you configure your API settings, wordwrap widths, and other options. Most of these mirror what's in the `.env` file, but you can adjust them visually.
+
+### Translation Tab
+The main tab for translating files.
+
+1. **Add files** — Place the game files you want to translate into the `files` folder (inside the tool directory).
+2. **Select a module** — Pick the engine that matches your game (e.g., RPG Maker MV/MZ, Wolf RPG, Ren'Py, etc.).
+3. **Click Translate** — The tool will process each file and output translated versions to the `translated` folder.
+4. **Copy the results** — Move the translated files from `translated` back into your game's data folder.
+
+### Engine Config Tab
+Engine-specific settings. For example, RPG Maker lets you toggle which event codes to translate (dialogue, choices, variables, etc.). The defaults cover the most common text (~95% of a game), so you usually don't need to change these.
+
+### RPG Maker / Wolf / CSV Tabs
+Specialized tabs with extra options for those specific engines.
+
+---
+
+## Vocab & Prompt
+
+### vocab.txt
+This file gives the AI context about your game — character names, genders, recurring terms, etc. The better your vocab file, the more consistent the translation.
+
+Open `vocab.txt` (or copy `vocab.txt.example` to `vocab.txt` if it doesn't exist) and add entries like:
+
+```plaintext
+# Game Characters
+水無月 士乃 (Minazuki Shino) - Female
+暗黒斎 (Dark Kokusai) - Male
+フトシ (Futoshi) - Male
 ```
 
-It will display the version.
+Format: Japanese name, English name in parentheses, then gender.
 
-## Setup Environment
+> **Note:** A very large vocab file can increase API costs and potentially reduce quality. Focus on the most important characters and terms.
 
-### 1. Open Project in VSCode
+### prompt.txt
+This is the system prompt sent to the AI. A default `prompt.txt` is included and works well for most games. You generally don't need to edit it unless you want to customize the translation style.
 
-1. Create a new folder where the tool will live.
-2. Download the ZIP by clicking CODE at the top.
-3. Extract the ZIP into the folder.
-4. Shift + Right Click and select "Open with Code".
+---
 
-   <img src="screens/open-with-code.png" alt="open-with-code" width=200>
-5. You should now have the project open in VSCode.
+## Tips
 
-   <img src="screens/vscode.png" alt="vscode" width=200>
+- **Check `log/translations.txt`** after a run to see what was translated. You can copy useful terms from it into `vocab.txt` for consistency in future runs.
+- **Start small** — Translate a few files first to make sure the output looks good before doing the whole game.
+- **Wordwrap** — If text overflows or looks awkward in-game, adjust the `width` setting in `.env` or the Config tab. `60` is a good default for most RPG Maker games.
+- **Version control** — Using [Git](https://git-scm.com/) with the game folder is highly recommended. It lets you track every change the translation makes, compare with original files, and roll back if needed.
 
-### 2. Install Dependencies
+---
 
-1. Click View > Terminal.
-2. Type the following command to install dependencies:
-   
-   ```shell
-   pip install -r requirements.txt
-   ```
+## Folder Structure
 
-### 3. Setup .env
+| Folder | Purpose |
+|---|---|
+| `files/` | Place game files here before translating |
+| `translated/` | Translated output appears here |
+| `log/` | Translation logs and cache |
+| `modules/` | Engine-specific translation scripts |
+| `gui/` | GUI source code |
 
-1. Copy `.env.example` and rename it to `.env`.
-2. Open `.env` and enter your [GPT API Key](https://platform.openai.com/settings/organization/api-keys) and [Organization Key](https://platform.openai.com/settings/organization/general).
-3. The rest of the ENV is where you will set things like wordwrap for game text.
+---
 
-That will about wrap it up for setup.
+## RPG Maker Translation Workflow
 
-### 4. Setup Prompt
+Here's the recommended step-by-step process for translating an RPG Maker MV/MZ game. This is also shown inside the GUI's RPG Maker tab.
 
-1. Create a file named `prompt.txt`.
-2. Copy what is in `prompt.example` and place it inside `prompt.txt`. You can change this, but I would mostly leave it the same.
+| Step | Action |
+|------|--------|
+| **1** | **Parse speakers → vocab.txt** — Use the Parse Speakers feature to pull character names from the game files into `vocab.txt`. |
+| **2** | **Identify speaker genders** — Figure out which characters are male/female and update `vocab.txt` accordingly. This helps the AI use correct pronouns. |
+| **3** | **Translate Actors.json, MapInfos.json** — These are small files with character and map names. Good to do first. |
+| **4** | **Translate Items, System, Weapons, etc.** — All the data files that aren't maps or events. Place them in `files/`, translate, then copy results back. |
+| **5** | **Find speaker names** — Enable CODE 101 (Speakers), check for bracketed names, or use the "First Line = Speaker" option to capture speaker names properly. |
+| **6** | **Replace `\n[0-999]` variables** — Some games use variable codes like `\n[1]` for character names. Replace these with the actual actor names so the AI can translate around them. |
+| **7** | **Translate Maps & CommonEvents** — The bulk of the game's dialogue. Start with a small map to test, then do the rest. You can use **Estimate** in the GUI to check the cost before running. |
+| **8** | **Edit plugins for menus/text** — Some UI text lives in `plugins.js` or plugin parameters. You may need to manually translate these in a text editor. |
+| **9** | **Translate CODE 122 vars, 356 plugins as needed** — Enable these codes in the RPG Maker tab if the game stores dialogue in variables or plugin commands. |
+| **10** | **Playtest → find issues → fix → repeat** — Play through the game, screenshot any untranslated text, search for it in the game files, and re-translate as needed. |
 
-## Translation
+> **Note:** Some text (e.g., CODE 122 variables) may only update when starting a new save file.
 
-`modules` contains the scripts needed to actually translate each game engine. For example, `rpgmakermvmz.py` is for translating RPG Maker MV and MZ games. I am going to go step by step into my process. This will hopefully give you an idea of how you should approach AI Translation of a game.
+---
 
-### 1. Setup Formatting
+## Using Copilot & VSCode
 
-1. Navigate to the game folder (where game.exe is).
-2. Shift + Right Click and select "Open in Code".
-3. Press `CTRL+SHIFT+X` and type `JSON formatter`. I recommend the one by Clemens Peters, but choose whichever works.
-4. Again Press `CTRL+SHIFT+X` and type `Workspace Formatter` and install that as well.
-5. Navigate to the `www` folder and right-click `data`. Then click `Format`. This will format all the files and make them look pretty for editing.
+[VSCode](https://code.visualstudio.com/) is a free code editor, and with [GitHub Copilot](https://marketplace.visualstudio.com/items?itemName=GitHub.copilot) you get an AI assistant built right into it. This is incredibly useful for translation work — you can ask the AI to help modify game files or even tweak the tool's modules without needing to know how to code.
 
-   <img src="screens/format.png" alt="vscode" width=200>
+### Setup
 
-### 2. Setup Version Control
+1. Install [VSCode](https://code.visualstudio.com/).
+2. Install the **GitHub Copilot** extension (`Ctrl+Shift+X` → search "GitHub Copilot").
+3. Sign in with your GitHub account (Copilot has a free tier).
 
-This is going to help us track changes we make while translating. It is extremely helpful, and I do not recommend skipping it.
+### Editing Game Files with AI
 
-1. In VSCode press `CTRL+SHIFT+X` and type `Gitlens`. Install the extension.
-2. Create a new file `.gitignore` in the game directory and add the following to it:
+Open your game folder in VSCode (`Right Click` → `Open with Code`) and use Copilot Chat (`Ctrl+Shift+I`) to ask for changes. Examples:
 
-   ```plaintext
-   # Ignore all files
-   *.*
-   # File Types
-   !*.mps
-   !*.dat
-   !*.json
-   !*.txt
-   !*.project
-   !*.js
-   !*.zip
-   !*.7z
-   !*.csv
-   !*.ain
-   !*.fnl
-   !*.ks
-   !*.tjs
-   !*.yaml
-   !*.rb
-   !*.rvdata2
-   # Other Needed Files
-   !.gitignore
-   !README.md
-   !patch-config.txt
-   !GameUpdate*
-   !patch*
-   !Game.dat
-   # Ignore
-   previous_patch_sha.txt
-   kabe3_save.dat
-   kabe3_system.dat
-   psbpack.dat
-   Save*
-   ```
+- *"Replace all `\n[1]` with `Shino` in this file"*
+- *"Translate all the Japanese menu text in this plugins.js file to English"*
+- *"This dialogue has broken line breaks — fix the formatting"*
 
-This will ignore files we don't care about.
+You can also select a block of text, right-click, and choose **Copilot → Fix / Explain / Modify** to work on just that selection.
 
-3. Click the source control button on the left (or hit `CTRL+Shift+G` -> `G`).
-4. Click "Initialize Repository". This is going to create a new repo that will track all changes. You will see them pop up after.
-5. `Committing` a change is a lot like saving them. Type `Initial Commit` in the message box and hit the commit button to save changes.
+### Modifying Tool Modules
 
-   <img src="screens/commit.png" alt="commit" width=200>
-6. Now, our changes are saved, but we will want them saved on another branch as well, so we can compare them later. Press `CTRL+Shift+P` -> Type "Create Branch" -> Type `original` and hit Enter.
-7. Press `CTRL+Shift+P` -> Type "Checkout" -> `main` or `master`.
-8. Navigate to Source Control on the left, click Gitlens at the bottom, and select the branch icon. A checkmark should be next to your main branch.
+Open the DazedMTLTool folder in VSCode and ask Copilot to make changes to the translation modules. Examples:
 
-When we make changes later, you will be able to directly compare them with the original files.
+- *"Add a new regex pattern to skip lines that start with //"*
+- *"Change the wordwrap logic to break on full-width punctuation"*
+- *"Make this module also handle .yaml files"*
+- *"Explain what CODE 356 does in rpgmakermvmz.py"*
 
-<img src="screens/branch.png" alt="branch" width=200>
+Copilot can read the surrounding code and suggest context-aware edits — you just review and accept. This makes it easy to customize the tool for specific games without deep Python knowledge.
 
-### 3. Names and Genders
+### Tips
 
-1. Find the names and genders of all the main characters in the game. This is going to help the AI properly handle subjects and genders. For example:
+- Use **Ctrl+Shift+I** to open Copilot Chat and ask questions about any file you have open.
+- Use **Ctrl+I** for inline editing — select code, describe what you want changed, and Copilot will rewrite it in place.
+- Use [Git](https://git-scm.com/) with your game folder so you can always undo changes if something breaks. The [GitLens](https://marketplace.visualstudio.com/items?itemName=eamodio.gitlens) extension makes this even easier.
 
-   ```plaintext
-   水無月 士乃 (Minazuki Shino) - Female
-   怪盗エース (Phantom Thief Ace) - Female
-   暗黒斎 (Dark Kokusai) - Male
-   フトシ (Futoshi) - Male
-   ```
+---
 
-   (Japanese first, followed by English in parentheses, followed by gender.)
+## Troubleshooting
 
-2. Place this inside `vocab.txt` in the DazedMTLTool project under `# Game Characters`. Do your best to find as many characters as possible beforehand.
-
-### 4. Non-Map Files
-
-1. Translate the Non-Map files. By Non-Map files, we mean files inside `data` that aren't MapXXX or CommonEvents, such as Actors, Weapons, etc. To start, place these inside the `files` folder.
-2. `files` will contain all the txt files that are to be translated. After the tool is run, the translated files will be placed inside `translated`.
-
-   <img src="screens/files.png" alt="vscode" width=200>
-3. Open `start.py` by double-clicking it and then press F5. If prompted, select `Python Debugger` and `Python File`. This will start the tool, and you will be prompted.
-
-   <img src="screens/tool.png" alt="vscode" width=200>
-4. Enter `1` to select "Translate". Then enter `1` to select the rpgmakermvmz module. This will begin translation.
-5. After it's finished, copy the files in `translation` back to the game `data` folder and check in-game to see if it's properly translated.
-
-**Note:** You can check `translations.txt` to see what was translated and even paste that into `vocab.txt` to add extra context for locations or items. This will make the AI translate it consistently later on. However, the bigger the vocab file, the more expensive the process will be, and if it's too big, it might reduce the quality of the translation.
-
-6. We can now commit these files as well to essentially save them. Back in the Game Project in VSCode, check the Source Control tab on the left. It is going to list all the changed files. If you click on one, it will show you the specific changes.
-
-   <img src="screens/changes.png" alt="changes" width=200>
-7. Commit/Save these changes by typing what the changes are in the message box and hitting `Commit`. The Gitlens tabs will show you all your commits, and you can go back and forth as needed.
-
-   <img src="screens/history.png" alt="changes" width=200>
-
-At any time, you can right-click a file and select `Open Changes` > `Open Changes w/ Branch` and select `original` to compare with the original files. Very useful.
-
-### 5. Map Files
-
-1. Now we can start translating the actual dialogue. I always recommend starting the game first and checking the first dialogue that appears. Then translate that map file. You can use the Snipping Tool to screenshot some text, grab it, and then use VSCode to search through the files.
-
-   For example, this is the first line of this game:
-
-   <img src="screens/prologue.png" alt="vscode" width=200>
-
-2. Use the Snipping Tool to screenshot and grab the text. Then go to the VSCode Game Project and search that text.
-
-   <img src="screens/search.png" alt="vscode" width=200>
-3. As you can see, Map049 is where the text resides. Copy that file to `files` in the tool.
-4. Open `rpgmakermvmz.py` in VSCode by double-clicking it.
-5. At the top of the module, there will be a lot of variables. What we mainly care about for this tutorial are the CODES. These codes label what the actual text is. For example:
-
-   - 401 Code = Dialogue
-   - 102 Code = Choices
-   - 122 Code = Variables
-   - etc.
-
-   When a code is set to `True`, the tool will translate all instances of it in the game files. As a rule of thumb, 401, 405, and 102 will translate 95%+ of the game. This is what we are going to do. Make sure those codes are set to `True`, and the rest are set to `False`.
-
-   <img src="screens/codes.png" alt="vscode" width=200>
-
-6. Next, look into `.env` and set the wordwrap for the text. Wordwrap will set how many words appear before a newline. No need to think too hard, just lower or raise it as needed in-game. 60 is a good fit for most games, and you can change it later by rerunning the map files through the tool.
-7. Now we can finally translate, simply repeat the steps you did for the non-map files, and it should work.
-8. Once you confirm that the text is translated and looks good in-game, you can then copy and paste the rest of the Map files into `files` and just run the tool. You can use `Estimate` to give you an estimate on the cost. Most games are around $20.
-
-### 6. Plugin Files
-
-You may notice that there is some text not translated in the menus. This text usually lives in `plugins.js`.
-
-1. Navigate to the game project and search the text you are looking for. You can simply translate the text directly here as needed. This varies from game to game, but as long as you use the search functionality in VSCode, you should have no issues.
-
-   <img src="screens/plugins.png" alt="vscode" width=200>
-
-## Final Thoughts
-
-That's about all the knowledge you need to get started on translation. RPGM games are easiest for this tool, but it can handle some other engines and most text files. The general process remains the same. Feel free to shoot me questions on Discord if you have trouble. Good luck!
+- **`START.bat` closes immediately** — Make sure Python 3.12–3.14 is installed and added to your PATH. Open a terminal and run `python -V` to check.
+- **API errors** — Double-check your API key and organization in `.env`. Make sure you have credits/quota with your provider.
+- **Missing dependencies** — Delete the `.venv` folder and run `START.bat` again. It will recreate the environment and reinstall everything.
