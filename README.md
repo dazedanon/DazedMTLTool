@@ -6,6 +6,7 @@ An AI-powered game translation tool with a GUI. Translate RPG Maker, Ren'Py, Tyr
 
 - [Supported Engines](#supported-engines)
 - [Requirements](#requirements)
+- [Installing Python](#installing-python)
 - [Quick Start](#quick-start)
 - [Using the GUI](#using-the-gui)
 - [Vocab & Prompt](#vocab--prompt)
@@ -30,10 +31,65 @@ An AI-powered game translation tool with a GUI. Translate RPG Maker, Ren'Py, Tyr
 
 ## Requirements
 
-- **Python 3.12 – 3.14** — [Download here](https://www.python.org/downloads/). During installation, **check "Add Python to PATH"**.
+- **Python 3.12 – 3.14** — See [Installing Python](#installing-python) below if you don't have it yet.
 - **An AI API Key** — You'll need an API key from [OpenAI](https://platform.openai.com/settings/organization/api-keys), [Google Gemini](https://aistudio.google.com/apikey), or a compatible provider.
 
-> **Tip:** You can verify Python is installed by opening a terminal and running `python -V`. It should print something like `Python 3.13.x`.
+---
+
+## Installing Python
+
+If you already have Python 3.12–3.14 installed and working, skip to [Quick Start](#quick-start).
+
+### Step 1 — Download
+
+Go to [python.org/downloads](https://www.python.org/downloads/) and download **Python 3.13** (or any version from 3.12 to 3.14).
+
+### Step 2 — Install (Important!)
+
+When the installer opens, **check both boxes at the bottom before clicking Install**:
+
+- ✅ **"Add python.exe to PATH"** — This is the most important step. Without it, your system won't be able to find Python.
+- ✅ **"Use admin privileges when installing pip"**
+
+Then click **Install Now**. The default settings are fine for everything else.
+
+### Step 3 — Verify
+
+Open a **new** terminal window (don't reuse an old one — it won't see the new PATH) and run:
+
+```
+python -V
+```
+
+You should see something like `Python 3.13.x`. Then check pip:
+
+```
+pip -V
+```
+
+You should see something like `pip 24.x.x from ...`.
+
+### If `python` or `pip` is not recognized
+
+This means Python wasn't added to your PATH. You have two options:
+
+**Option A — Reinstall (easiest)**
+1. Open the Python installer again (or redownload it).
+2. Select **Modify**.
+3. Click **Next** on the first screen.
+4. On the Advanced Options screen, check **"Add Python to environment variables"**.
+5. Click **Install**. Then open a **new** terminal and try again.
+
+**Option B — Add to PATH manually**
+1. Press `Win+R`, type `sysdm.cpl`, press Enter.
+2. Go to the **Advanced** tab → **Environment Variables**.
+3. Under **System variables**, find `Path` and click **Edit**.
+4. Click **New** and add the path where Python was installed. Typically:
+   - `C:\Users\YourName\AppData\Local\Programs\Python\Python313\`
+   - `C:\Users\YourName\AppData\Local\Programs\Python\Python313\Scripts\`
+5. Click **OK** on all dialogs, then open a **new** terminal and try `python -V` again.
+
+> **Tip:** If `python` works but `pip` doesn't, try `python -m pip -V` instead. If that works, you can use `python -m pip install` anywhere you'd normally use `pip install`.
 
 ---
 
