@@ -177,6 +177,79 @@ Copilot can read the surrounding code and suggest context-aware edits — you ju
 
 ---
 
+## Version Control with Git
+
+Git tracks every change you make to your game files, so you can compare translations against the originals and roll back mistakes. This is optional but **highly recommended** — it has saved countless hours of work.
+
+### Install Git
+
+1. Download and install [Git](https://git-scm.com/). The default settings during installation are fine.
+2. Open a terminal and verify it's installed: `git -v`
+
+### Set Up Git in Your Game Folder
+
+1. Open your **game folder** (where `Game.exe` lives) in VSCode — right-click the folder → **Open with Code**.
+2. Open the terminal in VSCode (`Ctrl+`` ` ``) and run:
+   ```
+   git init
+   ```
+   This creates a new Git repository in that folder.
+
+### Create a .gitignore
+
+Not every file needs to be tracked. Create a file called `.gitignore` in the game folder with contents like this:
+
+```plaintext
+# Ignore everything except text-based game files
+*.*
+# Allow these file types
+!*.json
+!*.txt
+!*.js
+!*.csv
+!*.ks
+!*.tjs
+!*.yaml
+!*.rb
+!*.rvdata2
+# Other useful files
+!.gitignore
+```
+
+This tells Git to only track the file types that matter for translation.
+
+### Save Your First Commit
+
+1. Click the **Source Control** icon on the left sidebar (or press `Ctrl+Shift+G`).
+2. You'll see all the game files listed. Type `Initial Commit` in the message box and click **Commit** → **Yes** (to stage all files).
+3. Your original files are now saved.
+
+### Create an "original" Branch
+
+This lets you always compare your translated files against the untouched originals.
+
+1. Press `Ctrl+Shift+P` → type **Create Branch** → name it `original` → press Enter.
+2. Press `Ctrl+Shift+P` → type **Checkout** → select `main` (or `master`).
+
+Now you're back on the main branch. Any translations you make here can be compared against the `original` branch at any time.
+
+### Comparing Changes
+
+After translating and copying files back into the game folder:
+
+1. Open **Source Control** — you'll see all modified files listed.
+2. Click any file to see a side-by-side diff of what changed.
+3. Commit your changes with a message like `Translated Items, Weapons, Actors`.
+
+To compare with the original untranslated files:
+- Right-click any file → **Open Changes** → **Open Changes with Branch** → select `original`.
+
+### Recommended Extension
+
+Install [GitLens](https://marketplace.visualstudio.com/items?itemName=eamodio.gitlens) (`Ctrl+Shift+X` → search "GitLens") for a much richer Git experience — commit history, file annotations, branch comparisons, and more.
+
+---
+
 ## Troubleshooting
 
 - **`START.bat` closes immediately** — Make sure Python 3.12–3.14 is installed and added to your PATH. Open a terminal and run `python -V` to check.
