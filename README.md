@@ -12,6 +12,7 @@ An AI-powered game translation tool with a GUI. Translate RPG Maker, Ren'Py, Tyr
 - [Vocab & Prompt](#vocab--prompt)
 - [Tips](#tips)
 - [Folder Structure](#folder-structure)
+- [Finding Untranslated Text (Snipping Tool OCR)](#finding-untranslated-text-snipping-tool-ocr)
 - [RPG Maker Translation Workflow](#rpg-maker-translation-workflow)
 - [Using Copilot & VSCode](#using-copilot--vscode)
 - [Version Control with Git](#version-control-with-git)
@@ -186,6 +187,28 @@ This is the system prompt sent to the AI. A default `prompt.txt` is included and
 | `log/` | Translation logs and cache |
 | `modules/` | Engine-specific translation scripts |
 | `gui/` | GUI source code |
+
+---
+
+## Finding Untranslated Text (Snipping Tool OCR)
+
+When playtesting a translated game, you'll inevitably find text that was missed or needs fixing. The fastest way to grab Japanese text from the screen and search for it in the game files is with the **Windows 11 Snipping Tool** — its built-in OCR is far better than most dedicated OCR tools for Japanese text.
+
+### How to Use It
+
+1. Press **Win+Shift+S** to open the Snipping Tool and take a screenshot of the untranslated text in-game.
+2. The screenshot opens in the Snipping Tool editor. Click the **Text Actions** button (the icon with lines of text) in the toolbar.
+3. The tool will detect and highlight all text in the image. You can now **click and drag** to select specific text, or click **Copy all text** to grab everything.
+4. Paste the copied Japanese text into VSCode's search (`Ctrl+Shift+F` to search across all files) to find exactly where it lives in the game data.
+5. Fix or re-translate that file as needed.
+
+### Why Snipping Tool?
+
+- **Built into Windows 11** — no extra software to install.
+- **Excellent Japanese OCR** — handles kanji, hiragana, and katakana very accurately, even from stylized game fonts.
+- **Quick workflow** — screenshot → copy text → paste into search, all in a few seconds.
+
+> **Tip:** If you're on Windows 10 or the Text Actions button doesn't appear, make sure Snipping Tool is updated via the Microsoft Store. Alternatively, [ShareX](https://getsharex.com/) with its OCR feature is a good free option.
 
 ---
 
