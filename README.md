@@ -136,7 +136,9 @@ The main tab for translating files.
 4. **Copy the results** — Move the translated files from `translated` back into your game's data folder.
 
 ### Engine Config Tab
-Engine-specific settings. For example, RPG Maker lets you toggle which event codes to translate (dialogue, choices, variables, etc.). The defaults cover the most common text (~95% of a game), so you usually don't need to change these.
+Engine-specific settings. RPG Maker has the most mature support — you can toggle exactly which event codes to translate (dialogue, choices, variables, plugin commands, etc.). The defaults cover ~95% of a game's text out of the box. See the [RPG Maker Translation Workflow](#rpg-maker-translation-workflow) section for a detailed step-by-step guide.
+
+Other engines (Wolf RPG, Ren'Py, Tyrano, etc.) have less granular support and may require more manual tweaking or post-editing depending on the game.
 
 ### RPG Maker / Wolf / CSV Tabs
 Specialized tabs with extra options for those specific engines.
