@@ -125,6 +125,8 @@ FIXTEXTWRAP = True
 IGNORETLTEXT = False
 # TLSYSTEMVARIABLES: Translate System Variables. (Optional but sometimes necessary. Can break stuff.)
 TLSYSTEMVARIABLES = False
+# TLSYSTEMSWITCHES: Translate System Switches. (Optional. Translates switch names in System.json.)
+TLSYSTEMSWITCHES = True
 # Join 408 codes into a single string like 401.
 JOIN408 = False
 
@@ -892,7 +894,7 @@ def parseNames(data, filename, context):
             note_regexes = [
                 (r"<note:(.*?)>", False),
                 (r"<PE拡張:(.*?)>", False),
-                (r"<hint:(.*?)>", False),
+                (r"<[Hh]int:(.*?)>", False),
                 (r"<SGDescription:(.*?)>", False),
                 (r"<SG説明:\n?(.*?)>", True),
                 (r"<SG説明2:\n?(.*?)>", False),
@@ -1083,6 +1085,7 @@ def parseSystem(data, filename):
             if isinstance(gt, str) and gt:
                 count += 1
             count += len(sysobj.get("variables", []) or [])
+            count += len(sysobj.get("switches", []) or [])
             count += len(sysobj.get("weaponTypes", []) or [])
             count += len(sysobj.get("armorTypes", []) or [])
             count += len(sysobj.get("skillTypes", []) or [])
@@ -1229,7 +1232,7 @@ def searchNames(data, pbar, context, filename):
     note_regexes = [
         (r"<note:(.*?)>", False),
         (r"<PE拡張:(.*?)>", False),
-        (r"<hint:(.*?)>", False),
+        (r"<[Hh]int:(.*?)>", False),
         (r"<SGDescription:(.*?)>", False),
         (r"<SG説明:\n?(.*?)>", True),
         (r"<SG説明2:\n?(.*?)>", False),
@@ -3884,6 +3887,32 @@ def searchSystem(data, pbar):
             # Assign back translations to corresponding indices
             for n, idx in enumerate(var_indices[: len(tl_list)]):
                 data["variables"][idx] = tl_list[n].replace('"', '').strip()
+            if pbar is not None:
+                pbar.refresh()
+
+    # Switches (Optional) — batch translate to reduce calls
+    if TLSYSTEMSWITCHES and "switches" in data and isinstance(data["switches"], list):
+        switch_indices = []
+        switch_values = []
+        for idx, val in enumerate(data["switches"]):
+            if isinstance(val, str) and val.strip():
+                # Skip if IGNORETLTEXT is enabled and no Japanese text
+                if IGNORETLTEXT and not re.search(LANGREGEX, val):
+                    continue
+                switch_indices.append(idx)
+                switch_values.append(val)
+        if switch_values:
+            response = translateAI(
+                switch_values,
+                'Reply with only the ' + LANGUAGE + ' translation of the switch name',
+                True,
+            )
+            totalTokens[0] += response[1][0]
+            totalTokens[1] += response[1][1]
+            tl_list = response[0]
+            # Assign back translations to corresponding indices
+            for n, idx in enumerate(switch_indices[: len(tl_list)]):
+                data["switches"][idx] = tl_list[n].replace('"', '').strip()
             if pbar is not None:
                 pbar.refresh()
 

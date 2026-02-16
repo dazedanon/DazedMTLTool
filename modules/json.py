@@ -165,6 +165,9 @@ def parseJSON(data, filename):
                 # RdData format (RdData.json - dgnDatas with dungeon/dialogue data)
                 elif "dgnDatas" in data:
                     result = translateRdData(data, filename)
+                # GameSetting format (Nupu_GameSetting.json - fzCardDatas, fzDeckDatas, rentalDecks)
+                elif any(k in data for k in ["fzCardDatas", "fzDeckDatas", "rentalDecks"]):
+                    result = translateGameSetting(data, filename)
                 else:
                     result = translateJSON(data, filename, [])
             else:
@@ -722,6 +725,122 @@ def translateRdData(data, filename):
         dgns[di]["sijiDatas"][si]["choiceSijiTxt"] = dazedwrap.wrapText(tl, WIDTH)
     if sijiChoiceS:
         save_progress_json(data, filename)
+
+    return tokens
+
+
+def translateGameSetting(data, filename):
+    """Translate GameSetting JSON format (e.g. Nupu_GameSetting.json).
+    
+    Handles card data, deck definitions, and rental decks.
+    Only translates player-visible text fields.
+    """
+    global LOCK, ESTIMATE, FILENAME, PBAR, MISMATCH
+    tokens = [0, 0]
+
+    def batchTranslate(stringList, context):
+        """Translate a list of strings and return translations. Returns [] on mismatch."""
+        nonlocal tokens
+        if not stringList:
+            return []
+        response = translateAI(stringList, context, True)
+        tokens[0] += response[1][0]
+        tokens[1] += response[1][1]
+        if len(stringList) != len(response[0]):
+            with LOCK:
+                if FILENAME not in MISMATCH:
+                    MISMATCH.append(FILENAME)
+            return []
+        return response[0]
+
+    # ================================================================
+    # PASS 1: Collect all translatable strings
+    # ================================================================
+
+    # -- fzCardDatas: card descriptions --
+    desc1S, desc1I = [], []
+    desc2S, desc2I = [], []
+
+    if "fzCardDatas" in data:
+        for i, card in enumerate(data["fzCardDatas"]):
+            if card.get("desc1") and re.search(LANGREGEX, card["desc1"]):
+                desc1S.append(card["desc1"].replace("\r\n", " ").replace("\n", " ").strip())
+                desc1I.append(i)
+            if card.get("desc2") and re.search(LANGREGEX, card["desc2"]):
+                desc2S.append(card["desc2"].replace("\r\n", " ").replace("\n", " ").strip())
+                desc2I.append(i)
+
+    # -- fzDeckDatas: deck name and description --
+    deckNameS, deckNameI = [], []
+    deckDescS, deckDescI = [], []
+
+    if "fzDeckDatas" in data:
+        for i, deck in enumerate(data["fzDeckDatas"]):
+            if deck.get("name") and re.search(LANGREGEX, deck["name"]):
+                deckNameS.append(deck["name"])
+                deckNameI.append(i)
+            if deck.get("desc") and re.search(LANGREGEX, deck["desc"]):
+                deckDescS.append(deck["desc"].replace("\r\n", " ").replace("\n", " ").strip())
+                deckDescI.append(i)
+
+    # -- rentalDecks: memo label --
+    rentalMemoS, rentalMemoI = [], []
+
+    if "rentalDecks" in data:
+        for i, rental in enumerate(data["rentalDecks"]):
+            if rental.get("memo") and re.search(LANGREGEX, rental["memo"]):
+                rentalMemoS.append(rental["memo"])
+                rentalMemoI.append(i)
+
+    # Set progress bar total
+    totalItems = (
+        len(desc1S) + len(desc2S)
+        + len(deckNameS) + len(deckDescS)
+        + len(rentalMemoS)
+    )
+    PBAR.total = totalItems
+    PBAR.refresh()
+
+    # ================================================================
+    # PASS 2: Translate each batch and apply results back to data
+    # ================================================================
+
+    # -- fzCardDatas --
+    if "fzCardDatas" in data:
+        cards = data["fzCardDatas"]
+
+        for tl, idx in zip(batchTranslate(desc1S, "Card Description"), desc1I):
+            cards[idx]["desc1"] = dazedwrap.wrapText(tl, WIDTH)
+        if desc1S:
+            save_progress_json(data, filename)
+
+        for tl, idx in zip(batchTranslate(desc2S, "Card Description"), desc2I):
+            cards[idx]["desc2"] = dazedwrap.wrapText(tl, WIDTH)
+        if desc2S:
+            save_progress_json(data, filename)
+
+    # -- fzDeckDatas --
+    if "fzDeckDatas" in data:
+        decks = data["fzDeckDatas"]
+
+        for tl, idx in zip(batchTranslate(deckNameS, "Deck Name"), deckNameI):
+            decks[idx]["name"] = tl
+        if deckNameS:
+            save_progress_json(data, filename)
+
+        for tl, idx in zip(batchTranslate(deckDescS, "Deck Description"), deckDescI):
+            decks[idx]["desc"] = dazedwrap.wrapText(tl, WIDTH)
+        if deckDescS:
+            save_progress_json(data, filename)
+
+    # -- rentalDecks --
+    if "rentalDecks" in data:
+        rentals = data["rentalDecks"]
+
+        for tl, idx in zip(batchTranslate(rentalMemoS, "Deck Label"), rentalMemoI):
+            rentals[idx]["memo"] = tl
+        if rentalMemoS:
+            save_progress_json(data, filename)
 
     return tokens
 
