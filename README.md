@@ -2,6 +2,20 @@
 
 An AI-powered game translation tool with a GUI. Translate RPG Maker, Ren'Py, Tyrano, Wolf RPG, Kirikiri, and other game engines from Japanese to English using GPT or compatible AI models.
 
+## Table of Contents
+
+- [Supported Engines](#supported-engines)
+- [Requirements](#requirements)
+- [Quick Start](#quick-start)
+- [Using the GUI](#using-the-gui)
+- [Vocab & Prompt](#vocab--prompt)
+- [Tips](#tips)
+- [Folder Structure](#folder-structure)
+- [RPG Maker Translation Workflow](#rpg-maker-translation-workflow)
+- [Using Copilot & VSCode](#using-copilot--vscode)
+- [Version Control with Git](#version-control-with-git)
+- [Troubleshooting](#troubleshooting)
+
 ## Supported Engines
 
 - RPG Maker (MV, MZ, Ace, and more)
