@@ -126,7 +126,7 @@ IGNORETLTEXT = False
 # TLSYSTEMVARIABLES: Translate System Variables. (Optional but sometimes necessary. Can break stuff.)
 TLSYSTEMVARIABLES = False
 # TLSYSTEMSWITCHES: Translate System Switches. (Optional. Translates switch names in System.json.)
-TLSYSTEMSWITCHES = True
+TLSYSTEMSWITCHES = False
 # Join 408 codes into a single string like 401.
 JOIN408 = False
 
@@ -2551,9 +2551,9 @@ def searchCodes(page, pbar, jobList, filename):
                     # "_EventSetting": (r'_EventSetting[\s,\d\w\W]+?"(.+?)";', False),
                     # "this.Menu_SexTxtSet(": (r'"(.+)"', True),
                     # "Rn_RsltTxtArr": (r'"(.+)"', True),
-                    # "_章切り替えStart": (r'_章切り替えStart\(\s*\\?"(.+?)\\?"', False),
+                    "_章切り替えStart": (r'_章切り替えStart\(\s*\\?"\s?,?.+?\\?"\s?,?\s?\\?"(.+?)\\?"', False),
                     # "MobNameSet": (r'MobNameSet\(\\?"(.+?)\\?"\)', False),
-                    "AddAddress": (r'AddAddress\(\d+,\s*\\?"(.+?)\\?"', False),
+                    # "AddAddress": (r'AddAddress\(\d+,\s*\\?"(.+?)\\?"', False),
                     
                 }
 
