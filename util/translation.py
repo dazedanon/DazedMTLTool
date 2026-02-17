@@ -125,12 +125,16 @@ def validate_placeholders(original_text, translated_text, replacements):
 def validate_translation_content(original_items, translated_items, langRegex):
     """
     Validate that translated items are not empty or nearly empty.
-    Returns: (is_valid, invalid_indices, reason)
+    Returns: (is_valid, invalid_indices, reasons, corrupted_indices)
     
     Rules:
+    0. If original contains corrupted/mojibake text (U+FFFD), skip it and mark as corrupted
     1. If original has content, translation must not be empty or just whitespace
     2. If original has Japanese text, translation must not be a single punctuation mark
     3. Translation should have meaningful content (more than 1-2 characters for substantial originals)
+    
+    corrupted_indices: list of indices where the original text is corrupted/mojibake
+                       — the caller should substitute the original text for these.
     """
     if not isinstance(original_items, list):
         original_items = [original_items]
@@ -138,6 +142,7 @@ def validate_translation_content(original_items, translated_items, langRegex):
     
     invalid_indices = []
     reasons = []
+    corrupted_indices = []
     
     for i, (orig, trans) in enumerate(zip(original_items, translated_items)):
         orig_str = str(orig).strip()
@@ -145,6 +150,12 @@ def validate_translation_content(original_items, translated_items, langRegex):
         
         # Skip if original is empty or placeholder
         if not orig_str or orig_str == "Placeholder Text":
+            continue
+        
+        # Check 0: Corrupted / mojibake text (U+FFFD replacement character)
+        # These cannot be translated meaningfully — keep the original as-is.
+        if "\ufffd" in orig_str:
+            corrupted_indices.append(i)
             continue
         
         # Check if original has content that needs translation
@@ -178,7 +189,7 @@ def validate_translation_content(original_items, translated_items, langRegex):
                     continue
     
     is_valid = len(invalid_indices) == 0
-    return is_valid, invalid_indices, reasons
+    return is_valid, invalid_indices, reasons, corrupted_indices
 
 # (from .env if present), strip accidental whitespace, and set the base URL,
 # organization, and API key. It also handles the Gemini compatibility layer.
@@ -813,7 +824,6 @@ def cleanTranslatedText(translatedText, language):
         "’": "'",
         "this guy": "this bastard",
         "This guy": "This bastard",
-        "Placeholder Text": "",
         "```json": "",
         "```": "",
     }
@@ -1168,9 +1178,14 @@ def translateAI(text, history, fullPromptFlag, config, filename=None, pbar=None,
                                     pbar.write(f"Extra placeholders: {', '.join(extra)}")
                         else:
                             # Check 3: Validate that translations are not empty or nearly empty
-                            content_valid, invalid_indices, content_reasons = validate_translation_content(
+                            content_valid, invalid_indices, content_reasons, corrupted_indices = validate_translation_content(
                                 tItem, extracted, config.langRegex
                             )
+                            
+                            # Substitute original text for corrupted/mojibake lines
+                            if corrupted_indices:
+                                for ci in corrupted_indices:
+                                    extracted[ci] = tItem[ci]
                             
                             if not content_valid:
                                 is_valid = False
@@ -1182,7 +1197,11 @@ def translateAI(text, history, fullPromptFlag, config, filename=None, pbar=None,
                                         pbar.write(f"  ... and {len(content_reasons) - 5} more issues")
                             else:
                                 # Set translations (line count matches, placeholders valid, and content is good)
-                                final_translations = extracted
+                                # Strip "Placeholder Text" from individual lines (AI placeholder for untranslatable input)
+                                final_translations = [
+                                    line.replace("Placeholder Text", "").strip() if isinstance(line, str) else line
+                                    for line in extracted
+                                ]
                 else:
                     # Single string: validate placeholders
                     placeholder_valid, missing, extra = validate_placeholders(protected_items, cleaned_text, all_replacements[0])
@@ -1197,9 +1216,14 @@ def translateAI(text, history, fullPromptFlag, config, filename=None, pbar=None,
                     else:
                         # Validate content for single string
                         final_cleaned = cleaned_text.replace("Placeholder Text", "")
-                        content_valid, _, content_reasons = validate_translation_content(
+                        content_valid, _, content_reasons, corrupted_indices = validate_translation_content(
                             tItem, final_cleaned, config.langRegex
                         )
+                        
+                        # If original is corrupted/mojibake, just keep original text
+                        if corrupted_indices:
+                            final_translations = tItem
+                            break
                         
                         if not content_valid:
                             is_valid = False

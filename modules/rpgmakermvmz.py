@@ -917,7 +917,7 @@ def parseNames(data, filename, context):
                 (r"<拡張説明:(.+?)>", False),
                 (r"<STS DESC>\n(.+?)\n<", False),
                 (r"text:(.+)>", False),
-                (r"<Skill\d+:([^,>]+)", False),
+                (r"<Skill\d+:(?:\d+,)?([^,>\d][^,>]*)", False),
             ]
 
             for entry in entries:
@@ -1256,7 +1256,7 @@ def searchNames(data, pbar, context, filename):
         (r"<拡張説明:(.+?)>", False),
         (r"<STS DESC>\n(.+?)\n<", False),
         (r"text:(.+)>", False),
-        (r"<Skill\d+:([^,>]+)", False),
+        (r"<Skill\d+:(?:\d+,)?([^,>\d][^,>]*)", False),
     ]
     # For each entry, collect all note matches
     for idx, entry in enumerate(data):
@@ -2843,17 +2843,51 @@ def searchCodes(page, pbar, jobList, filename):
                             for text in textLines:
                                 list355655.append(text)
                         else:
-                            for lineIdx in textLineIndices:
+                            # Collect all translated lines and re-wrap them
+                            translatedLines = []
+                            for _ in textLineIndices:
                                 if len(list355655) > 0:
-                                    translatedText = list355655[0]
-                                    list355655.pop(0)
-                                    translatedText = translatedText.replace('\\"', "'")
-                                    translatedText = translatedText.replace('"', "'")
+                                    tl = list355655.pop(0)
+                                    tl = tl.replace('\\"', "'")
+                                    tl = tl.replace('"', "'")
+                                    translatedLines.append(tl)
 
-                                    origParam = codeList[lineIdx]["parameters"][0]
-                                    origMatch = re.search(mtxtRegex, origParam)
-                                    if origMatch:
-                                        codeList[lineIdx]["parameters"][0] = origParam.replace(origMatch.group(1), translatedText)
+                            if translatedLines:
+                                # Join all lines and re-wrap to WIDTH
+                                combined = " ".join(translatedLines)
+                                wrapped = dazedwrap.wrapText(combined, width=WIDTH)
+                                wrappedLines = [l for l in wrapped.split("\n") if l.strip()]
+
+                                # Distribute wrapped lines across existing 355/655 slots
+                                for idx, lineIdx in enumerate(textLineIndices):
+                                    if idx < len(wrappedLines):
+                                        origParam = codeList[lineIdx]["parameters"][0]
+                                        origMatch = re.search(mtxtRegex, origParam)
+                                        if origMatch:
+                                            codeList[lineIdx]["parameters"][0] = origParam.replace(origMatch.group(1), wrappedLines[idx])
+                                    else:
+                                        # More slots than lines: blank out the text
+                                        origParam = codeList[lineIdx]["parameters"][0]
+                                        origMatch = re.search(mtxtRegex, origParam)
+                                        if origMatch:
+                                            codeList[lineIdx]["parameters"][0] = origParam.replace(origMatch.group(1), "")
+
+                                # If more wrapped lines than slots, insert new 655 codes
+                                if len(wrappedLines) > len(textLineIndices):
+                                    lastIdx = textLineIndices[-1]
+                                    indent = codeList[lastIdx].get("indent", 0)
+                                    for extra in range(len(textLineIndices), len(wrappedLines)):
+                                        new_item = {
+                                            "code": 655,
+                                            "indent": indent,
+                                            "parameters": [
+                                                '   _MTxt += "' + wrappedLines[extra] + '" + "\\n";'
+                                            ],
+                                        }
+                                        insertPos = lastIdx + 1 + (extra - len(textLineIndices))
+                                        codeList.insert(insertPos, new_item)
+                                    # Adjust j to account for inserted items
+                                    j += len(wrappedLines) - len(textLineIndices)
 
                         i = j - 1
 
