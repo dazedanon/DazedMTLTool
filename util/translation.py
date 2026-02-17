@@ -1263,7 +1263,15 @@ def translateAI(text, history, fullPromptFlag, config, filename=None, pbar=None,
 
         else: # Failure case after all retries
             if pbar: pbar.write(f"Translation failed after {max_retries + 1} attempts. Check mismatch log.")
-            
+
+            # Emit a machine-readable marker on stdout so the GUI worker
+            # thread can detect the mismatch reliably (stdout is captured
+            # synchronously, unlike file-tail polling which can be racy).
+            try:
+                print(f"MISMATCH_EVENT:{filename}", flush=True)
+            except Exception:
+                pass
+
             formatted_mismatch_output = last_raw_translation
             try:
                 parsed_json = json.loads(last_raw_translation)

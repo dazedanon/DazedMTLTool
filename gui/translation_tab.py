@@ -814,8 +814,8 @@ class TranslationTab(QWidget):
         self.reset_view_button.setStyleSheet(icon_btn_style)
         self.open_translations_button.setStyleSheet(icon_btn_style)
         # Ensure emoji/icons are readable
-        self.reset_view_button.setFont(QFont('', 12))
-        self.open_translations_button.setFont(QFont('', 12))
+        self.reset_view_button.setFont(QFont('Segoe UI', 12))
+        self.open_translations_button.setFont(QFont('Segoe UI', 12))
 
         # Create the stop button here so it sits in the same row as the
         # back/open buttons. Use a compact icon style to match them but
@@ -849,7 +849,7 @@ class TranslationTab(QWidget):
         self.stop_button.clicked.connect(self.stop_translation)
         self.stop_button.setStyleSheet(stop_button_style)
         # Slightly larger font for the emoji to make it visually clear
-        self.stop_button.setFont(QFont('', 14))
+        self.stop_button.setFont(QFont('Segoe UI', 14))
         self.stop_button.setVisible(False)
 
         # Place both buttons on the left and totals on the right
@@ -1017,6 +1017,9 @@ class TranslationTab(QWidget):
         
         # Right side - translation history log viewer
         self.translation_log_viewer = LogViewer()
+        # Mismatch counting is driven by MISMATCH_EVENT stdout markers
+        # detected in append_log. The log_viewer signal is kept as a
+        # fallback for in-process mode (e.g. speaker-parse).
         self.translation_log_viewer.mismatch_detected.connect(self.on_mismatch_detected)
 
         # Allow both left and right widgets to expand vertically so the
@@ -1743,6 +1746,11 @@ class TranslationTab(QWidget):
             self.translation_worker.start()
             
     def append_log(self, message):
+        # Detect mismatch markers emitted to stdout by translation.py.
+        # This is the primary, non-racy detection path for subprocess mode.
+        if isinstance(message, str) and message.startswith("MISMATCH_EVENT:"):
+            self.on_mismatch_detected()
+            return  # marker is internal, not displayed
         try:
             pattern = r'^\W*(?P<filename>[^:]+):.*?\[Input:\s*(?P<input>\d+)\].*?\[Output:\s*(?P<output>\d+)\].*?\[Cost:\s*\$(?P<cost>[\d\.]+)\].*?\[(?P<time>[\d\.]+)s\]'
             m = re.search(pattern, message)
@@ -1941,10 +1949,11 @@ class TranslationTab(QWidget):
         except Exception:
             pass
 
-        # Stop tailing the log when finished
+        # Stop tailing the log after a short delay so the final poll
+        # can pick up any data written just before the worker finished.
         try:
             if hasattr(self, 'translation_log_viewer') and self.translation_log_viewer:
-                self.translation_log_viewer.stop_tail()
+                QTimer.singleShot(600, self.translation_log_viewer.stop_tail)
         except Exception:
             pass
             
