@@ -855,8 +855,8 @@ class TranslationTab(QWidget):
         # Place both buttons on the left and totals on the right
         buttons_container = QWidget()
         # Prevent the buttons row from changing the file list box size when
-        # buttons/totals are shown — keep a fixed height for the row.
-        buttons_container.setFixedHeight(64)
+        # buttons/totals are shown — use minimum height that can grow if needed.
+        buttons_container.setMinimumHeight(64)
         buttons_container.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         buttons_hbox = QHBoxLayout()
         buttons_hbox.setContentsMargins(0, 0, 0, 0)
@@ -869,10 +869,9 @@ class TranslationTab(QWidget):
         buttons_hbox.addStretch()
         # Totals widget on the right (hidden until start)
         self.totals_widget = QWidget()
-        # Keep totals widget a fixed height so showing it doesn't expand the
-        # input files box vertically.
-        self.totals_widget.setFixedHeight(64)
-        self.totals_widget.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        # Let the totals widget size naturally; the mismatch label starts hidden
+        # so it won't take extra space until a mismatch occurs.
+        self.totals_widget.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Preferred)
         totals_layout = QVBoxLayout()
         totals_layout.setContentsMargins(6, 2, 6, 2)
         totals_layout.setSpacing(2)
@@ -885,6 +884,10 @@ class TranslationTab(QWidget):
         self.totals_time_label = QLabel("Time: 0.0s")
         self.totals_time_label.setStyleSheet("color: #4da6ff; font-weight: bold;")
         totals_layout.addWidget(self.totals_time_label)
+        self.totals_mismatch_label = QLabel("")
+        self.totals_mismatch_label.setStyleSheet("color: #ff4444; font-weight: bold;")
+        self.totals_mismatch_label.setVisible(False)
+        totals_layout.addWidget(self.totals_mismatch_label)
         self.totals_widget.setLayout(totals_layout)
         self.totals_widget.setVisible(False)
         buttons_hbox.addWidget(self.totals_widget)
@@ -1014,6 +1017,7 @@ class TranslationTab(QWidget):
         
         # Right side - translation history log viewer
         self.translation_log_viewer = LogViewer()
+        self.translation_log_viewer.mismatch_detected.connect(self.on_mismatch_detected)
 
         # Allow both left and right widgets to expand vertically so the
         # log viewer fills the full height to the bottom of the tab.
@@ -1643,6 +1647,10 @@ class TranslationTab(QWidget):
                     self.totals_cost_label.setText("Cost: $0.0000")
                 if hasattr(self, 'totals_time_label'):
                     self.totals_time_label.setText("Time: 0.0s")
+                if hasattr(self, 'totals_mismatch_label'):
+                    self.totals_mismatch_label.setText("")
+                    self.totals_mismatch_label.setVisible(False)
+                self.totals_mismatch_count = 0
                 if hasattr(self, 'totals_widget') and self.totals_widget:
                     self.totals_widget.setVisible(True)
             except Exception:
@@ -1858,6 +1866,18 @@ class TranslationTab(QWidget):
         """Handle a file translation error."""
         # Mark the file as failed with the error message
         self.mark_file_complete(filename, success=False, error_message=error_message)
+
+    def on_mismatch_detected(self):
+        """Increment the mismatch counter and update the totals label."""
+        try:
+            if not hasattr(self, 'totals_mismatch_count'):
+                self.totals_mismatch_count = 0
+            self.totals_mismatch_count += 1
+            if hasattr(self, 'totals_mismatch_label'):
+                self.totals_mismatch_label.setText(f"Mismatches: {self.totals_mismatch_count}")
+                self.totals_mismatch_label.setVisible(True)
+        except Exception:
+            pass
             
     def flush_log_buffer(self):
         """No longer needed - kept for compatibility."""

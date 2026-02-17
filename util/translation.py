@@ -1276,6 +1276,20 @@ def translateAI(text, history, fullPromptFlag, config, filename=None, pbar=None,
                 mismatchFile.write(f"Final Output:\n{formatted_mismatch_output}\n")
                 mismatchFile.flush()  # Ensure data is written to disk immediately
 
+            # Also write to the main translation log so the GUI log viewer can display it
+            try:
+                with open(config.logFilePath, "a", encoding="utf-8") as logFile:
+                    logFile.write(f"[MISMATCH] Failed after retries: {filename}\n")
+                    logFile.write(f"[MISMATCH] Input:\n")
+                    for mline in subbedT.splitlines():
+                        logFile.write(f"[MISMATCH] {mline}\n")
+                    logFile.write(f"[MISMATCH] Final Output:\n")
+                    for mline in formatted_mismatch_output.splitlines():
+                        logFile.write(f"[MISMATCH] {mline}\n")
+                    logFile.flush()
+            except Exception:
+                pass  # Don't fail if logging fails
+
             if filename and mismatchList is not None and filename not in mismatchList:
                 mismatchList.append(filename)
             
