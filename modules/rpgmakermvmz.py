@@ -917,6 +917,7 @@ def parseNames(data, filename, context):
                 (r"<拡張説明:(.+?)>", False),
                 (r"<STS DESC>\n(.+?)\n<", False),
                 (r"text:(.+)>", False),
+                (r"<Skill\d+:([^,>]+)", False),
             ]
 
             for entry in entries:
@@ -1255,6 +1256,7 @@ def searchNames(data, pbar, context, filename):
         (r"<拡張説明:(.+?)>", False),
         (r"<STS DESC>\n(.+?)\n<", False),
         (r"text:(.+)>", False),
+        (r"<Skill\d+:([^,>]+)", False),
     ]
     # For each entry, collect all note matches
     for idx, entry in enumerate(data):
@@ -2854,6 +2856,64 @@ def searchCodes(page, pbar, jobList, filename):
                                         codeList[lineIdx]["parameters"][0] = origParam.replace(origMatch.group(1), translatedText)
 
                         i = j - 1
+
+                # OpeSet handler - translate speaker name (1st arg) and dialogue text (2nd arg)
+                # Example: this.OpeSet(\"オペレーター\",\"今回の任務の内容は迷子になった少女を救出することです。\",\"ope\",180)
+                if "OpeSet(" in jaString:
+                    # Extract speaker name (1st quoted arg) and text (2nd quoted arg)
+                    nameMatch = re.search(r'OpeSet\s*\(\s*\\?"(.+?)\\?"\s*,', jaString)
+                    textMatch = re.search(r'OpeSet\s*\(\s*\\?"[^"]*?\\?"\s*,\s*\\?"(.+?)\\?"', jaString)
+
+                    nameStr = None
+                    translatedName = ""
+                    textStr = None
+
+                    # Process speaker name via getSpeaker
+                    if nameMatch:
+                        n = nameMatch.group(1)
+                        if re.search(r'[a-zA-Z一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]', n):
+                            if not (IGNORETLTEXT and not re.search(LANGREGEX, n)):
+                                nameStr = n
+                                response = getSpeaker(n)
+                                translatedName = response[0]
+                                totalTokens[0] += response[1][0]
+                                totalTokens[1] += response[1][1]
+
+                    # Process text (2nd arg)
+                    if textMatch:
+                        t = textMatch.group(1)
+                        if re.search(r'[a-zA-Z一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]', t):
+                            if not (IGNORETLTEXT and not re.search(LANGREGEX, t)):
+                                textStr = t
+
+                    if textStr or nameStr:
+                        speakerPrefix = translatedName if translatedName else ""
+
+                        if setData:
+                            if textStr:
+                                if speakerPrefix:
+                                    list355655.append(f"[{speakerPrefix}]: {textStr}")
+                                else:
+                                    list355655.append(textStr)
+                        else:
+                            if textStr:
+                                if len(list355655) > 0:
+                                    translatedText = list355655[0]
+                                    list355655.pop(0)
+                                    # Strip speaker prefix if present
+                                    translatedText = re.sub(r'^\[.*?\]\s*[|:]\s*', '', translatedText)
+                                    # Replace double quotes to avoid breaking JS syntax
+                                    translatedText = translatedText.replace('\\"', "'")
+                                    translatedText = translatedText.replace('"', "'")
+                                    jaString = jaString.replace(textStr, translatedText, 1)
+                            # Replace the speaker name (already translated via getSpeaker)
+                            if nameStr and translatedName:
+                                translatedName = translatedName.replace('\\"', "'")
+                                translatedName = translatedName.replace('"', "'")
+                                jaString = jaString.replace(nameStr, translatedName, 1)
+                            # Normalize \\N and \\C codes to always have exactly 4 backslashes
+                            jaString = re.sub(r'\\+([cCnN]\[\d+\])', r'\\\\\1', jaString)
+                            codeList[i]["parameters"][0] = jaString
 
             ## Event Code: 408 (Script)
             if "code" in codeList[i] and (codeList[i]["code"] == 408) and CODE408 is True:
