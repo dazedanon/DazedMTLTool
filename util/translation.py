@@ -125,16 +125,12 @@ def validate_placeholders(original_text, translated_text, replacements):
 def validate_translation_content(original_items, translated_items, langRegex):
     """
     Validate that translated items are not empty or nearly empty.
-    Returns: (is_valid, invalid_indices, reasons, corrupted_indices)
+    Returns: (is_valid, invalid_indices, reasons)
     
     Rules:
-    0. If original contains corrupted/mojibake text (U+FFFD), skip it and mark as corrupted
     1. If original has content, translation must not be empty or just whitespace
     2. If original has Japanese text, translation must not be a single punctuation mark
     3. Translation should have meaningful content (more than 1-2 characters for substantial originals)
-    
-    corrupted_indices: list of indices where the original text is corrupted/mojibake
-                       — the caller should substitute the original text for these.
     """
     if not isinstance(original_items, list):
         original_items = [original_items]
@@ -142,7 +138,6 @@ def validate_translation_content(original_items, translated_items, langRegex):
     
     invalid_indices = []
     reasons = []
-    corrupted_indices = []
     
     for i, (orig, trans) in enumerate(zip(original_items, translated_items)):
         orig_str = str(orig).strip()
@@ -150,12 +145,6 @@ def validate_translation_content(original_items, translated_items, langRegex):
         
         # Skip if original is empty or placeholder
         if not orig_str or orig_str == "Placeholder Text":
-            continue
-        
-        # Check 0: Corrupted / mojibake text (U+FFFD replacement character)
-        # These cannot be translated meaningfully — keep the original as-is.
-        if "\ufffd" in orig_str:
-            corrupted_indices.append(i)
             continue
         
         # Check if original has content that needs translation
@@ -189,7 +178,7 @@ def validate_translation_content(original_items, translated_items, langRegex):
                     continue
     
     is_valid = len(invalid_indices) == 0
-    return is_valid, invalid_indices, reasons, corrupted_indices
+    return is_valid, invalid_indices, reasons
 
 # (from .env if present), strip accidental whitespace, and set the base URL,
 # organization, and API key. It also handles the Gemini compatibility layer.
@@ -1069,6 +1058,44 @@ def translateAI(text, history, fullPromptFlag, config, filename=None, pbar=None,
             else:
                 protected_items, all_replacements[0] = protect_script_codes(tItem)
         
+        # Filter out corrupted/mojibake text (U+FFFD) from the batch before API call
+        corrupted_map = {}  # original_index -> original_text
+        if isinstance(tItem, list):
+            for j in range(len(tItem)):
+                if tItem[j] and "\ufffd" in str(tItem[j]):
+                    corrupted_map[j] = tItem[j]
+            
+            if corrupted_map:
+                clean_indices = [j for j in range(len(tItem)) if j not in corrupted_map]
+                
+                if not clean_indices:
+                    # All items are corrupted - skip translation entirely
+                    tList[index] = list(tItem)
+                    if pbar is not None:
+                        pbar.update(len(tItem))
+                    history = tItem[-config.maxHistory:]
+                    continue
+                
+                # Rebuild protected_items and all_replacements for clean items only
+                protected_items = [protected_items[j] for j in clean_indices]
+                new_replacements = {}
+                for new_idx, old_idx in enumerate(clean_indices):
+                    new_replacements[new_idx] = all_replacements.get(old_idx, {})
+                all_replacements = new_replacements
+        elif tItem and "\ufffd" in str(tItem):
+            # Single corrupted string - skip translation entirely
+            tList[index] = tItem
+            if pbar is not None:
+                pbar.update(1)
+            history = tItem
+            continue
+        
+        # Build filtered tItem for validation (excludes corrupted items)
+        if isinstance(tItem, list) and corrupted_map:
+            clean_tItem = [tItem[j] for j in range(len(tItem)) if j not in corrupted_map]
+        else:
+            clean_tItem = tItem
+
         # Format for translation
         if isinstance(tItem, list):
             payload = {f"Line{i+1}": string for i, string in enumerate(protected_items)}
@@ -1114,7 +1141,7 @@ def translateAI(text, history, fullPromptFlag, config, filename=None, pbar=None,
         max_retries = 2  # 1 initial attempt + 2 retries
         final_translations = None
         last_raw_translation = ""
-        numLines = len(tItem) if isinstance(tItem, list) else None
+        numLines = len(clean_tItem) if isinstance(tItem, list) else None
 
         for attempt in range(max_retries + 1):
             is_valid = True
@@ -1158,10 +1185,10 @@ def translateAI(text, history, fullPromptFlag, config, filename=None, pbar=None,
                     extracted = extractTranslation(cleaned_text, True, pbar)
 
                     # Check 1: Mismatch in length -> still a hard failure
-                    if extracted is None or len(tItem) != len(extracted):
+                    if extracted is None or len(clean_tItem) != len(extracted):
                         is_valid = False
                         if pbar:
-                            pbar.write(f"Length mismatch: expected {len(tItem)}, got {len(extracted) if extracted else 0}")
+                            pbar.write(f"Length mismatch: expected {len(clean_tItem)}, got {len(extracted) if extracted else 0}")
                     else:
                         # Check 2: Validate placeholders are preserved
                         # Flatten all_replacements for batch validation
@@ -1178,14 +1205,9 @@ def translateAI(text, history, fullPromptFlag, config, filename=None, pbar=None,
                                     pbar.write(f"Extra placeholders: {', '.join(extra)}")
                         else:
                             # Check 3: Validate that translations are not empty or nearly empty
-                            content_valid, invalid_indices, content_reasons, corrupted_indices = validate_translation_content(
-                                tItem, extracted, config.langRegex
+                            content_valid, invalid_indices, content_reasons = validate_translation_content(
+                                clean_tItem, extracted, config.langRegex
                             )
-                            
-                            # Substitute original text for corrupted/mojibake lines
-                            if corrupted_indices:
-                                for ci in corrupted_indices:
-                                    extracted[ci] = tItem[ci]
                             
                             if not content_valid:
                                 is_valid = False
@@ -1216,14 +1238,9 @@ def translateAI(text, history, fullPromptFlag, config, filename=None, pbar=None,
                     else:
                         # Validate content for single string
                         final_cleaned = cleaned_text.replace("Placeholder Text", "")
-                        content_valid, _, content_reasons, corrupted_indices = validate_translation_content(
+                        content_valid, _, content_reasons = validate_translation_content(
                             tItem, final_cleaned, config.langRegex
                         )
-                        
-                        # If original is corrupted/mojibake, just keep original text
-                        if corrupted_indices:
-                            final_translations = tItem
-                            break
                         
                         if not content_valid:
                             is_valid = False
@@ -1251,6 +1268,18 @@ def translateAI(text, history, fullPromptFlag, config, filename=None, pbar=None,
                 for j in range(len(final_translations)):
                     if j in all_replacements:
                         final_translations[j] = restore_script_codes(final_translations[j], all_replacements[j])
+                
+                # Re-insert corrupted originals at their original positions
+                if corrupted_map:
+                    expanded = []
+                    clean_idx = 0
+                    for j in range(len(tItem)):
+                        if j in corrupted_map:
+                            expanded.append(corrupted_map[j])
+                        else:
+                            expanded.append(final_translations[clean_idx])
+                            clean_idx += 1
+                    final_translations = expanded
             else:
                 final_translations = restore_script_codes(final_translations, all_replacements[0])
             
