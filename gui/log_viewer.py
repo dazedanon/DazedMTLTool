@@ -9,6 +9,7 @@ from PyQt5.QtCore import Qt, pyqtSignal, QTimer
 from PyQt5.QtGui import QTextCursor, QFont
 from pathlib import Path
 import datetime
+import html
 import os
 
 
@@ -16,6 +17,7 @@ class LogViewer(QWidget):
     """Widget for viewing translation logs and monitoring progress."""
     
     log_updated = pyqtSignal(str)
+    mismatch_detected = pyqtSignal()  # Emitted each time a [MISMATCH] header line is seen
     
     def __init__(self):
         super().__init__()
@@ -225,11 +227,20 @@ class LogViewer(QWidget):
             self.stop_tail()
         
     def append_log_message(self, message):
-        """Append a message to the log display."""
-        # Append raw message (worker already includes any desired context).
-        # We intentionally avoid adding timestamps here so wrapped lines stay
-        # readable and do not misalign JSON-like outputs.
-        self.log_display.append(message)
+        """Append a message to the log display.
+        
+        Lines containing '[MISMATCH]' are rendered in red to highlight
+        translation batch failures.
+        """
+        if "[MISMATCH]" in message:
+            escaped = html.escape(message)
+            self.log_display.append(f'<span style="color: #ff4444;">{escaped}</span>')
+            # Emit signal on the header line ("Failed after retries") so the
+            # counter increments once per mismatch event, not per line.
+            if "Failed after retries" in message:
+                self.mismatch_detected.emit()
+        else:
+            self.log_display.append(message)
 
         # Scroll to bottom
         cursor = self.log_display.textCursor()
