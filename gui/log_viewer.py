@@ -6,7 +6,7 @@ from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QTextEdit, QLabel, QSizePolicy
 )
 from PyQt5.QtCore import Qt, pyqtSignal, QTimer
-from PyQt5.QtGui import QTextCursor, QFont
+from PyQt5.QtGui import QTextCursor, QFont, QTextCharFormat
 from pathlib import Path
 import datetime
 import html
@@ -120,6 +120,9 @@ class LogViewer(QWidget):
     def clear_log(self):
         """Clear the log display and reset tracking."""
         self.log_display.clear()
+        # Reset the char format so the red color from previous [MISMATCH]
+        # HTML spans doesn't bleed into new plain-text appends.
+        self.log_display.setCurrentCharFormat(QTextCharFormat())
         self.status_label.setText("Log cleared")
         # Reset tail file pointer and buffer if active
         self._tail_buffer = ""
@@ -171,11 +174,26 @@ class LogViewer(QWidget):
         self._tail_timer.start(self._tail_interval)
 
     def stop_tail(self):
-        """Stop tailing the log file and close internal file handle."""
+        """Stop tailing the log file and close internal file handle.
+
+        Performs a final drain so no data written before this call is lost.
+        """
         try:
             self._tail_timer.stop()
         except Exception:
             pass
+        # Final drain: read any remaining data before closing the handle
+        try:
+            self._poll_tail()
+        except Exception:
+            pass
+        # Flush any leftover partial line sitting in the buffer
+        if self._tail_buffer and self._tail_buffer.strip():
+            try:
+                self.append_log_message(self._tail_buffer)
+            except Exception:
+                pass
+            self._tail_buffer = ""
         if self._tail_f:
             try:
                 self._tail_f.close()
@@ -235,12 +253,13 @@ class LogViewer(QWidget):
         if "[MISMATCH]" in message:
             escaped = html.escape(message)
             self.log_display.append(f'<span style="color: #ff4444;">{escaped}</span>')
-            # Emit signal on the header line ("Failed after retries") so the
-            # counter increments once per mismatch event, not per line.
-            if "Failed after retries" in message:
-                self.mismatch_detected.emit()
+            # Counting is handled via stdout MISMATCH_EVENT markers in
+            # TranslationTab.append_log — the log viewer only handles display.
         else:
-            self.log_display.append(message)
+            # Explicitly wrap in a white span so Qt doesn't inherit red from
+            # a preceding [MISMATCH] HTML append.
+            escaped = html.escape(message)
+            self.log_display.append(f'<span style="color: #ffffff;">{escaped}</span>')
 
         # Scroll to bottom
         cursor = self.log_display.textCursor()
