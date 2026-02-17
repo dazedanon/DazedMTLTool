@@ -291,16 +291,16 @@ def translatePSData(data, filename):
 
     if "MailDatas" in data:
         for i, m in enumerate(data["MailDatas"]):
-            if m.get("Name") and re.search(LANGREGEX, m["Name"]):
+            if m.get("Name"):
                 mailNameS.append(m["Name"])
                 mailNameI.append(i)
-            if m.get("Title") and re.search(LANGREGEX, m["Title"]):
+            if m.get("Title"):
                 mailTitleS.append(m["Title"])
                 mailTitleI.append(i)
-            if m.get("MailListName") and re.search(LANGREGEX, m["MailListName"]):
+            if m.get("MailListName"):
                 mailListNameS.append(m["MailListName"])
                 mailListNameI.append(i)
-            if m.get("MailText") and re.search(LANGREGEX, m["MailText"]):
+            if m.get("MailText"):
                 mailTextS.append(m["MailText"].replace("\r\n", " ").replace("\n", " ").strip())
                 mailTextI.append(i)
 
@@ -313,23 +313,23 @@ def translatePSData(data, filename):
 
     if "MemoryData" in data:
         for i, mem in enumerate(data["MemoryData"]):
-            if mem.get("_Title") and re.search(LANGREGEX, mem["_Title"]):
+            if mem.get("_Title"):
                 memTitleS.append(mem["_Title"])
                 memTitleI.append(i)
-            if mem.get("_Setu") and re.search(LANGREGEX, mem["_Setu"]):
+            if mem.get("_Setu"):
                 memSetuS.append(mem["_Setu"].replace("\r\n", " ").replace("\n", " ").strip())
                 memSetuI.append(i)
-            if mem.get("_Hint") and re.search(LANGREGEX, mem["_Hint"]):
+            if mem.get("_Hint"):
                 memHintS.append(mem["_Hint"])
                 memHintI.append(i)
             if "_Ptn" in mem and isinstance(mem["_Ptn"], list):
                 for j, p in enumerate(mem["_Ptn"]):
-                    if p and re.search(LANGREGEX, p):
+                    if p:
                         memPtnS.append(p)
                         memPtnI.append((i, j))
             if "_DtlCheck" in mem and isinstance(mem["_DtlCheck"], list):
                 for j, dtl in enumerate(mem["_DtlCheck"]):
-                    if isinstance(dtl, dict) and dtl.get("_Setu") and re.search(LANGREGEX, dtl["_Setu"]):
+                    if isinstance(dtl, dict) and dtl.get("_Setu"):
                         memDtlSetuS.append(dtl["_Setu"].replace("\r\n", " ").replace("\n", " ").strip())
                         memDtlSetuI.append((i, j))
 
@@ -342,13 +342,13 @@ def translatePSData(data, filename):
 
     if "ShopDatas" in data:
         for i, shop in enumerate(data["ShopDatas"]):
-            if shop.get("name") and re.search(LANGREGEX, shop["name"]):
+            if shop.get("name"):
                 shopNameS.append(shop["name"])
                 shopNameI.append(i)
             for field in shopTextFields:
                 if field in shop and isinstance(shop[field], dict):
                     text = shop[field].get("text", "")
-                    if text and re.search(LANGREGEX, text):
+                    if text:
                         shopTextS[field].append(text.replace("\r\n", " ").replace("\n", " ").strip())
                         shopTextI[field].append(i)
 
@@ -363,13 +363,13 @@ def translatePSData(data, filename):
         for arrName in rankArrayNames:
             if arrName in hst and isinstance(hst[arrName], list):
                 for i, rank in enumerate(hst[arrName]):
-                    if rank.get("rankSetu") and re.search(LANGREGEX, rank["rankSetu"]):
+                    if rank.get("rankSetu"):
                         rankSetuS.append(rank["rankSetu"].replace("\r\n", " ").replace("\n", " ").strip())
                         rankSetuI.append((arrName, i))
-                    if rank.get("rankText1") and re.search(LANGREGEX, rank["rankText1"]):
+                    if rank.get("rankText1"):
                         rankText1S.append(rank["rankText1"])
                         rankText1I.append((arrName, i))
-                    if rank.get("rankText2") and re.search(LANGREGEX, rank["rankText2"]):
+                    if rank.get("rankText2"):
                         rankText2S.append(rank["rankText2"])
                         rankText2I.append((arrName, i))
 
@@ -436,7 +436,7 @@ def translatePSData(data, filename):
             save_progress_json(data, filename)
 
         for tl, (mi, di) in zip(batchTranslate(memDtlSetuS, "Character Commentary"), memDtlSetuI):
-            memories[mi]["_DtlCheck"][di]["_Setu"] = dazedwrap.wrapText(tl, WIDTH)
+            memories[mi]["_DtlCheck"][di]["_Setu"] = dazedwrap.wrapText(tl, LISTWIDTH)
         if memDtlSetuS:
             save_progress_json(data, filename)
 
@@ -542,46 +542,46 @@ def translateRdData(data, filename):
             continue
 
         # Dungeon short fields
-        if dgn.get("name") and re.search(LANGREGEX, dgn["name"]):
+        if dgn.get("name"):
             dgnNameS.append(dgn["name"])
             dgnNameI.append(di)
-        if dgn.get("clearTxt") and re.search(LANGREGEX, dgn["clearTxt"]):
+        if dgn.get("clearTxt"):
             clearTxtS.append(dgn["clearTxt"])
             clearTxtI.append(di)
-        if dgn.get("hosyuTxt") and re.search(LANGREGEX, dgn["hosyuTxt"]):
+        if dgn.get("hosyuTxt"):
             hosyuTxtS.append(dgn["hosyuTxt"])
             hosyuTxtI.append(di)
-        if dgn.get("firstHosyuTxt") and re.search(LANGREGEX, dgn["firstHosyuTxt"]):
+        if dgn.get("firstHosyuTxt"):
             firstHosyuTxtS.append(dgn["firstHosyuTxt"])
             firstHosyuTxtI.append(di)
-        if dgn.get("memoTxt") and re.search(LANGREGEX, dgn["memoTxt"]):
+        if dgn.get("memoTxt"):
             memoTxtS.append(dgn["memoTxt"])
             memoTxtI.append(di)
-        if dgn.get("appMemoTxt") and re.search(LANGREGEX, dgn["appMemoTxt"]):
+        if dgn.get("appMemoTxt"):
             appMemoTxtS.append(dgn["appMemoTxt"])
             appMemoTxtI.append(di)
-        if dgn.get("areaMemo") and re.search(LANGREGEX, dgn["areaMemo"]):
+        if dgn.get("areaMemo"):
             areaMemoS.append(dgn["areaMemo"])
             areaMemoI.append(di)
 
         # Dungeon long text fields (strip line breaks for translation)
-        if dgn.get("naiyoTxt") and re.search(LANGREGEX, dgn["naiyoTxt"]):
+        if dgn.get("naiyoTxt"):
             naiyoTxtS.append(dgn["naiyoTxt"].replace("\r\n", " ").replace("\n", " ").strip())
             naiyoTxtI.append(di)
-        if dgn.get("naiyoTxtEx") and re.search(LANGREGEX, dgn["naiyoTxtEx"]):
+        if dgn.get("naiyoTxtEx"):
             naiyoTxtExS.append(dgn["naiyoTxtEx"].replace("\r\n", " ").replace("\n", " ").strip())
             naiyoTxtExI.append(di)
-        if dgn.get("johoTxt") and re.search(LANGREGEX, dgn["johoTxt"]):
+        if dgn.get("johoTxt"):
             johoTxtS.append(dgn["johoTxt"].replace("\r\n", " ").replace("\n", " ").strip())
             johoTxtI.append(di)
-        if dgn.get("johoTxtEx") and re.search(LANGREGEX, dgn["johoTxtEx"]):
+        if dgn.get("johoTxtEx"):
             johoTxtExS.append(dgn["johoTxtEx"].replace("\r\n", " ").replace("\n", " ").strip())
             johoTxtExI.append(di)
 
         # Floor names
         if "kaisoDatas" in dgn and isinstance(dgn["kaisoDatas"], list):
             for ki, kaiso in enumerate(dgn["kaisoDatas"]):
-                if isinstance(kaiso, dict) and kaiso.get("kaisoName") and re.search(LANGREGEX, kaiso["kaisoName"]):
+                if isinstance(kaiso, dict) and kaiso.get("kaisoName"):
                     kaisoNameS.append(kaiso["kaisoName"])
                     kaisoNameI.append((di, ki))
 
@@ -591,17 +591,17 @@ def translateRdData(data, filename):
                 for ti, talk in enumerate(dgn[talkKey]):
                     if not isinstance(talk, dict):
                         continue
-                    if talk.get("name") and re.search(LANGREGEX, talk["name"]):
+                    if talk.get("name"):
                         talkNameS.append(talk["name"])
                         talkNameI.append((di, talkKey, ti))
                     if "speachDatas" in talk and isinstance(talk["speachDatas"], list):
                         for si, speech in enumerate(talk["speachDatas"]):
                             if not isinstance(speech, dict):
                                 continue
-                            if speech.get("name") and re.search(LANGREGEX, speech["name"]):
+                            if speech.get("name"):
                                 speakerNameS.append(speech["name"])
                                 speakerNameI.append((di, talkKey, ti, si))
-                            if speech.get("text") and re.search(LANGREGEX, speech["text"]):
+                            if speech.get("text"):
                                 dialogueS.append(speech["text"].replace("\r\n", " ").replace("\n", " ").strip())
                                 dialogueI.append((di, talkKey, ti, si))
 
@@ -610,10 +610,10 @@ def translateRdData(data, filename):
             for si, siji in enumerate(dgn["sijiDatas"]):
                 if not isinstance(siji, dict):
                     continue
-                if siji.get("name") and re.search(LANGREGEX, siji["name"]):
+                if siji.get("name"):
                     sijiNameS.append(siji["name"])
                     sijiNameI.append((di, si))
-                if siji.get("choiceSijiTxt") and re.search(LANGREGEX, siji["choiceSijiTxt"]):
+                if siji.get("choiceSijiTxt"):
                     sijiChoiceS.append(siji["choiceSijiTxt"].replace("\r\n", " ").replace("\n", " ").strip())
                     sijiChoiceI.append((di, si))
 
@@ -763,10 +763,10 @@ def translateGameSetting(data, filename):
 
     if "fzCardDatas" in data:
         for i, card in enumerate(data["fzCardDatas"]):
-            if card.get("desc1") and re.search(LANGREGEX, card["desc1"]):
+            if card.get("desc1"):
                 desc1S.append(card["desc1"].replace("\r\n", " ").replace("\n", " ").strip())
                 desc1I.append(i)
-            if card.get("desc2") and re.search(LANGREGEX, card["desc2"]):
+            if card.get("desc2"):
                 desc2S.append(card["desc2"].replace("\r\n", " ").replace("\n", " ").strip())
                 desc2I.append(i)
 
@@ -776,10 +776,10 @@ def translateGameSetting(data, filename):
 
     if "fzDeckDatas" in data:
         for i, deck in enumerate(data["fzDeckDatas"]):
-            if deck.get("name") and re.search(LANGREGEX, deck["name"]):
+            if deck.get("name"):
                 deckNameS.append(deck["name"])
                 deckNameI.append(i)
-            if deck.get("desc") and re.search(LANGREGEX, deck["desc"]):
+            if deck.get("desc"):
                 deckDescS.append(deck["desc"].replace("\r\n", " ").replace("\n", " ").strip())
                 deckDescI.append(i)
 
@@ -788,7 +788,7 @@ def translateGameSetting(data, filename):
 
     if "rentalDecks" in data:
         for i, rental in enumerate(data["rentalDecks"]):
-            if rental.get("memo") and re.search(LANGREGEX, rental["memo"]):
+            if rental.get("memo"):
                 rentalMemoS.append(rental["memo"])
                 rentalMemoI.append(i)
 
