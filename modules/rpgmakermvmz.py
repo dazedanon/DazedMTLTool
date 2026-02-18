@@ -3719,7 +3719,6 @@ def searchSS(state, pbar):
         (r"<STATE_HELP>\n(.*)\n", False),
         (r"<ShowHoverState:\s?(.+?)>", False),
         (r"<Detail:\s?(.+?)>", False),
-        (r"(.+)", True),
     ]
     notesBatch = []
     notesBatchMap = []
