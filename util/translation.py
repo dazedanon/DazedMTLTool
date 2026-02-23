@@ -875,9 +875,9 @@ def extractTranslation(translatedTextList, isList, pbar=None):
 
     # Normalize a broad set of Unicode “smart” quotes to ASCII equivalents.
     translation_table = {
-        0x201C: '"',  # “ left double quotation mark
-        0x201D: '"',  # ” right double quotation mark
-        0xFF02: '"',  # ＂ fullwidth quotation mark
+        0x201C: "'",  # “ left double quotation mark
+        0x201D: "'",  # ” right double quotation mark
+        0xFF02: "'",  # ＂ fullwidth quotation mark
 
         0x2018: "'",  # ‘ left single quotation mark
         0x2019: "'",  # ’ right single quotation mark

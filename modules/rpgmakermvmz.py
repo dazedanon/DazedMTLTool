@@ -124,7 +124,7 @@ FIXTEXTWRAP = True
 # IGNORETLTEXT: Skip Translated Text.
 IGNORETLTEXT = False
 # TLSYSTEMVARIABLES: Translate System Variables. (Optional but sometimes necessary. Can break stuff.)
-TLSYSTEMVARIABLES = False
+TLSYSTEMVARIABLES = True
 # TLSYSTEMSWITCHES: Translate System Switches. (Optional. Translates switch names in System.json.)
 TLSYSTEMSWITCHES = False
 # Join 408 codes into a single string like 401.
@@ -2553,7 +2553,8 @@ def searchCodes(page, pbar, jobList, filename):
                     # "_EventSetting": (r'_EventSetting[\s,\d\w\W]+?"(.+?)";', False),
                     # "this.Menu_SexTxtSet(": (r'"(.+)"', True),
                     # "Rn_RsltTxtArr": (r'"(.+)"', True),
-                    "_章切り替えStart": (r'_章切り替えStart\(\s*\\?"\s?,?.+?\\?"\s?,?\s?\\?"(.+?)\\?"', False),
+                    # "_章切り替えStart": (r'_章切り替えStart\(\s*\\?"\s?,?.+?\\?"\s?,?\s?\\?"(.+?)\\?"', False),
+                    "SkillLogAdd": (r'SkillLogAdd\((?:.+?\+\s*)?\\?"(?:\\\\+[A-Za-z]\[\d+\])?(.+?)\\?"', False),
                     # "MobNameSet": (r'MobNameSet\(\\?"(.+?)\\?"\)', False),
                     # "AddAddress": (r'AddAddress\(\d+,\s*\\?"(.+?)\\?"', False),
                     
@@ -2629,13 +2630,13 @@ def searchCodes(page, pbar, jobList, filename):
 
                 # AddCmnt handler - extract strings from array and name parameter
                 if "AddCmnt(" in jaString:
-                    arrayMatch = re.search(r'AddCmnt\s*\(\s*\[(.+?)\]', jaString)
+                    arrayMatch = re.search(r'AddCmnt\s*\(\s*\[(.+)\]\s*,', jaString)
                     if arrayMatch:
                         arrayContent = arrayMatch.group(1)
                         strings = re.findall(r'\\?"(.+?)\\?"', arrayContent)
                         
                         # Also grab the name argument after the array: , "name")
-                        nameMatch = re.search(r'AddCmnt\s*\(\s*\[.+?\]\s*,\s*\\?"(.+?)\\?"\s*\)', jaString)
+                        nameMatch = re.search(r'AddCmnt\s*\(\s*\[.+\]\s*,\s*\\?"(.+?)\\?"\s*\)', jaString)
                         
                         translatable = []
                         for s in strings:
@@ -3719,6 +3720,7 @@ def searchSS(state, pbar):
         (r"<STATE_HELP>\n(.*)\n", False),
         (r"<ShowHoverState:\s?(.+?)>", False),
         (r"<Detail:\s?(.+?)>", False),
+        (r"<説明:([^>]*)>", False),
     ]
     notesBatch = []
     notesBatchMap = []
