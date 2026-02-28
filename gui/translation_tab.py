@@ -340,14 +340,20 @@ class TranslationWorker(QThread):
                     # Run handlers sequentially in this worker process so globals are shared
                     try:
                         if is_mvmz:
-                            from modules.rpgmakermvmz import handleMVMZ as handler, setSpeakerParseMode, finalizeSpeakerParse, TOKENS, calculateCost, MODEL
+                            from modules.rpgmakermvmz import handleMVMZ as handler, setSpeakerParseMode, finalizeSpeakerParse, resetSpeakerState, TOKENS, calculateCost, MODEL
                         elif is_ace:
-                            from modules.rpgmakerace import handleACE as handler, setSpeakerParseMode, finalizeSpeakerParse, TOKENS, calculateCost, MODEL
+                            from modules.rpgmakerace import handleACE as handler, setSpeakerParseMode, finalizeSpeakerParse, resetSpeakerState, TOKENS, calculateCost, MODEL
                     except Exception as e:
                         engine_name = "rpgmakermvmz" if is_mvmz else "rpgmakerace"
                         self.emit_log(f"❌ Could not import {engine_name} for speaker-parse: {e}")
                         self.finished_signal.emit(False, str(e))
                         return
+
+                    # Reset stale speaker data from any previous run
+                    try:
+                        resetSpeakerState()
+                    except Exception:
+                        pass
 
                     # Enable speaker parse mode in this process
                     try:
