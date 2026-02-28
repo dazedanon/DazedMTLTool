@@ -3731,6 +3731,14 @@ def translateAI(text, history, fullPromptFlag):
         mismatchList=MISMATCH
     )
 
+def resetSpeakerState():
+    """Clear all speaker-related globals so a fresh run doesn't carry over stale data."""
+    global NAMESLIST, SPEAKER_COLLECTED
+    NAMESLIST = []
+    SPEAKER_COLLECTED = []
+    with _speakerCacheLock:
+        _speakerCache.clear()
+
 def setSpeakerParseMode(flag: bool):
     """Enable/disable speaker-only parse mode."""
     global SPEAKER_PARSE_MODE
