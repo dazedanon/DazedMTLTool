@@ -694,24 +694,30 @@ def translateText(system, user, history, penalty, formatType, model, numLines=No
             msg.append({"role": "assistant", "content": history})
 
     # Response Format
-    # Most providers (OpenAI, Claude, Gemini) support json_schema.
-    # Deepseek only supports json_object.
-    _json_object_only = model and "deepseek" in model.lower()
+    # - OpenAI:   response_format with json_schema wrapper {name, strict, schema}
+    # - Deepseek: response_format with json_object (no schema support)
+    # - Claude:   output_config.format via extra_body {type, schema} — no response_format
+    # - Gemini:   response_format with json_schema (OpenAI compat)
+    _is_claude = model and any(x in model.lower() for x in ("claude", "sonnet", "haiku", "opus"))
+    _is_deepseek = model and "deepseek" in model.lower()
+
     if formatType == "json" and numLines is not None:
-        if _json_object_only:
+        schema = createTranslationSchema(numLines)
+        if _is_claude:
+            responseFormat = {"type": "text"}   # unused for Claude; controlled via extra_body
+            _claude_output_config = {"format": {"type": "json_schema", "schema": schema}}
+        elif _is_deepseek:
             responseFormat = {"type": "json_object"}
+            _claude_output_config = None
         else:
-            schema = createTranslationSchema(numLines)
             responseFormat = {
                 "type": "json_schema",
-                "json_schema": {
-                    "name": "translation_response",
-                    "strict": True,
-                    "schema": schema
-                }
+                "json_schema": {"name": "translation_response", "strict": True, "schema": schema}
             }
+            _claude_output_config = None
     else:
         responseFormat = {"type": "text"}
+        _claude_output_config = None
 
     # Content to TL - ensure user content is not empty
     if not user or not str(user).strip():
@@ -750,10 +756,15 @@ def translateText(system, user, history, penalty, formatType, model, numLines=No
                     }
                 }
             except (ValueError, TypeError):
-                # Ignore if the value is not a valid integer
                 pass
         
         # frequency_penalty is not supported via the OpenAI compatibility layer for Gemini
+    elif _is_claude:
+        params["temperature"] = 0
+        # Claude uses output_config.format instead of response_format
+        del params["response_format"]
+        if _claude_output_config:
+            params["extra_body"] = {"output_config": _claude_output_config}
     else:  # Default to OpenAI behavior
         if "gpt-5" in model:
             params["reasoning_effort"] = "minimal"
