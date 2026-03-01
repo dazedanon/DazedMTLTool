@@ -3,7 +3,7 @@ Log Viewer - Real-time log display and monitoring
 """
 
 from PyQt5.QtWidgets import (
-    QWidget, QVBoxLayout, QTextEdit, QLabel, QSizePolicy
+    QWidget, QVBoxLayout, QTextEdit, QLabel, QSizePolicy, QTabWidget
 )
 from PyQt5.QtCore import Qt, pyqtSignal, QTimer
 from PyQt5.QtGui import QTextCursor, QFont, QTextCharFormat
@@ -24,6 +24,7 @@ class LogViewer(QWidget):
         # Lightweight append-only log viewer. Logs are provided by the
         # translation worker via signals so we don't poll files or provide
         # controls here. This keeps the UI responsive.
+        self._error_count = 0
         self.init_ui()
         
     def init_ui(self):
@@ -49,20 +50,56 @@ class LogViewer(QWidget):
         # content lines up visually.
         layout.setSpacing(8)
 
-        # Log display area (append-only)
-        self.log_display = QTextEdit()
-        self.log_display.setReadOnly(True)
-        self.log_display.setFont(QFont("Consolas", 10))
-        self.log_display.setStyleSheet("""
+        # Tab widget for All / Errors views
+        self._tab_widget = QTabWidget()
+        self._tab_widget.setStyleSheet("""
+            QTabWidget::pane {
+                border: 1px solid #555555;
+                background-color: #1e1e1e;
+            }
+            QTabBar::tab {
+                background-color: #2d2d2d;
+                color: #cccccc;
+                padding: 5px 12px;
+                border: 1px solid #555555;
+                border-bottom: none;
+            }
+            QTabBar::tab:selected {
+                background-color: #1e1e1e;
+                color: #ffffff;
+            }
+            QTabBar::tab:hover {
+                background-color: #3a3a3a;
+            }
+        """)
+        self._tab_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+
+        _log_font = QFont("Consolas", 10)
+        _text_edit_style = """
             QTextEdit {
                 background-color: #1e1e1e;
                 color: #ffffff;
-                border: 1px solid #555555;
+                border: none;
             }
-        """)
-        # Make the log display expand to take available vertical space
+        """
+
+        # --- All tab ---
+        self.log_display = QTextEdit()
+        self.log_display.setReadOnly(True)
+        self.log_display.setFont(_log_font)
+        self.log_display.setStyleSheet(_text_edit_style)
         self.log_display.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        layout.addWidget(self.log_display, 1)
+        self._tab_widget.addTab(self.log_display, "All")
+
+        # --- Errors tab (MISMATCH + API_ERROR only) ---
+        self.error_display = QTextEdit()
+        self.error_display.setReadOnly(True)
+        self.error_display.setFont(_log_font)
+        self.error_display.setStyleSheet(_text_edit_style)
+        self.error_display.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self._tab_widget.addTab(self.error_display, "Errors")
+
+        layout.addWidget(self._tab_widget, 1)
 
         # Lightweight status label
         self.status_label = QLabel("Ready")
@@ -123,6 +160,10 @@ class LogViewer(QWidget):
         # Reset the char format so the red color from previous [MISMATCH]
         # HTML spans doesn't bleed into new plain-text appends.
         self.log_display.setCurrentCharFormat(QTextCharFormat())
+        self.error_display.clear()
+        self.error_display.setCurrentCharFormat(QTextCharFormat())
+        self._error_count = 0
+        self._tab_widget.setTabText(1, "Errors")
         self.status_label.setText("Log cleared")
         # Reset tail file pointer and buffer if active
         self._tail_buffer = ""
@@ -247,27 +288,35 @@ class LogViewer(QWidget):
     def append_log_message(self, message):
         """Append a message to the log display.
         
-        Lines containing '[MISMATCH]' are rendered in red to highlight
-        translation batch failures.
+        Lines containing '[MISMATCH]' or '[API_ERROR]' are also routed to the
+        Errors filter tab so they are never lost in a fast-scrolling log.
         """
+        escaped = html.escape(message)
         if "[MISMATCH]" in message:
-            escaped = html.escape(message)
-            self.log_display.append(f'<span style="color: #ff4444;">{escaped}</span>')
+            html_msg = f'<span style="color: #ff4444;">{escaped}</span>'
+            self.log_display.append(html_msg)
+            self.error_display.append(html_msg)
+            self._error_count += 1
+            self._tab_widget.setTabText(1, f"Errors ({self._error_count})")
             # Counting is handled via stdout MISMATCH_EVENT markers in
             # TranslationTab.append_log — the log viewer only handles display.
         elif "[API_ERROR]" in message:
-            escaped = html.escape(message)
-            self.log_display.append(f'<span style="color: #ffaa00;">{escaped}</span>')
+            html_msg = f'<span style="color: #ffaa00;">{escaped}</span>'
+            self.log_display.append(html_msg)
+            self.error_display.append(html_msg)
+            self._error_count += 1
+            self._tab_widget.setTabText(1, f"Errors ({self._error_count})")
         else:
             # Explicitly wrap in a white span so Qt doesn't inherit red from
             # a preceding [MISMATCH] HTML append.
-            escaped = html.escape(message)
             self.log_display.append(f'<span style="color: #ffffff;">{escaped}</span>')
 
-        # Scroll to bottom
-        cursor = self.log_display.textCursor()
-        cursor.movePosition(QTextCursor.End)
-        self.log_display.setTextCursor(cursor)
+        # Scroll to bottom of whichever tab is active; always scroll the
+        # background error display too so it stays at the latest entry.
+        for display in (self.log_display, self.error_display):
+            cursor = display.textCursor()
+            cursor.movePosition(QTextCursor.End)
+            display.setTextCursor(cursor)
         
     def get_current_log_content(self):
         """Get the current log content."""
