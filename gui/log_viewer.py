@@ -255,6 +255,9 @@ class LogViewer(QWidget):
             self.log_display.append(f'<span style="color: #ff4444;">{escaped}</span>')
             # Counting is handled via stdout MISMATCH_EVENT markers in
             # TranslationTab.append_log — the log viewer only handles display.
+        elif "[API_ERROR]" in message:
+            escaped = html.escape(message)
+            self.log_display.append(f'<span style="color: #ffaa00;">{escaped}</span>')
         else:
             # Explicitly wrap in a white span so Qt doesn't inherit red from
             # a preceding [MISMATCH] HTML append.

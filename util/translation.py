@@ -694,17 +694,22 @@ def translateText(system, user, history, penalty, formatType, model, numLines=No
             msg.append({"role": "assistant", "content": history})
 
     # Response Format
+    # Most providers (OpenAI, Claude, Gemini) support json_schema.
+    # Deepseek only supports json_object.
+    _json_object_only = model and "deepseek" in model.lower()
     if formatType == "json" and numLines is not None:
-        # Use structured output with JSON schema
-        schema = createTranslationSchema(numLines)
-        responseFormat = {
-            "type": "json_schema",
-            "json_schema": {
-                "name": "translation_response",
-                "strict": True,
-                "schema": schema
+        if _json_object_only:
+            responseFormat = {"type": "json_object"}
+        else:
+            schema = createTranslationSchema(numLines)
+            responseFormat = {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "translation_response",
+                    "strict": True,
+                    "schema": schema
+                }
             }
-        }
     else:
         responseFormat = {"type": "text"}
 
@@ -765,6 +770,14 @@ def translateText(system, user, history, penalty, formatType, model, numLines=No
             raise Exception(f"API endpoint not found (404) - check your API_PROVIDER and base URL settings. Error: {e}")
         elif e.status_code >= 500:
             raise Exception(f"API server error ({e.status_code}) - retrying... Error: {e}")
+        elif e.status_code == 400 and formatType == "json" and "json_schema" in str(responseFormat):
+            # Provider doesn't support json_schema (e.g. Claude) — fall back to json_object
+            responseFormat = {"type": "json_object"}
+            params["response_format"] = responseFormat
+            try:
+                response = openai.chat.completions.create(**params)
+            except Exception as fallback_error:
+                raise Exception(f"API call failed: {e}. Fallback also failed: {fallback_error}")
         else:
             raise Exception(f"API status error ({e.status_code}): {e}")
     except (APIConnectionError, RateLimitError) as e:
@@ -1161,7 +1174,23 @@ def translateAI(text, history, fullPromptFlag, config, filename=None, pbar=None,
                     pbar.write(f"Retrying translation... (Attempt {attempt + 1}/{max_retries + 1})")
 
             # Translate
-            response = translateText(current_system, user, history, 0.05, formatType, config.model, numLines)
+            try:
+                response = translateText(current_system, user, history, 0.05, formatType, config.model, numLines)
+            except Exception as api_err:
+                err_msg = f"[API_ERROR] {api_err}"
+                # Print to stdout so the GUI captures it immediately
+                print(err_msg, flush=True)
+                if pbar:
+                    pbar.write(err_msg)
+                # Also write to the translation log file for persistence
+                try:
+                    Path(config.logFilePath).parent.mkdir(parents=True, exist_ok=True)
+                    with open(config.logFilePath, "a", encoding="utf-8") as _lf:
+                        _lf.write(f"{err_msg}\n")
+                        _lf.flush()
+                except Exception:
+                    pass
+                raise  # Let retry decorator handle it
             translatedText = response.choices[0].message.content
             last_raw_translation = translatedText
 
