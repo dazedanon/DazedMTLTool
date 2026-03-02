@@ -1078,6 +1078,7 @@ class TranslationTab(QWidget):
             from modules.images import handleImages
             from modules.rpgmakerplugin import handlePlugin
             from modules.aquedi4 import handleAquedi4
+            from modules.srpg import handleSRPG
             
             self.modules = [
                 ["RPG Maker MV/MZ", [".json"], handleMVMZ],
@@ -1097,6 +1098,7 @@ class TranslationTab(QWidget):
                 ["Images", [".png", ".jpg", ".jpeg"], handleImages],
                 ["RPG Maker Plugin", [".js"], handlePlugin],
                 ["Aquedi4 Prepared JSON", [".json"], handleAquedi4],
+                ["SRPG Studio", [".json"], handleSRPG],
             ]
             
             for module in self.modules:
@@ -1121,6 +1123,8 @@ class TranslationTab(QWidget):
             self.engine_changed.emit("wolf")
         elif "mv/mz" in lowered:
             self.engine_changed.emit("mvmz")
+        elif "srpg" in lowered:
+            self.engine_changed.emit("srpg")
         
         # Update mode dropdown based on engine
         current_mode = self.mode_combo.currentText()

@@ -17,6 +17,7 @@ from dotenv import load_dotenv, set_key
 from gui.rpgmaker_tab import RPGMakerTab
 from gui.wolf_tab import WolfTab
 from gui.csv_tab import CSVTab
+from gui.srpg_tab import SRPGTab
 
 
 def create_section_header(title):
@@ -113,6 +114,12 @@ class ConfigTab(QWidget):
         btn_csv.clicked.connect(lambda: self.switch_page(4))
         nav_layout.addWidget(btn_csv)
         self.nav_buttons.append(btn_csv)
+
+        # SRPG Studio button
+        btn_srpg = self.create_nav_button("⚔️", "SRPG Studio")
+        btn_srpg.clicked.connect(lambda: self.switch_page(5))
+        nav_layout.addWidget(btn_srpg)
+        self.nav_buttons.append(btn_srpg)
         
         nav_layout.addStretch()
         nav_bar.setLayout(nav_layout)
@@ -139,6 +146,10 @@ class ConfigTab(QWidget):
         # Page 5: CSV Settings
         self.csv_tab = CSVTab()
         self.content_stack.addWidget(self.csv_tab)
+
+        # Page 6: SRPG Studio Engine
+        self.srpg_tab = SRPGTab()
+        self.content_stack.addWidget(self.srpg_tab)
         
         # Add navigation bar and content to main layout
         main_layout.addWidget(nav_bar)
