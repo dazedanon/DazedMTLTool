@@ -119,6 +119,12 @@ def run_handler(project_root, module_name, filename, estimate_only):
         elif "Plugin" in module_name:
             from modules.rpgmakerplugin import handlePlugin
             handler = handlePlugin
+        elif "Aquedi4" in module_name:
+            from modules.aquedi4 import handleAquedi4
+            handler = handleAquedi4
+        elif "SRPG" in module_name:
+            from modules.srpg import handleSRPG
+            handler = handleSRPG
         else:
             print(f"ERROR:Unknown module: {module_name}")
             sys.exit(1)
