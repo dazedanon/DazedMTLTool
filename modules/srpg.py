@@ -318,6 +318,9 @@ def parseBookmark(data, filename):
     Args:
         data: Parsed JSON data (list of bookmark entries)
         filename: Name of the file being parsed
+
+    Returns:
+        Tuple of (translated data, token counts, error)
     """
     global PBAR
     totalTokens = [0, 0]
