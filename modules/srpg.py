@@ -318,10 +318,8 @@ def parseBookmark(data, filename):
     Args:
         data: Parsed JSON data (list of bookmark entries)
         filename: Name of the file being parsed
-
-    Returns:
-        Tuple of (data, token counts, error)
     """
+    global PBAR
     totalTokens = [0, 0]
 
     pbar = None
@@ -374,6 +372,7 @@ def parseBookmark(data, filename):
                 position=POSITION,
                 leave=LEAVE,
             )
+            PBAR = pbar
 
         # Translate using two-pass approach
         result = translateBookmark(data, filename, pbar=pbar)
@@ -391,6 +390,7 @@ def parseBookmark(data, filename):
                 pbar.close()
         except Exception:
             pass
+        PBAR = None
 
 
 def translateBookmark(data, filename, translatedDataList=None, pbar=None):
@@ -664,6 +664,7 @@ def parseGeneric(data, filename):
                 position=POSITION,
                 leave=LEAVE,
             )
+            PBAR = pbar
         
         # Translate the data using two-pass approach
         result = translateGeneric(data, filename, pbar=pbar)
@@ -682,6 +683,7 @@ def parseGeneric(data, filename):
                 pbar.close()
         except Exception:
             pass
+        PBAR = None
 
 
 def translateGeneric(data, filename, translatedDataList=None, pbar=None):
@@ -1107,6 +1109,7 @@ def translateGeneric(data, filename, translatedDataList=None, pbar=None):
 
 def parseTitles(data, filename):
     """Parser for titles.json (small dict of title strings)."""
+    global PBAR
     totalTokens = [0, 0]
     pbar = None
     try:
@@ -1122,6 +1125,7 @@ def parseTitles(data, filename):
                 position=POSITION,
                 leave=LEAVE,
             )
+            PBAR = pbar
 
         if values:
             response = translateAI(
@@ -1149,6 +1153,7 @@ def parseTitles(data, filename):
                 pbar.close()
         except Exception:
             pass
+        PBAR = None
 
 
 def parseRecollection(data, filename):
@@ -1218,6 +1223,7 @@ def parseRecollection(data, filename):
                 position=POSITION,
                 leave=LEAVE,
             )
+            PBAR = pbar
         
         # Translate the data using two-pass approach
         result = translateRecollection(data, filename, pbar=pbar)
@@ -1235,6 +1241,7 @@ def parseRecollection(data, filename):
                 pbar.close()
         except Exception:
             pass
+        PBAR = None
 
 
 def translateRecollection(data, filename, translatedDataList=None, pbar=None):
@@ -1646,6 +1653,7 @@ def parseMap(data, filename):
                 position=POSITION,
                 leave=LEAVE,
             )
+            PBAR = pbar
         
         # Translate the data using two-pass approach
         result = translateMap(data, filename, pbar=pbar)
@@ -1663,6 +1671,7 @@ def parseMap(data, filename):
                 pbar.close()
         except Exception:
             pass
+        PBAR = None
 
 
 def translateMap(data, filename, translatedDataList=None, pbar=None):
