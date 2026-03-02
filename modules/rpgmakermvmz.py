@@ -124,7 +124,7 @@ FIXTEXTWRAP = True
 # IGNORETLTEXT: Skip Translated Text.
 IGNORETLTEXT = False
 # TLSYSTEMVARIABLES: Translate System Variables. (Optional but sometimes necessary. Can break stuff.)
-TLSYSTEMVARIABLES = True
+TLSYSTEMVARIABLES = False
 # TLSYSTEMSWITCHES: Translate System Switches. (Optional. Translates switch names in System.json.)
 TLSYSTEMSWITCHES = False
 # Join 408 codes into a single string like 401.
