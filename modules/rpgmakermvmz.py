@@ -2536,7 +2536,7 @@ def searchCodes(page, pbar, jobList, filename):
                 
                 # Patterns: (regex, multiline) - multiline=True means it spans 355 + following 655 codes
                 patterns = {
-                    # "テキスト-": (r"テキスト-(.+)", False),
+                    "テキスト-": (r"テキスト-(.+)", False),
                     # "=": (r'=\s?(.*)",', False),
                     # "var text": (r"var\stext\d+\s=\s\"(.+)\"", False),
                     # "logtxt = ": (r"logtxt\s=\s'(.+)'", False),
@@ -2554,7 +2554,7 @@ def searchCodes(page, pbar, jobList, filename):
                     # "this.Menu_SexTxtSet(": (r'"(.+)"', True),
                     # "Rn_RsltTxtArr": (r'"(.+)"', True),
                     # "_章切り替えStart": (r'_章切り替えStart\(\s*\\?"\s?,?.+?\\?"\s?,?\s?\\?"(.+?)\\?"', False),
-                    "SkillLogAdd": (r'SkillLogAdd\((?:.+?\+\s*)?\\?"(?:\\\\+[A-Za-z]\[\d+\])?(.+?)\\?"', False),
+                    # "SkillLogAdd": (r'SkillLogAdd\((?:.+?\+\s*)?\\?"(?:\\\\+[A-Za-z]\[\d+\])?(.+?)\\?"', False),
                     # "MobNameSet": (r'MobNameSet\(\\?"(.+?)\\?"\)', False),
                     # "AddAddress": (r'AddAddress\(\d+,\s*\\?"(.+?)\\?"', False),
                     
