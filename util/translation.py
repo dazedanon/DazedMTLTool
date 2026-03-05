@@ -574,6 +574,29 @@ def parseVocabWithCategories(vocabText):
     return pairs
 
 
+def _japanese_term_in_text(term, text):
+    """
+    Check if a Japanese term appears in text as a standalone word, not as a
+    substring of a longer run of the same script (katakana/hiragana/kanji).
+    E.g. 'キス' will NOT match inside 'テキスト' because both neighbours are katakana.
+    Falls back to plain substring check for non-Japanese or mixed terms.
+    """
+    if term not in text:
+        return False
+    KATAKANA = r'ァ-ヴーｦ-ﾟ'
+    HIRAGANA = r'ぁ-ゔ'
+    KANJI = r'一-龠'
+    if re.search(rf'[{KATAKANA}]', term) and not re.search(rf'[{HIRAGANA}{KANJI}]', term):
+        pattern = rf'(?<![{KATAKANA}]){re.escape(term)}(?![{KATAKANA}])'
+    elif re.search(rf'[{HIRAGANA}]', term) and not re.search(rf'[{KATAKANA}{KANJI}]', term):
+        pattern = rf'(?<![{HIRAGANA}]){re.escape(term)}(?![{HIRAGANA}])'
+    elif re.search(rf'[{KANJI}]', term) and not re.search(rf'[{KATAKANA}{HIRAGANA}]', term):
+        pattern = rf'(?<![{KANJI}]){re.escape(term)}(?![{KANJI}])'
+    else:
+        return True  # mixed-script term: plain substring match already confirmed above
+    return bool(re.search(pattern, text))
+
+
 def buildMatchedVocabText(vocabPairs, subbedText, history=None):
     """Build formatted vocabulary text with matched terms organized by category."""
     matchedCategories = {}
@@ -593,11 +616,11 @@ def buildMatchedVocabText(vocabPairs, subbedText, history=None):
         if isinstance(term, tuple):
             # Check both Japanese and English terms
             japanese_term, english_term = term
-            if japanese_term in textToSearch or english_term in textToSearch:
+            if _japanese_term_in_text(japanese_term, textToSearch) or english_term in textToSearch:
                 term_found = True
         else:
             # Single term check
-            if term in textToSearch:
+            if _japanese_term_in_text(term, textToSearch) if re.search(r'[一-龠ぁ-ゔァ-ヴーｦ-ﾟ｡-ﾟ]', str(term)) else term in textToSearch:
                 term_found = True
         
         # Always include "# Game Characters" category and all its terms regardless of matches
