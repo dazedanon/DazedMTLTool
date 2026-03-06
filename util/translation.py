@@ -726,18 +726,16 @@ def translateText(system, user, history, penalty, formatType, model, numLines=No
 
     if formatType == "json" and numLines is not None:
         schema = createTranslationSchema(numLines)
-        if _is_claude:
-            responseFormat = {"type": "text"}   # unused for Claude; controlled via extra_body
-            _claude_output_config = {"format": {"type": "json_schema", "schema": schema}}
-        elif _is_deepseek:
+        if _is_deepseek:
+            # Deepseek: use json_object (no strict schema support)
             responseFormat = {"type": "json_object"}
-            _claude_output_config = None
         else:
+            # OpenAI, Claude, Gemini: use json_schema with strict enforcement
             responseFormat = {
                 "type": "json_schema",
                 "json_schema": {"name": "translation_response", "strict": True, "schema": schema}
             }
-            _claude_output_config = None
+        _claude_output_config = None
     else:
         responseFormat = {"type": "text"}
         _claude_output_config = None
@@ -784,10 +782,6 @@ def translateText(system, user, history, penalty, formatType, model, numLines=No
         # frequency_penalty is not supported via the OpenAI compatibility layer for Gemini
     elif _is_claude:
         params["temperature"] = 0
-        # Claude uses output_config.format instead of response_format
-        del params["response_format"]
-        if _claude_output_config:
-            params["extra_body"] = {"output_config": _claude_output_config}
     else:  # Default to OpenAI behavior
         if "gpt-5" in model:
             params["reasoning_effort"] = "minimal"

@@ -2233,23 +2233,23 @@ def searchCodes(page, pbar, jobList, filename):
 
                 # Map Plugins
                 headerMappings = {
-                    "LL_InfoPopupWIndow": (["messageText"], None),
-                    "QuestSystem": (["DetailNote"], None),
-                    "BalloonInBattle": (["text"], None),
-                    "MNKR_CommonPopupCoreMZ": (["text"], None),
-                    "DestinationWindow": (["destination"], None),
-                    "_TMLogWindowMZ": (["text"], None),
-                    "TorigoyaMZ_NotifyMessage": (["message"], None),
-                    "SoR_GabWindow": (["arg1"], None),
-                    "DarkPlasma_CharacterText": (["text"], None),
-                    "DTextPicture": (["text"], None),
-                    "TextPicture": (["text"], None),
-                    # "TRP_SkitMZ": (["name"], None),
-                    "LogWindow": (["text"], None),
-                    "BattleLogOutput": (["message"], None),
-                    "TorigoyaMZ_NotifyMessage_CommandMessage": (["message"], None),
-                    "NUUN_SaveScreen": (["AnyName"], None),
-                    "build/ARPG_Core": (["Text", "SkillByName"], None),
+                    # "LL_InfoPopupWIndow": (["messageText"], None),
+                    # "QuestSystem": (["DetailNote"], None),
+                    # "BalloonInBattle": (["text"], None),
+                    # "MNKR_CommonPopupCoreMZ": (["text"], None),
+                    # "DestinationWindow": (["destination"], None),
+                    # "_TMLogWindowMZ": (["text"], None),
+                    # "TorigoyaMZ_NotifyMessage": (["message"], None),
+                    # "SoR_GabWindow": (["arg1"], None),
+                    # "DarkPlasma_CharacterText": (["text"], None),
+                    # "DTextPicture": (["text"], None),
+                    # "TextPicture": (["text"], None),
+                    # # "TRP_SkitMZ": (["name"], None),
+                    # "LogWindow": (["text"], None),
+                    # "BattleLogOutput": (["message"], None),
+                    # "TorigoyaMZ_NotifyMessage_CommandMessage": (["message"], None),
+                    # "NUUN_SaveScreen": (["AnyName"], None),
+                    # "build/ARPG_Core": (["Text", "SkillByName"], None),
                 }
 
                 for key, (argVars, font) in headerMappings.items():
@@ -2319,6 +2319,47 @@ def searchCodes(page, pbar, jobList, filename):
                                             translatedText = dazedwrap.wrapText(translatedText, width=WIDTH)
 
                                         params_obj[chosen_key] = translatedText
+
+                # VisuMZ_4_ProximityMessages handler
+                # Text:json value is stored as a JSON-encoded string, e.g. "\"\\\\{\\\\{text\""
+                # After Python JSON parsing: "\\{\\{text" (outer quotes + \\{ formatting prefix)
+                if "VisuMZ_4_ProximityMessages" in headerString and len(codeList[i]["parameters"]) > 3:
+                    params_obj = codeList[i]["parameters"][3]
+                    if isinstance(params_obj, dict) and "Text:json" in params_obj:
+                        rawValue = params_obj["Text:json"]
+                        if isinstance(rawValue, str):
+                            # Strip outer JSON quotes ("\"...\"" wrapper)
+                            innerMatch = re.match(r'^"(.*)"$', rawValue, re.DOTALL)
+                            innerText = innerMatch.group(1) if innerMatch else rawValue
+
+                            # Preserve \\{ / \\} RPGMaker font-size codes at start and end
+                            prefixMatch = re.match(r'^((?:\\\\[{}])+)', innerText)
+                            prefix = prefixMatch.group(1) if prefixMatch else ""
+                            remaining = innerText[len(prefix):]
+                            suffixMatch = re.search(r'((?:\\\\[{}])+)$', remaining)
+                            suffix = suffixMatch.group(1) if suffixMatch else ""
+                            jaString = remaining[: len(remaining) - len(suffix)] if suffix else remaining
+
+                            # Skip if IGNORETLTEXT is enabled and no Japanese text
+                            skip = IGNORETLTEXT and not re.search(LANGREGEX, jaString)
+                            if not skip and jaString.strip():
+                                # Pass 1
+                                if setData:
+                                    list357.append(jaString)
+                                # Pass 2
+                                else:
+                                    if len(list357) > 0:
+                                        translatedText = list357[0]
+                                        list357.pop(0)
+
+                                        # Remove characters that would break the JSON string encoding
+                                        translatedText = translatedText.replace('"', "'")
+
+                                        # Normalize color/name codes to 4 backslashes (required for Text:json encoding)
+                                        translatedText = re.sub(r'\\+([cCnNiIvV]\[\d+\])', r'\\\\\\\\\1', translatedText)
+
+                                        # Reassemble: restore outer quotes and formatting codes
+                                        params_obj["Text:json"] = f'"{prefix}{translatedText}{suffix}"'
 
                 if headerString == "LL_GalgeChoiceWindow":
                     ### Message Text First
