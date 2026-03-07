@@ -2356,7 +2356,7 @@ def searchCodes(page, pbar, jobList, filename):
                                         translatedText = translatedText.replace('"', "'")
 
                                         # Normalize color/name codes to 4 backslashes (required for Text:json encoding)
-                                        translatedText = re.sub(r'\\+([cCnNiIvV]\[\d+\])', r'\\\\\\\\\1', translatedText)
+                                        translatedText = re.sub(r'\\{1,3}([cCnNiIvV]\[\d+\])', r'\\\\\\\\\1', translatedText)
 
                                         # Reassemble: restore outer quotes and formatting codes
                                         params_obj["Text:json"] = f'"{prefix}{translatedText}{suffix}"'
