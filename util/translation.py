@@ -754,11 +754,15 @@ def translateText(system, user, history, penalty, formatType, model, numLines=No
     api_provider = os.getenv("API_PROVIDER", "openai").lower()
 
     # Base parameters for the API call
+    # Note: do NOT include response_format when it is plain text — many providers
+    # (e.g. newer OpenAI models) reject {"type": "text"} as an invalid value since
+    # text output is already the default when no response_format is supplied.
     params = {
         "model": model,
-        "response_format": responseFormat,
         "messages": msg,
     }
+    if responseFormat.get("type") != "text":
+        params["response_format"] = responseFormat
 
     # Provider-specific parameters
     if api_provider == "gemini":
@@ -799,9 +803,25 @@ def translateText(system, user, history, penalty, formatType, model, numLines=No
         elif e.status_code >= 500:
             raise Exception(f"API server error ({e.status_code}) - retrying... Error: {e}")
         elif e.status_code == 400 and formatType == "json" and "json_schema" in str(responseFormat):
+            # Only fall back to json_object if the error is NOT "Input should be 'json_schema'"
+            # (that message means json_schema IS required and json_object would also be rejected)
+            if "input should be 'json_schema'" in str(e).lower() or "input should be \"json_schema\"" in str(e).lower():
+                raise Exception(f"API status error ({e.status_code}): {e}")
             # Provider doesn't support json_schema (e.g. Claude) — fall back to json_object
             responseFormat = {"type": "json_object"}
             params["response_format"] = responseFormat
+            try:
+                response = openai.chat.completions.create(**params)
+            except APIStatusError as fallback_error:
+                if fallback_error.status_code == 400 and "input should be 'json_schema'" in str(fallback_error).lower():
+                    raise Exception(f"API requires json_schema response format but rejected the schema. Original error: {e}")
+                raise Exception(f"API call failed: {e}. Fallback also failed: {fallback_error}")
+            except Exception as fallback_error:
+                raise Exception(f"API call failed: {e}. Fallback also failed: {fallback_error}")
+        elif e.status_code == 400 and "input should be 'json_schema'" in str(e).lower():
+            # response_format.type was rejected (e.g. sent "text" or "json_object" to a model
+            # that only accepts json_schema). Remove response_format and retry with no constraint.
+            params.pop("response_format", None)
             try:
                 response = openai.chat.completions.create(**params)
             except Exception as fallback_error:
@@ -817,8 +837,10 @@ def translateText(system, user, history, penalty, formatType, model, numLines=No
         if "404" in error_str or "not found" in error_str:
             raise Exception(f"API returned 404 Not Found - check your API configuration. Original error: {e}")
         
-        # If structured output fails, fallback to json_object
-        if formatType == "json" and "json_schema" in str(responseFormat):
+        # If structured output fails, fallback to json_object (unless the error
+        # explicitly states json_schema is required — falling back would just fail again)
+        if formatType == "json" and "json_schema" in str(responseFormat) and \
+                "input should be 'json_schema'" not in error_str:
             responseFormat = {"type": "json_object"}
             params["response_format"] = responseFormat
             try:
