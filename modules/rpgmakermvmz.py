@@ -73,6 +73,8 @@ LEAVE = False
 # Config (Default)
 # FIRSTLINESPEAKERS: Guess speaker from first line.
 FIRSTLINESPEAKERS = False
+# INLINE401SPEAKERS: Extract speaker from "Name「dialogue」" inline format on 401 lines.
+INLINE401SPEAKERS = True
 # FACENAME101: Map face name -> speaker.
 FACENAME101 = False
 # Face name -> speaker mapping for FACENAME101.
@@ -1774,6 +1776,12 @@ def searchCodes(page, pbar, jobList, filename):
                         jaString,
                     )
 
+                # Inline Japanese quote speakers (e.g. "トルテ「dialogue」" or "エルミナ「first line...")
+                if len(speakerList) == 0 and INLINE401SPEAKERS:
+                    inlineQuoteDetect = re.match(r"^([^\s「」。、！？…\\\n]{1,20})「", jaString)
+                    if inlineQuoteDetect:
+                        speakerList = [inlineQuoteDetect.group(1).strip()]
+
                 # First Line Speakers
                 if len(speakerList) == 0 and FIRSTLINESPEAKERS is True:
                     # Test Speaker
@@ -1811,7 +1819,9 @@ def searchCodes(page, pbar, jobList, filename):
                 if len(speakerList) != 0:
                     # Check if speaker+dialogue are on same line (【speaker】dialogue)
                     sameLineMatch = re.match(r"^\s*【([^】]+)】(.+)", jaString, re.DOTALL)
-                    
+                    # Check if speaker+dialogue are on same line via Japanese quote (Name「dialogue)
+                    inlineQuoteMatch = re.match(r"^([^\s「」。、！？…\\\n]{1,20})「(.*)", jaString, re.DOTALL) if INLINE401SPEAKERS else None
+
                     if sameLineMatch and len(speakerList) == 1:
                         # Translate speaker
                         response = getSpeaker(speakerList[0])
@@ -1823,6 +1833,18 @@ def searchCodes(page, pbar, jobList, filename):
                         # Store the translated bracket to add back later
                         if not setData:
                             nametag = f"【{speaker}】" + nametag
+                        # Don't skip to next line - continue with current line
+                    elif inlineQuoteMatch and len(speakerList) == 1:
+                        # Inline quote format: strip "Name「" prefix entirely, keep raw dialogue
+                        response = getSpeaker(speakerList[0])
+                        speaker = response[0]
+                        totalTokens[0] += response[1][0]
+                        totalTokens[1] += response[1][1]
+                        # Remove speaker name and opening 「 from jaString; strip trailing 」 too
+                        jaString = re.sub(r"」\s*$", "", inlineQuoteMatch.group(2))
+                        # Format as [Speaker]:  for output
+                        if not setData:
+                            nametag = f"[{speaker}]: " + nametag
                         # Don't skip to next line - continue with current line
                     elif codeList[i + 1]["code"] in [401, 405, -1]:
                         # Original behavior: speaker on its own line, dialogue on next line

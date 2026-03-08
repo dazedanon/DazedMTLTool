@@ -50,6 +50,7 @@ class RPGMakerTab(QWidget):
     DEFAULT_CONFIG = {
         # General settings
         "FIRSTLINESPEAKERS": False,
+        "INLINE401SPEAKERS": False,
         "FACENAME101": False,
         "BRFLAG": False,
         "FIXTEXTWRAP": True,
@@ -256,6 +257,11 @@ class RPGMakerTab(QWidget):
         )
         col1.addLayout(layout)
         
+        self.inline401speakers_cb, layout = self._create_checkbox_with_description(
+            "Inline 401 Speaker", "Detect Name「dialogue」 speaker format", "Extracts speaker from Name\u300cdialogue\u300d inline format in 401 lines."
+        )
+        col1.addLayout(layout)
+
         self.facename101_cb, layout = self._create_checkbox_with_description(
             "Face → Speaker", "Use face image as speaker name", "Uses face filenames to identify speakers."
         )
@@ -502,6 +508,7 @@ class RPGMakerTab(QWidget):
         try:
             # General settings checkboxes
             self.first_line_speakers_cb.stateChanged.disconnect()
+            self.inline401speakers_cb.stateChanged.disconnect()
             self.facename101_cb.stateChanged.disconnect()
             self.brflag_cb.stateChanged.disconnect()
             self.fixtextwrap_cb.stateChanged.disconnect()
@@ -544,6 +551,7 @@ class RPGMakerTab(QWidget):
         """Connect all checkboxes to auto-apply changes when modified."""
         # General settings checkboxes
         self.first_line_speakers_cb.stateChanged.connect(lambda: self.apply_to_module(show_messages=False))
+        self.inline401speakers_cb.stateChanged.connect(lambda: self.apply_to_module(show_messages=False))
         self.facename101_cb.stateChanged.connect(lambda: self.apply_to_module(show_messages=False))
         self.brflag_cb.stateChanged.connect(lambda: self.apply_to_module(show_messages=False))
         self.fixtextwrap_cb.stateChanged.connect(lambda: self.apply_to_module(show_messages=False))
@@ -584,6 +592,7 @@ class RPGMakerTab(QWidget):
         config = {
             # General settings
             "FIRSTLINESPEAKERS": self.first_line_speakers_cb.isChecked(),
+            "INLINE401SPEAKERS": self.inline401speakers_cb.isChecked(),
             "FACENAME101": self.facename101_cb.isChecked(),
             "BRFLAG": self.brflag_cb.isChecked(),
             "FIXTEXTWRAP": self.fixtextwrap_cb.isChecked(),
@@ -628,6 +637,7 @@ class RPGMakerTab(QWidget):
         """Set configuration from dictionary."""
         # General settings
         self.first_line_speakers_cb.setChecked(config.get("FIRSTLINESPEAKERS", False))
+        self.inline401speakers_cb.setChecked(config.get("INLINE401SPEAKERS", False))
         self.facename101_cb.setChecked(config.get("FACENAME101", False))
         self.brflag_cb.setChecked(config.get("BRFLAG", False))
         self.fixtextwrap_cb.setChecked(config.get("FIXTEXTWRAP", True))
