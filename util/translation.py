@@ -9,6 +9,7 @@ import re
 import json
 import tiktoken
 import openai
+import anthropic
 from openai import APIError, APIConnectionError, RateLimitError, APIStatusError
 import hashlib
 import threading
@@ -18,6 +19,23 @@ from retry import retry
 
 # Set to True to print input/output token counts and content for each API call
 DEBUG_LOGGING = False
+
+# Set to True to print per-batch and running-total actual costs for Claude.
+# Run the same file twice — once with DISABLE_CACHE=False, once with DISABLE_CACHE=True
+# — and compare the final "run total" lines to see real savings.
+CACHE_COST_DEBUG = True
+
+# Set to True to disable Claude prompt caching (removes cache_control from the
+# system message). Use together with CACHE_COST_DEBUG to get the real uncached
+# baseline cost for comparison against a cached run.
+DISABLE_CACHE = True
+
+# Module-level accumulators for CACHE_COST_DEBUG — persist across all translateAI
+# calls within a single process run so the final run_total is meaningful.
+_dbg_cache_read = 0
+_dbg_cache_write = 0
+_dbg_regular_input = 0
+_dbg_output = 0
 
 
 # ===== Placeholder Protection System =====
@@ -726,9 +744,14 @@ def translateText(system, user, history, penalty, formatType, model, numLines=No
     # History is added as separate messages below.
     # For all other providers: combine into one plain string as before.
     if _is_claude:
-        content_blocks = [{"type": "text", "text": f"```\n{system}\n```", "cache_control": {"type": "ephemeral"}}]
-        if vocab_text and vocab_text.strip():
-            content_blocks.append({"type": "text", "text": vocab_text})
+        if DISABLE_CACHE:
+            # No cache_control — sends as a plain content block for a real uncached run.
+            combined_system = system + vocab_text
+            content_blocks = [{"type": "text", "text": f"```\n{combined_system}\n```"}]
+        else:
+            content_blocks = [{"type": "text", "text": f"```\n{system}\n```", "cache_control": {"type": "ephemeral"}}]
+            if vocab_text and vocab_text.strip():
+                content_blocks.append({"type": "text", "text": vocab_text})
         msg = [{"role": "system", "content": content_blocks}]
     else:
         combined_system = system + vocab_text
@@ -822,7 +845,85 @@ def translateText(system, user, history, penalty, formatType, model, numLines=No
             params["temperature"] = 0
             params["frequency_penalty"] = penalty
 
-    # Call API
+    # --- Native Anthropic SDK call (bypasses the OpenAI compat layer) ---
+    # The compat endpoint strips cache_control blocks and never returns
+    # cache_read_input_tokens / cache_creation_input_tokens. The native SDK
+    # exposes both, making prompt caching observable and verifiable.
+    if _is_claude:
+        # system blocks were built above (with cache_control on static prompt).
+        ant_system = list(msg[0]["content"])
+
+        # Convert the remaining msg entries to native-SDK format.
+        # system-role entries are history markers; the assistant-role entries
+        # that follow them carry the actual previous translations.
+        history_items = []
+        native_msgs   = []
+        for m in msg[1:]:
+            role    = m["role"]
+            content = m.get("content", "")
+            if role == "system":
+                pass  # skip "Translation History:\n```" / "```" wrapper lines
+            elif role == "assistant":
+                history_items.append(str(content))
+            elif role == "user":
+                native_msgs.append({"role": "user", "content": str(content)})
+
+        if history_items:
+            ant_system.append({
+                "type": "text",
+                "text": "Translation History:\n```\n" + "\n".join(history_items) + "\n```",
+            })
+
+        if not native_msgs:
+            raise ValueError("No user message found for Anthropic native call")
+
+        ant_client = anthropic.Anthropic(api_key=openai.api_key)
+        try:
+            ant_resp = ant_client.messages.create(
+                model=model,
+                max_tokens=16384,
+                temperature=0,
+                system=ant_system,
+                messages=native_msgs,
+            )
+        except Exception as e:
+            raise Exception(f"Anthropic API error: {e}")
+
+        _ant_text = ant_resp.content[0].text if ant_resp.content else ""
+        _u = ant_resp.usage
+        _cr  = getattr(_u, "cache_read_input_tokens",     0) or 0
+        _cw  = getattr(_u, "cache_creation_input_tokens", 0) or 0
+        _inp = getattr(_u, "input_tokens",  0) or 0
+        _out = getattr(_u, "output_tokens", 0) or 0
+        # input_tokens from native SDK = non-cached portion only;
+        # rebuild the full prompt total so totalTokens stays accurate.
+        _total_prompt = _inp + _cr + _cw
+
+        class _AnthropicCompat:
+            class _Usage:
+                def __init__(self, prompt, completion, cr, cw):
+                    self.prompt_tokens               = prompt
+                    self.completion_tokens           = completion
+                    self.cache_read_input_tokens     = cr
+                    self.cache_creation_input_tokens = cw
+                @property
+                def model_extra(self):
+                    return {
+                        "cache_read_input_tokens":     self.cache_read_input_tokens,
+                        "cache_creation_input_tokens": self.cache_creation_input_tokens,
+                    }
+            class _Choice:
+                class _Msg:
+                    def __init__(self, c): self.content = c
+                def __init__(self, c):
+                    self.message = _AnthropicCompat._Choice._Msg(c)
+            def __init__(self, text, prompt, output, cr, cw):
+                self.choices = [_AnthropicCompat._Choice(text)]
+                self.usage   = _AnthropicCompat._Usage(prompt, output, cr, cw)
+
+        return _AnthropicCompat(_ant_text, _total_prompt, _out, _cr, _cw)
+
+    # Call API (reaches here only for non-Claude providers)
     try:
         response = openai.chat.completions.create(**params)
     except APIStatusError as e:
@@ -1107,6 +1208,7 @@ def translateAI(text, history, fullPromptFlag, config, filename=None, pbar=None,
         pass
 
     # Don't open log file here - we'll open it only when we need to write
+    # Token tracking: [input, output].
     totalTokens = [0, 0]
     
     if isinstance(text, list):
@@ -1277,6 +1379,66 @@ def translateAI(text, history, fullPromptFlag, config, filename=None, pbar=None,
             # Update token count for this attempt
             totalTokens[0] += response.usage.prompt_tokens
             totalTokens[1] += response.usage.completion_tokens
+
+            # --- Cache cost debug (Claude only) ---
+            _is_claude_model = config.model and any(x in config.model.lower() for x in ("claude", "sonnet", "haiku", "opus"))
+            if CACHE_COST_DEBUG and _is_claude_model:
+                global _dbg_cache_read, _dbg_cache_write, _dbg_regular_input, _dbg_output
+                usage = response.usage
+
+                # Cache fields are set directly on _AnthropicCompat._Usage by the
+                # native SDK path in translateText (cache_read_input_tokens,
+                # cache_creation_input_tokens). Fall back to model_extra for safety.
+                def _get_usage_field(field):
+                    v = getattr(usage, field, None)
+                    if v is None:
+                        v = (getattr(usage, "model_extra", None) or {}).get(field)
+                    return int(v) if v else 0
+
+                batch_cache_read  = _get_usage_field("cache_read_input_tokens")
+                batch_cache_write = _get_usage_field("cache_creation_input_tokens")
+                # "input_tokens" is Anthropic's name for non-cached portion;
+                # OpenAI SDK uses "prompt_tokens" for the full total.
+                # Derive non-cached regular tokens from the total minus cache buckets.
+                batch_prompt_total = getattr(usage, "prompt_tokens", 0) or 0
+                batch_regular = max(0, batch_prompt_total - batch_cache_read - batch_cache_write)
+                batch_output  = getattr(usage, "completion_tokens", 0) or 0
+
+                _dbg_cache_read    += batch_cache_read
+                _dbg_cache_write   += batch_cache_write
+                _dbg_regular_input += batch_regular
+                _dbg_output        += batch_output
+
+                pricing = getPricingConfig(config.model)
+                base_rate = pricing["inputAPICost"] / 1_000_000
+                out_rate  = pricing["outputAPICost"] / 1_000_000
+
+                batch_cost = (
+                    batch_cache_read  * base_rate * 0.10 +
+                    batch_cache_write * base_rate * 1.25 +
+                    batch_regular     * base_rate +
+                    batch_output      * out_rate
+                )
+                total_cost = (
+                    _dbg_cache_read    * base_rate * 0.10 +
+                    _dbg_cache_write   * base_rate * 1.25 +
+                    _dbg_regular_input * base_rate +
+                    _dbg_output        * out_rate
+                )
+
+                cache_label = "DISABLED" if DISABLE_CACHE else (
+                    "HIT"   if batch_cache_read  > 0 else
+                    "WRITE" if batch_cache_write > 0 else "MISS"
+                )
+                msg = (
+                    f"[CACHE {cache_label}] Batch {index+1} | "
+                    f"cache_read={batch_cache_read} cache_write={batch_cache_write} "
+                    f"regular={batch_regular} output={batch_output} | "
+                    f"batch=${batch_cost:.5f} | run_total=${total_cost:.4f}"
+                )
+                print(msg, flush=True)
+                if pbar:
+                    pbar.write(msg)
 
             # --- Debug Token Logging ---
             if DEBUG_LOGGING:
