@@ -1840,11 +1840,11 @@ def searchCodes(page, pbar, jobList, filename):
                         speaker = response[0]
                         totalTokens[0] += response[1][0]
                         totalTokens[1] += response[1][1]
-                        # Remove speaker name and opening 「 from jaString; strip trailing 」 too
-                        jaString = re.sub(r"」\s*$", "", inlineQuoteMatch.group(2))
-                        # Format as [Speaker]:  for output
+                        # Remove speaker name from jaString, preserve 「...」 for standard quote conversion
+                        jaString = "「" + inlineQuoteMatch.group(2)
+                        # Format as [Speaker]\n for output
                         if not setData:
-                            nametag = f"[{speaker}]: " + nametag
+                            nametag = f"[{speaker}]\n" + nametag
                         # Don't skip to next line - continue with current line
                     elif codeList[i + 1]["code"] in [401, 405, -1]:
                         # Original behavior: speaker on its own line, dialogue on next line
