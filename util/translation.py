@@ -28,7 +28,7 @@ CACHE_COST_DEBUG = True
 # Set to True to disable Claude prompt caching (removes cache_control from the
 # system message). Use together with CACHE_COST_DEBUG to get the real uncached
 # baseline cost for comparison against a cached run.
-DISABLE_CACHE = True
+DISABLE_CACHE = False
 
 # Module-level accumulators for CACHE_COST_DEBUG — persist across all translateAI
 # calls within a single process run so the final run_total is meaningful.
@@ -36,6 +36,16 @@ _dbg_cache_read = 0
 _dbg_cache_write = 0
 _dbg_regular_input = 0
 _dbg_output = 0
+
+# Thread-local storage for per-file cache token breakdown.
+# Used by calculateCost() to return accurate cache-discounted costs for Claude
+# without requiring changes to any module files.
+_thread_local = threading.local()
+
+# Global (cross-thread) running total of accurate cache-discounted cost.
+# Protected by a lock so parallel file threads can safely accumulate into it.
+_global_accurate_cost      = 0.0
+_global_accurate_cost_lock = threading.Lock()
 
 
 # ===== Placeholder Protection System =====
@@ -1134,18 +1144,48 @@ def extractTranslation(translatedTextList, isList, pbar=None):
 def calculateCost(inputTokens, outputTokens, model):
     """
     Calculate the cost of translation based on token usage and model pricing.
-    
-    Args:
-        inputTokens: Number of input tokens used
-        outputTokens: Number of output tokens generated
-        model: The model name string
-        
-    Returns:
-        float: Total cost in USD
+
+    For Claude models the cost is derived from the actual cache token breakdown
+    recorded by translateAI, so cache discounts are reflected accurately:
+      - Cache reads:  10 % of the base input rate
+      - Cache writes: 125 % of the base input rate
+      - Regular input: 100 % of the base input rate
+
+    Call pattern (no module changes required):
+      Per-file call: thread-local file_* accumulators hold this file's token
+                     counts → compute cost, reset accumulators to 0, return cost.
+      TOTAL call:    accumulators are 0 (already reset) → return total_accurate_cost
+                     (running sum of all per-file costs in this thread).
+
+    Falls back to naive token × rate calculation for non-Claude models.
     """
+    _is_claude = model and any(x in model.lower() for x in ("claude", "sonnet", "haiku", "opus"))
+    if _is_claude:
+        if getattr(_thread_local, 'file_cost_ready', False):
+            # Per-file call: compute from accumulators (may be 0 for disk-cached files),
+            # reset everything, return the file cost.
+            cr  = getattr(_thread_local, 'file_cache_read',  0)
+            cw  = getattr(_thread_local, 'file_cache_write', 0)
+            reg = getattr(_thread_local, 'file_regular',     0)
+            out = getattr(_thread_local, 'file_output',      0)
+            pricing  = getPricingConfig(model)
+            br  = pricing["inputAPICost"]  / 1_000_000
+            orr = pricing["outputAPICost"] / 1_000_000
+            cost = cr * br * 0.10 + cw * br * 1.25 + reg * br + out * orr
+            _thread_local.file_cache_read  = 0
+            _thread_local.file_cache_write = 0
+            _thread_local.file_regular     = 0
+            _thread_local.file_output      = 0
+            _thread_local.file_cost_ready  = False
+            return cost
+        # TOTAL call (flag already cleared): return the cross-thread running total.
+        with _global_accurate_cost_lock:
+            return _global_accurate_cost
+
+    # Non-Claude (or no accurate data available): naive calculation.
     pricing = getPricingConfig(model)
-    inputCost = (inputTokens / 1000000) * pricing["inputAPICost"]
-    outputCost = (outputTokens / 1000000) * pricing["outputAPICost"]
+    inputCost  = (inputTokens  / 1_000_000) * pricing["inputAPICost"]
+    outputCost = (outputTokens / 1_000_000) * pricing["outputAPICost"]
     return inputCost + outputCost
 
 
@@ -1210,6 +1250,21 @@ def translateAI(text, history, fullPromptFlag, config, filename=None, pbar=None,
     # Don't open log file here - we'll open it only when we need to write
     # Token tracking: [input, output].
     totalTokens = [0, 0]
+
+    # Ensure per-file accumulators exist on this thread (first call ever on this thread).
+    # They are NOT reset here — they accumulate across ALL translateAI calls for one
+    # file and are only reset by calculateCost() when the per-file cost line is printed.
+    if not hasattr(_thread_local, 'file_cache_read'):
+        _thread_local.file_cache_read  = 0
+        _thread_local.file_cache_write = 0
+        _thread_local.file_regular     = 0
+        _thread_local.file_output      = 0
+    # Record snapshot so end-of-call delta only counts tokens from THIS call.
+    _prev_cr  = _thread_local.file_cache_read
+    _prev_cw  = _thread_local.file_cache_write
+    _prev_reg = _thread_local.file_regular
+    _prev_out = _thread_local.file_output
+    _thread_local.file_cost_ready = False  # will be set True at end of translateAI
     
     if isinstance(text, list):
         formatType = "json"
@@ -1380,15 +1435,13 @@ def translateAI(text, history, fullPromptFlag, config, filename=None, pbar=None,
             totalTokens[0] += response.usage.prompt_tokens
             totalTokens[1] += response.usage.completion_tokens
 
-            # --- Cache cost debug (Claude only) ---
+            # --- Cache cost tracking (Claude only) ---
             _is_claude_model = config.model and any(x in config.model.lower() for x in ("claude", "sonnet", "haiku", "opus"))
-            if CACHE_COST_DEBUG and _is_claude_model:
-                global _dbg_cache_read, _dbg_cache_write, _dbg_regular_input, _dbg_output
+            if _is_claude_model:
                 usage = response.usage
 
                 # Cache fields are set directly on _AnthropicCompat._Usage by the
-                # native SDK path in translateText (cache_read_input_tokens,
-                # cache_creation_input_tokens). Fall back to model_extra for safety.
+                # native SDK path in translateText. Fall back to model_extra for safety.
                 def _get_usage_field(field):
                     v = getattr(usage, field, None)
                     if v is None:
@@ -1397,48 +1450,54 @@ def translateAI(text, history, fullPromptFlag, config, filename=None, pbar=None,
 
                 batch_cache_read  = _get_usage_field("cache_read_input_tokens")
                 batch_cache_write = _get_usage_field("cache_creation_input_tokens")
-                # "input_tokens" is Anthropic's name for non-cached portion;
-                # OpenAI SDK uses "prompt_tokens" for the full total.
-                # Derive non-cached regular tokens from the total minus cache buckets.
                 batch_prompt_total = getattr(usage, "prompt_tokens", 0) or 0
                 batch_regular = max(0, batch_prompt_total - batch_cache_read - batch_cache_write)
                 batch_output  = getattr(usage, "completion_tokens", 0) or 0
 
-                _dbg_cache_read    += batch_cache_read
-                _dbg_cache_write   += batch_cache_write
-                _dbg_regular_input += batch_regular
-                _dbg_output        += batch_output
+                # Per-file accumulators (thread-local) — always updated so
+                # calculateCost() can return accurate cache-discounted costs.
+                _thread_local.file_cache_read  += batch_cache_read
+                _thread_local.file_cache_write += batch_cache_write
+                _thread_local.file_regular     += batch_regular
+                _thread_local.file_output      += batch_output
 
-                pricing = getPricingConfig(config.model)
-                base_rate = pricing["inputAPICost"] / 1_000_000
-                out_rate  = pricing["outputAPICost"] / 1_000_000
+                if CACHE_COST_DEBUG:
+                    global _dbg_cache_read, _dbg_cache_write, _dbg_regular_input, _dbg_output
+                    _dbg_cache_read    += batch_cache_read
+                    _dbg_cache_write   += batch_cache_write
+                    _dbg_regular_input += batch_regular
+                    _dbg_output        += batch_output
 
-                batch_cost = (
-                    batch_cache_read  * base_rate * 0.10 +
-                    batch_cache_write * base_rate * 1.25 +
-                    batch_regular     * base_rate +
-                    batch_output      * out_rate
-                )
-                total_cost = (
-                    _dbg_cache_read    * base_rate * 0.10 +
-                    _dbg_cache_write   * base_rate * 1.25 +
-                    _dbg_regular_input * base_rate +
-                    _dbg_output        * out_rate
-                )
+                    pricing = getPricingConfig(config.model)
+                    base_rate = pricing["inputAPICost"] / 1_000_000
+                    out_rate  = pricing["outputAPICost"] / 1_000_000
 
-                cache_label = "DISABLED" if DISABLE_CACHE else (
-                    "HIT"   if batch_cache_read  > 0 else
-                    "WRITE" if batch_cache_write > 0 else "MISS"
-                )
-                msg = (
-                    f"[CACHE {cache_label}] Batch {index+1} | "
-                    f"cache_read={batch_cache_read} cache_write={batch_cache_write} "
-                    f"regular={batch_regular} output={batch_output} | "
-                    f"batch=${batch_cost:.5f} | run_total=${total_cost:.4f}"
-                )
-                print(msg, flush=True)
-                if pbar:
-                    pbar.write(msg)
+                    batch_cost = (
+                        batch_cache_read  * base_rate * 0.10 +
+                        batch_cache_write * base_rate * 1.25 +
+                        batch_regular     * base_rate +
+                        batch_output      * out_rate
+                    )
+                    total_cost = (
+                        _dbg_cache_read    * base_rate * 0.10 +
+                        _dbg_cache_write   * base_rate * 1.25 +
+                        _dbg_regular_input * base_rate +
+                        _dbg_output        * out_rate
+                    )
+
+                    cache_label = "DISABLED" if DISABLE_CACHE else (
+                        "HIT"   if batch_cache_read  > 0 else
+                        "WRITE" if batch_cache_write > 0 else "MISS"
+                    )
+                    msg = (
+                        f"[CACHE {cache_label}] Batch {index+1} | "
+                        f"cache_read={batch_cache_read} cache_write={batch_cache_write} "
+                        f"regular={batch_regular} output={batch_output} | "
+                        f"batch=${batch_cost:.5f} | run_total=${total_cost:.4f}"
+                    )
+                    print(msg, flush=True)
+                    if pbar:
+                        pbar.write(msg)
 
             # --- Debug Token Logging ---
             if DEBUG_LOGGING:
@@ -1634,6 +1693,31 @@ def translateAI(text, history, fullPromptFlag, config, filename=None, pbar=None,
     
     # Save cache after processing (for both estimate and translation modes)
     save_cache()
+
+    # For Claude: add only the DELTA from this call to total_accurate_cost so
+    # that multiple translateAI calls within one file don't double-count tokens.
+    # The file_* accumulators span ALL calls for the file; calculateCost() reads
+    # their full accumulated values when the per-file cost line is printed.
+    _is_claude_final = config.model and any(x in config.model.lower() for x in ("claude", "sonnet", "haiku", "opus"))
+    if _is_claude_final and not config.estimateMode:
+        _pricing = getPricingConfig(config.model)
+        _br = _pricing["inputAPICost"] / 1_000_000
+        _or = _pricing["outputAPICost"] / 1_000_000
+        # Delta = tokens added in *this* translateAI call only
+        _delta_cr  = getattr(_thread_local, 'file_cache_read',  0) - _prev_cr
+        _delta_cw  = getattr(_thread_local, 'file_cache_write', 0) - _prev_cw
+        _delta_reg = getattr(_thread_local, 'file_regular',     0) - _prev_reg
+        _delta_out = getattr(_thread_local, 'file_output',      0) - _prev_out
+        _call_cost = (
+            _delta_cr  * _br * 0.10 +
+            _delta_cw  * _br * 1.25 +
+            _delta_reg * _br +
+            _delta_out * _or
+        )
+        global _global_accurate_cost
+        with _global_accurate_cost_lock:
+            _global_accurate_cost += _call_cost
+        _thread_local.file_cost_ready = True  # signals calculateCost to use file accumulators
 
     # Return result
     if formatType == "json":
