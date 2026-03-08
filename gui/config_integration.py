@@ -109,7 +109,7 @@ class ConfigIntegration:
                 
             # Find configuration lines
             config_patterns = [
-                r'^(FIRSTLINESPEAKERS|FACENAME101|NAMES|BRFLAG|FIXTEXTWRAP|IGNORETLTEXT)\s*=\s*(True|False)',
+                r'^(FIRSTLINESPEAKERS|INLINE401SPEAKERS|FACENAME101|NAMES|BRFLAG|FIXTEXTWRAP|IGNORETLTEXT)\s*=\s*(True|False)',
                 r'^(CODE\d+)\s*=\s*(True|False)'
             ]
             
@@ -152,6 +152,7 @@ class ConfigIntegration:
         return {
             # General config
             "FIRSTLINESPEAKERS": False,
+            "INLINE401SPEAKERS": False,
             "FACENAME101": False,
             "NAMES": False,
             "BRFLAG": False,
@@ -185,6 +186,7 @@ class ConfigIntegration:
         """Get descriptions for all configuration options."""
         return {
             "FIRSTLINESPEAKERS": "If 1st line of 401 is a speaker, set to True",
+            "INLINE401SPEAKERS": "Detect speaker from Name\u300cdialogue\u300d inline format in 401 lines",
             "FACENAME101": "Find Speakers in 101 Codes based on Face Name",
             "NAMES": "Output a list of all the character names found",
             "BRFLAG": "If the game uses <br> instead of newlines",
