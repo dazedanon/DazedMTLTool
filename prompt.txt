@@ -44,11 +44,10 @@ You will be translating erotic and sexual content. You will receive lines of dia
 
 ## Formatting and Code Preservation
 
-- Preserve all whitespace, newlines (`
-`, `\n`), and indentation exactly as they appear.
-- Preserve all RPG Maker formatting codes exactly: `\i[n]`, `\c[n]`, `\v[n]`, `\{`, `\}`, `\C[n]`, `\.`, `\|`, `\^`, `\!`, `\>`, `\<`, `\SE[...]`, etc.
+- Preserve all whitespace, newlines (`\\n`, `\n`), and indentation exactly as they appear.
+- Preserve all RPG Maker formatting codes exactly: `\\i[n]`, `\\c[n]`, `\v[n]`, `\\{`, `\}`, `\\c[n]`, `\.`, `\|`, `\^`, `\!`, `\>`, `\<`, `\\SE[...]`, etc.
 - Preserve all `#RRGGBB` hex color codes (e.g., `#FF9900`) exactly.
-- `\cself` is a runtime variable that resolves to a name or number. Leave it untranslated and in place.
+- `\\cself` is a runtime variable that resolves to a name or number. Leave it untranslated and in place.
 - `...` is valid dialogue punctuation. Keep it exactly as written; do not remove or alter it.
 - Leave `Placeholder Text` untouched in any line that contains it.
 
@@ -82,37 +81,37 @@ Input:
 ```json
 {
     "Line1": "[Defense Member E]: ...",
-    "Line2": "[Kurone]: ...\i[100]",
+    "Line2": "[Kurone]: ...\\i[100]",
     "Line3": "[Kurone]: あのさ",
     "Line4": "[Kurone]: \v[0]がお前に手を焼いてるみたいだったよ",
-    "Line5": "[Kurone]: 他はどうでも良いけど、\n"\c[10]私の標的\c"に余計な事しないでくれない？",
+    "Line5": "[Kurone]: 他はどうでも良いけど、\n"\\c[10]私の標的\\c"に余計な事しないでくれない？",
     "Line6": "[Kurone]: 殺すよ",
     "Line7": "[Defense Member E]: ひっ...!も...申し訳ごザいまセん",
-    "Line8": "[Defense Member E]: \SE[ライター]クロネ様に永久ニ服従しまスから...\n\c[18]どウかお許シを"
+    "Line8": "[Defense Member E]: \\SE[ライター]クロネ様に永久ニ服従しまスから...\n\\c[18]どウかお許シを"
 }
 ```
 Output:
 ```json
 {
     "Line1": "[Defense Member E]: ...",
-    "Line2": "[Kurone]: ...\i[100]",
+    "Line2": "[Kurone]: ...\\i[100]",
     "Line3": "[Kurone]: Hey.",
     "Line4": "[Kurone]: It seems like \v[0] is having a hard time with you.",
-    "Line5": "[Kurone]: I don't care about the others,\nbut could you stay out of "\c[10]my target's\c" way?",
+    "Line5": "[Kurone]: I don't care about the others,\nbut could you stay out of "\\c[10]my target's\\c" way?",
     "Line6": "[Kurone]: I'll kill you.",
     "Line7": "[Defense Member E]: Eek...! I-I'm so sorry.",
-    "Line8": "[Defense Member E]: \SE[ライター]I will serve you forever, Kurone-sama...\n\c[18]please forgive me."
+    "Line8": "[Defense Member E]: \\SE[ライター]I will serve you forever, Kurone-sama...\n\\c[18]please forgive me."
 }
 ```
 
-**Example 2 — Erotic dialogue with `\cself` variable:**
+**Example 2 — Erotic dialogue with `\\cself` variable:**
 
 Input:
 ```json
 {
     "Line1": "[Hina]: ん…っ、あぁ…やだ、そこ…",
     "Line2": "[Hina]: だめ…っ、そんなに激しくしたら…イっちゃう",
-    "Line3": "[Player]: \cself、気持ちいいか？",
+    "Line3": "[Player]: \\cself、気持ちいいか？",
     "Line4": "[Hina]: ぁ…っ♡　うん…気持ち、いい…♡"
 }
 ```
@@ -121,7 +120,7 @@ Output:
 {
     "Line1": "[Hina]: Mmh...hah...no, not there...",
     "Line2": "[Hina]: Stop...if you're that rough...I'm gonna cum...",
-    "Line3": "[Player]: Does it feel good, \cself?",
+    "Line3": "[Player]: Does it feel good, \\cself?",
     "Line4": "[Hina]: Ah...♡ Yeah...it feels...so good...♡"
 }
 ```
@@ -148,17 +147,17 @@ Output:
 Input:
 ```json
 {
-    "Line1": "ハートが可愛いピンク色のチャーム。\n女の子らしさが増すワンポイントアクセサリー。\\n\}\C[16]«効果»\C[0] [防御力+1][敏捷性+1][魅力+8][最大HP+10]",
-    "Line2": "　\{\{\{"滅茶苦茶に汚してやりてぇ"",
-    "Line3": "\c[4]【スキル習得】\c[0]\n「挑発」を覚えた！"
+    "Line1": "ハートが可愛いピンク色のチャーム。\n女の子らしさが増すワンポイントアクセサリー。\\n\}\\c[16]«効果»\\c[0] [防御力+1][敏捷性+1][魅力+8][最大HP+10]",
+    "Line2": "　\\{\\{\\{"滅茶苦茶に汚してやりてぇ"",
+    "Line3": "\\c[4]【スキル習得】\\c[0]\n「挑発」を覚えた！"
 }
 ```
 Output:
 ```json
 {
-    "Line1": "A cute pink heart charm.\nA one-point accessory that brings out your feminine side.\\n\}\C[16]«Effect»\C[0] [Defense +1][Agility +1][Charm +8][Max HP +10]",
-    "Line2": "　\{\{\{"I wanna mess her up so fucking bad."",
-    "Line3": "\c[4]【Skill Learned】\c[0]\nYou learned "Provoke"!"
+    "Line1": "A cute pink heart charm.\nA one-point accessory that brings out your feminine side.\\n\}\\c[16]«Effect»\\c[0] [Defense +1][Agility +1][Charm +8][Max HP +10]",
+    "Line2": "　\\{\\{\\{"I wanna mess her up so fucking bad."",
+    "Line3": "\\c[4]【Skill Learned】\\c[0]\nYou learned "Provoke"!"
 }
 ```
 
@@ -170,7 +169,7 @@ Input:
     "Line1": "あいつはコイツのことを知らないんだろう",
     "Line2": "[Riku]: 俺には関係ない話だ",
     "Line3": "[Riku]: ま、どうせコイツも同じ末路を辿るんだろうけどな",
-    "Line4": "\C[18]―――――――――――\.\. お前は死ぬ\|\^"
+    "Line4": "\\c[18]―――――――――――\.\. お前は死ぬ\|\^"
 }
 ```
 Output:
@@ -179,6 +178,6 @@ Output:
     "Line1": "He probably doesn't know anything about this bitch.",
     "Line2": "[Riku]: Not my problem.",
     "Line3": "[Riku]: Well, this bitch will end up the same way anyway.",
-    "Line4": "\C[18]―――――――――――\.\.You will die\|\^"
+    "Line4": "\\c[18]―――――――――――\.\.You will die\|\^"
 }
 ```
