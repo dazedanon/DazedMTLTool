@@ -1,3 +1,4 @@
+anthropic>=0.40.0
 colorama>=0.4.6
 openai>=2.8.0
 python-dotenv>=1.0.0
