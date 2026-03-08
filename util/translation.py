@@ -1,7 +1,6 @@
 """
-Shared translation utilities for DazedMTLTool
-This module provides a centralized translation function that can be used across all modules
-without relying on global variables.
+Shared translation utilities for DazedMTLTool.
+Centralized translation function used across all modules.
 """
 
 import os
@@ -20,30 +19,22 @@ from retry import retry
 # Set to True to print input/output token counts and content for each API call
 DEBUG_LOGGING = False
 
-# Set to True to print per-batch and running-total actual costs for Claude.
-# Run the same file twice — once with DISABLE_CACHE=False, once with DISABLE_CACHE=True
-# — and compare the final "run total" lines to see real savings.
-CACHE_COST_DEBUG = True
+# Set to True to print per-batch cache costs for Claude (read/write/regular breakdown).
+CACHE_COST_DEBUG = False
 
-# Set to True to disable Claude prompt caching (removes cache_control from the
-# system message). Use together with CACHE_COST_DEBUG to get the real uncached
-# baseline cost for comparison against a cached run.
+# Set to True to disable Claude prompt caching for baseline cost comparison.
 DISABLE_CACHE = False
 
-# Module-level accumulators for CACHE_COST_DEBUG — persist across all translateAI
-# calls within a single process run so the final run_total is meaningful.
+# Per-process debug accumulators for CACHE_COST_DEBUG run_total line.
 _dbg_cache_read = 0
 _dbg_cache_write = 0
 _dbg_regular_input = 0
 _dbg_output = 0
 
-# Thread-local storage for per-file cache token breakdown.
-# Used by calculateCost() to return accurate cache-discounted costs for Claude
-# without requiring changes to any module files.
+# Thread-local per-file token breakdown; read by calculateCost() for Claude.
 _thread_local = threading.local()
 
-# Global (cross-thread) running total of accurate cache-discounted cost.
-# Protected by a lock so parallel file threads can safely accumulate into it.
+# Cross-thread running total of accurate cache-discounted cost (protected by lock).
 _global_accurate_cost      = 0.0
 _global_accurate_cost_lock = threading.Lock()
 
@@ -55,8 +46,8 @@ PROTECTED_PATTERNS = [
     r'\\ME\[[^\]]+\]',      # \ME[music_effect_name]
     r'\\BGM\[[^\]]+\]',     # \BGM[background_music_name]
     r'\\BGS\[[^\]]+\]',     # \BGS[background_sound_name]
-    r'_pum\[[^\]]+\]',     # \BGS[background_sound_name]
-    r'\\VS\[[^\]]+\]',     # \BGS[background_sound_name]
+    r'_pum\[[^\]]+\]',      # _pum[name]
+    r'\\VS\[[^\]]+\]',      # \VS[name]
 ]
 
 def protect_script_codes(text):
@@ -208,8 +199,8 @@ def validate_translation_content(original_items, translated_items, langRegex):
     is_valid = len(invalid_indices) == 0
     return is_valid, invalid_indices, reasons
 
-# (from .env if present), strip accidental whitespace, and set the base URL,
-# organization, and API key. It also handles the Gemini compatibility layer.
+# Load .env, strip accidental whitespace, set base URL / org / API key.
+# Handles the Gemini compatibility layer as a special case.
 load_dotenv()
 api_provider = os.getenv("API_PROVIDER", "openai").lower()
 env_api = os.getenv("api", "").strip()
@@ -433,20 +424,9 @@ class TranslationConfig:
         # Set language regex (default is Japanese)
         self.langRegex = langRegex or r"[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]+"
         
-        # Set batch size based on model if not provided
+        # Set batch size — derive from pricing config unless explicitly supplied
         if batchSize is None:
-            if "gpt-3.5" in self.model:
-                self.batchSize = 10
-            elif "gpt-4" in self.model:
-                self.batchSize = 30
-            elif "deepseek" in self.model:
-                self.batchSize = 30
-            else:
-                # Try to get from environment, fallback to 10
-                try:
-                    self.batchSize = int(os.getenv("batchsize", 10))
-                except (ValueError, TypeError):
-                    self.batchSize = 10
+            self.batchSize = getPricingConfig(self.model)["batchSize"]
         else:
             self.batchSize = batchSize
             
@@ -504,7 +484,21 @@ def getPricingConfig(model):
             "batchSize": 30,
             "frequencyPenalty": 0.05
         }
-    elif "sonnet" in model:
+    elif "claude-opus" in model or model == "claude-3-opus":
+        return {
+            "inputAPICost": 15.00,
+            "outputAPICost": 75.00,
+            "batchSize": 30,
+            "frequencyPenalty": 0.05
+        }
+    elif "claude-haiku" in model or "haiku" in model:
+        return {
+            "inputAPICost": 0.80,
+            "outputAPICost": 4.00,
+            "batchSize": 30,
+            "frequencyPenalty": 0.05
+        }
+    elif "sonnet" in model or "claude" in model:
         return {
             "inputAPICost": 3.00,
             "outputAPICost": 15.00,
@@ -730,11 +724,9 @@ def createTranslationSchema(numLines):
 
 def translateText(system, user, history, penalty, formatType, model, numLines=None, vocab_text=""):
     """Send translation request to the selected API.
-    
-    Args:
-        system:     Static system prompt (prompt.txt content).
-        vocab_text: Per-batch matched vocabulary text (dynamic, kept separate so
-                    it does not bust the Claude prompt cache on every call).
+
+    system:     Static system prompt (prompt.txt). Cached by Claude.
+    vocab_text: Per-batch vocabulary (dynamic, never cached to avoid cache busting).
     """
     # Ensure system content is not empty
     if not system or not str(system).strip():
@@ -743,16 +735,10 @@ def translateText(system, user, history, penalty, formatType, model, numLines=No
     _is_claude = model and any(x in model.lower() for x in ("claude", "sonnet", "haiku", "opus"))
     _is_deepseek = model and "deepseek" in model.lower()
 
-    # Prompt
-    # For Claude: the static prompt (prompt.txt) is placed in its own content block
-    # marked with cache_control so Anthropic caches it across all batches (~90%
-    # discount on cache reads, 25% surcharge on the one-time write).
-    # prompt.txt must be ≥2048 tokens for Sonnet 4.6 (≥1024 for older models) to
-    # qualify — keeping it static and vocab-free ensures the cache key never changes.
-    # The per-batch matched vocab is appended as a second, uncached content block so
-    # it never invalidates the cache.
-    # History is added as separate messages below.
-    # For all other providers: combine into one plain string as before.
+    # Build message list.
+    # Claude: static prompt gets cache_control; vocab appended uncached so it
+    # never busts the cache. Requires ≥2048 tokens for Sonnet 4.6 to qualify.
+    # Other providers: combine into one plain string.
     if _is_claude:
         if DISABLE_CACHE:
             # No cache_control — sends as a plain content block for a real uncached run.
@@ -779,11 +765,8 @@ def translateText(system, user, history, penalty, formatType, model, numLines=No
         if history and str(history).strip():
             msg.append({"role": "assistant", "content": history})
 
-    # Response Format
-    # - OpenAI:   response_format with json_schema wrapper {name, strict, schema}
-    # - Deepseek: response_format with json_object (no schema support)
-    # - Claude:   output_config.format via extra_body {type, schema} — no response_format
-    # - Gemini:   response_format with json_schema (OpenAI compat)
+    # Response format per provider:
+    # OpenAI/Gemini: json_schema  |  Deepseek: json_object  |  text: omit entirely
 
     if formatType == "json" and numLines is not None:
         schema = createTranslationSchema(numLines)
@@ -796,10 +779,8 @@ def translateText(system, user, history, penalty, formatType, model, numLines=No
                 "type": "json_schema",
                 "json_schema": {"name": "translation_response", "strict": True, "schema": schema}
             }
-        _claude_output_config = None
     else:
         responseFormat = {"type": "text"}
-        _claude_output_config = None
 
     # Content to TL - ensure user content is not empty
     if not user or not str(user).strip():
@@ -814,10 +795,7 @@ def translateText(system, user, history, penalty, formatType, model, numLines=No
     # --- API Call Logic ---
     api_provider = os.getenv("API_PROVIDER", "openai").lower()
 
-    # Base parameters for the API call
-    # Note: do NOT include response_format when it is plain text — many providers
-    # (e.g. newer OpenAI models) reject {"type": "text"} as an invalid value since
-    # text output is already the default when no response_format is supplied.
+    # Omit response_format for plain text — some providers reject {"type": "text"}.
     params = {
         "model": model,
         "messages": msg,
@@ -844,7 +822,7 @@ def translateText(system, user, history, penalty, formatType, model, numLines=No
             except (ValueError, TypeError):
                 pass
         
-        # frequency_penalty is not supported via the OpenAI compatibility layer for Gemini
+    # frequency_penalty is unsupported on the Gemini OpenAI compat layer
     elif _is_claude:
         params["temperature"] = 0
         # cache_control is set on the system message content block above.
@@ -855,17 +833,14 @@ def translateText(system, user, history, penalty, formatType, model, numLines=No
             params["temperature"] = 0
             params["frequency_penalty"] = penalty
 
-    # --- Native Anthropic SDK call (bypasses the OpenAI compat layer) ---
-    # The compat endpoint strips cache_control blocks and never returns
-    # cache_read_input_tokens / cache_creation_input_tokens. The native SDK
-    # exposes both, making prompt caching observable and verifiable.
+    # Use native Anthropic SDK — the OpenAI compat endpoint strips cache_control
+    # and never returns cache_read/creation_input_tokens.
     if _is_claude:
         # system blocks were built above (with cache_control on static prompt).
         ant_system = list(msg[0]["content"])
 
-        # Convert the remaining msg entries to native-SDK format.
-        # system-role entries are history markers; the assistant-role entries
-        # that follow them carry the actual previous translations.
+        # Convert remaining messages to native format.
+        # Skip system wrapper lines; collect assistant history and user content.
         history_items = []
         native_msgs   = []
         for m in msg[1:]:
@@ -905,8 +880,7 @@ def translateText(system, user, history, penalty, formatType, model, numLines=No
         _cw  = getattr(_u, "cache_creation_input_tokens", 0) or 0
         _inp = getattr(_u, "input_tokens",  0) or 0
         _out = getattr(_u, "output_tokens", 0) or 0
-        # input_tokens from native SDK = non-cached portion only;
-        # rebuild the full prompt total so totalTokens stays accurate.
+        # input_tokens (native SDK) = non-cached portion; add cache fields for true total.
         _total_prompt = _inp + _cr + _cw
 
         class _AnthropicCompat:
@@ -1152,10 +1126,11 @@ def calculateCost(inputTokens, outputTokens, model):
       - Regular input: 100 % of the base input rate
 
     Call pattern (no module changes required):
-      Per-file call: thread-local file_* accumulators hold this file's token
-                     counts → compute cost, reset accumulators to 0, return cost.
-      TOTAL call:    accumulators are 0 (already reset) → return total_accurate_cost
-                     (running sum of all per-file costs in this thread).
+      Per-file call: file_cost_ready flag is True → read thread-local per-file
+                     accumulators (which span all translateAI calls for the file),
+                     compute cost, reset accumulators, clear flag, return cost.
+      TOTAL call:    file_cost_ready is False (already cleared) → return the
+                     cross-thread _global_accurate_cost running sum.
 
     Falls back to naive token × rate calculation for non-Claude models.
     """
@@ -1213,25 +1188,14 @@ def countTokens(system, user, history):
 @retry(exceptions=Exception, tries=5, delay=5)
 def translateAI(text, history, fullPromptFlag, config, filename=None, pbar=None, lock=None, mismatchList=None):
     """
-    Main translation function that can be used across all modules.
-    
-    Args:
-        text: Text to translate (string or list)
-        history: Translation history for context
-        fullPromptFlag: Whether to use full prompt or simplified version
-        config: TranslationConfig instance with all settings
-        filename: Current filename being processed (for logging)
-        pbar: Progress bar instance (optional)
-        lock: Threading lock (optional)
-        mismatchList: List to track mismatched files (optional)
-    
-    Returns:
-        [translatedText, totalTokens]
+    Main translation entry point used by all modules.
+
+    Returns [translatedText, [inputTokens, outputTokens]].
     """
     if not text:
         return [text, [0, 0]]
 
-    # If a per-run log file is specified via environment variable, prefer it.
+    # Use TRANSLATION_RUN_LOG env var as log path if set.
     run_log = os.getenv("TRANSLATION_RUN_LOG")
     if run_log:
         # Make sure parent dir exists
@@ -1247,19 +1211,17 @@ def translateAI(text, history, fullPromptFlag, config, filename=None, pbar=None,
     except Exception:
         pass
 
-    # Don't open log file here - we'll open it only when we need to write
     # Token tracking: [input, output].
     totalTokens = [0, 0]
 
-    # Ensure per-file accumulators exist on this thread (first call ever on this thread).
-    # They are NOT reset here — they accumulate across ALL translateAI calls for one
-    # file and are only reset by calculateCost() when the per-file cost line is printed.
+    # Init per-file accumulators on first call on this thread (never reset here —
+    # they span all translateAI calls for a file; reset by calculateCost).
     if not hasattr(_thread_local, 'file_cache_read'):
         _thread_local.file_cache_read  = 0
         _thread_local.file_cache_write = 0
         _thread_local.file_regular     = 0
         _thread_local.file_output      = 0
-    # Record snapshot so end-of-call delta only counts tokens from THIS call.
+    # Snapshot accumulators so end-of-call delta only counts tokens from this call.
     _prev_cr  = _thread_local.file_cache_read
     _prev_cw  = _thread_local.file_cache_write
     _prev_reg = _thread_local.file_regular
@@ -1440,8 +1402,7 @@ def translateAI(text, history, fullPromptFlag, config, filename=None, pbar=None,
             if _is_claude_model:
                 usage = response.usage
 
-                # Cache fields are set directly on _AnthropicCompat._Usage by the
-                # native SDK path in translateText. Fall back to model_extra for safety.
+                # Read cache fields from _AnthropicCompat._Usage; fall back to model_extra.
                 def _get_usage_field(field):
                     v = getattr(usage, field, None)
                     if v is None:
@@ -1454,8 +1415,7 @@ def translateAI(text, history, fullPromptFlag, config, filename=None, pbar=None,
                 batch_regular = max(0, batch_prompt_total - batch_cache_read - batch_cache_write)
                 batch_output  = getattr(usage, "completion_tokens", 0) or 0
 
-                # Per-file accumulators (thread-local) — always updated so
-                # calculateCost() can return accurate cache-discounted costs.
+                # Accumulate into per-file thread-local counters.
                 _thread_local.file_cache_read  += batch_cache_read
                 _thread_local.file_cache_write += batch_cache_write
                 _thread_local.file_regular     += batch_regular
@@ -1694,16 +1654,14 @@ def translateAI(text, history, fullPromptFlag, config, filename=None, pbar=None,
     # Save cache after processing (for both estimate and translation modes)
     save_cache()
 
-    # For Claude: add only the DELTA from this call to total_accurate_cost so
-    # that multiple translateAI calls within one file don't double-count tokens.
-    # The file_* accumulators span ALL calls for the file; calculateCost() reads
-    # their full accumulated values when the per-file cost line is printed.
+    # For Claude: accumulate only this call's delta into the cross-thread total.
+    # file_* accumulators hold full per-file totals; calculateCost() reads them.
     _is_claude_final = config.model and any(x in config.model.lower() for x in ("claude", "sonnet", "haiku", "opus"))
     if _is_claude_final and not config.estimateMode:
         _pricing = getPricingConfig(config.model)
         _br = _pricing["inputAPICost"] / 1_000_000
         _or = _pricing["outputAPICost"] / 1_000_000
-        # Delta = tokens added in *this* translateAI call only
+        # Delta = tokens added in this call only (not earlier calls for same file).
         _delta_cr  = getattr(_thread_local, 'file_cache_read',  0) - _prev_cr
         _delta_cw  = getattr(_thread_local, 'file_cache_write', 0) - _prev_cw
         _delta_reg = getattr(_thread_local, 'file_regular',     0) - _prev_reg
