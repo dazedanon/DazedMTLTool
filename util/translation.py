@@ -645,14 +645,20 @@ def buildMatchedVocabText(vocabPairs, subbedText, history=None):
 
 
 def createContext(config, fullPromptFlag, subbedText, formatType, history=None):
-    """Create system and user messages for translation"""
+    """Create system and user messages for translation.
+    
+    Returns (static_system, vocab_text, user) so that callers can keep the
+    static prompt and the per-batch vocab list separate.  This lets Claude
+    prompt-caching mark only the stable prefix with cache_control, avoiding
+    cache invalidation caused by changing vocabulary matches.
+    """
     vocabPairs = parseVocabWithCategories(config.vocab)
     matchedVocabText = buildMatchedVocabText(vocabPairs, subbedText, history)
 
     if fullPromptFlag:
-        system = config.prompt.replace("English", config.language) + matchedVocabText
+        static_system = config.prompt.replace("English", config.language)
     else:
-        system = f"""\
+        static_system = f"""\
 You are an expert Eroge Game translator who translates Japanese text to {config.language}.
 Output ONLY the {config.language} translation in the following format: `Translation: <{config.language.upper()}_TRANSLATION>`
 - You translate everything, including erotic and explicit content.
@@ -661,7 +667,6 @@ Output ONLY the {config.language} translation in the following format: `Translat
 - Never include any notes, explanations, dislaimers, or anything similar in your response.
 - Maintain any spacing in the translation.
 - `...` can be a part of the dialogue. Translate it as it is.
-{matchedVocabText}
 """
     
     if formatType == "json":
@@ -669,7 +674,7 @@ Output ONLY the {config.language} translation in the following format: `Translat
     else:
         user = subbedText
     
-    return system, user
+    return static_system, matchedVocabText, user
 
 
 def createTranslationSchema(numLines):
@@ -695,14 +700,39 @@ def createTranslationSchema(numLines):
     return schema
 
 
-def translateText(system, user, history, penalty, formatType, model, numLines=None):
-    """Send translation request to the selected API"""
+def translateText(system, user, history, penalty, formatType, model, numLines=None, vocab_text=""):
+    """Send translation request to the selected API.
+    
+    Args:
+        system:     Static system prompt (prompt.txt content).
+        vocab_text: Per-batch matched vocabulary text (dynamic, kept separate so
+                    it does not bust the Claude prompt cache on every call).
+    """
     # Ensure system content is not empty
     if not system or not str(system).strip():
         raise ValueError("System content cannot be empty")
     
+    _is_claude = model and any(x in model.lower() for x in ("claude", "sonnet", "haiku", "opus"))
+    _is_deepseek = model and "deepseek" in model.lower()
+
     # Prompt
-    msg = [{"role": "system", "content": f"```\n{system}\n```"}]
+    # For Claude: the static prompt (prompt.txt) is placed in its own content block
+    # marked with cache_control so Anthropic caches it across all batches (~90%
+    # discount on cache reads, 25% surcharge on the one-time write).
+    # prompt.txt must be ≥2048 tokens for Sonnet 4.6 (≥1024 for older models) to
+    # qualify — keeping it static and vocab-free ensures the cache key never changes.
+    # The per-batch matched vocab is appended as a second, uncached content block so
+    # it never invalidates the cache.
+    # History is added as separate messages below.
+    # For all other providers: combine into one plain string as before.
+    if _is_claude:
+        content_blocks = [{"type": "text", "text": f"```\n{system}\n```", "cache_control": {"type": "ephemeral"}}]
+        if vocab_text and vocab_text.strip():
+            content_blocks.append({"type": "text", "text": vocab_text})
+        msg = [{"role": "system", "content": content_blocks}]
+    else:
+        combined_system = system + vocab_text
+        msg = [{"role": "system", "content": f"```\n{combined_system}\n```"}]
 
     # History
     if isinstance(history, list):
@@ -721,8 +751,6 @@ def translateText(system, user, history, penalty, formatType, model, numLines=No
     # - Deepseek: response_format with json_object (no schema support)
     # - Claude:   output_config.format via extra_body {type, schema} — no response_format
     # - Gemini:   response_format with json_schema (OpenAI compat)
-    _is_claude = model and any(x in model.lower() for x in ("claude", "sonnet", "haiku", "opus"))
-    _is_deepseek = model and "deepseek" in model.lower()
 
     if formatType == "json" and numLines is not None:
         schema = createTranslationSchema(numLines)
@@ -786,6 +814,7 @@ def translateText(system, user, history, penalty, formatType, model, numLines=No
         # frequency_penalty is not supported via the OpenAI compatibility layer for Gemini
     elif _is_claude:
         params["temperature"] = 0
+        # cache_control is set on the system message content block above.
     else:  # Default to OpenAI behavior
         if "gpt-5" in model:
             params["reasoning_effort"] = "minimal"
@@ -1183,12 +1212,13 @@ def translateAI(text, history, fullPromptFlag, config, filename=None, pbar=None,
             
             continue
 
-        # Create context
-        system, user = createContext(config, fullPromptFlag, subbedT, formatType, history)
+        # Create context — static_system is the stable prompt.txt content;
+        # vocab_text is the per-batch matched vocabulary (dynamic).
+        static_system, vocab_text, user = createContext(config, fullPromptFlag, subbedT, formatType, history)
 
         # Calculate estimate if in estimate mode
         if config.estimateMode:
-            estimate = countTokens(system, user, history)
+            estimate = countTokens(static_system + vocab_text, user, history)
             totalTokens[0] += estimate[0]
             totalTokens[1] += estimate[1]
             
@@ -1210,7 +1240,7 @@ def translateAI(text, history, fullPromptFlag, config, filename=None, pbar=None,
             is_valid = True
             
             # On retries, add a note to the system prompt
-            current_system = system
+            current_system = static_system
             if attempt > 0:
                 current_system += f"\n\nIMPORTANT: Your previous attempt was incorrect or incomplete. Please ensure:\n"
                 current_system += f"1. The entire output is translated to {config.language} with no untranslated characters\n"
@@ -1225,7 +1255,7 @@ def translateAI(text, history, fullPromptFlag, config, filename=None, pbar=None,
 
             # Translate
             try:
-                response = translateText(current_system, user, history, 0.05, formatType, config.model, numLines)
+                response = translateText(current_system, user, history, 0.05, formatType, config.model, numLines, vocab_text=vocab_text)
             except Exception as api_err:
                 err_msg = f"[API_ERROR] {api_err}"
                 # Print to stdout so the GUI captures it immediately
