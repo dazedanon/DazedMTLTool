@@ -180,7 +180,8 @@ def validate_translation_content(original_items, translated_items, langRegex):
             
             # Check 2: Translation is just a single punctuation mark or very short
             # Allow control codes like \\C[27]\\V[45] but not just ":" or ""
-            if len(trans_str) <= 2 and not re.search(r'\\[A-Z]\[', trans_str):
+            # Use <= 1 so real 2-char words like "No", "Go", "Hi" are not rejected
+            if len(trans_str) <= 1 and not re.search(r'\\[A-Z]\[', trans_str):
                 # Exception: if original is also very short (like "回" -> "x"), that's ok
                 if len(orig_str) > 3:
                     invalid_indices.append(i)
@@ -195,6 +196,13 @@ def validate_translation_content(original_items, translated_items, langRegex):
                     invalid_indices.append(i)
                     reasons.append(f"Line{i+1}: Translation suspiciously short ('{trans_str}') for '{orig_str[:50]}...'")
                     continue
+
+            # Check 4: Runaway translation - translation is excessively long relative to original
+            # Catches cases where the model repeats words endlessly (e.g. "it hurts it hurts it hurts...")
+            if len(orig_str) > 10 and len(trans_str) > len(orig_str) * 10:
+                invalid_indices.append(i)
+                reasons.append(f"Line{i+1}: Runaway translation (output {len(trans_str)} chars vs input {len(orig_str)} chars) for '{orig_str[:50]}...'")
+                continue
     
     is_valid = len(invalid_indices) == 0
     return is_valid, invalid_indices, reasons

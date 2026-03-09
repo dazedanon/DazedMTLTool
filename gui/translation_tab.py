@@ -1761,6 +1761,14 @@ class TranslationTab(QWidget):
         if isinstance(message, str) and message.startswith("MISMATCH_EVENT:"):
             self.on_mismatch_detected()
             return  # marker is internal, not displayed
+        # Forward error messages to the log viewer directly. These worker-level
+        # errors are not written to the log file so the tail won't capture them.
+        if isinstance(message, str) and '\u274c' in message:
+            try:
+                if hasattr(self, 'translation_log_viewer') and self.translation_log_viewer:
+                    self.translation_log_viewer.append_log_message(message)
+            except Exception:
+                pass
         try:
             pattern = r'^\W*(?P<filename>[^:]+):.*?\[Input:\s*(?P<input>\d+)\].*?\[Output:\s*(?P<output>\d+)\].*?\[Cost:\s*\$(?P<cost>[\d\.]+)\].*?\[(?P<time>[\d\.]+)s\]'
             m = re.search(pattern, message)
