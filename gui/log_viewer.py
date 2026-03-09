@@ -306,6 +306,13 @@ class LogViewer(QWidget):
             self.error_display.append(html_msg)
             self._error_count += 1
             self._tab_widget.setTabText(1, f"Errors ({self._error_count})")
+        elif '\u274c' in message:
+            # Worker-level error (❌ prefix) — show in both All and Errors tabs.
+            html_msg = f'<span style="color: #ff6666;">{escaped}</span>'
+            self.log_display.append(html_msg)
+            self.error_display.append(html_msg)
+            self._error_count += 1
+            self._tab_widget.setTabText(1, f"Errors ({self._error_count})")
         else:
             # Explicitly wrap in a white span so Qt doesn't inherit red from
             # a preceding [MISMATCH] HTML append.
