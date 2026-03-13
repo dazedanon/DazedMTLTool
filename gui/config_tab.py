@@ -128,6 +128,9 @@ class ConfigTab(QWidget):
         
         # Connect auto-save after initial load
         self.connect_auto_save()
+
+        # Fetch latest models in the background once the UI is shown
+        QTimer.singleShot(0, lambda: self.fetch_models(silent=True))
         
     def init_ui(self):
         """Initialize the user interface with horizontal icon navigation at top."""
@@ -357,7 +360,7 @@ class ConfigTab(QWidget):
         self.model_refresh_btn.setText("⟳")
         self.model_refresh_btn.setToolTip("Fetch latest models from the configured API")
         self.model_refresh_btn.setFixedWidth(28)
-        self.model_refresh_btn.clicked.connect(self.fetch_models)
+        self.model_refresh_btn.clicked.connect(lambda: self.fetch_models(silent=False))
 
         model_layout.addWidget(self.model_combo)
         model_layout.addWidget(self.model_refresh_btn)
@@ -607,16 +610,17 @@ class ConfigTab(QWidget):
     # Model fetching
     # ------------------------------------------------------------------
 
-    def fetch_models(self):
+    def fetch_models(self, silent=False):
         """Kick off background fetch of models from the configured API."""
         api_key = self.api_key_edit.text().strip()
         api_url = self.api_url_edit.text().strip()
 
         if not api_key:
-            QMessageBox.warning(
-                self, "No API Key",
-                "Please enter an API key before fetching models."
-            )
+            if not silent:
+                QMessageBox.warning(
+                    self, "No API Key",
+                    "Please enter an API key before fetching models."
+                )
             return
 
         self.model_refresh_btn.setEnabled(False)
