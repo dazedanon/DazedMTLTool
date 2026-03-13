@@ -1,0 +1,212 @@
+# MAIN CHARACTERS
+エルミナ (Elmina) - Female; protagonist; elf mage
+フェリス (Feris) - Female; spirit entity; Elmina's guardian & companion
+
+# ALLIES / COMPANIONS
+アンナ (Anna) - Female; witch; lives in 魔女の森; ally
+メープル (Maple) - Female; companion; timid
+ダイヤ (Daiya) - Female; companion; diligent
+トルテ (Torte) - Female; companion; cook/baker
+クレア (Claire) - Female; full name クレアリス・デカート (Clairis Decart); guild-affiliated
+ルイン (Ruin) - Female; Elmina's younger sister (妹); key story motivation
+
+# SIDE / RECURRING CHARACTERS
+バブンスキー (Babunsky) - Male; antagonistic early on, later redeems himself
+ドンフシ (Donfushi) - Male; バブンスキー's younger brother; from プライア村
+ツギカ (Tsugika) - Male; young villager; has feelings for Elmina
+ミゲル (Miguel) - Male; minor NPC; innkeeper or medical role
+
+# ANTAGONISTS
+アナゼマ (Anazema) - Spirit entity; primary antagonist; former co-guardian of 魔界
+ロザリー (Rosalie) - Female; ruler of カロン; arc boss
+キングディブロ (King Diabro) - Boss; Dwarf dungeon; defeated for 水の精霊石
+プーペ (Pupe) - Female; spider-type monster girl (クモ型魔物娘); recurring mini-boss
+魔神 (Demon God) - Entity; final-area antagonist; gave power to アナゼマ
+ビャクダン (Byakudan) - Named boss; Slum dungeon
+# Note: 魔神 = "Demon God"  do NOT render as 'Majin'
+
+# ENEMY / MONSTER TYPES
+スライム (Slime)
+オーク (Orc)
+ゴブリン (Goblin)
+ゴブリン兄弟 (Goblin Brothers)
+こうもり (Bat)
+ミノタウロス (Minotaur)
+魔物娘 (Monster Girl)
+クモ型魔物娘 (Spider-type Monster Girl)  プーペ's species
+
+# LOCATIONS
+## STARTING AREA
+プライア村 (Puraia Village) - Elmina's starting village
+ノストゥスの森 (Nostus Forest) - Forest east of Puraia Village; early dungeon
+
+## KARON CITY
+カロン (Karon) - Major city; mid-game hub; ruled by ロザリー様
+カロン街道 (Karon Road) - Road connecting Puraia Village to Karon
+オプス (Opus) - Karon's high-end inn
+
+## WITCH'S FOREST
+魔女の森 (Witch's Forest) - Anna's domain
+魔女道 (Witch's Road) - Path leading to 魔女の森
+
+## DUNGEONS
+オーク洞窟 (Orc Cave) - Multi-floor orc dungeon
+ロザリー屋敷 (Rosalie's Mansion) - ロザリー's residence; 14+ floors
+
+## DWARF AREA
+ドワーフ街道 (Dwarf Road) - Road from Karon toward Dwarf territory
+ドワーフ隠れ里 (Dwarf Hidden Village) - Dwarf settlement
+ドワーフダンジョン (Dwarf Dungeon) - キングディブロ boss dungeon
+
+## SLUMS
+スラム (Slums) - Poverty district off the Dwarf Road
+娼館 (Brothel / Pleasure House) - Located in the Slums
+
+## ELF VILLAGE
+エルフ里 (Elf Village) - Elmina's homeland; destroyed before the story begins
+
+## SPIRIT STONE DUNGEONS
+精霊石ダンジョン (Spirit Stone Dungeon) - Entrance to three elemental paths
+火 (Fire) - Fire dungeon path
+風 (Wind) - Wind dungeon path
+水 (Water) - Water dungeon path
+
+## DEMON WORLD
+魔界 (Demon World) - The demonic realm; final area
+# Note: render as "Demon World"  NOT "Netherworld" or "Makai"
+
+# WORLD-BUILDING TERMS
+淫紋 (Ero Brand / Lewd Mark) - Contract seal on Elmina's belly; converts desire into magic
+精霊石 (Spirit Stone) - Three elemental key items needed to grant Elmina's wish
+  炎の精霊石 (Fire Spirit Stone)
+  水の精霊石 (Water Spirit Stone)
+  風の精霊石 (Wind Spirit Stone)
+魔力 (Mana / Magical Power)
+ノロイ (Curse) - アナゼマ's seal placed on the Spirit Stones
+冒険者 (Adventurer) - profession/rank system
+ギルド (Guild) - the Adventurers' Guild
+ギルド長 (Guild Master)
+調合師 (Alchemist / Apothecary) - crafts 回復ビン from ingredients
+チャームリンク (Charm Link) - magical bond item between Elmina and a companion
+協会 (Temple / Shrine) - religious institution enshrining the 女神達
+女神 (Goddess) - deities who once saved the continent
+女神達 (Goddesses) - plural; enshrined in the 協会
+魔女 (Witch) - female magic practitioner; distinct from 魔法使い (mage)
+ドワーフ族 (Dwarf Tribe / Dwarf Clan)
+エルフ (Elf) - Elmina's race
+アニキ (Aniki) - "big bro"; ドンフシ's term for バブンスキー
+
+# WEAPON TYPES (Elmina's magic)
+炎の魔法 (Fire Magic) - status ailments; sustained damage
+水の魔法 (Water Magic) - single-hit damage; raises HP and Defense
+風の魔法 (Wind Magic) - multi-hit combos; gains debuffs on growth
+盾の魔法 (Shield Magic) - raises Defense; beginner-recommended
+
+# ARMORS / OUTFITS
+エルミナの普段着 (Elmina's Everyday Clothes)
+絹の肌着 (Silk Undershirt)
+魅惑のバニー (Alluring Bunny)
+メイド服 (Maid Outfit)
+ワンダーウルフ (Wonder Wolf)
+調教服 (Training Outfit / Leash Outfit)
+
+# BATTLE STATES
+戦闘不能 (Incapacitated / KO)
+防御 (Guard / Defending)
+不死身 (Immortal)
+毒 (Poison)
+暗闇 (Blind / Darkness)
+沈黙 (Silence)
+激昂 (Enrage / Fury)
+混乱 (Confusion)
+魅了 (Charm / Enthralled)
+睡眠 (Sleep)
+
+# KEY ITEMS
+怪しげな薬 (Suspicious Medicine)
+冒険者登録証 (Adventurer's Registration Card)
+トルテのお弁当 (Torte's Lunchbox)
+回復ビン (Recovery Vial) - upgrades +1 through +15
+屋敷のカギ (Mansion Key)
+力のグローブ (Power Gloves)
+爆音袋 (Sonic Bag / Bang Bag)
+子猫の入ったカバン (Bag Containing a Kitten)
+チャームリンク・メープル (Charm Link: Maple) - +Defense
+チャームリンク・アンナ (Charm Link: Anna) - +Magic
+チャームリンク・ダイヤ (Charm Link: Daiya) - +Defense
+
+## Crafting Ingredients (素材)
+緑草 (Green Grass)
+黄草 (Yellow Grass)
+赤草 (Red Grass)
+黒草 (Black Grass)
+ロゼの花 (Roze Flower)
+オルラーヤ (Orlaya)
+リンドウ (Gentian)
+ベニダケ (Red Mushroom)
+サボテンの果実 (Cactus Fruit)
+輝くゼンマイ (Glowing Bracken)
+触手の若芽 (Tentacle Sprout)
+水 (Water)
+純水 (Pure Water)
+魔力水 (Mana Water)
+
+## Guild Exchange Drops (ギルド換金)
+スライムの核 (Slime Core)
+スライムの巨大核 (Slime Giant Core)
+スライムの赤核 (Slime Red Core)
+スライムの赤粘膜 (Slime Red Membrane)
+オークの牙 (Orc Fang)
+獣の毛 (Beast Fur)
+焔心核 (Flame Heart Core)
+蜘蛛の糸 (Spider Thread)
+悪魔の角 (Demon Horn)
+海魔の墨 (Kraken Ink)
+悪魔の羽根 (Demon Feather)
+死霊の灰 (Wraith Ash)
+
+## Mana Crystal EXP Items
+小さな魔力結晶 (Small Mana Crystal) - EXP 10
+魔力結晶 (Mana Crystal) - EXP 100
+大きな魔力結晶 (Large Mana Crystal) - EXP 1,000
+巨大な魔力結晶 (Giant Mana Crystal) - EXP 10,000
+
+## Boss Mana Cores (素材)
+プーペの魔力核 (Pupe's Mana Core)
+ビャクダンの魔力核 (Byakudan's Mana Core)
+キングディブロの魔力核 (King Diabro's Mana Core)
+ロザリーの魔力核 (Rosalie's Mana Core)
+タイタンワームの魔力結晶 (Titan Worm Mana Crystal)
+
+# ROMANISATION CONVENTIONS
+エルミナ (Elmina) - not Erumina; matches title
+フェリス (Feris) - matches sprite file "feris1"
+アンナ (Anna)
+メープル (Maple)
+ダイヤ (Daiya) - or Dia; avoid "Diamond" in dialogue
+バブンスキー (Babunsky)
+ドンフシ (Donfushi)
+ツギカ (Tsugika)
+トルテ (Torte) - German: layer-cake
+クレア (Claire)
+クレアリス・デカート (Clairis Decart) - both parts are proper nouns
+アナゼマ (Anazema)
+ルイン (Ruin) - or Luin
+プーペ (Pupe) - or Poupée; French: doll
+ミゲル (Miguel)
+ロザリー (Rosalie)
+キングディブロ (King Diabro)
+ビャクダン (Byakudan)
+カロン (Karon)
+プライア村 (Puraia Village) - keep "Puraia" per map file names
+ノストゥスの森 (Nostus Forest)
+ドワーフ (Dwarf)
+エルフ (Elf)
+魔界 (Demon World) - NOT "Netherworld"; keep distinct from 地獄 "Hell"
+淫紋 (Ero Brand) - or "Lewd Mark"; keep consistent within project
+精霊石 (Spirit Stone)
+ノロイ (Curse)
+魔神 (Demon God) - NOT "Majin"; translate fully
+調合師 (Alchemist) - or Apothecary; be consistent
+ギルド長 (Guild Master)
+アニキ (Aniki) - or "Big Bro"; keep consistent per character

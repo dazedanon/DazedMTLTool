@@ -1,0 +1,3 @@
+username=dazed-translations
+repo=magical-girls-runa-and-nanami
+branch=main

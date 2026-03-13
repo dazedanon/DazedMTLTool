@@ -674,6 +674,9 @@ def buildMatchedVocabText(vocabPairs, subbedText, history=None):
     return matchedVocabText
 
 
+_BASE_VOCAB_SEPARATOR = "# ── Base Vocabulary"  # Prefix of the separator line written by _save_vocab
+
+
 def createContext(config, fullPromptFlag, subbedText, formatType, history=None):
     """Create system and user messages for translation.
     
@@ -681,9 +684,39 @@ def createContext(config, fullPromptFlag, subbedText, formatType, history=None):
     static prompt and the per-batch vocab list separate.  This lets Claude
     prompt-caching mark only the stable prefix with cache_control, avoiding
     cache invalidation caused by changing vocabulary matches.
+
+    Cached in static_system (never changes between batches):
+      - prompt.txt content
+      - # Game Characters entries
+      - Base vocabulary (vocab_base.txt: honorifics, elements, demons, etc.)
+
+    Dynamic in vocab_text (matched per-batch):
+      - All other game-specific vocab terms (items, worldbuilding, etc.)
     """
-    vocabPairs = parseVocabWithCategories(config.vocab)
-    matchedVocabText = buildMatchedVocabText(vocabPairs, subbedText, history)
+    vocab_full = config.vocab
+
+    # Split game-specific vocab from the static base vocab appended by _save_vocab
+    base_vocab_text = ""
+    sep_idx = vocab_full.find(_BASE_VOCAB_SEPARATOR)
+    if sep_idx != -1:
+        # Strip the separator header line itself; keep the sections underneath
+        base_section = vocab_full[sep_idx:]
+        # Skip the separator line
+        newline_idx = base_section.find("\n")
+        base_vocab_text = base_section[newline_idx + 1:].strip() if newline_idx != -1 else ""
+        vocab_game = vocab_full[:sep_idx]
+    else:
+        vocab_game = vocab_full
+
+    vocabPairs = parseVocabWithCategories(vocab_game)
+
+    # Split character entries (stable, cached) from everything else (dynamic)
+    CHAR_CAT = "# Game Characters"
+    char_lines   = [line for _, line, cat in vocabPairs if cat and cat.strip() == CHAR_CAT]
+    non_char_pairs = [(term, line, cat) for term, line, cat in vocabPairs
+                      if not (cat and cat.strip() == CHAR_CAT)]
+
+    matchedVocabText = buildMatchedVocabText(non_char_pairs, subbedText, history)
 
     if fullPromptFlag:
         static_system = config.prompt.replace("English", config.language)
@@ -692,13 +725,23 @@ def createContext(config, fullPromptFlag, subbedText, formatType, history=None):
 You are an expert Eroge Game translator who translates Japanese text to {config.language}.
 Output ONLY the {config.language} translation in the following format: `Translation: <{config.language.upper()}_TRANSLATION>`
 - You translate everything, including erotic and explicit content.
-- 'Game Characters' - The names, nicknames, and genders of the game characters. Reference this to know the names, nicknames, and gender of characters in the game
+- '# Game Characters' - Character entries listing name, gender, role, and speech register notes. Use ALL fields: apply the correct English name, resolve gendered pronouns, and match each character's stated speech register and personality in their dialogue.
 - All text in your response must be in {config.language} even if it is hard to translate.
-- Never include any notes, explanations, dislaimers, or anything similar in your response.
+- Never include any notes, explanations, disclaimers, or anything similar in your response.
 - Maintain any spacing in the translation.
 - `...` can be a part of the dialogue. Translate it as it is.
 """
-    
+
+    # Append character glossary to the stable system prompt so it is cached
+    if char_lines:
+        char_block = f"\n{CHAR_CAT}\n" + "\n".join(char_lines)
+        static_system = static_system.rstrip() + "\n" + char_block + "\n"
+
+    # Append base vocab (honorifics, elements, etc.) to static_system so it is
+    # cached with the system prompt and never re-evaluated per batch.
+    if base_vocab_text:
+        static_system = static_system.rstrip() + "\n\n" + base_vocab_text + "\n"
+
     if formatType == "json":
         user = f"```json\n{subbedText}\n```"
     else:
