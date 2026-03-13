@@ -7,14 +7,187 @@ A PyQt-based graphical user interface for the DazedMTLTool translation system.
 import sys
 import os
 import json
+import urllib.request
+import zipfile
+import shutil
+import tempfile
 from pathlib import Path
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QTabWidget, QVBoxLayout, QHBoxLayout,
     QWidget, QPushButton, QLabel, QFileDialog, QMessageBox, QProgressBar,
-    QTextEdit, QSplitter, QGroupBox, QStatusBar, QStackedWidget, QToolButton
+    QTextEdit, QSplitter, QGroupBox, QStatusBar, QStackedWidget, QToolButton,
+    QDialog
 )
 from PyQt5.QtCore import Qt, QThread, pyqtSignal, QTimer, QSettings
 from PyQt5.QtGui import QIcon, QFont, QPixmap, QScreen
+
+
+class UpdateThread(QThread):
+    """Downloads and applies a tool update from the GitGud repository."""
+
+    REPO_USER   = "DazedAnon"
+    REPO_NAME   = "DazedMTLTool"
+    REPO_BRANCH = "main"
+    SHA_FILE    = "last_update_sha.txt"
+
+    # Paths (relative, top-level) that should never be touched during update
+    PROTECTED = {".env", "venv", "log", "files", "translated",
+                 "vocab.txt", "last_update_sha.txt"}
+
+    progress  = pyqtSignal(str)           # status message
+    finished  = pyqtSignal(bool, str)     # (success, message)
+
+    def __init__(self, check_only=False, parent=None):
+        super().__init__(parent)
+        self.check_only = check_only
+
+    # ------------------------------------------------------------------ #
+
+    def run(self):
+        try:
+            latest_sha = self._fetch_latest_sha()
+            current_sha = self._read_stored_sha()
+
+            if latest_sha == current_sha:
+                self.finished.emit(True, "already_up_to_date")
+                return
+
+            if self.check_only:
+                self.finished.emit(True, f"update_available:{latest_sha}")
+                return
+
+            self._download_and_apply(latest_sha)
+
+        except Exception as exc:
+            self.finished.emit(False, str(exc))
+
+    # ------------------------------------------------------------------ #
+
+    def _fetch_latest_sha(self):
+        api = (
+            f"https://gitgud.io/api/v4/projects/"
+            f"{self.REPO_USER}%2F{self.REPO_NAME}"
+            f"/repository/branches/{self.REPO_BRANCH}"
+        )
+        req = urllib.request.Request(api, headers={"User-Agent": "DazedMTLTool"})
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            return json.loads(resp.read())["commit"]["id"]
+
+    def _read_stored_sha(self):
+        p = Path(self.SHA_FILE)
+        return p.read_text().strip() if p.exists() else ""
+
+    def _download_and_apply(self, latest_sha):
+        zip_url = (
+            f"https://gitgud.io/{self.REPO_USER}/{self.REPO_NAME}/-/archive/"
+            f"{self.REPO_BRANCH}/{self.REPO_NAME}-{self.REPO_BRANCH}.zip"
+        )
+
+        self.progress.emit("Downloading update…")
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp     = Path(tmp_dir)
+            zip_path = tmp / "update.zip"
+
+            req = urllib.request.Request(zip_url, headers={"User-Agent": "DazedMTLTool"})
+            with urllib.request.urlopen(req, timeout=120) as resp, \
+                 open(zip_path, "wb") as fh:
+                shutil.copyfileobj(resp, fh)
+
+            self.progress.emit("Extracting…")
+            with zipfile.ZipFile(zip_path, "r") as zf:
+                zf.extractall(tmp)
+
+            extracted = tmp / f"{self.REPO_NAME}-{self.REPO_BRANCH}"
+            root      = Path(".").resolve()
+
+            self.progress.emit("Applying update…")
+            for src in extracted.rglob("*"):
+                rel   = src.relative_to(extracted)
+                parts = rel.parts
+                if not parts or parts[0] in self.PROTECTED:
+                    continue
+                dst = root / rel
+                if src.is_dir():
+                    dst.mkdir(parents=True, exist_ok=True)
+                else:
+                    dst.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(src, dst)
+
+        Path(self.SHA_FILE).write_text(latest_sha)
+        self.finished.emit(True, f"updated:{latest_sha[:8]}")
+
+
+class UpdateDialog(QDialog):
+    """Modal dialog that shows update progress and result."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Tool Update")
+        self.setMinimumWidth(420)
+        self.setModal(True)
+
+        layout = QVBoxLayout(self)
+        layout.setSpacing(10)
+
+        self.status_label = QLabel("Checking for updates…")
+        self.status_label.setWordWrap(True)
+        layout.addWidget(self.status_label)
+
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setRange(0, 0)   # indeterminate
+        layout.addWidget(self.progress_bar)
+
+        self.close_btn = QPushButton("Cancel")
+        self.close_btn.clicked.connect(self.reject)
+        layout.addWidget(self.close_btn)
+
+        self._thread = None
+
+    def start(self, check_only=False):
+        self._thread = UpdateThread(check_only=check_only, parent=self)
+        self._thread.progress.connect(self.status_label.setText)
+        self._thread.finished.connect(self._on_finished)
+        self._thread.start()
+
+    def _on_finished(self, success, message):
+        self.progress_bar.setRange(0, 1)
+        self.progress_bar.setValue(1)
+        self.close_btn.setText("Close")
+
+        if not success:
+            self.status_label.setText(f"❌ Update failed:\n{message}")
+            return
+
+        if message == "already_up_to_date":
+            self.status_label.setText("✅ Already up to date.")
+        elif message.startswith("update_available:"):
+            sha = message.split(":", 1)[1]
+            self.status_label.setText(
+                f"🆕 Update available ({sha[:8]}).\nClick 'Update Now' to install."
+            )
+            self.close_btn.setText("Cancel")
+            update_btn = QPushButton("Update Now")
+            update_btn.clicked.connect(self._do_update)
+            self.layout().insertWidget(self.layout().count() - 1, update_btn)
+        elif message.startswith("updated:"):
+            sha = message.split(":", 1)[1]
+            self.status_label.setText(
+                f"✅ Updated to {sha}.\n\nPlease restart the tool for changes to take effect."
+            )
+
+    def _do_update(self):
+        # Remove any extra buttons so only the close button remains
+        for i in reversed(range(self.layout().count())):
+            item = self.layout().itemAt(i)
+            if item and item.widget() and item.widget() is not self.close_btn:
+                w = item.widget()
+                if isinstance(w, QPushButton) and w.text() in ("Update Now", "Cancel"):
+                    if w.text() != "Close":
+                        self.layout().removeWidget(w)
+                        w.deleteLater()
+        self.progress_bar.setRange(0, 0)
+        self.status_label.setText("Downloading update…")
+        self.start(check_only=False)
 
 # Import configuration widgets
 from gui.config_tab import ConfigTab
@@ -204,6 +377,13 @@ class DazedMTLGUI(QMainWindow):
         self.nav_buttons.append(btn_config)
         
         sidebar_layout.addStretch()
+
+        # Update button at the bottom of the sidebar
+        btn_update = self.create_nav_button("🔄", "Check for Updates")
+        btn_update.setCheckable(False)
+        btn_update.clicked.connect(self.show_update_dialog)
+        sidebar_layout.addWidget(btn_update)
+
         sidebar.setLayout(sidebar_layout)
         
         # Create stacked widget for content pages
@@ -273,6 +453,12 @@ class DazedMTLGUI(QMainWindow):
         self.config_tab.config_changed.connect(self.on_config_changed)
         self.content_stack.addWidget(self.config_tab)
         
+    def show_update_dialog(self):
+        """Open the update dialog and check for a newer version."""
+        dlg = UpdateDialog(self)
+        dlg.start(check_only=True)
+        dlg.exec_()
+
     def on_config_changed(self):
         """Handle configuration changes."""
         # This will be called when font scale or other settings change
@@ -333,6 +519,12 @@ class DazedMTLGUI(QMainWindow):
         
     # Font Size submenu removed — font scaling menu was unreliable and has been removed
         
+        tools_menu.addSeparator()
+
+        # Check for updates
+        update_action = tools_menu.addAction('Check for Updates')
+        update_action.triggered.connect(self.show_update_dialog)
+
         tools_menu.addSeparator()
         
         # Reset to defaults
