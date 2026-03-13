@@ -915,13 +915,23 @@ def translateText(system, user, history, penalty, formatType, model, numLines=No
 
         ant_client = anthropic.Anthropic(api_key=openai.api_key)
         try:
-            ant_resp = ant_client.messages.create(
+            ant_kwargs = dict(
                 model=model,
                 max_tokens=16384,
                 temperature=0,
                 system=ant_system,
                 messages=native_msgs,
             )
+            # Use native structured output (output_config) when a JSON schema is required.
+            # Supported on claude-opus-4-6, claude-sonnet-4-6/4-5, claude-haiku-4-5.
+            if formatType == "json" and numLines is not None:
+                ant_kwargs["output_config"] = {
+                    "format": {
+                        "type": "json_schema",
+                        "schema": createTranslationSchema(numLines),
+                    }
+                }
+            ant_resp = ant_client.messages.create(**ant_kwargs)
         except Exception as e:
             raise Exception(f"Anthropic API error: {e}")
 

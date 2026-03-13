@@ -193,7 +193,7 @@ HEADER_MAPPINGS_357 = {
     "TemplateEvent": (["eventId"], None),
 }
 # Subset of HEADER_MAPPINGS_357 keys that should be processed (empty = none).
-ENABLED_PLUGINS_357: set = {"EventLabel", "KN_MapBattle", "KN_Shop", "Mano_CurrencyUnit", "SceneGlossary", "TorigoyaMZ_NotifyMessage", "TorigoyaMZ_NotifyMessage_CommandMessage"}
+ENABLED_PLUGINS_357: set = set()
 
 # All known code-355/655 script patterns. Enable entries via ENABLED_PATTERNS_355655.
 PATTERNS_355655 = {
