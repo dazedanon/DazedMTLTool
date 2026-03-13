@@ -20,6 +20,8 @@ import sys
 import threading
 from pathlib import Path
 
+import jsbeautifier
+
 from PyQt5.QtCore import Qt, QSettings, QThread, QTimer, pyqtSignal
 from PyQt5.QtGui import QFont
 from PyQt5.QtWidgets import (
@@ -51,7 +53,7 @@ from PyQt5.QtWidgets import (
 
 PHASE1_CONFIG = {
     # Safe dialogue / choices
-    "CODE101": False,
+    "CODE101": True,
     "CODE401": True,
     "CODE405": True,
     "CODE102": True,
@@ -238,25 +240,6 @@ class _JsFormatWorker(QThread):
         self.js_path = js_path
 
     def run(self):
-        import subprocess as _sp
-        import sys
-        try:
-            import jsbeautifier
-        except ImportError:
-            self.log.emit("jsbeautifier not installed — installing via pip…")
-            r = _sp.run(
-                [sys.executable, "-m", "pip", "install", "jsbeautifier"],
-                capture_output=True, text=True,
-            )
-            if r.returncode != 0:
-                self.done.emit(False, f"pip install failed: {r.stderr.strip()}")
-                return
-            self.log.emit("jsbeautifier installed.")
-            try:
-                import jsbeautifier
-            except ImportError:
-                self.done.emit(False, "jsbeautifier could not be imported after install.")
-                return
         try:
             p = Path(self.js_path)
             self.log.emit(f"Formatting {p.name} …")
