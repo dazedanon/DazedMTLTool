@@ -19,6 +19,7 @@ from PyQt5.QtGui import QIcon, QFont, QPixmap, QScreen
 # Import configuration widgets
 from gui.config_tab import ConfigTab
 from gui.translation_tab import TranslationTab
+from gui.workflow_tab import WorkflowTab
 
 class DazedMTLGUI(QMainWindow):
     """Main GUI window for the DazedMTLTool."""
@@ -188,10 +189,17 @@ class DazedMTLGUI(QMainWindow):
         btn_translation.clicked.connect(lambda: self.switch_page(0))
         sidebar_layout.addWidget(btn_translation)
         self.nav_buttons.append(btn_translation)
-        
-        # Configuration button (second)
+
+        # Workflow / Automation button (second)
+        btn_workflow = self.create_nav_button("⚡", "Workflow")
+        btn_workflow.setToolTip("Workflow — automated translation pipeline")
+        btn_workflow.clicked.connect(lambda: self.switch_page(1))
+        sidebar_layout.addWidget(btn_workflow)
+        self.nav_buttons.append(btn_workflow)
+
+        # Configuration button (third)
         btn_config = self.create_nav_button("⚙️", "Configuration")
-        btn_config.clicked.connect(lambda: self.switch_page(1))
+        btn_config.clicked.connect(lambda: self.switch_page(2))
         sidebar_layout.addWidget(btn_config)
         self.nav_buttons.append(btn_config)
         
@@ -252,11 +260,15 @@ class DazedMTLGUI(QMainWindow):
         
     def setup_tabs(self):
         """Set up all the tabs in the interface."""
-        # Translation Execution Tab (first)
+        # Translation Execution Tab (index 0)
         self.translation_tab = TranslationTab(self)
         self.content_stack.addWidget(self.translation_tab)
-        
-        # Configuration Tab (second)
+
+        # Workflow / Automation Tab (index 1)
+        self.workflow_tab = WorkflowTab(self)
+        self.content_stack.addWidget(self.workflow_tab)
+
+        # Configuration Tab (index 2)
         self.config_tab = ConfigTab()
         self.config_tab.config_changed.connect(self.on_config_changed)
         self.content_stack.addWidget(self.config_tab)
