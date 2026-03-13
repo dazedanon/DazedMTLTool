@@ -1251,21 +1251,13 @@ class WorkflowTab(QWidget):
         wrap_inner.setSpacing(6)
 
         wrap_hint = QLabel(
-            "Copy the prompt, paste it into Copilot with System.json and plugins.js attached. "
-            "It will calculate how many English characters fit per line for each window type. "
-            "Enter the recommended values and click Apply to update .env."
+            "Start with the default values (60 / 70 / 60) and run a test translation. "
+            "If lines overflow or wrap too early in-game, adjust the values here and re-translate. "
+            "Click Apply to write the values to .env."
         )
         wrap_hint.setWordWrap(True)
         wrap_hint.setStyleSheet("color:#888;font-size:10px;")
         wrap_inner.addWidget(wrap_hint)
-
-        copy_wrap_row = QHBoxLayout()
-        copy_wrap_btn = _make_btn("📋  Copy Wrap Prompt", "#555")
-        copy_wrap_btn.setToolTip("Copy the text-wrap analysis prompt to clipboard")
-        copy_wrap_btn.clicked.connect(self._copy_wrap_prompt)
-        copy_wrap_row.addWidget(copy_wrap_btn)
-        copy_wrap_row.addStretch()
-        wrap_inner.addLayout(copy_wrap_row)
 
         def _spin_pair(label_text: str, default: int):
             lbl = QLabel(label_text)
@@ -1281,7 +1273,7 @@ class WorkflowTab(QWidget):
             return lbl, sp
 
         lbl_w,  self.wrap_width_spin = _spin_pair("Dialogue (width)", 60)
-        lbl_lw, self.wrap_list_spin  = _spin_pair("List/Help (listWidth)", 80)
+        lbl_lw, self.wrap_list_spin  = _spin_pair("List/Help (listWidth)", 70)
         lbl_nw, self.wrap_note_spin  = _spin_pair("Notes (noteWidth)", 60)
 
         for lbl, sp in [(lbl_w, self.wrap_width_spin),

@@ -186,14 +186,12 @@ HEADER_MAPPINGS_357 = {
     "EventLabel": (["text"], None),
     "KN_MapBattle": (["enemyName"], None),
     "KN_Shop": (["goodsType"], None),
+    "KN_StillManager": (["label"], None),  # OPEN_GALLERY category label in parameters[3]
     "Mano_CurrencyUnit": (["unit"], None),
     "SceneGlossary": (["category"], None),
-    # No visible text — keys hold asset/internal IDs, not display text:
-    "KN_StillManager": (["id"], None),
-    "TemplateEvent": (["eventId"], None),
 }
 # Subset of HEADER_MAPPINGS_357 keys that should be processed (empty = none).
-ENABLED_PLUGINS_357: set = set()
+ENABLED_PLUGINS_357: set = {"KN_StillManager"}
 
 # All known code-355/655 script patterns. Enable entries via ENABLED_PATTERNS_355655.
 PATTERNS_355655 = {
@@ -1696,6 +1694,7 @@ def searchCodes(page, pbar, jobList, filename):
         list324 = jobList[6]
         list408 = jobList[7]
         list325 = jobList[8]
+        list657 = jobList[9]
         setData = False
     else:
         list401 = []
@@ -1707,6 +1706,7 @@ def searchCodes(page, pbar, jobList, filename):
         list324 = []
         list408 = []
         list325 = []
+        list657 = []
         setData = True
     textHistory = []
     match = []
@@ -2329,6 +2329,25 @@ def searchCodes(page, pbar, jobList, filename):
                         for argVar in argVars:
                             translatePlugins(argVar, font)
 
+                # KN_StillManager: translate parameters[2] (the display label, e.g. "ギャラリーを開く")
+                # Only OPEN_GALLERY has a player-visible label in parameters[2].
+                # Other commands (SHOW_BY_ID, HIDE, etc.) use parameters[2] as an internal label.
+                if (headerString == "KN_StillManager" and "KN_StillManager" in ENABLED_PLUGINS_357
+                        and len(codeList[i]["parameters"]) > 2
+                        and len(codeList[i]["parameters"]) > 1
+                        and codeList[i]["parameters"][1] == "OPEN_GALLERY"):
+                    p2 = codeList[i]["parameters"][2]
+                    if isinstance(p2, str) and p2.strip():
+                        if not (IGNORETLTEXT and not re.search(LANGREGEX, p2)):
+                            if setData:
+                                list357.append(p2)
+                            else:
+                                if len(list357) > 0:
+                                    translatedText = list357[0]
+                                    list357.pop(0)
+                                    translatedText = translatedText.replace('"', "")
+                                    codeList[i]["parameters"][2] = translatedText
+
                 # AdvExtention plugin support (message event)
                 if headerString == "AdvExtentionllk" and len(codeList[i]["parameters"]) > 3:
                     try:
@@ -2472,56 +2491,53 @@ def searchCodes(page, pbar, jobList, filename):
 
             ## Event Code: 657 [Picture Text] [Optional]
             if "code" in codeList[i] and codeList[i]["code"] == 657 and CODE657 is True:
-                if "text" in codeList[i]["parameters"][0]:
-                    jaString = codeList[i]["parameters"][0]
-                    if not isinstance(jaString, str):
-                        i += 1
-                        continue
+                jaString = codeList[i]["parameters"][0]
+                if not isinstance(jaString, str):
+                    i += 1
+                    continue
 
-                    # Definitely don't want to mess with files
-                    if "_" in jaString:
+                # Definitely don't want to mess with files
+                if "_" in jaString:
+                    i += 1
+                    continue
+
+                # Only translate 'メッセージ = <value>' key/value pairs.
+                # All other keys (ページ番号, イベントID, アイコンID, etc.) are internal references.
+                kvMatch = re.match(r"^'?([^=]+?)\s*=\s*(.*?)'?$", jaString, re.DOTALL)
+                if kvMatch:
+                    kvKey = kvMatch.group(1).strip()
+                    kvValue = kvMatch.group(2).strip()
+                    # Strip any outer single-quotes wrapping the value
+                    kvValue = re.sub(r"^'(.*)'$", r"\1", kvValue)
+
+                    if kvKey != 'メッセージ':
                         i += 1
                         continue
 
                     # Skip if IGNORETLTEXT is enabled and no Japanese text
-                    if IGNORETLTEXT and not re.search(LANGREGEX, jaString):
+                    if IGNORETLTEXT and not re.search(LANGREGEX, kvValue):
                         i += 1
                         continue
 
-                    # Remove outside text
-                    startString = re.search(r"^[^一-龠ぁ-ゔァ-ヴー\<\>【】\\]+", jaString)
-                    jaString = re.sub(r"^[^一-龠ぁ-ゔァ-ヴー\<\>【】\\]+", "", jaString)
-                    endString = re.search(r"[^一-龠ぁ-ゔァ-ヴー\<\>【】。！？\\]+$", jaString)
-                    jaString = re.sub(r"[^一-龠ぁ-ゔァ-ヴー\<\>【】。！？\\]+$", "", jaString)
-                    if startString is None:
-                        startString = ""
-                    else:
-                        startString = startString.group()
-                    if endString is None:
-                        endString = ""
-                    else:
-                        endString = endString.group()
+                    if not kvValue.strip():
+                        i += 1
+                        continue
 
                     # Remove any textwrap
-                    jaString = re.sub(r"\n", " ", jaString)
+                    kvValue = re.sub(r"\n", " ", kvValue)
 
-                    # Translate
-                    response = translateAI(jaString, "", True)
-                    totalTokens[0] += response[1][0]
-                    totalTokens[1] += response[1][1]
-                    translatedText = response[0]
+                    # Pass 1 – collect value for batch translation
+                    if setData:
+                        list657.append(kvValue)
 
-                    # Remove characters that may break scripts
-                    charList = [".", '"', "'"]
-                    for char in charList:
-                        translatedText = translatedText.replace(char, "")
-
-                    # Textwrap
-                    translatedText = dazedwrap.wrapText(translatedText, width=WIDTH)
-                    translatedText = startString + translatedText + endString
-
-                    # Set Data
-                    codeList[i]["parameters"][0] = translatedText
+                    # Pass 2 – apply translated value
+                    else:
+                        if len(list657) > 0:
+                            translatedText = list657[0]
+                            list657.pop(0)
+                            for char in ['"', "'"]:
+                                translatedText = translatedText.replace(char, "")
+                            codeList[i]["parameters"][0] = f"'{kvKey} = {translatedText}'"
 
             ## Event Code: 101 [Name] [Optional]
             if "code" in codeList[i] and codeList[i]["code"] == 101 and CODE101 is True:
@@ -3589,6 +3605,7 @@ def searchCodes(page, pbar, jobList, filename):
         list355655TL = []
         list108TL = []
         list325TL = []
+        list657TL = []
         PBAR = pbar
 
         # 401
@@ -3660,6 +3677,17 @@ def searchCodes(page, pbar, jobList, filename):
                     if filename not in MISMATCH:
                         MISMATCH.append(filename)
 
+        # 657
+        if len(list657) > 0:
+            response = translateAI(list657, textHistory, True)
+            list657TL = response[0]
+            totalTokens[0] += response[1][0]
+            totalTokens[1] += response[1][1]
+            if len(list657TL) != len(list657):
+                with LOCK:
+                    if filename not in MISMATCH:
+                        MISMATCH.append(filename)
+
         # 408
         if len(list408) > 0:
             response = translateAI(list408, "", True)
@@ -3710,6 +3738,7 @@ def searchCodes(page, pbar, jobList, filename):
                     list324TL,
                     list408TL,
                     list325TL,
+                    list657TL,
                 ],
                 filename,
             )
