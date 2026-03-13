@@ -127,6 +127,71 @@ class ConfigIntegration:
             
         return config
         
+    def read_plugin_config(self, module_path: Path = None) -> Dict[str, Any]:
+        """Read ENABLED_PLUGINS_357 and ENABLED_PATTERNS_355655 set literals from module file."""
+        if module_path is None:
+            module_path = self.modules_dir / "rpgmakermvmz.py"
+        result: Dict[str, Any] = {
+            "ENABLED_PLUGINS_357": set(),
+            "ENABLED_PATTERNS_355655": set(),
+        }
+        if not module_path.exists():
+            return result
+        try:
+            with open(module_path, "r", encoding="utf-8") as f:
+                content = f.read()
+            for var_name in ("ENABLED_PLUGINS_357", "ENABLED_PATTERNS_355655"):
+                # Match:  VAR_NAME: set = set()  or  VAR_NAME: set = {"a", "b"}
+                m = re.search(
+                    rf'^{re.escape(var_name)}\s*(?::\s*set)?\s*=\s*(\{{[^}}]*\}}|set\(\))',
+                    content,
+                    re.MULTILINE,
+                )
+                if m:
+                    bracket = m.group(1)
+                    items = re.findall(r'"([^"]+)"|\'([^\']+)\'', bracket)
+                    result[var_name] = {a or b for a, b in items}
+        except Exception as e:
+            print(f"Error reading plugin config: {e}")
+        return result
+
+    def update_plugin_config(
+        self,
+        enabled_357: set,
+        enabled_355655: set,
+        module_path: Path = None,
+    ) -> bool:
+        """Write ENABLED_PLUGINS_357 and ENABLED_PATTERNS_355655 set literals to module file."""
+        if module_path is None:
+            module_path = self.modules_dir / "rpgmakermvmz.py"
+        if not module_path.exists():
+            raise FileNotFoundError(f"Module file not found: {module_path}")
+
+        def _fmt(s: set) -> str:
+            if not s:
+                return "set()"
+            items = ", ".join(f'"{k}"' for k in sorted(s))
+            return "{" + items + "}"
+
+        try:
+            with open(module_path, "r", encoding="utf-8") as f:
+                content = f.read()
+            for var_name, val_set in (
+                ("ENABLED_PLUGINS_357", enabled_357),
+                ("ENABLED_PATTERNS_355655", enabled_355655),
+            ):
+                content = re.sub(
+                    rf'^{re.escape(var_name)}\s*(?::\s*set)?\s*=\s*.*$',
+                    f'{var_name}: set = {_fmt(val_set)}',
+                    content,
+                    flags=re.MULTILINE,
+                )
+            with open(module_path, "w", encoding="utf-8") as f:
+                f.write(content)
+            return True
+        except Exception as e:
+            raise e
+
     def validate_module_syntax(self, module_path: Path = None) -> bool:
         """Validate that the module file has correct Python syntax."""
         if module_path is None:
