@@ -51,6 +51,27 @@ from PyQt5.QtWidgets import (
 # Phase profiles applied to rpgmakermvmz.py before each translation run
 # ---------------------------------------------------------------------------
 
+# Core database files — translated first (names/descriptions)
+_DB_FILES = {
+    "Actors.json", "Armors.json", "Classes.json", "Enemies.json",
+    "Items.json",  "MapInfos.json", "Skills.json",  "States.json",
+    "System.json", "Weapons.json",
+}
+
+# Event files — translated in phases 1 / 1b / 2
+_EVENT_FILES_EXACT = {"CommonEvents.json", "Troops.json"}
+# Any Map????.json is also an event file (matched by prefix below)
+
+PHASE0_CONFIG = {
+    # All event codes OFF — DB files use top-level name/description fields
+    "CODE101": False, "CODE401": False, "CODE405": False,
+    "CODE102": False, "CODE408": False,
+    "CODE111": False, "CODE122": False, "CODE357": False,
+    "CODE355655": False, "CODE657": False, "CODE356": False,
+    "CODE320": False, "CODE324": False, "CODE325": False,
+    "CODE108": False,
+}
+
 PHASE1_CONFIG = {
     # Safe dialogue / choices
     "CODE101": True,
@@ -702,173 +723,168 @@ class WorkflowTab(QWidget):
     _WRAP_PROMPT = (
         "You are helping me configure text-wrap widths for a Japanese RPGMaker MV/MZ translation tool.\n"
         "\n"
-        "The tool wraps translated English text using a character-count limit — NOT pixels — so\n"
-        "I need to know how many English characters fit comfortably on one line for three\n"
-        "different window types:\n"
+        "The tool wraps translated English text using a character-count limit (not pixels).\n"
+        "I need three values:\n"
         "\n"
-        "  width      — main dialogue / message box (Show Text / code 401)\n"
+        "  width      — main dialogue / message box (Show Text)\n"
         "  listWidth  — item / skill / help description windows\n"
         "  noteWidth  — database note fields (item, weapon, armour, skill descriptions)\n"
         "\n"
-        "## Step 1 — Gather screen and font settings\n"
+        "To calculate them:\n"
+        "  1. Read screenWidth and fontSize from System.json.\n"
+        "     Check js/plugins.js for any MessageCore or Window plugin that overrides these.\n"
+        "  2. For each window type, estimate its pixel width, subtract ~48px padding, then:\n"
+        "       chars = floor(content_px / (font_size × 0.58))\n"
+        "     listWidth window is usually full or half screen width.\n"
+        "     noteWidth window is usually the narrowest description pane (~40–50% screen width).\n"
+        "  3. If the font size is above 26px and reducing it would meaningfully increase\n"
+        "     characters per line, note where to change it (System.json or plugin parameter).\n"
         "\n"
-        "Read System.json and report:\n"
-        "  - screenWidth and screenHeight (or window_width / window_height for older MV)\n"
-        "  - fontSize (default 26 for MV; may be absent in MZ if using default)\n"
-        "  - advanced.uiAreaWidth / advanced.uiAreaHeight if present\n"
-        "\n"
-        "## Step 2 — Check plugins for window overrides\n"
-        "\n"
-        "Search plugins.js (or js/plugins.js) for any of the following and report their\n"
-        "relevant parameters if present:\n"
-        "\n"
-        "  VisuMZ_1_MessageCore  → MessageWidth, DefaultRows, FontSize\n"
-        "  YEP_MessageCore       → messageWidth, messageRows\n"
-        "  MOG_MessageSystem     → message_width, message_height\n"
-        "  Any other plugin whose name contains 'Message' or 'Window' with size config\n"
-        "\n"
-        "## Step 3 — Calculate character widths\n"
-        "\n"
-        "Use this formula for each window type:\n"
-        "\n"
-        "  content_px        = window_pixel_width - (horizontal_padding × 2)\n"
-        "                      assume 24px padding per side if unknown\n"
-        "  avg_char_width_px = font_size_px × 0.58   (empirical average for English sans-serif)\n"
-        "  chars_per_line    = floor(content_px / avg_char_width_px)\n"
-        "\n"
-        "For listWidth, the relevant window is the help/description pane in the menu\n"
-        "(usually full screen width or half, depending on the game's menu layout).\n"
-        "For noteWidth, use the narrowest description area you can find — often an item\n"
-        "detail window that is roughly 40–50% of screen width.\n"
-        "\n"
-        "Show your working for each of the three values.\n"
-        "\n"
-        "## Step 4 — Font size advice\n"
-        "\n"
-        "If the game's font size is larger than 26px, consider whether reducing it would\n"
-        "let more translated text fit without excessive wrapping. Only recommend a change\n"
-        "if the gain is meaningful (e.g. 30px → 26px adds ~6 characters per line).\n"
-        "\n"
-        "If a font-size change is advisable, identify exactly where to make it:\n"
-        "  a) System.json 'fontSize' field\n"
-        "  b) VisuMZ_1_MessageCore or YEP_MessageCore 'FontSize' parameter in plugins.js\n"
-        "  c) A CSS / font override file if the game uses a custom web font\n"
-        "\n"
-        "## Required output format\n"
-        "\n"
-        "Reply with EXACTLY this block — fill in the numbers from your analysis:\n"
+        "Do not show calculations. Just give me the final answer in this exact format:\n"
         "\n"
         "```\n"
-        "# Text wrap recommendations\n"
-        "\n"
-        "Screen resolution : <W>x<H>  (source: System.json / plugin override)\n"
-        "Font size         : <N>px    (source: System.json / plugin override)\n"
-        "\n"
-        "Dialogue window   : <pixel_width>px wide  →  width=<N>\n"
-        "List/help window  : <pixel_width>px wide  →  listWidth=<N>\n"
-        "Note window       : <pixel_width>px wide  →  noteWidth=<N>\n"
-        "\n"
-        "Font size change  : <'No change needed'  OR  'Change Xpx → Ypx  in <location>'>\n"
+        "width=<N>\n"
+        "listWidth=<N>\n"
+        "noteWidth=<N>\n"
+        "fontSize=<N>   # or: no change needed\n"
         "```\n"
         "\n"
-        "After the block, include a short paragraph explaining any assumptions you made\n"
-        "(e.g. padding estimates, windows whose pixel width could not be determined directly).\n"
+        "Followed by one sentence of assumptions if anything was estimated.\n"
     )
 
-    _RISKY_PROMPT = (
+    _PLUGIN_PROMPT = (
         "You are helping me safely translate a Japanese RPGMaker MV/MZ game.\n"
-        "Before I run Phase 2 (risky codes), I need you to audit four code types\n"
-        "and tell me exactly what is safe to translate and what must be left alone.\n"
+        "Before I run Phase 2, I need you to audit several optional code types and tell me\n"
+        "(a) which ones contain player-visible Japanese text that needs translation, and\n"
+        "(b) for code 122, exactly which variable ID ranges carry display text vs internal keys.\n"
         "\n"
         "Attach the game's event files (CommonEvents.json, Troops.json, Map*.json)\n"
-        "and plugins.js before running this prompt.\n"
+        "and js/plugins.js before running this prompt.\n"
         "\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-        "## AUDIT 1 — Code 111 (Conditional Branch) string comparisons\n"
+        "## AUDIT 1 — Code 122 (Control Variables) — which variable IDs carry display text\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
         "\n"
-        "Search all event lists for code 111 entries that compare a string value\n"
-        "(operationType 0 or where parameters[3] is a string literal).\n"
+        "A code 122 entry looks like:\n"
+        "  { \"code\": 122, \"parameters\": [startVarId, endVarId, 0, 4, \"\\\"some string\\\"\"] }\n"
+        "parameters[0] is the variable ID being set; parameters[4] is the string value\n"
+        "(only present when parameters[3] == 4, direct string assignment).\n"
         "\n"
-        "For each one found, report:\n"
-        "  - The variable or switch being tested\n"
-        "  - The string it is compared against (e.g. === 'ノーマル')\n"
-        "  - Whether the same string appears as a value SET by a code 122 elsewhere\n"
-        "    (meaning translating code 122 would break this 111 comparison)\n"
+        "Collect every code 122 where parameters[3] == 4. For each variable ID found:\n"
+        "  1. Is the string also tested in a code 111 $gameVariables comparison?\n"
+        "     → DO NOT TRANSLATE (would break game logic)\n"
+        "  2. Is the string used as an internal ID / plugin key / script argument?\n"
+        "     → DO NOT TRANSLATE\n"
+        "  3. Is the string purely player-visible display text?\n"
+        "     → SAFE TO TRANSLATE\n"
         "\n"
-        "Verdict for each: SAFE TO TRANSLATE  /  DO NOT TRANSLATE  /  NEEDS MANUAL CHECK\n"
-        "\n"
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-        "## AUDIT 2 — Code 122 (Control Variables) string values\n"
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-        "\n"
-        "Search for code 122 entries where parameters[4] is a quoted string.\n"
-        "For each unique string value found:\n"
-        "  - Is this string also tested in a 111 comparison? → DO NOT TRANSLATE\n"
-        "  - Is this string used as a key / ID in a plugin call or script? → DO NOT TRANSLATE\n"
-        "  - Is this string purely display text (shown to the player)? → SAFE TO TRANSLATE\n"
-        "\n"
-        "List any variables by variable-ID that should be blacklisted from translation.\n"
+        "Summarise translatable variable IDs as compact numeric ranges,\n"
+        "e.g. 'Translate IDs: 5, 10-18, 42'. Separately list any DO NOT TRANSLATE IDs\n"
+        "with the reason. The ranges will be entered as min/max in the translation tool.\n"
         "\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-        "## AUDIT 3 — Code 357 (Plugin Commands) — which plugins need enabling\n"
+        "## AUDIT 2 — Plugin codes with visible text (357 / 356 / 355-655 / 657 / 320 / 324 / 325 / 108)\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
         "\n"
-        "Search all event lists for code 357 entries and collect every unique\n"
-        "parameters[0] (plugin header string) that contains translatable Japanese text\n"
-        "in its parameters[3] dict.\n"
+        "For EACH of the following code types, scan all events and report whether any\n"
+        "instance contains Japanese text that is visible to the player at runtime.\n"
         "\n"
-        "The translation module already has built-in handlers for these headers:\n"
-        "  AdvExtentionllk, VisuMZ_4_ProximityMessages, LL_GalgeChoiceWindow\n"
-        "\n"
-        "For every OTHER header you find with Japanese text, check whether it matches\n"
-        "one of these commented-out entries in the module's headerMappings dict:\n"
-        "\n"
-        "  LL_InfoPopupWIndow       → messageText\n"
-        "  QuestSystem              → DetailNote\n"
-        "  BalloonInBattle          → text\n"
-        "  MNKR_CommonPopupCoreMZ   → text\n"
-        "  DestinationWindow        → destination\n"
-        "  _TMLogWindowMZ           → text\n"
-        "  TorigoyaMZ_NotifyMessage → message\n"
-        "  SoR_GabWindow            → arg1\n"
-        "  DarkPlasma_CharacterText → text\n"
-        "  DTextPicture             → text\n"
-        "  TextPicture              → text\n"
-        "  TRP_SkitMZ               → name\n"
-        "  LogWindow                → text\n"
-        "  BattleLogOutput          → message\n"
-        "  TorigoyaMZ_NotifyMessage_CommandMessage → message\n"
-        "  NUUN_SaveScreen          → AnyName\n"
-        "  build/ARPG_Core          → Text, SkillByName\n"
-        "\n"
-        "For each match, output the EXACT line to uncomment in headerMappings, e.g.:\n"
+        "--- Code 357 (MZ Plugin Commands) ---\n"
+        "parameters[0] = plugin header; parameters[3] = data dict.\n"
+        "Look up each unique header in js/plugins.js.\n"
+        "Does any key in parameters[3] hold Japanese text shown on screen?\n"
+        "The module already handles: AdvExtentionllk, VisuMZ_4_ProximityMessages, LL_GalgeChoiceWindow\n"
+        "For other headers with visible text, check the commented-out headerMappings list:\n"
         "  \"LL_InfoPopupWIndow\": ([\"messageText\"], None),\n"
+        "  \"QuestSystem\": ([\"DetailNote\"], None),\n"
+        "  \"BalloonInBattle\": ([\"text\"], None),\n"
+        "  \"MNKR_CommonPopupCoreMZ\": ([\"text\"], None),\n"
+        "  \"DestinationWindow\": ([\"destination\"], None),\n"
+        "  \"_TMLogWindowMZ\": ([\"text\"], None),\n"
+        "  \"TorigoyaMZ_NotifyMessage\": ([\"message\"], None),\n"
+        "  \"SoR_GabWindow\": ([\"arg1\"], None),\n"
+        "  \"DarkPlasma_CharacterText\": ([\"text\"], None),\n"
+        "  \"DTextPicture\": ([\"text\"], None),\n"
+        "  \"TextPicture\": ([\"text\"], None),\n"
+        "  \"TRP_SkitMZ\": ([\"name\"], None),\n"
+        "  \"LogWindow\": ([\"text\"], None),\n"
+        "  \"BattleLogOutput\": ([\"message\"], None),\n"
+        "  \"TorigoyaMZ_NotifyMessage_CommandMessage\": ([\"message\"], None),\n"
+        "  \"NUUN_SaveScreen\": ([\"AnyName\"], None),\n"
+        "  \"build/ARPG_Core\": ([\"Text\", \"SkillByName\"], None),\n"
+        "Output: EXACT uncomment line, or describe parameters[3] if header is new.\n"
         "\n"
-        "For headers with Japanese text that do NOT appear in the list above, describe\n"
-        "the parameters[3] structure so a new entry can be written manually.\n"
+        "--- Code 356 (MV Plugin Commands) ---\n"
+        "parameters[0] is a space-delimited string, e.g. 'D_TEXT テキスト 24'.\n"
+        "The module already handles: D_TEXT, ShowInfo, PushGab, addLog, DW_*, CommonPopup, AddCustomChoice.\n"
+        "Does any 356 line have Japanese that is shown on screen?\n"
+        "If yes: ENABLE CODE356 and list the command keywords found.\n"
+        "If no:  SKIP CODE356.\n"
+        "\n"
+        "--- Code 355/655 (Inline Scripts) ---\n"
+        "Code 355 starts a script block; code 655 continues it.\n"
+        "parameters[0] is the raw JS/script text.\n"
+        "For each block with Japanese in a string passed to a message/popup/log function:\n"
+        "  • The leading keyword/pattern that identifies the block\n"
+        "  • A regex capturing only the display substring, e.g. テキスト-(.+)\n"
+        "  • Whether it is single-line (355 only) or multi-line (355 + 655)\n"
+        "  • The exact entry to add to the patterns dict:\n"
+        "      \"<keyword>\": (r\"<regex>\", <True|False>),\n"
+        "\n"
+        "--- Code 657 (Picture Text) ---\n"
+        "parameters[0] is a plain string drawn onto a picture.\n"
+        "Does any 657 entry contain Japanese text visible on screen (not a filename)?\n"
+        "If yes: ENABLE CODE657. If no: SKIP CODE657.\n"
+        "\n"
+        "--- Codes 320 / 324 / 325 (Actor Name / Nickname / Profile) ---\n"
+        "parameters[1] is the new name/nickname/profile string.\n"
+        "Do any of these codes set Japanese strings visible to the player\n"
+        "(not just internal IDs or filenames)?\n"
+        "If yes: ENABLE the respective code. If no: SKIP.\n"
+        "\n"
+        "--- Code 108 (Comment / Notetag) ---\n"
+        "parameters[0] is a comment string used as a plugin notetag.\n"
+        "The module only translates 108 lines that match specific patterns:\n"
+        "  info:, ActiveMessage:, event_text, Menu Name, text_indicator\n"
+        "Do any 108 entries matching those patterns have Japanese visible to the player?\n"
+        "If yes: ENABLE CODE108 and list the patterns found. If no: SKIP CODE108.\n"
         "\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
         "## Required output format\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
         "\n"
-        "Reply with four sections using these exact headers:\n"
+        "Reply with these exact sections:\n"
         "\n"
-        "### Code 111 — Dangerous Comparisons\n"
-        "<table of: variable | compared string | also set by 122? | verdict>\n"
-        "If none found: 'No dangerous string comparisons found.'\n"
-        "\n"
-        "### Code 122 — Variable String Safety\n"
-        "<list of variable IDs with their string values and SAFE / DO NOT TRANSLATE verdict>\n"
-        "If all safe: 'All code 122 string values appear to be display text only.'\n"
+        "### Code 122 — Variable Translation Ranges\n"
+        "  Translate IDs  : <compact ranges, e.g. 5, 10-18, 42>\n"
+        "  Do NOT translate: <ID — reason>\n"
+        "If none: 'No display-text string assignments found.'\n"
         "\n"
         "### Code 357 — Plugin Handlers to Enable\n"
-        "For each plugin header with Japanese text:\n"
-        "  • Already handled     : <header> — no action needed\n"
-        "  • Enable in module    : uncomment this line in headerMappings:\n"
-        "      \"<header>\": ([\"<key>\"], None),\n"
-        "  • New entry needed    : <header> — parameters[3] looks like: <description>\n"
-        "If no 357 codes with Japanese found: 'No code 357 plugin text found.'\n"
+        "  • Already handled  : <header> — no action needed\n"
+        "  • Enable in module : uncomment → \"<header>\": ([\"<key>\"], None),\n"
+        "  • New entry needed : <header> — parameters[3] structure: <description>\n"
+        "  • No visible text  : <header> — internal only, skip\n"
+        "If none: 'No code 357 visible text found.'\n"
+        "\n"
+        "### Code 356 — Enable or Skip\n"
+        "  ENABLE / SKIP — keywords found: <list>\n"
+        "\n"
+        "### Code 355/655 — Script Patterns to Add\n"
+        "  • Pattern key : <keyword>\n"
+        "  • Regex       : <capture regex>\n"
+        "  • Multiline   : <true/false>\n"
+        "  • Module line : \"<keyword>\": (r\"<regex>\", <True|False>),\n"
+        "If none: 'No translatable 355/655 scripts found.'\n"
+        "\n"
+        "### Code 657 — Enable or Skip\n"
+        "  ENABLE / SKIP — <brief reason>\n"
+        "\n"
+        "### Codes 320 / 324 / 325 — Enable or Skip\n"
+        "  320: ENABLE / SKIP   324: ENABLE / SKIP   325: ENABLE / SKIP\n"
+        "\n"
+        "### Code 108 — Enable or Skip\n"
+        "  ENABLE / SKIP — patterns found: <list>\n"
     )
 
     # ── Step 1 (Optional): Pre-process ────────────────────────────────
@@ -1274,6 +1290,37 @@ class WorkflowTab(QWidget):
 
         layout.addWidget(wrap_box)
 
+        p0_box = QGroupBox("Phase 0  –  Core Database Files")
+        p0_box.setStyleSheet(
+            "QGroupBox{color:#ccc;border:1px solid #444;border-radius:3px;"
+            "margin-top:8px;font-size:11px;}"
+            "QGroupBox::title{padding:0 6px;}"
+        )
+        p0_inner = QVBoxLayout(p0_box)
+        p0_desc = QLabel(
+            "Files: Actors, Armors, Weapons, Items, Skills, States, Classes, Enemies, System, MapInfos\n"
+            "Translates names, descriptions, and notes in the core database. "
+            "Run this first before any event-code phases."
+        )
+        p0_desc.setStyleSheet("color:#888;font-size:10px;")
+        p0_desc.setWordWrap(True)
+        p0_inner.addWidget(p0_desc)
+        p0_row = QHBoxLayout()
+        run_p0 = _make_btn("⚙  Set Codes → Go to Translation", "#4a7a4a")
+        run_p0.setToolTip(
+            "Sets engine to RPG Maker MV/MZ, selects only DB files "
+            "(Actors, Armors … etc.), all event codes OFF — then opens Translation tab."
+        )
+        run_p0.clicked.connect(lambda: self._run_phase(0))
+        p0_row.addWidget(run_p0)
+        sync_p0 = _make_btn("🔄  Sync translated/ → files/", "#3a4a6a")
+        sync_p0.setToolTip("After translation finishes, copy translated/ back into files/ so the next phase starts from the latest state")
+        sync_p0.clicked.connect(self._copy_translated_to_files)
+        p0_row.addWidget(sync_p0)
+        p0_row.addStretch()
+        p0_inner.addLayout(p0_row)
+        layout.addWidget(p0_box)
+
         p1_box = QGroupBox("Phase 1  –  Safe Codes (dialogue + choices)")
         p1_box.setStyleSheet(
             "QGroupBox{color:#ccc;border:1px solid #444;border-radius:3px;"
@@ -1294,6 +1341,10 @@ class WorkflowTab(QWidget):
         run_p1.setToolTip("Applies Phase 1 code settings and switches to the Translation tab")
         run_p1.clicked.connect(lambda: self._run_phase(1))
         p1_row.addWidget(run_p1)
+        sync_p1 = _make_btn("🔄  Sync translated/ → files/", "#3a4a6a")
+        sync_p1.setToolTip("After translation finishes, copy translated/ back into files/ so the next phase starts from the latest state")
+        sync_p1.clicked.connect(self._copy_translated_to_files)
+        p1_row.addWidget(sync_p1)
         p1_row.addStretch()
         p1_inner.addLayout(p1_row)
         layout.addWidget(p1_box)
@@ -1320,6 +1371,10 @@ class WorkflowTab(QWidget):
         run_p1b.setToolTip("Applies Phase 1b code settings (111 only) and switches to the Translation tab")
         run_p1b.clicked.connect(lambda: self._run_phase("1b"))
         p1b_row.addWidget(run_p1b)
+        sync_p1b = _make_btn("🔄  Sync translated/ → files/", "#3a4a6a")
+        sync_p1b.setToolTip("After translation finishes, copy translated/ back into files/ so the next phase starts from the latest state")
+        sync_p1b.clicked.connect(self._copy_translated_to_files)
+        p1b_row.addWidget(sync_p1b)
         p1b_row.addStretch()
         p1b_inner.addLayout(p1b_row)
         layout.addWidget(p1b_box)
@@ -1334,28 +1389,75 @@ class WorkflowTab(QWidget):
         p2_desc = QLabel(
             "Codes ON: 122 (Control Variables), 357 (Plugin Commands)\n"
             "Strings here are often used in script comparisons — mistranslations can break game "
-            "logic. Use Scan first to preview what will be translated, then apply and go translate."
+            "logic. Use the Plugin Prompt to audit the game first, then set the var range below."
         )
         p2_desc.setStyleSheet("color:#888;font-size:10px;")
         p2_desc.setWordWrap(True)
         p2_inner.addWidget(p2_desc)
 
         copy_risky_row = QHBoxLayout()
-        copy_risky_btn = _make_btn("📋  Copy Risky Prompt", "#555")
+        copy_risky_btn = _make_btn("📋  Copy Plugin Prompt", "#555")
         copy_risky_btn.setToolTip(
-            "Copy a Copilot prompt that audits code 111 string comparisons, "
-            "code 122 variable safety, and code 357 plugin handlers."
+            "Copy a Copilot prompt that audits code 122 variable ranges and all optional "
+            "plugin/script codes (357, 356, 355/655, 657, 320, 324, 325, 108) for visible text."
         )
-        copy_risky_btn.clicked.connect(self._copy_risky_prompt)
+        copy_risky_btn.clicked.connect(self._copy_plugin_prompt)
         copy_risky_row.addWidget(copy_risky_btn)
         copy_risky_row.addStretch()
         p2_inner.addLayout(copy_risky_row)
+
+        # Code 122 variable ID range
+        var_range_row = QHBoxLayout()
+        var_range_lbl = QLabel("Code 122 var range:")
+        var_range_lbl.setStyleSheet("color:#aaa;font-size:10px;")
+        var_range_row.addWidget(var_range_lbl)
+        from PyQt5.QtWidgets import QLineEdit
+        from PyQt5.QtGui import QIntValidator
+        self._p2_var_min = QLineEdit("0")
+        self._p2_var_min.setValidator(QIntValidator(0, 99999))
+        self._p2_var_min.setFixedWidth(55)
+        self._p2_var_min.setAlignment(Qt.AlignCenter)
+        self._p2_var_min.setStyleSheet("QLineEdit{padding:3px;font-size:10px;}")
+        self._p2_var_min.setToolTip("Minimum variable ID to translate (inclusive)")
+        var_range_row.addWidget(self._p2_var_min)
+        dash = QLabel("–")
+        dash.setStyleSheet("color:#aaa;font-size:10px;")
+        var_range_row.addWidget(dash)
+        self._p2_var_max = QLineEdit("2000")
+        self._p2_var_max.setValidator(QIntValidator(1, 99999))
+        self._p2_var_max.setFixedWidth(55)
+        self._p2_var_max.setAlignment(Qt.AlignCenter)
+        self._p2_var_max.setStyleSheet("QLineEdit{padding:3px;font-size:10px;}")
+        self._p2_var_max.setToolTip("Maximum variable ID to translate (exclusive)")
+        var_range_row.addWidget(self._p2_var_max)
+        apply_range_btn = _make_btn("Apply", "#3a3a3a")
+        apply_range_btn.setFixedWidth(54)
+        apply_range_btn.setToolTip("Write CODE122_VAR_MIN / CODE122_VAR_MAX to the module")
+        apply_range_btn.clicked.connect(self._apply_var_range)
+        var_range_row.addWidget(apply_range_btn)
+        var_range_row.addStretch()
+        p2_inner.addLayout(var_range_row)
+
+        # Pre-populate range from current module values
+        try:
+            from gui.config_integration import ConfigIntegration
+            cur = ConfigIntegration().read_current_config()
+            if "CODE122_VAR_MIN" in cur:
+                self._p2_var_min.setText(str(cur["CODE122_VAR_MIN"]))
+            if "CODE122_VAR_MAX" in cur:
+                self._p2_var_max.setText(str(cur["CODE122_VAR_MAX"]))
+        except Exception:
+            pass
 
         p2_row = QHBoxLayout()
         run_p2 = _make_btn("⚙  Set Codes \u2192 Go to Translation", "#7a4a00")
         run_p2.setToolTip("Applies Phase 2 code settings and switches to the Translation tab")
         run_p2.clicked.connect(lambda: self._run_phase(2))
         p2_row.addWidget(run_p2)
+        sync_p2 = _make_btn("🔄  Sync translated/ → files/", "#3a4a6a")
+        sync_p2.setToolTip("After translation finishes, copy translated/ back into files/ so the next phase starts from the latest state")
+        sync_p2.clicked.connect(self._copy_translated_to_files)
+        p2_row.addWidget(sync_p2)
         p2_row.addStretch()
         p2_inner.addLayout(p2_row)
         layout.addWidget(p2_box)
@@ -1656,8 +1758,36 @@ class WorkflowTab(QWidget):
         QApplication.clipboard().setText(self._WRAP_PROMPT)
         self._log("Text-wrap analysis prompt copied to clipboard.")
 
-    def _copy_risky_prompt(self):
-        QApplication.clipboard().setText(self._RISKY_PROMPT)
+    def _apply_var_range(self):
+        """Write CODE122_VAR_MIN / CODE122_VAR_MAX to the module file."""
+        try:
+            var_min = int(self._p2_var_min.text() or 0)
+            var_max = int(self._p2_var_max.text() or 2000)
+        except ValueError:
+            self._log("❌ Var range: invalid numbers")
+            return
+        cfg = {"CODE122_VAR_MIN": var_min, "CODE122_VAR_MAX": var_max}
+        try:
+            from gui.config_integration import ConfigIntegration
+            ConfigIntegration().update_rpgmaker_config(cfg)
+            self._log(f"✅ Code 122 var range set: {var_min}–{var_max}")
+            # Sync to the Settings tab if open
+            try:
+                if self.parent_window and hasattr(self.parent_window, "config_tab"):
+                    ct = self.parent_window.config_tab
+                    if hasattr(ct, "rpgmaker_tab") and ct.rpgmaker_tab:
+                        rt = ct.rpgmaker_tab
+                        if hasattr(rt, "code122_var_min_spin"):
+                            rt.code122_var_min_spin.setText(str(var_min))
+                        if hasattr(rt, "code122_var_max_spin"):
+                            rt.code122_var_max_spin.setText(str(var_max))
+            except Exception:
+                pass
+        except Exception as exc:
+            self._log(f"❌ Could not apply var range: {exc}")
+
+    def _copy_plugin_prompt(self):
+        QApplication.clipboard().setText(self._PLUGIN_PROMPT)
         self._log("Risky codes analysis prompt copied to clipboard.")
 
     def _apply_wrap_config(self):
@@ -1716,15 +1846,22 @@ class WorkflowTab(QWidget):
     # ─────────────────────────────────────────────────────────────────────────
 
     def _run_phase(self, phase):
-        if phase == 1:
+        if phase == 0:
+            config = PHASE0_CONFIG
+            label = "Phase 0 (core DB files)"
+            file_preset = "db"
+        elif phase == 1:
             config = PHASE1_CONFIG
             label = "Phase 1 (safe codes)"
+            file_preset = "events"
         elif phase == "1b":
             config = PHASE1B_CONFIG
             label = "Phase 1b (code 111 cache)"
+            file_preset = "events"
         else:
             config = PHASE2_CONFIG
             label = "Phase 2 (risky codes)"
+            file_preset = "events"
 
         # Apply config profile so the Translation tab uses the right codes
         try:
@@ -1753,7 +1890,14 @@ class WorkflowTab(QWidget):
             return
 
         # Phase-specific guidance
-        if phase == 1:
+        if phase == 0:
+            self._log("")
+            self._log("─" * 54)
+            self._log("👉  Switch to the Translation tab and start the run.")
+            self._log("   Phase 0 translates core DB file fields (names,")
+            self._log("   descriptions, notes). Event codes are all OFF.")
+            self._log("─" * 54)
+        elif phase == 1:
             self._log("")
             self._log("─" * 54)
             self._log("👉  Switch to the Translation tab and start the run.")
@@ -1780,13 +1924,72 @@ class WorkflowTab(QWidget):
             self._log("   Phase 1b has been run first to build the 111 cache.")
             self._log("─" * 54)
 
-        # Navigate to the Translation tab (index 0 in content_stack)
+        # Navigate to Translation tab and configure it
+        self._navigate_to_translation(file_preset)
+
+    def _navigate_to_translation(self, file_preset: str):
+        """Switch to Translation tab, set engine to MVMZ, and check/uncheck files.
+
+        file_preset:
+            'db'     — check only core DB files, uncheck event files
+            'events' — check CommonEvents, Troops, and Map*.json; uncheck DB files
+        """
         try:
-            if self.parent_window and hasattr(self.parent_window, "content_stack"):
-                self.parent_window.content_stack.setCurrentIndex(0)
-                # Keep nav buttons in sync
-                if hasattr(self.parent_window, "nav_buttons"):
-                    for i, btn in enumerate(self.parent_window.nav_buttons):
+            pw = self.parent_window
+            if not pw:
+                return
+            tt = getattr(pw, "translation_tab", None)
+            if tt is None:
+                return
+
+            # 1. Set engine to RPG Maker MV/MZ
+            try:
+                combo = tt.module_combo
+                for i in range(combo.count()):
+                    if "RPG Maker MV/MZ" in combo.itemText(i):
+                        combo.setCurrentIndex(i)
+                        break
+            except Exception:
+                pass
+
+            # 2. Determine which files belong to each preset
+            files_dir = getattr(tt, "files_dir", None)
+            if files_dir is None:
+                files_dir = __import__("pathlib").Path("files")
+
+            def _is_event(name: str) -> bool:
+                return (
+                    name in _EVENT_FILES_EXACT
+                    or (name.startswith("Map") and name.endswith(".json") and name not in _DB_FILES)
+                )
+
+            def _is_db(name: str) -> bool:
+                return name in _DB_FILES
+
+            if file_preset == "db":
+                should_check = _is_db
+            else:  # "events"
+                should_check = _is_event
+
+            # 3. Apply check states to the file list
+            try:
+                tt.refresh_file_lists()
+                fl = tt.file_list
+                from PyQt5.QtCore import Qt as _Qt
+                for idx in range(fl.count()):
+                    item = fl.item(idx)
+                    name = item.text()
+                    item.setCheckState(
+                        _Qt.Checked if should_check(name) else _Qt.Unchecked
+                    )
+            except Exception:
+                pass
+
+            # 4. Navigate
+            if hasattr(pw, "content_stack"):
+                pw.content_stack.setCurrentIndex(0)
+                if hasattr(pw, "nav_buttons"):
+                    for i, btn in enumerate(pw.nav_buttons):
                         btn.setChecked(i == 0)
         except Exception:
             pass
@@ -1794,6 +1997,32 @@ class WorkflowTab(QWidget):
     # ─────────────────────────────────────────────────────────────────────────
     # Step 5 – Export to game
     # ─────────────────────────────────────────────────────────────────────────
+
+    def _copy_translated_to_files(self):
+        """Copy translated/ files back into files/ (only matching names)."""
+        import shutil
+        files_dir   = Path("files")
+        transl_dir  = Path("translated")
+
+        if not transl_dir.exists():
+            self._log("⚠  translated/ folder not found — nothing to sync.")
+            return
+
+        active = {fp.name for fp in files_dir.glob("*.json")} if files_dir.exists() else set()
+        to_copy = [fp for fp in transl_dir.glob("*.json") if not active or fp.name in active]
+
+        if not to_copy:
+            self._log("⚠  No matching files found in translated/ to sync.")
+            return
+
+        files_dir.mkdir(exist_ok=True)
+        copied = 0
+        for src in to_copy:
+            dst = files_dir / src.name
+            shutil.copy2(src, dst)
+            copied += 1
+
+        self._log(f"✅  Synced {copied} file(s) from translated/ → files/")
 
     def _export_active_files(self):
         """Export only translated files whose names match what is in files/."""
