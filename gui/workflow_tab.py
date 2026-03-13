@@ -1,14 +1,15 @@
-"""
+﻿"""
 RPGMaker Workflow Tab - Automation hub for the full translation pipeline.
 
 Provides a guided, step-by-step interface:
 
   Step 0  – Select game project folder and import data files into files/
-  Step 1  – Edit vocab.txt (glossary) inline
-  Step 2  – Actor variable substitution  (\\n[X] ↔ names)
-  Step 3  – Auto-detect speaker format and apply to module settings
-  Step 4  – Phase 1 (safe dialogue codes) and Phase 2 (risky codes) translation
-  Step 5  – Export translated/ back to the game folder
+  Step 1  – (Optional) Pre-process game files
+  Step 2  – Auto-detect speaker format and apply to module settings
+  Step 3  – Build glossary: parse speakers, then enrich with AI prompt
+  Step 4  – Actor variable substitution  (\\n[X] ↔ names)
+  Step 5  – Phase 1 (safe dialogue codes) and Phase 2 (risky codes) translation
+  Step 6  – Export translated/ back to the game folder
 """
 
 from __future__ import annotations
@@ -417,11 +418,11 @@ class WorkflowTab(QWidget):
         vbox.addWidget(_make_hr())
         self._build_preprocess(vbox)
         vbox.addWidget(_make_hr())
+        self._build_step3(vbox)
+        vbox.addWidget(_make_hr())
         self._build_step1(vbox)
         vbox.addWidget(_make_hr())
         self._build_step2(vbox)
-        vbox.addWidget(_make_hr())
-        self._build_step3(vbox)
         vbox.addWidget(_make_hr())
         self._build_step4(vbox)
         vbox.addWidget(_make_hr())
@@ -543,29 +544,54 @@ class WorkflowTab(QWidget):
     _PROMPT_GLOSSARY = (
         "You are helping me build a complete translation glossary for a Japanese RPGMaker game.\n"
         "\n"
-        "Please scan ALL of these game files (Actors.json, CommonEvents.json, Map*.json, "
-        "Troops.json, and any other available files) and produce TWO sections:\n"
+        "⚠️ FILE SIZE WARNING: Map files and CommonEvents.json can be extremely large "
+        "(hundreds of thousands of lines). Do NOT attempt to read them in full — you will "
+        "hit context limits and miss content. Instead, use this strategy:\n"
+        "\n"
+        "  1. Read the small structured DB files IN FULL first — these are the richest "
+        "source of names and are always small:\n"
+        "     Actors.json, Classes.json, Troops.json, Skills.json, Items.json, "
+        "Armors.json, Weapons.json, States.json, System.json\n"
+        "\n"
+        "  2. For large files (CommonEvents.json, Map*.json), do NOT read sequentially. "
+        "Instead, SEARCH (grep) for:\n"
+        "     - Named character patterns: 【, \\\\n<, \\\\k< at the start of dialogue lines\n"
+        "     - Unique proper nouns: capitalised katakana clusters or kanji compound nouns "
+        "in \"message\" or \"parameters\" fields\n"
+        "     Scan Map001.json through Map010.json at most — early maps have the most "
+        "story-critical dialogue.\n"
+        "\n"
+        "  3. Stop adding entries once you stop finding new names/terms — do not pad.\n"
+        "\n"
+        "Produce TWO sections of output.\n"
+        "\n"
+        "Output the results EXACTLY in the format shown below, including the category headers "
+        "starting with #. Do not add any other text, preamble, or explanation outside the entries.\n"
         "\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-        "SECTION 1 — NAMED CHARACTERS\n"
+        "# Game Characters\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
         "Identify every NAMED CHARACTER that appears in dialogue or descriptions.\n"
         "For each character provide:\n"
         "  - Japanese name (katakana/kanji as it appears in-game)\n"
         "  - English transliteration or translation\n"
         "  - Gender (Male / Female / Unknown) — infer from speech patterns or pronouns\n"
-        "  - Brief role note (e.g. protagonist, antagonist, NPC, merchant)\n"
+        "  - Role (protagonist, antagonist, NPC, etc.)\n"
+        "  - Speech register and personality notes — how they speak, their tone, any nicknames, "
+        "whether their name is player-chosen, etc.\n"
         "\n"
-        "Format — one entry per line:\n"
-        "山田太郎 (Yamada Taro) - Male; protagonist; high-school student\n"
-        "浅井花子 (Asai Hanako) - Female; childhood friend; lives in 栄町\n"
+        "Format — the header line, then one entry per line:\n"
+        "# Game Characters\n"
+        "\u30b7\u30ed (Shiro) - Female; protagonist; player-controlled (Actors.json ID 1); "
+        "speaks in a flustered, cute register with feminine speech markers; nickname \u30d0\u30ab\u732b\u3002\n"
+        "\u30af\u30ed\u30cd (Kurone) - Female; antagonist; cold and terse; speaks in short cutting sentences\n"
         "\n"
         "Rules:\n"
         "  - Named characters only — no generic enemy types or unnamed NPCs.\n"
         "  - If a character has a player-chosen name (e.g. Actors.json id 1), note it explicitly.\n"
         "\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-        "SECTION 2 — WORLDBUILDING TERMS\n"
+        "# Worldbuilding Terms\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
         "Identify lore-specific terms that appear in dialogue, descriptions, or narration "
         "but do NOT have a dedicated database file — i.e. terms the translation tool will NOT "
@@ -573,24 +599,53 @@ class WorkflowTab(QWidget):
         "\n"
         "Target specifically:\n"
         "  - Faction / organisation names (kingdoms, guilds, cults, nations)\n"
-        "  - Location names that are mentioned in dialogue but are not map titles\n"
+        "  - Location names mentioned in dialogue but not map titles\n"
         "  - Unique magic systems, schools of magic, or power classifications\n"
         "  - Lore titles and honorifics unique to this setting\n"
-        "  - Recurring in-universe concepts, events, or proper nouns with no English equivalent\n"
+        "  - Recurring in-universe concepts or proper nouns with no English equivalent\n"
         "\n"
-        "For each term provide:\n"
-        "  - Japanese original (as it appears in-game)\n"
-        "  - Recommended English translation\n"
-        "  - Brief note explaining what it is\n"
-        "\n"
-        "Format — one entry per line:\n"
-        "魔世界 (Demon World) - The demonic realm referenced in NPC dialogue; not a named map\n"
-        "聖剣教団 (Holy Blade Order) - Antagonist faction controlling the eastern territories\n"
+        "Format — the header line, then one entry per line:\n"
+        "# Worldbuilding Terms\n"
+        "\u9b54\u4e16\u754c (Demon World) - The demonic realm referenced in NPC dialogue; not a named map\n"
+        "\u8056\u5263\u6559\u56e3 (Holy Blade Order) - Antagonist faction controlling the eastern territories\n"
         "\n"
         "Rules:\n"
         "  - Do NOT list skill names, item names, weapon names, armour names — the tool handles those.\n"
-        "  - Skip generic RPG words (ポーション, レベル, ステータス, etc.).\n"
-        "  - Do NOT repeat character names here — those belong in Section 1."
+        "  - Skip generic RPG words (\u30dd\u30fc\u30b7\u30e7\u30f3, \u30ec\u30d9\u30eb, \u30b9\u30c6\u30fc\u30bf\u30b9, etc.).\n"
+        "  - Do NOT repeat character names here.\n"
+        "\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        "COMPLETE EXAMPLE OUTPUT\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        "Below is what a correct, well-formed response looks like.\n"
+        "Your output should follow this structure exactly:\n"
+        "\n"
+        "```\n"
+        "# Game Characters\n"
+        "アリア (Aria) - Female; protagonist; player-chosen name (Actors.json ID 1); "
+        "speaks cheerfully in casual feminine speech; nicknamed アリアちゃん by her sister\n"
+        "ゼクス (Zex) - Male; antagonist; cold and commanding; addresses others with contempt; "
+        "uses archaic formal register\n"
+        "カナエ (Kanae) - Female; NPC shopkeeper; warm and motherly; ends sentences with わね\n"
+        "\n"
+        "# Worldbuilding Terms\n"
+        "虚無の穴 (Void Rift) - Dimensional tear referenced repeatedly in Act 2 NPC dialogue; "
+        "not a named map location\n"
+        "鋼の誓約 (Iron Vow) - Sacred oath-binding ritual unique to the knightly order; "
+        "appears in story cutscenes\n"
+        "裁定者 (Arbiter) - Title held by the ruling council; lore-specific rank with no "
+        "real-world equivalent\n"
+        "```\n"
+        "\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        "GLOBAL RULES (apply to both sections)\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        "  - NEVER give two options for any term (e.g. 'Sylfia / Sylphia' is wrong). "
+        "Always commit to a single best translation. If multiple transliterations exist, "
+        "pick the most etymologically accurate or natural-sounding one and use only that.\n"
+        "  - Use a plain hyphen-minus (-) as the separator between the Japanese entry and "
+        "its description. Never use an em dash (\u2014) or en dash (\u2013) \u2014 the "
+        "translation tool only recognises the plain hyphen."
     )
 
     # ── Step 1 (Optional): Pre-process ────────────────────────────────
@@ -693,8 +748,8 @@ class WorkflowTab(QWidget):
         tc_inner = QVBoxLayout(tc)
         tc_inner.setSpacing(4)
         tc_desc = QLabel(
-            "Copies everything from the <code>gameupdate/</code> folder in the game root "
-            "into the game\'s data folder, overwriting existing files."
+            "Copies everything from the <code>gameupdate/</code> folder "
+            "into the game\'s root folder, overwriting existing files."
         )
         tc_desc.setTextFormat(Qt.RichText)
         tc_desc.setWordWrap(True)
@@ -719,7 +774,7 @@ class WorkflowTab(QWidget):
 
         tc_dst_row = QHBoxLayout()
         tc_dst_row.addWidget(QLabel("Destination:"))
-        self.pp_gameupdate_dst_label = QLabel("(data folder auto-filled from project)")
+        self.pp_gameupdate_dst_label = QLabel("(game root folder auto-filled from project)")
         self.pp_gameupdate_dst_label.setStyleSheet("color:#888;font-size:10px;")
         tc_dst_row.addWidget(self.pp_gameupdate_dst_label, 1)
         tc_inner.addLayout(tc_dst_row)
@@ -752,7 +807,7 @@ class WorkflowTab(QWidget):
         )
 
     def _build_step1(self, layout: QVBoxLayout):
-        layout.addWidget(_make_section_label("Step 2 — Glossary (vocab.txt)"))
+        layout.addWidget(_make_section_label("Step 3 — Glossary (vocab.txt)"))
         hint = QLabel(
             "Edit your glossary below. Character names, genders, and worldbuilding terms "
             "here are injected into every AI prompt for consistent terminology."
@@ -761,8 +816,43 @@ class WorkflowTab(QWidget):
         hint.setStyleSheet("color:#888;font-size:10px;padding-bottom:4px;")
         layout.addWidget(hint)
 
+        # ---- Parse Speakers -------------------------------------------------
+        spk_box = QGroupBox("2a — Parse Speakers (Auto-detect Names)")
+        spk_box.setStyleSheet(
+            "QGroupBox{color:#ccc;border:1px solid #444;border-radius:3px;"
+            "margin-top:8px;font-size:11px;}"
+            "QGroupBox::title{padding:0 6px;}"
+        )
+        spk_inner = QVBoxLayout(spk_box)
+        spk_inner.setSpacing(6)
+
+        spk_hint = QLabel(
+            "Scans every file in <b>files/</b> and extracts all detected speaker names "
+            "into a <b># Speakers</b> section of vocab.txt. "
+            "Run this first — the AI prompt below will then work from the pre-populated "
+            "list and can enrich entries with gender, role, and speech register."
+        )
+        spk_hint.setTextFormat(Qt.RichText)
+        spk_hint.setWordWrap(True)
+        spk_hint.setStyleSheet("color:#888;font-size:10px;")
+        spk_inner.addWidget(spk_hint)
+
+        spk_row = QHBoxLayout()
+        self._parse_speakers_status = QLabel("")
+        self._parse_speakers_status.setStyleSheet("color:#aaa;font-size:10px;")
+        spk_row.addWidget(self._parse_speakers_status, 1)
+        self._parse_speakers_btn = _make_btn("🔍  Parse Speakers", "#007acc")
+        self._parse_speakers_btn.setToolTip(
+            "Scan all game files for speaker names and write them to vocab.txt"
+        )
+        self._parse_speakers_btn.clicked.connect(self._run_parse_speakers)
+        spk_row.addWidget(self._parse_speakers_btn)
+        spk_inner.addLayout(spk_row)
+
+        layout.addWidget(spk_box)
+
         # ---- Copilot / Cursor prompt helpers --------------------------------
-        prompt_box = QGroupBox("AI Prompt Helpers (Copilot / Cursor)")
+        prompt_box = QGroupBox("2b — AI Prompt Helpers (Copilot / Cursor)")
         prompt_box.setStyleSheet(
             "QGroupBox{color:#ccc;border:1px solid #444;border-radius:3px;"
             "margin-top:8px;font-size:11px;}"
@@ -772,8 +862,10 @@ class WorkflowTab(QWidget):
         pb_inner.setSpacing(6)
 
         prompt_hint = QLabel(
-            "Copy a prompt below, paste it into GitHub Copilot Chat or Cursor with your "
-            "game files open, then paste the AI’s output into vocab.txt."
+            "After parsing speakers above, copy the prompt below and paste it into "
+            "GitHub Copilot Chat or Cursor with your game files open. "
+            "The AI will enrich the speaker list with gender, role, and speech register "
+            "and add worldbuilding terms. Paste the AI's output back into vocab.txt."
         )
         prompt_hint.setWordWrap(True)
         prompt_hint.setStyleSheet("color:#888;font-size:10px;")
@@ -800,8 +892,10 @@ class WorkflowTab(QWidget):
         # ---- vocab.txt editor -----------------------------------------------
         layout.addWidget(_make_section_label("vocab.txt editor"))
         format_hint = QLabel(
-            "Expected line format:   Japanese (English) - Gender; role; notes\n"
-            "Example:  山田太郎 (Yamada Taro) - Male; protagonist; village blacksmith"
+            "Put character entries under  # Game Characters  — they are always sent to the AI.\n"
+            "Format:  Japanese (English) - Gender; role; speech register / personality notes\n"
+            "Example:  シロ (Shiro) - Female; protagonist; speaks in a flustered, cute register with feminine speech markers\n"
+            "Universal terms (honorifics, elements, etc.) live in vocab_base.txt and are auto-appended on every save."
         )
         format_hint.setFont(QFont("Consolas", 9))
         format_hint.setStyleSheet(
@@ -834,7 +928,7 @@ class WorkflowTab(QWidget):
     # ── Step 2: Actor Variables ─────────────────────────────────────────────
 
     def _build_step2(self, layout: QVBoxLayout):
-        layout.addWidget(_make_section_label("Step 3 — Actor Variable Substitution"))
+        layout.addWidget(_make_section_label("Step 4 — Actor Variable Substitution"))
         hint = QLabel(
             "Replaces  \\n[X]  RPGMaker name variables with actual actor names "
             "so the AI has proper context. After translation the variables are "
@@ -872,7 +966,7 @@ class WorkflowTab(QWidget):
     # ── Step 3: Speaker Detection ───────────────────────────────────────────
 
     def _build_step3(self, layout: QVBoxLayout):
-        layout.addWidget(_make_section_label("Step 4 — Speaker Format Detection"))
+        layout.addWidget(_make_section_label("Step 2 — Speaker Format Detection"))
         hint = QLabel(
             "Scans map files to determine how speaker names are embedded in dialogue "
             "and automatically sets the correct INLINE401SPEAKERS / FIRSTLINESPEAKERS "
@@ -1099,11 +1193,69 @@ class WorkflowTab(QWidget):
     # Step 1 – Vocab
     # ─────────────────────────────────────────────────────────────────────────
 
+    def _run_parse_speakers(self):
+        """Launch a speaker-parse pass over files/ and write results to vocab.txt."""
+        try:
+            from gui.translation_tab import TranslationWorker
+        except Exception as exc:
+            self._log(f"Could not import TranslationWorker: {exc}")
+            return
+
+        project_root = Path(__file__).parent.parent
+        files_dir = project_root / "files"
+        all_json = sorted(
+            p.name for p in files_dir.glob("*.json") if p.name != ".gitkeep"
+        ) if files_dir.exists() else []
+
+        if not all_json:
+            self._log("No JSON files found in files/. Run Step 1 (import) first.")
+            self._parse_speakers_status.setText("No files found in files/.")
+            return
+
+        self._log(f"Parsing speakers from {len(all_json)} file(s)...")
+        self._parse_speakers_btn.setEnabled(False)
+        self._parse_speakers_status.setText("Running...")
+
+        module_info = ["RPG Maker MV/MZ", [".json"], None]
+        worker = TranslationWorker(
+            project_root, module_info, estimate_only=False,
+            selected_files=all_json,
+            parse_speakers=True,
+        )
+        worker.log_signal.connect(self._log)
+        worker.progress_signal.connect(
+            lambda cur, tot, fn: self._parse_speakers_status.setText(
+                f"[{cur}/{tot}] {Path(fn).name}"
+            )
+        )
+        worker.finished_signal.connect(self._on_parse_speakers_done)
+        self._worker = worker
+        worker.start()
+
+    def _on_parse_speakers_done(self, ok: bool, msg: str):
+        self._parse_speakers_btn.setEnabled(True)
+        if ok:
+            self._parse_speakers_status.setText(
+                "Done — # Speakers section written to vocab.txt"
+            )
+            self._reload_vocab()
+            self._log("Speaker parse complete. vocab.txt updated with # Speakers.")
+        else:
+            self._parse_speakers_status.setText(f"Failed: {msg}")
+            self._log(f"Speaker parse failed: {msg}")
+
+    _BASE_SEPARATOR = "# ── Base Vocabulary (auto-appended from vocab_base.txt — do not edit below) ──\n"
+
     def _reload_vocab(self):
         vocab_path = Path("vocab.txt")
         try:
             if vocab_path.exists():
-                self.vocab_editor.setPlainText(vocab_path.read_text(encoding="utf-8"))
+                text = vocab_path.read_text(encoding="utf-8")
+                # Strip the auto-appended base section so editor shows only game-specific content
+                sep_idx = text.find(self._BASE_SEPARATOR)
+                if sep_idx != -1:
+                    text = text[:sep_idx].rstrip("\n")
+                self.vocab_editor.setPlainText(text)
             else:
                 self.vocab_editor.setPlainText("# Add character glossary entries here\n")
         except Exception as exc:
@@ -1111,10 +1263,12 @@ class WorkflowTab(QWidget):
 
     def _save_vocab(self):
         try:
-            Path("vocab.txt").write_text(
-                self.vocab_editor.toPlainText(), encoding="utf-8"
-            )
-            self._log("✅ vocab.txt saved.")
+            game_text = self.vocab_editor.toPlainText().rstrip("\n")
+            base_path = Path("vocab_base.txt")
+            base_text = base_path.read_text(encoding="utf-8") if base_path.exists() else ""
+            combined = game_text + "\n\n" + self._BASE_SEPARATOR + base_text
+            Path("vocab.txt").write_text(combined, encoding="utf-8")
+            self._log("✅ vocab.txt saved (base terms from vocab_base.txt appended).")
         except Exception as exc:
             self._log(f"❌ Could not save vocab.txt: {exc}")
 
@@ -1442,7 +1596,7 @@ class WorkflowTab(QWidget):
         except Exception:
             pass
         try:
-            self.pp_gameupdate_dst_label.setText(data_path or "(no data folder detected)")
+            self.pp_gameupdate_dst_label.setText(game_root or "(no game folder detected)")
         except Exception:
             pass
 
@@ -1488,12 +1642,12 @@ class WorkflowTab(QWidget):
 
     def _run_gameupdate(self):
         src = self.pp_gameupdate_edit.text().strip()
-        dst = self._data_path
+        dst = self.folder_edit.text().strip()
         if not src:
             self._log("⚠  No gameupdate folder path set.")
             return
         if not dst:
-            self._log("⚠  No data folder detected. Complete Step 0 first.")
+            self._log("⚠  No game root folder set. Complete Step 0 first.")
             return
         if not Path(src).is_dir():
             self._log(f"⚠  gameupdate folder not found: {src}")
@@ -1534,14 +1688,15 @@ class WorkflowTab(QWidget):
             skipped.append(f"B (format plugins.js): {reason}")
 
         # C — gameupdate copy
-        if gameupdate_src and Path(gameupdate_src).is_dir() and data_path:
+        game_root_dst = self.folder_edit.text().strip()
+        if gameupdate_src and Path(gameupdate_src).is_dir() and game_root_dst:
             self._log("▶ [C] gameupdate copy …")
             self._run_gameupdate()
         else:
             if not gameupdate_src or not Path(gameupdate_src).is_dir():
                 reason = f"source not found ({gameupdate_src or 'not set'})"
             else:
-                reason = "data folder missing"
+                reason = "game root folder missing"
             skipped.append(f"C (gameupdate): {reason}")
 
         for msg in skipped:
