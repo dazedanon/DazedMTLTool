@@ -11,11 +11,13 @@ from .config_tab import ConfigTab
 from .rpgmaker_tab import RPGMakerTab
 from .log_viewer import LogViewer
 from .file_manager import FileManager
+from .workflow_tab import WorkflowTab
 
 __all__ = [
     "DazedMTLGUI",
-    "ConfigTab", 
+    "ConfigTab",
     "RPGMakerTab",
     "LogViewer",
-    "FileManager"
+    "FileManager",
+    "WorkflowTab",
 ]
