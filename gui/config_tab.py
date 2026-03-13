@@ -576,10 +576,6 @@ class ConfigTab(QWidget):
         button_layout = QHBoxLayout()
         button_layout.setSpacing(10)
         
-        load_button = QPushButton("📂 Load from File")
-        load_button.clicked.connect(self.load_from_file_dialog)
-        load_button.setMinimumHeight(32)
-
         reset_button = QPushButton("🔄 Reset to Defaults")
         reset_button.clicked.connect(self.reset_to_defaults_with_save)
         reset_button.setMinimumHeight(32)
@@ -591,7 +587,6 @@ class ConfigTab(QWidget):
         self.autosave_label = QLabel("")
         self.autosave_label.setStyleSheet("color: #4ec9b0; font-weight: bold;")
 
-        button_layout.addWidget(load_button)
         button_layout.addWidget(reset_button)
         button_layout.addWidget(save_button)
         button_layout.addSpacing(10)
