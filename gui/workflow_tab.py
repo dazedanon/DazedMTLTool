@@ -128,50 +128,6 @@ class _ImportWorker(QThread):
             self.done.emit(0, [str(exc)])
 
 
-class _ActorSubstituteWorker(QThread):
-    done = pyqtSignal(dict)
-    log  = pyqtSignal(str)
-
-    def __init__(self, mode: str):  # "substitute" or "restore"
-        super().__init__()
-        self.mode = mode
-
-    def run(self):
-        try:
-            from util.actor_substitutor import (
-                load_actor_map,
-                substitute_in_files,
-                restore_in_translated,
-            )
-            actor_map = load_actor_map()
-            if not actor_map:
-                self.done.emit({"error": "No actor map found. Make sure files/Actors.json exists."})
-                return
-            if self.mode == "substitute":
-                self.log.emit("Substituting \\n[X] → actor names in files/ …")
-                stats = substitute_in_files(actor_map=actor_map)
-            else:
-                self.log.emit("Restoring actor names → \\n[X] in translated/ …")
-                stats = restore_in_translated(actor_map=actor_map)
-            self.done.emit(stats)
-        except Exception as exc:
-            self.done.emit({"error": str(exc)})
-
-
-class _SpeakerDetectWorker(QThread):
-    done = pyqtSignal(dict)
-    log  = pyqtSignal(str)
-
-    def run(self):
-        try:
-            from util.speaker_detector import detect_speaker_format
-            self.log.emit("Scanning files/ for speaker patterns …")
-            result = detect_speaker_format()
-            self.done.emit(result)
-        except Exception as exc:
-            self.done.emit({"error": str(exc)})
-
-
 class _ExportWorker(QThread):
     done = pyqtSignal(int, list)
     log  = pyqtSignal(str)
@@ -384,7 +340,6 @@ class WorkflowTab(QWidget):
         self._data_path: str | None = None
         self._engine: str = "MVMZ"
         self._file_items: list[dict] = []
-        self._detect_result: dict | None = None
         self._worker = None  # active background QThread
         # Pre-process paths (auto-populated after folder detection)
         self._plugins_js_path: str = ""
@@ -421,8 +376,6 @@ class WorkflowTab(QWidget):
         self._build_step3(vbox)
         vbox.addWidget(_make_hr())
         self._build_step1(vbox)
-        vbox.addWidget(_make_hr())
-        self._build_step2(vbox)
         vbox.addWidget(_make_hr())
         self._build_step4(vbox)
         vbox.addWidget(_make_hr())
@@ -540,6 +493,60 @@ class WorkflowTab(QWidget):
     # ── Step 1: Vocab / Glossary ────────────────────────────────────────────
 
     # ── Copilot prompt templates ────────────────────────────────────────────
+
+    _SPEAKER_PROMPT = (
+        "You are helping me configure a Japanese RPGMaker MV/MZ translation tool.\n"
+        "\n"
+        "Look at a sample of the game's event files (Map*.json, CommonEvents.json, "
+        "Troops.json) and determine which speaker name format the game uses.\n"
+        "\n"
+        "## How dialogue commands work\n"
+        "\n"
+        "Code 101 opens the text window. Code 401 is a dialogue line. "
+        "Multiple 401s in a row form one message box.\n"
+        "\n"
+        "## The formats to identify\n"
+        "\n"
+        "### Format A — 101 name in param[4]  (NO FLAG NEEDED, handled automatically)\n"
+        "The 101 code has a non-empty string at parameters[4].\n"
+        "Example:\n"
+        "  { \"code\": 101, \"parameters\": [\"\", 0, 2, 2, \"るな\"] }\n"
+        "  { \"code\": 401, \"parameters\": [\"「おはよう！\"] }\n"
+        "→ No flag needed. Do not set anything.\n"
+        "\n"
+        "### Format B — INLINE401SPEAKERS\n"
+        "The speaker name is embedded at the start of the 401 text directly before 「.\n"
+        "Example:\n"
+        "  { \"code\": 401, \"parameters\": [\"エレナ「今日は晴れですね。\"] }\n"
+        "→ Set INLINE401SPEAKERS = True\n"
+        "\n"
+        "### Format C — FIRSTLINESPEAKERS\n"
+        "The first 401 in a group is a short name (<40 chars), and the next 401 "
+        "starts with 「 \" ( （ * [.\n"
+        "Example:\n"
+        "  { \"code\": 401, \"parameters\": [\"アリス\"] }\n"
+        "  { \"code\": 401, \"parameters\": [\"「こんにちは。\"] }\n"
+        "→ Set FIRSTLINESPEAKERS = True\n"
+        "\n"
+        "### Format D — FACENAME101\n"
+        "The 101 code has a face image filename in parameters[0] and parameters[4] is empty "
+        "or missing. The speaker name must be inferred from the face filename.\n"
+        "Example:\n"
+        "  { \"code\": 101, \"parameters\": [\"face_alice\", 0, 0, 2, \"\"] }\n"
+        "→ Set FACENAME101 = True\n"
+        "\n"
+        "### Always-on (NO FLAG NEEDED, handled automatically)\n"
+        "  - \\\\n<Name> or \\\\k<Name> codes embedded in 401 text\n"
+        "  - 【Name】 alone on a line or 【Name】dialogue on the same line\n"
+        "\n"
+        "---\n"
+        "\n"
+        "Please examine a sample of the event commands in the game files attached and tell me:\n"
+        "  1. Which format(s) are present\n"
+        "  2. Exactly which flags to set True (only list flags that should be True):\n"
+        "     INLINE401SPEAKERS, FIRSTLINESPEAKERS, FACENAME101\n"
+        "  3. A short concrete example from the files confirming the pattern\n"
+    )
 
     _PROMPT_GLOSSARY = (
         "You are helping me build a complete translation glossary for a Japanese RPGMaker game.\n"
@@ -883,7 +890,7 @@ class WorkflowTab(QWidget):
         glossary_row.addWidget(glossary_label, 1)
         copy_glossary_btn = _make_btn("📋  Copy Prompt", "#555")
         copy_glossary_btn.setToolTip("Copy the full glossary discovery prompt to clipboard")
-        copy_glossary_btn.clicked.connect(lambda: self._copy_to_clipboard(self._PROMPT_GLOSSARY, "Glossary prompt copied."))
+        copy_glossary_btn.clicked.connect(self._copy_glossary_prompt)
         glossary_row.addWidget(copy_glossary_btn)
         pb_inner.addLayout(glossary_row)
 
@@ -927,79 +934,64 @@ class WorkflowTab(QWidget):
 
     # ── Step 2: Actor Variables ─────────────────────────────────────────────
 
-    def _build_step2(self, layout: QVBoxLayout):
-        layout.addWidget(_make_section_label("Step 4 — Actor Variable Substitution"))
-        hint = QLabel(
-            "Replaces  \\n[X]  RPGMaker name variables with actual actor names "
-            "so the AI has proper context. After translation the variables are "
-            "restored — rename-able protagonists continue to work at runtime."
-        )
-        hint.setWordWrap(True)
-        hint.setStyleSheet("color:#888;font-size:10px;padding-bottom:4px;")
-        layout.addWidget(hint)
-
-        self.actor_status = QLabel("Click Scan to preview substitutions.")
-        self.actor_status.setWordWrap(True)
-        self.actor_status.setStyleSheet("color:#aaa;font-size:10px;padding:4px 0;")
-        layout.addWidget(self.actor_status)
-
-        row = QHBoxLayout()
-        scan_actors = _make_btn("🔍  Scan \\n[X] usage", "#555")
-        scan_actors.setToolTip("Scan files/ and show which actor IDs are referenced")
-        scan_actors.clicked.connect(self._scan_actor_vars)
-        row.addWidget(scan_actors)
-        row.addStretch()
-        layout.addLayout(row)
-
-        row2 = QHBoxLayout()
-        self.sub_btn = _make_btn("▶  Substitute \\n[X] → Names  (pre-translation)", "#007acc")
-        self.sub_btn.setToolTip("Modifies files/ in-place. Run before translating.")
-        self.sub_btn.clicked.connect(self._substitute_actors)
-        row2.addWidget(self.sub_btn)
-
-        self.restore_btn = _make_btn("↩  Restore Names → \\n[X]  (post-translation)", "#7a4a7a")
-        self.restore_btn.setToolTip("Modifies translated/ in-place. Run after translating.")
-        self.restore_btn.clicked.connect(self._restore_actors)
-        row2.addWidget(self.restore_btn)
-        layout.addLayout(row2)
-
     # ── Step 3: Speaker Detection ───────────────────────────────────────────
 
     def _build_step3(self, layout: QVBoxLayout):
         layout.addWidget(_make_section_label("Step 2 — Speaker Format Detection"))
         hint = QLabel(
-            "Scans map files to determine how speaker names are embedded in dialogue "
-            "and automatically sets the correct INLINE401SPEAKERS / FIRSTLINESPEAKERS "
-            "/ FACENAME101 flags."
+            "Copy the prompt below, open Copilot (or any AI), attach a few of the game's "
+            "Map*.json / CommonEvents.json files, paste the prompt, and ask it which "
+            "speaker flags to enable. Then tick the matching boxes and click Apply."
         )
         hint.setWordWrap(True)
-        hint.setStyleSheet("color:#888;font-size:10px;padding-bottom:4px;")
+        hint.setStyleSheet("color:#888;font-size:10px;padding-bottom:6px;")
         layout.addWidget(hint)
 
-        self.speaker_result = QLabel("Run the scan to auto-detect speaker format.")
-        self.speaker_result.setWordWrap(True)
-        self.speaker_result.setStyleSheet(
-            "color:#aaa;font-size:10px;padding:4px 0;"
-            "background:#252526;border:1px solid #444;padding:6px;border-radius:2px;"
+        copy_row = QHBoxLayout()
+        copy_btn = _make_btn("📋  Copy Prompt for Copilot", "#555")
+        copy_btn.setToolTip("Copies a prompt explaining all speaker formats — paste into Copilot with game files")
+        copy_btn.clicked.connect(self._copy_speaker_prompt)
+        copy_row.addWidget(copy_btn)
+        copy_row.addStretch()
+        layout.addLayout(copy_row)
+
+        # ---- Flag checkboxes ------------------------------------------------
+        _cb_style = "color:#ccc;font-size:10px;"
+        cb_box = QGroupBox("Speaker flags")
+        cb_box.setStyleSheet(
+            "QGroupBox{color:#aaa;border:1px solid #3a3a3a;border-radius:3px;"
+            "margin-top:6px;font-size:10px;padding:6px;background:#1e1e1e;}"
+            "QGroupBox::title{padding:0 4px;}"
         )
-        layout.addWidget(self.speaker_result)
+        cb_inner = QVBoxLayout(cb_box)
+        cb_inner.setSpacing(3)
 
-        row = QHBoxLayout()
-        scan_spk = _make_btn("🔍  Scan Speaker Format", "#555")
-        scan_spk.clicked.connect(self._detect_speakers)
-        row.addWidget(scan_spk)
+        self.spk_inline_cb = QCheckBox("INLINE401SPEAKERS  —  speaker name inline before 「 in the 401 text")
+        self.spk_inline_cb.setStyleSheet(_cb_style)
+        cb_inner.addWidget(self.spk_inline_cb)
 
-        self.apply_speaker_btn = _make_btn("✔  Apply to RPGMaker Settings", "#3a7a3a")
-        self.apply_speaker_btn.setEnabled(False)
-        self.apply_speaker_btn.clicked.connect(self._apply_speaker_settings)
-        row.addWidget(self.apply_speaker_btn)
-        row.addStretch()
-        layout.addLayout(row)
+        self.spk_firstline_cb = QCheckBox("FIRSTLINESPEAKERS  —  first 401 line is a short speaker name")
+        self.spk_firstline_cb.setStyleSheet(_cb_style)
+        cb_inner.addWidget(self.spk_firstline_cb)
+
+        self.spk_face_cb = QCheckBox("FACENAME101  —  speaker inferred from 101 face-image filename")
+        self.spk_face_cb.setStyleSheet(_cb_style)
+        cb_inner.addWidget(self.spk_face_cb)
+
+        apply_row = QHBoxLayout()
+        apply_spk = _make_btn("✔  Apply", "#3a7a3a")
+        apply_spk.setToolTip("Write the selected flags to RPGMaker settings")
+        apply_spk.clicked.connect(self._apply_speaker_flags)
+        apply_row.addStretch()
+        apply_row.addWidget(apply_spk)
+        cb_inner.addLayout(apply_row)
+
+        layout.addWidget(cb_box)
 
     # ── Step 4: Translation ─────────────────────────────────────────────────
 
     def _build_step4(self, layout: QVBoxLayout):
-        layout.addWidget(_make_section_label("Step 5 — Translation"))
+        layout.addWidget(_make_section_label("Step 4 — Translation"))
 
         p1_box = QGroupBox("Phase 1  –  Safe Codes (dialogue + choices)")
         p1_box.setStyleSheet(
@@ -1056,7 +1048,7 @@ class WorkflowTab(QWidget):
     # ── Step 6: Export ──────────────────────────────────────────────────────
 
     def _build_step6(self, layout: QVBoxLayout):
-        layout.addWidget(_make_section_label("Step 6 — Export to Game"))
+        layout.addWidget(_make_section_label("Step 5 — Export to Game"))
         hint = QLabel(
             "Copy all files from translated/ back into the game's data folder "
             "to patch the game in-place."
@@ -1246,6 +1238,47 @@ class WorkflowTab(QWidget):
 
     _BASE_SEPARATOR = "# ── Base Vocabulary (auto-appended from vocab_base.txt — do not edit below) ──\n"
 
+    def _copy_glossary_prompt(self):
+        """Build the glossary prompt, injecting any already-parsed speakers."""
+        prompt = self._PROMPT_GLOSSARY
+
+        # Extract # Speakers entries from current vocab.txt
+        speakers = []
+        try:
+            vocab_text = Path("vocab.txt").read_text(encoding="utf-8")
+            in_speakers = False
+            for line in vocab_text.splitlines():
+                stripped = line.strip()
+                if stripped == "# Speakers":
+                    in_speakers = True
+                    continue
+                if in_speakers:
+                    if stripped.startswith("#"):
+                        break  # next section
+                    if stripped:
+                        speakers.append(stripped)
+        except Exception:
+            pass
+
+        if speakers:
+            speaker_block = (
+                "\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                "ALREADY-IDENTIFIED SPEAKERS\n"
+                "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                "The speaker parser has already found these names in the game files.\n"
+                "For genuine named characters in this list, add them to # Game Characters\n"
+                "with gender, role, and speech register.\n"
+                "Skip entries that are clearly NOT real characters — generic labels (e.g. 男, 女),\n"
+                "placeholders (e.g. ＊＊＊, ???), or system strings.\n"
+                "```\n"
+                + "\n".join(speakers)
+                + "\n```"
+            )
+            prompt = prompt + speaker_block
+
+        self._copy_to_clipboard(prompt, "Glossary prompt copied."
+            + (f" ({len(speakers)} speaker(s) included.)" if speakers else ""))
+
     def _reload_vocab(self):
         vocab_path = Path("vocab.txt")
         try:
@@ -1276,139 +1309,36 @@ class WorkflowTab(QWidget):
     # Step 2 – Actor substitution
     # ─────────────────────────────────────────────────────────────────────────
 
-    def _scan_actor_vars(self):
-        try:
-            from util.actor_substitutor import scan_variables, load_actor_map
-            counts = scan_variables("files")
-            actor_map = load_actor_map()
-            if not counts:
-                self.actor_status.setText("No \\n[X] variables found in files/")
-                return
-            lines = []
-            for aid, cnt in sorted(counts.items()):
-                name = actor_map.get(aid, "???")
-                lines.append(f"  \\n[{aid}] → {name}  ({cnt} occurrence(s))")
-            self.actor_status.setText("\n".join(lines))
-            self._log("Actor variable scan complete.")
-        except Exception as exc:
-            self._log(f"❌ Scan error: {exc}")
-
-    def _substitute_actors(self):
-        reply = QMessageBox.question(
-            self,
-            "Substitute Actor Variables",
-            "This will modify files/ in-place, replacing \\n[X] codes with actor names.\n\n"
-            "Back up files/ first if needed. Continue?",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.Yes,
-        )
-        if reply != QMessageBox.Yes:
-            return
-        self.sub_btn.setEnabled(False)
-        w = _ActorSubstituteWorker("substitute")
-        w.log.connect(self._log)
-        w.done.connect(self._on_actor_done)
-        self._worker = w
-        w.start()
-
-    def _restore_actors(self):
-        reply = QMessageBox.question(
-            self,
-            "Restore Actor Variables",
-            "This will modify translated/ in-place, replacing actor names back with \\n[X] codes.\n\n"
-            "Continue?",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.Yes,
-        )
-        if reply != QMessageBox.Yes:
-            return
-        self.restore_btn.setEnabled(False)
-        w = _ActorSubstituteWorker("restore")
-        w.log.connect(self._log)
-        w.done.connect(self._on_actor_done)
-        self._worker = w
-        w.start()
-
-    def _on_actor_done(self, stats: dict):
-        self.sub_btn.setEnabled(True)
-        self.restore_btn.setEnabled(True)
-        if "error" in stats:
-            self._log(f"❌ {stats['error']}")
-            return
-        mods = stats.get("files_modified", 0)
-        total = stats.get("total_substitutions", 0)
-        found = stats.get("variables_found", {})
-        errors = stats.get("errors", [])
-        self._log(
-            f"✅ {total} substitution(s) across {mods} file(s). "
-            f"Actors: {', '.join(f'ID {k}={v}' for k, v in found.items()) or 'none'}"
-        )
-        for e in errors:
-            self._log(f"   ⚠  {e}")
-
     # ─────────────────────────────────────────────────────────────────────────
     # Step 3 – Speaker detection
     # ─────────────────────────────────────────────────────────────────────────
 
-    def _detect_speakers(self):
-        self.apply_speaker_btn.setEnabled(False)
-        self.speaker_result.setText("Scanning…")
-        w = _SpeakerDetectWorker()
-        w.log.connect(self._log)
-        w.done.connect(self._on_speaker_done)
-        self._worker = w
-        w.start()
+    def _copy_speaker_prompt(self):
+        QApplication.clipboard().setText(self._SPEAKER_PROMPT)
+        self._log("Speaker format prompt copied to clipboard.")
 
-    def _on_speaker_done(self, result: dict):
-        if "error" in result:
-            self.speaker_result.setText(f"❌ Error: {result['error']}")
-            self._log(f"❌ Speaker detection error: {result['error']}")
-            return
-
-        self._detect_result = result
-        scores = result.get("scores", {})
-        best = result.get("best_mode", "NONE")
-        conf = result.get("confidence", "low")
-        note = result.get("note", "")
-
-        conf_color = {"high": "#4ec9b0", "medium": "#dcdcaa", "low": "#f48771"}.get(conf, "#ccc")
-        score_str = "  |  ".join(f"{k}: {v}" for k, v in scores.items())
-        self.speaker_result.setText(
-            f"Best mode: {best}  ({conf} confidence)\n"
-            f"Scores — {score_str}\n"
-            f"{note}"
-        )
-        self._log(f"Speaker detection: {best} ({conf}) — {note}")
-
-        if best != "NONE":
-            self.apply_speaker_btn.setEnabled(True)
-
-    def _apply_speaker_settings(self):
-        if not self._detect_result:
-            return
-        cfg = self._detect_result.get("recommended_config", {})
+    def _apply_speaker_flags(self):
+        cfg = {
+            "INLINE401SPEAKERS": self.spk_inline_cb.isChecked(),
+            "FIRSTLINESPEAKERS": self.spk_firstline_cb.isChecked(),
+            "FACENAME101":       self.spk_face_cb.isChecked(),
+        }
         try:
             from gui.config_integration import ConfigIntegration
-            ci = ConfigIntegration()
-            ci.update_rpgmaker_config(cfg)
+            ConfigIntegration().update_rpgmaker_config(cfg)
             self._log(
-                f"✅ Applied speaker settings: "
+                "✅ Speaker flags applied: "
                 + ", ".join(f"{k}={v}" for k, v in cfg.items())
             )
-            # Refresh the RPGMaker tab if accessible
-            self._refresh_rpgmaker_tab(cfg)
+            try:
+                if self.parent_window and hasattr(self.parent_window, "config_tab"):
+                    ct = self.parent_window.config_tab
+                    if hasattr(ct, "rpgmaker_tab") and ct.rpgmaker_tab:
+                        ct.rpgmaker_tab.set_config(cfg)
+            except Exception:
+                pass
         except Exception as exc:
-            self._log(f"❌ Could not apply settings: {exc}")
-
-    def _refresh_rpgmaker_tab(self, cfg: dict):
-        """Push the new config to the RPGMaker tab widget so it refreshes live."""
-        try:
-            if self.parent_window and hasattr(self.parent_window, "config_tab"):
-                ct = self.parent_window.config_tab
-                if hasattr(ct, "rpgmaker_tab") and ct.rpgmaker_tab:
-                    ct.rpgmaker_tab.set_config(cfg)
-        except Exception:
-            pass
+            self._log(f"❌ Could not apply speaker flags: {exc}")
 
     # ─────────────────────────────────────────────────────────────────────────
     # Step 4 – Translation phases
