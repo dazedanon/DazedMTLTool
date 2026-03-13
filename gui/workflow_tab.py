@@ -1509,7 +1509,7 @@ class WorkflowTab(QWidget):
         self._p2_plugin_checks: dict = {}
         try:
             from modules.rpgmakermvmz import HEADER_MAPPINGS_357 as _HM357
-            for idx, key in enumerate(_HM357.keys()):
+            for idx, key in enumerate(sorted(_HM357.keys())):
                 cb = QCheckBox(key)
                 cb.setStyleSheet("color:#bbb;font-size:9px;")
                 plugin357_grid.addWidget(cb, idx // 2, idx % 2)
@@ -1542,7 +1542,7 @@ class WorkflowTab(QWidget):
         self._p2_pattern_checks: dict = {}
         try:
             from modules.rpgmakermvmz import PATTERNS_355655 as _PAT
-            for idx, key in enumerate(_PAT.keys()):
+            for idx, key in enumerate(sorted(_PAT.keys())):
                 cb = QCheckBox(key)
                 cb.setStyleSheet("color:#bbb;font-size:9px;")
                 patterns_grid.addWidget(cb, idx // 2, idx % 2)

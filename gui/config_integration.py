@@ -181,10 +181,10 @@ class ConfigIntegration:
                 ("ENABLED_PATTERNS_355655", enabled_355655),
             ):
                 content = re.sub(
-                    rf'^{re.escape(var_name)}\s*(?::\s*set)?\s*=\s*.*$',
+                    rf'^{re.escape(var_name)}\s*(?::\s*set)?\s*=\s*(?:\{{[^}}]*\}}|set\(\))',
                     f'{var_name}: set = {_fmt(val_set)}',
                     content,
-                    flags=re.MULTILINE,
+                    flags=re.MULTILINE | re.DOTALL,
                 )
             with open(module_path, "w", encoding="utf-8") as f:
                 f.write(content)
