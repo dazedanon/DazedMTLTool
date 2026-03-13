@@ -54,3 +54,72 @@ def wrapText(text: str, width: int) -> str:
         wrapped_segments.append("\n".join(lines))
     # Rejoin with double newlines to preserve hard breaks
     return "\n\n".join(wrapped_segments)
+
+
+def wrapSGDesc(text: str, width: int) -> str:
+    """Structured word-wrap for SG plugin description blocks.
+
+    Unlike wrapText, this function understands the layout of SG info-box
+    content:
+      ◆ / ・ / • / ● lines are always kept on their own line as section
+      headers; the body text immediately following is word-wrapped to
+      *width*.  Paragraph breaks (\\n\\n) are preserved between sections.
+    """
+    HEADER_CHARS = ("◆", "・", "•", "●")
+
+    paragraphs = text.split("\n\n")
+    wrapped_paragraphs = []
+    for para in paragraphs:
+        lines = para.split("\n")
+        out_parts = []
+        body_buf: list[str] = []
+
+        def flush_body():
+            if not body_buf:
+                return
+            words = " ".join(body_buf).split()
+            cur_line: list[str] = []
+            cur_len = 0
+            for word in words:
+                wl = _get_visible_length(word)
+                if cur_len + wl + len(cur_line) <= width:
+                    cur_line.append(word)
+                    cur_len += wl
+                else:
+                    if cur_line:
+                        out_parts.append(" ".join(cur_line))
+                    cur_line = [word]
+                    cur_len = wl
+            if cur_line:
+                out_parts.append(" ".join(cur_line))
+            body_buf.clear()
+
+        for line in lines:
+            stripped = line.strip()
+            if not stripped:
+                continue
+            if stripped.startswith(HEADER_CHARS):
+                flush_body()
+                # Word-wrap the header line itself — the bullet stays on the
+                # first wrapped line; continuation lines are plain body lines.
+                words = stripped.split()
+                cur_line: list[str] = []
+                cur_len = 0
+                for word in words:
+                    wl = _get_visible_length(word)
+                    if cur_len + wl + len(cur_line) <= width:
+                        cur_line.append(word)
+                        cur_len += wl
+                    else:
+                        if cur_line:
+                            out_parts.append(" ".join(cur_line))
+                        cur_line = [word]
+                        cur_len = wl
+                if cur_line:
+                    out_parts.append(" ".join(cur_line))
+            else:
+                body_buf.append(stripped)
+        flush_body()
+        wrapped_paragraphs.append("\n".join(out_parts))
+
+    return "\n\n".join(wrapped_paragraphs)
