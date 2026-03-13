@@ -793,6 +793,16 @@ class TranslationTab(QWidget):
         self.open_translations_button.setToolTip("Open the translated files folder")
         self.open_translations_button.clicked.connect(self.open_output_folder)
         self.open_translations_button.setVisible(False)
+        # Sync translated/ → files/ (RPG Maker only)
+        self.sync_translated_button = QPushButton("🔄")
+        self.sync_translated_button.setToolTip("Sync translated/ → files/\nCopy translated files back into files/ so the next phase starts from the latest state")
+        self.sync_translated_button.clicked.connect(self._sync_translated_to_files)
+        self.sync_translated_button.setVisible(False)
+        # Export active files → game folder (RPG Maker only)
+        self.export_active_button = QPushButton("📤")
+        self.export_active_button.setToolTip("Export active files → Game Folder\nCopy translated files matching files/ into your game's data directory")
+        self.export_active_button.clicked.connect(self._export_active_files)
+        self.export_active_button.setVisible(False)
 
         # Make both buttons the same fixed size and style (icon-only)
         icon_btn_style = """
@@ -819,9 +829,13 @@ class TranslationTab(QWidget):
 
         self.reset_view_button.setStyleSheet(icon_btn_style)
         self.open_translations_button.setStyleSheet(icon_btn_style)
+        self.sync_translated_button.setStyleSheet(icon_btn_style)
+        self.export_active_button.setStyleSheet(icon_btn_style)
         # Ensure emoji/icons are readable
         self.reset_view_button.setFont(QFont('Segoe UI', 12))
         self.open_translations_button.setFont(QFont('Segoe UI', 12))
+        self.sync_translated_button.setFont(QFont('Segoe UI', 12))
+        self.export_active_button.setFont(QFont('Segoe UI', 12))
 
         # Create the stop button here so it sits in the same row as the
         # back/open buttons. Use a compact icon style to match them but
@@ -871,6 +885,8 @@ class TranslationTab(QWidget):
         buttons_hbox.addWidget(self.stop_button)
         buttons_hbox.addWidget(self.reset_view_button)
         buttons_hbox.addWidget(self.open_translations_button)
+        buttons_hbox.addWidget(self.sync_translated_button)
+        buttons_hbox.addWidget(self.export_active_button)
         # Spacer between buttons and totals
         buttons_hbox.addStretch()
         # Totals widget on the right (hidden until start)
@@ -1369,7 +1385,93 @@ class TranslationTab(QWidget):
     def open_output_folder(self):
         """Open the output directory."""
         self.open_folder(self.translated_dir)
-        
+
+    def _sync_translated_to_files(self):
+        """Copy translated/ files back into files/ (only matching names)."""
+        import shutil
+        files_dir = Path("files")
+        transl_dir = Path("translated")
+
+        if not transl_dir.exists():
+            QMessageBox.warning(self, "Sync", "translated/ folder not found — nothing to sync.")
+            return
+
+        active = {fp.name for fp in files_dir.glob("*.json")} if files_dir.exists() else set()
+        to_copy = [fp for fp in transl_dir.glob("*.json") if not active or fp.name in active]
+
+        if not to_copy:
+            QMessageBox.warning(self, "Sync", "No matching files found in translated/ to sync.")
+            return
+
+        files_dir.mkdir(exist_ok=True)
+        copied = 0
+        for src in to_copy:
+            shutil.copy2(src, files_dir / src.name)
+            copied += 1
+
+        QMessageBox.information(self, "Sync Complete", f"Synced {copied} file(s) from translated/ → files/")
+        self.refresh_file_lists()
+
+    def _export_active_files(self):
+        """Export translated files matching files/ contents into the game data folder."""
+        files_dir = Path("files")
+        active = sorted(
+            fp.name for fp in files_dir.glob("*.json") if fp.name != ".gitkeep"
+        ) if files_dir.exists() else []
+
+        if not active:
+            QMessageBox.warning(self, "Export", "No files found in files/ — import game files first.")
+            return
+
+        # For RPG Maker MV/MZ, try to reuse the project path already set in the Workflow tab
+        game_data = None
+        module_text = ""
+        try:
+            module_text = self.module_combo.currentText().lower()
+        except Exception:
+            pass
+        is_mvmz = "mv/mz" in module_text
+
+        if is_mvmz:
+            try:
+                wt = self.window().workflow_tab
+                if wt and getattr(wt, "_data_path", None):
+                    game_data = wt._data_path
+            except Exception:
+                pass
+
+        if not game_data:
+            game_data = QFileDialog.getExistingDirectory(self, "Select Game Data Folder to Export Into")
+            if not game_data:
+                return
+
+        reply = QMessageBox.question(
+            self,
+            "Export Active Files to Game",
+            f"Export {len(active)} file(s) into:\n{game_data}\n\nMake a backup first if needed. Continue?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if reply != QMessageBox.Yes:
+            return
+
+        import shutil
+        transl_dir = Path("translated")
+        exported = 0
+        skipped = 0
+        for name in active:
+            src = transl_dir / name
+            if src.exists():
+                shutil.copy2(src, Path(game_data) / name)
+                exported += 1
+            else:
+                skipped += 1
+
+        msg = f"Exported {exported} file(s) to:\n{game_data}"
+        if skipped:
+            msg += f"\n({skipped} file(s) not found in translated/ — skipped)"
+        QMessageBox.information(self, "Export Complete", msg)
+
     def open_folder(self, folder_path):
         """Open a folder in the file explorer."""
         try:
@@ -1580,6 +1682,14 @@ class TranslationTab(QWidget):
         # Also hide the open translations button when returning to file view
         try:
             self.open_translations_button.setVisible(False)
+        except Exception:
+            pass
+        try:
+            self.sync_translated_button.setVisible(False)
+        except Exception:
+            pass
+        try:
+            self.export_active_button.setVisible(False)
         except Exception:
             pass
         # Hide totals when returning to file view
@@ -1949,6 +2059,15 @@ class TranslationTab(QWidget):
         # Show the button to open the translated files folder
         try:
             self.open_translations_button.setVisible(True)
+        except Exception:
+            pass
+
+        # Show sync/export buttons only for RPG Maker engines
+        try:
+            module_text = self.module_combo.currentText().lower()
+            is_rpgmaker = "rpg maker" in module_text or "rpgmaker" in module_text
+            self.sync_translated_button.setVisible(is_rpgmaker)
+            self.export_active_button.setVisible(is_rpgmaker)
         except Exception:
             pass
 
