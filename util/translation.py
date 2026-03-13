@@ -1215,10 +1215,14 @@ def calculateCost(inputTokens, outputTokens, model):
             _thread_local.file_cost_ready  = False
             return cost
         # TOTAL call (flag already cleared): return the cross-thread running total.
+        # If _global_accurate_cost is 0 it means no real API calls were made
+        # (e.g. estimate mode), so fall through to the naive calculation below.
         with _global_accurate_cost_lock:
-            return _global_accurate_cost
+            accurate = _global_accurate_cost
+        if accurate > 0:
+            return accurate
 
-    # Non-Claude (or no accurate data available): naive calculation.
+    # Non-Claude, estimate mode, or no accurate data: naive calculation.
     pricing = getPricingConfig(model)
     inputCost  = (inputTokens  / 1_000_000) * pricing["inputAPICost"]
     outputCost = (outputTokens / 1_000_000) * pricing["outputAPICost"]
