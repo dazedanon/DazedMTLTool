@@ -49,7 +49,7 @@ _ACTOR_MAP_CACHE_LOCK = threading.Lock()
 _VAR_ACTOR_RE = re.compile(r"\\n\[(\d+)\]", re.IGNORECASE)
 
 # Regex - Need to change this if you want to translate from/to other languages. Default is Japanese Regex
-LANGREGEX = r"[\u3000-\u303F\u3040-\u309F\u30A0-\u30FF\u31F0-\u31FF\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF\uFF61-\uFF9F]+"
+LANGREGEX = r"[\u3000\u3002-\u3009\u300C-\u303F\u3040-\u309A\u309C-\u30FF\u31F0-\u31FF\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF\uFF61-\uFF9F]+"
 
 # Get pricing configuration based on the model
 PRICING_CONFIG = getPricingConfig(MODEL)
@@ -2097,6 +2097,15 @@ def searchCodes(page, pbar, jobList, filename):
                             match = re.search(r'(^\[(.+?)\]\s?[|:]\s?)', translatedText)
                             if match:
                                 translatedText = translatedText.replace(match.group(1), "") 
+
+                            # Ensure a space follows sentence-ending punctuation before a capital letter.
+                            # Japanese doesn't use spaces after ！/？, so the AI omits them too.
+                            translatedText = re.sub(r'([!?])([A-Z])', r'\1 \2', translatedText)
+
+                            # Ensure a single space before a run of RPGMaker pause/wait codes
+                            # (\. \! \| \^) when immediately preceded by a word/punctuation char.
+                            # Matches the whole code run at once so no intra-run spaces are added.
+                            translatedText = re.sub(r'([^\s\\])((?:\\[.!|^])+)', r'\1 \2', translatedText)
 
                             # Fix '- '
                             translatedText = translatedText.replace("- ", "-")
