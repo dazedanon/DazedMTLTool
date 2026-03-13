@@ -49,7 +49,7 @@ _ACTOR_MAP_CACHE_LOCK = threading.Lock()
 _VAR_ACTOR_RE = re.compile(r"\\n\[(\d+)\]", re.IGNORECASE)
 
 # Regex - Need to change this if you want to translate from/to other languages. Default is Japanese Regex
-LANGREGEX = r"[\u3000\u3002-\u3009\u300C-\u303F\u3040-\u309A\u309C-\u30FF\u31F0-\u31FF\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF\uFF61-\uFF9F]+"
+LANGREGEX = r"[\u3000\u3002-\u3009\u300C-\u303F\u3040-\u309A\u309C-\u30FA\u30FC-\u30FF\u31F0-\u31FF\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF\uFF61-\uFF9F]+"
 
 # Get pricing configuration based on the model
 PRICING_CONFIG = getPricingConfig(MODEL)
@@ -688,7 +688,37 @@ def parseMap(data, filename):
     return [data, totalTokens, None]
 
 
-def translateNote(event, regex, wordwrap=False):
+def _normalize_sg_desc(text: str) -> str:
+    """Normalize SG description text before AI translation.
+
+    Japanese body text is hard-wrapped at screen width using bare \\n.
+    This collapses those intra-paragraph newlines into spaces so the AI
+    receives clean prose paragraphs, while preserving:
+      - \\n\\n paragraph / section breaks
+      - ◆ / ・ / • / ● header lines (kept on their own line)
+    """
+    HEADER_CHARS = ("◆", "・", "•", "●")
+    blocks = text.split("\n\n")
+    normalized_blocks = []
+    for block in blocks:
+        lines = block.split("\n")
+        result_lines: list[str] = []
+        body_buf: list[str] = []
+        for line in lines:
+            stripped = line.strip()
+            if stripped.startswith(HEADER_CHARS):
+                if body_buf:
+                    result_lines.append(" ".join(body_buf))
+                    body_buf = []
+                result_lines.append(stripped)
+            elif stripped:
+                body_buf.append(stripped)
+        if body_buf:
+            result_lines.append(" ".join(body_buf))
+        normalized_blocks.append("\n".join(result_lines))
+    return "\n\n".join(normalized_blocks)
+
+
     # Regex String
     jaString = event.get("note") or ""
     if not isinstance(jaString, str):
@@ -1340,7 +1370,8 @@ def searchNames(data, pbar, context, filename):
                     # Skip if IGNORETLTEXT is enabled and no Japanese text
                     if IGNORETLTEXT and not re.search(LANGREGEX, match_text):
                         continue
-                    notesBatch.append(match_text)
+                    # Normalize for AI (collapse intra-paragraph \n, keep headers)
+                    notesBatch.append(_normalize_sg_desc(match_text))
                     notesBatchMap.append((idx, regex, match_text, wordwrap))
             else:
                 for m in matches:
@@ -1367,7 +1398,10 @@ def searchNames(data, pbar, context, filename):
             break
         translated = translatedNotesBatch[note_insert_idx]
         if wordwrap:
-            translated = dazedwrap.wrapText(translated, width=NOTEWIDTH)
+            if regex.startswith(r"<SG説明:"):
+                translated = dazedwrap.wrapSGDesc(translated, width=NOTEWIDTH)
+            else:
+                translated = dazedwrap.wrapText(translated, width=NOTEWIDTH)
             translated = translated.replace('"', "")
         # Use a safe literal match for the replacement (no re.escape, just str.replace)
         data[idx]["note"] = data[idx]["note"].replace(match_text, translated, 1)
