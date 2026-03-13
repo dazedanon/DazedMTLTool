@@ -183,9 +183,17 @@ HEADER_MAPPINGS_357 = {
     "TorigoyaMZ_NotifyMessage_CommandMessage": (["message"], None),
     "NUUN_SaveScreen": (["AnyName"], None),
     "build/ARPG_Core": (["Text", "SkillByName"], None),
+    "EventLabel": (["text"], None),
+    "KN_MapBattle": (["enemyName"], None),
+    "KN_Shop": (["goodsType"], None),
+    "Mano_CurrencyUnit": (["unit"], None),
+    "SceneGlossary": (["category"], None),
+    # No visible text — keys hold asset/internal IDs, not display text:
+    "KN_StillManager": (["id"], None),
+    "TemplateEvent": (["eventId"], None),
 }
 # Subset of HEADER_MAPPINGS_357 keys that should be processed (empty = none).
-ENABLED_PLUGINS_357: set = {"TorigoyaMZ_NotifyMessage_CommandMessage"}
+ENABLED_PLUGINS_357: set = {"EventLabel", "KN_MapBattle", "KN_Shop", "Mano_CurrencyUnit", "SceneGlossary", "TorigoyaMZ_NotifyMessage", "TorigoyaMZ_NotifyMessage_CommandMessage"}
 
 # All known code-355/655 script patterns. Enable entries via ENABLED_PATTERNS_355655.
 PATTERNS_355655 = {
