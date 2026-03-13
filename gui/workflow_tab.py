@@ -71,6 +71,26 @@ PHASE1_CONFIG = {
     "CODE108": False,
 }
 
+PHASE1B_CONFIG = {
+    # Dialogue OFF (handled by Phase 1)
+    "CODE101": False,
+    "CODE401": False,
+    "CODE405": False,
+    "CODE102": False,
+    "CODE408": False,
+    # Only 111 ON — build the var-translation cache from string comparisons
+    "CODE111": True,
+    "CODE122": False,
+    "CODE357": False,
+    "CODE355655": False,
+    "CODE657": False,
+    "CODE356": False,
+    "CODE320": False,
+    "CODE324": False,
+    "CODE325": False,
+    "CODE108": False,
+}
+
 PHASE2_CONFIG = {
     # Dialogue OFF (already handled by Phase 1)
     "CODE101": False,
@@ -78,10 +98,10 @@ PHASE2_CONFIG = {
     "CODE405": False,
     "CODE102": False,
     "CODE408": False,
-    # Risky codes ON
+    # Risky codes ON (111 OFF — cache already built by Phase 1b)
     "CODE122": True,
     "CODE357": True,
-    "CODE111": True,
+    "CODE111": False,
     "CODE356": False,   # plugin cmd — user can enable manually if needed
     "CODE108": False,   # comment — rarely needed
 }
@@ -755,6 +775,102 @@ class WorkflowTab(QWidget):
         "(e.g. padding estimates, windows whose pixel width could not be determined directly).\n"
     )
 
+    _RISKY_PROMPT = (
+        "You are helping me safely translate a Japanese RPGMaker MV/MZ game.\n"
+        "Before I run Phase 2 (risky codes), I need you to audit four code types\n"
+        "and tell me exactly what is safe to translate and what must be left alone.\n"
+        "\n"
+        "Attach the game's event files (CommonEvents.json, Troops.json, Map*.json)\n"
+        "and plugins.js before running this prompt.\n"
+        "\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        "## AUDIT 1 — Code 111 (Conditional Branch) string comparisons\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        "\n"
+        "Search all event lists for code 111 entries that compare a string value\n"
+        "(operationType 0 or where parameters[3] is a string literal).\n"
+        "\n"
+        "For each one found, report:\n"
+        "  - The variable or switch being tested\n"
+        "  - The string it is compared against (e.g. === 'ノーマル')\n"
+        "  - Whether the same string appears as a value SET by a code 122 elsewhere\n"
+        "    (meaning translating code 122 would break this 111 comparison)\n"
+        "\n"
+        "Verdict for each: SAFE TO TRANSLATE  /  DO NOT TRANSLATE  /  NEEDS MANUAL CHECK\n"
+        "\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        "## AUDIT 2 — Code 122 (Control Variables) string values\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        "\n"
+        "Search for code 122 entries where parameters[4] is a quoted string.\n"
+        "For each unique string value found:\n"
+        "  - Is this string also tested in a 111 comparison? → DO NOT TRANSLATE\n"
+        "  - Is this string used as a key / ID in a plugin call or script? → DO NOT TRANSLATE\n"
+        "  - Is this string purely display text (shown to the player)? → SAFE TO TRANSLATE\n"
+        "\n"
+        "List any variables by variable-ID that should be blacklisted from translation.\n"
+        "\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        "## AUDIT 3 — Code 357 (Plugin Commands) — which plugins need enabling\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        "\n"
+        "Search all event lists for code 357 entries and collect every unique\n"
+        "parameters[0] (plugin header string) that contains translatable Japanese text\n"
+        "in its parameters[3] dict.\n"
+        "\n"
+        "The translation module already has built-in handlers for these headers:\n"
+        "  AdvExtentionllk, VisuMZ_4_ProximityMessages, LL_GalgeChoiceWindow\n"
+        "\n"
+        "For every OTHER header you find with Japanese text, check whether it matches\n"
+        "one of these commented-out entries in the module's headerMappings dict:\n"
+        "\n"
+        "  LL_InfoPopupWIndow       → messageText\n"
+        "  QuestSystem              → DetailNote\n"
+        "  BalloonInBattle          → text\n"
+        "  MNKR_CommonPopupCoreMZ   → text\n"
+        "  DestinationWindow        → destination\n"
+        "  _TMLogWindowMZ           → text\n"
+        "  TorigoyaMZ_NotifyMessage → message\n"
+        "  SoR_GabWindow            → arg1\n"
+        "  DarkPlasma_CharacterText → text\n"
+        "  DTextPicture             → text\n"
+        "  TextPicture              → text\n"
+        "  TRP_SkitMZ               → name\n"
+        "  LogWindow                → text\n"
+        "  BattleLogOutput          → message\n"
+        "  TorigoyaMZ_NotifyMessage_CommandMessage → message\n"
+        "  NUUN_SaveScreen          → AnyName\n"
+        "  build/ARPG_Core          → Text, SkillByName\n"
+        "\n"
+        "For each match, output the EXACT line to uncomment in headerMappings, e.g.:\n"
+        "  \"LL_InfoPopupWIndow\": ([\"messageText\"], None),\n"
+        "\n"
+        "For headers with Japanese text that do NOT appear in the list above, describe\n"
+        "the parameters[3] structure so a new entry can be written manually.\n"
+        "\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        "## Required output format\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        "\n"
+        "Reply with four sections using these exact headers:\n"
+        "\n"
+        "### Code 111 — Dangerous Comparisons\n"
+        "<table of: variable | compared string | also set by 122? | verdict>\n"
+        "If none found: 'No dangerous string comparisons found.'\n"
+        "\n"
+        "### Code 122 — Variable String Safety\n"
+        "<list of variable IDs with their string values and SAFE / DO NOT TRANSLATE verdict>\n"
+        "If all safe: 'All code 122 string values appear to be display text only.'\n"
+        "\n"
+        "### Code 357 — Plugin Handlers to Enable\n"
+        "For each plugin header with Japanese text:\n"
+        "  • Already handled     : <header> — no action needed\n"
+        "  • Enable in module    : uncomment this line in headerMappings:\n"
+        "      \"<header>\": ([\"<key>\"], None),\n"
+        "  • New entry needed    : <header> — parameters[3] looks like: <description>\n"
+        "If no 357 codes with Japanese found: 'No code 357 plugin text found.'\n"
+    )
+
     # ── Step 1 (Optional): Pre-process ────────────────────────────────
 
     def _build_preprocess(self, layout: QVBoxLayout):
@@ -1182,6 +1298,32 @@ class WorkflowTab(QWidget):
         p1_inner.addLayout(p1_row)
         layout.addWidget(p1_box)
 
+        p1b_box = QGroupBox("Phase 1b  –  Build Variable Cache (code 111)")
+        p1b_box.setStyleSheet(
+            "QGroupBox{color:#ccc;border:1px solid #444;border-radius:3px;"
+            "margin-top:8px;font-size:11px;}"
+            "QGroupBox::title{padding:0 6px;}"
+        )
+        p1b_inner = QVBoxLayout(p1b_box)
+        p1b_desc = QLabel(
+            "Code ON: 111 (Conditional Branch string comparisons)\n"
+            "Scans all 111 branches that compare \u2018$gameVariables\u2019 against string values and "
+            "builds the var_translation_map cache.\n"
+            "Run this before Phase 2 so that code 122 translated strings are automatically "
+            "matched when those same strings appear in 111 comparisons."
+        )
+        p1b_desc.setStyleSheet("color:#888;font-size:10px;")
+        p1b_desc.setWordWrap(True)
+        p1b_inner.addWidget(p1b_desc)
+        p1b_row = QHBoxLayout()
+        run_p1b = _make_btn("⚙  Set Codes \u2192 Go to Translation", "#2a5a7a")
+        run_p1b.setToolTip("Applies Phase 1b code settings (111 only) and switches to the Translation tab")
+        run_p1b.clicked.connect(lambda: self._run_phase("1b"))
+        p1b_row.addWidget(run_p1b)
+        p1b_row.addStretch()
+        p1b_inner.addLayout(p1b_row)
+        layout.addWidget(p1b_box)
+
         p2_box = QGroupBox("Phase 2  –  Risky Codes (variables + conditionals)")
         p2_box.setStyleSheet(
             "QGroupBox{color:#ccc;border:1px solid #444;border-radius:3px;"
@@ -1190,7 +1332,7 @@ class WorkflowTab(QWidget):
         )
         p2_inner = QVBoxLayout(p2_box)
         p2_desc = QLabel(
-            "Codes ON: 122 (Control Variables), 357 (Plugin Commands), 111 (Conditional Branch)\n"
+            "Codes ON: 122 (Control Variables), 357 (Plugin Commands)\n"
             "Strings here are often used in script comparisons — mistranslations can break game "
             "logic. Use Scan first to preview what will be translated, then apply and go translate."
         )
@@ -1198,15 +1340,18 @@ class WorkflowTab(QWidget):
         p2_desc.setWordWrap(True)
         p2_inner.addWidget(p2_desc)
 
-        p2_row = QHBoxLayout()
-        scan_p2 = _make_btn("🔍  Scan Risky Strings", "#555")
-        scan_p2.setToolTip(
-            "Preview all unique string values in codes 122 / 357 / 111 "
-            "before deciding what to translate."
+        copy_risky_row = QHBoxLayout()
+        copy_risky_btn = _make_btn("📋  Copy Risky Prompt", "#555")
+        copy_risky_btn.setToolTip(
+            "Copy a Copilot prompt that audits code 111 string comparisons, "
+            "code 122 variable safety, and code 357 plugin handlers."
         )
-        scan_p2.clicked.connect(self._scan_risky_strings)
-        p2_row.addWidget(scan_p2)
+        copy_risky_btn.clicked.connect(self._copy_risky_prompt)
+        copy_risky_row.addWidget(copy_risky_btn)
+        copy_risky_row.addStretch()
+        p2_inner.addLayout(copy_risky_row)
 
+        p2_row = QHBoxLayout()
         run_p2 = _make_btn("⚙  Set Codes \u2192 Go to Translation", "#7a4a00")
         run_p2.setToolTip("Applies Phase 2 code settings and switches to the Translation tab")
         run_p2.clicked.connect(lambda: self._run_phase(2))
@@ -1511,6 +1656,10 @@ class WorkflowTab(QWidget):
         QApplication.clipboard().setText(self._WRAP_PROMPT)
         self._log("Text-wrap analysis prompt copied to clipboard.")
 
+    def _copy_risky_prompt(self):
+        QApplication.clipboard().setText(self._RISKY_PROMPT)
+        self._log("Risky codes analysis prompt copied to clipboard.")
+
     def _apply_wrap_config(self):
         """Write width / listWidth / noteWidth back into .env."""
         import re as _re
@@ -1566,9 +1715,16 @@ class WorkflowTab(QWidget):
     # Step 4 – Translation phases
     # ─────────────────────────────────────────────────────────────────────────
 
-    def _run_phase(self, phase: int):
-        config = PHASE1_CONFIG if phase == 1 else PHASE2_CONFIG
-        label = "Phase 1 (safe codes)" if phase == 1 else "Phase 2 (risky codes)"
+    def _run_phase(self, phase):
+        if phase == 1:
+            config = PHASE1_CONFIG
+            label = "Phase 1 (safe codes)"
+        elif phase == "1b":
+            config = PHASE1B_CONFIG
+            label = "Phase 1b (code 111 cache)"
+        else:
+            config = PHASE2_CONFIG
+            label = "Phase 2 (risky codes)"
 
         # Apply config profile so the Translation tab uses the right codes
         try:
@@ -1607,12 +1763,21 @@ class WorkflowTab(QWidget):
             self._log("   If names are missing or garbled, stop the run and")
             self._log("   revisit Step 2 (speaker flags) before continuing.")
             self._log("─" * 54)
+        elif phase == "1b":
+            self._log("")
+            self._log("─" * 54)
+            self._log("👉  Switch to the Translation tab and start the run.")
+            self._log("   Phase 1b translates code 111 string comparisons and")
+            self._log("   writes a var_translation_map cache to log/.")
+            self._log("   Run Phase 2 afterwards — code 122 strings that match")
+            self._log("   a cached 111 comparison will reuse the same translation.")
+            self._log("─" * 54)
         else:
             self._log("")
             self._log("─" * 54)
             self._log("👉  Switch to the Translation tab and start the run.")
-            self._log("   Phase 2 targets script/variable strings — review")
-            self._log("   the Risky String scan output before proceeding.")
+            self._log("   Phase 2 targets script/variable strings — make sure")
+            self._log("   Phase 1b has been run first to build the 111 cache.")
             self._log("─" * 54)
 
         # Navigate to the Translation tab (index 0 in content_stack)
@@ -1625,50 +1790,6 @@ class WorkflowTab(QWidget):
                         btn.setChecked(i == 0)
         except Exception:
             pass
-
-    # ─────────────────────────────────────────────────────────────────────────
-    # Risky string scanner (preview mode)
-    # ─────────────────────────────────────────────────────────────────────────
-
-    def _scan_risky_strings(self):
-        risky_codes = {122, 357, 111}
-        collected: dict[int, list[str]] = {c: [] for c in risky_codes}
-        files_dir = Path("files")
-
-        try:
-            for fp in sorted(files_dir.glob("*.json")):
-                data = json.loads(fp.read_text(encoding="utf-8-sig"))
-                self._collect_risky(data, risky_codes, collected)
-
-            self._log("=" * 50)
-            self._log("Risky Code String Scan (preview — nothing modified):")
-            total = 0
-            for code in sorted(risky_codes):
-                strings = sorted(set(collected[code]))
-                total += len(strings)
-                self._log(f"\n  CODE {code} — {len(strings)} unique string(s):")
-                for s in strings[:50]:
-                    self._log(f"    {repr(s)}")
-                if len(strings) > 50:
-                    self._log(f"    … ({len(strings) - 50} more)")
-            self._log(f"\n  Total unique strings: {total}")
-            self._log("=" * 50)
-        except Exception as exc:
-            self._log(f"❌ Scan error: {exc}")
-
-    def _collect_risky(self, obj, risky_codes: set, collected: dict):
-        if isinstance(obj, list):
-            for item in obj:
-                self._collect_risky(item, risky_codes, collected)
-        elif isinstance(obj, dict):
-            code = obj.get("code")
-            if code in risky_codes:
-                params = obj.get("parameters") or []
-                for p in params:
-                    if isinstance(p, str) and p.strip():
-                        collected[code].append(p)
-            for v in obj.values():
-                self._collect_risky(v, risky_codes, collected)
 
     # ─────────────────────────────────────────────────────────────────────────
     # Step 5 – Export to game
