@@ -162,6 +162,58 @@ CODE325 = False
 CODE111 = False
 CODE108 = False
 
+# ─── Plugin Manager ──────────────────────────────────────────────────────────
+# All known code-357 headerMapping entries. Enable entries via ENABLED_PLUGINS_357.
+# The GUI reads this dict to build the checkbox list dynamically.
+HEADER_MAPPINGS_357 = {
+    "LL_InfoPopupWIndow": (["messageText"], None),
+    "QuestSystem": (["DetailNote"], None),
+    "BalloonInBattle": (["text"], None),
+    "MNKR_CommonPopupCoreMZ": (["text"], None),
+    "DestinationWindow": (["destination"], None),
+    "_TMLogWindowMZ": (["text"], None),
+    "TorigoyaMZ_NotifyMessage": (["message"], None),
+    "SoR_GabWindow": (["arg1"], None),
+    "DarkPlasma_CharacterText": (["text"], None),
+    "DTextPicture": (["text"], None),
+    "TextPicture": (["text"], None),
+    "TRP_SkitMZ": (["name"], None),
+    "LogWindow": (["text"], None),
+    "BattleLogOutput": (["message"], None),
+    "TorigoyaMZ_NotifyMessage_CommandMessage": (["message"], None),
+    "NUUN_SaveScreen": (["AnyName"], None),
+    "build/ARPG_Core": (["Text", "SkillByName"], None),
+}
+# Subset of HEADER_MAPPINGS_357 keys that should be processed (empty = none).
+ENABLED_PLUGINS_357: set = {"TorigoyaMZ_NotifyMessage_CommandMessage"}
+
+# All known code-355/655 script patterns. Enable entries via ENABLED_PATTERNS_355655.
+PATTERNS_355655 = {
+    "テキスト-": (r"テキスト-(.+)", False),
+    "=": (r'=\s?(.*)",', False),
+    "var text": (r'var\stext\d+\s=\s\"(.+)\"', False),
+    "logtxt = ": (r"logtxt\s=\s'(.+)'", False),
+    ".setNickname": (r'.setNickname\(\\?"(.+?)\\?"\)', False),
+    "_subject=": (r'_subject=(.+?)(?=[_\\"\]])', False),
+    "text =": (r"text\s*=\s*'(.+[^\\])'", False),
+    "const text": (r'(const\stext\s?=\s?"(.+)";?)', False),
+    "ex_a_name": (r'ex_a_name\(\d+,"(.+)"\)', False),
+    "gameVariables.setValue": (r'\$gameVariables\.setValue\(\d+,\s*"([^"]*)"\)', False),
+    "BattleManager._logWindow.push('addText'": (r"BattleManager._logWindow.push\('addText',\s'(.+)'\)", False),
+    "BattleManager._logWindow.addText": (r"BattleManager._logWindow.addText\('(.+)'\)", False),
+    "this.BLogAdd": (r'this\.BLogAdd\?(.+?\\?"(.+?)\\?"\)', False),
+    "Fuki_Set": (r'Fuki_Set\([\s,\d\w\W]+?"(.+?)",', False),
+    "_EventSetting": (r'_EventSetting[\s,\d\w\W]+?"(.+?)";', False),
+    "this.Menu_SexTxtSet(": (r'"(.+)"', True),
+    "Rn_RsltTxtArr": (r'"(.+)"', True),
+    "_章切り替えStart": (r'_章切り替えStart\(\s*\\?"\s?,?.+?\\?"\s?,?\s?\\?"(.+?)\\?"', False),
+    "SkillLogAdd": (r'SkillLogAdd\((?:.+?\+\s*)?\\?"(?:\\\\+[A-Za-z]\[\d+\])?(.+?)\\?"', False),
+    "MobNameSet": (r'MobNameSet\(\\?"(.+?)\\?"\)', False),
+    "AddAddress": (r'AddAddress\(\d+,\s*\\?"(.+?)\\?"', False),
+}
+# Subset of PATTERNS_355655 keys that should be processed (empty = none).
+ENABLED_PATTERNS_355655: set = set()
+
 
 def handleMVMZ(filename, estimate):
     global ESTIMATE, TOKENS, FILENAME
@@ -2258,25 +2310,10 @@ def searchCodes(page, pbar, jobList, filename):
                                 codeList[i]["parameters"][3][argVar] = f"{translatedText}"
                                 list357.pop(0)
 
-                # Map Plugins
+                # Map Plugins — use module-level registry filtered by ENABLED_PLUGINS_357
                 headerMappings = {
-                    # "LL_InfoPopupWIndow": (["messageText"], None),
-                    # "QuestSystem": (["DetailNote"], None),
-                    # "BalloonInBattle": (["text"], None),
-                    # "MNKR_CommonPopupCoreMZ": (["text"], None),
-                    # "DestinationWindow": (["destination"], None),
-                    # "_TMLogWindowMZ": (["text"], None),
-                    # "TorigoyaMZ_NotifyMessage": (["message"], None),
-                    # "SoR_GabWindow": (["arg1"], None),
-                    # "DarkPlasma_CharacterText": (["text"], None),
-                    # "DTextPicture": (["text"], None),
-                    # "TextPicture": (["text"], None),
-                    # # "TRP_SkitMZ": (["name"], None),
-                    # "LogWindow": (["text"], None),
-                    # "BattleLogOutput": (["message"], None),
-                    # "TorigoyaMZ_NotifyMessage_CommandMessage": (["message"], None),
-                    # "NUUN_SaveScreen": (["AnyName"], None),
-                    # "build/ARPG_Core": (["Text", "SkillByName"], None),
+                    k: v for k, v in HEADER_MAPPINGS_357.items()
+                    if k in ENABLED_PLUGINS_357
                 }
 
                 for key, (argVars, font) in headerMappings.items():
@@ -2602,30 +2639,10 @@ def searchCodes(page, pbar, jobList, filename):
             if "code" in codeList[i] and (codeList[i]["code"] == 355 or codeList[i]["code"] == 655) and CODE355655 is True:
                 jaString = codeList[i]["parameters"][0]
                 
-                # Patterns: (regex, multiline) - multiline=True means it spans 355 + following 655 codes
+                # Patterns — use module-level registry filtered by ENABLED_PATTERNS_355655
                 patterns = {
-                    "テキスト-": (r"テキスト-(.+)", False),
-                    # "=": (r'=\s?(.*)",', False),
-                    # "var text": (r"var\stext\d+\s=\s\"(.+)\"", False),
-                    # "logtxt = ": (r"logtxt\s=\s'(.+)'", False),
-                    # ".setNickname": (r'.setNickname\(\\?"(.+?)\\?"\)', False),
-                    # "_subject=": (r'_subject=(.+?)(?=[_\\"\]])', False),
-                    # "text =": (r"text\s*=\s*'(.+[^\\])'", False),
-                    # "const text": (r'(const\stext\s?=\s?"(.+)";?)', False),
-                    # "ex_a_name": (r'ex_a_name\(\d+,"(.+)"\)', False),
-                    # "gameVariables.setValue": (r'\$gameVariables\.setValue\(\d+,\s*"([^"]*)"\)', False),
-                    # "BattleManager._logWindow.push('addText'": (r"BattleManager._logWindow.push\('addText',\s'(.+)'\)", False),
-                    # "BattleManager._logWindow.addText": (r"BattleManager._logWindow.addText\('(.+)'\)", False),
-                    # "this.BLogAdd": (r'this\.BLogAdd\?(.+?\\?"(.+?)\\?"\)', False),
-                    # "Fuki_Set": (r'Fuki_Set\([\s,\d\w\W]+?"(.+?)",', False),
-                    # "_EventSetting": (r'_EventSetting[\s,\d\w\W]+?"(.+?)";', False),
-                    # "this.Menu_SexTxtSet(": (r'"(.+)"', True),
-                    # "Rn_RsltTxtArr": (r'"(.+)"', True),
-                    # "_章切り替えStart": (r'_章切り替えStart\(\s*\\?"\s?,?.+?\\?"\s?,?\s?\\?"(.+?)\\?"', False),
-                    # "SkillLogAdd": (r'SkillLogAdd\((?:.+?\+\s*)?\\?"(?:\\\\+[A-Za-z]\[\d+\])?(.+?)\\?"', False),
-                    # "MobNameSet": (r'MobNameSet\(\\?"(.+?)\\?"\)', False),
-                    # "AddAddress": (r'AddAddress\(\d+,\s*\\?"(.+?)\\?"', False),
-                    
+                    k: v for k, v in PATTERNS_355655.items()
+                    if k in ENABLED_PATTERNS_355655
                 }
 
                 for key, (regex, multiline) in patterns.items():

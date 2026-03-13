@@ -29,6 +29,7 @@ from PyQt5.QtWidgets import (
     QCheckBox,
     QFileDialog,
     QFrame,
+    QGridLayout,
     QGroupBox,
     QHBoxLayout,
     QLabel,
@@ -885,6 +886,20 @@ class WorkflowTab(QWidget):
         "\n"
         "### Code 108 — Enable or Skip\n"
         "  ENABLE / SKIP — patterns found: <list>\n"
+        "\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        "## GUI Action Summary\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        "\n"
+        "After all audit sections above, output this final block so I can configure the GUI:\n"
+        "\n"
+        "ENABLE CODES     : <comma-separated CODE* keys to check, e.g. CODE357, CODE356>\n"
+        "SKIP CODES       : <codes that have no visible text>\n"
+        "357 PLUGINS      : <comma-separated HEADER_MAPPINGS_357 keys to enable>\n"
+        "355/655 PATTERNS : <comma-separated PATTERNS_355655 keys to enable>\n"
+        "122 VAR RANGE    : min=<N>, max=<M>\n"
+        "\n"
+        "If a field has nothing to fill in, write NONE.\n"
     )
 
     # ── Step 1 (Optional): Pre-process ────────────────────────────────
@@ -1387,9 +1402,9 @@ class WorkflowTab(QWidget):
         )
         p2_inner = QVBoxLayout(p2_box)
         p2_desc = QLabel(
-            "Codes ON: 122 (Control Variables), 357 (Plugin Commands)\n"
-            "Strings here are often used in script comparisons — mistranslations can break game "
-            "logic. Use the Plugin Prompt to audit the game first, then set the var range below."
+            "Phase 2 targets script/variable strings and plugin text.\n"
+            "Use the Plugin Prompt to audit the game first, then enable only the codes and "
+            "plugins that contain visible text."
         )
         p2_desc.setStyleSheet("color:#888;font-size:10px;")
         p2_desc.setWordWrap(True)
@@ -1411,7 +1426,6 @@ class WorkflowTab(QWidget):
         var_range_lbl = QLabel("Code 122 var range:")
         var_range_lbl.setStyleSheet("color:#aaa;font-size:10px;")
         var_range_row.addWidget(var_range_lbl)
-        from PyQt5.QtWidgets import QLineEdit
         from PyQt5.QtGui import QIntValidator
         self._p2_var_min = QLineEdit("0")
         self._p2_var_min.setValidator(QIntValidator(0, 99999))
@@ -1449,9 +1463,122 @@ class WorkflowTab(QWidget):
         except Exception:
             pass
 
+        # ─── Code Toggles ───────────────────────────────────────────────────────────────────
+        _sub_cs = (
+            "QGroupBox{color:#aaa;border:1px solid #383838;border-radius:3px;"
+            "margin-top:6px;font-size:10px;}QGroupBox::title{padding:0 4px;}"
+        )
+        toggle_box = QGroupBox("Enable Codes")
+        toggle_box.setStyleSheet(_sub_cs)
+        toggle_grid = QGridLayout(toggle_box)
+        toggle_grid.setContentsMargins(6, 8, 6, 6)
+        toggle_grid.setHorizontalSpacing(16)
+        toggle_grid.setVerticalSpacing(4)
+
+        _P2_CODE_DEFS = [
+            ("CODE122",    "122 – Variables",     "Control Variables (code 122)"),
+            ("CODE357",    "357 – Plugins (MZ)",  "MZ Plugin Command text (code 357)"),
+            ("CODE355655", "355/655 – Scripts",   "Inline script text (codes 355/655)"),
+            ("CODE356",    "356 – Plugins (MV)",  "MV Plugin Command text (code 356)"),
+            ("CODE657",    "657 – Picture Text",  "Extended picture text (code 657)"),
+            ("CODE320",    "320 – Actor Name",    "Change Actor Name (code 320)"),
+            ("CODE324",    "324 – Nickname",      "Change Nickname (code 324)"),
+            ("CODE325",    "325 – Profile",       "Change Profile (code 325)"),
+            ("CODE108",    "108 – Comments",      "Comment notetags (code 108)"),
+        ]
+        self._p2_code_checks: dict = {}
+        for idx, (code_key, label, tip) in enumerate(_P2_CODE_DEFS):
+            cb = QCheckBox(label)
+            cb.setToolTip(tip)
+            cb.setStyleSheet("color:#ccc;font-size:10px;")
+            toggle_grid.addWidget(cb, idx // 3, idx % 3)
+            self._p2_code_checks[code_key] = cb
+        p2_inner.addWidget(toggle_box)
+
+        # ─── Code 357 Plugin Handlers ───────────────────────────────────────────────────
+        plugin357_box = QGroupBox("Code 357 – Plugin Handlers (MZ)  ·  check to enable")
+        plugin357_box.setStyleSheet(_sub_cs)
+        plugin357_inner = QVBoxLayout(plugin357_box)
+        plugin357_inner.setContentsMargins(4, 8, 4, 4)
+
+        plugin357_container = QWidget()
+        plugin357_grid = QGridLayout(plugin357_container)
+        plugin357_grid.setContentsMargins(4, 2, 4, 2)
+        plugin357_grid.setHorizontalSpacing(12)
+        plugin357_grid.setVerticalSpacing(2)
+        self._p2_plugin_checks: dict = {}
+        try:
+            from modules.rpgmakermvmz import HEADER_MAPPINGS_357 as _HM357
+            for idx, key in enumerate(_HM357.keys()):
+                cb = QCheckBox(key)
+                cb.setStyleSheet("color:#bbb;font-size:9px;")
+                plugin357_grid.addWidget(cb, idx // 2, idx % 2)
+                self._p2_plugin_checks[key] = cb
+        except Exception:
+            pass
+
+        plugin357_scroll = QScrollArea()
+        plugin357_scroll.setMaximumHeight(120)
+        plugin357_scroll.setWidgetResizable(True)
+        plugin357_scroll.setWidget(plugin357_container)
+        plugin357_scroll.setStyleSheet(
+            "QScrollArea{border:none;background:transparent;}"
+            "QScrollBar:vertical{width:8px;}"
+        )
+        plugin357_inner.addWidget(plugin357_scroll)
+        p2_inner.addWidget(plugin357_box)
+
+        # ─── Code 355/655 Script Patterns ───────────────────────────────────────────
+        patterns_box = QGroupBox("Code 355/655 – Script Patterns  ·  check to enable")
+        patterns_box.setStyleSheet(_sub_cs)
+        patterns_inner_layout = QVBoxLayout(patterns_box)
+        patterns_inner_layout.setContentsMargins(4, 8, 4, 4)
+
+        patterns_container = QWidget()
+        patterns_grid = QGridLayout(patterns_container)
+        patterns_grid.setContentsMargins(4, 2, 4, 2)
+        patterns_grid.setHorizontalSpacing(12)
+        patterns_grid.setVerticalSpacing(2)
+        self._p2_pattern_checks: dict = {}
+        try:
+            from modules.rpgmakermvmz import PATTERNS_355655 as _PAT
+            for idx, key in enumerate(_PAT.keys()):
+                cb = QCheckBox(key)
+                cb.setStyleSheet("color:#bbb;font-size:9px;")
+                patterns_grid.addWidget(cb, idx // 2, idx % 2)
+                self._p2_pattern_checks[key] = cb
+        except Exception:
+            pass
+
+        patterns_scroll = QScrollArea()
+        patterns_scroll.setMaximumHeight(110)
+        patterns_scroll.setWidgetResizable(True)
+        patterns_scroll.setWidget(patterns_container)
+        patterns_scroll.setStyleSheet(
+            "QScrollArea{border:none;background:transparent;}"
+            "QScrollBar:vertical{width:8px;}"
+        )
+        patterns_inner_layout.addWidget(patterns_scroll)
+        p2_inner.addWidget(patterns_box)
+
+        # Apply Plugin Settings button
+        apply_plugins_row = QHBoxLayout()
+        apply_plugins_btn = _make_btn("✔  Apply Plugin Settings", "#2a4a6a")
+        apply_plugins_btn.setToolTip(
+            "Save the checked plugin handlers and script patterns to the module file.\n"
+            "Updates ENABLED_PLUGINS_357 and ENABLED_PATTERNS_355655 in rpgmakermvmz.py."
+        )
+        apply_plugins_btn.clicked.connect(self._apply_plugin_settings)
+        apply_plugins_row.addWidget(apply_plugins_btn)
+        apply_plugins_row.addStretch()
+        p2_inner.addLayout(apply_plugins_row)
+
         p2_row = QHBoxLayout()
-        run_p2 = _make_btn("⚙  Set Codes \u2192 Go to Translation", "#7a4a00")
-        run_p2.setToolTip("Applies Phase 2 code settings and switches to the Translation tab")
+        run_p2 = _make_btn("⚙  Set Codes → Go to Translation", "#7a4a00")
+        run_p2.setToolTip(
+            "Applies Phase 2 code settings (from the checkboxes above) and switches to the "
+            "Translation tab with event files pre-selected."
+        )
         run_p2.clicked.connect(lambda: self._run_phase(2))
         p2_row.addWidget(run_p2)
         sync_p2 = _make_btn("🔄  Sync translated/ → files/", "#3a4a6a")
@@ -1461,6 +1588,9 @@ class WorkflowTab(QWidget):
         p2_row.addStretch()
         p2_inner.addLayout(p2_row)
         layout.addWidget(p2_box)
+
+        # Pre-populate all Phase 2 checkboxes from current module state
+        self._populate_p2_checkboxes()
 
     # ── Step 6: Export ──────────────────────────────────────────────────────
 
@@ -1786,6 +1916,53 @@ class WorkflowTab(QWidget):
         except Exception as exc:
             self._log(f"❌ Could not apply var range: {exc}")
 
+    def _populate_p2_checkboxes(self):
+        """Read current module config and pre-tick Phase 2 checkboxes."""
+        try:
+            from gui.config_integration import ConfigIntegration
+            ci = ConfigIntegration()
+            # Code toggle checkboxes
+            cur = ci.read_current_config()
+            for code_key, cb in getattr(self, "_p2_code_checks", {}).items():
+                if code_key in cur:
+                    cb.setChecked(cur[code_key])
+            # Plugin / pattern checkboxes
+            plugin_cfg = ci.read_plugin_config()
+            enabled_357 = plugin_cfg.get("ENABLED_PLUGINS_357", set())
+            enabled_355655 = plugin_cfg.get("ENABLED_PATTERNS_355655", set())
+            for key, cb in getattr(self, "_p2_plugin_checks", {}).items():
+                cb.setChecked(key in enabled_357)
+            for key, cb in getattr(self, "_p2_pattern_checks", {}).items():
+                cb.setChecked(key in enabled_355655)
+        except Exception:
+            pass
+
+    def _apply_plugin_settings(self):
+        """Write the checked plugin handlers and script patterns back to rpgmakermvmz.py."""
+        try:
+            from gui.config_integration import ConfigIntegration
+            ci = ConfigIntegration()
+            enabled_357 = {
+                k for k, cb in getattr(self, "_p2_plugin_checks", {}).items()
+                if cb.isChecked()
+            }
+            enabled_355655 = {
+                k for k, cb in getattr(self, "_p2_pattern_checks", {}).items()
+                if cb.isChecked()
+            }
+            ci.update_plugin_config(enabled_357, enabled_355655)
+            self._log(
+                f"✅ Plugin settings saved — "
+                f"357: {len(enabled_357)} handler(s), "
+                f"355/655: {len(enabled_355655)} pattern(s) enabled"
+            )
+            if enabled_357:
+                self._log("   357  : " + ", ".join(sorted(enabled_357)))
+            if enabled_355655:
+                self._log("   355/655: " + ", ".join(sorted(enabled_355655)))
+        except Exception as exc:
+            self._log(f"❌ Could not save plugin settings: {exc}")
+
     def _copy_plugin_prompt(self):
         QApplication.clipboard().setText(self._PLUGIN_PROMPT)
         self._log("Risky codes analysis prompt copied to clipboard.")
@@ -1859,7 +2036,10 @@ class WorkflowTab(QWidget):
             label = "Phase 1b (code 111 cache)"
             file_preset = "events"
         else:
-            config = PHASE2_CONFIG
+            # Build Phase 2 config: start from PHASE2_CONFIG defaults, then overlay checkbox states
+            config = dict(PHASE2_CONFIG)
+            for code_key, cb in getattr(self, "_p2_code_checks", {}).items():
+                config[code_key] = cb.isChecked()
             label = "Phase 2 (risky codes)"
             file_preset = "events"
 
