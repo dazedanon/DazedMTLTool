@@ -43,6 +43,11 @@ _speakerCache = {}
 _speakerCacheLock = threading.Lock()
 SPEAKER_COLLECTED = []  # Original speaker names collected during parse mode (untranslated)
 
+# Actor variable substitution (\n[X] -> name before AI, name -> \n[X] after)
+_ACTOR_MAP_CACHE: dict | None = None
+_ACTOR_MAP_CACHE_LOCK = threading.Lock()
+_VAR_ACTOR_RE = re.compile(r"\\n\[(\d+)\]", re.IGNORECASE)
+
 # Regex - Need to change this if you want to translate from/to other languages. Default is Japanese Regex
 LANGREGEX = r"[\u3000-\u303F\u3040-\u309F\u30A0-\u30FF\u31F0-\u31FF\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF\uFF61-\uFF9F]+"
 
@@ -4184,6 +4189,40 @@ def getSpeaker(speaker: str):
             NAMESLIST.append([speaker, translated])
     return [translated, response[1]]
 
+def _get_actor_map() -> dict:
+    """Lazily load actor_id -> name from Actors.json (translated/ preferred)."""
+    global _ACTOR_MAP_CACHE
+    with _ACTOR_MAP_CACHE_LOCK:
+        if _ACTOR_MAP_CACHE is not None:
+            return _ACTOR_MAP_CACHE
+        for candidate in (Path("translated/Actors.json"), Path("files/Actors.json")):
+            if candidate.is_file():
+                try:
+                    data = json.loads(candidate.read_text(encoding="utf-8-sig"))
+                    m: dict = {}
+                    for entry in data:
+                        if not entry or not isinstance(entry, dict):
+                            continue
+                        aid = entry.get("id")
+                        name = (entry.get("name") or "").strip()
+                        if aid is not None and name:
+                            m[int(aid)] = name
+                    if m:
+                        _ACTOR_MAP_CACHE = m
+                        return m
+                except Exception:
+                    continue
+        _ACTOR_MAP_CACHE = {}
+        return {}
+
+
+def resetActorMapCache():
+    """Invalidate the cached actor map so it reloads on next use."""
+    global _ACTOR_MAP_CACHE
+    with _ACTOR_MAP_CACHE_LOCK:
+        _ACTOR_MAP_CACHE = None
+
+
 def translateAI(text, history, fullPromptFlag):
     """
     Legacy wrapper function for the new shared translation utility.
@@ -4221,7 +4260,31 @@ def translateAI(text, history, fullPromptFlag):
         # Return original payload and zero tokens so totals aren't affected
         return [text, [0, 0]]
 
-    return sharedtranslateAI(
+    # ── Actor variable substitution ──────────────────────────────────────────
+    # Replace \n[X] codes with actor names before sending to AI so the model
+    # sees real character names.  Track what was swapped so we can restore
+    # the variable codes in the translated output.
+    actor_map = _get_actor_map()
+    reverse: dict[str, str] = {}  # lower_name -> "\\n[X]"
+
+    def _sub(s: str) -> str:
+        if not isinstance(s, str) or not actor_map:
+            return s
+        def _repl(m: re.Match) -> str:
+            aid = int(m.group(1))
+            name = actor_map.get(aid)
+            if name:
+                reverse[name.lower()] = f"\\n[{aid}]"
+                return name
+            return m.group(0)
+        return _VAR_ACTOR_RE.sub(_repl, s)
+
+    if isinstance(text, list):
+        text = [_sub(s) for s in text]
+    else:
+        text = _sub(text)
+
+    result = sharedtranslateAI(
         text=text,
         history=history,
         fullPromptFlag=fullPromptFlag,
@@ -4231,6 +4294,24 @@ def translateAI(text, history, fullPromptFlag):
         lock=LOCK,
         mismatchList=MISMATCH
     )
+
+    # ── Restore \n[X] codes in translated output ───────────────────────────
+    if reverse:
+        _restore_pat = re.compile(
+            "|".join(re.escape(n) for n in sorted(reverse, key=len, reverse=True)),
+            re.IGNORECASE,
+        )
+        def _restore(s: str) -> str:
+            if not isinstance(s, str):
+                return s
+            return _restore_pat.sub(lambda m: reverse[m.group(0).lower()], s)
+
+        if isinstance(result[0], list):
+            result[0] = [_restore(s) for s in result[0]]
+        elif isinstance(result[0], str):
+            result[0] = _restore(result[0])
+
+    return result
 
 def resetSpeakerState():
     """Clear all speaker-related globals so a fresh run doesn't carry over stale data."""
