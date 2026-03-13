@@ -334,14 +334,6 @@ class ConfigTab(QWidget):
         self.api_key_edit.setFixedWidth(350)  # Large
         api_form.addRow(api_key_label, self.api_key_edit)
         
-        org_label = QLabel("Organization:")
-        org_label.setFixedWidth(150)
-        org_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        self.organization_edit = QLineEdit()
-        self.organization_edit.setPlaceholderText("Optional organization key")
-        self.organization_edit.setFixedWidth(350)  # Large
-        api_form.addRow(org_label, self.organization_edit)
-        
         model_label = QLabel("Model:")
         model_label.setFixedWidth(150)
         model_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
@@ -655,7 +647,7 @@ class ConfigTab(QWidget):
             # Load API settings (trim whitespace to avoid accidental trailing spaces)
             self.api_url_edit.setText(os.getenv("api", "").strip())
             self.api_key_edit.setText(os.getenv("key", "").strip())
-            self.organization_edit.setText(os.getenv("organization", "").strip())
+
             self.model_combo.setCurrentText(os.getenv("model", "gpt-4.1"))
         
         # Load translation settings
@@ -683,7 +675,7 @@ class ConfigTab(QWidget):
         # Text fields - use editingFinished to avoid saving on every keystroke
         self.api_url_edit.editingFinished.connect(self.auto_save)
         self.api_key_edit.editingFinished.connect(self.auto_save)
-        self.organization_edit.editingFinished.connect(self.auto_save)
+
         
         # Combo boxes
         self.model_combo.currentTextChanged.connect(self.auto_save)
@@ -708,7 +700,7 @@ class ConfigTab(QWidget):
         try:
             self.api_url_edit.editingFinished.disconnect(self.auto_save)
             self.api_key_edit.editingFinished.disconnect(self.auto_save)
-            self.organization_edit.editingFinished.disconnect(self.auto_save)
+
             self.model_combo.currentTextChanged.disconnect(self.auto_save)
             self.language_combo.currentTextChanged.disconnect(self.auto_save)
             self.timeout_spin.editingFinished.disconnect(self.auto_save)
@@ -747,7 +739,6 @@ class ConfigTab(QWidget):
             config = {
                 "api": self.api_url_edit.text().strip(),
                 "key": self.api_key_edit.text().strip(),
-                "organization": self.organization_edit.text().strip(),
                 "model": self.model_combo.currentText(),
                 "language": self.language_combo.currentText(),
                 "timeout": str(self.timeout_spin.value()),
@@ -801,7 +792,6 @@ class ConfigTab(QWidget):
         # API settings
         self.api_url_edit.clear()
         self.api_key_edit.clear()
-        self.organization_edit.clear()
         self.model_combo.setCurrentText("gpt-4.1")
         
         # Translation settings
@@ -842,7 +832,6 @@ class ConfigTab(QWidget):
         return {
             "api": self.api_url_edit.text(),
             "key": self.api_key_edit.text(),
-            "organization": self.organization_edit.text(),
             "model": self.model_combo.currentText(),
             "language": self.language_combo.currentText(),
             "timeout": self.timeout_spin.value(),
