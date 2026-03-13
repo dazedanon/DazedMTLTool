@@ -8,9 +8,10 @@ from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QFormLayout, QLineEdit, 
     QSpinBox, QDoubleSpinBox, QComboBox, QPushButton, QGroupBox,
     QLabel, QFileDialog, QMessageBox, QScrollArea, QTextEdit,
-    QCheckBox, QApplication, QTabWidget, QFrame, QStackedWidget, QToolButton
+    QCheckBox, QApplication, QTabWidget, QFrame, QStackedWidget, QToolButton,
+    QMenu
 )
-from PyQt5.QtCore import Qt, pyqtSignal
+from PyQt5.QtCore import Qt, pyqtSignal, QTimer
 from PyQt5.QtGui import QIcon
 from dotenv import load_dotenv, set_key
 
@@ -53,6 +54,11 @@ class ConfigTab(QWidget):
         self.env_file_path = Path(".env")
         # Initialize UI first so widgets/tabs exist for resetting or loading
         self.init_ui()
+
+        # Timer for autosave indicator (created after init_ui so autosave_label exists)
+        self._autosave_timer = QTimer(self)
+        self._autosave_timer.setSingleShot(True)
+        self._autosave_timer.timeout.connect(self._clear_autosave_indicator)
 
         # If a .env file doesn't exist, show defaults in the UI
         # (prevents showing stale values from the process/OS environment)
@@ -222,10 +228,40 @@ class ConfigTab(QWidget):
         api_url_label = QLabel("API URL:")
         api_url_label.setFixedWidth(150)
         api_url_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+
+        api_url_widget = QWidget()
+        api_url_layout = QHBoxLayout(api_url_widget)
+        api_url_layout.setContentsMargins(0, 0, 0, 0)
+        api_url_layout.setSpacing(4)
+
         self.api_url_edit = QLineEdit()
         self.api_url_edit.setPlaceholderText("Leave blank for OpenAI API")
-        self.api_url_edit.setFixedWidth(350)  # Large
-        api_form.addRow(api_url_label, self.api_url_edit)
+
+        api_url_preset_btn = QToolButton()
+        api_url_preset_btn.setText("Presets ▾")
+        api_url_preset_btn.setFixedWidth(75)
+        api_url_preset_btn.setPopupMode(QToolButton.InstantPopup)
+        api_url_preset_btn.setStyleSheet("""
+            QToolButton { padding: 3px 6px; }
+            QToolButton::menu-indicator { image: none; }
+        """)
+
+        api_url_menu = QMenu(api_url_preset_btn)
+        _url_presets = [
+            ("OpenAI", "https://api.openai.com/v1"),
+            ("Claude (Anthropic)", "https://api.anthropic.com/v1"),
+            ("Gemini", "https://generativelanguage.googleapis.com/v1beta/openai/"),
+        ]
+        for _name, _url in _url_presets:
+            _action = api_url_menu.addAction(_name)
+            _action.triggered.connect(lambda checked, u=_url: self.api_url_edit.setText(u))
+        api_url_preset_btn.setMenu(api_url_menu)
+
+        api_url_layout.addWidget(self.api_url_edit)
+        api_url_layout.addWidget(api_url_preset_btn)
+        api_url_widget.setFixedWidth(364)
+
+        api_form.addRow(api_url_label, api_url_widget)
         
         api_key_label = QLabel("API Key:")
         api_key_label.setFixedWidth(150)
@@ -432,7 +468,25 @@ class ConfigTab(QWidget):
         self.output_cost_spin.setSuffix(" per 1M tokens")
         self.output_cost_spin.setFixedWidth(200)  # Medium
         price_form.addRow(output_label, self.output_cost_spin)
-        
+
+        cache_rate_label = QLabel("Est. Cache Rate:")
+        cache_rate_label.setFixedWidth(150)
+        cache_rate_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        cache_rate_label.setToolTip(
+            "Assumed prompt-cache hit rate used when estimating costs for Claude models.\n"
+            "0.9 = 90 % of input tokens billed at 10 % (cache read rate).\n"
+            "Set to 0 to disable the discount and use the full input rate."
+        )
+        self.estimate_cache_rate_spin = QDoubleSpinBox()
+        self.estimate_cache_rate_spin.setButtonSymbols(QDoubleSpinBox.NoButtons)
+        self.estimate_cache_rate_spin.setRange(0.0, 1.0)
+        self.estimate_cache_rate_spin.setDecimals(2)
+        self.estimate_cache_rate_spin.setSingleStep(0.05)
+        self.estimate_cache_rate_spin.setValue(0.9)
+        self.estimate_cache_rate_spin.setSuffix("  (Claude estimate only)")
+        self.estimate_cache_rate_spin.setFixedWidth(200)
+        price_form.addRow(cache_rate_label, self.estimate_cache_rate_spin)
+
         right_column.addLayout(price_form)
         right_column.addStretch()
         
@@ -450,13 +504,23 @@ class ConfigTab(QWidget):
         load_button = QPushButton("📂 Load from File")
         load_button.clicked.connect(self.load_from_file_dialog)
         load_button.setMinimumHeight(32)
-        
+
         reset_button = QPushButton("🔄 Reset to Defaults")
         reset_button.clicked.connect(self.reset_to_defaults_with_save)
         reset_button.setMinimumHeight(32)
-        
+
+        save_button = QPushButton("💾 Save Changes")
+        save_button.clicked.connect(lambda: self.save_to_env(show_message=True))
+        save_button.setMinimumHeight(32)
+
+        self.autosave_label = QLabel("")
+        self.autosave_label.setStyleSheet("color: #4ec9b0; font-weight: bold;")
+
         button_layout.addWidget(load_button)
         button_layout.addWidget(reset_button)
+        button_layout.addWidget(save_button)
+        button_layout.addSpacing(10)
+        button_layout.addWidget(self.autosave_label)
         button_layout.addStretch()
         
         layout.addLayout(button_layout)
@@ -496,6 +560,7 @@ class ConfigTab(QWidget):
         # Load custom API settings
         self.input_cost_spin.setValue(float(os.getenv("input_cost", "2.0")))
         self.output_cost_spin.setValue(float(os.getenv("output_cost", "8.0")))
+        self.estimate_cache_rate_spin.setValue(float(os.getenv("ESTIMATE_CACHE_RATE", "0.9")))
         
     def connect_auto_save(self):
         """Connect all widgets to auto-save on change."""
@@ -508,17 +573,19 @@ class ConfigTab(QWidget):
         self.model_combo.currentTextChanged.connect(self.auto_save)
         self.language_combo.currentTextChanged.connect(self.auto_save)
         
-        # Spin boxes
-        self.timeout_spin.valueChanged.connect(self.auto_save)
-        self.file_threads_spin.valueChanged.connect(self.auto_save)
-        self.threads_spin.valueChanged.connect(self.auto_save)
-        self.batch_size_spin.valueChanged.connect(self.auto_save)
-        self.frequency_penalty_spin.valueChanged.connect(self.auto_save)
-        self.width_spin.valueChanged.connect(self.auto_save)
-        self.list_width_spin.valueChanged.connect(self.auto_save)
-        self.note_width_spin.valueChanged.connect(self.auto_save)
-        self.input_cost_spin.valueChanged.connect(self.auto_save)
-        self.output_cost_spin.valueChanged.connect(self.auto_save)
+        # Spin boxes — use editingFinished so saves trigger on Enter or focus-out,
+        # not on every intermediate keystroke while typing.
+        self.timeout_spin.editingFinished.connect(self.auto_save)
+        self.file_threads_spin.editingFinished.connect(self.auto_save)
+        self.threads_spin.editingFinished.connect(self.auto_save)
+        self.batch_size_spin.editingFinished.connect(self.auto_save)
+        self.frequency_penalty_spin.editingFinished.connect(self.auto_save)
+        self.width_spin.editingFinished.connect(self.auto_save)
+        self.list_width_spin.editingFinished.connect(self.auto_save)
+        self.note_width_spin.editingFinished.connect(self.auto_save)
+        self.input_cost_spin.editingFinished.connect(self.auto_save)
+        self.output_cost_spin.editingFinished.connect(self.auto_save)
+        self.estimate_cache_rate_spin.editingFinished.connect(self.auto_save)
     
     def disconnect_auto_save(self):
         """Disconnect all widgets from auto-save."""
@@ -528,22 +595,30 @@ class ConfigTab(QWidget):
             self.organization_edit.editingFinished.disconnect(self.auto_save)
             self.model_combo.currentTextChanged.disconnect(self.auto_save)
             self.language_combo.currentTextChanged.disconnect(self.auto_save)
-            self.timeout_spin.valueChanged.disconnect(self.auto_save)
-            self.file_threads_spin.valueChanged.disconnect(self.auto_save)
-            self.threads_spin.valueChanged.disconnect(self.auto_save)
-            self.batch_size_spin.valueChanged.disconnect(self.auto_save)
-            self.frequency_penalty_spin.valueChanged.disconnect(self.auto_save)
-            self.width_spin.valueChanged.disconnect(self.auto_save)
-            self.list_width_spin.valueChanged.disconnect(self.auto_save)
-            self.note_width_spin.valueChanged.disconnect(self.auto_save)
-            self.input_cost_spin.valueChanged.disconnect(self.auto_save)
-            self.output_cost_spin.valueChanged.disconnect(self.auto_save)
+            self.timeout_spin.editingFinished.disconnect(self.auto_save)
+            self.file_threads_spin.editingFinished.disconnect(self.auto_save)
+            self.threads_spin.editingFinished.disconnect(self.auto_save)
+            self.batch_size_spin.editingFinished.disconnect(self.auto_save)
+            self.frequency_penalty_spin.editingFinished.disconnect(self.auto_save)
+            self.width_spin.editingFinished.disconnect(self.auto_save)
+            self.list_width_spin.editingFinished.disconnect(self.auto_save)
+            self.note_width_spin.editingFinished.disconnect(self.auto_save)
+            self.input_cost_spin.editingFinished.disconnect(self.auto_save)
+            self.output_cost_spin.editingFinished.disconnect(self.auto_save)
+            self.estimate_cache_rate_spin.editingFinished.disconnect(self.auto_save)
         except (TypeError, RuntimeError):
             pass
     
     def auto_save(self):
         """Auto-save configuration without showing message."""
         self.save_to_env(show_message=False)
+        if hasattr(self, 'autosave_label'):
+            self.autosave_label.setText("✓ Saved")
+            self._autosave_timer.start(2000)
+
+    def _clear_autosave_indicator(self):
+        if hasattr(self, 'autosave_label'):
+            self.autosave_label.setText("")
     
     def save_to_env(self, show_message=True):
         """Save configuration to .env file."""
@@ -569,6 +644,7 @@ class ConfigTab(QWidget):
                 "noteWidth": str(self.note_width_spin.value()),
                 "input_cost": str(self.input_cost_spin.value()),
                 "output_cost": str(self.output_cost_spin.value()),
+                "ESTIMATE_CACHE_RATE": str(self.estimate_cache_rate_spin.value()),
             }
             
             # Save to .env file and update os.environ so subprocesses inherit new values
@@ -637,6 +713,7 @@ class ConfigTab(QWidget):
         # Custom API settings
         self.input_cost_spin.setValue(2.0)
         self.output_cost_spin.setValue(8.0)
+        self.estimate_cache_rate_spin.setValue(0.9)
         
         # Reset engine tabs
         self.mvmz_tab.reset_to_defaults()

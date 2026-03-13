@@ -1223,8 +1223,21 @@ def calculateCost(inputTokens, outputTokens, model):
             return accurate
 
     # Non-Claude, estimate mode, or no accurate data: naive calculation.
+    # For Claude models in estimate mode, apply an assumed cache hit rate so the
+    # estimate reflects the real-world prompt-caching discount.
+    # The rate defaults to 0.9 (90 % cache reads) and can be overridden with the
     pricing = getPricingConfig(model)
-    inputCost  = (inputTokens  / 1_000_000) * pricing["inputAPICost"]
+    _is_claude_naive = model and any(x in model.lower() for x in ("claude", "sonnet", "haiku", "opus"))
+    if _is_claude_naive:
+        try:
+            cache_rate = float(os.getenv("estimate_cache_rate", "0.7"))
+            cache_rate = max(0.0, min(1.0, cache_rate))
+        except (TypeError, ValueError):
+            cache_rate = 0.9
+        effective_input_multiplier = cache_rate * 0.10 + (1.0 - cache_rate)
+        inputCost = (inputTokens / 1_000_000) * pricing["inputAPICost"] * effective_input_multiplier
+    else:
+        inputCost = (inputTokens / 1_000_000) * pricing["inputAPICost"]
     outputCost = (outputTokens / 1_000_000) * pricing["outputAPICost"]
     return inputCost + outputCost
 
