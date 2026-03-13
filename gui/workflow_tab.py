@@ -1470,8 +1470,25 @@ class WorkflowTab(QWidget):
         )
         toggle_box = QGroupBox("Enable Codes")
         toggle_box.setStyleSheet(_sub_cs)
-        toggle_grid = QGridLayout(toggle_box)
-        toggle_grid.setContentsMargins(6, 8, 6, 6)
+        toggle_box_layout = QVBoxLayout(toggle_box)
+        toggle_box_layout.setContentsMargins(6, 8, 6, 6)
+        toggle_box_layout.setSpacing(4)
+
+        codes_sa_row = QHBoxLayout()
+        codes_select_all_btn = QPushButton("Select All")
+        codes_select_all_btn.setCheckable(True)
+        codes_select_all_btn.setFixedWidth(80)
+        codes_select_all_btn.setStyleSheet(
+            "QPushButton{color:#aaa;font-size:9px;padding:1px 4px;background:#2a2a2a;border:1px solid #444;border-radius:3px;}"
+            "QPushButton:checked{background:#1a3a5a;color:#7af;}"
+        )
+        codes_sa_row.addStretch()
+        codes_sa_row.addWidget(codes_select_all_btn)
+        toggle_box_layout.addLayout(codes_sa_row)
+
+        toggle_grid_container = QWidget()
+        toggle_grid = QGridLayout(toggle_grid_container)
+        toggle_grid.setContentsMargins(0, 0, 0, 0)
         toggle_grid.setHorizontalSpacing(16)
         toggle_grid.setVerticalSpacing(4)
 
@@ -1493,6 +1510,13 @@ class WorkflowTab(QWidget):
             cb.setStyleSheet("color:#ccc;font-size:10px;")
             toggle_grid.addWidget(cb, idx // 3, idx % 3)
             self._p2_code_checks[code_key] = cb
+        toggle_box_layout.addWidget(toggle_grid_container)
+
+        def _toggle_codes(checked):
+            codes_select_all_btn.setText("Deselect All" if checked else "Select All")
+            for cb in self._p2_code_checks.values():
+                cb.setChecked(checked)
+        codes_select_all_btn.toggled.connect(_toggle_codes)
         p2_inner.addWidget(toggle_box)
 
         # ─── Code 357 Plugin Handlers ───────────────────────────────────────────────────
@@ -1525,7 +1549,24 @@ class WorkflowTab(QWidget):
             "QScrollArea{border:none;background:transparent;}"
             "QScrollBar:vertical{width:8px;}"
         )
+        plugin357_sa_row = QHBoxLayout()
+        plugin357_select_all_btn = QPushButton("Select All")
+        plugin357_select_all_btn.setCheckable(True)
+        plugin357_select_all_btn.setFixedWidth(80)
+        plugin357_select_all_btn.setStyleSheet(
+            "QPushButton{color:#aaa;font-size:9px;padding:1px 4px;background:#2a2a2a;border:1px solid #444;border-radius:3px;}"
+            "QPushButton:checked{background:#1a3a5a;color:#7af;}"
+        )
+        plugin357_sa_row.addStretch()
+        plugin357_sa_row.addWidget(plugin357_select_all_btn)
+        plugin357_inner.addLayout(plugin357_sa_row)
         plugin357_inner.addWidget(plugin357_scroll)
+
+        def _toggle_plugins357(checked):
+            plugin357_select_all_btn.setText("Deselect All" if checked else "Select All")
+            for cb in self._p2_plugin_checks.values():
+                cb.setChecked(checked)
+        plugin357_select_all_btn.toggled.connect(_toggle_plugins357)
         p2_inner.addWidget(plugin357_box)
 
         # ─── Code 355/655 Script Patterns ───────────────────────────────────────────
@@ -1558,7 +1599,24 @@ class WorkflowTab(QWidget):
             "QScrollArea{border:none;background:transparent;}"
             "QScrollBar:vertical{width:8px;}"
         )
+        patterns_sa_row = QHBoxLayout()
+        patterns_select_all_btn = QPushButton("Select All")
+        patterns_select_all_btn.setCheckable(True)
+        patterns_select_all_btn.setFixedWidth(80)
+        patterns_select_all_btn.setStyleSheet(
+            "QPushButton{color:#aaa;font-size:9px;padding:1px 4px;background:#2a2a2a;border:1px solid #444;border-radius:3px;}"
+            "QPushButton:checked{background:#1a3a5a;color:#7af;}"
+        )
+        patterns_sa_row.addStretch()
+        patterns_sa_row.addWidget(patterns_select_all_btn)
+        patterns_inner_layout.addLayout(patterns_sa_row)
         patterns_inner_layout.addWidget(patterns_scroll)
+
+        def _toggle_patterns(checked):
+            patterns_select_all_btn.setText("Deselect All" if checked else "Select All")
+            for cb in self._p2_pattern_checks.values():
+                cb.setChecked(checked)
+        patterns_select_all_btn.toggled.connect(_toggle_patterns)
         p2_inner.addWidget(patterns_box)
 
         # Apply Plugin Settings button
