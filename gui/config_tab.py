@@ -11,7 +11,7 @@ from PyQt5.QtWidgets import (
     QCheckBox, QApplication, QTabWidget, QFrame, QStackedWidget, QToolButton,
     QMenu
 )
-from PyQt5.QtCore import Qt, pyqtSignal, QTimer
+from PyQt5.QtCore import Qt, pyqtSignal, QTimer, QThread
 from PyQt5.QtGui import QIcon
 from dotenv import load_dotenv, set_key
 
@@ -19,6 +19,65 @@ from gui.rpgmaker_tab import RPGMakerTab
 from gui.wolf_tab import WolfTab
 from gui.csv_tab import CSVTab
 from gui.srpg_tab import SRPGTab
+
+
+class ModelFetchThread(QThread):
+    """Background thread that fetches model lists from OpenAI, Anthropic, or Gemini."""
+    models_fetched = pyqtSignal(list)
+    fetch_error = pyqtSignal(str)
+
+    # Fallback list shown when no API key is set or a fetch fails
+    DEFAULTS = [
+        "gpt-4.1-mini", "gpt-4.1", "gpt-4o", "gpt-4o-mini",
+        "o3", "o4-mini",
+        "claude-opus-4-5", "claude-sonnet-4-5", "claude-haiku-4-5",
+        "gemini-2.0-flash", "gemini-2.5-flash", "gemini-2.5-pro",
+        "deepseek-chat",
+    ]
+
+    def __init__(self, api_key, api_url, parent=None):
+        super().__init__(parent)
+        self.api_key = api_key
+        self.api_url = api_url.strip()
+
+    def run(self):
+        models = []
+        errors = []
+        for fetcher in (self._fetch_openai, self._fetch_anthropic, self._fetch_gemini):
+            try:
+                models.extend(fetcher())
+            except Exception as exc:
+                errors.append(str(exc))
+        if models:
+            self.models_fetched.emit(sorted(set(models)))
+        else:
+            self.fetch_error.emit("\n".join(errors))
+
+    def _fetch_openai(self):
+        import openai
+        kwargs = {"api_key": self.api_key}
+        if self.api_url:
+            kwargs["base_url"] = self.api_url
+        client = openai.OpenAI(**kwargs)
+        prefixes = ("gpt-", "o1", "o2", "o3", "o4", "chatgpt")
+        return sorted(
+            m.id for m in client.models.list()
+            if any(m.id.lower().startswith(p) for p in prefixes)
+        )
+
+    def _fetch_anthropic(self):
+        import anthropic
+        client = anthropic.Anthropic(api_key=self.api_key)
+        return sorted(m.id for m in client.models.list(limit=100))
+
+    def _fetch_gemini(self):
+        import openai
+        base = self.api_url or "https://generativelanguage.googleapis.com/v1beta/openai/"
+        client = openai.OpenAI(api_key=self.api_key, base_url=base)
+        return sorted(
+            m.id for m in client.models.list()
+            if "gemini" in m.id.lower()
+        )
 
 
 def create_section_header(title):
@@ -283,15 +342,28 @@ class ConfigTab(QWidget):
         model_label = QLabel("Model:")
         model_label.setFixedWidth(150)
         model_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+
+        model_widget = QWidget()
+        model_layout = QHBoxLayout(model_widget)
+        model_layout.setContentsMargins(0, 0, 0, 0)
+        model_layout.setSpacing(4)
+
         self.model_combo = QComboBox()
         self.model_combo.setEditable(True)
-        self.model_combo.addItems([
-            "gpt-4.1-mini", "gpt-4.1", "gpt-5",
-            "deepseek-chat", "claude-3-sonnet-20240229",
-            "gemini-2.0-flash", "gemini-2.5-flash", "gemini-2.5-pro"
-        ])
-        self.model_combo.setFixedWidth(200)  # Medium
-        api_form.addRow(model_label, self.model_combo)
+        self.model_combo.addItems(ModelFetchThread.DEFAULTS)
+        self.model_combo.setFixedWidth(270)
+
+        self.model_refresh_btn = QToolButton()
+        self.model_refresh_btn.setText("⟳")
+        self.model_refresh_btn.setToolTip("Fetch latest models from the configured API")
+        self.model_refresh_btn.setFixedWidth(28)
+        self.model_refresh_btn.clicked.connect(self.fetch_models)
+
+        model_layout.addWidget(self.model_combo)
+        model_layout.addWidget(self.model_refresh_btn)
+        model_widget.setFixedWidth(306)
+
+        api_form.addRow(model_label, model_widget)
         
         left_column.addLayout(api_form)
         left_column.addWidget(create_horizontal_line())
@@ -530,7 +602,52 @@ class ConfigTab(QWidget):
         widget.layout().setContentsMargins(0, 0, 0, 0)
         widget.layout().addWidget(content)
         return widget
-        
+
+    # ------------------------------------------------------------------
+    # Model fetching
+    # ------------------------------------------------------------------
+
+    def fetch_models(self):
+        """Kick off background fetch of models from the configured API."""
+        api_key = self.api_key_edit.text().strip()
+        api_url = self.api_url_edit.text().strip()
+
+        if not api_key:
+            QMessageBox.warning(
+                self, "No API Key",
+                "Please enter an API key before fetching models."
+            )
+            return
+
+        self.model_refresh_btn.setEnabled(False)
+        self.model_refresh_btn.setText("…")
+
+        self._model_fetch_thread = ModelFetchThread(api_key, api_url, parent=self)
+        self._model_fetch_thread.models_fetched.connect(self._on_models_fetched)
+        self._model_fetch_thread.fetch_error.connect(self._on_models_fetch_error)
+        self._model_fetch_thread.finished.connect(lambda: None)  # keep GC away
+        self._model_fetch_thread.start()
+
+    def _on_models_fetched(self, models):
+        """Populate the model dropdown with freshly fetched models."""
+        current = self.model_combo.currentText()
+        self.model_combo.blockSignals(True)
+        self.model_combo.clear()
+        self.model_combo.addItems(models)
+        self.model_combo.setCurrentText(current)  # restore whatever was typed
+        self.model_combo.blockSignals(False)
+        self.model_refresh_btn.setEnabled(True)
+        self.model_refresh_btn.setText("⟳")
+
+    def _on_models_fetch_error(self, error):
+        """Restore button and show error."""
+        self.model_refresh_btn.setEnabled(True)
+        self.model_refresh_btn.setText("⟳")
+        QMessageBox.warning(
+            self, "Fetch Error",
+            f"Could not fetch models from the API:\n{error}"
+        )
+
     def load_from_env(self):
         """Load configuration from .env file."""
         if self.env_file_path.exists():
