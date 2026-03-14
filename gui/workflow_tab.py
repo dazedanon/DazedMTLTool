@@ -1063,17 +1063,13 @@ class WorkflowTab(QWidget):
 
         layout.addWidget(tasks_box)
 
-        # ---- Run All + Import button row --------------------------------
+        # ---- Run All button row --------------------------------
         bottom_row = QHBoxLayout()
         bottom_row.addStretch()
         run_all_btn = _make_btn("▶▶  Run All 3 Tasks", "#3a4a6a")
         run_all_btn.setToolTip("Run dazedformat, prettier, and gameupdate copy in sequence")
         run_all_btn.clicked.connect(self._run_all_preprocess)
         bottom_row.addWidget(run_all_btn)
-        self.import_btn = _make_btn("⬇  Import Selected → files/", "#3a4a6a")
-        self.import_btn.setEnabled(False)
-        self.import_btn.clicked.connect(self._import_files)
-        bottom_row.addWidget(self.import_btn)
         layout.addLayout(bottom_row)
 
     @staticmethod
@@ -1209,6 +1205,16 @@ class WorkflowTab(QWidget):
 
     def _build_step3(self, layout: QVBoxLayout):
         layout.addWidget(_make_section_label("Step 2 — Speaker Format Detection"))
+
+        # Import button row
+        import_row = QHBoxLayout()
+        self.import_btn = _make_btn("⬇  Import Selected → files/", "#007acc")
+        self.import_btn.setEnabled(False)
+        self.import_btn.clicked.connect(self._import_files)
+        import_row.addWidget(self.import_btn)
+        import_row.addStretch()
+        layout.addLayout(import_row)
+
         hint = QLabel(
             "Copy the prompt below, open Copilot (or any AI), attach a few of the game's "
             "Map*.json / CommonEvents.json files, paste the prompt, and ask it which "
