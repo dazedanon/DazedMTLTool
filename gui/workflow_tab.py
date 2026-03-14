@@ -2462,42 +2462,66 @@ class WorkflowTab(QWidget):
             self._log(f"   ⚠  {e}")
 
     def _run_all_preprocess(self):
-        """Launch all three pre-process tasks, skipping any whose prerequisites are missing."""
-        import shutil as _shutil
+        """Launch all three pre-process tasks in sequence, chaining via signals."""
         data_path      = self._data_path
         plugins_js     = self.pp_plugins_edit.text().strip()
         gameupdate_src = self.pp_gameupdate_edit.text().strip()
-        skipped: list[str] = []
+        game_root_dst  = self.folder_edit.text().strip()
 
-        # A — dazedformat (bundled, no PATH check needed)
+        # Build the queue of (label, worker_or_None) pairs
+        queue: list[tuple[str, object]] = []
+
         if data_path:
-            self._log("▶ [A] dazedformat …")
-            self._run_dazedformat()
+            queue.append(("[A] dazedformat", _JsonFormatWorker(data_path)))
         else:
-            skipped.append("A (dazedformat): data folder missing")
+            self._log("  ⏭  Skipped: A (dazedformat): data folder missing")
 
-        # B — jsbeautifier (pure Python, no Node required)
         if plugins_js and Path(plugins_js).is_file():
-            self._log("▶ [B] formatting plugins.js …")
-            self._run_prettier()
+            queue.append(("[B] format plugins.js", _JsFormatWorker(plugins_js)))
         else:
-            reason = f"plugins.js not found ({plugins_js or 'not set'})"
-            skipped.append(f"B (format plugins.js): {reason}")
+            self._log(f"  ⏭  Skipped: B (format plugins.js): not found ({plugins_js or 'not set'})")
 
-        # C — gameupdate copy
-        game_root_dst = self.folder_edit.text().strip()
         if gameupdate_src and Path(gameupdate_src).is_dir() and game_root_dst:
-            self._log("▶ [C] gameupdate copy …")
-            self._run_gameupdate()
+            queue.append(("[C] gameupdate copy", _FileCopyWorker(gameupdate_src, game_root_dst)))
         else:
-            if not gameupdate_src or not Path(gameupdate_src).is_dir():
-                reason = f"source not found ({gameupdate_src or 'not set'})"
-            else:
-                reason = "game root folder missing"
-            skipped.append(f"C (gameupdate): {reason}")
+            reason = (f"source not found ({gameupdate_src or 'not set'})"
+                      if not gameupdate_src or not Path(gameupdate_src).is_dir()
+                      else "game root folder missing")
+            self._log(f"  ⏭  Skipped: C (gameupdate): {reason}")
 
-        for msg in skipped:
-            self._log(f"  ⏭  Skipped: {msg}")
+        if not queue:
+            self._log("⚠  Nothing to run — check prerequisites.")
+            return
+
+        # Keep strong references to all workers so they aren't GC'd mid-run
+        self._preprocess_workers = [w for _, w in queue]
+
+        def run_next(remaining):
+            if not remaining:
+                self._log("✅  All pre-process tasks finished.")
+                return
+            label, worker = remaining[0]
+            self._log(f"▶ {label} …")
+            worker.log.connect(self._log)
+
+            def on_done(ok, msg, rest=remaining[1:]):
+                self._log(("✅ " if ok else "❌ ") + msg)
+                run_next(rest)
+
+            # _FileCopyWorker emits done(int, list) — wrap it
+            if isinstance(worker, _FileCopyWorker):
+                def on_copy_done(count, errors, rest=remaining[1:]):
+                    self._log(f"✅ gameupdate: copied {count} file(s).")
+                    for e in errors:
+                        self._log(f"   ⚠  {e}")
+                    run_next(rest)
+                worker.done.connect(on_copy_done)
+            else:
+                worker.done.connect(on_done)
+
+            worker.start()
+
+        run_next(queue)
 
     def _copy_to_clipboard(self, text: str, confirmation: str = "Copied."):
         try:
