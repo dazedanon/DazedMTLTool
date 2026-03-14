@@ -15,7 +15,6 @@ load_dotenv()
 for env in [
     "api",
     "key",
-    "organization",
     "model",
     "language",
     "timeout",

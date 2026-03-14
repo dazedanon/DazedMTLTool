@@ -275,7 +275,7 @@ class TranslationWorker(QThread):
             clear_cache()
             
             # Check for required environment variables
-            required_envs = ["api", "key", "organization", "model", "language", "timeout", "fileThreads", "threads", "width", "listWidth"]
+            required_envs = ["api", "key", "model", "language", "timeout", "fileThreads", "threads", "width", "listWidth"]
             env_missing = False
             
             for env in required_envs:
