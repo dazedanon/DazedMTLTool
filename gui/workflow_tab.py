@@ -261,6 +261,30 @@ class _SubprocessWorker(QThread):
             self.done.emit(False, f"{self.label}: {exc}")
 
 
+class _JsonFormatWorker(QThread):
+    """Format all JSON files in a directory using the bundled dazedformat utility."""
+    done = pyqtSignal(bool, str)
+    log  = pyqtSignal(str)
+
+    def __init__(self, data_path: str):
+        super().__init__()
+        self.data_path = data_path
+
+    def run(self):
+        try:
+            from util.dazedformat import format_json_files
+            self.log.emit(f"Formatting JSON files in {self.data_path} …")
+            count, errors = format_json_files(self.data_path, log=self.log.emit)
+            for e in errors:
+                self.log.emit(f"  ⚠  {e}")
+            if errors:
+                self.done.emit(False, f"dazedformat: {count} formatted, {len(errors)} error(s).")
+            else:
+                self.done.emit(True, f"dazedformat: {count} file(s) formatted successfully.")
+        except Exception as exc:
+            self.done.emit(False, f"dazedformat error: {exc}")
+
+
 class _FileCopyWorker(QThread):
     """Recursively copy a source folder into a destination folder."""
     done = pyqtSignal(int, list)   # count_copied, errors
@@ -533,11 +557,6 @@ class WorkflowTab(QWidget):
         row1.addWidget(sel_core)
 
         row1.addStretch()
-
-        self.import_btn = _make_btn("⬇  Import Selected → files/", "#007acc")
-        self.import_btn.setEnabled(False)
-        self.import_btn.clicked.connect(self._import_files)
-        row1.addWidget(self.import_btn)
         layout.addLayout(row1)
 
     # ── Step 1: Vocab / Glossary ────────────────────────────────────────────
@@ -933,13 +952,14 @@ class WorkflowTab(QWidget):
         tb.setSpacing(10)
 
         # ---- Task A: dazedformat -----------------------------------------
-        ta = QGroupBox("A — Format JSON files with dazedformat")
+        ta = QGroupBox("A — Format JSON files (dazedformat)")
         ta.setStyleSheet(self._task_box_style())
         ta_inner = QVBoxLayout(ta)
         ta_inner.setSpacing(4)
         ta_desc = QLabel(
-            "Runs  <code>dazedformat .</code>  in the game\'s data folder to "
-            "normalise all JSON files before importing."
+            "Normalises all JSON files in the game's data folder by round-tripping them "
+            "through <code>json.load / json.dump</code>. "
+            "Bundled — no external install required."
         )
         ta_desc.setTextFormat(Qt.RichText)
         ta_desc.setWordWrap(True)
@@ -1043,14 +1063,18 @@ class WorkflowTab(QWidget):
 
         layout.addWidget(tasks_box)
 
-        # ---- Run All button ------------------------------------------
-        run_all_row = QHBoxLayout()
-        run_all_btn = _make_btn("▶▶  Run All 3 Tasks", "#007acc")
+        # ---- Run All + Import button row --------------------------------
+        bottom_row = QHBoxLayout()
+        bottom_row.addStretch()
+        run_all_btn = _make_btn("▶▶  Run All 3 Tasks", "#3a4a6a")
         run_all_btn.setToolTip("Run dazedformat, prettier, and gameupdate copy in sequence")
         run_all_btn.clicked.connect(self._run_all_preprocess)
-        run_all_row.addStretch()
-        run_all_row.addWidget(run_all_btn)
-        layout.addLayout(run_all_row)
+        bottom_row.addWidget(run_all_btn)
+        self.import_btn = _make_btn("⬇  Import Selected → files/", "#3a4a6a")
+        self.import_btn.setEnabled(False)
+        self.import_btn.clicked.connect(self._import_files)
+        bottom_row.addWidget(self.import_btn)
+        layout.addLayout(bottom_row)
 
     @staticmethod
     def _task_box_style() -> str:
@@ -2393,7 +2417,7 @@ class WorkflowTab(QWidget):
         if not data_path:
             self._log("⚠  No data folder detected. Complete Step 0 first.")
             return
-        w = _SubprocessWorker(["dazedformat", "."], cwd=data_path, label="dazedformat")
+        w = _JsonFormatWorker(data_path)
         w.log.connect(self._log)
         w.done.connect(lambda ok, msg: self._log(("✅ " if ok else "❌ ") + msg))
         self._worker = w
@@ -2445,13 +2469,12 @@ class WorkflowTab(QWidget):
         gameupdate_src = self.pp_gameupdate_edit.text().strip()
         skipped: list[str] = []
 
-        # A — dazedformat
-        if data_path and _shutil.which("dazedformat"):
+        # A — dazedformat (bundled, no PATH check needed)
+        if data_path:
             self._log("▶ [A] dazedformat …")
             self._run_dazedformat()
         else:
-            reason = "data folder missing" if not data_path else "dazedformat not on PATH"
-            skipped.append(f"A (dazedformat): {reason}")
+            skipped.append("A (dazedformat): data folder missing")
 
         # B — jsbeautifier (pure Python, no Node required)
         if plugins_js and Path(plugins_js).is_file():
