@@ -1266,6 +1266,8 @@ class WorkflowTab(QWidget):
 
         layout.addWidget(cb_box)
 
+        self._populate_speaker_flags()
+
     # ── Step 4: Translation ─────────────────────────────────────────────────
 
     def _build_step4_translation(self, layout: QVBoxLayout):
@@ -1640,19 +1642,6 @@ class WorkflowTab(QWidget):
         p2_row.addStretch()
         p2_inner.addLayout(p2_row)
         layout.addWidget(p2_box)
-
-        # Shared manual sync button (also happens automatically before each phase run)
-        sync_row = QHBoxLayout()
-        sync_row.setContentsMargins(0, 6, 0, 0)
-        sync_all_btn = _make_btn("🔄  Sync translated/ → files/", "#3a4a6a")
-        sync_all_btn.setToolTip(
-            "Copy translated files back into files/ so the next phase starts from the latest output.\n"
-            "This also happens automatically at the start of each phase run."
-        )
-        sync_all_btn.clicked.connect(self._copy_translated_to_files)
-        sync_row.addWidget(sync_all_btn)
-        sync_row.addStretch()
-        layout.addLayout(sync_row)
 
         # Pre-populate all Phase 2 checkboxes from current module state
         self._populate_p2_checkboxes()
@@ -2100,6 +2089,24 @@ class WorkflowTab(QWidget):
         except Exception as exc:
             self._log(f"❌ Could not update .env: {exc}")
 
+    def _populate_speaker_flags(self):
+        """Read current module config and pre-tick speaker flag checkboxes."""
+        try:
+            from gui.config_integration import ConfigIntegration
+            cur = ConfigIntegration().read_current_config()
+            flag_map = {
+                "INLINE401SPEAKERS": self.spk_inline_cb,
+                "FIRSTLINESPEAKERS": self.spk_firstline_cb,
+                "FACENAME101":       self.spk_face_cb,
+            }
+            for key, cb in flag_map.items():
+                if key in cur:
+                    cb.blockSignals(True)
+                    cb.setChecked(bool(cur[key]))
+                    cb.blockSignals(False)
+        except Exception:
+            pass
+
     def _apply_speaker_flags(self):
         cfg = {
             "INLINE401SPEAKERS": self.spk_inline_cb.isChecked(),
@@ -2128,18 +2135,25 @@ class WorkflowTab(QWidget):
     # ─────────────────────────────────────────────────────────────────────────
 
     def _run_phase(self, phase):
-        # For every phase after Phase 0, automatically sync translated/ → files/
-        # so the next phase always starts from the latest translated output.
-        if phase != 0:
-            translated_dir = Path("translated")
-            files_dir = Path("files")
-            has_translated = (
-                translated_dir.exists()
-                and any(translated_dir.glob("*.json"))
-            )
-            if has_translated:
-                self._log("🔄 Auto-syncing translated/ → files/ before phase run…")
-                self._copy_translated_to_files()
+        # Ask user if they want to sync translated/ → files/ before running this phase
+        from PyQt5.QtWidgets import QMessageBox
+        transl_dir = Path("translated")
+        files_dir  = Path("files")
+        if transl_dir.exists() and any(transl_dir.glob("*.json")):
+            active = {fp.name for fp in files_dir.glob("*.json")} if files_dir.exists() else set()
+            overlap = [fp for fp in transl_dir.glob("*.json") if not active or fp.name in active]
+            if overlap:
+                reply = QMessageBox.question(
+                    None,
+                    "Sync before phase?",
+                    f"translated/ contains {len(overlap)} file(s) that match files/.\n\n"
+                    "Sync translated/ → files/ before running this phase?\n"
+                    "Yes = overwrite files/ with translated versions\n"
+                    "No = use existing files/ as-is",
+                    QMessageBox.Yes | QMessageBox.No,
+                )
+                if reply == QMessageBox.Yes:
+                    self._do_copy_translated_to_files()
 
         if phase == 0:
             config = PHASE0_CONFIG
@@ -2317,11 +2331,38 @@ class WorkflowTab(QWidget):
     # Step 5 – Export to game
     # ─────────────────────────────────────────────────────────────────────────
 
-    def _copy_translated_to_files(self):
-        """Copy translated/ files back into files/ (only matching names)."""
+    def _do_copy_translated_to_files(self):
+        """Silently copy translated/ files back into files/ (only matching names). Returns count copied."""
         import shutil
-        files_dir   = Path("files")
-        transl_dir  = Path("translated")
+        files_dir  = Path("files")
+        transl_dir = Path("translated")
+
+        if not transl_dir.exists():
+            self._log("⚠  translated/ folder not found — nothing to sync.")
+            return 0
+
+        active = {fp.name for fp in files_dir.glob("*.json")} if files_dir.exists() else set()
+        to_copy = [fp for fp in transl_dir.glob("*.json") if not active or fp.name in active]
+
+        if not to_copy:
+            self._log("⚠  No matching files found in translated/ to sync.")
+            return 0
+
+        files_dir.mkdir(exist_ok=True)
+        copied = 0
+        for src in to_copy:
+            dst = files_dir / src.name
+            shutil.copy2(src, dst)
+            copied += 1
+
+        self._log(f"✅  Synced {copied} file(s) from translated/ → files/")
+        return copied
+
+    def _copy_translated_to_files(self):
+        """Prompt user then copy translated/ files back into files/ (only matching names)."""
+        from PyQt5.QtWidgets import QMessageBox
+        files_dir  = Path("files")
+        transl_dir = Path("translated")
 
         if not transl_dir.exists():
             self._log("⚠  translated/ folder not found — nothing to sync.")
@@ -2334,14 +2375,18 @@ class WorkflowTab(QWidget):
             self._log("⚠  No matching files found in translated/ to sync.")
             return
 
-        files_dir.mkdir(exist_ok=True)
-        copied = 0
-        for src in to_copy:
-            dst = files_dir / src.name
-            shutil.copy2(src, dst)
-            copied += 1
+        reply = QMessageBox.question(
+            None,
+            "Sync translated/ → files/",
+            f"This will overwrite {len(to_copy)} file(s) in files/ with their translated versions.\n\n"
+            "Choose Yes to sync, or No to keep files/ as-is.",
+            QMessageBox.Yes | QMessageBox.No,
+        )
+        if reply != QMessageBox.Yes:
+            self._log("⏭  Sync skipped — using existing files/ as-is.")
+            return
 
-        self._log(f"✅  Synced {copied} file(s) from translated/ → files/")
+        self._do_copy_translated_to_files()
 
     def _export_active_files(self):
         """Export only translated files whose names match what is in files/."""

@@ -6,6 +6,7 @@ Centralized translation function used across all modules.
 import os
 import re
 import json
+import unicodedata
 import tiktoken
 import openai
 import anthropic
@@ -75,6 +76,12 @@ def protect_script_codes(text):
         '\uFF07': "'",  # ＇ fullwidth apostrophe
     })
     text = text.translate(quote_norm_table)
+
+    # Convert half-width katakana (U+FF61–U+FF9F) to full-width katakana so the
+    # AI recognises them as Japanese text and translates them correctly.
+    # NFKC is applied only to matched half-width kana spans to avoid altering
+    # intentional fullwidth Latin/digit characters elsewhere in the string.
+    text = re.sub(r'[\uFF61-\uFF9F]+', lambda m: unicodedata.normalize('NFKC', m.group(0)), text)
 
     replacements = {}
     protected_text = text
