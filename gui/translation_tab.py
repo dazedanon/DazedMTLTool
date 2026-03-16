@@ -1709,8 +1709,13 @@ class TranslationTab(QWidget):
         self.stop_button.setVisible(False)
         self.refresh_file_lists()
             
-    def start_translation(self):
-        """Start the translation process."""
+    def start_translation(self, skip_confirm: bool = False):
+        """Start the translation process.
+
+        skip_confirm: when True the confirmation dialog is bypassed (used when
+        called programmatically from the Workflow tab so the user doesn't need
+        an extra click to confirm what they just explicitly requested).
+        """
         # Get checked files
         selected_files = self.get_selected_files()
         
@@ -1731,16 +1736,19 @@ class TranslationTab(QWidget):
         estimate_only = (mode == "Estimate")
         parse_speakers = (mode == "Parse Speakers")
         
-        # Confirm start
-        action = mode.lower()
-        reply = QMessageBox.question(
-            self,
-            f"Start {mode}",
-            f"Start {action} for {len(selected_files)} file(s) using {selected_module[0]}?",
-            QMessageBox.Yes | QMessageBox.No
-        )
+        # Confirm start (skipped when called programmatically from the Workflow tab)
+        if not skip_confirm:
+            action = mode.lower()
+            reply = QMessageBox.question(
+                self,
+                f"Start {mode}",
+                f"Start {action} for {len(selected_files)} file(s) using {selected_module[0]}?",
+                QMessageBox.Yes | QMessageBox.No
+            )
+            if reply != QMessageBox.Yes:
+                return
         
-        if reply == QMessageBox.Yes:
+        if True:
             # Switch to progress view
             self.file_stack.setCurrentIndex(1)
             
@@ -1785,11 +1793,17 @@ class TranslationTab(QWidget):
                     self.totals_widget.setVisible(True)
             except Exception:
                 pass
-            # Ensure the open translations button is hidden while running
-            try:
-                self.open_translations_button.setVisible(False)
-            except Exception:
-                pass
+            # Hide all post-run buttons while a new run is in progress
+            for _btn_attr in (
+                "open_translations_button",
+                "reset_view_button",
+                "sync_translated_button",
+                "export_active_button",
+            ):
+                try:
+                    getattr(self, _btn_attr).setVisible(False)
+                except Exception:
+                    pass
             
             # Initialize progress tracking
             self.files_completed = 0
