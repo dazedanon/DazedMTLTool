@@ -1258,23 +1258,18 @@ class WorkflowTab(QWidget):
 
         self.spk_inline_cb = QCheckBox("INLINE401SPEAKERS  —  speaker name inline before 「 in the 401 text")
         self.spk_inline_cb.setStyleSheet(_cb_style)
+        self.spk_inline_cb.stateChanged.connect(self._apply_speaker_flags)
         cb_inner.addWidget(self.spk_inline_cb)
 
         self.spk_firstline_cb = QCheckBox("FIRSTLINESPEAKERS  —  first 401 line is a short speaker name")
         self.spk_firstline_cb.setStyleSheet(_cb_style)
+        self.spk_firstline_cb.stateChanged.connect(self._apply_speaker_flags)
         cb_inner.addWidget(self.spk_firstline_cb)
 
         self.spk_face_cb = QCheckBox("FACENAME101  —  speaker inferred from 101 face-image filename")
         self.spk_face_cb.setStyleSheet(_cb_style)
+        self.spk_face_cb.stateChanged.connect(self._apply_speaker_flags)
         cb_inner.addWidget(self.spk_face_cb)
-
-        apply_row = QHBoxLayout()
-        apply_spk = _make_btn("✔  Apply", "#3a7a3a")
-        apply_spk.setToolTip("Write the selected flags to RPGMaker settings")
-        apply_spk.clicked.connect(self._apply_speaker_flags)
-        apply_row.addStretch()
-        apply_row.addWidget(apply_spk)
-        cb_inner.addLayout(apply_row)
 
         layout.addWidget(cb_box)
 
@@ -2153,6 +2148,19 @@ class WorkflowTab(QWidget):
     # ─────────────────────────────────────────────────────────────────────────
 
     def _run_phase(self, phase):
+        # For every phase after Phase 0, automatically sync translated/ → files/
+        # so the next phase always starts from the latest translated output.
+        if phase != 0:
+            translated_dir = Path("translated")
+            files_dir = Path("files")
+            has_translated = (
+                translated_dir.exists()
+                and any(translated_dir.glob("*.json"))
+            )
+            if has_translated:
+                self._log("🔄 Auto-syncing translated/ → files/ before phase run…")
+                self._copy_translated_to_files()
+
         if phase == 0:
             config = PHASE0_CONFIG
             label = "Phase 0 (core DB files)"
