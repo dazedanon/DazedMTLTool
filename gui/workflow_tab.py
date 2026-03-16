@@ -515,13 +515,13 @@ class WorkflowTab(QWidget):
         """)
 
         _tab_defs = [
-            ("0 · Project",      self._build_step0),
-            ("1 · Pre-process",  self._build_step1_preprocess),
-            ("2 · Speaker",      self._build_step2_speaker),
-            ("3 · Glossary",     self._build_step3_glossary),
-            ("4 · Translation",  self._build_step4_translation),
-            ("5 · Plugins.js",   self._build_step5_plugins_js),
-            ("6 · Export",       self._build_step6_export),
+            ("0  Project",      self._build_step0),
+            ("1  Pre-process",  self._build_step1_preprocess),
+            ("2  Speaker",      self._build_step2_speaker),
+            ("3  Glossary",     self._build_step3_glossary),
+            ("4  Translation",  self._build_step4_translation),
+            ("5  Plugins.js",   self._build_step5_plugins_js),
+            ("6  Export",       self._build_step6_export),
         ]
 
         for tab_label, builder in _tab_defs:
@@ -573,8 +573,12 @@ class WorkflowTab(QWidget):
                 next_btn = _make_btn("Next →", "#007acc")
                 next_btn.setFixedWidth(100)
                 _idx = tab_idx  # capture for lambda
+                _lbl = tab_label  # original label without checkmark
                 next_btn.clicked.connect(
-                    lambda _checked, i=_idx: self._step_tabs.setCurrentIndex(i + 1)
+                    lambda _checked, i=_idx, lbl=_lbl: (
+                        self._step_tabs.setTabText(i, "✓  " + lbl),
+                        self._step_tabs.setCurrentIndex(i + 1),
+                    )
                 )
                 nav_layout.addWidget(next_btn)
 
@@ -1415,26 +1419,18 @@ class WorkflowTab(QWidget):
         )
 
     def _build_step3_glossary(self, layout: QVBoxLayout):
-        layout.addWidget(_make_section_label("Step 3 — Glossary (vocab.txt)"))
-        hint = QLabel(
-            "Edit your glossary below. Character names, genders, and worldbuilding terms "
-            "here are injected into every AI prompt for consistent terminology."
-        )
-        hint.setWordWrap(True)
-        hint.setStyleSheet("color:#9d9d9d;font-size:13px;padding-bottom:4px;")
-        layout.addWidget(hint)
+        layout.setContentsMargins(20, 8, 20, 4)
+        layout.setSpacing(6)
 
         # ---- Parse Speakers -------------------------------------------------
         spk_box = QGroupBox("3a — Parse Speakers (Auto-detect Names)")
         spk_box.setStyleSheet(self._task_box_style())
         spk_inner = QVBoxLayout(spk_box)
-        spk_inner.setSpacing(6)
+        spk_inner.setSpacing(4)
 
         spk_hint = QLabel(
-            "Scans every file in <b>files/</b> and extracts all detected speaker names "
-            "into a <b># Speakers</b> section of vocab.txt. "
-            "Run this first — the AI prompt below will then work from the pre-populated "
-            "list and can enrich entries with gender, role, and speech register."
+            "Scans every file in <b>files/</b> and extracts detected speaker names "
+            "into a <b># Speakers</b> section of vocab.txt — run this before using the AI prompt below."
         )
         spk_hint.setTextFormat(Qt.RichText)
         spk_hint.setWordWrap(True)
@@ -1461,27 +1457,16 @@ class WorkflowTab(QWidget):
         prompt_box = QGroupBox("3b — AI Prompt Helpers (Copilot / Cursor)")
         prompt_box.setStyleSheet(self._task_box_style())
         pb_inner = QVBoxLayout(prompt_box)
-        pb_inner.setSpacing(6)
+        pb_inner.setSpacing(4)
 
         prompt_hint = QLabel(
-            "After parsing speakers above, copy the prompt below and paste it into "
-            "GitHub Copilot Chat or Cursor with your game files open. "
-            "The AI will enrich the speaker list with gender, role, and speech register "
-            "and add worldbuilding terms. Paste the AI's output back into vocab.txt."
+            "Copy the prompt and paste it into Copilot Chat or Cursor with your game files open. "
+            "Paste the AI's output back into vocab.txt."
         )
         prompt_hint.setWordWrap(True)
         prompt_hint.setStyleSheet("color:#9d9d9d;font-size:13px;")
         pb_inner.addWidget(prompt_hint)
 
-        # Combined glossary prompt
-        glossary_desc = QLabel(
-            "👥🌍  <b>Full Glossary</b> — named characters (with gender &amp; role) "
-            "and unique worldbuilding terms in one pass."
-        )
-        glossary_desc.setTextFormat(Qt.RichText)
-        glossary_desc.setWordWrap(True)
-        glossary_desc.setStyleSheet("color:#ccc;font-size:13px;")
-        pb_inner.addWidget(glossary_desc)
         glossary_row = QHBoxLayout()
         copy_glossary_btn = _make_btn("📋  Copy Prompt for Copilot", "#555")
         copy_glossary_btn.setFixedWidth(220)
@@ -1496,21 +1481,19 @@ class WorkflowTab(QWidget):
         # ---- vocab.txt editor -----------------------------------------------
         layout.addWidget(_make_section_label("vocab.txt editor"))
         format_hint = QLabel(
-            "Put character entries under  # Game Characters  — they are always sent to the AI.\n"
             "Format:  Japanese (English) - Gender; role; speech register / personality notes\n"
-            "Example:  シロ (Shiro) - Female; protagonist; speaks in a flustered, cute register with feminine speech markers\n"
-            "Universal terms (honorifics, elements, etc.) live in vocab_base.txt and are auto-appended on every save."
+            "Example:  シロ (Shiro) - Female; protagonist; speaks in a flustered, cute register with feminine speech markers"
         )
         format_hint.setFont(QFont("Consolas", 9))
         format_hint.setStyleSheet(
             "color:#569cd6;background-color:#1a1e2a;border:1px solid #2a3a5a;"
-            "padding:7px 10px;border-radius:4px;font-size:13px;"
+            "padding:5px 10px;border-radius:4px;font-size:13px;"
             "border-left:3px solid #2a6a9a;"
         )
         layout.addWidget(format_hint)
 
         self.vocab_editor = QTextEdit()
-        self.vocab_editor.setMinimumHeight(160)
+        self.vocab_editor.setMinimumHeight(120)
         self.vocab_editor.setFont(QFont("Consolas", 9))
         self.vocab_editor.setStyleSheet(
             "QTextEdit{background-color:#252526;color:#d4d4d4;"
@@ -1518,7 +1501,7 @@ class WorkflowTab(QWidget):
             "selection-background-color:#264f78;}"
         )
         self._reload_vocab()
-        layout.addWidget(self.vocab_editor)
+        layout.addWidget(self.vocab_editor, 1)
 
         row = QHBoxLayout()
         row.setSpacing(8)
