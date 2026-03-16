@@ -754,10 +754,7 @@ def createContext(config, subbedText, formatType, history=None):
     return static_system, matchedVocabText, user
 
 
-# Static array-based schema for structured JSON output.  A fixed schema is
-# required for Claude because Anthropic includes output_config in the prompt-
-# cache key — a per-batch LineN schema would bust the cache on every call.
-# Using the same schema for all providers keeps behaviour consistent.
+# Static array-based schema for structured JSON output.
 _TRANSLATION_SCHEMA = {
     "type": "object",
     "properties": {
