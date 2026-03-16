@@ -1356,10 +1356,10 @@ class WorkflowTab(QWidget):
         p0_desc.setWordWrap(True)
         p0_inner.addWidget(p0_desc)
         p0_row = QHBoxLayout()
-        run_p0 = _make_btn("⚙  Set Codes → Go to Translation", "#4a7a4a")
+        run_p0 = _make_btn("▶  Run Phase 0", "#4a7a4a")
         run_p0.setToolTip(
             "Sets engine to RPG Maker MV/MZ, selects only DB files "
-            "(Actors, Armors … etc.), all event codes OFF — then opens Translation tab."
+            "(Actors, Armors … etc.), all event codes OFF — then starts translation."
         )
         run_p0.clicked.connect(lambda: self._run_phase(0))
         p0_row.addWidget(run_p0)
@@ -1387,8 +1387,8 @@ class WorkflowTab(QWidget):
         p1_desc.setWordWrap(True)
         p1_inner.addWidget(p1_desc)
         p1_row = QHBoxLayout()
-        run_p1 = _make_btn("⚙  Set Codes \u2192 Go to Translation", "#007acc")
-        run_p1.setToolTip("Applies Phase 1 code settings and switches to the Translation tab")
+        run_p1 = _make_btn("▶  Run Phase 1", "#007acc")
+        run_p1.setToolTip("Applies Phase 1 code settings and starts translation")
         run_p1.clicked.connect(lambda: self._run_phase(1))
         p1_row.addWidget(run_p1)
         sync_p1 = _make_btn("🔄  Sync translated/ → files/", "#3a4a6a")
@@ -1417,8 +1417,8 @@ class WorkflowTab(QWidget):
         p1b_desc.setWordWrap(True)
         p1b_inner.addWidget(p1b_desc)
         p1b_row = QHBoxLayout()
-        run_p1b = _make_btn("⚙  Set Codes \u2192 Go to Translation", "#2a5a7a")
-        run_p1b.setToolTip("Applies Phase 1b code settings (111 only) and switches to the Translation tab")
+        run_p1b = _make_btn("▶  Run Phase 1b", "#2a5a7a")
+        run_p1b.setToolTip("Applies Phase 1b code settings (111 only) and starts translation")
         run_p1b.clicked.connect(lambda: self._run_phase("1b"))
         p1b_row.addWidget(run_p1b)
         sync_p1b = _make_btn("🔄  Sync translated/ → files/", "#3a4a6a")
@@ -1667,10 +1667,10 @@ class WorkflowTab(QWidget):
         p2_inner.addLayout(apply_plugins_row)
 
         p2_row = QHBoxLayout()
-        run_p2 = _make_btn("⚙  Set Codes → Go to Translation", "#7a4a00")
+        run_p2 = _make_btn("▶  Run Phase 2", "#7a4a00")
         run_p2.setToolTip(
-            "Applies Phase 2 code settings (from the checkboxes above) and switches to the "
-            "Translation tab with event files pre-selected."
+            "Applies Phase 2 code settings (from the checkboxes above) and starts translation "
+            "with event files pre-selected."
         )
         run_p2.clicked.connect(lambda: self._run_phase(2))
         p2_row.addWidget(run_p2)
@@ -2234,10 +2234,10 @@ class WorkflowTab(QWidget):
             self._log("   Phase 1b has been run first to build the 111 cache.")
             self._log("─" * 54)
 
-        # Navigate to Translation tab and configure it
-        self._navigate_to_translation(file_preset)
+        # Navigate to Translation tab, configure it, and auto-start
+        self._navigate_to_translation(file_preset, auto_start=True)
 
-    def _navigate_to_translation(self, file_preset: str):
+    def _navigate_to_translation(self, file_preset: str, auto_start: bool = False):
         """Switch to Translation tab, set engine to MVMZ, and check/uncheck files.
 
         file_preset:
@@ -2301,6 +2301,14 @@ class WorkflowTab(QWidget):
                 if hasattr(pw, "nav_buttons"):
                     for i, btn in enumerate(pw.nav_buttons):
                         btn.setChecked(i == 0)
+
+            # 5. Auto-start translation so the user doesn't need an extra click
+            if auto_start:
+                from PyQt5.QtCore import QTimer as _QTimer
+                _QTimer.singleShot(100, lambda: (
+                    tt.start_translation(skip_confirm=True)
+                    if tt is not None else None
+                ))
         except Exception:
             pass
 
