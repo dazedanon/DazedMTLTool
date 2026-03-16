@@ -1375,24 +1375,6 @@ def translateAI(text, history, fullPromptFlag, config, filename=None, pbar=None,
             for j in range(len(tItem)):
                 if tItem[j] and "\ufffd" in str(tItem[j]):
                     corrupted_map[j] = tItem[j]
-            
-            if corrupted_map:
-                clean_indices = [j for j in range(len(tItem)) if j not in corrupted_map]
-                
-                if not clean_indices:
-                    # All items are corrupted - skip translation entirely
-                    tList[index] = list(tItem)
-                    if pbar is not None:
-                        pbar.update(len(tItem))
-                    history = tItem[-config.maxHistory:]
-                    continue
-                
-                # Rebuild protected_items and all_replacements for clean items only
-                protected_items = [protected_items[j] for j in clean_indices]
-                new_replacements = {}
-                for new_idx, old_idx in enumerate(clean_indices):
-                    new_replacements[new_idx] = all_replacements.get(old_idx, {})
-                all_replacements = new_replacements
         elif tItem and "\ufffd" in str(tItem):
             # Single corrupted string - skip translation entirely
             tList[index] = tItem
@@ -1400,10 +1382,52 @@ def translateAI(text, history, fullPromptFlag, config, filename=None, pbar=None,
                 pbar.update(1)
             history = tItem
             continue
-        
-        # Build filtered tItem for validation (excludes corrupted items)
-        if isinstance(tItem, list) and corrupted_map:
-            clean_tItem = [tItem[j] for j in range(len(tItem)) if j not in corrupted_map]
+
+        # Filter out items that have content but no Japanese — they need no translation
+        # and the AI tends to empty them (e.g. "「………」" -> "").  Apply the same
+        # cleanup that would happen post-translation and restore them afterwards.
+        no_japanese_map = {}  # original_index -> already-cleaned text
+        if isinstance(tItem, list):
+            for j in range(len(tItem)):
+                if j in corrupted_map:
+                    continue
+                item_str = str(tItem[j]).strip() if tItem[j] else ""
+                if item_str and item_str != "Placeholder Text" and not re.search(config.langRegex, item_str):
+                    cleaned = cleanTranslatedText(tItem[j], config.language)
+                    cleaned = cleaned.replace("「", '"').replace("」", '"').strip()
+                    no_japanese_map[j] = cleaned
+
+        # Combine skip sets and rebuild protected_items / all_replacements
+        skip_indices = set(corrupted_map.keys()) | set(no_japanese_map.keys())
+        if isinstance(tItem, list) and skip_indices:
+            clean_indices = [j for j in range(len(tItem)) if j not in skip_indices]
+
+            if not clean_indices:
+                # Every item is either corrupted or untranslatable — reassemble and move on
+                result = []
+                for j in range(len(tItem)):
+                    if j in corrupted_map:
+                        result.append(corrupted_map[j])
+                    elif j in no_japanese_map:
+                        result.append(no_japanese_map[j])
+                    else:
+                        result.append(tItem[j])
+                tList[index] = result
+                if pbar is not None:
+                    pbar.update(len(tItem))
+                history = result[-config.maxHistory:]
+                continue
+
+            # Rebuild protected_items and all_replacements for translatable items only
+            protected_items = [protected_items[j] for j in clean_indices]
+            new_replacements = {}
+            for new_idx, old_idx in enumerate(clean_indices):
+                new_replacements[new_idx] = all_replacements.get(old_idx, {})
+            all_replacements = new_replacements
+
+        # Build filtered tItem for validation (excludes skipped items)
+        if isinstance(tItem, list) and skip_indices:
+            clean_tItem = [tItem[j] for j in range(len(tItem)) if j not in skip_indices]
         else:
             clean_tItem = tItem
 
@@ -1663,13 +1687,15 @@ def translateAI(text, history, fullPromptFlag, config, filename=None, pbar=None,
                     if j in all_replacements:
                         final_translations[j] = restore_script_codes(final_translations[j], all_replacements[j])
                 
-                # Re-insert corrupted originals at their original positions
-                if corrupted_map:
+                # Re-insert corrupted / no-japanese originals at their original positions
+                if corrupted_map or no_japanese_map:
                     expanded = []
                     clean_idx = 0
                     for j in range(len(tItem)):
                         if j in corrupted_map:
                             expanded.append(corrupted_map[j])
+                        elif j in no_japanese_map:
+                            expanded.append(no_japanese_map[j])
                         else:
                             expanded.append(final_translations[clean_idx])
                             clean_idx += 1
