@@ -17,26 +17,11 @@ from dotenv import load_dotenv
 from pathlib import Path
 from retry import retry
 
-# Set to True to print input/output token counts and content for each API call
-DEBUG_LOGGING = False
-
-# Set to True to print per-batch cache costs for Claude (read/write/regular breakdown).
-CACHE_COST_DEBUG = True
+# Set to True to enable debug logging (token counts, cache costs, etc.)
+DEBUG = True
 
 # Set to True to disable Claude prompt caching for baseline cost comparison.
 DISABLE_CACHE = False
-
-# Per-process debug accumulators for CACHE_COST_DEBUG run_total line.
-_dbg_cache_read = 0
-_dbg_cache_write = 0
-_dbg_regular_input = 0
-_dbg_output = 0
-
-# --- Cache debug: track the cached system block across requests ---
-_cache_debug_lock = threading.Lock()
-_cache_debug_prev_hash = None   # hash of the previous cached block text
-_cache_debug_prev_text = None   # full text of the previous cached block
-_cache_debug_call_num  = 0      # sequential API call counter
 
 # Thread-local per-file token breakdown; read by calculateCost() for Claude.
 _thread_local = threading.local()
@@ -710,11 +695,19 @@ _BASE_VOCAB_SEPARATOR = "# ── Base Vocabulary"  # Prefix of the separator li
 
 def createContext(config, subbedText, formatType, history=None):
     """Create system and user messages for translation.
-    
-    Returns (static_system, vocab_text, user).  All vocabulary (prompt.txt,
-    vocab.txt, and vocab_base.txt) is included in static_system so the entire
-    system content is constant across batches and maximises Claude cache hits.
-    vocab_text is always empty.
+
+    Returns (static_system, vocab_text, user) so that callers can keep the
+    static prompt and the per-batch vocab list separate.  This lets Claude
+    prompt-caching mark only the stable prefix with cache_control, avoiding
+    cache invalidation caused by changing vocabulary matches.
+
+    Cached in static_system (never changes between batches):
+      - prompt.txt content
+      - # Game Characters entries
+      - Base vocabulary (vocab_base.txt: honorifics, elements, demons, etc.)
+
+    Dynamic in vocab_text (matched per-batch):
+      - All other game-specific vocab terms (items, worldbuilding, etc.)
     """
     vocab_full = config.vocab
 
@@ -727,17 +720,29 @@ def createContext(config, subbedText, formatType, history=None):
         # Skip the separator line
         newline_idx = base_section.find("\n")
         base_vocab_text = base_section[newline_idx + 1:].strip() if newline_idx != -1 else ""
-        vocab_game = vocab_full[:sep_idx].strip()
+        vocab_game = vocab_full[:sep_idx]
     else:
-        vocab_game = vocab_full.strip()
+        vocab_game = vocab_full
+
+    vocabPairs = parseVocabWithCategories(vocab_game)
+
+    # Split character entries (stable, cached) from everything else (dynamic)
+    CHAR_CAT = "# Game Characters"
+    char_lines   = [line for _, line, cat in vocabPairs if cat and cat.strip() == CHAR_CAT]
+    non_char_pairs = [(term, line, cat) for term, line, cat in vocabPairs
+                      if not (cat and cat.strip() == CHAR_CAT)]
+
+    matchedVocabText = buildMatchedVocabText(non_char_pairs, subbedText, history)
 
     static_system = config.prompt.replace("English", config.language)
 
-    # Append all game-specific vocab (characters, worldbuilding, items, etc.)
-    if vocab_game:
-        static_system = static_system.rstrip() + "\n\n" + vocab_game + "\n"
+    # Append character glossary to the stable system prompt so it is cached
+    if char_lines:
+        char_block = f"\n{CHAR_CAT}\n" + "\n".join(char_lines)
+        static_system = static_system.rstrip() + "\n" + char_block + "\n"
 
-    # Append base vocab (honorifics, elements, etc.)
+    # Append base vocab (honorifics, elements, etc.) to static_system so it is
+    # cached with the system prompt and never re-evaluated per batch.
     if base_vocab_text:
         static_system = static_system.rstrip() + "\n\n" + base_vocab_text + "\n"
 
@@ -745,38 +750,15 @@ def createContext(config, subbedText, formatType, history=None):
         user = f"```json\n{subbedText}\n```"
     else:
         user = subbedText
-    
-    return static_system, "", user
+
+    return static_system, matchedVocabText, user
 
 
-def createTranslationSchema(numLines):
-    """Create a JSON schema for translation response based on number of lines"""
-    properties = {}
-    required = []
-    
-    for i in range(1, numLines + 1):
-        line_key = f"Line{i}"
-        properties[line_key] = {
-            "type": "string",
-            "description": f"The translated text for Line{i}"
-        }
-        required.append(line_key)
-    
-    schema = {
-        "type": "object",
-        "properties": properties,
-        "required": required,
-        "additionalProperties": False
-    }
-    
-    return schema
-
-
-# Static array-based schema for Claude's output_config.  Because Anthropic
-# includes output_config in the prompt-cache key, every call must send the
-# exact same schema or the cache is busted.  An array of strings naturally
-# accommodates any batch size without changing.
-_CLAUDE_TRANSLATION_SCHEMA = {
+# Static array-based schema for structured JSON output.  A fixed schema is
+# required for Claude because Anthropic includes output_config in the prompt-
+# cache key — a per-batch LineN schema would bust the cache on every call.
+# Using the same schema for all providers keeps behaviour consistent.
+_TRANSLATION_SCHEMA = {
     "type": "object",
     "properties": {
         "translations": {
@@ -838,7 +820,6 @@ def translateText(system, user, history, penalty, formatType, model, numLines=No
     # OpenAI/Gemini: json_schema  |  Deepseek: json_object  |  text: omit entirely
 
     if formatType == "json" and numLines is not None:
-        schema = createTranslationSchema(numLines)
         if _is_deepseek:
             # Deepseek: use json_object (no strict schema support)
             responseFormat = {"type": "json_object"}
@@ -846,7 +827,7 @@ def translateText(system, user, history, penalty, formatType, model, numLines=No
             # OpenAI, Claude, Gemini: use json_schema with strict enforcement
             responseFormat = {
                 "type": "json_schema",
-                "json_schema": {"name": "translation_response", "strict": True, "schema": schema}
+                "json_schema": {"name": "translation_response", "strict": True, "schema": _TRANSLATION_SCHEMA}
             }
     else:
         responseFormat = {"type": "text"}
@@ -922,8 +903,13 @@ def translateText(system, user, history, penalty, formatType, model, numLines=No
             elif role == "user":
                 native_msgs.append({"role": "user", "content": str(content)})
 
-        # History goes into messages, NOT ant_system — history changes every
-        # batch and would bust the cache if placed in the system parameter.
+        # Vocab goes into messages as a user turn so it doesn't bust the
+        # Anthropic prefix cache (the entire system parameter is the key).
+        if vocab_text and vocab_text.strip():
+            native_msgs.insert(0, {"role": "user", "content": vocab_text.strip()})
+            native_msgs.insert(1, {"role": "assistant", "content": "Understood."})
+
+        # History also goes into messages, NOT ant_system.
         if history_items:
             history_block = "Translation History:\n```\n" + "\n".join(history_items) + "\n```"
             native_msgs.insert(0, {"role": "user", "content": history_block})
@@ -931,65 +917,6 @@ def translateText(system, user, history, penalty, formatType, model, numLines=No
 
         if not native_msgs:
             raise ValueError("No user message found for Anthropic native call")
-
-        # --- CACHE DEBUG: detect & dump changes in the cached system block ---
-        if CACHE_COST_DEBUG:
-            global _cache_debug_prev_hash, _cache_debug_prev_text, _cache_debug_call_num
-            # The cached block is always ant_system[0] (the one with cache_control)
-            cached_block_text = ant_system[0]["text"] if ant_system else ""
-            cur_hash = hashlib.md5(cached_block_text.encode("utf-8")).hexdigest()[:8]
-            with _cache_debug_lock:
-                _cache_debug_call_num += 1
-                call_n = _cache_debug_call_num
-                prev_hash = _cache_debug_prev_hash
-                prev_text = _cache_debug_prev_text
-                _cache_debug_prev_hash = cur_hash
-                _cache_debug_prev_text = cached_block_text
-
-            log_dir = Path("log")
-            log_dir.mkdir(parents=True, exist_ok=True)
-            dbg_path = log_dir / "cache_debug.log"
-
-            with open(dbg_path, "a", encoding="utf-8") as df:
-                df.write(f"\n=== API Call #{call_n} | cached_block hash={cur_hash} | prev_hash={prev_hash} ==="
-                         f" | ant_system blocks={len(ant_system)} | formatType={formatType} | numLines={numLines}"
-                         f" | history_items={len(history_items)} | native_msgs={len(native_msgs)}"
-                         f" | thread={threading.current_thread().name}\n")
-                for bi, blk in enumerate(ant_system):
-                    blk_preview = (blk.get("text", "") or "")[:120].replace("\n", "\\n")
-                    has_cc = "cache_control" in blk
-                    df.write(f"  block[{bi}]: len={len(blk.get('text',''))} cache_control={has_cc} preview={blk_preview!r}\n")
-                df.flush()
-
-            # If the hash changed from the previous call, dump both versions for diff
-            if prev_hash is not None and cur_hash != prev_hash:
-                print(f"[CACHE DEBUG] *** HASH CHANGED *** call #{call_n}: {prev_hash} -> {cur_hash}", flush=True)
-                dump_prev = log_dir / f"static_system_{prev_hash}.txt"
-                dump_cur  = log_dir / f"static_system_{cur_hash}.txt"
-                if prev_text is not None and not dump_prev.exists():
-                    dump_prev.write_text(prev_text, encoding="utf-8")
-                dump_cur.write_text(cached_block_text, encoding="utf-8")
-
-                # Also write a line-by-line diff summary
-                prev_lines = (prev_text or "").splitlines(keepends=True)
-                cur_lines  = cached_block_text.splitlines(keepends=True)
-                import difflib
-                diff = list(difflib.unified_diff(prev_lines, cur_lines,
-                                                fromfile=f"static_system_{prev_hash}",
-                                                tofile=f"static_system_{cur_hash}", n=3))
-                if diff:
-                    diff_path = log_dir / f"cache_diff_{prev_hash}_vs_{cur_hash}.txt"
-                    with open(diff_path, "w", encoding="utf-8") as dff:
-                        dff.writelines(diff)
-                    print(f"[CACHE DEBUG] Diff written to {diff_path}", flush=True)
-                    # Also print first 30 diff lines to console
-                    for line in diff[:30]:
-                        print(f"  {line}", end="", flush=True)
-            elif prev_hash is None:
-                # First call — dump the initial version
-                dump_cur = log_dir / f"static_system_{cur_hash}.txt"
-                dump_cur.write_text(cached_block_text, encoding="utf-8")
-        # --- END CACHE DEBUG ---
 
         ant_client = anthropic.Anthropic(api_key=openai.api_key)
         try:
@@ -1000,26 +927,13 @@ def translateText(system, user, history, penalty, formatType, model, numLines=No
                 system=ant_system,
                 messages=native_msgs,
             )
-            # Use a STATIC array-based schema so output_config is identical
-            # across all Claude calls (Anthropic includes it in the prompt
-            # cache key).  The caller sends LineN input; Claude returns
-            # {"translations": ["...", ...]} which extractTranslation handles.
             if formatType == "json" and numLines is not None:
                 ant_kwargs["output_config"] = {
                     "format": {
                         "type": "json_schema",
-                        "schema": _CLAUDE_TRANSLATION_SCHEMA,
+                        "schema": _TRANSLATION_SCHEMA,
                     }
                 }
-
-            # --- CACHE DEBUG: dump full request payload ---
-            if CACHE_COST_DEBUG:
-                _dump_path = Path("log") / f"ant_request_{_cache_debug_call_num}.json"
-                try:
-                    with open(_dump_path, "w", encoding="utf-8") as _df:
-                        json.dump(ant_kwargs, _df, indent=2, ensure_ascii=False, default=str)
-                except Exception:
-                    pass
 
             ant_resp = ant_client.messages.create(**ant_kwargs)
         except Exception as e:
@@ -1032,13 +946,6 @@ def translateText(system, user, history, penalty, formatType, model, numLines=No
         _inp = getattr(_u, "input_tokens",  0) or 0
         _out = getattr(_u, "output_tokens", 0) or 0
 
-        # --- CACHE DEBUG: dump raw usage ---
-        if CACHE_COST_DEBUG:
-            try:
-                with open(Path("log") / "cache_debug.log", "a", encoding="utf-8") as _udf:
-                    _udf.write(f"  raw_usage: {_u}\n")
-            except Exception:
-                pass
         # input_tokens (native SDK) = non-cached portion; add cache fields for true total.
         _total_prompt = _inp + _cr + _cw
 
@@ -1664,55 +1571,22 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None, mism
                 _thread_local.file_regular     += batch_regular
                 _thread_local.file_output      += batch_output
 
-                if CACHE_COST_DEBUG:
-                    global _dbg_cache_read, _dbg_cache_write, _dbg_regular_input, _dbg_output
-                    _dbg_cache_read    += batch_cache_read
-                    _dbg_cache_write   += batch_cache_write
-                    _dbg_regular_input += batch_regular
-                    _dbg_output        += batch_output
-
-                    pricing = getPricingConfig(config.model)
-                    base_rate = pricing["inputAPICost"] / 1_000_000
-                    out_rate  = pricing["outputAPICost"] / 1_000_000
-
-                    batch_cost = (
-                        batch_cache_read  * base_rate * 0.10 +
-                        batch_cache_write * base_rate * 2.00 +
-                        batch_regular     * base_rate +
-                        batch_output      * out_rate
-                    )
-                    total_cost = (
-                        _dbg_cache_read    * base_rate * 0.10 +
-                        _dbg_cache_write   * base_rate * 2.00 +
-                        _dbg_regular_input * base_rate +
-                        _dbg_output        * out_rate
-                    )
-
-                    cache_label = "DISABLED" if DISABLE_CACHE else (
-                        "HIT"   if batch_cache_read  > 0 else
-                        "WRITE" if batch_cache_write > 0 else "MISS"
-                    )
-                    msg = (
-                        f"[CACHE {cache_label}] Batch {index+1} | "
-                        f"cache_read={batch_cache_read} cache_write={batch_cache_write} "
-                        f"regular={batch_regular} output={batch_output} | "
-                        f"batch=${batch_cost:.5f} | run_total=${total_cost:.4f}"
-                    )
-                    print(msg, flush=True)
-                    if pbar:
-                        pbar.write(msg)
-                    try:
-                        with open(Path("log") / "cache_debug.log", "a", encoding="utf-8") as _cdf:
-                            _cdf.write(msg + "\n")
-                    except Exception:
-                        pass
-
             # --- Debug Token Logging ---
-            if DEBUG_LOGGING:
-                print(f"\nInput ({response.usage.prompt_tokens} tokens):")
-                print(f"{static_system}\n{current_user}")
-                print(f"\nOutput ({response.usage.completion_tokens} tokens):")
-                print(f"{translatedText}")
+            if DEBUG:
+                try:
+                    _dbg_dir = Path("log")
+                    _dbg_dir.mkdir(parents=True, exist_ok=True)
+                    with open(_dbg_dir / "debug.log", "a", encoding="utf-8") as _dbf:
+                        _dbf.write(f"\n--- Batch ({len(clean_tItem) if isinstance(tItem, list) else 1} lines) ---\n")
+                        _dbf.write(f"Prompt: {response.usage.prompt_tokens} tokens | Output: {response.usage.completion_tokens} tokens\n")
+                        if hasattr(response.usage, "cache_read_input_tokens"):
+                            cr = getattr(response.usage, "cache_read_input_tokens", 0) or 0
+                            cw = getattr(response.usage, "cache_creation_input_tokens", 0) or 0
+                            cache_status = "HIT" if cr > 0 else ("WRITE" if cw > 0 else "MISS")
+                            _dbf.write(f"Cache: {cache_status} (read={cr}, write={cw})\n")
+                        _dbf.flush()
+                except Exception:
+                    pass
 
             # Clean the translation first for consistency
             cleaned_text = cleanTranslatedText(translatedText, config.language)
