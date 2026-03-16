@@ -754,18 +754,20 @@ def createContext(config, subbedText, formatType, history=None):
     return static_system, matchedVocabText, user
 
 
-# Static array-based schema for structured JSON output.
-_TRANSLATION_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "translations": {
-            "type": "array",
-            "items": {"type": "string"},
-        }
-    },
-    "required": ["translations"],
-    "additionalProperties": False,
-}
+def createTranslationSchema(numLines):
+    """Create a JSON schema for translation response based on number of lines."""
+    properties = {}
+    required = []
+    for i in range(1, numLines + 1):
+        line_key = f"Line{i}"
+        properties[line_key] = {"type": "string"}
+        required.append(line_key)
+    return {
+        "type": "object",
+        "properties": properties,
+        "required": required,
+        "additionalProperties": False,
+    }
 
 
 def translateText(system, user, history, penalty, formatType, model, numLines=None, vocab_text=""):
@@ -824,7 +826,7 @@ def translateText(system, user, history, penalty, formatType, model, numLines=No
             # OpenAI, Claude, Gemini: use json_schema with strict enforcement
             responseFormat = {
                 "type": "json_schema",
-                "json_schema": {"name": "translation_response", "strict": True, "schema": _TRANSLATION_SCHEMA}
+                "json_schema": {"name": "translation_response", "strict": True, "schema": createTranslationSchema(numLines)}
             }
     else:
         responseFormat = {"type": "text"}
@@ -928,7 +930,7 @@ def translateText(system, user, history, penalty, formatType, model, numLines=No
                 ant_kwargs["output_config"] = {
                     "format": {
                         "type": "json_schema",
-                        "schema": _TRANSLATION_SCHEMA,
+                        "schema": createTranslationSchema(numLines),
                     }
                 }
 
