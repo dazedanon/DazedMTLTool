@@ -517,16 +517,13 @@ class WorkflowTab(QWidget):
         if saved:
             self.folder_edit.setText(saved)
         row0.addWidget(self.folder_edit, 1)
+        self.folder_edit.returnPressed.connect(self._detect_folder)
 
         browse_btn = _make_btn(" Browse…")
         browse_btn.setIcon(browse_btn.style().standardIcon(QStyle.SP_DirOpenIcon))
         browse_btn.clicked.connect(self._browse_folder)
         row0.addWidget(browse_btn)
 
-        detect_btn = _make_btn("🔍  Detect", "#3a7a3a")
-        detect_btn.setToolTip("Scan the folder to find the data/ directory and list files")
-        detect_btn.clicked.connect(self._detect_folder)
-        row0.addWidget(detect_btn)
         layout.addLayout(row0)
 
         # Detected info
@@ -1775,8 +1772,11 @@ class WorkflowTab(QWidget):
 
         self.import_btn.setEnabled(len(items) > 0)
         self.sel_all_btn.setText("Select All")
-        self._log(f"Found {len(items)} importable file(s).")
+        self._log(f"Found {len(items)} importable file(s). Auto-importing…")
         self._populate_preprocess_paths()
+        # Automatically import the selected files so the user doesn't need
+        # to scroll down and click Import as a separate step.
+        self._import_files()
 
     def _select_all_files(self):
         count = self.file_list.count()
