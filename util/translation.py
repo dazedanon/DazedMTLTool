@@ -1250,6 +1250,7 @@ def calculateCost(inputTokens, outputTokens, model):
         _thread_local.estimate_regular_tokens = 0
         _thread_local.estimate_batch_count    = 0
         # Exact model: 1 cache write (2x) + (N-1) cache reads (0.10x) + regular at 1x
+        # 1.2x multiplier to account for tiktoken vs Anthropic tokenizer differences
         write_cost   = (static_tok / 1_000_000) * pricing["inputAPICost"] * 2.0
         read_cost    = ((batch_count - 1) * static_tok / 1_000_000) * pricing["inputAPICost"] * 0.10
         regular_cost = (regular_tok / 1_000_000) * pricing["inputAPICost"]
@@ -1257,7 +1258,7 @@ def calculateCost(inputTokens, outputTokens, model):
     else:
         inputCost = (inputTokens / 1_000_000) * pricing["inputAPICost"]
     outputCost = (outputTokens / 1_000_000) * pricing["outputAPICost"]
-    return inputCost + outputCost
+    return (inputCost + outputCost) * 1.2 if _is_claude_naive else inputCost + outputCost
 
 
 def countTokens(system, user, history):
