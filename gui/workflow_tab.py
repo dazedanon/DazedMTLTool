@@ -351,8 +351,9 @@ class _JsFormatWorker(QThread):
 def _make_section_label(text: str) -> QLabel:
     lbl = QLabel(text)
     lbl.setStyleSheet(
-        "font-size:13px; font-weight:bold; color:#007acc; "
-        "padding:8px 0 4px 0; background:transparent;"
+        "font-size:14px; font-weight:bold; color:#007acc; "
+        "padding:8px 0 4px 8px; background:transparent;"
+        "border-left:3px solid #007acc;"
     )
     return lbl
 
@@ -445,15 +446,15 @@ class WorkflowTab(QWidget):
 
         self._build_step0(vbox)
         vbox.addWidget(_make_hr())
-        self._build_preprocess(vbox)
+        self._build_step1_preprocess(vbox)
         vbox.addWidget(_make_hr())
-        self._build_step3(vbox)
+        self._build_step2_speaker(vbox)
         vbox.addWidget(_make_hr())
-        self._build_step1(vbox)
+        self._build_step3_glossary(vbox)
         vbox.addWidget(_make_hr())
-        self._build_step4(vbox)
+        self._build_step4_translation(vbox)
         vbox.addWidget(_make_hr())
-        self._build_step6(vbox)
+        self._build_step5_export(vbox)
         vbox.addStretch()
 
         scroll.setWidget(container)
@@ -556,7 +557,7 @@ class WorkflowTab(QWidget):
         row1.addStretch()
         layout.addLayout(row1)
 
-    # ── Step 1: Vocab / Glossary ────────────────────────────────────────────
+    # ── Step 3: Vocab / Glossary ────────────────────────────────────────────
 
     # ── Copilot prompt templates ────────────────────────────────────────────
 
@@ -929,7 +930,7 @@ class WorkflowTab(QWidget):
 
     # ── Step 1 (Optional): Pre-process ────────────────────────────────
 
-    def _build_preprocess(self, layout: QVBoxLayout):
+    def _build_step1_preprocess(self, layout: QVBoxLayout):
         header_row = QHBoxLayout()
         header_row.addWidget(_make_section_label("Step 1 (Optional) — Pre-process"))
         opt_badge = QLabel("personal / optional")
@@ -939,15 +940,31 @@ class WorkflowTab(QWidget):
         )
         header_row.addWidget(opt_badge)
         header_row.addStretch()
+        # Collapse/expand toggle
+        toggle_btn = QPushButton("▼")
+        toggle_btn.setCheckable(True)
+        toggle_btn.setChecked(True)
+        toggle_btn.setFixedSize(22, 22)
+        toggle_btn.setStyleSheet(
+            "QPushButton{background:transparent;color:#888;border:none;font-size:11px;}"
+            "QPushButton:hover{color:#ccc;}"
+        )
+        header_row.addWidget(toggle_btn)
         layout.addLayout(header_row)
+
+        # Collapsible container — wraps hint + tasks_box + run-all row
+        collapse_widget = QWidget()
+        collapse_layout = QVBoxLayout(collapse_widget)
+        collapse_layout.setContentsMargins(0, 0, 0, 0)
+        collapse_layout.setSpacing(4)
 
         hint = QLabel(
             "Three optional preparation tasks to run against the game folder before "
             "importing files. Paths are auto-filled when a project folder is detected."
         )
         hint.setWordWrap(True)
-        hint.setStyleSheet("color:#888;font-size:10px;padding-bottom:6px;")
-        layout.addWidget(hint)
+        hint.setStyleSheet("color:#999;font-size:10px;padding-bottom:6px;")
+        collapse_layout.addWidget(hint)
 
         tasks_box = QGroupBox()
         tasks_box.setStyleSheet(
@@ -956,6 +973,7 @@ class WorkflowTab(QWidget):
         )
         tb = QVBoxLayout(tasks_box)
         tb.setSpacing(10)
+        collapse_layout.addWidget(tasks_box)
 
         # ---- Task A: dazedformat -----------------------------------------
         ta = QGroupBox("A — Format JSON files (dazedformat)")
@@ -1067,16 +1085,23 @@ class WorkflowTab(QWidget):
         tc_inner.addLayout(tc_btn_row)
         tb.addWidget(tc)
 
-        layout.addWidget(tasks_box)
-
         # ---- Run All button row --------------------------------
-        bottom_row = QHBoxLayout()
-        bottom_row.addStretch()
+        bottom_row = QWidget()
+        bottom_row_layout = QHBoxLayout(bottom_row)
+        bottom_row_layout.setContentsMargins(0, 0, 0, 0)
+        bottom_row_layout.addStretch()
         run_all_btn = _make_btn("▶▶  Run All 3 Tasks", "#3a4a6a")
         run_all_btn.setToolTip("Run dazedformat, prettier, and gameupdate copy in sequence")
         run_all_btn.clicked.connect(self._run_all_preprocess)
-        bottom_row.addWidget(run_all_btn)
-        layout.addLayout(bottom_row)
+        bottom_row_layout.addWidget(run_all_btn)
+        collapse_layout.addWidget(bottom_row)
+
+        layout.addWidget(collapse_widget)
+
+        def _toggle_preprocess(expanded: bool):
+            toggle_btn.setText("▼" if expanded else "▶")
+            collapse_widget.setVisible(expanded)
+        toggle_btn.toggled.connect(_toggle_preprocess)
 
     @staticmethod
     def _task_box_style() -> str:
@@ -1086,14 +1111,14 @@ class WorkflowTab(QWidget):
             "QGroupBox::title{padding:0 4px;}"
         )
 
-    def _build_step1(self, layout: QVBoxLayout):
+    def _build_step3_glossary(self, layout: QVBoxLayout):
         layout.addWidget(_make_section_label("Step 3 — Glossary (vocab.txt)"))
         hint = QLabel(
             "Edit your glossary below. Character names, genders, and worldbuilding terms "
             "here are injected into every AI prompt for consistent terminology."
         )
         hint.setWordWrap(True)
-        hint.setStyleSheet("color:#888;font-size:10px;padding-bottom:4px;")
+        hint.setStyleSheet("color:#999;font-size:10px;padding-bottom:4px;")
         layout.addWidget(hint)
 
         # ---- Parse Speakers -------------------------------------------------
@@ -1114,7 +1139,7 @@ class WorkflowTab(QWidget):
         )
         spk_hint.setTextFormat(Qt.RichText)
         spk_hint.setWordWrap(True)
-        spk_hint.setStyleSheet("color:#888;font-size:10px;")
+        spk_hint.setStyleSheet("color:#999;font-size:10px;")
         spk_inner.addWidget(spk_hint)
 
         spk_row = QHBoxLayout()
@@ -1148,7 +1173,7 @@ class WorkflowTab(QWidget):
             "and add worldbuilding terms. Paste the AI's output back into vocab.txt."
         )
         prompt_hint.setWordWrap(True)
-        prompt_hint.setStyleSheet("color:#888;font-size:10px;")
+        prompt_hint.setStyleSheet("color:#999;font-size:10px;")
         pb_inner.addWidget(prompt_hint)
 
         # Combined glossary prompt
@@ -1205,11 +1230,9 @@ class WorkflowTab(QWidget):
         row.addStretch()
         layout.addLayout(row)
 
-    # ── Step 2: Actor Variables ─────────────────────────────────────────────
+    # ── Step 2: Speaker Detection ───────────────────────────────────────────
 
-    # ── Step 3: Speaker Detection ───────────────────────────────────────────
-
-    def _build_step3(self, layout: QVBoxLayout):
+    def _build_step2_speaker(self, layout: QVBoxLayout):
         layout.addWidget(_make_section_label("Step 2 — Speaker Format Detection"))
 
         # Import button row
@@ -1231,7 +1254,7 @@ class WorkflowTab(QWidget):
             "speaker flags to enable. Then tick the matching boxes and click Apply."
         )
         hint.setWordWrap(True)
-        hint.setStyleSheet("color:#888;font-size:10px;padding-bottom:6px;")
+        hint.setStyleSheet("color:#999;font-size:10px;padding-bottom:6px;")
         layout.addWidget(hint)
 
         copy_row = QHBoxLayout()
@@ -1272,7 +1295,7 @@ class WorkflowTab(QWidget):
 
     # ── Step 4: Translation ─────────────────────────────────────────────────
 
-    def _build_step4(self, layout: QVBoxLayout):
+    def _build_step4_translation(self, layout: QVBoxLayout):
         layout.addWidget(_make_section_label("Step 4 — Translation"))
 
         # ---- Pre-flight: text wrap configuration ----------------------------
@@ -1291,7 +1314,7 @@ class WorkflowTab(QWidget):
             "Click Apply to write the values to .env."
         )
         wrap_hint.setWordWrap(True)
-        wrap_hint.setStyleSheet("color:#888;font-size:10px;")
+        wrap_hint.setStyleSheet("color:#999;font-size:10px;")
         wrap_inner.addWidget(wrap_hint)
 
         def _spin_pair(label_text: str, default: int):
@@ -1334,9 +1357,9 @@ class WorkflowTab(QWidget):
 
         p0_box = QGroupBox("Phase 0  –  Core Database Files")
         p0_box.setStyleSheet(
-            "QGroupBox{color:#ccc;border:1px solid #444;border-radius:3px;"
-            "margin-top:8px;font-size:11px;}"
-            "QGroupBox::title{padding:0 6px;}"
+            "QGroupBox{color:#ccc;border:1px solid #4a7a4a;border-radius:3px;"
+            "margin-top:8px;font-size:11px;border-left:3px solid #4a9a4a;}"
+            "QGroupBox::title{padding:0 6px;color:#9aca9a;}"
         )
         p0_inner = QVBoxLayout(p0_box)
         p0_desc = QLabel(
@@ -1344,30 +1367,29 @@ class WorkflowTab(QWidget):
             "Translates names, descriptions, and notes in the core database. "
             "Run this first before any event-code phases."
         )
-        p0_desc.setStyleSheet("color:#888;font-size:10px;")
+        p0_desc.setStyleSheet("color:#999;font-size:10px;")
         p0_desc.setWordWrap(True)
         p0_inner.addWidget(p0_desc)
         p0_row = QHBoxLayout()
-        run_p0 = _make_btn("▶  Run Phase 0", "#4a7a4a")
-        run_p0.setToolTip(
+        self._run_p0_btn = _make_btn("▶  Run Phase 0", "#4a7a4a")
+        self._run_p0_btn.setToolTip(
             "Sets engine to RPG Maker MV/MZ, selects only DB files "
             "(Actors, Armors … etc.), all event codes OFF — then starts translation."
         )
-        run_p0.clicked.connect(lambda: self._run_phase(0))
-        p0_row.addWidget(run_p0)
-        sync_p0 = _make_btn("🔄  Sync translated/ → files/", "#3a4a6a")
-        sync_p0.setToolTip("After translation finishes, copy translated/ back into files/ so the next phase starts from the latest state")
-        sync_p0.clicked.connect(self._copy_translated_to_files)
-        p0_row.addWidget(sync_p0)
+        self._run_p0_btn.clicked.connect(lambda: self._run_phase(0))
+        p0_row.addWidget(self._run_p0_btn)
+        self._p0_status_lbl = QLabel("")
+        self._p0_status_lbl.setStyleSheet("color:#6a9a6a;font-size:10px;")
+        p0_row.addWidget(self._p0_status_lbl)
         p0_row.addStretch()
         p0_inner.addLayout(p0_row)
         layout.addWidget(p0_box)
 
         p1_box = QGroupBox("Phase 1  –  Safe Codes (dialogue + choices)")
         p1_box.setStyleSheet(
-            "QGroupBox{color:#ccc;border:1px solid #444;border-radius:3px;"
-            "margin-top:8px;font-size:11px;}"
-            "QGroupBox::title{padding:0 6px;}"
+            "QGroupBox{color:#ccc;border:1px solid #1a6aaa;border-radius:3px;"
+            "margin-top:8px;font-size:11px;border-left:3px solid #007acc;}"
+            "QGroupBox::title{padding:0 6px;color:#7ab8d4;}"
         )
         p1_inner = QVBoxLayout(p1_box)
         p1_desc = QLabel(
@@ -1375,27 +1397,26 @@ class WorkflowTab(QWidget):
             "Clicking the button below applies these codes, then takes you to the Translation tab.\n"
             "While translating, watch the log — speaker lines should look like  [Speaker]: Dialogue."
         )
-        p1_desc.setStyleSheet("color:#888;font-size:10px;")
+        p1_desc.setStyleSheet("color:#999;font-size:10px;")
         p1_desc.setWordWrap(True)
         p1_inner.addWidget(p1_desc)
         p1_row = QHBoxLayout()
-        run_p1 = _make_btn("▶  Run Phase 1", "#007acc")
-        run_p1.setToolTip("Applies Phase 1 code settings and starts translation")
-        run_p1.clicked.connect(lambda: self._run_phase(1))
-        p1_row.addWidget(run_p1)
-        sync_p1 = _make_btn("🔄  Sync translated/ → files/", "#3a4a6a")
-        sync_p1.setToolTip("After translation finishes, copy translated/ back into files/ so the next phase starts from the latest state")
-        sync_p1.clicked.connect(self._copy_translated_to_files)
-        p1_row.addWidget(sync_p1)
+        self._run_p1_btn = _make_btn("▶  Run Phase 1", "#007acc")
+        self._run_p1_btn.setToolTip("Applies Phase 1 code settings and starts translation")
+        self._run_p1_btn.clicked.connect(lambda: self._run_phase(1))
+        p1_row.addWidget(self._run_p1_btn)
+        self._p1_status_lbl = QLabel("")
+        self._p1_status_lbl.setStyleSheet("color:#6ab4d4;font-size:10px;")
+        p1_row.addWidget(self._p1_status_lbl)
         p1_row.addStretch()
         p1_inner.addLayout(p1_row)
         layout.addWidget(p1_box)
 
         p1b_box = QGroupBox("Phase 1b  –  Build Variable Cache (code 111)")
         p1b_box.setStyleSheet(
-            "QGroupBox{color:#ccc;border:1px solid #444;border-radius:3px;"
-            "margin-top:8px;font-size:11px;}"
-            "QGroupBox::title{padding:0 6px;}"
+            "QGroupBox{color:#ccc;border:1px solid #2a6a8a;border-radius:3px;"
+            "margin-top:8px;font-size:11px;border-left:3px solid #2a7a9a;}"
+            "QGroupBox::title{padding:0 6px;color:#7aaac4;}"
         )
         p1b_inner = QVBoxLayout(p1b_box)
         p1b_desc = QLabel(
@@ -1405,27 +1426,26 @@ class WorkflowTab(QWidget):
             "Run this before Phase 2 so that code 122 translated strings are automatically "
             "matched when those same strings appear in 111 comparisons."
         )
-        p1b_desc.setStyleSheet("color:#888;font-size:10px;")
+        p1b_desc.setStyleSheet("color:#999;font-size:10px;")
         p1b_desc.setWordWrap(True)
         p1b_inner.addWidget(p1b_desc)
         p1b_row = QHBoxLayout()
-        run_p1b = _make_btn("▶  Run Phase 1b", "#2a5a7a")
-        run_p1b.setToolTip("Applies Phase 1b code settings (111 only) and starts translation")
-        run_p1b.clicked.connect(lambda: self._run_phase("1b"))
-        p1b_row.addWidget(run_p1b)
-        sync_p1b = _make_btn("🔄  Sync translated/ → files/", "#3a4a6a")
-        sync_p1b.setToolTip("After translation finishes, copy translated/ back into files/ so the next phase starts from the latest state")
-        sync_p1b.clicked.connect(self._copy_translated_to_files)
-        p1b_row.addWidget(sync_p1b)
+        self._run_p1b_btn = _make_btn("▶  Run Phase 1b", "#2a5a7a")
+        self._run_p1b_btn.setToolTip("Applies Phase 1b code settings (111 only) and starts translation")
+        self._run_p1b_btn.clicked.connect(lambda: self._run_phase("1b"))
+        p1b_row.addWidget(self._run_p1b_btn)
+        self._p1b_status_lbl = QLabel("")
+        self._p1b_status_lbl.setStyleSheet("color:#6aaac4;font-size:10px;")
+        p1b_row.addWidget(self._p1b_status_lbl)
         p1b_row.addStretch()
         p1b_inner.addLayout(p1b_row)
         layout.addWidget(p1b_box)
 
         p2_box = QGroupBox("Phase 2  –  Risky Codes (variables + conditionals)")
         p2_box.setStyleSheet(
-            "QGroupBox{color:#ccc;border:1px solid #444;border-radius:3px;"
-            "margin-top:8px;font-size:11px;}"
-            "QGroupBox::title{padding:0 6px;}"
+            "QGroupBox{color:#ccc;border:1px solid #8a5a00;border-radius:3px;"
+            "margin-top:8px;font-size:11px;border-left:3px solid #aa7000;}"
+            "QGroupBox::title{padding:0 6px;color:#d4aa68;}"
         )
         p2_inner = QVBoxLayout(p2_box)
         p2_desc = QLabel(
@@ -1433,7 +1453,7 @@ class WorkflowTab(QWidget):
             "Use the Plugin Prompt to audit the game first, then enable only the codes and "
             "plugins that contain visible text."
         )
-        p2_desc.setStyleSheet("color:#888;font-size:10px;")
+        p2_desc.setStyleSheet("color:#999;font-size:10px;")
         p2_desc.setWordWrap(True)
         p2_inner.addWidget(p2_desc)
 
@@ -1506,8 +1526,9 @@ class WorkflowTab(QWidget):
         codes_select_all_btn.setCheckable(True)
         codes_select_all_btn.setFixedWidth(80)
         codes_select_all_btn.setStyleSheet(
-            "QPushButton{color:#aaa;font-size:9px;padding:1px 4px;background:#2a2a2a;border:1px solid #444;border-radius:3px;}"
-            "QPushButton:checked{background:#1a3a5a;color:#7af;}"
+            "QPushButton{color:#ccc;font-size:10px;padding:3px 8px;background:#3a3a3a;border:none;border-radius:3px;}"
+            "QPushButton:checked{background:#1a3a5a;color:#7ab8d4;}"
+            "QPushButton:hover{background:#4a4a4a;}"
         )
         codes_sa_row.addStretch()
         codes_sa_row.addWidget(codes_select_all_btn)
@@ -1581,8 +1602,9 @@ class WorkflowTab(QWidget):
         plugin357_select_all_btn.setCheckable(True)
         plugin357_select_all_btn.setFixedWidth(80)
         plugin357_select_all_btn.setStyleSheet(
-            "QPushButton{color:#aaa;font-size:9px;padding:1px 4px;background:#2a2a2a;border:1px solid #444;border-radius:3px;}"
-            "QPushButton:checked{background:#1a3a5a;color:#7af;}"
+            "QPushButton{color:#ccc;font-size:10px;padding:3px 8px;background:#3a3a3a;border:none;border-radius:3px;}"
+            "QPushButton:checked{background:#1a3a5a;color:#7ab8d4;}"
+            "QPushButton:hover{background:#4a4a4a;}"
         )
         plugin357_sa_row.addStretch()
         plugin357_sa_row.addWidget(plugin357_select_all_btn)
@@ -1631,8 +1653,9 @@ class WorkflowTab(QWidget):
         patterns_select_all_btn.setCheckable(True)
         patterns_select_all_btn.setFixedWidth(80)
         patterns_select_all_btn.setStyleSheet(
-            "QPushButton{color:#aaa;font-size:9px;padding:1px 4px;background:#2a2a2a;border:1px solid #444;border-radius:3px;}"
-            "QPushButton:checked{background:#1a3a5a;color:#7af;}"
+            "QPushButton{color:#ccc;font-size:10px;padding:3px 8px;background:#3a3a3a;border:none;border-radius:3px;}"
+            "QPushButton:checked{background:#1a3a5a;color:#7ab8d4;}"
+            "QPushButton:hover{background:#4a4a4a;}"
         )
         patterns_sa_row.addStretch()
         patterns_sa_row.addWidget(patterns_select_all_btn)
@@ -1659,33 +1682,45 @@ class WorkflowTab(QWidget):
         p2_inner.addLayout(apply_plugins_row)
 
         p2_row = QHBoxLayout()
-        run_p2 = _make_btn("▶  Run Phase 2", "#7a4a00")
-        run_p2.setToolTip(
+        self._run_p2_btn = _make_btn("▶  Run Phase 2", "#7a4a00")
+        self._run_p2_btn.setToolTip(
             "Applies Phase 2 code settings (from the checkboxes above) and starts translation "
             "with event files pre-selected."
         )
-        run_p2.clicked.connect(lambda: self._run_phase(2))
-        p2_row.addWidget(run_p2)
-        sync_p2 = _make_btn("🔄  Sync translated/ → files/", "#3a4a6a")
-        sync_p2.setToolTip("After translation finishes, copy translated/ back into files/ so the next phase starts from the latest state")
-        sync_p2.clicked.connect(self._copy_translated_to_files)
-        p2_row.addWidget(sync_p2)
+        self._run_p2_btn.clicked.connect(lambda: self._run_phase(2))
+        p2_row.addWidget(self._run_p2_btn)
+        self._p2_status_lbl = QLabel("")
+        self._p2_status_lbl.setStyleSheet("color:#d4aa68;font-size:10px;")
+        p2_row.addWidget(self._p2_status_lbl)
         p2_row.addStretch()
         p2_inner.addLayout(p2_row)
         layout.addWidget(p2_box)
 
+        # Shared manual sync button (also happens automatically before each phase run)
+        sync_row = QHBoxLayout()
+        sync_row.setContentsMargins(0, 6, 0, 0)
+        sync_all_btn = _make_btn("🔄  Sync translated/ → files/", "#3a4a6a")
+        sync_all_btn.setToolTip(
+            "Copy translated files back into files/ so the next phase starts from the latest output.\n"
+            "This also happens automatically at the start of each phase run."
+        )
+        sync_all_btn.clicked.connect(self._copy_translated_to_files)
+        sync_row.addWidget(sync_all_btn)
+        sync_row.addStretch()
+        layout.addLayout(sync_row)
+
         # Pre-populate all Phase 2 checkboxes from current module state
         self._populate_p2_checkboxes()
 
-    # ── Step 6: Export ──────────────────────────────────────────────────────
+    # ── Step 5: Export ──────────────────────────────────────────────────────
 
-    def _build_step6(self, layout: QVBoxLayout):
+    def _build_step5_export(self, layout: QVBoxLayout):
         layout.addWidget(_make_section_label("Step 5 — Export to Game"))
         hint = QLabel(
             "Copy translated files back into the game's data folder to patch the game in-place."
         )
         hint.setWordWrap(True)
-        hint.setStyleSheet("color:#888;font-size:10px;padding-bottom:4px;")
+        hint.setStyleSheet("color:#999;font-size:10px;padding-bottom:4px;")
         layout.addWidget(hint)
 
         row = QHBoxLayout()
@@ -2206,6 +2241,19 @@ class WorkflowTab(QWidget):
         except Exception as exc:
             self._log(f"❌ Could not apply phase config: {exc}")
             return
+
+        # Visual feedback on the phase run button
+        _btn_map = {0: "_run_p0_btn", 1: "_run_p1_btn", "1b": "_run_p1b_btn", 2: "_run_p2_btn"}
+        _lbl_map = {0: "_p0_status_lbl", 1: "_p1_status_lbl", "1b": "_p1b_status_lbl", 2: "_p2_status_lbl"}
+        _phlbl = getattr(self, _lbl_map.get(phase, ""), None)
+        _phbtn = getattr(self, _btn_map.get(phase, ""), None)
+        if _phlbl:
+            _phlbl.setText("✅ Applied")
+        if _phbtn:
+            _orig = _phbtn.text()
+            _phbtn.setText("⚙  Starting…")
+            _phbtn.setEnabled(False)
+            QTimer.singleShot(2500, lambda b=_phbtn, t=_orig: (b.setText(t), b.setEnabled(True)))
 
         # Phase-specific guidance
         if phase == 0:
