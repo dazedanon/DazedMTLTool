@@ -536,24 +536,6 @@ class ConfigTab(QWidget):
         self.output_cost_spin.setFixedWidth(200)  # Medium
         price_form.addRow(output_label, self.output_cost_spin)
 
-        cache_rate_label = QLabel("Est. Cache Rate:")
-        cache_rate_label.setFixedWidth(150)
-        cache_rate_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        cache_rate_label.setToolTip(
-            "Assumed prompt-cache hit rate used when estimating costs for Claude models.\n"
-            "0.9 = 90 % of input tokens billed at 10 % (cache read rate).\n"
-            "Set to 0 to disable the discount and use the full input rate."
-        )
-        self.estimate_cache_rate_spin = QDoubleSpinBox()
-        self.estimate_cache_rate_spin.setButtonSymbols(QDoubleSpinBox.NoButtons)
-        self.estimate_cache_rate_spin.setRange(0.0, 1.0)
-        self.estimate_cache_rate_spin.setDecimals(2)
-        self.estimate_cache_rate_spin.setSingleStep(0.05)
-        self.estimate_cache_rate_spin.setValue(0.9)
-        self.estimate_cache_rate_spin.setSuffix("  (Claude estimate only)")
-        self.estimate_cache_rate_spin.setFixedWidth(200)
-        price_form.addRow(cache_rate_label, self.estimate_cache_rate_spin)
-
         right_column.addLayout(price_form)
         right_column.addStretch()
         
@@ -687,7 +669,6 @@ class ConfigTab(QWidget):
         # Custom API pricing
         self.input_cost_spin.setValue(float(_get("input_cost", "2.0")))
         self.output_cost_spin.setValue(float(_get("output_cost", "8.0")))
-        self.estimate_cache_rate_spin.setValue(float(_get("ESTIMATE_CACHE_RATE", "0.9")))
         
     def connect_auto_save(self):
         """Connect all widgets to auto-save on change."""
@@ -712,7 +693,6 @@ class ConfigTab(QWidget):
         self.note_width_spin.editingFinished.connect(self.auto_save)
         self.input_cost_spin.editingFinished.connect(self.auto_save)
         self.output_cost_spin.editingFinished.connect(self.auto_save)
-        self.estimate_cache_rate_spin.editingFinished.connect(self.auto_save)
     
     def disconnect_auto_save(self):
         """Disconnect all widgets from auto-save."""
@@ -732,7 +712,6 @@ class ConfigTab(QWidget):
             self.note_width_spin.editingFinished.disconnect(self.auto_save)
             self.input_cost_spin.editingFinished.disconnect(self.auto_save)
             self.output_cost_spin.editingFinished.disconnect(self.auto_save)
-            self.estimate_cache_rate_spin.editingFinished.disconnect(self.auto_save)
         except (TypeError, RuntimeError):
             pass
     
@@ -770,7 +749,6 @@ class ConfigTab(QWidget):
                 "noteWidth": str(self.note_width_spin.value()),
                 "input_cost": str(self.input_cost_spin.value()),
                 "output_cost": str(self.output_cost_spin.value()),
-                "ESTIMATE_CACHE_RATE": str(self.estimate_cache_rate_spin.value()),
             }
             
             # Save to .env file and update os.environ so subprocesses inherit new values
@@ -838,7 +816,6 @@ class ConfigTab(QWidget):
         # Custom API settings
         self.input_cost_spin.setValue(2.0)
         self.output_cost_spin.setValue(8.0)
-        self.estimate_cache_rate_spin.setValue(0.9)
         
         # Reset engine tabs
         self.mvmz_tab.reset_to_defaults()
