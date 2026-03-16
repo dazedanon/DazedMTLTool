@@ -579,6 +579,8 @@ class TranslationTab(QWidget):
         self.totals_time = 0.0
         # Track which filenames' totals have been applied (prevents double-counting)
         self._applied_file_totals = set()
+        # Filenames from the most recently completed translation run (used by post-run export)
+        self._last_run_files: list = []
         # Totals widget reference
         self.totals_widget = None
         
@@ -736,8 +738,8 @@ class TranslationTab(QWidget):
         file_buttons.addWidget(refresh_btn)
 
         self.sidebar_export_btn = QPushButton("📤")
-        self.sidebar_export_btn.setToolTip("Export active files → Game Folder\nCopy translated files matching files/ into your game's data directory")
-        self.sidebar_export_btn.clicked.connect(self._export_active_files)
+        self.sidebar_export_btn.setToolTip("Export selected files → Game Folder\nCopy translated files for the checked items into your game's data directory")
+        self.sidebar_export_btn.clicked.connect(self._export_selected_files)
         self.sidebar_export_btn.setStyleSheet(icon_button_style)
         file_buttons.addWidget(self.sidebar_export_btn)
         
@@ -806,8 +808,8 @@ class TranslationTab(QWidget):
         self.sync_translated_button.setVisible(False)
         # Export active files → game folder (RPG Maker only)
         self.export_active_button = QPushButton("📤")
-        self.export_active_button.setToolTip("Export active files → Game Folder\nCopy translated files matching files/ into your game's data directory")
-        self.export_active_button.clicked.connect(self._export_active_files)
+        self.export_active_button.setToolTip("Export translated files → Game Folder\nCopy the files from this translation run into your game's data directory")
+        self.export_active_button.clicked.connect(self._export_last_run_files)
         self.export_active_button.setVisible(False)
 
         # Make both buttons the same fixed size and style (icon-only)
@@ -1418,12 +1420,35 @@ class TranslationTab(QWidget):
         QMessageBox.information(self, "Sync Complete", f"Synced {copied} file(s) from translated/ → files/")
         self.refresh_file_lists()
 
-    def _export_active_files(self):
-        """Export translated files matching files/ contents into the game data folder."""
+    def _export_selected_files(self):
+        """Export only the currently checked files in the file list."""
+        selected = self.get_selected_files()
+        if not selected:
+            QMessageBox.warning(self, "Export", "No files are checked — select files to export first.")
+            return
+        self._export_active_files(filenames=selected)
+
+    def _export_last_run_files(self):
+        """Export only the files that were part of the most recent translation run."""
+        if not self._last_run_files:
+            QMessageBox.warning(self, "Export", "No translation run recorded — translate some files first.")
+            return
+        self._export_active_files(filenames=self._last_run_files)
+
+    def _export_active_files(self, filenames: list | None = None):
+        """Export translated files into the game data folder.
+
+        filenames: if provided, only those files are exported; otherwise all
+        files currently in files/ are used (the original behavior, kept for
+        back-compat and used by the Workflow tab via inheritance).
+        """
         files_dir = Path("files")
-        active = sorted(
-            fp.name for fp in files_dir.glob("*.json") if fp.name != ".gitkeep"
-        ) if files_dir.exists() else []
+        if filenames is not None:
+            active = [n for n in filenames if n != ".gitkeep"]
+        else:
+            active = sorted(
+                fp.name for fp in files_dir.glob("*.json") if fp.name != ".gitkeep"
+            ) if files_dir.exists() else []
 
         if not active:
             QMessageBox.warning(self, "Export", "No files found in files/ — import game files first.")
@@ -1814,6 +1839,10 @@ class TranslationTab(QWidget):
             self.item_progress_bar.setValue(0)
             self.item_progress_bar.setMaximum(100)
             
+            # Remember which files this run covers so the post-run export button
+            # can export exactly those files rather than all active files.
+            self._last_run_files = list(selected_files)
+
             # Create and start translation worker
             self.translation_worker = TranslationWorker(
                 self.project_root, 
