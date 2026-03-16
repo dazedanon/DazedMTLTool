@@ -43,6 +43,7 @@ from PyQt5.QtWidgets import (
     QSpinBox,
     QSplitter,
     QStyle,
+    QTabWidget,
     QTextEdit,
     QVBoxLayout,
     QWidget,
@@ -471,38 +472,116 @@ class WorkflowTab(QWidget):
         splitter.setHandleWidth(1)
         splitter.setStyleSheet("QSplitter::handle{background:#3a3a3a;}")
 
-        # ---- Left: scrollable step panels ----
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setStyleSheet(
-            "QScrollArea{border:none;background-color:#1e1e1e;}"
+        # ---- Left: tabbed step panels ----
+        _SCROLL_STYLE = (
+            "QScrollArea{border:none;background-color:transparent;}"
             "QScrollBar:vertical{background:#252526;width:10px;border:none;}"
             "QScrollBar::handle:vertical{background:#555555;border-radius:5px;min-height:20px;}"
             "QScrollBar::handle:vertical:hover{background:#007acc;}"
             "QScrollBar::add-line:vertical,QScrollBar::sub-line:vertical{height:0;}"
         )
-        container = QWidget()
-        vbox = QVBoxLayout(container)
-        vbox.setContentsMargins(20, 16, 20, 16)
-        vbox.setSpacing(2)
 
-        self._build_step0(vbox)
-        vbox.addWidget(_make_hr())
-        self._build_step1_preprocess(vbox)
-        vbox.addWidget(_make_hr())
-        self._build_step2_speaker(vbox)
-        vbox.addWidget(_make_hr())
-        self._build_step3_glossary(vbox)
-        vbox.addWidget(_make_hr())
-        self._build_step4_translation(vbox)
-        vbox.addWidget(_make_hr())
-        self._build_step5_plugins_js(vbox)
-        vbox.addWidget(_make_hr())
-        self._build_step6_export(vbox)
-        vbox.addStretch()
+        self._step_tabs = QTabWidget()
+        self._step_tabs.setStyleSheet("""
+            QTabWidget::pane {
+                border: none;
+                background-color: #1e1e1e;
+            }
+            QTabWidget::tab-bar {
+                alignment: left;
+            }
+            QTabBar {
+                background-color: #252526;
+            }
+            QTabBar::tab {
+                background-color: #252526;
+                color: #7a7a7a;
+                padding: 9px 18px;
+                border: none;
+                border-right: 1px solid #3a3a3a;
+                font-size: 12px;
+                min-width: 90px;
+            }
+            QTabBar::tab:selected {
+                background-color: #1e1e1e;
+                color: #e0e0e0;
+                font-weight: bold;
+                border-top: 2px solid #007acc;
+            }
+            QTabBar::tab:hover:!selected {
+                background-color: #2d2d30;
+                color: #cccccc;
+            }
+        """)
 
-        scroll.setWidget(container)
-        splitter.addWidget(scroll)
+        _tab_defs = [
+            ("0 · Project",      self._build_step0),
+            ("1 · Pre-process",  self._build_step1_preprocess),
+            ("2 · Speaker",      self._build_step2_speaker),
+            ("3 · Glossary",     self._build_step3_glossary),
+            ("4 · Translation",  self._build_step4_translation),
+            ("5 · Plugins.js",   self._build_step5_plugins_js),
+            ("6 · Export",       self._build_step6_export),
+        ]
+
+        for tab_label, builder in _tab_defs:
+            # Each tab: outer page → scroll area → inner content widget
+            page = QWidget()
+            page_layout = QVBoxLayout(page)
+            page_layout.setContentsMargins(0, 0, 0, 0)
+            page_layout.setSpacing(0)
+
+            scroll = QScrollArea()
+            scroll.setWidgetResizable(True)
+            scroll.setStyleSheet(_SCROLL_STYLE)
+
+            inner = QWidget()
+            vbox = QVBoxLayout(inner)
+            vbox.setContentsMargins(24, 18, 24, 12)
+            vbox.setSpacing(10)
+
+            builder(vbox)
+            vbox.addStretch()
+
+            scroll.setWidget(inner)
+            page_layout.addWidget(scroll, 1)
+
+            # ── Navigation footer ──────────────────────────────────────────
+            nav = QWidget()
+            nav.setStyleSheet(
+                "QWidget{background-color:#252526;"
+                "border-top:1px solid #3a3a3a;}"
+            )
+            nav_layout = QHBoxLayout(nav)
+            nav_layout.setContentsMargins(16, 6, 16, 6)
+            nav_layout.setSpacing(8)
+
+            tab_idx = len(self._step_tabs)  # current tab index (before addTab)
+
+            if tab_idx > 0:
+                back_btn = _make_btn("← Back", "#3a3a3a")
+                back_btn.setFixedWidth(100)
+                _idx = tab_idx  # capture for lambda
+                back_btn.clicked.connect(
+                    lambda _checked, i=_idx: self._step_tabs.setCurrentIndex(i - 1)
+                )
+                nav_layout.addWidget(back_btn)
+
+            nav_layout.addStretch()
+
+            if tab_idx < len(_tab_defs) - 1:
+                next_btn = _make_btn("Next →", "#007acc")
+                next_btn.setFixedWidth(100)
+                _idx = tab_idx  # capture for lambda
+                next_btn.clicked.connect(
+                    lambda _checked, i=_idx: self._step_tabs.setCurrentIndex(i + 1)
+                )
+                nav_layout.addWidget(next_btn)
+
+            page_layout.addWidget(nav)
+            self._step_tabs.addTab(page, tab_label)
+
+        splitter.addWidget(self._step_tabs)
 
         # ---- Right: log area ----
         log_panel = QWidget()
@@ -662,11 +741,14 @@ class WorkflowTab(QWidget):
 
         # Action row
         row1 = QHBoxLayout()
+        row1.setSpacing(6)
         self.sel_all_btn = _make_btn("Select All", "#555")
+        self.sel_all_btn.setFixedWidth(110)
         self.sel_all_btn.clicked.connect(self._select_all_files)
         row1.addWidget(self.sel_all_btn)
 
         sel_core = _make_btn("Core Only", "#555")
+        sel_core.setFixedWidth(110)
         sel_core.setToolTip("Select only core database files; deselect map files")
         sel_core.clicked.connect(self._select_core_only)
         row1.addWidget(sel_core)
@@ -1198,6 +1280,7 @@ class WorkflowTab(QWidget):
         ta_inner.addLayout(ta_path_row)
         ta_btn_row = QHBoxLayout()
         run_dazed = _make_btn("►  Run dazedformat", "#555")
+        run_dazed.setFixedWidth(180)
         run_dazed.clicked.connect(self._run_dazedformat)
         ta_btn_row.addWidget(run_dazed)
         ta_btn_row.addStretch()
@@ -1231,6 +1314,7 @@ class WorkflowTab(QWidget):
         tb_inner.addLayout(tb_path_row)
         tb_btn_row = QHBoxLayout()
         run_prettier = _make_btn("►  Format plugins.js", "#555")
+        run_prettier.setFixedWidth(180)
         run_prettier.clicked.connect(self._run_prettier)
         tb_btn_row.addWidget(run_prettier)
         tb_btn_row.addStretch()
@@ -1271,14 +1355,17 @@ class WorkflowTab(QWidget):
         tc_inner.addLayout(tc_dst_row)
 
         tc_btn_row = QHBoxLayout()
+        tc_btn_row.setSpacing(8)
         run_gu = _make_btn("►  Copy gameupdate/", "#555")
+        run_gu.setFixedWidth(180)
         run_gu.clicked.connect(self._run_gameupdate)
         tc_btn_row.addWidget(run_gu)
-        tc_btn_row.addStretch()
         run_all_btn = _make_btn("►►  Run All 3 Tasks", "#007acc")
+        run_all_btn.setFixedWidth(180)
         run_all_btn.setToolTip("Run dazedformat, prettier, and gameupdate copy in sequence")
         run_all_btn.clicked.connect(self._run_all_preprocess)
         tc_btn_row.addWidget(run_all_btn)
+        tc_btn_row.addStretch()
         tc_inner.addLayout(tc_btn_row)
         tb.addWidget(tc)
 
@@ -1356,7 +1443,7 @@ class WorkflowTab(QWidget):
 
         spk_btn_row = QHBoxLayout()
         self._parse_speakers_btn = _make_btn("🔍  Parse Speakers", "#007acc")
-        self._parse_speakers_btn.setMinimumWidth(180)
+        self._parse_speakers_btn.setFixedWidth(180)
         self._parse_speakers_btn.setToolTip(
             "Scan all game files for speaker names and write them to vocab.txt"
         )
@@ -1397,7 +1484,7 @@ class WorkflowTab(QWidget):
         pb_inner.addWidget(glossary_desc)
         glossary_row = QHBoxLayout()
         copy_glossary_btn = _make_btn("📋  Copy Prompt for Copilot", "#555")
-        copy_glossary_btn.setMinimumWidth(220)
+        copy_glossary_btn.setFixedWidth(220)
         copy_glossary_btn.setToolTip("Copy the full glossary discovery prompt to clipboard")
         copy_glossary_btn.clicked.connect(self._copy_glossary_prompt)
         glossary_row.addWidget(copy_glossary_btn)
@@ -1433,15 +1520,15 @@ class WorkflowTab(QWidget):
         self._reload_vocab()
         layout.addWidget(self.vocab_editor)
 
-        _VOC_W = 180
         row = QHBoxLayout()
+        row.setSpacing(8)
         save_vocab = _make_btn("💾  Save vocab.txt", "#3a7a3a")
-        save_vocab.setMinimumWidth(_VOC_W)
+        save_vocab.setFixedWidth(180)
         save_vocab.clicked.connect(self._save_vocab)
         row.addWidget(save_vocab)
 
         reload_vocab = _make_btn("↺  Reload", "#555")
-        reload_vocab.setMinimumWidth(_VOC_W)
+        reload_vocab.setFixedWidth(110)
         reload_vocab.clicked.connect(self._reload_vocab)
         row.addWidget(reload_vocab)
         row.addStretch()
@@ -1453,15 +1540,16 @@ class WorkflowTab(QWidget):
         layout.addWidget(_make_section_label("Step 2 — Speaker Format Detection"))
 
         # Import button row
-        _IMP_W = 230
+        _IMP_W = 220
         import_row = QHBoxLayout()
+        import_row.setSpacing(8)
         self.import_btn = _make_btn("⬇  Import Selected → files/", "#007acc")
-        self.import_btn.setMinimumWidth(_IMP_W)
+        self.import_btn.setFixedWidth(_IMP_W)
         self.import_btn.setEnabled(False)
         self.import_btn.clicked.connect(self._import_files)
         import_row.addWidget(self.import_btn)
         clear_translated_btn = _make_btn("🗑  Clear translated/", "#8b0000")
-        clear_translated_btn.setMinimumWidth(_IMP_W)
+        clear_translated_btn.setFixedWidth(_IMP_W)
         clear_translated_btn.setToolTip("Delete all files inside the translated/ folder")
         clear_translated_btn.clicked.connect(self._clear_translated)
         import_row.addWidget(clear_translated_btn)
@@ -1479,6 +1567,7 @@ class WorkflowTab(QWidget):
 
         copy_row = QHBoxLayout()
         copy_btn = _make_btn("📋  Copy Prompt for Copilot", "#555")
+        copy_btn.setFixedWidth(220)
         copy_btn.setToolTip("Copies a prompt explaining all speaker formats — paste into Copilot with game files")
         copy_btn.clicked.connect(self._copy_speaker_prompt)
         copy_row.addWidget(copy_btn)
@@ -1552,6 +1641,7 @@ class WorkflowTab(QWidget):
 
         apply_wrap_row = QHBoxLayout()
         apply_wrap_btn = _make_btn("✔  Apply to .env", "#3a7a3a")
+        apply_wrap_btn.setFixedWidth(160)
         apply_wrap_btn.setToolTip("Write width / listWidth / noteWidth into .env")
         apply_wrap_btn.clicked.connect(self._apply_wrap_config)
         apply_wrap_row.addWidget(apply_wrap_btn)
@@ -1572,7 +1662,9 @@ class WorkflowTab(QWidget):
         p0_desc.setWordWrap(True)
         p0_inner.addWidget(p0_desc)
         p0_row = QHBoxLayout()
+        p0_row.setSpacing(10)
         self._run_p0_btn = _make_btn("►  Run Phase 0", "#4a7a4a")
+        self._run_p0_btn.setFixedWidth(200)
         self._run_p0_btn.setToolTip(
             "Sets engine to RPG Maker MV/MZ, selects only DB files "
             "(Actors, Armors … etc.), all event codes OFF — then starts translation."
@@ -1580,7 +1672,7 @@ class WorkflowTab(QWidget):
         self._run_p0_btn.clicked.connect(lambda: self._run_phase(0))
         p0_row.addWidget(self._run_p0_btn)
         self._p0_status_lbl = QLabel("")
-        self._p0_status_lbl.setStyleSheet("color:#6a9a6a;font-size:13px;")
+        self._p0_status_lbl.setStyleSheet("color:#6a9a6a;font-size:13px;padding-left:4px;")
         p0_row.addWidget(self._p0_status_lbl)
         p0_row.addStretch()
         p0_inner.addLayout(p0_row)
@@ -1598,12 +1690,14 @@ class WorkflowTab(QWidget):
         p1_desc.setWordWrap(True)
         p1_inner.addWidget(p1_desc)
         p1_row = QHBoxLayout()
+        p1_row.setSpacing(10)
         self._run_p1_btn = _make_btn("►  Run Phase 1", "#007acc")
+        self._run_p1_btn.setFixedWidth(200)
         self._run_p1_btn.setToolTip("Applies Phase 1 code settings and starts translation")
         self._run_p1_btn.clicked.connect(lambda: self._run_phase(1))
         p1_row.addWidget(self._run_p1_btn)
         self._p1_status_lbl = QLabel("")
-        self._p1_status_lbl.setStyleSheet("color:#6ab4d4;font-size:13px;")
+        self._p1_status_lbl.setStyleSheet("color:#6ab4d4;font-size:13px;padding-left:4px;")
         p1_row.addWidget(self._p1_status_lbl)
         p1_row.addStretch()
         p1_inner.addLayout(p1_row)
@@ -1623,12 +1717,14 @@ class WorkflowTab(QWidget):
         p1b_desc.setWordWrap(True)
         p1b_inner.addWidget(p1b_desc)
         p1b_row = QHBoxLayout()
+        p1b_row.setSpacing(10)
         self._run_p1b_btn = _make_btn("►  Run Phase 1b", "#2a5a7a")
+        self._run_p1b_btn.setFixedWidth(200)
         self._run_p1b_btn.setToolTip("Applies Phase 1b code settings (111 only) and starts translation")
         self._run_p1b_btn.clicked.connect(lambda: self._run_phase("1b"))
         p1b_row.addWidget(self._run_p1b_btn)
         self._p1b_status_lbl = QLabel("")
-        self._p1b_status_lbl.setStyleSheet("color:#6aaac4;font-size:13px;")
+        self._p1b_status_lbl.setStyleSheet("color:#6aaac4;font-size:13px;padding-left:4px;")
         p1b_row.addWidget(self._p1b_status_lbl)
         p1b_row.addStretch()
         p1b_inner.addLayout(p1b_row)
@@ -1648,6 +1744,7 @@ class WorkflowTab(QWidget):
 
         copy_risky_row = QHBoxLayout()
         copy_risky_btn = _make_btn("📋  Copy Plugin Prompt", "#555")
+        copy_risky_btn.setFixedWidth(200)
         copy_risky_btn.setToolTip(
             "Copy a Copilot prompt that audits code 122 variable ranges and all optional "
             "plugin/script codes (357, 356, 355/655, 657, 320, 324, 325, 108) for visible text."
@@ -1677,6 +1774,7 @@ class WorkflowTab(QWidget):
         self._p2_var_max.setToolTip("Maximum variable ID to translate (exclusive)")
         var_range_row.addWidget(self._p2_var_max)
         apply_range_btn = _make_btn("Apply", "#3a3a3a")
+        apply_range_btn.setFixedWidth(80)
         apply_range_btn.setToolTip("Write CODE122_VAR_MIN / CODE122_VAR_MAX to the module")
         apply_range_btn.clicked.connect(self._apply_var_range)
         var_range_row.addWidget(apply_range_btn)
@@ -1831,7 +1929,7 @@ class WorkflowTab(QWidget):
         patterns_select_all_btn.toggled.connect(_toggle_patterns)
         p2_inner.addWidget(patterns_box)
 
-        _P2_BTN_WIDTH = 220
+        _P2_BTN_WIDTH = 200
 
         # Apply Plugin Settings button
         apply_plugins_row = QHBoxLayout()
@@ -1847,6 +1945,7 @@ class WorkflowTab(QWidget):
         p2_inner.addLayout(apply_plugins_row)
 
         p2_row = QHBoxLayout()
+        p2_row.setSpacing(10)
         self._run_p2_btn = _make_btn("►  Run Phase 2", "#7a4a00")
         self._run_p2_btn.setFixedWidth(_P2_BTN_WIDTH)
         self._run_p2_btn.setToolTip(
@@ -1856,7 +1955,7 @@ class WorkflowTab(QWidget):
         self._run_p2_btn.clicked.connect(lambda: self._run_phase(2))
         p2_row.addWidget(self._run_p2_btn)
         self._p2_status_lbl = QLabel("")
-        self._p2_status_lbl.setStyleSheet("color:#d4aa68;font-size:13px;")
+        self._p2_status_lbl.setStyleSheet("color:#d4aa68;font-size:13px;padding-left:4px;")
         p2_row.addWidget(self._p2_status_lbl)
         p2_row.addStretch()
         p2_inner.addLayout(p2_row)
@@ -1880,9 +1979,9 @@ class WorkflowTab(QWidget):
         hint.setStyleSheet("color:#9d9d9d;font-size:13px;padding-bottom:6px;")
         layout.addWidget(hint)
 
-        _BTN_WIDTH = 300
+        _BTN_WIDTH = 240
 
-        vocab_btn = _make_btn("1.  📄  Copy vocab.txt → Game Folder", "#555")
+        vocab_btn = _make_btn("📄  Copy vocab.txt → Game Folder", "#555")
         vocab_btn.setFixedWidth(_BTN_WIDTH)
         vocab_btn.setToolTip(
             "Copy vocab.txt to <game root>/vocab.txt so you can attach it "
@@ -1890,7 +1989,7 @@ class WorkflowTab(QWidget):
         )
         vocab_btn.clicked.connect(self._copy_vocab_to_game)
 
-        copy_btn = _make_btn("2.  📋  Copy Prompt for Copilot", "#555")
+        copy_btn = _make_btn("📋  Copy Prompt for Copilot", "#555")
         copy_btn.setFixedWidth(_BTN_WIDTH)
         copy_btn.setToolTip(
             "Copy a prompt that instructs Copilot/Cursor to translate only "
@@ -1898,11 +1997,12 @@ class WorkflowTab(QWidget):
         )
         copy_btn.clicked.connect(self._copy_plugins_js_translate_prompt)
 
-        for btn in (vocab_btn, copy_btn):
-            row = QHBoxLayout()
-            row.addWidget(btn)
-            row.addStretch()
-            layout.addLayout(row)
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(8)
+        btn_row.addWidget(vocab_btn)
+        btn_row.addWidget(copy_btn)
+        btn_row.addStretch()
+        layout.addLayout(btn_row)
 
     # ── Step 6: Export ──────────────────────────────────────────────────────
 
@@ -1915,10 +2015,11 @@ class WorkflowTab(QWidget):
         hint.setStyleSheet("color:#9d9d9d;font-size:13px;padding-bottom:4px;")
         layout.addWidget(hint)
 
-        _EXP_W = 280
+        _EXP_W = 260
         row = QHBoxLayout()
-        export_active_btn = _make_btn("📤  Export Active Files → Game Folder", "#3a7a3a")
-        export_active_btn.setMinimumWidth(_EXP_W)
+        row.setSpacing(8)
+        export_active_btn = _make_btn("📤  Export Active Files", "#3a7a3a")
+        export_active_btn.setFixedWidth(_EXP_W)
         export_active_btn.setToolTip(
             "Only export files whose names match those currently in files/\n"
             "(i.e. the files you imported for this project)"
@@ -1926,8 +2027,8 @@ class WorkflowTab(QWidget):
         export_active_btn.clicked.connect(self._export_active_files)
         row.addWidget(export_active_btn)
 
-        export_all_btn = _make_btn("📤  Export ALL translated/ → Game Folder", "#555")
-        export_all_btn.setMinimumWidth(_EXP_W)
+        export_all_btn = _make_btn("📤  Export ALL translated/", "#555")
+        export_all_btn.setFixedWidth(_EXP_W)
         export_all_btn.setToolTip("Export every file in translated/ regardless of what is in files/")
         export_all_btn.clicked.connect(self._export_to_game)
         row.addWidget(export_all_btn)
