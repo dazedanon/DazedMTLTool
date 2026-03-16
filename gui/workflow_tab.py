@@ -351,9 +351,8 @@ class _JsFormatWorker(QThread):
 def _make_section_label(text: str) -> QLabel:
     lbl = QLabel(text)
     lbl.setStyleSheet(
-        "font-size:14px; font-weight:bold; color:#007acc; "
-        "padding:8px 0 4px 8px; background:transparent;"
-        "border-left:3px solid #007acc;"
+        "font-size: 13px; font-weight: bold; color: #007acc;"
+        "padding: 8px 0px 5px 0px; background-color: transparent;"
     )
     return lbl
 
@@ -362,37 +361,57 @@ def _make_hr() -> QFrame:
     hr = QFrame()
     hr.setFrameShape(QFrame.HLine)
     hr.setFrameShadow(QFrame.Sunken)
-    hr.setStyleSheet("QFrame{color:#444;margin:8px 0;}")
+    hr.setStyleSheet("QFrame { color: #555555; margin: 5px 0px; }")
     return hr
 
 
 def _make_btn(text: str, color: str = "#007acc") -> QPushButton:
+    """Button styled to match the translation tab.
+
+    Dark utility colours (max channel < 115) use the flat sidebar style
+    (dark background, border, blue left-accent on hover).
+    True action colours use a filled coloured button.
+    """
     btn = QPushButton(text)
-    # Derive a slightly lighter hover colour by blending toward white
     try:
-        r = int(color[1:3], 16)
-        g = int(color[3:5], 16)
-        b = int(color[5:7], 16)
-        rh = min(255, r + 30)
-        gh = min(255, g + 30)
-        bh = min(255, b + 30)
-        hover_color = f"#{rh:02x}{gh:02x}{bh:02x}"
-        rp = max(0, r - 30)
-        gp = max(0, g - 30)
-        bp = max(0, b - 30)
-        press_color = f"#{rp:02x}{gp:02x}{bp:02x}"
+        c = color.lstrip("#")
+        if len(c) == 3:
+            c = c[0] * 2 + c[1] * 2 + c[2] * 2
+        r, g, b = int(c[0:2], 16), int(c[2:4], 16), int(c[4:6], 16)
+        is_flat = max(r, g, b) < 115
     except Exception:
-        hover_color = color
-        press_color = color
-    btn.setStyleSheet(
-        f"QPushButton{{background:{color};color:#fff;border:none;"
-        f"padding:6px 14px;border-radius:3px;font-size:11px;"
-        f"icon-size:16px;"
-        f"font-family:'Segoe UI Emoji','Segoe UI','Apple Color Emoji',sans-serif;}}"
-        f"QPushButton:hover{{background:{hover_color};}}"
-        f"QPushButton:pressed{{background:{press_color};padding:7px 13px 5px 15px;}}"
-        f"QPushButton:disabled{{background:#555;color:#999;}}"
-    )
+        r = g = b = 0
+        is_flat = False
+    if is_flat:
+        btn.setStyleSheet(
+            "QPushButton{background-color:#2d2d30;color:#cccccc;"
+            "border:1px solid #555555;padding:6px 14px;"
+            "border-radius:4px;font-size:12px;font-weight:bold;"
+            "font-family:'Segoe UI Emoji','Segoe UI','Apple Color Emoji',sans-serif;}"
+            "QPushButton:hover{background-color:#3e3e42;border-left-color:#007acc;}"
+            "QPushButton:pressed{background-color:#007acc;color:white;}"
+            "QPushButton:disabled{background-color:#404040;color:#666666;border-color:#444444;}"
+        )
+    else:
+        try:
+            rh = min(255, r + 25)
+            gh = min(255, g + 25)
+            bh = min(255, b + 25)
+            hover_color = f"#{rh:02x}{gh:02x}{bh:02x}"
+            rp = max(0, r - 20)
+            gp = max(0, g - 20)
+            bp = max(0, b - 20)
+            press_color = f"#{rp:02x}{gp:02x}{bp:02x}"
+        except Exception:
+            hover_color = press_color = color
+        btn.setStyleSheet(
+            f"QPushButton{{background-color:{color};color:white;border:none;"
+            f"padding:7px 16px;border-radius:4px;font-size:12px;font-weight:bold;"
+            f"font-family:'Segoe UI Emoji','Segoe UI','Apple Color Emoji',sans-serif;}}"
+            f"QPushButton:hover{{background-color:{hover_color};}}"
+            f"QPushButton:pressed{{background-color:{press_color};}}"
+            f"QPushButton:disabled{{background-color:#404040;color:#666666;}}"
+        )
     return btn
 
 
@@ -431,15 +450,14 @@ class WorkflowTab(QWidget):
 
         # Splitter: left=steps, right=log
         splitter = QSplitter(Qt.Horizontal)
-        splitter.setHandleWidth(4)
-        splitter.setStyleSheet("QSplitter::handle{background:#333;}")
+        splitter.setHandleWidth(2)
+        splitter.setStyleSheet("QSplitter::handle{background:#555555;}")
 
         # ---- Left: scrollable step panels ----
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setStyleSheet("QScrollArea{border:none;}")
         container = QWidget()
-        container.setStyleSheet("background:#1e1e1e;")
         vbox = QVBoxLayout(container)
         vbox.setContentsMargins(18, 14, 18, 14)
         vbox.setSpacing(4)
@@ -462,15 +480,14 @@ class WorkflowTab(QWidget):
 
         # ---- Right: log area ----
         log_panel = QWidget()
-        log_panel.setStyleSheet("background:#1e1e1e;")
         lp_layout = QVBoxLayout(log_panel)
         lp_layout.setContentsMargins(0, 0, 0, 0)
         lp_layout.setSpacing(0)
 
         log_header = QLabel("  Log")
         log_header.setStyleSheet(
-            "background:#252526;color:#ccc;font-size:11px;"
-            "padding:6px 8px;border-bottom:1px solid #333;"
+            "background-color:#2d2d30;color:#cccccc;font-size:11px;font-weight:bold;"
+            "padding:6px 8px;border-bottom:1px solid #555555;"
         )
         lp_layout.addWidget(log_header)
 
@@ -478,16 +495,12 @@ class WorkflowTab(QWidget):
         self.log_area.setReadOnly(True)
         self.log_area.setFont(QFont("Consolas", 9))
         self.log_area.setStyleSheet(
-            "QTextEdit{background:#1e1e1e;color:#d4d4d4;"
+            "QTextEdit{background-color:#252526;color:#d4d4d4;"
             "border:none;padding:8px;}"
         )
         lp_layout.addWidget(self.log_area)
 
-        clear_btn = QPushButton("Clear Log")
-        clear_btn.setStyleSheet(
-            "QPushButton{background:#252526;color:#888;border:none;"
-            "font-size:10px;padding:4px;}QPushButton:hover{color:#ccc;}"
-        )
+        clear_btn = _make_btn("Clear Log", "#444")
         clear_btn.clicked.connect(self.log_area.clear)
         lp_layout.addWidget(clear_btn)
 
@@ -510,10 +523,6 @@ class WorkflowTab(QWidget):
         row0 = QHBoxLayout()
         self.folder_edit = QLineEdit()
         self.folder_edit.setPlaceholderText("Path to game root folder…")
-        self.folder_edit.setStyleSheet(
-            "QLineEdit{background:#2d2d30;color:#ccc;border:1px solid #555;"
-            "padding:5px;font-size:11px;border-radius:2px;}"
-        )
         saved = self._setting("last_game_folder", "")
         if saved:
             self.folder_edit.setText(saved)
@@ -536,10 +545,9 @@ class WorkflowTab(QWidget):
         self.file_list = QListWidget()
         self.file_list.setMaximumHeight(180)
         self.file_list.setStyleSheet(
-            "QListWidget{background:#252526;color:#ccc;border:1px solid #444;"
-            "font-size:10px;}"
-            "QListWidget::item:selected{background:#37373d;}"
-            "QListWidget::item:hover{background:#2a2d2e;}"
+            "QListWidget{outline:none;border:1px solid #555555;}"
+            "QListWidget::item{border:none;outline:none;}"
+            "QListWidget::item:hover{background-color:#3e3e42;}"
         )
         layout.addWidget(self.file_list)
 
@@ -967,10 +975,6 @@ class WorkflowTab(QWidget):
         collapse_layout.addWidget(hint)
 
         tasks_box = QGroupBox()
-        tasks_box.setStyleSheet(
-            "QGroupBox{border:1px solid #3a3a3a;border-radius:3px;margin-top:4px;"
-            "padding:6px;background:#1a1a1a;}"
-        )
         tb = QVBoxLayout(tasks_box)
         tb.setSpacing(10)
         collapse_layout.addWidget(tasks_box)
@@ -1021,10 +1025,6 @@ class WorkflowTab(QWidget):
         tb_path_row.addWidget(tb_path_lbl)
         self.pp_plugins_edit = QLineEdit()
         self.pp_plugins_edit.setPlaceholderText("Path to plugins.js…")
-        self.pp_plugins_edit.setStyleSheet(
-            "QLineEdit{background:#2d2d30;color:#ccc;border:1px solid #555;"
-            "padding:3px;font-size:10px;border-radius:2px;}"
-        )
         tb_path_row.addWidget(self.pp_plugins_edit, 1)
         browse_plugins = _make_btn("", "#444")
         browse_plugins.setIcon(browse_plugins.style().standardIcon(QStyle.SP_DirOpenIcon))
@@ -1058,10 +1058,6 @@ class WorkflowTab(QWidget):
         tc_src_row.addWidget(QLabel("Source:"))
         self.pp_gameupdate_edit = QLineEdit()
         self.pp_gameupdate_edit.setPlaceholderText("Path to gameupdate/ folder…")
-        self.pp_gameupdate_edit.setStyleSheet(
-            "QLineEdit{background:#2d2d30;color:#ccc;border:1px solid #555;"
-            "padding:3px;font-size:10px;border-radius:2px;}"
-        )
         tc_src_row.addWidget(self.pp_gameupdate_edit, 1)
         browse_gu = _make_btn("", "#444")
         browse_gu.setIcon(browse_gu.style().standardIcon(QStyle.SP_DirOpenIcon))
@@ -1105,11 +1101,7 @@ class WorkflowTab(QWidget):
 
     @staticmethod
     def _task_box_style() -> str:
-        return (
-            "QGroupBox{color:#bbb;border:1px solid #444;border-radius:2px;"
-            "margin-top:6px;font-size:10px;padding:4px;}"
-            "QGroupBox::title{padding:0 4px;}"
-        )
+        return ""  # inherits from app stylesheet
 
     def _build_step3_glossary(self, layout: QVBoxLayout):
         layout.addWidget(_make_section_label("Step 3 — Glossary (vocab.txt)"))
@@ -1123,11 +1115,6 @@ class WorkflowTab(QWidget):
 
         # ---- Parse Speakers -------------------------------------------------
         spk_box = QGroupBox("3a — Parse Speakers (Auto-detect Names)")
-        spk_box.setStyleSheet(
-            "QGroupBox{color:#ccc;border:1px solid #444;border-radius:3px;"
-            "margin-top:8px;font-size:11px;}"
-            "QGroupBox::title{padding:0 6px;}"
-        )
         spk_inner = QVBoxLayout(spk_box)
         spk_inner.setSpacing(6)
 
@@ -1158,11 +1145,6 @@ class WorkflowTab(QWidget):
 
         # ---- Copilot / Cursor prompt helpers --------------------------------
         prompt_box = QGroupBox("3b — AI Prompt Helpers (Copilot / Cursor)")
-        prompt_box.setStyleSheet(
-            "QGroupBox{color:#ccc;border:1px solid #444;border-radius:3px;"
-            "margin-top:8px;font-size:11px;}"
-            "QGroupBox::title{padding:0 6px;}"
-        )
         pb_inner = QVBoxLayout(prompt_box)
         pb_inner.setSpacing(6)
 
@@ -1204,8 +1186,8 @@ class WorkflowTab(QWidget):
         )
         format_hint.setFont(QFont("Consolas", 9))
         format_hint.setStyleSheet(
-            "color:#569cd6;background:#252526;border:1px solid #3a3a3a;"
-            "padding:5px 8px;border-radius:2px;font-size:10px;"
+            "color:#569cd6;border:1px solid #444444;"
+            "padding:5px 8px;border-radius:3px;font-size:10px;"
         )
         layout.addWidget(format_hint)
 
@@ -1213,8 +1195,8 @@ class WorkflowTab(QWidget):
         self.vocab_editor.setMinimumHeight(160)
         self.vocab_editor.setFont(QFont("Consolas", 9))
         self.vocab_editor.setStyleSheet(
-            "QTextEdit{background:#252526;color:#d4d4d4;border:1px solid #444;"
-            "padding:6px;}"
+            "QTextEdit{background-color:#252526;color:#d4d4d4;"
+            "border:1px solid #555555;padding:6px;}"
         )
         self._reload_vocab()
         layout.addWidget(self.vocab_editor)
@@ -1266,28 +1248,19 @@ class WorkflowTab(QWidget):
         layout.addLayout(copy_row)
 
         # ---- Flag checkboxes ------------------------------------------------
-        _cb_style = "color:#ccc;font-size:10px;"
         cb_box = QGroupBox("Speaker flags")
-        cb_box.setStyleSheet(
-            "QGroupBox{color:#aaa;border:1px solid #3a3a3a;border-radius:3px;"
-            "margin-top:6px;font-size:10px;padding:6px;background:#1e1e1e;}"
-            "QGroupBox::title{padding:0 4px;}"
-        )
         cb_inner = QVBoxLayout(cb_box)
         cb_inner.setSpacing(3)
 
         self.spk_inline_cb = QCheckBox("INLINE401SPEAKERS  —  speaker name inline before 「 in the 401 text")
-        self.spk_inline_cb.setStyleSheet(_cb_style)
         self.spk_inline_cb.stateChanged.connect(self._apply_speaker_flags)
         cb_inner.addWidget(self.spk_inline_cb)
 
         self.spk_firstline_cb = QCheckBox("FIRSTLINESPEAKERS  —  first 401 line is a short speaker name")
-        self.spk_firstline_cb.setStyleSheet(_cb_style)
         self.spk_firstline_cb.stateChanged.connect(self._apply_speaker_flags)
         cb_inner.addWidget(self.spk_firstline_cb)
 
         self.spk_face_cb = QCheckBox("FACENAME101  —  speaker inferred from 101 face-image filename")
-        self.spk_face_cb.setStyleSheet(_cb_style)
         self.spk_face_cb.stateChanged.connect(self._apply_speaker_flags)
         cb_inner.addWidget(self.spk_face_cb)
 
@@ -1300,11 +1273,6 @@ class WorkflowTab(QWidget):
 
         # ---- Pre-flight: text wrap configuration ----------------------------
         wrap_box = QGroupBox("Pre-flight — Text Wrap Width")
-        wrap_box.setStyleSheet(
-            "QGroupBox{color:#ccc;border:1px solid #444;border-radius:3px;"
-            "margin-top:4px;font-size:11px;}"
-            "QGroupBox::title{padding:0 6px;}"
-        )
         wrap_inner = QVBoxLayout(wrap_box)
         wrap_inner.setSpacing(6)
 
@@ -1319,14 +1287,9 @@ class WorkflowTab(QWidget):
 
         def _spin_pair(label_text: str, default: int):
             lbl = QLabel(label_text)
-            lbl.setStyleSheet("color:#aaa;font-size:10px;")
             sp = QSpinBox()
             sp.setRange(20, 300)
             sp.setValue(default)
-            sp.setStyleSheet(
-                "QSpinBox{background:#2d2d30;color:#ccc;border:1px solid #555;"
-                "padding:2px 4px;font-size:10px;border-radius:2px;}"
-            )
             sp.setFixedWidth(68)
             return lbl, sp
 
@@ -1357,9 +1320,9 @@ class WorkflowTab(QWidget):
 
         p0_box = QGroupBox("Phase 0  –  Core Database Files")
         p0_box.setStyleSheet(
-            "QGroupBox{color:#ccc;border:1px solid #4a7a4a;border-radius:3px;"
-            "margin-top:8px;font-size:11px;border-left:3px solid #4a9a4a;}"
-            "QGroupBox::title{padding:0 6px;color:#9aca9a;}"
+            "QGroupBox{border:1px solid #444444;border-left:3px solid #4a9a4a;"
+            "border-radius:3px;margin-top:8px;}"
+            "QGroupBox::title{left:8px;padding:2px 5px;color:#007acc;font-weight:bold;}"
         )
         p0_inner = QVBoxLayout(p0_box)
         p0_desc = QLabel(
@@ -1387,9 +1350,9 @@ class WorkflowTab(QWidget):
 
         p1_box = QGroupBox("Phase 1  –  Safe Codes (dialogue + choices)")
         p1_box.setStyleSheet(
-            "QGroupBox{color:#ccc;border:1px solid #1a6aaa;border-radius:3px;"
-            "margin-top:8px;font-size:11px;border-left:3px solid #007acc;}"
-            "QGroupBox::title{padding:0 6px;color:#7ab8d4;}"
+            "QGroupBox{border:1px solid #444444;border-left:3px solid #007acc;"
+            "border-radius:3px;margin-top:8px;}"
+            "QGroupBox::title{left:8px;padding:2px 5px;color:#007acc;font-weight:bold;}"
         )
         p1_inner = QVBoxLayout(p1_box)
         p1_desc = QLabel(
@@ -1414,9 +1377,9 @@ class WorkflowTab(QWidget):
 
         p1b_box = QGroupBox("Phase 1b  –  Build Variable Cache (code 111)")
         p1b_box.setStyleSheet(
-            "QGroupBox{color:#ccc;border:1px solid #2a6a8a;border-radius:3px;"
-            "margin-top:8px;font-size:11px;border-left:3px solid #2a7a9a;}"
-            "QGroupBox::title{padding:0 6px;color:#7aaac4;}"
+            "QGroupBox{border:1px solid #444444;border-left:3px solid #2a7a9a;"
+            "border-radius:3px;margin-top:8px;}"
+            "QGroupBox::title{left:8px;padding:2px 5px;color:#007acc;font-weight:bold;}"
         )
         p1b_inner = QVBoxLayout(p1b_box)
         p1b_desc = QLabel(
@@ -1443,9 +1406,9 @@ class WorkflowTab(QWidget):
 
         p2_box = QGroupBox("Phase 2  –  Risky Codes (variables + conditionals)")
         p2_box.setStyleSheet(
-            "QGroupBox{color:#ccc;border:1px solid #8a5a00;border-radius:3px;"
-            "margin-top:8px;font-size:11px;border-left:3px solid #aa7000;}"
-            "QGroupBox::title{padding:0 6px;color:#d4aa68;}"
+            "QGroupBox{border:1px solid #444444;border-left:3px solid #aa7000;"
+            "border-radius:3px;margin-top:8px;}"
+            "QGroupBox::title{left:8px;padding:2px 5px;color:#007acc;font-weight:bold;}"
         )
         p2_inner = QVBoxLayout(p2_box)
         p2_desc = QLabel(
@@ -1471,24 +1434,20 @@ class WorkflowTab(QWidget):
         # Code 122 variable ID range
         var_range_row = QHBoxLayout()
         var_range_lbl = QLabel("Code 122 var range:")
-        var_range_lbl.setStyleSheet("color:#aaa;font-size:10px;")
         var_range_row.addWidget(var_range_lbl)
         from PyQt5.QtGui import QIntValidator
         self._p2_var_min = QLineEdit("0")
         self._p2_var_min.setValidator(QIntValidator(0, 99999))
         self._p2_var_min.setFixedWidth(55)
         self._p2_var_min.setAlignment(Qt.AlignCenter)
-        self._p2_var_min.setStyleSheet("QLineEdit{padding:3px;font-size:10px;}")
         self._p2_var_min.setToolTip("Minimum variable ID to translate (inclusive)")
         var_range_row.addWidget(self._p2_var_min)
         dash = QLabel("–")
-        dash.setStyleSheet("color:#aaa;font-size:10px;")
         var_range_row.addWidget(dash)
         self._p2_var_max = QLineEdit("2000")
         self._p2_var_max.setValidator(QIntValidator(1, 99999))
         self._p2_var_max.setFixedWidth(55)
         self._p2_var_max.setAlignment(Qt.AlignCenter)
-        self._p2_var_max.setStyleSheet("QLineEdit{padding:3px;font-size:10px;}")
         self._p2_var_max.setToolTip("Maximum variable ID to translate (exclusive)")
         var_range_row.addWidget(self._p2_var_max)
         apply_range_btn = _make_btn("Apply", "#3a3a3a")
@@ -1511,12 +1470,7 @@ class WorkflowTab(QWidget):
             pass
 
         # ─── Code Toggles ───────────────────────────────────────────────────────────────────
-        _sub_cs = (
-            "QGroupBox{color:#aaa;border:1px solid #383838;border-radius:3px;"
-            "margin-top:6px;font-size:10px;}QGroupBox::title{padding:0 4px;}"
-        )
         toggle_box = QGroupBox("Enable Codes")
-        toggle_box.setStyleSheet(_sub_cs)
         toggle_box_layout = QVBoxLayout(toggle_box)
         toggle_box_layout.setContentsMargins(6, 8, 6, 6)
         toggle_box_layout.setSpacing(4)
@@ -1569,7 +1523,6 @@ class WorkflowTab(QWidget):
 
         # ─── Code 357 Plugin Handlers ───────────────────────────────────────────────────
         plugin357_box = QGroupBox("Code 357 – Plugin Handlers (MZ)  ·  check to enable")
-        plugin357_box.setStyleSheet(_sub_cs)
         plugin357_inner = QVBoxLayout(plugin357_box)
         plugin357_inner.setContentsMargins(4, 8, 4, 4)
 
@@ -1593,10 +1546,7 @@ class WorkflowTab(QWidget):
         plugin357_scroll.setMaximumHeight(120)
         plugin357_scroll.setWidgetResizable(True)
         plugin357_scroll.setWidget(plugin357_container)
-        plugin357_scroll.setStyleSheet(
-            "QScrollArea{border:none;background:transparent;}"
-            "QScrollBar:vertical{width:8px;}"
-        )
+        plugin357_scroll.setStyleSheet("QScrollArea{border:none;}")
         plugin357_sa_row = QHBoxLayout()
         plugin357_select_all_btn = QPushButton("Select All")
         plugin357_select_all_btn.setCheckable(True)
@@ -1620,7 +1570,6 @@ class WorkflowTab(QWidget):
 
         # ─── Code 355/655 Script Patterns ───────────────────────────────────────────
         patterns_box = QGroupBox("Code 355/655 – Script Patterns  ·  check to enable")
-        patterns_box.setStyleSheet(_sub_cs)
         patterns_inner_layout = QVBoxLayout(patterns_box)
         patterns_inner_layout.setContentsMargins(4, 8, 4, 4)
 
@@ -1644,10 +1593,7 @@ class WorkflowTab(QWidget):
         patterns_scroll.setMaximumHeight(110)
         patterns_scroll.setWidgetResizable(True)
         patterns_scroll.setWidget(patterns_container)
-        patterns_scroll.setStyleSheet(
-            "QScrollArea{border:none;background:transparent;}"
-            "QScrollBar:vertical{width:8px;}"
-        )
+        patterns_scroll.setStyleSheet("QScrollArea{border:none;}")
         patterns_sa_row = QHBoxLayout()
         patterns_select_all_btn = QPushButton("Select All")
         patterns_select_all_btn.setCheckable(True)
