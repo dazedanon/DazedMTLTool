@@ -1402,21 +1402,16 @@ class WorkflowTab(QWidget):
 
     @staticmethod
     def _checkbox_box_style() -> str:
-        """Bordered style for sections that contain scrollable checkbox lists."""
+        """Style for checkbox list container widgets."""
         return (
-            "QGroupBox{"
-            "border:1px solid #3c3c3c;"
-            "border-radius:4px;"
+            "QWidget#cbbox{"
             "background-color:#252526;"
-            "margin-top:10px;"
-            "padding:8px 8px 6px 8px;}"
-            "QGroupBox::title{"
-            "subcontrol-origin:margin;"
-            "subcontrol-position:top left;"
-            "left:10px;top:-1px;"
-            "padding:0 4px;"
-            "color:#888888;font-size:12px;"
-            "font-family:'Segoe UI','Segoe UI Emoji','Apple Color Emoji',sans-serif;}"
+            "border:1px solid #3c3c3c;"
+            "border-radius:6px;}"
+            "QWidget{"
+            "background-color:#252526;"
+            "border:none;}"
+            "QCheckBox{border:none;background-color:transparent;}"
         )
 
     def _build_step3_glossary(self, layout: QVBoxLayout):
@@ -1760,26 +1755,36 @@ class WorkflowTab(QWidget):
             pass
 
         # ── Code toggles ───────────────────────────────────────────────────
-        toggle_box = QGroupBox()
+        codes_hdr = QHBoxLayout()
+        codes_title_lbl = QLabel("Enable Codes")
+        codes_title_lbl.setStyleSheet("color:#4ec9b0;font-size:13px;font-weight:bold;")
+        codes_hdr.addWidget(codes_title_lbl)
+        codes_hdr.addStretch()
+        codes_select_all_btn = QPushButton("☑")
+        codes_select_all_btn.setCheckable(True)
+        codes_select_all_btn.setFixedSize(28, 28)
+        codes_select_all_btn.setStyleSheet(
+            "QPushButton{background:transparent;color:#888888;border:none;"
+            "font-size:18px;padding:0 2px;}"
+            "QPushButton:hover{color:#cccccc;}"
+            "QPushButton:checked{color:#007acc;}"
+        )
+        codes_select_all_btn.setToolTip("Select / Deselect All")
+        codes_hdr.addWidget(codes_select_all_btn)
+        layout.addLayout(codes_hdr)
+
+        toggle_box = QWidget()
+        toggle_box.setObjectName("cbbox")
         toggle_box.setStyleSheet(self._checkbox_box_style())
         toggle_box_layout = QVBoxLayout(toggle_box)
-        toggle_box_layout.setContentsMargins(6, 8, 6, 4)
+        toggle_box_layout.setContentsMargins(8, 8, 10, 6)
         toggle_box_layout.setSpacing(3)
-
-        codes_sa_row = QHBoxLayout()
-        codes_title_lbl = QLabel("Enable Codes")
-        codes_title_lbl.setStyleSheet("color:#888888;font-size:12px;")
-        codes_sa_row.addWidget(codes_title_lbl)
-        codes_sa_row.addStretch()
-        codes_select_all_btn = _make_toggle_btn("Select All")
-        codes_sa_row.addWidget(codes_select_all_btn)
-        toggle_box_layout.addLayout(codes_sa_row)
 
         toggle_grid_container = QWidget()
         toggle_grid = QGridLayout(toggle_grid_container)
         toggle_grid.setContentsMargins(0, 0, 0, 0)
-        toggle_grid.setHorizontalSpacing(16)
-        toggle_grid.setVerticalSpacing(3)
+        toggle_grid.setHorizontalSpacing(24)
+        toggle_grid.setVerticalSpacing(4)
 
         _P2_CODE_DEFS = [
             ("CODE122",    "122 – Variables",     "Control Variables (code 122)"),
@@ -1802,7 +1807,7 @@ class WorkflowTab(QWidget):
         toggle_box_layout.addWidget(toggle_grid_container)
 
         def _toggle_codes(checked):
-            codes_select_all_btn.setText("Deselect All" if checked else "Select All")
+            codes_select_all_btn.setText("☑" if checked else "☐")
             for cb in self._p2_code_checks.values():
                 cb.setChecked(checked)
         codes_select_all_btn.toggled.connect(_toggle_codes)
@@ -1812,101 +1817,128 @@ class WorkflowTab(QWidget):
         lists_row = QHBoxLayout()
         lists_row.setSpacing(8)
 
-        # Left: 357 plugin handlers
-        plugin357_box = QGroupBox()
+        _icon_btn_style = (
+            "QPushButton{background:transparent;color:#888888;border:none;"
+            "font-size:18px;padding:0 2px;}"
+            "QPushButton:hover{color:#cccccc;}"
+            "QPushButton:checked{color:#007acc;}"
+        )
+
+        # Left column: header row + group box
+        left_col = QVBoxLayout()
+        left_col.setSpacing(3)
+
+        plugin357_hdr = QHBoxLayout()
+        plugin357_title_lbl = QLabel("Code 357 — Plugin Handlers (MZ)")
+        plugin357_title_lbl.setStyleSheet("color:#4ec9b0;font-size:13px;font-weight:bold;")
+        plugin357_hdr.addWidget(plugin357_title_lbl)
+        plugin357_hdr.addStretch()
+        plugin357_select_all_btn = QPushButton("☑")
+        plugin357_select_all_btn.setCheckable(True)
+        plugin357_select_all_btn.setFixedSize(28, 28)
+        plugin357_select_all_btn.setStyleSheet(_icon_btn_style)
+        plugin357_select_all_btn.setToolTip("Select / Deselect All")
+        plugin357_hdr.addWidget(plugin357_select_all_btn)
+        left_col.addLayout(plugin357_hdr)
+
+        plugin357_box = QWidget()
+        plugin357_box.setObjectName("cbbox")
         plugin357_box.setStyleSheet(self._checkbox_box_style())
         plugin357_inner = QVBoxLayout(plugin357_box)
         plugin357_inner.setContentsMargins(8, 8, 10, 6)
         plugin357_inner.setSpacing(3)
 
-        plugin357_sa_row = QHBoxLayout()
-        plugin357_title_lbl = QLabel("Code 357 – Plugin Handlers (MZ)")
-        plugin357_title_lbl.setStyleSheet("color:#888888;font-size:12px;")
-        plugin357_sa_row.addWidget(plugin357_title_lbl)
-        plugin357_sa_row.addStretch()
-        plugin357_select_all_btn = _make_toggle_btn("Select All")
-        plugin357_sa_row.addWidget(plugin357_select_all_btn)
-        plugin357_inner.addLayout(plugin357_sa_row)
-
         plugin357_container = QWidget()
-        plugin357_grid = QGridLayout(plugin357_container)
-        plugin357_grid.setContentsMargins(4, 2, 4, 2)
-        plugin357_grid.setHorizontalSpacing(12)
-        plugin357_grid.setVerticalSpacing(2)
+        plugin357_vbox = QVBoxLayout(plugin357_container)
+        plugin357_vbox.setContentsMargins(4, 2, 4, 2)
+        plugin357_vbox.setSpacing(2)
         self._p2_plugin_checks: dict = {}
         try:
             from modules.rpgmakermvmz import HEADER_MAPPINGS_357 as _HM357
-            _keys357 = sorted(_HM357.keys(), key=str.casefold)
-            _nrows357 = -(-len(_keys357) // 2)  # ceil division
-            for idx, key in enumerate(_keys357):
+            for key in sorted(_HM357.keys(), key=str.casefold):
                 cb = QCheckBox(key)
                 cb.setStyleSheet("color:#cccccc;font-size:13px;")
-                plugin357_grid.addWidget(cb, idx % _nrows357, idx // _nrows357)
+                plugin357_vbox.addWidget(cb)
                 self._p2_plugin_checks[key] = cb
         except Exception:
             pass
+        plugin357_vbox.addStretch()
 
         plugin357_scroll = QScrollArea()
         plugin357_scroll.setWidgetResizable(True)
         plugin357_scroll.setWidget(plugin357_container)
+        plugin357_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         plugin357_scroll.setStyleSheet("QScrollArea{border:none;}")
         plugin357_inner.addWidget(plugin357_scroll, 1)
+        plugin357_box.setMaximumHeight(260)
 
         def _toggle_plugins357(checked):
-            plugin357_select_all_btn.setText("Deselect All" if checked else "Select All")
+            plugin357_select_all_btn.setText("☑" if checked else "☐")
             for cb in self._p2_plugin_checks.values():
                 cb.setChecked(checked)
         plugin357_select_all_btn.toggled.connect(_toggle_plugins357)
-        lists_row.addWidget(plugin357_box, 1)
 
-        # Right: 355/655 script patterns
-        patterns_box = QGroupBox()
+        left_col.addWidget(plugin357_box, 1)
+        lists_row.addLayout(left_col, 1)
+
+        # Right column: header row + group box
+        right_col = QVBoxLayout()
+        right_col.setSpacing(3)
+
+        patterns_hdr = QHBoxLayout()
+        patterns_title_lbl = QLabel("Code 355/655 — Script Patterns")
+        patterns_title_lbl.setStyleSheet("color:#4ec9b0;font-size:13px;font-weight:bold;")
+        patterns_hdr.addWidget(patterns_title_lbl)
+        patterns_hdr.addStretch()
+        patterns_select_all_btn = QPushButton("☑")
+        patterns_select_all_btn.setCheckable(True)
+        patterns_select_all_btn.setFixedSize(28, 28)
+        patterns_select_all_btn.setStyleSheet(_icon_btn_style)
+        patterns_select_all_btn.setToolTip("Select / Deselect All")
+        patterns_hdr.addWidget(patterns_select_all_btn)
+        right_col.addLayout(patterns_hdr)
+
+        patterns_box = QWidget()
+        patterns_box.setObjectName("cbbox")
         patterns_box.setStyleSheet(self._checkbox_box_style())
         patterns_inner_layout = QVBoxLayout(patterns_box)
         patterns_inner_layout.setContentsMargins(8, 8, 10, 6)
         patterns_inner_layout.setSpacing(3)
 
-        patterns_sa_row = QHBoxLayout()
-        patterns_title_lbl = QLabel("Code 355/655 – Script Patterns")
-        patterns_title_lbl.setStyleSheet("color:#888888;font-size:12px;")
-        patterns_sa_row.addWidget(patterns_title_lbl)
-        patterns_sa_row.addStretch()
-        patterns_select_all_btn = _make_toggle_btn("Select All")
-        patterns_sa_row.addWidget(patterns_select_all_btn)
-        patterns_inner_layout.addLayout(patterns_sa_row)
-
         patterns_container = QWidget()
-        patterns_grid = QGridLayout(patterns_container)
-        patterns_grid.setContentsMargins(4, 2, 4, 2)
-        patterns_grid.setHorizontalSpacing(12)
-        patterns_grid.setVerticalSpacing(2)
+        patterns_vbox = QVBoxLayout(patterns_container)
+        patterns_vbox.setContentsMargins(4, 2, 4, 2)
+        patterns_vbox.setSpacing(2)
         self._p2_pattern_checks: dict = {}
         try:
             from modules.rpgmakermvmz import PATTERNS_355655 as _PAT
-            _keys_pat = sorted(_PAT.keys(), key=str.casefold)
-            _nrows_pat = -(-len(_keys_pat) // 2)  # ceil division
-            for idx, key in enumerate(_keys_pat):
+            for key in sorted(_PAT.keys(), key=str.casefold):
                 cb = QCheckBox(key)
                 cb.setStyleSheet("color:#cccccc;font-size:13px;")
-                patterns_grid.addWidget(cb, idx % _nrows_pat, idx // _nrows_pat)
+                patterns_vbox.addWidget(cb)
                 self._p2_pattern_checks[key] = cb
         except Exception:
             pass
+        patterns_vbox.addStretch()
 
         patterns_scroll = QScrollArea()
         patterns_scroll.setWidgetResizable(True)
         patterns_scroll.setWidget(patterns_container)
+        patterns_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         patterns_scroll.setStyleSheet("QScrollArea{border:none;}")
         patterns_inner_layout.addWidget(patterns_scroll, 1)
+        patterns_box.setMaximumHeight(260)
 
         def _toggle_patterns(checked):
-            patterns_select_all_btn.setText("Deselect All" if checked else "Select All")
+            patterns_select_all_btn.setText("☑" if checked else "☐")
             for cb in self._p2_pattern_checks.values():
                 cb.setChecked(checked)
         patterns_select_all_btn.toggled.connect(_toggle_patterns)
-        lists_row.addWidget(patterns_box, 1)
 
-        layout.addLayout(lists_row, 1)
+        right_col.addWidget(patterns_box, 1)
+        lists_row.addLayout(right_col, 1)
+
+        layout.addLayout(lists_row)
 
         # ── Bottom row: Apply + Run ────────────────────────────────────────
         bottom_row = QHBoxLayout()
