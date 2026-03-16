@@ -4,6 +4,7 @@ DazedMTLTool GUI - Main Application
 A PyQt-based graphical user interface for the DazedMTLTool translation system.
 """
 
+import re
 import sys
 import os
 import json
@@ -290,20 +291,39 @@ class DazedMTLGUI(QMainWindow):
         """Apply font scaling to the entire application."""
         try:
             app = QApplication.instance()
-            if app:
-                # Get the default font
-                font = app.font()
-                base_size = 9  # Base font size
-                new_size = int(base_size * scale_factor)
-                font.setPointSize(new_size)
-                app.setFont(font)
-                
-                # Also update window title to show scaling
-                if scale_factor != 1.0:
-                    self.setWindowTitle(f"DazedMTLTool - Visual Translation Interface (Font: {scale_factor:.1f}x)")
-                else:
-                    self.setWindowTitle("DazedMTLTool - Visual Translation Interface")
-                    
+            if not app:
+                return
+
+            # Scale the application default font (affects widgets without inline font-size)
+            font = app.font()
+            font.setPointSize(max(6, int(9 * scale_factor)))
+            app.setFont(font)
+
+            # Scale inline font-size values in every widget's individual stylesheet.
+            # We store the *original* stylesheet on each widget (using a Qt property)
+            # so that re-scaling always starts from the unmodified values.
+            for widget in app.allWidgets():
+                original = widget.property("_orig_stylesheet")
+                if original is None:
+                    ss = widget.styleSheet()
+                    if not ss or 'font-size' not in ss:
+                        continue
+                    widget.setProperty("_orig_stylesheet", ss)
+                    original = ss
+
+                scaled = re.sub(
+                    r'font-size:\s*(\d+(?:\.\d+)?)px',
+                    lambda m: f'font-size: {max(6, round(float(m.group(1)) * scale_factor))}px',
+                    original
+                )
+                widget.setStyleSheet(scaled)
+
+            # Update window title only when non-default scale is active
+            if scale_factor != 1.0:
+                self.setWindowTitle(f"DazedMTLTool - Visual Translation Interface (Font: {scale_factor:.1f}x)")
+            else:
+                self.setWindowTitle("DazedMTLTool - Visual Translation Interface")
+
         except Exception as e:
             print(f"Warning: Could not apply font scaling: {e}")
         

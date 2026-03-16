@@ -537,6 +537,35 @@ class ConfigTab(QWidget):
         price_form.addRow(output_label, self.output_cost_spin)
 
         right_column.addLayout(price_form)
+        right_column.addWidget(create_horizontal_line())
+
+        # UI Settings Section
+        right_column.addWidget(create_section_header("🖥️ UI Settings"))
+        ui_form = QFormLayout()
+        ui_form.setSpacing(6)
+        ui_form.setContentsMargins(0, 0, 0, 12)
+        ui_form.setFieldGrowthPolicy(QFormLayout.FieldsStayAtSizeHint)
+        ui_form.setLabelAlignment(Qt.AlignRight | Qt.AlignVCenter)
+
+        font_scale_label = QLabel("Font Scale:")
+        font_scale_label.setFixedWidth(150)
+        font_scale_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        self.font_scale_spin = QDoubleSpinBox()
+        self.font_scale_spin.setButtonSymbols(QDoubleSpinBox.NoButtons)
+        self.font_scale_spin.setRange(0.5, 3.0)
+        self.font_scale_spin.setSingleStep(0.1)
+        self.font_scale_spin.setDecimals(1)
+        self.font_scale_spin.setValue(1.0)
+        self.font_scale_spin.setSuffix("x")
+        self.font_scale_spin.setFixedWidth(120)
+        self.font_scale_spin.setToolTip(
+            "Scale the application font size.\n"
+            "1.0 = default, 1.5 = 50% larger, 2.0 = double size.\n"
+            "Takes effect immediately on save."
+        )
+        ui_form.addRow(font_scale_label, self.font_scale_spin)
+
+        right_column.addLayout(ui_form)
         right_column.addStretch()
         
         # Add columns to layout
@@ -669,6 +698,9 @@ class ConfigTab(QWidget):
         # Custom API pricing
         self.input_cost_spin.setValue(float(_get("input_cost", "2.0")))
         self.output_cost_spin.setValue(float(_get("output_cost", "8.0")))
+
+        # UI settings
+        self.font_scale_spin.setValue(float(_get("font_scale", "1.0")))
         
     def connect_auto_save(self):
         """Connect all widgets to auto-save on change."""
@@ -693,6 +725,7 @@ class ConfigTab(QWidget):
         self.note_width_spin.editingFinished.connect(self.auto_save)
         self.input_cost_spin.editingFinished.connect(self.auto_save)
         self.output_cost_spin.editingFinished.connect(self.auto_save)
+        self.font_scale_spin.editingFinished.connect(self.auto_save)
     
     def disconnect_auto_save(self):
         """Disconnect all widgets from auto-save."""
@@ -712,6 +745,7 @@ class ConfigTab(QWidget):
             self.note_width_spin.editingFinished.disconnect(self.auto_save)
             self.input_cost_spin.editingFinished.disconnect(self.auto_save)
             self.output_cost_spin.editingFinished.disconnect(self.auto_save)
+            self.font_scale_spin.editingFinished.disconnect(self.auto_save)
         except (TypeError, RuntimeError):
             pass
     
@@ -749,6 +783,7 @@ class ConfigTab(QWidget):
                 "noteWidth": str(self.note_width_spin.value()),
                 "input_cost": str(self.input_cost_spin.value()),
                 "output_cost": str(self.output_cost_spin.value()),
+                "font_scale": str(self.font_scale_spin.value()),
             }
             
             # Save to .env file and update os.environ so subprocesses inherit new values
@@ -805,6 +840,9 @@ class ConfigTab(QWidget):
         self.width_spin.setValue(60)
         self.list_width_spin.setValue(100)
         self.note_width_spin.setValue(75)
+
+        # UI settings
+        self.font_scale_spin.setValue(1.0)
         
         self.connect_auto_save()
     
@@ -839,7 +877,8 @@ class ConfigTab(QWidget):
             "listWidth": self.list_width_spin.value(),
             "noteWidth": self.note_width_spin.value(),
             "input_cost": self.input_cost_spin.value(),
-            "output_cost": self.output_cost_spin.value()
+            "output_cost": self.output_cost_spin.value(),
+            "font_scale": self.font_scale_spin.value(),
         }
         
     def validate(self):
