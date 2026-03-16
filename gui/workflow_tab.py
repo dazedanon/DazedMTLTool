@@ -519,9 +519,10 @@ class WorkflowTab(QWidget):
             ("1  Pre-process",  self._build_step1_preprocess),
             ("2  Speaker",      self._build_step2_speaker),
             ("3  Glossary",     self._build_step3_glossary),
-            ("4  Translation",  self._build_step4_translation),
-            ("5  Plugins.js",   self._build_step5_plugins_js),
-            ("6  Export",       self._build_step6_export),
+            ("4  TL Phase 1",   self._build_step4_translation),
+            ("5  TL Phase 2",   self._build_step4b_risky),
+            ("6  Plugins.js",   self._build_step5_plugins_js),
+            ("7  Export",       self._build_step6_export),
         ]
 
         for tab_label, builder in _tab_defs:
@@ -1551,64 +1552,63 @@ class WorkflowTab(QWidget):
     # ── Step 4: Translation ─────────────────────────────────────────────────
 
     def _build_step4_translation(self, layout: QVBoxLayout):
-        layout.addWidget(_make_section_label("Step 4 — Translation"))
+        layout.setContentsMargins(20, 8, 20, 4)
+        layout.setSpacing(6)
 
         # ---- Pre-flight: text wrap configuration ----------------------------
         wrap_box = QGroupBox("Pre-flight — Text Wrap Width")
         wrap_box.setStyleSheet(self._task_box_style())
         wrap_inner = QVBoxLayout(wrap_box)
-        wrap_inner.setSpacing(6)
+        wrap_inner.setSpacing(4)
 
         wrap_hint = QLabel(
-            "Start with the default values (60 / 70 / 60) and run a test translation. "
-            "If lines overflow or wrap too early in-game, adjust the values here and re-translate. "
-            "Click Apply to write the values to .env."
+            "Adjust if lines overflow or wrap too early in-game, then click Apply to write to .env."
         )
         wrap_hint.setWordWrap(True)
         wrap_hint.setStyleSheet("color:#9d9d9d;font-size:13px;")
         wrap_inner.addWidget(wrap_hint)
 
+        # All three spinboxes on one row
+        spins_row = QHBoxLayout()
+        spins_row.setSpacing(16)
+
         def _spin_pair(label_text: str, default: int):
             lbl = QLabel(label_text)
+            lbl.setStyleSheet("color:#cccccc;font-size:13px;")
             sp = QSpinBox()
             sp.setRange(20, 300)
             sp.setValue(default)
-            sp.setFixedWidth(68)
+            sp.setFixedWidth(60)
             return lbl, sp
 
-        lbl_w,  self.wrap_width_spin = _spin_pair("Dialogue (width)", 60)
-        lbl_lw, self.wrap_list_spin  = _spin_pair("List/Help (listWidth)", 70)
-        lbl_nw, self.wrap_note_spin  = _spin_pair("Notes (noteWidth)", 60)
+        lbl_w,  self.wrap_width_spin = _spin_pair("Dialogue", 60)
+        lbl_lw, self.wrap_list_spin  = _spin_pair("List/Help", 70)
+        lbl_nw, self.wrap_note_spin  = _spin_pair("Notes", 60)
 
         for lbl, sp in [(lbl_w, self.wrap_width_spin),
                         (lbl_lw, self.wrap_list_spin),
                         (lbl_nw, self.wrap_note_spin)]:
-            row = QHBoxLayout()
-            row.setSpacing(6)
-            lbl.setFixedWidth(160)
-            row.addWidget(lbl)
-            row.addWidget(sp)
-            row.addStretch()
-            wrap_inner.addLayout(row)
+            spins_row.addWidget(lbl)
+            spins_row.addWidget(sp)
+        spins_row.addStretch()
 
-        apply_wrap_row = QHBoxLayout()
         apply_wrap_btn = _make_btn("✔  Apply to .env", "#3a7a3a")
-        apply_wrap_btn.setFixedWidth(160)
+        apply_wrap_btn.setFixedWidth(140)
         apply_wrap_btn.setToolTip("Write width / listWidth / noteWidth into .env")
         apply_wrap_btn.clicked.connect(self._apply_wrap_config)
-        apply_wrap_row.addWidget(apply_wrap_btn)
-        apply_wrap_row.addStretch()
-        wrap_inner.addLayout(apply_wrap_row)
+        spins_row.addWidget(apply_wrap_btn)
 
+        wrap_inner.addLayout(spins_row)
         layout.addWidget(wrap_box)
 
+        # ---- Phase 0 --------------------------------------------------------
         p0_box = QGroupBox("Phase 0  –  Core Database Files")
         p0_box.setStyleSheet(self._task_box_style())
         p0_inner = QVBoxLayout(p0_box)
+        p0_inner.setSpacing(4)
         p0_desc = QLabel(
-            "Files: Actors, Armors, Weapons, Items, Skills, States, Classes, Enemies, System, MapInfos\n"
-            "Translates names, descriptions, and notes in the core database. "
-            "Run this first before any event-code phases."
+            "Actors, Armors, Weapons, Items, Skills, States, Classes, Enemies, System, MapInfos — "
+            "run first before any event-code phases."
         )
         p0_desc.setStyleSheet("color:#9d9d9d;font-size:13px;")
         p0_desc.setWordWrap(True)
@@ -1618,8 +1618,7 @@ class WorkflowTab(QWidget):
         self._run_p0_btn = _make_btn("►  Run Phase 0", "#4a7a4a")
         self._run_p0_btn.setFixedWidth(200)
         self._run_p0_btn.setToolTip(
-            "Sets engine to RPG Maker MV/MZ, selects only DB files "
-            "(Actors, Armors … etc.), all event codes OFF — then starts translation."
+            "Sets engine to RPG Maker MV/MZ, selects only DB files, all event codes OFF."
         )
         self._run_p0_btn.clicked.connect(lambda: self._run_phase(0))
         p0_row.addWidget(self._run_p0_btn)
@@ -1630,13 +1629,14 @@ class WorkflowTab(QWidget):
         p0_inner.addLayout(p0_row)
         layout.addWidget(p0_box)
 
+        # ---- Phase 1 --------------------------------------------------------
         p1_box = QGroupBox("Phase 1  –  Safe Codes (dialogue + choices)")
         p1_box.setStyleSheet(self._task_box_style())
         p1_inner = QVBoxLayout(p1_box)
+        p1_inner.setSpacing(4)
         p1_desc = QLabel(
-            "Codes ON: 101 (Name), 401 (Show Text), 405 (continued), 102 (Choices), 408 (extra lines)\n"
-            "Clicking the button below applies these codes, then takes you to the Translation tab.\n"
-            "While translating, watch the log — speaker lines should look like  [Speaker]: Dialogue."
+            "Codes ON: 101 (Name), 401 (Show Text), 405 (continued), 102 (Choices), 408 (extra lines). "
+            "Speaker lines in the log should look like  [Speaker]: Dialogue."
         )
         p1_desc.setStyleSheet("color:#9d9d9d;font-size:13px;")
         p1_desc.setWordWrap(True)
@@ -1655,15 +1655,14 @@ class WorkflowTab(QWidget):
         p1_inner.addLayout(p1_row)
         layout.addWidget(p1_box)
 
+        # ---- Phase 1b -------------------------------------------------------
         p1b_box = QGroupBox("Phase 1b  –  Build Variable Cache (code 111)")
         p1b_box.setStyleSheet(self._task_box_style())
         p1b_inner = QVBoxLayout(p1b_box)
+        p1b_inner.setSpacing(4)
         p1b_desc = QLabel(
-            "Code ON: 111 (Conditional Branch string comparisons)\n"
-            "Scans all 111 branches that compare \u2018$gameVariables\u2019 against string values and "
-            "builds the var_translation_map cache.\n"
-            "Run this before Phase 2 so that code 122 translated strings are automatically "
-            "matched when those same strings appear in 111 comparisons."
+            "Scans code 111 branches that compare \u2018$gameVariables\u2019 and builds the var_translation_map cache. "
+            "Run before Phase 2 so code 122 strings are automatically matched."
         )
         p1b_desc.setStyleSheet("color:#9d9d9d;font-size:13px;")
         p1b_desc.setWordWrap(True)
@@ -1681,6 +1680,9 @@ class WorkflowTab(QWidget):
         p1b_row.addStretch()
         p1b_inner.addLayout(p1b_row)
         layout.addWidget(p1b_box)
+
+    def _build_step4b_risky(self, layout: QVBoxLayout):
+        layout.addWidget(_make_section_label("Step 5 — Phase 2: Risky Codes"))
 
         p2_box = QGroupBox("Phase 2  –  Risky Codes (variables + conditionals)")
         p2_box.setStyleSheet(self._task_box_style())
@@ -1919,7 +1921,7 @@ class WorkflowTab(QWidget):
     # ── Step 5: plugins.js Translation ─────────────────────────────────────
 
     def _build_step5_plugins_js(self, layout: QVBoxLayout):
-        layout.addWidget(_make_section_label("Step 5 — Translate plugins.js"))
+        layout.addWidget(_make_section_label("Step 6 — Translate plugins.js"))
 
         hint = QLabel(
             "Translate the visible Japanese strings in js/plugins.js without breaking "
@@ -1959,7 +1961,7 @@ class WorkflowTab(QWidget):
     # ── Step 6: Export ──────────────────────────────────────────────────────
 
     def _build_step6_export(self, layout: QVBoxLayout):
-        layout.addWidget(_make_section_label("Step 6 — Export to Game"))
+        layout.addWidget(_make_section_label("Step 7 — Export to Game"))
         hint = QLabel(
             "Copy translated files back into the game's data folder to patch the game in-place."
         )
