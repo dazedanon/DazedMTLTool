@@ -226,7 +226,7 @@ def translateSimpleKeyValueJSON(data, filename):
         PBAR.total = len(stringList)
         PBAR.refresh()
         
-        response = translateAI(stringList, "Reply with the English Translation", True)
+        response = translateAI(stringList, "Reply with the English Translation")
         tokens[0] += response[1][0]
         tokens[1] += response[1][1]
         translatedList = response[0]
@@ -269,7 +269,7 @@ def translatePSData(data, filename):
         nonlocal tokens
         if not stringList:
             return []
-        response = translateAI(stringList, context, True)
+        response = translateAI(stringList, context)
         tokens[0] += response[1][0]
         tokens[1] += response[1][1]
         if len(stringList) != len(response[0]):
@@ -491,7 +491,7 @@ def translateRdData(data, filename):
         nonlocal tokens
         if not stringList:
             return []
-        response = translateAI(stringList, context, True)
+        response = translateAI(stringList, context)
         tokens[0] += response[1][0]
         tokens[1] += response[1][1]
         if len(stringList) != len(response[0]):
@@ -743,7 +743,7 @@ def translateGameSetting(data, filename):
         nonlocal tokens
         if not stringList:
             return []
-        response = translateAI(stringList, context, True)
+        response = translateAI(stringList, context)
         tokens[0] += response[1][0]
         tokens[1] += response[1][1]
         if len(stringList) != len(response[0]):
@@ -1092,7 +1092,7 @@ def translateJSON(data, filename, translatedList):
             
             # Event Title
             if eventList[0]:
-                response = translateAI(eventList[0], "Event Title", True)
+                response = translateAI(eventList[0], "Event Title")
                 tokens[0] += response[1][0]
                 tokens[1] += response[1][1]
                 eventListTL[0] = response[0]
@@ -1104,7 +1104,7 @@ def translateJSON(data, filename, translatedList):
 
             # Event Process
             if eventList[1]:
-                response = translateAI(eventList[1], "Event Process", True)
+                response = translateAI(eventList[1], "Event Process")
                 tokens[0] += response[1][0]
                 tokens[1] += response[1][1]
                 eventListTL[1] = response[0]
@@ -1116,7 +1116,7 @@ def translateJSON(data, filename, translatedList):
 
             # Event Text
             if eventList[2]:
-                response = translateAI(eventList[2], "Event Description", True)
+                response = translateAI(eventList[2], "Event Description")
                 tokens[0] += response[1][0]
                 tokens[1] += response[1][1]
                 eventListTL[2] = response[0]
@@ -1128,7 +1128,7 @@ def translateJSON(data, filename, translatedList):
 
             # Event Key
             if eventList[3]:
-                response = translateAI(eventList[3], "Event Key", True)
+                response = translateAI(eventList[3], "Event Key")
                 tokens[0] += response[1][0]
                 tokens[1] += response[1][1]
                 eventListTL[3] = response[0]
@@ -1140,7 +1140,7 @@ def translateJSON(data, filename, translatedList):
 
             # Event Target
             if eventList[4]:
-                response = translateAI(eventList[4], "Character Name", True)
+                response = translateAI(eventList[4], "Character Name")
                 tokens[0] += response[1][0]
                 tokens[1] += response[1][1]
                 eventListTL[4] = response[0]
@@ -1152,7 +1152,7 @@ def translateJSON(data, filename, translatedList):
 
             # Event Job
             if eventList[5]:
-                response = translateAI(eventList[5], "Job/Occupation", True)
+                response = translateAI(eventList[5], "Job/Occupation")
                 tokens[0] += response[1][0]
                 tokens[1] += response[1][1]
                 eventListTL[5] = response[0]
@@ -1164,7 +1164,7 @@ def translateJSON(data, filename, translatedList):
 
             # Event Place
             if eventList[6]:
-                response = translateAI(eventList[6], "Location Name", True)
+                response = translateAI(eventList[6], "Location Name")
                 tokens[0] += response[1][0]
                 tokens[1] += response[1][1]
                 eventListTL[6] = response[0]
@@ -1178,7 +1178,7 @@ def translateJSON(data, filename, translatedList):
         if stringList:
             PBAR.total = len(stringList)
             PBAR.refresh()
-            response = translateAI(stringList, "Reply with the English Translation", True)
+            response = translateAI(stringList, "Reply with the English Translation")
             tokens[0] += response[1][0]
             tokens[1] += response[1][1]
             stringListTL = response[0]
@@ -1232,7 +1232,7 @@ def getSpeaker(speaker):
             return response
     return [speaker, [0, 0]]
 
-def translateAI(text, history, fullPromptFlag):
+def translateAI(text, history, history_ctx=None):
     """
     Legacy wrapper function for the new shared translation utility.
     This maintains compatibility with existing code while using the new shared implementation.
@@ -1246,7 +1246,6 @@ def translateAI(text, history, fullPromptFlag):
     return sharedtranslateAI(
         text=text,
         history=history,
-        fullPromptFlag=fullPromptFlag,
         config=TRANSLATION_CONFIG,
         filename=FILENAME,
         pbar=PBAR,

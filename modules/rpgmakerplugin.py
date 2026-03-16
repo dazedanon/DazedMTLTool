@@ -876,37 +876,37 @@ def translatePlugin(data, pbar, filename, translatedList):
     # Quest
     if len(questList) > 0:
         # Quest Name
-        response = translateAI(questList[0], "Quest Name", True)
+        response = translateAI(questList[0], "Quest Name")
         tokens[0] += response[1][0]
         tokens[1] += response[1][1]
         questName = response[0]
 
         # Quest Client
-        response = translateAI(questList[1], "Quest Client", True)
+        response = translateAI(questList[1], "Quest Client")
         tokens[0] += response[1][0]
         tokens[1] += response[1][1]
         questClient = response[0]
 
         # Quest Location
-        response = translateAI(questList[2], "Quest Location", True)
+        response = translateAI(questList[2], "Quest Location")
         tokens[0] += response[1][0]
         tokens[1] += response[1][1]
         questLocation = response[0]
 
         # Quest Target
-        response = translateAI(questList[3], "Quest Location", True)
+        response = translateAI(questList[3], "Quest Location")
         tokens[0] += response[1][0]
         tokens[1] += response[1][1]
         questTarget = response[0]
 
         # Quest Summary
-        response = translateAI(questList[4], "Quest Summary", True)
+        response = translateAI(questList[4], "Quest Summary")
         tokens[0] += response[1][0]
         tokens[1] += response[1][1]
         questSummary = response[0]
 
         # Quest Goal 1
-        response = translateAI(questList[5], "Quest Goal", True)
+        response = translateAI(questList[5], "Quest Goal")
         tokens[0] += response[1][0]
         tokens[1] += response[1][1]
         questGoal1 = response[0]
@@ -933,7 +933,7 @@ def translatePlugin(data, pbar, filename, translatedList):
     # Custom
     if custom:
         # TL
-        response = translateAI(custom, "Relic Name", True)
+        response = translateAI(custom, "Relic Name")
         tokens[0] += response[1][0]
         tokens[1] += response[1][1]
         customResponse = response[0]
@@ -959,7 +959,7 @@ def translatePlugin(data, pbar, filename, translatedList):
 
     if sceneMenuText:
         # TL
-        response = translateAI(sceneMenuText, "Menu Item", True)
+        response = translateAI(sceneMenuText, "Menu Item")
         tokens[0] += response[1][0]
         tokens[1] += response[1][1]
         sceneMenuTextResponse = response[0]
@@ -978,7 +978,7 @@ def translatePlugin(data, pbar, filename, translatedList):
     # SceneCustomMenu CommonHelpText
     if sceneMenuCommonHelpText:
         # TL
-        response = translateAI(sceneMenuCommonHelpText, "Menu Help Text", True)
+        response = translateAI(sceneMenuCommonHelpText, "Menu Help Text")
         tokens[0] += response[1][0]
         tokens[1] += response[1][1]
         sceneMenuCommonHelpTextResponse = response[0]
@@ -997,7 +997,7 @@ def translatePlugin(data, pbar, filename, translatedList):
     # SceneCustomMenu HelpText
     if sceneMenuHelpText:
         # TL
-        response = translateAI(sceneMenuHelpText, "Menu Help Text", True)
+        response = translateAI(sceneMenuHelpText, "Menu Help Text")
         tokens[0] += response[1][0]
         tokens[1] += response[1][1]
         sceneMenuHelpTextResponse = response[0]
@@ -1016,7 +1016,7 @@ def translatePlugin(data, pbar, filename, translatedList):
     # DrawTextEx - Brace-delimited labels (tracker section headers and field labels)
     if sceneMenuDrawText:
         # TL
-        response = translateAI(sceneMenuDrawText, "Status Tracker Label", True)
+        response = translateAI(sceneMenuDrawText, "Status Tracker Label")
         tokens[0] += response[1][0]
         tokens[1] += response[1][1]
         sceneMenuDrawTextResponse = response[0]
@@ -1035,7 +1035,7 @@ def translatePlugin(data, pbar, filename, translatedList):
     # DrawTextEx - Stat labels (e.g., 攻撃力, 魔力, etc.)
     if sceneMenuStatLabel:
         # TL
-        response = translateAI(sceneMenuStatLabel, "Character Stat Name", True)
+        response = translateAI(sceneMenuStatLabel, "Character Stat Name")
         tokens[0] += response[1][0]
         tokens[1] += response[1][1]
         sceneMenuStatLabelResponse = response[0]
@@ -1054,7 +1054,7 @@ def translatePlugin(data, pbar, filename, translatedList):
     # NUUN_SaveScreen ParamName
     if saveParamName:
         # TL
-        response = translateAI(saveParamName, "Save Screen Label", True)
+        response = translateAI(saveParamName, "Save Screen Label")
         tokens[0] += response[1][0]
         tokens[1] += response[1][1]
         saveParamNameResponse = response[0]
@@ -1113,7 +1113,7 @@ def getSpeaker(speaker):
             return response
     return [speaker, [0, 0]]
 
-def translateAI(text, history, fullPromptFlag):
+def translateAI(text, history):
     """
     Legacy wrapper function for the new shared translation utility.
     This maintains compatibility with existing code while using the new shared implementation.
@@ -1127,7 +1127,6 @@ def translateAI(text, history, fullPromptFlag):
     return sharedtranslateAI(
         text=text,
         history=history,
-        fullPromptFlag=fullPromptFlag,
         config=TRANSLATION_CONFIG,
         filename=FILENAME,
         pbar=PBAR,

@@ -296,7 +296,7 @@ def translateOnscripter(data, pbar, filename, translatedList):
             choiceList = re.findall(r"\"(.*?)\"", jaString)
             if len(choiceList) > 0:
                 # Translate
-                response = translateAI(choiceList, "This will be a dialogue option", True)
+                response = translateAI(choiceList, "This will be a dialogue option")
                 translatedTextList = response[0]
                 tokens[0] += response[1][0]
                 tokens[1] += response[1][1]
@@ -323,7 +323,7 @@ def translateOnscripter(data, pbar, filename, translatedList):
         pbar.refresh()
 
         # Translate
-        response = translateAI(stringList, "", True)
+        response = translateAI(stringList, "")
         tokens[0] += response[1][0]
         tokens[1] += response[1][1]
         translatedList = response[0]
@@ -410,9 +410,17 @@ def getSpeaker(speaker):
     return [speaker, [0, 0]]
 
 
-def translateAI(text, history, fullPromptFlag):
+def translateAI(text, history):
     """
     Translate text using the shared translation utility.
     This function maintains compatibility with existing code while using the new shared implementation.
     """
-    return sharedtranslateAI(TRANSLATION_CONFIG, text, history, fullPromptFlag)
+    return sharedtranslateAI(
+        text=text,
+        history=history,
+        config=TRANSLATION_CONFIG,
+        filename=FILENAME,
+        pbar=PBAR,
+        lock=LOCK,
+        mismatchList=MISMATCH
+    )

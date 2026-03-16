@@ -258,7 +258,7 @@ def translateWOLF(data, translatedList, pbar, filename):
                 i += 1
 
             # Translate
-            response = translateAI(choiceList, "This will be a dialogue option", True)
+            response = translateAI(choiceList, "This will be a dialogue option")
             tokens[0] += response[1][0]
             tokens[1] += response[1][1]
             choiceListTL = response[0]
@@ -344,7 +344,7 @@ def translateWOLF(data, translatedList, pbar, filename):
         pbar.refresh()
 
         # Translate
-        response = translateAI(stringList, "", True)
+        response = translateAI(stringList, "")
         tokens[0] += response[1][0]
         tokens[1] += response[1][1]
         translatedList = response[0]
@@ -398,7 +398,7 @@ def getSpeaker(speaker):
             return response
     return [speaker, [0, 0]]
 
-def translateAI(text, history, fullPromptFlag):
+def translateAI(text, history, history_ctx=None):
     """
     Legacy wrapper function for the new shared translation utility.
     This maintains compatibility with existing code while using the new shared implementation.
@@ -412,7 +412,6 @@ def translateAI(text, history, fullPromptFlag):
     return sharedtranslateAI(
         text=text,
         history=history,
-        fullPromptFlag=fullPromptFlag,
         config=TRANSLATION_CONFIG,
         filename=FILENAME,
         pbar=PBAR,

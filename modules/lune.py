@@ -236,7 +236,7 @@ def translateJSON(data, pbar):
                             # Translate Batch if Full
                             if len(batch) == BATCHSIZE:
                                 # Translate
-                                response = translateAI(batch, textHistory, True)
+                                response = translateAI(batch, textHistory)
                                 tokens[0] += response[1][0]
                                 tokens[1] += response[1][1]
                                 translatedBatch = response[0]
@@ -289,7 +289,7 @@ def translateJSON(data, pbar):
         # Translate Batch if not empty and EOF
         if len(batch) != 0 and i >= len(data):
             # Translate
-            response = translateAI(batch, textHistory, True)
+            response = translateAI(batch, textHistory)
             tokens[0] += response[1][0]
             tokens[1] += response[1][1]
             translatedBatch = response[0]
@@ -350,7 +350,7 @@ def getSpeaker(speaker):
             return response
     return [speaker, [0, 0]]
 
-def translateAI(text, history, fullPromptFlag):
+def translateAI(text, history):
     """
     Legacy wrapper function for the new shared translation utility.
     This maintains compatibility with existing code while using the new shared implementation.
@@ -364,7 +364,6 @@ def translateAI(text, history, fullPromptFlag):
     return sharedtranslateAI(
         text=text,
         history=history,
-        fullPromptFlag=fullPromptFlag,
         config=TRANSLATION_CONFIG,
         filename=FILENAME,
         pbar=PBAR,

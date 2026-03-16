@@ -571,7 +571,7 @@ def searchCodes(events, pbar, jobList, filename):
 
                     # Translate Question
                     question = codeList[i]['stringArgs'][2]
-                    response = translateAI(question, "Reply with the {LANGUAGE} translation", False)
+                    response = translateAI(question, "Reply with the {LANGUAGE} translation")
                     translatedText = response[0]
                     totalTokens[0] += response[1][0]
                     totalTokens[1] += response[1][1]
@@ -582,9 +582,9 @@ def searchCodes(events, pbar, jobList, filename):
 
                     # Translate Choices
                     if 'jaString' in locals() and jaString:
-                        response = translateAI(choiceList, jaString, True)
+                        response = translateAI(choiceList, jaString)
                     else:
-                        response = translateAI(choiceList, f"Reply with the {LANGUAGE} translation of the dialogue choice", True)
+                        response = translateAI(choiceList, f"Reply with the {LANGUAGE} translation of the dialogue choice")
                     choiceListTL = response[0]
                     totalTokens[0] += response[1][0]
                     totalTokens[1] += response[1][1]
@@ -735,7 +735,7 @@ def searchCodes(events, pbar, jobList, filename):
         if len(stringList) > 0:
             pbar.total = len(stringList)
             pbar.refresh()
-            response = translateAI(stringList, textHistory, True)
+            response = translateAI(stringList, textHistory)
             stringListTL = response[0]
             totalTokens[0] += response[1][0]
             totalTokens[1] += response[1][1]
@@ -750,7 +750,7 @@ def searchCodes(events, pbar, jobList, filename):
         if len(list210) > 0:
             pbar.total = len(list210)
             pbar.refresh()
-            response = translateAI(list210, textHistory, True)
+            response = translateAI(list210, textHistory)
             list210TL = response[0]
             totalTokens[0] += response[1][0]
             totalTokens[1] += response[1][1]
@@ -765,7 +765,7 @@ def searchCodes(events, pbar, jobList, filename):
         if len(list250) > 0:
             pbar.total = len(list250)
             pbar.refresh()
-            response = translateAI(list250, textHistory, True)
+            response = translateAI(list250, textHistory)
             list250TL = response[0]
             totalTokens[0] += response[1][0]
             totalTokens[1] += response[1][1]
@@ -780,7 +780,7 @@ def searchCodes(events, pbar, jobList, filename):
         if len(list300) > 0:
             pbar.total = len(list300)
             pbar.refresh()
-            response = translateAI(list300, textHistory, True)
+            response = translateAI(list300, textHistory)
             list300TL = response[0]
             totalTokens[0] += response[1][0]
             totalTokens[1] += response[1][1]
@@ -820,7 +820,7 @@ def searchCodes(events, pbar, jobList, filename):
         if len(list122) > 0:
             pbar.total = len(list122)
             pbar.refresh()
-            response = translateAI(list122, textHistory, True)
+            response = translateAI(list122, textHistory)
             list122TL = response[0]
             totalTokens[0] += response[1][0]
             totalTokens[1] += response[1][1]
@@ -2096,17 +2096,17 @@ def searchDB(events, pbar, jobList, filename):
             totalTokens[0] += response[1][0]
             totalTokens[1] += response[1][1]
             # Desc 1
-            response = translateAI(npcList[1], "Reply with only the " + LANGUAGE + " translation", True)
+            response = translateAI(npcList[1], "Reply with only the " + LANGUAGE + " translation")
             descListTL1 = response[0]
             totalTokens[0] += response[1][0]
             totalTokens[1] += response[1][1]
             # Desc 2
-            response = translateAI(npcList[2], "Reply with only the " + LANGUAGE + " translation", True)
+            response = translateAI(npcList[2], "Reply with only the " + LANGUAGE + " translation")
             descListTL2 = response[0]
             totalTokens[0] += response[1][0]
             totalTokens[1] += response[1][1]
             # Desc 3
-            response = translateAI(npcList[3], "Reply with only the " + LANGUAGE + " translation", True)
+            response = translateAI(npcList[3], "Reply with only the " + LANGUAGE + " translation")
             descListTL3 = response[0]
             totalTokens[0] += response[1][0]
             totalTokens[1] += response[1][1]
@@ -2227,22 +2227,22 @@ def searchDB(events, pbar, jobList, filename):
             pbar.refresh()
 
             # Name
-            response = translateAI(itemList[0], "Reply with only the " + LANGUAGE + " translation", True)
+            response = translateAI(itemList[0], "Reply with only the " + LANGUAGE + " translation")
             nameListTL = response[0]
             totalTokens[0] += response[1][0]
             totalTokens[1] += response[1][1]
             # Desc 1
-            response = translateAI(itemList[1], "Reply with only the " + LANGUAGE + " translation", True)
+            response = translateAI(itemList[1], "Reply with only the " + LANGUAGE + " translation")
             descListTL1 = response[0]
             totalTokens[0] += response[1][0]
             totalTokens[1] += response[1][1]
             # Desc 2
-            response = translateAI(itemList[2], "Reply with only the " + LANGUAGE + " translation", True)
+            response = translateAI(itemList[2], "Reply with only the " + LANGUAGE + " translation")
             descListTL2 = response[0]
             totalTokens[0] += response[1][0]
             totalTokens[1] += response[1][1]
             # Desc 3
-            response = translateAI(itemList[3], "Reply with only the " + LANGUAGE + " translation", True)
+            response = translateAI(itemList[3], "Reply with only the " + LANGUAGE + " translation")
             descListTL3 = response[0]
             totalTokens[0] += response[1][0]
             totalTokens[1] += response[1][1]
@@ -2280,7 +2280,7 @@ def searchDB(events, pbar, jobList, filename):
             totalTokens[0] += response[1][0]
             totalTokens[1] += response[1][1]
             # Desc 1
-            response = translateAI(armorList[1], "Reply with only the " + LANGUAGE + " translation", True)
+            response = translateAI(armorList[1], "Reply with only the " + LANGUAGE + " translation")
             descListTL1 = response[0]
             totalTokens[0] += response[1][0]
             totalTokens[1] += response[1][1]
@@ -2313,7 +2313,7 @@ def searchDB(events, pbar, jobList, filename):
             totalTokens[0] += response[1][0]
             totalTokens[1] += response[1][1]
             # Desc 1
-            response = translateAI(enemyList[1], "Reply with only the " + LANGUAGE + " translation", True)
+            response = translateAI(enemyList[1], "Reply with only the " + LANGUAGE + " translation")
             descListTL1 = response[0]
             totalTokens[0] += response[1][0]
             totalTokens[1] += response[1][1]
@@ -2346,12 +2346,12 @@ def searchDB(events, pbar, jobList, filename):
             totalTokens[0] += response[1][0]
             totalTokens[1] += response[1][1]
             # Desc 1
-            response = translateAI(weaponsList[1], "", True)
+            response = translateAI(weaponsList[1], "")
             descListTL1 = response[0]
             totalTokens[0] += response[1][0]
             totalTokens[1] += response[1][1]
             # Desc 2
-            response = translateAI(weaponsList[2], "", True)
+            response = translateAI(weaponsList[2], "")
             descListTL2 = response[0]
             totalTokens[0] += response[1][0]
             totalTokens[1] += response[1][1]
@@ -2466,7 +2466,7 @@ def searchDB(events, pbar, jobList, filename):
                 totalTokens[1] += response[1][1]
 
                 # Desc 1
-                response = translateAI(stateList[1], "", True)
+                response = translateAI(stateList[1], "")
                 descListTL1 = response[0]
                 totalTokens[0] += response[1][0]
                 totalTokens[1] += response[1][1]
@@ -2577,7 +2577,7 @@ def searchDB(events, pbar, jobList, filename):
             pbar.refresh()
 
             # Name
-            response = translateAI(dbNameList[0], "Reply with only the " + LANGUAGE + " translation", True)
+            response = translateAI(dbNameList[0], "Reply with only the " + LANGUAGE + " translation")
             nameListTL = response[0]
             totalTokens[0] += response[1][0]
             totalTokens[1] += response[1][1]
@@ -2601,7 +2601,7 @@ def searchDB(events, pbar, jobList, filename):
             pbar.refresh()
 
             # Name
-            response = translateAI(dbValueList[0], "Reply with only the " + LANGUAGE + " translation", True)
+            response = translateAI(dbValueList[0], "Reply with only the " + LANGUAGE + " translation")
             valueListTL = response[0]
             totalTokens[0] += response[1][0]
             totalTokens[1] += response[1][1]
@@ -2677,7 +2677,7 @@ def getSpeaker(speaker):
             return response
     return [speaker, [0, 0]]
 
-def translateAI(text, history, fullPromptFlag):
+def translateAI(text, history, history_ctx=None):
     """
     Legacy wrapper function for the new shared translation utility.
     This maintains compatibility with existing code while using the new shared implementation.
@@ -2691,7 +2691,6 @@ def translateAI(text, history, fullPromptFlag):
     return sharedtranslateAI(
         text=text,
         history=history,
-        fullPromptFlag=fullPromptFlag,
         config=TRANSLATION_CONFIG,
         filename=FILENAME,
         pbar=PBAR,

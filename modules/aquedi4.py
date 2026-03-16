@@ -145,7 +145,7 @@ def translateSimpleKeyValueJSON(data, filename, stringList, keyList):
         PBAR.total = len(preparedStringList)
         PBAR.refresh()
         
-        response = translateAI(preparedStringList, "Reply with the English Translation", True)
+        response = translateAI(preparedStringList, "Reply with the English Translation")
         tokens[0] += response[1][0]
         tokens[1] += response[1][1]
         translatedList = response[0]
@@ -200,14 +200,13 @@ def getResultString(translatedData, translationTime, filename):
         errorString = str(translatedData[2]) + Fore.RED
         return f"{filename}: {totalTokenstring}{timeString}" + Fore.RED + " \u2717 " + errorString + Fore.RESET
 
-def translateAI(text, history, fullPromptFlag):
+def translateAI(text, history, history_ctx=None):
     """Legacy wrapper for the shared translation utility."""
     global PBAR, MISMATCH, FILENAME
     TRANSLATION_CONFIG.estimateMode = bool(ESTIMATE)
     return sharedtranslateAI(
         text=text,
         history=history,
-        fullPromptFlag=fullPromptFlag,
         config=TRANSLATION_CONFIG,
         filename=FILENAME,
         pbar=PBAR,

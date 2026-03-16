@@ -373,7 +373,7 @@ def translateImages(imageList):
     totalTokens = [0, 0]
 
     # Translate GPT
-    response = translateAI(imageList[0], "Keep the Translation as brief as possible", True)
+    response = translateAI(imageList[0], "Keep the Translation as brief as possible")
     translatedList = response[0]
     totalTokens[0] += response[1][0]
     totalTokens[1] += response[1][1]
@@ -417,7 +417,7 @@ def getSpeaker(speaker):
             NAMESLIST.append(speakerList)
             return response
     return [speaker, [0, 0]]
-def translateAI(text, history, fullPromptFlag):
+def translateAI(text, history, history_ctx=None):
     """
     Legacy wrapper function for the new shared translation utility.
     This maintains compatibility with existing code while using the new shared implementation.
@@ -431,7 +431,6 @@ def translateAI(text, history, fullPromptFlag):
     return sharedtranslateAI(
         text=text,
         history=history,
-        fullPromptFlag=fullPromptFlag,
         config=TRANSLATION_CONFIG,
         filename=FILENAME,
         pbar=PBAR,
