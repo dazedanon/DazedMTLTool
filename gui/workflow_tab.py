@@ -1451,7 +1451,6 @@ class WorkflowTab(QWidget):
         self._p2_var_max.setToolTip("Maximum variable ID to translate (exclusive)")
         var_range_row.addWidget(self._p2_var_max)
         apply_range_btn = _make_btn("Apply", "#3a3a3a")
-        apply_range_btn.setFixedWidth(54)
         apply_range_btn.setToolTip("Write CODE122_VAR_MIN / CODE122_VAR_MAX to the module")
         apply_range_btn.clicked.connect(self._apply_var_range)
         var_range_row.addWidget(apply_range_btn)
