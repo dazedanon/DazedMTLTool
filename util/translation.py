@@ -772,13 +772,28 @@ def createTranslationSchema(numLines):
     return schema
 
 
-def translateText(system, user, history, penalty, formatType, model, numLines=None, vocab_text="", batchSize=None):
+# Static array-based schema for Claude's output_config.  Because Anthropic
+# includes output_config in the prompt-cache key, every call must send the
+# exact same schema or the cache is busted.  An array of strings naturally
+# accommodates any batch size without changing.
+_CLAUDE_TRANSLATION_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "translations": {
+            "type": "array",
+            "items": {"type": "string"},
+        }
+    },
+    "required": ["translations"],
+    "additionalProperties": False,
+}
+
+
+def translateText(system, user, history, penalty, formatType, model, numLines=None, vocab_text=""):
     """Send translation request to the selected API.
 
     system:     Static system prompt (prompt.txt). Cached by Claude.
     vocab_text: Per-batch vocabulary (dynamic, never cached to avoid cache busting).
-    batchSize:  Max batch size — used for a fixed-size JSON schema so
-                output_config stays identical across Claude calls (cache stability).
     """
     # Ensure system content is not empty
     if not system or not str(system).strip():
@@ -985,16 +1000,15 @@ def translateText(system, user, history, penalty, formatType, model, numLines=No
                 system=ant_system,
                 messages=native_msgs,
             )
-            # Use a FIXED-SIZE schema (batchSize) so output_config is
-            # identical across all Claude calls — Anthropic includes it in
-            # the prompt-cache key, so varying numLines would bust the cache.
-            # The caller trims extra lines from the response after extraction.
+            # Use a STATIC array-based schema so output_config is identical
+            # across all Claude calls (Anthropic includes it in the prompt
+            # cache key).  The caller sends LineN input; Claude returns
+            # {"translations": ["...", ...]} which extractTranslation handles.
             if formatType == "json" and numLines is not None:
-                schema_lines = batchSize if batchSize else numLines
                 ant_kwargs["output_config"] = {
                     "format": {
                         "type": "json_schema",
-                        "schema": createTranslationSchema(schema_lines),
+                        "schema": _CLAUDE_TRANSLATION_SCHEMA,
                     }
                 }
 
@@ -1223,6 +1237,11 @@ def extractTranslation(translatedTextList, isList, pbar=None):
     # Attempt strict parse first
     try:
         lineDict = json.loads(s)
+
+        # Handle array-based schema: {"translations": ["...", ...]}
+        if isinstance(lineDict, dict) and "translations" in lineDict and isinstance(lineDict["translations"], list):
+            stringList = [str(v) for v in lineDict["translations"]]
+            return stringList if isList else (stringList[0] if stringList else None)
 
         # Build list in numeric order if keys are LineN
         numeric_keys = []
@@ -1598,7 +1617,7 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None, mism
 
             # Translate
             try:
-                response = translateText(static_system, current_user, history, 0.05, formatType, config.model, numLines, vocab_text=vocab_text, batchSize=config.batchSize)
+                response = translateText(static_system, current_user, history, 0.05, formatType, config.model, numLines, vocab_text=vocab_text)
             except Exception as api_err:
                 err_msg = f"[API_ERROR] {api_err}"
                 # Print to stdout so the GUI captures it immediately
@@ -1702,11 +1721,6 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None, mism
             if cleaned_text:
                 if isinstance(tItem, list):
                     extracted = extractTranslation(cleaned_text, True, pbar)
-
-                    # Trim extra lines from fixed-size schema response
-                    # (Claude fills all batchSize slots; we only need numLines).
-                    if extracted and len(extracted) > len(clean_tItem):
-                        extracted = extracted[:len(clean_tItem)]
 
                     # Check 1: Mismatch in length -> still a hard failure
                     if extracted is None or len(clean_tItem) != len(extracted):
@@ -1816,6 +1830,9 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None, mism
             formatted_output = last_raw_translation
             try:
                 parsed_json = json.loads(last_raw_translation)
+                # Normalize array-based output to LineN format for log readability
+                if isinstance(parsed_json, dict) and "translations" in parsed_json and isinstance(parsed_json["translations"], list):
+                    parsed_json = {f"Line{i+1}": v for i, v in enumerate(parsed_json["translations"])}
                 formatted_output = json.dumps(parsed_json, indent=4, ensure_ascii=False)
             except (json.JSONDecodeError, ValueError):
                 pass
@@ -1858,6 +1875,8 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None, mism
             formatted_mismatch_output = last_raw_translation
             try:
                 parsed_json = json.loads(last_raw_translation)
+                if isinstance(parsed_json, dict) and "translations" in parsed_json and isinstance(parsed_json["translations"], list):
+                    parsed_json = {f"Line{i+1}": v for i, v in enumerate(parsed_json["translations"])}
                 formatted_mismatch_output = json.dumps(parsed_json, indent=4, ensure_ascii=False)
             except (json.JSONDecodeError, ValueError):
                 pass
