@@ -520,9 +520,9 @@ class WorkflowTab(QWidget):
             ("2  Speaker",      self._build_step2_speaker),
             ("3  Glossary",     self._build_step3_glossary),
             ("4  TL Phase 1",   self._build_step4_translation),
-            ("5  TL Phase 2",   self._build_step4b_risky),
-            ("6  Plugins.js",   self._build_step5_plugins_js),
-            ("7  Export",       self._build_step6_export),
+            ("5  TL Phase 2",   self._build_step5_tl_phase2),
+            ("6  Plugins.js",   self._build_step6_plugins_js),
+            ("7  Export",       self._build_step7_export),
         ]
 
         for tab_label, builder in _tab_defs:
@@ -1681,61 +1681,74 @@ class WorkflowTab(QWidget):
         p1b_inner.addLayout(p1b_row)
         layout.addWidget(p1b_box)
 
-    def _build_step4b_risky(self, layout: QVBoxLayout):
-        layout.addWidget(_make_section_label("Step 5 — Phase 2: Risky Codes"))
+    def _build_step5_tl_phase2(self, layout: QVBoxLayout):
+        layout.setContentsMargins(20, 8, 20, 4)
+        layout.setSpacing(6)
 
-        p2_box = QGroupBox("Phase 2  –  Risky Codes (variables + conditionals)")
-        p2_box.setStyleSheet(self._task_box_style())
-        p2_inner = QVBoxLayout(p2_box)
-        p2_desc = QLabel(
-            "Phase 2 targets script/variable strings and plugin text.\n"
-            "Use the Plugin Prompt to audit the game first, then enable only the codes and "
-            "plugins that contain visible text."
+        # ── Pre-flight card: description + prompt + var range ──────────────
+        pre_box = QGroupBox("Pre-flight \u2014 Audit & Configure")
+        pre_box.setStyleSheet(self._task_box_style())
+        pre_inner = QVBoxLayout(pre_box)
+        pre_inner.setContentsMargins(10, 8, 10, 8)
+        pre_inner.setSpacing(6)
+
+        pre_top = QHBoxLayout()
+        pre_top.setSpacing(12)
+        desc_lbl = QLabel(
+            "Targets script/variable strings and plugin text. "
+            "Use the Plugin Prompt to audit the game first, then enable only the codes with visible text."
         )
-        p2_desc.setStyleSheet("color:#9d9d9d;font-size:13px;")
-        p2_desc.setWordWrap(True)
-        p2_inner.addWidget(p2_desc)
-
-        copy_risky_row = QHBoxLayout()
+        desc_lbl.setWordWrap(True)
+        desc_lbl.setStyleSheet("color:#9d9d9d;font-size:13px;")
+        pre_top.addWidget(desc_lbl, 1)
         copy_risky_btn = _make_btn("📋  Copy Plugin Prompt", "#555")
         copy_risky_btn.setFixedWidth(200)
         copy_risky_btn.setToolTip(
             "Copy a Copilot prompt that audits code 122 variable ranges and all optional "
-            "plugin/script codes (357, 356, 355/655, 657, 320, 324, 325, 108) for visible text."
+            "plugin/script codes for visible text."
         )
         copy_risky_btn.clicked.connect(self._copy_plugin_prompt)
-        copy_risky_row.addWidget(copy_risky_btn)
-        copy_risky_row.addStretch()
-        p2_inner.addLayout(copy_risky_row)
+        pre_top.addWidget(copy_risky_btn)
+        pre_inner.addLayout(pre_top)
 
-        # Code 122 variable ID range
-        var_range_row = QHBoxLayout()
-        var_range_lbl = QLabel("Code 122 var range:")
-        var_range_row.addWidget(var_range_lbl)
+        # Divider line
+        div = QFrame()
+        div.setFrameShape(QFrame.HLine)
+        div.setStyleSheet("QFrame{background-color:#3a3a3a;border:none;max-height:1px;}")
+        pre_inner.addWidget(div)
+
+        # Code 122 var range row
+        var_row = QHBoxLayout()
+        var_row.setSpacing(6)
+        var_lbl = QLabel("Code 122 var range:")
+        var_lbl.setStyleSheet("color:#cccccc;font-size:13px;")
+        var_row.addWidget(var_lbl)
         from PyQt5.QtGui import QIntValidator
         self._p2_var_min = QLineEdit("0")
         self._p2_var_min.setValidator(QIntValidator(0, 99999))
         self._p2_var_min.setFixedWidth(55)
         self._p2_var_min.setAlignment(Qt.AlignCenter)
         self._p2_var_min.setToolTip("Minimum variable ID to translate (inclusive)")
-        var_range_row.addWidget(self._p2_var_min)
-        dash = QLabel("–")
-        var_range_row.addWidget(dash)
+        var_row.addWidget(self._p2_var_min)
+        dash_lbl = QLabel("–")
+        dash_lbl.setStyleSheet("color:#9d9d9d;")
+        var_row.addWidget(dash_lbl)
         self._p2_var_max = QLineEdit("2000")
         self._p2_var_max.setValidator(QIntValidator(1, 99999))
         self._p2_var_max.setFixedWidth(55)
         self._p2_var_max.setAlignment(Qt.AlignCenter)
         self._p2_var_max.setToolTip("Maximum variable ID to translate (exclusive)")
-        var_range_row.addWidget(self._p2_var_max)
+        var_row.addWidget(self._p2_var_max)
         apply_range_btn = _make_btn("Apply", "#3a3a3a")
         apply_range_btn.setFixedWidth(80)
         apply_range_btn.setToolTip("Write CODE122_VAR_MIN / CODE122_VAR_MAX to the module")
         apply_range_btn.clicked.connect(self._apply_var_range)
-        var_range_row.addWidget(apply_range_btn)
-        var_range_row.addStretch()
-        p2_inner.addLayout(var_range_row)
+        var_row.addWidget(apply_range_btn)
+        var_row.addStretch()
+        pre_inner.addLayout(var_row)
+        layout.addWidget(pre_box)
 
-        # Pre-populate range from current module values
+        # Pre-populate range
         try:
             from gui.config_integration import ConfigIntegration
             cur = ConfigIntegration().read_current_config()
@@ -1746,12 +1759,12 @@ class WorkflowTab(QWidget):
         except Exception:
             pass
 
-        # ─── Code Toggles ───────────────────────────────────────────────────────────────────
+        # ── Code toggles ───────────────────────────────────────────────────
         toggle_box = QGroupBox()
         toggle_box.setStyleSheet(self._checkbox_box_style())
         toggle_box_layout = QVBoxLayout(toggle_box)
-        toggle_box_layout.setContentsMargins(6, 8, 6, 6)
-        toggle_box_layout.setSpacing(4)
+        toggle_box_layout.setContentsMargins(6, 8, 6, 4)
+        toggle_box_layout.setSpacing(3)
 
         codes_sa_row = QHBoxLayout()
         codes_title_lbl = QLabel("Enable Codes")
@@ -1766,7 +1779,7 @@ class WorkflowTab(QWidget):
         toggle_grid = QGridLayout(toggle_grid_container)
         toggle_grid.setContentsMargins(0, 0, 0, 0)
         toggle_grid.setHorizontalSpacing(16)
-        toggle_grid.setVerticalSpacing(4)
+        toggle_grid.setVerticalSpacing(3)
 
         _P2_CODE_DEFS = [
             ("CODE122",    "122 – Variables",     "Control Variables (code 122)"),
@@ -1793,13 +1806,27 @@ class WorkflowTab(QWidget):
             for cb in self._p2_code_checks.values():
                 cb.setChecked(checked)
         codes_select_all_btn.toggled.connect(_toggle_codes)
-        p2_inner.addWidget(toggle_box)
+        layout.addWidget(toggle_box)
 
-        # ─── Code 357 Plugin Handlers ───────────────────────────────────────────────────
+        # ── 357 plugins + 355/655 patterns — side by side ──────────────────
+        lists_row = QHBoxLayout()
+        lists_row.setSpacing(8)
+
+        # Left: 357 plugin handlers
         plugin357_box = QGroupBox()
         plugin357_box.setStyleSheet(self._checkbox_box_style())
         plugin357_inner = QVBoxLayout(plugin357_box)
         plugin357_inner.setContentsMargins(4, 8, 4, 4)
+        plugin357_inner.setSpacing(3)
+
+        plugin357_sa_row = QHBoxLayout()
+        plugin357_title_lbl = QLabel("Code 357 – Plugin Handlers (MZ)")
+        plugin357_title_lbl.setStyleSheet("color:#888888;font-size:12px;")
+        plugin357_sa_row.addWidget(plugin357_title_lbl)
+        plugin357_sa_row.addStretch()
+        plugin357_select_all_btn = _make_toggle_btn("Select All")
+        plugin357_sa_row.addWidget(plugin357_select_all_btn)
+        plugin357_inner.addLayout(plugin357_sa_row)
 
         plugin357_container = QWidget()
         plugin357_grid = QGridLayout(plugin357_container)
@@ -1818,32 +1845,33 @@ class WorkflowTab(QWidget):
             pass
 
         plugin357_scroll = QScrollArea()
-        plugin357_scroll.setMaximumHeight(120)
         plugin357_scroll.setWidgetResizable(True)
         plugin357_scroll.setWidget(plugin357_container)
         plugin357_scroll.setStyleSheet("QScrollArea{border:none;}")
-        plugin357_sa_row = QHBoxLayout()
-        plugin357_title_lbl = QLabel("Code 357 – Plugin Handlers (MZ)")
-        plugin357_title_lbl.setStyleSheet("color:#888888;font-size:12px;")
-        plugin357_sa_row.addWidget(plugin357_title_lbl)
-        plugin357_sa_row.addStretch()
-        plugin357_select_all_btn = _make_toggle_btn("Select All")
-        plugin357_sa_row.addWidget(plugin357_select_all_btn)
-        plugin357_inner.addLayout(plugin357_sa_row)
-        plugin357_inner.addWidget(plugin357_scroll)
+        plugin357_inner.addWidget(plugin357_scroll, 1)
 
         def _toggle_plugins357(checked):
             plugin357_select_all_btn.setText("Deselect All" if checked else "Select All")
             for cb in self._p2_plugin_checks.values():
                 cb.setChecked(checked)
         plugin357_select_all_btn.toggled.connect(_toggle_plugins357)
-        p2_inner.addWidget(plugin357_box)
+        lists_row.addWidget(plugin357_box, 1)
 
-        # ─── Code 355/655 Script Patterns ───────────────────────────────────────────
+        # Right: 355/655 script patterns
         patterns_box = QGroupBox()
         patterns_box.setStyleSheet(self._checkbox_box_style())
         patterns_inner_layout = QVBoxLayout(patterns_box)
         patterns_inner_layout.setContentsMargins(4, 8, 4, 4)
+        patterns_inner_layout.setSpacing(3)
+
+        patterns_sa_row = QHBoxLayout()
+        patterns_title_lbl = QLabel("Code 355/655 – Script Patterns")
+        patterns_title_lbl.setStyleSheet("color:#888888;font-size:12px;")
+        patterns_sa_row.addWidget(patterns_title_lbl)
+        patterns_sa_row.addStretch()
+        patterns_select_all_btn = _make_toggle_btn("Select All")
+        patterns_sa_row.addWidget(patterns_select_all_btn)
+        patterns_inner_layout.addLayout(patterns_sa_row)
 
         patterns_container = QWidget()
         patterns_grid = QGridLayout(patterns_container)
@@ -1862,31 +1890,24 @@ class WorkflowTab(QWidget):
             pass
 
         patterns_scroll = QScrollArea()
-        patterns_scroll.setMaximumHeight(110)
         patterns_scroll.setWidgetResizable(True)
         patterns_scroll.setWidget(patterns_container)
         patterns_scroll.setStyleSheet("QScrollArea{border:none;}")
-        patterns_sa_row = QHBoxLayout()
-        patterns_title_lbl = QLabel("Code 355/655 – Script Patterns")
-        patterns_title_lbl.setStyleSheet("color:#888888;font-size:12px;")
-        patterns_sa_row.addWidget(patterns_title_lbl)
-        patterns_sa_row.addStretch()
-        patterns_select_all_btn = _make_toggle_btn("Select All")
-        patterns_sa_row.addWidget(patterns_select_all_btn)
-        patterns_inner_layout.addLayout(patterns_sa_row)
-        patterns_inner_layout.addWidget(patterns_scroll)
+        patterns_inner_layout.addWidget(patterns_scroll, 1)
 
         def _toggle_patterns(checked):
             patterns_select_all_btn.setText("Deselect All" if checked else "Select All")
             for cb in self._p2_pattern_checks.values():
                 cb.setChecked(checked)
         patterns_select_all_btn.toggled.connect(_toggle_patterns)
-        p2_inner.addWidget(patterns_box)
+        lists_row.addWidget(patterns_box, 1)
 
+        layout.addLayout(lists_row, 1)
+
+        # ── Bottom row: Apply + Run ────────────────────────────────────────
+        bottom_row = QHBoxLayout()
+        bottom_row.setSpacing(10)
         _P2_BTN_WIDTH = 200
-
-        # Apply Plugin Settings button
-        apply_plugins_row = QHBoxLayout()
         apply_plugins_btn = _make_btn("✔  Apply Plugin Settings", "#2a4a6a")
         apply_plugins_btn.setFixedWidth(_P2_BTN_WIDTH)
         apply_plugins_btn.setToolTip(
@@ -1894,33 +1915,28 @@ class WorkflowTab(QWidget):
             "Updates ENABLED_PLUGINS_357 and ENABLED_PATTERNS_355655 in rpgmakermvmz.py."
         )
         apply_plugins_btn.clicked.connect(self._apply_plugin_settings)
-        apply_plugins_row.addWidget(apply_plugins_btn)
-        apply_plugins_row.addStretch()
-        p2_inner.addLayout(apply_plugins_row)
+        bottom_row.addWidget(apply_plugins_btn)
 
-        p2_row = QHBoxLayout()
-        p2_row.setSpacing(10)
         self._run_p2_btn = _make_btn("►  Run Phase 2", "#7a4a00")
         self._run_p2_btn.setFixedWidth(_P2_BTN_WIDTH)
         self._run_p2_btn.setToolTip(
-            "Applies Phase 2 code settings (from the checkboxes above) and starts translation "
-            "with event files pre-selected."
+            "Applies Phase 2 code settings and starts translation with event files pre-selected."
         )
         self._run_p2_btn.clicked.connect(lambda: self._run_phase(2))
-        p2_row.addWidget(self._run_p2_btn)
+        bottom_row.addWidget(self._run_p2_btn)
+
         self._p2_status_lbl = QLabel("")
         self._p2_status_lbl.setStyleSheet("color:#d4aa68;font-size:13px;padding-left:4px;")
-        p2_row.addWidget(self._p2_status_lbl)
-        p2_row.addStretch()
-        p2_inner.addLayout(p2_row)
-        layout.addWidget(p2_box)
+        bottom_row.addWidget(self._p2_status_lbl)
+        bottom_row.addStretch()
+        layout.addLayout(bottom_row)
 
         # Pre-populate all Phase 2 checkboxes from current module state
         self._populate_p2_checkboxes()
 
     # ── Step 5: plugins.js Translation ─────────────────────────────────────
 
-    def _build_step5_plugins_js(self, layout: QVBoxLayout):
+    def _build_step6_plugins_js(self, layout: QVBoxLayout):
         layout.addWidget(_make_section_label("Step 6 — Translate plugins.js"))
 
         hint = QLabel(
@@ -1960,7 +1976,7 @@ class WorkflowTab(QWidget):
 
     # ── Step 6: Export ──────────────────────────────────────────────────────
 
-    def _build_step6_export(self, layout: QVBoxLayout):
+    def _build_step7_export(self, layout: QVBoxLayout):
         layout.addWidget(_make_section_label("Step 7 — Export to Game"))
         hint = QLabel(
             "Copy translated files back into the game's data folder to patch the game in-place."
