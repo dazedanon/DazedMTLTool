@@ -734,6 +734,12 @@ class TranslationTab(QWidget):
         refresh_btn.clicked.connect(self.refresh_file_lists)
         refresh_btn.setStyleSheet(icon_button_style)
         file_buttons.addWidget(refresh_btn)
+
+        self.sidebar_export_btn = QPushButton("📤")
+        self.sidebar_export_btn.setToolTip("Export active files → Game Folder\nCopy translated files matching files/ into your game's data directory")
+        self.sidebar_export_btn.clicked.connect(self._export_active_files)
+        self.sidebar_export_btn.setStyleSheet(icon_button_style)
+        file_buttons.addWidget(self.sidebar_export_btn)
         
         # Add stretch to push buttons to top
         file_buttons.addStretch()
@@ -1445,10 +1451,12 @@ class TranslationTab(QWidget):
             if not game_data:
                 return
 
+        transl_dir = Path("translated")
+        exportable_count = sum(1 for name in active if (transl_dir / name).exists())
         reply = QMessageBox.question(
             self,
             "Export Active Files to Game",
-            f"Export {len(active)} file(s) into:\n{game_data}\n\nMake a backup first if needed. Continue?",
+            f"Export {exportable_count} file(s) into:\n{game_data}\n\nMake a backup first if needed. Continue?",
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.No,
         )
@@ -1456,7 +1464,6 @@ class TranslationTab(QWidget):
             return
 
         import shutil
-        transl_dir = Path("translated")
         exported = 0
         skipped = 0
         for name in active:
