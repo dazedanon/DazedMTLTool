@@ -1080,6 +1080,7 @@ class WorkflowTab(QWidget):
         collapse_layout.addWidget(hint)
 
         tasks_box = QGroupBox()
+        tasks_box.setStyleSheet("QGroupBox{border:none;margin:0;padding:0;}")
         tb = QVBoxLayout(tasks_box)
         tb.setSpacing(10)
         collapse_layout.addWidget(tasks_box)
@@ -1206,7 +1207,23 @@ class WorkflowTab(QWidget):
 
     @staticmethod
     def _task_box_style() -> str:
-        return ""  # inherits from app stylesheet
+        return (
+            "QGroupBox{border:none;margin-top:14px;padding-top:4px;}"
+            "QGroupBox::title{subcontrol-origin:margin;subcontrol-position:top left;"
+            "padding:0;color:#007acc;font-weight:bold;font-size:13px;"
+            "font-family:'Segoe UI Emoji','Segoe UI','Apple Color Emoji',sans-serif;}"
+        )
+
+    @staticmethod
+    def _checkbox_box_style() -> str:
+        """Bordered style for sections that contain scrollable checkbox lists."""
+        return (
+            "QGroupBox{border:1px solid #3a3a3a;border-radius:4px;margin-top:10px;padding-top:4px;}"
+            "QGroupBox::title{subcontrol-origin:margin;subcontrol-position:top left;"
+            "left:8px;padding:0 4px;top:-1px;"
+            "background-color:#1e1e1e;color:#888888;font-size:12px;"
+            "font-family:'Segoe UI Emoji','Segoe UI','Apple Color Emoji',sans-serif;}"
+        )
 
     def _build_step3_glossary(self, layout: QVBoxLayout):
         layout.addWidget(_make_section_label("Step 3 — Glossary (vocab.txt)"))
@@ -1220,6 +1237,7 @@ class WorkflowTab(QWidget):
 
         # ---- Parse Speakers -------------------------------------------------
         spk_box = QGroupBox("3a — Parse Speakers (Auto-detect Names)")
+        spk_box.setStyleSheet(self._task_box_style())
         spk_inner = QVBoxLayout(spk_box)
         spk_inner.setSpacing(6)
 
@@ -1252,6 +1270,7 @@ class WorkflowTab(QWidget):
 
         # ---- Copilot / Cursor prompt helpers --------------------------------
         prompt_box = QGroupBox("3b — AI Prompt Helpers (Copilot / Cursor)")
+        prompt_box.setStyleSheet(self._task_box_style())
         pb_inner = QVBoxLayout(prompt_box)
         pb_inner.setSpacing(6)
 
@@ -1364,6 +1383,7 @@ class WorkflowTab(QWidget):
 
         # ---- Flag checkboxes ------------------------------------------------
         cb_box = QGroupBox("Speaker flags")
+        cb_box.setStyleSheet(self._task_box_style())
         cb_inner = QVBoxLayout(cb_box)
         cb_inner.setSpacing(3)
 
@@ -1390,6 +1410,7 @@ class WorkflowTab(QWidget):
 
         # ---- Pre-flight: text wrap configuration ----------------------------
         wrap_box = QGroupBox("Pre-flight — Text Wrap Width")
+        wrap_box.setStyleSheet(self._task_box_style())
         wrap_inner = QVBoxLayout(wrap_box)
         wrap_inner.setSpacing(6)
 
@@ -1436,11 +1457,7 @@ class WorkflowTab(QWidget):
         layout.addWidget(wrap_box)
 
         p0_box = QGroupBox("Phase 0  –  Core Database Files")
-        p0_box.setStyleSheet(
-            "QGroupBox{border:1px solid #444444;border-left:3px solid #4a9a4a;"
-            "border-radius:3px;margin-top:8px;}"
-            "QGroupBox::title{left:8px;padding:2px 5px;color:#007acc;font-weight:bold;}"
-        )
+        p0_box.setStyleSheet(self._task_box_style())
         p0_inner = QVBoxLayout(p0_box)
         p0_desc = QLabel(
             "Files: Actors, Armors, Weapons, Items, Skills, States, Classes, Enemies, System, MapInfos\n"
@@ -1466,11 +1483,7 @@ class WorkflowTab(QWidget):
         layout.addWidget(p0_box)
 
         p1_box = QGroupBox("Phase 1  –  Safe Codes (dialogue + choices)")
-        p1_box.setStyleSheet(
-            "QGroupBox{border:1px solid #444444;border-left:3px solid #007acc;"
-            "border-radius:3px;margin-top:8px;}"
-            "QGroupBox::title{left:8px;padding:2px 5px;color:#007acc;font-weight:bold;}"
-        )
+        p1_box.setStyleSheet(self._task_box_style())
         p1_inner = QVBoxLayout(p1_box)
         p1_desc = QLabel(
             "Codes ON: 101 (Name), 401 (Show Text), 405 (continued), 102 (Choices), 408 (extra lines)\n"
@@ -1493,11 +1506,7 @@ class WorkflowTab(QWidget):
         layout.addWidget(p1_box)
 
         p1b_box = QGroupBox("Phase 1b  –  Build Variable Cache (code 111)")
-        p1b_box.setStyleSheet(
-            "QGroupBox{border:1px solid #444444;border-left:3px solid #2a7a9a;"
-            "border-radius:3px;margin-top:8px;}"
-            "QGroupBox::title{left:8px;padding:2px 5px;color:#007acc;font-weight:bold;}"
-        )
+        p1b_box.setStyleSheet(self._task_box_style())
         p1b_inner = QVBoxLayout(p1b_box)
         p1b_desc = QLabel(
             "Code ON: 111 (Conditional Branch string comparisons)\n"
@@ -1522,11 +1531,7 @@ class WorkflowTab(QWidget):
         layout.addWidget(p1b_box)
 
         p2_box = QGroupBox("Phase 2  –  Risky Codes (variables + conditionals)")
-        p2_box.setStyleSheet(
-            "QGroupBox{border:1px solid #444444;border-left:3px solid #aa7000;"
-            "border-radius:3px;margin-top:8px;}"
-            "QGroupBox::title{left:8px;padding:2px 5px;color:#007acc;font-weight:bold;}"
-        )
+        p2_box.setStyleSheet(self._task_box_style())
         p2_inner = QVBoxLayout(p2_box)
         p2_desc = QLabel(
             "Phase 2 targets script/variable strings and plugin text.\n"
@@ -1586,14 +1591,18 @@ class WorkflowTab(QWidget):
             pass
 
         # ─── Code Toggles ───────────────────────────────────────────────────────────────────
-        toggle_box = QGroupBox("Enable Codes")
+        toggle_box = QGroupBox()
+        toggle_box.setStyleSheet(self._checkbox_box_style())
         toggle_box_layout = QVBoxLayout(toggle_box)
         toggle_box_layout.setContentsMargins(6, 8, 6, 6)
         toggle_box_layout.setSpacing(4)
 
         codes_sa_row = QHBoxLayout()
-        codes_select_all_btn = _make_toggle_btn("Select All")
+        codes_title_lbl = QLabel("Enable Codes")
+        codes_title_lbl.setStyleSheet("color:#888888;font-size:12px;")
+        codes_sa_row.addWidget(codes_title_lbl)
         codes_sa_row.addStretch()
+        codes_select_all_btn = _make_toggle_btn("Select All")
         codes_sa_row.addWidget(codes_select_all_btn)
         toggle_box_layout.addLayout(codes_sa_row)
 
@@ -1631,7 +1640,8 @@ class WorkflowTab(QWidget):
         p2_inner.addWidget(toggle_box)
 
         # ─── Code 357 Plugin Handlers ───────────────────────────────────────────────────
-        plugin357_box = QGroupBox("Code 357 – Plugin Handlers (MZ)  ·  check to enable")
+        plugin357_box = QGroupBox()
+        plugin357_box.setStyleSheet(self._checkbox_box_style())
         plugin357_inner = QVBoxLayout(plugin357_box)
         plugin357_inner.setContentsMargins(4, 8, 4, 4)
 
@@ -1657,8 +1667,11 @@ class WorkflowTab(QWidget):
         plugin357_scroll.setWidget(plugin357_container)
         plugin357_scroll.setStyleSheet("QScrollArea{border:none;}")
         plugin357_sa_row = QHBoxLayout()
-        plugin357_select_all_btn = _make_toggle_btn("Select All")
+        plugin357_title_lbl = QLabel("Code 357 – Plugin Handlers (MZ)")
+        plugin357_title_lbl.setStyleSheet("color:#888888;font-size:12px;")
+        plugin357_sa_row.addWidget(plugin357_title_lbl)
         plugin357_sa_row.addStretch()
+        plugin357_select_all_btn = _make_toggle_btn("Select All")
         plugin357_sa_row.addWidget(plugin357_select_all_btn)
         plugin357_inner.addLayout(plugin357_sa_row)
         plugin357_inner.addWidget(plugin357_scroll)
@@ -1671,7 +1684,8 @@ class WorkflowTab(QWidget):
         p2_inner.addWidget(plugin357_box)
 
         # ─── Code 355/655 Script Patterns ───────────────────────────────────────────
-        patterns_box = QGroupBox("Code 355/655 – Script Patterns  ·  check to enable")
+        patterns_box = QGroupBox()
+        patterns_box.setStyleSheet(self._checkbox_box_style())
         patterns_inner_layout = QVBoxLayout(patterns_box)
         patterns_inner_layout.setContentsMargins(4, 8, 4, 4)
 
@@ -1697,8 +1711,11 @@ class WorkflowTab(QWidget):
         patterns_scroll.setWidget(patterns_container)
         patterns_scroll.setStyleSheet("QScrollArea{border:none;}")
         patterns_sa_row = QHBoxLayout()
-        patterns_select_all_btn = _make_toggle_btn("Select All")
+        patterns_title_lbl = QLabel("Code 355/655 – Script Patterns")
+        patterns_title_lbl.setStyleSheet("color:#888888;font-size:12px;")
+        patterns_sa_row.addWidget(patterns_title_lbl)
         patterns_sa_row.addStretch()
+        patterns_select_all_btn = _make_toggle_btn("Select All")
         patterns_sa_row.addWidget(patterns_select_all_btn)
         patterns_inner_layout.addLayout(patterns_sa_row)
         patterns_inner_layout.addWidget(patterns_scroll)
