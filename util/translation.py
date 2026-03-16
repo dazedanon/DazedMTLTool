@@ -1248,15 +1248,21 @@ def calculateCost(inputTokens, outputTokens, model):
         static_tok  = getattr(_thread_local, 'estimate_static_tokens', 0)
         regular_tok = getattr(_thread_local, 'estimate_regular_tokens', 0)
         batch_count = max(1, getattr(_thread_local, 'estimate_batch_count', 1))
-d        _thread_local.estimate_static_tokens  = 0
+        _thread_local.estimate_static_tokens  = 0
         _thread_local.estimate_regular_tokens = 0
         _thread_local.estimate_batch_count    = 0
-        # Assume first 30 batches across ALL files are cache writes (2x), rest reads (0.10x).
+        # If cache is disabled, every batch is a write (2x) — no reads ever.
+        # Otherwise assume first <batchSize> batches globally are writes, rest are reads (0.10x).
         global _global_estimate_batch_offset
-        offset = _global_estimate_batch_offset
-        _global_estimate_batch_offset += batch_count
-        write_batches = max(0, min(30, offset + batch_count) - offset)
-        read_batches  = batch_count - write_batches
+        if DISABLE_CACHE:
+            write_batches = batch_count
+            read_batches  = 0
+        else:
+            cache_write_window = pricing["batchSize"]
+            offset = _global_estimate_batch_offset
+            _global_estimate_batch_offset += batch_count
+            write_batches = max(0, min(cache_write_window, offset + batch_count) - offset)
+            read_batches  = batch_count - write_batches
         write_cost   = (write_batches * static_tok / 1_000_000) * pricing["inputAPICost"] * 2.0
         read_cost    = (read_batches  * static_tok / 1_000_000) * pricing["inputAPICost"] * 0.10
         regular_cost = (regular_tok / 1_000_000) * pricing["inputAPICost"]
