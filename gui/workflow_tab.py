@@ -382,15 +382,16 @@ def _make_btn(text: str, color: str = "#007acc") -> QPushButton:
     except Exception:
         r = g = b = 0
         is_flat = False
+    _PAD = "padding:6px 14px;"
     if is_flat:
         btn.setStyleSheet(
-            "QPushButton{background-color:#2d2d30;color:#cccccc;"
-            "border:1px solid #555555;padding:6px 14px;"
-            "border-radius:4px;font-size:12px;font-weight:bold;"
-            "font-family:'Segoe UI Emoji','Segoe UI','Apple Color Emoji',sans-serif;}"
-            "QPushButton:hover{background-color:#3e3e42;border-left-color:#007acc;}"
-            "QPushButton:pressed{background-color:#007acc;color:white;}"
-            "QPushButton:disabled{background-color:#404040;color:#666666;border-color:#444444;}"
+            f"QPushButton{{background-color:#2d2d30;color:#cccccc;"
+            f"border:1px solid #555555;{_PAD}"
+            f"border-radius:4px;font-size:12px;font-weight:bold;"
+            f"font-family:'Segoe UI Emoji','Segoe UI','Apple Color Emoji',sans-serif;}}"
+            f"QPushButton:hover{{background-color:#3e3e42;}}"
+            f"QPushButton:pressed{{background-color:#007acc;color:white;}}"
+            f"QPushButton:disabled{{background-color:#404040;color:#666666;border-color:#444444;}}"
         )
     else:
         try:
@@ -406,12 +407,28 @@ def _make_btn(text: str, color: str = "#007acc") -> QPushButton:
             hover_color = press_color = color
         btn.setStyleSheet(
             f"QPushButton{{background-color:{color};color:white;border:none;"
-            f"padding:7px 16px;border-radius:4px;font-size:12px;font-weight:bold;"
+            f"{_PAD}border-radius:4px;font-size:12px;font-weight:bold;"
             f"font-family:'Segoe UI Emoji','Segoe UI','Apple Color Emoji',sans-serif;}}"
             f"QPushButton:hover{{background-color:{hover_color};}}"
             f"QPushButton:pressed{{background-color:{press_color};}}"
             f"QPushButton:disabled{{background-color:#404040;color:#666666;}}"
         )
+    return btn
+
+
+def _make_toggle_btn(text: str) -> QPushButton:
+    """Checkable Select All / Deselect All button, styled to match the rest of the workflow UI."""
+    btn = QPushButton(text)
+    btn.setCheckable(True)
+    btn.setStyleSheet(
+        "QPushButton{background-color:#2d2d30;color:#aaaaaa;"
+        "border:1px solid #555555;padding:4px 12px;"
+        "border-radius:4px;font-size:12px;"
+        "font-family:'Segoe UI Emoji','Segoe UI','Apple Color Emoji',sans-serif;}"
+        "QPushButton:hover{background-color:#3e3e42;color:#cccccc;}"
+        "QPushButton:checked{background-color:#1a3a5a;color:#7ab8d4;border-color:#2a6a9a;}"
+        "QPushButton:checked:hover{background-color:#1e4268;}"
+    )
     return btn
 
 
@@ -1217,17 +1234,19 @@ class WorkflowTab(QWidget):
         spk_hint.setStyleSheet("color:#999;font-size:13px;")
         spk_inner.addWidget(spk_hint)
 
-        spk_row = QHBoxLayout()
-        self._parse_speakers_status = QLabel("")
-        self._parse_speakers_status.setStyleSheet("color:#aaa;font-size:13px;")
-        spk_row.addWidget(self._parse_speakers_status, 1)
+        spk_btn_row = QHBoxLayout()
         self._parse_speakers_btn = _make_btn("🔍  Parse Speakers", "#007acc")
+        self._parse_speakers_btn.setMinimumWidth(180)
         self._parse_speakers_btn.setToolTip(
             "Scan all game files for speaker names and write them to vocab.txt"
         )
         self._parse_speakers_btn.clicked.connect(self._run_parse_speakers)
-        spk_row.addWidget(self._parse_speakers_btn)
-        spk_inner.addLayout(spk_row)
+        spk_btn_row.addWidget(self._parse_speakers_btn)
+        spk_btn_row.addStretch()
+        spk_inner.addLayout(spk_btn_row)
+        self._parse_speakers_status = QLabel("")
+        self._parse_speakers_status.setStyleSheet("color:#aaa;font-size:13px;")
+        spk_inner.addWidget(self._parse_speakers_status)
 
         layout.addWidget(spk_box)
 
@@ -1247,19 +1266,21 @@ class WorkflowTab(QWidget):
         pb_inner.addWidget(prompt_hint)
 
         # Combined glossary prompt
-        glossary_row = QHBoxLayout()
-        glossary_label = QLabel(
+        glossary_desc = QLabel(
             "👥🌍  <b>Full Glossary</b> — named characters (with gender &amp; role) "
             "and unique worldbuilding terms in one pass."
         )
-        glossary_label.setTextFormat(Qt.RichText)
-        glossary_label.setWordWrap(True)
-        glossary_label.setStyleSheet("color:#ccc;font-size:13px;")
-        glossary_row.addWidget(glossary_label, 1)
-        copy_glossary_btn = _make_btn("📋  Copy Prompt", "#555")
+        glossary_desc.setTextFormat(Qt.RichText)
+        glossary_desc.setWordWrap(True)
+        glossary_desc.setStyleSheet("color:#ccc;font-size:13px;")
+        pb_inner.addWidget(glossary_desc)
+        glossary_row = QHBoxLayout()
+        copy_glossary_btn = _make_btn("📋  Copy Prompt for Copilot", "#555")
+        copy_glossary_btn.setMinimumWidth(220)
         copy_glossary_btn.setToolTip("Copy the full glossary discovery prompt to clipboard")
         copy_glossary_btn.clicked.connect(self._copy_glossary_prompt)
         glossary_row.addWidget(copy_glossary_btn)
+        glossary_row.addStretch()
         pb_inner.addLayout(glossary_row)
 
         layout.addWidget(prompt_box)
@@ -1289,12 +1310,15 @@ class WorkflowTab(QWidget):
         self._reload_vocab()
         layout.addWidget(self.vocab_editor)
 
+        _VOC_W = 180
         row = QHBoxLayout()
         save_vocab = _make_btn("💾  Save vocab.txt", "#3a7a3a")
+        save_vocab.setMinimumWidth(_VOC_W)
         save_vocab.clicked.connect(self._save_vocab)
         row.addWidget(save_vocab)
 
         reload_vocab = _make_btn("↺  Reload", "#555")
+        reload_vocab.setMinimumWidth(_VOC_W)
         reload_vocab.clicked.connect(self._reload_vocab)
         row.addWidget(reload_vocab)
         row.addStretch()
@@ -1306,12 +1330,15 @@ class WorkflowTab(QWidget):
         layout.addWidget(_make_section_label("Step 2 — Speaker Format Detection"))
 
         # Import button row
+        _IMP_W = 230
         import_row = QHBoxLayout()
         self.import_btn = _make_btn("⬇  Import Selected → files/", "#007acc")
+        self.import_btn.setMinimumWidth(_IMP_W)
         self.import_btn.setEnabled(False)
         self.import_btn.clicked.connect(self._import_files)
         import_row.addWidget(self.import_btn)
         clear_translated_btn = _make_btn("🗑  Clear translated/", "#8b0000")
+        clear_translated_btn.setMinimumWidth(_IMP_W)
         clear_translated_btn.setToolTip("Delete all files inside the translated/ folder")
         clear_translated_btn.clicked.connect(self._clear_translated)
         import_row.addWidget(clear_translated_btn)
@@ -1402,8 +1429,8 @@ class WorkflowTab(QWidget):
         apply_wrap_btn = _make_btn("✔  Apply to .env", "#3a7a3a")
         apply_wrap_btn.setToolTip("Write width / listWidth / noteWidth into .env")
         apply_wrap_btn.clicked.connect(self._apply_wrap_config)
-        apply_wrap_row.addStretch()
         apply_wrap_row.addWidget(apply_wrap_btn)
+        apply_wrap_row.addStretch()
         wrap_inner.addLayout(apply_wrap_row)
 
         layout.addWidget(wrap_box)
@@ -1565,14 +1592,7 @@ class WorkflowTab(QWidget):
         toggle_box_layout.setSpacing(4)
 
         codes_sa_row = QHBoxLayout()
-        codes_select_all_btn = QPushButton("Select All")
-        codes_select_all_btn.setCheckable(True)
-        codes_select_all_btn.setFixedWidth(80)
-        codes_select_all_btn.setStyleSheet(
-            "QPushButton{color:#ccc;font-size:13px;padding:3px 8px;background:#3a3a3a;border:none;border-radius:3px;}"
-            "QPushButton:checked{background:#1a3a5a;color:#7ab8d4;}"
-            "QPushButton:hover{background:#4a4a4a;}"
-        )
+        codes_select_all_btn = _make_toggle_btn("Select All")
         codes_sa_row.addStretch()
         codes_sa_row.addWidget(codes_select_all_btn)
         toggle_box_layout.addLayout(codes_sa_row)
@@ -1598,7 +1618,7 @@ class WorkflowTab(QWidget):
         for idx, (code_key, label, tip) in enumerate(_P2_CODE_DEFS):
             cb = QCheckBox(label)
             cb.setToolTip(tip)
-            cb.setStyleSheet("color:#ccc;font-size:13px;")
+            cb.setStyleSheet("color:#cccccc;font-size:13px;")
             toggle_grid.addWidget(cb, idx // 3, idx % 3)
             self._p2_code_checks[code_key] = cb
         toggle_box_layout.addWidget(toggle_grid_container)
@@ -1625,7 +1645,7 @@ class WorkflowTab(QWidget):
             from modules.rpgmakermvmz import HEADER_MAPPINGS_357 as _HM357
             for idx, key in enumerate(sorted(_HM357.keys())):
                 cb = QCheckBox(key)
-                cb.setStyleSheet("color:#bbb;font-size:13px;")
+                cb.setStyleSheet("color:#cccccc;font-size:13px;")
                 plugin357_grid.addWidget(cb, idx // 2, idx % 2)
                 self._p2_plugin_checks[key] = cb
         except Exception:
@@ -1637,14 +1657,7 @@ class WorkflowTab(QWidget):
         plugin357_scroll.setWidget(plugin357_container)
         plugin357_scroll.setStyleSheet("QScrollArea{border:none;}")
         plugin357_sa_row = QHBoxLayout()
-        plugin357_select_all_btn = QPushButton("Select All")
-        plugin357_select_all_btn.setCheckable(True)
-        plugin357_select_all_btn.setFixedWidth(80)
-        plugin357_select_all_btn.setStyleSheet(
-            "QPushButton{color:#ccc;font-size:13px;padding:3px 8px;background:#3a3a3a;border:none;border-radius:3px;}"
-            "QPushButton:checked{background:#1a3a5a;color:#7ab8d4;}"
-            "QPushButton:hover{background:#4a4a4a;}"
-        )
+        plugin357_select_all_btn = _make_toggle_btn("Select All")
         plugin357_sa_row.addStretch()
         plugin357_sa_row.addWidget(plugin357_select_all_btn)
         plugin357_inner.addLayout(plugin357_sa_row)
@@ -1672,7 +1685,7 @@ class WorkflowTab(QWidget):
             from modules.rpgmakermvmz import PATTERNS_355655 as _PAT
             for idx, key in enumerate(sorted(_PAT.keys())):
                 cb = QCheckBox(key)
-                cb.setStyleSheet("color:#bbb;font-size:13px;")
+                cb.setStyleSheet("color:#cccccc;font-size:13px;")
                 patterns_grid.addWidget(cb, idx // 2, idx % 2)
                 self._p2_pattern_checks[key] = cb
         except Exception:
@@ -1684,14 +1697,7 @@ class WorkflowTab(QWidget):
         patterns_scroll.setWidget(patterns_container)
         patterns_scroll.setStyleSheet("QScrollArea{border:none;}")
         patterns_sa_row = QHBoxLayout()
-        patterns_select_all_btn = QPushButton("Select All")
-        patterns_select_all_btn.setCheckable(True)
-        patterns_select_all_btn.setFixedWidth(80)
-        patterns_select_all_btn.setStyleSheet(
-            "QPushButton{color:#ccc;font-size:13px;padding:3px 8px;background:#3a3a3a;border:none;border-radius:3px;}"
-            "QPushButton:checked{background:#1a3a5a;color:#7ab8d4;}"
-            "QPushButton:hover{background:#4a4a4a;}"
-        )
+        patterns_select_all_btn = _make_toggle_btn("Select All")
         patterns_sa_row.addStretch()
         patterns_sa_row.addWidget(patterns_select_all_btn)
         patterns_inner_layout.addLayout(patterns_sa_row)
@@ -1704,9 +1710,12 @@ class WorkflowTab(QWidget):
         patterns_select_all_btn.toggled.connect(_toggle_patterns)
         p2_inner.addWidget(patterns_box)
 
+        _P2_BTN_WIDTH = 220
+
         # Apply Plugin Settings button
         apply_plugins_row = QHBoxLayout()
         apply_plugins_btn = _make_btn("✔  Apply Plugin Settings", "#2a4a6a")
+        apply_plugins_btn.setFixedWidth(_P2_BTN_WIDTH)
         apply_plugins_btn.setToolTip(
             "Save the checked plugin handlers and script patterns to the module file.\n"
             "Updates ENABLED_PLUGINS_357 and ENABLED_PATTERNS_355655 in rpgmakermvmz.py."
@@ -1718,6 +1727,7 @@ class WorkflowTab(QWidget):
 
         p2_row = QHBoxLayout()
         self._run_p2_btn = _make_btn("▶  Run Phase 2", "#7a4a00")
+        self._run_p2_btn.setFixedWidth(_P2_BTN_WIDTH)
         self._run_p2_btn.setToolTip(
             "Applies Phase 2 code settings (from the checkboxes above) and starts translation "
             "with event files pre-selected."
@@ -1788,8 +1798,10 @@ class WorkflowTab(QWidget):
         hint.setStyleSheet("color:#999;font-size:13px;padding-bottom:4px;")
         layout.addWidget(hint)
 
+        _EXP_W = 280
         row = QHBoxLayout()
         export_active_btn = _make_btn("📤  Export Active Files → Game Folder", "#3a7a3a")
+        export_active_btn.setMinimumWidth(_EXP_W)
         export_active_btn.setToolTip(
             "Only export files whose names match those currently in files/\n"
             "(i.e. the files you imported for this project)"
@@ -1798,6 +1810,7 @@ class WorkflowTab(QWidget):
         row.addWidget(export_active_btn)
 
         export_all_btn = _make_btn("📤  Export ALL translated/ → Game Folder", "#555")
+        export_all_btn.setMinimumWidth(_EXP_W)
         export_all_btn.setToolTip("Export every file in translated/ regardless of what is in files/")
         export_all_btn.clicked.connect(self._export_to_game)
         row.addWidget(export_all_btn)
