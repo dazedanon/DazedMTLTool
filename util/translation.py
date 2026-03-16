@@ -21,7 +21,7 @@ from retry import retry
 DEBUG_LOGGING = False
 
 # Set to True to print per-batch cache costs for Claude (read/write/regular breakdown).
-CACHE_COST_DEBUG = False
+CACHE_COST_DEBUG = True
 
 # Set to True to disable Claude prompt caching for baseline cost comparison.
 DISABLE_CACHE = False
@@ -31,6 +31,12 @@ _dbg_cache_read = 0
 _dbg_cache_write = 0
 _dbg_regular_input = 0
 _dbg_output = 0
+
+# --- Cache debug: track the cached system block across requests ---
+_cache_debug_lock = threading.Lock()
+_cache_debug_prev_hash = None   # hash of the previous cached block text
+_cache_debug_prev_text = None   # full text of the previous cached block
+_cache_debug_call_num  = 0      # sequential API call counter
 
 # Thread-local per-file token breakdown; read by calculateCost() for Claude.
 _thread_local = threading.local()
@@ -705,18 +711,10 @@ _BASE_VOCAB_SEPARATOR = "# ── Base Vocabulary"  # Prefix of the separator li
 def createContext(config, subbedText, formatType, history=None):
     """Create system and user messages for translation.
     
-    Returns (static_system, vocab_text, user) so that callers can keep the
-    static prompt and the per-batch vocab list separate.  This lets Claude
-    prompt-caching mark only the stable prefix with cache_control, avoiding
-    cache invalidation caused by changing vocabulary matches.
-
-    Cached in static_system (never changes between batches):
-      - prompt.txt content
-      - # Game Characters entries
-      - Base vocabulary (vocab_base.txt: honorifics, elements, demons, etc.)
-
-    Dynamic in vocab_text (matched per-batch):
-      - All other game-specific vocab terms (items, worldbuilding, etc.)
+    Returns (static_system, vocab_text, user).  All vocabulary (prompt.txt,
+    vocab.txt, and vocab_base.txt) is included in static_system so the entire
+    system content is constant across batches and maximises Claude cache hits.
+    vocab_text is always empty.
     """
     vocab_full = config.vocab
 
@@ -729,29 +727,17 @@ def createContext(config, subbedText, formatType, history=None):
         # Skip the separator line
         newline_idx = base_section.find("\n")
         base_vocab_text = base_section[newline_idx + 1:].strip() if newline_idx != -1 else ""
-        vocab_game = vocab_full[:sep_idx]
+        vocab_game = vocab_full[:sep_idx].strip()
     else:
-        vocab_game = vocab_full
-
-    vocabPairs = parseVocabWithCategories(vocab_game)
-
-    # Split character entries (stable, cached) from everything else (dynamic)
-    CHAR_CAT = "# Game Characters"
-    char_lines   = [line for _, line, cat in vocabPairs if cat and cat.strip() == CHAR_CAT]
-    non_char_pairs = [(term, line, cat) for term, line, cat in vocabPairs
-                      if not (cat and cat.strip() == CHAR_CAT)]
-
-    matchedVocabText = buildMatchedVocabText(non_char_pairs, subbedText, history)
+        vocab_game = vocab_full.strip()
 
     static_system = config.prompt.replace("English", config.language)
 
-    # Append character glossary to the stable system prompt so it is cached
-    if char_lines:
-        char_block = f"\n{CHAR_CAT}\n" + "\n".join(char_lines)
-        static_system = static_system.rstrip() + "\n" + char_block + "\n"
+    # Append all game-specific vocab (characters, worldbuilding, items, etc.)
+    if vocab_game:
+        static_system = static_system.rstrip() + "\n\n" + vocab_game + "\n"
 
-    # Append base vocab (honorifics, elements, etc.) to static_system so it is
-    # cached with the system prompt and never re-evaluated per batch.
+    # Append base vocab (honorifics, elements, etc.)
     if base_vocab_text:
         static_system = static_system.rstrip() + "\n\n" + base_vocab_text + "\n"
 
@@ -760,7 +746,7 @@ def createContext(config, subbedText, formatType, history=None):
     else:
         user = subbedText
     
-    return static_system, matchedVocabText, user
+    return static_system, "", user
 
 
 def createTranslationSchema(numLines):
@@ -786,11 +772,13 @@ def createTranslationSchema(numLines):
     return schema
 
 
-def translateText(system, user, history, penalty, formatType, model, numLines=None, vocab_text=""):
+def translateText(system, user, history, penalty, formatType, model, numLines=None, vocab_text="", batchSize=None):
     """Send translation request to the selected API.
 
     system:     Static system prompt (prompt.txt). Cached by Claude.
     vocab_text: Per-batch vocabulary (dynamic, never cached to avoid cache busting).
+    batchSize:  Max batch size — used for a fixed-size JSON schema so
+                output_config stays identical across Claude calls (cache stability).
     """
     # Ensure system content is not empty
     if not system or not str(system).strip():
@@ -809,9 +797,11 @@ def translateText(system, user, history, penalty, formatType, model, numLines=No
             combined_system = system + vocab_text
             content_blocks = [{"type": "text", "text": f"```\n{combined_system}\n```"}]
         else:
+            # Only the static prompt goes in the system content blocks.
+            # Vocab and history are moved to messages so they don't bust the
+            # Anthropic prefix cache (the entire system parameter is part of
+            # the cache key, not just blocks up to cache_control).
             content_blocks = [{"type": "text", "text": f"```\n{system}\n```", "cache_control": {"type": "ephemeral", "ttl": "1h"}}]
-            if vocab_text and vocab_text.strip():
-                content_blocks.append({"type": "text", "text": vocab_text})
         msg = [{"role": "system", "content": content_blocks}]
     else:
         combined_system = system + vocab_text
@@ -917,14 +907,74 @@ def translateText(system, user, history, penalty, formatType, model, numLines=No
             elif role == "user":
                 native_msgs.append({"role": "user", "content": str(content)})
 
+        # History goes into messages, NOT ant_system — history changes every
+        # batch and would bust the cache if placed in the system parameter.
         if history_items:
-            ant_system.append({
-                "type": "text",
-                "text": "Translation History:\n```\n" + "\n".join(history_items) + "\n```",
-            })
+            history_block = "Translation History:\n```\n" + "\n".join(history_items) + "\n```"
+            native_msgs.insert(0, {"role": "user", "content": history_block})
+            native_msgs.insert(1, {"role": "assistant", "content": "Understood."})
 
         if not native_msgs:
             raise ValueError("No user message found for Anthropic native call")
+
+        # --- CACHE DEBUG: detect & dump changes in the cached system block ---
+        if CACHE_COST_DEBUG:
+            global _cache_debug_prev_hash, _cache_debug_prev_text, _cache_debug_call_num
+            # The cached block is always ant_system[0] (the one with cache_control)
+            cached_block_text = ant_system[0]["text"] if ant_system else ""
+            cur_hash = hashlib.md5(cached_block_text.encode("utf-8")).hexdigest()[:8]
+            with _cache_debug_lock:
+                _cache_debug_call_num += 1
+                call_n = _cache_debug_call_num
+                prev_hash = _cache_debug_prev_hash
+                prev_text = _cache_debug_prev_text
+                _cache_debug_prev_hash = cur_hash
+                _cache_debug_prev_text = cached_block_text
+
+            log_dir = Path("log")
+            log_dir.mkdir(parents=True, exist_ok=True)
+            dbg_path = log_dir / "cache_debug.log"
+
+            with open(dbg_path, "a", encoding="utf-8") as df:
+                df.write(f"\n=== API Call #{call_n} | cached_block hash={cur_hash} | prev_hash={prev_hash} ==="
+                         f" | ant_system blocks={len(ant_system)} | formatType={formatType} | numLines={numLines}"
+                         f" | history_items={len(history_items)} | native_msgs={len(native_msgs)}"
+                         f" | thread={threading.current_thread().name}\n")
+                for bi, blk in enumerate(ant_system):
+                    blk_preview = (blk.get("text", "") or "")[:120].replace("\n", "\\n")
+                    has_cc = "cache_control" in blk
+                    df.write(f"  block[{bi}]: len={len(blk.get('text',''))} cache_control={has_cc} preview={blk_preview!r}\n")
+                df.flush()
+
+            # If the hash changed from the previous call, dump both versions for diff
+            if prev_hash is not None and cur_hash != prev_hash:
+                print(f"[CACHE DEBUG] *** HASH CHANGED *** call #{call_n}: {prev_hash} -> {cur_hash}", flush=True)
+                dump_prev = log_dir / f"static_system_{prev_hash}.txt"
+                dump_cur  = log_dir / f"static_system_{cur_hash}.txt"
+                if prev_text is not None and not dump_prev.exists():
+                    dump_prev.write_text(prev_text, encoding="utf-8")
+                dump_cur.write_text(cached_block_text, encoding="utf-8")
+
+                # Also write a line-by-line diff summary
+                prev_lines = (prev_text or "").splitlines(keepends=True)
+                cur_lines  = cached_block_text.splitlines(keepends=True)
+                import difflib
+                diff = list(difflib.unified_diff(prev_lines, cur_lines,
+                                                fromfile=f"static_system_{prev_hash}",
+                                                tofile=f"static_system_{cur_hash}", n=3))
+                if diff:
+                    diff_path = log_dir / f"cache_diff_{prev_hash}_vs_{cur_hash}.txt"
+                    with open(diff_path, "w", encoding="utf-8") as dff:
+                        dff.writelines(diff)
+                    print(f"[CACHE DEBUG] Diff written to {diff_path}", flush=True)
+                    # Also print first 30 diff lines to console
+                    for line in diff[:30]:
+                        print(f"  {line}", end="", flush=True)
+            elif prev_hash is None:
+                # First call — dump the initial version
+                dump_cur = log_dir / f"static_system_{cur_hash}.txt"
+                dump_cur.write_text(cached_block_text, encoding="utf-8")
+        # --- END CACHE DEBUG ---
 
         ant_client = anthropic.Anthropic(api_key=openai.api_key)
         try:
@@ -935,15 +985,28 @@ def translateText(system, user, history, penalty, formatType, model, numLines=No
                 system=ant_system,
                 messages=native_msgs,
             )
-            # Use native structured output (output_config) when a JSON schema is required.
-            # Supported on claude-opus-4-6, claude-sonnet-4-6/4-5, claude-haiku-4-5.
+            # Use a FIXED-SIZE schema (batchSize) so output_config is
+            # identical across all Claude calls — Anthropic includes it in
+            # the prompt-cache key, so varying numLines would bust the cache.
+            # The caller trims extra lines from the response after extraction.
             if formatType == "json" and numLines is not None:
+                schema_lines = batchSize if batchSize else numLines
                 ant_kwargs["output_config"] = {
                     "format": {
                         "type": "json_schema",
-                        "schema": createTranslationSchema(numLines),
+                        "schema": createTranslationSchema(schema_lines),
                     }
                 }
+
+            # --- CACHE DEBUG: dump full request payload ---
+            if CACHE_COST_DEBUG:
+                _dump_path = Path("log") / f"ant_request_{_cache_debug_call_num}.json"
+                try:
+                    with open(_dump_path, "w", encoding="utf-8") as _df:
+                        json.dump(ant_kwargs, _df, indent=2, ensure_ascii=False, default=str)
+                except Exception:
+                    pass
+
             ant_resp = ant_client.messages.create(**ant_kwargs)
         except Exception as e:
             raise Exception(f"Anthropic API error: {e}")
@@ -954,6 +1017,14 @@ def translateText(system, user, history, penalty, formatType, model, numLines=No
         _cw  = getattr(_u, "cache_creation_input_tokens", 0) or 0
         _inp = getattr(_u, "input_tokens",  0) or 0
         _out = getattr(_u, "output_tokens", 0) or 0
+
+        # --- CACHE DEBUG: dump raw usage ---
+        if CACHE_COST_DEBUG:
+            try:
+                with open(Path("log") / "cache_debug.log", "a", encoding="utf-8") as _udf:
+                    _udf.write(f"  raw_usage: {_u}\n")
+            except Exception:
+                pass
         # input_tokens (native SDK) = non-cached portion; add cache fields for true total.
         _total_prompt = _inp + _cr + _cw
 
@@ -1527,7 +1598,7 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None, mism
 
             # Translate
             try:
-                response = translateText(static_system, current_user, history, 0.05, formatType, config.model, numLines, vocab_text=vocab_text)
+                response = translateText(static_system, current_user, history, 0.05, formatType, config.model, numLines, vocab_text=vocab_text, batchSize=config.batchSize)
             except Exception as api_err:
                 err_msg = f"[API_ERROR] {api_err}"
                 # Print to stdout so the GUI captures it immediately
@@ -1611,6 +1682,11 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None, mism
                     print(msg, flush=True)
                     if pbar:
                         pbar.write(msg)
+                    try:
+                        with open(Path("log") / "cache_debug.log", "a", encoding="utf-8") as _cdf:
+                            _cdf.write(msg + "\n")
+                    except Exception:
+                        pass
 
             # --- Debug Token Logging ---
             if DEBUG_LOGGING:
@@ -1626,6 +1702,11 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None, mism
             if cleaned_text:
                 if isinstance(tItem, list):
                     extracted = extractTranslation(cleaned_text, True, pbar)
+
+                    # Trim extra lines from fixed-size schema response
+                    # (Claude fills all batchSize slots; we only need numLines).
+                    if extracted and len(extracted) > len(clean_tItem):
+                        extracted = extracted[:len(clean_tItem)]
 
                     # Check 1: Mismatch in length -> still a hard failure
                     if extracted is None or len(clean_tItem) != len(extracted):
