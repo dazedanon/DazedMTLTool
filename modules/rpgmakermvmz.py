@@ -4267,7 +4267,7 @@ def getSpeaker(speaker: str):
         THREAD_CTX.in_speaker = False
     except Exception:
         pass
-    translated = response[0].title().replace("'S", "'s").replace("Speaker: ", "")
+    translated = response[0].strip().title().replace("'S", "'s").replace("Speaker: ", "")
     translated = re.sub(r'(\d)(St|Nd|Rd|Th)\b', lambda m: m.group(1) + m.group(2).lower(), translated)
 
     if re.search(r"([a-zA-Z？?])", translated) is None:
@@ -4284,7 +4284,7 @@ def getSpeaker(speaker: str):
             THREAD_CTX.in_speaker = False
         except Exception:
             pass
-        translated = response[0].title().replace("'S", "'s")
+        translated = response[0].strip().title().replace("'S", "'s")
         translated = re.sub(r'(\d)(St|Nd|Rd|Th)\b', lambda m: m.group(1) + m.group(2).lower(), translated)
 
     with _speakerCacheLock:
