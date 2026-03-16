@@ -821,7 +821,7 @@ def translateText(system, user, history, penalty, formatType, model, numLines=No
             combined_system = system + vocab_text
             content_blocks = [{"type": "text", "text": f"```\n{combined_system}\n```"}]
         else:
-            content_blocks = [{"type": "text", "text": f"```\n{system}\n```", "cache_control": {"type": "ephemeral"}}]
+            content_blocks = [{"type": "text", "text": f"```\n{system}\n```", "cache_control": {"type": "ephemeral", "ttl": "1h"}}]
             if vocab_text and vocab_text.strip():
                 content_blocks.append({"type": "text", "text": vocab_text})
         msg = [{"role": "system", "content": content_blocks}]
