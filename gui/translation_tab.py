@@ -335,6 +335,15 @@ class TranslationWorker(QThread):
             old_cwd = os.getcwd()
             os.chdir(str(self.project_root))
 
+            # Reset estimate written-sizes file at the start of each run so the
+            # warm-cache window is recalculated fresh across all subprocesses.
+            if self.estimate_only:
+                try:
+                    from util.translation import clear_estimate_written_sizes
+                    clear_estimate_written_sizes()
+                except Exception:
+                    pass
+
             try:
                 if self.parse_speakers and (is_mvmz or is_ace):
                     # Run handlers sequentially in this worker process so globals are shared
@@ -517,6 +526,11 @@ class TranslationWorker(QThread):
                     self.emit_log("✅ Translation completed successfully!")
                 else:
                     self.emit_log("✅ Estimation completed!")
+                    try:
+                        from util.translation import clear_estimate_written_sizes
+                        clear_estimate_written_sizes()
+                    except Exception:
+                        pass
                 self.finished_signal.emit(True, str(total_cost))
             else:
                 if not self.should_stop:

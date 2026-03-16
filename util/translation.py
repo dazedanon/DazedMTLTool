@@ -30,8 +30,40 @@ _thread_local = threading.local()
 _global_accurate_cost      = 0.0
 _global_accurate_cost_lock = threading.Lock()
 
-# Global batch counter for estimate mode — tracks total batches across all files.
-_global_estimate_batch_offset = 0
+# Tracks which distinct batch sizes have already been cache-written during this estimate run.
+# Each unique numLines value maps to a distinct output_config schema → one write per size.
+# Persisted to disk so sequential GUI subprocesses share state.
+_estimate_written_sizes: set = set()
+_ESTIMATE_SIZES_FILE = Path("log/estimate_written_sizes.json")
+
+def _load_estimate_written_sizes():
+    """Load persisted written-sizes set from disk (for GUI subprocess sharing)."""
+    global _estimate_written_sizes
+    try:
+        if _ESTIMATE_SIZES_FILE.exists():
+            with open(_ESTIMATE_SIZES_FILE, "r", encoding="utf-8") as f:
+                _estimate_written_sizes = set(json.load(f))
+    except Exception:
+        _estimate_written_sizes = set()
+
+def _save_estimate_written_sizes():
+    """Persist written-sizes set to disk."""
+    try:
+        _ESTIMATE_SIZES_FILE.parent.mkdir(parents=True, exist_ok=True)
+        with open(_ESTIMATE_SIZES_FILE, "w", encoding="utf-8") as f:
+            json.dump(list(_estimate_written_sizes), f)
+    except Exception:
+        pass
+
+def clear_estimate_written_sizes():
+    """Reset the written-sizes file at the start of a new estimate run."""
+    global _estimate_written_sizes
+    _estimate_written_sizes = set()
+    try:
+        if _ESTIMATE_SIZES_FILE.exists():
+            _ESTIMATE_SIZES_FILE.unlink()
+    except Exception:
+        pass
 
 
 # ===== Placeholder Protection System =====
@@ -1252,17 +1284,22 @@ def calculateCost(inputTokens, outputTokens, model):
         _thread_local.estimate_regular_tokens = 0
         _thread_local.estimate_batch_count    = 0
         # If cache is disabled, every batch is a write (2x) — no reads ever.
-        # Otherwise assume first <batchSize> batches globally are writes, rest are reads (0.10x).
-        global _global_estimate_batch_offset
+        # Otherwise: each distinct batch size (= distinct output_config schema) gets exactly
+        # one cache write on first use; all subsequent batches of that size are reads (0.10x).
+        # Load from disk first so GUI subprocesses (one per file) share warm-cache state.
+        global _estimate_written_sizes
         if DISABLE_CACHE:
             write_batches = batch_count
             read_batches  = 0
         else:
-            cache_write_window = pricing["batchSize"]
-            offset = _global_estimate_batch_offset
-            _global_estimate_batch_offset += batch_count
-            write_batches = max(0, min(cache_write_window, offset + batch_count) - offset)
+            _load_estimate_written_sizes()
+            seen_sizes = getattr(_thread_local, 'estimate_seen_sizes', set())
+            new_sizes = seen_sizes - _estimate_written_sizes
+            write_batches = len(new_sizes)  # one write per newly-seen size
             read_batches  = batch_count - write_batches
+            _estimate_written_sizes.update(new_sizes)
+            _save_estimate_written_sizes()
+            _thread_local.estimate_seen_sizes = set()
         write_cost   = (write_batches * static_tok / 1_000_000) * pricing["inputAPICost"] * 2.0
         read_cost    = (read_batches  * static_tok / 1_000_000) * pricing["inputAPICost"] * 0.10
         regular_cost = (regular_tok / 1_000_000) * pricing["inputAPICost"]
@@ -1499,6 +1536,11 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None, mism
                 regular_tok = max(0, estimate[0] - getattr(_thread_local, 'estimate_static_tokens', 0))
                 _thread_local.estimate_regular_tokens = getattr(_thread_local, 'estimate_regular_tokens', 0) + regular_tok
                 _thread_local.estimate_batch_count = getattr(_thread_local, 'estimate_batch_count', 0) + 1
+                # Track unique batch sizes seen this file (each maps to a distinct schema)
+                _size = len(clean_tItem) if isinstance(clean_tItem, list) else 1
+                _seen = getattr(_thread_local, 'estimate_seen_sizes', set())
+                _seen.add(_size)
+                _thread_local.estimate_seen_sizes = _seen
             
             # Cache the payload with original text as placeholder for future estimates
             if isinstance(tItem, list):
