@@ -1816,7 +1816,7 @@ class WorkflowTab(QWidget):
         plugin357_box = QGroupBox()
         plugin357_box.setStyleSheet(self._checkbox_box_style())
         plugin357_inner = QVBoxLayout(plugin357_box)
-        plugin357_inner.setContentsMargins(4, 8, 4, 4)
+        plugin357_inner.setContentsMargins(8, 8, 10, 6)
         plugin357_inner.setSpacing(3)
 
         plugin357_sa_row = QHBoxLayout()
@@ -1836,10 +1836,12 @@ class WorkflowTab(QWidget):
         self._p2_plugin_checks: dict = {}
         try:
             from modules.rpgmakermvmz import HEADER_MAPPINGS_357 as _HM357
-            for idx, key in enumerate(sorted(_HM357.keys())):
+            _keys357 = sorted(_HM357.keys(), key=str.casefold)
+            _nrows357 = -(-len(_keys357) // 2)  # ceil division
+            for idx, key in enumerate(_keys357):
                 cb = QCheckBox(key)
                 cb.setStyleSheet("color:#cccccc;font-size:13px;")
-                plugin357_grid.addWidget(cb, idx // 2, idx % 2)
+                plugin357_grid.addWidget(cb, idx % _nrows357, idx // _nrows357)
                 self._p2_plugin_checks[key] = cb
         except Exception:
             pass
@@ -1861,7 +1863,7 @@ class WorkflowTab(QWidget):
         patterns_box = QGroupBox()
         patterns_box.setStyleSheet(self._checkbox_box_style())
         patterns_inner_layout = QVBoxLayout(patterns_box)
-        patterns_inner_layout.setContentsMargins(4, 8, 4, 4)
+        patterns_inner_layout.setContentsMargins(8, 8, 10, 6)
         patterns_inner_layout.setSpacing(3)
 
         patterns_sa_row = QHBoxLayout()
@@ -1881,10 +1883,12 @@ class WorkflowTab(QWidget):
         self._p2_pattern_checks: dict = {}
         try:
             from modules.rpgmakermvmz import PATTERNS_355655 as _PAT
-            for idx, key in enumerate(sorted(_PAT.keys())):
+            _keys_pat = sorted(_PAT.keys(), key=str.casefold)
+            _nrows_pat = -(-len(_keys_pat) // 2)  # ceil division
+            for idx, key in enumerate(_keys_pat):
                 cb = QCheckBox(key)
                 cb.setStyleSheet("color:#cccccc;font-size:13px;")
-                patterns_grid.addWidget(cb, idx // 2, idx % 2)
+                patterns_grid.addWidget(cb, idx % _nrows_pat, idx // _nrows_pat)
                 self._p2_pattern_checks[key] = cb
         except Exception:
             pass
