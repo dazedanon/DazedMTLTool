@@ -7,8 +7,8 @@ Provides a guided, step-by-step interface:
   Step 1  – (Optional) Pre-process game files
   Step 2  – Auto-detect speaker format and apply to module settings
   Step 3  – Build glossary: parse speakers, then enrich with AI prompt
-  Step 4  – Actor variable substitution  (\\n[X] ↔ names)
-  Step 5  – Phase 1 (safe dialogue codes) and Phase 2 (risky codes) translation
+  Step 4  – Translation: Phase 0 (DB), Phase 1 (dialogue), Phase 1b (111 cache), Phase 2 (risky)
+  Step 5  – Translate visible strings in js/plugins.js
   Step 6  – Export translated/ back to the game folder
 """
 
@@ -472,7 +472,9 @@ class WorkflowTab(QWidget):
         vbox.addWidget(_make_hr())
         self._build_step4_translation(vbox)
         vbox.addWidget(_make_hr())
-        self._build_step5_export(vbox)
+        self._build_step5_plugins_js(vbox)
+        vbox.addWidget(_make_hr())
+        self._build_step6_export(vbox)
         vbox.addStretch()
 
         scroll.setWidget(container)
@@ -785,6 +787,92 @@ class WorkflowTab(QWidget):
         "```\n"
         "\n"
         "Followed by one sentence of assumptions if anything was estimated.\n"
+    )
+
+    _PLUGINS_JS_TRANSLATE_PROMPT = (
+        "You are helping me translate a Japanese RPGMaker MV/MZ game.\n"
+        "I need you to translate visible Japanese strings inside js/plugins.js\n"
+        "without breaking any game logic or plugin functionality.\n"
+        "\n"
+        "A vocab.txt glossary file has been attached. Use it as your primary reference\n"
+        "for character names, worldbuilding terms, and their approved English translations.\n"
+        "Any Japanese name or term that appears in the glossary must be translated\n"
+        "exactly as specified there — do not invent alternative spellings.\n"
+        "\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        "## WHAT TO TRANSLATE\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        "\n"
+        "Only translate string values that are directly shown to the player at runtime.\n"
+        "These are typically plugin parameters with Japanese text such as:\n"
+        "  - Menu/button labels displayed in-game UI (e.g. \"決定\", \"キャンセル\")\n"
+        "  - Scene/window title text (e.g. \"アイテム\", \"スキル\", \"装備\")\n"
+        "  - In-game popup, tooltip, or notification messages\n"
+        "  - Default NPC names or pronouns used in UI display\n"
+        "  - Help or description text shown in help windows\n"
+        "  - Battle log messages or status effect messages\n"
+        "\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        "## WHAT MUST NOT BE TRANSLATED\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        "\n"
+        "CRITICAL — translating the following will break the game:\n"
+        "\n"
+        "  1. Plugin parameter KEYS (object property names).\n"
+        "     Example: { \"CommandName\": \"セーブ\" }\n"
+        "     → translate \"セーブ\" but NOT \"CommandName\"\n"
+        "\n"
+        "  2. Strings used as internal identifiers or lookup keys:\n"
+        "     - Switch/variable names that match System.json entries\n"
+        "     - Actor, skill, item, weapon, armour names if they are used\n"
+        "       as keys inside other plugin parameters (e.g. skill filtering lists)\n"
+        "     - Strings passed as plugin command arguments that the engine looks up\n"
+        "\n"
+        "  3. File paths, filenames, URLs, colour codes, font names, icon indices.\n"
+        "     Example: \"img/faces/Actor1\" or \"#ffffff\" — do NOT translate.\n"
+        "\n"
+        "  4. Plugin names and script identifiers:\n"
+        "     - The \"name\" property at the top of each plugin block\n"
+        "       (e.g. { \"name\": \"YEP_CoreEngine\" }) — never translate\n"
+        "     - Function identifiers, class names, JS event names\n"
+        "\n"
+        "  5. Any string that also appears in the game data files (Actors.json,\n"
+        "     Skills.json, Items.json, etc.) AND is used as a lookup key in the\n"
+        "     plugin — changing it here would desync it from the data file.\n"
+        "\n"
+        "  6. Boolean strings, numeric strings, regex patterns.\n"
+        "\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        "## HOW TO IDENTIFY SAFE STRINGS\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        "\n"
+        "Before translating a string, ask yourself:\n"
+        "  ✔ Is this value ever displayed directly to the player as text?\n"
+        "  ✔ Is it purely a UI label, not a key used anywhere else?\n"
+        "  ✔ Does nothing in the codebase compare this exact string to another value?\n"
+        "\n"
+        "If all three are YES, it is safe to translate.\n"
+        "When in doubt, SKIP IT — untranslated Japanese is better than a broken game.\n"
+        "\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        "## OUTPUT FORMAT\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        "\n"
+        "Provide the translated file as a complete replacement of js/plugins.js.\n"
+        "Only change the string values identified above.\n"
+        "Preserve all original formatting, indentation, comments, and structure.\n"
+        "\n"
+        "After the file, output a translation summary:\n"
+        "\n"
+        "### Translations Made\n"
+        "List each change in this format:\n"
+        "  Plugin: <plugin name>\n"
+        "  Parameter: <parameter key>\n"
+        "  Before: <original Japanese>\n"
+        "  After:  <English translation>\n"
+        "\n"
+        "### Skipped (Ambiguous or Internal)\n"
+        "List any Japanese strings you detected but chose NOT to translate, with a one-line reason.\n"
     )
 
     _PLUGIN_PROMPT = (
@@ -1646,10 +1734,53 @@ class WorkflowTab(QWidget):
         # Pre-populate all Phase 2 checkboxes from current module state
         self._populate_p2_checkboxes()
 
-    # ── Step 5: Export ──────────────────────────────────────────────────────
+    # ── Step 5: plugins.js Translation ─────────────────────────────────────
 
-    def _build_step5_export(self, layout: QVBoxLayout):
-        layout.addWidget(_make_section_label("Step 5 — Export to Game"))
+    def _build_step5_plugins_js(self, layout: QVBoxLayout):
+        layout.addWidget(_make_section_label("Step 5 — Translate plugins.js"))
+
+        hint = QLabel(
+            "Translate the visible Japanese strings in js/plugins.js without breaking "
+            "game logic. First copy vocab.txt into the game folder so the AI can use it "
+            "as a glossary, then copy the prompt and paste it into Copilot or Cursor with "
+            "plugins.js, vocab.txt, and optionally System.json attached."
+        )
+        hint.setWordWrap(True)
+        hint.setStyleSheet("color:#999;font-size:13px;padding-bottom:6px;")
+        layout.addWidget(hint)
+
+        _BTN_WIDTH = 300
+
+        vocab_btn = _make_btn("1.  📄  Copy vocab.txt → Game Folder", "#555")
+        vocab_btn.setFixedWidth(_BTN_WIDTH)
+        vocab_btn.setToolTip(
+            "Copy vocab.txt to <game root>/vocab.txt so you can attach it "
+            "alongside plugins.js when running the AI prompt."
+        )
+        vocab_btn.clicked.connect(self._copy_vocab_to_game)
+
+        copy_btn = _make_btn("2.  📋  Copy Prompt for Copilot", "#555")
+        copy_btn.setFixedWidth(_BTN_WIDTH)
+        copy_btn.setToolTip(
+            "Copy a prompt that instructs Copilot/Cursor to translate only "
+            "visible player-facing strings in plugins.js, using vocab.txt as a glossary."
+        )
+        copy_btn.clicked.connect(self._copy_plugins_js_translate_prompt)
+
+        for btn in (vocab_btn, copy_btn):
+            row = QHBoxLayout()
+            row.addWidget(btn)
+            row.addStretch()
+            layout.addLayout(row)
+
+        self._s5_vocab_status = QLabel("")
+        self._s5_vocab_status.setStyleSheet("color:#aaa;font-size:13px;padding-left:4px;")
+        layout.addWidget(self._s5_vocab_status)
+
+    # ── Step 6: Export ──────────────────────────────────────────────────────
+
+    def _build_step6_export(self, layout: QVBoxLayout):
+        layout.addWidget(_make_section_label("Step 6 — Export to Game"))
         hint = QLabel(
             "Copy translated files back into the game's data folder to patch the game in-place."
         )
@@ -2057,6 +2188,46 @@ class WorkflowTab(QWidget):
         except Exception as exc:
             self._log(f"❌ Could not save plugin settings: {exc}")
 
+    def _copy_vocab_to_game(self):
+        """Copy vocab.txt into the game root folder so it can be attached to the AI prompt."""
+        game_root = self.folder_edit.text().strip()
+        if not game_root:
+            self._log("⚠  No game folder set. Complete Step 0 first.")
+            try:
+                self._s5_vocab_status.setText("⚠ No game folder set.")
+            except Exception:
+                pass
+            return
+
+        src = Path("vocab.txt")
+        if not src.exists():
+            self._log("⚠  vocab.txt not found — save it in Step 3 first.")
+            try:
+                self._s5_vocab_status.setText("⚠ vocab.txt not found.")
+            except Exception:
+                pass
+            return
+
+        import shutil
+        dst = Path(game_root) / "vocab.txt"
+        try:
+            shutil.copy2(src, dst)
+            self._log(f"✅ vocab.txt copied to {dst}")
+            try:
+                self._s5_vocab_status.setText(f"✅ Copied to {dst}")
+            except Exception:
+                pass
+        except Exception as exc:
+            self._log(f"❌ Could not copy vocab.txt: {exc}")
+            try:
+                self._s5_vocab_status.setText(f"❌ {exc}")
+            except Exception:
+                pass
+
+    def _copy_plugins_js_translate_prompt(self):
+        QApplication.clipboard().setText(self._PLUGINS_JS_TRANSLATE_PROMPT)
+        self._log("plugins.js translation prompt copied to clipboard.")
+
     def _copy_plugin_prompt(self):
         QApplication.clipboard().setText(self._PLUGIN_PROMPT)
         self._log("Risky codes analysis prompt copied to clipboard.")
@@ -2328,7 +2499,7 @@ class WorkflowTab(QWidget):
             pass
 
     # ─────────────────────────────────────────────────────────────────────────
-    # Step 5 – Export to game
+    # Step 6 – Export to game
     # ─────────────────────────────────────────────────────────────────────────
 
     def _do_copy_translated_to_files(self):
