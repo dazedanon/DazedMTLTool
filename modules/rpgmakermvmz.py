@@ -79,7 +79,7 @@ LEAVE = False
 # FIRSTLINESPEAKERS: Guess speaker from first line.
 FIRSTLINESPEAKERS = False
 # INLINE401SPEAKERS: Extract speaker from "Name「dialogue」" inline format on 401 lines.
-INLINE401SPEAKERS = False
+INLINE401SPEAKERS = True
 # FACENAME101: Map face name -> speaker.
 FACENAME101 = False
 # Face name -> speaker mapping for FACENAME101.
@@ -1875,11 +1875,23 @@ def searchCodes(page, pbar, jobList, filename):
                         jaString,
                     )
 
+                # [Speaker] standalone line format (written back by inline re-export)
+                if len(speakerList) == 0:
+                    inlineFmtMatch = re.match(r"^\[([^\[\]\n]+)\]\s*$", jaString)
+                    if inlineFmtMatch:
+                        speakerList = [inlineFmtMatch.group(1).strip()]
+
                 # Inline Japanese quote speakers (e.g. "トルテ「dialogue」" or "エルミナ「first line...")
                 if len(speakerList) == 0 and INLINE401SPEAKERS:
                     inlineQuoteDetect = re.match(r"^([^\s「」。、！？…\\\n]{1,20})「", jaString)
                     if inlineQuoteDetect:
                         speakerList = [inlineQuoteDetect.group(1).strip()]
+
+                # Inline curly-quote speakers (e.g. "Elmina: \u201cdialogue" or "Elmina\u201cdialogue")
+                if len(speakerList) == 0 and INLINE401SPEAKERS:
+                    inlineCurlyDetect = re.match(r'^([^\s「」。、！？…\\\n\u201c\u201d":：\[\]]{1,20})(?:[:：]\s*)?[\u201c"]', jaString)
+                    if inlineCurlyDetect:
+                        speakerList = [inlineCurlyDetect.group(1).strip()]
 
                 # First Line Speakers
                 if len(speakerList) == 0 and FIRSTLINESPEAKERS is True:
@@ -1920,6 +1932,8 @@ def searchCodes(page, pbar, jobList, filename):
                     sameLineMatch = re.match(r"^\s*【([^】]+)】(.+)", jaString, re.DOTALL)
                     # Check if speaker+dialogue are on same line via Japanese quote (Name「dialogue)
                     inlineQuoteMatch = re.match(r"^([^\s「」。、！？…\\\n]{1,20})「(.*)", jaString, re.DOTALL) if INLINE401SPEAKERS else None
+                    # Check if speaker+dialogue are on same line via curly quote (Name: "dialogue or Name"dialogue)
+                    inlineCurlyMatch = re.match(r'^([^\s「」。、！？…\\\n\u201c\u201d":：\[\]]{1,20})(?:[:：]\s*)?([\u201c"])(.*)', jaString, re.DOTALL) if INLINE401SPEAKERS else None
 
                     if sameLineMatch and len(speakerList) == 1:
                         # Translate speaker
@@ -1941,6 +1955,19 @@ def searchCodes(page, pbar, jobList, filename):
                         totalTokens[1] += response[1][1]
                         # Remove speaker name from jaString, preserve 「...」 for standard quote conversion
                         jaString = "「" + inlineQuoteMatch.group(2)
+                        # Format as [Speaker]\n for output
+                        if not setData:
+                            nametag = f"[{speaker}]\n" + nametag
+                        # Don't skip to next line - continue with current line
+                    elif inlineCurlyMatch and len(speakerList) == 1:
+                        # Curly/straight-quote format: strip "Name: \u201c" or "Name"" prefix, keep dialogue
+                        response = getSpeaker(speakerList[0])
+                        speaker = response[0]
+                        totalTokens[0] += response[1][0]
+                        totalTokens[1] += response[1][1]
+                        # Remove speaker name, preserve whichever opening quote was matched
+                        openQuote = inlineCurlyMatch.group(2)
+                        jaString = openQuote + inlineCurlyMatch.group(3)
                         # Format as [Speaker]\n for output
                         if not setData:
                             nametag = f"[{speaker}]\n" + nametag
@@ -2205,9 +2232,19 @@ def searchCodes(page, pbar, jobList, filename):
 
                             # Handle 401
                             else:
-                                codeList[j]["parameters"] = [translatedText]
-                                codeList[j]["code"] = code
-                                syncIndex = i + 1
+                                lines = translatedText.split('\n')
+                                if len(lines) > 1:
+                                    codeList[j]["parameters"] = [lines[0]]
+                                    codeList[j]["code"] = code
+                                    for idx, line in enumerate(lines[1:]):
+                                        new_item = copy.deepcopy(codeList[j])
+                                        new_item["parameters"] = [line]
+                                        codeList.insert(j + idx + 1, new_item)
+                                    syncIndex = j + len(lines)
+                                else:
+                                    codeList[j]["parameters"] = [translatedText]
+                                    codeList[j]["code"] = code
+                                    syncIndex = i + 1
 
                             # Reset
                             speaker = ""
@@ -3311,9 +3348,11 @@ def searchCodes(page, pbar, jobList, filename):
                             translatedText = list356[0]
 
                             # Remove characters that may break scripts
-                            charList = [".", '"']
-                            for char in charList:
-                                translatedText = translatedText.replace(char, "")
+                            # addLog keeps dots and quotes (they're fine in log text)
+                            if "addLog" not in jaString:
+                                charList = [".", '"']
+                                for char in charList:
+                                    translatedText = translatedText.replace(char, "")
 
                             # Cant have spaces?
                             translatedText = translatedText.replace(" ", "_")

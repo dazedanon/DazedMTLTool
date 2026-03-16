@@ -30,6 +30,7 @@ You will be translating erotic and sexual content. You will receive lines of dia
 - **Speech register:** If the entry describes how a character speaks (flustered, blunt, formal, childlike, crude, etc.), mirror that register in their English dialogue. A character described as speaking in a "cute, flustered register" should sound different from one described as "cold and terse".
 - **Role & context:** Use the role/personality notes to inform tone — a villain's lines should feel threatening, a comic-relief NPC's lines should feel goofy, etc.
 - Japanese omits pronouns constantly. Infer the correct subject and pronoun from context, translation history, and the character list.
+- **Preserve third-person self-reference.** Some characters refer to themselves by name instead of using "I" (e.g. ワタシ used as a name, or a character saying their own name). When a character is clearly speaking about themselves in the third person as a stylistic trait, maintain that in English (e.g. "Feris doesn't know" rather than "I don't know").
 - Third-person pronouns (彼, 彼女, あいつ, こいつ, そいつ, コイツ) should match the known gender of the person being referenced.
 - Translate **コイツ** as "this bastard" (male) or "this bitch" (female) depending on the referenced character's gender.
 
