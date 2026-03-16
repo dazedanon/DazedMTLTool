@@ -1236,7 +1236,7 @@ def calculateCost(inputTokens, outputTokens, model):
             pricing  = getPricingConfig(model)
             br  = pricing["inputAPICost"]  / 1_000_000
             orr = pricing["outputAPICost"] / 1_000_000
-            cost = cr * br * 0.10 + cw * br * 1.25 + reg * br + out * orr
+            cost = cr * br * 0.10 + cw * br * 2.00 + reg * br + out * orr
             _thread_local.file_cache_read  = 0
             _thread_local.file_cache_write = 0
             _thread_local.file_regular     = 0
@@ -1565,13 +1565,13 @@ def translateAI(text, history, fullPromptFlag, config, filename=None, pbar=None,
 
                     batch_cost = (
                         batch_cache_read  * base_rate * 0.10 +
-                        batch_cache_write * base_rate * 1.25 +
+                        batch_cache_write * base_rate * 2.00 +
                         batch_regular     * base_rate +
                         batch_output      * out_rate
                     )
                     total_cost = (
                         _dbg_cache_read    * base_rate * 0.10 +
-                        _dbg_cache_write   * base_rate * 1.25 +
+                        _dbg_cache_write   * base_rate * 2.00 +
                         _dbg_regular_input * base_rate +
                         _dbg_output        * out_rate
                     )
@@ -1805,7 +1805,7 @@ def translateAI(text, history, fullPromptFlag, config, filename=None, pbar=None,
         _delta_out = getattr(_thread_local, 'file_output',      0) - _prev_out
         _call_cost = (
             _delta_cr  * _br * 0.10 +
-            _delta_cw  * _br * 1.25 +
+            _delta_cw  * _br * 2.00 +
             _delta_reg * _br +
             _delta_out * _or
         )
