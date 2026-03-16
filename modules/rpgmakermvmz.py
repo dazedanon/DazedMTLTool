@@ -49,7 +49,7 @@ _ACTOR_MAP_CACHE_LOCK = threading.Lock()
 _VAR_ACTOR_RE = re.compile(r"\\n\[(\d+)\]", re.IGNORECASE)
 
 # Regex - Need to change this if you want to translate from/to other languages. Default is Japanese Regex
-LANGREGEX = r"[\u3000\u3002-\u3009\u300C-\u303F\u3040-\u309A\u309C-\u30FA\u30FC-\u30FF\u31F0-\u31FF\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF\uFF61-\uFF9F]+"
+LANGREGEX = r"[\u3000\u3002-\u3009\u300C-\u303F\u3040-\u309A\u309C-\u30FA\u31F0-\u31FF\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF\uFF61-\uFF9F]+"
 
 # Get pricing configuration based on the model
 PRICING_CONFIG = getPricingConfig(MODEL)
