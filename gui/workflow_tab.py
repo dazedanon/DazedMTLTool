@@ -351,8 +351,9 @@ class _JsFormatWorker(QThread):
 def _make_section_label(text: str) -> QLabel:
     lbl = QLabel(text)
     lbl.setStyleSheet(
-        "font-size: 13px; font-weight: bold; color: #007acc;"
-        "padding: 8px 0px 5px 0px; background-color: transparent;"
+        "font-size: 14px; font-weight: bold; color: #e0e0e0;"
+        "padding: 7px 0px 6px 10px; background-color: transparent;"
+        "border-left: 3px solid #007acc; margin-top: 6px;"
     )
     return lbl
 
@@ -360,8 +361,8 @@ def _make_section_label(text: str) -> QLabel:
 def _make_hr() -> QFrame:
     hr = QFrame()
     hr.setFrameShape(QFrame.HLine)
-    hr.setFrameShadow(QFrame.Sunken)
-    hr.setStyleSheet("QFrame { color: #555555; margin: 5px 0px; }")
+    hr.setFrameShadow(QFrame.Plain)
+    hr.setStyleSheet("QFrame { color: #333333; margin: 10px 0px 4px 0px; }")
     return hr
 
 
@@ -388,7 +389,7 @@ def _make_btn(text: str, color: str = "#007acc") -> QPushButton:
             f"QPushButton{{background-color:#2d2d30;color:#cccccc;"
             f"border:1px solid #555555;{_PAD}"
             f"border-radius:4px;font-size:12px;font-weight:bold;"
-            f"font-family:'Segoe UI Emoji','Segoe UI','Apple Color Emoji',sans-serif;}}"
+            f"font-family:'Segoe UI','Segoe UI Emoji','Apple Color Emoji',sans-serif;}}"
             f"QPushButton:hover{{background-color:#3e3e42;}}"
             f"QPushButton:pressed{{background-color:#007acc;color:white;}}"
             f"QPushButton:disabled{{background-color:#404040;color:#666666;border-color:#444444;}}"
@@ -408,7 +409,7 @@ def _make_btn(text: str, color: str = "#007acc") -> QPushButton:
         btn.setStyleSheet(
             f"QPushButton{{background-color:{color};color:white;border:none;"
             f"{_PAD}border-radius:4px;font-size:12px;font-weight:bold;"
-            f"font-family:'Segoe UI Emoji','Segoe UI','Apple Color Emoji',sans-serif;}}"
+            f"font-family:'Segoe UI','Segoe UI Emoji','Apple Color Emoji',sans-serif;}}"
             f"QPushButton:hover{{background-color:{hover_color};}}"
             f"QPushButton:pressed{{background-color:{press_color};}}"
             f"QPushButton:disabled{{background-color:#404040;color:#666666;}}"
@@ -424,7 +425,7 @@ def _make_toggle_btn(text: str) -> QPushButton:
         "QPushButton{background-color:#2d2d30;color:#aaaaaa;"
         "border:1px solid #555555;padding:4px 12px;"
         "border-radius:4px;font-size:12px;"
-        "font-family:'Segoe UI Emoji','Segoe UI','Apple Color Emoji',sans-serif;}"
+        "font-family:'Segoe UI','Segoe UI Emoji','Apple Color Emoji',sans-serif;}"
         "QPushButton:hover{background-color:#3e3e42;color:#cccccc;}"
         "QPushButton:checked{background-color:#1a3a5a;color:#7ab8d4;border-color:#2a6a9a;}"
         "QPushButton:checked:hover{background-color:#1e4268;}"
@@ -467,17 +468,23 @@ class WorkflowTab(QWidget):
 
         # Splitter: left=steps, right=log
         splitter = QSplitter(Qt.Horizontal)
-        splitter.setHandleWidth(2)
-        splitter.setStyleSheet("QSplitter::handle{background:#555555;}")
+        splitter.setHandleWidth(1)
+        splitter.setStyleSheet("QSplitter::handle{background:#3a3a3a;}")
 
         # ---- Left: scrollable step panels ----
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
-        scroll.setStyleSheet("QScrollArea{border:none;}")
+        scroll.setStyleSheet(
+            "QScrollArea{border:none;background-color:#1e1e1e;}"
+            "QScrollBar:vertical{background:#252526;width:10px;border:none;}"
+            "QScrollBar::handle:vertical{background:#555555;border-radius:5px;min-height:20px;}"
+            "QScrollBar::handle:vertical:hover{background:#007acc;}"
+            "QScrollBar::add-line:vertical,QScrollBar::sub-line:vertical{height:0;}"
+        )
         container = QWidget()
         vbox = QVBoxLayout(container)
-        vbox.setContentsMargins(18, 14, 18, 14)
-        vbox.setSpacing(4)
+        vbox.setContentsMargins(20, 16, 20, 16)
+        vbox.setSpacing(2)
 
         self._build_step0(vbox)
         vbox.addWidget(_make_hr())
@@ -503,10 +510,11 @@ class WorkflowTab(QWidget):
         lp_layout.setContentsMargins(0, 0, 0, 0)
         lp_layout.setSpacing(0)
 
-        log_header = QLabel("  Log")
+        log_header = QLabel("  ▸  Workflow Log")
         log_header.setStyleSheet(
-            "background-color:#2d2d30;color:#cccccc;font-size:11px;font-weight:bold;"
-            "padding:6px 8px;border-bottom:1px solid #555555;"
+            "background-color:#252526;color:#9d9d9d;font-size:11px;font-weight:bold;"
+            "padding:7px 10px;border-bottom:1px solid #3a3a3a;"
+            "letter-spacing:0.5px;"
         )
         lp_layout.addWidget(log_header)
 
@@ -514,12 +522,21 @@ class WorkflowTab(QWidget):
         self.log_area.setReadOnly(True)
         self.log_area.setFont(QFont("Consolas", 9))
         self.log_area.setStyleSheet(
-            "QTextEdit{background-color:#252526;color:#d4d4d4;"
-            "border:none;padding:8px;}"
+            "QTextEdit{background-color:#1e1e1e;color:#c8c8c8;"
+            "border:none;padding:10px;"
+            "selection-background-color:#264f78;}"
         )
         lp_layout.addWidget(self.log_area)
 
-        clear_btn = _make_btn("Clear Log", "#444")
+        clear_btn = _make_btn("Clear Log", "#3a3a3a")
+        clear_btn.setStyleSheet(
+            "QPushButton{background-color:#252526;color:#6a6a6a;"
+            "border:none;border-top:1px solid #3a3a3a;"
+            "padding:5px 12px;font-size:11px;font-weight:normal;"
+            "font-family:'Segoe UI','Arial',sans-serif;}"
+            "QPushButton:hover{background-color:#2d2d30;color:#9d9d9d;}"
+            "QPushButton:pressed{color:#cccccc;}"
+        )
         clear_btn.clicked.connect(self.log_area.clear)
         lp_layout.addWidget(clear_btn)
 
@@ -528,10 +545,76 @@ class WorkflowTab(QWidget):
 
         root.addWidget(splitter)
         self.setLayout(root)
+        self._apply_theme()
 
         # Auto-detect on first start if a folder was previously saved
         if self._setting("last_game_folder", ""):
             QTimer.singleShot(100, self._detect_folder)
+
+    def _apply_theme(self):
+        """Apply a unified dark-theme stylesheet to all standard controls."""
+        self.setStyleSheet("""
+            QLineEdit {
+                background-color: #3c3c3c;
+                border: 1px solid #555555;
+                border-radius: 4px;
+                padding: 4px 8px;
+                color: #cccccc;
+                font-size: 13px;
+            }
+            QLineEdit:focus {
+                border-color: #007acc;
+            }
+            QLineEdit:disabled {
+                background-color: #2d2d30;
+                color: #666666;
+            }
+            QLineEdit::placeholder {
+                color: #606060;
+            }
+            QSpinBox {
+                background-color: #3c3c3c;
+                border: 1px solid #555555;
+                border-radius: 4px;
+                padding: 3px 6px;
+                color: #cccccc;
+                font-size: 13px;
+            }
+            QSpinBox:focus {
+                border-color: #007acc;
+            }
+            QSpinBox::up-button, QSpinBox::down-button {
+                background-color: #2d2d30;
+                border: none;
+                width: 18px;
+            }
+            QSpinBox::up-button:hover, QSpinBox::down-button:hover {
+                background-color: #007acc;
+            }
+            QCheckBox {
+                color: #cccccc;
+                font-size: 13px;
+                spacing: 7px;
+            }
+            QCheckBox::indicator {
+                width: 14px;
+                height: 14px;
+                border: 1px solid #555555;
+                border-radius: 3px;
+                background-color: #3c3c3c;
+            }
+            QCheckBox::indicator:checked {
+                background-color: #007acc;
+                border-color: #007acc;
+            }
+            QCheckBox::indicator:hover {
+                border-color: #007acc;
+            }
+            QCheckBox::indicator:disabled {
+                background-color: #2d2d30;
+                border-color: #444444;
+            }
+        """)
 
     # ── Step 0: Project Folder ──────────────────────────────────────────────
 
@@ -557,16 +640,23 @@ class WorkflowTab(QWidget):
 
         # Detected info
         self.detected_label = QLabel("No folder detected yet.")
-        self.detected_label.setStyleSheet("color:#888;font-size:13px;padding:2px 0;")
+        self.detected_label.setStyleSheet(
+            "color:#6a9a6a;font-size:13px;padding:4px 8px;"
+            "background-color:#1f2b1f;border:1px solid #2a4a2a;"
+            "border-radius:4px;margin:4px 0;"
+        )
         layout.addWidget(self.detected_label)
 
         # File list
         self.file_list = QListWidget()
         self.file_list.setMaximumHeight(180)
         self.file_list.setStyleSheet(
-            "QListWidget{outline:none;border:1px solid #555555;}"
-            "QListWidget::item{border:none;outline:none;}"
-            "QListWidget::item:hover{background-color:#3e3e42;}"
+            "QListWidget{outline:none;border:1px solid #3c3c3c;"
+            "background-color:#252526;border-radius:4px;}"
+            "QListWidget::item{border:none;outline:none;padding:2px 6px;"
+            "color:#c8c8c8;}"
+            "QListWidget::item:hover{background-color:#2d2d30;"
+            "border-left:2px solid #007acc;}"
         )
         layout.addWidget(self.file_list)
 
@@ -1046,10 +1136,11 @@ class WorkflowTab(QWidget):
     def _build_step1_preprocess(self, layout: QVBoxLayout):
         header_row = QHBoxLayout()
         header_row.addWidget(_make_section_label("Step 1 (Optional) — Pre-process"))
-        opt_badge = QLabel("personal / optional")
+        opt_badge = QLabel("optional")
         opt_badge.setStyleSheet(
-            "color:#888;font-size:12px;border:1px solid #555;"
-            "padding:1px 6px;border-radius:8px;margin-left:6px;"
+            "color:#7a7a7a;font-size:11px;border:1px solid #3c3c3c;"
+            "padding:1px 8px;border-radius:8px;margin-left:8px;"
+            "background-color:#252526;"
         )
         header_row.addWidget(opt_badge)
         header_row.addStretch()
@@ -1076,11 +1167,11 @@ class WorkflowTab(QWidget):
             "importing files. Paths are auto-filled when a project folder is detected."
         )
         hint.setWordWrap(True)
-        hint.setStyleSheet("color:#999;font-size:13px;padding-bottom:6px;")
+        hint.setStyleSheet("color:#9d9d9d;font-size:13px;padding-bottom:6px;")
         collapse_layout.addWidget(hint)
 
         tasks_box = QGroupBox()
-        tasks_box.setStyleSheet("QGroupBox{border:none;margin:0;padding:0;}")
+        tasks_box.setStyleSheet("QGroupBox{border:none;margin:0;padding:4px 0;}")
         tb = QVBoxLayout(tasks_box)
         tb.setSpacing(10)
         collapse_layout.addWidget(tasks_box)
@@ -1097,16 +1188,16 @@ class WorkflowTab(QWidget):
         )
         ta_desc.setTextFormat(Qt.RichText)
         ta_desc.setWordWrap(True)
-        ta_desc.setStyleSheet("color:#aaa;font-size:13px;")
+        ta_desc.setStyleSheet("color:#9d9d9d;font-size:13px;")
         ta_inner.addWidget(ta_desc)
         ta_path_row = QHBoxLayout()
         ta_path_row.addWidget(QLabel("Data folder:"))
         self.pp_data_path_label = QLabel("(detect a project folder first)")
-        self.pp_data_path_label.setStyleSheet("color:#888;font-size:13px;")
+        self.pp_data_path_label.setStyleSheet("color:#7a7a7a;font-size:13px;")
         ta_path_row.addWidget(self.pp_data_path_label, 1)
         ta_inner.addLayout(ta_path_row)
         ta_btn_row = QHBoxLayout()
-        run_dazed = _make_btn("▶  Run dazedformat", "#555")
+        run_dazed = _make_btn("►  Run dazedformat", "#555")
         run_dazed.clicked.connect(self._run_dazedformat)
         ta_btn_row.addWidget(run_dazed)
         ta_btn_row.addStretch()
@@ -1124,7 +1215,7 @@ class WorkflowTab(QWidget):
         )
         tb_desc.setTextFormat(Qt.RichText)
         tb_desc.setWordWrap(True)
-        tb_desc.setStyleSheet("color:#aaa;font-size:13px;")
+        tb_desc.setStyleSheet("color:#9d9d9d;font-size:13px;")
         tb_inner.addWidget(tb_desc)
         tb_path_row = QHBoxLayout()
         tb_path_lbl = QLabel("plugins.js:")
@@ -1139,7 +1230,7 @@ class WorkflowTab(QWidget):
         tb_path_row.addWidget(browse_plugins)
         tb_inner.addLayout(tb_path_row)
         tb_btn_row = QHBoxLayout()
-        run_prettier = _make_btn("▶  Format plugins.js", "#555")
+        run_prettier = _make_btn("►  Format plugins.js", "#555")
         run_prettier.clicked.connect(self._run_prettier)
         tb_btn_row.addWidget(run_prettier)
         tb_btn_row.addStretch()
@@ -1157,7 +1248,7 @@ class WorkflowTab(QWidget):
         )
         tc_desc.setTextFormat(Qt.RichText)
         tc_desc.setWordWrap(True)
-        tc_desc.setStyleSheet("color:#aaa;font-size:13px;")
+        tc_desc.setStyleSheet("color:#9d9d9d;font-size:13px;")
         tc_inner.addWidget(tc_desc)
 
         tc_src_row = QHBoxLayout()
@@ -1175,16 +1266,16 @@ class WorkflowTab(QWidget):
         tc_dst_row = QHBoxLayout()
         tc_dst_row.addWidget(QLabel("Destination:"))
         self.pp_gameupdate_dst_label = QLabel("(game root folder auto-filled from project)")
-        self.pp_gameupdate_dst_label.setStyleSheet("color:#888;font-size:13px;")
+        self.pp_gameupdate_dst_label.setStyleSheet("color:#7a7a7a;font-size:13px;")
         tc_dst_row.addWidget(self.pp_gameupdate_dst_label, 1)
         tc_inner.addLayout(tc_dst_row)
 
         tc_btn_row = QHBoxLayout()
-        run_gu = _make_btn("▶  Copy gameupdate/", "#555")
+        run_gu = _make_btn("►  Copy gameupdate/", "#555")
         run_gu.clicked.connect(self._run_gameupdate)
         tc_btn_row.addWidget(run_gu)
         tc_btn_row.addStretch()
-        run_all_btn = _make_btn("▶▶  Run All 3 Tasks", "#007acc")
+        run_all_btn = _make_btn("►►  Run All 3 Tasks", "#007acc")
         run_all_btn.setToolTip("Run dazedformat, prettier, and gameupdate copy in sequence")
         run_all_btn.clicked.connect(self._run_all_preprocess)
         tc_btn_row.addWidget(run_all_btn)
@@ -1194,28 +1285,46 @@ class WorkflowTab(QWidget):
         layout.addWidget(collapse_widget)
 
         def _toggle_preprocess(expanded: bool):
-            toggle_btn.setText("▼" if expanded else "▶")
+            toggle_btn.setText("▼" if expanded else "►")
             collapse_widget.setVisible(expanded)
         toggle_btn.toggled.connect(_toggle_preprocess)
 
     @staticmethod
     def _task_box_style() -> str:
         return (
-            "QGroupBox{border:none;margin-top:14px;padding-top:4px;}"
-            "QGroupBox::title{subcontrol-origin:margin;subcontrol-position:top left;"
-            "padding:0;color:#007acc;font-weight:bold;font-size:13px;"
-            "font-family:'Segoe UI Emoji','Segoe UI','Apple Color Emoji',sans-serif;}"
+            "QGroupBox{"
+            "border:1px solid #3c3c3c;"
+            "border-radius:6px;"
+            "background-color:#252526;"
+            "margin-top:18px;"
+            "padding:10px 10px 8px 10px;}"
+            "QGroupBox::title{"
+            "subcontrol-origin:margin;"
+            "subcontrol-position:top left;"
+            "left:12px;top:-1px;"
+            "padding:0 6px;"
+            "color:#4ec9b0;"
+            "font-weight:bold;font-size:13px;"
+            "font-family:'Segoe UI','Segoe UI Emoji','Apple Color Emoji',sans-serif;}"
         )
 
     @staticmethod
     def _checkbox_box_style() -> str:
         """Bordered style for sections that contain scrollable checkbox lists."""
         return (
-            "QGroupBox{border:1px solid #3a3a3a;border-radius:4px;margin-top:10px;padding-top:4px;}"
-            "QGroupBox::title{subcontrol-origin:margin;subcontrol-position:top left;"
-            "left:8px;padding:0 4px;top:-1px;"
-            "background-color:#1e1e1e;color:#888888;font-size:12px;"
-            "font-family:'Segoe UI Emoji','Segoe UI','Apple Color Emoji',sans-serif;}"
+            "QGroupBox{"
+            "border:1px solid #3c3c3c;"
+            "border-radius:4px;"
+            "background-color:#252526;"
+            "margin-top:10px;"
+            "padding:8px 8px 6px 8px;}"
+            "QGroupBox::title{"
+            "subcontrol-origin:margin;"
+            "subcontrol-position:top left;"
+            "left:10px;top:-1px;"
+            "padding:0 4px;"
+            "color:#888888;font-size:12px;"
+            "font-family:'Segoe UI','Segoe UI Emoji','Apple Color Emoji',sans-serif;}"
         )
 
     def _build_step3_glossary(self, layout: QVBoxLayout):
@@ -1225,7 +1334,7 @@ class WorkflowTab(QWidget):
             "here are injected into every AI prompt for consistent terminology."
         )
         hint.setWordWrap(True)
-        hint.setStyleSheet("color:#999;font-size:13px;padding-bottom:4px;")
+        hint.setStyleSheet("color:#9d9d9d;font-size:13px;padding-bottom:4px;")
         layout.addWidget(hint)
 
         # ---- Parse Speakers -------------------------------------------------
@@ -1242,7 +1351,7 @@ class WorkflowTab(QWidget):
         )
         spk_hint.setTextFormat(Qt.RichText)
         spk_hint.setWordWrap(True)
-        spk_hint.setStyleSheet("color:#999;font-size:13px;")
+        spk_hint.setStyleSheet("color:#9d9d9d;font-size:13px;")
         spk_inner.addWidget(spk_hint)
 
         spk_btn_row = QHBoxLayout()
@@ -1256,7 +1365,7 @@ class WorkflowTab(QWidget):
         spk_btn_row.addStretch()
         spk_inner.addLayout(spk_btn_row)
         self._parse_speakers_status = QLabel("")
-        self._parse_speakers_status.setStyleSheet("color:#aaa;font-size:13px;")
+        self._parse_speakers_status.setStyleSheet("color:#9d9d9d;font-size:13px;")
         spk_inner.addWidget(self._parse_speakers_status)
 
         layout.addWidget(spk_box)
@@ -1274,7 +1383,7 @@ class WorkflowTab(QWidget):
             "and add worldbuilding terms. Paste the AI's output back into vocab.txt."
         )
         prompt_hint.setWordWrap(True)
-        prompt_hint.setStyleSheet("color:#999;font-size:13px;")
+        prompt_hint.setStyleSheet("color:#9d9d9d;font-size:13px;")
         pb_inner.addWidget(prompt_hint)
 
         # Combined glossary prompt
@@ -1307,8 +1416,9 @@ class WorkflowTab(QWidget):
         )
         format_hint.setFont(QFont("Consolas", 9))
         format_hint.setStyleSheet(
-            "color:#569cd6;border:1px solid #444444;"
-            "padding:5px 8px;border-radius:3px;font-size:13px;"
+            "color:#569cd6;background-color:#1a1e2a;border:1px solid #2a3a5a;"
+            "padding:7px 10px;border-radius:4px;font-size:13px;"
+            "border-left:3px solid #2a6a9a;"
         )
         layout.addWidget(format_hint)
 
@@ -1317,7 +1427,8 @@ class WorkflowTab(QWidget):
         self.vocab_editor.setFont(QFont("Consolas", 9))
         self.vocab_editor.setStyleSheet(
             "QTextEdit{background-color:#252526;color:#d4d4d4;"
-            "border:1px solid #555555;padding:6px;}"
+            "border:1px solid #3c3c3c;border-radius:4px;padding:8px;"
+            "selection-background-color:#264f78;}"
         )
         self._reload_vocab()
         layout.addWidget(self.vocab_editor)
@@ -1363,7 +1474,7 @@ class WorkflowTab(QWidget):
             "speaker flags to enable. Then tick the matching boxes and click Apply."
         )
         hint.setWordWrap(True)
-        hint.setStyleSheet("color:#999;font-size:13px;padding-bottom:6px;")
+        hint.setStyleSheet("color:#9d9d9d;font-size:13px;padding-bottom:6px;")
         layout.addWidget(hint)
 
         copy_row = QHBoxLayout()
@@ -1413,7 +1524,7 @@ class WorkflowTab(QWidget):
             "Click Apply to write the values to .env."
         )
         wrap_hint.setWordWrap(True)
-        wrap_hint.setStyleSheet("color:#999;font-size:13px;")
+        wrap_hint.setStyleSheet("color:#9d9d9d;font-size:13px;")
         wrap_inner.addWidget(wrap_hint)
 
         def _spin_pair(label_text: str, default: int):
@@ -1457,11 +1568,11 @@ class WorkflowTab(QWidget):
             "Translates names, descriptions, and notes in the core database. "
             "Run this first before any event-code phases."
         )
-        p0_desc.setStyleSheet("color:#999;font-size:13px;")
+        p0_desc.setStyleSheet("color:#9d9d9d;font-size:13px;")
         p0_desc.setWordWrap(True)
         p0_inner.addWidget(p0_desc)
         p0_row = QHBoxLayout()
-        self._run_p0_btn = _make_btn("▶  Run Phase 0", "#4a7a4a")
+        self._run_p0_btn = _make_btn("►  Run Phase 0", "#4a7a4a")
         self._run_p0_btn.setToolTip(
             "Sets engine to RPG Maker MV/MZ, selects only DB files "
             "(Actors, Armors … etc.), all event codes OFF — then starts translation."
@@ -1483,11 +1594,11 @@ class WorkflowTab(QWidget):
             "Clicking the button below applies these codes, then takes you to the Translation tab.\n"
             "While translating, watch the log — speaker lines should look like  [Speaker]: Dialogue."
         )
-        p1_desc.setStyleSheet("color:#999;font-size:13px;")
+        p1_desc.setStyleSheet("color:#9d9d9d;font-size:13px;")
         p1_desc.setWordWrap(True)
         p1_inner.addWidget(p1_desc)
         p1_row = QHBoxLayout()
-        self._run_p1_btn = _make_btn("▶  Run Phase 1", "#007acc")
+        self._run_p1_btn = _make_btn("►  Run Phase 1", "#007acc")
         self._run_p1_btn.setToolTip("Applies Phase 1 code settings and starts translation")
         self._run_p1_btn.clicked.connect(lambda: self._run_phase(1))
         p1_row.addWidget(self._run_p1_btn)
@@ -1508,11 +1619,11 @@ class WorkflowTab(QWidget):
             "Run this before Phase 2 so that code 122 translated strings are automatically "
             "matched when those same strings appear in 111 comparisons."
         )
-        p1b_desc.setStyleSheet("color:#999;font-size:13px;")
+        p1b_desc.setStyleSheet("color:#9d9d9d;font-size:13px;")
         p1b_desc.setWordWrap(True)
         p1b_inner.addWidget(p1b_desc)
         p1b_row = QHBoxLayout()
-        self._run_p1b_btn = _make_btn("▶  Run Phase 1b", "#2a5a7a")
+        self._run_p1b_btn = _make_btn("►  Run Phase 1b", "#2a5a7a")
         self._run_p1b_btn.setToolTip("Applies Phase 1b code settings (111 only) and starts translation")
         self._run_p1b_btn.clicked.connect(lambda: self._run_phase("1b"))
         p1b_row.addWidget(self._run_p1b_btn)
@@ -1531,7 +1642,7 @@ class WorkflowTab(QWidget):
             "Use the Plugin Prompt to audit the game first, then enable only the codes and "
             "plugins that contain visible text."
         )
-        p2_desc.setStyleSheet("color:#999;font-size:13px;")
+        p2_desc.setStyleSheet("color:#9d9d9d;font-size:13px;")
         p2_desc.setWordWrap(True)
         p2_inner.addWidget(p2_desc)
 
@@ -1736,7 +1847,7 @@ class WorkflowTab(QWidget):
         p2_inner.addLayout(apply_plugins_row)
 
         p2_row = QHBoxLayout()
-        self._run_p2_btn = _make_btn("▶  Run Phase 2", "#7a4a00")
+        self._run_p2_btn = _make_btn("►  Run Phase 2", "#7a4a00")
         self._run_p2_btn.setFixedWidth(_P2_BTN_WIDTH)
         self._run_p2_btn.setToolTip(
             "Applies Phase 2 code settings (from the checkboxes above) and starts translation "
@@ -1766,7 +1877,7 @@ class WorkflowTab(QWidget):
             "plugins.js, vocab.txt, and optionally System.json attached."
         )
         hint.setWordWrap(True)
-        hint.setStyleSheet("color:#999;font-size:13px;padding-bottom:6px;")
+        hint.setStyleSheet("color:#9d9d9d;font-size:13px;padding-bottom:6px;")
         layout.addWidget(hint)
 
         _BTN_WIDTH = 300
@@ -1801,7 +1912,7 @@ class WorkflowTab(QWidget):
             "Copy translated files back into the game's data folder to patch the game in-place."
         )
         hint.setWordWrap(True)
-        hint.setStyleSheet("color:#999;font-size:13px;padding-bottom:4px;")
+        hint.setStyleSheet("color:#9d9d9d;font-size:13px;padding-bottom:4px;")
         layout.addWidget(hint)
 
         _EXP_W = 280
@@ -1843,6 +1954,11 @@ class WorkflowTab(QWidget):
 
         self._save_setting("last_game_folder", folder)
         self.detected_label.setText("Scanning…")
+        self.detected_label.setStyleSheet(
+            "color:#9d9d9d;font-size:13px;padding:4px 8px;"
+            "background-color:#252526;border:1px solid #3c3c3c;"
+            "border-radius:4px;margin:4px 0;"
+        )
         self.file_list.clear()
         self.import_btn.setEnabled(False)
 
@@ -1851,6 +1967,11 @@ class WorkflowTab(QWidget):
             data_path, engine = find_data_folder(folder)
         except Exception as exc:
             self.detected_label.setText(f"Error: {exc}")
+            self.detected_label.setStyleSheet(
+                "color:#f48771;font-size:13px;padding:4px 8px;"
+                "background-color:#2b1a1a;border:1px solid #5a2a2a;"
+                "border-radius:4px;margin:4px 0;"
+            )
             return
 
         if data_path is None:
@@ -1858,12 +1979,22 @@ class WorkflowTab(QWidget):
                 "⚠  No recognised data folder found. "
                 "Make sure this is a valid RPGMaker game directory."
             )
+            self.detected_label.setStyleSheet(
+                "color:#e9a12a;font-size:13px;padding:4px 8px;"
+                "background-color:#2b2010;border:1px solid #5a4010;"
+                "border-radius:4px;margin:4px 0;"
+            )
             return
 
         self._data_path = str(data_path)
         self._engine = engine
         self.detected_label.setText(
             f"Engine: {engine}   ·   Data folder: {data_path}"
+        )
+        self.detected_label.setStyleSheet(
+            "color:#6a9a6a;font-size:13px;padding:4px 8px;"
+            "background-color:#1f2b1f;border:1px solid #2a4a2a;"
+            "border-radius:4px;margin:4px 0;"
         )
         self._log(f"Detected data folder: {data_path}  (engine: {engine})")
 
@@ -2792,7 +2923,7 @@ class WorkflowTab(QWidget):
                 self._log("✅  All pre-process tasks finished.")
                 return
             label, worker = remaining[0]
-            self._log(f"▶ {label} …")
+            self._log(f"► {label} …")
             worker.log.connect(self._log)
 
             def on_done(ok, msg, rest=remaining[1:]):
