@@ -639,6 +639,14 @@ class ConfigTab(QWidget):
             f"Could not fetch models from the API:\n{error}"
         )
 
+    def mousePressEvent(self, event):
+        """Clear focus from any text/spin box when clicking on empty space,
+        which triggers editingFinished and therefore auto-save."""
+        focused = QApplication.focusWidget()
+        if focused and isinstance(focused, (QLineEdit, QSpinBox, QDoubleSpinBox)):
+            focused.clearFocus()
+        super().mousePressEvent(event)
+
     def showEvent(self, event):
         """Reload values from .env every time this tab becomes visible."""
         super().showEvent(event)
