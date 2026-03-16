@@ -538,7 +538,7 @@ class WorkflowTab(QWidget):
 
         # Detected info
         self.detected_label = QLabel("No folder detected yet.")
-        self.detected_label.setStyleSheet("color:#888;font-size:14px;padding:2px 0;")
+        self.detected_label.setStyleSheet("color:#888;font-size:13px;padding:2px 0;")
         layout.addWidget(self.detected_label)
 
         # File list
@@ -943,7 +943,7 @@ class WorkflowTab(QWidget):
         header_row.addWidget(_make_section_label("Step 1 (Optional) — Pre-process"))
         opt_badge = QLabel("personal / optional")
         opt_badge.setStyleSheet(
-            "color:#888;font-size:13px;border:1px solid #555;"
+            "color:#888;font-size:12px;border:1px solid #555;"
             "padding:1px 6px;border-radius:8px;margin-left:6px;"
         )
         header_row.addWidget(opt_badge)
@@ -971,7 +971,7 @@ class WorkflowTab(QWidget):
             "importing files. Paths are auto-filled when a project folder is detected."
         )
         hint.setWordWrap(True)
-        hint.setStyleSheet("color:#999;font-size:14px;padding-bottom:6px;")
+        hint.setStyleSheet("color:#999;font-size:13px;padding-bottom:6px;")
         collapse_layout.addWidget(hint)
 
         tasks_box = QGroupBox()
@@ -991,12 +991,12 @@ class WorkflowTab(QWidget):
         )
         ta_desc.setTextFormat(Qt.RichText)
         ta_desc.setWordWrap(True)
-        ta_desc.setStyleSheet("color:#aaa;font-size:14px;")
+        ta_desc.setStyleSheet("color:#aaa;font-size:13px;")
         ta_inner.addWidget(ta_desc)
         ta_path_row = QHBoxLayout()
         ta_path_row.addWidget(QLabel("Data folder:"))
         self.pp_data_path_label = QLabel("(detect a project folder first)")
-        self.pp_data_path_label.setStyleSheet("color:#888;font-size:14px;")
+        self.pp_data_path_label.setStyleSheet("color:#888;font-size:13px;")
         ta_path_row.addWidget(self.pp_data_path_label, 1)
         ta_inner.addLayout(ta_path_row)
         ta_btn_row = QHBoxLayout()
@@ -1018,7 +1018,7 @@ class WorkflowTab(QWidget):
         )
         tb_desc.setTextFormat(Qt.RichText)
         tb_desc.setWordWrap(True)
-        tb_desc.setStyleSheet("color:#aaa;font-size:14px;")
+        tb_desc.setStyleSheet("color:#aaa;font-size:13px;")
         tb_inner.addWidget(tb_desc)
         tb_path_row = QHBoxLayout()
         tb_path_lbl = QLabel("plugins.js:")
@@ -1051,7 +1051,7 @@ class WorkflowTab(QWidget):
         )
         tc_desc.setTextFormat(Qt.RichText)
         tc_desc.setWordWrap(True)
-        tc_desc.setStyleSheet("color:#aaa;font-size:14px;")
+        tc_desc.setStyleSheet("color:#aaa;font-size:13px;")
         tc_inner.addWidget(tc_desc)
 
         tc_src_row = QHBoxLayout()
@@ -1069,7 +1069,7 @@ class WorkflowTab(QWidget):
         tc_dst_row = QHBoxLayout()
         tc_dst_row.addWidget(QLabel("Destination:"))
         self.pp_gameupdate_dst_label = QLabel("(game root folder auto-filled from project)")
-        self.pp_gameupdate_dst_label.setStyleSheet("color:#888;font-size:14px;")
+        self.pp_gameupdate_dst_label.setStyleSheet("color:#888;font-size:13px;")
         tc_dst_row.addWidget(self.pp_gameupdate_dst_label, 1)
         tc_inner.addLayout(tc_dst_row)
 
@@ -1110,7 +1110,7 @@ class WorkflowTab(QWidget):
             "here are injected into every AI prompt for consistent terminology."
         )
         hint.setWordWrap(True)
-        hint.setStyleSheet("color:#999;font-size:14px;padding-bottom:4px;")
+        hint.setStyleSheet("color:#999;font-size:13px;padding-bottom:4px;")
         layout.addWidget(hint)
 
         # ---- Parse Speakers -------------------------------------------------
@@ -1126,12 +1126,12 @@ class WorkflowTab(QWidget):
         )
         spk_hint.setTextFormat(Qt.RichText)
         spk_hint.setWordWrap(True)
-        spk_hint.setStyleSheet("color:#999;font-size:14px;")
+        spk_hint.setStyleSheet("color:#999;font-size:13px;")
         spk_inner.addWidget(spk_hint)
 
         spk_row = QHBoxLayout()
         self._parse_speakers_status = QLabel("")
-        self._parse_speakers_status.setStyleSheet("color:#aaa;font-size:14px;")
+        self._parse_speakers_status.setStyleSheet("color:#aaa;font-size:13px;")
         spk_row.addWidget(self._parse_speakers_status, 1)
         self._parse_speakers_btn = _make_btn("🔍  Parse Speakers", "#007acc")
         self._parse_speakers_btn.setToolTip(
@@ -1155,7 +1155,7 @@ class WorkflowTab(QWidget):
             "and add worldbuilding terms. Paste the AI's output back into vocab.txt."
         )
         prompt_hint.setWordWrap(True)
-        prompt_hint.setStyleSheet("color:#999;font-size:14px;")
+        prompt_hint.setStyleSheet("color:#999;font-size:13px;")
         pb_inner.addWidget(prompt_hint)
 
         # Combined glossary prompt
@@ -1166,7 +1166,7 @@ class WorkflowTab(QWidget):
         )
         glossary_label.setTextFormat(Qt.RichText)
         glossary_label.setWordWrap(True)
-        glossary_label.setStyleSheet("color:#ccc;font-size:14px;")
+        glossary_label.setStyleSheet("color:#ccc;font-size:13px;")
         glossary_row.addWidget(glossary_label, 1)
         copy_glossary_btn = _make_btn("📋  Copy Prompt", "#555")
         copy_glossary_btn.setToolTip("Copy the full glossary discovery prompt to clipboard")
@@ -1187,7 +1187,7 @@ class WorkflowTab(QWidget):
         format_hint.setFont(QFont("Consolas", 9))
         format_hint.setStyleSheet(
             "color:#569cd6;border:1px solid #444444;"
-            "padding:5px 8px;border-radius:3px;font-size:14px;"
+            "padding:5px 8px;border-radius:3px;font-size:13px;"
         )
         layout.addWidget(format_hint)
 
@@ -1236,7 +1236,7 @@ class WorkflowTab(QWidget):
             "speaker flags to enable. Then tick the matching boxes and click Apply."
         )
         hint.setWordWrap(True)
-        hint.setStyleSheet("color:#999;font-size:14px;padding-bottom:6px;")
+        hint.setStyleSheet("color:#999;font-size:13px;padding-bottom:6px;")
         layout.addWidget(hint)
 
         copy_row = QHBoxLayout()
@@ -1284,7 +1284,7 @@ class WorkflowTab(QWidget):
             "Click Apply to write the values to .env."
         )
         wrap_hint.setWordWrap(True)
-        wrap_hint.setStyleSheet("color:#999;font-size:14px;")
+        wrap_hint.setStyleSheet("color:#999;font-size:13px;")
         wrap_inner.addWidget(wrap_hint)
 
         def _spin_pair(label_text: str, default: int):
@@ -1332,7 +1332,7 @@ class WorkflowTab(QWidget):
             "Translates names, descriptions, and notes in the core database. "
             "Run this first before any event-code phases."
         )
-        p0_desc.setStyleSheet("color:#999;font-size:14px;")
+        p0_desc.setStyleSheet("color:#999;font-size:13px;")
         p0_desc.setWordWrap(True)
         p0_inner.addWidget(p0_desc)
         p0_row = QHBoxLayout()
@@ -1344,7 +1344,7 @@ class WorkflowTab(QWidget):
         self._run_p0_btn.clicked.connect(lambda: self._run_phase(0))
         p0_row.addWidget(self._run_p0_btn)
         self._p0_status_lbl = QLabel("")
-        self._p0_status_lbl.setStyleSheet("color:#6a9a6a;font-size:14px;")
+        self._p0_status_lbl.setStyleSheet("color:#6a9a6a;font-size:13px;")
         p0_row.addWidget(self._p0_status_lbl)
         p0_row.addStretch()
         p0_inner.addLayout(p0_row)
@@ -1362,7 +1362,7 @@ class WorkflowTab(QWidget):
             "Clicking the button below applies these codes, then takes you to the Translation tab.\n"
             "While translating, watch the log — speaker lines should look like  [Speaker]: Dialogue."
         )
-        p1_desc.setStyleSheet("color:#999;font-size:14px;")
+        p1_desc.setStyleSheet("color:#999;font-size:13px;")
         p1_desc.setWordWrap(True)
         p1_inner.addWidget(p1_desc)
         p1_row = QHBoxLayout()
@@ -1371,7 +1371,7 @@ class WorkflowTab(QWidget):
         self._run_p1_btn.clicked.connect(lambda: self._run_phase(1))
         p1_row.addWidget(self._run_p1_btn)
         self._p1_status_lbl = QLabel("")
-        self._p1_status_lbl.setStyleSheet("color:#6ab4d4;font-size:14px;")
+        self._p1_status_lbl.setStyleSheet("color:#6ab4d4;font-size:13px;")
         p1_row.addWidget(self._p1_status_lbl)
         p1_row.addStretch()
         p1_inner.addLayout(p1_row)
@@ -1391,7 +1391,7 @@ class WorkflowTab(QWidget):
             "Run this before Phase 2 so that code 122 translated strings are automatically "
             "matched when those same strings appear in 111 comparisons."
         )
-        p1b_desc.setStyleSheet("color:#999;font-size:14px;")
+        p1b_desc.setStyleSheet("color:#999;font-size:13px;")
         p1b_desc.setWordWrap(True)
         p1b_inner.addWidget(p1b_desc)
         p1b_row = QHBoxLayout()
@@ -1400,7 +1400,7 @@ class WorkflowTab(QWidget):
         self._run_p1b_btn.clicked.connect(lambda: self._run_phase("1b"))
         p1b_row.addWidget(self._run_p1b_btn)
         self._p1b_status_lbl = QLabel("")
-        self._p1b_status_lbl.setStyleSheet("color:#6aaac4;font-size:14px;")
+        self._p1b_status_lbl.setStyleSheet("color:#6aaac4;font-size:13px;")
         p1b_row.addWidget(self._p1b_status_lbl)
         p1b_row.addStretch()
         p1b_inner.addLayout(p1b_row)
@@ -1418,7 +1418,7 @@ class WorkflowTab(QWidget):
             "Use the Plugin Prompt to audit the game first, then enable only the codes and "
             "plugins that contain visible text."
         )
-        p2_desc.setStyleSheet("color:#999;font-size:14px;")
+        p2_desc.setStyleSheet("color:#999;font-size:13px;")
         p2_desc.setWordWrap(True)
         p2_inner.addWidget(p2_desc)
 
@@ -1481,7 +1481,7 @@ class WorkflowTab(QWidget):
         codes_select_all_btn.setCheckable(True)
         codes_select_all_btn.setFixedWidth(80)
         codes_select_all_btn.setStyleSheet(
-            "QPushButton{color:#ccc;font-size:14px;padding:3px 8px;background:#3a3a3a;border:none;border-radius:3px;}"
+            "QPushButton{color:#ccc;font-size:13px;padding:3px 8px;background:#3a3a3a;border:none;border-radius:3px;}"
             "QPushButton:checked{background:#1a3a5a;color:#7ab8d4;}"
             "QPushButton:hover{background:#4a4a4a;}"
         )
@@ -1510,7 +1510,7 @@ class WorkflowTab(QWidget):
         for idx, (code_key, label, tip) in enumerate(_P2_CODE_DEFS):
             cb = QCheckBox(label)
             cb.setToolTip(tip)
-            cb.setStyleSheet("color:#ccc;font-size:14px;")
+            cb.setStyleSheet("color:#ccc;font-size:13px;")
             toggle_grid.addWidget(cb, idx // 3, idx % 3)
             self._p2_code_checks[code_key] = cb
         toggle_box_layout.addWidget(toggle_grid_container)
@@ -1553,7 +1553,7 @@ class WorkflowTab(QWidget):
         plugin357_select_all_btn.setCheckable(True)
         plugin357_select_all_btn.setFixedWidth(80)
         plugin357_select_all_btn.setStyleSheet(
-            "QPushButton{color:#ccc;font-size:14px;padding:3px 8px;background:#3a3a3a;border:none;border-radius:3px;}"
+            "QPushButton{color:#ccc;font-size:13px;padding:3px 8px;background:#3a3a3a;border:none;border-radius:3px;}"
             "QPushButton:checked{background:#1a3a5a;color:#7ab8d4;}"
             "QPushButton:hover{background:#4a4a4a;}"
         )
@@ -1600,7 +1600,7 @@ class WorkflowTab(QWidget):
         patterns_select_all_btn.setCheckable(True)
         patterns_select_all_btn.setFixedWidth(80)
         patterns_select_all_btn.setStyleSheet(
-            "QPushButton{color:#ccc;font-size:14px;padding:3px 8px;background:#3a3a3a;border:none;border-radius:3px;}"
+            "QPushButton{color:#ccc;font-size:13px;padding:3px 8px;background:#3a3a3a;border:none;border-radius:3px;}"
             "QPushButton:checked{background:#1a3a5a;color:#7ab8d4;}"
             "QPushButton:hover{background:#4a4a4a;}"
         )
@@ -1637,7 +1637,7 @@ class WorkflowTab(QWidget):
         self._run_p2_btn.clicked.connect(lambda: self._run_phase(2))
         p2_row.addWidget(self._run_p2_btn)
         self._p2_status_lbl = QLabel("")
-        self._p2_status_lbl.setStyleSheet("color:#d4aa68;font-size:14px;")
+        self._p2_status_lbl.setStyleSheet("color:#d4aa68;font-size:13px;")
         p2_row.addWidget(self._p2_status_lbl)
         p2_row.addStretch()
         p2_inner.addLayout(p2_row)
@@ -1654,7 +1654,7 @@ class WorkflowTab(QWidget):
             "Copy translated files back into the game's data folder to patch the game in-place."
         )
         hint.setWordWrap(True)
-        hint.setStyleSheet("color:#999;font-size:14px;padding-bottom:4px;")
+        hint.setStyleSheet("color:#999;font-size:13px;padding-bottom:4px;")
         layout.addWidget(hint)
 
         row = QHBoxLayout()
