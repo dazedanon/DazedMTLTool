@@ -1184,19 +1184,12 @@ class WorkflowTab(QWidget):
         run_gu.clicked.connect(self._run_gameupdate)
         tc_btn_row.addWidget(run_gu)
         tc_btn_row.addStretch()
-        tc_inner.addLayout(tc_btn_row)
-        tb.addWidget(tc)
-
-        # ---- Run All button row --------------------------------
-        bottom_row = QWidget()
-        bottom_row_layout = QHBoxLayout(bottom_row)
-        bottom_row_layout.setContentsMargins(0, 0, 0, 0)
-        bottom_row_layout.addStretch()
-        run_all_btn = _make_btn("▶▶  Run All 3 Tasks", "#3a4a6a")
+        run_all_btn = _make_btn("▶▶  Run All 3 Tasks", "#007acc")
         run_all_btn.setToolTip("Run dazedformat, prettier, and gameupdate copy in sequence")
         run_all_btn.clicked.connect(self._run_all_preprocess)
-        bottom_row_layout.addWidget(run_all_btn)
-        collapse_layout.addWidget(bottom_row)
+        tc_btn_row.addWidget(run_all_btn)
+        tc_inner.addLayout(tc_btn_row)
+        tb.addWidget(tc)
 
         layout.addWidget(collapse_widget)
 
@@ -1800,10 +1793,6 @@ class WorkflowTab(QWidget):
             row.addStretch()
             layout.addLayout(row)
 
-        self._s5_vocab_status = QLabel("")
-        self._s5_vocab_status.setStyleSheet("color:#aaa;font-size:13px;padding-left:4px;")
-        layout.addWidget(self._s5_vocab_status)
-
     # ── Step 6: Export ──────────────────────────────────────────────────────
 
     def _build_step6_export(self, layout: QVBoxLayout):
@@ -2223,19 +2212,11 @@ class WorkflowTab(QWidget):
         game_root = self.folder_edit.text().strip()
         if not game_root:
             self._log("⚠  No game folder set. Complete Step 0 first.")
-            try:
-                self._s5_vocab_status.setText("⚠ No game folder set.")
-            except Exception:
-                pass
             return
 
         src = Path("vocab.txt")
         if not src.exists():
             self._log("⚠  vocab.txt not found — save it in Step 3 first.")
-            try:
-                self._s5_vocab_status.setText("⚠ vocab.txt not found.")
-            except Exception:
-                pass
             return
 
         import shutil
@@ -2243,16 +2224,8 @@ class WorkflowTab(QWidget):
         try:
             shutil.copy2(src, dst)
             self._log(f"✅ vocab.txt copied to {dst}")
-            try:
-                self._s5_vocab_status.setText(f"✅ Copied to {dst}")
-            except Exception:
-                pass
         except Exception as exc:
             self._log(f"❌ Could not copy vocab.txt: {exc}")
-            try:
-                self._s5_vocab_status.setText(f"❌ {exc}")
-            except Exception:
-                pass
 
     def _copy_plugins_js_translate_prompt(self):
         QApplication.clipboard().setText(self._PLUGINS_JS_TRANSLATE_PROMPT)
