@@ -30,6 +30,9 @@ _thread_local = threading.local()
 _global_accurate_cost      = 0.0
 _global_accurate_cost_lock = threading.Lock()
 
+# Global batch counter for estimate mode — tracks total batches across all files.
+_global_estimate_batch_offset = 0
+
 
 # ===== Placeholder Protection System =====
 # Patterns to protect from translation (sound effects, control codes, etc.)
@@ -1245,19 +1248,23 @@ def calculateCost(inputTokens, outputTokens, model):
         static_tok  = getattr(_thread_local, 'estimate_static_tokens', 0)
         regular_tok = getattr(_thread_local, 'estimate_regular_tokens', 0)
         batch_count = max(1, getattr(_thread_local, 'estimate_batch_count', 1))
-        _thread_local.estimate_static_tokens  = 0
+d        _thread_local.estimate_static_tokens  = 0
         _thread_local.estimate_regular_tokens = 0
         _thread_local.estimate_batch_count    = 0
-        # Exact model: 1 cache write (2x) + (N-1) cache reads (0.10x) + regular at 1x
-        # 1.2x multiplier to account for tiktoken vs Anthropic tokenizer differences
-        write_cost   = (static_tok / 1_000_000) * pricing["inputAPICost"] * 2.0
-        read_cost    = ((batch_count - 1) * static_tok / 1_000_000) * pricing["inputAPICost"] * 0.10
+        # Assume first 30 batches across ALL files are cache writes (2x), rest reads (0.10x).
+        global _global_estimate_batch_offset
+        offset = _global_estimate_batch_offset
+        _global_estimate_batch_offset += batch_count
+        write_batches = max(0, min(30, offset + batch_count) - offset)
+        read_batches  = batch_count - write_batches
+        write_cost   = (write_batches * static_tok / 1_000_000) * pricing["inputAPICost"] * 2.0
+        read_cost    = (read_batches  * static_tok / 1_000_000) * pricing["inputAPICost"] * 0.10
         regular_cost = (regular_tok / 1_000_000) * pricing["inputAPICost"]
         inputCost    = write_cost + read_cost + regular_cost
     else:
         inputCost = (inputTokens / 1_000_000) * pricing["inputAPICost"]
     outputCost = (outputTokens / 1_000_000) * pricing["outputAPICost"]
-    return (inputCost + outputCost) * 1.2 if _is_claude_naive else inputCost + outputCost
+    return inputCost + outputCost
 
 
 def countTokens(system, user, history):
