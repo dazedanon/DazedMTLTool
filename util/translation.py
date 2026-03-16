@@ -57,7 +57,25 @@ def protect_script_codes(text):
     """
     if not text or not isinstance(text, str):
         return text, {}
-    
+
+    # Normalize curly/smart quotes to ASCII equivalents BEFORE building the JSON
+    # payload.  When these characters appear inside a JSON string value the AI
+    # tends to treat them as regular ASCII double-quotes, which makes the value
+    # appear empty (e.g. `"スキルを"リセットする` → AI sees empty + stray text).
+    # This mirrors the identical normalization already applied to the AI's OUTPUT
+    # inside extractTranslation's translation_table.
+    quote_norm_table = str.maketrans({
+        '\u201C': "'",  # " left double quotation mark
+        '\u201D': "'",  # " right double quotation mark
+        '\uFF02': "'",  # ＂ fullwidth quotation mark
+        '\u2018': "'",  # ' left single quotation mark
+        '\u2019': "'",  # ' right single quotation mark
+        '\u201B': "'",  # ‛ single high-reversed-9 quotation mark
+        '\u02BC': "'",  # ʼ modifier letter apostrophe
+        '\uFF07': "'",  # ＇ fullwidth apostrophe
+    })
+    text = text.translate(quote_norm_table)
+
     replacements = {}
     protected_text = text
     counter = 0
@@ -1042,8 +1060,9 @@ def cleanTranslatedText(translatedText, language):
         "〜": "~",
         "ッ": "",
         "。": ".",
-        "「": '\"',
-        "」": '\"',
+        # Note: 「 and 」 are NOT replaced here — replacing them with ASCII " would
+        # corrupt raw JSON strings before extraction.  They are handled per-line
+        # in _clean_extracted_line() after JSON parsing.
         "—": "―",
         "】": "]",
         "【": "[",
@@ -1069,8 +1088,11 @@ def cleanTranslatedText(translatedText, language):
 
 def elongateCharacters(text):
     """Replace ー sequences with elongated characters"""
-    # Define a pattern to match one character followed by two or more ー characters
-    pattern = r"(?<=(.))ー{2,}"
+    # Define a pattern to match one character followed by two or more ー characters.
+    # The lookbehind is restricted to non-ー Japanese/CJK characters so that:
+    #   - standalone ー separators (e.g. "ーーーーーーーーーー") are left untouched
+    #   - ー sequences preceded by a JSON quote or other non-Japanese char are not corrupted
+    pattern = r"(?<=([\u3040-\u309F\u30A0-\u30FB\u30FD-\u30FF\u4E00-\u9FEF\uFF61-\uFF9F]))ー{2,}"
 
     # Define a replacement function that elongates the captured character
     def repl(match):
@@ -1588,10 +1610,14 @@ def translateAI(text, history, fullPromptFlag, config, filename=None, pbar=None,
                             else:
                                 # Set translations (line count matches, placeholders valid, and content is good)
                                 # Strip "Placeholder Text" from individual lines (AI placeholder for untranslatable input)
-                                final_translations = [
-                                    line.replace("Placeholder Text", "").strip() if isinstance(line, str) else line
-                                    for line in extracted
-                                ]
+                                # Also apply the 「→" / 」→" replacements here per-line (safe now that JSON is parsed)
+                                def _clean_extracted_line(line):
+                                    if not isinstance(line, str):
+                                        return line
+                                    line = line.replace("Placeholder Text", "").strip()
+                                    line = line.replace("「", '"').replace("」", '"')
+                                    return line
+                                final_translations = [_clean_extracted_line(line) for line in extracted]
                 else:
                     # Single string: validate placeholders
                     placeholder_valid, missing, extra = validate_placeholders(protected_items, cleaned_text, all_replacements[0])

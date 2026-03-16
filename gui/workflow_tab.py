@@ -672,11 +672,20 @@ class WorkflowTab(QWidget):
         "  - Speech register and personality notes — how they speak, their tone, any nicknames, "
         "whether their name is player-chosen, etc.\n"
         "\n"
+        "⚠️ IMPORTANT: In all descriptions, ALWAYS refer to other characters by their "
+        "ENGLISH name, never their Japanese name. "
+        "For example, write \"her sister Ruin was kidnapped\" not "
+        "\"her sister ルイン was kidnapped\". "
+        "The description text must be entirely in English with no Japanese characters "
+        "except inside the leading Japanese (English) name tag.\n"
+        "\n"
         "Format — the header line, then one entry per line:\n"
         "# Game Characters\n"
         "\u30b7\u30ed (Shiro) - Female; protagonist; player-controlled (Actors.json ID 1); "
-        "speaks in a flustered, cute register with feminine speech markers; nickname \u30d0\u30ab\u732b\u3002\n"
-        "\u30af\u30ed\u30cd (Kurone) - Female; antagonist; cold and terse; speaks in short cutting sentences\n"
+        "speaks in a flustered, cute register with feminine speech markers; "
+        "her partner is Kurone\n"
+        "\u30af\u30ed\u30cd (Kurone) - Female; antagonist; cold and terse; speaks in short cutting sentences; "
+        "pursues Shiro throughout the story\n"
         "\n"
         "Rules:\n"
         "  - Named characters only — no generic enemy types or unnamed NPCs.\n"
@@ -1212,6 +1221,10 @@ class WorkflowTab(QWidget):
         self.import_btn.setEnabled(False)
         self.import_btn.clicked.connect(self._import_files)
         import_row.addWidget(self.import_btn)
+        clear_translated_btn = _make_btn("🗑  Clear translated/", "#8b0000")
+        clear_translated_btn.setToolTip("Delete all files inside the translated/ folder")
+        clear_translated_btn.clicked.connect(self._clear_translated)
+        import_row.addWidget(clear_translated_btn)
         import_row.addStretch()
         layout.addLayout(import_row)
 
@@ -1820,6 +1833,43 @@ class WorkflowTab(QWidget):
         self._worker = worker
         worker.start()
 
+    def _clear_translated(self):
+        translated_dir = Path("translated")
+        items_to_delete = [
+            item for item in translated_dir.iterdir()
+            if item.name != ".gitkeep"
+        ] if translated_dir.exists() else []
+        if not items_to_delete:
+            self._log("ℹ  translated/ is already empty — nothing to clear.")
+            return
+        reply = QMessageBox.warning(
+            self,
+            "Clear translated/ folder",
+            "This will permanently delete all files inside the translated/ folder.\n\nAre you sure?",
+            QMessageBox.Yes | QMessageBox.Cancel,
+            QMessageBox.Cancel,
+        )
+        if reply != QMessageBox.Yes:
+            return
+        deleted = 0
+        errors = []
+        for item in items_to_delete:
+            try:
+                if item.is_file():
+                    item.unlink()
+                    deleted += 1
+                elif item.is_dir():
+                    import shutil
+                    shutil.rmtree(item)
+                    deleted += 1
+            except Exception as exc:
+                errors.append(f"{item.name}: {exc}")
+        if errors:
+            self._log(f"⚠  {len(errors)} error(s) while clearing translated/:")
+            for e in errors[:10]:
+                self._log(f"   {e}")
+        self._log(f"✅ Cleared {deleted} item(s) from translated/")
+
     def _on_import_done(self, count: int, errors: list):
         self.import_btn.setEnabled(True)
         if errors:
@@ -2299,10 +2349,17 @@ class WorkflowTab(QWidget):
         if not game_data:
             return
 
+        translated_dir = Path("translated")
+        active_set = set(active)
+        exportable = [
+            fp for fp in translated_dir.glob("*.json")
+            if fp.name in active_set and fp.name != ".gitkeep"
+        ] if translated_dir.exists() else []
+
         reply = QMessageBox.question(
             self,
             "Export Active Files to Game",
-            f"Export {len(active)} file(s) matching files/ contents into:\n{game_data}\n\n"
+            f"Export {len(exportable)} file(s) into:\n{game_data}\n\n"
             "Make a backup first if needed. Continue?",
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.No,
