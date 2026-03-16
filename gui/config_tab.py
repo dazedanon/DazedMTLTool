@@ -13,7 +13,7 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import Qt, pyqtSignal, QTimer, QThread
 from PyQt5.QtGui import QIcon
-from dotenv import load_dotenv, set_key
+from dotenv import load_dotenv, set_key, dotenv_values
 
 from gui.rpgmaker_tab import RPGMakerTab
 from gui.wolf_tab import WolfTab
@@ -639,36 +639,47 @@ class ConfigTab(QWidget):
             f"Could not fetch models from the API:\n{error}"
         )
 
-    def load_from_env(self):
-        """Load configuration from .env file."""
+    def showEvent(self, event):
+        """Reload values from .env every time this tab becomes visible."""
+        super().showEvent(event)
         if self.env_file_path.exists():
-            load_dotenv(self.env_file_path)
-            
-            # Load API settings (trim whitespace to avoid accidental trailing spaces)
-            self.api_url_edit.setText(os.getenv("api", "").strip())
-            self.api_key_edit.setText(os.getenv("key", "").strip())
+            self.disconnect_auto_save()
+            self.load_from_env()
+            self.connect_auto_save()
 
-            self.model_combo.setCurrentText(os.getenv("model", "gpt-4.1"))
-        
-        # Load translation settings
-        self.language_combo.setCurrentText(os.getenv("language", "English"))
-        self.timeout_spin.setValue(int(os.getenv("timeout", "90")))
-        
-        # Load performance settings
-        self.file_threads_spin.setValue(int(os.getenv("fileThreads", "1")))
-        self.threads_spin.setValue(int(os.getenv("threads", "1")))
-        self.batch_size_spin.setValue(int(os.getenv("batchsize", "30")))
-        self.frequency_penalty_spin.setValue(float(os.getenv("frequency_penalty", "0.05")))
-        
-        # Load formatting settings
-        self.width_spin.setValue(int(os.getenv("width", "60")))
-        self.list_width_spin.setValue(int(os.getenv("listWidth", "100")))
-        self.note_width_spin.setValue(int(os.getenv("noteWidth", "75")))
-        
-        # Load custom API settings
-        self.input_cost_spin.setValue(float(os.getenv("input_cost", "2.0")))
-        self.output_cost_spin.setValue(float(os.getenv("output_cost", "8.0")))
-        self.estimate_cache_rate_spin.setValue(float(os.getenv("ESTIMATE_CACHE_RATE", "0.9")))
+    def load_from_env(self):
+        """Load configuration from .env file, reading directly from disk."""
+        # Use dotenv_values() to read the file directly rather than relying on
+        # os.environ, which may be stale if values were changed after startup.
+        env = dotenv_values(self.env_file_path) if self.env_file_path.exists() else {}
+
+        def _get(key, default=""):
+            return env.get(key, os.getenv(key, default))
+
+        # API settings
+        self.api_url_edit.setText(_get("api", "").strip())
+        self.api_key_edit.setText(_get("key", "").strip())
+        self.model_combo.setCurrentText(_get("model", "gpt-4.1"))
+
+        # Translation settings
+        self.language_combo.setCurrentText(_get("language", "English"))
+        self.timeout_spin.setValue(int(_get("timeout", "90")))
+
+        # Performance settings
+        self.file_threads_spin.setValue(int(_get("fileThreads", "1")))
+        self.threads_spin.setValue(int(_get("threads", "1")))
+        self.batch_size_spin.setValue(int(_get("batchsize", "30")))
+        self.frequency_penalty_spin.setValue(float(_get("frequency_penalty", "0.05")))
+
+        # Formatting settings
+        self.width_spin.setValue(int(_get("width", "60")))
+        self.list_width_spin.setValue(int(_get("listWidth", "100")))
+        self.note_width_spin.setValue(int(_get("noteWidth", "75")))
+
+        # Custom API pricing
+        self.input_cost_spin.setValue(float(_get("input_cost", "2.0")))
+        self.output_cost_spin.setValue(float(_get("output_cost", "8.0")))
+        self.estimate_cache_rate_spin.setValue(float(_get("ESTIMATE_CACHE_RATE", "0.9")))
         
     def connect_auto_save(self):
         """Connect all widgets to auto-save on change."""
