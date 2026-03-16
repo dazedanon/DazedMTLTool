@@ -1422,39 +1422,8 @@ class WorkflowTab(QWidget):
         layout.setContentsMargins(20, 8, 20, 4)
         layout.setSpacing(6)
 
-        # ---- Parse Speakers -------------------------------------------------
-        spk_box = QGroupBox("3a — Parse Speakers (Auto-detect Names)")
-        spk_box.setStyleSheet(self._task_box_style())
-        spk_inner = QVBoxLayout(spk_box)
-        spk_inner.setSpacing(4)
-
-        spk_hint = QLabel(
-            "Scans every file in <b>files/</b> and extracts detected speaker names "
-            "into a <b># Speakers</b> section of vocab.txt — run this before using the AI prompt below."
-        )
-        spk_hint.setTextFormat(Qt.RichText)
-        spk_hint.setWordWrap(True)
-        spk_hint.setStyleSheet("color:#9d9d9d;font-size:13px;")
-        spk_inner.addWidget(spk_hint)
-
-        spk_btn_row = QHBoxLayout()
-        self._parse_speakers_btn = _make_btn("🔍  Parse Speakers", "#007acc")
-        self._parse_speakers_btn.setFixedWidth(180)
-        self._parse_speakers_btn.setToolTip(
-            "Scan all game files for speaker names and write them to vocab.txt"
-        )
-        self._parse_speakers_btn.clicked.connect(self._run_parse_speakers)
-        spk_btn_row.addWidget(self._parse_speakers_btn)
-        spk_btn_row.addStretch()
-        spk_inner.addLayout(spk_btn_row)
-        self._parse_speakers_status = QLabel("")
-        self._parse_speakers_status.setStyleSheet("color:#9d9d9d;font-size:13px;")
-        spk_inner.addWidget(self._parse_speakers_status)
-
-        layout.addWidget(spk_box)
-
         # ---- Copilot / Cursor prompt helpers --------------------------------
-        prompt_box = QGroupBox("3b — AI Prompt Helpers (Copilot / Cursor)")
+        prompt_box = QGroupBox("3a — AI Prompt Helpers (Copilot / Cursor)")
         prompt_box.setStyleSheet(self._task_box_style())
         pb_inner = QVBoxLayout(prompt_box)
         pb_inner.setSpacing(4)
@@ -2210,57 +2179,6 @@ class WorkflowTab(QWidget):
     # ─────────────────────────────────────────────────────────────────────────
     # Step 1 – Vocab
     # ─────────────────────────────────────────────────────────────────────────
-
-    def _run_parse_speakers(self):
-        """Launch a speaker-parse pass over files/ and write results to vocab.txt."""
-        try:
-            from gui.translation_tab import TranslationWorker
-        except Exception as exc:
-            self._log(f"Could not import TranslationWorker: {exc}")
-            return
-
-        project_root = Path(__file__).parent.parent
-        files_dir = project_root / "files"
-        all_json = sorted(
-            p.name for p in files_dir.glob("*.json") if p.name != ".gitkeep"
-        ) if files_dir.exists() else []
-
-        if not all_json:
-            self._log("No JSON files found in files/. Run Step 1 (import) first.")
-            self._parse_speakers_status.setText("No files found in files/.")
-            return
-
-        self._log(f"Parsing speakers from {len(all_json)} file(s)...")
-        self._parse_speakers_btn.setEnabled(False)
-        self._parse_speakers_status.setText("Running...")
-
-        module_info = ["RPG Maker MV/MZ", [".json"], None]
-        worker = TranslationWorker(
-            project_root, module_info, estimate_only=False,
-            selected_files=all_json,
-            parse_speakers=True,
-        )
-        worker.log_signal.connect(self._log)
-        worker.progress_signal.connect(
-            lambda cur, tot, fn: self._parse_speakers_status.setText(
-                f"[{cur}/{tot}] {Path(fn).name}"
-            )
-        )
-        worker.finished_signal.connect(self._on_parse_speakers_done)
-        self._worker = worker
-        worker.start()
-
-    def _on_parse_speakers_done(self, ok: bool, msg: str):
-        self._parse_speakers_btn.setEnabled(True)
-        if ok:
-            self._parse_speakers_status.setText(
-                "Done — # Speakers section written to vocab.txt"
-            )
-            self._reload_vocab()
-            self._log("Speaker parse complete. vocab.txt updated with # Speakers.")
-        else:
-            self._parse_speakers_status.setText(f"Failed: {msg}")
-            self._log(f"Speaker parse failed: {msg}")
 
     _BASE_SEPARATOR = "# ── Base Vocabulary (auto-appended from vocab_base.txt — do not edit below) ──\n"
 
