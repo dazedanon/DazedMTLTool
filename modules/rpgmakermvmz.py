@@ -1385,7 +1385,7 @@ def searchNames(data, pbar, context, filename):
     # --- Batch translate all notes ---
     translatedNotesBatch = []
     if notesBatch:
-        response = translateAI(notesBatch, f"Reply with only the {LANGUAGE} translation of the note text.", True)
+        response = translateAI(notesBatch, f"Reply with only the {LANGUAGE} translation of the note text.")
         translatedNotesBatch = response[0]
         totalTokens[0] += response[1][0]
         totalTokens[1] += response[1][1]
@@ -1525,7 +1525,7 @@ def searchNames(data, pbar, context, filename):
                 # Track tokens for this batch
                 batchTokens = [0, 0]
                 # Name
-                response = translateAI(nameList, newContext, True)
+                response = translateAI(nameList, newContext)
                 translatedNameBatch = response[0]
                 totalTokens[0] += response[1][0]
                 totalTokens[1] += response[1][1]
@@ -1536,7 +1536,7 @@ def searchNames(data, pbar, context, filename):
 
                 # Nickname
                 if nicknameList:
-                    response = translateAI(nicknameList, newContext, True)
+                    response = translateAI(nicknameList, newContext)
                     translatedNicknameBatch = response[0]
                     totalTokens[0] += response[1][0]
                     totalTokens[1] += response[1][1]
@@ -1547,7 +1547,7 @@ def searchNames(data, pbar, context, filename):
 
                 # Profile
                 if profileList:
-                    response = translateAI(profileList, "", True)
+                    response = translateAI(profileList, "")
                     translatedProfileBatch = response[0]
                     totalTokens[0] += response[1][0]
                     totalTokens[1] += response[1][1]
@@ -1596,7 +1596,7 @@ def searchNames(data, pbar, context, filename):
                 # Track tokens for this batch
                 batchTokens = [0, 0]
                 # Name
-                response = translateAI(nameList, newContext, True)
+                response = translateAI(nameList, newContext)
                 translatedNameBatch = response[0]
                 totalTokens[0] += response[1][0]
                 totalTokens[1] += response[1][1]
@@ -1658,7 +1658,7 @@ def searchNames(data, pbar, context, filename):
             if context in ["Enemies", "Classes", "MapInfos"]:
                 # Track tokens for this batch
                 batchTokens = [0, 0]
-                response = translateAI(nameList, newContext, True)
+                response = translateAI(nameList, newContext)
                 translatedNameBatch = response[0]
                 totalTokens[0] += response[1][0]
                 totalTokens[1] += response[1][1]
@@ -2506,7 +2506,7 @@ def searchCodes(page, pbar, jobList, filename):
 
                     # Remove any textwrap & TL
                     jaString = re.sub(r"\n", " ", jaString)
-                    response = translateAI(jaString, "", False)
+                    response = translateAI(jaString, "")
                     translatedText = response[0]
                     totalTokens[0] += response[1][0]
                     totalTokens[1] += response[1][1]
@@ -3343,7 +3343,7 @@ def searchCodes(page, pbar, jobList, filename):
                     if len(matchList) > 0:
                         # Translate
                         text = matchList[0]
-                        response = translateAI(text, "Reply with the " + LANGUAGE + " Translation", False)
+                        response = translateAI(text, "Reply with the " + LANGUAGE + " Translation")
                         translatedText = response[0]
                         totalTokens[0] += response[1][0]
                         totalTokens[1] += response[1][1]
@@ -3382,7 +3382,7 @@ def searchCodes(page, pbar, jobList, filename):
                     if len(matchList) > 0:
                         # Translate
                         text = matchList[0]
-                        response = translateAI(text, "Reply with the " + LANGUAGE + " Translation", False)
+                        response = translateAI(text, "Reply with the " + LANGUAGE + " Translation")
                         translatedText = response[0]
                         totalTokens[0] += response[1][0]
                         totalTokens[1] += response[1][1]
@@ -3401,7 +3401,7 @@ def searchCodes(page, pbar, jobList, filename):
 
                         # Remove any textwrap & TL
                         jaString = re.sub(r"\n", " ", jaString)
-                        response = translateAI(jaString, "", False)
+                        response = translateAI(jaString, "")
                         translatedText = response[0]
                         totalTokens[0] += response[1][0]
                         totalTokens[1] += response[1][1]
@@ -3482,7 +3482,7 @@ def searchCodes(page, pbar, jobList, filename):
                             True,
                         )
                     else:
-                        response = translateAI(choiceList, "Reply with the English translation of the dialogue choice.", True)
+                        response = translateAI(choiceList, "Reply with the English translation of the dialogue choice.")
                     
                     translatedTextList = response[0]
                     totalTokens[0] += response[1][0]
@@ -3660,7 +3660,7 @@ def searchCodes(page, pbar, jobList, filename):
 
         # 401
         if len(list401) > 0:
-            response = translateAI(list401, "", True)
+            response = translateAI(list401, "")
             list401TL = response[0]
             totalTokens[0] += response[1][0]
             totalTokens[1] += response[1][1]
@@ -3671,7 +3671,7 @@ def searchCodes(page, pbar, jobList, filename):
 
         # 122
         if len(list122) > 0:
-            response = translateAI(list122, "Keep your translation as brief as possible", True)
+            response = translateAI(list122, "Keep your translation as brief as possible")
             list122TL = response[0]
             totalTokens[0] += response[1][0]
             totalTokens[1] += response[1][1]
@@ -3685,7 +3685,7 @@ def searchCodes(page, pbar, jobList, filename):
 
         # 355/655
         if len(list355655) > 0:
-            response = translateAI(list355655, textHistory, True)
+            response = translateAI(list355655, textHistory)
             list355655TL = response[0]
             totalTokens[0] += response[1][0]
             totalTokens[1] += response[1][1]
@@ -3696,7 +3696,7 @@ def searchCodes(page, pbar, jobList, filename):
 
         # 108
         if len(list108) > 0:
-            response = translateAI(list108, "This text is a label. Use title capitalization and keep it brief.", True)
+            response = translateAI(list108, "This text is a label. Use title capitalization and keep it brief.")
             list108TL = response[0]
             totalTokens[0] += response[1][0]
             totalTokens[1] += response[1][1]
@@ -3707,7 +3707,7 @@ def searchCodes(page, pbar, jobList, filename):
 
         # 356
         if len(list356) > 0:
-            response = translateAI(list356, textHistory, True)
+            response = translateAI(list356, textHistory)
             list356TL = response[0]
             totalTokens[0] += response[1][0]
             totalTokens[1] += response[1][1]
@@ -3718,7 +3718,7 @@ def searchCodes(page, pbar, jobList, filename):
 
         # 357
         if len(list357) > 0:
-            response = translateAI(list357, textHistory, True)
+            response = translateAI(list357, textHistory)
             list357TL = response[0]
             totalTokens[0] += response[1][0]
             totalTokens[1] += response[1][1]
@@ -3729,7 +3729,7 @@ def searchCodes(page, pbar, jobList, filename):
 
         # 657
         if len(list657) > 0:
-            response = translateAI(list657, textHistory, True)
+            response = translateAI(list657, textHistory)
             list657TL = response[0]
             totalTokens[0] += response[1][0]
             totalTokens[1] += response[1][1]
@@ -3740,7 +3740,7 @@ def searchCodes(page, pbar, jobList, filename):
 
         # 408
         if len(list408) > 0:
-            response = translateAI(list408, "", True)
+            response = translateAI(list408, "")
             list408TL = response[0]
             totalTokens[0] += response[1][0]
             totalTokens[1] += response[1][1]
@@ -3752,7 +3752,7 @@ def searchCodes(page, pbar, jobList, filename):
         # 324
         if len(list324) > 0:
             # Generic short-text translation for parameter index 1
-            response = translateAI(list324, "Reply with only the " + LANGUAGE + " translation of the text.", True)
+            response = translateAI(list324, "Reply with only the " + LANGUAGE + " translation of the text.")
             list324TL = response[0]
             totalTokens[0] += response[1][0]
             totalTokens[1] += response[1][1]
@@ -3764,7 +3764,7 @@ def searchCodes(page, pbar, jobList, filename):
         # 325
         if len(list325) > 0:
             # Use same short-text speaker-style translation as other name fields
-            response = translateAI(list325, "Reply with the " + LANGUAGE + " translation of the NPC name.", True)
+            response = translateAI(list325, "Reply with the " + LANGUAGE + " translation of the NPC name.")
             list325TL = response[0]
             totalTokens[0] += response[1][0]
             totalTokens[1] += response[1][1]
@@ -3911,7 +3911,7 @@ def searchSS(state, pbar):
     # --- Batch translate all notes ---
     translatedNotesBatch = []
     if notesBatch:
-        response = translateAI(notesBatch, f"Reply with only the {LANGUAGE} translation of the note text.", True)
+        response = translateAI(notesBatch, f"Reply with only the {LANGUAGE} translation of the note text.")
         translatedNotesBatch = response[0]
         totalTokens[0] += response[1][0]
         totalTokens[1] += response[1][1]
@@ -3998,7 +3998,7 @@ def searchSystem(data, pbar):
                     term_indices.append(i)
             
             if term_values:
-                response = translateAI(term_values, context, False)
+                response = translateAI(term_values, context)
                 totalTokens[0] += response[1][0]
                 totalTokens[1] += response[1][1]
                 tl_list = response[0]
@@ -4327,7 +4327,7 @@ def resetActorMapCache():
         _ACTOR_MAP_CACHE = None
 
 
-def translateAI(text, history, fullPromptFlag):
+def translateAI(text, history, history_ctx=None):
     """
     Legacy wrapper function for the new shared translation utility.
     This maintains compatibility with existing code while using the new shared implementation.
@@ -4391,7 +4391,6 @@ def translateAI(text, history, fullPromptFlag):
     result = sharedtranslateAI(
         text=text,
         history=history,
-        fullPromptFlag=fullPromptFlag,
         config=TRANSLATION_CONFIG,
         filename=tl_filename,
         pbar=PBAR,

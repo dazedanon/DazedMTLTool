@@ -366,7 +366,7 @@ def translateTyrano(data, filename, translatedList):
         if stringList:
             PBAR.total = len(stringList)
             PBAR.refresh()
-            response = translateAI(stringList, "Reply with the English Translation", True)
+            response = translateAI(stringList, "Reply with the English Translation")
             tokens[0] += response[1][0]
             tokens[1] += response[1][1]
             stringListTL = response[0]
@@ -379,7 +379,7 @@ def translateTyrano(data, filename, translatedList):
 
         # Choice List
         if choiceList:
-            response = translateAI(choiceList, "Reply with the English TL of the Dialogue Choice", True)
+            response = translateAI(choiceList, "Reply with the English TL of the Dialogue Choice")
             tokens[0] += response[1][0]
             tokens[1] += response[1][1]
             choiceListTL = response[0]
@@ -435,7 +435,7 @@ def getSpeaker(speaker):
             return response
     return [speaker, [0, 0]]
 
-def translateAI(text, history, fullPromptFlag):
+def translateAI(text, history):
     """
     Legacy wrapper function for the new shared translation utility.
     This maintains compatibility with existing code while using the new shared implementation.
@@ -449,7 +449,6 @@ def translateAI(text, history, fullPromptFlag):
     return sharedtranslateAI(
         text=text,
         history=history,
-        fullPromptFlag=fullPromptFlag,
         config=TRANSLATION_CONFIG,
         filename=FILENAME,
         pbar=PBAR,

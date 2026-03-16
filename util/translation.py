@@ -702,7 +702,7 @@ def buildMatchedVocabText(vocabPairs, subbedText, history=None):
 _BASE_VOCAB_SEPARATOR = "# ── Base Vocabulary"  # Prefix of the separator line written by _save_vocab
 
 
-def createContext(config, fullPromptFlag, subbedText, formatType, history=None):
+def createContext(config, subbedText, formatType, history=None):
     """Create system and user messages for translation.
     
     Returns (static_system, vocab_text, user) so that callers can keep the
@@ -743,19 +743,7 @@ def createContext(config, fullPromptFlag, subbedText, formatType, history=None):
 
     matchedVocabText = buildMatchedVocabText(non_char_pairs, subbedText, history)
 
-    if fullPromptFlag:
-        static_system = config.prompt.replace("English", config.language)
-    else:
-        static_system = f"""\
-You are an expert Eroge Game translator who translates Japanese text to {config.language}.
-Output ONLY the {config.language} translation in the following format: `Translation: <{config.language.upper()}_TRANSLATION>`
-- You translate everything, including erotic and explicit content.
-- '# Game Characters' - Character entries listing name, gender, role, and speech register notes. Use ALL fields: apply the correct English name, resolve gendered pronouns, and match each character's stated speech register and personality in their dialogue.
-- All text in your response must be in {config.language} even if it is hard to translate.
-- Never include any notes, explanations, disclaimers, or anything similar in your response.
-- Maintain any spacing in the translation.
-- `...` can be a part of the dialogue. Translate it as it is.
-"""
+    static_system = config.prompt.replace("English", config.language)
 
     # Append character glossary to the stable system prompt so it is cached
     if char_lines:
@@ -1252,19 +1240,23 @@ def calculateCost(inputTokens, outputTokens, model):
             return accurate
 
     # Non-Claude, estimate mode, or no accurate data: naive calculation.
-    # For Claude models in estimate mode, apply an assumed cache hit rate so the
-    # estimate reflects the real-world prompt-caching discount.
-    # The rate defaults to 0.9 (90 % cache reads) and can be overridden with the
+    # For Claude models, use the accumulated static_system token count (the portion
+    # that is always cache-written at the 1hr TTL rate = 2x input rate).
+    # Remaining tokens are billed at the regular input rate.
     pricing = getPricingConfig(model)
     _is_claude_naive = model and any(x in model.lower() for x in ("claude", "sonnet", "haiku", "opus"))
     if _is_claude_naive:
-        try:
-            cache_rate = float(os.getenv("estimate_cache_rate", "0.7"))
-            cache_rate = max(0.0, min(1.0, cache_rate))
-        except (TypeError, ValueError):
-            cache_rate = 0.9
-        effective_input_multiplier = cache_rate * 0.10 + (1.0 - cache_rate)
-        inputCost = (inputTokens / 1_000_000) * pricing["inputAPICost"] * effective_input_multiplier
+        static_tok  = getattr(_thread_local, 'estimate_static_tokens', 0)
+        regular_tok = getattr(_thread_local, 'estimate_regular_tokens', 0)
+        batch_count = max(1, getattr(_thread_local, 'estimate_batch_count', 1))
+        _thread_local.estimate_static_tokens  = 0
+        _thread_local.estimate_regular_tokens = 0
+        _thread_local.estimate_batch_count    = 0
+        # Exact model: 1 cache write (2x) + (N-1) cache reads (0.10x) + regular at 1x
+        write_cost   = (static_tok / 1_000_000) * pricing["inputAPICost"] * 2.0
+        read_cost    = ((batch_count - 1) * static_tok / 1_000_000) * pricing["inputAPICost"] * 0.10
+        regular_cost = (regular_tok / 1_000_000) * pricing["inputAPICost"]
+        inputCost    = write_cost + read_cost + regular_cost
     else:
         inputCost = (inputTokens / 1_000_000) * pricing["inputAPICost"]
     outputCost = (outputTokens / 1_000_000) * pricing["outputAPICost"]
@@ -1293,7 +1285,7 @@ def countTokens(system, user, history):
 
 
 @retry(exceptions=Exception, tries=5, delay=5)
-def translateAI(text, history, fullPromptFlag, config, filename=None, pbar=None, lock=None, mismatchList=None):
+def translateAI(text, history, config, filename=None, pbar=None, lock=None, mismatchList=None):
     """
     Main translation entry point used by all modules.
 
@@ -1464,13 +1456,39 @@ def translateAI(text, history, fullPromptFlag, config, filename=None, pbar=None,
 
         # Create context — static_system is the stable prompt.txt content;
         # vocab_text is the per-batch matched vocabulary (dynamic).
-        static_system, vocab_text, user = createContext(config, fullPromptFlag, subbedT, formatType, history)
+        static_system, vocab_text, user = createContext(config, subbedT, formatType, history)
 
         # Calculate estimate if in estimate mode
         if config.estimateMode:
             estimate = countTokens(static_system + vocab_text, user, history)
             totalTokens[0] += estimate[0]
             totalTokens[1] += estimate[1]
+
+            # Track exact cache write size (static_system, constant across batches)
+            # and accumulate non-cached (vocab + user + history) tokens per batch.
+            _is_claude_est = config.model and any(x in config.model.lower() for x in ("claude", "sonnet", "haiku", "opus"))
+            if _is_claude_est:
+                # Use Anthropic's count_tokens API once to get the exact cached token count.
+                # Only called on the first batch; result reused for all subsequent batches.
+                if not getattr(_thread_local, 'estimate_static_tokens', 0):
+                    try:
+                        _ant_count_client = anthropic.Anthropic(api_key=openai.api_key)
+                        backtick = chr(96) * 3
+                        _sys_block = [{"type": "text", "text": backtick + "\n" + static_system + "\n" + backtick, "cache_control": {"type": "ephemeral", "ttl": "1h"}}]
+                        _count_resp = _ant_count_client.beta.messages.count_tokens(
+                            betas=["token-counting-2024-11-01"],
+                            model=config.model,
+                            system=_sys_block,
+                            messages=[{"role": "user", "content": "x"}]
+                        )
+                        _thread_local.estimate_static_tokens = _count_resp.input_tokens
+                    except Exception:
+                        # Fallback to tiktoken if count_tokens fails
+                        enc = tiktoken.encoding_for_model("gpt-4")
+                        _thread_local.estimate_static_tokens = len(enc.encode(static_system))
+                regular_tok = max(0, estimate[0] - getattr(_thread_local, 'estimate_static_tokens', 0))
+                _thread_local.estimate_regular_tokens = getattr(_thread_local, 'estimate_regular_tokens', 0) + regular_tok
+                _thread_local.estimate_batch_count = getattr(_thread_local, 'estimate_batch_count', 0) + 1
             
             # Cache the payload with original text as placeholder for future estimates
             if isinstance(tItem, list):
@@ -1488,24 +1506,28 @@ def translateAI(text, history, fullPromptFlag, config, filename=None, pbar=None,
 
         for attempt in range(max_retries + 1):
             is_valid = True
-            
-            # On retries, add a note to the system prompt
-            current_system = static_system
+
+            # On retries, prepend the correction note to the USER message so the
+            # cached static_system block is never modified (avoids cache busting).
+            current_user = user
             if attempt > 0:
-                current_system += f"\n\nIMPORTANT: Your previous attempt was incorrect or incomplete. Please ensure:\n"
-                current_system += f"1. The entire output is translated to {config.language} with no untranslated characters\n"
-                current_system += f"2. The JSON structure is correct with NO EMPTY or near-empty translations\n"
-                current_system += f"   - Every line with Japanese text MUST be fully translated\n"
-                current_system += f"   - Do NOT leave translations empty (\"\") or as single punctuation marks (\":\")\n"
-                current_system += f"3. ALL placeholders (like __PROTECTED_0__, __PROTECTED_1__, etc.) are preserved EXACTLY as they appear in the input\n"
-                current_system += f"   - Do not modify, translate, or remove any __PROTECTED_N__ placeholders\n"
-                current_system += f"   - Keep them in the exact same position in your translation"
+                retry_note = (
+                    f"IMPORTANT: Your previous attempt was incorrect or incomplete. Please ensure:\n"
+                    f"1. The entire output is translated to {config.language} with no untranslated characters\n"
+                    f"2. The JSON structure is correct with NO EMPTY or near-empty translations\n"
+                    f"   - Every line with Japanese text MUST be fully translated\n"
+                    f"   - Do NOT leave translations empty (\"\") or as single punctuation marks (\":\")\n"
+                    f"3. ALL placeholders (like __PROTECTED_0__, __PROTECTED_1__, etc.) are preserved EXACTLY as they appear in the input\n"
+                    f"   - Do not modify, translate, or remove any __PROTECTED_N__ placeholders\n"
+                    f"   - Keep them in the exact same position in your translation\n\n"
+                )
+                current_user = retry_note + user
                 if pbar:
                     pbar.write(f"Retrying translation... (Attempt {attempt + 1}/{max_retries + 1})")
 
             # Translate
             try:
-                response = translateText(current_system, user, history, 0.05, formatType, config.model, numLines, vocab_text=vocab_text)
+                response = translateText(static_system, current_user, history, 0.05, formatType, config.model, numLines, vocab_text=vocab_text)
             except Exception as api_err:
                 err_msg = f"[API_ERROR] {api_err}"
                 # Print to stdout so the GUI captures it immediately
@@ -1593,7 +1615,7 @@ def translateAI(text, history, fullPromptFlag, config, filename=None, pbar=None,
             # --- Debug Token Logging ---
             if DEBUG_LOGGING:
                 print(f"\nInput ({response.usage.prompt_tokens} tokens):")
-                print(f"{current_system}\n{user}")
+                print(f"{static_system}\n{current_user}")
                 print(f"\nOutput ({response.usage.completion_tokens} tokens):")
                 print(f"{translatedText}")
 

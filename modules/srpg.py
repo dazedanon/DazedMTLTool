@@ -2231,7 +2231,7 @@ def getSpeaker(speaker):
     return response
 
 
-def translateAI(text, history, fullPromptFlag, filename_param=None, pbar_param=None):
+def translateAI(text, history):
     """
     Legacy wrapper function for the new shared translation utility.
     This maintains compatibility with existing code while using the new shared implementation.
@@ -2239,7 +2239,6 @@ def translateAI(text, history, fullPromptFlag, filename_param=None, pbar_param=N
     Args:
         text: Text to translate (can be string or list)
         history: History/context for the translation
-        fullPromptFlag: Whether to use the full prompt with vocab
     
     Returns:
         List containing [translated text, [input tokens, output tokens]]
@@ -2253,10 +2252,9 @@ def translateAI(text, history, fullPromptFlag, filename_param=None, pbar_param=N
     return sharedtranslateAI(
         text=text,
         history=history,
-        fullPromptFlag=fullPromptFlag,
         config=TRANSLATION_CONFIG,
-        filename=(filename_param if filename_param is not None else FILENAME),
-        pbar=(pbar_param if pbar_param is not None else PBAR),
+        filename=FILENAME,
+        pbar=PBAR,
         lock=LOCK,
         mismatchList=MISMATCH
     )
