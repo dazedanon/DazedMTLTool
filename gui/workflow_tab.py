@@ -1454,7 +1454,7 @@ class WorkflowTab(QWidget):
         layout.addWidget(prompt_box)
 
         # ---- vocab.txt editor -----------------------------------------------
-        vocab_title = QLabel("vocab.txt editor")
+        vocab_title = QLabel("3b — vocab.txt editor")
         vocab_title.setStyleSheet("color:#4ec9b0;font-size:13px;font-weight:bold;")
         layout.addWidget(vocab_title)
         format_hint = QLabel(
