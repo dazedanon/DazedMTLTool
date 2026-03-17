@@ -1454,7 +1454,9 @@ class WorkflowTab(QWidget):
         layout.addWidget(prompt_box)
 
         # ---- vocab.txt editor -----------------------------------------------
-        layout.addWidget(_make_section_label("vocab.txt editor"))
+        vocab_title = QLabel("vocab.txt editor")
+        vocab_title.setStyleSheet("color:#4ec9b0;font-size:13px;font-weight:bold;")
+        layout.addWidget(vocab_title)
         format_hint = QLabel(
             "Format:  Japanese (English) - Gender; role; speech register / personality notes\n"
             "Example:  シロ (Shiro) - Female; protagonist; speaks in a flustered, cute register with feminine speech markers"
@@ -1500,15 +1502,16 @@ class WorkflowTab(QWidget):
 
         # Import button row
         _IMP_W = 220
+        _IMP_H = 36
         import_row = QHBoxLayout()
         import_row.setSpacing(8)
         self.import_btn = _make_btn("⬇  Import Selected → files/", "#007acc")
-        self.import_btn.setFixedWidth(_IMP_W)
+        self.import_btn.setFixedSize(_IMP_W, _IMP_H)
         self.import_btn.setEnabled(False)
         self.import_btn.clicked.connect(self._import_files)
         import_row.addWidget(self.import_btn)
         clear_translated_btn = _make_btn("🗑  Clear translated/", "#8b0000")
-        clear_translated_btn.setFixedWidth(_IMP_W)
+        clear_translated_btn.setFixedSize(_IMP_W, _IMP_H)
         clear_translated_btn.setToolTip("Delete all files inside the translated/ folder")
         clear_translated_btn.clicked.connect(self._clear_translated)
         import_row.addWidget(clear_translated_btn)
