@@ -1984,8 +1984,9 @@ class WorkflowTab(QWidget):
         bottom_row = QHBoxLayout()
         bottom_row.setSpacing(10)
         _P2_BTN_WIDTH = 200
+        _P2_BTN_HEIGHT = 36
         apply_plugins_btn = _make_btn("✔  Apply Plugin Settings", "#2a4a6a")
-        apply_plugins_btn.setFixedWidth(_P2_BTN_WIDTH)
+        apply_plugins_btn.setFixedSize(_P2_BTN_WIDTH, _P2_BTN_HEIGHT)
         apply_plugins_btn.setToolTip(
             "Save the checked plugin handlers and script patterns to the module file.\n"
             "Updates ENABLED_PLUGINS_357 and ENABLED_PATTERNS_355655 in rpgmakermvmz.py."
@@ -1994,7 +1995,7 @@ class WorkflowTab(QWidget):
         bottom_row.addWidget(apply_plugins_btn)
 
         self._run_p2_btn = _make_btn("►  Run Phase 2", "#7a4a00")
-        self._run_p2_btn.setFixedWidth(_P2_BTN_WIDTH)
+        self._run_p2_btn.setFixedSize(_P2_BTN_WIDTH, _P2_BTN_HEIGHT)
         self._run_p2_btn.setToolTip(
             "Applies Phase 2 code settings and starts translation with event files pre-selected."
         )
