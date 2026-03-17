@@ -1264,9 +1264,14 @@ class WorkflowTab(QWidget):
         collapse_layout.addWidget(tasks_box)
 
         # ---- Task A: dazedformat -----------------------------------------
-        ta = QGroupBox("A — Format JSON files (dazedformat)")
+        ta_title = QLabel("A — Format JSON files (dazedformat)")
+        ta_title.setStyleSheet("color:#4ec9b0;font-size:13px;font-weight:bold;")
+        tb.addWidget(ta_title)
+        ta = QWidget()
+        ta.setObjectName("tbox")
         ta.setStyleSheet(self._task_box_style())
         ta_inner = QVBoxLayout(ta)
+        ta_inner.setContentsMargins(10, 8, 10, 8)
         ta_inner.setSpacing(4)
         ta_desc = QLabel(
             "Normalises all JSON files in the game's data folder by round-tripping them "
@@ -1293,9 +1298,14 @@ class WorkflowTab(QWidget):
         tb.addWidget(ta)
 
         # ---- Task B: prettier on plugins.js -----------------------------
-        tb_box = QGroupBox("B — Format plugins.js with Prettier")
+        tb_box_title = QLabel("B — Format plugins.js with Prettier")
+        tb_box_title.setStyleSheet("color:#4ec9b0;font-size:13px;font-weight:bold;")
+        tb.addWidget(tb_box_title)
+        tb_box = QWidget()
+        tb_box.setObjectName("tbox")
         tb_box.setStyleSheet(self._task_box_style())
         tb_inner = QVBoxLayout(tb_box)
+        tb_inner.setContentsMargins(10, 8, 10, 8)
         tb_inner.setSpacing(4)
         tb_desc = QLabel(
             "Formats plugins.js using <code>jsbeautifier</code> (pure Python — no Node.js required) "
@@ -1327,9 +1337,14 @@ class WorkflowTab(QWidget):
         tb.addWidget(tb_box)
 
         # ---- Task C: copy gameupdate/ -----------------------------------
-        tc = QGroupBox("C — Apply gameupdate/ patch files")
+        tc_title = QLabel("C — Apply gameupdate/ patch files")
+        tc_title.setStyleSheet("color:#4ec9b0;font-size:13px;font-weight:bold;")
+        tb.addWidget(tc_title)
+        tc = QWidget()
+        tc.setObjectName("tbox")
         tc.setStyleSheet(self._task_box_style())
         tc_inner = QVBoxLayout(tc)
+        tc_inner.setContentsMargins(10, 8, 10, 8)
         tc_inner.setSpacing(4)
         tc_desc = QLabel(
             "Copies everything from the <code>gameupdate/</code> folder "
@@ -1384,20 +1399,10 @@ class WorkflowTab(QWidget):
     @staticmethod
     def _task_box_style() -> str:
         return (
-            "QGroupBox{"
-            "border:1px solid #3c3c3c;"
-            "border-radius:6px;"
+            "QWidget#tbox{"
             "background-color:#252526;"
-            "margin-top:18px;"
-            "padding:10px 10px 8px 10px;}"
-            "QGroupBox::title{"
-            "subcontrol-origin:margin;"
-            "subcontrol-position:top left;"
-            "left:12px;top:-1px;"
-            "padding:0 6px;"
-            "color:#4ec9b0;"
-            "font-weight:bold;font-size:13px;"
-            "font-family:'Segoe UI','Segoe UI Emoji','Apple Color Emoji',sans-serif;}"
+            "border:1px solid #3c3c3c;"
+            "border-radius:6px;}"
         )
 
     @staticmethod
@@ -1419,9 +1424,14 @@ class WorkflowTab(QWidget):
         layout.setSpacing(6)
 
         # ---- Copilot / Cursor prompt helpers --------------------------------
-        prompt_box = QGroupBox("3a — AI Prompt Helpers (Copilot / Cursor)")
+        prompt_box_title = QLabel("3a — AI Prompt Helpers (Copilot / Cursor)")
+        prompt_box_title.setStyleSheet("color:#4ec9b0;font-size:13px;font-weight:bold;")
+        layout.addWidget(prompt_box_title)
+        prompt_box = QWidget()
+        prompt_box.setObjectName("tbox")
         prompt_box.setStyleSheet(self._task_box_style())
         pb_inner = QVBoxLayout(prompt_box)
+        pb_inner.setContentsMargins(10, 8, 10, 8)
         pb_inner.setSpacing(4)
 
         prompt_hint = QLabel(
@@ -1523,9 +1533,14 @@ class WorkflowTab(QWidget):
         layout.addLayout(copy_row)
 
         # ---- Flag checkboxes ------------------------------------------------
-        cb_box = QGroupBox("Speaker flags")
+        cb_box_title = QLabel("Speaker flags")
+        cb_box_title.setStyleSheet("color:#4ec9b0;font-size:13px;font-weight:bold;")
+        layout.addWidget(cb_box_title)
+        cb_box = QWidget()
+        cb_box.setObjectName("tbox")
         cb_box.setStyleSheet(self._task_box_style())
         cb_inner = QVBoxLayout(cb_box)
+        cb_inner.setContentsMargins(10, 8, 10, 8)
         cb_inner.setSpacing(3)
 
         self.spk_inline_cb = QCheckBox("INLINE401SPEAKERS  —  speaker name inline before 「 in the 401 text")
@@ -1551,9 +1566,14 @@ class WorkflowTab(QWidget):
         layout.setSpacing(6)
 
         # ---- Pre-flight: text wrap configuration ----------------------------
-        wrap_box = QGroupBox("Pre-flight — Text Wrap Width")
+        wrap_box_title = QLabel("Pre-flight — Text Wrap Width")
+        wrap_box_title.setStyleSheet("color:#4ec9b0;font-size:13px;font-weight:bold;")
+        layout.addWidget(wrap_box_title)
+        wrap_box = QWidget()
+        wrap_box.setObjectName("tbox")
         wrap_box.setStyleSheet(self._task_box_style())
         wrap_inner = QVBoxLayout(wrap_box)
+        wrap_inner.setContentsMargins(10, 8, 10, 8)
         wrap_inner.setSpacing(4)
 
         wrap_hint = QLabel(
@@ -1597,9 +1617,14 @@ class WorkflowTab(QWidget):
         layout.addWidget(wrap_box)
 
         # ---- Phase 0 --------------------------------------------------------
-        p0_box = QGroupBox("Phase 0  –  Core Database Files")
+        p0_box_title = QLabel("Phase 0  –  Core Database Files")
+        p0_box_title.setStyleSheet("color:#4ec9b0;font-size:13px;font-weight:bold;")
+        layout.addWidget(p0_box_title)
+        p0_box = QWidget()
+        p0_box.setObjectName("tbox")
         p0_box.setStyleSheet(self._task_box_style())
         p0_inner = QVBoxLayout(p0_box)
+        p0_inner.setContentsMargins(10, 8, 10, 8)
         p0_inner.setSpacing(4)
         p0_desc = QLabel(
             "Actors, Armors, Weapons, Items, Skills, States, Classes, Enemies, System, MapInfos — "
@@ -1625,9 +1650,14 @@ class WorkflowTab(QWidget):
         layout.addWidget(p0_box)
 
         # ---- Phase 1 --------------------------------------------------------
-        p1_box = QGroupBox("Phase 1  –  Safe Codes (dialogue + choices)")
+        p1_box_title = QLabel("Phase 1  –  Safe Codes (dialogue + choices)")
+        p1_box_title.setStyleSheet("color:#4ec9b0;font-size:13px;font-weight:bold;")
+        layout.addWidget(p1_box_title)
+        p1_box = QWidget()
+        p1_box.setObjectName("tbox")
         p1_box.setStyleSheet(self._task_box_style())
         p1_inner = QVBoxLayout(p1_box)
+        p1_inner.setContentsMargins(10, 8, 10, 8)
         p1_inner.setSpacing(4)
         p1_desc = QLabel(
             "Codes ON: 101 (Name), 401 (Show Text), 405 (continued), 102 (Choices), 408 (extra lines). "
@@ -1651,9 +1681,14 @@ class WorkflowTab(QWidget):
         layout.addWidget(p1_box)
 
         # ---- Phase 1b -------------------------------------------------------
-        p1b_box = QGroupBox("Phase 1b  –  Build Variable Cache (code 111)")
+        p1b_box_title = QLabel("Phase 1b  –  Build Variable Cache (code 111)")
+        p1b_box_title.setStyleSheet("color:#4ec9b0;font-size:13px;font-weight:bold;")
+        layout.addWidget(p1b_box_title)
+        p1b_box = QWidget()
+        p1b_box.setObjectName("tbox")
         p1b_box.setStyleSheet(self._task_box_style())
         p1b_inner = QVBoxLayout(p1b_box)
+        p1b_inner.setContentsMargins(10, 8, 10, 8)
         p1b_inner.setSpacing(4)
         p1b_desc = QLabel(
             "Scans code 111 branches that compare \u2018$gameVariables\u2019 and builds the var_translation_map cache. "
@@ -1681,7 +1716,11 @@ class WorkflowTab(QWidget):
         layout.setSpacing(6)
 
         # ── Pre-flight card: description + prompt + var range ──────────────
-        pre_box = QGroupBox("Pre-flight \u2014 Audit & Configure")
+        pre_box_title = QLabel("Pre-flight \u2014 Audit & Configure")
+        pre_box_title.setStyleSheet("color:#4ec9b0;font-size:13px;font-weight:bold;")
+        layout.addWidget(pre_box_title)
+        pre_box = QWidget()
+        pre_box.setObjectName("tbox")
         pre_box.setStyleSheet(self._task_box_style())
         pre_inner = QVBoxLayout(pre_box)
         pre_inner.setContentsMargins(10, 8, 10, 8)
