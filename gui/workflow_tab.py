@@ -370,9 +370,8 @@ def _make_hr() -> QFrame:
 def _make_btn(text: str, color: str = "#007acc") -> QPushButton:
     """Button styled to match the translation tab.
 
-    Dark utility colours (max channel < 115) use the flat sidebar style
-    (dark background, border, blue left-accent on hover).
-    True action colours use a filled coloured button.
+    Dark utility colours (max channel < 115) use the flat sidebar style.
+    Action colours use flat dark bg + coloured outline + coloured text.
     """
     btn = QPushButton(text)
     try:
@@ -396,24 +395,28 @@ def _make_btn(text: str, color: str = "#007acc") -> QPushButton:
             f"QPushButton:disabled{{background-color:#404040;color:#666666;border-color:#444444;}}"
         )
     else:
-        try:
-            rh = min(255, r + 25)
-            gh = min(255, g + 25)
-            bh = min(255, b + 25)
-            hover_color = f"#{rh:02x}{gh:02x}{bh:02x}"
-            rp = max(0, r - 20)
-            gp = max(0, g - 20)
-            bp = max(0, b - 20)
-            press_color = f"#{rp:02x}{gp:02x}{bp:02x}"
-        except Exception:
-            hover_color = press_color = color
+        # Flat dark bg + coloured outline + lightened text
+        rt = min(255, r + 80)
+        gt = min(255, g + 80)
+        bt = min(255, b + 80)
+        text_color = f"#{rt:02x}{gt:02x}{bt:02x}"
+        base = 0x2d
+        rh = min(255, int(base + (r - base) * 0.18))
+        gh = min(255, int(base + (g - base) * 0.18))
+        bh = min(255, int(base + (b - base) * 0.18))
+        hover_bg = f"#{rh:02x}{gh:02x}{bh:02x}"
+        rb = min(255, r + 35)
+        gb = min(255, g + 35)
+        bb = min(255, b + 35)
+        hover_accent = f"#{rb:02x}{gb:02x}{bb:02x}"
         btn.setStyleSheet(
-            f"QPushButton{{background-color:{color};color:white;border:none;"
-            f"{_PAD}border-radius:4px;font-size:12px;font-weight:bold;"
+            f"QPushButton{{background-color:#2d2d30;color:{text_color};"
+            f"border:1px solid {color};{_PAD}"
+            f"border-radius:4px;font-size:12px;font-weight:bold;"
             f"font-family:'Segoe UI','Segoe UI Emoji','Apple Color Emoji',sans-serif;}}"
-            f"QPushButton:hover{{background-color:{hover_color};}}"
-            f"QPushButton:pressed{{background-color:{press_color};}}"
-            f"QPushButton:disabled{{background-color:#404040;color:#666666;}}"
+            f"QPushButton:hover{{background-color:{hover_bg};border-color:{hover_accent};color:{hover_accent};}}"
+            f"QPushButton:pressed{{background-color:#1a1a1a;}}"
+            f"QPushButton:disabled{{background-color:#2d2d30;color:#555555;border-color:#444444;}}"
         )
     return btn
 
@@ -1503,14 +1506,39 @@ class WorkflowTab(QWidget):
         # Import button row
         _IMP_W = 220
         _IMP_H = 36
+        _IMP_SS = (
+            "QPushButton{{"
+            "background-color:{bg};color:white;border:none;"
+            "padding:0px;border-radius:4px;font-size:12px;font-weight:bold;"
+            "font-family:'Segoe UI',sans-serif;}}"
+            "QPushButton:hover{{background-color:{hover};}}"
+            "QPushButton:pressed{{background-color:{press};}}"
+            "QPushButton:disabled{{background-color:#404040;color:#666666;}}"
+        )
         import_row = QHBoxLayout()
         import_row.setSpacing(8)
-        self.import_btn = _make_btn("⬇  Import Selected → files/", "#007acc")
+        import_row.setAlignment(Qt.AlignVCenter)
+        self.import_btn = QPushButton("↓  Import Selected → files/")
+        self.import_btn.setStyleSheet(
+            "QPushButton{background-color:#2d2d30;color:#4da8f0;border:1px solid #007acc;"
+            "padding:0px;border-radius:4px;font-size:12px;font-weight:bold;"
+            "font-family:'Segoe UI',sans-serif;}"
+            "QPushButton:hover{background-color:#1a2d3a;border-color:#1a9aff;color:#7ac8ff;}"
+            "QPushButton:pressed{background-color:#0a1a2a;}"
+            "QPushButton:disabled{background-color:#2d2d30;color:#555555;border-color:#444444;}"
+        )
         self.import_btn.setFixedSize(_IMP_W, _IMP_H)
         self.import_btn.setEnabled(False)
         self.import_btn.clicked.connect(self._import_files)
         import_row.addWidget(self.import_btn)
-        clear_translated_btn = _make_btn("🗑  Clear translated/", "#8b0000")
+        clear_translated_btn = QPushButton("✕  Clear translated/")
+        clear_translated_btn.setStyleSheet(
+            "QPushButton{background-color:#2d2d30;color:#cc4444;border:1px solid #8b0000;"
+            "padding:0px;border-radius:4px;font-size:12px;font-weight:bold;"
+            "font-family:'Segoe UI',sans-serif;}"
+            "QPushButton:hover{background-color:#3a2020;border-color:#cc2222;color:#ff6666;}"
+            "QPushButton:pressed{background-color:#4a1010;}"
+        )
         clear_translated_btn.setFixedSize(_IMP_W, _IMP_H)
         clear_translated_btn.setToolTip("Delete all files inside the translated/ folder")
         clear_translated_btn.clicked.connect(self._clear_translated)
