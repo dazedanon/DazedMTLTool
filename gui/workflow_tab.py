@@ -1420,8 +1420,8 @@ class WorkflowTab(QWidget):
         )
 
     def _build_step3_glossary(self, layout: QVBoxLayout):
-        layout.setContentsMargins(20, 8, 20, 4)
-        layout.setSpacing(6)
+
+        layout.addWidget(_make_section_label("Step 3 — Vocab / Glossary"))
 
         # ---- Copilot / Cursor prompt helpers --------------------------------
         prompt_box_title = QLabel("3a — AI Prompt Helpers (Copilot / Cursor)")
@@ -1468,7 +1468,8 @@ class WorkflowTab(QWidget):
         layout.addWidget(format_hint)
 
         self.vocab_editor = QTextEdit()
-        self.vocab_editor.setMinimumHeight(120)
+        self.vocab_editor.setMinimumHeight(80)
+        self.vocab_editor.setMaximumHeight(160)
         self.vocab_editor.setFont(QFont("Consolas", 9))
         self.vocab_editor.setStyleSheet(
             "QTextEdit{background-color:#252526;color:#d4d4d4;"
@@ -1562,8 +1563,8 @@ class WorkflowTab(QWidget):
     # ── Step 4: Translation ─────────────────────────────────────────────────
 
     def _build_step4_translation(self, layout: QVBoxLayout):
-        layout.setContentsMargins(20, 8, 20, 4)
-        layout.setSpacing(6)
+
+        layout.addWidget(_make_section_label("Step 4 — TL Phase 1"))
 
         # ---- Pre-flight: text wrap configuration ----------------------------
         wrap_box_title = QLabel("Pre-flight — Text Wrap Width")
@@ -1712,8 +1713,8 @@ class WorkflowTab(QWidget):
         layout.addWidget(p1b_box)
 
     def _build_step5_tl_phase2(self, layout: QVBoxLayout):
-        layout.setContentsMargins(20, 8, 20, 4)
-        layout.setSpacing(6)
+
+        layout.addWidget(_make_section_label("Step 5 — TL Phase 2"))
 
         # ── Pre-flight card: description + prompt + var range ──────────────
         pre_box_title = QLabel("Pre-flight \u2014 Audit & Configure")
