@@ -1405,7 +1405,8 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None, mism
                     protected_items.append("Placeholder Text")
                     all_replacements[j] = {}
                 else:
-                    protected_text, replacements = protect_script_codes(tItem[j])
+                    collapsed = re.sub(r'(.)\1{9,}', lambda m: m.group(1) * 10, tItem[j])
+                    protected_text, replacements = protect_script_codes(collapsed)
                     protected_items.append(protected_text)
                     all_replacements[j] = replacements
         else:
@@ -1413,7 +1414,8 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None, mism
                 protected_items = "Placeholder Text"
                 all_replacements[0] = {}
             else:
-                protected_items, all_replacements[0] = protect_script_codes(tItem)
+                collapsed = re.sub(r'(.)\1{9,}', lambda m: m.group(1) * 10, tItem)
+                protected_items, all_replacements[0] = protect_script_codes(collapsed)
         
         # Filter out corrupted/mojibake text (U+FFFD) from the batch before API call
         corrupted_map = {}  # original_index -> original_text

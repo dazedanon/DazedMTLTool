@@ -168,6 +168,9 @@ def parseJSON(data, filename):
                 # GameSetting format (Nupu_GameSetting.json - fzCardDatas, fzDeckDatas, rentalDecks)
                 elif any(k in data for k in ["fzCardDatas", "fzDeckDatas", "rentalDecks"]):
                     result = translateGameSetting(data, filename)
+                # Src/Tl dialogue format (numeric-keyed entries with src and tl fields)
+                elif data and all(isinstance(v, dict) and "src" in v for v in data.values()):
+                    result = translateDialogueSrcTl(data, filename)
                 else:
                     result = translateJSON(data, filename, [])
             else:
@@ -841,6 +844,79 @@ def translateGameSetting(data, filename):
             rentals[idx]["memo"] = tl
         if rentalMemoS:
             save_progress_json(data, filename)
+
+    return tokens
+
+
+def translateDialogueSrcTl(data, filename):
+    """Translate src/tl dialogue JSON format.
+
+    Format:
+    {
+        "0": {"type": "dialogue", "src": "Japanese text", "tl": ""},
+        "4": {"type": "dialogue", "speaker": "琴音", "src": "「...」", "tl": ""}
+    }
+
+    Translates 'src' into 'tl'. Uses 'speaker' as context only — not translated.
+    Skips entries where 'tl' is already populated.
+    """
+    global LOCK, ESTIMATE, FILENAME, PBAR, MISMATCH
+    tokens = [0, 0]
+    srcList = []
+    keyList = []   # list of (key, entry_type)
+
+    # Collect all entries with translatable content
+    for key, entry in data.items():
+        if not isinstance(entry, dict):
+            continue
+        src = entry.get("src", "")
+        if not src:
+            continue
+        tl = entry.get("tl", "")
+        entry_type = entry.get("type", "")
+        speaker = entry.get("speaker", "")
+
+        if tl:
+            # Already has a translation — send tl so the module can decide to skip it
+            srcList.append(tl)
+        else:
+            if not re.search(LANGREGEX, src):
+                continue
+            srcClean = src.replace("\r\n", " ").replace("\n", " ").strip()
+            if speaker:
+                srcList.append(f"[{speaker}]: {srcClean}")
+            else:
+                srcList.append(srcClean)
+        keyList.append((key, entry_type))
+
+    if not srcList:
+        return tokens
+
+    PBAR.total = len(srcList)
+    PBAR.refresh()
+
+    response = translateAI(srcList, "Reply with the English Translation")
+    tokens[0] += response[1][0]
+    tokens[1] += response[1][1]
+    translatedList = response[0]
+
+    if len(srcList) != len(translatedList):
+        with LOCK:
+            if FILENAME not in MISMATCH:
+                MISMATCH.append(FILENAME)
+
+    for i, (key, entry_type) in enumerate(keyList):
+        if i >= len(translatedList):
+            break
+        translatedText = translatedList[i]
+
+        # Strip speaker prefix if the AI echoed it back
+        match = re.search(r'^\[.+?\]\s?[|:]\s?', translatedText)
+        if match:
+            translatedText = translatedText[match.end():]
+
+        data[key]["tl"] = translatedText
+        save_progress_json(data, filename)
 
     return tokens
 
