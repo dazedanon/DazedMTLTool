@@ -2231,7 +2231,7 @@ def getSpeaker(speaker):
     return response
 
 
-def translateAI(text, history):
+def translateAI(text, history, history_ctx=None, filename=None, pbar=None):
     """
     Legacy wrapper function for the new shared translation utility.
     This maintains compatibility with existing code while using the new shared implementation.
@@ -2253,8 +2253,8 @@ def translateAI(text, history):
         text=text,
         history=history,
         config=TRANSLATION_CONFIG,
-        filename=FILENAME,
-        pbar=PBAR,
+        filename=filename if filename is not None else FILENAME,
+        pbar=pbar if pbar is not None else PBAR,
         lock=LOCK,
         mismatchList=MISMATCH
     )
