@@ -2123,7 +2123,52 @@ class WorkflowTab(QWidget):
         if folder:
             self.folder_edit.setText(folder)
             self._save_setting("last_game_folder", folder)
+            self._ask_clear_old_files()
             self._detect_folder()
+
+    def _ask_clear_old_files(self):
+        """Prompt the user to clear /files and /translated to avoid stale data conflicts."""
+        import shutil
+
+        msg = QMessageBox(self)
+        msg.setWindowTitle("Clear Previous Translation Data?")
+        msg.setText(
+            "Do you want to clear the <b>files/</b> and <b>translated/</b> folders?\n\n"
+            "This is recommended when switching to a new game project to avoid "
+            "old translations conflicting with the new one."
+        )
+        msg.setIcon(QMessageBox.Question)
+        msg.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
+        msg.setDefaultButton(QMessageBox.Yes)
+        result = msg.exec_()
+
+        if result != QMessageBox.Yes:
+            return
+
+        base = Path(__file__).resolve().parent.parent
+        cleared = []
+        errors = []
+        for folder_name in ("files", "translated"):
+            target = base / folder_name
+            if target.is_dir():
+                for child in target.iterdir():
+                    if child.name == ".gitkeep":
+                        continue
+                    try:
+                        if child.is_dir():
+                            shutil.rmtree(child)
+                        else:
+                            child.unlink()
+                        cleared.append(child.name)
+                    except Exception as exc:  # noqa: BLE001
+                        errors.append(f"{child.name}: {exc}")
+
+        if cleared:
+            self._log(f"🗑  Cleared {len(cleared)} item(s) from files/ and translated/.")
+        else:
+            self._log("ℹ  files/ and translated/ were already empty.")
+        for err in errors:
+            self._log(f"⚠  Could not remove {err}")
 
     def _detect_folder(self):
         folder = self.folder_edit.text().strip()
