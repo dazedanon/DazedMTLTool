@@ -79,7 +79,7 @@ LEAVE = False
 # FIRSTLINESPEAKERS: Guess speaker from first line.
 FIRSTLINESPEAKERS = False
 # INLINE401SPEAKERS: Extract speaker from "Name「dialogue」" inline format on 401 lines.
-INLINE401SPEAKERS = True
+INLINE401SPEAKERS = False
 # FACENAME101: Map face name -> speaker.
 FACENAME101 = False
 # Face name -> speaker mapping for FACENAME101.
@@ -1013,6 +1013,7 @@ def parseNames(data, filename, context):
                 (r"<STS DESC>\n(.+?)\n<", False),
                 (r"text:(.+)>", False),
                 (r"<Skill\d+:(?:\d+,)?([^,>\d][^,>]*)", False),
+                (r"<コメント:\n?(.*?)>", True),
             ]
 
             for entry in entries:
@@ -1352,6 +1353,7 @@ def searchNames(data, pbar, context, filename):
         (r"<STS DESC>\n(.+?)\n<", False),
         (r"text:(.+)>", False),
         (r"<Skill\d+:(?:\d+,)?([^,>\d][^,>]*)", False),
+        (r"<コメント:\n?(.*?)>", True),
     ]
     # For each entry, collect all note matches
     for idx, entry in enumerate(data):
