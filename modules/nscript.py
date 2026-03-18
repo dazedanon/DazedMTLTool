@@ -410,7 +410,7 @@ def getSpeaker(speaker):
     return [speaker, [0, 0]]
 
 
-def translateAI(text, history):
+def translateAI(text, history, history_ctx=None):
     """
     Translate text using the shared translation utility.
     This function maintains compatibility with existing code while using the new shared implementation.

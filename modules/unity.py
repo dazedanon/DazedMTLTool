@@ -331,7 +331,7 @@ def getSpeaker(speaker):
             return response
     return [speaker, [0, 0]]
 
-def translateAI(text, history):
+def translateAI(text, history, history_ctx=None):
     """
     Legacy wrapper function for the new shared translation utility.
     This maintains compatibility with existing code while using the new shared implementation.
