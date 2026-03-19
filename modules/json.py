@@ -857,7 +857,7 @@ def translateDialogueSrcTl(data, filename):
         "4": {"type": "dialogue", "speaker": "琴音", "src": "「...」", "tl": ""}
     }
 
-    Translates 'src' into 'tl'. Uses 'speaker' as context only — not translated.
+    Translates 'src' into 'tl'. Also translates Japanese 'speaker' fields.
     Skips entries where 'tl' is already populated.
     """
     global LOCK, ESTIMATE, FILENAME, PBAR, MISMATCH
@@ -889,33 +889,57 @@ def translateDialogueSrcTl(data, filename):
                 srcList.append(srcClean)
         keyList.append((key, entry_type))
 
-    if not srcList:
-        return tokens
+    if srcList:
+        PBAR.total = len(srcList)
+        PBAR.refresh()
 
-    PBAR.total = len(srcList)
-    PBAR.refresh()
+        response = translateAI(srcList, "Reply with the English Translation")
+        tokens[0] += response[1][0]
+        tokens[1] += response[1][1]
+        translatedList = response[0]
 
-    response = translateAI(srcList, "Reply with the English Translation")
-    tokens[0] += response[1][0]
-    tokens[1] += response[1][1]
-    translatedList = response[0]
+        if len(srcList) != len(translatedList):
+            with LOCK:
+                if FILENAME not in MISMATCH:
+                    MISMATCH.append(FILENAME)
 
-    if len(srcList) != len(translatedList):
-        with LOCK:
-            if FILENAME not in MISMATCH:
-                MISMATCH.append(FILENAME)
+        for i, (key, entry_type) in enumerate(keyList):
+            if i >= len(translatedList):
+                break
+            translatedText = translatedList[i]
 
-    for i, (key, entry_type) in enumerate(keyList):
-        if i >= len(translatedList):
-            break
-        translatedText = translatedList[i]
+            # Strip speaker prefix if the AI echoed it back
+            # Handles: [Speaker]: text  |  Speaker: text  |  Speaker(text) / CJK(text)
+            match = re.search(r'^\[.+?\]\s?[|:]\s?', translatedText)
+            if match:
+                translatedText = translatedText[match.end():]
+            else:
+                # Fallback: strip any leading Japanese/CJK name followed by ( or :
+                cjk_m = re.match(r'^[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]+\s*[\(（:]\s*', translatedText)
+                if cjk_m:
+                    translatedText = translatedText[cjk_m.end():]
+                    translatedText = re.sub(r'\s*[)）]\s*$', '', translatedText)
 
-        # Strip speaker prefix if the AI echoed it back
-        match = re.search(r'^\[.+?\]\s?[|:]\s?', translatedText)
-        if match:
-            translatedText = translatedText[match.end():]
+            data[key]["tl"] = translatedText
+            save_progress_json(data, filename)
 
-        data[key]["tl"] = translatedText
+    # Translate any Japanese speaker names found in the data
+    seen_speakers = {}
+    speaker_updated = False
+    for key, entry in data.items():
+        if not isinstance(entry, dict):
+            continue
+        speaker = entry.get("speaker", "")
+        if not speaker or not re.search(LANGREGEX, speaker):
+            continue
+        if speaker not in seen_speakers:
+            response = getSpeaker(speaker)
+            tokens[0] += response[1][0]
+            tokens[1] += response[1][1]
+            seen_speakers[speaker] = response[0]
+        data[key]["speaker"] = seen_speakers[speaker]
+        speaker_updated = True
+    if speaker_updated:
         save_progress_json(data, filename)
 
     return tokens
@@ -1122,10 +1146,15 @@ def translateJSON(data, filename, translatedList):
                     if len(stringList) <= 0:
                         stringList = None
 
-                    # Remove speaker
+                    # Remove speaker prefix — handles [Name]: / Name: / CJK(text)
                     match = re.search(r'(^\[.+?\]\s?[|:]\s?)', translatedText)
                     if match:
-                        translatedText = translatedText.replace(match.group(1), "") 
+                        translatedText = translatedText.replace(match.group(1), "")
+                    else:
+                        cjk_m = re.match(r'^[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]+\s*[\(（:]\s*', translatedText)
+                        if cjk_m:
+                            translatedText = translatedText[cjk_m.end():]
+                            translatedText = re.sub(r'\s*[)）]\s*$', '', translatedText)
 
                     # Escape Quotes
                     translatedText = re.sub(r'(?<!\\)"', r"", translatedText)
