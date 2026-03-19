@@ -1378,7 +1378,7 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None, mism
         formatType = "json"
         tList = batchList(text, config.batchSize)
     else:
-        formatType = "text"
+        formatType = "json"
         tList = [text]
 
     for index, tItem in enumerate(tList):
@@ -1485,7 +1485,7 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None, mism
             payload = json.dumps(payload, indent=4, ensure_ascii=False)
             subbedT = payload
         else:
-            subbedT = protected_items
+            subbedT = json.dumps({"Line1": protected_items}, indent=4, ensure_ascii=False)
 
         # Check cache for this exact payload
         cached_result = get_cached_translation(subbedT, config.language)
@@ -1556,7 +1556,7 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None, mism
         max_retries = 2  # 1 initial attempt + 2 retries
         final_translations = None
         last_raw_translation = ""
-        numLines = len(clean_tItem) if isinstance(tItem, list) else None
+        numLines = len(clean_tItem) if isinstance(tItem, list) else 1
 
         for attempt in range(max_retries + 1):
             is_valid = True
@@ -1698,32 +1698,39 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None, mism
                                     return line
                                 final_translations = [_clean_extracted_line(line) for line in extracted]
                 else:
-                    # Single string: validate placeholders
-                    placeholder_valid, missing, extra = validate_placeholders(protected_items, cleaned_text, all_replacements[0])
-                    
-                    if not placeholder_valid:
+                    # Single string: extract from JSON schema response
+                    extracted = extractTranslation(cleaned_text, False, pbar)
+                    if extracted is None:
                         is_valid = False
                         if pbar:
-                            if missing:
-                                pbar.write(f"Missing placeholders: {', '.join(missing)}")
-                            if extra:
-                                pbar.write(f"Extra placeholders: {', '.join(extra)}")
+                            pbar.write(f"Failed to extract translation from response: {cleaned_text[:100]}")
                     else:
-                        # Validate content for single string
-                        final_cleaned = cleaned_text.replace("Placeholder Text", "")
-                        content_valid, _, content_reasons = validate_translation_content(
-                            tItem, final_cleaned, config.langRegex
-                        )
+                        # Validate placeholders against extracted value
+                        placeholder_valid, missing, extra = validate_placeholders(protected_items, extracted, all_replacements[0])
                         
-                        if not content_valid:
+                        if not placeholder_valid:
                             is_valid = False
                             if pbar:
-                                pbar.write(f"Invalid translation content:")
-                                for reason in content_reasons:
-                                    pbar.write(f"  - {reason}")
+                                if missing:
+                                    pbar.write(f"Missing placeholders: {', '.join(missing)}")
+                                if extra:
+                                    pbar.write(f"Extra placeholders: {', '.join(extra)}")
                         else:
-                            # Accept output - all validations passed
-                            final_translations = final_cleaned
+                            # Validate content for single string
+                            final_cleaned = extracted.replace("Placeholder Text", "")
+                            content_valid, _, content_reasons = validate_translation_content(
+                                tItem, final_cleaned, config.langRegex
+                            )
+                            
+                            if not content_valid:
+                                is_valid = False
+                                if pbar:
+                                    pbar.write(f"Invalid translation content:")
+                                    for reason in content_reasons:
+                                        pbar.write(f"  - {reason}")
+                            else:
+                                # Accept output - all validations passed
+                                final_translations = final_cleaned
             else:
                 is_valid = False
                 if pbar: pbar.write(f"AI Refused: {tItem}\n")
@@ -1868,7 +1875,7 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None, mism
         _thread_local.file_cost_ready = True  # signals calculateCost to use file accumulators
 
     # Return result
-    if formatType == "json":
+    if isinstance(text, list):
         return [tList, totalTokens]
     else:
         return [tList[0], totalTokens]
