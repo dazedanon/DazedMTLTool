@@ -460,6 +460,10 @@ class WorkflowTab(QWidget):
         # Pre-process paths (auto-populated after folder detection)
         self._plugins_js_path: str = ""
         self._gameupdate_path: str = ""
+        # RPGMaker Ace state
+        self._ace_encrypted: bool = False
+        self._ace_json_dir: str = ""     # <game_root>/JSON/ — used as _data_path for Ace
+        self._ace_rvdata_dir: str = ""   # <game_root>/Data/ with rvdata2 files
 
         self._init_ui()
 
@@ -633,9 +637,15 @@ class WorkflowTab(QWidget):
         root.addWidget(splitter)
         self.setLayout(root)
         self._apply_theme()
+        self._detected_on_show: bool = False  # guard: only auto-detect once per new folder
 
-        # Auto-detect on first start if a folder was previously saved
-        if self._setting("last_game_folder", ""):
+    # ── Tab visibility ──────────────────────────────────────────────────────
+
+    def showEvent(self, event):
+        """Trigger folder detection the first time this tab is shown (or after a new folder is set)."""
+        super().showEvent(event)
+        if not self._detected_on_show and self._setting("last_game_folder", ""):
+            self._detected_on_show = True
             QTimer.singleShot(100, self._detect_folder)
 
     def _apply_theme(self):
@@ -2123,6 +2133,7 @@ class WorkflowTab(QWidget):
         if folder:
             self.folder_edit.setText(folder)
             self._save_setting("last_game_folder", folder)
+            self._detected_on_show = True  # new folder chosen — treat as already-shown
             self._ask_clear_old_files()
             self._detect_folder()
 
@@ -2186,6 +2197,33 @@ class WorkflowTab(QWidget):
         self.file_list.clear()
         self.import_btn.setEnabled(False)
 
+        # Reset ACE state from any previous detection
+        self._ace_encrypted = False
+        self._ace_json_dir = ""
+        self._ace_rvdata_dir = ""
+
+        root_path = Path(folder)
+
+        # ── RPGMaker Ace encrypted: Game.rgss* present (no Data/ yet) ────────
+        # Must be checked BEFORE find_data_folder, which returns UNKNOWN for
+        # encrypted games (no rvdata2 files exist until the archive is extracted).
+        rgss_files = list(root_path.glob("Game.rgss*"))
+        if rgss_files:
+            self._ace_encrypted = True
+            rgss_name = rgss_files[0].name
+            self.detected_label.setText(
+                f"⚠  RPGMaker Ace — Encrypted ({rgss_name}). Decrypt before importing."
+            )
+            self.detected_label.setStyleSheet(
+                "color:#e9a12a;font-size:13px;padding:4px 8px;"
+                "background-color:#2b2010;border:1px solid #5a4010;"
+                "border-radius:4px;margin:4px 0;"
+            )
+            self._log(f"⚠  RPGMaker Ace (encrypted) detected — found: {rgss_name}")
+            self._show_ace_decrypt_notice(folder, str(rgss_files[0]))
+            return
+        # ─────────────────────────────────────────────────────────────────────
+
         try:
             from util.project_scanner import find_data_folder
             data_path, engine = find_data_folder(folder)
@@ -2212,6 +2250,48 @@ class WorkflowTab(QWidget):
 
         self._data_path = str(data_path)
         self._engine = engine
+
+        # ── RPGMaker Ace decrypted: rvdata2 present, no rgss archive ─────────
+        if engine == "ACE":
+            self._ace_encrypted = False
+            self._ace_rvdata_dir = str(data_path)
+            self._engine = "MVMZ"  # scan JSON files like MVMZ
+            self._log("RPGMaker Ace (decrypted) detected.")
+            self._log(f"  rvdata2 dir : {data_path}")
+
+            ace_json = root_path / "ace_json"
+            if ace_json.is_dir() and any(ace_json.glob("*.json")):
+                self._ace_json_dir = str(ace_json)
+                self._data_path = str(ace_json)
+                self._log(f"  ace_json dir: {ace_json} (existing — skipping RV2JSON -c)")
+                self.detected_label.setText(
+                    f"Engine: Ace (via RV2JSON)   ·   ace_json: {ace_json}"
+                )
+                self.detected_label.setStyleSheet(
+                    "color:#6a9a6a;font-size:13px;padding:4px 8px;"
+                    "background-color:#1f2b1f;border:1px solid #2a4a2a;"
+                    "border-radius:4px;margin:4px 0;"
+                )
+                worker = _ScanWorker(self._data_path, "MVMZ")
+                worker.done.connect(self._on_scan_done)
+                worker.error.connect(lambda e: self._log(f"❌ Scan error: {e}"))
+                self._worker = worker
+                worker.start()
+            else:
+                self._ace_json_dir = str(ace_json)
+                self._data_path = str(ace_json)
+                self.detected_label.setText(
+                    "RPGMaker Ace (decrypted)  ·  Creating JSON files with RV2JSON…"
+                )
+                self.detected_label.setStyleSheet(
+                    "color:#9d9d9d;font-size:13px;padding:4px 8px;"
+                    "background-color:#252526;border:1px solid #3c3c3c;"
+                    "border-radius:4px;margin:4px 0;"
+                )
+                self._run_rv2json_create()
+            return  # scan continues above or in _on_rv2json_create_done
+        # ─────────────────────────────────────────────────────────────────────
+
         self.detected_label.setText(
             f"Engine: {engine}   ·   Data folder: {data_path}"
         )
@@ -2939,12 +3019,134 @@ class WorkflowTab(QWidget):
             self._data_path = game_data
         return game_data
 
+    # ─────────────────────────────────────────────────────────────────────────
+    # RPGMaker Ace helpers
+    # ─────────────────────────────────────────────────────────────────────────
+
+    @staticmethod
+    def _ace_tool_path(name: str) -> Path:
+        return Path(__file__).resolve().parent.parent / "util" / "ace" / name
+
+    def _show_ace_decrypt_notice(self, game_root: str, rgss_path: str):
+        """Show a dialog explaining how to decrypt the encrypted Ace archive."""
+        rgss_name = Path(rgss_path).name
+        msg = QMessageBox(self)
+        msg.setWindowTitle("RPGMaker Ace — Encrypted Game")
+        msg.setIcon(QMessageBox.Warning)
+        msg.setTextFormat(Qt.RichText)
+        msg.setText(
+            f"<b>This game is encrypted.</b><br><br>"
+            f"Found: <code>{rgss_name}</code><br><br>"
+            "To use this game with the translation tool:<br>"
+            "<ol>"
+            "<li>Run <b>RPGMakerDecrypter.exe</b> (button below) to extract the game files</li>"
+            "<li>Back up the <code>.rgss</code> archive to a safe location</li>"
+            f"<li>Delete <code>{rgss_name}</code> from the game folder</li>"
+            "<li>Re-scan the folder in this tool (press Enter in the path box)</li>"
+            "</ol>"
+        )
+        run_btn = msg.addButton("Run RPGMakerDecrypter.exe", QMessageBox.ActionRole)
+        msg.addButton(QMessageBox.Ok)
+        msg.exec_()
+        if msg.clickedButton() == run_btn:
+            self._run_ace_decrypter(game_root)
+
+    def _run_ace_decrypter(self, game_root: str):
+        decrypter = self._ace_tool_path("RPGMakerDecrypter.exe")
+        if not decrypter.is_file():
+            self._log(f"❌ RPGMakerDecrypter.exe not found at {decrypter}")
+            return
+        self._log(f"Running RPGMakerDecrypter.exe in {game_root} …")
+        w = _SubprocessWorker([str(decrypter)], cwd=game_root, label="RPGMakerDecrypter")
+        w.log.connect(self._log)
+        w.done.connect(lambda ok, msg: self._log(("✅ " if ok else "❌ ") + msg))
+        self._worker = w
+        w.start()
+
+    def _run_rv2json_create(self):
+        """Run RV2JSON.exe -c to convert rvdata2 → JSON files (run from game root)."""
+        rv2json = self._ace_tool_path("RV2JSON.exe")
+        if not rv2json.is_file():
+            self._log(f"❌ RV2JSON.exe not found at {rv2json}")
+            return
+        game_root = self.folder_edit.text().strip()
+        # -c takes no path flags — must be run from the game root so it can
+        # find the Data/ folder automatically and creates JSON/ alongside it.
+        cmd = [str(rv2json), "-c"]
+        self._log(f"$ {' '.join(cmd)}  (cwd: {game_root})")
+        w = _SubprocessWorker(cmd, cwd=game_root, label="RV2JSON -c")
+        w.log.connect(self._log)
+        w.done.connect(self._on_rv2json_create_done)
+        self._worker = w
+        w.start()
+
+    def _on_rv2json_create_done(self, ok: bool, msg: str):
+        self._log(("✅ " if ok else "❌ ") + msg)
+        if not ok:
+            self.detected_label.setText("❌ RV2JSON -c failed — check log for details.")
+            self.detected_label.setStyleSheet(
+                "color:#f48771;font-size:13px;padding:4px 8px;"
+                "background-color:#2b1a1a;border:1px solid #5a2a2a;"
+                "border-radius:4px;margin:4px 0;"
+            )
+            return
+
+        ace_json = Path(self._ace_json_dir)
+        if not ace_json.is_dir() or not any(ace_json.glob("*.json")):
+            self._log(f"⚠  RV2JSON ran but ace_json folder has no JSON files: {ace_json}")
+            self.detected_label.setText("⚠  ace_json not populated after RV2JSON -c. Check log.")
+            self.detected_label.setStyleSheet(
+                "color:#e9a12a;font-size:13px;padding:4px 8px;"
+                "background-color:#2b2010;border:1px solid #5a4010;"
+                "border-radius:4px;margin:4px 0;"
+            )
+            return
+
+        self._log(f"JSON files ready in: {ace_json}")
+        self.detected_label.setText(
+            f"Engine: Ace (via RV2JSON)   ·   ace_json: {ace_json}"
+        )
+        self.detected_label.setStyleSheet(
+            "color:#6a9a6a;font-size:13px;padding:4px 8px;"
+            "background-color:#1f2b1f;border:1px solid #2a4a2a;"
+            "border-radius:4px;margin:4px 0;"
+        )
+        worker = _ScanWorker(self._data_path, "MVMZ")
+        worker.done.connect(self._on_scan_done)
+        worker.error.connect(lambda e: self._log(f"❌ Scan error: {e}"))
+        self._worker = worker
+        worker.start()
+
+    def _run_rv2json_update(self):
+        """Run RV2JSON.exe -u to write translated JSON back to rvdata2 files."""
+        rv2json = self._ace_tool_path("RV2JSON.exe")
+        if not rv2json.is_file():
+            self._log(f"❌ RV2JSON.exe not found at {rv2json}")
+            return
+        game_root = self.folder_edit.text().strip()
+        if not game_root:
+            self._log("❌ RV2JSON -u: game root folder not set.")
+            return
+        # Run without path flags (same as -c): tool finds Data/ and ace_json/
+        # relative to the game root automatically.
+        cmd = [str(rv2json), "-u"]
+        self._log("RV2JSON: updating rvdata2 files…")
+        self._log(f"$ {' '.join(cmd)}  (cwd: {game_root})")
+        w = _SubprocessWorker(cmd, cwd=game_root, label="RV2JSON -u")
+        w.log.connect(self._log)
+        w.done.connect(lambda ok, msg: self._log(("✅ " if ok else "❌ ") + msg))
+        self._worker = w
+        w.start()
+
     def _on_export_done(self, count: int, errors: list):
         if errors:
             self._log(f"⚠  {len(errors)} error(s) during export:")
             for e in errors[:10]:
                 self._log(f"   {e}")
         self._log(f"✅ Exported {count} file(s) to game folder.")
+        # For RPGMaker Ace: convert the exported JSON files back to rvdata2
+        if self._ace_json_dir and self._ace_rvdata_dir:
+            self._run_rv2json_update()
 
     # ─────────────────────────────────────────────────────────────────────────
     # Helpers
