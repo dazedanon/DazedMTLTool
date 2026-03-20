@@ -2434,45 +2434,8 @@ class WorkflowTab(QWidget):
     _BASE_SEPARATOR = "# ── Base Vocabulary (auto-appended from vocab_base.txt — do not edit below) ──\n"
 
     def _copy_glossary_prompt(self):
-        """Build the glossary prompt, injecting any already-parsed speakers."""
-        prompt = self._PROMPT_GLOSSARY
-
-        # Extract # Speakers entries from current vocab.txt
-        speakers = []
-        try:
-            vocab_text = Path("vocab.txt").read_text(encoding="utf-8")
-            in_speakers = False
-            for line in vocab_text.splitlines():
-                stripped = line.strip()
-                if stripped == "# Speakers":
-                    in_speakers = True
-                    continue
-                if in_speakers:
-                    if stripped.startswith("#"):
-                        break  # next section
-                    if stripped:
-                        speakers.append(stripped)
-        except Exception:
-            pass
-
-        if speakers:
-            speaker_block = (
-                "\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-                "ALREADY-IDENTIFIED SPEAKERS\n"
-                "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-                "The speaker parser has already found these names in the game files.\n"
-                "For genuine named characters in this list, add them to # Game Characters\n"
-                "with gender, role, and speech register.\n"
-                "Skip entries that are clearly NOT real characters — generic labels (e.g. 男, 女),\n"
-                "placeholders (e.g. ＊＊＊, ???), or system strings.\n"
-                "```\n"
-                + "\n".join(speakers)
-                + "\n```"
-            )
-            prompt = prompt + speaker_block
-
-        self._copy_to_clipboard(prompt, "Glossary prompt copied."
-            + (f" ({len(speakers)} speaker(s) included.)" if speakers else ""))
+        """Copy the glossary prompt to clipboard."""
+        self._copy_to_clipboard(self._PROMPT_GLOSSARY, "Glossary prompt copied.")
 
     def _reload_vocab(self):
         vocab_path = Path("vocab.txt")
