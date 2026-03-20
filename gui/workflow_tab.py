@@ -1092,6 +1092,86 @@ class WorkflowTab(QWidget):
         "List any Japanese strings you detected but chose NOT to translate, with a one-line reason.\n"
     )
 
+    _ACE_SCRIPTS_TRANSLATE_PROMPT = (
+        "You are helping me translate a Japanese RPGMaker Ace (VX Ace) game.\n"
+        "The game's scripts are in the ace_json/scripts/ folder as .rb files.\n"
+        "I need you to translate visible Japanese strings inside these Ruby scripts\n"
+        "without breaking any game logic or script functionality.\n"
+        "\n"
+        "A vocab.txt glossary file has been attached. Use it as your primary reference\n"
+        "for character names, worldbuilding terms, and their approved English translations.\n"
+        "Any Japanese name or term that appears in the glossary must be translated\n"
+        "exactly as specified there — do not invent alternative spellings.\n"
+        "\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        "## WHAT TO TRANSLATE\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        "\n"
+        "Only translate string literals that are directly shown to the player at runtime.\n"
+        "These typically appear as:\n"
+        "  - Strings passed to msgbox, msgbox_p, print, p\n"
+        "  - Labels and text in Window or Scene classes rendered to screen\n"
+        "  - draw_text / draw_item calls with a Japanese string literal\n"
+        "  - Default UI label text (menu names, button labels, status window text)\n"
+        "  - Battle log messages, notifications, popup strings\n"
+        "  - Help or description text shown in help windows\n"
+        "\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        "## WHAT MUST NOT BE TRANSLATED\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        "\n"
+        "CRITICAL — translating the following will break the game:\n"
+        "\n"
+        "  1. Strings used as hash keys, method names, or symbol equivalents.\n"
+        "     Example: vocab[\"HP\"] = \"体力\"  \u2192  translate \"体力\" but NOT the key \"HP\"\n"
+        "\n"
+        "  2. Strings used as internal identifiers compared with == or used in case/when:\n"
+        "     - Actor/class/skill/item names used as lookup strings\n"
+        "     - Script-internal state names or flag strings\n"
+        "     Example: if type == \"スキル\"  \u2192  do NOT translate \"スキル\"\n"
+        "\n"
+        "  3. File paths, filenames, font names, colour strings, URLs.\n"
+        "\n"
+        "  4. Regular expressions, format strings used with sprintf or % operator\n"
+        "     where the placeholders must stay in the same position.\n"
+        "     (You may translate the human-readable parts but keep %s / %d / %1 etc intact.)\n"
+        "\n"
+        "  5. Script class names, module names, method names, constants.\n"
+        "\n"
+        "  6. Any string that is read back elsewhere in the scripts with an exact match.\n"
+        "\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        "## HOW TO IDENTIFY SAFE STRINGS\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        "\n"
+        "Before translating a string, ask yourself:\n"
+        "  \u2714 Is this value ever displayed directly to the player as text?\n"
+        "  \u2714 Is it purely a display string, not compared or looked up anywhere?\n"
+        "  \u2714 Would changing it break no conditional logic or data lookup?\n"
+        "\n"
+        "If all three are YES, it is safe to translate.\n"
+        "When in doubt, SKIP IT — untranslated Japanese is better than a broken game.\n"
+        "\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        "## OUTPUT FORMAT\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        "\n"
+        "For each .rb file that needed changes, provide the full translated file content.\n"
+        "Only change the string values identified as safe above.\n"
+        "Preserve all Ruby syntax, indentation, comments, and structure exactly.\n"
+        "\n"
+        "After all files, output a translation summary:\n"
+        "\n"
+        "### Translations Made\n"
+        "List each change in this format:\n"
+        "  File:   <script filename.rb>\n"
+        "  Before: <original Japanese>\n"
+        "  After:  <English translation>\n"
+        "\n"
+        "### Skipped (Ambiguous or Internal)\n"
+        "List any Japanese strings you detected but chose NOT to translate, with a one-line reason.\n"
+    )
+
     _PLUGIN_PROMPT = (
         "You are helping me safely translate a Japanese RPGMaker MV/MZ game.\n"
         "Before I run Phase 2, I need you to audit several optional code types and tell me\n"
@@ -1290,6 +1370,7 @@ class WorkflowTab(QWidget):
         ta_title = QLabel("A — Format JSON files (dazedformat)")
         ta_title.setStyleSheet("color:#4ec9b0;font-size:13px;font-weight:bold;")
         tb.addWidget(ta_title)
+        self._pp_dazedformat_title = ta_title
         ta = QWidget()
         ta.setObjectName("tbox")
         ta.setStyleSheet(self._task_box_style())
@@ -1319,11 +1400,13 @@ class WorkflowTab(QWidget):
         ta_btn_row.addStretch()
         ta_inner.addLayout(ta_btn_row)
         tb.addWidget(ta)
+        self._pp_dazedformat_box = ta
 
-        # ---- Task B: prettier on plugins.js -----------------------------
+        # ---- Task B: prettier on plugins.js
         tb_box_title = QLabel("B — Format plugins.js with Prettier")
         tb_box_title.setStyleSheet("color:#4ec9b0;font-size:13px;font-weight:bold;")
         tb.addWidget(tb_box_title)
+        self._pp_plugins_js_title = tb_box_title
         tb_box = QWidget()
         tb_box.setObjectName("tbox")
         tb_box.setStyleSheet(self._task_box_style())
@@ -1358,6 +1441,7 @@ class WorkflowTab(QWidget):
         tb_btn_row.addStretch()
         tb_inner.addLayout(tb_btn_row)
         tb.addWidget(tb_box)
+        self._pp_plugins_js_box = tb_box
 
         # ---- Task C: copy gameupdate/ -----------------------------------
         tc_title = QLabel("C — Apply gameupdate/ patch files")
@@ -2062,20 +2146,21 @@ class WorkflowTab(QWidget):
         # Pre-populate all Phase 2 checkboxes from current module state
         self._populate_p2_checkboxes()
 
-    # ── Step 5: plugins.js Translation ─────────────────────────────────────
+    # ── Step 5: plugins.js / Ace scripts Translation ───────────────────────
 
     def _build_step6_plugins_js(self, layout: QVBoxLayout):
-        layout.addWidget(_make_section_label("Step 6 — Translate plugins.js"))
+        self._step6_section_label = _make_section_label("Step 6 — Translate plugins.js")
+        layout.addWidget(self._step6_section_label)
 
-        hint = QLabel(
+        self._step6_hint = QLabel(
             "Translate the visible Japanese strings in js/plugins.js without breaking "
             "game logic. First copy vocab.txt into the game folder so the AI can use it "
             "as a glossary, then copy the prompt and paste it into Copilot or Cursor with "
             "plugins.js, vocab.txt, and optionally System.json attached."
         )
-        hint.setWordWrap(True)
-        hint.setStyleSheet("color:#9d9d9d;font-size:13px;padding-bottom:6px;")
-        layout.addWidget(hint)
+        self._step6_hint.setWordWrap(True)
+        self._step6_hint.setStyleSheet("color:#9d9d9d;font-size:13px;padding-bottom:6px;")
+        layout.addWidget(self._step6_hint)
 
         _BTN_WIDTH = 240
 
@@ -2087,18 +2172,18 @@ class WorkflowTab(QWidget):
         )
         vocab_btn.clicked.connect(self._copy_vocab_to_game)
 
-        copy_btn = _make_btn("📋  Copy Prompt for Copilot", "#555")
-        copy_btn.setFixedWidth(_BTN_WIDTH)
-        copy_btn.setToolTip(
+        self._step6_copy_btn = _make_btn("📋  Copy Prompt for Copilot", "#555")
+        self._step6_copy_btn.setFixedWidth(_BTN_WIDTH)
+        self._step6_copy_btn.setToolTip(
             "Copy a prompt that instructs Copilot/Cursor to translate only "
             "visible player-facing strings in plugins.js, using vocab.txt as a glossary."
         )
-        copy_btn.clicked.connect(self._copy_plugins_js_translate_prompt)
+        self._step6_copy_btn.clicked.connect(self._copy_plugins_js_translate_prompt)
 
         btn_row = QHBoxLayout()
         btn_row.setSpacing(8)
         btn_row.addWidget(vocab_btn)
-        btn_row.addWidget(copy_btn)
+        btn_row.addWidget(self._step6_copy_btn)
         btn_row.addStretch()
         layout.addLayout(btn_row)
 
@@ -2191,6 +2276,52 @@ class WorkflowTab(QWidget):
         for err in errors:
             self._log(f"⚠  Could not remove {err}")
 
+    def _update_step6_for_engine(self, is_ace: bool) -> None:
+        """Adapt the Step 6 tab label and content for MV/MZ (plugins.js) vs Ace (.rb scripts)."""
+        # Step 1 prettier section — only relevant for MV/MZ
+        for attr in ("_pp_dazedformat_title", "_pp_dazedformat_box",
+                     "_pp_plugins_js_title", "_pp_plugins_js_box"):
+            w = getattr(self, attr, None)
+            if w is not None:
+                w.setVisible(not is_ace)
+        # Tab label
+        self._step_tabs.setTabText(6, "6  Scripts" if is_ace else "6  Plugins.js")
+        # Step 6 section header
+        lbl = getattr(self, "_step6_section_label", None)
+        if lbl is not None:
+            lbl.setText("Step 6 — Translate Ace Scripts (.rb)" if is_ace
+                        else "Step 6 — Translate plugins.js")
+        # Hint text
+        hint = getattr(self, "_step6_hint", None)
+        if hint is not None:
+            if is_ace:
+                hint.setText(
+                    "Translate visible Japanese strings in the Ace script files "
+                    "(ace_json/scripts/*.rb) without breaking game logic. "
+                    "Attach the .rb files and vocab.txt to Copilot or Cursor, "
+                    "then paste the copied prompt."
+                )
+            else:
+                hint.setText(
+                    "Translate the visible Japanese strings in js/plugins.js without breaking "
+                    "game logic. First copy vocab.txt into the game folder so the AI can use it "
+                    "as a glossary, then copy the prompt and paste it into Copilot or Cursor with "
+                    "plugins.js, vocab.txt, and optionally System.json attached."
+                )
+        # Prompt button tooltip
+        btn = getattr(self, "_step6_copy_btn", None)
+        if btn is not None:
+            if is_ace:
+                btn.setToolTip(
+                    "Copy a prompt that instructs Copilot/Cursor to translate only "
+                    "visible player-facing strings in the Ace .rb script files."
+                )
+            else:
+                btn.setToolTip(
+                    "Copy a prompt that instructs Copilot/Cursor to translate only "
+                    "visible player-facing strings in plugins.js, using vocab.txt as a glossary."
+                )
+
     def _detect_folder(self):
         folder = self.folder_edit.text().strip()
         if not folder:
@@ -2211,6 +2342,7 @@ class WorkflowTab(QWidget):
         self._ace_encrypted = False
         self._ace_json_dir = ""
         self._ace_rvdata_dir = ""
+        self._update_step6_for_engine(False)
 
         root_path = Path(folder)
 
@@ -2230,6 +2362,7 @@ class WorkflowTab(QWidget):
                 "border-radius:4px;margin:4px 0;"
             )
             self._log(f"⚠  RPGMaker Ace (encrypted) detected — found: {rgss_name}")
+            self._update_step6_for_engine(True)
             self._show_ace_decrypt_notice(folder, str(rgss_files[0]))
             return
         # ─────────────────────────────────────────────────────────────────────
@@ -2266,6 +2399,7 @@ class WorkflowTab(QWidget):
             self._ace_encrypted = False
             self._ace_rvdata_dir = str(data_path)
             self._engine = "MVMZ"  # scan JSON files like MVMZ
+            self._update_step6_for_engine(True)
             self._log("RPGMaker Ace (decrypted) detected.")
             self._log(f"  rvdata2 dir : {data_path}")
 
@@ -2585,8 +2719,13 @@ class WorkflowTab(QWidget):
             self._log(f"❌ Could not copy vocab.txt: {exc}")
 
     def _copy_plugins_js_translate_prompt(self):
-        QApplication.clipboard().setText(self._PLUGINS_JS_TRANSLATE_PROMPT)
-        self._log("plugins.js translation prompt copied to clipboard.")
+        is_ace = bool(getattr(self, "_ace_rvdata_dir", "") or getattr(self, "_ace_json_dir", ""))
+        if is_ace:
+            QApplication.clipboard().setText(self._ACE_SCRIPTS_TRANSLATE_PROMPT)
+            self._log("Ace scripts translation prompt copied to clipboard.")
+        else:
+            QApplication.clipboard().setText(self._PLUGINS_JS_TRANSLATE_PROMPT)
+            self._log("plugins.js translation prompt copied to clipboard.")
 
     def _copy_plugin_prompt(self):
         QApplication.clipboard().setText(self._PLUGIN_PROMPT)
