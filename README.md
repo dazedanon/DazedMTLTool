@@ -2,6 +2,10 @@
 
 An AI-powered game translation tool with a GUI. Translate RPG Maker, Ren'Py, Tyrano, Wolf RPG, Kirikiri, and other game engines from Japanese to English using GPT or compatible AI models.
 
+## Credits
+
+- **[Sinflower](https://github.com/Sinflower)** — [RV2JSON](https://github.com/Sinflower/RV2JSON) — enables RPGMaker Ace games to be translated the same way as MV/MZ by converting rvdata2 files to JSON and back.
+
 ## Table of Contents
 
 - [Supported Engines](#supported-engines)
