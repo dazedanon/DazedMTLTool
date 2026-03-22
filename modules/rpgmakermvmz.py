@@ -4059,10 +4059,10 @@ def searchSystem(data, pbar):
         if pbar is not None:
             pbar.refresh()
 
-    # Equip Types - batch translate all
+    # Equip Types - batch translate all (not present in RPG Maker Ace)
     equip_values = []
     equip_indices = []
-    for i in range(len(data["equipTypes"])):
+    for i in range(len(data.get("equipTypes", []) or [])):
         val = data["equipTypes"][i]
         # Skip if IGNORETLTEXT is enabled and no Japanese text
         if IGNORETLTEXT and (not val or not re.search(LANGREGEX, str(val))):
