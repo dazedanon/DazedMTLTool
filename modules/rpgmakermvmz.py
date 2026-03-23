@@ -2045,11 +2045,6 @@ def searchCodes(page, pbar, jobList, filename):
                         nametag = nametag.replace(speaker, tledSpeaker)
                         speaker = tledSpeaker
 
-                    # Detect pure-ellipsis strings (e.g. 「………」) before any transformation.
-                    # These are passed through as-is after bracket conversion, not sent to AI.
-                    _ell_inner = finalJAString.strip().lstrip('「').rstrip('」').strip()
-                    isEllipsisOnly = bool(_ell_inner) and all(c == '\u2026' for c in _ell_inner)
-
                     # Remove Extra Stuff bad for translation.
                     finalJAString = finalJAString.replace("ﾞ", "")
                     finalJAString = finalJAString.replace("　", "")
@@ -2112,7 +2107,7 @@ def searchCodes(page, pbar, jobList, filename):
                             finalJAString = finalJAString.replace("\\px[200]", "")
 
                         # Append
-                        if finalJAString != "" and not isEllipsisOnly:
+                        if finalJAString != "":
                             if speaker == "" and finalJAString != "":
                                 list401.append(finalJAString)
                             elif finalJAString != "":
@@ -2132,19 +2127,8 @@ def searchCodes(page, pbar, jobList, filename):
 
                     # Pass 2 (Setting Data)
                     else:
-                        # Ellipsis-only: bypass AI, set cleaned string directly
-                        if isEllipsisOnly:
-                            translatedText = nametag + finalJAString
-                            nametag = ""
-                            codeList[j]["code"] = code
-                            codeList[j]["parameters"] = [translatedText]
-                            syncIndex = i + 1
-                            speaker = ""
-                            match = []
-                            currentGroup = []
-
                         # Grab Translated String
-                        elif len(list401) > 0:
+                        if len(list401) > 0:
                             translatedText = list401[0]
 
                             # Remove speaker prefix if present
@@ -3342,7 +3326,8 @@ def searchCodes(page, pbar, jobList, filename):
 
                             # Cant have spaces?
                             translatedText = translatedText.replace(" ", "_")
-                            translatedText = translatedText.replace("__", "_")
+                            if "D_TEXT " not in jaString:
+                                translatedText = translatedText.replace("__", "_")
 
                             # Put Args Back
                             translatedText = jaString.replace(text, translatedText)
