@@ -191,7 +191,7 @@ HEADER_MAPPINGS_357 = {
     "SceneGlossary": (["category"], None),
 }
 # Subset of HEADER_MAPPINGS_357 keys that should be processed (empty = none).
-ENABLED_PLUGINS_357: set = {"_TMLogWindowMZ"}
+ENABLED_PLUGINS_357: set = set()
 
 # All known code-355/655 script patterns. Enable entries via ENABLED_PATTERNS_355655.
 PATTERNS_355655 = {
@@ -2045,11 +2045,13 @@ def searchCodes(page, pbar, jobList, filename):
                         nametag = nametag.replace(speaker, tledSpeaker)
                         speaker = tledSpeaker
 
+                    # Detect pure-ellipsis strings (e.g. 「………」) before any transformation.
+                    # These are passed through as-is after bracket conversion, not sent to AI.
+                    _ell_inner = finalJAString.strip().lstrip('「').rstrip('」').strip()
+                    isEllipsisOnly = bool(_ell_inner) and all(c == '\u2026' for c in _ell_inner)
+
                     # Remove Extra Stuff bad for translation.
                     finalJAString = finalJAString.replace("ﾞ", "")
-                    finalJAString = finalJAString.replace("…", "...")
-                    finalJAString = finalJAString.replace("。", ".")
-                    finalJAString = re.sub(r"(\.{3}\.+)", "...", finalJAString)
                     finalJAString = finalJAString.replace("　", "")
                     finalJAString = finalJAString.replace("「", '"')
                     finalJAString = finalJAString.replace("」", '"')
@@ -2110,7 +2112,7 @@ def searchCodes(page, pbar, jobList, filename):
                             finalJAString = finalJAString.replace("\\px[200]", "")
 
                         # Append
-                        if finalJAString != "":
+                        if finalJAString != "" and not isEllipsisOnly:
                             if speaker == "" and finalJAString != "":
                                 list401.append(finalJAString)
                             elif finalJAString != "":
@@ -2130,14 +2132,28 @@ def searchCodes(page, pbar, jobList, filename):
 
                     # Pass 2 (Setting Data)
                     else:
+                        # Ellipsis-only: bypass AI, set cleaned string directly
+                        if isEllipsisOnly:
+                            translatedText = nametag + finalJAString
+                            nametag = ""
+                            codeList[j]["code"] = code
+                            codeList[j]["parameters"] = [translatedText]
+                            syncIndex = i + 1
+                            speaker = ""
+                            match = []
+                            currentGroup = []
+
                         # Grab Translated String
-                        if len(list401) > 0:
+                        elif len(list401) > 0:
                             translatedText = list401[0]
 
                             # Remove speaker prefix if present
                             match = re.search(r'(^\[(.+?)\]\s?[|:]\s?)', translatedText)
                             if match:
                                 translatedText = translatedText.replace(match.group(1), "") 
+
+                            # Remove 。 that appears after ... in AI output
+                            translatedText = re.sub(r'\.\.\.(。)+', '...', translatedText)
 
                             # Ensure a space follows sentence-ending punctuation before a capital letter.
                             # Japanese doesn't use spaces after ！/？, so the AI omits them too.
@@ -3266,7 +3282,7 @@ def searchCodes(page, pbar, jobList, filename):
 
                 # Want to translate this script
                 if "D_TEXT " in jaString:
-                    regex = r"D_TEXT\s*([^\s]+)\s?\d*"
+                    regex = r"D_TEXT\s*(.+?)(?:\s+\d+)?$"
                 elif "ShowInfo" in jaString:
                     regex = r"ShowInfo\s(.*)"
                 elif "PushGab" in jaString:
