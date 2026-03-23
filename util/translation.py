@@ -1395,6 +1395,28 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None, mism
             history = tItem[-config.maxHistory:] if isinstance(tItem, list) else tItem
             continue
 
+        # Ellipsis-only bypass: strings whose translatable content is purely '…' characters
+        # (e.g. "「………」") should never be sent to the AI — just convert brackets and pass through.
+        def _is_ellipsis_only(s):
+            inner = str(s).strip().lstrip('「').rstrip('」').strip()
+            return bool(inner) and all(c == '\u2026' for c in inner)
+
+        def _convert_ellipsis(s):
+            return str(s).replace('「', '"').replace('」', '"')
+
+        if isinstance(tItem, list):
+            if all(_is_ellipsis_only(s) for s in tItem):
+                tList[index] = [_convert_ellipsis(s) for s in tItem]
+                if pbar is not None:
+                    pbar.update(len(tItem))
+                continue
+        else:
+            if _is_ellipsis_only(tItem):
+                tList[index] = _convert_ellipsis(tItem)
+                if pbar is not None:
+                    pbar.update(1)
+                continue
+
         # Protect script codes before translation
         protected_items = []
         all_replacements = {}
