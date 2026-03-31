@@ -4226,6 +4226,37 @@ def searchSystem(data, pbar):
 
     return totalTokens
 
+# Regex that matches one or more markup codes like \c[1], \n[2], \ow[3], etc.
+_MARKUP_STRIP_RE = re.compile(r"[\\]+[a-zA-Z]+\[[\w\d]*\]")
+
+def _is_plausible_speaker(name: str) -> bool:
+    """Return True only if *name* looks like a character name rather than dialogue or junk.
+
+    Called during SPEAKER_PARSE_MODE to filter false positives before they
+    enter SPEAKER_COLLECTED.  Heuristics (applied after stripping markup):
+      • 1–20 characters long
+      • Contains at least one Japanese character (kana / kanji)
+      • No sentence-ending / mid-sentence punctuation (。！？…、)
+      • No dialogue-opening quotes (「"（)
+      • No newlines, underscores, slashes, or dots
+    """
+    clean = _MARKUP_STRIP_RE.sub("", name).strip()
+    if not clean:
+        return False
+    if len(clean) > 20:
+        return False
+    # Must have at least one Japanese character
+    if not re.search(r"[\u3040-\u30FA\u31F0-\u31FF\u3400-\u4DBF\u4E00-\u9FFF\uFF61-\uFF9F]", clean):
+        return False
+    # Reject sentence-like strings
+    if re.search(r"[。！？…、]", clean):
+        return False
+    # Reject dialogue openers / structural characters
+    if re.search(r"[「」""\n\r_/\\.]", clean):
+        return False
+    return True
+
+
 # Save some money and enter the character before translation
 def getSpeaker(speaker: str):
     """Return (and possibly collect) speaker name.
@@ -4247,7 +4278,7 @@ def getSpeaker(speaker: str):
         with _speakerCacheLock:
             if speaker in _speakerCache:
                 return [_speakerCache[speaker], [0, 0]]
-            if speaker not in SPEAKER_COLLECTED:
+            if speaker not in SPEAKER_COLLECTED and _is_plausible_speaker(speaker):
                 SPEAKER_COLLECTED.append(speaker)
         return [speaker, [0, 0]]
 
