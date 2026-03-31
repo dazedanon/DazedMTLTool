@@ -779,7 +779,7 @@ class WorkflowTab(QWidget):
     # ── Copilot prompt templates ────────────────────────────────────────────
 
     _SPEAKER_PROMPT = (
-        "You are helping me configure a Japanese RPGMaker MV/MZ translation tool.\n"
+        "# RPGMaker MV/MZ Speaker Format Detection Prompt\n"
         "\n"
         "Look at a sample of the game's event files (Map*.json, CommonEvents.json, "
         "Troops.json) and determine which speaker name format the game uses.\n"
@@ -792,7 +792,9 @@ class WorkflowTab(QWidget):
         "## IMPORTANT — Always-on formats (NO FLAG NEEDED, never enable any flag for these)\n"
         "\n"
         "The following formats are detected and translated automatically. "
-        "If the game uses ANY of these, do NOT enable any flag — output SKIP for every flag.\n"
+        "If the game uses ANY of these, do NOT enable any flag for lines matching that pattern. "
+        "However, **DO NOT STOP** — continue checking whether other speakers in the same game "
+        "use a different format that requires a flag.\n"
         "\n"
         "  • 101 param[4] name — { \"code\": 101, \"parameters\": [\"\", 0, 2, 2, \"るな\"] }\n"
         "  • \\\\n<Name> or \\\\k<Name> escape code anywhere in a 401 line\n"
@@ -805,23 +807,27 @@ class WorkflowTab(QWidget):
         "\n"
         "## Flags that MAY need to be enabled\n"
         "\n"
-        "Only set these if the game does NOT already use an always-on format above.\n"
+        "Only set these if at least SOME speakers do NOT already use an always-on format above.\n"
         "\n"
         "### INLINE401SPEAKERS\n"
         "The speaker name is embedded at the start of the 401 text directly before 「 "
         "with NO intervening markup or brackets.\n"
         "Example:\n"
         "  { \"code\": 401, \"parameters\": [\"エレナ「今日は晴れですね。\"] }\n"
-        "→ ENABLE only if the game has no always-on format. "
-        "Do NOT enable if names come via 101 param[4], \\\\n<>, 【】, or [] — those are already handled.\n"
+        "→ ENABLE only if the game has dialogue lines matching this pattern.\n"
         "\n"
         "### FIRSTLINESPEAKERS\n"
         "The very first 401 in a message group is a short standalone name (<40 chars), "
         "and the following 401 starts with 「 \" ( （ * [.\n"
+        "This pattern commonly appears for NPCs/side characters even in games where the "
+        "protagonist uses an always-on format (e.g. \\\\c[N]Name\\\\c[0]).\n"
+        "The 101 command for these NPC lines typically has an empty face image (parameters[0] == \"\").\n"
         "Example:\n"
-        "  { \"code\": 401, \"parameters\": [\"アリス\"] }\n"
-        "  { \"code\": 401, \"parameters\": [\"「こんにちは。\"] }\n"
-        "→ ENABLE only if the game has no always-on format and names appear this way.\n"
+        "  { \"code\": 101, \"parameters\": [\"\", 0, 0, 2] }\n"
+        "  { \"code\": 401, \"parameters\": [\"衛兵さん\"] }        ← plain name, no color or brackets\n"
+        "  { \"code\": 401, \"parameters\": [\"「……起きたか」\"] }\n"
+        "→ ENABLE if ANY speakers in the game use this pattern, even if other speakers "
+        "(e.g. the protagonist) use an always-on format.\n"
         "\n"
         "### FACENAME101  ⚠  LAST RESORT ONLY\n"
         "Enable this ONLY when:\n"
@@ -838,22 +844,31 @@ class WorkflowTab(QWidget):
         "\n"
         "## Decision process\n"
         "\n"
-        "Step 1 — Check for always-on formats in the 401/101 blocks.\n"
-        "         If found → output SKIP for all three flags and stop.\n"
-        "Step 2 — Check for INLINE401SPEAKERS or FIRSTLINESPEAKERS.\n"
-        "         If found → ENABLE the matching flag(s). Stop — do not also enable FACENAME101.\n"
-        "Step 3 — Only if steps 1 and 2 both found nothing → consider FACENAME101.\n"
+        "Step 1 — Scan ALL 101→401 blocks across the sample files.\n"
+        "         Identify every distinct speaker pattern present:\n"
+        "           (a) Always-on patterns (list them — they need no flag)\n"
+        "           (b) Flag-requiring patterns (list them separately)\n"
+        "         A game may have BOTH simultaneously (e.g. protagonist via \\\\c[N]Name\\\\c[0],\n"
+        "         NPCs via plain FIRSTLINESPEAKERS). Do not stop after finding one pattern.\n"
+        "\n"
+        "Step 2 — For each flag-requiring pattern found in Step 1:\n"
+        "           • INLINE401SPEAKERS → ENABLE if name「 inline pattern exists\n"
+        "           • FIRSTLINESPEAKERS → ENABLE if plain standalone name line exists\n"
+        "         These can both be enabled together if both patterns exist.\n"
+        "\n"
+        "Step 3 — Only if no flag-requiring patterns were found in Steps 1–2, AND\n"
+        "         no always-on format was found, → consider FACENAME101.\n"
         "\n"
         "---\n"
         "\n"
         "Please examine a sample of the event commands in the attached files and output:\n"
         "\n"
-        "  1. Which format(s) were detected and which step of the decision process applied\n"
+        "  1. Which pattern(s) were detected for each speaker type (protagonist, NPCs, signs/narration)\n"
         "  2. For each flag — ENABLE or SKIP, with a one-line reason:\n"
         "       INLINE401SPEAKERS : ENABLE / SKIP — <reason>\n"
         "       FIRSTLINESPEAKERS : ENABLE / SKIP — <reason>\n"
         "       FACENAME101       : ENABLE / SKIP — <reason>\n"
-        "  3. A short concrete example from the files confirming the dominant pattern\n"
+        "  3. A short concrete example from the files confirming each detected pattern\n"
         "  4. If FACENAME101 is ENABLE: list every unique face filename found in "
         "code 101 parameters[0] so the user can build the name mapping\n"
     )
@@ -889,6 +904,10 @@ class WorkflowTab(QWidget):
         "# Game Characters\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
         "Identify every NAMED CHARACTER that appears in dialogue or descriptions.\n"
+        "If a 'Known speakers' list was provided above, use ONLY those names — do not add\n"
+        "characters that are not on that list, and skip any unnamed NPCs or generic enemies.\n"
+        "If no list was provided, discover named characters from the files yourself, but still\n"
+        "skip unnamed NPCs, generic enemy types, and narration-only entries.\n"
         "For each character provide:\n"
         "  - Japanese name (katakana/kanji as it appears in-game)\n"
         "  - English transliteration or translation\n"
@@ -913,7 +932,7 @@ class WorkflowTab(QWidget):
         "pursues Shiro throughout the story\n"
         "\n"
         "Rules:\n"
-        "  - Named characters only — no generic enemy types or unnamed NPCs.\n"
+        "  - If a Known speakers list was provided, only output entries for names on that list.\n"
         "  - If a character has a player-chosen name (e.g. Actors.json id 1), note it explicitly.\n"
         "\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
@@ -1530,8 +1549,43 @@ class WorkflowTab(QWidget):
 
         layout.addWidget(_make_section_label("Step 3 — Vocab / Glossary"))
 
+        # ---- 3a: Parse Speakers ---------------------------------------------
+        parse_title = QLabel("3a — Parse Speakers")
+        parse_title.setStyleSheet("color:#4ec9b0;font-size:13px;font-weight:bold;")
+        layout.addWidget(parse_title)
+
+        parse_box = QWidget()
+        parse_box.setObjectName("tbox")
+        parse_box.setStyleSheet(self._task_box_style())
+        parse_inner = QVBoxLayout(parse_box)
+        parse_inner.setContentsMargins(10, 8, 10, 8)
+        parse_inner.setSpacing(4)
+
+        parse_hint = QLabel(
+            "Scan all event files (Maps, CommonEvents, Troops) for speaker names and "
+            "batch-translate them, then write them into the # Speakers section of vocab.txt.\n"
+            "Run this before the full translation so the AI already knows every character name."
+        )
+        parse_hint.setWordWrap(True)
+        parse_hint.setStyleSheet("color:#9d9d9d;font-size:13px;")
+        parse_inner.addWidget(parse_hint)
+
+        parse_row = QHBoxLayout()
+        parse_speakers_btn = _make_btn("🔍  Parse Speakers", "#5a3a7a")
+        parse_speakers_btn.setFixedWidth(180)
+        parse_speakers_btn.setToolTip(
+            "Sets mode to 'Parse Speakers', selects all event files, and starts the run.\n"
+            "No text is translated — only speaker names are collected and written to vocab.txt."
+        )
+        parse_speakers_btn.clicked.connect(self._run_parse_speakers)
+        parse_row.addWidget(parse_speakers_btn)
+        parse_row.addStretch()
+        parse_inner.addLayout(parse_row)
+
+        layout.addWidget(parse_box)
+
         # ---- Copilot / Cursor prompt helpers --------------------------------
-        prompt_box_title = QLabel("3a — AI Prompt Helpers (Copilot / Cursor)")
+        prompt_box_title = QLabel("3b — AI Prompt Helpers (Copilot / Cursor)")
         prompt_box_title.setStyleSheet("color:#4ec9b0;font-size:13px;font-weight:bold;")
         layout.addWidget(prompt_box_title)
         prompt_box = QWidget()
@@ -1561,7 +1615,7 @@ class WorkflowTab(QWidget):
         layout.addWidget(prompt_box)
 
         # ---- vocab.txt editor -----------------------------------------------
-        vocab_title = QLabel("3b — vocab.txt editor")
+        vocab_title = QLabel("3c — vocab.txt editor")
         vocab_title.setStyleSheet("color:#4ec9b0;font-size:13px;font-weight:bold;")
         layout.addWidget(vocab_title)
         format_hint = QLabel(
@@ -1601,6 +1655,52 @@ class WorkflowTab(QWidget):
         row.addWidget(reload_vocab)
         row.addStretch()
         layout.addLayout(row)
+
+    def _run_parse_speakers(self):
+        """Configure Translation tab for Parse Speakers mode and auto-start."""
+        try:
+            pw = self.parent_window
+            tt = getattr(pw, "translation_tab", None) if pw else None
+            if tt is None:
+                self._log("❌ Translation tab not found.")
+                return
+
+            # 1. Set engine to RPG Maker MV/MZ
+            try:
+                combo = tt.module_combo
+                for i in range(combo.count()):
+                    if "RPG Maker MV/MZ" in combo.itemText(i):
+                        combo.setCurrentIndex(i)
+                        break
+            except Exception:
+                pass
+
+            # 2. Set mode to Parse Speakers
+            try:
+                mc = tt.mode_combo
+                idx = mc.findText("Parse Speakers")
+                if idx >= 0:
+                    mc.setCurrentIndex(idx)
+                else:
+                    self._log("❌ 'Parse Speakers' mode not available — make sure RPG Maker MV/MZ is selected.")
+                    return
+            except Exception as exc:
+                self._log(f"❌ Could not set Parse Speakers mode: {exc}")
+                return
+
+            self._log("")
+            self._log("─" * 54)
+            self._log("🔍  Switching to Parse Speakers mode…")
+            self._log("   Event files selected. Speaker names will be")
+            self._log("   collected and written to vocab.txt # Speakers.")
+            self._log("─" * 54)
+
+        except Exception as exc:
+            self._log(f"❌ _run_parse_speakers error: {exc}")
+            return
+
+        # 3. Select event files and auto-start
+        self._navigate_to_translation("events", auto_start=True)
 
     # ── Step 2: Speaker Detection ───────────────────────────────────────────
 
@@ -2578,8 +2678,56 @@ class WorkflowTab(QWidget):
     _BASE_SEPARATOR = "# ── Base Vocabulary (auto-appended from vocab_base.txt — do not edit below) ──\n"
 
     def _copy_glossary_prompt(self):
-        """Copy the glossary prompt to clipboard."""
-        self._copy_to_clipboard(self._PROMPT_GLOSSARY, "Glossary prompt copied.")
+        """Copy the glossary prompt to clipboard, injecting known speakers from vocab.txt."""
+        speakers = self._read_vocab_speakers()
+        if speakers:
+            speaker_lines = "\n".join(f"  {orig} ({tl})" for orig, tl in speakers)
+            known_block = (
+                "## Known speakers (identified by Parse Speakers)\n"
+                "\n"
+                "The following character names were already extracted from the game files.\n"
+                "For the '# Game Characters' section, focus ONLY on these names — do NOT add\n"
+                "extra characters that are not in this list.\n"
+                "Skip any unnamed NPCs, generic enemies, or narration-only entries.\n"
+                "\n"
+                + speaker_lines
+                + "\n\n---\n\n"
+            )
+            final_prompt = known_block + self._PROMPT_GLOSSARY
+        else:
+            final_prompt = self._PROMPT_GLOSSARY
+        self._copy_to_clipboard(final_prompt, "Glossary prompt copied.")
+
+    def _read_vocab_speakers(self) -> list[tuple[str, str]]:
+        """Parse the '# Speakers' section from vocab.txt and return (orig, tl) pairs."""
+        vocab_path = Path("vocab.txt")
+        if not vocab_path.exists():
+            return []
+        try:
+            content = vocab_path.read_text(encoding="utf-8")
+        except Exception:
+            return []
+
+        import re as _re
+        # Find the # Speakers block (ends at next # header or EOF)
+        m = _re.search(
+            r"^[\t ]*#\s*Speakers\s*$\r?\n(.*?)(?=^[\t ]*#|\Z)",
+            content,
+            _re.MULTILINE | _re.DOTALL,
+        )
+        if not m:
+            return []
+
+        results = []
+        for line in m.group(1).splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            # Expected format: "日本語 (English)"
+            pm = _re.match(r"^(.+?)\s+\((.+?)\)\s*$", line)
+            if pm:
+                results.append((pm.group(1), pm.group(2)))
+        return results
 
     def _reload_vocab(self):
         vocab_path = Path("vocab.txt")
