@@ -438,6 +438,17 @@ def _make_toggle_btn(text: str) -> QPushButton:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Helpers
+# ─────────────────────────────────────────────────────────────────────────────
+
+class _PlainPasteTextEdit(QTextEdit):
+    """QTextEdit that always pastes as plain text to avoid spurious newlines."""
+
+    def insertFromMimeData(self, source):  # noqa: N802
+        self.insertPlainText(source.text())
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Main widget
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -813,11 +824,27 @@ class WorkflowTab(QWidget):
         "\n"
         "\n"
         "  101 param[4] name       { \"code\": 101, \"parameters\": [\"\", 0, 2, 2, \"るな\"] }\n"
-        "  \\\\n<Name> or \\\\k<Name>   escape code anywhere inside a 401 line\n"
+        "  \\\\n<Name> or \\\\k<Name>   escape code with ANGLE BRACKETS anywhere inside a 401 line\n"
         "  【Name】                  alone on a line, or 【Name】dialogue on the same line\n"
         "  [Name]                  alone on a line, or [Name]dialogue on the same line\n"
         "  \\\\c[N]Name\\\\c[0]       color-wrapped name on its own 401 line\n"
         "  Name：                   line ending with a full-width colon\n"
+        "\n"
+        "## CRITICAL — \\\\N[X] / \\\\n[X] (square bracket + number) is NOT a speaker format\n"
+        "\n"
+        "  \\\\N[ActorID] and \\\\n[ActorID] (e.g. \\\\N[1], \\\\n[2]) are RPGMaker actor variable\n"
+        "  substitution codes. They expand to an actor's name at runtime, but the translation tool\n"
+        "  handles them purely as text substitution during translation — they are NEVER treated as\n"
+        "  a speaker name tag.\n"
+        "\n"
+        "  A 401 line containing ONLY \\\\N[X], or narration text that embeds \\\\N[X] (e.g.\n"
+        "  \"ローターが\\\\N[1]の乳首に装着される！\"), does NOT match any always-on speaker format.\n"
+        "  Do NOT count \\\\N[X] / \\\\n[X] codes as always-on speaker detection hits.\n"
+        "\n"
+        "  If a game's ONLY speaker indicator is a standalone \\\\N[X] line followed by dialogue,\n"
+        "  check whether FIRSTLINESPEAKERS would catch it (the standalone line must be < 40 chars\n"
+        "  AND contain at least one Japanese character — a bare \\\\N[1] with no Japanese text does\n"
+        "  NOT qualify for FIRSTLINESPEAKERS either).\n"
         "</always_on_formats>\n"
         "\n"
         "<flags>\n"
@@ -1586,7 +1613,7 @@ class WorkflowTab(QWidget):
         )
         layout.addWidget(format_hint)
 
-        self.vocab_editor = QTextEdit()
+        self.vocab_editor = _PlainPasteTextEdit()
         self.vocab_editor.setMinimumHeight(80)
         self.vocab_editor.setMaximumHeight(160)
         self.vocab_editor.setFont(QFont("Consolas", 9))
