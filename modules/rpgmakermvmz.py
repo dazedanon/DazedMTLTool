@@ -148,8 +148,8 @@ CODE408 = False
 
 # Variables
 CODE122 = False
-CODE122_VAR_MIN = 0
-CODE122_VAR_MAX = 2000
+CODE122_VAR_MIN = 890
+CODE122_VAR_MAX = 891
 
 # Plugins / Scripts
 CODE355655 = False
@@ -218,7 +218,7 @@ PATTERNS_355655 = {
     "AddAddress": (r'AddAddress\(\d+,\s*\\?"(.+?)\\?"', False),
 }
 # Subset of PATTERNS_355655 keys that should be processed (empty = none).
-ENABLED_PATTERNS_355655: set = set()
+ENABLED_PATTERNS_355655: set = {"BattleManager._logWindow.push('addText'"}
 
 
 def handleMVMZ(filename, estimate):
@@ -1886,7 +1886,7 @@ def searchCodes(page, pbar, jobList, filename):
                 # Inline speaker detection — Name「/Name: "/Name: (/[Name] "/[Name] (
                 if len(speakerList) == 0 and INLINE401SPEAKERS:
                     inlineSpeakerMatch = re.match(
-                        r'^(?:\[([^\]]{1,30})\]\s*|([^\s「」。、！？…\\\n“”"(:\[\]]{1,20})(?:[::：]\s*)?(?=[「“"(]))(.*)',
+                        r'^(?:\[([^\]]{1,30})\]\s*|([^\s「」。、！？…\\\n“”"(:\[\]]{1,20})(?:[::：]?\s*)(?=[「“"(]))(.*)',
                         jaString, re.DOTALL
                     )
                     if inlineSpeakerMatch:
@@ -2623,8 +2623,10 @@ def searchCodes(page, pbar, jobList, filename):
                     if isinstance(codeList[i]["parameters"][0], str) and codeList[i]["parameters"][0].strip():
                         reduceWidthFlag = True
                     jaString = codeList[i]["parameters"][4]
-                # Check for Var
-                elif len(codeList[i]["parameters"]) > 0:
+                # Check for Var (only when parameters[0] is not a face file,
+                # i.e. fewer than 4 params — standard code 101 always has 4:
+                # [faceFile, faceIndex, background, position])
+                elif 0 < len(codeList[i]["parameters"]) < 4:
                     jaString = codeList[i]["parameters"][0]
                     isVar = True
                 if not isinstance(jaString, str):

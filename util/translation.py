@@ -1398,11 +1398,11 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None, mism
         # Ellipsis-only bypass: strings whose translatable content is purely '…' characters
         # (e.g. "「………」") should never be sent to the AI — just convert brackets and pass through.
         def _is_ellipsis_only(s):
-            inner = str(s).strip().lstrip('「').rstrip('」').strip()
-            return bool(inner) and all(c == '\u2026' for c in inner)
+            inner = str(s).strip().lstrip('「『').rstrip('」』').strip()
+            return bool(inner) and all(c in '\u2026\u30FC' for c in inner)
 
         def _convert_ellipsis(s):
-            return str(s).replace('「', '"').replace('」', '"')
+            return str(s).replace('「', '"').replace('」', '"').replace('『', '"').replace('』', '"')
 
         if isinstance(tItem, list):
             if all(_is_ellipsis_only(s) for s in tItem):
@@ -1717,6 +1717,7 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None, mism
                                         return line
                                     line = line.replace("Placeholder Text", "").strip()
                                     line = line.replace("「", '"').replace("」", '"')
+                                    line = line.replace("『", '"').replace("』", '"')
                                     return line
                                 final_translations = [_clean_extracted_line(line) for line in extracted]
                 else:
