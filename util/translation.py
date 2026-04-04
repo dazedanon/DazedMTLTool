@@ -877,7 +877,19 @@ def translateText(system, user, history, penalty, formatType, model, numLines=No
             raise ValueError(f"Message {i} has empty content: {message}")
 
     # --- API Call Logic ---
-    api_provider = os.getenv("API_PROVIDER", "openai").lower()
+    # Re-apply env vars here so that GUI config changes (which update os.environ
+    # but cannot re-run module-level code) are always reflected at call time.
+    _live_api = os.getenv("api", "").strip()
+    _live_key = os.getenv("key", "").strip()
+    _live_provider = os.getenv("API_PROVIDER", "openai").lower()
+    if _live_provider == "gemini":
+        openai.base_url = "https://generativelanguage.googleapis.com/v1beta/openai/"
+    elif _live_api:
+        openai.base_url = _live_api
+    if _live_key:
+        openai.api_key = _live_key
+
+    api_provider = _live_provider
 
     # Omit response_format for plain text — some providers reject {"type": "text"}.
     params = {

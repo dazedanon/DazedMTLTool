@@ -313,6 +313,7 @@ class ConfigTab(QWidget):
             ("OpenAI", "https://api.openai.com/v1"),
             ("Claude (Anthropic)", "https://api.anthropic.com/v1"),
             ("Gemini", "https://generativelanguage.googleapis.com/v1beta/openai/"),
+            ("DeepSeek", "https://api.deepseek.com/v1"),
         ]
         for _name, _url in _url_presets:
             _action = api_url_menu.addAction(_name)
