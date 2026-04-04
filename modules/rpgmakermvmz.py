@@ -218,7 +218,7 @@ PATTERNS_355655 = {
     "AddAddress": (r'AddAddress\(\d+,\s*\\?"(.+?)\\?"', False),
 }
 # Subset of PATTERNS_355655 keys that should be processed (empty = none).
-ENABLED_PATTERNS_355655: set = {"BattleManager._logWindow.push('addText'"}
+ENABLED_PATTERNS_355655: set = {"_subject="}
 
 
 def handleMVMZ(filename, estimate):
@@ -3278,7 +3278,7 @@ def searchCodes(page, pbar, jobList, filename):
                 elif "DW_" in jaString:
                     regex = r"DW_.*\s\d+\s(.+)"
                 elif "CommonPopup" in jaString:
-                    regex = r"CommonPopup\sadd\stext:(.*?)[\\]+}"
+                    regex = r"CommonPopup\sadd\stext:(.+?)(?=\s+count:|\s*$)"
                 elif "AddCustomChoice" in jaString:
                     regex = r"AddCustomChoice\s\d+\s(.+)\s\d"
                 else:
