@@ -756,6 +756,12 @@ class TranslationTab(QWidget):
         self.sidebar_export_btn.clicked.connect(self._export_selected_files)
         self.sidebar_export_btn.setStyleSheet(icon_button_style)
         file_buttons.addWidget(self.sidebar_export_btn)
+
+        pricing_test_btn = QPushButton("💰")
+        pricing_test_btn.setToolTip("Check live pricing for the current model")
+        pricing_test_btn.clicked.connect(self._check_model_pricing)
+        pricing_test_btn.setStyleSheet(icon_button_style)
+        file_buttons.addWidget(pricing_test_btn)
         
         # Add stretch to push buttons to top
         file_buttons.addStretch()
@@ -1249,6 +1255,70 @@ class TranslationTab(QWidget):
         elif mode_text == "Parse Speakers":
             self.translate_button.setText("Parse Speakers")
         
+    def _check_model_pricing(self):
+        """Fetch live pricing for the current model and print it to the log."""
+        from dotenv import dotenv_values
+        from pathlib import Path as _Path
+
+        # Read model from .env file directly so we always get the saved value
+        env = dotenv_values(_Path(".env")) if _Path(".env").exists() else {}
+        model = env.get("model") or os.getenv("model", "").strip()
+
+        log = self.translation_log_viewer
+
+        if not model:
+            log.append_log_message("💰 [PRICING] No model configured — set a model in Settings first.")
+            return
+
+        log.append_log_message(f"💰 [PRICING] Checking pricing for: {model}")
+
+        try:
+            from util.translation import _lookup_model_price, _load_litellm_pricing
+        except Exception as e:
+            log.append_log_message(f"💰 [PRICING] Could not import pricing module: {e}")
+            return
+
+        # Force a fresh fetch attempt (bypasses the in-memory TTL check by
+        # temporarily clearing the in-memory cache timestamp)
+        try:
+            import util.translation as _tmod
+            _tmod._pricing_db_fetched_at = 0.0
+            _tmod._pricing_fetch_warned = False
+        except Exception:
+            pass
+
+        db = _load_litellm_pricing()
+        if db is None:
+            log.append_log_message(
+                "💰 [PRICING] Could not reach LiteLLM pricing DB — no internet or cache available. "
+                "Falling back to built-in prices."
+            )
+        else:
+            log.append_log_message(f"💰 [PRICING] LiteLLM DB loaded ({len(db):,} entries).")
+
+        result = _lookup_model_price(model)
+        if result:
+            inp, out = result
+            source = "LiteLLM" if db else "built-in fallback"
+            log.append_log_message(
+                f"💰 [PRICING] {model}  —  "
+                f"Input: ${inp:.4f} / 1M tokens  |  "
+                f"Output: ${out:.4f} / 1M tokens  "
+                f"(source: {source})"
+            )
+        else:
+            # Fall back to getPricingConfig for the hardcoded table result
+            try:
+                from util.translation import getPricingConfig
+                cfg = getPricingConfig(model)
+                log.append_log_message(
+                    f"💰 [PRICING] {model} not found in LiteLLM DB — using built-in fallback:  "
+                    f"Input: ${cfg['inputAPICost']:.4f} / 1M tokens  |  "
+                    f"Output: ${cfg['outputAPICost']:.4f} / 1M tokens"
+                )
+            except Exception as e:
+                log.append_log_message(f"💰 [PRICING] Could not determine pricing for '{model}': {e}")
+
     def refresh_file_lists(self):
         """Refresh the file list with checkboxes, preserving checked states."""
         # Save current check states from existing QListWidgetItems

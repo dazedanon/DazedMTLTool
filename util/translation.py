@@ -6,10 +6,12 @@ Centralized translation function used across all modules.
 import os
 import re
 import json
+import time
 import unicodedata
 import tiktoken
 import openai
 import anthropic
+import urllib.request
 from openai import APIError, APIConnectionError, RateLimitError, APIStatusError
 import hashlib
 import threading
@@ -495,6 +497,140 @@ class TranslationConfig:
         self.mismatchLogPath = mismatchLogPath
 
 
+_LITELLM_PRICING_URL = (
+    "https://raw.githubusercontent.com/BerriAI/litellm/main"
+    "/model_prices_and_context_window.json"
+)
+_PRICING_CACHE_FILE = Path("log/litellm_pricing.json")
+_PRICING_CACHE_TTL  = 86_400  # 24 hours
+_pricing_db: dict | None = None
+_pricing_db_fetched_at: float = 0.0
+_pricing_db_lock = threading.Lock()
+_pricing_fetch_warned: bool = False  # print fetch-failure warning at most once per session
+
+
+def _load_litellm_pricing() -> dict | None:
+    """Return the LiteLLM pricing DB, using a 24-hour disk cache."""
+    global _pricing_db, _pricing_db_fetched_at, _pricing_fetch_warned
+
+    with _pricing_db_lock:
+        now = time.time()
+
+        # In-memory cache still fresh
+        if _pricing_db is not None and (now - _pricing_db_fetched_at) < _PRICING_CACHE_TTL:
+            return _pricing_db
+
+        # Try disk cache
+        if _PRICING_CACHE_FILE.exists():
+            try:
+                disk = json.loads(_PRICING_CACHE_FILE.read_text(encoding="utf-8"))
+                if (now - disk.get("fetched_at", 0)) < _PRICING_CACHE_TTL:
+                    _pricing_db = disk["prices"]
+                    _pricing_db_fetched_at = disk["fetched_at"]
+                    return _pricing_db
+            except Exception:
+                pass
+
+        # Fetch from GitHub
+        try:
+            with urllib.request.urlopen(_LITELLM_PRICING_URL, timeout=5) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+            _pricing_db = data
+            _pricing_db_fetched_at = now
+            _pricing_fetch_warned = False  # reset if a later fetch succeeds
+            try:
+                _PRICING_CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
+                _PRICING_CACHE_FILE.write_text(
+                    json.dumps({"fetched_at": now, "prices": data}),
+                    encoding="utf-8",
+                )
+            except Exception:
+                pass
+            return _pricing_db
+        except Exception as fetch_err:
+            # No internet / GitHub unreachable — warn once, then fall back
+            if not _pricing_fetch_warned:
+                _pricing_fetch_warned = True
+                print(
+                    f"[PRICING] Warning: Could not fetch live model pricing "
+                    f"({fetch_err}). Cost estimates may be inaccurate — "
+                    f"using built-in fallback prices.",
+                    flush=True,
+                )
+            # Use stale disk cache if available
+            if _pricing_db is not None:
+                return _pricing_db
+            try:
+                disk = json.loads(_PRICING_CACHE_FILE.read_text(encoding="utf-8"))
+                _pricing_db = disk["prices"]
+                return _pricing_db
+            except Exception:
+                return None
+
+
+def _lookup_model_price(model: str):
+    """Look up (input_per_1M, output_per_1M) from the LiteLLM pricing DB.
+
+    Returns a (float, float) tuple or None if not found.
+    Matching priority:
+      1. Exact key match
+      2. Exact match on the model portion after a provider prefix (e.g. "deepseek/deepseek-chat")
+      3. The user's model name is a prefix of a DB key (handles dated suffixes like -20241022)
+      4. A DB key model-part is a prefix of the user's model name
+    """
+    db = _load_litellm_pricing()
+    if not db:
+        return None
+
+    model_lower = model.lower()
+
+    def _extract(entry):
+        inp = entry.get("input_cost_per_token")
+        out = entry.get("output_cost_per_token")
+        if inp is not None and out is not None:
+            return round(inp * 1_000_000, 6), round(out * 1_000_000, 6)
+        return None
+
+    # Pass 1: exact key
+    if model_lower in db:
+        result = _extract(db[model_lower])
+        if result:
+            return result
+
+    # Build a lookup of (stripped_key → original_key) for passes 2-4
+    stripped: list[tuple[str, str]] = []
+    for key in db:
+        stripped.append((key.split("/")[-1].lower(), key))
+
+    # Pass 2: exact match on stripped key
+    for skey, orig in stripped:
+        if skey == model_lower:
+            result = _extract(db[orig])
+            if result:
+                return result
+
+    # Pass 3: model name is a prefix of the DB key (e.g. "claude-3-5-sonnet" matches
+    #          "claude-3-5-sonnet-20241022")
+    candidates = [(skey, orig) for skey, orig in stripped if skey.startswith(model_lower)]
+    if candidates:
+        # Prefer the shortest (most generic) key
+        skey, orig = min(candidates, key=lambda x: len(x[0]))
+        result = _extract(db[orig])
+        if result:
+            return result
+
+    # Pass 4: DB key is a prefix of the model name (e.g. "gemini-2.0-flash" matches
+    #          "gemini-2.0-flash-exp")
+    candidates = [(skey, orig) for skey, orig in stripped if model_lower.startswith(skey)]
+    if candidates:
+        skey, orig = max(candidates, key=lambda x: len(x[0]))  # longest = most specific
+        result = _extract(db[orig])
+        if result:
+            return result
+
+    return None
+
+
 def getPricingConfig(model):
     """
     Get pricing configuration for a given model.
@@ -505,108 +641,72 @@ def getPricingConfig(model):
     Returns:
         dict: Dictionary containing inputAPICost, outputAPICost, batchSize, and frequencyPenalty
     """
-    # Pricing - Depends on the model https://openai.com/pricing ($ Price Per 1M)
-    # Batch Size - GPT 3.5 Struggles past 15 lines per request. GPT4 struggles past 50 lines per request
-    # If you are getting a MISMATCH LENGTH error, lower the batch size.
-    if "gpt-3.5" in model:
-        return {
-            "inputAPICost": 3.00,
-            "outputAPICost": 5.00,
-            "batchSize": 10,
-            "frequencyPenalty": 0.2
-        }
-    elif "gpt-4.1-mini" in model:
-        return {
-            "inputAPICost": 0.40,
-            "outputAPICost": 1.60,
-            "batchSize": 30,
-            "frequencyPenalty": 0.05
-        }
-    elif "gpt-4.1" in model:
-        return {
-            "inputAPICost": 2.00,
-            "outputAPICost": 8.00,
-            "batchSize": 30,
-            "frequencyPenalty": 0.05
-        }
-    elif "gpt-5" in model:
-        return {
-            "inputAPICost": 1.25,
-            "outputAPICost": 10.00,
-            "batchSize": 30,
-            "frequencyPenalty": 0.05
-        }
-    elif "deepseek" in model:
-        return {
-            "inputAPICost": 0.27,
-            "outputAPICost": 1.10,
-            "batchSize": 30,
-            "frequencyPenalty": 0.05
-        }
-    elif "claude-opus" in model or model == "claude-3-opus":
-        return {
-            "inputAPICost": 15.00,
-            "outputAPICost": 75.00,
-            "batchSize": 30,
-            "frequencyPenalty": 0.05
-        }
-    elif "claude-haiku" in model or "haiku" in model:
-        return {
-            "inputAPICost": 0.80,
-            "outputAPICost": 4.00,
-            "batchSize": 30,
-            "frequencyPenalty": 0.05
-        }
-    elif "sonnet" in model or "claude" in model:
-        return {
-            "inputAPICost": 3.00,
-            "outputAPICost": 15.00,
-            "batchSize": 30,
-            "frequencyPenalty": 0.05
-        }
-    elif "gemini-2.0-flash-lite" in model:
-        return {
-            "inputAPICost": 0.075,
-            "outputAPICost": 0.30,
-            "batchSize": 30,
-            "frequencyPenalty": 0.0
-        }
-    elif "gemini-2.0-flash" in model:
-        return {
-            "inputAPICost": 0.10,
-            "outputAPICost": 0.40,
-            "batchSize": 30,
-            "frequencyPenalty": 0.0
-        }
-    elif "gemini-2.5-flash-lite" in model:
-        return {
-            "inputAPICost": 0.10,
-            "outputAPICost": 0.40,
-            "batchSize": 30,
-            "frequencyPenalty": 0.0
-        }
-    elif "gemini-2.5-flash" in model:
-        return {
-            "inputAPICost": 0.30,
-            "outputAPICost": 2.50,
-            "batchSize": 30,
-            "frequencyPenalty": 0.0
-        }
-    elif "gemini-2.5-pro" in model:
-        return {
-            "inputAPICost": 1.25,
-            "outputAPICost": 10.00,
-            "batchSize": 30,
-            "frequencyPenalty": 0.0
-        }
+    # Try to resolve pricing from the LiteLLM community pricing DB first.
+    # This keeps costs accurate as providers update their prices without requiring
+    # a code change.  Falls back to the hardcoded table below on failure.
+    live_price = _lookup_model_price(model)
+    if live_price:
+        inp, out = live_price
+        # Preserve model-specific batch / penalty overrides from the hardcoded table
+        # by still running through the if-chain but replacing the cost fields.
+        _live_override = {"inputAPICost": inp, "outputAPICost": out}
     else:
-        # Fallback to environment variables
-        return {
-            "inputAPICost": float(os.getenv("input_cost", 3.00)),
-            "outputAPICost": float(os.getenv("output_cost", 6.00)),
-            "batchSize": int(os.getenv("batchsize", 10)),
-            "frequencyPenalty": float(os.getenv("frequency_penalty", 0.2))
+        _live_override = None
+
+    # Hardcoded fallback table — used for batchSize / frequencyPenalty tuning and
+    # as a cost fallback when the LiteLLM DB is unavailable.
+    # Batch Size: GPT-3.5 struggles past 15 lines; GPT-4 struggles past 50.
+    # If you get a MISMATCH LENGTH error, lower the batch size.
+    if "gpt-3.5" in model:
+        cfg = {"inputAPICost": 3.00,  "outputAPICost": 5.00,  "batchSize": 10, "frequencyPenalty": 0.2}
+    elif "gpt-4.1-mini" in model:
+        cfg = {"inputAPICost": 0.40,  "outputAPICost": 1.60,  "batchSize": 30, "frequencyPenalty": 0.05}
+    elif "gpt-4.1" in model:
+        cfg = {"inputAPICost": 2.00,  "outputAPICost": 8.00,  "batchSize": 30, "frequencyPenalty": 0.05}
+    elif "gpt-5" in model:
+        cfg = {"inputAPICost": 1.25,  "outputAPICost": 10.00, "batchSize": 30, "frequencyPenalty": 0.05}
+    elif "deepseek" in model:
+        cfg = {"inputAPICost": 0.27,  "outputAPICost": 1.10,  "batchSize": 30, "frequencyPenalty": 0.05}
+    elif "claude-opus-4-5" in model or "claude-opus-4-6" in model:
+        cfg = {"inputAPICost": 5.00,  "outputAPICost": 25.00, "batchSize": 30, "frequencyPenalty": 0.05}
+    elif "claude-opus" in model or model == "claude-3-opus":
+        # Opus 4, 4.1, 3 — $15/$75
+        cfg = {"inputAPICost": 15.00, "outputAPICost": 75.00, "batchSize": 30, "frequencyPenalty": 0.05}
+    elif "claude-haiku-4-5" in model or "claude-haiku-4-6" in model:
+        cfg = {"inputAPICost": 1.00,  "outputAPICost": 5.00,  "batchSize": 30, "frequencyPenalty": 0.05}
+    elif "claude-haiku-3-5" in model:
+        cfg = {"inputAPICost": 0.80,  "outputAPICost": 4.00,  "batchSize": 30, "frequencyPenalty": 0.05}
+    elif "claude-3-haiku" in model:
+        cfg = {"inputAPICost": 0.25,  "outputAPICost": 1.25,  "batchSize": 30, "frequencyPenalty": 0.05}
+    elif "haiku" in model:
+        # Unknown haiku version — use current flagship pricing as best guess
+        cfg = {"inputAPICost": 1.00,  "outputAPICost": 5.00,  "batchSize": 30, "frequencyPenalty": 0.05}
+    elif "sonnet" in model or "claude" in model:
+        cfg = {"inputAPICost": 3.00,  "outputAPICost": 15.00, "batchSize": 30, "frequencyPenalty": 0.05}
+    elif "gemini-2.0-flash-lite" in model:
+        cfg = {"inputAPICost": 0.075, "outputAPICost": 0.30,  "batchSize": 30, "frequencyPenalty": 0.0}
+    elif "gemini-2.0-flash" in model:
+        cfg = {"inputAPICost": 0.10,  "outputAPICost": 0.40,  "batchSize": 30, "frequencyPenalty": 0.0}
+    elif "gemini-2.5-flash-lite" in model:
+        cfg = {"inputAPICost": 0.10,  "outputAPICost": 0.40,  "batchSize": 30, "frequencyPenalty": 0.0}
+    elif "gemini-2.5-flash" in model:
+        cfg = {"inputAPICost": 0.30,  "outputAPICost": 2.50,  "batchSize": 30, "frequencyPenalty": 0.0}
+    elif "gemini-2.5-pro" in model:
+        cfg = {"inputAPICost": 1.25,  "outputAPICost": 10.00, "batchSize": 30, "frequencyPenalty": 0.0}
+    else:
+        cfg = {
+            "inputAPICost":    float(os.getenv("input_cost", 3.00)),
+            "outputAPICost":   float(os.getenv("output_cost", 6.00)),
+            "batchSize":       int(os.getenv("batchsize", 10)),
+            "frequencyPenalty": float(os.getenv("frequency_penalty", 0.2)),
         }
+
+    # Apply live pricing from LiteLLM if available — keeps costs up-to-date
+    # without requiring code changes when providers reprice their models.
+    if _live_override:
+        cfg.update(_live_override)
+
+    return cfg
 
 
 def batchList(inputList, batchSize):
