@@ -43,7 +43,16 @@ class ModelFetchThread(QThread):
     def run(self):
         models = []
         errors = []
-        for fetcher in (self._fetch_openai, self._fetch_anthropic, self._fetch_gemini):
+        _url = self.api_url.lower()
+        # Only attempt each provider's fetcher when the configured URL matches.
+        # Avoids sending a DeepSeek (or other) key to Anthropic and getting a
+        # spurious 401 authentication error.
+        fetchers = [self._fetch_openai]
+        if not _url or "anthropic" in _url:
+            fetchers.append(self._fetch_anthropic)
+        if not _url or "googleapis" in _url or "gemini" in _url:
+            fetchers.append(self._fetch_gemini)
+        for fetcher in fetchers:
             try:
                 models.extend(fetcher())
             except Exception as exc:
@@ -59,11 +68,14 @@ class ModelFetchThread(QThread):
         if self.api_url:
             kwargs["base_url"] = self.api_url
         client = openai.OpenAI(**kwargs)
+        all_models = [m.id for m in client.models.list()]
+        # When using a custom URL (non-OpenAI provider like DeepSeek), return all
+        # model IDs unfiltered.  For the default OpenAI endpoint, keep only the
+        # GPT / o-series models to avoid a cluttered list.
+        if self.api_url:
+            return sorted(all_models)
         prefixes = ("gpt-", "o1", "o2", "o3", "o4", "chatgpt")
-        return sorted(
-            m.id for m in client.models.list()
-            if any(m.id.lower().startswith(p) for p in prefixes)
-        )
+        return sorted(m for m in all_models if any(m.lower().startswith(p) for p in prefixes))
 
     def _fetch_anthropic(self):
         import anthropic
@@ -313,7 +325,7 @@ class ConfigTab(QWidget):
             ("OpenAI", "https://api.openai.com/v1"),
             ("Claude (Anthropic)", "https://api.anthropic.com/v1"),
             ("Gemini", "https://generativelanguage.googleapis.com/v1beta/openai/"),
-            ("DeepSeek", "https://api.deepseek.com/v1"),
+            ("DeepSeek", "https://api.deepseek.com/v1/"),
         ]
         for _name, _url in _url_presets:
             _action = api_url_menu.addAction(_name)

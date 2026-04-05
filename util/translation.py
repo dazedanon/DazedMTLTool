@@ -815,7 +815,16 @@ def translateText(system, user, history, penalty, formatType, model, numLines=No
     if not system or not str(system).strip():
         raise ValueError("System content cannot be empty")
     
-    _is_claude = model and any(x in model.lower() for x in ("claude", "sonnet", "haiku", "opus"))
+    _live_api_check = os.getenv("api", "").strip()
+    # Only route to the native Anthropic SDK when the model looks like Claude AND
+    # the configured API URL is either unset (implying default Anthropic usage) or
+    # explicitly points at anthropic.com.  Any other custom URL (e.g. DeepSeek,
+    # OpenAI proxy) should use the OpenAI-compatible path even for Claude-named models.
+    _is_claude = (
+        model
+        and any(x in model.lower() for x in ("claude", "sonnet", "haiku", "opus"))
+        and (not _live_api_check or "anthropic" in _live_api_check.lower())
+    )
     _is_deepseek = model and "deepseek" in model.lower()
 
     # Build message list.
@@ -1549,7 +1558,12 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None, mism
 
             # Track exact cache write size (static_system, constant across batches)
             # and accumulate non-cached (vocab + user + history) tokens per batch.
-            _is_claude_est = config.model and any(x in config.model.lower() for x in ("claude", "sonnet", "haiku", "opus"))
+            _est_api = os.getenv("api", "").strip()
+            _is_claude_est = (
+                config.model
+                and any(x in config.model.lower() for x in ("claude", "sonnet", "haiku", "opus"))
+                and (not _est_api or "anthropic" in _est_api.lower())
+            )
             if _is_claude_est:
                 # Use Anthropic's count_tokens API once to get the exact cached token count.
                 # Only called on the first batch; result reused for all subsequent batches.
