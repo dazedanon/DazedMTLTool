@@ -1,212 +1,65 @@
-# MAIN CHARACTERS
-エルミナ (Elmina) - Female; protagonist; elf mage
-フェリス (Feris) - Female; spirit entity; Elmina's guardian & companion
+# Game Characters
+エル (El) - Female; inn adventurer tied to the Light Plain plotline; not player-chosen; speaks casually and informally; energetic and direct
+流浪の求道者 (Seeker) - Male; roaming challenge NPC; not player-chosen; speaks in a grave, formal register; stoic and trial-focused
+シスターエキュリー (Sister Ecurie) - Female; church sister of the Amol faith; not player-chosen; polite religious register; gentle and dutiful
+ホエミ (Hoemi) - Female; friend in the northern district; not player-chosen; casual friendly speech; warm and approachable
+ロクサヌ (Roxanu) - Female; northern district student; not player-chosen; youthful casual speech; sociable and ordinary
+ミント (Mint) - Female; northern district student; not player-chosen; youthful casual speech; lively and informal
+ヒルデ (Hilde) - Female; apartment resident; not player-chosen; plain civilian speech; practical and grounded
+管理人ナミサ (Manager Namisa) - Female; apartment manager; not player-chosen; polite caretaker speech; responsible and matter-of-fact
+デフィ (Defi) - Female; soldier's wife living in the apartment; not player-chosen; domestic casual speech; reserved and ordinary
+ラム (Ram) - Female; arena warrior; not player-chosen; confident fighter's speech; bold and competitive
+アルシェ (Arche) - Female; arena fan; not player-chosen; enthusiastic casual speech; excitable and friendly
+バーニア (Barnia) - Female; student associated with the arena; not player-chosen; youthful casual speech; curious and energetic
+フォサ (Fossa) - Female; arena-side NPC; not player-chosen; casual town speech; socially active
+キャナリ (Canari) - Female; cafe worker or cafe patron; not player-chosen; light casual speech; cheerful and sociable
+エロン (Elon) - Male; cafe NPC; not player-chosen; casual adult speech; relaxed and conversational
+チコニャ (Ciconya) - Female; cafe NPC; not player-chosen; casual service speech; friendly and talkative
+ルートル (Rootle) - Male; cafe NPC; not player-chosen; casual adult speech; easygoing
+シャモー (Chameau) - Male; cafe NPC; not player-chosen; casual adult speech; relaxed and ordinary
+コション (Cochon) - Male; cafe NPC; not player-chosen; casual adult speech; informal and sociable
+アレニエ (Areignee) - Female; trading-company NPC; not player-chosen; businesslike polite speech; composed and practical
+ミルバト (Mirbat) - Male; trading-company NPC; not player-chosen; businesslike speech; practical and restrained
+受付アンヌ (Receptionist Anne) - Female; theater receptionist; not player-chosen; polite service register; courteous and professional
+支配人アドルフ (Manager Adolf) - Male; theater manager; not player-chosen; formal managerial speech; authoritative and composed
+アンリ (Henri) - Male; theater-related named NPC; not player-chosen; polite stage-world speech; refined and reserved
+カトリーヌ (Catherine) - Female; theater performer or staff member; not player-chosen; elegant feminine speech; theatrical and poised
+シエル (Ciel) - Female; theater performer or staff member; not player-chosen; polite feminine speech; graceful and composed
+グラティア (Gratia) - Female; theater NPC; not player-chosen; refined speech; elegant and expressive
+オレイユ (Oreille) - Female; theater NPC; not player-chosen; refined speech; attentive and polished
+実況 (Commentator) - Male; arena or event commentator; not player-chosen; energetic announcing register; loud and performative
+ウミ (Umi) - Female; named NPC in Albol Forest; not player-chosen; casual rural speech; practical and outdoorsy
+ネリネ (Nerine) - Female; named NPC at Albol Camp; not player-chosen; casual camp speech; warm and grounded
+ジャスミン (Jasmine) - Female; named NPC at Albol Camp; not player-chosen; casual feminine speech; friendly and composed
+アーディ (Ardi) - Male; named NPC in the Testa settlement; not player-chosen; casual local speech; practical and direct
+クラレット (Claret) - Female; named NPC in Viola Village; not player-chosen; casual village speech; grounded and approachable
+ステノ (Steno) - Female; hot spring inn NPC; not player-chosen; polite hospitality speech; calm and service-minded
 
-# ALLIES / COMPANIONS
-アンナ (Anna) - Female; witch; lives in 魔女の森; ally
-メープル (Maple) - Female; companion; timid
-ダイヤ (Daiya) - Female; companion; diligent
-トルテ (Torte) - Female; companion; cook/baker
-クレア (Claire) - Female; full name クレアリス・デカート (Clairis Decart); guild-affiliated
-ルイン (Ruin) - Female; Elmina's younger sister (妹); key story motivation
-
-# SIDE / RECURRING CHARACTERS
-バブンスキー (Babunsky) - Male; antagonistic early on, later redeems himself
-ドンフシ (Donfushi) - Male; バブンスキー's younger brother; from プライア村
-ツギカ (Tsugika) - Male; young villager; has feelings for Elmina
-ミゲル (Miguel) - Male; minor NPC; innkeeper or medical role
-
-# ANTAGONISTS
-アナゼマ (Anazema) - Spirit entity; primary antagonist; former co-guardian of 魔界
-ロザリー (Rosalie) - Female; ruler of カロン; arc boss
-キングディブロ (King Diabro) - Boss; Dwarf dungeon; defeated for 水の精霊石
-プーペ (Pupe) - Female; spider-type monster girl (クモ型魔物娘); recurring mini-boss
-魔神 (Demon God) - Entity; final-area antagonist; gave power to アナゼマ
-ビャクダン (Byakudan) - Named boss; Slum dungeon
-# Note: 魔神 = "Demon God"  do NOT render as 'Majin'
-
-# ENEMY / MONSTER TYPES
-スライム (Slime)
-オーク (Orc)
-ゴブリン (Goblin)
-ゴブリン兄弟 (Goblin Brothers)
-こうもり (Bat)
-ミノタウロス (Minotaur)
-魔物娘 (Monster Girl)
-クモ型魔物娘 (Spider-type Monster Girl)  プーペ's species
-
-# LOCATIONS
-## STARTING AREA
-プライア村 (Puraia Village) - Elmina's starting village
-ノストゥスの森 (Nostus Forest) - Forest east of Puraia Village; early dungeon
-
-## KARON CITY
-カロン (Karon) - Major city; mid-game hub; ruled by ロザリー様
-カロン街道 (Karon Road) - Road connecting Puraia Village to Karon
-オプス (Opus) - Karon's high-end inn
-
-## WITCH'S FOREST
-魔女の森 (Witch's Forest) - Anna's domain
-魔女道 (Witch's Road) - Path leading to 魔女の森
-
-## DUNGEONS
-オーク洞窟 (Orc Cave) - Multi-floor orc dungeon
-ロザリー屋敷 (Rosalie's Mansion) - ロザリー's residence; 14+ floors
-
-## DWARF AREA
-ドワーフ街道 (Dwarf Road) - Road from Karon toward Dwarf territory
-ドワーフ隠れ里 (Dwarf Hidden Village) - Dwarf settlement
-ドワーフダンジョン (Dwarf Dungeon) - キングディブロ boss dungeon
-
-## SLUMS
-スラム (Slums) - Poverty district off the Dwarf Road
-娼館 (Brothel / Pleasure House) - Located in the Slums
-
-## ELF VILLAGE
-エルフ里 (Elf Village) - Elmina's homeland; destroyed before the story begins
-
-## SPIRIT STONE DUNGEONS
-精霊石ダンジョン (Spirit Stone Dungeon) - Entrance to three elemental paths
-火 (Fire) - Fire dungeon path
-風 (Wind) - Wind dungeon path
-水 (Water) - Water dungeon path
-
-## DEMON WORLD
-魔界 (Demon World) - The demonic realm; final area
-# Note: render as "Demon World"  NOT "Netherworld" or "Makai"
-
-# WORLD-BUILDING TERMS
-淫紋 (Ero Brand / Lewd Mark) - Contract seal on Elmina's belly; converts desire into magic
-精霊石 (Spirit Stone) - Three elemental key items needed to grant Elmina's wish
-  炎の精霊石 (Fire Spirit Stone)
-  水の精霊石 (Water Spirit Stone)
-  風の精霊石 (Wind Spirit Stone)
-魔力 (Mana / Magical Power)
-ノロイ (Curse) - アナゼマ's seal placed on the Spirit Stones
-冒険者 (Adventurer) - profession/rank system
-ギルド (Guild) - the Adventurers' Guild
-ギルド長 (Guild Master)
-調合師 (Alchemist / Apothecary) - crafts 回復ビン from ingredients
-チャームリンク (Charm Link) - magical bond item between Elmina and a companion
-協会 (Temple / Shrine) - religious institution enshrining the 女神達
-女神 (Goddess) - deities who once saved the continent
-女神達 (Goddesses) - plural; enshrined in the 協会
-魔女 (Witch) - female magic practitioner; distinct from 魔法使い (mage)
-ドワーフ族 (Dwarf Tribe / Dwarf Clan)
-エルフ (Elf) - Elmina's race
-アニキ (Aniki) - "big bro"; ドンフシ's term for バブンスキー
-
-# WEAPON TYPES (Elmina's magic)
-炎の魔法 (Fire Magic) - status ailments; sustained damage
-水の魔法 (Water Magic) - single-hit damage; raises HP and Defense
-風の魔法 (Wind Magic) - multi-hit combos; gains debuffs on growth
-盾の魔法 (Shield Magic) - raises Defense; beginner-recommended
-
-# ARMORS / OUTFITS
-エルミナの普段着 (Elmina's Everyday Clothes)
-絹の肌着 (Silk Undershirt)
-魅惑のバニー (Alluring Bunny)
-メイド服 (Maid Outfit)
-ワンダーウルフ (Wonder Wolf)
-調教服 (Training Outfit / Leash Outfit)
-
-# BATTLE STATES
-戦闘不能 (Incapacitated / KO)
-防御 (Guard / Defending)
-不死身 (Immortal)
-毒 (Poison)
-暗闇 (Blind / Darkness)
-沈黙 (Silence)
-激昂 (Enrage / Fury)
-混乱 (Confusion)
-魅了 (Charm / Enthralled)
-睡眠 (Sleep)
-
-# KEY ITEMS
-怪しげな薬 (Suspicious Medicine)
-冒険者登録証 (Adventurer's Registration Card)
-トルテのお弁当 (Torte's Lunchbox)
-回復ビン (Recovery Vial) - upgrades +1 through +15
-屋敷のカギ (Mansion Key)
-力のグローブ (Power Gloves)
-爆音袋 (Sonic Bag / Bang Bag)
-子猫の入ったカバン (Bag Containing a Kitten)
-チャームリンク・メープル (Charm Link: Maple) - +Defense
-チャームリンク・アンナ (Charm Link: Anna) - +Magic
-チャームリンク・ダイヤ (Charm Link: Daiya) - +Defense
-
-## Crafting Ingredients (素材)
-緑草 (Green Grass)
-黄草 (Yellow Grass)
-赤草 (Red Grass)
-黒草 (Black Grass)
-ロゼの花 (Roze Flower)
-オルラーヤ (Orlaya)
-リンドウ (Gentian)
-ベニダケ (Red Mushroom)
-サボテンの果実 (Cactus Fruit)
-輝くゼンマイ (Glowing Bracken)
-触手の若芽 (Tentacle Sprout)
-水 (Water)
-純水 (Pure Water)
-魔力水 (Mana Water)
-
-## Guild Exchange Drops (ギルド換金)
-スライムの核 (Slime Core)
-スライムの巨大核 (Slime Giant Core)
-スライムの赤核 (Slime Red Core)
-スライムの赤粘膜 (Slime Red Membrane)
-オークの牙 (Orc Fang)
-獣の毛 (Beast Fur)
-焔心核 (Flame Heart Core)
-蜘蛛の糸 (Spider Thread)
-悪魔の角 (Demon Horn)
-海魔の墨 (Kraken Ink)
-悪魔の羽根 (Demon Feather)
-死霊の灰 (Wraith Ash)
-
-## Mana Crystal EXP Items
-小さな魔力結晶 (Small Mana Crystal) - EXP 10
-魔力結晶 (Mana Crystal) - EXP 100
-大きな魔力結晶 (Large Mana Crystal) - EXP 1,000
-巨大な魔力結晶 (Giant Mana Crystal) - EXP 10,000
-
-## Boss Mana Cores (素材)
-プーペの魔力核 (Pupe's Mana Core)
-ビャクダンの魔力核 (Byakudan's Mana Core)
-キングディブロの魔力核 (King Diabro's Mana Core)
-ロザリーの魔力核 (Rosalie's Mana Core)
-タイタンワームの魔力結晶 (Titan Worm Mana Crystal)
-
-# ROMANISATION CONVENTIONS
-エルミナ (Elmina) - not Erumina; matches title
-フェリス (Feris) - matches sprite file "feris1"
-アンナ (Anna)
-メープル (Maple)
-ダイヤ (Daiya) - or Dia; avoid "Diamond" in dialogue
-バブンスキー (Babunsky)
-ドンフシ (Donfushi)
-ツギカ (Tsugika)
-トルテ (Torte) - German: layer-cake
-クレア (Claire)
-クレアリス・デカート (Clairis Decart) - both parts are proper nouns
-アナゼマ (Anazema)
-ルイン (Ruin) - or Luin
-プーペ (Pupe) - or Poupée; French: doll
-ミゲル (Miguel)
-ロザリー (Rosalie)
-キングディブロ (King Diabro)
-ビャクダン (Byakudan)
-カロン (Karon)
-プライア村 (Puraia Village) - keep "Puraia" per map file names
-ノストゥスの森 (Nostus Forest)
-ドワーフ (Dwarf)
-エルフ (Elf)
-魔界 (Demon World) - NOT "Netherworld"; keep distinct from 地獄 "Hell"
-淫紋 (Ero Brand) - or "Lewd Mark"; keep consistent within project
-精霊石 (Spirit Stone)
-ノロイ (Curse)
-魔神 (Demon God) - NOT "Majin"; translate fully
-調合師 (Alchemist) - or Apothecary; be consistent
-ギルド長 (Guild Master)
-アニキ (Aniki) - or "Big Bro"; keep consistent per character
+# Worldbuilding Terms
+淫催都市ヒュプノズム (Lewd Hypnosis City Hypnosm) - Game title and central city setting; a city shaped by the Incitation curse and its social control
+ヒュプノズム (Hypnosm) - Main city and hub area; divided into districts such as the southern district, slums, upper district, church, guild, theater, and lord's manor
+淫催 (Incitation) - The central hypnosis-like curse or state that alters obedience, desire, and social values throughout Hypnosm
+淫催の呪い (Incitation Curse) - Story term for the magical influence affecting the city and its residents
+淫催の守護者 (Guardian of Incitation) - Enemy or boss title connected to the Incitation system
+アモル教 (Amol Faith) - City religion imposed on residents; tied to marriage, sexuality, and the social norms of Hypnosm
+光の平原 (Light Plain) - Major plot location where magical power gathers and expands; associated with danger, monsters, and the Divine King's awakening
+神王覚醒 (Divine King's Awakening) - Historical event said to have created or transformed the Light Plain around twenty years earlier
+血胤 (Bloodline) - Ruby-tagged lore term read as Bloodseed; unique hereditary magic tied to absorbing traits from other beings
+血胤魔術 (Bloodline Magic) - Keimi's unique magic system derived from the Bloodline lineage
+ブラッドシード家 (Bloodseed Family) - Fallen noble family associated with Bloodline magic
+フィガロ家 (Figaro Family) - Prestigious family famous for swords and magic swords
+魔剣 (Magic Sword) - Lore term for special enchanted swords, especially those connected to the Figaro family
+フィガロの魔剣 (Figaro Magic Sword) - Named magic sword from the Figaro family
+魔剣活性化 (Magic Sword Activation) - Story process or quest concept for making a magic sword usable
+冒険者ランク (Adventurer Rank) - Guild status system; raising it unlocks citizenship and marriage-related progression
+住民権 (Citizenship) - Legal status required to access restricted districts and marry within Hypnosm
+ギルド (Guild) - Adventurer organization that handles rank progression and quest reporting
+マナ (Mana) - Recurring magical resource gained from exploration and used in city systems
+マナ屋 (Mana Shop) - City facility or service related to exchanging mana
+領主の館 (Lord's Manor) - Plot location tied to the city's ruler and later story investigation
+地下道 (Underground Passage) - Story route used during the Hypnosm investigation arc
+魔人の塔 (Demon Tower) - Major dungeon or travel destination referenced in progression data
+氷結の迷宮 (Frozen Labyrinth) - Major dungeon or travel destination referenced in progression data
+宵闇のエージェント (Agent of Twilight) - Named quest title with story significance
+極寒のプレリュード (Frigid Prelude) - Named quest title with story significance
+性奴隷 (Sex Slave) - In-universe class/status used by event progression and relationship systems

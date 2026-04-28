@@ -15,12 +15,14 @@ import urllib.request
 from openai import APIError, APIConnectionError, RateLimitError, APIStatusError
 import hashlib
 import threading
+from contextlib import contextmanager
 from dotenv import load_dotenv
 from pathlib import Path
 from retry import retry
 
 # Set to True to enable debug logging (token counts, cache costs, etc.)
 DEBUG = True
+_debug_request_log_lock = threading.Lock()
 
 # Set to True to disable Claude prompt caching for baseline cost comparison.
 DISABLE_CACHE = False
@@ -31,6 +33,60 @@ _thread_local = threading.local()
 # Cross-thread running total of accurate cache-discounted cost (protected by lock).
 _global_accurate_cost      = 0.0
 _global_accurate_cost_lock = threading.Lock()
+
+
+def _usage_to_debug_dict(usage):
+    """Extract token counts from provider usage objects for request debugging."""
+    if not usage:
+        return {}
+
+    usage_dict = {}
+    for field in (
+        "prompt_tokens",
+        "completion_tokens",
+        "input_tokens",
+        "output_tokens",
+        "cache_read_input_tokens",
+        "cache_creation_input_tokens",
+    ):
+        value = getattr(usage, field, None)
+        if value is not None:
+            usage_dict[field] = value
+
+    extra = getattr(usage, "model_extra", None)
+    if isinstance(extra, dict):
+        for field in ("cache_read_input_tokens", "cache_creation_input_tokens"):
+            value = extra.get(field)
+            if value is not None and field not in usage_dict:
+                usage_dict[field] = value
+
+    return usage_dict
+
+
+def _write_request_debug_log(provider, request_payload, usage):
+    """Write the exact SDK payload text and returned token usage."""
+    if not DEBUG:
+        return
+
+    try:
+        log_dir = Path("log")
+        log_dir.mkdir(parents=True, exist_ok=True)
+        usage_dict = _usage_to_debug_dict(usage)
+        payload_text = json.dumps(request_payload, indent=2, ensure_ascii=False, default=str)
+        usage_text = json.dumps(usage_dict, indent=2, ensure_ascii=False, default=str)
+
+        with _debug_request_log_lock:
+            with open(log_dir / "request_debug.log", "a", encoding="utf-8") as debug_file:
+                debug_file.write("\n=== API Request ===\n")
+                debug_file.write(f"Timestamp: {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
+                debug_file.write(f"Provider: {provider}\n")
+                debug_file.write("Usage:\n")
+                debug_file.write(f"{usage_text}\n")
+                debug_file.write("Payload:\n")
+                debug_file.write(f"{payload_text}\n")
+                debug_file.flush()
+    except Exception:
+        pass
 
 # Tracks which distinct batch sizes have already been cache-written during this estimate run.
 # Each unique numLines value maps to a distinct output_config schema → one write per size.
@@ -282,58 +338,133 @@ openai.api_key = os.getenv("key", "").strip()
 
 # Translation cache management
 CACHE_FILE = Path("log/translation_cache.json")
-CACHE_LOCK = threading.Lock()
+CACHE_LOCK_FILE = Path("log/translation_cache.lock")
+CACHE_LOCK = threading.RLock()
+CACHE_PENDING_MARKER = "__translation_pending__"
+CACHE_PENDING_TTL = 600
+CACHE_WAIT_INTERVAL = 0.25
 _cache = None
+
+@contextmanager
+def _translation_cache_file_lock():
+    """Cross-process lock for translation_cache.json."""
+    CACHE_LOCK_FILE.parent.mkdir(parents=True, exist_ok=True)
+    with open(CACHE_LOCK_FILE, "a+b") as lock_file:
+        if os.name == "nt":
+            import msvcrt
+            lock_file.seek(0)
+            msvcrt.locking(lock_file.fileno(), msvcrt.LK_LOCK, 1)
+            try:
+                yield
+            finally:
+                lock_file.seek(0)
+                msvcrt.locking(lock_file.fileno(), msvcrt.LK_UNLCK, 1)
+        else:
+            import fcntl
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+            try:
+                yield
+            finally:
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+
+def _read_cache_from_disk():
+    """Read the disk cache; return an empty dict if it is unavailable."""
+    try:
+        if CACHE_FILE.exists():
+            with open(CACHE_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                return data if isinstance(data, dict) else {}
+    except Exception:
+        pass
+    return {}
+
+def _write_cache_to_disk(cache):
+    """Atomically write the cache using a process/thread-unique temp file."""
+    CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
+    tmp_file = CACHE_FILE.with_name(
+        f"{CACHE_FILE.name}.{os.getpid()}.{threading.get_ident()}.tmp"
+    )
+    with open(tmp_file, "w", encoding="utf-8") as f:
+        json.dump(cache, f, ensure_ascii=False, indent=2)
+    tmp_file.replace(CACHE_FILE)
+
+def _is_pending_cache_entry(value):
+    return isinstance(value, dict) and value.get(CACHE_PENDING_MARKER) is True
+
+def _is_stale_pending_cache_entry(value):
+    if not _is_pending_cache_entry(value):
+        return False
+    try:
+        return time.time() - float(value.get("time", 0)) > CACHE_PENDING_TTL
+    except Exception:
+        return True
+
+def _is_own_pending_cache_entry(value):
+    return (
+        _is_pending_cache_entry(value)
+        and value.get("pid") == os.getpid()
+        and value.get("thread") == threading.get_ident()
+    )
+
+def _pending_cache_entry():
+    return {
+        CACHE_PENDING_MARKER: True,
+        "pid": os.getpid(),
+        "thread": threading.get_ident(),
+        "time": time.time(),
+    }
+
+def _merge_translation_caches(base, overlay):
+    """Merge cache dictionaries while never replacing a translation with pending."""
+    merged = dict(base or {})
+    for key, value in (overlay or {}).items():
+        existing = merged.get(key)
+        if _is_pending_cache_entry(value) and existing is not None:
+            if not _is_pending_cache_entry(existing):
+                continue
+            if not _is_stale_pending_cache_entry(existing):
+                continue
+        merged[key] = value
+    return merged
 
 def clear_cache():
     """Clear the translation cache (called at start of each run)"""
     global _cache
     with CACHE_LOCK:
         _cache = {}
-        # Also clear the cache file on disk
-        try:
-            if CACHE_FILE.exists():
-                CACHE_FILE.unlink()
-        except Exception:
-            pass
+        with _translation_cache_file_lock():
+            try:
+                if CACHE_FILE.exists():
+                    CACHE_FILE.unlink()
+            except Exception:
+                pass
 
 def load_cache():
-    """Load the translation cache from disk"""
+    """Load the translation cache from disk."""
     global _cache
-    if _cache is not None:
-        return _cache
-    
     with CACHE_LOCK:
-        if _cache is not None:  # Double-check after acquiring lock
-            return _cache
-        
-        # Try to load existing cache from disk
-        _cache = {}
-        try:
-            if CACHE_FILE.exists():
-                with open(CACHE_FILE, "r", encoding="utf-8") as f:
-                    _cache = json.load(f)
-        except Exception:
-            # If cache file is corrupted or unreadable, start fresh
-            _cache = {}
-        
+        with _translation_cache_file_lock():
+            disk_cache = _read_cache_from_disk()
+            if _cache:
+                disk_cache = _merge_translation_caches(disk_cache, _cache)
+            _cache = disk_cache
         return _cache
 
 def save_cache():
-    """Save the translation cache to disk"""
+    """Save the translation cache to disk, preserving entries from other workers."""
     global _cache
     if _cache is None:
         return
     
-    try:
-        CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
-        # Use atomic write
-        tmp_file = CACHE_FILE.with_suffix(".tmp")
-        with open(tmp_file, "w", encoding="utf-8") as f:
-            json.dump(_cache, f, ensure_ascii=False, indent=2)
-        tmp_file.replace(CACHE_FILE)
-    except Exception:
-        pass
+    with CACHE_LOCK:
+        try:
+            with _translation_cache_file_lock():
+                disk_cache = _read_cache_from_disk()
+                disk_cache = _merge_translation_caches(disk_cache, _cache)
+                _cache = disk_cache
+                _write_cache_to_disk(_cache)
+        except Exception:
+            pass
 
 def get_cache_key(payload, language):
     """Generate a cache key for a payload (can be single string or JSON batch)"""
@@ -344,21 +475,45 @@ def get_cache_key(payload, language):
 
 def get_cached_translation(payload, language):
     """Get cached translation if it exists"""
-    cache = load_cache()
+    global _cache
     key = get_cache_key(payload, language)
-    return cache.get(key)
+    while True:
+        with CACHE_LOCK:
+            with _translation_cache_file_lock():
+                cache = _read_cache_from_disk()
+                if _cache:
+                    cache = _merge_translation_caches(cache, _cache)
+
+                entry = cache.get(key)
+                if (
+                    entry is None
+                    or _is_stale_pending_cache_entry(entry)
+                    or _is_own_pending_cache_entry(entry)
+                ):
+                    cache[key] = _pending_cache_entry()
+                    _cache = cache
+                    _write_cache_to_disk(cache)
+                    return None
+
+                _cache = cache
+                if not _is_pending_cache_entry(entry):
+                    return entry
+
+        time.sleep(CACHE_WAIT_INTERVAL)
 
 def cache_translation(payload, translation, language):
     """Cache a translation payload and its response"""
     global _cache
-    cache = load_cache()
     key = get_cache_key(payload, language)
     
     with CACHE_LOCK:
-        cache[key] = translation
-        # Save every 10 new entries to avoid excessive disk writes
-        if len(cache) % 10 == 0:
-            save_cache()
+        with _translation_cache_file_lock():
+            cache = _read_cache_from_disk()
+            if _cache:
+                cache = _merge_translation_caches(cache, _cache)
+            cache[key] = translation
+            _cache = cache
+            _write_cache_to_disk(cache)
 
 
 # Variable translation map (code 122 <-> code 111 consistency)
@@ -733,12 +888,23 @@ def parseVocabWithCategories(vocabText):
             currentCategory = line
             continue
             
-        # Parse vocabulary term - extract both Japanese and English parts
-        # Format: "Japanese term (English translation)" or "Japanese term – English translation"
-        m = re.match(r'^(.+?)(?:\s?[\(–]\s*(.+?)[\)]?\s*$)', line)
-        if m and ('(' in line or '–' in line):  # Only process lines that actually have parentheses or dashes
-            japanese_term = m.group(1).strip()
-            english_term = m.group(2).strip().rstrip(')')  # Remove trailing parenthesis if exists
+        # Parse vocabulary term - extract both Japanese and English parts.
+        # Rich entries may continue after the first parenthesized translation,
+        # e.g. "サンク (Sank) - Male; protagonist..."; only "Sank" is the match key.
+        paren_match = re.match(r'^(.+?)\s*\(([^()]*)\)', line)
+        dash_match = re.match(r'^(.+?)\s+[–-]\s+(.+)$', line)
+        if paren_match:
+            japanese_term = paren_match.group(1).strip()
+            english_term = paren_match.group(2).strip()
+            
+            # Create a tuple with both terms for matching
+            term_pair = (japanese_term, english_term)
+            if term_pair not in seen:
+                pairs.append((term_pair, line, currentCategory))
+                seen.add(term_pair)
+        elif dash_match:
+            japanese_term = dash_match.group(1).strip()
+            english_term = dash_match.group(2).strip()
             
             # Create a tuple with both terms for matching
             term_pair = (japanese_term, english_term)
@@ -778,17 +944,68 @@ def _japanese_term_in_text(term, text):
     return bool(re.search(pattern, text))
 
 
+def _vocab_term_in_text(term, text):
+    """Match any vocab term variant against the current batch text."""
+    if not term:
+        return False
+
+    variants = [str(term).strip()]
+    if isinstance(term, str):
+        variants.extend(part.strip() for part in re.split(r"[,、]", term) if part.strip())
+
+    for variant in variants:
+        if not variant:
+            continue
+        if re.search(r'[一-龠ぁ-ゔァ-ヴーｦ-ﾟ｡-ﾟ]', variant):
+            if _japanese_term_in_text(variant, text):
+                return True
+        elif variant in text:
+            return True
+
+    return False
+
+
+def _collect_json_string_values(value):
+    """Collect only translatable string values from a parsed JSON payload."""
+    if isinstance(value, str):
+        return [value]
+    if isinstance(value, list):
+        values = []
+        for item in value:
+            values.extend(_collect_json_string_values(item))
+        return values
+    if isinstance(value, dict):
+        values = []
+        for item in value.values():
+            values.extend(_collect_json_string_values(item))
+        return values
+    return []
+
+
+def _text_for_vocab_search(subbedText):
+    """Return text that should participate in vocab matching."""
+    text = str(subbedText)
+    stripped = text.strip()
+    if stripped.startswith("```"):
+        stripped = re.sub(r'^```(?:json)?\s*', '', stripped, flags=re.IGNORECASE)
+        stripped = re.sub(r'\s*```$', '', stripped)
+
+    try:
+        parsed = json.loads(stripped)
+    except (TypeError, json.JSONDecodeError):
+        return text
+
+    values = _collect_json_string_values(parsed)
+    return "\n".join(values) if values else text
+
+
 def buildMatchedVocabText(vocabPairs, subbedText, history=None):
-    """Build formatted vocabulary text with matched terms organized by category."""
+    """Build formatted vocabulary text for terms found in the current batch."""
     matchedCategories = {}
 
-    # Prepare text to search - combine subbedText and history
-    textToSearch = str(subbedText)
-    if history:
-        if isinstance(history, list):
-            textToSearch += " " + " ".join(str(h) for h in history)
-        else:
-            textToSearch += " " + str(history)
+    # Only match against the current request text. History is deliberately not
+    # searched so stale terms are not resent in unrelated batches.
+    textToSearch = _text_for_vocab_search(subbedText)
 
     # Use word boundaries for Japanese if appropriate, or allow substring as before.
     for term, line, category in vocabPairs:
@@ -797,15 +1014,14 @@ def buildMatchedVocabText(vocabPairs, subbedText, history=None):
         if isinstance(term, tuple):
             # Check both Japanese and English terms
             japanese_term, english_term = term
-            if _japanese_term_in_text(japanese_term, textToSearch) or english_term in textToSearch:
+            if _vocab_term_in_text(japanese_term, textToSearch) or _vocab_term_in_text(english_term, textToSearch):
                 term_found = True
         else:
             # Single term check
-            if _japanese_term_in_text(term, textToSearch) if re.search(r'[一-龠ぁ-ゔァ-ヴーｦ-ﾟ｡-ﾟ]', str(term)) else term in textToSearch:
+            if _vocab_term_in_text(term, textToSearch):
                 term_found = True
         
-        # Always include "# Game Characters" category and all its terms regardless of matches
-        if term_found or (category and category.strip() == "# Game Characters"):
+        if term_found:
             if category not in matchedCategories:
                 matchedCategories[category] = []
             matchedCategories[category].append(line)
@@ -825,9 +1041,6 @@ def buildMatchedVocabText(vocabPairs, subbedText, history=None):
     return matchedVocabText
 
 
-_BASE_VOCAB_SEPARATOR = "# ── Base Vocabulary"  # Prefix of the separator line written by _save_vocab
-
-
 def createContext(config, subbedText, formatType, history=None):
     """Create system and user messages for translation.
 
@@ -836,50 +1049,16 @@ def createContext(config, subbedText, formatType, history=None):
     prompt-caching mark only the stable prefix with cache_control, avoiding
     cache invalidation caused by changing vocabulary matches.
 
-    Cached in static_system (never changes between batches):
+    Cached in static_system:
       - prompt.txt content
-      - # Game Characters entries
-      - Base vocabulary (vocab_base.txt: honorifics, elements, demons, etc.)
 
-    Dynamic in vocab_text (matched per-batch):
-      - All other game-specific vocab terms (items, worldbuilding, etc.)
+    Dynamic in vocab_text:
+      - only vocab terms found in the current batch text
     """
-    vocab_full = config.vocab
-
-    # Split game-specific vocab from the static base vocab appended by _save_vocab
-    base_vocab_text = ""
-    sep_idx = vocab_full.find(_BASE_VOCAB_SEPARATOR)
-    if sep_idx != -1:
-        # Strip the separator header line itself; keep the sections underneath
-        base_section = vocab_full[sep_idx:]
-        # Skip the separator line
-        newline_idx = base_section.find("\n")
-        base_vocab_text = base_section[newline_idx + 1:].strip() if newline_idx != -1 else ""
-        vocab_game = vocab_full[:sep_idx]
-    else:
-        vocab_game = vocab_full
-
-    vocabPairs = parseVocabWithCategories(vocab_game)
-
-    # Split character entries (stable, cached) from everything else (dynamic)
-    CHAR_CAT = "# Game Characters"
-    char_lines   = [line for _, line, cat in vocabPairs if cat and cat.strip() == CHAR_CAT]
-    non_char_pairs = [(term, line, cat) for term, line, cat in vocabPairs
-                      if not (cat and cat.strip() == CHAR_CAT)]
-
-    matchedVocabText = buildMatchedVocabText(non_char_pairs, subbedText, history)
+    vocabPairs = parseVocabWithCategories(config.vocab)
+    matchedVocabText = buildMatchedVocabText(vocabPairs, subbedText, history)
 
     static_system = config.prompt.replace("English", config.language)
-
-    # Append character glossary to the stable system prompt so it is cached
-    if char_lines:
-        char_block = f"\n{CHAR_CAT}\n" + "\n".join(char_lines)
-        static_system = static_system.rstrip() + "\n" + char_block + "\n"
-
-    # Append base vocab (honorifics, elements, etc.) to static_system so it is
-    # cached with the system prompt and never re-evaluated per batch.
-    if base_vocab_text:
-        static_system = static_system.rstrip() + "\n\n" + base_vocab_text + "\n"
 
     if formatType == "json":
         user = f"```json\n{subbedText}\n```"
@@ -1126,7 +1305,9 @@ def translateText(system, user, history, penalty, formatType, model, numLines=No
                 self.choices = [_AnthropicCompat._Choice(text)]
                 self.usage   = _AnthropicCompat._Usage(prompt, output, cr, cw)
 
-        return _AnthropicCompat(_ant_text, _total_prompt, _out, _cr, _cw)
+        compat_response = _AnthropicCompat(_ant_text, _total_prompt, _out, _cr, _cw)
+        _write_request_debug_log("anthropic", ant_kwargs, compat_response.usage)
+        return compat_response
 
     # Call API (reaches here only for non-Claude providers)
     try:
@@ -1189,7 +1370,8 @@ def translateText(system, user, history, penalty, formatType, model, numLines=No
     # Validate response before returning
     if not response or not hasattr(response, 'choices') or not response.choices:
         raise Exception("API returned invalid or empty response - retrying...")
-    
+
+    _write_request_debug_log(api_provider, params, getattr(response, "usage", None))
     return response
 
 
