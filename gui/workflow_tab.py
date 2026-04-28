@@ -3049,9 +3049,9 @@ class WorkflowTab(QWidget):
             self._log("─" * 54)
 
         # Navigate to Translation tab, configure it, and auto-start
-        self._navigate_to_translation(file_preset, auto_start=True)
+        self._navigate_to_translation(file_preset, auto_start=True, mode_text="Translate")
 
-    def _navigate_to_translation(self, file_preset: str, auto_start: bool = False):
+    def _navigate_to_translation(self, file_preset: str, auto_start: bool = False, mode_text: str | None = None):
         """Switch to Translation tab, set engine to MVMZ, and check/uncheck files.
 
         file_preset:
@@ -3076,7 +3076,18 @@ class WorkflowTab(QWidget):
             except Exception:
                 pass
 
-            # 2. Determine which files belong to each preset
+            # 2. Set requested mode after selecting the engine, since the engine
+            # change refreshes the mode list.
+            if mode_text:
+                try:
+                    mode_combo = tt.mode_combo
+                    mode_idx = mode_combo.findText(mode_text)
+                    if mode_idx >= 0:
+                        mode_combo.setCurrentIndex(mode_idx)
+                except Exception:
+                    pass
+
+            # 3. Determine which files belong to each preset
             files_dir = getattr(tt, "files_dir", None)
             if files_dir is None:
                 files_dir = __import__("pathlib").Path("files")
@@ -3095,7 +3106,7 @@ class WorkflowTab(QWidget):
             else:  # "events"
                 should_check = _is_event
 
-            # 3. Apply check states to the file list
+            # 4. Apply check states to the file list
             try:
                 tt.refresh_file_lists()
                 fl = tt.file_list
@@ -3109,14 +3120,14 @@ class WorkflowTab(QWidget):
             except Exception:
                 pass
 
-            # 4. Navigate
+            # 5. Navigate
             if hasattr(pw, "content_stack"):
                 pw.content_stack.setCurrentIndex(0)
                 if hasattr(pw, "nav_buttons"):
                     for i, btn in enumerate(pw.nav_buttons):
                         btn.setChecked(i == 0)
 
-            # 5. Auto-start translation so the user doesn't need an extra click
+            # 6. Auto-start translation so the user doesn't need an extra click
             if auto_start:
                 from PyQt5.QtCore import QTimer as _QTimer
                 _QTimer.singleShot(100, lambda: (

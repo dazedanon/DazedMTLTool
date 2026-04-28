@@ -148,8 +148,8 @@ CODE408 = False
 
 # Variables
 CODE122 = False
-CODE122_VAR_MIN = 890
-CODE122_VAR_MAX = 891
+CODE122_VAR_MIN = 0
+CODE122_VAR_MAX = 2000
 
 # Plugins / Scripts
 CODE355655 = False
@@ -205,8 +205,11 @@ PATTERNS_355655 = {
     "const text": (r'(const\stext\s?=\s?"(.+)";?)', False),
     "ex_a_name": (r'ex_a_name\(\d+,"(.+)"\)', False),
     "gameVariables.setValue": (r'\$gameVariables\.setValue\(\d+,\s*"([^"]*)"\)', False),
+    "$gameMessage.add": (r"\$gameMessage\.add\(.+?\)(.+?)", True),
     "BattleManager._logWindow.push('addText'": (r"BattleManager._logWindow.push\('addText',\s'(.+)'\)", False),
-    "BattleManager._logWindow.addText": (r"BattleManager._logWindow.addText\('(.+)'\)", False),
+    "BattleManager._logWindow.addText": (r"BattleManager\._logWindow\.addText\(.+?\)(.+?)", True),
+    "let out": (r"let\s+out\d+\s*=\s*\(.+?\)(.+?)", True),
+    "let moji": (r"(?:let\s+)?moji\s*=\s*(.+)", True),
     "this.BLogAdd": (r'this\.BLogAdd\?(.+?\\?"(.+?)\\?"\)', False),
     "Fuki_Set": (r'Fuki_Set\([\s,\d\w\W]+?"(.+?)",', False),
     "_EventSetting": (r'_EventSetting[\s,\d\w\W]+?"(.+?)";', False),
@@ -218,7 +221,7 @@ PATTERNS_355655 = {
     "AddAddress": (r'AddAddress\(\d+,\s*\\?"(.+?)\\?"', False),
 }
 # Subset of PATTERNS_355655 keys that should be processed (empty = none).
-ENABLED_PATTERNS_355655: set = {"_subject="}
+ENABLED_PATTERNS_355655: set = {"$gameMessage.add", "BattleManager._logWindow.addText", "let moji", "let out"}
 
 
 def handleMVMZ(filename, estimate):
@@ -2633,6 +2636,13 @@ def searchCodes(page, pbar, jobList, filename):
                     i += 1
                     continue
 
+                varActorMatch = re.match(r"^\s*(?:[\\]+[cC]\[\d+?\]\s*)?[\\]+[nN]\[(\d+)\]", jaString)
+                if varActorMatch:
+                    actorName = _get_actor_map().get(int(varActorMatch.group(1)))
+                    speaker = actorName or varActorMatch.group(0).strip()
+                    i += 1
+                    continue
+
                 # Force Speaker using var
                 if "memerisu" in jaString.lower():
                     speaker = "Memerisu"
@@ -4414,7 +4424,7 @@ def translateAI(text, history, history_ctx=None):
             aid = int(m.group(1))
             name = actor_map.get(aid)
             if name:
-                reverse[name.lower()] = f"\\n[{aid}]"
+                reverse[name.lower()] = m.group(0)
                 return name
             return m.group(0)
         return _VAR_ACTOR_RE.sub(_repl, s)
