@@ -209,7 +209,7 @@ PATTERNS_355655 = {
     "BattleManager._logWindow.push('addText'": (r"BattleManager._logWindow.push\('addText',\s'(.+)'\)", False),
     "BattleManager._logWindow.addText": (r"BattleManager\._logWindow\.addText\(.+?\)(.+?)", True),
     "let out": (r"let\s+out\d+\s*=\s*\(.+?\)(.+?)", True),
-    "let moji": (r"(?:let\s+)?moji\s*=\s*(.+)", True),
+    "moji": (r"(?:let\s+)?moji\s*\+?=\s*(.+)", True),
     "this.BLogAdd": (r'this\.BLogAdd\?(.+?\\?"(.+?)\\?"\)', False),
     "Fuki_Set": (r'Fuki_Set\([\s,\d\w\W]+?"(.+?)",', False),
     "_EventSetting": (r'_EventSetting[\s,\d\w\W]+?"(.+?)";', False),
@@ -221,7 +221,7 @@ PATTERNS_355655 = {
     "AddAddress": (r'AddAddress\(\d+,\s*\\?"(.+?)\\?"', False),
 }
 # Subset of PATTERNS_355655 keys that should be processed (empty = none).
-ENABLED_PATTERNS_355655: set = {"$gameMessage.add", "BattleManager._logWindow.addText", "let moji", "let out"}
+ENABLED_PATTERNS_355655: set = {"moji"}
 
 
 def handleMVMZ(filename, estimate):
