@@ -205,6 +205,7 @@ PATTERNS_355655 = {
     "const text": (r'(const\stext\s?=\s?"(.+)";?)', False),
     "ex_a_name": (r'ex_a_name\(\d+,"(.+)"\)', False),
     "gameVariables.setValue": (r'\$gameVariables\.setValue\(\d+,\s*"([^"]*)"\)', False),
+    "$gameVariables._data": (r"\$gameVariables\._data(?:\[\d+\])+\s*=\s*['\"]((?:\\.|[^'\"\\])*)['\"]", False),
     "$gameMessage.add": (r"\$gameMessage\.add\(.+?\)(.+?)", True),
     "BattleManager._logWindow.push('addText'": (r"BattleManager._logWindow.push\('addText',\s'(.+)'\)", False),
     "BattleManager._logWindow.addText": (r"BattleManager\._logWindow\.addText\(.+?\)(.+?)", True),
@@ -221,7 +222,7 @@ PATTERNS_355655 = {
     "AddAddress": (r'AddAddress\(\d+,\s*\\?"(.+?)\\?"', False),
 }
 # Subset of PATTERNS_355655 keys that should be processed (empty = none).
-ENABLED_PATTERNS_355655: set = {"moji"}
+ENABLED_PATTERNS_355655: set = {"$gameVariables._data"}
 
 
 def handleMVMZ(filename, estimate):
@@ -2792,6 +2793,9 @@ def searchCodes(page, pbar, jobList, filename):
 
                                     if "gameVariables.setValue" in codeList[i]["parameters"][0]:
                                         translatedText = translatedText.replace('\"', "'")
+
+                                    if "$gameVariables._data" in codeList[i]["parameters"][0]:
+                                        translatedText = re.sub(r"(?<!\\)'", r"\\'", translatedText)
                                     
                                     if "BattleManager" in codeList[i]["parameters"][0]:
                                         translatedText = re.sub(r"(?<!\\)'", r"\\'", translatedText)
