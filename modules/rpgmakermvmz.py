@@ -205,7 +205,7 @@ PATTERNS_355655 = {
     "const text": (r'(const\stext\s?=\s?"(.+)";?)', False),
     "ex_a_name": (r'ex_a_name\(\d+,"(.+)"\)', False),
     "gameVariables.setValue": (r'\$gameVariables\.setValue\(\d+,\s*"([^"]*)"\)', False),
-    "$gameVariables._data": (r"\$gameVariables\._data(?:\[\d+\])+\s*=\s*['\"]((?:\\.|[^'\"\\])*)['\"]", False),
+    "$gameVariables._data": (r"\$gameVariables\._data(?:\[[^\]]+\])+\s*=\s*['\"]((?:\\.|[^'\"\\])*)['\"]", False),
     "$gameMessage.add": (r"\$gameMessage\.add\(.+?\)(.+?)", True),
     "BattleManager._logWindow.push('addText'": (r"BattleManager._logWindow.push\('addText',\s'(.+)'\)", False),
     "BattleManager._logWindow.addText": (r"BattleManager\._logWindow\.addText\(.+?\)(.+?)", True),
@@ -1017,6 +1017,7 @@ def parseNames(data, filename, context):
                 (r"<STS DESC>\n(.+?)\n<", False),
                 (r"text:(.+)>", False),
                 (r"<Skill\d+:(?:\d+,)?([^,>\d][^,>]*)", False),
+                (r"<ClassMessage>\n?(.*?)</ClassMessage>", False),
                 (r"<コメント:\n?(.*?)>", True),
             ]
 
@@ -1357,6 +1358,7 @@ def searchNames(data, pbar, context, filename):
         (r"<STS DESC>\n(.+?)\n<", False),
         (r"text:(.+)>", False),
         (r"<Skill\d+:(?:\d+,)?([^,>\d][^,>]*)", False),
+        (r"<ClassMessage>\n?(.*?)</ClassMessage>", False),
         (r"<コメント:\n?(.*?)>", True),
     ]
     # For each entry, collect all note matches
@@ -2114,10 +2116,13 @@ def searchCodes(page, pbar, jobList, filename):
                         if finalJAString != "":
                             if speaker == "" and finalJAString != "":
                                 list401.append(finalJAString)
+                                historyEntry = finalJAString
                             elif finalJAString != "":
                                 list401.append(f"[{speaker}]: {finalJAString}")
+                                historyEntry = f"[{speaker}]: {finalJAString}"
                             else:
                                 list401.append(speaker)
+                                historyEntry = speaker
                         speaker = ""
                         match = []
                         nametag = ""
@@ -2125,7 +2130,7 @@ def searchCodes(page, pbar, jobList, filename):
                         syncIndex = i + 1
 
                         # Keep textHistory list at length maxHistory
-                        textHistory.append('"' + finalJAString + '"')
+                        textHistory.append('"' + historyEntry + '"')
                         if len(textHistory) > maxHistory:
                             textHistory.pop(0)
 
