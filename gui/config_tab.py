@@ -269,10 +269,21 @@ class ConfigTab(QWidget):
     def switch_page(self, index):
         """Switch to the specified page and update button states."""
         self.content_stack.setCurrentIndex(index)
+        self._refresh_engine_config_page(index)
         
         # Update button checked states
         for i, btn in enumerate(self.nav_buttons):
             btn.setChecked(i == index)
+
+    def _refresh_engine_config_page(self, index):
+        """Refresh engine config pages from their module files when shown."""
+        engine_pages = {
+            1: getattr(self, "mvmz_tab", None),
+            2: getattr(self, "ace_tab", None),
+        }
+        page = engine_pages.get(index)
+        if page is not None and hasattr(page, "refresh_from_module"):
+            page.refresh_from_module()
     
     def create_general_settings_tab(self):
         """Create combined general settings tab with API, Translation, Performance, and UI settings."""
@@ -672,12 +683,13 @@ class ConfigTab(QWidget):
         super().mousePressEvent(event)
 
     def showEvent(self, event):
-        """Reload values from .env every time this tab becomes visible."""
+        """Reload values from disk every time this tab becomes visible."""
         super().showEvent(event)
         if self.env_file_path.exists():
             self.disconnect_auto_save()
             self.load_from_env()
             self.connect_auto_save()
+        self._refresh_engine_config_page(self.content_stack.currentIndex())
 
     def load_from_env(self):
         """Load configuration from .env file, reading directly from disk."""

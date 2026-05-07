@@ -107,20 +107,27 @@ class ConfigIntegration:
             with open(module_path, 'r', encoding='utf-8') as f:
                 content = f.read()
                 
-            # Find configuration lines
-            config_patterns = [
-                r'^(FIRSTLINESPEAKERS|INLINE401SPEAKERS|FACENAME101|NAMES|BRFLAG|FIXTEXTWRAP|IGNORETLTEXT)\s*=\s*(True|False)',
-                r'^(CODE\d+)\s*=\s*(True|False)'
-            ]
+            # Find configuration lines used by the RPG Maker config UI.
+            bool_pattern = (
+                r'^(FIRSTLINESPEAKERS|INLINE401SPEAKERS|FACENAME101|NAMES|'
+                r'BRFLAG|FIXTEXTWRAP|IGNORETLTEXT|TLSYSTEMVARIABLES|'
+                r'TLSYSTEMSWITCHES|JOIN408|SPEAKERS408|CODE\d+)\s*=\s*(True|False)'
+            )
+            int_pattern = r'^(CODE122_VAR_MIN|CODE122_VAR_MAX)\s*=\s*(\d+)'
             
             for line in content.split('\n'):
                 line = line.strip()
-                for pattern in config_patterns:
-                    match = re.match(pattern, line)
-                    if match:
-                        key = match.group(1)
-                        value = match.group(2) == 'True'
-                        config[key] = value
+                match = re.match(bool_pattern, line)
+                if match:
+                    key = match.group(1)
+                    value = match.group(2) == 'True'
+                    config[key] = value
+                    continue
+
+                match = re.match(int_pattern, line)
+                if match:
+                    key = match.group(1)
+                    config[key] = int(match.group(2))
                         
         except Exception as e:
             print(f"Error reading configuration from {module_path}: {e}")
