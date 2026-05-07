@@ -22,7 +22,7 @@ from pathlib import Path
 
 import jsbeautifier
 
-from PyQt5.QtCore import Qt, QSettings, QThread, QTimer, pyqtSignal
+from PyQt5.QtCore import Qt, QEvent, QSettings, QThread, QTimer, pyqtSignal
 from PyQt5.QtGui import QFont
 from PyQt5.QtWidgets import (
     QApplication,
@@ -47,6 +47,7 @@ from PyQt5.QtWidgets import (
     QTextEdit,
     QVBoxLayout,
     QWidget,
+    QAbstractItemView,
 )
 
 # ---------------------------------------------------------------------------
@@ -165,6 +166,7 @@ class _ImportWorker(QThread):
 
     def run(self):
         try:
+            import shutil
             from util.project_scanner import import_to_files
 
             # Clear existing files/ contents before importing so stale files
@@ -174,9 +176,17 @@ class _ImportWorker(QThread):
             if dest.exists():
                 removed = 0
                 for fp in dest.iterdir():
-                    if fp.is_file() and fp.name != ".gitkeep":
+                    if fp.name == ".gitkeep":
+                        continue
+                    if fp.is_file():
                         try:
                             fp.unlink()
+                            removed += 1
+                        except Exception as e:
+                            self.log.emit(f"  ⚠ Could not remove {fp.name}: {e}")
+                    elif fp.is_dir():
+                        try:
+                            shutil.rmtree(fp)
                             removed += 1
                         except Exception as e:
                             self.log.emit(f"  ⚠ Could not remove {fp.name}: {e}")
@@ -477,6 +487,8 @@ class WorkflowTab(QWidget):
         self._ace_rvdata_dir: str = ""   # <game_root>/Data/ with rvdata2 files
         self._p2_loading_config: bool = False
         self._p2_auto_apply_timer: QTimer | None = None
+        self._syncing_file_checks: bool = False
+        self._import_buttons: list[QPushButton] = []
 
         self._init_ui()
 
@@ -662,10 +674,42 @@ class WorkflowTab(QWidget):
             self._detected_on_show = True
             QTimer.singleShot(100, self._detect_folder)
 
+    def eventFilter(self, obj, event):
+        """Toggle workflow file checks when clicking a row outside the checkbox."""
+        try:
+            if (
+                obj is self.file_list.viewport()
+                and event.type() == QEvent.MouseButtonRelease
+                and event.button() == Qt.LeftButton
+            ):
+                item = self.file_list.itemAt(event.pos())
+                if item is None:
+                    return False
+
+                # Let native checkbox clicks handle their own checked state.
+                item_rect = self.file_list.visualItemRect(item)
+                if event.pos().x() <= item_rect.left() + 26:
+                    return False
+
+                item.setCheckState(
+                    Qt.Unchecked if item.checkState() == Qt.Checked else Qt.Checked
+                )
+                return False
+        except Exception:
+            pass
+        return super().eventFilter(obj, event)
+
     def _on_step_tab_changed(self, index: int):
         """Refresh config-backed controls when their workflow page is shown."""
         if index == 5:
             self._populate_p2_checkboxes()
+
+    def _register_import_button(self, button: QPushButton) -> None:
+        self._import_buttons.append(button)
+
+    def _set_import_buttons_enabled(self, enabled: bool) -> None:
+        for button in self._import_buttons:
+            button.setEnabled(enabled)
 
     def _apply_theme(self):
         """Apply a unified dark-theme stylesheet to all standard controls."""
@@ -765,7 +809,11 @@ class WorkflowTab(QWidget):
 
         # File list
         self.file_list = QListWidget()
-        self.file_list.setMaximumHeight(180)
+        self.file_list.setMinimumHeight(320)
+        self.file_list.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.file_list.setSelectionMode(QAbstractItemView.ExtendedSelection)
+        self.file_list.itemChanged.connect(self._sync_selected_file_checks)
+        self.file_list.viewport().installEventFilter(self)
         self.file_list.setStyleSheet(
             "QListWidget{outline:none;border:1px solid #3c3c3c;"
             "background-color:#252526;border-radius:4px;}"
@@ -774,7 +822,7 @@ class WorkflowTab(QWidget):
             "QListWidget::item:hover{background-color:#2d2d30;"
             "border-left:2px solid #007acc;}"
         )
-        layout.addWidget(self.file_list)
+        layout.addWidget(self.file_list, 1)
 
         # Action row
         row1 = QHBoxLayout()
@@ -784,11 +832,24 @@ class WorkflowTab(QWidget):
         self.sel_all_btn.clicked.connect(self._select_all_files)
         row1.addWidget(self.sel_all_btn)
 
+        deselect_all_btn = _make_btn("Deselect All", "#555")
+        deselect_all_btn.setFixedWidth(110)
+        deselect_all_btn.clicked.connect(self._deselect_all_files)
+        row1.addWidget(deselect_all_btn)
+
         sel_core = _make_btn("Core Only", "#555")
         sel_core.setFixedWidth(110)
         sel_core.setToolTip("Select only core database files; deselect map files")
         sel_core.clicked.connect(self._select_core_only)
         row1.addWidget(sel_core)
+
+        import_btn = _make_btn("Import Selected → files/", "#007acc")
+        import_btn.setFixedWidth(180)
+        import_btn.setEnabled(False)
+        import_btn.setToolTip("Replace files/ with exactly the checked files above")
+        import_btn.clicked.connect(self._import_files)
+        self._register_import_button(import_btn)
+        row1.addWidget(import_btn)
 
         row1.addStretch()
         layout.addLayout(row1)
@@ -1733,8 +1794,8 @@ class WorkflowTab(QWidget):
         import_row = QHBoxLayout()
         import_row.setSpacing(8)
         import_row.setAlignment(Qt.AlignVCenter)
-        self.import_btn = QPushButton("↓  Import Selected → files/")
-        self.import_btn.setStyleSheet(
+        import_btn = QPushButton("↓  Import Selected → files/")
+        import_btn.setStyleSheet(
             "QPushButton{background-color:#2d2d30;color:#4da8f0;border:1px solid #007acc;"
             "padding:0px;border-radius:4px;font-size:12px;font-weight:bold;"
             "font-family:'Segoe UI',sans-serif;}"
@@ -1742,10 +1803,11 @@ class WorkflowTab(QWidget):
             "QPushButton:pressed{background-color:#0a1a2a;}"
             "QPushButton:disabled{background-color:#2d2d30;color:#555555;border-color:#444444;}"
         )
-        self.import_btn.setFixedSize(_IMP_W, _IMP_H)
-        self.import_btn.setEnabled(False)
-        self.import_btn.clicked.connect(self._import_files)
-        import_row.addWidget(self.import_btn)
+        import_btn.setFixedSize(_IMP_W, _IMP_H)
+        import_btn.setEnabled(False)
+        import_btn.clicked.connect(self._import_files)
+        self._register_import_button(import_btn)
+        import_row.addWidget(import_btn)
         clear_translated_btn = QPushButton("✕  Clear translated/")
         clear_translated_btn.setStyleSheet(
             "QPushButton{background-color:#2d2d30;color:#cc4444;border:1px solid #8b0000;"
@@ -2447,7 +2509,7 @@ class WorkflowTab(QWidget):
             "border-radius:4px;margin:4px 0;"
         )
         self.file_list.clear()
-        self.import_btn.setEnabled(False)
+        self._set_import_buttons_enabled(False)
 
         # Reset ACE state from any previous detection
         self._ace_encrypted = False
@@ -2572,6 +2634,7 @@ class WorkflowTab(QWidget):
             icon = "📄" if cat == "core" else ("🗺" if cat == "map" else "❓")
             lw = QListWidgetItem(f"{icon}  {item['name']}  ({item['size_kb']:.1f} KB)")
             lw.setData(Qt.UserRole, item)
+            lw.setFlags(lw.flags() | Qt.ItemIsEnabled | Qt.ItemIsSelectable | Qt.ItemIsUserCheckable)
             lw.setCheckState(Qt.Checked if item["default"] else Qt.Unchecked)
             if cat == "core":
                 lw.setForeground(__import__("PyQt5.QtGui", fromlist=["QColor"]).QColor("#9cdcfe"))
@@ -2579,45 +2642,70 @@ class WorkflowTab(QWidget):
                 lw.setForeground(__import__("PyQt5.QtGui", fromlist=["QColor"]).QColor("#c5c5c0"))
             self.file_list.addItem(lw)
 
-        self.import_btn.setEnabled(len(items) > 0)
-        self.sel_all_btn.setText("Select All")
+        self._set_import_buttons_enabled(len(items) > 0)
         self._log(f"Found {len(items)} importable file(s).")
         self._populate_preprocess_paths()
         if items:
-            self._log("Prompting before importing selected files into files/.")
-            self._import_files()
+            self._log("Choose files to import, then click Import Selected → files/.")
 
     def _select_all_files(self):
         count = self.file_list.count()
         if not count:
             return
-        all_checked = all(
-            self.file_list.item(i).checkState() == Qt.Checked
-            for i in range(count)
-        )
-        new_state = Qt.Unchecked if all_checked else Qt.Checked
-        for i in range(count):
-            self.file_list.item(i).setCheckState(new_state)
-        if new_state == Qt.Checked:
-            self.sel_all_btn.setText("Deselect All")
-            self._log(f"✔  Selected all {count} file(s).")
-        else:
-            self.sel_all_btn.setText("Select All")
-            self._log(f"✔  Deselected all {count} file(s).")
+        self._syncing_file_checks = True
+        try:
+            for i in range(count):
+                self.file_list.item(i).setCheckState(Qt.Checked)
+        finally:
+            self._syncing_file_checks = False
+        self._log(f"✔  Selected all {count} file(s).")
+
+    def _deselect_all_files(self):
+        count = self.file_list.count()
+        if not count:
+            return
+        self._syncing_file_checks = True
+        try:
+            for i in range(count):
+                self.file_list.item(i).setCheckState(Qt.Unchecked)
+        finally:
+            self._syncing_file_checks = False
+        self._log(f"✔  Deselected all {count} file(s).")
 
     def _select_core_only(self):
         core = other = 0
-        for i in range(self.file_list.count()):
-            item = self.file_list.item(i)
-            data = item.data(Qt.UserRole)
-            is_core = bool(data and data.get("category") == "core")
-            item.setCheckState(Qt.Checked if is_core else Qt.Unchecked)
-            if is_core:
-                core += 1
-            else:
-                other += 1
+        self._syncing_file_checks = True
+        try:
+            for i in range(self.file_list.count()):
+                item = self.file_list.item(i)
+                data = item.data(Qt.UserRole)
+                is_core = bool(data and data.get("category") == "core")
+                item.setCheckState(Qt.Checked if is_core else Qt.Unchecked)
+                if is_core:
+                    core += 1
+                else:
+                    other += 1
+        finally:
+            self._syncing_file_checks = False
         if self.file_list.count():
             self._log(f"✔  Selected {core} core file(s); deselected {other} other(s).")
+
+    def _sync_selected_file_checks(self, changed_item: QListWidgetItem):
+        """Apply a checkbox change to the current Ctrl/Shift-selected file rows."""
+        if self._syncing_file_checks:
+            return
+        selected = self.file_list.selectedItems()
+        if len(selected) <= 1 or changed_item not in selected:
+            return
+
+        self._syncing_file_checks = True
+        try:
+            new_state = changed_item.checkState()
+            for item in selected:
+                if item is not changed_item:
+                    item.setCheckState(new_state)
+        finally:
+            self._syncing_file_checks = False
 
     def _import_files(self):
         selected = []
@@ -2634,7 +2722,7 @@ class WorkflowTab(QWidget):
             self._log("ℹ  Import cancelled; files/ was left unchanged.")
             return
 
-        self.import_btn.setEnabled(False)
+        self._set_import_buttons_enabled(False)
         worker = _ImportWorker(selected, "files")
         worker.log.connect(self._log)
         worker.done.connect(self._on_import_done)
@@ -2701,7 +2789,7 @@ class WorkflowTab(QWidget):
         self._log(f"✅ Cleared {deleted} item(s) from translated/")
 
     def _on_import_done(self, count: int, errors: list):
-        self.import_btn.setEnabled(True)
+        self._set_import_buttons_enabled(bool(self.file_list.count()))
         if errors:
             self._log(f"⚠  {len(errors)} error(s) during import:")
             for e in errors[:10]:
