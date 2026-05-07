@@ -34,7 +34,6 @@ these values using an .env file, for an example see .env.example"
     )
 
 from modules.rpgmakermvmz import handleMVMZ, setSpeakerParseMode as setSpeakerParseMVMZ, finalizeSpeakerParse as finalizeSpeakerParseMVMZ
-from modules.rpgmakerace import handleACE, setSpeakerParseMode as setSpeakerParseACE, finalizeSpeakerParse as finalizeSpeakerParseACE
 from modules.csv import handleCSV
 from modules.tyrano import handleTyrano
 from modules.kirikiri import handleKirikiri
@@ -60,7 +59,6 @@ THREADS = int(os.getenv("fileThreads"))
 MODULES = [
     ["RPGMaker MV/MZ", ["json"], handleMVMZ],
     ["RPGMaker Plugins", ["js", "rb"], handlePlugin],
-    ["RPGMaker ACE", ["yaml"], handleACE],
     ["CSV (From Translator++)", ["csv"], handleCSV],
     ["Tyrano", ["ks"], handleTyrano],
     ["Kirikiri", ["ks", "tjs", "ssd", "asd"], handleKirikiri],
@@ -123,13 +121,12 @@ def main():
 files to translate are in the /files folder and that you picked the right game engine."
     )
 
-    # If translating RPGMaker MV/MZ (index 0) or RPGMaker ACE (index 2) prompt for speaker parse mode
+    # If translating RPGMaker MV/MZ, prompt for speaker parse mode
     speaker_parse = False
-    if version in [0, 2] and not estimate:
+    if version == 0 and not estimate:
         sub = ""
-        engine_name = "RPGMaker MV/MZ" if version == 0 else "RPGMaker ACE"
         while sub == "":
-            sub = input(f"{engine_name} options:\n\n 1. Standard Translate\n 2. Parse Speakers (collect speaker names only)\n")
+            sub = input("RPGMaker MV/MZ options:\n\n 1. Standard Translate\n 2. Parse Speakers (collect speaker names only)\n")
             match sub:
                 case "1":
                     speaker_parse = False
@@ -138,10 +135,7 @@ files to translate are in the /files folder and that you picked the right game e
                 case _:
                     sub = ""
         if speaker_parse:
-            if version == 0:
-                setSpeakerParseMVMZ(True)
-            elif version == 2:
-                setSpeakerParseACE(True)
+            setSpeakerParseMVMZ(True)
 
     # Open File (Threads) - recursively walk 'files' and preserve directory structure
     # Prepare per-run log file so CLI runs also write to a run-specific history file
@@ -259,10 +253,7 @@ files to translate are in the /files folder and that you picked the right game e
 
     # Finalize speaker parse mode by writing collected speakers to vocab
     if speaker_parse:
-        if version == 0:
-            finalizeSpeakerParseMVMZ()
-        elif version == 2:
-            finalizeSpeakerParseACE()
+        finalizeSpeakerParseMVMZ()
 
     # Delete Tmp Files
     if os.path.isfile("csv.tmp"):
@@ -295,5 +286,5 @@ files to translate are in the /files folder and that you picked the right game e
 def deleteFolderFiles(folderPath):
     for filename in os.listdir(folderPath):
         file_path = os.path.join(folderPath, filename)
-        if file_path.endswith((".json", ".yaml", ".ks")):
+        if file_path.endswith((".json", ".ks")):
             os.remove(file_path)

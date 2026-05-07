@@ -325,11 +325,10 @@ class TranslationWorker(QThread):
             threads = int(os.getenv("fileThreads", "1"))
             total_cost = "Fail"
 
-            # If we're doing Parse Speakers for RPGMaker MV/MZ or ACE, run handlers in-process so
+            # If we're doing Parse Speakers for RPGMaker MV/MZ, run handlers in-process so
             # speaker collection is shared in this process and finalizeSpeakerParse() can run once.
             module_name_lower = self.module_info[0].lower() if isinstance(self.module_info[0], str) else ""
             is_mvmz = "mv/mz" in module_name_lower
-            is_ace = "ace" in module_name_lower
 
             # Change to project directory for module execution
             old_cwd = os.getcwd()
@@ -345,16 +344,12 @@ class TranslationWorker(QThread):
                     pass
 
             try:
-                if self.parse_speakers and (is_mvmz or is_ace):
+                if self.parse_speakers and is_mvmz:
                     # Run handlers sequentially in this worker process so globals are shared
                     try:
-                        if is_mvmz:
-                            from modules.rpgmakermvmz import handleMVMZ as handler, setSpeakerParseMode, finalizeSpeakerParse, resetSpeakerState, TOKENS, calculateCost, MODEL
-                        elif is_ace:
-                            from modules.rpgmakerace import handleACE as handler, setSpeakerParseMode, finalizeSpeakerParse, resetSpeakerState, TOKENS, calculateCost, MODEL
+                        from modules.rpgmakermvmz import handleMVMZ as handler, setSpeakerParseMode, finalizeSpeakerParse, resetSpeakerState, TOKENS, calculateCost, MODEL
                     except Exception as e:
-                        engine_name = "rpgmakermvmz" if is_mvmz else "rpgmakerace"
-                        self.emit_log(f"❌ Could not import {engine_name} for speaker-parse: {e}")
+                        self.emit_log(f"❌ Could not import rpgmakermvmz for speaker-parse: {e}")
                         self.finished_signal.emit(False, str(e))
                         return
 
@@ -1106,7 +1101,6 @@ class TranslationTab(QWidget):
         try:
             sys.path.append(str(self.project_root))
             from modules.rpgmakermvmz import handleMVMZ
-            from modules.rpgmakerace import handleACE
             from modules.csv import handleCSV
             from modules.tyrano import handleTyrano
             from modules.kirikiri import handleKirikiri
@@ -1126,7 +1120,6 @@ class TranslationTab(QWidget):
             
             self.modules = [
                 ["RPG Maker MV/MZ", [".json"], handleMVMZ],
-                ["RPG Maker Ace", [".yaml"], handleACE],
                 ["CSV", [".csv"], handleCSV],
                 ["Tyrano", [".ks"], handleTyrano],
                 ["Kirikiri", [".ks"], handleKirikiri],
@@ -1161,9 +1154,7 @@ class TranslationTab(QWidget):
 
     def _on_module_changed(self, text: str):
         lowered = text.lower()
-        if "ace" in lowered:
-            self.engine_changed.emit("ace")
-        elif "wolf" in lowered and "wolf rpg 2" not in lowered:
+        if "wolf" in lowered and "wolf rpg 2" not in lowered:
             self.engine_changed.emit("wolf")
         elif "mv/mz" in lowered:
             self.engine_changed.emit("mvmz")
@@ -1176,8 +1167,8 @@ class TranslationTab(QWidget):
         self.mode_combo.addItem("Translate")
         self.mode_combo.addItem("Estimate")
         
-        # Add Parse Speakers for RPG Maker MV/MZ and RPG Maker Ace
-        if "mv/mz" in lowered or "ace" in lowered:
+        # Add Parse Speakers for RPG Maker MV/MZ
+        if "mv/mz" in lowered:
             self.mode_combo.addItem("Parse Speakers")
         
         # Restore previous selection if it still exists
@@ -1336,7 +1327,7 @@ class TranslationTab(QWidget):
         try:
             selected_index = self.module_combo.currentIndex()
             if 0 <= selected_index < len(self.modules):
-                accepted_extensions = self.modules[selected_index][1]  # List of extensions like [".json", ".yaml"]
+                accepted_extensions = self.modules[selected_index][1]  # List of extensions like [".json"]
         except Exception:
             pass
 
