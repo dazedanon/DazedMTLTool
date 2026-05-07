@@ -1290,7 +1290,7 @@ class WorkflowTab(QWidget):
         "--- Code 108 (Comment / Notetag) ---\n"
         "parameters[0] is a comment string used as a plugin notetag.\n"
         "The module only translates 108 lines that match specific patterns:\n"
-        "  info:, ActiveMessage:, event_text, Menu Name, text_indicator\n"
+        "  info:, ActiveMessage:, event_text, Menu Name, text_indicator, NW名前指定\n"
         "Do any 108 entries matching those patterns have Japanese visible to the player?\n"
         "If yes: ENABLE CODE108 and list the patterns found. If no: SKIP CODE108.\n"
         "</audit_2>\n"
@@ -2573,11 +2573,11 @@ class WorkflowTab(QWidget):
 
         self.import_btn.setEnabled(len(items) > 0)
         self.sel_all_btn.setText("Select All")
-        self._log(f"Found {len(items)} importable file(s). Auto-importing…")
+        self._log(f"Found {len(items)} importable file(s).")
         self._populate_preprocess_paths()
-        # Automatically import the selected files so the user doesn't need
-        # to scroll down and click Import as a separate step.
-        self._import_files()
+        if items:
+            self._log("Prompting before importing selected files into files/.")
+            self._import_files()
 
     def _select_all_files(self):
         count = self.file_list.count()
@@ -2622,12 +2622,38 @@ class WorkflowTab(QWidget):
             self._log("⚠  No files selected.")
             return
 
+        if not self._confirm_import_overwrite(selected):
+            self._log("ℹ  Import cancelled; files/ was left unchanged.")
+            return
+
         self.import_btn.setEnabled(False)
         worker = _ImportWorker(selected, "files")
         worker.log.connect(self._log)
         worker.done.connect(self._on_import_done)
         self._worker = worker
         worker.start()
+
+    def _confirm_import_overwrite(self, selected: list[dict]) -> bool:
+        files_dir = Path("files")
+        existing = [
+            item for item in files_dir.iterdir()
+            if item.name != ".gitkeep"
+        ] if files_dir.exists() else []
+        if not existing:
+            return True
+
+        reply = QMessageBox.warning(
+            self,
+            "Import game files",
+            "Importing selected game files will delete the existing contents of files/ "
+            "before copying the new files.\n\n"
+            f"Existing items: {len(existing)}\n"
+            f"Selected files to import: {len(selected)}\n\n"
+            "Continue and overwrite files/?",
+            QMessageBox.Yes | QMessageBox.Cancel,
+            QMessageBox.Cancel,
+        )
+        return reply == QMessageBox.Yes
 
     def _clear_translated(self):
         translated_dir = Path("translated")

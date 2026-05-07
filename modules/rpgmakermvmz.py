@@ -3210,6 +3210,8 @@ def searchCodes(page, pbar, jobList, filename):
                     regex = r"Menu\sName\s*:\s*(.*)>"
                 elif "text_indicator" in jaString:
                     regex = r"text_indicator\s?:\s?(.+)"
+                elif re.match(r"^NW名前指定\s+", jaString):
+                    regex = r"NW名前指定\s+(.+)"
                 else:
                     i += 1
                     continue
