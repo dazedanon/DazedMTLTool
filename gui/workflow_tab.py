@@ -475,6 +475,8 @@ class WorkflowTab(QWidget):
         self._ace_encrypted: bool = False
         self._ace_json_dir: str = ""     # <game_root>/JSON/ — used as _data_path for Ace
         self._ace_rvdata_dir: str = ""   # <game_root>/Data/ with rvdata2 files
+        self._p2_loading_config: bool = False
+        self._p2_auto_apply_timer: QTimer | None = None
 
         self._init_ui()
 
@@ -2023,6 +2025,8 @@ class WorkflowTab(QWidget):
         apply_range_btn.setToolTip("Write CODE122_VAR_MIN / CODE122_VAR_MAX to the module")
         apply_range_btn.clicked.connect(self._apply_var_range)
         var_row.addWidget(apply_range_btn)
+        self._p2_var_min.editingFinished.connect(self._schedule_p2_config_apply)
+        self._p2_var_max.editingFinished.connect(self._schedule_p2_config_apply)
         var_row.addStretch()
         pre_inner.addLayout(var_row)
         layout.addWidget(pre_box)
@@ -2087,6 +2091,7 @@ class WorkflowTab(QWidget):
             cb.setToolTip(tip)
             cb.setStyleSheet("color:#cccccc;font-size:13px;")
             toggle_grid.addWidget(cb, idx // 3, idx % 3)
+            cb.stateChanged.connect(self._schedule_p2_config_apply)
             self._p2_code_checks[code_key] = cb
         toggle_box_layout.addWidget(toggle_grid_container)
 
@@ -2142,6 +2147,7 @@ class WorkflowTab(QWidget):
             for key in sorted(_HM357.keys(), key=str.casefold):
                 cb = QCheckBox(key)
                 cb.setStyleSheet("color:#cccccc;font-size:13px;")
+                cb.stateChanged.connect(self._schedule_p2_config_apply)
                 plugin357_vbox.addWidget(cb)
                 self._p2_plugin_checks[key] = cb
         except Exception:
@@ -2199,6 +2205,7 @@ class WorkflowTab(QWidget):
             for key in sorted(_PAT.keys(), key=str.casefold):
                 cb = QCheckBox(key)
                 cb.setStyleSheet("color:#cccccc;font-size:13px;")
+                cb.stateChanged.connect(self._schedule_p2_config_apply)
                 patterns_vbox.addWidget(cb)
                 self._p2_pattern_checks[key] = cb
         except Exception:
@@ -2224,20 +2231,11 @@ class WorkflowTab(QWidget):
 
         layout.addLayout(lists_row)
 
-        # ── Bottom row: Apply + Run ────────────────────────────────────────
+        # ── Bottom row: Run ────────────────────────────────────────────────
         bottom_row = QHBoxLayout()
         bottom_row.setSpacing(10)
         _P2_BTN_WIDTH = 200
         _P2_BTN_HEIGHT = 36
-        apply_plugins_btn = _make_btn("✔  Apply Plugin Settings", "#2a4a6a")
-        apply_plugins_btn.setFixedSize(_P2_BTN_WIDTH, _P2_BTN_HEIGHT)
-        apply_plugins_btn.setToolTip(
-            "Save the checked plugin handlers and script patterns to the module file.\n"
-            "Updates ENABLED_PLUGINS_357 and ENABLED_PATTERNS_355655 in rpgmakermvmz.py."
-        )
-        apply_plugins_btn.clicked.connect(self._apply_plugin_settings)
-        bottom_row.addWidget(apply_plugins_btn)
-
         self._run_p2_btn = _make_btn("►  Run Phase 2", "#7a4a00")
         self._run_p2_btn.setFixedSize(_P2_BTN_WIDTH, _P2_BTN_HEIGHT)
         self._run_p2_btn.setToolTip(
@@ -2251,6 +2249,10 @@ class WorkflowTab(QWidget):
         bottom_row.addWidget(self._p2_status_lbl)
         bottom_row.addStretch()
         layout.addLayout(bottom_row)
+
+        self._p2_auto_apply_timer = QTimer(self)
+        self._p2_auto_apply_timer.setSingleShot(True)
+        self._p2_auto_apply_timer.timeout.connect(self._apply_p2_config)
 
         # Pre-populate all Phase 2 checkboxes from current module state
         self._populate_p2_checkboxes()
@@ -2834,6 +2836,7 @@ class WorkflowTab(QWidget):
 
     def _populate_p2_checkboxes(self):
         """Read current module config and pre-tick Phase 2 checkboxes."""
+        self._p2_loading_config = True
         try:
             from gui.config_integration import ConfigIntegration
             ci = ConfigIntegration()
@@ -2856,6 +2859,67 @@ class WorkflowTab(QWidget):
                 cb.setChecked(key in enabled_355655)
         except Exception:
             pass
+        finally:
+            self._p2_loading_config = False
+
+    def _schedule_p2_config_apply(self, *_args):
+        """Debounce auto-saving Phase 2 settings while the user changes controls."""
+        if self._p2_loading_config:
+            return
+        timer = getattr(self, "_p2_auto_apply_timer", None)
+        if timer is not None:
+            timer.start(300)
+        else:
+            self._apply_p2_config()
+
+    def _apply_p2_config(self):
+        """Write Phase 2 code and plugin settings when controls change."""
+        try:
+            var_min = int(self._p2_var_min.text() or 0)
+            var_max = int(self._p2_var_max.text() or 2000)
+        except ValueError:
+            self._p2_status_lbl.setText("Invalid Code 122 range")
+            self._log("❌ Phase 2 config not saved: invalid Code 122 range")
+            return
+
+        try:
+            from gui.config_integration import ConfigIntegration
+            ci = ConfigIntegration()
+
+            code_cfg = {
+                code_key: cb.isChecked()
+                for code_key, cb in getattr(self, "_p2_code_checks", {}).items()
+            }
+            code_cfg.update({
+                "CODE122_VAR_MIN": var_min,
+                "CODE122_VAR_MAX": var_max,
+            })
+            ci.update_rpgmaker_config(code_cfg)
+
+            enabled_357 = {
+                k for k, cb in getattr(self, "_p2_plugin_checks", {}).items()
+                if cb.isChecked()
+            }
+            enabled_355655 = {
+                k for k, cb in getattr(self, "_p2_pattern_checks", {}).items()
+                if cb.isChecked()
+            }
+            ci.update_plugin_config(enabled_357, enabled_355655)
+
+            self._p2_status_lbl.setText(
+                f"Auto-saved ({len(enabled_357)} handlers, {len(enabled_355655)} patterns)"
+            )
+
+            try:
+                if self.parent_window and hasattr(self.parent_window, "config_tab"):
+                    ct = self.parent_window.config_tab
+                    if hasattr(ct, "mvmz_tab") and ct.mvmz_tab:
+                        ct.mvmz_tab.refresh_from_module()
+            except Exception:
+                pass
+        except Exception as exc:
+            self._p2_status_lbl.setText("Auto-save failed")
+            self._log(f"❌ Could not save Phase 2 settings: {exc}")
 
     def _apply_plugin_settings(self):
         """Write the checked plugin handlers and script patterns back to rpgmakermvmz.py."""
