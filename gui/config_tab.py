@@ -177,27 +177,21 @@ class ConfigTab(QWidget):
         nav_layout.addWidget(btn_mvmz)
         self.nav_buttons.append(btn_mvmz)
         
-        # RPG Maker Ace button
-        btn_ace = self.create_nav_button("🎲", "RPG Maker Ace")
-        btn_ace.clicked.connect(lambda: self.switch_page(2))
-        nav_layout.addWidget(btn_ace)
-        self.nav_buttons.append(btn_ace)
-        
         # Wolf RPG button
         btn_wolf = self.create_nav_button("🐺", "Wolf RPG")
-        btn_wolf.clicked.connect(lambda: self.switch_page(3))
+        btn_wolf.clicked.connect(lambda: self.switch_page(2))
         nav_layout.addWidget(btn_wolf)
         self.nav_buttons.append(btn_wolf)
         
         # CSV button
         btn_csv = self.create_nav_button("📄", "CSV")
-        btn_csv.clicked.connect(lambda: self.switch_page(4))
+        btn_csv.clicked.connect(lambda: self.switch_page(3))
         nav_layout.addWidget(btn_csv)
         self.nav_buttons.append(btn_csv)
 
         # SRPG Studio button
         btn_srpg = self.create_nav_button("⚔️", "SRPG Studio")
-        btn_srpg.clicked.connect(lambda: self.switch_page(5))
+        btn_srpg.clicked.connect(lambda: self.switch_page(4))
         nav_layout.addWidget(btn_srpg)
         self.nav_buttons.append(btn_srpg)
         
@@ -215,19 +209,15 @@ class ConfigTab(QWidget):
         self.mvmz_tab = RPGMakerTab("MVMZ")
         self.content_stack.addWidget(self.mvmz_tab)
         
-        # Page 3: RPG Maker Ace Engine
-        self.ace_tab = RPGMakerTab("ACE")
-        self.content_stack.addWidget(self.ace_tab)
-        
-        # Page 4: Wolf RPG Engine
+        # Page 3: Wolf RPG Engine
         self.wolf_tab = WolfTab()
         self.content_stack.addWidget(self.wolf_tab)
         
-        # Page 5: CSV Settings
+        # Page 4: CSV Settings
         self.csv_tab = CSVTab()
         self.content_stack.addWidget(self.csv_tab)
 
-        # Page 6: SRPG Studio Engine
+        # Page 5: SRPG Studio Engine
         self.srpg_tab = SRPGTab()
         self.content_stack.addWidget(self.srpg_tab)
         
@@ -279,7 +269,6 @@ class ConfigTab(QWidget):
         """Refresh engine config pages from their module files when shown."""
         engine_pages = {
             1: getattr(self, "mvmz_tab", None),
-            2: getattr(self, "ace_tab", None),
         }
         page = engine_pages.get(index)
         if page is not None and hasattr(page, "refresh_from_module"):
@@ -882,7 +871,6 @@ class ConfigTab(QWidget):
         
         # Reset engine tabs
         self.mvmz_tab.reset_to_defaults()
-        self.ace_tab.reset_to_defaults()
         self.wolf_tab.reset_to_defaults()
         self.csv_tab.reset_to_defaults()
         

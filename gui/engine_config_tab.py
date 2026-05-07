@@ -5,7 +5,6 @@ based on signals from the Translation tab (engine selection).
 
 Currently supports:
 - RPG Maker MV/MZ
-- RPG Maker Ace
 - Wolf RPG
 
 Easily extensible: add new engine widget + mapping entry.
@@ -31,7 +30,6 @@ class EngineConfigTab(QWidget):
 
         # Engine widgets
         self.mv_widget = RPGMakerTab("MVMZ")
-        self.ace_widget = RPGMakerTab("ACE")
         self.wolf_widget = WolfTab()
 
         # Placeholder when no engine selected
@@ -42,7 +40,6 @@ class EngineConfigTab(QWidget):
         # Add to stack
         self.widget_map = {
             "mvmz": self.mv_widget,
-            "ace": self.ace_widget,
             "wolf": self.wolf_widget,
         }
         self.stack.addWidget(self.placeholder)  # index 0

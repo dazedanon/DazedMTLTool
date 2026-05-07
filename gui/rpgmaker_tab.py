@@ -40,11 +40,7 @@ def create_section_label(text):
 
 
 class RPGMakerTab(QWidget):
-    """RPG Maker MV/MZ & Ace configuration tab.
-
-    This widget now supports both MV/MZ and Ace engines. Pass engine="ACE" to
-    target rpgmakerace.py; otherwise it will default to MV/MZ (rpgmakermvmz.py).
-    """
+    """RPG Maker MV/MZ configuration tab."""
     
     # Default configuration values for RPG Maker MV/MZ
     DEFAULT_CONFIG = {
@@ -187,8 +183,7 @@ class RPGMakerTab(QWidget):
 
             loaded_config = None
             if self.config_integration:
-                module_filename = "rpgmakermvmz.py" if self.engine != "ACE" else "rpgmakerace.py"
-                module_path = Path("modules") / module_filename
+                module_path = Path("modules") / "rpgmakermvmz.py"
                 loaded_config = self.config_integration.read_current_config(module_path)
 
             # Use loaded module config if available, otherwise use canonical defaults
@@ -237,8 +232,7 @@ class RPGMakerTab(QWidget):
         main_layout.setSpacing(12)
         
         # Title
-        title = "RPG Maker MV/MZ" if self.engine != "ACE" else "RPG Maker Ace"
-        title_label = QLabel(f"{title} Translation Settings")
+        title_label = QLabel("RPG Maker MV/MZ Translation Settings")
         title_label.setStyleSheet("font-size: 16px; font-weight: bold; color: #007acc;")
         main_layout.addWidget(title_label)
         
@@ -297,11 +291,6 @@ class RPGMakerTab(QWidget):
         )
         col1.addLayout(layout)
 
-        self.speakers408_cb, layout = self._create_checkbox_with_description(
-            "408 Speakers", "Detect speakers in comment blocks", "Apply speaker logic to comment blocks."
-        )
-        col1.addLayout(layout)
-        
         col1.addStretch()
         
         # ==================== COLUMN 2: DIALOGUE ====================
@@ -516,8 +505,6 @@ class RPGMakerTab(QWidget):
             self.tlsystemvariables_cb.stateChanged.disconnect()
             self.tlsystemswitches_cb.stateChanged.disconnect()
             self.join408_cb.stateChanged.disconnect()
-            if self.engine == "ACE":
-                self.speakers408_cb.stateChanged.disconnect()
             
             # Main Codes
             self.code401_cb.stateChanged.disconnect()
@@ -559,8 +546,6 @@ class RPGMakerTab(QWidget):
         self.tlsystemvariables_cb.stateChanged.connect(lambda: self.apply_to_module(show_messages=False))
         self.tlsystemswitches_cb.stateChanged.connect(lambda: self.apply_to_module(show_messages=False))
         self.join408_cb.stateChanged.connect(lambda: self.apply_to_module(show_messages=False))
-        if self.engine == "ACE":
-            self.speakers408_cb.stateChanged.connect(lambda: self.apply_to_module(show_messages=False))
 
         # Main Codes
         self.code401_cb.stateChanged.connect(lambda: self.apply_to_module(show_messages=False))
@@ -626,11 +611,6 @@ class RPGMakerTab(QWidget):
             "CODE111": self.code111_cb.isChecked(),
             "CODE108": self.code108_cb.isChecked(),
         }
-        
-        # Only include SPEAKERS408 for ACE engine
-        if self.engine == "ACE":
-            config["SPEAKERS408"] = self.speakers408_cb.isChecked()
-            
         return config
         
     def set_config(self, config):
@@ -645,10 +625,6 @@ class RPGMakerTab(QWidget):
         self.tlsystemvariables_cb.setChecked(config.get("TLSYSTEMVARIABLES", False))
         self.tlsystemswitches_cb.setChecked(config.get("TLSYSTEMSWITCHES", False))
         self.join408_cb.setChecked(config.get("JOIN408", False))
-        
-        # Only set SPEAKERS408 for ACE engine
-        if self.engine == "ACE":
-            self.speakers408_cb.setChecked(config.get("SPEAKERS408", False))
 
         # Main Codes
         self.code401_cb.setChecked(config.get("CODE401", True))
@@ -760,11 +736,10 @@ class RPGMakerTab(QWidget):
         return is_valid
         
     def apply_to_module(self, show_messages=False):
-        """Apply current configuration to the correct RPG Maker module (MV/MZ or Ace)."""
+        """Apply current configuration to the RPG Maker MV/MZ module."""
         try:
             config = self.get_config()
-            # Select module filename based on engine
-            module_filename = "rpgmakermvmz.py" if self.engine != "ACE" else "rpgmakerace.py"
+            module_filename = "rpgmakermvmz.py"
             module_path = Path(__file__).parent.parent / "modules" / module_filename
             
             if not module_path.exists():
@@ -815,12 +790,12 @@ class RPGMakerTab(QWidget):
             self.config_changed.emit()
         
     def load_from_module(self):
-        """Load configuration from the actual module file based on engine."""
+        """Load configuration from the RPG Maker MV/MZ module file."""
         if not self.config_integration:
             return
 
         try:
-            module_filename = "rpgmakermvmz.py" if self.engine != "ACE" else "rpgmakerace.py"
+            module_filename = "rpgmakermvmz.py"
             module_path = Path("modules") / module_filename
             config = self.config_integration.read_current_config(module_path)
             if config:
@@ -841,8 +816,7 @@ class RPGMakerTab(QWidget):
             return False
 
         try:
-            module_filename = "rpgmakermvmz.py" if self.engine != "ACE" else "rpgmakerace.py"
-            module_path = Path("modules") / module_filename
+            module_path = Path("modules") / "rpgmakermvmz.py"
             config = self.config_integration.read_current_config(module_path)
             if not config:
                 return False

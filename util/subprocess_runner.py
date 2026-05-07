@@ -74,9 +74,6 @@ def run_handler(project_root, module_name, filename, estimate_only):
         if "RPG Maker MV/MZ" in module_name:
             from modules.rpgmakermvmz import handleMVMZ
             handler = handleMVMZ
-        elif "RPG Maker Ace" in module_name:
-            from modules.rpgmakerace import handleACE
-            handler = handleACE
         elif "CSV" in module_name:
             from modules.csv import handleCSV
             handler = handleCSV

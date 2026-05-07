@@ -263,7 +263,6 @@ Open the DazedMTLTool folder in VSCode and ask Copilot to make changes to the tr
 
 - *"Add a new regex pattern to skip lines that start with //"*
 - *"Change the wordwrap logic to break on full-width punctuation"*
-- *"Make this module also handle .yaml files"*
 - *"Explain what CODE 356 does in rpgmakermvmz.py"*
 
 Copilot can read the surrounding code and suggest context-aware edits — you just review and accept. This makes it easy to customize the tool for specific games without deep Python knowledge.
@@ -308,7 +307,6 @@ Not every file needs to be tracked. Create a file called `.gitignore` in the gam
 !*.csv
 !*.ks
 !*.tjs
-!*.yaml
 !*.rb
 !*.rvdata2
 # Other useful files
