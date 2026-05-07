@@ -4349,10 +4349,10 @@ def getSpeaker(speaker: str):
     return [translated, response[1]]
 
 def _get_actor_map() -> dict:
-    """Lazily load actor_id -> name from Actors.json (translated/ preferred)."""
+    """Lazily load actor_id -> name from Actors.json, falling back to vocab actor entries."""
     global _ACTOR_MAP_CACHE
     with _ACTOR_MAP_CACHE_LOCK:
-        if _ACTOR_MAP_CACHE is not None:
+        if _ACTOR_MAP_CACHE:
             return _ACTOR_MAP_CACHE
         for candidate in (Path("translated/Actors.json"), Path("files/Actors.json")):
             if candidate.is_file():
@@ -4371,6 +4371,20 @@ def _get_actor_map() -> dict:
                         return m
                 except Exception:
                     continue
+        try:
+            m: dict = {}
+            for line in VOCAB.splitlines():
+                match = re.search(r"\(([^()]+)\)\s*-\s*.*?\bactor\s+ID\s+(\d+)\b", line, re.IGNORECASE)
+                if match:
+                    name = match.group(1).strip()
+                    aid = int(match.group(2))
+                    if name:
+                        m[aid] = name
+            if m:
+                _ACTOR_MAP_CACHE = m
+                return m
+        except Exception:
+            pass
         _ACTOR_MAP_CACHE = {}
         return {}
 
@@ -4421,27 +4435,50 @@ def translateAI(text, history, history_ctx=None):
 
     # ── Actor variable substitution ──────────────────────────────────────────
     # Replace \n[X] codes with actor names before sending to AI so the model
-    # sees real character names.  Track what was swapped so we can restore
-    # the variable codes in the translated output.
+    # sees real character names. Restore only exact-case name matches afterward;
+    # this avoids lower-case words like "red" and keeps the prompt clean.
     actor_map = _get_actor_map()
-    reverse: dict[str, str] = {}  # lower_name -> "\\n[X]"
+    reverse: dict[str, str] = {}  # actor_name -> "\\n[X]"
 
-    def _sub(s: str) -> str:
+    def _sub(s: str, reverse_map: dict[str, str]) -> str:
         if not isinstance(s, str) or not actor_map:
             return s
+
+        def _display_actor_name(m: re.Match) -> str:
+            name = actor_map.get(int(m.group(1)))
+            return name if name else m.group(0)
+
         def _repl(m: re.Match) -> str:
             aid = int(m.group(1))
             name = actor_map.get(aid)
             if name:
-                reverse[name.lower()] = m.group(0)
+                reverse_map[name] = m.group(0)
                 return name
             return m.group(0)
+
+        speaker_prefix = re.match(
+            r"^(?P<open>\s*\[)(?P<speaker>(?:\\n\[\d+\]|[^\]\n])+)(?P<close>\]\s*[|:]\s*)",
+            s,
+            re.IGNORECASE,
+        )
+        if speaker_prefix:
+            speaker = _VAR_ACTOR_RE.sub(_display_actor_name, speaker_prefix.group("speaker"))
+            body = _VAR_ACTOR_RE.sub(_repl, s[speaker_prefix.end():])
+            return f"{speaker_prefix.group('open')}{speaker}{speaker_prefix.group('close')}{body}"
+
         return _VAR_ACTOR_RE.sub(_repl, s)
 
     if isinstance(text, list):
-        text = [_sub(s) for s in text]
+        item_reverses: list[dict[str, str]] = []
+        subbed_text = []
+        for s in text:
+            item_reverse: dict[str, str] = {}
+            subbed_text.append(_sub(s, item_reverse))
+            item_reverses.append(item_reverse)
+        text = subbed_text
     else:
-        text = _sub(text)
+        item_reverses = []
+        text = _sub(text, reverse)
 
     result = sharedtranslateAI(
         text=text,
@@ -4454,20 +4491,24 @@ def translateAI(text, history, history_ctx=None):
     )
 
     # ── Restore \n[X] codes in translated output ───────────────────────────
-    if reverse:
-        _restore_pat = re.compile(
-            "|".join(re.escape(n) for n in sorted(reverse, key=len, reverse=True)),
-            re.IGNORECASE,
+    def _restore(s: str, reverse_map: dict[str, str]) -> str:
+        if not isinstance(s, str) or not reverse_map:
+            return s
+        restore_pat = re.compile(
+            r"(?<!\w)(" + "|".join(re.escape(n) for n in sorted(reverse_map, key=len, reverse=True)) + r")(?!\w)",
         )
-        def _restore(s: str) -> str:
-            if not isinstance(s, str):
-                return s
-            return _restore_pat.sub(lambda m: reverse[m.group(0).lower()], s)
+        return restore_pat.sub(lambda m: reverse_map[m.group(1)], s)
 
+    if reverse or any(item_reverses):
         if isinstance(result[0], list):
-            result[0] = [_restore(s) for s in result[0]]
+            restored = []
+            for idx, s in enumerate(result[0]):
+                reverse_map = item_reverses[idx] if idx < len(item_reverses) else {}
+                restored.append(_restore(s, reverse_map))
+            result[0] = restored
         elif isinstance(result[0], str):
-            result[0] = _restore(result[0])
+            reverse_map = item_reverses[0] if item_reverses else reverse
+            result[0] = _restore(result[0], reverse_map)
 
     return result
 
