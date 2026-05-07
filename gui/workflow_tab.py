@@ -604,6 +604,7 @@ class WorkflowTab(QWidget):
             page_layout.addWidget(nav)
             self._step_tabs.addTab(page, tab_label)
 
+        self._step_tabs.currentChanged.connect(self._on_step_tab_changed)
         splitter.addWidget(self._step_tabs)
 
         # ---- Right: log area ----
@@ -658,6 +659,11 @@ class WorkflowTab(QWidget):
         if not self._detected_on_show and self._setting("last_game_folder", ""):
             self._detected_on_show = True
             QTimer.singleShot(100, self._detect_folder)
+
+    def _on_step_tab_changed(self, index: int):
+        """Refresh config-backed controls when their workflow page is shown."""
+        if index == 5:
+            self._populate_p2_checkboxes()
 
     def _apply_theme(self):
         """Apply a unified dark-theme stylesheet to all standard controls."""
@@ -2833,6 +2839,10 @@ class WorkflowTab(QWidget):
             ci = ConfigIntegration()
             # Code toggle checkboxes
             cur = ci.read_current_config()
+            if "CODE122_VAR_MIN" in cur:
+                self._p2_var_min.setText(str(cur["CODE122_VAR_MIN"]))
+            if "CODE122_VAR_MAX" in cur:
+                self._p2_var_max.setText(str(cur["CODE122_VAR_MAX"]))
             for code_key, cb in getattr(self, "_p2_code_checks", {}).items():
                 if code_key in cur:
                     cb.setChecked(cur[code_key])

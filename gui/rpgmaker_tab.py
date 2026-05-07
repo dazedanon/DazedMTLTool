@@ -824,9 +824,36 @@ class RPGMakerTab(QWidget):
             module_path = Path("modules") / module_filename
             config = self.config_integration.read_current_config(module_path)
             if config:
-                self.set_config(config)
+                self.disconnect_auto_apply()
+                try:
+                    self.set_config(config)
+                finally:
+                    self.connect_auto_apply()
                 QMessageBox.information(self, "Success", f"Configuration loaded from {module_filename}")
             else:
                 QMessageBox.warning(self, "Warning", f"No configuration found in {module_filename}")
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to load from module:\n{str(e)}")
+
+    def refresh_from_module(self) -> bool:
+        """Reload current module config into the UI without applying or showing dialogs."""
+        if not self.config_integration:
+            return False
+
+        try:
+            module_filename = "rpgmakermvmz.py" if self.engine != "ACE" else "rpgmakerace.py"
+            module_path = Path("modules") / module_filename
+            config = self.config_integration.read_current_config(module_path)
+            if not config:
+                return False
+
+            self.disconnect_auto_apply()
+            self.set_config(config)
+            self.connect_auto_apply()
+            return True
+        except Exception:
+            try:
+                self.connect_auto_apply()
+            except Exception:
+                pass
+            return False
