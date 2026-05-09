@@ -29,41 +29,38 @@ echo Using root directory: "%ROOT_DIR%"
 echo Using config: "%CONFIG_FILE%"
 
 echo Checking for pwsh...
-set _my_shell=pwsh
-
-REM Check if pwsh.exe exists
+set "_my_shell=pwsh"
 where /q !_my_shell!
 if !errorlevel! neq 0 (
   echo pwsh not found.
-  echo.
-  echo PowerShell 7 ^(pwsh^) is faster and recommended.
-  set /p "INSTALL_PWSH=Would you like to install it now via winget? (Y/N): "
-  if /I "!INSTALL_PWSH!"=="Y" (
-    echo Installing PowerShell 7 via winget...
-    winget install --id Microsoft.PowerShell --source winget --accept-package-agreements --accept-source-agreements
-    if !errorlevel! neq 0 (
-      echo Install failed or winget not available. Falling back to powershell...
-      set _my_shell=powershell
+  if /I "%GAMEUPDATE_PROMPT_PWSH%"=="1" (
+    echo.
+    set /p "INSTALL_PWSH=PowerShell 7 is faster. Install now via winget? (Y/N): "
+    if /I "!INSTALL_PWSH!"=="Y" (
+      echo Installing PowerShell 7 via winget...
+      winget install --id Microsoft.PowerShell --source winget --accept-package-agreements --accept-source-agreements
+      where /q pwsh
+      if !errorlevel! equ 0 (
+        set "_my_shell=pwsh"
+        echo PowerShell 7 installed; using pwsh.
+      ) else (
+        echo Install failed or unavailable; falling back to powershell.
+        set "_my_shell=powershell"
+      )
     ) else (
-      echo PowerShell 7 installed successfully.
-      echo Please re-run GameUpdate.bat to use pwsh.
-      pause
-      exit /b 0
+      echo Skipping install; falling back to powershell.
+      set "_my_shell=powershell"
     )
   ) else (
-    echo Skipping install. Falling back to powershell...
-    set _my_shell=powershell
+    echo Tip: Set GAMEUPDATE_PROMPT_PWSH=1 to offer PowerShell 7 install.
+    echo Falling back to powershell...
+    set "_my_shell=powershell"
   )
-
-  REM Check if powershell.exe exists
-  echo Checking for powershell...
   where /q !_my_shell!
   if !errorlevel! neq 0 (
-    echo.Error: Powershell not found!
+    echo ERROR: Neither pwsh nor powershell was found.
     pause
-    exit /B 1
-  ) else (
-    echo powershell found.
+    exit /b 1
   )
 ) else (
   echo pwsh found.
@@ -85,11 +82,27 @@ for /f "usebackq tokens=1,2 delims==" %%a in ("%CONFIG_FILE%") do (
     if "%%a"=="branch" set "branch=%%b"
 )
 
+REM Validate required config keys early for clearer errors
+if "%username%"=="" (
+    echo ERROR: 'username=' is missing in gameupdate\patch-config.txt
+    pause
+    exit /b 1
+)
+if "%repo%"=="" (
+    echo ERROR: 'repo=' is missing in gameupdate\patch-config.txt
+    pause
+    exit /b 1
+)
+if "%branch%"=="" (
+    echo ERROR: 'branch=' is missing in gameupdate\patch-config.txt
+    pause
+    exit /b 1
+)
+
 REM For PowerShell (proper URL encoding; avoids cmd %% pitfalls)
 set "GU_USERNAME=%username%"
 set "GU_REPO=%repo%"
 set "GU_BRANCH=%branch%"
-if /I "!_my_shell!"=="pwsh" (set "GU_DL_PROGRESS=Continue") else (set "GU_DL_PROGRESS=SilentlyContinue")
 
 REM --------------------------------------------------------
 REM PRE-SETUP: Ensure SRPG data and patch structure exists
@@ -150,56 +163,28 @@ if exist "%ROOT_DIR%\data.dts" (
     echo [Pre-Setup] data.dts not found; skipping pre-setup SRPG steps.
 )
 
-REM Get the latest hash (GitLab API — browser /-/archive/ URLs are often blocked by CDN)
-echo "Getting latest commit SHA hash"
-!_my_shell! -NoProfile -Command "$ErrorActionPreference='Stop'; $id=[uri]::EscapeDataString($env:GU_USERNAME+'/'+ $env:GU_REPO); $br=[uri]::EscapeDataString($env:GU_BRANCH); (Invoke-RestMethod -Uri \"https://gitgud.io/api/v4/projects/$id/repository/branches/$br\" -Headers @{'User-Agent'='GameUpdate/1.0'}).commit.id" > "%ROOT_DIR%\latest_patch_sha.txt"
-
-REM Read the latest SHA from the file
-set /p latest_patch_sha=<"%ROOT_DIR%\latest_patch_sha.txt"
-
-REM Check if previous_patch_sha.txt exists in gameupdate
-if not exist "%SCRIPT_DIR%previous_patch_sha.txt" (
-    echo "Previous SHA hash not found!"
-    echo "Assuming first time patching..."
-    goto download_extract
-)
-
-REM Read the stored SHA from previous check
-set /p previous_patch_sha=<"%SCRIPT_DIR%previous_patch_sha.txt"
-
-REM Trim whitespace from SHA strings
-set "previous_patch_sha=%previous_patch_sha: =%"
-set "latest_patch_sha=%latest_patch_sha: =%"
-
-REM Compare trimmed SHAs
-if "%latest_patch_sha%" neq "%previous_patch_sha%" (
-    echo "Update found! Patching..."
-    goto download_extract
-) else (
-    echo "Patch is up to date."
-)
-
-REM Delete latest_patch_sha.txt
-del "%ROOT_DIR%\latest_patch_sha.txt"
-
-endlocal
-pause
-exit /b
-
 :download_extract
 
-REM Escape single quotes in paths
-set "escaped_root=%ROOT_DIR:'=''%"
-
-REM Download zip via GitLab API; extract single top-level folder (API uses commit-based root name, not repo-branch)
-echo "Downloading latest patch..."
-!_my_shell! -NoProfile -Command "$ErrorActionPreference='Stop'; Set-Location -LiteralPath '%escaped_root%'; $id=[uri]::EscapeDataString($env:GU_USERNAME+'/'+ $env:GU_REPO); $shaQ=[uri]::EscapeDataString($env:GU_BRANCH); $url=\"https://gitgud.io/api/v4/projects/$id/repository/archive.zip?sha=$shaQ\"; $ProgressPreference=$env:GU_DL_PROGRESS; Invoke-WebRequest -Uri $url -OutFile 'repo.zip' -UseBasicParsing -Headers @{'User-Agent'='GameUpdate/1.0'}; $ProgressPreference='SilentlyContinue'; $stage = Join-Path (Get-Location) '_patch_extract_tmp'; if (Test-Path $stage) { Remove-Item -LiteralPath $stage -Recurse -Force }; New-Item -ItemType Directory -Path $stage | Out-Null; try { Expand-Archive -LiteralPath '.\repo.zip' -DestinationPath $stage -Force; $dirs = @(Get-ChildItem -LiteralPath $stage -Directory); if ($dirs.Count -ne 1) { throw \"Expected one root folder in archive, found $($dirs.Count)\" }; Copy-Item -Path (Join-Path $dirs[0].FullName '*') -Destination (Get-Location) -Recurse -Force } finally { if (Test-Path $stage) { Remove-Item -LiteralPath $stage -Recurse -Force } }"
-if !errorlevel! neq 0 (
+REM Download/extract via patch-download.ps1 (IWR-based); Bypass avoids ExecutionPolicy prompts
+if not exist "%SCRIPT_DIR%patch-download.ps1" (
+    echo ERROR: patch-download.ps1 not found next to patch.bat in the gameupdate folder.
+    pause
+    exit /b 1
+)
+!_my_shell! -NoProfile -ExecutionPolicy Bypass -File "%SCRIPT_DIR%patch-download.ps1" -GameRoot "%ROOT_DIR%" -StateFile "%SCRIPT_DIR%previous_patch_sha.txt"
+set "PATCH_DL_EXIT=!errorlevel!"
+if "!PATCH_DL_EXIT!"=="10" (
+    echo Patch is up to date.
+    endlocal
+    pause
+    exit /b 0
+)
+if not "!PATCH_DL_EXIT!"=="0" (
     echo Download or extraction failed!
     if exist "%ROOT_DIR%\repo.zip" del "%ROOT_DIR%\repo.zip"
     if exist "%ROOT_DIR%\_patch_extract_tmp" rmdir /s /q "%ROOT_DIR%\_patch_extract_tmp"
     pause
-    exit /b
+    exit /b 1
 )
 echo "Applying patch..."
 REM Files merged by Copy-Item above
@@ -248,9 +233,6 @@ REM Clean up
 echo "Cleaning up..."
 del "%ROOT_DIR%\repo.zip"
 if exist "%ROOT_DIR%\_patch_extract_tmp" rmdir /s /q "%ROOT_DIR%\_patch_extract_tmp"
-del "%ROOT_DIR%\latest_patch_sha.txt"
-REM Store latest SHA for next check in gameupdate
-echo %latest_patch_sha% > "%SCRIPT_DIR%previous_patch_sha.txt"
 endlocal
 pause
 exit /b
