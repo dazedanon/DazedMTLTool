@@ -5,6 +5,9 @@
 
 ## Future Patching
 1. Run GAMEUPDATE.bat to auto patch.
+2. Keep the whole `gameupdate` folder together when you ship the game—`patch.bat` and `patch-download.ps1` must sit side by side.
+3. Optional: set `GAMEUPDATE_PROMPT_PWSH=1` before running `GameUpdate.bat` if you want users to be prompted to install PowerShell 7 via winget.
+4. Optional: set `GAMEUPDATE_DL_ATTEMPTS` (default `2`) to control retries for API checks/downloads. Lower values fail faster; higher values tolerate flaky networks.
 
 # Troubleshooting
 **GAMEUPDATE.bat doesn't update and closes immediately**
