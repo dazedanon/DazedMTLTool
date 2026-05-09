@@ -8,7 +8,6 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $exitCode = 1
-$lockPath = Join-Path $GameRoot '.patch_update.lock'
 
 if ($PSVersionTable.PSEdition -ne 'Core') {
     try {
@@ -77,10 +76,6 @@ function Download-WithIwrSpeedProgress {
 
 try {
     Set-Location -LiteralPath $GameRoot
-    if (Test-Path -LiteralPath $lockPath) {
-        throw 'PATCH_ERR:LOCK:Another patch process appears to be running.'
-    }
-    New-Item -Path $lockPath -ItemType File -Force | Out-Null
 
     if (-not $env:GU_USERNAME -or -not $env:GU_REPO -or -not $env:GU_BRANCH) {
         throw 'PATCH_ERR:CONFIG:patch.bat must set GU_USERNAME, GU_REPO, and GU_BRANCH.'
@@ -159,11 +154,6 @@ catch {
     Write-Host ($_.Exception.Message)
     if ($_.InvocationInfo.PositionMessage) { Write-Host $_.InvocationInfo.PositionMessage }
     $exitCode = 1
-}
-finally {
-    if (Test-Path -LiteralPath $lockPath) {
-        Remove-Item -LiteralPath $lockPath -Force -ErrorAction SilentlyContinue
-    }
 }
 
 exit $exitCode

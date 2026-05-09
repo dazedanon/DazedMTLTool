@@ -1,10 +1,13 @@
 #!/bin/bash
 
-set -e
+set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(pwd)"
 CONFIG_FILE="$SCRIPT_DIR/patch-config.txt"
+STATE_FILE="$SCRIPT_DIR/previous_patch_sha.txt"
+GITGUD_API="https://gitgud.io/api/v4"
+API_HEADERS=( -H "User-Agent: GameUpdate/1.0" )
 
 check_dependency() {
   if ! command -v "$1" > /dev/null 2>&1; then
@@ -35,17 +38,58 @@ echo "Config file path: $CONFIG_FILE"
 # shellcheck disable=SC1090
 . "$CONFIG_FILE"
 
-# GitLab API (same host as gitgud.io) — browser /-/archive/ URLs are often blocked by CDN filters
-GITGUD_API="https://gitgud.io/api/v4"
-API_HEADERS=( -H "User-Agent: GameUpdate/1.0" )
+if [ -z "${username:-}" ]; then
+    echo "ERROR: 'username=' is missing in gameupdate/patch-config.txt"
+    exit 1
+fi
+if [ -z "${repo:-}" ]; then
+    echo "ERROR: 'repo=' is missing in gameupdate/patch-config.txt"
+    exit 1
+fi
+if [ -z "${branch:-}" ]; then
+    echo "ERROR: 'branch=' is missing in gameupdate/patch-config.txt"
+    exit 1
+fi
+
+RETRIES="${GAMEUPDATE_DL_ATTEMPTS:-2}"
+if ! [[ "$RETRIES" =~ ^[1-9][0-9]*$ ]]; then
+    RETRIES=2
+fi
+
+retry_cmd() {
+    local name="$1"
+    shift
+    local attempt=1
+    while true; do
+        if "$@"; then
+            return 0
+        fi
+        if [ "$attempt" -ge "$RETRIES" ]; then
+            echo "$name failed after $attempt attempt(s)."
+            return 1
+        fi
+        echo "$name failed ($attempt/$RETRIES), retrying..."
+        attempt=$((attempt + 1))
+        sleep 2
+    done
+}
 
 project_enc=$(jq -nr --arg ns "$username" --arg rp "$repo" '$ns + "/" + $rp | @uri')
 branch_enc=$(jq -nr --arg b "$branch" '$b | @uri')
 
 # Get the latest hash
 echo "Getting latest commit SHA hash"
-latest_patch_sha=$(curl -fsSL "${API_HEADERS[@]}" \
-  "${GITGUD_API}/projects/${project_enc}/repository/branches/${branch_enc}" | jq -r '.commit.id')
+latest_patch_sha="$(
+  retry_cmd "Resolve latest patch SHA" \
+    curl -fsSL "${API_HEADERS[@]}" \
+    "${GITGUD_API}/projects/${project_enc}/repository/branches/${branch_enc}" \
+  | jq -r '.commit.id'
+)"
+latest_patch_sha="$(printf '%s' "$latest_patch_sha" | tr -d '[:space:]')"
+if [ -z "$latest_patch_sha" ] || [ "$latest_patch_sha" = "null" ]; then
+    echo "PATCH_ERR:API:Latest commit SHA response was empty."
+    exit 1
+fi
 
 # --------------------------------------------------------
 # PRE-SETUP: Ensure SRPG data and patch structure exists
@@ -90,8 +134,10 @@ fi
 
 download_extract() {
     echo "Downloading latest patch..."
-    if ! curl -fSL --progress-bar "${API_HEADERS[@]}" \
-        "${GITGUD_API}/projects/${project_enc}/repository/archive.zip?sha=${branch_enc}" \
+    archive_sha_enc=$(jq -nr --arg s "$latest_patch_sha" '$s | @uri')
+    if ! retry_cmd "Download archive with curl" \
+        curl -fSL --progress-bar "${API_HEADERS[@]}" \
+        "${GITGUD_API}/projects/${project_enc}/repository/archive.zip?sha=${archive_sha_enc}" \
         -o "$ROOT_DIR/repo.zip"; then
         echo "Download failed!"
         rm -f "$ROOT_DIR/repo.zip"
@@ -108,7 +154,13 @@ download_extract() {
         return 1
     fi
 
-    inner=$(find "$TMP_EX" -mindepth 1 -maxdepth 1 -type d | head -1)
+    inner=""
+    for d in "$TMP_EX"/*; do
+        if [ -d "$d" ]; then
+            inner="$d"
+            break
+        fi
+    done
     if [ -z "$inner" ]; then
         echo "Archive had no root folder!"
         rm -rf "$TMP_EX"
@@ -157,16 +209,16 @@ download_extract() {
         echo "data.dts not found; skipping SRPG patch steps."
     fi
 
-    echo "$latest_patch_sha" > "$SCRIPT_DIR/previous_patch_sha.txt"
+    echo "$latest_patch_sha" > "$STATE_FILE"
 }
 
 # Check if previous_patch_sha.txt exists in gameupdate
-if [ ! -f "$SCRIPT_DIR/previous_patch_sha.txt" ]; then
+if [ ! -f "$STATE_FILE" ]; then
     echo "Previous SHA hash not found!"
     echo "Assuming first time patching..."
     download_extract
 else
-    previous_patch_sha=$(tr -d '[:space:]' < "$SCRIPT_DIR/previous_patch_sha.txt")
+    previous_patch_sha=$(tr -d '[:space:]' < "$STATE_FILE")
 
     if [ "$latest_patch_sha" != "$previous_patch_sha" ]; then
         echo "Update found! Patching..."
