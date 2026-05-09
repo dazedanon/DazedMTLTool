@@ -107,7 +107,9 @@ try {
     Write-Host 'Update found! Patching...'
     Write-Host 'Downloading latest patch... (backend: iwr, GitLab API)'
     $zipPath = Join-Path $PWD.Path 'repo.zip'
-    $stage = Join-Path $PWD.Path '_patch_extract_tmp'
+    # Use a short temp extract root to avoid Windows MAX_PATH issues when
+    # GitLab archive root folder includes long commit SHA suffixes.
+    $stage = Join-Path ([IO.Path]::GetTempPath()) ("gu_" + [Guid]::NewGuid().ToString("N"))
     $archiveSha = [uri]::EscapeDataString($latestSha)
     $archiveUrl = "https://gitgud.io/api/v4/projects/$id/repository/archive.zip?sha=$archiveSha"
 
