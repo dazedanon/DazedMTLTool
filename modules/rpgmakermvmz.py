@@ -208,7 +208,11 @@ PATTERNS_355655 = {
     "$gameVariables._data": (r"\$gameVariables\._data(?:\[[^\]]+\])+\s*=\s*['\"]((?:\\.|[^'\"\\])*)['\"]", False),
     "$gameMessage.add": (r"\$gameMessage\.add\(.+?\)(.+?)", True),
     "BattleManager._logWindow.push('addText'": (r"BattleManager._logWindow.push\('addText',\s'(.+)'\)", False),
-    "BattleManager._logWindow.addText": (r"BattleManager\._logWindow\.addText\(.+?\)(.+?)", True),
+    # Supports addText('msg'), addText("msg"), and addText(expr+'msg') where expr contains () e.g. .members()
+    "BattleManager._logWindow.addText": (
+        r"BattleManager\._logWindow\.addText\(\s*(?:(?:[^()]|\([^)]*\))*\+\s*)?(['\"])((?:\\.|(?!\1).)*)\1\s*\)",
+        True,
+    ),
     "let out": (r"let\s+out\d+\s*=\s*\(.+?\)(.+?)", True),
     "moji": (r"(?:let\s+)?moji\s*\+?=\s*(.+)", True),
     "this.BLogAdd": (r'this\.BLogAdd\?(.+?\\?"(.+?)\\?"\)', False),
@@ -222,7 +226,12 @@ PATTERNS_355655 = {
     "AddAddress": (r'AddAddress\(\d+,\s*\\?"(.+?)\\?"', False),
 }
 # Subset of PATTERNS_355655 keys that should be processed (empty = none).
-ENABLED_PATTERNS_355655: set = {"$gameVariables._data"}
+ENABLED_PATTERNS_355655: set = {"BattleManager._logWindow.addText"}
+
+
+def _pat355655_captured_text(match):
+    """Substring to translate for PATTERNS_355655; last capture group is always the visible text."""
+    return match.group(match.lastindex)
 
 
 def handleMVMZ(filename, estimate):
@@ -2750,7 +2759,7 @@ def searchCodes(page, pbar, jobList, filename):
                                 param = codeList[j]["parameters"][0] if codeList[j]["parameters"] else ""
                                 textMatch = re.search(regex, param)
                                 if textMatch:
-                                    text = textMatch.group(1)
+                                    text = _pat355655_captured_text(textMatch)
                                     if not (IGNORETLTEXT and not re.search(LANGREGEX, text)):
                                         textLines.append(text)
                                         textLineIndices.append(j)
@@ -2775,7 +2784,8 @@ def searchCodes(page, pbar, jobList, filename):
                                             origParam = codeList[lineIdx]["parameters"][0]
                                             origMatch = re.search(regex, origParam)
                                             if origMatch:
-                                                codeList[lineIdx]["parameters"][0] = origParam.replace(origMatch.group(1), translatedText)
+                                                old = _pat355655_captured_text(origMatch)
+                                                codeList[lineIdx]["parameters"][0] = origParam.replace(old, translatedText)
                                 
                                 i = j - 1
                             break
@@ -2784,14 +2794,15 @@ def searchCodes(page, pbar, jobList, filename):
                         else:
                             match = re.search(regex, jaString)
                             if match:
-                                if not re.search(r'[a-zA-Z一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]', match.group(1)):
+                                cap = _pat355655_captured_text(match)
+                                if not re.search(r'[a-zA-Z一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]', cap):
                                     continue
 
-                                if IGNORETLTEXT and not re.search(LANGREGEX, match.group(1)):
+                                if IGNORETLTEXT and not re.search(LANGREGEX, cap):
                                     continue
 
                                 if setData:
-                                    list355655.append(match.group(1))
+                                    list355655.append(cap)
                                 else:
                                     translatedText = list355655[0]
                                     list355655.pop(0)
@@ -2805,7 +2816,7 @@ def searchCodes(page, pbar, jobList, filename):
                                     if "BattleManager" in codeList[i]["parameters"][0]:
                                         translatedText = re.sub(r"(?<!\\)'", r"\\'", translatedText)
 
-                                    codeList[i]["parameters"][0] = jaString.replace(match.group(1), translatedText)
+                                    codeList[i]["parameters"][0] = jaString.replace(cap, translatedText)
                             break
 
                 # AddCmnt handler - extract strings from array and name parameter
