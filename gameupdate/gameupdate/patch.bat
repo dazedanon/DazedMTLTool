@@ -85,6 +85,12 @@ for /f "usebackq tokens=1,2 delims==" %%a in ("%CONFIG_FILE%") do (
     if "%%a"=="branch" set "branch=%%b"
 )
 
+REM For PowerShell (proper URL encoding; avoids cmd %% pitfalls)
+set "GU_USERNAME=%username%"
+set "GU_REPO=%repo%"
+set "GU_BRANCH=%branch%"
+if /I "!_my_shell!"=="pwsh" (set "GU_DL_PROGRESS=Continue") else (set "GU_DL_PROGRESS=SilentlyContinue")
+
 REM --------------------------------------------------------
 REM PRE-SETUP: Ensure SRPG data and patch structure exists
 REM Run Steps 1 and 2 BEFORE pulling repo patch to avoid overwriting updates
@@ -144,9 +150,9 @@ if exist "%ROOT_DIR%\data.dts" (
     echo [Pre-Setup] data.dts not found; skipping pre-setup SRPG steps.
 )
 
-REM Get the latest hash
+REM Get the latest hash (GitLab API — browser /-/archive/ URLs are often blocked by CDN)
 echo "Getting latest commit SHA hash"
-!_my_shell! -Command "(Invoke-RestMethod -Uri 'https://gitgud.io/api/v4/projects/%username%%%2F%repo%/repository/branches/%branch%').commit.id" > "%ROOT_DIR%\latest_patch_sha.txt"
+!_my_shell! -NoProfile -Command "$ErrorActionPreference='Stop'; $id=[uri]::EscapeDataString($env:GU_USERNAME+'/'+ $env:GU_REPO); $br=[uri]::EscapeDataString($env:GU_BRANCH); (Invoke-RestMethod -Uri \"https://gitgud.io/api/v4/projects/$id/repository/branches/$br\" -Headers @{'User-Agent'='GameUpdate/1.0'}).commit.id" > "%ROOT_DIR%\latest_patch_sha.txt"
 
 REM Read the latest SHA from the file
 set /p latest_patch_sha=<"%ROOT_DIR%\latest_patch_sha.txt"
@@ -183,35 +189,20 @@ exit /b
 :download_extract
 
 REM Escape single quotes in paths
-set "escaped_root=%ROOT_DIR:'=''%" 
+set "escaped_root=%ROOT_DIR:'=''%"
 
-REM Download zip file to root
+REM Download zip via GitLab API; extract single top-level folder (API uses commit-based root name, not repo-branch)
 echo "Downloading latest patch..."
-!_my_shell! -Command "Set-Location -LiteralPath '%escaped_root%'; $ProgressPreference = 'SilentlyContinue'; Invoke-WebRequest -Uri 'https://gitgud.io/%username%/%repo%/-/archive/%branch%/%repo%-%branch%.zip' -OutFile 'repo.zip'"
+!_my_shell! -NoProfile -Command "$ErrorActionPreference='Stop'; Set-Location -LiteralPath '%escaped_root%'; $id=[uri]::EscapeDataString($env:GU_USERNAME+'/'+ $env:GU_REPO); $shaQ=[uri]::EscapeDataString($env:GU_BRANCH); $url=\"https://gitgud.io/api/v4/projects/$id/repository/archive.zip?sha=$shaQ\"; $ProgressPreference=$env:GU_DL_PROGRESS; Invoke-WebRequest -Uri $url -OutFile 'repo.zip' -UseBasicParsing -Headers @{'User-Agent'='GameUpdate/1.0'}; $ProgressPreference='SilentlyContinue'; $stage = Join-Path (Get-Location) '_patch_extract_tmp'; if (Test-Path $stage) { Remove-Item -LiteralPath $stage -Recurse -Force }; New-Item -ItemType Directory -Path $stage | Out-Null; try { Expand-Archive -LiteralPath '.\repo.zip' -DestinationPath $stage -Force; $dirs = @(Get-ChildItem -LiteralPath $stage -Directory); if ($dirs.Count -ne 1) { throw \"Expected one root folder in archive, found $($dirs.Count)\" }; Copy-Item -Path (Join-Path $dirs[0].FullName '*') -Destination (Get-Location) -Recurse -Force } finally { if (Test-Path $stage) { Remove-Item -LiteralPath $stage -Recurse -Force } }"
 if !errorlevel! neq 0 (
-    pause
-    exit /b
-)
-
-REM Extract contents, overwriting conflicts into root
-echo "Extracting..."
-!_my_shell! -Command "Set-Location -LiteralPath '%escaped_root%'; $ProgressPreference = 'SilentlyContinue'; Expand-Archive -Path '.\repo.zip' -DestinationPath '.' -Force"
-if !errorlevel! neq 0 (
-    echo Extraction failed!
-    del "%ROOT_DIR%\repo.zip"
-    rmdir /s /q "%ROOT_DIR%\%repo%-%branch%"
+    echo Download or extraction failed!
+    if exist "%ROOT_DIR%\repo.zip" del "%ROOT_DIR%\repo.zip"
+    if exist "%ROOT_DIR%\_patch_extract_tmp" rmdir /s /q "%ROOT_DIR%\_patch_extract_tmp"
     pause
     exit /b
 )
 echo "Applying patch..."
-xcopy /s /e /y "%ROOT_DIR%\%repo%-%branch%\*" "%ROOT_DIR%\"
-if !errorlevel! neq 0 (
-    echo Patch application failed!
-    del "%ROOT_DIR%\repo.zip"
-    rmdir /s /q "%ROOT_DIR%\%repo%-%branch%"
-    pause
-    exit /b
-)
+REM Files merged by Copy-Item above
 REM --------------------------------------------------------
 REM POST-APPLY: Run Steps 3 and 4 after patch files are merged
 REM 3) Apply Patch to data\project.dat
@@ -256,7 +247,7 @@ if exist "%ROOT_DIR%\data.dts" (
 REM Clean up
 echo "Cleaning up..."
 del "%ROOT_DIR%\repo.zip"
-rmdir /s /q "%ROOT_DIR%\%repo%-%branch%"
+if exist "%ROOT_DIR%\_patch_extract_tmp" rmdir /s /q "%ROOT_DIR%\_patch_extract_tmp"
 del "%ROOT_DIR%\latest_patch_sha.txt"
 REM Store latest SHA for next check in gameupdate
 echo %latest_patch_sha% > "%SCRIPT_DIR%previous_patch_sha.txt"

@@ -10,6 +10,7 @@
 **GAMEUPDATE.bat doesn't update and closes immediately**
 1. Make sure your path doesn't contain any Japanese characters or lots of whitespace.
 2. Make sure you actually have permissions in the folder
+3. Auto-update calls GitLab’s public HTTP API (`/api/v4/...`), not the web “Download ZIP” URL—no account or token is required for public patch repos.
 
 For WOLF RPG games, if you downloaded the game off of DLSite, you will need to do some extra steps to patch it. This is because there is a "master" file called Data.wolf that will take priority over the english patch files. You will need this file to be a folder before patching will work.
 
