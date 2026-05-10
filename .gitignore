@@ -14,7 +14,7 @@
 *.script
 __pycache__
 
-!screens/*.png
+!assets/*.png
 !.pre-commit-config.yaml
 !prompt.txt
 !vocab_base.txt
