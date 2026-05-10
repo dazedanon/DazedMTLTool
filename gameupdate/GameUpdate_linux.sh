@@ -3,11 +3,12 @@
 # Enable error handling
 set -e
 
-# Copy patch.sh to a new file in gameupdate
-cp "gameupdate/patch.sh" "gameupdate/patch2.sh"
+# Same layout as GameUpdate.bat: patch assets live under ./gameupdate/ next to this file.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+GAME_ROOT="$SCRIPT_DIR"
+PATCH_DIR="$SCRIPT_DIR/gameupdate"
 
-# Run the new file
-bash "gameupdate/patch2.sh"
-
-# Delete the new file
-rm "gameupdate/patch2.sh"
+cd "$GAME_ROOT"
+cp "$PATCH_DIR/patch.sh" "$PATCH_DIR/patch2.sh"
+bash "$PATCH_DIR/patch2.sh"
+rm "$PATCH_DIR/patch2.sh"
