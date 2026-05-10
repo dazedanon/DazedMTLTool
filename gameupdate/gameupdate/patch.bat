@@ -1,5 +1,5 @@
 @echo off
-setlocal EnableExtensions EnableDelayedExpansion
+setlocal EnableExtensions
 
 REM Check if being run from gameupdate folder (incorrect usage)
 for %%I in ("%CD%") do set "CURRENT_FOLDER=%%~nxI"
@@ -25,14 +25,14 @@ set "SCRIPT_DIR=%~dp0"
 set "ROOT_DIR=%CD%"
 set "CONFIG_FILE=%SCRIPT_DIR%patch-config.txt"
 
-echo Using root directory: "%ROOT_DIR%"
-echo Using config: "%CONFIG_FILE%"
+echo Root: %ROOT_DIR%
 
-echo Checking for pwsh...
+setlocal EnableDelayedExpansion
+
 set "_my_shell=pwsh"
 where /q !_my_shell!
 if !errorlevel! neq 0 (
-  echo pwsh not found.
+  echo PowerShell 7 ^(pwsh^) not found.
   if /I "%GAMEUPDATE_PROMPT_PWSH%"=="1" (
     echo.
     set /p "INSTALL_PWSH=PowerShell 7 is faster. Install now via winget? (Y/N): "
@@ -62,15 +62,11 @@ if !errorlevel! neq 0 (
     pause
     exit /b 1
   )
-) else (
-  echo pwsh found.
 )
-
-echo Using !_my_shell! for script execution.
 
 REM Check if patch-config.txt exists in gameupdate folder
 if not exist "%CONFIG_FILE%" (
-    echo "Config file (gameupdate\patch-config.txt) not found! Assuming no patching needed."
+    echo Config file gameupdate\patch-config.txt not found - skipping patch.
     pause
     exit /b
 )
@@ -113,8 +109,6 @@ REM --------------------------------------------------------
 set "UNPACKER=%ROOT_DIR%\SRPG_Unpacker.exe"
 if exist "%ROOT_DIR%\data.dts" (
     if exist "%UNPACKER%" (
-        echo [Pre-Setup] Running SRPG_Unpacker preparation steps...
-
     REM Step 1: Unpack (once)
     if not exist "%ROOT_DIR%\data\" (
         set "SHOULD_UNPACK=1"
@@ -126,7 +120,7 @@ if exist "%ROOT_DIR%\data.dts" (
     
     if "!SHOULD_UNPACK!"=="1" (
             if exist "%ROOT_DIR%\data.dts" (
-                echo [Pre-Setup] Step 1: Unpacking data.dts to data
+                echo [Pre-Setup] Unpacking data.dts to data\
                 pushd "%ROOT_DIR%"
                 "%UNPACKER%" -o "data" "data.dts"
                 if !errorlevel! neq 0 (
@@ -134,16 +128,13 @@ if exist "%ROOT_DIR%\data.dts" (
                 )
                 popd
             ) else (
-                echo [Pre-Setup] Step 1: Skipping unpack - no data folder and no data.dts found.
+                echo [Pre-Setup] Skipping unpack: data.dts missing.
             )
-        ) else (
-            echo [Pre-Setup] Step 1: data folder exists; skipping unpack.
-        )
 
         REM Step 2: Create Patch (once)
         if not exist "%ROOT_DIR%\patch\" (
             if exist "%ROOT_DIR%\data\project.dat" (
-                echo [Pre-Setup] Step 2: Creating patch from data\project.dat
+                echo [Pre-Setup] Creating patch folder from data\project.dat
                 pushd "%ROOT_DIR%"
                 "%UNPACKER%" ".\data\project.dat" -c
                 if !errorlevel! neq 0 (
@@ -151,13 +142,27 @@ if exist "%ROOT_DIR%\data.dts" (
                 )
                 popd
             ) else (
-                echo [Pre-Setup] Step 2: Skipping create patch - data\project.dat not found.
+                echo [Pre-Setup] Skipping create patch: data\project.dat not found.
             )
-        ) else (
-            echo [Pre-Setup] Step 2: patch folder exists; skipping create.
         )
     ) else (
-        echo [Pre-Setup] SRPG_Unpacker.exe not found in root; skipping pre-setup steps.
+        REM SHOULD_UNPACK=0: only Step 2 may still be needed
+        if not exist "%ROOT_DIR%\patch\" (
+            if exist "%ROOT_DIR%\data\project.dat" (
+                echo [Pre-Setup] Creating patch folder from data\project.dat
+                pushd "%ROOT_DIR%"
+                "%UNPACKER%" ".\data\project.dat" -c
+                if !errorlevel! neq 0 (
+                    echo [Pre-Setup] ERROR: Create Patch failed. Continuing.
+                )
+                popd
+            ) else (
+                echo [Pre-Setup] Skipping create patch: data\project.dat not found.
+            )
+        )
+    )
+    ) else (
+        echo [Pre-Setup] SRPG_Unpacker.exe not found; skipping data setup.
     )
 )
 
@@ -178,13 +183,13 @@ if "!PATCH_DL_EXIT!"=="10" (
     exit /b 0
 )
 if not "!PATCH_DL_EXIT!"=="0" (
-    echo Download or extraction failed!
+    echo Download or extraction failed^!
     if exist "%ROOT_DIR%\repo.zip" del "%ROOT_DIR%\repo.zip"
     if exist "%ROOT_DIR%\_patch_extract_tmp" rmdir /s /q "%ROOT_DIR%\_patch_extract_tmp"
     pause
     exit /b 1
 )
-echo "Applying patch..."
+echo Applying patch...
 REM Files merged by Copy-Item above
 REM --------------------------------------------------------
 REM POST-APPLY: Run Steps 3 and 4 after patch files are merged
@@ -194,11 +199,9 @@ REM --------------------------------------------------------
 set "UNPACKER=%ROOT_DIR%\SRPG_Unpacker.exe"
 if exist "%ROOT_DIR%\data.dts" (
     if exist "%UNPACKER%" (
-        echo Running SRPG_Unpacker apply/pack steps...
-
         REM Step 3: Apply Patch
         if exist "%ROOT_DIR%\data\project.dat" (
-            echo Step 3: Applying patch to data\project.dat
+            echo Applying patch to data\project.dat...
             pushd "%ROOT_DIR%"
             "%UNPACKER%" ".\data\project.dat" -a
             if !errorlevel! neq 0 (
@@ -211,7 +214,7 @@ if exist "%ROOT_DIR%\data.dts" (
 
         REM Step 4: Pack
         if exist "%ROOT_DIR%\data\" (
-            echo Step 4: Packing data to data.dts
+            echo Packing data folder to data.dts...
             pushd "%ROOT_DIR%"
             "%UNPACKER%" -o "data.dts" "data"
             if !errorlevel! neq 0 (
@@ -226,7 +229,7 @@ if exist "%ROOT_DIR%\data.dts" (
     )
 )
 REM Clean up
-echo "Cleaning up..."
+echo Cleaning up...
 del "%ROOT_DIR%\repo.zip"
 if exist "%ROOT_DIR%\_patch_extract_tmp" rmdir /s /q "%ROOT_DIR%\_patch_extract_tmp"
 endlocal

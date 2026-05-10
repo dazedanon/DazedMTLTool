@@ -1,0 +1,2 @@
+# Cmd.exe parses LF-only .bat files incorrectly on Windows (joined tokens / mangled commands).
+*.bat text eol=crlf
