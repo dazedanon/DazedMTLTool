@@ -16,7 +16,14 @@ else {
 $PatchBundleRoot = $PSScriptRoot
 
 function Wait-ConsolePause {
-    $null = cmd /c pause
+    Write-Host ''
+    Write-Host 'Press any key to close this window...'
+    try {
+        $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
+    }
+    catch {
+        Read-Host 'Press Enter to close'
+    }
 }
 
 function Write-BannerWrongFolder {
