@@ -1,14 +1,9 @@
 @echo off
 setlocal
 
-REM Copy GAMEUPDATE.bat to a new file
-copy "gameupdate\patch.bat" "gameupdate\patch2.bat"
-
-REM Run the new file
+REM Copy patch.bat to a temp name so the live patch.bat can be overwritten during updates
+copy /Y "gameupdate\patch.bat" "gameupdate\patch2.bat" >nul
 call "gameupdate\patch2.bat"
-
-REM Delete the new file
-del "gameupdate\patch2.bat"
+del /Q "gameupdate\patch2.bat" >nul 2>&1
 
 endlocal
-@echo on

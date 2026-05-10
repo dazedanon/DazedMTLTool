@@ -97,15 +97,13 @@ try {
     if (Test-Path -LiteralPath $StateFile) {
         $previousSha = (Get-Content -LiteralPath $StateFile -Raw).Trim()
     } else {
-        Write-Host 'No saved patch version yet (first run); comparing with remote...'
+        Write-Host 'First run: comparing with remote...'
     }
     if ($previousSha -eq $latestSha) {
-        Write-Host 'Already up to date (matches latest patch commit).'
         exit 10
     }
 
-    Write-Host 'Update found! Patching...'
-    Write-Host 'Downloading latest patch... (backend: iwr, GitLab API)'
+    Write-Host 'Downloading patch...'
     $zipPath = Join-Path $PWD.Path 'repo.zip'
     # Use a short temp extract root to avoid Windows MAX_PATH issues when
     # GitLab archive root folder includes long commit SHA suffixes.
