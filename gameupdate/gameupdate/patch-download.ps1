@@ -97,11 +97,11 @@ try {
     if (Test-Path -LiteralPath $StateFile) {
         $previousSha = (Get-Content -LiteralPath $StateFile -Raw).Trim()
     } else {
-        Write-Host 'Previous SHA hash not found. Assuming first time patching...'
+        Write-Host 'No saved patch version yet (first run); comparing with remote...'
     }
     if ($previousSha -eq $latestSha) {
-        $exitCode = 10
-        return
+        Write-Host 'Already up to date (matches latest patch commit).'
+        exit 10
     }
 
     Write-Host 'Update found! Patching...'

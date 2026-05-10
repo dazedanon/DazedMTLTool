@@ -128,8 +128,6 @@ if [ -f "$ROOT_DIR/data.dts" ]; then
     else
         echo "[Pre-Setup] SRPG_Unpacker.exe not found in root; skipping pre-setup steps."
     fi
-else
-    echo "[Pre-Setup] data.dts not found; skipping pre-setup SRPG steps."
 fi
 
 download_extract() {
@@ -205,8 +203,6 @@ download_extract() {
         else
             echo "SRPG_Unpacker.exe not found in root; skipping SRPG patch steps."
         fi
-    else
-        echo "data.dts not found; skipping SRPG patch steps."
     fi
 
     echo "$latest_patch_sha" > "$STATE_FILE"
@@ -214,8 +210,7 @@ download_extract() {
 
 # Check if previous_patch_sha.txt exists in gameupdate
 if [ ! -f "$STATE_FILE" ]; then
-    echo "Previous SHA hash not found!"
-    echo "Assuming first time patching..."
+    echo "No saved patch version yet (first run); comparing with remote..."
     download_extract
 else
     previous_patch_sha=$(tr -d '[:space:]' < "$STATE_FILE")
@@ -224,6 +219,6 @@ else
         echo "Update found! Patching..."
         download_extract
     else
-        echo "Patch is up to date."
+        echo "Already up to date (matches latest patch commit)."
     fi
 fi

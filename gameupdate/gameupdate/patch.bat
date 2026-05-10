@@ -159,8 +159,6 @@ if exist "%ROOT_DIR%\data.dts" (
     ) else (
         echo [Pre-Setup] SRPG_Unpacker.exe not found in root; skipping pre-setup steps.
     )
-) else (
-    echo [Pre-Setup] data.dts not found; skipping pre-setup SRPG steps.
 )
 
 :download_extract
@@ -174,7 +172,7 @@ if not exist "%SCRIPT_DIR%patch-download.ps1" (
 !_my_shell! -NoProfile -ExecutionPolicy Bypass -File "%SCRIPT_DIR%patch-download.ps1" -GameRoot "%ROOT_DIR%" -StateFile "%SCRIPT_DIR%previous_patch_sha.txt"
 set "PATCH_DL_EXIT=!errorlevel!"
 if "!PATCH_DL_EXIT!"=="10" (
-    echo Patch is up to date.
+    echo Already up to date.
     endlocal
     pause
     exit /b 0
@@ -226,8 +224,6 @@ if exist "%ROOT_DIR%\data.dts" (
     ) else (
         echo SRPG_Unpacker.exe not found in root; skipping SRPG patch steps.
     )
-) else (
-    echo data.dts not found; skipping SRPG patch steps.
 )
 REM Clean up
 echo "Cleaning up..."
