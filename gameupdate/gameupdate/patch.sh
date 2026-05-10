@@ -102,7 +102,7 @@ if [ -f "$ROOT_DIR/data.dts" ]; then
     if [ -f "$UNPACKER" ]; then
         echo "[Pre-Setup] Running SRPG_Unpacker preparation steps..."
 
-        # Step 1: Unpack (once) — mirror patch.bat: unpack if no data/ or no data/project.dat
+        # Step 1: Unpack (once) — mirror patch.ps1: unpack if no data/ or no data/project.dat
         if [ ! -d "$ROOT_DIR/data" ] || [ ! -f "$ROOT_DIR/data/project.dat" ]; then
             if [ -f "$ROOT_DIR/data.dts" ]; then
                 echo "[Pre-Setup] Step 1: Unpacking data.dts -> data"

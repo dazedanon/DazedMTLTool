@@ -4,10 +4,18 @@
 3. Extract to game folder and Replace All.
 
 ## Future Patching
-1. Run GAMEUPDATE.bat to auto patch.
-2. Keep the whole `gameupdate` folder together when you ship the game—`patch.bat` and `patch-download.ps1` must sit side by side.
-3. Optional: set `GAMEUPDATE_PROMPT_PWSH=1` before running `GameUpdate.bat` if you want users to be prompted to install PowerShell 7 via winget.
-4. Optional: set `GAMEUPDATE_DL_ATTEMPTS` (default `2`) to control retries for API checks/downloads. Lower values fail faster; higher values tolerate flaky networks.
+1. Run **`GameUpdate.bat`** to auto patch (Windows).
+
+### Folder layout
+
+**In this translation-tool repo:** Patch payloads stay tidy inside **`gameupdate/gameupdate/`** (`patch.ps1`, `patch-config.txt`, etc.). **`GameUpdate.bat`** and **`GameUpdate_linux.sh`** sit one level up, under **`gameupdate/`**.
+
+**On an installed game (what gets copied over):** Put **`GameUpdate.bat`** in the **game root**, next to the game exe. Put **`patch.ps1`** and friends inside **`gameupdate\`** under that same root (mirror names—still **`gameupdate\`**). **`GameUpdate.bat`** finds **`gameupdate\patch.ps1`** from its own folder, so **`GameRoot`** is correct even if the console cwd is somewhere else.
+
+**Copy checklist:** From **`DazedMTLTool/gameupdate/`**, copy **`GameUpdate.bat`** to `<game>\`; copy everything inside **`gameupdate/gameupdate/`** into `<game>\gameupdate\`.
+
+2. Optional: set `GAMEUPDATE_PROMPT_PWSH=1` before running `GameUpdate.bat` if you want users to be prompted to install PowerShell 7 via winget.
+3. Optional: set `GAMEUPDATE_DL_ATTEMPTS` (default `2`) to control retries for API checks/downloads. Lower values fail faster; higher values tolerate flaky networks.
 
 # Troubleshooting
 **GAMEUPDATE.bat doesn't update and closes immediately**
