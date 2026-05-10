@@ -26,6 +26,159 @@ function Wait-ConsolePause {
     }
 }
 
+function Get-DazedPatcherBannerGlyphs {
+    # Fixed 7 rows × 8 cols per glyph (monospace). Letters only; words built separately.
+    return @{
+        'A' = @('        ', '  AAA   ', ' A   A  ', ' AAAAA  ', ' A   A  ', ' A   A  ', '        ')
+        'C' = @('        ', '  CCCC  ', ' C      ', ' C      ', ' C      ', '  CCCC  ', '        ')
+        'D' = @('        ', ' DDDDD  ', ' D    D ', ' D    D ', ' D    D ', ' DDDDD  ', '        ')
+        'E' = @('        ', ' EEEEE  ', ' E      ', ' EEE    ', ' E      ', ' EEEEE  ', '        ')
+        'H' = @('        ', ' H   H  ', ' H   H  ', ' HHHHH  ', ' H   H  ', ' H   H  ', '        ')
+        'P' = @('        ', ' PPPPP  ', ' P   P  ', ' PPPP   ', ' P      ', ' P      ', '        ')
+        'R' = @('        ', ' RRRRR  ', ' R   R  ', ' RRRR   ', ' R  R   ', ' R   R  ', '        ')
+        'T' = @('        ', ' TTTTT  ', '   T    ', '   T    ', '   T    ', '   T    ', '        ')
+        'Z' = @('        ', ' ZZZZZ  ', '    Z   ', '   Z    ', '  Z     ', ' ZZZZZ  ', '        ')
+    }
+}
+
+function Build-AsciiWordLines {
+    param(
+        [Parameter(Mandatory = $true)][string]$Word,
+        [hashtable]$Glyphs
+    )
+    # Force array: pipeline assignment can otherwise collapse to a scalar and break glyph lookup.
+    $letters = @(
+        $Word.ToUpperInvariant().ToCharArray() | ForEach-Object { [string]$_ }
+    )
+    $rows = New-Object string[] 7
+    for ($r = 0; $r -lt 7; $r++) {
+        $parts = New-Object System.Collections.Generic.List[string]
+        foreach ($letter in $letters) {
+            if (-not $Glyphs.ContainsKey($letter)) {
+                throw "Banner glyph missing for '$letter'."
+            }
+            $parts.Add($Glyphs[$letter][$r])
+        }
+        $rows[$r] = ($parts -join ' ')
+    }
+    return [string[]]$rows
+}
+
+function ConvertTo-LineStringArray {
+    param([AllowNull()][object]$Value)
+    if ($null -eq $Value) { return @() }
+    if ($Value -is [string[]]) { return $Value }
+    if ($Value -is [System.Collections.Generic.List[string]]) { return $Value.ToArray() }
+    if ($Value -is [string]) {
+        if ([string]::IsNullOrWhiteSpace([string]$Value)) { return @() }
+        return ,[string]$Value
+    }
+    return [string[]](@($Value) | ForEach-Object { if ($null -eq $_) { '' } else { "$_" } })
+}
+
+function Pad-LineBlockToHeight {
+    param(
+        # Untyped: PS may wrongly coerce to '' before binding [string[]]; normalize ourselves.
+        [Parameter(Mandatory = $true, Position = 0)][object]$PatchVerticalRows,
+        [Parameter(Mandatory = $true, Position = 1)][int]$TargetHeight
+    )
+    [string[]]$lines = ConvertTo-LineStringArray -Value $PatchVerticalRows
+    if ($lines.Count -eq 0 -and $TargetHeight -gt 0) {
+        $blank = New-Object string[] $TargetHeight
+        for ($i = 0; $i -lt $TargetHeight; $i++) { $blank[$i] = '' }
+        return $blank
+    }
+    if ($lines.Count -ge $TargetHeight) {
+        return [string[]]$lines
+    }
+    $padTotal = $TargetHeight - $lines.Count
+    $padTop = [int][Math]::Floor($padTotal / 2)
+    $padBot = $padTotal - $padTop
+    $top = @()
+    for ($i = 0; $i -lt $padTop; $i++) { $top += '' }
+    $bot = @()
+    for ($i = 0; $i -lt $padBot; $i++) { $bot += '' }
+    return [string[]]($top + $lines + $bot)
+}
+
+function Get-EmbeddedIconAsciiCatLines {
+    # Generated from assets/icon.png; rerun generate_icon_ascii.ps1 and paste here if the icon changes.
+    $raw = @'
+       #            %#
+     %:.-@         #..=
+   #:.-*:.:#     *..=*..-%
+    *=.:.+#  %%  @*-:::+#
+      *-#   +...=#  =-%
+    %      #..==..:#                  %@
+  %..*     -.:%%#=..=##*##%%     %*=:...+
+*:.=+.:=   ..=%##%*:..::.....:=+:..-=*:.:
+*=:--.=*   ..=%###%########*+=:.-+#%%%:.-
+   -:%    #..=%###%%%%%###%%%%%#%%%#%*..+
+         %..=%##-.=*=-*%#####%%%%%#%#:.:
+         +.:###%+....:*%###:.=*=-*%%-..%
+         -.:%#%+..:..=%####=....-#%%+..%
+         *..*%##**%*-=###%=..:..=%#%*..#
+          =..*%%%%#%%%#####*#%*-+%%%-..
+           +..-*#%%%%######%%#%%%%*:..#
+            %+...-+*##%%%%%%%%#*+-..=%
+             %..:.....::---::....:*%
+             :.:%%#*+=--::::-=+:.:*
+            %..+%#%%%%%%%%%%%%%%+..-@    #-:::+@
+            #..+%###############%#:.:%  #..=*:..#
+             ..=%################%#:..% %..+%%-..@
+            %..:%###%#%##%%#%#####%#:.-  *..*%*..+
+           #....*%##-.+%%#:.+%##%#%%*..*  :.-%%:.-
+          %..=..-%#%:..#%+..+%#%+::#%:.-  :.-%%:.-
+          -.:%=..*%%*..+%:.:%#%#..:#%=.. #..+%*..+
+          ..=%#..:%%#..-#..=%#%-..*%%=..*:.-%%-..@
+          -.-%%+..+%%-.:+..+%%+..+%#%-....=%%-..#
+          +..*%*..:%%=..=..*%%:..*%%#...=#%+:.:#
+          ..-**..:+**=..:..+**+:..**+..=*=:..+
+          +..............................:=#
+            %%%%%%%%%%%%%%%%%%%%%%%%%%%%@
+'@
+    [string[]]$split = @($raw -split '\r?\n')
+    return [string[]]$split
+}
+
+function Write-AsciiHeader {
+    try {
+        Write-Host ''
+        $glyphs = Get-DazedPatcherBannerGlyphs
+        $wordDazed = Build-AsciiWordLines -Word 'Dazed' -Glyphs $glyphs
+        $wordPatcher = Build-AsciiWordLines -Word 'Patcher' -Glyphs $glyphs
+        $titleCore = [System.Collections.Generic.List[string]]::new()
+        foreach ($ln in $wordDazed) { $titleCore.Add($ln) }
+        [void]$titleCore.Add('')
+        foreach ($ln in $wordPatcher) { $titleCore.Add($ln) }
+        $titleRows = $titleCore.ToArray()
+
+        $catLines = @(Get-EmbeddedIconAsciiCatLines)
+
+        $targetH = [Math]::Max($titleRows.Count, $catLines.Count)
+        $titlePadded = Pad-LineBlockToHeight -PatchVerticalRows $titleRows -TargetHeight $targetH
+        $catPadded = Pad-LineBlockToHeight -PatchVerticalRows $catLines -TargetHeight $targetH
+
+        $titleWidth = 0
+        foreach ($ln in $titlePadded) {
+            $safe = if ($null -eq $ln) { '' } else { $ln }
+            if ($safe.Length -gt $titleWidth) { $titleWidth = $safe.Length }
+        }
+
+        $gap = '    '
+        for ($i = 0; $i -lt $targetH; $i++) {
+            $ti = if ($null -eq $titlePadded[$i]) { '' } else { $titlePadded[$i] }
+            $ci = if ($catPadded.Length -le $i -or $null -eq $catPadded[$i]) { '' } else { $catPadded[$i] }
+            $left = if ($titleWidth -gt 0) { $ti.PadRight($titleWidth) } else { '' }
+            Write-Host ($left + $gap + $ci)
+        }
+        Write-Host ''
+    }
+    catch {
+        Write-Host ('[Banner skipped] ' + $_.Exception.Message)
+    }
+}
+
 function Write-BannerWrongFolder {
     Write-Host ''
     Write-Host '========================================'
@@ -426,6 +579,8 @@ try {
         Wait-ConsolePause
         exit 1
     }
+
+    Write-AsciiHeader
 
     Write-Host "Root: $GameRoot"
 
