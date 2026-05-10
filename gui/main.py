@@ -23,6 +23,23 @@ from PyQt5.QtCore import Qt, QThread, pyqtSignal, QTimer, QSettings
 from PyQt5.QtGui import QIcon, QFont, QPixmap, QScreen
 
 
+def _project_root() -> Path:
+    """Directory containing start_gui.py / requirements.txt (parent of gui/)."""
+    return Path(__file__).resolve().parent.parent
+
+
+def load_application_icon() -> QIcon:
+    """Prefer ICO on Windows; PNG is fine for all platforms. Empty if missing."""
+    root = _project_root()
+    for rel in ("assets/icon.ico", "assets/icon.png"):
+        path = root / rel
+        if path.is_file():
+            icon = QIcon(str(path))
+            if not icon.isNull():
+                return icon
+    return QIcon()
+
+
 class UpdateThread(QThread):
     """Downloads and applies a tool update from the GitGud repository."""
 
@@ -348,10 +365,9 @@ class DazedMTLGUI(QMainWindow):
         # Set minimum size to prevent the window from becoming too small
         self.setMinimumSize(1000, 600)
         
-        # Set window icon if available
-        icon_path = Path("screens/tool.png")
-        if icon_path.exists():
-            self.setWindowIcon(QIcon(str(icon_path)))
+        app_icon = load_application_icon()
+        if not app_icon.isNull():
+            self.setWindowIcon(app_icon)
         
         # Create central widget and main layout
         central_widget = QWidget()
@@ -679,6 +695,22 @@ def main():
             QApplication.setHighDpiScaleFactorRoundingPolicy(Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
         
         app = QApplication(sys.argv)
+
+        # Windows taskbar groups by executable (python.exe) unless we set an explicit
+        # AppUserModelID; combine with QApplication window icon so the pinned icon
+        # matches the window instead of the Python launcher.
+        if sys.platform == "win32":
+            try:
+                import ctypes
+                ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
+                    "DazedTranslations.DazedMTLTool.1"
+                )
+            except Exception:
+                pass
+
+        app_icon = load_application_icon()
+        if not app_icon.isNull():
+            app.setWindowIcon(app_icon)
         
         # Additional screen-aware settings
         screen = app.primaryScreen()
