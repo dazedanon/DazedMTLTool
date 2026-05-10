@@ -174,6 +174,59 @@ function Invoke-WithRetry {
     throw $lastErr
 }
 
+function Get-InvalidZipDownloadHint {
+    param([Parameter(Mandatory = $true)][string]$LiteralPath)
+    $item = Get-Item -LiteralPath $LiteralPath -ErrorAction SilentlyContinue
+    if (-not $item) {
+        return '(downloaded file missing)'
+    }
+    $len = $item.Length
+    $parts = [System.Collections.Generic.List[string]]::new()
+    $parts.Add("File size: $len bytes.")
+    if ($len -eq 0) {
+        $parts.Add('Download was empty.')
+        return ($parts -join ' ')
+    }
+
+    $peekSize = [Math]::Min([int64]$len, 6144)
+    $buf = New-Object byte[] $peekSize
+    $fs = [System.IO.File]::OpenRead($LiteralPath)
+    try {
+        [void]$fs.Read($buf, 0, $peekSize)
+    }
+    finally {
+        $fs.Dispose()
+    }
+
+    $text = [System.Text.Encoding]::UTF8.GetString($buf)
+    if ($text -match '(?i)<!DOCTYPE\s+html|<html[\s>]') {
+        $parts.Add('Body looks like HTML (often an error page or block). Check username/repo/branch in patch-config.txt and network.')
+    }
+    elseif ($text.TrimStart().StartsWith('{')) {
+        try {
+            $j = ($text.TrimStart() | ConvertFrom-Json)
+            if ($j.message) {
+                $parts.Add("GitLab JSON: $($j.message)")
+            }
+            else {
+                $parts.Add('Body starts with JSON (likely an API error, not a ZIP).')
+            }
+        }
+        catch {
+            $parts.Add('Body starts with `{` but was not parseable JSON (truncated or wrong encoding).')
+        }
+    }
+    else {
+        $flat = ($text -replace '[\r\n]+', ' ')
+        $take = [Math]::Min(200, $flat.Length)
+        if ($take -gt 0) {
+            $parts.Add(('UTF-8 preview: ' + $flat.Substring(0, $take)))
+        }
+    }
+
+    return ($parts -join ' ')
+}
+
 function Download-WithIwrSpeedProgress {
     param(
         [Parameter(Mandatory = $true)][string]$Url,
@@ -235,8 +288,7 @@ function Invoke-PatchDownloadExtract {
 
     $id = [uri]::EscapeDataString($Username + '/' + $Repo)
     $branchEnc = [uri]::EscapeDataString($Branch)
-    $ua = 'DazedMTL-Patcher-1.0'
-    $headers = @{ 'User-Agent' = $ua }
+    $headers = @{ 'User-Agent' = 'DazedMTL-Patcher-1.0' }
     $dlAttempts = Get-EnvInt -Name 'GAMEUPDATE_DL_ATTEMPTS' -Default 2
 
     $latestSha = Invoke-WithRetry -Name 'Resolve latest patch SHA' -Attempts $dlAttempts -Action {
@@ -276,7 +328,8 @@ function Invoke-PatchDownloadExtract {
     try {
         $hdr = New-Object byte[] 4
         if ($fs.Read($hdr, 0, 4) -lt 4 -or $hdr[0] -ne 0x50 -or $hdr[1] -ne 0x4B) {
-            throw 'PATCH_ERR:ZIP:Download is not a valid ZIP (error page or empty file).'
+            $hint = Get-InvalidZipDownloadHint -LiteralPath $zipPath
+            throw "PATCH_ERR:ZIP:Download is not a valid ZIP (missing PK header). $hint"
         }
     }
     finally {
