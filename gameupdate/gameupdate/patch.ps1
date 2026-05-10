@@ -609,6 +609,9 @@ try {
         exit 1
     }
 
+    Write-Host ('Pulling patch from https://gitgud.io/{0}/{1} (branch: {2})' -f $cfg.username, $cfg.repo, $cfg.branch)
+    Write-Host ''
+
     Invoke-SrpgPreSetup -Root $GameRoot
 
     $stateFile = Join-Path $PatchBundleRoot 'previous_patch_sha.txt'
