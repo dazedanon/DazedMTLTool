@@ -27,7 +27,6 @@ function Wait-ConsolePause {
 }
 
 function Get-DazedPatcherBannerGlyphs {
-    # Fixed 7 rows × 8 cols per glyph (monospace). Letters only; words built separately.
     return @{
         'A' = @('        ', '  AAA   ', ' A   A  ', ' AAAAA  ', ' A   A  ', ' A   A  ', '        ')
         'C' = @('        ', '  CCCC  ', ' C      ', ' C      ', ' C      ', '  CCCC  ', '        ')
@@ -46,7 +45,6 @@ function Build-AsciiWordLines {
         [Parameter(Mandatory = $true)][string]$Word,
         [hashtable]$Glyphs
     )
-    # Force array: pipeline assignment can otherwise collapse to a scalar and break glyph lookup.
     $letters = @(
         $Word.ToUpperInvariant().ToCharArray() | ForEach-Object { [string]$_ }
     )
@@ -78,11 +76,10 @@ function ConvertTo-LineStringArray {
 
 function Pad-LineBlockToHeight {
     param(
-        # Untyped: PS may wrongly coerce to '' before binding [string[]]; normalize ourselves.
-        [Parameter(Mandatory = $true, Position = 0)][object]$PatchVerticalRows,
+        [Parameter(Mandatory = $true, Position = 0)][object]$Rows,
         [Parameter(Mandatory = $true, Position = 1)][int]$TargetHeight
     )
-    [string[]]$lines = ConvertTo-LineStringArray -Value $PatchVerticalRows
+    [string[]]$lines = ConvertTo-LineStringArray -Value $Rows
     if ($lines.Count -eq 0 -and $TargetHeight -gt 0) {
         $blank = New-Object string[] $TargetHeight
         for ($i = 0; $i -lt $TargetHeight; $i++) { $blank[$i] = '' }
@@ -102,7 +99,7 @@ function Pad-LineBlockToHeight {
 }
 
 function Get-EmbeddedIconAsciiCatLines {
-    # Generated from assets/icon.png; rerun generate_icon_ascii.ps1 and paste here if the icon changes.
+    # Refresh via generate_icon_ascii.ps1 when assets/icon.png changes.
     $raw = @'
        #            %#
      %:.-@         #..=
@@ -137,8 +134,7 @@ function Get-EmbeddedIconAsciiCatLines {
           +..............................:=#
             %%%%%%%%%%%%%%%%%%%%%%%%%%%%@
 '@
-    [string[]]$split = @($raw -split '\r?\n')
-    return [string[]]$split
+    return [string[]]@($raw -split '\r?\n')
 }
 
 function Write-AsciiHeader {
@@ -156,8 +152,8 @@ function Write-AsciiHeader {
         $catLines = @(Get-EmbeddedIconAsciiCatLines)
 
         $targetH = [Math]::Max($titleRows.Count, $catLines.Count)
-        $titlePadded = Pad-LineBlockToHeight -PatchVerticalRows $titleRows -TargetHeight $targetH
-        $catPadded = Pad-LineBlockToHeight -PatchVerticalRows $catLines -TargetHeight $targetH
+        $titlePadded = Pad-LineBlockToHeight -Rows $titleRows -TargetHeight $targetH
+        $catPadded = Pad-LineBlockToHeight -Rows $catLines -TargetHeight $targetH
 
         $titleWidth = 0
         foreach ($ln in $titlePadded) {
@@ -344,7 +340,7 @@ function Get-InvalidZipDownloadHint {
     $parts = [System.Collections.Generic.List[string]]::new()
     $parts.Add("File size: $len bytes.")
     if ($len -eq 0) {
-        $parts.Add('Download was empty.')
+        $parts.Add('Empty file often means the window was closed during download, the connection dropped, or security software blocked the file. Run again and let it finish.')
         return ($parts -join ' ')
     }
 
@@ -387,7 +383,67 @@ function Get-InvalidZipDownloadHint {
     return ($parts -join ' ')
 }
 
-function Download-WithIwrSpeedProgress {
+$script:GameUpdateConsoleCloseHelperLoaded = $false
+function Initialize-GameUpdateConsoleCloseHelper {
+    if ($script:GameUpdateConsoleCloseHelperLoaded) { return }
+    $script:GameUpdateConsoleCloseHelperLoaded = $true
+    $script:GameUpdateConsoleCloseHelperWorks = $false
+    if ($env:OS -ne 'Windows_NT') { return }
+
+    try {
+        Add-Type -TypeDefinition @'
+using System;
+using System.IO;
+using System.Runtime.InteropServices;
+
+namespace GameUpdate {
+    public static class ConsoleCloseHelper {
+        private static HandlerRoutine _handler;
+
+        public static void Register() {
+            _handler = Handle;
+            SetConsoleCtrlHandler(_handler, true);
+        }
+
+        public static void Unregister() {
+            if (_handler != null) {
+                SetConsoleCtrlHandler(_handler, false);
+                _handler = null;
+            }
+        }
+
+        private static bool Handle(uint ctrlType) {
+            const uint CTRL_CLOSE_EVENT = 2;
+            const uint CTRL_LOGOFF_EVENT = 5;
+            const uint CTRL_SHUTDOWN_EVENT = 6;
+            if (ctrlType != CTRL_CLOSE_EVENT && ctrlType != CTRL_LOGOFF_EVENT && ctrlType != CTRL_SHUTDOWN_EVENT) {
+                return false;
+            }
+            try {
+                string path = Environment.GetEnvironmentVariable("GAMEUPDATE_REPO_ZIP_PATH");
+                if (!string.IsNullOrEmpty(path) && File.Exists(path)) {
+                    File.Delete(path);
+                }
+            }
+            catch { }
+            return false;
+        }
+
+        private delegate bool HandlerRoutine(uint ctrlType);
+
+        [DllImport("Kernel32.dll", SetLastError = true)]
+        private static extern bool SetConsoleCtrlHandler(HandlerRoutine handler, bool add);
+    }
+}
+'@ -ErrorAction Stop
+        $script:GameUpdateConsoleCloseHelperWorks = $true
+    }
+    catch {
+        $script:GameUpdateConsoleCloseHelperWorks = $false
+    }
+}
+
+function Invoke-PatchArchiveDownload {
     param(
         [Parameter(Mandatory = $true)][string]$Url,
         [Parameter(Mandatory = $true)][string]$OutFile,
@@ -398,13 +454,37 @@ function Download-WithIwrSpeedProgress {
         Remove-Item -LiteralPath $OutFile -Force
     }
 
+    $outFull = [System.IO.Path]::GetFullPath($OutFile)
+    Initialize-GameUpdateConsoleCloseHelper
+
     $prevPref = $ProgressPreference
+    $completed = $false
+    $registeredCloseHandler = $false
     try {
+        if ($script:GameUpdateConsoleCloseHelperWorks) {
+            $env:GAMEUPDATE_REPO_ZIP_PATH = $outFull
+            [GameUpdate.ConsoleCloseHelper]::Register()
+            $registeredCloseHandler = $true
+        }
+
         $ProgressPreference = 'Continue'
         Invoke-WebRequest -Uri $Url -OutFile $OutFile -Headers $Headers -UseBasicParsing
+        $completed = $true
     }
     finally {
         $ProgressPreference = $prevPref
+
+        if ($registeredCloseHandler) {
+            try {
+                [GameUpdate.ConsoleCloseHelper]::Unregister()
+            }
+            catch { }
+            Remove-Item env:GAMEUPDATE_REPO_ZIP_PATH -ErrorAction SilentlyContinue
+        }
+
+        if (-not $completed -and (Test-Path -LiteralPath $OutFile)) {
+            Remove-FileOrDirectoryViaCmd -LiteralPath $OutFile
+        }
     }
 }
 
@@ -468,32 +548,44 @@ function Invoke-PatchDownloadExtract {
         return 10
     }
 
-    Write-Host 'Downloading patch...'
-    $zipPath = Join-Path $PWD.Path 'repo.zip'
+    $zipPath = Join-Path $Root ('dazedmtl_patch_' + [Guid]::NewGuid().ToString('N') + '.zip')
+    Write-Host ('Downloading patch... ' + $zipPath)
     $stage = Join-Path ([IO.Path]::GetTempPath()) ('gu_' + [Guid]::NewGuid().ToString('N'))
     $archiveSha = [uri]::EscapeDataString($latestSha)
     $archiveUrl = "https://gitgud.io/api/v4/projects/$id/repository/archive.zip?sha=$archiveSha"
 
     $dlSw = [System.Diagnostics.Stopwatch]::StartNew()
     Invoke-WithRetry -Name 'Download archive with Invoke-WebRequest' -Attempts $dlAttempts -Action {
-        Download-WithIwrSpeedProgress -Url $archiveUrl -OutFile $zipPath -Headers $headers
+        Invoke-PatchArchiveDownload -Url $archiveUrl -OutFile $zipPath -Headers $headers
     } | Out-Null
     $dlSw.Stop()
     $bytes = (Get-Item -LiteralPath $zipPath).Length
+    if ($bytes -eq 0) {
+        $hint = Get-InvalidZipDownloadHint -LiteralPath $zipPath
+        Remove-DownloadedRepoZip -LiteralPath $zipPath
+        throw "PATCH_ERR:ZIP:Download is empty (0 bytes). $hint"
+    }
+
     $secs = [Math]::Max($dlSw.Elapsed.TotalSeconds, 0.001)
     $mbps = ($bytes / 1MB) / $secs
-    Write-Host ("Download complete via iwr: {0:N1} MB in {1:N1}s ({2:N1} MB/s)" -f ($bytes / 1MB), $secs, $mbps)
+    Write-Host ("Download complete: {0:N1} MB in {1:N1}s ({2:N1} MB/s)" -f ($bytes / 1MB), $secs, $mbps)
 
+    $zipHeaderBad = $false
+    $zipHeaderHint = ''
     $fs = [System.IO.File]::OpenRead($zipPath)
     try {
         $hdr = New-Object byte[] 4
         if ($fs.Read($hdr, 0, 4) -lt 4 -or $hdr[0] -ne 0x50 -or $hdr[1] -ne 0x4B) {
-            $hint = Get-InvalidZipDownloadHint -LiteralPath $zipPath
-            throw "PATCH_ERR:ZIP:Download is not a valid ZIP (missing PK header). $hint"
+            $zipHeaderBad = $true
+            $zipHeaderHint = Get-InvalidZipDownloadHint -LiteralPath $zipPath
         }
     }
     finally {
         $fs.Dispose()
+    }
+    if ($zipHeaderBad) {
+        Remove-DownloadedRepoZip -LiteralPath $zipPath
+        throw "PATCH_ERR:ZIP:Download is not a valid ZIP (missing PK header). $zipHeaderHint"
     }
 
     if (Test-Path -LiteralPath $stage) {
@@ -501,14 +593,19 @@ function Invoke-PatchDownloadExtract {
     }
     New-Item -ItemType Directory -Path $stage | Out-Null
     try {
-        Expand-Archive -LiteralPath $zipPath -DestinationPath $stage -Force
-        $dirs = @(Get-ChildItem -LiteralPath $stage -Directory)
-        if ($dirs.Count -ne 1) {
-            throw ('PATCH_ERR:ZIP:Expected one root folder in archive, found {0}.' -f $dirs.Count)
+        try {
+            Expand-Archive -LiteralPath $zipPath -DestinationPath $stage -Force
+            $dirs = @(Get-ChildItem -LiteralPath $stage -Directory)
+            if ($dirs.Count -ne 1) {
+                throw ('PATCH_ERR:ZIP:Expected one root folder in archive, found {0}.' -f $dirs.Count)
+            }
+            Copy-Item -Path (Join-Path $dirs[0].FullName '*') -Destination $PWD.Path -Recurse -Force
         }
-        Copy-Item -Path (Join-Path $dirs[0].FullName '*') -Destination $PWD.Path -Recurse -Force
-        Write-Host 'Removing downloaded archive (repo.zip)...'
-        Remove-DownloadedRepoZip -LiteralPath $zipPath
+        finally {
+            if (Test-Path -LiteralPath $zipPath) {
+                Remove-DownloadedRepoZip -LiteralPath $zipPath
+            }
+        }
     }
     finally {
         if (Test-Path -LiteralPath $stage) {
@@ -558,13 +655,24 @@ function Invoke-SrpgPostApply {
     }
 }
 
+function Remove-StalePatchZipArtifactsInGameRoot {
+    param([Parameter(Mandatory = $true)][string]$Root)
+    if (-not (Test-Path -LiteralPath $Root)) { return }
+    Get-ChildItem -LiteralPath $Root -Filter 'dazedmtl_patch_*.zip' -File -ErrorAction SilentlyContinue |
+        ForEach-Object {
+            Remove-FileOrDirectoryViaCmd -LiteralPath $_.FullName
+        }
+}
+
 function Remove-PatchTempArtifacts {
     param([string]$Root)
     $zipPath = Join-Path $Root 'repo.zip'
     $legacyTmp = Join-Path $Root '_patch_extract_tmp'
 
+    Remove-StalePatchZipArtifactsInGameRoot -Root $Root
+
     if (Test-Path -LiteralPath $zipPath) {
-        Write-Host '  Removing repo.zip - large files can sit here for minutes if antivirus is scanning.'
+        Write-Host '  Removing repo.zip...'
         Remove-FileOrDirectoryViaCmd -LiteralPath $zipPath
     }
     if (Test-Path -LiteralPath $legacyTmp) {
@@ -582,7 +690,7 @@ try {
 
     Write-AsciiHeader
 
-    Write-Host "Root: $GameRoot"
+    Remove-StalePatchZipArtifactsInGameRoot -Root $GameRoot
 
     $configPath = Join-Path $PatchBundleRoot 'patch-config.txt'
     if (-not (Test-Path -LiteralPath $configPath)) {
@@ -610,7 +718,6 @@ try {
     }
 
     Write-Host ('Pulling patch from https://gitgud.io/{0}/{1} (branch: {2})' -f $cfg.username, $cfg.repo, $cfg.branch)
-    Write-Host ''
 
     Invoke-SrpgPreSetup -Root $GameRoot
 
