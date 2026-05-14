@@ -1106,6 +1106,7 @@ class TranslationTab(QWidget):
             from modules.kirikiri import handleKirikiri
             from modules.json import handleJSON
             from modules.lune import handleLune
+            from modules.yuris import handleYuris
             from modules.nscript import handleOnscripter
             from modules.wolf import handleWOLF
             from modules.wolf2 import handleWOLF2
@@ -1125,6 +1126,7 @@ class TranslationTab(QWidget):
                 ["Kirikiri", [".ks"], handleKirikiri],
                 ["JSON", [".json"], handleJSON],
                 ["Lune", [".l"], handleLune],
+                ["Yuris", [".json"], handleYuris],
                 ["NScript", [".nscript"], handleOnscripter],
                 ["Wolf RPG", [".json"], handleWOLF],
                 ["Wolf RPG 2", [".txt"], handleWOLF2],

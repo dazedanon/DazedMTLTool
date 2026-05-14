@@ -89,6 +89,9 @@ def run_handler(project_root, module_name, filename, estimate_only):
         elif "Lune" in module_name:
             from modules.lune import handleLune
             handler = handleLune
+        elif "Yuris" in module_name:
+            from modules.yuris import handleYuris
+            handler = handleYuris
         elif "NScript" in module_name:
             from modules.nscript import handleOnscripter
             handler = handleOnscripter

@@ -39,6 +39,7 @@ from modules.tyrano import handleTyrano
 from modules.kirikiri import handleKirikiri
 from modules.json import handleJSON
 from modules.lune import handleLune
+from modules.yuris import handleYuris
 from modules.nscript import handleOnscripter
 from modules.wolf import handleWOLF
 from modules.wolf2 import handleWOLF2
@@ -64,6 +65,7 @@ MODULES = [
     ["Kirikiri", ["ks", "tjs", "ssd", "asd"], handleKirikiri],
     ["JSON", ["json"], handleJSON],
     ["Lune", ["json"], handleLune],
+    ["Yuris", ["json"], handleYuris],
     ["NScript", ["txt"], handleOnscripter],
     ["Wolf", ["json"], handleWOLF],
     ["Wolf", ["txt"], handleWOLF2],
