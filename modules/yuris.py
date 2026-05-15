@@ -53,6 +53,11 @@ TRANSLATION_CONFIG = TranslationConfig(
 )
 
 
+def replace_yuris_problem_dashes(text: str) -> str:
+    """Replace characters the Yuris runtime mishandles (e.g. ― U+2015 HORIZONTAL BAR)."""
+    return text.replace("\u2015", "-")
+
+
 def handleYuris(filename, estimate):
     global ESTIMATE, FILENAME, TOKENS
     ESTIMATE = estimate
@@ -141,6 +146,7 @@ def translateYuris(data, filename):
         #     continue
 
         cleanMessage = message.replace("\r\n", " ").replace("\n", " ").strip()
+        cleanMessage = replace_yuris_problem_dashes(cleanMessage)
         hasSpeaker = bool(speaker)
         stringList.append(f"[{speaker}]: {cleanMessage}" if hasSpeaker else cleanMessage)
         entries.append((index, message, hasSpeaker))
@@ -165,9 +171,10 @@ def translateYuris(data, filename):
     for (index, originalMessage, hasSpeaker), translatedText in zip(entries, translatedList):
         if hasSpeaker:
             translatedText = stripSpeakerPrefix(translatedText)
+        translatedText = replace_yuris_problem_dashes(translatedText)
         translatedText = translatedText.replace("\r\n", "\n")
         translatedText = dazedwrap.wrapText(translatedText, width=WIDTH)
-        translatedText = translatedText.replace("\n", "\r\n")
+        translatedText = apply_yuris_newline_indent_after_wrap(translatedText)
         data[index]["message"] = originalMessage.replace(originalMessage, translatedText)
         save_progress_json(data, filename)
         if PBAR is not None:
@@ -190,6 +197,28 @@ def stripSpeakerPrefix(translated_text):
             translated_text = translated_text[cjk_m.end():]
             translated_text = re.sub(r"\s*[)）]\s*$", "", translated_text)
     return translated_text.strip()
+
+
+def apply_yuris_newline_indent_after_wrap(text: str, sep: str = "\r\n") -> str:
+    """Engine quirk: after each newline within wrapped text, add one more leading space (1st wrap line +1, 2nd +2, …).
+
+    Paragraph breaks from wrapText (blank line / \\n\\n) reset the counter per paragraph.
+    Output uses CRLF between lines and double CRLF between paragraphs.
+    """
+    normalized = text.replace("\r\n", "\n").replace("\r", "\n")
+    paragraphs = normalized.split("\n\n")
+    out_paragraphs: list[str] = []
+    for para in paragraphs:
+        lines = para.split("\n")
+        adjusted: list[str] = []
+        for i, raw in enumerate(lines):
+            content = raw.strip()
+            if i == 0:
+                adjusted.append(content)
+            else:
+                adjusted.append((" " * i) + content)
+        out_paragraphs.append(sep.join(adjusted))
+    return (sep + sep).join(out_paragraphs)
 
 
 def save_progress_json(data, filename):
