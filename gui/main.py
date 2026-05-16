@@ -211,6 +211,7 @@ class UpdateDialog(QDialog):
 from gui.config_tab import ConfigTab
 from gui.translation_tab import TranslationTab
 from gui.workflow_tab import WorkflowTab
+from gui.rewrite_tab import RewriteTab
 
 class DazedMTLGUI(QMainWindow):
     """Main GUI window for the DazedMTLTool."""
@@ -411,6 +412,13 @@ class DazedMTLGUI(QMainWindow):
         btn_config.clicked.connect(lambda: self.switch_page(2))
         sidebar_layout.addWidget(btn_config)
         self.nav_buttons.append(btn_config)
+
+        # Rewrite button (fourth)
+        btn_rewrite = self.create_nav_button("✏️", "Rewrite")
+        btn_rewrite.setToolTip("Rewrite — fix over-limit dialogue messages")
+        btn_rewrite.clicked.connect(lambda: self.switch_page(3))
+        sidebar_layout.addWidget(btn_rewrite)
+        self.nav_buttons.append(btn_rewrite)
         
         sidebar_layout.addStretch()
 
@@ -488,6 +496,10 @@ class DazedMTLGUI(QMainWindow):
         self.config_tab = ConfigTab()
         self.config_tab.config_changed.connect(self.on_config_changed)
         self.content_stack.addWidget(self.config_tab)
+
+        # Rewrite Tab (index 3)
+        self.rewrite_tab = RewriteTab(self)
+        self.content_stack.addWidget(self.rewrite_tab)
         
     def show_update_dialog(self):
         """Open the update dialog and check for a newer version."""
