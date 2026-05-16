@@ -1831,17 +1831,27 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None, mism
         # Check cache for this exact payload
         cached_result = get_cached_translation(subbedT, config.language)
         if cached_result is not None:
-            if isinstance(tItem, list):
-                tList[index] = cached_result
-                history = cached_result[-config.maxHistory:]
+            # In estimate mode, never replace tList[index] from cache — the cached value
+            # may have been stored for a batch with a different number of skip_indices,
+            # so its length can differ from the current tItem.  Keeping tList[index] as
+            # the original tItem ensures the returned list always has the correct length.
+            if not config.estimateMode:
+                if isinstance(tItem, list):
+                    tList[index] = cached_result
+                    history = cached_result[-config.maxHistory:]
+                else:
+                    tList[index] = cached_result
+                    history = cached_result
             else:
-                tList[index] = cached_result
-                history = cached_result
-            
+                if isinstance(cached_result, list) and cached_result:
+                    history = cached_result[-config.maxHistory:]
+                elif cached_result:
+                    history = cached_result
+
             if lock and pbar is not None:
                 with lock:
                     pbar.update(len(tItem) if isinstance(tItem, list) else 1)
-            
+
             continue
 
         # Create context — static_system is the stable prompt.txt content;

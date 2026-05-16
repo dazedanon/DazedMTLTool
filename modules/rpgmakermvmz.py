@@ -235,9 +235,10 @@ def _pat355655_captured_text(match):
 
 
 def handleMVMZ(filename, estimate):
-    global ESTIMATE, TOKENS, FILENAME
+    global ESTIMATE, TOKENS, FILENAME, MISMATCH
     ESTIMATE = estimate
     FILENAME = filename
+    MISMATCH = []  # Reset per-file; prevents cross-file contamination in CLI mode
     # Also record per-thread filename to avoid cross-thread interference
     try:
         THREAD_CTX.filename = filename
