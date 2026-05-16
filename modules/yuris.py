@@ -52,10 +52,111 @@ TRANSLATION_CONFIG = TranslationConfig(
     estimateMode=False,
 )
 
+_ASSET_EXT = re.compile(
+    r"\.(png|jpe?g|gif|webp|bmp|tga|tif|ogg|mp3|wav|mid|json|txt|xml|ttf|otf|woff2?|ks|tjs)\b",
+    re.I,
+)
+# Typeface / UI font name tokens — translating breaks runtime font resolution.
+_FONTISH = re.compile(
+    r"ゴシック|ゴチック|明朝|Mincho|Gothic|ＰＧ|ＭＳ|メイリオ|Meiryo|游ゴ|Yu\s?Gothic|"
+    r"Tahoma|Arial|Consolas|Segoe|SimSun|宋体|黑体|DF体|ヒラギノ|Hiragino|"
+    r"Noto\s|IPA|Ricty|VL\s|@",
+    re.I,
+)
+
+
+def _yuris_nonempty_messages(data: list) -> list[str]:
+    out: list[str] = []
+    for item in data:
+        if isinstance(item, dict):
+            msg = item.get("message")
+            if isinstance(msg, str) and msg.strip():
+                out.append(msg)
+    return out
+
+
+def _yuris_font_face_table(msgs: list[str]) -> bool:
+    if not msgs or len(msgs) > 120:
+        return False
+    if any(len(m) > 120 for m in msgs):
+        return False
+    ascii_label = re.compile(r"^[A-Za-z0-9 _+.,'-]{1,64}$")
+    for m in msgs:
+        if _FONTISH.search(m):
+            continue
+        if ascii_label.fullmatch(m.strip()):
+            continue
+        return False
+    return True
+
+
+def yuris_whole_file_pass_through_reason(data) -> str | None:
+    """
+    When True, the file is copied to translated/ unchanged (no API).
+    Heuristics: only resource paths, or only font-face style entries.
+    """
+    if not isinstance(data, list):
+        return None
+    msgs = _yuris_nonempty_messages(data)
+    if not msgs:
+        return None
+    if all(_message_looks_like_asset_path(m) for m in msgs):
+        return "path-only resource strings"
+    if _yuris_font_face_table(msgs):
+        return "font face list"
+    return None
+
+
+def _message_looks_like_asset_path(message: str) -> bool:
+    """Skip resource-like strings: paths, URLs, and any line containing '_' (engine IDs / filenames)."""
+    s = message.strip()
+    if not s:
+        return True
+    if "://" in s:
+        return True
+    if re.match(r"^[A-Za-z]:[/\\]", s):
+        return True
+    if "\\" in s or "/" in s:
+        norm = s.replace("\\", "/")
+        tail = norm.rsplit("/", 1)[-1]
+        if _ASSET_EXT.search(s):
+            return True
+        if re.fullmatch(r"[A-Za-z0-9_.-]+", tail):
+            return True
+    if "_" in s:
+        return True
+    # Common JP UI font face names (no underscores) — keep short to avoid snagging real prose.
+    if len(s) <= 80 and any(t in s for t in ("ゴシック", "ゴチック", "明朝")):
+        return True
+    return False
+
+
+def yuris_message_is_translatable(message: str) -> bool:
+    return isinstance(message, str) and bool(message.strip()) and not _message_looks_like_asset_path(message)
+
 
 def replace_yuris_problem_dashes(text: str) -> str:
     """Replace characters the Yuris runtime mishandles (e.g. ― U+2015 HORIZONTAL BAR)."""
     return text.replace("\u2015", "-")
+
+
+def _yuris_pulse_progress_complete(filename: str) -> None:
+    """
+    GUI/ subprocess_runner polls modules.yuris.PBAR. Skipped files and 0-line files
+    never touched tqdm otherwise, so the monitor never emits PROGRESS:...:n:total and
+    rows sit at 0% or odd states until completion.
+    """
+    global PBAR
+    with tqdm(
+        total=1,
+        bar_format=BAR_FORMAT,
+        position=POSITION,
+        leave=LEAVE,
+        desc=filename,
+    ) as pbar:
+        PBAR = pbar
+        pbar.update(1)
+    PBAR = None
 
 
 def handleYuris(filename, estimate):
@@ -65,18 +166,36 @@ def handleYuris(filename, estimate):
 
     try:
         start = time.time()
-        translatedData = openFiles(filename)
+        with open("files/" + filename, "r", encoding="UTF-8-sig") as readFile:
+            data = json.load(readFile)
 
-        if not estimate:
-            os.makedirs(os.path.dirname(os.path.join("translated", filename)) or "translated", exist_ok=True)
-            with open("translated/" + filename, "w", encoding="utf-8", newline="\n") as outFile:
-                json.dump(translatedData[0], outFile, ensure_ascii=False, indent=4)
+        pass_reason = yuris_whole_file_pass_through_reason(data)
+        if pass_reason:
+            if not estimate:
+                os.makedirs(os.path.dirname(os.path.join("translated", filename)) or "translated", exist_ok=True)
+                with open("translated/" + filename, "w", encoding="utf-8", newline="\n") as outFile:
+                    json.dump(data, outFile, ensure_ascii=False, indent=4)
+            end = time.time()
+            # Machine-readable line so the GUI can apply totals row state (same as other modules).
+            c0 = calculateCost(0, 0, MODEL)
+            tqdm.write(
+                f"{filename}: [Input: 0][Output: 0][Cost: ${c0:.4f}]"
+                f"[{round(end - start, 1)}s] [skipped] {pass_reason}"
+            )
+            _yuris_pulse_progress_complete(filename)
+        else:
+            translatedData = parseYuris(data, filename)
 
-        end = time.time()
-        tqdm.write(getResultString(translatedData, end - start, filename))
-        with LOCK:
-            TOKENS[0] += translatedData[1][0]
-            TOKENS[1] += translatedData[1][1]
+            if not estimate:
+                os.makedirs(os.path.dirname(os.path.join("translated", filename)) or "translated", exist_ok=True)
+                with open("translated/" + filename, "w", encoding="utf-8", newline="\n") as outFile:
+                    json.dump(translatedData[0], outFile, ensure_ascii=False, indent=4)
+
+            end = time.time()
+            tqdm.write(getResultString(translatedData, end - start, filename))
+            with LOCK:
+                TOKENS[0] += translatedData[1][0]
+                TOKENS[1] += translatedData[1][1]
     except Exception:
         traceback.print_exc()
         return "Fail"
@@ -85,13 +204,6 @@ def handleYuris(filename, estimate):
     if MISMATCH:
         return totalString + Fore.RED + f"\nMismatch Errors: {MISMATCH}" + Fore.RESET
     return totalString
-
-
-def openFiles(filename):
-    with open("files/" + filename, "r", encoding="UTF-8-sig") as readFile:
-        data = json.load(readFile)
-        translatedData = parseYuris(data, filename)
-    return translatedData
 
 
 def parseYuris(data, filename):
@@ -104,19 +216,25 @@ def parseYuris(data, filename):
     totalLines = sum(
         1
         for item in data
-        if isinstance(item, dict) and isinstance(item.get("message"), str) and item["message"].strip()
+        if isinstance(item, dict) and yuris_message_is_translatable(item.get("message", ""))
     )
 
-    with tqdm(bar_format=BAR_FORMAT, position=POSITION, total=totalLines, leave=LEAVE) as pbar:
+    # total=0 breaks tqdm + GUI progress monitor; still pulse 1/1 when nothing to translate.
+    pbar_total = max(1, totalLines)
+    with tqdm(bar_format=BAR_FORMAT, position=POSITION, total=pbar_total, leave=LEAVE) as pbar:
         pbar.desc = filename
         PBAR = pbar
         try:
+            if totalLines == 0:
+                pbar.update(1)
             result = translateYuris(data, filename)
             totalTokens[0] += result[0]
             totalTokens[1] += result[1]
         except Exception as e:
             traceback.print_exc()
             return [data, totalTokens, e]
+        finally:
+            PBAR = None
 
     return [data, totalTokens, None]
 
@@ -140,10 +258,8 @@ def translateYuris(data, filename):
             item["name"] = speaker
 
         message = item.get("message")
-        if not isinstance(message, str) or not message.strip():
+        if not yuris_message_is_translatable(message):
             continue
-        # if not re.search(LANGREGEX, message):
-        #     continue
 
         cleanMessage = message.replace("\r\n", " ").replace("\n", " ").strip()
         cleanMessage = replace_yuris_problem_dashes(cleanMessage)
@@ -172,9 +288,8 @@ def translateYuris(data, filename):
         if hasSpeaker:
             translatedText = stripSpeakerPrefix(translatedText)
         translatedText = replace_yuris_problem_dashes(translatedText)
-        translatedText = translatedText.replace("\r\n", "\n")
         translatedText = dazedwrap.wrapText(translatedText, width=WIDTH)
-        translatedText = apply_yuris_newline_indent_after_wrap(translatedText)
+        translatedText = translatedText.replace("\n", "\r\n")
         data[index]["message"] = originalMessage.replace(originalMessage, translatedText)
         save_progress_json(data, filename)
         if PBAR is not None:
@@ -197,28 +312,6 @@ def stripSpeakerPrefix(translated_text):
             translated_text = translated_text[cjk_m.end():]
             translated_text = re.sub(r"\s*[)）]\s*$", "", translated_text)
     return translated_text.strip()
-
-
-def apply_yuris_newline_indent_after_wrap(text: str, sep: str = "\r\n") -> str:
-    """Engine quirk: after each newline within wrapped text, add one more leading space (1st wrap line +1, 2nd +2, …).
-
-    Paragraph breaks from wrapText (blank line / \\n\\n) reset the counter per paragraph.
-    Output uses CRLF between lines and double CRLF between paragraphs.
-    """
-    normalized = text.replace("\r\n", "\n").replace("\r", "\n")
-    paragraphs = normalized.split("\n\n")
-    out_paragraphs: list[str] = []
-    for para in paragraphs:
-        lines = para.split("\n")
-        adjusted: list[str] = []
-        for i, raw in enumerate(lines):
-            content = raw.strip()
-            if i == 0:
-                adjusted.append(content)
-            else:
-                adjusted.append((" " * i) + content)
-        out_paragraphs.append(sep.join(adjusted))
-    return (sep + sep).join(out_paragraphs)
 
 
 def save_progress_json(data, filename):
