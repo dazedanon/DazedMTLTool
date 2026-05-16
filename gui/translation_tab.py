@@ -30,6 +30,12 @@ from PyQt5.QtGui import QFont
 from gui.log_viewer import LogViewer
 
 
+def _strip_ansi(text):
+    if not isinstance(text, str) or not text:
+        return text
+    return re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", text)
+
+
 def create_section_header(title):
     """Create a clean section header without boxes."""
     label = QLabel(title)
@@ -1697,7 +1703,26 @@ class TranslationTab(QWidget):
             item['label'].setText(f"{current}/{total}")
             item['label'].setStyleSheet("color: #007acc; font-weight: bold;")
     
-    def mark_file_complete(self, filename, success=True, error_message=None):
+    def _apply_success_status_icon(self, item, completion_kind="normal"):
+        """Green checkmark for every successful row; tooltips explain skip / idle when relevant."""
+        try:
+            item["status_label"].setText("✓")
+            item["status_label"].setStyleSheet(
+                "color: #4ec9b0; font-weight: bold; font-size: 11px;"
+            )
+            if completion_kind == "skip":
+                reason = (item.get("_skip_reason") or "").strip()
+                tip = f"Skipped: {reason}" if reason else "Whole file skipped (paths/fonts only)."
+            elif completion_kind == "idle":
+                tip = "No translatable lines (non-dialogue content only)."
+            else:
+                tip = ""
+            item["status_label"].setToolTip(tip)
+            item["status_label"].setVisible(True)
+        except Exception:
+            pass
+
+    def mark_file_complete(self, filename, success=True, error_message=None, completion_kind="normal"):
         """Mark a file as complete or failed."""
         if filename in self.file_progress_items:
             item = self.file_progress_items[filename]
@@ -1709,13 +1734,7 @@ class TranslationTab(QWidget):
                     item['tokens_label'].setVisible(True)
                     item['cost_label'].setVisible(True)
                     item['time_label'].setVisible(True)
-                    # Show compact status in the middle column
-                    try:
-                        item['status_label'].setText("✓")
-                        item['status_label'].setStyleSheet("color: #4ec9b0; font-weight: bold; font-size: 11px;")
-                        item['status_label'].setVisible(True)
-                    except Exception:
-                        pass
+                    self._apply_success_status_icon(item, completion_kind)
                     try:
                         item['progress_bar'].setVisible(False)
                     except Exception:
@@ -1728,13 +1747,11 @@ class TranslationTab(QWidget):
                         pass
                 else:
                     # No parsed results available - show status in status_label
+                    self._apply_success_status_icon(item, completion_kind)
                     try:
-                        item['status_label'].setText("✓")
-                        item['status_label'].setStyleSheet("color: #4ec9b0; font-weight: bold; font-size: 11px;")
-                        item['status_label'].setVisible(True)
+                        item['progress_bar'].setVisible(False)
                     except Exception:
                         pass
-                    item['progress_bar'].setValue(item['progress_bar'].maximum())
                     try:
                         item['label'].setText("")
                         item['label'].setStyleSheet("color: #888888; font-size: 11px;")
@@ -2007,32 +2024,67 @@ class TranslationTab(QWidget):
             except Exception:
                 pass
         try:
-            pattern = r'^\W*(?P<filename>[^:]+):.*?\[Input:\s*(?P<input>\d+)\].*?\[Output:\s*(?P<output>\d+)\].*?\[Cost:\s*\$(?P<cost>[\d\.]+)\].*?\[(?P<time>[\d\.]+)s\]'
-            m = re.search(pattern, message)
+            stripped = _strip_ansi(message)
+            pattern = (
+                r'^\s*(?P<filename>[^:]+):.*?\[Input:\s*(?P<input>\d+)\].*?\[Output:\s*(?P<output>\d+)\]'
+                r'.*?\[Cost:\s*\$(?P<cost>[\d,\.]+)\].*?\[(?P<time>[\d\.]+)s\]'
+            )
+            m = re.search(pattern, stripped)
             if not m:
                 return
-            filename = re.sub(r'^[^\w]+', '', m.group('filename')).strip()
-            if filename.lower() == 'total':
+            filename = m.group("filename").strip()
+            if filename.lower() == "total":
                 return
-            input_tokens = int(m.group('input'))
-            output_tokens = int(m.group('output'))
-            cost = float(m.group('cost'))
-            time_s = float(m.group('time'))
-            self._apply_file_result(filename, input_tokens, output_tokens, cost, time_s)
+            input_tokens = int(m.group("input"))
+            output_tokens = int(m.group("output"))
+            cost = float(m.group("cost").replace(",", ""))
+            time_s = float(m.group("time"))
+            m_skip = re.search(r"\[skipped\]\s*(.*)$", stripped)
+            skip_reason = (m_skip.group(1) or "").strip() if m_skip else ""
+            if skip_reason:
+                completion_kind = "skip"
+            elif input_tokens == 0 and output_tokens == 0:
+                completion_kind = "idle"
+            else:
+                completion_kind = "normal"
+            self._apply_file_result(
+                filename,
+                input_tokens,
+                output_tokens,
+                cost,
+                time_s,
+                completion_kind=completion_kind,
+                skip_reason=skip_reason,
+            )
         except Exception:
             # Ignore parse/logging errors
             pass
         # Do not forward this message into the LogViewer (we tail the log file separately).
         return
 
-    def _apply_file_result(self, filename, input_tokens, output_tokens, cost, time_s):
+    def _apply_file_result(
+        self,
+        filename,
+        input_tokens,
+        output_tokens,
+        cost,
+        time_s,
+        completion_kind="normal",
+        skip_reason="",
+    ):
         """Update a file's item UI with parsed result details and update totals."""
         # Update per-item display
         if filename in self.file_progress_items:
             item = self.file_progress_items[filename]
             try:
-                # Compact token display: input/output
-                item['tokens_label'].setText(f"{input_tokens}/{output_tokens}")
+                item.pop("_skip_reason", None)
+                if skip_reason:
+                    item["_skip_reason"] = skip_reason
+                # Distinguish "no API usage" from real token counts in the list UI
+                if completion_kind in ("skip", "idle"):
+                    item["tokens_label"].setText("—")
+                else:
+                    item["tokens_label"].setText(f"{input_tokens}/{output_tokens}")
                 item['cost_label'].setText(f"${cost:.4f}")
                 item['time_label'].setText(f"{time_s:.1f}s")
                 item['tokens_label'].setVisible(True)
@@ -2066,7 +2118,7 @@ class TranslationTab(QWidget):
             pass
         # Mark file as complete (this will ensure checkbox and label updated)
         try:
-            self.mark_file_complete(filename, success=True)
+            self.mark_file_complete(filename, success=True, completion_kind=completion_kind)
         except Exception:
             pass
     
@@ -2080,8 +2132,12 @@ class TranslationTab(QWidget):
         self.files_completed = current_file
         self.files_translated_label.setText(f"{current_file}/{total_files}")
 
-        # Mark this filename as complete right away
-        self.mark_file_complete(filename, success=True)
+        # Row details (tokens/cost) come from parsed stdout via append_log. If that
+        # did not run (older modules / parse miss), finalize so the row is not stuck.
+        if filename in self.file_progress_items:
+            sl = self.file_progress_items[filename].get("status_label")
+            if not sl or not sl.text():
+                self.mark_file_complete(filename, success=True)
 
         # Clear current_translating_file if it was the same file
         if self.current_translating_file == filename:

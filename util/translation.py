@@ -308,11 +308,23 @@ def validate_translation_content(original_items, translated_items, langRegex):
 
             # Check 4: Runaway translation - translation is excessively long relative to original
             # Catches cases where the model repeats words endlessly (e.g. "it hurts it hurts it hurts...")
-            if len(orig_str) > 10 and len(trans_str) > len(orig_str) * 10:
+            ratio_limit = max(len(orig_str) * 8, 120)
+            if len(orig_str) > 10 and len(trans_str) > ratio_limit:
                 invalid_indices.append(i)
                 reasons.append(f"Line{i+1}: Runaway translation (output {len(trans_str)} chars vs input {len(orig_str)} chars) for '{orig_str[:50]}...'")
                 continue
-    
+            # Absolute cap: garbage outputs that are not caught by ratio alone
+            if len(trans_str) > 4000 and len(trans_str) > len(orig_str) * 3:
+                invalid_indices.append(i)
+                reasons.append(f"Line{i+1}: Runaway translation (output {len(trans_str)} chars exceeds cap) for '{orig_str[:50]}...'")
+                continue
+
+            # Check 5: Same character repeated many times (common API glitch / broken JSON tail)
+            if re.search(r"(.)\1{44,}", trans_str):
+                invalid_indices.append(i)
+                reasons.append(f"Line{i+1}: Excessive character repetition (possible model glitch) in translation")
+                continue
+
     is_valid = len(invalid_indices) == 0
     return is_valid, invalid_indices, reasons
 
@@ -1257,7 +1269,6 @@ def translateText(system, user, history, penalty, formatType, model, numLines=No
             ant_kwargs = dict(
                 model=model,
                 max_tokens=16384,
-                temperature=0,
                 system=ant_system,
                 messages=native_msgs,
             )
@@ -1268,6 +1279,11 @@ def translateText(system, user, history, penalty, formatType, model, numLines=No
                         "schema": createTranslationSchema(numLines),
                     }
                 }
+            else:
+                # Plain completions still allow explicit sampling params.
+                ant_kwargs["temperature"] = 0
+            # Do not pass temperature with output_config: newer Claude (e.g. Opus 4.7)
+            # returns errors such as "temperature is not supported" for structured outputs.
 
             ant_resp = ant_client.messages.create(**ant_kwargs)
         except Exception as e:
@@ -1903,7 +1919,9 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None, mism
                     f"   - Do NOT leave translations empty (\"\") or as single punctuation marks (\":\")\n"
                     f"3. ALL placeholders (like __PROTECTED_0__, __PROTECTED_1__, etc.) are preserved EXACTLY as they appear in the input\n"
                     f"   - Do not modify, translate, or remove any __PROTECTED_N__ placeholders\n"
-                    f"   - Keep them in the exact same position in your translation\n\n"
+                    f"   - Keep them in the exact same position in your translation\n"
+                    f"4. Do NOT repeat the same letter or symbol many times in a row (e.g. uuuuuuuu... or broken tails)\n"
+                    f"   - Keep moans/effects natural; never output long runs of one character\n\n"
                 )
                 current_user = retry_note + user
                 if pbar:
