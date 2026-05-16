@@ -11,6 +11,8 @@ import os
 import json
 import time
 import traceback
+import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -270,11 +272,12 @@ class RewriteWorker(QThread):
     finished_signal = pyqtSignal(bool, str)
 
     def __init__(self, violations: list, output_folder: Path, max_retries: int,
-                 project_root: Path):
+                 file_threads: int, project_root: Path):
         super().__init__()
         self.violations = violations
         self.output_folder = output_folder
         self.max_retries = max_retries
+        self.file_threads = file_threads
         self.project_root = project_root
         self.should_stop = False
         self._mutex = QMutex()
@@ -333,25 +336,27 @@ class RewriteWorker(QThread):
             f"Pricing: ${input_cost_per_m:.4f}/M in  ${output_cost_per_m:.4f}/M out"
         )
         self.log_signal.emit(f"Output folder: {self.output_folder}")
-        self.log_signal.emit(f"Total violations to process: {len(self.violations)}\n")
+        self.log_signal.emit(
+            f"Total violations: {len(self.violations)}  |  Parallel files: {self.file_threads}\n"
+        )
 
-        total_in_tok = 0
-        total_out_tok = 0
-        running_cost = 0.0
-
-        # Group violations by file (preserving order)
-        from collections import defaultdict
-        file_groups: dict = defaultdict(list)
-        for idx, v in enumerate(self.violations):
-            file_groups[v["file"]].append((idx, v))
-
-        done = 0
-        failed = 0
+        # Shared counters — all accesses protected by _counter_lock
+        _counter_lock = threading.Lock()
+        _totals = {"done": 0, "failed": 0, "in_tok": 0, "out_tok": 0}
         total = len(self.violations)
 
-        for filename, items in file_groups.items():
+        # Group violations by file (preserving order)
+        from collections import OrderedDict
+        file_groups: dict = OrderedDict()
+        for idx, v in enumerate(self.violations):
+            file_groups.setdefault(v["file"], []).append((idx, v))
+
+        # ------------------------------------------------------------------ #
+        # Per-file worker — runs in a thread-pool thread
+        # ------------------------------------------------------------------ #
+        def process_file(filename: str, items: list):
             if self._is_stopped():
-                break
+                return
 
             self.file_status_signal.emit(filename, "processing")
             file_done = 0
@@ -361,21 +366,24 @@ class RewriteWorker(QThread):
             if not json_path.exists():
                 self.log_signal.emit(f"\n[SKIP] {filename} — not found in output folder")
                 self.file_status_signal.emit(filename, "skipped")
-                failed += len(items)
-                self.progress_signal.emit(done + failed, total)
-                continue
+                with _counter_lock:
+                    _totals["failed"] += len(items)
+                    self.progress_signal.emit(_totals["done"] + _totals["failed"], total)
+                return
 
             try:
                 file_data = json.loads(json_path.read_text(encoding="utf-8"))
             except Exception as exc:
                 self.log_signal.emit(f"\n[ERROR] Could not read {filename}: {exc}")
                 self.file_status_signal.emit(filename, "failed")
-                failed += len(items)
-                self.progress_signal.emit(done + failed, total)
-                continue
+                with _counter_lock:
+                    _totals["failed"] += len(items)
+                    self.progress_signal.emit(_totals["done"] + _totals["failed"], total)
+                return
 
-            self.log_signal.emit(f"\n{'─'*50}")
-            self.log_signal.emit(f"File: {filename}  ({len(items)} violation{'s' if len(items) != 1 else ''})")
+            self.log_signal.emit(
+                f"\n{'─'*50}\nFile: {filename}  ({len(items)} violation{'s' if len(items) != 1 else ''})"
+            )
 
             for idx, violation in items:
                 if self._is_stopped():
@@ -385,7 +393,9 @@ class RewriteWorker(QThread):
                 original_flat = original.replace(NEWLINE, "\n")
                 entry_index = violation["index"]
 
-                self.log_signal.emit(f"\n  [{idx + 1}/{total}] entry {entry_index}")
+                with _counter_lock:
+                    pos = _totals["done"] + _totals["failed"] + 1
+                self.log_signal.emit(f"\n  [{pos}/{total}] {filename} entry {entry_index}")
                 self.log_signal.emit(f"  Original: {repr(original_flat)}")
 
                 messages = [
@@ -401,13 +411,14 @@ class RewriteWorker(QThread):
                         result, in_tok, out_tok = _call_llm(
                             messages, model, api_url, api_key, is_claude, timeout
                         )
-                        total_in_tok  += in_tok
-                        total_out_tok += out_tok
-                        running_cost = (
-                            (total_in_tok  / 1_000_000) * input_cost_per_m +
-                            (total_out_tok / 1_000_000) * output_cost_per_m
-                        )
-                        self.cost_signal.emit(running_cost, total_in_tok, total_out_tok)
+                        with _counter_lock:
+                            _totals["in_tok"]  += in_tok
+                            _totals["out_tok"] += out_tok
+                            running_cost = (
+                                (_totals["in_tok"]  / 1_000_000) * input_cost_per_m +
+                                (_totals["out_tok"] / 1_000_000) * output_cost_per_m
+                            )
+                        self.cost_signal.emit(running_cost, _totals["in_tok"], _totals["out_tok"])
 
                         result = _normalise_line_endings(result)
                         result = _sanitise_output(result)
@@ -429,7 +440,6 @@ class RewriteWorker(QThread):
                     entry = file_data[entry_index]
                     if isinstance(entry, dict):
                         entry["message"] = rewrite
-                    # Save immediately after every successful rewrite
                     try:
                         json_path.write_text(
                             json.dumps(file_data, ensure_ascii=False, indent=4) + "\n",
@@ -437,17 +447,18 @@ class RewriteWorker(QThread):
                         )
                     except Exception as exc:
                         self.log_signal.emit(f"  [ERROR] Could not save {filename}: {exc}")
-                    done += 1
                     file_done += 1
+                    with _counter_lock:
+                        _totals["done"] += 1
+                        self.progress_signal.emit(_totals["done"] + _totals["failed"], total)
                 else:
-                    failed += 1
                     file_failed += 1
+                    with _counter_lock:
+                        _totals["failed"] += 1
+                        self.progress_signal.emit(_totals["done"] + _totals["failed"], total)
                     if rewrite is None:
                         self.log_signal.emit(f"  -> FAILED after {self.max_retries} attempts")
 
-                self.progress_signal.emit(done + failed, total)
-
-            # Per-file summary and final status colour
             if not self._is_stopped():
                 status = "done" if file_failed == 0 else ("partial" if file_done > 0 else "failed")
                 self.file_status_signal.emit(filename, status)
@@ -455,12 +466,33 @@ class RewriteWorker(QThread):
                     f"  [FILE DONE] {filename}  ✓ {file_done}  ✗ {file_failed}"
                 )
 
+        # ------------------------------------------------------------------ #
+        # Dispatch files to thread pool
+        # ------------------------------------------------------------------ #
+        with ThreadPoolExecutor(max_workers=self.file_threads) as executor:
+            futures = {
+                executor.submit(process_file, fn, items): fn
+                for fn, items in file_groups.items()
+            }
+            for future in as_completed(futures):
+                if self._is_stopped():
+                    # Cancel queued (not yet started) futures
+                    for f in futures:
+                        f.cancel()
+                    break
+                try:
+                    future.result()
+                except Exception as exc:
+                    fn = futures[future]
+                    self.log_signal.emit(f"[ERROR] {fn}: {exc}")
+
         stopped = self._is_stopped()
-        summary = f"Done: {done}  Failed: {failed}  Total: {total}"
-        if stopped:
-            summary += "  (stopped early)"
+        summary = (
+            f"Done: {_totals['done']}  Failed: {_totals['failed']}  Total: {total}"
+            + ("  (stopped early)" if stopped else "")
+        )
         self.log_signal.emit(f"\n{'='*50}\n{summary}")
-        self.finished_signal.emit(not stopped and failed == 0, summary)
+        self.finished_signal.emit(not stopped and _totals["failed"] == 0, summary)
 
 
 # ---------------------------------------------------------------------------
@@ -499,6 +531,7 @@ class RewriteTab(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._project_root = Path(__file__).resolve().parent.parent
+        load_dotenv()
         self._violations: list = []
         self._worker: RewriteWorker | None = None
         # filename → row index in _file_list for fast status updates
@@ -589,6 +622,21 @@ class RewriteTab(QWidget):
         retry_row.addWidget(self._retry_spin)
         retry_row.addStretch()
         layout.addLayout(retry_row)
+
+        threads_row = QHBoxLayout()
+        threads_row.addWidget(QLabel("Parallel files:"))
+        self._threads_spin = QSpinBox()
+        self._threads_spin.setRange(1, 20)
+        default_threads = int(os.getenv("fileThreads", "1"))
+        self._threads_spin.setValue(max(1, default_threads))
+        self._threads_spin.setFixedWidth(60)
+        self._threads_spin.setToolTip(
+            "Number of files to process simultaneously.\n"
+            "Defaults to fileThreads from .env. Keep low for free-tier APIs."
+        )
+        threads_row.addWidget(self._threads_spin)
+        threads_row.addStretch()
+        layout.addLayout(threads_row)
 
         layout.addWidget(_make_hline())
 
@@ -840,6 +888,7 @@ class RewriteTab(QWidget):
             violations=violations,
             output_folder=folder,
             max_retries=self._retry_spin.value(),
+            file_threads=self._threads_spin.value(),
             project_root=self._project_root,
         )
         self._worker.log_signal.connect(self._log)
