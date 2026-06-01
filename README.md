@@ -109,9 +109,11 @@ This means Python wasn't added to your PATH. You have two options:
 
 1. Inside the tool folder, find `.env.example` and make a copy of it named `.env`.
 2. Open `.env` in any text editor (Notepad works fine) and fill in your API details:
+   - `api` — Your API base URL (for Nvidia use `https://integrate.api.nvidia.com/v1/`).
    - `key` — Your API key.
    - `organization` — Your organization key (make something up if using a self-hosted or non-OpenAI API).
-   - `API_PROVIDER` — Set to `openai` or `gemini` depending on your provider.
+   - `API_PROVIDER` — Use `openai` for OpenAI-compatible providers (including Nvidia), or `gemini` for Gemini.
+   - `model` — For Nvidia/custom OpenAI-compatible endpoints, enter the model name manually (example: `deepseek-ai/deepseek-v4-pro`).
 3. The rest of the settings (wordwrap, batch size, etc.) can be left as defaults for now. You can tweak them later.
 
 ### 3. Launch the GUI
