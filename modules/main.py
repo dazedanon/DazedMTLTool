@@ -298,8 +298,14 @@ files to translate are in the /files folder and that you picked the right game e
         if resume_state is None:
             clearBatchFiles()
 
-            # Pass 1 — collect every needed request without calling the API.
+            # Pass 1 — queue dialogue for the batch; speaker/variable strings still hit live API.
             tqdm.write(Fore.CYAN + "[BATCH] Pass 1/2: collecting requests..." + Fore.RESET)
+            tqdm.write(
+                Fore.YELLOW
+                + "[BATCH] Note: speaker names and similar short strings translate at live "
+                "API rates during collect (dialogue is batched after you confirm)."
+                + Fore.RESET
+            )
             set_batch_phase("collect")
             try:
                 totalCost = runFiles(False)

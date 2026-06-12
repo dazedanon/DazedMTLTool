@@ -53,6 +53,8 @@ from PyQt5.QtWidgets import (
     QAbstractItemView,
 )
 
+from gui.translation_tab import BATCH_MODE_LABEL, BATCH_COLLECT_LIVE_CHARGE_NOTE
+
 # ---------------------------------------------------------------------------
 # Phase profiles applied to rpgmakermvmz.py before each translation run
 # ---------------------------------------------------------------------------
@@ -1888,6 +1890,16 @@ class WorkflowTab(QWidget):
 
         layout.addWidget(_make_section_label("Step 4 — TL Phase 1"))
 
+        batch_hint = QLabel(
+            "Batch buttons use the Anthropic Batches API — 50% or more cheaper than live translate "
+            "(Claude only). Pass 1 collects dialogue for the batch; you confirm cost, then Pass 2 "
+            "writes files.\n"
+            + BATCH_COLLECT_LIVE_CHARGE_NOTE
+        )
+        batch_hint.setWordWrap(True)
+        batch_hint.setStyleSheet("color:#9d9d9d;font-size:12px;margin-bottom:6px;")
+        layout.addWidget(batch_hint)
+
         # ---- Pre-flight: text wrap configuration ----------------------------
         wrap_box_title = QLabel("Pre-flight — Text Wrap Width")
         wrap_box_title.setStyleSheet("color:#4ec9b0;font-size:13px;font-weight:bold;")
@@ -1965,6 +1977,13 @@ class WorkflowTab(QWidget):
         )
         self._run_p0_btn.clicked.connect(lambda: self._run_phase(0))
         p0_row.addWidget(self._run_p0_btn)
+        self._run_p0_batch_btn = _make_btn("►  Phase 0 (Batch)", "#3a6a3a")
+        self._run_p0_batch_btn.setFixedWidth(200)
+        self._run_p0_batch_btn.setToolTip(
+            "Same as Phase 0 but via Anthropic Batches API (50% off, Claude only)."
+        )
+        self._run_p0_batch_btn.clicked.connect(lambda: self._run_phase(0, batch=True))
+        p0_row.addWidget(self._run_p0_batch_btn)
         self._p0_status_lbl = QLabel("")
         self._p0_status_lbl.setStyleSheet("color:#6a9a6a;font-size:13px;padding-left:4px;")
         p0_row.addWidget(self._p0_status_lbl)
@@ -1996,6 +2015,14 @@ class WorkflowTab(QWidget):
         self._run_p1_btn.setToolTip("Applies Phase 1 code settings and starts translation")
         self._run_p1_btn.clicked.connect(lambda: self._run_phase(1))
         p1_row.addWidget(self._run_p1_btn)
+        self._run_p1_batch_btn = _make_btn("►  Phase 1 (Batch)", "#005a9e")
+        self._run_p1_batch_btn.setFixedWidth(200)
+        self._run_p1_batch_btn.setToolTip(
+            "Same as Phase 1 but via Anthropic Batches API (50% off, Claude only). "
+            "Best for large map sets."
+        )
+        self._run_p1_batch_btn.clicked.connect(lambda: self._run_phase(1, batch=True))
+        p1_row.addWidget(self._run_p1_batch_btn)
         self._p1_status_lbl = QLabel("")
         self._p1_status_lbl.setStyleSheet("color:#6ab4d4;font-size:13px;padding-left:4px;")
         p1_row.addWidget(self._p1_status_lbl)
@@ -3531,7 +3558,7 @@ class WorkflowTab(QWidget):
     # Step 4 – Translation phases
     # ─────────────────────────────────────────────────────────────────────────
 
-    def _run_phase(self, phase):
+    def _run_phase(self, phase, batch=False):
         # Ask user if they want to sync translated/ → files/ before running this phase
         from PyQt5.QtWidgets import QMessageBox
         transl_dir = Path("translated")
@@ -3554,11 +3581,11 @@ class WorkflowTab(QWidget):
 
         if phase == 0:
             config = PHASE0_CONFIG
-            label = "Phase 0 (core DB files)"
+            label = "Phase 0 (core DB files)" + (" — batch" if batch else "")
             file_preset = "db"
         elif phase == 1:
             config = PHASE1_CONFIG
-            label = "Phase 1 (safe codes)"
+            label = "Phase 1 (safe codes)" + (" — batch" if batch else "")
             file_preset = "events"
         elif phase == "1b":
             config = PHASE1B_CONFIG
@@ -3647,7 +3674,8 @@ class WorkflowTab(QWidget):
             self._log("─" * 54)
 
         # Navigate to Translation tab, configure it, and auto-start
-        self._navigate_to_translation(file_preset, auto_start=True, mode_text="Translate")
+        mode_text = BATCH_MODE_LABEL if batch else "Translate"
+        self._navigate_to_translation(file_preset, auto_start=True, mode_text=mode_text)
 
     def _navigate_to_translation(self, file_preset: str, auto_start: bool = False, mode_text: str | None = None):
         """Switch to Translation tab, set engine to MVMZ, and check/uncheck files.

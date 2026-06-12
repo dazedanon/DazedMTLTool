@@ -10,6 +10,9 @@ import datetime
 import subprocess
 import threading
 import sys
+import io
+import time
+from contextlib import redirect_stdout
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed, Future
 import traceback
@@ -59,6 +62,14 @@ def create_horizontal_line():
     return line
 
 
+BATCH_MODE_LABEL = "Batch Translate"
+BATCH_COLLECT_LIVE_CHARGE_NOTE = (
+    "During Pass 1, speaker names and similar short strings are translated at live "
+    "API rates right away (not batched). Dialogue is queued for the batch and billed "
+    "only after you confirm the estimate."
+)
+
+
 class TranslationWorker(QThread):
     """Worker thread for running translations without blocking the UI."""
     
@@ -67,8 +78,10 @@ class TranslationWorker(QThread):
     item_progress_signal = pyqtSignal(str, int, int)  # filename, current_item, total_items (for tqdm within file)
     file_error_signal = pyqtSignal(str, str)  # filename, error_message
     finished_signal = pyqtSignal(bool, str)
+    batch_phase_signal = pyqtSignal(str, object)  # phase name, optional payload
     
-    def __init__(self, project_root, module_info, estimate_only=False, selected_files=None, parse_speakers=False):
+    def __init__(self, project_root, module_info, estimate_only=False, selected_files=None,
+                 parse_speakers=False, batch_mode=False, batch_resume_state=None):
         super().__init__()
         self.project_root = project_root
         self.module_info = module_info  # [name, extensions, handler_function]
@@ -76,10 +89,82 @@ class TranslationWorker(QThread):
         self.selected_files = selected_files  # List of files to process
         # Whether we should run in speaker-parse mode (special-case for MV/MZ)
         self.parse_speakers = parse_speakers
+        self.batch_mode = batch_mode
+        self.batch_resume_state = batch_resume_state
+        self._batch_submit_event = threading.Event()
+        self._batch_submit_approved = False
         self.should_stop = False
         self.mutex = QMutex()  # For thread safety
         self.executor = None  # Store reference to executor for proper shutdown
         self.running_processes = []  # Track running processes for termination
+
+    def set_batch_submit_response(self, approved):
+        """Called from the UI thread after the submit-batch confirmation dialog."""
+        self._batch_submit_approved = approved
+        self._batch_submit_event.set()
+
+    def _wait_batch_submit(self, estimate):
+        self._batch_submit_event.clear()
+        self.batch_phase_signal.emit("submit", estimate)
+        self._batch_submit_event.wait()
+        return self._batch_submit_approved
+
+    def _emit_batch_phase(self, phase, payload=None):
+        self.batch_phase_signal.emit(phase, payload)
+
+    def _emit_batch_output(self, fn, *args, **kwargs):
+        """Run a batch helper that prints status lines; forward them to the log."""
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            result = fn(*args, **kwargs)
+        for line in buf.getvalue().splitlines():
+            if line.strip():
+                self.emit_log(line)
+        return result
+
+    def _run_batch_poll_fetch(self):
+        """Submit (if needed), poll until ended, fetch results. None if stopped while polling."""
+        from util.translation import (
+            submitTranslationBatches,
+            checkTranslationBatches,
+            fetchTranslationBatches,
+            _read_batch_file,
+            BATCH_STATE_FILE,
+            _batch_file_lock,
+        )
+
+        with _batch_file_lock():
+            state = _read_batch_file(BATCH_STATE_FILE)
+        if not state.get("batches"):
+            if not self._emit_batch_output(submitTranslationBatches):
+                return 0, 0
+
+        poll = int(os.getenv("batchPollInterval", "60") or 60)
+        self._emit_batch_phase("polling")
+        self.emit_log(
+            f"[BATCH] polling every {poll}s (stop is safe — resume later with Batch Translate mode)..."
+        )
+        while True:
+            if self.should_stop:
+                self.emit_log("[BATCH] Stopped while polling. Batch keeps processing — resume later.")
+                return None
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                ended = checkTranslationBatches()
+            for line in buf.getvalue().splitlines():
+                if line.strip():
+                    self.emit_log(line)
+                    self._emit_batch_phase("poll_status", line.strip())
+            if ended:
+                break
+            for _ in range(poll * 10):
+                if self.should_stop:
+                    self.emit_log("[BATCH] Stopped while polling. Batch keeps processing — resume later.")
+                    return None
+                time.sleep(0.1)
+
+        fetched, errored = self._emit_batch_output(fetchTranslationBatches)
+        return fetched, errored
         
     def stop(self):
         """Stop the translation process."""
@@ -131,7 +216,7 @@ class TranslationWorker(QThread):
         """Thread-safe progress emission."""
         self.progress_signal.emit(current, total, filename)
         
-    def run_module_in_process(self, filename, estimate_only):
+    def run_module_in_process(self, filename, estimate_only, batch_phase=None):
         """Run a module handler in a separate process for better control."""
         try:
             # Use the external subprocess runner script
@@ -143,6 +228,10 @@ class TranslationWorker(QThread):
             # Run the script in a separate process
             env = os.environ.copy()
             env['PYTHONIOENCODING'] = 'utf-8'  # Force UTF-8 encoding
+            if batch_phase in ("collect", "consume"):
+                env["BATCH_PHASE"] = batch_phase
+            else:
+                env.pop("BATCH_PHASE", None)
             
             process = subprocess.Popen(
                 [
@@ -269,18 +358,136 @@ class TranslationWorker(QThread):
         except Exception as e:
             self.emit_log(f"❌ Failed to run module process: {str(e)}")
             return "Fail"
+
+    def _run_files(self, matching_files, estimate_only, batch_phase=None):
+        """Process matching files; return last cost string or 'Fail'."""
+        threads = int(os.getenv("fileThreads", "1"))
+        total_cost = "Fail"
+        module_name_lower = self.module_info[0].lower() if isinstance(self.module_info[0], str) else ""
+        is_mvmz = "mv/mz" in module_name_lower
+
+        if self.parse_speakers and is_mvmz:
+            try:
+                from modules.rpgmakermvmz import (
+                    handleMVMZ as handler, setSpeakerParseMode, finalizeSpeakerParse,
+                    resetSpeakerState, TOKENS, calculateCost, MODEL,
+                )
+            except Exception as e:
+                self.emit_log(f"❌ Could not import rpgmakermvmz for speaker-parse: {e}")
+                return "Fail"
+
+            try:
+                resetSpeakerState()
+            except Exception:
+                pass
+            try:
+                setSpeakerParseMode(True)
+            except Exception:
+                pass
+
+            completed_count = 0
+            total_files = len(matching_files)
+            for filename in matching_files:
+                if self.should_stop:
+                    break
+                try:
+                    handler(filename, estimate_only)
+                    completed_count += 1
+                    self.emit_progress(completed_count, total_files, filename)
+                except Exception as e:
+                    tb_line = str(traceback.extract_tb(sys.exc_info()[2])[-1].lineno)
+                    self.emit_log(f"❌ Error processing {filename}: {str(e)} | Line: {tb_line}")
+                    self.file_error_signal.emit(filename, str(e))
+                    completed_count += 1
+                    self.emit_progress(completed_count, total_files, filename)
+
+            try:
+                before_in, before_out = (0, 0)
+                try:
+                    before_in, before_out = (int(TOKENS[0]), int(TOKENS[1]))
+                except Exception:
+                    pass
+                finalizeSpeakerParse()
+                after_in, after_out = (0, 0)
+                try:
+                    after_in, after_out = (int(TOKENS[0]), int(TOKENS[1]))
+                except Exception:
+                    pass
+                delta_in = max(0, after_in - before_in)
+                delta_out = max(0, after_out - before_out)
+                if delta_in or delta_out:
+                    try:
+                        cost = calculateCost(delta_in, delta_out, MODEL)
+                        self.emit_log(f"Speakers: [Input: {delta_in}][Output: {delta_out}][Cost: ${cost:.4f}] ✓")
+                    except Exception:
+                        pass
+            except Exception as e:
+                self.emit_log(f"❌ Failed to finalize speaker parse: {e}")
+
+            try:
+                setSpeakerParseMode(False)
+            except Exception:
+                pass
+            return "Success"
+
+        max_workers = 1 if estimate_only else threads
+        self.executor = ThreadPoolExecutor(max_workers=max_workers)
+        future_to_filename = {
+            self.executor.submit(
+                self.run_module_in_process, filename, estimate_only, batch_phase
+            ): filename
+            for filename in matching_files
+        }
+
+        completed_count = 0
+        total_files = len(matching_files)
+        for future in as_completed(future_to_filename):
+            if self.should_stop:
+                for remaining_future in future_to_filename:
+                    if not remaining_future.done():
+                        remaining_future.cancel()
+                break
+
+            filename = future_to_filename[future]
+            completed_count += 1
+            self.emit_progress(completed_count, total_files, filename)
+
+            try:
+                result = future.result()
+                if isinstance(result, tuple) and len(result) == 2 and result[0] == "SUBPROCESS_ERROR":
+                    self.file_error_signal.emit(filename, result[1])
+                elif result and result not in ("Fail", "Stopped"):
+                    total_cost = result
+                elif result == "Stopped":
+                    break
+                else:
+                    self.emit_log(f"❌ Failed processing {filename}")
+                    self.file_error_signal.emit(filename, "Translation failed")
+            except Exception as e:
+                tb_line = str(traceback.extract_tb(sys.exc_info()[2])[-1].lineno)
+                self.emit_log(f"❌ Error processing {filename}: {str(e)} | Line: {tb_line}")
+                self.file_error_signal.emit(filename, str(e))
+
+        if self.executor:
+            try:
+                self.executor.shutdown(wait=False, cancel_futures=True)
+            except TypeError:
+                self.executor.shutdown(wait=False)
+            self.executor = None
+
+        return total_cost
         
     def run(self):
         """Run the translation process."""
         try:
-            # Load environment variables
             load_dotenv()
-            
-            # Clear the translation cache at the start of the run
+            sys.path.insert(0, str(self.project_root))
+
             from util.translation import clear_cache
-            clear_cache()
-            
-            # Check for required environment variables
+
+            if not (self.batch_mode and self.batch_resume_state):
+                clear_cache()
+
             required_envs = ["api", "key", "model", "language", "timeout", "fileThreads", "threads", "width", "listWidth"]
             missing_envs = [
                 env for env in required_envs
@@ -292,19 +499,21 @@ class TranslationWorker(QThread):
                 self.emit_log("   Check your .env file (see .env.example).")
                 self.finished_signal.emit(False, f"Missing env: {names}")
                 return
-                
-            # Get files to process
+
+            if self.batch_mode and self.parse_speakers:
+                self.emit_log("❌ Batch Translate does not support Parse Speakers mode.")
+                self.finished_signal.emit(False, "Batch + Parse Speakers unsupported")
+                return
+
             files_dir = self.project_root / "files"
             if not files_dir.exists():
                 self.emit_log("❌ Files directory does not exist!")
                 self.finished_signal.emit(False, "Files directory missing")
                 return
-                
-            # Use selected files or find all matching files
+
             if self.selected_files:
                 matching_files = self.selected_files
             else:
-                # Find files matching the selected module's extensions
                 matching_files = []
                 for file_path in files_dir.iterdir():
                     if file_path.is_file() and file_path.name != '.gitkeep':
@@ -312,35 +521,26 @@ class TranslationWorker(QThread):
                             if file_path.name.endswith(ext):
                                 matching_files.append(file_path.name)
                                 break
-                            
+
             if not matching_files:
                 self.emit_log(f"❌ No files found matching extensions: {', '.join(self.module_info[1])}")
                 self.finished_signal.emit(False, "No matching files")
                 return
-                
+
             self.emit_log(f"📁 Found {len(matching_files)} files to process:")
             for filename in matching_files:
                 self.emit_log(f"   • {filename}")
-                
             self.emit_log(f"🔧 Using module: {self.module_info[0]}")
-            self.emit_log(f"📊 Estimate only: {'Yes' if self.estimate_only else 'No'}")
+            if self.batch_mode:
+                self.emit_log("📦 Batch mode: Anthropic Batches API (50% off)")
+            else:
+                self.emit_log(f"📊 Estimate only: {'Yes' if self.estimate_only else 'No'}")
             self.emit_log("")
-            
-            # Process files
-            threads = int(os.getenv("fileThreads", "1"))
+
             total_cost = "Fail"
-
-            # If we're doing Parse Speakers for RPGMaker MV/MZ, run handlers in-process so
-            # speaker collection is shared in this process and finalizeSpeakerParse() can run once.
-            module_name_lower = self.module_info[0].lower() if isinstance(self.module_info[0], str) else ""
-            is_mvmz = "mv/mz" in module_name_lower
-
-            # Change to project directory for module execution
             old_cwd = os.getcwd()
             os.chdir(str(self.project_root))
 
-            # Reset estimate written-sizes file at the start of each run so the
-            # warm-cache window is recalculated fresh across all subprocesses.
             if self.estimate_only:
                 try:
                     from util.translation import clear_estimate_written_sizes
@@ -349,152 +549,65 @@ class TranslationWorker(QThread):
                     pass
 
             try:
-                if self.parse_speakers and is_mvmz:
-                    # Run handlers sequentially in this worker process so globals are shared
-                    try:
-                        from modules.rpgmakermvmz import handleMVMZ as handler, setSpeakerParseMode, finalizeSpeakerParse, resetSpeakerState, TOKENS, calculateCost, MODEL
-                    except Exception as e:
-                        self.emit_log(f"❌ Could not import rpgmakermvmz for speaker-parse: {e}")
-                        self.finished_signal.emit(False, str(e))
-                        return
+                if self.batch_mode:
+                    from util.translation import (
+                        clearBatchFiles,
+                        pendingBatchRequests,
+                        estimateBatchCost,
+                    )
 
-                    # Reset stale speaker data from any previous run
-                    try:
-                        resetSpeakerState()
-                    except Exception:
-                        pass
-
-                    # Enable speaker parse mode in this process
-                    try:
-                        setSpeakerParseMode(True)
-                    except Exception:
-                        pass
-
-                    completed_count = 0
-                    total_files = len(matching_files)
-
-                    for filename in matching_files:
+                    run_consume = True
+                    if self.batch_resume_state is None:
+                        clearBatchFiles()
+                        self._emit_batch_phase("collect")
+                        self.emit_log("[BATCH] Pass 1/2: collecting requests...")
+                        self.emit_log(
+                            "[BATCH] Note: speaker names and similar short strings translate at "
+                            "live API rates during collect (dialogue is batched after you confirm)."
+                        )
+                        total_cost = self._run_files(matching_files, False, batch_phase="collect")
                         if self.should_stop:
-                            break
-                        # Run handler in-process
-                        try:
-                            result = handler(filename, self.estimate_only)
-                            completed_count += 1
-                            self.emit_progress(completed_count, total_files, filename)
-                            # Handler prints cost lines via tqdm.write; capture nothing here
-                        except Exception as e:
-                            tb_line = str(traceback.extract_tb(sys.exc_info()[2])[-1].lineno)
-                            error_msg = f"❌ Error processing {filename}: {str(e)} | Line: {tb_line}"
-                            self.emit_log(error_msg)
-                            # Emit file error signal to mark this file as failed
-                            self.file_error_signal.emit(filename, str(e))
-                            completed_count += 1
-                            self.emit_progress(completed_count, total_files, filename)
+                            self.finished_signal.emit(False, "Translation stopped")
+                            return
 
-                    # After all files processed, finalize speaker parse (translates collected speakers)
-                    try:
-                        # Record tokens before finalize
-                        before_in, before_out = (0, 0)
-                        try:
-                            before_in, before_out = (int(TOKENS[0]), int(TOKENS[1]))
-                        except Exception:
-                            pass
+                        if pendingBatchRequests() == 0:
+                            self.emit_log("[BATCH] No requests queued — nothing needed the API.")
+                            run_consume = False
+                        else:
+                            n_requests = pendingBatchRequests()
+                            self._emit_batch_phase("collect_done", {
+                                "files": len(matching_files),
+                                "requests": n_requests,
+                            })
+                            est = self._emit_batch_output(estimateBatchCost)
+                            if est is not None:
+                                est = dict(est)
+                                est["files"] = len(matching_files)
+                            if not self._wait_batch_submit(est):
+                                self.emit_log("[BATCH] Not submitted. Queue kept in log/batch_requests.json.")
+                                self.finished_signal.emit(True, "Batch not submitted")
+                                return
+                            poll_result = self._run_batch_poll_fetch()
+                            if poll_result is None:
+                                self.finished_signal.emit(False, "Batch polling stopped")
+                                return
+                    elif self.batch_resume_state == "submitted":
+                        self._emit_batch_phase("polling")
+                        self.emit_log("[BATCH] Resuming submitted batch...")
+                        poll_result = self._run_batch_poll_fetch()
+                        if poll_result is None:
+                            self.finished_signal.emit(False, "Batch polling stopped")
+                            return
+                    else:
+                        self.emit_log("[BATCH] Resuming from fetched results...")
 
-                        finalizeSpeakerParse()
-
-                        # Tokens after finalize
-                        after_in, after_out = (0, 0)
-                        try:
-                            after_in, after_out = (int(TOKENS[0]), int(TOKENS[1]))
-                        except Exception:
-                            pass
-
-                        delta_in = max(0, after_in - before_in)
-                        delta_out = max(0, after_out - before_out)
-                        if delta_in or delta_out:
-                            try:
-                                cost = calculateCost(delta_in, delta_out, MODEL)
-                                total_str = f"[Input: {delta_in}][Output: {delta_out}][Cost: ${cost:.4f}]"
-                                self.emit_log(f"Speakers: {total_str} \u2713")
-                                # Ensure totals will be refreshed by _apply_file_result via append_log parsing
-                            except Exception:
-                                pass
-
-                    except Exception as e:
-                        self.emit_log(f"❌ Failed to finalize speaker parse: {e}")
-
-                    # Disable speaker parse mode
-                    try:
-                        setSpeakerParseMode(False)
-                    except Exception:
-                        pass
-
-                    # mark total_cost as Success so UI treats run as successful
-                    total_cost = "Success"
+                    if run_consume and not self.should_stop:
+                        self._emit_batch_phase("consume")
+                        self.emit_log("[BATCH] Pass 2/2: writing translated files...")
+                        total_cost = self._run_files(matching_files, False, batch_phase="consume")
                 else:
-                    # Default behavior: run each file in a separate process (unchanged)
-                    # Use single worker for estimate mode to prevent race conditions
-                    max_workers = 1 if self.estimate_only else threads
-                    self.executor = ThreadPoolExecutor(max_workers=max_workers)
-
-                    # Submit tasks to run modules in separate processes
-                    future_to_filename = {
-                        self.executor.submit(self.run_module_in_process, filename, self.estimate_only): filename
-                        for filename in matching_files
-                    }
-
-                    completed_count = 0
-                    total_files = len(matching_files)
-
-                    for future in as_completed(future_to_filename):
-                        if self.should_stop:
-                            # Don't log here, the stop() method already logged
-                            # Cancel remaining futures
-                            for remaining_future in future_to_filename:
-                                if not remaining_future.done():
-                                    remaining_future.cancel()
-                            break
-                            
-                        filename = future_to_filename[future]
-                        completed_count += 1
-                        
-                        # Emit progress signal (less frequent updates)
-                        self.emit_progress(completed_count, total_files, filename)
-                        
-                        try:
-                            result = future.result()
-                            # Check if result is an error tuple from subprocess
-                            if isinstance(result, tuple) and len(result) == 2 and result[0] == "SUBPROCESS_ERROR":
-                                error_message = result[1]
-                                self.file_error_signal.emit(filename, error_message)
-                            elif result and result != "Fail" and result != "Stopped":
-                                total_cost = result
-                                # Don't log completion here since the module already logged the detailed cost info
-                            elif result == "Stopped":
-                                # Don't log here, already handled
-                                break
-                            else:
-                                error_msg = f"❌ Failed processing {filename}"
-                                self.emit_log(error_msg)
-                                # Emit file error signal to mark this file as failed
-                                self.file_error_signal.emit(filename, "Translation failed")
-                        except Exception as e:
-                            tb_line = str(traceback.extract_tb(sys.exc_info()[2])[-1].lineno)
-                            error_msg = f"❌ Error processing {filename}: {str(e)} | Line: {tb_line}"
-                            self.emit_log(error_msg)
-                            # Emit file error signal to mark this file as failed
-                            self.file_error_signal.emit(filename, str(e))
+                    total_cost = self._run_files(matching_files, self.estimate_only)
             finally:
-                # Properly shutdown the executor
-                if self.executor:
-                    try:
-                        # Try to use cancel_futures parameter (Python 3.9+)
-                        self.executor.shutdown(wait=False, cancel_futures=True)
-                    except TypeError:
-                        # Fallback for older Python versions
-                        self.executor.shutdown(wait=False)
-                    self.executor = None
-                # Change back to original directory
                 os.chdir(old_cwd)
                 
             # Clean up temporary files
@@ -522,7 +635,9 @@ class TranslationWorker(QThread):
             if total_cost != "Fail" and not self.should_stop:
                 self.emit_log("")
                 self.emit_log(f"💰 {total_cost}")
-                if not self.estimate_only:
+                if self.batch_mode:
+                    self.emit_log("✅ Batch translation completed!")
+                elif not self.estimate_only:
                     self.emit_log("✅ Translation completed successfully!")
                 else:
                     self.emit_log("✅ Estimation completed!")
@@ -597,6 +712,9 @@ class TranslationTab(QWidget):
         self._last_run_files: list = []
         # Totals widget reference
         self.totals_widget = None
+        self._batch_active = False
+        self._batch_ui_phase = None
+        self._batch_tab_index = -1
         
         self.setup_ui()
         self.setup_module_list()
@@ -650,6 +768,7 @@ class TranslationTab(QWidget):
         # checkbox indicator. Installing on the viewport is more
         # reliable cross-platform than installing on the list itself.
         self.file_list.viewport().installEventFilter(self)
+        self._file_list_filter_installed = True
         self.file_list.setFocusPolicy(Qt.NoFocus)  # Remove focus outline
         self.file_list.setStyleSheet("""
             QListWidget {
@@ -785,9 +904,130 @@ class TranslationTab(QWidget):
         progress_view_page = QWidget()
         progress_view_layout = QVBoxLayout()
         progress_view_layout.setContentsMargins(0, 0, 0, 0)
-        
+        progress_view_layout.setSpacing(8)
+
+        # Batch pipeline panel (shown only during batch runs)
+        self.batch_pipeline_widget = QWidget()
+        self.batch_pipeline_widget.setVisible(False)
+        batch_pipe_layout = QVBoxLayout()
+        batch_pipe_layout.setContentsMargins(12, 12, 12, 12)
+        batch_pipe_layout.setSpacing(10)
+
+        self.batch_phase_title = QLabel("Batch Translate")
+        self.batch_phase_title.setStyleSheet("color:#4ec9b0;font-weight:bold;font-size:13px;")
+        batch_pipe_layout.addWidget(self.batch_phase_title)
+
+        self.batch_overall_bar = QProgressBar()
+        self.batch_overall_bar.setRange(0, 100)
+        self.batch_overall_bar.setValue(0)
+        self.batch_overall_bar.setFixedHeight(20)
+        self.batch_overall_bar.setTextVisible(True)
+        self.batch_overall_bar.setStyleSheet("""
+            QProgressBar {
+                border: none;
+                border-radius: 3px;
+                text-align: center;
+                background-color: #2b2b2b;
+                color: #cccccc;
+            }
+            QProgressBar::chunk {
+                background-color: #007acc;
+                border-radius: 3px;
+            }
+        """)
+        batch_pipe_layout.addWidget(self.batch_overall_bar)
+
+        self.batch_pipeline_stack = QStackedWidget()
+
+        collect_page = QWidget()
+        collect_layout = QVBoxLayout(collect_page)
+        collect_layout.setContentsMargins(0, 0, 0, 0)
+        collect_layout.setSpacing(8)
+        self.batch_collect_warning = QLabel(BATCH_COLLECT_LIVE_CHARGE_NOTE)
+        self.batch_collect_warning.setWordWrap(True)
+        self.batch_collect_warning.setStyleSheet("color:#f0ad4e;font-size:11px;")
+        collect_layout.addWidget(self.batch_collect_warning)
+        self.batch_collect_status = QLabel("Pass 1/2: collecting API requests from selected files…")
+        self.batch_collect_status.setWordWrap(True)
+        self.batch_collect_status.setStyleSheet("color:#cccccc;font-size:12px;")
+        collect_layout.addWidget(self.batch_collect_status)
+        self.batch_pipeline_stack.addWidget(collect_page)
+
+        submit_page = QWidget()
+        submit_layout = QVBoxLayout(submit_page)
+        submit_layout.setContentsMargins(0, 0, 0, 0)
+        submit_layout.setSpacing(4)
+        self.batch_submit_summary = QLabel("")
+        self.batch_submit_summary.setWordWrap(True)
+        self.batch_submit_summary.setAlignment(Qt.AlignTop)
+        self.batch_submit_summary.setStyleSheet("color:#cccccc;font-size:12px;")
+        submit_layout.addWidget(self.batch_submit_summary, 1)
+        submit_btn_row = QHBoxLayout()
+        submit_btn_row.addStretch()
+        self.batch_submit_yes_btn = QPushButton("Submit Batch")
+        self.batch_submit_yes_btn.setStyleSheet(
+            "QPushButton{background-color:#007acc;color:white;font-weight:bold;padding:6px 16px;border-radius:4px;}"
+            "QPushButton:hover{background-color:#106ebe;}"
+        )
+        self.batch_submit_yes_btn.clicked.connect(self._on_batch_submit_yes)
+        self.batch_submit_no_btn = QPushButton("Cancel")
+        self.batch_submit_no_btn.setStyleSheet(
+            "QPushButton{background-color:#555;color:white;padding:6px 16px;border-radius:4px;}"
+            "QPushButton:hover{background-color:#666;}"
+        )
+        self.batch_submit_no_btn.clicked.connect(self._on_batch_submit_no)
+        submit_btn_row.addWidget(self.batch_submit_no_btn)
+        submit_btn_row.addWidget(self.batch_submit_yes_btn)
+        submit_layout.addLayout(submit_btn_row)
+        self.batch_pipeline_stack.addWidget(submit_page)
+
+        poll_page = QWidget()
+        poll_layout = QVBoxLayout(poll_page)
+        poll_layout.setContentsMargins(0, 0, 0, 0)
+        self.batch_poll_status = QLabel("Waiting for Anthropic to finish processing the batch…")
+        self.batch_poll_status.setWordWrap(True)
+        self.batch_poll_status.setStyleSheet("color:#cccccc;font-size:12px;")
+        poll_layout.addWidget(self.batch_poll_status)
+        self.batch_poll_bar = QProgressBar()
+        self.batch_poll_bar.setRange(0, 0)  # indeterminate
+        self.batch_poll_bar.setFixedHeight(16)
+        self.batch_poll_bar.setStyleSheet("""
+            QProgressBar { border: none; background-color: #2b2b2b; border-radius: 3px; }
+            QProgressBar::chunk { background-color: #007acc; border-radius: 3px; }
+        """)
+        poll_layout.addWidget(self.batch_poll_bar)
+        self.batch_pipeline_stack.addWidget(poll_page)
+
+        consume_page = QWidget()
+        consume_layout = QVBoxLayout(consume_page)
+        consume_layout.setContentsMargins(0, 0, 0, 0)
+        self.batch_consume_status = QLabel("Pass 2/2: writing translated files from batch results…")
+        self.batch_consume_status.setWordWrap(True)
+        self.batch_consume_status.setStyleSheet("color:#cccccc;font-size:12px;")
+        consume_layout.addWidget(self.batch_consume_status)
+        self.batch_pipeline_stack.addWidget(consume_page)
+
+        batch_pipe_layout.addWidget(self.batch_pipeline_stack, 1)
+        self.batch_live_status = QLabel("")
+        self.batch_live_status.setWordWrap(True)
+        self.batch_live_status.setStyleSheet("color:#666666;font-size:11px;")
+        batch_pipe_layout.addWidget(self.batch_live_status)
+
+        self.batch_pipeline_widget.setLayout(batch_pipe_layout)
+        self.batch_pipeline_widget.setObjectName("batchPipeline")
+        self.batch_pipeline_widget.setStyleSheet("""
+            #batchPipeline {
+                background-color: #252526;
+                border: 1px solid #3e3e42;
+                border-radius: 4px;
+            }
+        """)
+        self.batch_pipeline_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.batch_pipeline_stack.setStyleSheet("background: transparent;")
+        self.batch_pipeline_stack.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+
         self.progress_list = QListWidget()
-        self.progress_list.setMinimumHeight(350)
+        self.progress_list.setMinimumHeight(120)
         self.progress_list.setSelectionMode(QListWidget.NoSelection)
         self.progress_list.setFocusPolicy(Qt.NoFocus)
         self.progress_list.setSpacing(1)  # Minimal spacing between items
@@ -808,7 +1048,67 @@ class TranslationTab(QWidget):
                 border-bottom: none;
             }
         """)
-        progress_view_layout.addWidget(self.progress_list)
+
+        self.progress_overview_page = QWidget()
+        overview_layout = QVBoxLayout(self.progress_overview_page)
+        overview_layout.setContentsMargins(0, 0, 0, 0)
+        overview_layout.setSpacing(0)
+        overview_layout.addWidget(self.batch_pipeline_widget, 1)
+
+        self.progress_files_page = QWidget()
+        files_page_layout = QVBoxLayout(self.progress_files_page)
+        files_page_layout.setContentsMargins(0, 0, 0, 0)
+        files_page_layout.addWidget(self.progress_list)
+
+        progress_tab_btn_style = """
+            QPushButton {
+                background: #2d2d30;
+                color: #aaa;
+                border: 1px solid #3e3e42;
+                border-radius: 4px;
+                padding: 0px;
+            }
+            QPushButton:hover {
+                background: #353538;
+                color: #ddd;
+            }
+        """
+        progress_tab_btn_active_style = """
+            QPushButton {
+                background: #252526;
+                color: #4ec9b0;
+                border: 1px solid #4a4a4f;
+                border-radius: 4px;
+                padding: 0px;
+            }
+        """
+        self._progress_tab_btn_style = progress_tab_btn_style
+        self._progress_tab_btn_active_style = progress_tab_btn_active_style
+
+        self.progress_tab_row = QWidget()
+        progress_tab_row_layout = QHBoxLayout(self.progress_tab_row)
+        progress_tab_row_layout.setContentsMargins(0, 0, 0, 0)
+        progress_tab_row_layout.setSpacing(6)
+        self.batch_tab_btn = QPushButton("Batch")
+        self.batch_tab_btn.setFixedSize(118, 34)
+        self.batch_tab_btn.setCursor(Qt.PointingHandCursor)
+        self.batch_tab_btn.clicked.connect(lambda: self._switch_progress_tab(0))
+        self.files_tab_btn = QPushButton("Files")
+        self.files_tab_btn.setFixedSize(118, 34)
+        self.files_tab_btn.setCursor(Qt.PointingHandCursor)
+        self.files_tab_btn.clicked.connect(lambda: self._switch_progress_tab(1))
+        progress_tab_row_layout.addWidget(self.batch_tab_btn)
+        progress_tab_row_layout.addWidget(self.files_tab_btn)
+        progress_tab_row_layout.addStretch()
+        self.progress_tab_row.setVisible(False)
+
+        self.progress_content_stack = QStackedWidget()
+        self.progress_content_stack.addWidget(self.progress_overview_page)
+        self.progress_content_stack.addWidget(self.progress_files_page)
+        self.progress_content_stack.setCurrentIndex(1)
+
+        progress_view_layout.addWidget(self.progress_tab_row)
+        progress_view_layout.addWidget(self.progress_content_stack, 1)
 
         # Summary button (shown after completion) - icon-only
         # Use a simple left-arrow for the back action and place it on the left
@@ -1035,9 +1335,19 @@ class TranslationTab(QWidget):
         self.mode_combo = QComboBox()
         self.mode_combo.addItem("Translate")
         self.mode_combo.addItem("Estimate")
+        self.mode_combo.addItem(BATCH_MODE_LABEL)
         self.mode_combo.setFixedWidth(300)
         self.mode_combo.currentTextChanged.connect(self._on_mode_changed)
         trans_form.addRow(mode_label, self.mode_combo)
+
+        self.batch_mode_note = QLabel(
+            "Anthropic Batches API — 50% or more cheaper than live translate (Claude only).\n"
+            + BATCH_COLLECT_LIVE_CHARGE_NOTE
+        )
+        self.batch_mode_note.setWordWrap(True)
+        self.batch_mode_note.setStyleSheet("color:#8fbc8f;font-size:12px;padding-left:4px;")
+        self.batch_mode_note.setVisible(False)
+        trans_form.addRow("", self.batch_mode_note)
 
         layout.addLayout(trans_form)
         layout.addWidget(create_horizontal_line())
@@ -1063,6 +1373,8 @@ class TranslationTab(QWidget):
         button_layout.addWidget(self.translate_button)
         button_layout.addStretch()
         layout.addLayout(button_layout)
+
+        self.mode_combo.setCurrentIndex(self.mode_combo.findText(BATCH_MODE_LABEL))
         left_widget.setLayout(layout)
         
         # Right side - translation history log viewer
@@ -1173,7 +1485,8 @@ class TranslationTab(QWidget):
         self.mode_combo.clear()
         self.mode_combo.addItem("Translate")
         self.mode_combo.addItem("Estimate")
-        
+        self.mode_combo.addItem(BATCH_MODE_LABEL)
+
         # Add Parse Speakers for RPG Maker MV/MZ
         if "mv/mz" in lowered:
             self.mode_combo.addItem("Parse Speakers")
@@ -1183,7 +1496,8 @@ class TranslationTab(QWidget):
         if index >= 0:
             self.mode_combo.setCurrentIndex(index)
         else:
-            self.mode_combo.setCurrentIndex(0)
+            batch_idx = self.mode_combo.findText(BATCH_MODE_LABEL)
+            self.mode_combo.setCurrentIndex(batch_idx if batch_idx >= 0 else 0)
         
         # Refresh file list to show only files matching the selected module's extensions
         self.refresh_file_lists()
@@ -1199,6 +1513,19 @@ class TranslationTab(QWidget):
         except Exception:
             pass
 
+    def _remove_file_list_event_filter(self):
+        if not getattr(self, "_file_list_filter_installed", False):
+            return
+        try:
+            self.file_list.viewport().removeEventFilter(self)
+        except RuntimeError:
+            pass
+        self._file_list_filter_installed = False
+
+    def closeEvent(self, event):
+        self._remove_file_list_event_filter()
+        super().closeEvent(event)
+
     def eventFilter(self, obj, event):
         """Intercept mouse presses on the file list.
 
@@ -1208,15 +1535,21 @@ class TranslationTab(QWidget):
         and consume the event to prevent further handling (avoids
         double toggles).
         """
+        try:
+            file_list = self.file_list
+            viewport = file_list.viewport()
+        except RuntimeError:
+            return False
+
         # We install the filter on the QListWidget viewport, so the
         # obj will be the viewport widget when mouse events arrive.
-        if (obj is self.file_list.viewport() or obj is self.file_list) and event.type() == QEvent.MouseButtonPress:
+        if (obj is viewport or obj is file_list) and event.type() == QEvent.MouseButtonPress:
             pos = event.pos()
-            index = self.file_list.indexAt(pos)
+            index = file_list.indexAt(pos)
             if not index.isValid():
                 return False
 
-            rect = self.file_list.visualRect(index)
+            rect = file_list.visualRect(index)
             # Approximate checkbox indicator rectangle (style may vary).
             # Use a small left inset and a ~20x20 indicator area vertically centered.
             indicator_w = 20
@@ -1232,7 +1565,7 @@ class TranslationTab(QWidget):
                 return False
 
             # Toggle the item and consume the event
-            item = self.file_list.item(index.row())
+            item = file_list.item(index.row())
             try:
                 if item.checkState() == Qt.Checked:
                     item.setCheckState(Qt.Unchecked)
@@ -1242,17 +1575,233 @@ class TranslationTab(QWidget):
                 pass
             return True
 
-        return super().eventFilter(obj, event)
+        try:
+            return super().eventFilter(obj, event)
+        except RuntimeError:
+            return False
     
     def _on_mode_changed(self, mode_text):
         """Update the translate button text based on selected mode."""
+        if hasattr(self, "batch_mode_note"):
+            self.batch_mode_note.setVisible(mode_text == BATCH_MODE_LABEL)
+        if not hasattr(self, "translate_button"):
+            return
         if mode_text == "Translate":
             self.translate_button.setText("Start Translation")
         elif mode_text == "Estimate":
             self.translate_button.setText("Start Estimation")
+        elif mode_text == BATCH_MODE_LABEL:
+            self.translate_button.setText("Start Batch Translation")
         elif mode_text == "Parse Speakers":
             self.translate_button.setText("Parse Speakers")
-        
+
+    def _switch_progress_tab(self, index):
+        """Switch Batch/Files views; index 0 = batch overview, 1 = per-file list."""
+        self._batch_tab_index = index if self.progress_tab_row.isVisible() else -1
+        self.progress_content_stack.setCurrentIndex(index)
+        self.batch_tab_btn.setStyleSheet(
+            self._progress_tab_btn_active_style if index == 0 else self._progress_tab_btn_style
+        )
+        self.files_tab_btn.setStyleSheet(
+            self._progress_tab_btn_active_style if index == 1 else self._progress_tab_btn_style
+        )
+
+    def _set_progress_view_mode(self, batch_mode, file_count=0):
+        """Batch runs use a Batch tab for the pipeline; Files tab holds the per-file list."""
+        if batch_mode:
+            self.progress_tab_row.setVisible(True)
+            self.batch_pipeline_widget.setVisible(True)
+            self.files_tab_btn.setText(f"Files ({file_count})" if file_count else "Files")
+            self._switch_progress_tab(0)
+        else:
+            self.progress_tab_row.setVisible(False)
+            self.batch_pipeline_widget.setVisible(False)
+            self.files_tab_btn.setText("Files")
+            self._batch_tab_index = -1
+            self.progress_content_stack.setCurrentIndex(1)
+
+    def _on_batch_submit_yes(self):
+        if hasattr(self, "translation_worker") and self.translation_worker:
+            self.translation_worker.set_batch_submit_response(True)
+
+    def _on_batch_submit_no(self):
+        if hasattr(self, "translation_worker") and self.translation_worker:
+            self.translation_worker.set_batch_submit_response(False)
+
+    def _update_batch_stop_button(self):
+        """Show stop only while batch is collecting; hide after that."""
+        if not getattr(self, "_batch_active", False):
+            return
+        try:
+            self.stop_button.setVisible(self._batch_ui_phase == "collect")
+        except Exception:
+            pass
+
+    def _on_batch_phase(self, phase, payload):
+        """Update the inline batch pipeline panel for the current phase."""
+        self._batch_ui_phase = phase
+        self.batch_pipeline_widget.setVisible(True)
+
+        if phase == "collect":
+            self.batch_phase_title.setText("Batch Translate — Pass 1/2: Collect")
+            self.batch_overall_bar.setRange(0, 100)
+            self.batch_overall_bar.setValue(15)
+            self.batch_pipeline_stack.setCurrentIndex(0)
+            self.batch_submit_yes_btn.setText("Submit Batch")
+            self.batch_collect_status.setText(
+                "Scanning files and queueing dialogue for the batch…"
+            )
+        elif phase == "collect_done":
+            info = payload or {}
+            n_files = info.get("files", "?")
+            n_req = info.get("requests", "?")
+            self.batch_phase_title.setText("Batch Translate — Collect complete")
+            self.batch_overall_bar.setValue(30)
+            self.batch_pipeline_stack.setCurrentIndex(0)
+            self.batch_collect_status.setText(
+                f"Finished scanning {n_files} file(s) — {n_req} API request(s) queued.\n"
+                "Review the total cost below, then submit once for the whole batch."
+            )
+            self.batch_live_status.setText(
+                f"All {n_files} files collected. Switch to the Files tab to inspect individual rows."
+            )
+        elif phase == "submit":
+            est = payload or {}
+            n_files = est.get("files", "?")
+            n_req = est.get("requests", "?")
+            self.batch_phase_title.setText("Batch Translate — Review & Submit (once)")
+            self.batch_overall_bar.setValue(35)
+            self.batch_pipeline_stack.setCurrentIndex(1)
+            self.batch_submit_summary.setText(
+                f"All {n_files} file(s) scanned — {n_req} request(s) queued total.\n\n"
+                f"Submit everything in one Anthropic batch?\n\n"
+                f"Estimated cost: ${est.get('batch_cached_cost', 0):.2f} (batch + prompt cache)\n"
+                f"Worst case: ${est.get('batch_nocache_cost', 0):.2f} (batch, no cache hits)\n"
+                f"Live API would be: ${est.get('live_cost', 0):.2f}\n\n"
+                "One submission covers all files. The batch usually finishes within an hour. "
+                "You can stop safely and resume later."
+            )
+            self.batch_submit_yes_btn.setText(f"Submit All ({n_req} requests)")
+        elif phase == "polling":
+            self.batch_phase_title.setText("Batch Translate — Processing")
+            self.batch_overall_bar.setRange(0, 100)
+            self.batch_overall_bar.setValue(55)
+            self.batch_pipeline_stack.setCurrentIndex(2)
+            self.batch_poll_status.setText("Submitted — waiting for Anthropic to process the batch…")
+        elif phase == "poll_status":
+            if isinstance(payload, str) and payload.strip():
+                self.batch_poll_status.setText(payload.strip())
+                self.batch_overall_bar.setValue(min(75, self.batch_overall_bar.value() + 2))
+        elif phase == "consume":
+            self.batch_phase_title.setText("Batch Translate — Pass 2/2: Write")
+            self.batch_overall_bar.setValue(80)
+            self.batch_pipeline_stack.setCurrentIndex(3)
+            self._reset_files_for_consume()
+            if self.progress_tab_row.isVisible():
+                self._switch_progress_tab(0)
+        elif phase == "done":
+            self.batch_overall_bar.setValue(100)
+            self.batch_phase_title.setText("Batch Translate — Complete")
+
+        self._update_batch_stop_button()
+
+    def _reset_batch_pipeline_ui(self):
+        self._batch_active = False
+        self._batch_ui_phase = None
+        if hasattr(self, "batch_pipeline_widget"):
+            self.batch_pipeline_widget.setVisible(False)
+        if hasattr(self, "batch_live_status"):
+            self.batch_live_status.setText("")
+        if hasattr(self, "progress_content_stack"):
+            self._set_progress_view_mode(False)
+        elif hasattr(self, "batch_overall_bar"):
+            self.batch_overall_bar.setRange(0, 100)
+            self.batch_overall_bar.setValue(0)
+
+    def _reset_files_for_consume(self):
+        """Clear collect-pass row state before the consume pass writes translations."""
+        self.files_completed = 0
+        self.files_translated_label.setText(f"0/{self.files_total}")
+        for filename, item in self.file_progress_items.items():
+            try:
+                item["checkbox"].setChecked(False)
+                item["label"].setText("Waiting...")
+                item["label"].setStyleSheet("color: #888888; font-size: 10px;")
+                item["progress_bar"].setVisible(True)
+                item["progress_bar"].setValue(0)
+                item["progress_bar"].setMaximum(100)
+                item["progress_bar"].setTextVisible(True)
+                item["progress_bar"].setStyleSheet("""
+                    QProgressBar {
+                        border: 1px solid #555555;
+                        border-radius: 2px;
+                        text-align: center;
+                        background-color: #2b2b2b;
+                        color: white;
+                    }
+                    QProgressBar::chunk {
+                        background-color: #007acc;
+                        border-radius: 1px;
+                    }
+                """)
+                item["tokens_label"].setVisible(False)
+                item["tokens_label"].setText("")
+                item["cost_label"].setVisible(False)
+                item["cost_label"].setText("")
+                item["time_label"].setVisible(False)
+                item["time_label"].setText("")
+                item["status_label"].setVisible(False)
+                item["status_label"].setText("")
+                item.pop("_skip_reason", None)
+            except Exception:
+                pass
+        if hasattr(self, "_applied_file_totals"):
+            self._applied_file_totals.clear()
+        self.totals_input_tokens = 0
+        self.totals_output_tokens = 0
+        self.totals_cost = 0.0
+        self.totals_time = 0.0
+        try:
+            if hasattr(self, "totals_tokens_label"):
+                self.totals_tokens_label.setText("Tokens: 0 in / 0 out")
+            if hasattr(self, "totals_cost_label"):
+                self.totals_cost_label.setText("Cost: $0.0000")
+            if hasattr(self, "totals_time_label"):
+                self.totals_time_label.setText("Time: 0.0s")
+        except Exception:
+            pass
+
+    def mark_file_queued(self, filename):
+        """Collect pass finished for a file — queued for batch, not translated yet."""
+        if filename not in self.file_progress_items:
+            return
+        item = self.file_progress_items[filename]
+        try:
+            item["label"].setText("Collected")
+            item["label"].setStyleSheet("color: #d4a017; font-weight: bold; font-size: 10px;")
+            item["progress_bar"].setVisible(True)
+            item["progress_bar"].setMaximum(100)
+            item["progress_bar"].setValue(100)
+            item["progress_bar"].setTextVisible(False)
+            item["progress_bar"].setStyleSheet("""
+                QProgressBar {
+                    border: 1px solid #555555;
+                    border-radius: 2px;
+                    background-color: #2b2b2b;
+                }
+                QProgressBar::chunk {
+                    background-color: #6a5a20;
+                    border-radius: 1px;
+                }
+            """)
+            item["checkbox"].setChecked(False)
+            item["status_label"].setVisible(False)
+            item["tokens_label"].setVisible(False)
+            item["cost_label"].setVisible(False)
+            item["time_label"].setVisible(False)
+        except Exception:
+            pass
+
     def _check_model_pricing(self):
         """Fetch live pricing for the current model and print it to the log."""
         from dotenv import dotenv_values
@@ -1802,6 +2351,7 @@ class TranslationTab(QWidget):
     
     def reset_to_file_view(self):
         """Reset back to file selection view."""
+        self._reset_batch_pipeline_ui()
         self.file_stack.setCurrentIndex(0)
         self.reset_view_button.setVisible(False)
         # Also hide the open translations button when returning to file view
@@ -1853,16 +2403,59 @@ class TranslationTab(QWidget):
         mode = self.mode_combo.currentText()
         estimate_only = (mode == "Estimate")
         parse_speakers = (mode == "Parse Speakers")
+        batch_mode = (mode == BATCH_MODE_LABEL)
+        batch_resume_state = None
+
+        if batch_mode:
+            load_dotenv()
+            sys.path.insert(0, str(self.project_root))
+            try:
+                from util.translation import isClaudeNative, batchRunState
+            except Exception as e:
+                QMessageBox.warning(self, "Batch Translate", f"Could not load batch support: {e}")
+                return
+            model = os.getenv("model", "")
+            if not isClaudeNative(model):
+                QMessageBox.warning(
+                    self,
+                    "Batch Translate",
+                    "Batch Translate requires a Claude model with the API URL unset or "
+                    "pointing at anthropic.com.\n\nChange your model/API settings and try again.",
+                )
+                return
+            batch_resume_state = batchRunState()
+            if batch_resume_state and not skip_confirm:
+                reply = QMessageBox.question(
+                    self,
+                    "Resume Batch?",
+                    f"A previous batch run was interrupted ({batch_resume_state}).\n\n"
+                    "Resume it instead of re-collecting?\n"
+                    "(Re-collecting would queue new requests and bill again.)",
+                    QMessageBox.Yes | QMessageBox.No,
+                )
+                if reply != QMessageBox.Yes:
+                    batch_resume_state = None
         
         # Confirm start (skipped when called programmatically from the Workflow tab)
         if not skip_confirm:
-            action = mode.lower()
-            reply = QMessageBox.question(
-                self,
-                f"Start {mode}",
-                f"Start {action} for {len(selected_files)} file(s) using {selected_module[0]}?",
-                QMessageBox.Yes | QMessageBox.No
-            )
+            if batch_mode and not batch_resume_state:
+                reply = QMessageBox.question(
+                    self,
+                    "Start Batch Translate",
+                    f"Start batch translation for {len(selected_files)} file(s) using {selected_module[0]}?\n\n"
+                    "Pass 1 collects dialogue for the batch; you confirm the estimate, then Anthropic "
+                    "processes it (50% off). Pass 2 writes translated files.\n\n"
+                    f"⚠ {BATCH_COLLECT_LIVE_CHARGE_NOTE}",
+                    QMessageBox.Yes | QMessageBox.No,
+                )
+            else:
+                action = mode.lower()
+                reply = QMessageBox.question(
+                    self,
+                    f"Start {mode}",
+                    f"Start {action} for {len(selected_files)} file(s) using {selected_module[0]}?",
+                    QMessageBox.Yes | QMessageBox.No,
+                )
             if reply != QMessageBox.Yes:
                 return
         
@@ -1885,7 +2478,11 @@ class TranslationTab(QWidget):
             
             # Toggle button visibility
             self.translate_button.setVisible(False)
-            self.stop_button.setVisible(True)
+            if batch_mode:
+                # Shown during collect; hidden once collection finishes (see _on_batch_phase)
+                self.stop_button.setVisible(batch_resume_state is None)
+            else:
+                self.stop_button.setVisible(True)
             # Show totals footer and reset totals when starting translation
             try:
                 self.totals_input_tokens = 0
@@ -1926,6 +2523,17 @@ class TranslationTab(QWidget):
             # Initialize progress tracking
             self.files_completed = 0
             self.files_total = len(selected_files)
+            self._batch_active = batch_mode
+            self._batch_ui_phase = None
+            if batch_mode:
+                self._set_progress_view_mode(True, len(selected_files))
+                self.batch_overall_bar.setValue(0)
+                self.batch_pipeline_stack.setCurrentIndex(0)
+                self.batch_live_status.setText("")
+            else:
+                self._set_progress_view_mode(False, len(selected_files))
+                self._batch_active = False
+                self._batch_ui_phase = None
             self.files_translated_label.setText(f"0/{self.files_total}")
             self.translating_label.setText("Starting...")
             self.item_progress_label.setText("0/0")
@@ -1941,8 +2549,10 @@ class TranslationTab(QWidget):
                 self.project_root, 
                 selected_module, 
                 estimate_only,
-                selected_files,  # Pass selected files
-                parse_speakers=parse_speakers
+                selected_files,
+                parse_speakers=parse_speakers,
+                batch_mode=batch_mode,
+                batch_resume_state=batch_resume_state,
             )
             
             # Connect signals
@@ -1951,6 +2561,7 @@ class TranslationTab(QWidget):
             self.translation_worker.item_progress_signal.connect(self.update_item_progress)
             self.translation_worker.file_error_signal.connect(self.on_file_error)
             self.translation_worker.finished_signal.connect(self.on_translation_finished)
+            self.translation_worker.batch_phase_signal.connect(self._on_batch_phase)
             # Prepare a per-run log file in log/history and start tailing it so
             # the right-hand log panel shows only this run's new lines.
             try:
@@ -2022,6 +2633,9 @@ class TranslationTab(QWidget):
                     self.translation_log_viewer.append_log_message(message)
             except Exception:
                 pass
+        # During batch collect/poll/submit, per-file cost lines are not final translations.
+        if getattr(self, "_batch_active", False) and getattr(self, "_batch_ui_phase", None) != "consume":
+            return
         try:
             stripped = _strip_ansi(message)
             pattern = (
@@ -2123,11 +2737,23 @@ class TranslationTab(QWidget):
     
     def update_file_progress(self, current_file, total_files, filename):
         """Update the file-level progress."""
-        # The worker emits this when a file's task completes. Treat the
-        # provided filename as the file that just finished and mark it
-        # complete immediately instead of setting it back to
-        # "Translating..." (which caused it to appear incomplete until the
-        # next file finished).
+        batch_active = getattr(self, "_batch_active", False)
+        phase = getattr(self, "_batch_ui_phase", None) if batch_active else None
+
+        if batch_active:
+            if phase == "collect":
+                self.files_completed = current_file
+                self.files_translated_label.setText(f"{current_file}/{total_files} collected")
+                self.batch_collect_status.setText(
+                    f"Pass 1/2: collecting {current_file}/{total_files} files…"
+                )
+                self.batch_live_status.setText(f"Current file: {filename}")
+                self.batch_overall_bar.setValue(15 + int(20 * current_file / max(total_files, 1)))
+                self.mark_file_queued(filename)
+                return
+            if phase in ("submit", "polling", "poll_status"):
+                return
+
         self.files_completed = current_file
         self.files_translated_label.setText(f"{current_file}/{total_files}")
 
@@ -2146,10 +2772,19 @@ class TranslationTab(QWidget):
         # remaining, keep it as a generic "Translating..." until the next
         # file emits item-level progress (which will set the actual
         # filename). If this was the final file, show a neutral state.
+        if batch_active and phase == "consume":
+            self.batch_overall_bar.setValue(80 + int(15 * current_file / max(total_files, 1)))
+            self.batch_consume_status.setText(
+                f"Pass 2/2: writing translations ({current_file}/{total_files})…"
+            )
+            self.batch_live_status.setText(f"Current file: {filename}")
         if current_file < total_files:
             self.translating_label.setText("Translating...")
         else:
-            self.translating_label.setText("—")
+            if batch_active and phase == "consume":
+                self.translating_label.setText("Finishing batch…")
+            else:
+                self.translating_label.setText("—")
     
         # If the translation worker already signaled finished but we
         # hadn't yet shown the final UI (because the worker finished
@@ -2166,19 +2801,23 @@ class TranslationTab(QWidget):
 
     def update_item_progress(self, filename, current_item, total_items):
         """Update the item-level progress (from tqdm)."""
-        # Update the overall progress display with the current file
+        batch_active = getattr(self, "_batch_active", False)
+        phase = getattr(self, "_batch_ui_phase", None) if batch_active else None
+
         self.item_progress_label.setText(f"{current_item}/{total_items}")
         self.item_progress_bar.setMaximum(total_items if total_items > 0 else 100)
         self.item_progress_bar.setValue(current_item)
         self.translating_label.setText(filename)
         
-        # Update the specific file's progress bar in the list
         if filename in self.file_progress_items:
             self.update_file_item_progress(filename, current_item, total_items)
-            # Mark as translating if not already done
-            if self.file_progress_items[filename]['label'].text() == "Waiting...":
-                self.file_progress_items[filename]['label'].setText("Translating...")
-                self.file_progress_items[filename]['label'].setStyleSheet("color: #007acc; font-weight: bold;")
+            label = self.file_progress_items[filename]['label']
+            if label.text() in ("Waiting...", "Queued"):
+                if batch_active and phase == "collect":
+                    label.setText("Scanning...")
+                else:
+                    label.setText("Translating...")
+                label.setStyleSheet("color: #007acc; font-weight: bold;")
     
     def on_file_error(self, filename, error_message):
         """Handle a file translation error."""
@@ -2228,6 +2867,8 @@ class TranslationTab(QWidget):
 
     def _apply_finish_ui(self, success, message):
         """Apply UI changes for a finished translation run."""
+        if getattr(self, "_batch_active", False):
+            self._on_batch_phase("done", None)
         # Hide the stop button and show the reset/back button
         try:
             self.stop_button.setVisible(False)
