@@ -1,7 +1,7 @@
 @echo off
 rem ============================================================================
 rem  TLInspector installer / uninstaller  (RPG Maker MV & MZ)
-rem  Idea by Sakura · Plugin by kaoss
+rem  Idea by Sakura · Plugin by Kao_SSS
 rem  Put this file and TLInspector.js in the GAME ROOT (next to the .exe /
 rem  index.html), then double-click this file.
 rem    - Not installed yet -> installs it (moves the plugin into the plugins
@@ -22,7 +22,7 @@ function PauseExit { [void](Read-Host "`nPress Enter to exit"); exit }
 $root = $env:TLI_ROOT
 Write-Host "============================================"
 Write-Host " TLInspector installer"
-Write-Host " Idea by Sakura · Plugin by kaoss"
+Write-Host " Idea by Sakura · Plugin by Kao_SSS"
 Write-Host "============================================"
 
 # --- Detect engine / locate plugins.js (MV uses www\, MZ does not) ----------

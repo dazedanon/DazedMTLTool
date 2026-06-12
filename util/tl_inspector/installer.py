@@ -1,6 +1,6 @@
 """Install / uninstall TLInspector into an RPG Maker MV or MZ game folder.
 
-Credits: Idea by Sakura · Plugin by kaoss
+Credits: Idea by Sakura · Plugin by Kao_SSS
 """
 
 from __future__ import annotations

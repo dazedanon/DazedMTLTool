@@ -2419,7 +2419,7 @@ class WorkflowTab(QWidget):
         hint.setStyleSheet("color:#9d9d9d;font-size:13px;padding-bottom:4px;")
         layout.addWidget(hint)
 
-        credits = QLabel("Idea by Sakura · Plugin by kaoss")
+        credits = QLabel("Idea by Sakura · Plugin by Kao_SSS")
         credits.setStyleSheet("color:#6a6a6a;font-size:11px;font-style:italic;padding-bottom:6px;")
         layout.addWidget(credits)
 

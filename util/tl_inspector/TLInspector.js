@@ -1,16 +1,16 @@
 //=============================================================================
 // TLInspector.js
-// Idea by Sakura · Plugin by kaoss
+// Idea by Sakura · Plugin by Kao_SSS
 //=============================================================================
 /*:
  * @plugindesc Translation Source Inspector - shows which source file/line every
  * on-screen line of text and image comes from, and jumps to it in VSCode.
- * @author kaoss
+ * @author Kao_SSS
  *
  * @help
  * ----------------------------------------------------------------------------
  * TLInspector  (RPGMaker MV / MZ, NW.js)
- * Credits: Idea by Sakura · Plugin by kaoss
+ * Credits: Idea by Sakura · Plugin by Kao_SSS
  * ----------------------------------------------------------------------------
  * A drop-in proofreading aid for translators. While the game runs, it tracks
  * every message / choice / scrolling-text line and every on-screen image, and
@@ -135,7 +135,7 @@
     function log() {
         if (window.console) { console.log.apply(console, ['[TLInspector]'].concat([].slice.call(arguments))); }
     }
-    log('init', { engine: ENGINE, node: nodeOk, dataDir: DATA_DIR, credits: 'Idea by Sakura · Plugin by kaoss' });
+    log('init', { engine: ENGINE, node: nodeOk, dataDir: DATA_DIR, credits: 'Idea by Sakura · Plugin by Kao_SSS' });
 
     //=========================================================================
     // File cache + JSON value locator (path -> char offset -> line:col)
@@ -1379,7 +1379,7 @@
         var head = document.createElement('div');
         head.style.cssText = 'padding:8px 10px;background:#11131a;border-bottom:1px solid #333;display:flex;align-items:center;gap:8px;flex:0 0 auto';
         head.innerHTML =
-            '<b style="color:#6cf" title="Idea by Sakura · Plugin by kaoss">TL Inspector</b>' +
+            '<b style="color:#6cf" title="Idea by Sakura · Plugin by Kao_SSS">TL Inspector</b>' +
             '<span data-tab="text" class="tl-tab">Text</span>' +
             '<span data-tab="images" class="tl-tab">Images</span>' +
             '<span data-act="pick" class="tl-btn" title="Hover the game to highlight an object, click to reveal it">&#x2316; Inspect</span>' +
