@@ -56,8 +56,17 @@
     var CFG = {
         enabled: true,
         hotkey: 'F10',          // key (event.key) that toggles the overlay
-        editorCmd: 'auto',      // 'auto' = find VSCode automatically (no PATH setup
-                                // needed). Or set an absolute path to any editor exe.
+        reloadHotkey: 'F9',     // key that reloads on-screen game elements from disk
+        editorCmd: 'auto',      // 'auto' = auto-detect installed editors (VS Code, Cursor,
+                                // VSCodium, Insiders, Windsurf). Or set an absolute path to
+                                // force a specific editor exe.
+        editor: 'auto',         // which editor click-to-source opens files in:
+                                //   'auto'    = VSCode if it's installed, else the built-in
+                                //               in-game editor (also the fallback if a
+                                //               VSCode launch fails).
+                                //   'builtin' = always the built-in in-game editor (view &
+                                //               edit the source file right inside the game).
+                                //   'vscode'  = always VSCode (uses editorCmd above).
         workspaceFolder: 'auto',// 'auto' = open files inside the game ROOT folder as the
                                 // VSCode workspace (so they don't land in whatever window
                                 // happened to be open last). Or set an absolute folder.
@@ -65,11 +74,6 @@
         historySize: 80,        // how many past text lines to keep
         captureUiText: true,    // capture plugin / menu / UI text drawn via Bitmap.drawText
                                 // (so e.g. status-window strings from plugins.js are locatable)
-        liveEdit: true,         // allow saving edited text back to the source file in-game
-        liveRefresh: true,      // auto-reload data/*.json when files change on disk (NW.js)
-        liveRefreshStableMs: 120,// VSCode save: reload once mtime unchanged this long
-        liveRefreshPollMs: 400,  // how often we check data/*.json for external saves
-        liveRefreshHotkey: 'F9',// manual reload: all DB JSON + current map
         dataDirOverride: null   // set an absolute path to force the data dir
     };
 
@@ -135,7 +139,7 @@
     function log() {
         if (window.console) { console.log.apply(console, ['[TLInspector]'].concat([].slice.call(arguments))); }
     }
-    log('init', { engine: ENGINE, node: nodeOk, dataDir: DATA_DIR, credits: 'Idea by Sakura · Plugin by Kao_SSS' });
+    log('init', { engine: ENGINE, node: nodeOk, dataDir: DATA_DIR });
 
     //=========================================================================
     // File cache + JSON value locator (path -> char offset -> line:col)
@@ -177,108 +181,15 @@
         }
         return i;
     }
-    function scanString(t, i) { // i at opening " -> returns index after closing "
-        return scanQuotedString(t, i, '"');
-    }
-    function scanQuotedString(t, i, q) {
-        if (!q) { q = t[i]; }
-        if (q !== '"' && q !== "'") { return i; }
-        i++; // past opening quote
+    function scanString(t, i) { // i at opening quote -> returns index after closing quote
+        i++; // past "
         while (i < t.length) {
             var ch = t[i];
             if (ch === '\\') { i += 2; continue; }
-            if (ch === q) { return i + 1; }
+            if (ch === '"') { return i + 1; }
             i++;
         }
         return i;
-    }
-    function decodeStringLiteral(t, startOff) {
-        var q = t[startOff];
-        if (q !== '"' && q !== "'") { return null; }
-        var j = startOff + 1, out = '';
-        while (j < t.length) {
-            var ch = t[j];
-            if (ch === '\\') {
-                j++;
-                if (j >= t.length) { return null; }
-                var e = t[j];
-                if (e === 'n') { out += '\n'; }
-                else if (e === 'r') { out += '\r'; }
-                else if (e === 't') { out += '\t'; }
-                else if (e === 'b') { out += '\b'; }
-                else if (e === 'f') { out += '\f'; }
-                else if (e === 'u') {
-                    var hex = t.substr(j + 1, 4);
-                    if (!/^[0-9a-fA-F]{4}$/.test(hex)) { return null; }
-                    out += String.fromCharCode(parseInt(hex, 16));
-                    j += 4;
-                } else { out += e; }
-                j++;
-                continue;
-            }
-            if (ch === q) {
-                return { start: startOff, end: j, quote: q, value: out };
-            }
-            out += ch;
-            j++;
-        }
-        return null;
-    }
-    function encodeStringLiteral(text, quoteChar) {
-        if (quoteChar === "'") {
-            return "'" + String(text).replace(/\\/g, '\\\\').replace(/'/g, "\\'")
-                .replace(/\r/g, '\\r').replace(/\n/g, '\\n').replace(/\t/g, '\\t') + "'";
-        }
-        return JSON.stringify(text);
-    }
-    // Scan a line for quoted literals whose decoded value exactly equals expectedText.
-    function findExactStringLiteralOnLine(c, line, expectedText) {
-        if (!c || !line || expectedText == null) { return null; }
-        var lineStart = c.lineStarts[line - 1];
-        if (lineStart == null) { return null; }
-        var lineEnd = line < c.lineStarts.length ? c.lineStarts[line] : c.text.length;
-        var i = lineStart, best = null;
-        while (i < lineEnd) {
-            var ch = c.text[i];
-            if (ch === '"' || ch === "'") {
-                var lit = decodeStringLiteral(c.text, i);
-                if (lit) {
-                    if (lit.value === expectedText) { best = lit; }
-                    i = lit.end + 1;
-                    continue;
-                }
-            }
-            i++;
-        }
-        return best;
-    }
-    // Resolve a safe edit target: the whole string literal whose value matches expectedText.
-    function resolveEditSite(file, line, col, expectedText) {
-        var c = readFileCached(file);
-        if (!c || !line || expectedText == null) { return null; }
-        var lit = findExactStringLiteralOnLine(c, line, expectedText);
-        if (lit) { return lit; }
-        // Fallback: literal containing the column, but only if the WHOLE value matches.
-        var pos = c.lineStarts[line - 1] + Math.max(0, (col || 1) - 1);
-        var lineStart = c.lineStarts[line - 1];
-        var lineEnd = line < c.lineStarts.length ? c.lineStarts[line] : c.text.length;
-        var i = lineStart;
-        while (i < lineEnd) {
-            var ch = c.text[i];
-            if (ch === '"' || ch === "'") {
-                var candidate = decodeStringLiteral(c.text, i);
-                if (candidate) {
-                    if (pos > candidate.start && pos < candidate.end &&
-                        candidate.value === expectedText) {
-                        return candidate;
-                    }
-                    i = candidate.end + 1;
-                    continue;
-                }
-            }
-            i++;
-        }
-        return null;
     }
     function readKey(t, i) { // i at opening quote -> { end, value }
         var start = i + 1, j = i + 1, out = '';
@@ -358,196 +269,6 @@
         var res = off >= 0 ? offsetToLineCol(c, off) : null;
         lineCache[key] = res;
         return res;
-    }
-
-    function invalidateFileCache(file) {
-        delete fileCache[file];
-        Object.keys(lineCache).forEach(function (k) {
-            if (k.indexOf(file + '::') === 0) { delete lineCache[k]; }
-        });
-        dupIndex = null;
-    }
-
-    function writeStringAtOffset(file, startOff, newText, expectedOld, quoteChar) {
-        var c = readFileCached(file);
-        if (!c) { return { ok: false, err: 'read failed' }; }
-        var t = c.text;
-        var lit = decodeStringLiteral(t, startOff);
-        if (!lit) { return { ok: false, err: 'not a complete string literal' }; }
-        if (expectedOld != null && lit.value !== expectedOld) {
-            return { ok: false, err: 'on-disk text differs from the captured line — use VSCode instead' };
-        }
-        var q = quoteChar || lit.quote;
-        var repl = encodeStringLiteral(newText, q);
-        var merged = t.slice(0, lit.start) + repl + t.slice(lit.end + 1);
-        try {
-            fs.writeFileSync(file, merged, 'utf8');
-        } catch (e) { return { ok: false, err: String(e.message || e) }; }
-        invalidateFileCache(file);
-        markSelfWrite(file);
-        return { ok: true };
-    }
-
-    function writeAtPath(file, pathArr, newText, expectedOld) {
-        var c = readFileCached(file);
-        if (!c) { return { ok: false, err: 'read failed' }; }
-        var off = locateOffset(c.text, pathArr);
-        if (off < 0) { return { ok: false, err: 'could not locate value' }; }
-        if (c.text[off] !== '"') {
-            return { ok: false, err: 'JSON value at path is not a string' };
-        }
-        return writeStringAtOffset(file, off, newText, expectedOld, '"');
-    }
-
-    function writeAtEditSite(file, site, newText, expectedOld) {
-        if (!site) { return { ok: false, err: 'no edit target' }; }
-        return writeStringAtOffset(file, site.start, newText, expectedOld, site.quote);
-    }
-
-    function memoryRootForFile(file) {
-        if (!path) { return null; }
-        var fname = path.basename(file);
-        if (/^Map\d+\.json$/i.test(fname)) {
-            if (typeof $dataMap === 'undefined' || !$dataMap) { return null; }
-            if (typeof $gameMap !== 'undefined' && $gameMap && $gameMap.mapId) {
-                var mapId = parseInt(fname.match(/\d+/)[0], 10);
-                if ($gameMap.mapId() !== mapId) { return null; }
-            }
-            return $dataMap;
-        }
-        if (fname === 'CommonEvents.json') {
-            return (typeof $dataCommonEvents !== 'undefined') ? $dataCommonEvents : null;
-        }
-        if (fname === 'Troops.json') {
-            return (typeof $dataTroops !== 'undefined') ? $dataTroops : null;
-        }
-        return null;
-    }
-
-    function setAtPath(root, pathArr, val) {
-        var o = root;
-        for (var i = 0; i < pathArr.length - 1; i++) {
-            o = o[pathArr[i]];
-            if (o == null) { return false; }
-        }
-        o[pathArr[pathArr.length - 1]] = val;
-        return true;
-    }
-
-    function applyLiveMessage(rec, newText) {
-        if (typeof $gameMessage === 'undefined' || !$gameMessage) { return; }
-        var busy = $gameMessage.isBusy && $gameMessage.isBusy();
-        if (!busy || rec.group !== currentGroup || currentGroup === -1) { return; }
-        try {
-            if ($gameMessage._texts) {
-                for (var i = 0; i < $gameMessage._texts.length; i++) {
-                    if ($gameMessage._texts[i] === rec.text) { $gameMessage._texts[i] = newText; }
-                }
-            }
-            if ($gameMessage._choices) {
-                for (var j = 0; j < $gameMessage._choices.length; j++) {
-                    if ($gameMessage._choices[j] === rec.text) { $gameMessage._choices[j] = newText; }
-                }
-            }
-        } catch (e) { /* ignore */ }
-    }
-
-    function canEditRecord(rec) {
-        if (!CFG.liveEdit || !nodeOk || rec._ambig) { return false; }
-        if (rec.file && rec.tail) { return true; }
-        if (rec.file && rec._editSite) { return true; }
-        return false;
-    }
-
-    function bindEditSite(rec, file, line, col) {
-        var site = resolveEditSite(file, line, col, rec.text);
-        if (!site) {
-            return false;
-        }
-        rec.file = file;
-        rec._editSite = site;
-        rec._editLine = line;
-        rec._editCol = col || 1;
-        delete rec._editQuoted;
-        return true;
-    }
-
-    function isDataJsonFile(file) {
-        if (!file || !path) { return false; }
-        try {
-            var ap = absPath(file);
-            var dir = absPath(DATA_DIR);
-            if (process.platform === 'win32') {
-                return ap.toLowerCase().indexOf(dir.toLowerCase()) === 0 && /\.json$/i.test(ap);
-            }
-            return ap.indexOf(dir) === 0 && /\.json$/i.test(ap);
-        } catch (e) { return false; }
-    }
-
-    function applyReloadAfterOverlaySave(file) {
-        if (!CFG.liveRefresh || !isDataJsonFile(file)) { return false; }
-        return reloadFile(file, { silent: true });
-    }
-
-    function saveRecordEdit(rec, newText) {
-        if (!nodeOk) { toast('Live edit requires the desktop NW.js build'); return false; }
-        if (newText === rec.text) { toast('No changes'); return false; }
-        var expected = rec.text;
-        var r;
-        if (rec.file && rec.tail) {
-            r = writeAtPath(rec.file, rec.tail, newText, expected);
-        } else if (rec.file && rec._editSite) {
-            r = writeAtEditSite(rec.file, rec._editSite, newText, expected);
-        } else if (rec.file && (rec._editLine || rec.uiLine)) {
-            var site = resolveEditSite(rec.file, rec._editLine || rec.uiLine,
-                rec._editCol || 1, expected);
-            if (!site) {
-                toast('Cannot safely edit — pick an exact quoted string match first');
-                return false;
-            }
-            rec._editSite = site;
-            r = writeAtEditSite(rec.file, site, newText, expected);
-        } else {
-            toast('Cannot edit — source location unresolved');
-            return false;
-        }
-        if (!r.ok) { toast('Save failed: ' + (r.err || '?')); log('save', r); return false; }
-        rec.text = newText;
-        rec._key = 't\u0000' + rec.kind + '\u0000' + newText + '\u0000' + (rec.file || '') +
-            '\u0000' + (rec.tail ? JSON.stringify(rec.tail) : '');
-        applyLiveMessage(rec, newText);
-        var reloaded = applyReloadAfterOverlaySave(rec.file);
-        if (!reloaded) { refreshSceneWindows(); }
-        var note = rec.kind === 'ui' && !reloaded ? ' — UI may need scene change' : '';
-        toast(reloaded ? 'Saved & reloaded' : ('Saved to file' + note));
-        scheduleRefresh();
-        return true;
-    }
-
-    function prepareUiEditTarget(rec, cb) {
-        if (rec.tail) { cb(true); return; }
-        var s = searchFilesSmart(rec.text);
-        if (s.partial) {
-            toast('Partial file match — live edit needs the full string; use VSCode');
-            cb(false);
-            return;
-        }
-        if (s.results.length === 1) {
-            if (bindEditSite(rec, s.results[0].file, s.results[0].line, s.results[0].col)) {
-                cb(true);
-                return;
-            }
-            toast('Match is not a complete string value — use VSCode');
-            cb(false);
-            return;
-        }
-        if (s.results.length > 1) {
-            toast(s.results.length + ' matches — use "locate in files" and pick an exact match');
-            cb(false);
-            return;
-        }
-        toast('No file match for this UI text');
-        cb(false);
     }
 
     //=========================================================================
@@ -889,48 +610,126 @@
     //=========================================================================
     // External actions (VSCode / file explorer)
     //=========================================================================
-    // Auto-locate VSCode so the user never has to touch the system PATH.
-    var _editorPath = null;
-    function detectEditor() {
-        if (_editorPath !== null) { return _editorPath; }
-        if (CFG.editorCmd && CFG.editorCmd !== 'auto') { _editorPath = CFG.editorCmd; return _editorPath; }
-        if (nodeOk) {
-            var env = process.env, plat = process.platform, cands = [];
-            if (plat === 'win32') {
-                [env.LOCALAPPDATA, env.ProgramFiles, env['ProgramFiles(x86)']].forEach(function (b) {
-                    if (!b) { return; }
-                    cands.push(path.join(b, 'Programs', 'Microsoft VS Code', 'Code.exe'));
-                    cands.push(path.join(b, 'Microsoft VS Code', 'Code.exe'));
-                    cands.push(path.join(b, 'Programs', 'Microsoft VS Code Insiders', 'Code - Insiders.exe'));
-                    cands.push(path.join(b, 'Programs', 'cursor', 'Cursor.exe'));
-                    cands.push(path.join(b, 'cursor', 'Cursor.exe'));
-                });
-            } else if (plat === 'darwin') {
-                cands.push('/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code');
-                cands.push('/Applications/Cursor.app/Contents/MacOS/Cursor');
-            } else {
-                cands.push('/usr/bin/code', '/usr/share/code/bin/code', '/snap/bin/code', '/usr/bin/cursor');
-            }
-            for (var i = 0; i < cands.length; i++) {
-                try { if (fs.existsSync(cands[i])) { _editorPath = cands[i]; log('editor found', _editorPath); return _editorPath; } }
-                catch (e) { /* ignore */ }
-            }
+    // Auto-locate installed editors so the user never has to touch the system PATH.
+    // We support the whole VS Code family (VS Code, Insiders, Cursor, VSCodium,
+    // Windsurf): they share an identical CLI ("<folder> -g file:line:col"), so the
+    // same launch path works for all of them. The user picks which one to use from a
+    // dropdown in the panel (see the editor <select>); the choice is remembered.
+    //
+    // Each candidate is [id, display name, absolute exe path]. The first existing
+    // path for a given id wins; ids are de-duplicated so each editor lists once.
+    function editorCandidates() {
+        var defs = [];
+        if (!nodeOk) { return defs; }
+        var env = process.env, plat = process.platform;
+        function J() { return path.join.apply(path, arguments); }
+        if (plat === 'win32') {
+            [env.LOCALAPPDATA, env.ProgramFiles, env['ProgramFiles(x86)']].forEach(function (b) {
+                if (!b) { return; }
+                defs.push(['vscode', 'VS Code', J(b, 'Programs', 'Microsoft VS Code', 'Code.exe')]);
+                defs.push(['vscode', 'VS Code', J(b, 'Microsoft VS Code', 'Code.exe')]);
+                defs.push(['insiders', 'VS Code Insiders', J(b, 'Programs', 'Microsoft VS Code Insiders', 'Code - Insiders.exe')]);
+                defs.push(['cursor', 'Cursor', J(b, 'Programs', 'cursor', 'Cursor.exe')]);
+                defs.push(['cursor', 'Cursor', J(b, 'cursor', 'Cursor.exe')]);
+                defs.push(['vscodium', 'VSCodium', J(b, 'Programs', 'VSCodium', 'VSCodium.exe')]);
+                defs.push(['vscodium', 'VSCodium', J(b, 'VSCodium', 'VSCodium.exe')]);
+                defs.push(['windsurf', 'Windsurf', J(b, 'Programs', 'Windsurf', 'Windsurf.exe')]);
+            });
+        } else if (plat === 'darwin') {
+            defs.push(['vscode', 'VS Code', '/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code']);
+            defs.push(['insiders', 'VS Code Insiders', '/Applications/Visual Studio Code - Insiders.app/Contents/Resources/app/bin/code']);
+            defs.push(['cursor', 'Cursor', '/Applications/Cursor.app/Contents/Resources/app/bin/cursor']);
+            defs.push(['vscodium', 'VSCodium', '/Applications/VSCodium.app/Contents/Resources/app/bin/codium']);
+            defs.push(['windsurf', 'Windsurf', '/Applications/Windsurf.app/Contents/Resources/app/bin/windsurf']);
+        } else {
+            defs.push(['vscode', 'VS Code', '/usr/bin/code']);
+            defs.push(['vscode', 'VS Code', '/usr/share/code/bin/code']);
+            defs.push(['vscode', 'VS Code', '/snap/bin/code']);
+            defs.push(['cursor', 'Cursor', '/usr/bin/cursor']);
+            defs.push(['vscodium', 'VSCodium', '/usr/bin/codium']);
+            defs.push(['windsurf', 'Windsurf', '/usr/bin/windsurf']);
         }
-        _editorPath = 'code'; // fall back to PATH lookup
-        return _editorPath;
+        return defs;
+    }
+
+    var _editorList = null;
+    function detectEditors() {
+        if (_editorList) { return _editorList; }
+        _editorList = [];
+        var seen = {};
+        // An explicit CFG.editorCmd path always wins and heads the list.
+        if (CFG.editorCmd && CFG.editorCmd !== 'auto') {
+            _editorList.push({ id: 'custom', name: 'Custom (config)', cmd: CFG.editorCmd });
+            seen.custom = true;
+        }
+        editorCandidates().forEach(function (d) {
+            var id = d[0];
+            if (seen[id]) { return; }
+            try {
+                if (fs.existsSync(d[2])) {
+                    seen[id] = true;
+                    _editorList.push({ id: id, name: d[1], cmd: d[2] });
+                    log('editor found', d[1], d[2]);
+                }
+            } catch (e) { /* ignore */ }
+        });
+        // Always offer a PATH-based VS Code fallback so there's at least one option even
+        // when nothing was found on disk (the user may have `code` on PATH).
+        if (!seen.vscode && !seen.custom) {
+            _editorList.push({ id: 'vscode', name: 'VS Code (PATH)', cmd: 'code' });
+        }
+        return _editorList;
+    }
+
+    // The editor currently selected in the dropdown (or the first available one).
+    function currentEditor() {
+        var list = detectEditors();
+        if (!list.length) { return { id: 'vscode', name: 'VS Code (PATH)', cmd: 'code' }; }
+        for (var i = 0; i < list.length; i++) {
+            if (list[i].id === ui.editorId) { return list[i]; }
+        }
+        return list[0];
+    }
+
+    // True when at least one real external editor exe was located on disk (not just the
+    // bare 'code' PATH fallback). 'auto' mode uses this to pick external vs built-in.
+    function vscodeAvailable() {
+        var list = detectEditors();
+        for (var i = 0; i < list.length; i++) {
+            if (list[i].cmd !== 'code') { return true; }
+        }
+        return false;
+    }
+
+    // The header checkbox (ui.useBuiltin) is the live switch; CFG.editor is just the
+    // initial default it's seeded from at startup.
+    function shouldUseBuiltin() {
+        if (ui && ui.useBuiltin != null) { return ui.useBuiltin; }
+        return CFG.editor === 'builtin' || (CFG.editor !== 'vscode' && !vscodeAvailable());
     }
 
     function openInEditor(file, line, col) {
         if (!nodeOk || !file) { toast('No file resolved for this entry'); return; }
+        // Route to the built-in in-game editor when the header switch (or config) selects
+        // it, so users without VSCode - or who prefer editing in-game - still get it.
+        if (shouldUseBuiltin()) {
+            openBuiltInEditor(file, line, col);
+            return;
+        }
         var loc = file + (line ? ':' + line + (col ? ':' + col : '') : '');
-        var cmd = detectEditor();
+        var ed = currentEditor();
+        var cmd = ed.cmd;
         // Pass the game folder so VSCode opens (or reuses) THAT workspace and reveals the
         // file in it, instead of dropping the file into whatever window was last focused.
         // Passing a folder makes VSCode route to the matching window itself, so we drop the
         // -r "reuse last window" flag (which is what caused the wrong-workspace behavior).
         var ws = (CFG.workspaceFolder && CFG.workspaceFolder !== 'auto') ? CFG.workspaceFolder : GAME_ROOT;
         var done = function (err) {
-            if (err) { toast('Editor launch failed; set CFG.editorCmd to your editor path.'); log('editor', err); }
+            if (err) {
+                log('editor', err);
+                toast(ed.name + ' launch failed - opening the built-in editor');
+                openBuiltInEditor(file, line, col);
+            }
         };
         try {
             if (cmd === 'code') {
@@ -1053,7 +852,7 @@
                 '<div class="tl-imginfo">' +
                     '<div class="tl-txt" style="color:#cfe">' + esc(url) + '</div>' +
                     '<div class="tl-meta">' +
-                        '<span class="tl-mini" data-act="reveal">reveal' + (ENC.on() ? ' (decrypt)' : '') + '</span>' +
+                        '<span class="tl-mini" data-act="reveal">Reveal' + (ENC.on() ? ' (decrypt)' : '') + '</span>' +
                         (opts.trigger ? '<span class="tl-loc" data-act="trig">trigger: ' + esc(opts.trigger.label) + '</span>' : '') +
                         (opts.fromLabel ? '<span class="tl-loc" style="cursor:default">from ' + esc(opts.fromLabel) + '</span>' : '') +
                     '</div>' +
@@ -1345,6 +1144,621 @@
     }
 
     //=========================================================================
+    // Built-in editor (in-game): a small multi-tab code editor that views & edits
+    // the source files directly, jumping to the same line click-to-source would.
+    // Routed to from openInEditor() when CFG.editor / the header switch selects it,
+    // when VSCode isn't installed, or as the fallback when a VSCode launch fails.
+    // "Open all" stacks every result as a tab. Includes a find/replace widget with
+    // regex, match-case and whole-word, next/prev, and replace / replace-all.
+    //=========================================================================
+    var EDLH = 18; // editor line-height in px (kept in sync with the CSS below)
+    var editor = {
+        root: null, area: null, gutter: null, tabsEl: null, findEl: null,
+        fq: null, frin: null, fcount: null, statusEl: null,
+        docs: [], active: -1, _lines: -1,
+        find: { open: false, q: '', r: '', re: false, cs: false, ww: false,
+                matches: [], idx: -1, invalid: false }
+    };
+
+    function baseName(f) { return f ? String(f).replace(/^.*[\\\/]/, '') : ''; }
+    function activeDoc() { return editor.active >= 0 ? editor.docs[editor.active] : null; }
+
+    // After a save, drop the cached text + located line numbers for the file so the
+    // panel (and the JSON locator) recompute against the new content.
+    function invalidateFile(file) {
+        delete fileCache[file];
+        var pre = file + '::';
+        for (var k in lineCache) {
+            if (lineCache.hasOwnProperty(k) && k.indexOf(pre) === 0) { delete lineCache[k]; }
+        }
+        dupIndex = null; // message text may have changed
+    }
+
+    function buildEditor() {
+        if (editor.root) { return; }
+        var root = document.createElement('div');
+        root.id = 'tl-editor';
+        root.style.cssText = [
+            'position:fixed', 'top:3%', 'left:50%', 'transform:translateX(-50%)',
+            'width:80%', 'max-width:1100px', 'height:92%', 'z-index:2147483646',
+            'background:#15171d', 'color:#e6e6e6', 'border:1px solid #344',
+            'border-radius:8px', 'box-shadow:0 8px 40px rgba(0,0,0,0.7)',
+            'display:none', 'flex-direction:column', 'font:12px Consolas,Menlo,monospace'
+        ].join(';');
+
+        var head = document.createElement('div');
+        head.style.cssText = 'padding:8px 12px;background:#11131a;border-bottom:1px solid #333;display:flex;align-items:center;gap:10px;flex:0 0 auto;border-radius:8px 8px 0 0';
+        head.innerHTML =
+            '<b style="color:#6cf">Edit</b>' +
+            '<span style="flex:1"></span>' +
+            '<span class="tl-ed-btn" data-act="find" title="Find / Replace (Ctrl+F / Ctrl+H)">Find</span>' +
+            '<span class="tl-ed-btn" data-act="save" title="Save active file (Ctrl+S)">Save</span>' +
+            '<span class="tl-ed-btn" data-act="close" title="Close editor (Esc)">&#x2715;</span>';
+        root.appendChild(head);
+
+        // tab strip (one tab per open file)
+        var tabs = document.createElement('div');
+        tabs.className = 'tl-ed-tabs';
+        root.appendChild(tabs);
+
+        // find / replace widget (hidden until opened)
+        var find = document.createElement('div');
+        find.className = 'tl-ed-find';
+        find.style.display = 'none';
+        find.innerHTML =
+            '<div class="tl-fr">' +
+                '<input class="tl-fq" type="text" placeholder="Find" spellcheck="false">' +
+                '<span class="tl-fopt" data-opt="cs" title="Match case">Aa</span>' +
+                '<span class="tl-fopt" data-opt="ww" title="Whole word">W</span>' +
+                '<span class="tl-fopt" data-opt="re" title="Use regular expression">.*</span>' +
+                '<span class="tl-fcount"></span>' +
+                '<span class="tl-fbtn" data-fa="prev" title="Previous match (Shift+Enter)">&#x2191;</span>' +
+                '<span class="tl-fbtn" data-fa="next" title="Next match (Enter)">&#x2193;</span>' +
+                '<span class="tl-fbtn" data-fa="close" title="Close (Esc)">&#x2715;</span>' +
+            '</div>' +
+            '<div class="tl-fr">' +
+                '<input class="tl-fr-in" type="text" placeholder="Replace" spellcheck="false">' +
+                '<span class="tl-fbtn" data-fa="rep" title="Replace (Enter)">Replace</span>' +
+                '<span class="tl-fbtn" data-fa="repall" title="Replace all matches">Replace All</span>' +
+            '</div>';
+        root.appendChild(find);
+
+        var main = document.createElement('div');
+        main.style.cssText = 'flex:1 1 auto;display:flex;overflow:hidden;background:#1b1e26';
+
+        var gutter = document.createElement('div');
+        gutter.className = 'tl-ed-gutter';
+        gutter.style.cssText = 'flex:0 0 auto;min-width:42px;overflow:hidden;text-align:right;' +
+            'padding:8px 6px 8px 10px;color:#566;background:#161922;white-space:pre;' +
+            'user-select:none;-webkit-user-select:none;font:12px/18px Consolas,Menlo,monospace';
+
+        var area = document.createElement('textarea');
+        area.className = 'tl-ed-area';
+        area.setAttribute('wrap', 'off');          // one logical line == one visual row
+        area.setAttribute('spellcheck', 'false');
+        area.style.cssText = 'flex:1 1 auto;resize:none;border:0;outline:0;padding:8px 10px;' +
+            'color:#e6e6e6;background:#1b1e26;white-space:pre;overflow:auto;' +
+            'font:12px/18px Consolas,Menlo,monospace;tab-size:4;-moz-tab-size:4';
+
+        main.appendChild(gutter);
+        main.appendChild(area);
+        root.appendChild(main);
+
+        var foot = document.createElement('div');
+        foot.style.cssText = 'padding:5px 12px;background:#11131a;border-top:1px solid #333;color:#8aa;flex:0 0 auto;display:flex;gap:14px;border-radius:0 0 8px 8px';
+        foot.innerHTML = '<span>Ctrl+S save &middot; Ctrl+F find &middot; Ctrl+H replace &middot; Esc close &middot; Tab indent</span>' +
+            '<span class="tl-ed-status" style="flex:1;text-align:right;color:#7a7"></span>';
+        root.appendChild(foot);
+
+        var st = document.createElement('style');
+        st.textContent =
+            '#tl-editor .tl-ed-btn{cursor:pointer;padding:3px 9px;border-radius:4px;background:#333;color:#ddd}' +
+            '#tl-editor .tl-ed-btn:hover{filter:brightness(1.35)}' +
+            '#tl-editor .tl-ed-tabs{display:flex;overflow-x:auto;background:#0e1016;border-bottom:1px solid #333;flex:0 0 auto}' +
+            '#tl-editor .tl-ed-tab{display:flex;align-items:center;gap:6px;padding:5px 8px;border-right:1px solid #222;color:#9ab;cursor:pointer;white-space:nowrap;max-width:220px;flex:0 0 auto}' +
+            '#tl-editor .tl-ed-tab.on{background:#1b1e26;color:#fff}' +
+            '#tl-editor .tl-ed-tab .nm{overflow:hidden;text-overflow:ellipsis}' +
+            '#tl-editor .tl-ed-tab .dot{color:#fd6}' +
+            '#tl-editor .tl-ed-tab .x{color:#889;border-radius:3px;padding:0 4px}' +
+            '#tl-editor .tl-ed-tab .x:hover{background:#555;color:#fff}' +
+            '#tl-editor .tl-ed-find{background:#12141b;border-bottom:1px solid #333;padding:5px 8px;flex:0 0 auto}' +
+            '#tl-editor .tl-fr{display:flex;align-items:center;gap:6px;margin:2px 0}' +
+            '#tl-editor .tl-fq,#tl-editor .tl-fr-in{flex:0 0 240px;width:240px;min-width:0;background:#1b1e26;border:1px solid #344;color:#eee;padding:3px 6px;font:12px Consolas,Menlo,monospace;outline:none}' +
+            '#tl-editor .tl-fopt{cursor:pointer;padding:2px 6px;border-radius:3px;background:#222;color:#9ab;font:11px monospace}' +
+            '#tl-editor .tl-fopt.on{background:#2a5db0;color:#fff}' +
+            '#tl-editor .tl-fcount{color:#9ab;min-width:62px;text-align:center;font-size:11px}' +
+            '#tl-editor .tl-fcount.err{color:#f88}' +
+            '#tl-editor .tl-fbtn{cursor:pointer;padding:2px 8px;border-radius:3px;background:#333;color:#ddd;white-space:nowrap}' +
+            '#tl-editor .tl-fbtn:hover{filter:brightness(1.3)}';
+        root.appendChild(st);
+
+        head.addEventListener('click', function (e) {
+            var a = e.target.getAttribute('data-act');
+            if (a === 'save') { saveEditor(); }
+            else if (a === 'close') { closeEditor(); }
+            else if (a === 'find') { openFind(false); }
+        });
+
+        // tab strip: click selects, click the x closes
+        tabs.addEventListener('click', function (e) {
+            var t = e.target;
+            while (t && t !== tabs && !t.hasAttribute('data-ti')) { t = t.parentNode; }
+            if (!t || t === tabs) { return; }
+            var i = parseInt(t.getAttribute('data-ti'), 10);
+            if (e.target.classList.contains('x')) { closeTab(i); } else { selectTab(i); }
+        });
+
+        // find widget wiring
+        editor.fq = find.querySelector('.tl-fq');
+        editor.frin = find.querySelector('.tl-fr-in');
+        editor.fcount = find.querySelector('.tl-fcount');
+        editor.fq.addEventListener('input', function () {
+            editor.find.q = this.value; recomputeMatches();
+            showMatch(editor.find.idx < 0 ? 0 : editor.find.idx);
+        });
+        editor.fq.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter') { e.preventDefault(); showMatch(editor.find.idx + (e.shiftKey ? -1 : 1)); }
+            else if (e.key === 'Escape') { e.preventDefault(); closeFind(); }
+        });
+        editor.frin.addEventListener('input', function () { editor.find.r = this.value; });
+        editor.frin.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter') { e.preventDefault(); replaceCurrent(); }
+            else if (e.key === 'Escape') { e.preventDefault(); closeFind(); }
+        });
+        find.addEventListener('click', function (e) {
+            var opt = e.target.getAttribute('data-opt');
+            var fa = e.target.getAttribute('data-fa');
+            if (opt) {
+                var f = editor.find; f[opt] = !f[opt];
+                e.target.classList.toggle('on', f[opt]);
+                recomputeMatches(); showMatch(f.idx < 0 ? 0 : f.idx);
+            } else if (fa === 'next') { showMatch(editor.find.idx + 1); }
+            else if (fa === 'prev') { showMatch(editor.find.idx - 1); }
+            else if (fa === 'close') { closeFind(); }
+            else if (fa === 'rep') { replaceCurrent(); }
+            else if (fa === 'repall') { replaceAll(); }
+        });
+
+        area.addEventListener('input', function () {
+            markDirty(); refreshGutter();
+            if (editor.find.open) { recomputeMatches(); updateFindCount(); }
+        });
+        area.addEventListener('scroll', syncGutter);
+        area.addEventListener('keydown', onEditorKey, false);
+
+        // Keep the game from reacting to clicks/keys aimed at the editor (mirrors the
+        // inspector panel's isolation). With "freeze" off this is what protects typing.
+        ['mousedown', 'mouseup', 'click', 'dblclick', 'wheel', 'contextmenu',
+         'touchstart', 'touchend', 'touchmove', 'pointerdown', 'pointerup',
+         'keydown', 'keyup', 'keypress'].forEach(function (t) {
+            root.addEventListener(t, function (ev) { ev.stopPropagation(); }, false);
+        });
+
+        document.body.appendChild(root);
+        editor.root = root;
+        editor.area = area;
+        editor.gutter = gutter;
+        editor.tabsEl = tabs;
+        editor.findEl = find;
+        editor.statusEl = foot.querySelector('.tl-ed-status');
+    }
+
+    //--- documents / tabs ----------------------------------------------------
+    function docIndexByFile(file) {
+        for (var i = 0; i < editor.docs.length; i++) { if (editor.docs[i].file === file) { return i; } }
+        return -1;
+    }
+
+    function createDoc(file) {
+        var raw;
+        try { raw = fs.readFileSync(file, 'utf8'); }
+        catch (e) { toast('Could not read file'); log('read', e); return null; }
+        var bom = raw.charCodeAt(0) === 0xFEFF;
+        if (bom) { raw = raw.slice(1); }
+        var nl = /\r\n/.test(raw) ? '\r\n' : '\n';      // preserve the file's line endings
+        return { file: file, name: baseName(file), text: raw.replace(/\r\n/g, '\n'),
+                 nl: nl, bom: bom, dirty: false, line: 0, scrollTop: 0, selStart: 0, selEnd: 0 };
+    }
+
+    function stashActive() {
+        var d = activeDoc(); if (!d) { return; }
+        d.text = editor.area.value;
+        d.scrollTop = editor.area.scrollTop;
+        d.selStart = editor.area.selectionStart;
+        d.selEnd = editor.area.selectionEnd;
+    }
+
+    function loadActive() {
+        var d = activeDoc();
+        editor._lines = -1;
+        if (!d) { editor.area.value = ''; refreshGutter(); updateEditorTitle(); return; }
+        editor.area.value = d.text;
+        refreshGutter();
+        editor.area.scrollTop = d.scrollTop || 0;
+        try { editor.area.setSelectionRange(d.selStart || 0, d.selEnd || 0); } catch (e) { /* ignore */ }
+        syncGutter();
+        updateEditorTitle();
+        if (editor.find.open) { recomputeMatches(); updateFindCount(); }
+    }
+
+    function selectTab(i, line) {
+        if (i < 0 || i >= editor.docs.length) { return; }
+        if (i !== editor.active) { stashActive(); editor.active = i; loadActive(); }
+        renderTabs();
+        if (line) { jumpToLine(line); }
+        editor.area.focus();
+    }
+
+    function closeTab(i) {
+        var d = editor.docs[i]; if (!d) { return; }
+        if (d.dirty && !window.confirm('Discard unsaved changes to ' + d.name + '?')) { return; }
+        if (i === editor.active) {
+            editor.docs.splice(i, 1);
+            if (!editor.docs.length) { editor.active = -1; renderTabs(); editor.root.style.display = 'none'; return; }
+            editor.active = Math.min(i, editor.docs.length - 1);
+            loadActive();
+        } else {
+            if (i < editor.active) { editor.active--; }
+            editor.docs.splice(i, 1);
+        }
+        renderTabs();
+    }
+
+    function renderTabs() {
+        var el = editor.tabsEl; if (!el) { return; }
+        el.innerHTML = '';
+        editor.docs.forEach(function (d, i) {
+            var t = document.createElement('div');
+            t.className = 'tl-ed-tab' + (i === editor.active ? ' on' : '');
+            t.setAttribute('data-ti', i);
+            t.title = d.file;
+            t.innerHTML = (d.dirty ? '<span class="dot">&#9679;</span>' : '') +
+                '<span class="nm">' + esc(d.name) + '</span>' +
+                '<span class="x">&#x2715;</span>';
+            el.appendChild(t);
+        });
+    }
+
+    function markDirty() {
+        var d = activeDoc(); if (!d) { return; }
+        if (!d.dirty) { d.dirty = true; renderTabs(); }
+        updateEditorTitle();
+    }
+
+    //--- view helpers --------------------------------------------------------
+    function insertAtCursor(area, str) {
+        var s = area.selectionStart, e = area.selectionEnd, v = area.value;
+        area.value = v.slice(0, s) + str + v.slice(e);
+        area.selectionStart = area.selectionEnd = s + str.length;
+    }
+
+    function onEditorKey(e) {
+        if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')) { e.preventDefault(); saveEditor(); return; }
+        if ((e.ctrlKey || e.metaKey) && (e.key === 'f' || e.key === 'F')) { e.preventDefault(); openFind(false); return; }
+        if ((e.ctrlKey || e.metaKey) && (e.key === 'h' || e.key === 'H')) { e.preventDefault(); openFind(true); return; }
+        if (e.key === 'Escape') { e.preventDefault(); if (editor.find.open) { closeFind(); } else { closeEditor(); } return; }
+        if (e.key === 'Tab') { e.preventDefault(); insertAtCursor(editor.area, '\t'); markDirty(); }
+    }
+
+    function syncGutter() {
+        if (editor.gutter && editor.area) { editor.gutter.scrollTop = editor.area.scrollTop; }
+    }
+
+    function refreshGutter() {
+        var v = editor.area.value, count = 1;
+        for (var i = 0; i < v.length; i++) { if (v.charCodeAt(i) === 10) { count++; } }
+        if (count === editor._lines) { return; }
+        editor._lines = count;
+        var s = '';
+        for (var k = 1; k <= count; k++) { s += k + '\n'; }
+        editor.gutter.textContent = s;
+        syncGutter();
+    }
+
+    function updateEditorTitle(line) {
+        var d = activeDoc();
+        if (!d) { setEditorStatus(''); return; }
+        if (line != null) { d.line = line; }
+        setEditorStatus(d.name + (d.line ? ':' + d.line : '') + (d.dirty ? '  (unsaved)' : ''));
+    }
+
+    function setEditorStatus(msg) {
+        if (editor.statusEl) { editor.statusEl.textContent = msg || ''; }
+    }
+
+    function lineStartOffset(text, line) {
+        var off = 0, cur = 1;
+        while (cur < line) {
+            var nl = text.indexOf('\n', off);
+            if (nl < 0) { break; }
+            off = nl + 1; cur++;
+        }
+        return off;
+    }
+
+    function jumpToLine(line) {
+        var area = editor.area, text = area.value;
+        var so = lineStartOffset(text, line);
+        var eo = text.indexOf('\n', so); if (eo < 0) { eo = text.length; }
+        try { area.setSelectionRange(so, eo); } catch (e) { /* ignore */ }
+        area.scrollTop = Math.max(0, (line - 4) * EDLH);
+        syncGutter();
+        updateEditorTitle(line);
+    }
+
+    // Entry point from openInEditor(): open (or focus) a tab for `file` and jump to line.
+    function openBuiltInEditor(file, line, col) {
+        if (!nodeOk || !file) { toast('No file to open'); return; }
+        buildEditor();
+        editor.root.style.display = 'flex';
+        var i = docIndexByFile(file);
+        if (i < 0) {
+            var d = createDoc(file); if (!d) { return; }
+            stashActive();
+            editor.docs.push(d);
+            i = editor.docs.length - 1;
+            editor.active = i;
+            loadActive();
+            renderTabs();
+            jumpToLine(line || 1);
+            editor.area.focus();
+        } else {
+            selectTab(i, line || 1);
+        }
+    }
+
+    function saveEditor() {
+        var d = activeDoc(); if (!d) { return; }
+        d.text = editor.area.value;
+        var out = (d.nl === '\r\n') ? d.text.replace(/\n/g, '\r\n') : d.text;
+        if (d.bom) { out = String.fromCharCode(0xFEFF) + out; }
+        try {
+            fs.writeFileSync(d.file, out, 'utf8');
+            d.dirty = false;
+            renderTabs(); updateEditorTitle();
+            invalidateFile(d.file);
+            // Push the just-saved edit straight onto the live game: reload data files,
+            // re-fetch on-screen images and redraw the scene so the change is visible
+            // immediately without leaving the editor or restarting.
+            refreshGameElements();
+            toast('Saved ' + d.name + ' — reloaded in-game');
+        } catch (e) { setEditorStatus('save failed'); toast('Save failed: ' + e.message); log('save', e); }
+    }
+
+    // Closes the editor window but KEEPS the open tabs in memory (like minimizing),
+    // so unsaved edits aren't lost; reopening any result shows them again.
+    function closeEditor() {
+        if (!editor.root) { return; }
+        editor.root.style.display = 'none';
+    }
+
+    //--- find / replace ------------------------------------------------------
+    function openFind(replaceFocus) {
+        buildEditor();
+        var f = editor.find; f.open = true;
+        editor.findEl.style.display = 'block';
+        // seed the query from a short single-line selection (VSCode behaviour)
+        var sel = editor.area.value.slice(editor.area.selectionStart, editor.area.selectionEnd);
+        if (sel && sel.indexOf('\n') < 0 && sel.length <= 200) { f.q = sel; editor.fq.value = sel; }
+        recomputeMatches();
+        var inp = replaceFocus ? editor.frin : editor.fq;
+        inp.focus(); inp.select();
+        showMatch(f.idx < 0 ? 0 : f.idx);
+    }
+
+    function closeFind() {
+        editor.find.open = false;
+        if (editor.findEl) { editor.findEl.style.display = 'none'; }
+        editor.area.focus();
+    }
+
+    function buildFindRegex(global) {
+        var f = editor.find;
+        if (!f.q) { return null; }
+        var src = f.re ? f.q : f.q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        if (f.ww) { src = '\\b' + src + '\\b'; }
+        try { return new RegExp(src, (global ? 'g' : '') + (f.cs ? '' : 'i') + 'm'); }
+        catch (e) { return null; }
+    }
+
+    function recomputeMatches(caret) {
+        var f = editor.find, text = editor.area.value;
+        f.matches = []; f.invalid = false;
+        if (!f.q) { f.idx = -1; updateFindCount(); return; }
+        var re = buildFindRegex(true);
+        if (!re) { f.invalid = !!f.re; f.idx = -1; updateFindCount(); return; }
+        var m, guard = 0;
+        while ((m = re.exec(text)) !== null) {
+            f.matches.push({ start: m.index, end: m.index + m[0].length });
+            if (m[0].length === 0) { re.lastIndex++; }   // never loop on empty match
+            if (++guard > 200000) { break; }
+        }
+        var c = (caret == null) ? (editor.area.selectionStart || 0) : caret;
+        f.idx = -1;
+        for (var i = 0; i < f.matches.length; i++) { if (f.matches[i].start >= c) { f.idx = i; break; } }
+        if (f.idx === -1 && f.matches.length) { f.idx = 0; }
+        updateFindCount();
+    }
+
+    // Select + scroll to match i (wraps). Does NOT move focus, so the user keeps
+    // typing in the find box while matches highlight live in the textarea.
+    function showMatch(i) {
+        var f = editor.find;
+        if (!f.matches.length) { updateFindCount(); return; }
+        f.idx = ((i % f.matches.length) + f.matches.length) % f.matches.length;
+        var mt = f.matches[f.idx], area = editor.area;
+        try { area.setSelectionRange(mt.start, mt.end); } catch (e) { /* ignore */ }
+        var line = area.value.slice(0, mt.start).split('\n').length;
+        area.scrollTop = Math.max(0, (line - 4) * EDLH);
+        syncGutter(); updateFindCount();
+    }
+
+    function updateFindCount() {
+        var f = editor.find, el = editor.fcount;
+        if (!el) { return; }
+        if (f.invalid) { el.textContent = 'bad regex'; el.className = 'tl-fcount err'; return; }
+        el.className = 'tl-fcount';
+        if (!f.q) { el.textContent = ''; }
+        else if (!f.matches.length) { el.textContent = 'No results'; }
+        else { el.textContent = (f.idx + 1) + ' of ' + f.matches.length; }
+    }
+
+    function computeReplacement(matched) {
+        var f = editor.find;
+        if (!f.re) { return f.r; }                       // literal: insert as-is
+        var re = buildFindRegex(false);
+        try { return matched.replace(re, f.r); }         // regex: honour $1, $& etc.
+        catch (e) { return matched; }
+    }
+
+    function replaceCurrent() {
+        var f = editor.find;
+        if (!f.matches.length) { return; }
+        if (f.idx < 0) { f.idx = 0; }
+        var mt = f.matches[f.idx], area = editor.area, val = area.value;
+        var rep = computeReplacement(val.slice(mt.start, mt.end));
+        area.value = val.slice(0, mt.start) + rep + val.slice(mt.end);
+        markDirty(); refreshGutter();
+        recomputeMatches(mt.start + rep.length);         // positions shifted; reanchor
+        showMatch(f.idx);
+    }
+
+    function replaceAll() {
+        var f = editor.find, area = editor.area;
+        var reg = buildFindRegex(true);
+        if (!reg) { return; }
+        var arr = area.value.match(reg);
+        var count = arr ? arr.length : 0;
+        if (!count) { toast('No matches'); return; }
+        // literal mode: function replacer so $ in the replacement stays literal.
+        area.value = f.re ? area.value.replace(reg, f.r)
+                          : area.value.replace(reg, function () { return f.r; });
+        markDirty(); refreshGutter();
+        recomputeMatches(); showMatch(0);
+        toast('Replaced ' + count + ' occurrence' + (count === 1 ? '' : 's'));
+    }
+
+    //=========================================================================
+    // Live refresh: reload the data files + images a translator just edited and
+    // redraw the current scene, so saved changes show up in-game without a restart.
+    // Bound to the panel's "Reload" button.
+    //=========================================================================
+    var DATA_GLOBALS = {
+        'System': '$dataSystem', 'Actors': '$dataActors', 'Classes': '$dataClasses',
+        'Skills': '$dataSkills', 'Items': '$dataItems', 'Weapons': '$dataWeapons',
+        'Armors': '$dataArmors', 'Enemies': '$dataEnemies', 'Troops': '$dataTroops',
+        'States': '$dataStates', 'Animations': '$dataAnimations', 'Tilesets': '$dataTilesets',
+        'CommonEvents': '$dataCommonEvents', 'MapInfos': '$dataMapInfos'
+    };
+
+    // Run the engine's post-load step on a freshly parsed data object. This is what
+    // rebuilds each entry's `.meta`/notetag fields (via DataManager.extractMetadata)
+    // AND re-fires any plugin that aliased DataManager.onLoad to process notetags.
+    // Skipping it is what crashed plugins like character-lighting (event.meta was
+    // undefined -> "Cannot read property 'CharLight' of undefined").
+    function runOnLoad(obj) {
+        try {
+            if (typeof DataManager !== 'undefined' && typeof DataManager.onLoad === 'function') {
+                DataManager.onLoad(obj);
+            }
+        } catch (e) { /* a plugin's onLoad hook may itself throw; don't abort the reload */ }
+    }
+
+    function reloadDataFiles() {
+        var n = 0;
+        for (var name in DATA_GLOBALS) {
+            if (!DATA_GLOBALS.hasOwnProperty(name)) { continue; }
+            var gname = DATA_GLOBALS[name];
+            if (typeof window[gname] === 'undefined') { continue; }
+            try {
+                window[gname] = JSON.parse(fs.readFileSync(dataFile(name + '.json'), 'utf8'));
+                runOnLoad(window[gname]);
+                n++;
+            } catch (e) { /* file may be absent for this game; skip */ }
+        }
+        try {
+            if (typeof $gameMap !== 'undefined' && $gameMap && $gameMap.mapId()) {
+                // $dataMap must be assigned BEFORE onLoad: it keys off (object === $dataMap)
+                // to know it should extract event metadata.
+                window.$dataMap = JSON.parse(fs.readFileSync(mapFile($gameMap.mapId()), 'utf8'));
+                runOnLoad(window.$dataMap);
+                n++;
+            }
+        } catch (e) { /* ignore */ }
+        return n;
+    }
+
+    // Redraw every window in the current scene (item names, descriptions, terms,
+    // status text, etc. are re-read from the freshly reloaded data).
+    function refreshSceneWindows() {
+        var scene = (typeof SceneManager !== 'undefined') && SceneManager._scene;
+        if (!scene || typeof Window_Base === 'undefined') { return 0; }
+        var n = 0;
+        (function walk(obj) {
+            if (!obj) { return; }
+            if (obj instanceof Window_Base && typeof obj.refresh === 'function') {
+                try { obj.refresh(); n++; } catch (e) { /* some windows refresh only with state */ }
+            }
+            var kids = obj.children;
+            if (kids) { for (var i = 0; i < kids.length; i++) { walk(kids[i]); } }
+        })(scene);
+        return n;
+    }
+
+    function clearImageCaches() {
+        try {
+            if (typeof ImageManager !== 'undefined') {
+                if (typeof ImageManager.clear === 'function') { ImageManager.clear(); }
+                if (ImageManager._cache) { ImageManager._cache = {}; }
+                if (ImageManager._system) { ImageManager._system = {}; }
+                if (typeof ImageCache !== 'undefined' && ImageManager._imageCache) { ImageManager._imageCache = new ImageCache(); }
+            }
+        } catch (e) { /* ignore */ }
+        thumbCache = {};
+    }
+
+    // Force on-screen sprites to re-fetch their bitmap from disk. Routing through
+    // ImageManager.loadBitmap (cache already cleared) keeps decryption working.
+    function reloadOnScreenImages() {
+        var scene = (typeof SceneManager !== 'undefined') && SceneManager._scene;
+        if (!scene || typeof ImageManager === 'undefined') { return 0; }
+        var n = 0;
+        (function walk(obj) {
+            if (!obj) { return; }
+            var bmp = obj.bitmap;
+            if (bmp && bmp._url) {
+                var url = decodeUrl(bmp._url);
+                var slash = url.lastIndexOf('/');
+                var folder = url.slice(0, slash + 1);
+                var fname = url.slice(slash + 1).replace(/\.png$/i, '');
+                try { obj.bitmap = ImageManager.loadBitmap(folder, fname); n++; }
+                catch (e) { /* ignore */ }
+            }
+            var kids = obj.children;
+            if (kids) { for (var i = 0; i < kids.length; i++) { walk(kids[i]); } }
+        })(scene);
+        return n;
+    }
+
+    function refreshGameElements() {
+        if (!nodeOk) { toast('Reload needs Node (NW.js)'); return; }
+        // Drop our own caches so the panel relocates against the new file contents.
+        fileCache = {}; lineCache = {}; dupIndex = null; _scanFiles = null;
+
+        var parts = [];
+        var d = reloadDataFiles();        if (d) { parts.push(d + ' data file' + (d === 1 ? '' : 's')); }
+        clearImageCaches();
+        var im = reloadOnScreenImages();  if (im) { parts.push(im + ' image' + (im === 1 ? '' : 's')); }
+        var w = refreshSceneWindows();    if (w) { parts.push(w + ' window' + (w === 1 ? '' : 's')); }
+
+        // Nudge the map to rebuild event sprites/state if we're on it.
+        try { if (typeof $gameMap !== 'undefined' && $gameMap && $gameMap.requestRefresh) { $gameMap.requestRefresh(); } } catch (e) { /* ignore */ }
+
+        render(); // refresh our own panel too
+        toast(parts.length ? ('Reloaded ' + parts.join(', ')) : 'Nothing on screen to reload');
+    }
+
+    //=========================================================================
     // Overlay UI
     //=========================================================================
     var ui = { root: null, body: null, tab: 'text', highlight: null, hlLayer: null,
@@ -1353,6 +1767,15 @@
     try { ui.side = window.localStorage.getItem('tlins.side') || 'right'; } catch (e) { /* ignore */ }
     try { ui.ignoreNl = window.localStorage.getItem('tlins.ignl') === '1'; } catch (e) { /* ignore */ }
     try { ui.freeze = window.localStorage.getItem('tlins.freeze') === '1'; } catch (e) { /* ignore */ }
+    // Editor switch: remembered choice if set, else seeded from CFG.editor (with 'auto'
+    // resolving to built-in only when VSCode isn't actually installed).
+    try {
+        var _sb = window.localStorage.getItem('tlins.builtin');
+        ui.useBuiltin = _sb === '1' ? true : _sb === '0' ? false :
+            (CFG.editor === 'builtin' || (CFG.editor !== 'vscode' && !vscodeAvailable()));
+    } catch (e) { ui.useBuiltin = (CFG.editor === 'builtin'); }
+    // Which external editor the dropdown opens results in (null => first detected).
+    try { ui.editorId = window.localStorage.getItem('tlins.editor') || null; } catch (e) { ui.editorId = null; }
 
     function applySide() {
         if (!ui.root) { return; }
@@ -1380,18 +1803,26 @@
         ].join(';');
 
         var head = document.createElement('div');
-        head.style.cssText = 'padding:8px 10px;background:#11131a;border-bottom:1px solid #333;display:flex;align-items:center;gap:8px;flex:0 0 auto';
+        head.style.cssText = 'background:#11131a;border-bottom:1px solid #333;flex:0 0 auto';
         head.innerHTML =
-            '<b style="color:#6cf" title="Idea by Sakura · Plugin by Kao_SSS">TL Inspector</b>' +
-            '<span data-tab="text" class="tl-tab">Text</span>' +
-            '<span data-tab="images" class="tl-tab">Images</span>' +
-            '<span data-act="pick" class="tl-btn" title="Hover the game to highlight an object, click to reveal it">&#x2316; Inspect</span>' +
-            '<label class="tl-btn tl-frz" title="Block mouse/keyboard from reaching the game while the editor is open">' +
-                '<input type="checkbox" data-act="freeze"' + (ui.freeze ? ' checked' : '') + '> freeze</label>' +
-            '<span style="flex:1"></span>' +
-            '<span data-act="flip" class="tl-btn" title="Move panel to the other side">&#x21c4;</span>' +
-            '<span data-act="refresh" class="tl-btn">&#x21bb;</span>' +
-            '<span data-act="close" class="tl-btn">&#x2715;</span>';
+            '<div class="tl-hrow" style="padding:7px 10px 4px">' +
+                '<b style="color:#6cf">TL Inspector</b>' +
+                '<span style="flex:1"></span>' +
+                '<span data-tab="text" class="tl-tab">Text</span>' +
+                '<span data-tab="images" class="tl-tab">Images</span>' +
+                '<span style="flex:1"></span>' +
+                '<span data-act="flip" class="tl-btn tl-ic" title="Move panel to the other side">&#x21c4;</span>' +
+                '<span data-act="close" class="tl-btn tl-ic" title="Close panel (F10)">&#x2715;</span>' +
+            '</div>' +
+            '<div class="tl-hrow" style="padding:0 10px 7px">' +
+                '<span data-act="pick" class="tl-btn tl-inspect" title="Hover the game to highlight an object, then click to reveal it">&#x2316; Inspect</span>' +
+                '<label class="tl-btn tl-frz" title="Open clicked file:line results in the built-in in-game editor instead of an external editor">' +
+                    '<input type="checkbox" data-act="builtin"' + (ui.useBuiltin ? ' checked' : '') + '> Built-in Editor</label>' +
+                '<select class="tl-edsel" data-act="edsel" title="Which installed editor opens clicked file:line results"></select>' +
+                '<label class="tl-btn tl-frz" title="Block mouse/keyboard from reaching the game while the panel is open">' +
+                    '<input type="checkbox" data-act="freeze"' + (ui.freeze ? ' checked' : '') + '> Freeze</label>' +
+                '<span data-act="refresh" class="tl-btn" title="Reload on-screen text &amp; images from disk so saved edits show immediately (F9)">&#x21bb; Reload</span>' +
+            '</div>';
         root.appendChild(head);
 
         var body = document.createElement('div');
@@ -1400,22 +1831,27 @@
 
         var style = document.createElement('style');
         style.textContent =
-            '#tl-inspector .tl-tab{cursor:pointer;padding:2px 8px;border-radius:4px;background:#222;color:#bbb}' +
+            '#tl-inspector .tl-hrow{display:flex;align-items:center;gap:6px;flex-wrap:wrap}' +
+            '#tl-inspector .tl-tab{cursor:pointer;padding:3px 11px;border-radius:4px;background:#222;color:#bbb;display:inline-flex;align-items:center;line-height:1.3}' +
             '#tl-inspector .tl-tab.on{background:#2a5db0;color:#fff}' +
-            '#tl-inspector .tl-btn{cursor:pointer;padding:2px 7px;border-radius:4px;background:#333}' +
+            '#tl-inspector .tl-btn{cursor:pointer;padding:3px 10px;border-radius:4px;background:#333;color:#ddd;display:inline-flex;align-items:center;gap:5px;line-height:1.3}' +
             '#tl-inspector .tl-btn.on{background:#3a7;color:#022}' +
+            '#tl-inspector .tl-ic{min-width:30px;justify-content:center;padding:3px 6px}' +
+            '#tl-inspector .tl-edsel{background:#333;color:#ddd;border:1px solid #475;border-radius:4px;padding:3px 4px;font:inherit;cursor:pointer;max-width:140px;line-height:1.3}' +
+            '#tl-inspector .tl-frz input{margin:0 1px 0 0}' +
             '#tl-inspector .tl-btn:hover,#tl-inspector .tl-tab:hover{filter:brightness(1.3)}' +
             '#tl-inspector .tl-row{border:1px solid #2b2f3a;border-radius:6px;padding:6px 8px;margin:0 0 6px;background:#1b1e26}' +
             '#tl-inspector .tl-row.live{border-color:#3a7;background:#1b2620}' +
             '#tl-inspector .tl-txt{color:#fff;white-space:pre-wrap;word-break:break-word;margin-bottom:4px;' +
                 '-webkit-user-select:text;user-select:text;cursor:text}' +
-            '#tl-inspector .tl-meta{color:#8aa;font-size:11px;display:flex;gap:8px;flex-wrap:wrap;align-items:center}' +
+            '#tl-inspector .tl-meta{color:#8aa;font-size:11px;display:flex;gap:10px;flex-wrap:wrap;align-items:center}' +
             '#tl-inspector .tl-loc{color:#9cd;cursor:pointer;text-decoration:underline}' +
             '#tl-inspector .tl-badge{font-size:10px;padding:0 5px;border-radius:8px;background:#345}' +
             '#tl-inspector .tl-badge.choice{background:#534}' +
             '#tl-inspector .tl-badge.ui{background:#553}' +
             '#tl-inspector .tl-badge.live{background:#3a7;color:#022}' +
-            '#tl-inspector .tl-mini{cursor:pointer;color:#cda;text-decoration:underline}' +
+            '#tl-inspector .tl-mini{cursor:pointer;color:#cda;background:#2a2f3a;padding:1px 7px;border-radius:4px;white-space:nowrap}' +
+            '#tl-inspector .tl-mini:hover{background:#363c4a;color:#eda}' +
             '#tl-inspector .tl-imgwrap{display:flex;gap:8px;align-items:flex-start}' +
             '#tl-inspector .tl-thumb{width:60px;height:60px;object-fit:contain;border:1px solid #333;border-radius:4px;flex:0 0 auto;' +
                 'background-image:linear-gradient(45deg,#2a2a2a 25%,transparent 25%),linear-gradient(-45deg,#2a2a2a 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#2a2a2a 75%),linear-gradient(-45deg,transparent 75%,#2a2a2a 75%);background-size:12px 12px;background-position:0 0,0 6px,6px -6px,-6px 0;background-color:#15171d;image-rendering:pixelated}' +
@@ -1423,11 +1859,6 @@
             '#tl-inspector .tl-imginfo{flex:1;min-width:0}' +
             '#tl-inspector .tl-dups{margin-top:6px;padding:4px 0 2px 8px;border-left:2px solid #46506a}' +
             '#tl-inspector .tl-dup{color:#9cd;cursor:pointer;text-decoration:underline;display:block;margin:2px 0}' +
-            '#tl-inspector .tl-edit{margin-top:6px;display:none}' +
-            '#tl-inspector .tl-edit textarea{width:100%;min-height:64px;box-sizing:border-box;' +
-                'background:#0f1118;color:#fff;border:1px solid #46506a;border-radius:4px;' +
-                'padding:6px 8px;font:inherit;resize:vertical}' +
-            '#tl-inspector .tl-edit-actions{display:flex;gap:10px;margin-top:4px}' +
             '#tl-inspector .tl-bar{margin:0 0 8px;color:#9ab}' +
             '#tl-inspector .tl-bar input{vertical-align:middle}' +
             '#tl-inspector .tl-empty{color:#778;padding:20px;text-align:center}';
@@ -1440,18 +1871,9 @@
         // Stop panel mouse/wheel/touch events from reaching the game's document-level
         // input handlers. Fixes: clicking the scrollbar/buttons driving the character,
         // and the mouse wheel not scrolling (the game preventDefault()s wheel events).
-        // Keyboard: stop bubble propagation so RPG Maker's Input (window keydown)
-        // never sees Enter/Backspace/etc. while typing in the panel or edit box.
         ['mousedown', 'mouseup', 'click', 'dblclick', 'wheel', 'contextmenu',
          'touchstart', 'touchend', 'touchmove', 'pointerdown', 'pointerup'].forEach(function (t) {
             root.addEventListener(t, function (ev) { ev.stopPropagation(); }, false);
-        });
-        ['keydown', 'keyup', 'keypress'].forEach(function (t) {
-            root.addEventListener(t, function (ev) {
-                if (ev.key === CFG.hotkey ||
-                    (CFG.liveRefresh && ev.key === CFG.liveRefreshHotkey)) { return; }
-                ev.stopPropagation();
-            }, false);
         });
 
         var frz = root.querySelector('[data-act="freeze"]');
@@ -1463,11 +1885,45 @@
             });
         }
 
+        // Editor dropdown: list every detected external editor; only shown when the
+        // built-in editor is NOT selected (since then clicks open externally).
+        var edsel = root.querySelector('[data-act="edsel"]');
+        function syncEdsel() {
+            if (!edsel) { return; }
+            edsel.style.display = ui.useBuiltin ? 'none' : '';
+        }
+        if (edsel) {
+            var list = detectEditors();
+            list.forEach(function (e) {
+                var o = document.createElement('option');
+                o.value = e.id; o.textContent = e.name;
+                edsel.appendChild(o);
+            });
+            edsel.value = currentEditor().id;
+            syncEdsel();
+            edsel.addEventListener('change', function () {
+                ui.editorId = this.value;
+                try { window.localStorage.setItem('tlins.editor', ui.editorId); } catch (e) { /* ignore */ }
+                toast('Results open in ' + currentEditor().name);
+            });
+        }
+
+        var bld = root.querySelector('[data-act="builtin"]');
+        if (bld) {
+            bld.addEventListener('change', function () {
+                ui.useBuiltin = this.checked;
+                try { window.localStorage.setItem('tlins.builtin', ui.useBuiltin ? '1' : '0'); } catch (e) { /* ignore */ }
+                syncEdsel();
+                toast(ui.useBuiltin ? 'Results open in the built-in editor'
+                                    : 'Results open in ' + currentEditor().name);
+            });
+        }
+
         head.addEventListener('click', function (ev) {
             var t = ev.target.getAttribute('data-tab');
             var a = ev.target.getAttribute('data-act');
-            if (t) { ui.tab = t; render(); }
-            else if (a === 'refresh') { render(); }
+            if (t) { ui.tab = t; if (t !== 'images' && ui.pick) { setPick(false); } render(); }
+            else if (a === 'refresh') { refreshGameElements(); }
             else if (a === 'pick') { setPick(!ui.pick); }
             else if (a === 'flip') { flipSide(); }
             else if (a === 'close') { toggle(false); }
@@ -1494,6 +1950,9 @@
         for (var i = 0; i < tabs.length; i++) {
             tabs[i].classList.toggle('on', tabs[i].getAttribute('data-tab') === ui.tab);
         }
+        // Inspect only works on images, so only surface it on the Images tab.
+        var insp = ui.root.querySelector('.tl-inspect');
+        if (insp) { insp.style.display = (ui.tab === 'images') ? '' : 'none'; }
     }
 
     function esc(s) {
@@ -1525,7 +1984,7 @@
             '<label style="cursor:pointer"><input type="checkbox"' + (ui.ignoreNl ? ' checked' : '') +
             '> ignore line breaks (\\n) when matching</label>' +
             '<span style="flex:1"></span>' +
-            '<span class="tl-mini" data-act="clearhist">clear history (' + textRecords.length + ')</span></div>');
+            '<span class="tl-mini" data-act="clearhist">Clear History (' + textRecords.length + ')</span></div>');
         bar.querySelector('input').addEventListener('change', function () {
             ui.ignoreNl = this.checked;
             try { window.localStorage.setItem('tlins.ignl', ui.ignoreNl ? '1' : ''); } catch (e) { /* ignore */ }
@@ -1564,17 +2023,9 @@
                     (live ? '<span class="tl-badge live">LIVE</span>' : '') +
                     '<span class="tl-loc">' + esc(locText) + '</span>' +
                     '<span class="tl-mini" data-act="dups">' +
-                        (r.kind === 'ui' ? 'locate in files' : (r.file ? 'find duplicates' : 'locate in files')) + '</span>' +
-                    (canEditRecord(r) ? '<span class="tl-mini" data-act="edit">edit</span>' : '') +
+                        (r.kind === 'ui' ? 'Locate In Files' : (r.file ? 'Find Duplicates' : 'Locate In Files')) + '</span>' +
                 '</div>' +
-                '<div class="tl-dups" style="display:none"></div>' +
-                '<div class="tl-edit" style="display:none">' +
-                    '<textarea spellcheck="false"></textarea>' +
-                    '<div class="tl-edit-actions">' +
-                        '<span class="tl-mini" data-act="save">save to file</span>' +
-                        '<span class="tl-mini" data-act="canceledit">cancel</span>' +
-                    '</div>' +
-                '</div>';
+                '<div class="tl-dups" style="display:none"></div>';
 
             (function (rec, ln, cl, rowEl) {
                 var locEl = rowEl.querySelector('.tl-loc');
@@ -1593,30 +2044,6 @@
                             dupsEl.innerHTML = '<span style="color:#778">searching…</span>';
                             setTimeout(function () { populateDups(dupsEl, rec); }, 0);
                         } else { dupsEl.style.display = 'none'; }
-                    });
-                }
-                var editPanel = rowEl.querySelector('.tl-edit');
-                var editBtn = rowEl.querySelector('[data-act="edit"]');
-                if (editBtn && editPanel) {
-                    var ta = editPanel.querySelector('textarea');
-                    editBtn.addEventListener('click', function () {
-                        function openEditor() {
-                            ta.value = rec.text;
-                            editPanel.style.display = 'block';
-                            ta.focus();
-                            try { ta.setSelectionRange(ta.value.length, ta.value.length); } catch (e) { /* ignore */ }
-                        }
-                        if (rec.kind === 'ui' && !rec.tail && !rec._editSite) {
-                            prepareUiEditTarget(rec, function (ok) { if (ok) { openEditor(); } });
-                        } else {
-                            openEditor();
-                        }
-                    });
-                    editPanel.querySelector('[data-act="save"]').addEventListener('click', function () {
-                        if (saveRecordEdit(rec, ta.value)) { editPanel.style.display = 'none'; }
-                    });
-                    editPanel.querySelector('[data-act="canceledit"]').addEventListener('click', function () {
-                        editPanel.style.display = 'none';
                     });
                 }
             })(r, line, col, row);
@@ -1658,7 +2085,7 @@
         }
         var head = htmlEl('<div style="color:#9ab;margin-bottom:3px">' + note +
             (total > MAXSHOW ? ' &mdash; showing first ' + MAXSHOW : '') +
-            ' &nbsp;<span class="tl-mini" data-act="openall">open all (' + shown.length + ')</span></div>');
+            ' &nbsp;<span class="tl-mini" data-act="openall">Open All (' + shown.length + ')</span></div>');
         container.appendChild(head);
         shown.forEach(function (x) {
             var fn = x.file.replace(/^.*[\\\/]/, '');
@@ -1668,22 +2095,7 @@
                     : (x.quoted === false) ? ' <span style="color:#c99">within longer text</span>' : '';
             var el = htmlEl('<span class="tl-dup">' + esc(fn) + (x.line ? ':' + x.line : '') + tag +
                 (x.isSelf ? '  <span style="color:#7a7">(this line)</span>' : '') + '</span>');
-            el.addEventListener('click', function () {
-                if (rec.kind === 'ui' && x.line) {
-                    if (x.quoted === false) {
-                        toast('Match is inside a longer string — pick an exact match or use VSCode');
-                        return;
-                    }
-                    if (bindEditSite(rec, x.file, x.line, x.col || 1)) {
-                        scheduleRefresh();
-                        toast('Exact match selected — click edit to change this string');
-                    } else {
-                        toast('Could not bind a safe edit target — use VSCode');
-                    }
-                    return;
-                }
-                openInEditor(x.file, x.line, x.col);
-            });
+            el.addEventListener('click', function () { openInEditor(x.file, x.line, x.col); });
             container.appendChild(el);
         });
         head.querySelector('[data-act="openall"]').addEventListener('click', function () {
@@ -1697,7 +2109,7 @@
         if (ui.selection && ui.selection.length) {
             var selHead = htmlEl('<div style="color:#fd6;margin:2px 0 6px;display:flex;align-items:center;gap:8px">' +
                 '<b>Under cursor (' + ui.selection.length + ')</b>' +
-                '<span class="tl-mini" data-act="clearsel">clear</span></div>');
+                '<span class="tl-mini" data-act="clearsel">Clear</span></div>');
             selHead.querySelector('[data-act="clearsel"]').addEventListener('click', function () { ui.selection = null; render(); });
             ui.body.appendChild(selHead);
             ui.selection.forEach(function (sel) {
@@ -1895,301 +2307,6 @@
     }
 
     //=========================================================================
-    // Live refresh — hot-reload data/*.json from external editor saves (NW.js)
-    //=========================================================================
-    var _selfWrittenFiles = {};   // absPath -> timestamp (skip watcher echo from overlay saves)
-    var _pendingStable = {};      // absPath -> { lastMt, stableSince, timer }
-    var _watcherStarted = false;
-    var _pollTimer = null;
-    var _watchScanTimer = 0;
-    var _knownMtimes = {};        // absPath -> mtimeMs (poll-based change detection)
-    var DB_FILES = {};            // 'Items.json' -> { global: '$dataItems', meta: true }
-
-    function absPath(file) {
-        if (!file || !path) { return file; }
-        try { return path.resolve(file); } catch (e) { return file; }
-    }
-
-    function syncMtimeCache(file) {
-        if (!nodeOk || !file) { return; }
-        try {
-            _knownMtimes[absPath(file)] = fs.statSync(absPath(file)).mtimeMs;
-        } catch (e) { /* ignore */ }
-    }
-
-    function markSelfWrite(file) {
-        if (!CFG.liveRefresh || !file) { return; }
-        _selfWrittenFiles[absPath(file)] = Date.now();
-        syncMtimeCache(file);
-    }
-
-    function isSelfWrite(file) {
-        if (!file) { return false; }
-        var key = absPath(file);
-        var t = _selfWrittenFiles[key];
-        if (!t) { return false; }
-        var windowMs = (CFG.liveRefreshStableMs || 120) + 600;
-        if (Date.now() - t < windowMs) { return true; }
-        delete _selfWrittenFiles[key];
-        return false;
-    }
-
-    function buildDbFileMap() {
-        DB_FILES = {};
-        var entries = (typeof DataManager !== 'undefined' && DataManager._databaseFiles)
-            ? DataManager._databaseFiles : null;
-        if (entries && entries.length) {
-            entries.forEach(function (entry) {
-                DB_FILES[entry.src] = {
-                    global: entry.name,
-                    meta: entry.src !== 'System.json'
-                };
-            });
-            return;
-        }
-        // Fallback before DataManager is ready (MV/MZ standard database list)
-        [
-            ['Actors.json', '$dataActors', true],
-            ['Classes.json', '$dataClasses', true],
-            ['Skills.json', '$dataSkills', true],
-            ['Items.json', '$dataItems', true],
-            ['Weapons.json', '$dataWeapons', true],
-            ['Armors.json', '$dataArmors', true],
-            ['Enemies.json', '$dataEnemies', true],
-            ['Troops.json', '$dataTroops', true],
-            ['States.json', '$dataStates', true],
-            ['Animations.json', '$dataAnimations', true],
-            ['Tilesets.json', '$dataTilesets', true],
-            ['CommonEvents.json', '$dataCommonEvents', true],
-            ['System.json', '$dataSystem', false],
-            ['MapInfos.json', '$dataMapInfos', true]
-        ].forEach(function (row) {
-            DB_FILES[row[0]] = { global: row[1], meta: row[2] };
-        });
-    }
-
-    function parseMapId(fname) {
-        var m = /^Map(\d+)\.json$/i.exec(fname || '');
-        return m ? parseInt(m[1], 10) : null;
-    }
-
-    function loadJsonFromDisk(file) {
-        var ap = absPath(file);
-        invalidateFileCache(ap);
-        return JSON.parse(fs.readFileSync(ap, 'utf8'));
-    }
-
-    function applyDatabaseGlobal(globalName, data, useMeta) {
-        window[globalName] = data;
-        if (useMeta && typeof DataManager !== 'undefined' && DataManager.extractArrayMetadata) {
-            DataManager.extractArrayMetadata(data);
-        }
-    }
-
-    function refreshSceneWindows() {
-        try {
-            var scene = (typeof SceneManager !== 'undefined') && SceneManager._scene;
-            if (!scene || !scene._windowLayer) { return; }
-            var kids = scene._windowLayer.children;
-            if (!kids) { return; }
-            for (var i = 0; i < kids.length; i++) {
-                var w = kids[i];
-                if (w && typeof w.refresh === 'function') {
-                    try { w.refresh(); } catch (e) { /* ignore */ }
-                }
-            }
-        } catch (e) { log('refreshSceneWindows', e); }
-    }
-
-    function reloadFile(filePath, options) {
-        options = options || {};
-        if (!nodeOk || !fs || !path) {
-            if (!options.silent) { toast('Live refresh requires NW.js playtest'); }
-            return false;
-        }
-        var ap = absPath(filePath);
-        if (!fs.existsSync(ap)) {
-            if (!options.silent) { toast('File not found: ' + path.basename(ap)); }
-            return false;
-        }
-        var fname = path.basename(ap);
-        if (!/\.json$/i.test(fname)) { return false; }
-
-        try {
-            var mapId = parseMapId(fname);
-            if (mapId != null) {
-                var currentMap = (typeof $gameMap !== 'undefined' && $gameMap && $gameMap.mapId)
-                    ? $gameMap.mapId() : 0;
-                if (currentMap !== mapId) {
-                    syncMtimeCache(ap);
-                    if (!options.silent) { toast('Map file saved (switch maps to apply)'); }
-                    return true;
-                }
-                if (typeof $dataMap !== 'undefined') {
-                    $dataMap = loadJsonFromDisk(ap);
-                }
-                syncMtimeCache(ap);
-                if (!options.silent) { toast('Reloaded ' + fname); }
-                refreshSceneWindows();
-                return true;
-            }
-
-            if (!Object.keys(DB_FILES).length) { buildDbFileMap(); }
-            var spec = DB_FILES[fname];
-            if (spec) {
-                applyDatabaseGlobal(spec.global, loadJsonFromDisk(ap), spec.meta);
-                syncMtimeCache(ap);
-                if (!options.silent) { toast('Reloaded ' + fname); }
-                refreshSceneWindows();
-                return true;
-            }
-
-            log('reload skip (unknown data file)', fname);
-            return false;
-        } catch (e) {
-            log('reload failed', fname, e);
-            if (!options.silent) { toast('Reload failed: ' + fname); }
-            return false;
-        }
-    }
-
-    function reloadAllForPlaytest() {
-        if (!nodeOk) { toast('Live refresh requires NW.js playtest'); return; }
-        if (!Object.keys(DB_FILES).length) { buildDbFileMap(); }
-        var count = 0;
-        Object.keys(DB_FILES).forEach(function (fname) {
-            if (reloadFile(dataFile(fname), { silent: true })) { count++; }
-        });
-        var mapId = (typeof $gameMap !== 'undefined' && $gameMap && $gameMap.mapId)
-            ? $gameMap.mapId() : 0;
-        if (mapId > 0 && reloadFile(mapFile(mapId), { silent: true })) { count++; }
-        refreshSceneWindows();
-        toast('Reloaded database + current map (' + count + ' files)');
-    }
-
-    // VSCode (etc.) saves land on disk; wait until mtime stops changing, then reload.
-    function scheduleFileReload(filePath) {
-        if (!CFG.liveRefresh || !nodeOk) { return; }
-        waitForStableThenReload(absPath(filePath));
-    }
-
-    function waitForStableThenReload(ap) {
-        if (isSelfWrite(ap)) { return; }
-        var stableMs = CFG.liveRefreshStableMs || 120;
-        var checkMs = 50;
-        if (!_pendingStable[ap]) {
-            _pendingStable[ap] = { lastMt: null, stableSince: 0, timer: 0 };
-        }
-        if (_pendingStable[ap].timer) { clearTimeout(_pendingStable[ap].timer); }
-
-        function tick() {
-            if (isSelfWrite(ap)) {
-                delete _pendingStable[ap];
-                return;
-            }
-            try {
-                if (!fs.existsSync(ap)) {
-                    _pendingStable[ap].timer = setTimeout(tick, checkMs);
-                    return;
-                }
-                var mt = fs.statSync(ap).mtimeMs;
-                var p = _pendingStable[ap];
-                if (p.lastMt !== mt) {
-                    p.lastMt = mt;
-                    p.stableSince = Date.now();
-                } else if (Date.now() - p.stableSince >= stableMs) {
-                    delete _pendingStable[ap];
-                    reloadFile(ap);
-                    return;
-                }
-                p.timer = setTimeout(tick, checkMs);
-            } catch (e) {
-                delete _pendingStable[ap];
-            }
-        }
-
-        _pendingStable[ap].timer = setTimeout(tick, checkMs);
-    }
-
-    function seedMtimes() {
-        if (!nodeOk) { return; }
-        try {
-            fs.readdirSync(DATA_DIR).forEach(function (fname) {
-                if (!/\.json$/i.test(fname)) { return; }
-                syncMtimeCache(path.join(DATA_DIR, fname));
-            });
-        } catch (e) { log('seedMtimes', e); }
-    }
-
-    function pollDataDirForChanges() {
-        if (!CFG.liveRefresh || !nodeOk) { return; }
-        try {
-            var names = fs.readdirSync(DATA_DIR);
-            for (var i = 0; i < names.length; i++) {
-                var fname = names[i];
-                if (!/\.json$/i.test(fname)) { continue; }
-                var ap = path.join(DATA_DIR, fname);
-                try {
-                    var mt = fs.statSync(ap).mtimeMs;
-                    var prev = _knownMtimes[ap];
-                    if (prev != null && mt !== prev && !isSelfWrite(ap)) {
-                        scheduleFileReload(ap);
-                    } else {
-                        _knownMtimes[ap] = mt;
-                    }
-                } catch (e2) { /* ignore */ }
-            }
-        } catch (e) { /* ignore */ }
-    }
-
-    function startLiveRefreshPoll() {
-        if (_pollTimer || !CFG.liveRefresh || !nodeOk) { return; }
-        seedMtimes();
-        var ms = CFG.liveRefreshPollMs || 400;
-        _pollTimer = setInterval(pollDataDirForChanges, ms);
-        log('live refresh polling every', ms + 'ms');
-    }
-
-    function scheduleDataDirScan() {
-        if (!CFG.liveRefresh) { return; }
-        clearTimeout(_watchScanTimer);
-        _watchScanTimer = setTimeout(pollDataDirForChanges, 200);
-    }
-
-    function startLiveRefreshWatcher() {
-        if (!CFG.liveRefresh || !nodeOk || _watcherStarted) { return; }
-        _watcherStarted = true;
-        buildDbFileMap();
-        startLiveRefreshPoll();
-        try {
-            fs.watch(DATA_DIR, function (eventType, filename) {
-                if (filename && /\.json$/i.test(filename)) {
-                    scheduleFileReload(path.join(DATA_DIR, filename));
-                } else {
-                    // Windows fs.watch often fires with a null filename
-                    scheduleDataDirScan();
-                }
-            });
-            log('live refresh watching', DATA_DIR);
-        } catch (e) {
-            log('live refresh watch failed (poll-only)', e);
-        }
-    }
-
-    if (CFG.liveRefresh && nodeOk) {
-        if (typeof DataManager !== 'undefined') {
-            startLiveRefreshWatcher();
-        } else {
-            var _waitDbTimer = setInterval(function () {
-                if (typeof DataManager !== 'undefined') {
-                    clearInterval(_waitDbTimer);
-                    startLiveRefreshWatcher();
-                }
-            }, 100);
-        }
-    }
-
-    //=========================================================================
     // Toast
     //=========================================================================
     var toastEl = null, toastTimer = 0;
@@ -2213,10 +2330,10 @@
             e.preventDefault();
             e.stopPropagation();
             toggle();
-        } else if (CFG.liveRefresh && e.key === CFG.liveRefreshHotkey) {
+        } else if (CFG.reloadHotkey && e.key === CFG.reloadHotkey) {
             e.preventDefault();
             e.stopPropagation();
-            reloadAllForPlaytest();
+            refreshGameElements();
         } else if (e.key === 'Escape' && ui.pick) {
             e.preventDefault();
             e.stopPropagation();
@@ -2228,23 +2345,21 @@
     // events from reaching the game's document/window listeners. Events targeting the
     // panel (or the Inspect catcher) and our own hotkeys are always allowed through.
     function inPanel(node) {
-        return !!(node && ui.root && (ui.root.contains(node) || (ui.catcher && ui.catcher === node)));
-    }
-    function isEditableInPanel(node) {
-        if (!node || !ui.root || !ui.root.contains(node)) { return false; }
-        var tag = node.tagName;
-        return tag === 'TEXTAREA' || tag === 'INPUT' || node.isContentEditable;
+        return !!(node && (
+            (ui.root && ui.root.contains(node)) ||
+            (ui.catcher && ui.catcher === node) ||
+            (editor.root && editor.root.contains(node))   // built-in editor needs raw input
+        ));
     }
     function freezeGuard(e) {
         if (!ui.open || !ui.freeze) { return; }
+        if (inPanel(e.target)) { return; } // our panel / built-in editor get input untouched
         var isKey = (e.type === 'keydown' || e.type === 'keyup' || e.type === 'keypress');
         if (isKey) {
-            if (e.key === CFG.hotkey || e.key === 'Escape' ||
-                (CFG.liveRefresh && e.key === CFG.liveRefreshHotkey)) { return; }
-            // Typing in the panel / edit box must keep normal browser behaviour
-            // (Backspace, Enter for newlines, etc.) — only block keys aimed at the game.
-            if (inPanel(e.target) || isEditableInPanel(document.activeElement)) { return; }
-            // Block the game from seeing this key.
+            if (e.key === CFG.hotkey || e.key === CFG.reloadHotkey || e.key === 'Escape') { return; } // hotkeys always work
+            // Always block the game from seeing the key (stopPropagation), but do NOT
+            // cancel the browser default for copy/select shortcuts (Ctrl+C / Ctrl+A) so
+            // the user can still copy selected text from the panel.
             e.stopPropagation();
             if (e.stopImmediatePropagation) { e.stopImmediatePropagation(); }
             if (e.cancelable && !(e.ctrlKey || e.metaKey)) { e.preventDefault(); }
@@ -2264,16 +2379,10 @@
     window.TLInspector = {
         open: function () { toggle(true); },
         close: function () { toggle(false); },
-        reload: function (file) { return reloadFile(file); },
-        reloadAll: function () { reloadAllForPlaytest(); return true; },
         records: textRecords,
         images: imageLog,
         cfg: CFG
     };
 
-    var _readyMsg = 'ready - ' + CFG.hotkey + ' inspector';
-    if (CFG.liveRefresh && nodeOk) {
-        _readyMsg += ', ' + CFG.liveRefreshHotkey + ' reload data (auto-watch on)';
-    }
-    log(_readyMsg);
+    log('ready - press ' + CFG.hotkey + ' to open');
 })();

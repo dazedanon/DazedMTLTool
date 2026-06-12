@@ -54,20 +54,41 @@ def detect_editors() -> list[tuple[str, Path]]:
             )
             add("Cursor", base / "Programs" / "cursor" / "Cursor.exe")
             add("Cursor", base / "cursor" / "Cursor.exe")
+            add("VSCodium", base / "Programs" / "VSCodium" / "VSCodium.exe")
+            add("VSCodium", base / "VSCodium" / "VSCodium.exe")
+            add("Windsurf", base / "Programs" / "Windsurf" / "Windsurf.exe")
     elif sys.platform == "darwin":
         add(
             "VS Code",
             Path("/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code"),
         )
-        add("Cursor", Path("/Applications/Cursor.app/Contents/MacOS/Cursor"))
+        add(
+            "VS Code Insiders",
+            Path(
+                "/Applications/Visual Studio Code - Insiders.app"
+                "/Contents/Resources/app/bin/code"
+            ),
+        )
+        add("Cursor", Path("/Applications/Cursor.app/Contents/Resources/app/bin/cursor"))
+        add("VSCodium", Path("/Applications/VSCodium.app/Contents/Resources/app/bin/codium"))
+        add("Windsurf", Path("/Applications/Windsurf.app/Contents/Resources/app/bin/windsurf"))
     else:
         for path in (
             Path("/usr/bin/code"),
             Path("/usr/share/code/bin/code"),
             Path("/snap/bin/code"),
             Path("/usr/bin/cursor"),
+            Path("/usr/bin/codium"),
+            Path("/usr/bin/windsurf"),
         ):
-            label = "Cursor" if "cursor" in path.name else "VS Code"
+            if "cursor" in path.name:
+                label = "Cursor"
+            elif "codium" in path.name:
+                label = "VSCodium"
+            elif "windsurf" in path.name:
+                label = "Windsurf"
+            else:
+                label = "VS Code"
             add(label, path)
 
     return out
@@ -121,7 +142,10 @@ def patch_cfg_block(js: str, overrides: dict) -> str:
             continue
         lit = _js_literal(val)
         pattern = rf"({re.escape(key)}:\s*)(?:'[^']*'|\"[^\"]*\"|true|false|null|\d+)"
-        js, count = re.subn(pattern, rf"\g<1>{lit}", js, count=1)
+        # Use a replacement *function*, not a template: a template would reinterpret
+        # backslashes in `lit` (e.g. Windows paths like C:\\Users\\... collapse to
+        # C:\Users\... -> invalid JS string escapes). A function inserts `lit` verbatim.
+        js, count = re.subn(pattern, lambda m, _lit=lit: m.group(1) + _lit, js, count=1)
         if count == 0:
             raise ValueError(f"Could not patch CFG.{key} in TLInspector.js")
     return js
