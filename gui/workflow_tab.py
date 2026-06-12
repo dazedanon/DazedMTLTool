@@ -29,6 +29,7 @@ from PyQt5.QtGui import QFont
 from PyQt5.QtWidgets import (
     QApplication,
     QCheckBox,
+    QComboBox,
     QFileDialog,
     QFrame,
     QGridLayout,
@@ -719,6 +720,7 @@ class WorkflowTab(QWidget):
             self._populate_p2_checkboxes()
         if index == 8:
             self._refresh_tl_inspector_status()
+            self._load_tli_editor_settings()
 
     def _register_import_button(self, button: QPushButton) -> None:
         self._import_buttons.append(button)
@@ -2435,6 +2437,87 @@ class WorkflowTab(QWidget):
         self._tli_status_label.setStyleSheet("color:#7a7a7a;font-size:13px;")
         inner.addWidget(self._tli_status_label)
 
+        editor_title = QLabel("Editor settings")
+        editor_title.setStyleSheet("color:#4ec9b0;font-size:12px;font-weight:bold;padding-top:4px;")
+        inner.addWidget(editor_title)
+
+        editor_row = QHBoxLayout()
+        editor_row.setSpacing(6)
+        editor_lbl = QLabel("Editor:")
+        editor_lbl.setFixedWidth(72)
+        editor_lbl.setStyleSheet("color:#9d9d9d;font-size:12px;")
+        editor_row.addWidget(editor_lbl)
+        self._tli_editor_combo = QComboBox()
+        self._tli_editor_combo.setMinimumWidth(280)
+        self._tli_editor_combo.currentIndexChanged.connect(self._on_tli_editor_combo_changed)
+        editor_row.addWidget(self._tli_editor_combo, 1)
+        detect_btn = _make_btn("Detect", "#4a4a4a")
+        detect_btn.setFixedWidth(72)
+        detect_btn.setToolTip("Scan this PC for VS Code, Insiders, or Cursor")
+        detect_btn.clicked.connect(self._detect_tli_editors)
+        editor_row.addWidget(detect_btn)
+        inner.addLayout(editor_row)
+
+        custom_row = QHBoxLayout()
+        custom_row.setSpacing(6)
+        custom_row.addSpacing(72)
+        self._tli_editor_custom = QLineEdit()
+        self._tli_editor_custom.setPlaceholderText("Path to editor executable (when Custom is selected)")
+        self._tli_editor_custom.setEnabled(False)
+        custom_row.addWidget(self._tli_editor_custom, 1)
+        browse_editor_btn = _make_btn("Browse…", "#4a4a4a")
+        browse_editor_btn.setFixedWidth(88)
+        browse_editor_btn.clicked.connect(self._browse_tli_editor)
+        custom_row.addWidget(browse_editor_btn)
+        inner.addLayout(custom_row)
+
+        self._tli_detect_label = QLabel("")
+        self._tli_detect_label.setWordWrap(True)
+        self._tli_detect_label.setStyleSheet("color:#6a6a6a;font-size:11px;padding-left:72px;")
+        inner.addWidget(self._tli_detect_label)
+
+        ws_row = QHBoxLayout()
+        ws_row.setSpacing(6)
+        ws_lbl = QLabel("Workspace:")
+        ws_lbl.setFixedWidth(72)
+        ws_lbl.setStyleSheet("color:#9d9d9d;font-size:12px;")
+        ws_row.addWidget(ws_lbl)
+        self._tli_workspace_auto = QCheckBox("Use game folder (auto)")
+        self._tli_workspace_auto.setChecked(True)
+        self._tli_workspace_auto.setStyleSheet("color:#cccccc;font-size:12px;")
+        self._tli_workspace_auto.toggled.connect(self._on_tli_workspace_auto_toggled)
+        ws_row.addWidget(self._tli_workspace_auto)
+        ws_row.addStretch()
+        inner.addLayout(ws_row)
+
+        ws_custom_row = QHBoxLayout()
+        ws_custom_row.setSpacing(6)
+        ws_custom_row.addSpacing(72)
+        self._tli_workspace_edit = QLineEdit()
+        self._tli_workspace_edit.setPlaceholderText("Custom VS Code / Cursor workspace folder")
+        self._tli_workspace_edit.setEnabled(False)
+        ws_custom_row.addWidget(self._tli_workspace_edit, 1)
+        browse_ws_btn = _make_btn("Browse…", "#4a4a4a")
+        browse_ws_btn.setFixedWidth(88)
+        browse_ws_btn.clicked.connect(self._browse_tli_workspace)
+        ws_custom_row.addWidget(browse_ws_btn)
+        inner.addLayout(ws_custom_row)
+
+        cfg_btn_row = QHBoxLayout()
+        cfg_btn_row.setSpacing(8)
+        save_tli_btn = _make_btn("✔  Save settings", "#3a5a7a")
+        save_tli_btn.setFixedWidth(140)
+        save_tli_btn.setToolTip("Write editor settings to .env (used on Install / Apply)")
+        save_tli_btn.clicked.connect(self._save_tli_editor_settings)
+        cfg_btn_row.addWidget(save_tli_btn)
+        apply_tli_btn = _make_btn("↻  Apply to game", "#3a5a7a")
+        apply_tli_btn.setFixedWidth(140)
+        apply_tli_btn.setToolTip("Update the installed TLInspector.js in your game folder")
+        apply_tli_btn.clicked.connect(self._apply_tli_editor_settings)
+        cfg_btn_row.addWidget(apply_tli_btn)
+        cfg_btn_row.addStretch()
+        inner.addLayout(cfg_btn_row)
+
         tips = QLabel(
             "<ul style='margin:4px 0;padding-left:18px;color:#9d9d9d;font-size:12px;'>"
             "<li>Run this <b>after exporting</b> translations so the game files are up to date.</li>"
@@ -2466,6 +2549,155 @@ class WorkflowTab(QWidget):
 
         layout.addWidget(box)
         self._step8_playtest_box = box
+        self._populate_tli_editor_combo()
+        self._load_tli_editor_settings()
+
+    def _populate_tli_editor_combo(self, select: str | None = None):
+        """Fill editor dropdown with auto-detect, found editors, and custom."""
+        from util.tl_inspector.config import detect_editors
+
+        combo = self._tli_editor_combo
+        combo.blockSignals(True)
+        combo.clear()
+        combo.addItem("Auto-detect (recommended)", "auto")
+        for label, path in detect_editors():
+            combo.addItem(f"{label} — {path}", str(path))
+        combo.addItem("Custom path…", "__custom__")
+
+        want = select
+        if want is None:
+            try:
+                from util.tl_inspector.config import load_config
+                want = load_config().get("editorCmd", "auto")
+            except Exception:
+                want = "auto"
+
+        idx = combo.findData(want) if want else 0
+        if idx >= 0:
+            combo.setCurrentIndex(idx)
+        elif want and want != "auto":
+            custom_idx = combo.findData("__custom__")
+            combo.setCurrentIndex(custom_idx if custom_idx >= 0 else 0)
+            self._tli_editor_custom.setText(want)
+        else:
+            combo.setCurrentIndex(0)
+        combo.blockSignals(False)
+        self._on_tli_editor_combo_changed()
+        self._update_tli_detect_label()
+
+    def _update_tli_detect_label(self):
+        from util.tl_inspector.config import detect_editors, detect_primary_editor
+
+        found = detect_editors()
+        primary = detect_primary_editor()
+        if primary:
+            extra = f" ({len(found)} found)" if len(found) > 1 else ""
+            self._tli_detect_label.setText(f"Detected on this PC: {primary}{extra}")
+        else:
+            self._tli_detect_label.setText(
+                "No VS Code / Cursor found — install one or choose Custom path."
+            )
+
+    def _load_tli_editor_settings(self):
+        """Load TL Inspector editor settings from .env into Step 8 controls."""
+        try:
+            from util.tl_inspector.config import load_config
+            cfg = load_config()
+        except Exception:
+            cfg = {"editorCmd": "auto", "workspaceFolder": "auto"}
+
+        self._populate_tli_editor_combo(select=cfg.get("editorCmd", "auto"))
+        ws = cfg.get("workspaceFolder", "auto")
+        auto_ws = not ws or ws == "auto"
+        self._tli_workspace_auto.blockSignals(True)
+        self._tli_workspace_auto.setChecked(auto_ws)
+        self._tli_workspace_auto.blockSignals(False)
+        self._tli_workspace_edit.setEnabled(not auto_ws)
+        self._tli_workspace_edit.setText("" if auto_ws else ws)
+
+    def _resolve_tli_config(self) -> dict:
+        """Build config dict from Step 8 editor controls."""
+        mode = self._tli_editor_combo.currentData()
+        if mode == "__custom__":
+            editor = self._tli_editor_custom.text().strip() or "auto"
+        elif mode:
+            editor = str(mode)
+        else:
+            editor = "auto"
+
+        if self._tli_workspace_auto.isChecked():
+            workspace = "auto"
+        else:
+            workspace = self._tli_workspace_edit.text().strip() or "auto"
+
+        return {"editorCmd": editor, "workspaceFolder": workspace}
+
+    def _on_tli_editor_combo_changed(self, _index: int | None = None):
+        custom = self._tli_editor_combo.currentData() == "__custom__"
+        self._tli_editor_custom.setEnabled(custom)
+
+    def _on_tli_workspace_auto_toggled(self, checked: bool):
+        self._tli_workspace_edit.setEnabled(not checked)
+
+    def _detect_tli_editors(self):
+        try:
+            from util.tl_inspector.config import load_config
+            current = load_config().get("editorCmd", "auto")
+        except Exception:
+            current = "auto"
+        self._populate_tli_editor_combo(select=current)
+        self._log("🔍 Scanned for VS Code / Cursor installations.")
+
+    def _browse_tli_editor(self):
+        start = self._tli_editor_custom.text() or self._setting("last_tli_editor", "")
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Select Editor Executable",
+            start,
+            "Executables (*.exe);;All Files (*)",
+        )
+        if not path:
+            return
+        self._save_setting("last_tli_editor", path)
+        custom_idx = self._tli_editor_combo.findData("__custom__")
+        if custom_idx >= 0:
+            self._tli_editor_combo.setCurrentIndex(custom_idx)
+        self._tli_editor_custom.setText(path)
+
+    def _browse_tli_workspace(self):
+        start = self._tli_workspace_edit.text() or self.folder_edit.text() or ""
+        folder = QFileDialog.getExistingDirectory(self, "Select Workspace Folder", start)
+        if folder:
+            self._tli_workspace_auto.setChecked(False)
+            self._tli_workspace_edit.setText(folder)
+
+    def _save_tli_editor_settings(self):
+        cfg = self._resolve_tli_config()
+        try:
+            from util.tl_inspector.config import save_config
+            save_config(cfg)
+            self._log(
+                "✅ TL Inspector settings saved — "
+                f"editor={cfg['editorCmd']}, workspace={cfg['workspaceFolder']}"
+            )
+        except Exception as exc:
+            self._log(f"❌ Could not save TL Inspector settings: {exc}")
+
+    def _apply_tli_editor_settings(self):
+        game_root = self.folder_edit.text().strip()
+        if not game_root:
+            self._log("⚠  No game folder set. Complete Step 0 first.")
+            return
+        cfg = self._resolve_tli_config()
+        try:
+            from util.tl_inspector.config import save_config
+            from util.tl_inspector.installer import apply_config
+            save_config(cfg)
+            ok, msg = apply_config(Path(game_root), cfg)
+        except Exception as exc:
+            self._log(f"❌ Could not apply TL Inspector settings: {exc}")
+            return
+        self._log(("✅ " if ok else "❌ ") + msg)
 
     def _refresh_tl_inspector_status(self):
         """Update Step 8 status label from the current game folder."""
@@ -2510,9 +2742,12 @@ class WorkflowTab(QWidget):
         if not game_root:
             self._log("⚠  No game folder set. Complete Step 0 first.")
             return
+        cfg = self._resolve_tli_config()
         try:
+            from util.tl_inspector.config import save_config
             from util.tl_inspector.installer import install
-            ok, msg = install(Path(game_root))
+            save_config(cfg)
+            ok, msg = install(Path(game_root), cfg=cfg)
         except Exception as exc:
             self._log(f"❌ TL Inspector install failed: {exc}")
             return

@@ -902,11 +902,14 @@
                     cands.push(path.join(b, 'Programs', 'Microsoft VS Code', 'Code.exe'));
                     cands.push(path.join(b, 'Microsoft VS Code', 'Code.exe'));
                     cands.push(path.join(b, 'Programs', 'Microsoft VS Code Insiders', 'Code - Insiders.exe'));
+                    cands.push(path.join(b, 'Programs', 'cursor', 'Cursor.exe'));
+                    cands.push(path.join(b, 'cursor', 'Cursor.exe'));
                 });
             } else if (plat === 'darwin') {
                 cands.push('/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code');
+                cands.push('/Applications/Cursor.app/Contents/MacOS/Cursor');
             } else {
-                cands.push('/usr/bin/code', '/usr/share/code/bin/code', '/snap/bin/code');
+                cands.push('/usr/bin/code', '/usr/share/code/bin/code', '/snap/bin/code', '/usr/bin/cursor');
             }
             for (var i = 0; i < cands.length; i++) {
                 try { if (fs.existsSync(cands[i])) { _editorPath = cands[i]; log('editor found', _editorPath); return _editorPath; } }

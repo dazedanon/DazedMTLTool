@@ -6,7 +6,6 @@ Credits: Idea by Sakura · Plugin by Kao_SSS
 from __future__ import annotations
 
 import re
-import shutil
 from pathlib import Path
 
 PLUGIN_NAME = "TLInspector"
@@ -80,8 +79,10 @@ def status(game_root: Path) -> dict:
     }
 
 
-def install(game_root: Path, source_js: Path | None = None) -> tuple[bool, str]:
+def install(game_root: Path, source_js: Path | None = None, cfg: dict | None = None) -> tuple[bool, str]:
     """Copy TLInspector.js into the game and declare it in plugins.js."""
+    from util.tl_inspector.config import load_config, prepare_plugin_js
+
     info = detect_engine(game_root)
     if info is None:
         return False, "No RPG Maker MV/MZ game found at that path."
@@ -95,7 +96,8 @@ def install(game_root: Path, source_js: Path | None = None) -> tuple[bool, str]:
     content, nl = _read_plugins_js(plugins_js)
 
     plugins_dir.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(src, target)
+    effective_cfg = cfg if cfg is not None else load_config()
+    target.write_text(prepare_plugin_js(src, effective_cfg), encoding="utf-8")
 
     if not _is_declared(content):
         idx = content.rfind("];")
@@ -133,3 +135,21 @@ def uninstall(game_root: Path) -> tuple[bool, str]:
         target.unlink()
 
     return True, "TLInspector uninstalled."
+
+
+def apply_config(game_root: Path, cfg: dict | None = None) -> tuple[bool, str]:
+    """Rewrite an installed TLInspector.js with current editor settings."""
+    from util.tl_inspector.config import load_config, prepare_plugin_js
+
+    info = detect_engine(game_root)
+    if info is None:
+        return False, "No RPG Maker MV/MZ game found at that path."
+
+    _, _, plugins_dir = info
+    target = plugins_dir / f"{PLUGIN_NAME}.js"
+    if not target.is_file():
+        return False, "TLInspector is not installed in this game folder."
+
+    effective_cfg = cfg if cfg is not None else load_config()
+    target.write_text(prepare_plugin_js(DEFAULT_PLUGIN_SRC, effective_cfg), encoding="utf-8")
+    return True, "TL Inspector editor settings applied to the installed plugin."
