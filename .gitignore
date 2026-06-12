@@ -20,3 +20,4 @@ __pycache__
 !prompt.txt
 !vocab_base.txt
 !requirements.txt
+!util/tl_inspector/TLInspector.js
