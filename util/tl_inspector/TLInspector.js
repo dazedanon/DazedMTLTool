@@ -139,7 +139,7 @@
     function log() {
         if (window.console) { console.log.apply(console, ['[TLInspector]'].concat([].slice.call(arguments))); }
     }
-    log('init', { engine: ENGINE, node: nodeOk, dataDir: DATA_DIR });
+    log('init', { engine: ENGINE, node: nodeOk, dataDir: DATA_DIR, credits: 'Idea by Sakura · Plugin by Kao_SSS' });
 
     //=========================================================================
     // File cache + JSON value locator (path -> char offset -> line:col)
