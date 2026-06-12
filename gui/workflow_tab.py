@@ -2441,69 +2441,49 @@ class WorkflowTab(QWidget):
         editor_title.setStyleSheet("color:#4ec9b0;font-size:12px;font-weight:bold;padding-top:4px;")
         inner.addWidget(editor_title)
 
-        editor_row = QHBoxLayout()
-        editor_row.setSpacing(6)
+        _TLI_LABEL_W = 80
+        _TLI_BTN_W = 88
+        _tli_lbl_style = "color:#9d9d9d;font-size:12px;"
+
+        tli_grid = QGridLayout()
+        tli_grid.setHorizontalSpacing(6)
+        tli_grid.setVerticalSpacing(6)
+        tli_grid.setColumnStretch(1, 1)
+
         editor_lbl = QLabel("Editor:")
-        editor_lbl.setFixedWidth(72)
-        editor_lbl.setStyleSheet("color:#9d9d9d;font-size:12px;")
-        editor_row.addWidget(editor_lbl)
+        editor_lbl.setFixedWidth(_TLI_LABEL_W)
+        editor_lbl.setStyleSheet(_tli_lbl_style)
+        editor_lbl.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        tli_grid.addWidget(editor_lbl, 0, 0)
+
         self._tli_editor_combo = QComboBox()
-        self._tli_editor_combo.setMinimumWidth(280)
         self._tli_editor_combo.currentIndexChanged.connect(self._on_tli_editor_combo_changed)
-        editor_row.addWidget(self._tli_editor_combo, 1)
+        tli_grid.addWidget(self._tli_editor_combo, 0, 1)
+
         detect_btn = _make_btn("Detect", "#4a4a4a")
-        detect_btn.setFixedWidth(72)
+        detect_btn.setFixedWidth(_TLI_BTN_W)
         detect_btn.setToolTip("Scan this PC for VS Code, Insiders, or Cursor")
         detect_btn.clicked.connect(self._detect_tli_editors)
-        editor_row.addWidget(detect_btn)
-        inner.addLayout(editor_row)
+        tli_grid.addWidget(detect_btn, 0, 2)
 
-        custom_row = QHBoxLayout()
-        custom_row.setSpacing(6)
-        custom_row.addSpacing(72)
         self._tli_editor_custom = QLineEdit()
         self._tli_editor_custom.setPlaceholderText("Path to editor executable (when Custom is selected)")
         self._tli_editor_custom.setEnabled(False)
-        custom_row.addWidget(self._tli_editor_custom, 1)
+        tli_grid.addWidget(self._tli_editor_custom, 1, 1)
+
         browse_editor_btn = _make_btn("Browse…", "#4a4a4a")
-        browse_editor_btn.setFixedWidth(88)
+        browse_editor_btn.setFixedWidth(_TLI_BTN_W)
         browse_editor_btn.clicked.connect(self._browse_tli_editor)
-        custom_row.addWidget(browse_editor_btn)
-        inner.addLayout(custom_row)
+        tli_grid.addWidget(browse_editor_btn, 1, 2)
 
         self._tli_detect_label = QLabel("")
         self._tli_detect_label.setWordWrap(True)
-        self._tli_detect_label.setStyleSheet("color:#6a6a6a;font-size:11px;padding-left:72px;")
-        inner.addWidget(self._tli_detect_label)
+        self._tli_detect_label.setStyleSheet("color:#6a6a6a;font-size:11px;")
+        tli_grid.addWidget(self._tli_detect_label, 2, 1, 1, 2)
 
-        ws_row = QHBoxLayout()
-        ws_row.setSpacing(6)
-        ws_lbl = QLabel("Workspace:")
-        ws_lbl.setFixedWidth(72)
-        ws_lbl.setStyleSheet("color:#9d9d9d;font-size:12px;")
-        ws_row.addWidget(ws_lbl)
-        self._tli_workspace_auto = QCheckBox("Use game folder (auto)")
-        self._tli_workspace_auto.setChecked(True)
-        self._tli_workspace_auto.setStyleSheet("color:#cccccc;font-size:12px;")
-        self._tli_workspace_auto.toggled.connect(self._on_tli_workspace_auto_toggled)
-        ws_row.addWidget(self._tli_workspace_auto)
-        ws_row.addStretch()
-        inner.addLayout(ws_row)
-
-        ws_custom_row = QHBoxLayout()
-        ws_custom_row.setSpacing(6)
-        ws_custom_row.addSpacing(72)
-        self._tli_workspace_edit = QLineEdit()
-        self._tli_workspace_edit.setPlaceholderText("Custom VS Code / Cursor workspace folder")
-        self._tli_workspace_edit.setEnabled(False)
-        ws_custom_row.addWidget(self._tli_workspace_edit, 1)
-        browse_ws_btn = _make_btn("Browse…", "#4a4a4a")
-        browse_ws_btn.setFixedWidth(88)
-        browse_ws_btn.clicked.connect(self._browse_tli_workspace)
-        ws_custom_row.addWidget(browse_ws_btn)
-        inner.addLayout(ws_custom_row)
-
-        cfg_btn_row = QHBoxLayout()
+        cfg_btn_wrap = QWidget()
+        cfg_btn_row = QHBoxLayout(cfg_btn_wrap)
+        cfg_btn_row.setContentsMargins(0, 0, 0, 0)
         cfg_btn_row.setSpacing(8)
         save_tli_btn = _make_btn("✔  Save settings", "#3a5a7a")
         save_tli_btn.setFixedWidth(140)
@@ -2516,7 +2496,9 @@ class WorkflowTab(QWidget):
         apply_tli_btn.clicked.connect(self._apply_tli_editor_settings)
         cfg_btn_row.addWidget(apply_tli_btn)
         cfg_btn_row.addStretch()
-        inner.addLayout(cfg_btn_row)
+        tli_grid.addWidget(cfg_btn_wrap, 3, 1, 1, 2)
+
+        inner.addLayout(tli_grid)
 
         tips = QLabel(
             "<ul style='margin:4px 0;padding-left:18px;color:#9d9d9d;font-size:12px;'>"
@@ -2604,16 +2586,9 @@ class WorkflowTab(QWidget):
             from util.tl_inspector.config import load_config
             cfg = load_config()
         except Exception:
-            cfg = {"editorCmd": "auto", "workspaceFolder": "auto"}
+            cfg = {"editorCmd": "auto"}
 
         self._populate_tli_editor_combo(select=cfg.get("editorCmd", "auto"))
-        ws = cfg.get("workspaceFolder", "auto")
-        auto_ws = not ws or ws == "auto"
-        self._tli_workspace_auto.blockSignals(True)
-        self._tli_workspace_auto.setChecked(auto_ws)
-        self._tli_workspace_auto.blockSignals(False)
-        self._tli_workspace_edit.setEnabled(not auto_ws)
-        self._tli_workspace_edit.setText("" if auto_ws else ws)
 
     def _resolve_tli_config(self) -> dict:
         """Build config dict from Step 8 editor controls."""
@@ -2625,19 +2600,11 @@ class WorkflowTab(QWidget):
         else:
             editor = "auto"
 
-        if self._tli_workspace_auto.isChecked():
-            workspace = "auto"
-        else:
-            workspace = self._tli_workspace_edit.text().strip() or "auto"
-
-        return {"editorCmd": editor, "workspaceFolder": workspace}
+        return {"editorCmd": editor, "workspaceFolder": "auto"}
 
     def _on_tli_editor_combo_changed(self, _index: int | None = None):
         custom = self._tli_editor_combo.currentData() == "__custom__"
         self._tli_editor_custom.setEnabled(custom)
-
-    def _on_tli_workspace_auto_toggled(self, checked: bool):
-        self._tli_workspace_edit.setEnabled(not checked)
 
     def _detect_tli_editors(self):
         try:
@@ -2664,22 +2631,12 @@ class WorkflowTab(QWidget):
             self._tli_editor_combo.setCurrentIndex(custom_idx)
         self._tli_editor_custom.setText(path)
 
-    def _browse_tli_workspace(self):
-        start = self._tli_workspace_edit.text() or self.folder_edit.text() or ""
-        folder = QFileDialog.getExistingDirectory(self, "Select Workspace Folder", start)
-        if folder:
-            self._tli_workspace_auto.setChecked(False)
-            self._tli_workspace_edit.setText(folder)
-
     def _save_tli_editor_settings(self):
         cfg = self._resolve_tli_config()
         try:
             from util.tl_inspector.config import save_config
             save_config(cfg)
-            self._log(
-                "✅ TL Inspector settings saved — "
-                f"editor={cfg['editorCmd']}, workspace={cfg['workspaceFolder']}"
-            )
+            self._log(f"✅ TL Inspector settings saved — editor={cfg['editorCmd']}")
         except Exception as exc:
             self._log(f"❌ Could not save TL Inspector settings: {exc}")
 

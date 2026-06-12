@@ -11,7 +11,6 @@ from pathlib import Path
 from dotenv import dotenv_values
 
 ENV_EDITOR = "tlEditorCmd"
-ENV_WORKSPACE = "tlWorkspaceFolder"
 
 CFG_KEYS = ("editorCmd", "workspaceFolder")
 
@@ -84,11 +83,8 @@ def load_config(env_path: Path | None = None) -> dict:
     env = dotenv_values(path) if path.is_file() else {}
     cfg = dict(DEFAULTS)
     editor = (env.get(ENV_EDITOR) or "").strip()
-    workspace = (env.get(ENV_WORKSPACE) or "").strip()
     if editor:
         cfg["editorCmd"] = editor
-    if workspace:
-        cfg["workspaceFolder"] = workspace
     return cfg
 
 
@@ -97,7 +93,6 @@ def save_config(cfg: dict, env_path: Path | None = None) -> None:
     text = path.read_text(encoding="utf-8") if path.is_file() else ""
     updates = {
         ENV_EDITOR: cfg.get("editorCmd", "auto"),
-        ENV_WORKSPACE: cfg.get("workspaceFolder", "auto"),
     }
     for key, val in updates.items():
         quoted = f"'{val}'"
@@ -136,4 +131,5 @@ def prepare_plugin_js(source: Path | None = None, cfg: dict | None = None) -> st
     src = source or BUNDLED_PLUGIN
     text = src.read_text(encoding="utf-8")
     effective = {**DEFAULTS, **(cfg or load_config())}
+    effective["workspaceFolder"] = "auto"
     return patch_cfg_block(text, effective)
