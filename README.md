@@ -5,6 +5,7 @@ An AI-powered game translation tool with a GUI. Translate RPG Maker, Ren'Py, Tyr
 ## Credits
 
 - **[Sinflower](https://github.com/Sinflower)** — [RV2JSON](https://github.com/Sinflower/RV2JSON) — enables RPGMaker Ace games to be translated the same way as MV/MZ by converting rvdata2 files to JSON and back.
+- **Sakura & Kao_SSS** — TL Inspector (`util/tl_inspector/`) — in-game translation source inspector and live-edit plugin for RPG Maker MV/MZ playtesting.
 
 ## Table of Contents
 
@@ -109,9 +110,11 @@ This means Python wasn't added to your PATH. You have two options:
 
 1. Inside the tool folder, find `.env.example` and make a copy of it named `.env`.
 2. Open `.env` in any text editor (Notepad works fine) and fill in your API details:
+   - `api` — Your API base URL (for Nvidia use `https://integrate.api.nvidia.com/v1/`).
    - `key` — Your API key.
    - `organization` — Your organization key (make something up if using a self-hosted or non-OpenAI API).
-   - `API_PROVIDER` — Set to `openai` or `gemini` depending on your provider.
+   - `API_PROVIDER` — Use `openai` for OpenAI-compatible providers (including Nvidia), or `gemini` for Gemini.
+   - `model` — For Nvidia/custom OpenAI-compatible endpoints, enter the model name manually (example: `deepseek-ai/deepseek-v4-pro`).
 3. The rest of the settings (wordwrap, batch size, etc.) can be left as defaults for now. You can tweak them later.
 
 ### 3. Launch the GUI

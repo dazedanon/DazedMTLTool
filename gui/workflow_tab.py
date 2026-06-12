@@ -7,9 +7,11 @@ Provides a guided, step-by-step interface:
   Step 1  – (Optional) Pre-process game files
   Step 2  – Auto-detect speaker format and apply to module settings
   Step 3  – Build glossary: parse speakers, then enrich with AI prompt
-  Step 4  – Translation: Phase 0 (DB), Phase 1 (dialogue), Phase 1b (111 cache), Phase 2 (risky)
-  Step 5  – Translate visible strings in js/plugins.js
-  Step 6  – Export translated/ back to the game folder
+  Step 4  – Translation: Phase 0 (DB), Phase 1 (dialogue), Phase 1b (111 cache)
+  Step 5  – Translation Phase 2 (risky codes)
+  Step 6  – Translate visible strings in js/plugins.js (or Ace scripts)
+  Step 7  – Export translated/ back to the game folder
+  Step 8  – Install TL Inspector for playtesting and live in-game edits (MV/MZ)
 """
 
 from __future__ import annotations
@@ -27,6 +29,7 @@ from PyQt5.QtGui import QFont
 from PyQt5.QtWidgets import (
     QApplication,
     QCheckBox,
+    QComboBox,
     QFileDialog,
     QFrame,
     QGridLayout,
@@ -560,6 +563,7 @@ class WorkflowTab(QWidget):
             ("5  TL Phase 2",   self._build_step5_tl_phase2),
             ("6  Plugins.js",   self._build_step6_plugins_js),
             ("7  Export",       self._build_step7_export),
+            ("8  Playtest",     self._build_step8_playtest),
         ]
 
         for tab_label, builder in _tab_defs:
@@ -714,6 +718,9 @@ class WorkflowTab(QWidget):
 
         if index == 5:
             self._populate_p2_checkboxes()
+        if index == 8:
+            self._refresh_tl_inspector_status()
+            self._load_tli_editor_settings()
 
     def _register_import_button(self, button: QPushButton) -> None:
         self._import_buttons.append(button)
@@ -2398,6 +2405,335 @@ class WorkflowTab(QWidget):
         row.addStretch()
         layout.addLayout(row)
 
+    # ── Step 8: Playtest (TL Inspector) ─────────────────────────────────────
+
+    def _build_step8_playtest(self, layout: QVBoxLayout):
+        self._step8_section_label = _make_section_label("Step 8 — Playtest with TL Inspector")
+        layout.addWidget(self._step8_section_label)
+
+        hint = QLabel(
+            "Install <b>TL Inspector</b> into your RPG Maker MV/MZ game for playtesting. "
+            "Press <b>F10</b> in-game to see which source file each line of text comes from, "
+            "open it in VSCode, or <b>edit the text live</b> and save directly to the JSON file."
+        )
+        hint.setWordWrap(True)
+        hint.setTextFormat(Qt.RichText)
+        hint.setStyleSheet("color:#9d9d9d;font-size:13px;padding-bottom:4px;")
+        layout.addWidget(hint)
+
+        credits = QLabel("Idea by Sakura · Plugin by Kao_SSS")
+        credits.setStyleSheet("color:#6a6a6a;font-size:11px;font-style:italic;padding-bottom:6px;")
+        layout.addWidget(credits)
+
+        box = QWidget()
+        box.setObjectName("tbox")
+        box.setStyleSheet(self._task_box_style())
+        inner = QVBoxLayout(box)
+        inner.setContentsMargins(10, 8, 10, 8)
+        inner.setSpacing(6)
+
+        self._tli_status_label = QLabel("Status: (detect a project folder first)")
+        self._tli_status_label.setWordWrap(True)
+        self._tli_status_label.setStyleSheet("color:#7a7a7a;font-size:13px;")
+        inner.addWidget(self._tli_status_label)
+
+        editor_title = QLabel("Editor settings")
+        editor_title.setStyleSheet("color:#4ec9b0;font-size:12px;font-weight:bold;padding-top:4px;")
+        inner.addWidget(editor_title)
+
+        _TLI_LABEL_W = 80
+        _TLI_BTN_W = 88
+        _tli_lbl_style = "color:#9d9d9d;font-size:12px;"
+
+        tli_grid = QGridLayout()
+        tli_grid.setHorizontalSpacing(6)
+        tli_grid.setVerticalSpacing(6)
+        tli_grid.setColumnStretch(1, 1)
+
+        editor_lbl = QLabel("Editor:")
+        editor_lbl.setFixedWidth(_TLI_LABEL_W)
+        editor_lbl.setStyleSheet(_tli_lbl_style)
+        editor_lbl.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        tli_grid.addWidget(editor_lbl, 0, 0)
+
+        self._tli_editor_combo = QComboBox()
+        self._tli_editor_combo.currentIndexChanged.connect(self._on_tli_editor_combo_changed)
+        tli_grid.addWidget(self._tli_editor_combo, 0, 1)
+
+        detect_btn = _make_btn("Detect", "#4a4a4a")
+        detect_btn.setFixedWidth(_TLI_BTN_W)
+        detect_btn.setToolTip("Scan this PC for VS Code, Insiders, or Cursor")
+        detect_btn.clicked.connect(self._detect_tli_editors)
+        tli_grid.addWidget(detect_btn, 0, 2)
+
+        self._tli_editor_custom = QLineEdit()
+        self._tli_editor_custom.setPlaceholderText("Path to editor executable (when Custom is selected)")
+        self._tli_editor_custom.setEnabled(False)
+        tli_grid.addWidget(self._tli_editor_custom, 1, 1)
+
+        browse_editor_btn = _make_btn("Browse…", "#4a4a4a")
+        browse_editor_btn.setFixedWidth(_TLI_BTN_W)
+        browse_editor_btn.clicked.connect(self._browse_tli_editor)
+        tli_grid.addWidget(browse_editor_btn, 1, 2)
+
+        self._tli_detect_label = QLabel("")
+        self._tli_detect_label.setWordWrap(True)
+        self._tli_detect_label.setStyleSheet("color:#6a6a6a;font-size:11px;")
+        tli_grid.addWidget(self._tli_detect_label, 2, 1, 1, 2)
+
+        cfg_btn_wrap = QWidget()
+        cfg_btn_row = QHBoxLayout(cfg_btn_wrap)
+        cfg_btn_row.setContentsMargins(0, 0, 0, 0)
+        cfg_btn_row.setSpacing(8)
+        save_tli_btn = _make_btn("✔  Save settings", "#3a5a7a")
+        save_tli_btn.setFixedWidth(140)
+        save_tli_btn.setToolTip("Write editor settings to .env (used on Install / Apply)")
+        save_tli_btn.clicked.connect(self._save_tli_editor_settings)
+        cfg_btn_row.addWidget(save_tli_btn)
+        apply_tli_btn = _make_btn("↻  Apply to game", "#3a5a7a")
+        apply_tli_btn.setFixedWidth(140)
+        apply_tli_btn.setToolTip("Update the installed TLInspector.js in your game folder")
+        apply_tli_btn.clicked.connect(self._apply_tli_editor_settings)
+        cfg_btn_row.addWidget(apply_tli_btn)
+        cfg_btn_row.addStretch()
+        tli_grid.addWidget(cfg_btn_wrap, 3, 1, 1, 2)
+
+        inner.addLayout(tli_grid)
+
+        tips = QLabel(
+            "<ul style='margin:4px 0;padding-left:18px;color:#9d9d9d;font-size:12px;'>"
+            "<li>Run this <b>after exporting</b> translations so the game files are up to date.</li>"
+            "<li>Overlay <b>save to file</b> reloads instantly; VSCode saves reload once the file is stable on disk</li>"
+            "<li><b>F9</b> — force reload database + current map</li>"
+            "<li><b>F10</b> — toggle the inspector panel</li>"
+            "<li>Click a source location to open in VSCode; click <b>edit</b> to change text in-game</li>"
+            "<li>Remove the plugin before shipping a release build</li>"
+            "</ul>"
+        )
+        tips.setWordWrap(True)
+        tips.setTextFormat(Qt.RichText)
+        inner.addWidget(tips)
+
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(8)
+        _BTN_W = 200
+        self._tli_install_btn = _make_btn("⬇  Install TL Inspector", "#3a7a3a")
+        self._tli_install_btn.setFixedWidth(_BTN_W)
+        self._tli_install_btn.clicked.connect(self._install_tl_inspector)
+        btn_row.addWidget(self._tli_install_btn)
+
+        self._tli_uninstall_btn = _make_btn("⬆  Uninstall TL Inspector", "#7a3a3a")
+        self._tli_uninstall_btn.setFixedWidth(_BTN_W)
+        self._tli_uninstall_btn.clicked.connect(self._uninstall_tl_inspector)
+        btn_row.addWidget(self._tli_uninstall_btn)
+        btn_row.addStretch()
+        inner.addLayout(btn_row)
+
+        layout.addWidget(box)
+        self._step8_playtest_box = box
+        self._populate_tli_editor_combo()
+        self._load_tli_editor_settings()
+
+    def _populate_tli_editor_combo(self, select: str | None = None):
+        """Fill editor dropdown with auto-detect, found editors, and custom."""
+        from util.tl_inspector.config import detect_editors
+
+        combo = self._tli_editor_combo
+        combo.blockSignals(True)
+        combo.clear()
+        combo.addItem("Auto-detect (recommended)", "auto")
+        for label, path in detect_editors():
+            combo.addItem(f"{label} — {path}", str(path))
+        combo.addItem("Custom path…", "__custom__")
+
+        want = select
+        if want is None:
+            try:
+                from util.tl_inspector.config import load_config
+                want = load_config().get("editorCmd", "auto")
+            except Exception:
+                want = "auto"
+
+        idx = combo.findData(want) if want else 0
+        if idx >= 0:
+            combo.setCurrentIndex(idx)
+        elif want and want != "auto":
+            custom_idx = combo.findData("__custom__")
+            combo.setCurrentIndex(custom_idx if custom_idx >= 0 else 0)
+            self._tli_editor_custom.setText(want)
+        else:
+            combo.setCurrentIndex(0)
+        combo.blockSignals(False)
+        self._on_tli_editor_combo_changed()
+        self._update_tli_detect_label()
+
+    def _update_tli_detect_label(self):
+        from util.tl_inspector.config import detect_editors, detect_primary_editor
+
+        found = detect_editors()
+        primary = detect_primary_editor()
+        if primary:
+            extra = f" ({len(found)} found)" if len(found) > 1 else ""
+            self._tli_detect_label.setText(f"Detected on this PC: {primary}{extra}")
+        else:
+            self._tli_detect_label.setText(
+                "No VS Code / Cursor found — install one or choose Custom path."
+            )
+
+    def _load_tli_editor_settings(self):
+        """Load TL Inspector editor settings from .env into Step 8 controls."""
+        try:
+            from util.tl_inspector.config import load_config
+            cfg = load_config()
+        except Exception:
+            cfg = {"editorCmd": "auto"}
+
+        self._populate_tli_editor_combo(select=cfg.get("editorCmd", "auto"))
+
+    def _resolve_tli_config(self) -> dict:
+        """Build config dict from Step 8 editor controls."""
+        mode = self._tli_editor_combo.currentData()
+        if mode == "__custom__":
+            editor = self._tli_editor_custom.text().strip() or "auto"
+        elif mode:
+            editor = str(mode)
+        else:
+            editor = "auto"
+
+        return {"editorCmd": editor, "workspaceFolder": "auto"}
+
+    def _on_tli_editor_combo_changed(self, _index: int | None = None):
+        custom = self._tli_editor_combo.currentData() == "__custom__"
+        self._tli_editor_custom.setEnabled(custom)
+
+    def _detect_tli_editors(self):
+        try:
+            from util.tl_inspector.config import load_config
+            current = load_config().get("editorCmd", "auto")
+        except Exception:
+            current = "auto"
+        self._populate_tli_editor_combo(select=current)
+        self._log("🔍 Scanned for VS Code / Cursor installations.")
+
+    def _browse_tli_editor(self):
+        start = self._tli_editor_custom.text() or self._setting("last_tli_editor", "")
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Select Editor Executable",
+            start,
+            "Executables (*.exe);;All Files (*)",
+        )
+        if not path:
+            return
+        self._save_setting("last_tli_editor", path)
+        custom_idx = self._tli_editor_combo.findData("__custom__")
+        if custom_idx >= 0:
+            self._tli_editor_combo.setCurrentIndex(custom_idx)
+        self._tli_editor_custom.setText(path)
+
+    def _save_tli_editor_settings(self):
+        cfg = self._resolve_tli_config()
+        try:
+            from util.tl_inspector.config import save_config
+            save_config(cfg)
+            self._log(f"✅ TL Inspector settings saved — editor={cfg['editorCmd']}")
+        except Exception as exc:
+            self._log(f"❌ Could not save TL Inspector settings: {exc}")
+
+    def _apply_tli_editor_settings(self):
+        game_root = self.folder_edit.text().strip()
+        if not game_root:
+            self._log("⚠  No game folder set. Complete Step 0 first.")
+            return
+        cfg = self._resolve_tli_config()
+        try:
+            from util.tl_inspector.config import save_config
+            from util.tl_inspector.installer import apply_config
+            save_config(cfg)
+            ok, msg = apply_config(Path(game_root), cfg)
+        except Exception as exc:
+            self._log(f"❌ Could not apply TL Inspector settings: {exc}")
+            return
+        self._log(("✅ " if ok else "❌ ") + msg)
+
+    def _refresh_tl_inspector_status(self):
+        """Update Step 8 status label from the current game folder."""
+        label = getattr(self, "_tli_status_label", None)
+        if label is None:
+            return
+        game_root = self.folder_edit.text().strip()
+        if not game_root:
+            label.setText("Status: no game folder set — complete Step 0 first.")
+            label.setStyleSheet("color:#7a7a7a;font-size:13px;")
+            return
+        try:
+            from util.tl_inspector.installer import status
+            st = status(Path(game_root))
+        except Exception as exc:
+            label.setText(f"Status: error — {exc}")
+            label.setStyleSheet("color:#f48771;font-size:13px;")
+            return
+
+        if not st.get("ok"):
+            label.setText(f"Status: {st.get('message', 'unsupported')}")
+            label.setStyleSheet("color:#e9a12a;font-size:13px;")
+            return
+
+        engine = st.get("engine", "?")
+        msg = st.get("message", "")
+        parts = [f"RPG Maker {engine}", msg]
+        if st.get("declared") and st.get("plugin_file"):
+            detail = "plugin declared in plugins.js and file present"
+        elif st.get("declared"):
+            detail = "declared in plugins.js (plugin file missing)"
+        elif st.get("plugin_file"):
+            detail = "plugin file present (not declared in plugins.js)"
+        else:
+            detail = "not installed"
+        label.setText(f"Status: {' · '.join(parts)} — {detail}")
+        color = "#6a9a6a" if st.get("declared") and st.get("plugin_file") else "#9d9d9d"
+        label.setStyleSheet(f"color:{color};font-size:13px;")
+
+    def _install_tl_inspector(self):
+        game_root = self.folder_edit.text().strip()
+        if not game_root:
+            self._log("⚠  No game folder set. Complete Step 0 first.")
+            return
+        cfg = self._resolve_tli_config()
+        try:
+            from util.tl_inspector.config import save_config
+            from util.tl_inspector.installer import install
+            save_config(cfg)
+            ok, msg = install(Path(game_root), cfg=cfg)
+        except Exception as exc:
+            self._log(f"❌ TL Inspector install failed: {exc}")
+            return
+        self._log(("✅ " if ok else "❌ ") + msg)
+        self._refresh_tl_inspector_status()
+
+    def _uninstall_tl_inspector(self):
+        game_root = self.folder_edit.text().strip()
+        if not game_root:
+            self._log("⚠  No game folder set. Complete Step 0 first.")
+            return
+        reply = QMessageBox.question(
+            self,
+            "Uninstall TL Inspector",
+            "Remove TLInspector from plugins.js and delete the plugin file?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if reply != QMessageBox.Yes:
+            return
+        try:
+            from util.tl_inspector.installer import uninstall
+            ok, msg = uninstall(Path(game_root))
+        except Exception as exc:
+            self._log(f"❌ TL Inspector uninstall failed: {exc}")
+            return
+        self._log(("✅ " if ok else "❌ ") + msg)
+        self._refresh_tl_inspector_status()
+
     # ─────────────────────────────────────────────────────────────────────────
     # Step 0 – Project Folder logic
     # ─────────────────────────────────────────────────────────────────────────
@@ -2501,6 +2837,13 @@ class WorkflowTab(QWidget):
                     "Copy a prompt that instructs Copilot/Cursor to translate only "
                     "visible player-facing strings in plugins.js, using vocab.txt as a glossary."
                 )
+        # Step 8 — TL Inspector (MV/MZ only)
+        if hasattr(self, "_step_tabs") and self._step_tabs.count() > 8:
+            self._step_tabs.setTabEnabled(8, not is_ace)
+        box = getattr(self, "_step8_playtest_box", None)
+        if box is not None:
+            box.setEnabled(not is_ace)
+        self._refresh_tl_inspector_status()
 
     def _detect_folder(self):
         folder = self.folder_edit.text().strip()

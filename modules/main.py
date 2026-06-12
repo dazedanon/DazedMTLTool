@@ -10,27 +10,27 @@ from dotenv import load_dotenv
 
 # This needs to be before the module imports as some of them currently try to read and use some of these values
 # upon import, in which case if they are unset the script will crash before we can output these messages.
-envMissing = False
 load_dotenv()
-for env in [
-    "api",
-    "key",
-    "model",
-    "language",
-    "timeout",
-    "fileThreads",
-    "threads",
-    "width",
-    "listWidth",
-]:
-    if os.getenv(env) is None or str(os.getenv(env))[:1] == "<":
-        tqdm.write(Fore.RED + f"Environment variable {env} is not set!")
-        envMissing = True
-if envMissing:
+_missing_envs = [
+    env for env in [
+        "api",
+        "key",
+        "model",
+        "language",
+        "timeout",
+        "fileThreads",
+        "threads",
+        "width",
+        "listWidth",
+    ]
+    if os.getenv(env) is None or str(os.getenv(env))[:1] == "<"
+]
+if _missing_envs:
+    names = ", ".join(_missing_envs)
     tqdm.write(
         Fore.RED
-        + "Some of the required environment values may not be set correctly. You can set \
-these values using an .env file, for an example see .env.example"
+        + f"Missing required environment variable(s): {names}. "
+        + "Set them in a .env file (see .env.example)."
     )
 
 from modules.rpgmakermvmz import handleMVMZ, setSpeakerParseMode as setSpeakerParseMVMZ, finalizeSpeakerParse as finalizeSpeakerParseMVMZ
