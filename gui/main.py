@@ -132,6 +132,12 @@ class UpdateThread(QThread):
                     shutil.copy2(src, dst)
 
         Path(self.SHA_FILE).write_text(latest_sha)
+        try:
+            from util.ace.update_tools import ensure_ace_tools
+            self.progress.emit("Updating RPG Maker Ace tools…")
+            ensure_ace_tools(log_fn=lambda m: self.progress.emit(m))
+        except Exception as exc:
+            self.progress.emit(f"Ace tool update skipped: {exc}")
         self.finished.emit(True, f"updated:{latest_sha[:8]}")
 
 

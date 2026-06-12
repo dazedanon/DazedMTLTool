@@ -3868,7 +3868,12 @@ class WorkflowTab(QWidget):
 
     @staticmethod
     def _ace_tool_path(name: str) -> Path:
-        return Path(__file__).resolve().parent.parent / "util" / "ace" / name
+        from util.ace.update_tools import ace_tool_path
+        return ace_tool_path(name)
+
+    def _ensure_ace_tools(self) -> bool:
+        from util.ace.update_tools import ensure_ace_tools
+        return ensure_ace_tools(log_fn=self._log)
 
     def _show_ace_decrypt_notice(self, game_root: str, rgss_path: str):
         """Show a dialog explaining how to decrypt the encrypted Ace archive."""
@@ -3895,12 +3900,17 @@ class WorkflowTab(QWidget):
             self._run_ace_decrypter(game_root)
 
     def _run_ace_decrypter(self, game_root: str):
-        decrypter = self._ace_tool_path("RPGMakerDecrypter.exe")
-        if not decrypter.is_file():
-            self._log(f"❌ RPGMakerDecrypter.exe not found at {decrypter}")
+        if not self._ensure_ace_tools():
             return
-        self._log(f"Running RPGMakerDecrypter.exe in {game_root} …")
-        w = _SubprocessWorker([str(decrypter)], cwd=game_root, label="RPGMakerDecrypter")
+        try:
+            from util.ace.update_tools import build_decrypter_command
+            cmd = build_decrypter_command(Path(game_root))
+        except FileNotFoundError as exc:
+            self._log(f"❌ {exc}")
+            return
+        decrypter = Path(cmd[0])
+        self._log(f"Running {decrypter.name} in {game_root} …")
+        w = _SubprocessWorker(cmd, cwd=game_root, label=decrypter.stem)
         w.log.connect(self._log)
         w.done.connect(lambda ok, msg: self._log(("✅ " if ok else "❌ ") + msg))
         self._worker = w
@@ -3908,6 +3918,8 @@ class WorkflowTab(QWidget):
 
     def _run_rv2json_create(self):
         """Run RV2JSON.exe -c to convert rvdata2 → JSON files (run from game root)."""
+        if not self._ensure_ace_tools():
+            return
         rv2json = self._ace_tool_path("RV2JSON.exe")
         if not rv2json.is_file():
             self._log(f"❌ RV2JSON.exe not found at {rv2json}")
@@ -3962,6 +3974,8 @@ class WorkflowTab(QWidget):
 
     def _run_rv2json_update(self):
         """Run RV2JSON.exe -u to write translated JSON back to rvdata2 files."""
+        if not self._ensure_ace_tools():
+            return
         rv2json = self._ace_tool_path("RV2JSON.exe")
         if not rv2json.is_file():
             self._log(f"❌ RV2JSON.exe not found at {rv2json}")

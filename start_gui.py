@@ -43,6 +43,12 @@ def main():
     # Check dependencies
     if not check_dependencies():
         sys.exit(1)
+
+    try:
+        from util.ace.update_tools import ensure_ace_tools
+        ensure_ace_tools()
+    except Exception as exc:
+        print(f"Warning: Ace tool setup failed ({exc}). Ace features may be unavailable.")
         
     # Import and run GUI
     try:

@@ -178,6 +178,14 @@ if errorlevel 1 (
 )
 echo.
 
+:: RPG Maker Ace tools (RV2JSON + decrypter) — downloaded from GitHub, not stored in git
+echo Checking RPG Maker Ace tools...
+python -m util.ace.update_tools
+if errorlevel 1 (
+    echo WARNING: Ace tool download failed. Ace translation features may not work until fixed.
+)
+echo.
+
 :: Launch the GUI
 echo ==========================================
 echo    Launching DazedMTLTool GUI...

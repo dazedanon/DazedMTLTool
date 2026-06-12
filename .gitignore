@@ -21,3 +21,6 @@ __pycache__
 !vocab_base.txt
 !requirements.txt
 !util/tl_inspector/TLInspector.js
+util/ace/*.exe
+util/ace/.tools_version.json
+!util/ace/offline/*.exe
