@@ -53,7 +53,13 @@ from PyQt5.QtWidgets import (
     QAbstractItemView,
 )
 
-from gui.translation_tab import BATCH_MODE_LABEL, BATCH_COLLECT_LIVE_CHARGE_NOTE
+from gui.translation_tab import (
+    BATCH_MODE_LABEL,
+    BATCH_MODE_BENEFIT_NOTE,
+    BATCH_COLLECT_LIVE_CHARGE_NOTE,
+)
+
+WORKFLOW_TL_NORMAL_LABEL = "Normal Translate"
 
 # ---------------------------------------------------------------------------
 # Phase profiles applied to rpgmakermvmz.py before each translation run
@@ -1886,19 +1892,76 @@ class WorkflowTab(QWidget):
 
     # ── Step 4: Translation ─────────────────────────────────────────────────
 
+    def _add_tl_mode_selector(self, layout: QVBoxLayout):
+        """Dropdown for normal vs batch TL; applies to all workflow phase run buttons."""
+        mode_box = QWidget()
+        mode_box.setObjectName("tbox")
+        mode_box.setStyleSheet(self._task_box_style())
+        mode_inner = QVBoxLayout(mode_box)
+        mode_inner.setContentsMargins(10, 8, 10, 8)
+        mode_inner.setSpacing(6)
+
+        mode_row = QHBoxLayout()
+        mode_row.setSpacing(10)
+        mode_lbl = QLabel("Translation mode:")
+        mode_lbl.setStyleSheet("color:#cccccc;font-size:13px;font-weight:bold;")
+        self._tl_mode_combo = QComboBox()
+        self._tl_mode_combo.addItem(WORKFLOW_TL_NORMAL_LABEL)
+        self._tl_mode_combo.addItem(BATCH_MODE_LABEL)
+        self._tl_mode_combo.setFixedWidth(240)
+        self._tl_mode_combo.setToolTip(
+            "Applies to Phase 0, 1, 1b, and 2 run buttons. "
+            "Batch uses the Anthropic Batches API (50% off, Claude only)."
+        )
+        self._tl_mode_combo.currentTextChanged.connect(self._on_workflow_tl_mode_changed)
+        mode_row.addWidget(mode_lbl)
+        mode_row.addWidget(self._tl_mode_combo)
+        mode_row.addStretch()
+        mode_inner.addLayout(mode_row)
+
+        self._batch_mode_benefit = QLabel(BATCH_MODE_BENEFIT_NOTE)
+        self._batch_mode_benefit.setWordWrap(True)
+        self._batch_mode_benefit.setStyleSheet("color:#8fbc8f;font-size:12px;")
+        self._batch_mode_benefit.setVisible(False)
+        mode_inner.addWidget(self._batch_mode_benefit)
+
+        self._batch_mode_warning = QLabel(BATCH_COLLECT_LIVE_CHARGE_NOTE)
+        self._batch_mode_warning.setWordWrap(True)
+        self._batch_mode_warning.setStyleSheet("color:#f0ad4e;font-size:11px;")
+        self._batch_mode_warning.setVisible(False)
+        mode_inner.addWidget(self._batch_mode_warning)
+
+        layout.addWidget(mode_box)
+        batch_idx = self._tl_mode_combo.findText(BATCH_MODE_LABEL)
+        if batch_idx >= 0:
+            self._tl_mode_combo.setCurrentIndex(batch_idx)
+        self._on_workflow_tl_mode_changed(self._tl_mode_combo.currentText())
+
+    def _on_workflow_tl_mode_changed(self, mode_text: str):
+        is_batch = mode_text == BATCH_MODE_LABEL
+        if hasattr(self, "_batch_mode_benefit"):
+            self._batch_mode_benefit.setVisible(is_batch)
+        if hasattr(self, "_batch_mode_warning"):
+            self._batch_mode_warning.setVisible(is_batch)
+        if hasattr(self, "_step5_mode_hint"):
+            self._step5_mode_hint.setText(f"Translation mode: {mode_text}")
+            if is_batch:
+                self._step5_mode_hint.setStyleSheet("color:#8fbc8f;font-size:12px;margin-bottom:4px;")
+            else:
+                self._step5_mode_hint.setStyleSheet("color:#9d9d9d;font-size:12px;margin-bottom:4px;")
+
+    def _workflow_batch_mode(self) -> bool:
+        combo = getattr(self, "_tl_mode_combo", None)
+        return combo is not None and combo.currentText() == BATCH_MODE_LABEL
+
+    def _workflow_mode_text(self) -> str:
+        return BATCH_MODE_LABEL if self._workflow_batch_mode() else "Translate"
+
     def _build_step4_translation(self, layout: QVBoxLayout):
 
         layout.addWidget(_make_section_label("Step 4 — TL Phase 1"))
 
-        batch_hint = QLabel(
-            "Batch buttons use the Anthropic Batches API — 50% or more cheaper than live translate "
-            "(Claude only). Pass 1 collects dialogue for the batch; you confirm cost, then Pass 2 "
-            "writes files.\n"
-            + BATCH_COLLECT_LIVE_CHARGE_NOTE
-        )
-        batch_hint.setWordWrap(True)
-        batch_hint.setStyleSheet("color:#9d9d9d;font-size:12px;margin-bottom:6px;")
-        layout.addWidget(batch_hint)
+        self._add_tl_mode_selector(layout)
 
         # ---- Pre-flight: text wrap configuration ----------------------------
         wrap_box_title = QLabel("Pre-flight — Text Wrap Width")
@@ -1977,13 +2040,6 @@ class WorkflowTab(QWidget):
         )
         self._run_p0_btn.clicked.connect(lambda: self._run_phase(0))
         p0_row.addWidget(self._run_p0_btn)
-        self._run_p0_batch_btn = _make_btn("►  Phase 0 (Batch)", "#3a6a3a")
-        self._run_p0_batch_btn.setFixedWidth(200)
-        self._run_p0_batch_btn.setToolTip(
-            "Same as Phase 0 but via Anthropic Batches API (50% off, Claude only)."
-        )
-        self._run_p0_batch_btn.clicked.connect(lambda: self._run_phase(0, batch=True))
-        p0_row.addWidget(self._run_p0_batch_btn)
         self._p0_status_lbl = QLabel("")
         self._p0_status_lbl.setStyleSheet("color:#6a9a6a;font-size:13px;padding-left:4px;")
         p0_row.addWidget(self._p0_status_lbl)
@@ -2015,14 +2071,6 @@ class WorkflowTab(QWidget):
         self._run_p1_btn.setToolTip("Applies Phase 1 code settings and starts translation")
         self._run_p1_btn.clicked.connect(lambda: self._run_phase(1))
         p1_row.addWidget(self._run_p1_btn)
-        self._run_p1_batch_btn = _make_btn("►  Phase 1 (Batch)", "#005a9e")
-        self._run_p1_batch_btn.setFixedWidth(200)
-        self._run_p1_batch_btn.setToolTip(
-            "Same as Phase 1 but via Anthropic Batches API (50% off, Claude only). "
-            "Best for large map sets."
-        )
-        self._run_p1_batch_btn.clicked.connect(lambda: self._run_phase(1, batch=True))
-        p1_row.addWidget(self._run_p1_batch_btn)
         self._p1_status_lbl = QLabel("")
         self._p1_status_lbl.setStyleSheet("color:#6ab4d4;font-size:13px;padding-left:4px;")
         p1_row.addWidget(self._p1_status_lbl)
@@ -2064,6 +2112,12 @@ class WorkflowTab(QWidget):
     def _build_step5_tl_phase2(self, layout: QVBoxLayout):
 
         layout.addWidget(_make_section_label("Step 5 — TL Phase 2"))
+
+        self._step5_mode_hint = QLabel(f"Translation mode: {BATCH_MODE_LABEL}")
+        self._step5_mode_hint.setStyleSheet("color:#8fbc8f;font-size:12px;margin-bottom:4px;")
+        layout.addWidget(self._step5_mode_hint)
+        if hasattr(self, "_tl_mode_combo"):
+            self._on_workflow_tl_mode_changed(self._tl_mode_combo.currentText())
 
         # ── Pre-flight card: description + prompt + var range ──────────────
         pre_box_title = QLabel("Pre-flight \u2014 Audit & Configure")
@@ -3558,7 +3612,8 @@ class WorkflowTab(QWidget):
     # Step 4 – Translation phases
     # ─────────────────────────────────────────────────────────────────────────
 
-    def _run_phase(self, phase, batch=False):
+    def _run_phase(self, phase):
+        batch = self._workflow_batch_mode()
         # Ask user if they want to sync translated/ → files/ before running this phase
         from PyQt5.QtWidgets import QMessageBox
         transl_dir = Path("translated")
@@ -3589,14 +3644,14 @@ class WorkflowTab(QWidget):
             file_preset = "events"
         elif phase == "1b":
             config = PHASE1B_CONFIG
-            label = "Phase 1b (code 111 cache)"
+            label = "Phase 1b (code 111 cache)" + (" — batch" if batch else "")
             file_preset = "events"
         else:
             # Build Phase 2 config: start from PHASE2_CONFIG defaults, then overlay checkbox states
             config = dict(PHASE2_CONFIG)
             for code_key, cb in getattr(self, "_p2_code_checks", {}).items():
                 config[code_key] = cb.isChecked()
-            label = "Phase 2 (risky codes)"
+            label = "Phase 2 (risky codes)" + (" — batch" if batch else "")
             file_preset = "events"
 
         # Apply config profile so the Translation tab uses the right codes
@@ -3674,7 +3729,7 @@ class WorkflowTab(QWidget):
             self._log("─" * 54)
 
         # Navigate to Translation tab, configure it, and auto-start
-        mode_text = BATCH_MODE_LABEL if batch else "Translate"
+        mode_text = self._workflow_mode_text()
         self._navigate_to_translation(file_preset, auto_start=True, mode_text=mode_text)
 
     def _navigate_to_translation(self, file_preset: str, auto_start: bool = False, mode_text: str | None = None):

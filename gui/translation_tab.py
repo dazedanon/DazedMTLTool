@@ -63,6 +63,9 @@ def create_horizontal_line():
 
 
 BATCH_MODE_LABEL = "Batch Translate"
+BATCH_MODE_BENEFIT_NOTE = (
+    "Anthropic Batches API — 50% or more cheaper than live translate (Claude only)."
+)
 BATCH_COLLECT_LIVE_CHARGE_NOTE = (
     "During Pass 1, speaker names and similar short strings are translated at live "
     "API rates right away (not batched). Dialogue is queued for the batch and billed "
@@ -1341,8 +1344,7 @@ class TranslationTab(QWidget):
         trans_form.addRow(mode_label, self.mode_combo)
 
         self.batch_mode_note = QLabel(
-            "Anthropic Batches API — 50% or more cheaper than live translate (Claude only).\n"
-            + BATCH_COLLECT_LIVE_CHARGE_NOTE
+            BATCH_MODE_BENEFIT_NOTE + "\n" + BATCH_COLLECT_LIVE_CHARGE_NOTE
         )
         self.batch_mode_note.setWordWrap(True)
         self.batch_mode_note.setStyleSheet("color:#8fbc8f;font-size:12px;padding-left:4px;")
