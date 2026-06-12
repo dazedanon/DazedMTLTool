@@ -644,6 +644,7 @@ def set_var_translations_batch(pairs):
 
 
 # ===== Anthropic Message Batches (50% off all token usage) =====
+# Batch integration by Len — two-pass collect/consume flow; see README Credits.
 # Batch translation is a two-pass flow driven by the batch phase (kept in the
 # BATCH_PHASE env var so GUI subprocesses inherit it):
 #   collect: translateAI builds each cache-missed request (byte-identical to a
