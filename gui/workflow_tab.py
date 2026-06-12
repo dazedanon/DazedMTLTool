@@ -7,9 +7,11 @@ Provides a guided, step-by-step interface:
   Step 1  – (Optional) Pre-process game files
   Step 2  – Auto-detect speaker format and apply to module settings
   Step 3  – Build glossary: parse speakers, then enrich with AI prompt
-  Step 4  – Translation: Phase 0 (DB), Phase 1 (dialogue), Phase 1b (111 cache), Phase 2 (risky)
-  Step 5  – Translate visible strings in js/plugins.js
-  Step 6  – Export translated/ back to the game folder
+  Step 4  – Translation: Phase 0 (DB), Phase 1 (dialogue), Phase 1b (111 cache)
+  Step 5  – Translation Phase 2 (risky codes)
+  Step 6  – Translate visible strings in js/plugins.js (or Ace scripts)
+  Step 7  – Export translated/ back to the game folder
+  Step 8  – Install TL Inspector for playtesting and live in-game edits (MV/MZ)
 """
 
 from __future__ import annotations
@@ -560,6 +562,7 @@ class WorkflowTab(QWidget):
             ("5  TL Phase 2",   self._build_step5_tl_phase2),
             ("6  Plugins.js",   self._build_step6_plugins_js),
             ("7  Export",       self._build_step7_export),
+            ("8  Playtest",     self._build_step8_playtest),
         ]
 
         for tab_label, builder in _tab_defs:
@@ -714,6 +717,8 @@ class WorkflowTab(QWidget):
 
         if index == 5:
             self._populate_p2_checkboxes()
+        if index == 8:
+            self._refresh_tl_inspector_status()
 
     def _register_import_button(self, button: QPushButton) -> None:
         self._import_buttons.append(button)
@@ -2398,6 +2403,145 @@ class WorkflowTab(QWidget):
         row.addStretch()
         layout.addLayout(row)
 
+    # ── Step 8: Playtest (TL Inspector) ─────────────────────────────────────
+
+    def _build_step8_playtest(self, layout: QVBoxLayout):
+        self._step8_section_label = _make_section_label("Step 8 — Playtest with TL Inspector")
+        layout.addWidget(self._step8_section_label)
+
+        hint = QLabel(
+            "Install <b>TL Inspector</b> into your RPG Maker MV/MZ game for playtesting. "
+            "Press <b>F10</b> in-game to see which source file each line of text comes from, "
+            "open it in VSCode, or <b>edit the text live</b> and save directly to the JSON file."
+        )
+        hint.setWordWrap(True)
+        hint.setTextFormat(Qt.RichText)
+        hint.setStyleSheet("color:#9d9d9d;font-size:13px;padding-bottom:4px;")
+        layout.addWidget(hint)
+
+        credits = QLabel("Idea by Sakura · Plugin by kaoss")
+        credits.setStyleSheet("color:#6a6a6a;font-size:11px;font-style:italic;padding-bottom:6px;")
+        layout.addWidget(credits)
+
+        box = QWidget()
+        box.setObjectName("tbox")
+        box.setStyleSheet(self._task_box_style())
+        inner = QVBoxLayout(box)
+        inner.setContentsMargins(10, 8, 10, 8)
+        inner.setSpacing(6)
+
+        self._tli_status_label = QLabel("Status: (detect a project folder first)")
+        self._tli_status_label.setWordWrap(True)
+        self._tli_status_label.setStyleSheet("color:#7a7a7a;font-size:13px;")
+        inner.addWidget(self._tli_status_label)
+
+        tips = QLabel(
+            "<ul style='margin:4px 0;padding-left:18px;color:#9d9d9d;font-size:12px;'>"
+            "<li>Run this <b>after exporting</b> translations so the game files are up to date.</li>"
+            "<li>Overlay <b>save to file</b> reloads instantly; VSCode saves reload once the file is stable on disk</li>"
+            "<li><b>F9</b> — force reload database + current map</li>"
+            "<li><b>F10</b> — toggle the inspector panel</li>"
+            "<li>Click a source location to open in VSCode; click <b>edit</b> to change text in-game</li>"
+            "<li>Remove the plugin before shipping a release build</li>"
+            "</ul>"
+        )
+        tips.setWordWrap(True)
+        tips.setTextFormat(Qt.RichText)
+        inner.addWidget(tips)
+
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(8)
+        _BTN_W = 200
+        self._tli_install_btn = _make_btn("⬇  Install TL Inspector", "#3a7a3a")
+        self._tli_install_btn.setFixedWidth(_BTN_W)
+        self._tli_install_btn.clicked.connect(self._install_tl_inspector)
+        btn_row.addWidget(self._tli_install_btn)
+
+        self._tli_uninstall_btn = _make_btn("⬆  Uninstall TL Inspector", "#7a3a3a")
+        self._tli_uninstall_btn.setFixedWidth(_BTN_W)
+        self._tli_uninstall_btn.clicked.connect(self._uninstall_tl_inspector)
+        btn_row.addWidget(self._tli_uninstall_btn)
+        btn_row.addStretch()
+        inner.addLayout(btn_row)
+
+        layout.addWidget(box)
+        self._step8_playtest_box = box
+
+    def _refresh_tl_inspector_status(self):
+        """Update Step 8 status label from the current game folder."""
+        label = getattr(self, "_tli_status_label", None)
+        if label is None:
+            return
+        game_root = self.folder_edit.text().strip()
+        if not game_root:
+            label.setText("Status: no game folder set — complete Step 0 first.")
+            label.setStyleSheet("color:#7a7a7a;font-size:13px;")
+            return
+        try:
+            from util.tl_inspector.installer import status
+            st = status(Path(game_root))
+        except Exception as exc:
+            label.setText(f"Status: error — {exc}")
+            label.setStyleSheet("color:#f48771;font-size:13px;")
+            return
+
+        if not st.get("ok"):
+            label.setText(f"Status: {st.get('message', 'unsupported')}")
+            label.setStyleSheet("color:#e9a12a;font-size:13px;")
+            return
+
+        engine = st.get("engine", "?")
+        msg = st.get("message", "")
+        parts = [f"RPG Maker {engine}", msg]
+        if st.get("declared") and st.get("plugin_file"):
+            detail = "plugin declared in plugins.js and file present"
+        elif st.get("declared"):
+            detail = "declared in plugins.js (plugin file missing)"
+        elif st.get("plugin_file"):
+            detail = "plugin file present (not declared in plugins.js)"
+        else:
+            detail = "not installed"
+        label.setText(f"Status: {' · '.join(parts)} — {detail}")
+        color = "#6a9a6a" if st.get("declared") and st.get("plugin_file") else "#9d9d9d"
+        label.setStyleSheet(f"color:{color};font-size:13px;")
+
+    def _install_tl_inspector(self):
+        game_root = self.folder_edit.text().strip()
+        if not game_root:
+            self._log("⚠  No game folder set. Complete Step 0 first.")
+            return
+        try:
+            from util.tl_inspector.installer import install
+            ok, msg = install(Path(game_root))
+        except Exception as exc:
+            self._log(f"❌ TL Inspector install failed: {exc}")
+            return
+        self._log(("✅ " if ok else "❌ ") + msg)
+        self._refresh_tl_inspector_status()
+
+    def _uninstall_tl_inspector(self):
+        game_root = self.folder_edit.text().strip()
+        if not game_root:
+            self._log("⚠  No game folder set. Complete Step 0 first.")
+            return
+        reply = QMessageBox.question(
+            self,
+            "Uninstall TL Inspector",
+            "Remove TLInspector from plugins.js and delete the plugin file?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if reply != QMessageBox.Yes:
+            return
+        try:
+            from util.tl_inspector.installer import uninstall
+            ok, msg = uninstall(Path(game_root))
+        except Exception as exc:
+            self._log(f"❌ TL Inspector uninstall failed: {exc}")
+            return
+        self._log(("✅ " if ok else "❌ ") + msg)
+        self._refresh_tl_inspector_status()
+
     # ─────────────────────────────────────────────────────────────────────────
     # Step 0 – Project Folder logic
     # ─────────────────────────────────────────────────────────────────────────
@@ -2501,6 +2645,13 @@ class WorkflowTab(QWidget):
                     "Copy a prompt that instructs Copilot/Cursor to translate only "
                     "visible player-facing strings in plugins.js, using vocab.txt as a glossary."
                 )
+        # Step 8 — TL Inspector (MV/MZ only)
+        if hasattr(self, "_step_tabs") and self._step_tabs.count() > 8:
+            self._step_tabs.setTabEnabled(8, not is_ace)
+        box = getattr(self, "_step8_playtest_box", None)
+        if box is not None:
+            box.setEnabled(not is_ace)
+        self._refresh_tl_inspector_status()
 
     def _detect_folder(self):
         folder = self.folder_edit.text().strip()
