@@ -88,21 +88,49 @@ tqdm.write(
 
 
 def main():
-    # Clear the translation cache at the start of the run
     from util.translation import clear_cache
-    clear_cache()
-    
+
     estimate = ""
+    batch_mode = False
     speaker_parse = False  # Deferred until after engine select
     while estimate == "":
-        estimate = input("Select Mode:\n\n 1. Translate\n 2. Estimate\n")
+        estimate = input("Select Mode:\n\n 1. Translate\n 2. Estimate\n 3. Batch Translate (Anthropic Batches API, 50% off)\n")
         match estimate:
             case "1":
                 estimate = False
             case "2":
                 estimate = True
+            case "3":
+                estimate = False
+                batch_mode = True
             case _:
                 estimate = ""
+
+    resume_state = None
+    if batch_mode:
+        from util.translation import isClaudeNative, batchRunState
+        if not isClaudeNative(os.getenv("model", "")):
+            tqdm.write(
+                Fore.RED
+                + "Batch Translate requires a Claude model with the 'api' env var unset or pointing at anthropic.com."
+                + Fore.RESET
+            )
+            return
+        # An interrupted batch run can be resumed instead of re-collecting
+        # (a second submission would be billed again).
+        resume_state = batchRunState()
+        if resume_state:
+            confirm = ""
+            while confirm not in ("y", "n"):
+                confirm = input(f"A previous batch run was interrupted ({resume_state}). Resume it? (y/n)\n").strip().lower()
+            if confirm == "n":
+                resume_state = None
+
+    # Clear the translation cache at the start of the run. Kept when resuming a
+    # batch so names translated during collect stay consistent with the queued
+    # payloads in the consume pass.
+    if not resume_state:
+        clear_cache()
 
     version = ""
     while True:
@@ -125,7 +153,7 @@ files to translate are in the /files folder and that you picked the right game e
 
     # If translating RPGMaker MV/MZ, prompt for speaker parse mode
     speaker_parse = False
-    if version == 0 and not estimate:
+    if version == 0 and not estimate and not batch_mode:
         sub = ""
         while sub == "":
             sub = input("RPGMaker MV/MZ options:\n\n 1. Standard Translate\n 2. Parse Speakers (collect speaker names only)\n")
@@ -180,78 +208,133 @@ files to translate are in the /files folder and that you picked the right game e
     except Exception:
         pass
     
-    # Use single worker for estimate mode to prevent race conditions
-    max_workers = 1 if estimate else THREADS
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        futures = []
-        files_root = "files"
+    def runFiles(estimate):
+        runCost = totalCost
+        # Use single worker for estimate mode to prevent race conditions
+        max_workers = 1 if estimate else THREADS
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = []
+            files_root = "files"
 
-        # Special-case: Images engine expects a folder, not a file; schedule per directory containing assets
-        if MODULES[version][0] == "Images":
-            for root, dirs, filenames in os.walk(files_root):
-                # Skip hidden/system directories
-                dirs[:] = [d for d in dirs if d not in {".git", "__pycache__"}]
+            # Special-case: Images engine expects a folder, not a file; schedule per directory containing assets
+            if MODULES[version][0] == "Images":
+                for root, dirs, filenames in os.walk(files_root):
+                    # Skip hidden/system directories
+                    dirs[:] = [d for d in dirs if d not in {".git", "__pycache__"}]
 
-                # Skip the root 'files' itself to avoid processing everything twice
-                # We'll still allow scheduling for root if it contains assets
+                    # Skip the root 'files' itself to avoid processing everything twice
+                    # We'll still allow scheduling for root if it contains assets
 
-                # Only schedule directories that contain potential assets
-                has_assets = any(fn.lower().endswith((".png", ".txt")) for fn in filenames)
-                if not has_assets:
-                    continue
-
-                # Compute relative directory path and ensure translated mirror exists
-                rel_dir = os.path.relpath(root, files_root).replace(os.sep, "/")
-                if rel_dir == ".":
-                    # Represent root as empty string so handler creates files under translated/ directly
-                    rel_dir = ""
-                try:
-                    target_dir = os.path.join("translated", rel_dir.replace("/", os.sep)) if rel_dir else "translated"
-                    os.makedirs(target_dir, exist_ok=True)
-                except Exception:
-                    pass
-
-                futures.append(
-                    executor.submit(MODULES[version][2], rel_dir, estimate)
-                )
-        else:
-            # Gather all candidate files recursively
-            for root, dirs, filenames in os.walk(files_root):
-                # Skip hidden/system directories if any
-                dirs[:] = [d for d in dirs if d not in {".git", "__pycache__"}]
-
-                for fname in filenames:
-                    if fname == ".gitkeep":
+                    # Only schedule directories that contain potential assets
+                    has_assets = any(fn.lower().endswith((".png", ".txt")) for fn in filenames)
+                    if not has_assets:
                         continue
 
-                    abs_path = os.path.join(root, fname)
-                    # Build relative path from 'files' root using POSIX-style separators so handlers can do 'files/' + rel
-                    rel_path = os.path.relpath(abs_path, files_root)
-                    rel_path_posix = rel_path.replace(os.sep, "/")
+                    # Compute relative directory path and ensure translated mirror exists
+                    rel_dir = os.path.relpath(root, files_root).replace(os.sep, "/")
+                    if rel_dir == ".":
+                        # Represent root as empty string so handler creates files under translated/ directly
+                        rel_dir = ""
+                    try:
+                        target_dir = os.path.join("translated", rel_dir.replace("/", os.sep)) if rel_dir else "translated"
+                        os.makedirs(target_dir, exist_ok=True)
+                    except Exception:
+                        pass
 
-                    # Check extension match for the selected module version
-                    for m in MODULES[version][1]:
-                        if rel_path_posix.endswith(m):
-                            # Ensure the corresponding directory exists under 'translated'
-                            rel_dir = os.path.dirname(rel_path_posix)
-                            if rel_dir:
-                                try:
-                                    os.makedirs(os.path.join("translated", rel_dir.replace("/", os.sep)), exist_ok=True)
-                                except Exception:
-                                    # Best-effort; handler may attempt write and fail if permissions are insufficient
-                                    pass
+                    futures.append(
+                        executor.submit(MODULES[version][2], rel_dir, estimate)
+                    )
+            else:
+                # Gather all candidate files recursively
+                for root, dirs, filenames in os.walk(files_root):
+                    # Skip hidden/system directories if any
+                    dirs[:] = [d for d in dirs if d not in {".git", "__pycache__"}]
 
-                            futures.append(
-                                executor.submit(MODULES[version][2], rel_path_posix, estimate)
-                            )
-                            break  # Avoid double-adding if multiple ext entries match
+                    for fname in filenames:
+                        if fname == ".gitkeep":
+                            continue
 
-        for future in as_completed(futures):
+                        abs_path = os.path.join(root, fname)
+                        # Build relative path from 'files' root using POSIX-style separators so handlers can do 'files/' + rel
+                        rel_path = os.path.relpath(abs_path, files_root)
+                        rel_path_posix = rel_path.replace(os.sep, "/")
+
+                        # Check extension match for the selected module version
+                        for m in MODULES[version][1]:
+                            if rel_path_posix.endswith(m):
+                                # Ensure the corresponding directory exists under 'translated'
+                                rel_dir = os.path.dirname(rel_path_posix)
+                                if rel_dir:
+                                    try:
+                                        os.makedirs(os.path.join("translated", rel_dir.replace("/", os.sep)), exist_ok=True)
+                                    except Exception:
+                                        # Best-effort; handler may attempt write and fail if permissions are insufficient
+                                        pass
+
+                                futures.append(
+                                    executor.submit(MODULES[version][2], rel_path_posix, estimate)
+                                )
+                                break  # Avoid double-adding if multiple ext entries match
+
+            for future in as_completed(futures):
+                try:
+                    runCost = future.result()
+                except Exception as e:
+                    tracebackLineNo = str(traceback.extract_tb(sys.exc_info()[2])[-1].lineno)
+                    tqdm.write(Fore.RED + str(e) + "|" + tracebackLineNo + Fore.RESET)
+        return runCost
+
+    if batch_mode:
+        from util.translation import (
+            set_batch_phase,
+            clearBatchFiles,
+            pendingBatchRequests,
+            estimateBatchCost,
+            runTranslationBatches,
+        )
+        poll = int(os.getenv("batchPollInterval", "60") or 60)
+        run_consume = True
+
+        if resume_state is None:
+            clearBatchFiles()
+
+            # Pass 1 — collect every needed request without calling the API.
+            tqdm.write(Fore.CYAN + "[BATCH] Pass 1/2: collecting requests..." + Fore.RESET)
+            set_batch_phase("collect")
             try:
-                totalCost = future.result()
-            except Exception as e:
-                tracebackLineNo = str(traceback.extract_tb(sys.exc_info()[2])[-1].lineno)
-                tqdm.write(Fore.RED + str(e) + "|" + tracebackLineNo + Fore.RESET)
+                totalCost = runFiles(False)
+            finally:
+                set_batch_phase(None)
+
+            if pendingBatchRequests() == 0:
+                tqdm.write("[BATCH] No requests queued — nothing needed the API.")
+                run_consume = False
+            else:
+                estimateBatchCost()
+                confirm = ""
+                while confirm not in ("y", "n"):
+                    confirm = input("Submit batch? (y/n)\n").strip().lower()
+                if confirm == "n":
+                    tqdm.write("[BATCH] Not submitted. The queue is kept in log/batch_requests.json.")
+                    return
+                runTranslationBatches(poll)
+        elif resume_state == "submitted":
+            tqdm.write(Fore.CYAN + "[BATCH] Resuming the submitted batch..." + Fore.RESET)
+            runTranslationBatches(poll)
+        else:  # "fetched" — results already downloaded, just write the files
+            tqdm.write(Fore.CYAN + "[BATCH] Resuming from fetched results..." + Fore.RESET)
+
+        if run_consume:
+            # Pass 2 — write the translated files from the fetched results.
+            # Anything the batch missed falls back to the live API.
+            tqdm.write(Fore.CYAN + "[BATCH] Pass 2/2: writing translated files..." + Fore.RESET)
+            set_batch_phase("consume")
+            try:
+                totalCost = runFiles(False)
+            finally:
+                set_batch_phase(None)
+    else:
+        totalCost = runFiles(estimate)
 
     # Finalize speaker parse mode by writing collected speakers to vocab
     if speaker_parse:

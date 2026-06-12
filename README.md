@@ -16,6 +16,7 @@ An AI-powered game translation tool with a GUI. Translate RPG Maker, Ren'Py, Tyr
 - [Using the GUI](#using-the-gui)
 - [Vocab & Prompt](#vocab--prompt)
 - [Tips](#tips)
+- [Batch Translation (Anthropic, 50% off)](#batch-translation-anthropic-50-off)
 - [Folder Structure](#folder-structure)
 - [Finding Untranslated Text (Snipping Tool OCR)](#finding-untranslated-text-snipping-tool-ocr)
 - [RPG Maker Translation Workflow](#rpg-maker-translation-workflow)
@@ -182,6 +183,53 @@ This is the system prompt sent to the AI. A default `prompt.txt` is included and
 - **Start small** — Translate a few files first to make sure the output looks good before doing the whole game.
 - **Wordwrap** — If text overflows or looks awkward in-game, adjust the `width` setting in `.env` or the Config tab. `60` is a good default for most RPG Maker games.
 - **Version control** — Using [Git](https://git-scm.com/) with the game folder is highly recommended. It lets you track every change the translation makes, compare with original files, and roll back if needed.
+
+---
+
+## Batch Translation (Anthropic, 50% off)
+
+When using a Claude model, the CLI offers a third mode that translates through the
+[Anthropic Message Batches API](https://platform.claude.com/docs/en/build-with-claude/batch-processing.md)
+— every token (input, output, and prompt-cache reads/writes) is billed at **50% of the live price**.
+Batches usually finish within an hour (24h worst case), so use it for large jobs where you don't
+need results immediately.
+
+```
+python start.py
+ -> 3. Batch Translate (Anthropic Batches API, 50% off)
+```
+
+How it works (all engine modules are supported automatically):
+
+1. **Pass 1 (collect)** — files are processed normally, but instead of calling the API each
+   request is queued to `log/batch_requests.json`. Requests are byte-identical to live ones:
+   the static `prompt.txt` block is cached with a 1h TTL, matched vocab and translation
+   history ride along per request, and structured output enforces the exact line count.
+   Speaker/variable names still translate live during this pass (they get embedded into the
+   dialogue payloads, so both passes must resolve them identically) — they're a tiny share
+   of the volume.
+2. **Cost estimate** — before anything is submitted you get a cost breakdown
+   (batch + cache / batch worst-case / live price) and a y/n confirmation.
+3. **Submit / poll / fetch** — the batch is submitted, polled until it ends
+   (`batchPollInterval` env var controls the interval, default 60s), and the results are
+   saved to `log/batch_results.json`. Ctrl-C while polling is safe — the batch keeps
+   processing server-side.
+4. **Pass 2 (consume)** — files are processed again; every payload is filled from the batch
+   results through the normal validation pipeline (line counts, placeholders, content
+   checks). Anything the batch missed or that fails validation falls back to the live API
+   automatically, so the output is always complete.
+
+Context note: in live mode the rolling translation history contains the previous batch's
+English lines; in batch mode requests are independent, so the history carries the previous
+batch's *source* lines instead. The model still sees the surrounding scene, and `vocab.txt`
+keeps names and terms consistent — so keep your vocab file in good shape for batch runs.
+
+Cost tracking is exact: per-file and total costs printed after the consume pass use the real
+billed token counts (cache reads at 0.1x, cache writes at 2x, output at the output rate) with
+the 50% batch discount applied.
+
+`python selftest_batch.py` round-trips the whole flow offline (no API key needed) if you want
+to verify the pipeline after making changes.
 
 ---
 
