@@ -2837,13 +2837,20 @@ class WorkflowTab(QWidget):
                     "Copy a prompt that instructs Copilot/Cursor to translate only "
                     "visible player-facing strings in plugins.js, using vocab.txt as a glossary."
                 )
-        # Step 8 — TL Inspector (MV/MZ only)
+        # Step 8 — TL Inspector (MV/MZ only; hidden for Ace)
         if hasattr(self, "_step_tabs") and self._step_tabs.count() > 8:
-            self._step_tabs.setTabEnabled(8, not is_ace)
+            show_playtest = not is_ace
+            if hasattr(self._step_tabs, "setTabVisible"):
+                self._step_tabs.setTabVisible(8, show_playtest)
+            else:
+                self._step_tabs.setTabEnabled(8, show_playtest)
+            if is_ace and self._step_tabs.currentIndex() == 8:
+                self._step_tabs.setCurrentIndex(7)
         box = getattr(self, "_step8_playtest_box", None)
         if box is not None:
             box.setEnabled(not is_ace)
-        self._refresh_tl_inspector_status()
+        if not is_ace:
+            self._refresh_tl_inspector_status()
 
     def _detect_folder(self):
         folder = self.folder_edit.text().strip()
