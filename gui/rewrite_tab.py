@@ -222,6 +222,45 @@ def _sanitise_output(text: str) -> str:
     return text
 
 
+def _extract_claude_text(response) -> str:
+    """Collect text from all text blocks; skip thinking/tool blocks."""
+    parts = []
+    for block in getattr(response, "content", None) or []:
+        if getattr(block, "type", None) == "text":
+            t = getattr(block, "text", None)
+            if t:
+                parts.append(t)
+        elif hasattr(block, "text") and block.text:
+            # Older SDK blocks without explicit type
+            parts.append(block.text)
+    text = "".join(parts).strip()
+    if not text:
+        stop = getattr(response, "stop_reason", None)
+        raise ValueError(
+            f"Empty response from API (stop_reason={stop!r}). "
+            "Try again or use a different model."
+        )
+    return text
+
+
+def _extract_openai_text(response) -> str:
+    """Extract assistant message text from an OpenAI-compatible completion."""
+    choices = getattr(response, "choices", None) or []
+    if not choices:
+        raise ValueError("Empty response from API (no choices returned).")
+    message = choices[0].message
+    text = getattr(message, "content", None)
+    if text is None and hasattr(message, "refusal") and message.refusal:
+        raise ValueError(f"Model refused: {message.refusal}")
+    if not text or not str(text).strip():
+        finish = getattr(choices[0], "finish_reason", None)
+        raise ValueError(
+            f"Empty response from API (finish_reason={finish!r}). "
+            "Try again or use a different model."
+        )
+    return str(text).strip()
+
+
 def _call_llm(messages: list, model: str, api_url: str, api_key: str,
               is_claude: bool, timeout: int) -> tuple:
     """Call the LLM. Returns (text, input_tokens, output_tokens)."""
@@ -237,7 +276,7 @@ def _call_llm(messages: list, model: str, api_url: str, api_key: str,
             messages=user_msgs,
             timeout=timeout,
         )
-        text = response.content[0].text.strip()
+        text = _extract_claude_text(response)
         in_tok = getattr(response.usage, "input_tokens", 0) or 0
         out_tok = getattr(response.usage, "output_tokens", 0) or 0
         return text, in_tok, out_tok
@@ -254,7 +293,7 @@ def _call_llm(messages: list, model: str, api_url: str, api_key: str,
             temperature=0,
             timeout=timeout,
         )
-        text = response.choices[0].message.content.strip()
+        text = _extract_openai_text(response)
         in_tok = getattr(response.usage, "prompt_tokens", 0) or 0
         out_tok = getattr(response.usage, "completion_tokens", 0) or 0
         return text, in_tok, out_tok

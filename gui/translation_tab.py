@@ -282,16 +282,15 @@ class TranslationWorker(QThread):
             
             # Check for required environment variables
             required_envs = ["api", "key", "model", "language", "timeout", "fileThreads", "threads", "width", "listWidth"]
-            env_missing = False
-            
-            for env in required_envs:
-                if os.getenv(env) is None or str(os.getenv(env))[:1] == "<":
-                    self.emit_log(f"❌ Environment variable {env} is not set!")
-                    env_missing = True
-                    
-            if env_missing:
-                self.emit_log("❌ Some required environment variables are not set. Check your .env file.")
-                self.finished_signal.emit(False, "Environment variables missing")
+            missing_envs = [
+                env for env in required_envs
+                if os.getenv(env) is None or str(os.getenv(env))[:1] == "<"
+            ]
+            if missing_envs:
+                names = ", ".join(missing_envs)
+                self.emit_log(f"❌ Missing required environment variable(s): {names}")
+                self.emit_log("   Check your .env file (see .env.example).")
+                self.finished_signal.emit(False, f"Missing env: {names}")
                 return
                 
             # Get files to process
