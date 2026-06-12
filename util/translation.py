@@ -88,6 +88,13 @@ def _write_request_debug_log(provider, request_payload, usage):
     except Exception:
         pass
 
+def _normalize_openai_base_url(url: str) -> str:
+    """Ensure OpenAI SDK global base_url has a trailing slash."""
+    _url = (url or "").strip()
+    if _url and not _url.endswith("/"):
+        _url += "/"
+    return _url
+
 # Tracks which distinct batch sizes have already been cache-written during this estimate run.
 # Each unique numLines value maps to a distinct output_config schema → one write per size.
 # Persisted to disk so sequential GUI subprocesses share state.
@@ -329,17 +336,17 @@ def validate_translation_content(original_items, translated_items, langRegex):
     return is_valid, invalid_indices, reasons
 
 # Load .env, strip accidental whitespace, set base URL / org / API key.
-# Handles the Gemini compatibility layer as a special case.
+# Gemini uses its compatibility endpoint only when no custom API URL is set.
 load_dotenv()
 api_provider = os.getenv("API_PROVIDER", "openai").lower()
 env_api = os.getenv("api", "").strip()
-if api_provider == "gemini":
-    # Use Google Generative Language compatibility endpoint when running Gemini
+if api_provider == "gemini" and not env_api:
+    # Use Google Generative Language compatibility endpoint only as fallback.
     openai.base_url = "https://generativelanguage.googleapis.com/v1beta/openai/"
     openai.organization = None
 else:
     if env_api:
-        openai.base_url = env_api
+        openai.base_url = _normalize_openai_base_url(env_api)
     # Support both 'organization' (gui/.env.example) and legacy 'org' names
     org = os.getenv("organization") or os.getenv("org")
     if org:
@@ -1182,10 +1189,10 @@ def translateText(system, user, history, penalty, formatType, model, numLines=No
     _live_api = os.getenv("api", "").strip()
     _live_key = os.getenv("key", "").strip()
     _live_provider = os.getenv("API_PROVIDER", "openai").lower()
-    if _live_provider == "gemini":
+    if _live_provider == "gemini" and not _live_api:
         openai.base_url = "https://generativelanguage.googleapis.com/v1beta/openai/"
     elif _live_api:
-        openai.base_url = _live_api
+        openai.base_url = _normalize_openai_base_url(_live_api)
     if _live_key:
         openai.api_key = _live_key
 
