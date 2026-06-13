@@ -11,7 +11,7 @@ Provides a guided, step-by-step interface:
   Step 5  – Translation Phase 2 (risky codes)
   Step 6  – Translate visible strings in js/plugins.js (or Ace scripts)
   Step 7  – Export translated/ back to the game folder
-  Step 8  – Install TL Inspector for playtesting and live in-game edits (MV/MZ)
+  Step 8  – Install TL Inspector and/or Forge playtest plugins
 """
 
 from __future__ import annotations
@@ -729,8 +729,8 @@ class WorkflowTab(QWidget):
         if index == 5:
             self._populate_p2_checkboxes()
         if index == 8:
-            self._refresh_tl_inspector_status()
-            self._load_tli_editor_settings()
+            self._refresh_playtest_status()
+            self._load_playtest_settings()
 
     def _register_import_button(self, button: QPushButton) -> None:
         self._import_buttons.append(button)
@@ -2491,131 +2491,212 @@ class WorkflowTab(QWidget):
     # ── Step 8: Playtest (TL Inspector) ─────────────────────────────────────
 
     def _build_step8_playtest(self, layout: QVBoxLayout):
-        self._step8_section_label = _make_section_label("Step 8 — Playtest with TL Inspector")
+        self._step8_section_label = _make_section_label("Step 8 — Playtest Tools")
         layout.addWidget(self._step8_section_label)
 
-        hint = QLabel(
-            "Install <b>TL Inspector</b> into your RPG Maker MV/MZ game for playtesting. "
-            "Press <b>F10</b> in-game to see which source file each line of text comes from, "
-            "open it in VSCode, or <b>edit the text live</b> and save directly to the JSON file."
+        self._step8_main_hint = QLabel(
+            "Install playtest plugins into your RPG Maker game. "
+            "<b>TL Inspector</b> works on MV and MZ. "
+            "<b>Forge</b> is MZ-only. Use <b>Install Both</b> on MZ to add both plugins at once."
         )
-        hint.setWordWrap(True)
-        hint.setTextFormat(Qt.RichText)
-        hint.setStyleSheet("color:#9d9d9d;font-size:13px;padding-bottom:4px;")
-        layout.addWidget(hint)
+        self._step8_main_hint.setWordWrap(True)
+        self._step8_main_hint.setTextFormat(Qt.RichText)
+        self._step8_main_hint.setStyleSheet("color:#9d9d9d;font-size:13px;padding-bottom:4px;")
+        layout.addWidget(self._step8_main_hint)
 
-        credits = QLabel("Idea by Sakura · Plugin by Kao_SSS")
-        credits.setStyleSheet("color:#6a6a6a;font-size:11px;font-style:italic;padding-bottom:6px;")
-        layout.addWidget(credits)
+        settings_box = QWidget()
+        settings_box.setObjectName("tbox")
+        settings_box.setStyleSheet(self._task_box_style())
+        settings_inner = QVBoxLayout(settings_box)
+        settings_inner.setContentsMargins(12, 10, 12, 10)
+        settings_inner.setSpacing(8)
 
-        box = QWidget()
-        box.setObjectName("tbox")
-        box.setStyleSheet(self._task_box_style())
-        inner = QVBoxLayout(box)
-        inner.setContentsMargins(10, 8, 10, 8)
-        inner.setSpacing(6)
+        _PT_LABEL_W = 118
+        _PT_FIELD_W = 96
+        _PT_BTN_W = 96
+        _PT_LBL_STYLE = "color:#9d9d9d;font-size:12px;"
+        _PT_SECTION_STYLE = "color:#4ec9b0;font-size:12px;font-weight:bold;"
 
-        self._tli_status_label = QLabel("Status: (detect a project folder first)")
-        self._tli_status_label.setWordWrap(True)
-        self._tli_status_label.setStyleSheet("color:#7a7a7a;font-size:13px;")
-        inner.addWidget(self._tli_status_label)
+        hotkey_title = QLabel("Hotkeys")
+        hotkey_title.setStyleSheet(_PT_SECTION_STYLE)
+        settings_inner.addWidget(hotkey_title)
+
+        hotkey_row = QHBoxLayout()
+        hotkey_row.setSpacing(8)
+
+        insp_lbl = QLabel("Inspector toggle:")
+        insp_lbl.setFixedWidth(_PT_LABEL_W)
+        insp_lbl.setStyleSheet(_PT_LBL_STYLE)
+        insp_lbl.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        hotkey_row.addWidget(insp_lbl)
+
+        self._pt_hotkey_edit = QLineEdit("F9")
+        self._pt_hotkey_edit.setFixedWidth(_PT_FIELD_W)
+        self._pt_hotkey_edit.setPlaceholderText("F9")
+        hotkey_row.addWidget(self._pt_hotkey_edit)
+
+        hotkey_row.addSpacing(16)
+
+        self._pt_forge_hotkey_lbl = QLabel("Forge toggle:")
+        self._pt_forge_hotkey_lbl.setFixedWidth(_PT_LABEL_W)
+        self._pt_forge_hotkey_lbl.setStyleSheet(_PT_LBL_STYLE)
+        self._pt_forge_hotkey_lbl.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        hotkey_row.addWidget(self._pt_forge_hotkey_lbl)
+
+        self._pt_forge_hotkey_edit = QLineEdit("F10")
+        self._pt_forge_hotkey_edit.setFixedWidth(_PT_FIELD_W)
+        self._pt_forge_hotkey_edit.setPlaceholderText("F10")
+        hotkey_row.addWidget(self._pt_forge_hotkey_edit)
+
+        hotkey_row.addStretch(1)
+        settings_inner.addLayout(hotkey_row)
 
         editor_title = QLabel("Editor settings")
-        editor_title.setStyleSheet("color:#4ec9b0;font-size:12px;font-weight:bold;padding-top:4px;")
-        inner.addWidget(editor_title)
+        editor_title.setStyleSheet(_PT_SECTION_STYLE + "padding-top:2px;")
+        settings_inner.addWidget(editor_title)
 
-        _TLI_LABEL_W = 80
-        _TLI_BTN_W = 88
-        _tli_lbl_style = "color:#9d9d9d;font-size:12px;"
-
-        tli_grid = QGridLayout()
-        tli_grid.setHorizontalSpacing(6)
-        tli_grid.setVerticalSpacing(6)
-        tli_grid.setColumnStretch(1, 1)
+        editor_grid = QGridLayout()
+        editor_grid.setHorizontalSpacing(8)
+        editor_grid.setVerticalSpacing(6)
+        editor_grid.setColumnMinimumWidth(0, _PT_LABEL_W)
+        editor_grid.setColumnStretch(1, 1)
 
         editor_lbl = QLabel("Editor:")
-        editor_lbl.setFixedWidth(_TLI_LABEL_W)
-        editor_lbl.setStyleSheet(_tli_lbl_style)
+        editor_lbl.setStyleSheet(_PT_LBL_STYLE)
         editor_lbl.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        tli_grid.addWidget(editor_lbl, 0, 0)
+        editor_grid.addWidget(editor_lbl, 0, 0)
 
         self._tli_editor_combo = QComboBox()
         self._tli_editor_combo.currentIndexChanged.connect(self._on_tli_editor_combo_changed)
-        tli_grid.addWidget(self._tli_editor_combo, 0, 1)
+        editor_grid.addWidget(self._tli_editor_combo, 0, 1)
 
         detect_btn = _make_btn("Detect", "#4a4a4a")
-        detect_btn.setFixedWidth(_TLI_BTN_W)
+        detect_btn.setFixedWidth(_PT_BTN_W)
         detect_btn.setToolTip("Scan this PC for VS Code, Insiders, or Cursor")
         detect_btn.clicked.connect(self._detect_tli_editors)
-        tli_grid.addWidget(detect_btn, 0, 2)
+        editor_grid.addWidget(detect_btn, 0, 2)
+
+        custom_lbl = QLabel("Custom path:")
+        custom_lbl.setStyleSheet(_PT_LBL_STYLE)
+        custom_lbl.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        editor_grid.addWidget(custom_lbl, 1, 0)
 
         self._tli_editor_custom = QLineEdit()
-        self._tli_editor_custom.setPlaceholderText("Path to editor executable (when Custom is selected)")
+        self._tli_editor_custom.setPlaceholderText("Editor executable when Custom is selected")
         self._tli_editor_custom.setEnabled(False)
-        tli_grid.addWidget(self._tli_editor_custom, 1, 1)
+        editor_grid.addWidget(self._tli_editor_custom, 1, 1)
 
         browse_editor_btn = _make_btn("Browse…", "#4a4a4a")
-        browse_editor_btn.setFixedWidth(_TLI_BTN_W)
+        browse_editor_btn.setFixedWidth(_PT_BTN_W)
         browse_editor_btn.clicked.connect(self._browse_tli_editor)
-        tli_grid.addWidget(browse_editor_btn, 1, 2)
+        editor_grid.addWidget(browse_editor_btn, 1, 2)
 
         self._tli_detect_label = QLabel("")
         self._tli_detect_label.setWordWrap(True)
         self._tli_detect_label.setStyleSheet("color:#6a6a6a;font-size:11px;")
-        tli_grid.addWidget(self._tli_detect_label, 2, 1, 1, 2)
+        editor_grid.addWidget(self._tli_detect_label, 2, 1, 1, 2)
 
-        cfg_btn_wrap = QWidget()
-        cfg_btn_row = QHBoxLayout(cfg_btn_wrap)
-        cfg_btn_row.setContentsMargins(0, 0, 0, 0)
-        cfg_btn_row.setSpacing(8)
-        save_tli_btn = _make_btn("✔  Save settings", "#3a5a7a")
-        save_tli_btn.setFixedWidth(140)
-        save_tli_btn.setToolTip("Write editor settings to .env (used on Install / Apply)")
-        save_tli_btn.clicked.connect(self._save_tli_editor_settings)
-        cfg_btn_row.addWidget(save_tli_btn)
-        apply_tli_btn = _make_btn("↻  Apply to game", "#3a5a7a")
-        apply_tli_btn.setFixedWidth(140)
-        apply_tli_btn.setToolTip("Update the installed TLInspector.js in your game folder")
-        apply_tli_btn.clicked.connect(self._apply_tli_editor_settings)
-        cfg_btn_row.addWidget(apply_tli_btn)
-        cfg_btn_row.addStretch()
-        tli_grid.addWidget(cfg_btn_wrap, 3, 1, 1, 2)
+        settings_inner.addLayout(editor_grid)
 
-        inner.addLayout(tli_grid)
+        action_row = QHBoxLayout()
+        action_row.setSpacing(8)
+        save_pt_btn = _make_btn("✔  Save settings", "#3a5a7a")
+        save_pt_btn.setFixedHeight(30)
+        save_pt_btn.setToolTip("Write hotkeys and editor settings to .env (used on Install / Apply)")
+        save_pt_btn.clicked.connect(self._save_playtest_settings)
+        action_row.addWidget(save_pt_btn)
 
-        tips = QLabel(
-            "<ul style='margin:4px 0;padding-left:18px;color:#9d9d9d;font-size:12px;'>"
-            "<li>Run this <b>after exporting</b> translations so the game files are up to date.</li>"
-            "<li>Overlay <b>save to file</b> reloads instantly; VSCode saves reload once the file is stable on disk</li>"
-            "<li><b>F9</b> — force reload database + current map</li>"
-            "<li><b>F10</b> — toggle the inspector panel</li>"
-            "<li>Click a source location to open in VSCode; click <b>edit</b> to change text in-game</li>"
-            "<li>Remove the plugin before shipping a release build</li>"
-            "</ul>"
+        apply_pt_btn = _make_btn("↻  Apply to game", "#3a5a7a")
+        apply_pt_btn.setFixedHeight(30)
+        apply_pt_btn.setToolTip("Update the installed playtest plugin(s) in your game folder")
+        apply_pt_btn.clicked.connect(self._apply_playtest_settings)
+        action_row.addWidget(apply_pt_btn)
+
+        action_row.addStretch(1)
+
+        self._install_both_btn = _make_btn("⬇  Install Both (MZ)", "#3a5a7a")
+        self._install_both_btn.setFixedHeight(30)
+        self._install_both_btn.setToolTip(
+            "Install TL Inspector and Forge as separate plugins (MZ only)"
         )
-        tips.setWordWrap(True)
-        tips.setTextFormat(Qt.RichText)
-        inner.addWidget(tips)
+        self._install_both_btn.clicked.connect(self._install_both_playtest)
+        action_row.addWidget(self._install_both_btn)
 
-        btn_row = QHBoxLayout()
-        btn_row.setSpacing(8)
-        _BTN_W = 200
+        settings_inner.addLayout(action_row)
+        layout.addWidget(settings_box)
+        self._step8_settings_box = settings_box
+
+        # ── Plugins (TL Inspector + Forge) ────────────────────────────────────
+        plugins_box = QWidget()
+        plugins_box.setObjectName("tbox")
+        plugins_box.setStyleSheet(self._task_box_style())
+        plugins_inner = QVBoxLayout(plugins_box)
+        plugins_inner.setContentsMargins(12, 10, 12, 10)
+        plugins_inner.setSpacing(8)
+
+        _PT_SECTION_STYLE = "color:#4ec9b0;font-size:12px;font-weight:bold;"
+
+        tli_title = QLabel("TL Inspector")
+        tli_title.setStyleSheet(_PT_SECTION_STYLE)
+        plugins_inner.addWidget(tli_title)
+
+        self._tli_status_label = QLabel("Status: (detect a project folder first)")
+        self._tli_status_label.setWordWrap(True)
+        self._tli_status_label.setStyleSheet("color:#7a7a7a;font-size:13px;")
+        plugins_inner.addWidget(self._tli_status_label)
+
+        tli_btn_row = QHBoxLayout()
+        tli_btn_row.setSpacing(8)
         self._tli_install_btn = _make_btn("⬇  Install TL Inspector", "#3a7a3a")
-        self._tli_install_btn.setFixedWidth(_BTN_W)
+        self._tli_install_btn.setMinimumHeight(30)
         self._tli_install_btn.clicked.connect(self._install_tl_inspector)
-        btn_row.addWidget(self._tli_install_btn)
+        tli_btn_row.addWidget(self._tli_install_btn, 1)
 
         self._tli_uninstall_btn = _make_btn("⬆  Uninstall TL Inspector", "#7a3a3a")
-        self._tli_uninstall_btn.setFixedWidth(_BTN_W)
+        self._tli_uninstall_btn.setMinimumHeight(30)
         self._tli_uninstall_btn.clicked.connect(self._uninstall_tl_inspector)
-        btn_row.addWidget(self._tli_uninstall_btn)
-        btn_row.addStretch()
-        inner.addLayout(btn_row)
+        tli_btn_row.addWidget(self._tli_uninstall_btn, 1)
+        plugins_inner.addLayout(tli_btn_row)
 
-        layout.addWidget(box)
-        self._step8_playtest_box = box
+        self._step8_forge_section = QWidget()
+        forge_section_layout = QVBoxLayout(self._step8_forge_section)
+        forge_section_layout.setContentsMargins(0, 4, 0, 0)
+        forge_section_layout.setSpacing(8)
+
+        forge_title = QLabel("Forge (MZ only)")
+        forge_title.setStyleSheet(_PT_SECTION_STYLE)
+        forge_section_layout.addWidget(forge_title)
+
+        self._forge_status_label = QLabel("Status: (MZ project required)")
+        self._forge_status_label.setWordWrap(True)
+        self._forge_status_label.setStyleSheet("color:#7a7a7a;font-size:13px;")
+        forge_section_layout.addWidget(self._forge_status_label)
+
+        forge_btn_row = QHBoxLayout()
+        forge_btn_row.setSpacing(8)
+        self._forge_install_btn = _make_btn("⬇  Install Forge", "#3a7a3a")
+        self._forge_install_btn.setMinimumHeight(30)
+        self._forge_install_btn.clicked.connect(self._install_forge)
+        forge_btn_row.addWidget(self._forge_install_btn, 1)
+
+        self._forge_uninstall_btn = _make_btn("⬆  Uninstall Forge", "#7a3a3a")
+        self._forge_uninstall_btn.setMinimumHeight(30)
+        self._forge_uninstall_btn.clicked.connect(self._uninstall_forge)
+        forge_btn_row.addWidget(self._forge_uninstall_btn, 1)
+        forge_section_layout.addLayout(forge_btn_row)
+
+        plugins_inner.addWidget(self._step8_forge_section)
+
+        self._step8_tli_credits = QLabel("Idea by Sakura · Plugin by Kao_SSS")
+        self._step8_tli_credits.setStyleSheet("color:#6a6a6a;font-size:11px;font-style:italic;padding-top:2px;")
+        plugins_inner.addWidget(self._step8_tli_credits)
+
+        layout.addWidget(plugins_box)
+        self._step8_playtest_box = plugins_box
+        self._step8_forge_box = self._step8_forge_section
+
         self._populate_tli_editor_combo()
-        self._load_tli_editor_settings()
+        self._load_playtest_settings()
 
     def _populate_tli_editor_combo(self, select: str | None = None):
         """Fill editor dropdown with auto-detect, found editors, and custom."""
@@ -2663,18 +2744,24 @@ class WorkflowTab(QWidget):
                 "No VS Code / Cursor found — install one or choose Custom path."
             )
 
-    def _load_tli_editor_settings(self):
-        """Load TL Inspector editor settings from .env into Step 8 controls."""
+    def _load_playtest_settings(self):
+        """Load playtest hotkeys and editor settings from .env into Step 8 controls."""
         try:
-            from util.tl_inspector.config import load_config
+            from util.playtest.config import load_config
             cfg = load_config()
         except Exception:
-            cfg = {"editorCmd": "auto"}
+            cfg = {
+                "hotkey": "F9",
+                "forgeHotkey": "F10",
+                "editorCmd": "auto",
+            }
 
+        self._pt_hotkey_edit.setText(cfg.get("hotkey", "F9"))
+        self._pt_forge_hotkey_edit.setText(cfg.get("forgeHotkey", "F10"))
         self._populate_tli_editor_combo(select=cfg.get("editorCmd", "auto"))
 
-    def _resolve_tli_config(self) -> dict:
-        """Build config dict from Step 8 editor controls."""
+    def _resolve_playtest_config(self) -> dict:
+        """Build playtest config dict from Step 8 controls."""
         mode = self._tli_editor_combo.currentData()
         if mode == "__custom__":
             editor = self._tli_editor_custom.text().strip() or "auto"
@@ -2683,7 +2770,74 @@ class WorkflowTab(QWidget):
         else:
             editor = "auto"
 
-        return {"editorCmd": editor, "workspaceFolder": "auto"}
+        return {
+            "hotkey": self._pt_hotkey_edit.text().strip() or "F9",
+            "forgeHotkey": self._pt_forge_hotkey_edit.text().strip() or "F10",
+            "editorCmd": editor,
+            "workspaceFolder": "auto",
+        }
+
+    def _save_playtest_settings(self):
+        cfg = self._resolve_playtest_config()
+        try:
+            from util.playtest.config import save_config
+            save_config(cfg)
+            self._log(
+                "✅ Playtest settings saved — "
+                f"inspector={cfg['hotkey']}, forge={cfg['forgeHotkey']}, "
+                f"editor={cfg['editorCmd']}"
+            )
+        except Exception as exc:
+            self._log(f"❌ Could not save playtest settings: {exc}")
+
+    def _apply_playtest_settings(self):
+        game_root = self.folder_edit.text().strip()
+        if not game_root:
+            self._log("⚠  No game folder set. Complete Step 0 first.")
+            return
+        cfg = self._resolve_playtest_config()
+        try:
+            from util.forge.installer import detect_mz
+            from util.playtest.config import save_config
+
+            save_config(cfg)
+            is_mz = detect_mz(Path(game_root)) is not None
+            msgs: list[str] = []
+            if is_mz:
+                from util.forge.installer import apply_config as apply_forge
+                from util.forge.installer import status as forge_status
+                if forge_status(Path(game_root)).get("plugin_file"):
+                    ok, msg = apply_forge(Path(game_root), cfg)
+                    msgs.append(("✅ " if ok else "❌ ") + msg)
+            from util.tl_inspector.installer import apply_config as apply_tli
+            from util.tl_inspector.installer import status as tli_status
+            if tli_status(Path(game_root)).get("plugin_file"):
+                ok, msg = apply_tli(Path(game_root), cfg)
+                msgs.append(("✅ " if ok else "❌ ") + msg)
+            if not msgs:
+                self._log("⚠  No playtest plugins installed in this game folder.")
+                return
+            for line in msgs:
+                self._log(line)
+        except Exception as exc:
+            self._log(f"❌ Could not apply playtest settings: {exc}")
+            return
+        self._refresh_playtest_status()
+
+    def _refresh_playtest_status(self):
+        """Update Step 8 status labels for the current engine."""
+        if getattr(self, "_step8_playtest_box", None) is not None:
+            self._refresh_tl_inspector_status()
+        game_root = self.folder_edit.text().strip()
+        is_mz = False
+        if game_root:
+            try:
+                from util.forge.installer import detect_mz
+                is_mz = detect_mz(Path(game_root)) is not None
+            except Exception:
+                is_mz = False
+        if is_mz:
+            self._refresh_forge_status()
 
     def _on_tli_editor_combo_changed(self, _index: int | None = None):
         custom = self._tli_editor_combo.currentData() == "__custom__"
@@ -2715,32 +2869,13 @@ class WorkflowTab(QWidget):
         self._tli_editor_custom.setText(path)
 
     def _save_tli_editor_settings(self):
-        cfg = self._resolve_tli_config()
-        try:
-            from util.tl_inspector.config import save_config
-            save_config(cfg)
-            self._log(f"✅ TL Inspector settings saved — editor={cfg['editorCmd']}")
-        except Exception as exc:
-            self._log(f"❌ Could not save TL Inspector settings: {exc}")
+        self._save_playtest_settings()
 
     def _apply_tli_editor_settings(self):
-        game_root = self.folder_edit.text().strip()
-        if not game_root:
-            self._log("⚠  No game folder set. Complete Step 0 first.")
-            return
-        cfg = self._resolve_tli_config()
-        try:
-            from util.tl_inspector.config import save_config
-            from util.tl_inspector.installer import apply_config
-            save_config(cfg)
-            ok, msg = apply_config(Path(game_root), cfg)
-        except Exception as exc:
-            self._log(f"❌ Could not apply TL Inspector settings: {exc}")
-            return
-        self._log(("✅ " if ok else "❌ ") + msg)
+        self._apply_playtest_settings()
 
     def _refresh_tl_inspector_status(self):
-        """Update Step 8 status label from the current game folder."""
+        """Update Step 8 TL Inspector status label from the current game folder."""
         label = getattr(self, "_tli_status_label", None)
         if label is None:
             return
@@ -2782,9 +2917,9 @@ class WorkflowTab(QWidget):
         if not game_root:
             self._log("⚠  No game folder set. Complete Step 0 first.")
             return
-        cfg = self._resolve_tli_config()
+        cfg = self._resolve_playtest_config()
         try:
-            from util.tl_inspector.config import save_config
+            from util.playtest.config import save_config
             from util.tl_inspector.installer import install
             save_config(cfg)
             ok, msg = install(Path(game_root), cfg=cfg)
@@ -2792,7 +2927,7 @@ class WorkflowTab(QWidget):
             self._log(f"❌ TL Inspector install failed: {exc}")
             return
         self._log(("✅ " if ok else "❌ ") + msg)
-        self._refresh_tl_inspector_status()
+        self._refresh_playtest_status()
 
     def _uninstall_tl_inspector(self):
         game_root = self.folder_edit.text().strip()
@@ -2815,7 +2950,114 @@ class WorkflowTab(QWidget):
             self._log(f"❌ TL Inspector uninstall failed: {exc}")
             return
         self._log(("✅ " if ok else "❌ ") + msg)
-        self._refresh_tl_inspector_status()
+        self._refresh_playtest_status()
+
+    def _refresh_forge_status(self):
+        """Update Step 8 Forge status label from the current game folder."""
+        label = getattr(self, "_forge_status_label", None)
+        if label is None:
+            return
+        game_root = self.folder_edit.text().strip()
+        if not game_root:
+            label.setText("Status: no game folder set — complete Step 0 first.")
+            label.setStyleSheet("color:#7a7a7a;font-size:13px;")
+            return
+        try:
+            from util.forge.installer import detect_mz, status
+            if detect_mz(Path(game_root)) is None:
+                label.setText("Status: not an MZ project (Forge is MZ-only).")
+                label.setStyleSheet("color:#e9a12a;font-size:13px;")
+                return
+            st = status(Path(game_root))
+        except Exception as exc:
+            label.setText(f"Status: error — {exc}")
+            label.setStyleSheet("color:#f48771;font-size:13px;")
+            return
+
+        msg = st.get("message", "")
+        if st.get("declared") and st.get("plugin_file"):
+            detail = "plugin declared in plugins.js and file present"
+        elif st.get("declared"):
+            detail = "declared in plugins.js (plugin file missing)"
+        elif st.get("plugin_file"):
+            detail = "plugin file present (not declared in plugins.js)"
+        else:
+            detail = "not installed"
+        label.setText(f"Status: RPG Maker MZ · {msg} — {detail}")
+        color = "#6a9a6a" if st.get("declared") and st.get("plugin_file") else "#9d9d9d"
+        label.setStyleSheet(f"color:{color};font-size:13px;")
+
+    def _install_forge(self):
+        game_root = self.folder_edit.text().strip()
+        if not game_root:
+            self._log("⚠  No game folder set. Complete Step 0 first.")
+            return
+        cfg = self._resolve_playtest_config()
+        try:
+            from util.playtest.config import save_config
+            from util.forge.installer import install
+            save_config(cfg)
+            ok, msg = install(Path(game_root), cfg=cfg)
+        except Exception as exc:
+            self._log(f"❌ Forge install failed: {exc}")
+            return
+        self._log(("✅ " if ok else "❌ ") + msg)
+        self._refresh_playtest_status()
+
+    def _install_both_playtest(self):
+        game_root = self.folder_edit.text().strip()
+        if not game_root:
+            self._log("⚠  No game folder set. Complete Step 0 first.")
+            return
+        try:
+            from util.forge.installer import detect_mz
+            if detect_mz(Path(game_root)) is None:
+                self._log("⚠  Install Both is for MZ projects only.")
+                return
+        except Exception as exc:
+            self._log(f"❌ Could not detect engine: {exc}")
+            return
+
+        cfg = self._resolve_playtest_config()
+        try:
+            from util.playtest.config import save_config
+            from util.tl_inspector.installer import install as install_tli
+            from util.forge.installer import install as install_forge
+
+            save_config(cfg)
+            ok_tli, msg_tli = install_tli(Path(game_root), cfg=cfg)
+            self._log(("✅ " if ok_tli else "❌ ") + msg_tli)
+            if not ok_tli:
+                return
+            ok_forge, msg_forge = install_forge(Path(game_root), cfg=cfg)
+            self._log(("✅ " if ok_forge else "❌ ") + msg_forge)
+        except Exception as exc:
+            self._log(f"❌ Install Both failed: {exc}")
+            return
+        self._refresh_playtest_status()
+
+    def _uninstall_forge(self):
+        game_root = self.folder_edit.text().strip()
+        if not game_root:
+            self._log("⚠  No game folder set. Complete Step 0 first.")
+            return
+        reply = QMessageBox.question(
+            self,
+            "Uninstall Forge",
+            "Remove Forge_MZ from plugins.js and delete the plugin file?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if reply != QMessageBox.Yes:
+            return
+        try:
+            from util.forge.installer import uninstall
+            ok, msg = uninstall(Path(game_root))
+        except Exception as exc:
+            self._log(f"❌ Forge uninstall failed: {exc}")
+            return
+        self._log(("✅ " if ok else "❌ ") + msg)
+        self._refresh_playtest_status()
 
     # ─────────────────────────────────────────────────────────────────────────
     # Step 0 – Project Folder logic
@@ -2930,10 +3172,32 @@ class WorkflowTab(QWidget):
             if is_ace and self._step_tabs.currentIndex() == 8:
                 self._step_tabs.setCurrentIndex(7)
         box = getattr(self, "_step8_playtest_box", None)
-        if box is not None:
-            box.setEnabled(not is_ace)
+        forge_section = getattr(self, "_step8_forge_section", None)
+        is_mz = False
         if not is_ace:
-            self._refresh_tl_inspector_status()
+            game_root = self.folder_edit.text().strip()
+            if game_root:
+                try:
+                    from util.forge.installer import detect_mz
+                    is_mz = detect_mz(Path(game_root)) is not None
+                except Exception:
+                    is_mz = False
+        if box is not None:
+            box.setVisible(not is_ace)
+            box.setEnabled(not is_ace)
+        if forge_section is not None:
+            forge_section.setVisible(is_mz)
+        install_both_btn = getattr(self, "_install_both_btn", None)
+        if install_both_btn is not None:
+            install_both_btn.setVisible(is_mz)
+        forge_hk_lbl = getattr(self, "_pt_forge_hotkey_lbl", None)
+        forge_hk_edit = getattr(self, "_pt_forge_hotkey_edit", None)
+        if forge_hk_lbl is not None:
+            forge_hk_lbl.setVisible(is_mz)
+        if forge_hk_edit is not None:
+            forge_hk_edit.setVisible(is_mz)
+        if not is_ace:
+            self._refresh_playtest_status()
 
     def _detect_folder(self):
         folder = self.folder_edit.text().strip()
@@ -3060,6 +3324,7 @@ class WorkflowTab(QWidget):
             "border-radius:4px;margin:4px 0;"
         )
         self._log(f"Detected data folder: {data_path}  (engine: {engine})")
+        self._update_step6_for_engine(False)
 
         worker = _ScanWorker(self._data_path, self._engine)
         worker.done.connect(self._on_scan_done)

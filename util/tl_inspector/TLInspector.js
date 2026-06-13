@@ -30,7 +30,6 @@
  *   In-game overlay "save to file" reloads that JSON into memory immediately.
  *   VSCode / external saves: we watch data/*.json; once the file mtime is stable
  *   (save finished), reload instantly. The game cannot hook Ctrl+S in VSCode itself.
- *   F9 — manual reload of all database JSON + the current map
  *
  * Limitations:
  *   - NW.js desktop playtest only (not browser)
@@ -55,8 +54,7 @@
     //=========================================================================
     var CFG = {
         enabled: true,
-        hotkey: 'F10',          // key (event.key) that toggles the overlay
-        reloadHotkey: 'F9',     // key that reloads on-screen game elements from disk
+        hotkey: 'F9',          // key (event.key) that toggles the overlay
         editorCmd: 'auto',      // 'auto' = auto-detect installed editors (VS Code, Cursor,
                                 // VSCodium, Insiders, Windsurf). Or set an absolute path to
                                 // force a specific editor exe.
@@ -1821,7 +1819,7 @@
                 '<select class="tl-edsel" data-act="edsel" title="Which installed editor opens clicked file:line results"></select>' +
                 '<label class="tl-btn tl-frz" title="Block mouse/keyboard from reaching the game while the panel is open">' +
                     '<input type="checkbox" data-act="freeze"' + (ui.freeze ? ' checked' : '') + '> Freeze</label>' +
-                '<span data-act="refresh" class="tl-btn" title="Reload on-screen text &amp; images from disk so saved edits show immediately (F9)">&#x21bb; Reload</span>' +
+                '<span data-act="refresh" class="tl-btn" title="Reload on-screen text &amp; images from disk (auto-reloads on save too)">&#x21bb; Reload</span>' +
             '</div>';
         root.appendChild(head);
 
@@ -2330,10 +2328,6 @@
             e.preventDefault();
             e.stopPropagation();
             toggle();
-        } else if (CFG.reloadHotkey && e.key === CFG.reloadHotkey) {
-            e.preventDefault();
-            e.stopPropagation();
-            refreshGameElements();
         } else if (e.key === 'Escape' && ui.pick) {
             e.preventDefault();
             e.stopPropagation();
@@ -2356,7 +2350,7 @@
         if (inPanel(e.target)) { return; } // our panel / built-in editor get input untouched
         var isKey = (e.type === 'keydown' || e.type === 'keyup' || e.type === 'keypress');
         if (isKey) {
-            if (e.key === CFG.hotkey || e.key === CFG.reloadHotkey || e.key === 'Escape') { return; } // hotkeys always work
+            if (e.key === CFG.hotkey || e.key === 'Escape') { return; } // hotkeys always work
             // Always block the game from seeing the key (stopPropagation), but do NOT
             // cancel the browser default for copy/select shortcuts (Ctrl+C / Ctrl+A) so
             // the user can still copy selected text from the panel.

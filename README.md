@@ -6,6 +6,7 @@ An AI-powered game translation tool with a GUI. Translate RPG Maker, Ren'Py, Tyr
 
 - **[Sinflower](https://github.com/Sinflower)** — [RV2JSON](https://github.com/Sinflower/RV2JSON) — enables RPGMaker Ace games to be translated the same way as MV/MZ by converting rvdata2 files to JSON and back. A copy is bundled offline in `util/ace/offline/`; newer builds are downloaded when online.
 - **Sakura & Kao_SSS** — TL Inspector (`util/tl_inspector/`) — in-game translation source inspector and live-edit plugin for RPG Maker MV/MZ playtesting.
+- **Len** — Forge (`util/forge/`) — MZ playtest cheat & editor overlay (install alongside TL Inspector).
 - **Len** — batch translation mode — Anthropic Message Batches API integration (collect/consume pipeline, cost estimation, resume, and GUI/workflow support).
 
 ## Table of Contents

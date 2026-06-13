@@ -8,15 +8,16 @@ import re
 import sys
 from pathlib import Path
 
-from dotenv import dotenv_values
+from util.playtest.config import load_config as _load_playtest_config, save_config as _save_playtest_config
 
 ENV_EDITOR = "tlEditorCmd"
 
-CFG_KEYS = ("editorCmd", "workspaceFolder")
+CFG_KEYS = ("editorCmd", "workspaceFolder", "hotkey")
 
 DEFAULTS = {
     "editorCmd": "auto",
     "workspaceFolder": "auto",
+    "hotkey": "F9",
 }
 
 _PKG_ROOT = Path(__file__).resolve().parent
@@ -100,30 +101,13 @@ def detect_primary_editor() -> Path | None:
 
 
 def load_config(env_path: Path | None = None) -> dict:
-    path = env_path or ENV_PATH
-    env = dotenv_values(path) if path.is_file() else {}
-    cfg = dict(DEFAULTS)
-    editor = (env.get(ENV_EDITOR) or "").strip()
-    if editor:
-        cfg["editorCmd"] = editor
-    return cfg
+    return _load_playtest_config(env_path)
 
 
 def save_config(cfg: dict, env_path: Path | None = None) -> None:
-    path = env_path or ENV_PATH
-    text = path.read_text(encoding="utf-8") if path.is_file() else ""
-    updates = {
-        ENV_EDITOR: cfg.get("editorCmd", "auto"),
-    }
-    for key, val in updates.items():
-        quoted = f"'{val}'"
-        pattern = rf"^({re.escape(key)}\s*=\s*)(?:'[^']*'|\"[^\"]*\"|[^\n]*)"
-        text, n = re.subn(pattern, rf"\g<1>{quoted}", text, count=1, flags=re.MULTILINE)
-        if n == 0:
-            text = text.rstrip("\n") + f"\n{key}={quoted}\n"
-    if not path.exists():
-        path.touch()
-    path.write_text(text, encoding="utf-8")
+    current = _load_playtest_config(env_path)
+    current.update(cfg)
+    _save_playtest_config(current, env_path)
 
 
 def _js_literal(value) -> str:
