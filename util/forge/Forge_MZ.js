@@ -4,8 +4,8 @@
 /*:
  * @target MZ
  * @plugindesc Forge — modern in-game editor: variables, switches, items, actors, gold, teleport, common events, freeze/lock & battle cheats. (MZ)
- * @author len (Forge - clean-room, MTool-inspired)
- * @url
+ * @author len
+ * @url https://gitgud.io/zero64801/forge-mvmz
  *
  * @param hotkey
  * @text Toggle Hotkey
@@ -51,6 +51,8 @@
  *
  * All edits are RAM-only and never written to save files. No external requests.
  * Plugin command "Open / Toggle Panel" toggles the overlay from events.
+ *
+ * Credits: len — https://gitgud.io/zero64801/forge-mvmz
  */
 
 /* ===================================================================================

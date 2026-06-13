@@ -6,8 +6,7 @@ An AI-powered game translation tool with a GUI. Translate RPG Maker, Ren'Py, Tyr
 
 - **[Sinflower](https://github.com/Sinflower)** — [RV2JSON](https://github.com/Sinflower/RV2JSON) — enables RPGMaker Ace games to be translated the same way as MV/MZ by converting rvdata2 files to JSON and back. A copy is bundled offline in `util/ace/offline/`; newer builds are downloaded when online.
 - **Sakura & Kao_SSS** — TL Inspector (`util/tl_inspector/`) — in-game translation source inspector and live-edit plugin for RPG Maker MV/MZ playtesting.
-- **Len** — Forge (`util/forge/`) — MZ playtest cheat & editor overlay (install alongside TL Inspector).
-- **Len** — batch translation mode — Anthropic Message Batches API integration (collect/consume pipeline, cost estimation, resume, and GUI/workflow support).
+- **Len** — [Forge](https://gitgud.io/zero64801/forge-mvmz) MZ playtest plugin (`util/forge/`), Mistral API support (provider integration and adaptive rate limiting), and batch translation mode (Anthropic Message Batches API).
 
 ## Table of Contents
 
@@ -202,7 +201,7 @@ This is the system prompt sent to the AI. A default `prompt.txt` is included and
 
 ## Batch Translation (Anthropic, 50% off)
 
-Batch mode was contributed by **Len** — see [Credits](#credits).
+Batch mode — see [Credits](#credits).
 
 When using a Claude model, the CLI offers a third mode that translates through the
 [Anthropic Message Batches API](https://platform.claude.com/docs/en/build-with-claude/batch-processing.md)

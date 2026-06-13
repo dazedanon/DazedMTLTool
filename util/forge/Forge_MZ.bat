@@ -1,6 +1,7 @@
 @echo off
 rem ============================================================================
 rem  Forge_MZ installer / uninstaller  (RPG Maker MZ only)
+rem  Credits: len — https://gitgud.io/zero64801/forge-mvmz (Forge plugin)
 rem  Put this file and Forge_MZ.js in the GAME ROOT (next to the .exe /
 rem  index.html), then double-click this file.
 rem    - Not installed yet -> installs it (copies the plugin into the plugins

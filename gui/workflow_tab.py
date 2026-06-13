@@ -2717,6 +2717,14 @@ class WorkflowTab(QWidget):
         self._step8_tli_credits.setStyleSheet("color:#6a6a6a;font-size:11px;font-style:italic;padding-top:2px;")
         plugins_inner.addWidget(self._step8_tli_credits)
 
+        self._step8_forge_credits = QLabel(
+            'Forge by <a href="https://gitgud.io/zero64801/forge-mvmz" style="color:#7a9abf">len</a>'
+        )
+        self._step8_forge_credits.setStyleSheet("color:#6a6a6a;font-size:11px;font-style:italic;")
+        self._step8_forge_credits.setTextFormat(Qt.RichText)
+        self._step8_forge_credits.setOpenExternalLinks(True)
+        plugins_inner.addWidget(self._step8_forge_credits)
+
         layout.addWidget(plugins_box)
         self._step8_playtest_box = plugins_box
         self._step8_forge_box = self._step8_forge_section

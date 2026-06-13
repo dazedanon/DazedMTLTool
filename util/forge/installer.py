@@ -1,4 +1,7 @@
-"""Install / uninstall Forge_MZ into an RPG Maker MZ game folder."""
+"""Install / uninstall Forge_MZ into an RPG Maker MZ game folder.
+
+Credits: len — https://gitgud.io/zero64801/forge-mvmz (Forge plugin)
+"""
 
 from __future__ import annotations
 
