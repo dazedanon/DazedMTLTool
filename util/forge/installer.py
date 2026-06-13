@@ -1,4 +1,4 @@
-"""Install / uninstall Forge_MZ into an RPG Maker MZ game folder.
+"""Install / uninstall Forge into an RPG Maker MV or MZ game folder.
 
 Credits: len — https://gitgud.io/zero64801/forge-mvmz (Forge plugin)
 """
@@ -8,25 +8,39 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from util.forge.config import plugin_entry, prepare_forge_mz_js
-
-PLUGIN_NAME = "Forge_MZ"
+from util.forge.config import PLUGIN_BY_ENGINE, plugin_entry, prepare_forge_js
 
 _PKG_ROOT = Path(__file__).resolve().parent
-DEFAULT_PLUGIN_SRC = _PKG_ROOT / "Forge_MZ.js"
 
 
-def bundled_plugin_path() -> Path:
-    return DEFAULT_PLUGIN_SRC
+def bundled_plugin_path(engine: str) -> Path:
+    from util.forge.config import bundled_plugin_path as _path
+
+    return _path(engine)
+
+
+def detect_engine(game_root: Path) -> tuple[str, Path, Path] | None:
+    """Return (engine, plugins_js, plugins_dir) or None if not MV/MZ."""
+    root = Path(game_root)
+    mv_js = root / "www" / "js" / "plugins.js"
+    mz_js = root / "js" / "plugins.js"
+    if mv_js.is_file():
+        return "MV", mv_js, root / "www" / "js" / "plugins"
+    if mz_js.is_file():
+        return "MZ", mz_js, root / "js" / "plugins"
+    return None
 
 
 def detect_mz(game_root: Path) -> tuple[Path, Path] | None:
-    """Return (plugins_js, plugins_dir) or None if not MZ."""
-    root = Path(game_root)
-    mz_js = root / "js" / "plugins.js"
-    if mz_js.is_file():
-        return mz_js, root / "js" / "plugins"
-    return None
+    """Return (plugins_js, plugins_dir) for MZ only, or None."""
+    info = detect_engine(game_root)
+    if info is None or info[0] != "MZ":
+        return None
+    return info[1], info[2]
+
+
+def _plugin_name(engine: str) -> str:
+    return PLUGIN_BY_ENGINE[engine]
 
 
 def _read_plugins_js(plugins_js: Path) -> tuple[str, str]:
@@ -35,13 +49,13 @@ def _read_plugins_js(plugins_js: Path) -> tuple[str, str]:
     return content, nl
 
 
-def _is_declared(content: str) -> bool:
-    return bool(re.search(rf'"name"\s*:\s*"{re.escape(PLUGIN_NAME)}"', content))
+def _is_declared(content: str, plugin_name: str) -> bool:
+    return bool(re.search(rf'"name"\s*:\s*"{re.escape(plugin_name)}"', content))
 
 
 def status(game_root: Path) -> dict:
     """Return install state for the game folder."""
-    info = detect_mz(game_root)
+    info = detect_engine(game_root)
     if info is None:
         return {
             "ok": False,
@@ -49,16 +63,17 @@ def status(game_root: Path) -> dict:
             "installed": False,
             "declared": False,
             "plugin_file": None,
-            "message": "No RPG Maker MZ game found (missing js/plugins.js).",
+            "message": "No RPG Maker MV/MZ game found (missing plugins.js).",
         }
-    plugins_js, plugins_dir = info
-    target = plugins_dir / f"{PLUGIN_NAME}.js"
+    engine, plugins_js, plugins_dir = info
+    plugin_name = _plugin_name(engine)
+    target = plugins_dir / f"{plugin_name}.js"
     content, _ = _read_plugins_js(plugins_js)
-    declared = _is_declared(content)
+    declared = _is_declared(content, plugin_name)
     file_there = target.is_file()
     return {
         "ok": True,
-        "engine": "MZ",
+        "engine": engine,
         "installed": declared or file_there,
         "declared": declared,
         "plugin_file": file_there,
@@ -75,27 +90,30 @@ def status(game_root: Path) -> dict:
 
 
 def install(game_root: Path, source_js: Path | None = None, cfg: dict | None = None) -> tuple[bool, str]:
-    """Copy Forge_MZ.js into the game and declare it in plugins.js."""
-    info = detect_mz(game_root)
+    """Copy Forge_MV.js or Forge_MZ.js into the game and declare it in plugins.js."""
+    info = detect_engine(game_root)
     if info is None:
-        return False, "No RPG Maker MZ game found at that path (Forge is MZ-only)."
+        return False, "No RPG Maker MV/MZ game found at that path."
 
-    plugins_js, plugins_dir = info
+    engine, plugins_js, plugins_dir = info
+    plugin_name = _plugin_name(engine)
+    default_src = bundled_plugin_path(engine)
+
     if source_js and not Path(source_js).is_file():
-        return False, f"Forge_MZ.js not found: {source_js}"
-    if not source_js and not DEFAULT_PLUGIN_SRC.is_file():
-        return False, f"Forge_MZ.js not found: {DEFAULT_PLUGIN_SRC}"
+        return False, f"{plugin_name}.js not found: {source_js}"
+    if not source_js and not default_src.is_file():
+        return False, f"{plugin_name}.js not found: {default_src}"
 
-    target = plugins_dir / f"{PLUGIN_NAME}.js"
+    target = plugins_dir / f"{plugin_name}.js"
     content, nl = _read_plugins_js(plugins_js)
 
     plugins_dir.mkdir(parents=True, exist_ok=True)
-    target.write_text(prepare_forge_mz_js(source_js, cfg), encoding="utf-8")
+    target.write_text(prepare_forge_js(engine, source_js, cfg), encoding="utf-8")
 
     hotkey = (cfg or {}).get("forgeHotkey", "F10")
     ui_scale = (cfg or {}).get("uiScale", "auto")
-    entry = plugin_entry(hotkey, ui_scale)
-    if not _is_declared(content):
+    entry = plugin_entry(engine, hotkey, ui_scale)
+    if not _is_declared(content, plugin_name):
         idx = content.rfind("];")
         if idx < 0:
             return False, "Could not find plugin list end ( ]; ) in plugins.js."
@@ -105,23 +123,24 @@ def install(game_root: Path, source_js: Path | None = None, cfg: dict | None = N
         content = before + sep + entry + nl + "    " + after
         plugins_js.write_text(content, encoding="utf-8", newline="")
 
-    return True, f"Forge installed for RPG Maker MZ. Press {hotkey} in-game to open."
+    return True, f"Forge installed for RPG Maker {engine}. Press {hotkey} in-game to open."
 
 
 def uninstall(game_root: Path) -> tuple[bool, str]:
-    """Remove Forge_MZ from plugins.js and delete the plugin file."""
-    info = detect_mz(game_root)
+    """Remove Forge from plugins.js and delete the plugin file."""
+    info = detect_engine(game_root)
     if info is None:
-        return False, "No RPG Maker MZ game found at that path."
+        return False, "No RPG Maker MV/MZ game found at that path."
 
-    plugins_js, plugins_dir = info
-    target = plugins_dir / f"{PLUGIN_NAME}.js"
+    engine, plugins_js, plugins_dir = info
+    plugin_name = _plugin_name(engine)
+    target = plugins_dir / f"{plugin_name}.js"
     content, nl = _read_plugins_js(plugins_js)
 
-    if _is_declared(content):
+    if _is_declared(content, plugin_name):
         kept = [
             line for line in re.split(r"\r?\n", content)
-            if not re.search(rf'"name"\s*:\s*"{re.escape(PLUGIN_NAME)}"', line)
+            if not re.search(rf'"name"\s*:\s*"{re.escape(plugin_name)}"', line)
         ]
         new_text = nl.join(kept)
         new_text = re.sub(r",(\s*)\];", r"\1];", new_text)
@@ -134,15 +153,16 @@ def uninstall(game_root: Path) -> tuple[bool, str]:
 
 
 def apply_config(game_root: Path, cfg: dict | None = None) -> tuple[bool, str]:
-    """Rewrite an installed Forge_MZ.js with the current Forge hotkey."""
-    info = detect_mz(game_root)
+    """Rewrite an installed Forge plugin with current playtest settings."""
+    info = detect_engine(game_root)
     if info is None:
-        return False, "No RPG Maker MZ game found at that path."
+        return False, "No RPG Maker MV/MZ game found at that path."
 
-    _, plugins_dir = info
-    target = plugins_dir / f"{PLUGIN_NAME}.js"
+    engine, _, plugins_dir = info
+    plugin_name = _plugin_name(engine)
+    target = plugins_dir / f"{plugin_name}.js"
     if not target.is_file():
         return False, "Forge is not installed in this game folder."
 
-    target.write_text(prepare_forge_mz_js(cfg=cfg), encoding="utf-8")
-    return True, "Forge hotkey applied to the installed plugin."
+    target.write_text(prepare_forge_js(engine, cfg=cfg), encoding="utf-8")
+    return True, f"Forge settings applied to the installed {plugin_name} plugin."

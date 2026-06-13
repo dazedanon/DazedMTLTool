@@ -2496,8 +2496,8 @@ class WorkflowTab(QWidget):
 
         self._step8_main_hint = QLabel(
             "Install playtest plugins into your RPG Maker game. "
-            "<b>TL Inspector</b> works on MV and MZ. "
-            "<b>Forge</b> is MZ-only. Use <b>Install Both</b> on MZ to add both plugins at once."
+            "<b>TL Inspector</b> and <b>Forge</b> work on MV and MZ. "
+            "Use <b>Install Both</b> to add both plugins at once."
         )
         self._step8_main_hint.setWordWrap(True)
         self._step8_main_hint.setTextFormat(Qt.RichText)
@@ -2640,10 +2640,10 @@ class WorkflowTab(QWidget):
 
         action_row.addStretch(1)
 
-        self._install_both_btn = _make_btn("⬇  Install Both (MZ)", "#3a5a7a")
+        self._install_both_btn = _make_btn("⬇  Install Both", "#3a5a7a")
         self._install_both_btn.setFixedHeight(30)
         self._install_both_btn.setToolTip(
-            "Install TL Inspector and Forge as separate plugins (MZ only)"
+            "Install TL Inspector and Forge as separate plugins (MV/MZ)"
         )
         self._install_both_btn.clicked.connect(self._install_both_playtest)
         action_row.addWidget(self._install_both_btn)
@@ -2689,11 +2689,11 @@ class WorkflowTab(QWidget):
         forge_section_layout.setContentsMargins(0, 4, 0, 0)
         forge_section_layout.setSpacing(8)
 
-        forge_title = QLabel("Forge (MZ only)")
+        forge_title = QLabel("Forge (MV / MZ)")
         forge_title.setStyleSheet(_PT_SECTION_STYLE)
         forge_section_layout.addWidget(forge_title)
 
-        self._forge_status_label = QLabel("Status: (MZ project required)")
+        self._forge_status_label = QLabel("Status: (MV or MZ project required)")
         self._forge_status_label.setWordWrap(True)
         self._forge_status_label.setStyleSheet("color:#7a7a7a;font-size:13px;")
         forge_section_layout.addWidget(self._forge_status_label)
@@ -2840,13 +2840,13 @@ class WorkflowTab(QWidget):
             return
         cfg = self._resolve_playtest_config()
         try:
-            from util.forge.installer import detect_mz
+            from util.forge.installer import detect_engine
             from util.playtest.config import save_config
 
             save_config(cfg)
-            is_mz = detect_mz(Path(game_root)) is not None
+            info = detect_engine(Path(game_root))
             msgs: list[str] = []
-            if is_mz:
+            if info is not None:
                 from util.forge.installer import apply_config as apply_forge
                 from util.forge.installer import status as forge_status
                 if forge_status(Path(game_root)).get("plugin_file"):
@@ -2871,16 +2871,7 @@ class WorkflowTab(QWidget):
         """Update Step 8 status labels for the current engine."""
         if getattr(self, "_step8_playtest_box", None) is not None:
             self._refresh_tl_inspector_status()
-        game_root = self.folder_edit.text().strip()
-        is_mz = False
-        if game_root:
-            try:
-                from util.forge.installer import detect_mz
-                is_mz = detect_mz(Path(game_root)) is not None
-            except Exception:
-                is_mz = False
-        if is_mz:
-            self._refresh_forge_status()
+        self._refresh_forge_status()
 
     def _on_tli_editor_combo_changed(self, _index: int | None = None):
         custom = self._tli_editor_combo.currentData() == "__custom__"
@@ -3006,9 +2997,9 @@ class WorkflowTab(QWidget):
             label.setStyleSheet("color:#7a7a7a;font-size:13px;")
             return
         try:
-            from util.forge.installer import detect_mz, status
-            if detect_mz(Path(game_root)) is None:
-                label.setText("Status: not an MZ project (Forge is MZ-only).")
+            from util.forge.installer import detect_engine, status
+            if detect_engine(Path(game_root)) is None:
+                label.setText("Status: not an MV/MZ project.")
                 label.setStyleSheet("color:#e9a12a;font-size:13px;")
                 return
             st = status(Path(game_root))
@@ -3017,6 +3008,7 @@ class WorkflowTab(QWidget):
             label.setStyleSheet("color:#f48771;font-size:13px;")
             return
 
+        engine = st.get("engine", "?")
         msg = st.get("message", "")
         if st.get("declared") and st.get("plugin_file"):
             detail = "plugin declared in plugins.js and file present"
@@ -3026,7 +3018,7 @@ class WorkflowTab(QWidget):
             detail = "plugin file present (not declared in plugins.js)"
         else:
             detail = "not installed"
-        label.setText(f"Status: RPG Maker MZ · {msg} — {detail}")
+        label.setText(f"Status: RPG Maker {engine} · {msg} — {detail}")
         color = "#6a9a6a" if st.get("declared") and st.get("plugin_file") else "#9d9d9d"
         label.setStyleSheet(f"color:{color};font-size:13px;")
 
@@ -3053,9 +3045,9 @@ class WorkflowTab(QWidget):
             self._log("⚠  No game folder set. Complete Step 0 first.")
             return
         try:
-            from util.forge.installer import detect_mz
-            if detect_mz(Path(game_root)) is None:
-                self._log("⚠  Install Both is for MZ projects only.")
+            from util.forge.installer import detect_engine
+            if detect_engine(Path(game_root)) is None:
+                self._log("⚠  Install Both requires an MV or MZ project.")
                 return
         except Exception as exc:
             self._log(f"❌ Could not detect engine: {exc}")
@@ -3087,7 +3079,7 @@ class WorkflowTab(QWidget):
         reply = QMessageBox.question(
             self,
             "Uninstall Forge",
-            "Remove Forge_MZ from plugins.js and delete the plugin file?",
+            "Remove Forge from plugins.js and delete the plugin file?",
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.No,
         )
@@ -3215,30 +3207,12 @@ class WorkflowTab(QWidget):
             if is_ace and self._step_tabs.currentIndex() == 8:
                 self._step_tabs.setCurrentIndex(7)
         box = getattr(self, "_step8_playtest_box", None)
-        forge_section = getattr(self, "_step8_forge_section", None)
-        is_mz = False
-        if not is_ace:
-            game_root = self.folder_edit.text().strip()
-            if game_root:
-                try:
-                    from util.forge.installer import detect_mz
-                    is_mz = detect_mz(Path(game_root)) is not None
-                except Exception:
-                    is_mz = False
+        install_both_btn = getattr(self, "_install_both_btn", None)
         if box is not None:
             box.setVisible(not is_ace)
             box.setEnabled(not is_ace)
-        if forge_section is not None:
-            forge_section.setVisible(is_mz)
-        install_both_btn = getattr(self, "_install_both_btn", None)
         if install_both_btn is not None:
-            install_both_btn.setVisible(is_mz)
-        forge_hk_lbl = getattr(self, "_pt_forge_hotkey_lbl", None)
-        forge_hk_edit = getattr(self, "_pt_forge_hotkey_edit", None)
-        if forge_hk_lbl is not None:
-            forge_hk_lbl.setVisible(is_mz)
-        if forge_hk_edit is not None:
-            forge_hk_edit.setVisible(is_mz)
+            install_both_btn.setVisible(not is_ace)
         if not is_ace:
             self._refresh_playtest_status()
 

@@ -22,6 +22,7 @@ __pycache__
 !requirements.txt
 !util/tl_inspector/TLInspector.js
 !util/forge/Forge_MZ.js
+!util/forge/Forge_MV.js
 util/ace/*.exe
 util/ace/.tools_version.json
 !util/ace/offline/*.exe
