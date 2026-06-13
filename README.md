@@ -1,6 +1,6 @@
 # DazedMTLTool
 
-An AI-powered game translation tool with a GUI. Translate RPG Maker, Ren'Py, Tyrano, Wolf RPG, Kirikiri, and other game engines from Japanese to English using GPT or compatible AI models.
+An AI-powered game translation tool with a GUI. Translate RPG Maker, Ren'Py, Tyrano, Wolf RPG, Kirikiri, and other game engines from Japanese to English using GPT, Gemini, [Mistral](https://docs.mistral.ai/api), or other compatible AI models.
 
 ## Credits
 
@@ -17,6 +17,7 @@ An AI-powered game translation tool with a GUI. Translate RPG Maker, Ren'Py, Tyr
 - [Using the GUI](#using-the-gui)
 - [Vocab & Prompt](#vocab--prompt)
 - [Tips](#tips)
+- [Mistral API (free tier)](#mistral-api-free-tier)
 - [Batch Translation (Anthropic, 50% off)](#batch-translation-anthropic-50-off)
 - [Folder Structure](#folder-structure)
 - [Finding Untranslated Text (Snipping Tool OCR)](#finding-untranslated-text-snipping-tool-ocr)
@@ -40,7 +41,7 @@ An AI-powered game translation tool with a GUI. Translate RPG Maker, Ren'Py, Tyr
 ## Requirements
 
 - **Python 3.12 – 3.14** — See [Installing Python](#installing-python) below if you don't have it yet.
-- **An AI API Key** — You'll need an API key from [OpenAI](https://platform.openai.com/settings/organization/api-keys), [Google Gemini](https://aistudio.google.com/apikey), or a compatible provider.
+- **An AI API Key** — You'll need an API key from [OpenAI](https://platform.openai.com/settings/organization/api-keys), [Google Gemini](https://aistudio.google.com/apikey), [Mistral](https://docs.mistral.ai/api) (free tier available — no credit card), or a compatible provider.
 
 ---
 
@@ -119,17 +120,7 @@ This means Python wasn't added to your PATH. You have two options:
    - `model` — For Nvidia/custom OpenAI-compatible endpoints, enter the model name manually (example: `deepseek-ai/deepseek-v4-pro`).
 3. The rest of the settings (wordwrap, batch size, etc.) can be left as defaults for now. You can tweak them later.
 
-> **Mistral note:** When the API URL points at `api.mistral.ai`, requests are paced by an
-> adaptive rate limiter. Mistral enforces a **per-minute request limit** and a **per-minute
-> token limit**, both of which are **per-model** — e.g. `mistral-medium` allows 25 req/min
-> while `ministral-3b` allows 750/min (Mistral's dashboard shows these ÷60 as "RPS", so the
-> effective rate ranges from well under 1 to over 12 requests/sec depending on the model). The
-> limiter reads both limits straight from the live `x-ratelimit-*` response headers, spaces
-> requests so it never overruns the per-minute request budget, charges them against a rolling
-> per-minute token budget, and honours `Retry-After` on 429s. It starts from a conservative
-> seed and pins itself to the exact per-model rate after the first response — so you can run
-> multiple `fileThreads` and it won't error out, it just paces the calls. Override the seeds
-> with `mistralReqPerSec`, `mistralTokPerMin`, and `mistralTokenHeadroom` if needed (rarely).
+> **Trying Mistral?** Set `API_PROVIDER=mistral`, add your key, use `mistral-medium-3.5`. Free tier details in [Mistral API (free tier)](#mistral-api-free-tier).
 
 ### 3. Launch the GUI
 
@@ -196,6 +187,27 @@ This is the system prompt sent to the AI. A default `prompt.txt` is included and
 - **Start small** — Translate a few files first to make sure the output looks good before doing the whole game.
 - **Wordwrap** — If text overflows or looks awkward in-game, adjust the `width` setting in `.env` or the Config tab. `60` is a good default for most RPG Maker games.
 - **Version control** — Using [Git](https://git-scm.com/) with the game folder is highly recommended. It lets you track every change the translation makes, compare with original files, and roll back if needed.
+
+---
+
+## Mistral API (free tier)
+
+Mistral's [API is free for now](https://docs.mistral.ai/api) (no credit card), and the tool has proper support for it — not just a generic OpenAI-compatible URL. Mistral rate-limits pretty aggressively per model, so there's an adaptive limiter that reads the live headers and paces requests automatically. That lets you crank up `fileThreads` without the run dying to 429s.
+
+`mistral-medium-3.5` is the recommended model for translation. Avoid `mistral-medium-latest` — it still points at the older 3.1 release.
+
+Quick setup in `.env`:
+
+```
+API_PROVIDER=mistral
+api="https://api.mistral.ai/v1/"
+key="your-mistral-api-key"
+model="mistral-medium-3.5"
+```
+
+When the API URL points at `api.mistral.ai`, requests are paced automatically. Mistral enforces a **per-minute request limit** and a **per-minute token limit**, both **per-model** — e.g. `mistral-medium` allows 25 req/min while `ministral-3b` allows 750/min. The limiter reads both limits from the live `x-ratelimit-*` response headers, spaces requests so it never overruns the per-minute budget, and honours `Retry-After` on 429s. Override the seeds with `mistralReqPerSec`, `mistralTokPerMin`, and `mistralTokenHeadroom` in `.env` if needed (rarely).
+
+> **Note:** Batch mode (50% off) is Anthropic/Claude only. Mistral runs live translation through the rate limiter above.
 
 ---
 
