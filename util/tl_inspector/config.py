@@ -12,12 +12,13 @@ from util.playtest.config import load_config as _load_playtest_config, save_conf
 
 ENV_EDITOR = "tlEditorCmd"
 
-CFG_KEYS = ("editorCmd", "workspaceFolder", "hotkey")
+CFG_KEYS = ("editorCmd", "workspaceFolder", "hotkey", "uiScale")
 
 DEFAULTS = {
     "editorCmd": "auto",
     "workspaceFolder": "auto",
     "hotkey": "F9",
+    "uiScale": "auto",
 }
 
 _PKG_ROOT = Path(__file__).resolve().parent

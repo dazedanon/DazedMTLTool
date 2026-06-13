@@ -9,11 +9,13 @@ from dotenv import dotenv_values
 
 ENV_TL_HOTKEY = "tlHotkey"
 ENV_FORGE_HOTKEY = "forgeHotkey"
+ENV_UI_SCALE = "playtestUiScale"
 ENV_EDITOR = "tlEditorCmd"
 
 DEFAULTS = {
     "hotkey": "F9",
     "forgeHotkey": "F10",
+    "uiScale": "auto",
     "editorCmd": "auto",
     "workspaceFolder": "auto",
 }
@@ -28,6 +30,7 @@ def load_config(env_path: Path | None = None) -> dict:
     for key, env_key in (
         ("hotkey", ENV_TL_HOTKEY),
         ("forgeHotkey", ENV_FORGE_HOTKEY),
+        ("uiScale", ENV_UI_SCALE),
         ("editorCmd", ENV_EDITOR),
     ):
         val = (env.get(env_key) or "").strip()
@@ -42,6 +45,7 @@ def save_config(cfg: dict, env_path: Path | None = None) -> None:
     updates = {
         ENV_TL_HOTKEY: cfg.get("hotkey", DEFAULTS["hotkey"]),
         ENV_FORGE_HOTKEY: cfg.get("forgeHotkey", DEFAULTS["forgeHotkey"]),
+        ENV_UI_SCALE: cfg.get("uiScale", DEFAULTS["uiScale"]),
         ENV_EDITOR: cfg.get("editorCmd", DEFAULTS["editorCmd"]),
     }
     for key, val in updates.items():

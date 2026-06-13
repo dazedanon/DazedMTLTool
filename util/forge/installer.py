@@ -90,7 +90,8 @@ def install(game_root: Path, source_js: Path | None = None, cfg: dict | None = N
     target.write_text(prepare_forge_mz_js(source_js, cfg), encoding="utf-8")
 
     hotkey = (cfg or {}).get("forgeHotkey", "F10")
-    entry = plugin_entry(hotkey)
+    ui_scale = (cfg or {}).get("uiScale", "auto")
+    entry = plugin_entry(hotkey, ui_scale)
     if not _is_declared(content):
         idx = content.rfind("];")
         if idx < 0:

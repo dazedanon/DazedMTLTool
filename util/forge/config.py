@@ -22,13 +22,14 @@ def _js_literal(value) -> str:
     return json.dumps(str(value))
 
 
-def plugin_entry(hotkey: str) -> str:
+def plugin_entry(hotkey: str, ui_scale: str = "auto") -> str:
     hk = _js_literal(hotkey.strip() or "F10")
+    scale = _js_literal(ui_scale.strip() or "auto")
     return (
         f'        {{ "name": "Forge_MZ", "status": true, '
         f'"description": "Forge — in-game cheat & editor overlay", '
         f'"parameters": {{ "hotkey": {hk}, "speedKey": "Control", '
-        f'"startOpen": "false", "itemMaxOverride": "0" }} }}'
+        f'"startOpen": "false", "itemMaxOverride": "0", "uiScale": {scale} }} }}'
     )
 
 
@@ -48,7 +49,18 @@ def _patch_forge_hotkey(forge_text: str, hotkey: str) -> str:
 
 
 def prepare_forge_mz_js(source: Path | None = None, cfg: dict | None = None) -> str:
-    """Build Forge_MZ.js with the configured toggle hotkey."""
+    """Build Forge_MZ.js with the configured toggle hotkey and UI scale."""
     src = source or BUNDLED_PLUGIN
     effective = {**load_config(), **(cfg or {})}
-    return _patch_forge_hotkey(src.read_text(encoding="utf-8"), effective["forgeHotkey"])
+    text = _patch_forge_hotkey(src.read_text(encoding="utf-8"), effective["forgeHotkey"])
+    scale = effective.get("uiScale", "auto")
+    text, n = re.subn(
+        r"(\* @param uiScale\s*\n(?:\s*\*[^\n]*\n)*?\s*\* @default )auto",
+        rf"\g<1>{scale}",
+        text,
+        count=1,
+    )
+    if n == 0:
+        raise ValueError("Could not patch @default uiScale in Forge_MZ.js")
+    text = re.sub(r"\(P\.uiScale \|\| 'auto'\)", f"(P.uiScale || '{scale}')", text)
+    return text

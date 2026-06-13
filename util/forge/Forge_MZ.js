@@ -32,6 +32,12 @@
  * @min 0
  * @default 0
  *
+ * @param uiScale
+ * @text UI Scale
+ * @desc Overlay size. Use auto to match game width, or a number like 1.5 or 2.
+ * @type string
+ * @default auto
+ *
  * @command open
  * @text Open / Toggle Panel
  * @desc Toggle the Forge overlay.
@@ -416,6 +422,18 @@
     var LS = 'forge:';
     function store(k, v) { try { localStorage.setItem(LS + k, JSON.stringify(v)); } catch (e) {} }
     function load(k, d) { try { var s = localStorage.getItem(LS + k); return s == null ? d : JSON.parse(s); } catch (e) { return d; } }
+    function resolveUiScale(v) {
+      if (v !== 'auto' && v != null && String(v).trim() !== '') {
+        var n = parseFloat(v);
+        if (!isNaN(n) && n > 0) return Math.max(0.75, Math.min(3, n));
+      }
+      var base = 816;
+      var w = (typeof Graphics !== 'undefined' && Graphics.width) ? Graphics.width : (window.innerWidth || base);
+      var scale = w / base;
+      var dpr = window.devicePixelRatio || 1;
+      if (dpr > 1.15) scale *= Math.min(2, 0.75 + dpr * 0.35);
+      return Math.max(1, Math.min(2.75, scale));
+    }
     // persisted speed settings (UI-controlled; override core/param defaults if the user changed them)
     API._speedKey = load('speedKey', API._speedKey || 'Control');
     API._speedUseKey = load('speedUseKey', true);
@@ -524,6 +542,8 @@ input::placeholder{color:var(--fg-text-faint)}\
     var shadow = host.attachShadow({ mode: 'open' });
     var rootEl = el('div', { id: 'forge-root' });
     rootEl.setAttribute('data-theme', load('theme', 'dark'));
+    var uiScale = resolveUiScale(API._uiScale || 'auto');
+    if (uiScale !== 1) rootEl.style.zoom = String(uiScale);
     shadow.appendChild(el('style', { text: CSS }));
     shadow.appendChild(rootEl);
 
@@ -1080,6 +1100,7 @@ input::placeholder{color:var(--fg-text-faint)}\
   if (window.Forge) {
     window.Forge._hotkey = (P.hotkey || 'F10').trim();
     window.Forge._itemMaxOverride = Number(P.itemMaxOverride) || 0;
+    window.Forge._uiScale = (P.uiScale || 'auto').trim();
     try { if (!localStorage.getItem('forge:speedKey')) window.Forge._speedKey = (P.speedKey || 'Control').trim(); } catch (e) { window.Forge._speedKey = (P.speedKey || 'Control').trim(); }
   }
   if (typeof PluginManager !== 'undefined' && PluginManager.registerCommand) {

@@ -72,10 +72,43 @@
         historySize: 80,        // how many past text lines to keep
         captureUiText: true,    // capture plugin / menu / UI text drawn via Bitmap.drawText
                                 // (so e.g. status-window strings from plugins.js are locatable)
-        dataDirOverride: null   // set an absolute path to force the data dir
+        dataDirOverride: null,  // set an absolute path to force the data dir
+        uiScale: 'auto'         // overlay scale: 'auto' from game width, or a number (1.5, 2, …)
     };
 
     if (!CFG.enabled) { return; }
+
+    function resolveUiScale(v) {
+        if (v !== 'auto' && v != null && String(v).trim() !== '') {
+            var n = parseFloat(v);
+            if (!isNaN(n) && n > 0) { return Math.max(0.75, Math.min(3, n)); }
+        }
+        var base = 816;
+        var w = (typeof Graphics !== 'undefined' && Graphics.width) ? Graphics.width :
+            (window.innerWidth || base);
+        var scale = w / base;
+        var dpr = window.devicePixelRatio || 1;
+        if (dpr > 1.15) { scale *= Math.min(2, 0.75 + dpr * 0.35); }
+        return Math.max(1, Math.min(2.75, scale));
+    }
+
+    function currentUiScale() {
+        return resolveUiScale(CFG.uiScale);
+    }
+
+    function applyOverlayScale() {
+        var s = currentUiScale();
+        var z = (s === 1) ? '' : String(s);
+        if (ui.root) {
+            ui.root.style.zoom = z;
+            ui.root.style.transformOrigin = (ui.side === 'left') ? 'top left' : 'top right';
+        }
+        if (editor.root) {
+            editor.root.style.zoom = z;
+            editor.root.style.transformOrigin = 'top center';
+        }
+        if (ui.pickLabel) { ui.pickLabel.style.zoom = z; }
+    }
 
     //=========================================================================
     // Node / environment bootstrap (NW.js exposes require)
@@ -1339,6 +1372,7 @@
         editor.tabsEl = tabs;
         editor.findEl = find;
         editor.statusEl = foot.querySelector('.tl-ed-status');
+        applyOverlayScale();
     }
 
     //--- documents / tabs ----------------------------------------------------
@@ -1781,6 +1815,7 @@
         ui.root.style.left = left ? '0' : 'auto';
         ui.root.style.right = left ? 'auto' : '0';
         ui.root.style.boxShadow = (left ? '2px' : '-2px') + ' 0 12px rgba(0,0,0,0.6)';
+        applyOverlayScale();
     }
 
     function flipSide() {
@@ -1941,6 +1976,7 @@
         hlz.style.cssText = 'position:fixed;left:0;top:0;z-index:2147483645;pointer-events:none;display:none';
         document.body.appendChild(hlz);
         ui.hlLayer = hlz;
+        applyOverlayScale();
     }
 
     function setTabStyles() {

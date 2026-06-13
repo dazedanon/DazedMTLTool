@@ -2551,6 +2551,32 @@ class WorkflowTab(QWidget):
         hotkey_row.addStretch(1)
         settings_inner.addLayout(hotkey_row)
 
+        scale_row = QHBoxLayout()
+        scale_row.setSpacing(8)
+        scale_lbl = QLabel("UI scale:")
+        scale_lbl.setFixedWidth(_PT_LABEL_W)
+        scale_lbl.setStyleSheet(_PT_LBL_STYLE)
+        scale_lbl.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        scale_row.addWidget(scale_lbl)
+
+        self._pt_ui_scale_combo = QComboBox()
+        self._pt_ui_scale_combo.setToolTip(
+            "In-game overlay size. Auto scales from game resolution and display DPI."
+        )
+        for label, value in (
+            ("Auto (match game width)", "auto"),
+            ("100%", "1"),
+            ("125%", "1.25"),
+            ("150%", "1.5"),
+            ("175%", "1.75"),
+            ("200%", "2"),
+            ("225%", "2.25"),
+            ("250%", "2.5"),
+        ):
+            self._pt_ui_scale_combo.addItem(label, value)
+        scale_row.addWidget(self._pt_ui_scale_combo, 1)
+        settings_inner.addLayout(scale_row)
+
         editor_title = QLabel("Editor settings")
         editor_title.setStyleSheet(_PT_SECTION_STYLE + "padding-top:2px;")
         settings_inner.addWidget(editor_title)
@@ -2753,11 +2779,19 @@ class WorkflowTab(QWidget):
             cfg = {
                 "hotkey": "F9",
                 "forgeHotkey": "F10",
+                "uiScale": "auto",
                 "editorCmd": "auto",
             }
 
         self._pt_hotkey_edit.setText(cfg.get("hotkey", "F9"))
         self._pt_forge_hotkey_edit.setText(cfg.get("forgeHotkey", "F10"))
+        want_scale = str(cfg.get("uiScale", "auto"))
+        scale_idx = self._pt_ui_scale_combo.findData(want_scale)
+        if scale_idx >= 0:
+            self._pt_ui_scale_combo.setCurrentIndex(scale_idx)
+        else:
+            custom_idx = self._pt_ui_scale_combo.findData("auto")
+            self._pt_ui_scale_combo.setCurrentIndex(custom_idx if custom_idx >= 0 else 0)
         self._populate_tli_editor_combo(select=cfg.get("editorCmd", "auto"))
 
     def _resolve_playtest_config(self) -> dict:
@@ -2773,6 +2807,7 @@ class WorkflowTab(QWidget):
         return {
             "hotkey": self._pt_hotkey_edit.text().strip() or "F9",
             "forgeHotkey": self._pt_forge_hotkey_edit.text().strip() or "F10",
+            "uiScale": str(self._pt_ui_scale_combo.currentData() or "auto"),
             "editorCmd": editor,
             "workspaceFolder": "auto",
         }
@@ -2785,7 +2820,7 @@ class WorkflowTab(QWidget):
             self._log(
                 "✅ Playtest settings saved — "
                 f"inspector={cfg['hotkey']}, forge={cfg['forgeHotkey']}, "
-                f"editor={cfg['editorCmd']}"
+                f"scale={cfg['uiScale']}, editor={cfg['editorCmd']}"
             )
         except Exception as exc:
             self._log(f"❌ Could not save playtest settings: {exc}")
