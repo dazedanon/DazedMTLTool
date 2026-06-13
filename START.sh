@@ -226,6 +226,12 @@ if ! python -m util.ace.update_tools; then
 fi
 echo
 
+echo "Checking Forge plugins..."
+if ! python -m util.forge.update_tools; then
+    echo "WARNING: Forge update failed. Playtest Forge features use the bundled upstream copy."
+fi
+echo
+
 echo "=========================================="
 echo "   Launching DazedMTLTool GUI..."
 echo "=========================================="

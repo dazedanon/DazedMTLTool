@@ -138,6 +138,12 @@ class UpdateThread(QThread):
             ensure_ace_tools(log_fn=lambda m: self.progress.emit(m))
         except Exception as exc:
             self.progress.emit(f"Ace tool update skipped: {exc}")
+        try:
+            from util.forge.update_tools import ensure_forge_plugins
+            self.progress.emit("Updating Forge plugins…")
+            ensure_forge_plugins(log_fn=lambda m: self.progress.emit(m))
+        except Exception as exc:
+            self.progress.emit(f"Forge update skipped: {exc}")
         self.finished.emit(True, f"updated:{latest_sha[:8]}")
 
 

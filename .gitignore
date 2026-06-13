@@ -23,6 +23,9 @@ __pycache__
 !util/tl_inspector/TLInspector.js
 !util/forge/Forge_MZ.js
 !util/forge/Forge_MV.js
+!util/forge/upstream/Forge_MZ.js
+!util/forge/upstream/Forge_MV.js
+util/forge/.forge_version.json
 util/ace/*.exe
 util/ace/.tools_version.json
 !util/ace/offline/*.exe

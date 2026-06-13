@@ -186,6 +186,13 @@ if errorlevel 1 (
 )
 echo.
 
+echo Checking Forge plugins...
+python -m util.forge.update_tools
+if errorlevel 1 (
+    echo WARNING: Forge update failed. Playtest Forge features use the bundled upstream copy.
+)
+echo.
+
 :: Launch the GUI
 echo ==========================================
 echo    Launching DazedMTLTool GUI...
