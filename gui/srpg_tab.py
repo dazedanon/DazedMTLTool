@@ -9,6 +9,7 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import pyqtSignal
 import re
+from gui.platform_glyph import platform_glyph
 
 try:
     import set_defaults
@@ -19,7 +20,7 @@ except Exception:
 
 def create_section_label(text):
     """Create a styled section header label."""
-    label = QLabel(text)
+    label = QLabel(platform_glyph(text))
     label.setStyleSheet("font-size: 12px; font-weight: bold; color: #007acc; padding: 2px 0px;")
     return label
 
@@ -83,7 +84,7 @@ class SRPGTab(QWidget):
         button_layout = QHBoxLayout()
         button_layout.setSpacing(10)
 
-        self.reset_btn = QPushButton("🔄 Reset to Defaults")
+        self.reset_btn = QPushButton(platform_glyph("🔄 Reset to Defaults"))
         self.reset_btn.clicked.connect(self.reset_to_defaults_with_message)
         self.reset_btn.setMaximumWidth(180)
         self.reset_btn.setMinimumHeight(32)

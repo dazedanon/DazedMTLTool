@@ -10,6 +10,7 @@ from PyQt5.QtWidgets import (
     QTextEdit, QSpinBox, QFrame, QGridLayout
 )
 from PyQt5.QtCore import Qt, pyqtSignal
+from gui.platform_glyph import platform_glyph
 
 try:
     from .config_integration import ConfigIntegration
@@ -25,8 +26,8 @@ except Exception:
 
 
 def create_section_label(text):
-    """Create a section label for grouping checkboxes."""
-    label = QLabel(text)
+    """Create a section label for grouping settings."""
+    label = QLabel(platform_glyph(text))
     label.setStyleSheet("""
         QLabel {
             font-size: 13px;
@@ -456,7 +457,7 @@ class RPGMakerTab(QWidget):
         
         # Reset button
         button_layout = QHBoxLayout()
-        self.reset_button = QPushButton("🔄 Reset to Defaults")
+        self.reset_button = QPushButton(platform_glyph("🔄 Reset to Defaults"))
         self.reset_button.clicked.connect(self.reset_to_defaults_with_message)
         self.reset_button.setMinimumHeight(32)
         self.reset_button.setMaximumWidth(160)

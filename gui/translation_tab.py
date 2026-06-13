@@ -31,6 +31,7 @@ from PyQt5.QtWidgets import QSizePolicy
 from PyQt5.QtCore import Qt, QTimer, pyqtSignal, QThread, QMutex, QProcess, QEvent, QRect, QSettings
 from PyQt5.QtGui import QFont
 from gui.log_viewer import LogViewer
+from gui.platform_glyph import platform_glyph
 
 
 def _strip_ansi(text):
@@ -41,7 +42,7 @@ def _strip_ansi(text):
 
 def create_section_header(title):
     """Create a clean section header without boxes."""
-    label = QLabel(title)
+    label = QLabel(platform_glyph(title))
     label.setStyleSheet("""
         QLabel {
             font-size: 13px;
@@ -849,7 +850,7 @@ class TranslationTab(QWidget):
         deselect_all_btn.setStyleSheet(icon_button_style)
         file_buttons.addWidget(deselect_all_btn)
         
-        add_files_btn = QPushButton("➕")
+        add_files_btn = QPushButton(platform_glyph("➕"))
         add_files_btn.setToolTip("Add files to translate")
         add_files_btn.clicked.connect(self.add_input_files)
         add_files_btn.setStyleSheet(icon_button_style)
@@ -861,13 +862,13 @@ class TranslationTab(QWidget):
         remove_files_btn.setStyleSheet(icon_button_style)
         file_buttons.addWidget(remove_files_btn)
         
-        open_folder_btn = QPushButton("📁")
+        open_folder_btn = QPushButton(platform_glyph("📁"))
         open_folder_btn.setToolTip("Open files folder in explorer")
         open_folder_btn.clicked.connect(self.open_input_folder)
         open_folder_btn.setStyleSheet(icon_button_style)
         file_buttons.addWidget(open_folder_btn)
         
-        refresh_btn = QPushButton("🔄")
+        refresh_btn = QPushButton(platform_glyph("🔄"))
         refresh_btn.setToolTip("Refresh file list")
         refresh_btn.clicked.connect(self.refresh_file_lists)
         refresh_btn.setStyleSheet(icon_button_style)
@@ -1120,12 +1121,12 @@ class TranslationTab(QWidget):
         self.reset_view_button.clicked.connect(self.reset_to_file_view)
         self.reset_view_button.setVisible(False)
         # Button to open the translations (translated) folder - icon-only
-        self.open_translations_button = QPushButton("📂")
+        self.open_translations_button = QPushButton(platform_glyph("📂"))
         self.open_translations_button.setToolTip("Open the translated files folder")
         self.open_translations_button.clicked.connect(self.open_output_folder)
         self.open_translations_button.setVisible(False)
         # Sync translated/ → files/ (RPG Maker only)
-        self.sync_translated_button = QPushButton("🔄")
+        self.sync_translated_button = QPushButton(platform_glyph("🔄"))
         self.sync_translated_button.setToolTip("Sync translated/ → files/\nCopy translated files back into files/ so the next phase starts from the latest state")
         self.sync_translated_button.clicked.connect(self._sync_translated_to_files)
         self.sync_translated_button.setVisible(False)
@@ -1195,7 +1196,7 @@ class TranslationTab(QWidget):
 
         # Use a clear stop-sign emoji so the glyph is rendered as a stop icon
         # and not as a colored square on some platforms.
-        self.stop_button = QPushButton("🛑")
+        self.stop_button = QPushButton(platform_glyph("🛑"))
         self.stop_button.setToolTip("Stop Translation")
         self.stop_button.clicked.connect(self.stop_translation)
         self.stop_button.setStyleSheet(stop_button_style)

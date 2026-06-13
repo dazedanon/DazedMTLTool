@@ -13,6 +13,7 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import Qt, pyqtSignal, QTimer, QThread
 from PyQt5.QtGui import QIcon
+from gui.platform_glyph import platform_glyph
 from dotenv import load_dotenv, set_key, dotenv_values
 
 from gui.rpgmaker_tab import RPGMakerTab
@@ -95,7 +96,7 @@ class ModelFetchThread(QThread):
 
 def create_section_header(title):
     """Create a clean section header without boxes."""
-    label = QLabel(title)
+    label = QLabel(platform_glyph(title))
     label.setStyleSheet("""
         QLabel {
             font-size: 13px;
@@ -247,29 +248,13 @@ class ConfigTab(QWidget):
     
     def create_nav_button(self, icon_text, tooltip):
         """Create a navigation button for the top bar."""
+        from gui.platform_glyph import configure_nav_toolbutton
+
         btn = QToolButton()
-        btn.setText(icon_text)
         btn.setToolTip(tooltip)
         btn.setFixedSize(50, 50)
         btn.setCheckable(True)
-        btn.setStyleSheet("""
-            QToolButton {
-                background-color: transparent;
-                border: none;
-                border-bottom: 3px solid transparent;
-                color: #cccccc;
-                font-size: 24px;
-                padding: 5px;
-            }
-            QToolButton:hover {
-                background-color: #3e3e42;
-            }
-            QToolButton:checked {
-                background-color: #37373d;
-                border-bottom: 3px solid #007acc;
-                color: #ffffff;
-            }
-        """)
+        configure_nav_toolbutton(btn, icon_text, horizontal=True)
         return btn
     
     def switch_page(self, index):
@@ -611,7 +596,7 @@ class ConfigTab(QWidget):
         button_layout = QHBoxLayout()
         button_layout.setSpacing(10)
         
-        reset_button = QPushButton("🔄 Reset to Defaults")
+        reset_button = QPushButton(platform_glyph("🔄 Reset to Defaults"))
         reset_button.clicked.connect(self.reset_to_defaults_with_save)
         reset_button.setMinimumHeight(32)
 

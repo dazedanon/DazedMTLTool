@@ -7,6 +7,7 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import Qt, pyqtSignal, QTimer
 from PyQt5.QtGui import QTextCursor, QFont, QTextCharFormat
+from gui.platform_glyph import platform_glyph
 from pathlib import Path
 import datetime
 import html
@@ -34,7 +35,7 @@ class LogViewer(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
 
         # Simple header to match left-side styling (use same look as create_section_header)
-        header = QLabel("📝 Translation Log")
+        header = QLabel(platform_glyph("📝 Translation Log"))
         header.setStyleSheet("""
             QLabel {
                 font-size: 13px;

@@ -455,29 +455,13 @@ class DazedMTLGUI(QMainWindow):
     
     def create_nav_button(self, icon_text, tooltip):
         """Create a navigation button for the sidebar."""
+        from gui.platform_glyph import configure_nav_toolbutton
+
         btn = QToolButton()
-        btn.setText(icon_text)
         btn.setToolTip(tooltip)
         btn.setFixedSize(60, 50)
         btn.setCheckable(True)
-        btn.setStyleSheet("""
-            QToolButton {
-                background-color: transparent;
-                border: none;
-                border-left: 3px solid transparent;
-                color: #cccccc;
-                font-size: 24px;
-                padding: 5px;
-            }
-            QToolButton:hover {
-                background-color: #3e3e42;
-            }
-            QToolButton:checked {
-                background-color: #37373d;
-                border-left: 3px solid #007acc;
-                color: #ffffff;
-            }
-        """)
+        configure_nav_toolbutton(btn, icon_text, horizontal=False)
         return btn
     
     def switch_page(self, index):

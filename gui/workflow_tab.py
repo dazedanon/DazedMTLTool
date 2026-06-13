@@ -444,7 +444,9 @@ def _make_btn(text: str, color: str = "#007acc") -> QPushButton:
 
 def _make_icon_btn(icon_text: str, tooltip: str = "") -> QPushButton:
     """Compact icon-only button matching the Translation tab action buttons."""
-    btn = QPushButton(icon_text)
+    from gui.platform_glyph import platform_glyph
+
+    btn = QPushButton(platform_glyph(icon_text))
     btn.setToolTip(tooltip)
     btn.setFont(QFont("Segoe UI", 12))
     btn.setFixedSize(40, 36)
