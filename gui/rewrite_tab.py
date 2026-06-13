@@ -281,18 +281,30 @@ def _call_llm(messages: list, model: str, api_url: str, api_key: str,
         out_tok = getattr(response.usage, "output_tokens", 0) or 0
         return text, in_tok, out_tok
     else:
-        import openai as _openai
-        client_kwargs = {"api_key": api_key}
-        if api_url:
-            client_kwargs["base_url"] = api_url
-        client = _openai.OpenAI(**client_kwargs)
-        response = client.chat.completions.create(
-            model=model,
-            messages=messages,
-            max_tokens=512,
-            temperature=0,
-            timeout=timeout,
-        )
+        from util.translation import isMistralAPI, callMistral
+        if isMistralAPI():
+            # Mistral budgets requests AND tokens per minute — go through the
+            # shared adaptive limiter (same one the translation runs use).
+            response = callMistral({
+                "model": model,
+                "messages": messages,
+                "max_tokens": 512,
+                "temperature": 0,
+                "timeout": timeout,
+            })
+        else:
+            import openai as _openai
+            client_kwargs = {"api_key": api_key}
+            if api_url:
+                client_kwargs["base_url"] = api_url
+            client = _openai.OpenAI(**client_kwargs)
+            response = client.chat.completions.create(
+                model=model,
+                messages=messages,
+                max_tokens=512,
+                temperature=0,
+                timeout=timeout,
+            )
         text = _extract_openai_text(response)
         in_tok = getattr(response.usage, "prompt_tokens", 0) or 0
         out_tok = getattr(response.usage, "completion_tokens", 0) or 0
@@ -351,6 +363,8 @@ class RewriteWorker(QThread):
 
         if provider == "gemini":
             api_url = api_url or "https://generativelanguage.googleapis.com/v1beta/openai/"
+        elif provider == "mistral":
+            api_url = api_url or "https://api.mistral.ai/v1/"
 
         is_claude = (
             any(x in model.lower() for x in ("claude", "sonnet", "haiku", "opus"))

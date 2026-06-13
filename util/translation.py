@@ -7,6 +7,7 @@ import os
 import re
 import json
 import time
+import random
 import unicodedata
 import tiktoken
 import openai
@@ -111,6 +112,19 @@ def isClaudeNative(model):
     """
     live_api = os.getenv("api", "").strip()
     return isClaudeModel(model) and (not live_api or "anthropic" in live_api.lower())
+
+
+def isMistralAPI():
+    """True when requests go to the Mistral platform API (la Plateforme).
+
+    Detection is URL-based: the adaptive rate limiter keys off x-ratelimit-*
+    headers that only api.mistral.ai sends. Mistral models served through other
+    OpenAI-compatible providers (Nvidia, OpenRouter, ...) use the generic path.
+    """
+    live_api = os.getenv("api", "").strip().lower()
+    if "mistral.ai" in live_api:
+        return True
+    return not live_api and os.getenv("API_PROVIDER", "").strip().lower() == "mistral"
 
 
 # Models that REJECT sampling params (temperature/top_p/top_k) with a 400 —
@@ -359,13 +373,16 @@ def validate_translation_content(original_items, translated_items, langRegex):
     return is_valid, invalid_indices, reasons
 
 # Load .env, strip accidental whitespace, set base URL / org / API key.
-# Gemini uses its compatibility endpoint only when no custom API URL is set.
+# Gemini/Mistral use their endpoints only when no custom API URL is set.
 load_dotenv()
 api_provider = os.getenv("API_PROVIDER", "openai").lower()
 env_api = os.getenv("api", "").strip()
 if api_provider == "gemini" and not env_api:
     # Use Google Generative Language compatibility endpoint only as fallback.
     openai.base_url = "https://generativelanguage.googleapis.com/v1beta/openai/"
+    openai.organization = None
+elif api_provider == "mistral" and not env_api:
+    openai.base_url = "https://api.mistral.ai/v1/"
     openai.organization = None
 else:
     if env_api:
@@ -1067,6 +1084,216 @@ def runTranslationBatches(poll=60):
     return fetchTranslationBatches()
 
 
+# ===== Mistral (la Plateforme) adaptive rate limiting =====
+# Mistral enforces independent request and token limits, both PER-MODEL.
+# Verified live against api.mistral.ai (the response headers are authoritative):
+#   * x-ratelimit-limit-req-minute  — requests/minute. PER-MODEL and varies a
+#     lot: mistral-medium=25, mistral-small=50, codestral=125, ministral-3b=750.
+#     Mistral's dashboard shows this /60 as "RPS" (25/min = 0.42 "RPS"), so the
+#     effective rate spans well below AND above 1 req/sec. There is NO
+#     per-second header; we divide req-minute by 60 to get the pacing interval.
+#   * x-ratelimit-limit-tokens-minute — input+output throughput, a true minute
+#     window, also per-model (e.g. 50k–1.3M).
+#   * Tokens per month — overall cap (not paced here; surfaces as a 429).
+# The limiter paces requests >= 1/RPS apart (so a burst of file threads can't
+# overrun the per-minute request budget) AND charges them against a
+# minute-windowed token budget. It starts from a conservative seed, then the
+# live headers on the first response pin req_per_sec / tok_per_min to the exact
+# per-model values. One limiter is shared across all file threads (this tool
+# runs one model per session). Override the seeds with
+# mistralReqPerSec / mistralTokPerMin / mistralTokenHeadroom.
+_mistral_limiter = None
+_mistral_limiter_lock = threading.Lock()
+
+
+def _estimate_mistral_tokens(text):
+    # JP ~1 token/char with Mistral tokenizers; EN ~1 per 3.5 chars. Be pessimistic.
+    return int(len(str(text)) * 1.1) + 8
+
+
+def _header_int(headers, *names):
+    """First present header among names parsed as int, else None."""
+    for n in names:
+        v = headers.get(n)
+        if v is not None and str(v).strip() != "":
+            try:
+                return int(float(v))
+            except (TypeError, ValueError):
+                pass
+    return None
+
+
+def _header_float(headers, *names):
+    """First present header among names parsed as float, else None.
+
+    Used for the RPS limit header, which per-model is often FRACTIONAL
+    (e.g. 0.08, 0.42, 0.83) — parsing it as int would floor those to 0."""
+    for n in names:
+        v = headers.get(n)
+        if v is not None and str(v).strip() != "":
+            try:
+                return float(v)
+            except (TypeError, ValueError):
+                pass
+    return None
+
+
+class AdaptiveLimiter:
+    """Paces requests off live ratelimit headers.
+
+    Two dimensions, enforced together by acquire():
+      * requests: spaced >= min_interval (1/RPS) apart — Mistral's request cap
+        is per-second, so this prevents bursts from tripping it.
+      * tokens: a minute-windowed budget (input+output), with a headroom margin.
+    """
+
+    def __init__(self, req_per_sec, tok_per_min, headroom):
+        self.lock = threading.Lock()
+        self.req_per_sec = max(0.001, float(req_per_sec))
+        self.tok_per_min = tok_per_min
+        self.headroom = headroom  # margin left under the TPM cap
+        self.min_interval = 1.0 / self.req_per_sec
+        self.next_request_at = time.monotonic()
+        self.tokens_remaining = tok_per_min
+        self.window_reset = time.monotonic() + 60
+
+    def acquire(self, est_tokens):
+        """Block until the request clears both the RPS pace and the TPM budget."""
+        while True:
+            with self.lock:
+                now = time.monotonic()
+                if now >= self.window_reset:
+                    self.tokens_remaining = self.tok_per_min
+                    self.window_reset = now + 60
+                # token gate
+                if self.tokens_remaining - est_tokens <= self.headroom:
+                    sleep_for = max(0.05, self.window_reset - now)
+                # request-pace gate
+                elif now < self.next_request_at:
+                    sleep_for = self.next_request_at - now
+                else:
+                    # both gates clear — reserve this slot
+                    self.next_request_at = max(now, self.next_request_at) + self.min_interval
+                    self.tokens_remaining -= est_tokens
+                    return
+            time.sleep(min(sleep_for, 5))
+
+    def update(self, headers):
+        """Sync budgets from the live ratelimit headers (authoritative).
+
+        Accepts both the per-second request headers and (for forward/back compat)
+        the older per-minute request header names; the token headers are minute."""
+        if not headers:
+            return
+        with self.lock:
+            # The authoritative request limit is x-ratelimit-limit-req-MINUTE
+            # (verified live: mistral-medium=25, ministral-3b=750, codestral=125;
+            # Mistral's dashboard "RPS" is just this number / 60). There is no
+            # per-second header. Convert to RPS for the pacing interval. A
+            # per-second header is still accepted first in case Mistral adds one.
+            limit_rps = _header_float(headers, "x-ratelimit-limit-req-second",
+                                      "x-ratelimit-limit-requests-second")
+            if limit_rps is None:
+                limit_rpm = _header_float(headers, "x-ratelimit-limit-req-minute",
+                                          "x-ratelimit-limit-requests-minute")
+                if limit_rpm is not None:
+                    limit_rps = limit_rpm / 60.0
+            if limit_rps and limit_rps > 0:
+                self.req_per_sec = limit_rps
+                self.min_interval = 1.0 / self.req_per_sec
+            limit_tok = _header_int(headers, "x-ratelimit-limit-tokens-minute",
+                                    "x-ratelimit-limit-tokens")
+            if limit_tok and limit_tok > 0:
+                self.tok_per_min = limit_tok
+            rem_tok = _header_int(headers, "x-ratelimit-remaining-tokens-minute",
+                                  "x-ratelimit-remaining-tokens")
+            if rem_tok is not None:
+                self.tokens_remaining = rem_tok
+            # Remaining requests this minute -> also cap the pace so a fresh
+            # limiter that joins mid-window doesn't burst the leftover budget.
+            rem_req = _header_int(headers, "x-ratelimit-remaining-req-minute",
+                                  "x-ratelimit-remaining-requests-minute")
+            if rem_req is not None and rem_req <= 0:
+                # budget already spent this minute — hold off ~ a minute
+                self.next_request_at = max(self.next_request_at, time.monotonic() + 60.0)
+
+
+def _get_mistral_limiter():
+    global _mistral_limiter
+    with _mistral_limiter_lock:
+        if _mistral_limiter is None:
+            # mistralReqPerMin kept as a deprecated alias: a per-minute number is
+            # converted to RPS so old .env files keep pacing sanely.
+            rps_env = os.getenv("mistralReqPerSec")
+            if rps_env:
+                req_per_sec = float(rps_env)
+            elif os.getenv("mistralReqPerMin"):
+                req_per_sec = max(0.05, float(os.getenv("mistralReqPerMin")) / 60.0)
+            else:
+                # Per-model RPS varies and is often well under 1 (free-tier
+                # mistral-medium ~0.83, magistral ~0.08). Start conservative so
+                # the FIRST request doesn't over-burst; the live header from that
+                # first response then corrects req_per_sec to the model's exact
+                # value (which is why few large batches > many tiny ones).
+                req_per_sec = 0.5
+            _mistral_limiter = AdaptiveLimiter(
+                req_per_sec,
+                int(os.getenv("mistralTokPerMin", "50000") or 50000),
+                int(os.getenv("mistralTokenHeadroom", "4000") or 4000),
+            )
+        return _mistral_limiter
+
+
+def callMistral(params, retries=6):
+    """Call the Mistral chat completions endpoint with adaptive pacing.
+
+    Acquires from the shared limiter before each attempt, syncs budgets from
+    the live x-ratelimit headers after each response, honours Retry-After on
+    429, backs off with jitter on 5xx/network errors, and downgrades
+    json_schema -> json_object for models without structured-output support.
+    """
+    limiter = _get_mistral_limiter()
+    est = sum(_estimate_mistral_tokens(m.get("content", "")) for m in params.get("messages", []))
+    est += params.get("max_tokens", 0) // 2
+    last_error = None
+    for attempt in range(retries + 1):
+        limiter.acquire(est)
+        try:
+            raw = openai.chat.completions.with_raw_response.create(**params)
+            response = raw.parse()
+            limiter.update(raw.headers)
+            return response
+        except RateLimitError as e:
+            last_error = e
+            resp = getattr(e, "response", None)
+            limiter.update(getattr(resp, "headers", None))
+            retry_after = None
+            try:
+                retry_after = float(resp.headers.get("retry-after"))
+            except (AttributeError, TypeError, ValueError):
+                pass
+            time.sleep(retry_after if retry_after is not None else min(60, 2 ** attempt + random.random() * 2))
+        except APIStatusError as e:
+            last_error = e
+            # Mistral rejects unsupported params with 400/422 — downgrade the
+            # structured-output format once and retry immediately.
+            if e.status_code in (400, 422) and (params.get("response_format") or {}).get("type") == "json_schema":
+                params = dict(params)
+                params["response_format"] = {"type": "json_object"}
+                continue
+            if e.status_code >= 500 and attempt < retries:
+                time.sleep(min(45, 2 ** attempt + random.random()))
+                continue
+            raise Exception(f"Mistral API error ({e.status_code}): {e}")
+        except APIConnectionError as e:
+            last_error = e
+            if attempt < retries:
+                time.sleep(min(45, 2 ** attempt + random.random()))
+                continue
+            raise Exception(f"Mistral connection error: {e}")
+    raise Exception(f"Mistral API failed after {retries + 1} attempts: {last_error}")
+
+
 class TranslationConfig:
     """Configuration class to hold all translation settings"""
     
@@ -1288,6 +1515,28 @@ def getPricingConfig(model):
         cfg = {"inputAPICost": 1.25,  "outputAPICost": 10.00, "batchSize": 30, "frequencyPenalty": 0.05}
     elif "deepseek" in model:
         cfg = {"inputAPICost": 0.27,  "outputAPICost": 1.10,  "batchSize": 30, "frequencyPenalty": 0.05}
+    # Mistral — system prompt is resent per request (no prompt caching), so
+    # throughput/cost favor larger batches. Live LiteLLM pricing overrides these.
+    elif "mistral-large" in model or "pixtral-large" in model:
+        cfg = {"inputAPICost": 2.00,  "outputAPICost": 6.00,  "batchSize": 40, "frequencyPenalty": 0.0}
+    elif "magistral-medium" in model:
+        cfg = {"inputAPICost": 2.00,  "outputAPICost": 5.00,  "batchSize": 40, "frequencyPenalty": 0.0}
+    elif "mistral-medium-3.5" in model or "mistral-medium-3-5" in model or "mistral-medium-26" in model:
+        # Medium 3.5 (v26.04) — also matches dated 26xx ids
+        cfg = {"inputAPICost": 1.50,  "outputAPICost": 7.50,  "batchSize": 40, "frequencyPenalty": 0.0}
+    elif "mistral-medium" in model:
+        # Medium 3 / 3.1 (what -latest still points at)
+        cfg = {"inputAPICost": 0.40,  "outputAPICost": 2.00,  "batchSize": 40, "frequencyPenalty": 0.0}
+    elif "magistral-small" in model:
+        cfg = {"inputAPICost": 0.50,  "outputAPICost": 1.50,  "batchSize": 40, "frequencyPenalty": 0.0}
+    elif "mistral-small" in model:
+        cfg = {"inputAPICost": 0.10,  "outputAPICost": 0.30,  "batchSize": 40, "frequencyPenalty": 0.0}
+    elif "ministral" in model or "open-mistral" in model or "mistral-nemo" in model:
+        cfg = {"inputAPICost": 0.10,  "outputAPICost": 0.10,  "batchSize": 40, "frequencyPenalty": 0.0}
+    elif "codestral" in model:
+        cfg = {"inputAPICost": 0.30,  "outputAPICost": 0.90,  "batchSize": 40, "frequencyPenalty": 0.0}
+    elif "mistral" in model or "pixtral" in model:
+        cfg = {"inputAPICost": 2.00,  "outputAPICost": 6.00,  "batchSize": 40, "frequencyPenalty": 0.0}
     elif "claude-opus-4-5" in model or "claude-opus-4-6" in model:
         cfg = {"inputAPICost": 5.00,  "outputAPICost": 25.00, "batchSize": 30, "frequencyPenalty": 0.05}
     elif "claude-opus" in model or model == "claude-3-opus":
@@ -1650,6 +1899,7 @@ def translateText(system, user, history, penalty, formatType, model, numLines=No
         and (not _live_api_check or "anthropic" in _live_api_check.lower())
     )
     _is_deepseek = model and "deepseek" in model.lower()
+    _is_mistral = not _is_claude and isMistralAPI()
 
     # Build message list.
     # Claude: static prompt gets cache_control; vocab appended uncached so it
@@ -1717,6 +1967,8 @@ def translateText(system, user, history, penalty, formatType, model, numLines=No
     _live_provider = os.getenv("API_PROVIDER", "openai").lower()
     if _live_provider == "gemini" and not _live_api:
         openai.base_url = "https://generativelanguage.googleapis.com/v1beta/openai/"
+    elif _live_provider == "mistral" and not _live_api:
+        openai.base_url = "https://api.mistral.ai/v1/"
     elif _live_api:
         openai.base_url = _normalize_openai_base_url(_live_api)
     if _live_key:
@@ -1755,6 +2007,12 @@ def translateText(system, user, history, penalty, formatType, model, numLines=No
     elif _is_claude:
         params["temperature"] = 0
         # cache_control is set on the system message content block above.
+    elif _is_mistral:
+        params["temperature"] = 0
+        # max_tokens caps the response AND feeds the limiter's token estimate
+        # (input+output count against the per-minute budget). Sized from the
+        # payload: JP ~1 token/char, output echoes the JSON scaffold + EN.
+        params["max_tokens"] = min(16000, max(1500, int(len(str(user)) * 1.2) + 40 * (numLines or 1)))
     else:  # Default to OpenAI behavior
         if "gpt-5" in model:
             params["reasoning_effort"] = "minimal"
@@ -1788,6 +2046,16 @@ def translateText(system, user, history, penalty, formatType, model, numLines=No
         compat_response = _AnthropicCompat(_ant_text, _total_prompt, _out, _cr, _cw)
         _write_request_debug_log("anthropic", ant_kwargs, compat_response.usage)
         return compat_response
+
+    # Mistral (la Plateforme): same OpenAI-compatible request, but routed
+    # through the adaptive rate limiter so the per-minute request/token
+    # budgets are paced off the live response headers instead of tripping 429s.
+    if _is_mistral:
+        response = callMistral(params)
+        if not response or not hasattr(response, 'choices') or not response.choices:
+            raise Exception("API returned invalid or empty response - retrying...")
+        _write_request_debug_log("mistral", params, getattr(response, "usage", None))
+        return response
 
     # Call API (reaches here only for non-Claude providers)
     try:

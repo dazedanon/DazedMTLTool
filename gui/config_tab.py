@@ -33,6 +33,7 @@ class ModelFetchThread(QThread):
         "claude-opus-4-5", "claude-sonnet-4-5", "claude-haiku-4-5",
         "gemini-2.0-flash", "gemini-2.5-flash", "gemini-2.5-pro",
         "deepseek-chat",
+        "mistral-medium-3.5",  # best quality/cost Mistral for translation (don't use -latest, it points at the older 3.1)
     ]
 
     def __init__(self, api_key, api_url, parent=None):
@@ -341,6 +342,7 @@ class ConfigTab(QWidget):
             ("Claude (Anthropic)", "https://api.anthropic.com/v1"),
             ("Gemini", "https://generativelanguage.googleapis.com/v1beta/openai/"),
             ("DeepSeek", "https://api.deepseek.com/v1/"),
+            ("Mistral", "https://api.mistral.ai/v1/"),
             ("Nvidia", "https://integrate.api.nvidia.com/v1/"),
         ]
         for _name, _url in _url_presets:

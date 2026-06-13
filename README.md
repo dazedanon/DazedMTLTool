@@ -112,12 +112,24 @@ This means Python wasn't added to your PATH. You have two options:
 
 1. Inside the tool folder, find `.env.example` and make a copy of it named `.env`.
 2. Open `.env` in any text editor (Notepad works fine) and fill in your API details:
-   - `api` — Your API base URL (for Nvidia use `https://integrate.api.nvidia.com/v1/`).
+   - `api` — Your API base URL (for Nvidia use `https://integrate.api.nvidia.com/v1/`, for Mistral use `https://api.mistral.ai/v1/`).
    - `key` — Your API key.
    - `organization` — Your organization key (make something up if using a self-hosted or non-OpenAI API).
-   - `API_PROVIDER` — Use `openai` for OpenAI-compatible providers (including Nvidia), or `gemini` for Gemini.
+   - `API_PROVIDER` — Use `openai` for OpenAI-compatible providers (including Nvidia), `gemini` for Gemini, or `mistral` for Mistral (only needed when `api` is left empty).
    - `model` — For Nvidia/custom OpenAI-compatible endpoints, enter the model name manually (example: `deepseek-ai/deepseek-v4-pro`).
 3. The rest of the settings (wordwrap, batch size, etc.) can be left as defaults for now. You can tweak them later.
+
+> **Mistral note:** When the API URL points at `api.mistral.ai`, requests are paced by an
+> adaptive rate limiter. Mistral enforces a **per-minute request limit** and a **per-minute
+> token limit**, both of which are **per-model** — e.g. `mistral-medium` allows 25 req/min
+> while `ministral-3b` allows 750/min (Mistral's dashboard shows these ÷60 as "RPS", so the
+> effective rate ranges from well under 1 to over 12 requests/sec depending on the model). The
+> limiter reads both limits straight from the live `x-ratelimit-*` response headers, spaces
+> requests so it never overruns the per-minute request budget, charges them against a rolling
+> per-minute token budget, and honours `Retry-After` on 429s. It starts from a conservative
+> seed and pins itself to the exact per-model rate after the first response — so you can run
+> multiple `fileThreads` and it won't error out, it just paces the calls. Override the seeds
+> with `mistralReqPerSec`, `mistralTokPerMin`, and `mistralTokenHeadroom` if needed (rarely).
 
 ### 3. Launch the GUI
 
