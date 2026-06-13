@@ -2561,7 +2561,7 @@ class WorkflowTab(QWidget):
 
         self._pt_ui_scale_combo = QComboBox()
         self._pt_ui_scale_combo.setToolTip(
-            "In-game overlay size. Auto scales from game resolution and display DPI."
+            "In-game overlay size. Auto scales from window size and display DPI."
         )
         for label, value in (
             ("Auto (match game width)", "auto"),

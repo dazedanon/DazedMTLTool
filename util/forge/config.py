@@ -1,4 +1,4 @@
-"""Forge plugin build — hotkey (and MZ UI scale) injection at install time."""
+"""Forge plugin build — hotkey and UI scale injection at install/apply time."""
 
 from __future__ import annotations
 
@@ -35,9 +35,9 @@ def _js_literal(value) -> str:
 
 def plugin_entry(engine: str, hotkey: str, ui_scale: str = "auto") -> str:
     hk = _js_literal(hotkey.strip() or "F10")
+    scale = _js_literal(ui_scale.strip() or "auto")
     name = PLUGIN_BY_ENGINE[engine]
     if engine == "MZ":
-        scale = _js_literal(ui_scale.strip() or "auto")
         return (
             f'        {{ "name": "{name}", "status": true, '
             f'"description": "Forge — in-game cheat & editor overlay", '
@@ -48,7 +48,7 @@ def plugin_entry(engine: str, hotkey: str, ui_scale: str = "auto") -> str:
         f'        {{ "name": "{name}", "status": true, '
         f'"description": "Forge — in-game cheat & editor overlay", '
         f'"parameters": {{ "Hotkey": {hk}, "SpeedKey": "Control", '
-        f'"StartOpen": "false", "ItemMaxOverride": "0" }} }}'
+        f'"StartOpen": "false", "ItemMaxOverride": "0", "UiScale": {scale} }} }}'
     )
 
 
@@ -63,8 +63,6 @@ def _patch_forge_hotkey(forge_text: str, hotkey: str, engine: str) -> str:
         forge_text, n = re.subn(pattern, rf"\g<1>{hk}", forge_text, count=1)
         if n == 0:
             raise ValueError("Could not patch @default hotkey in Forge_MZ.js")
-        forge_text = re.sub(r"\(P\.hotkey \|\| 'F10'\)", f"(P.hotkey || '{hk}')", forge_text)
-        forge_text = re.sub(r"API\._hotkey \|\| 'F10'", f"API._hotkey || '{hk}'", forge_text)
         return forge_text
 
     pattern = (
@@ -75,28 +73,83 @@ def _patch_forge_hotkey(forge_text: str, hotkey: str, engine: str) -> str:
     forge_text, n = re.subn(pattern, rf"\g<1>{hk}", forge_text, count=1)
     if n == 0:
         raise ValueError("Could not patch @default Hotkey in Forge_MV.js")
-    forge_text = re.sub(r"\(P\.Hotkey \|\| 'F10'\)", f"(P.Hotkey || '{hk}')", forge_text)
+    return forge_text
+
+
+def _patch_forge_ui_scale_default(forge_text: str, ui_scale: str, engine: str) -> str:
+    scale = ui_scale.strip() or "auto"
+    if engine == "MZ":
+        pattern = (
+            r"(\* @param uiScale\s*\n(?:\s*\*[^\n]*\n)*?\s*\* @default )auto"
+        )
+        if scale != "auto":
+            forge_text, n = re.subn(pattern, rf"\g<1>{scale}", forge_text, count=1)
+            if n == 0:
+                raise ValueError("Could not patch @default uiScale in Forge_MZ.js")
+        return forge_text
+
+    pattern = (
+        r"(\* @param UiScale\s*\n(?:\s*\*[^\n]*\n)*?\s*\* @default )auto"
+    )
+    if scale != "auto":
+        forge_text, n = re.subn(pattern, rf"\g<1>{scale}", forge_text, count=1)
+        if n == 0:
+            raise ValueError("Could not patch @default UiScale in Forge_MV.js")
+    return forge_text
+
+
+def _patch_forge_mtc_defaults(forge_text: str, hotkey: str, ui_scale: str) -> str:
+    hk = json.dumps(hotkey.strip() or "F10")
+    scale = json.dumps(str(ui_scale or "auto").strip() or "auto")
+    forge_text = re.sub(r"_hotkey: 'F10'", f"_hotkey: {hk}", forge_text, count=1)
+    forge_text = re.sub(r"_uiScale: 'auto'", f"_uiScale: {scale}", forge_text, count=1)
+    return forge_text
+
+
+def _patch_forge_runtime(forge_text: str, hotkey: str, ui_scale: str, engine: str) -> str:
+    """Bake hotkey/scale into the plugin file (plugins.js params alone are not enough)."""
+    hk = json.dumps(hotkey.strip() or "F10")
+    scale = json.dumps(str(ui_scale or "auto").strip() or "auto")
+    if engine == "MZ":
+        forge_text = re.sub(
+            r"window\.Forge\._hotkey = \(P\.hotkey \|\| '[^']*'\)\.trim\(\);",
+            f"window.Forge._hotkey = {hk};",
+            forge_text,
+            count=1,
+        )
+        forge_text = re.sub(
+            r"window\.Forge\._uiScale = \(P\.uiScale \|\| '[^']*'\)\.trim\(\);",
+            f"window.Forge._uiScale = {scale};",
+            forge_text,
+            count=1,
+        )
+        return forge_text
+
+    forge_text = re.sub(
+        r"window\.Forge\._hotkey = \(P\.Hotkey \|\| '[^']*'\)\.trim\(\);",
+        f"window.Forge._hotkey = {hk};",
+        forge_text,
+        count=1,
+    )
+    forge_text = re.sub(
+        r"window\.Forge\._uiScale = \(P\.UiScale \|\| '[^']*'\)\.trim\(\);",
+        f"window.Forge._uiScale = {scale};",
+        forge_text,
+        count=1,
+    )
     return forge_text
 
 
 def prepare_forge_js(engine: str, source: Path | None = None, cfg: dict | None = None) -> str:
-    """Build Forge_MV.js or Forge_MZ.js with configured hotkey (and MZ UI scale)."""
+    """Build Forge_MV.js or Forge_MZ.js with configured hotkey and UI scale."""
     src = source or bundled_plugin_path(engine)
     effective = {**load_config(), **(cfg or {})}
-    text = _patch_forge_hotkey(src.read_text(encoding="utf-8"), effective["forgeHotkey"], engine)
-    if engine != "MZ":
-        return text
-
-    scale = effective.get("uiScale", "auto")
-    text, n = re.subn(
-        r"(\* @param uiScale\s*\n(?:\s*\*[^\n]*\n)*?\s*\* @default )auto",
-        rf"\g<1>{scale}",
-        text,
-        count=1,
-    )
-    if n == 0:
-        raise ValueError("Could not patch @default uiScale in Forge_MZ.js")
-    text = re.sub(r"\(P\.uiScale \|\| 'auto'\)", f"(P.uiScale || '{scale}')", text)
+    hotkey = effective.get("forgeHotkey", "F10")
+    ui_scale = effective.get("uiScale", "auto")
+    text = _patch_forge_hotkey(src.read_text(encoding="utf-8"), hotkey, engine)
+    text = _patch_forge_ui_scale_default(text, str(ui_scale), engine)
+    text = _patch_forge_mtc_defaults(text, hotkey, str(ui_scale))
+    text = _patch_forge_runtime(text, hotkey, str(ui_scale), engine)
     return text
 
 

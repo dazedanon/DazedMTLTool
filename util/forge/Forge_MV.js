@@ -22,6 +22,10 @@
  * @desc Value used by the "Max" button for item stacks (0 = use engine maxItems).
  * @default 0
  *
+ * @param UiScale
+ * @desc Overlay size. Use auto to match the window, or a number like 1.5 or 2.
+ * @default auto
+ *
  * @help
  * Forge — drop-in cheat & editor for RPG Maker MV.
  * Place in js/plugins/ and enable. Press F10 in-game to open the overlay.
@@ -380,7 +384,7 @@
   };
 
   // expose the assembled API (UI is attached below if a real DOM is present)
-  var MTC = { env: { IS_MZ: IS_MZ }, ops: ops, locks: locks, cheats: cheats, LOCK: LOCK, CHEAT: CHEAT, PARAM_NAMES: PARAM_NAMES, _itemMaxOverride: 0, _hotkey: 'F10', _speedKey: 'Control', _speedBoost: 2 };
+  var MTC = { env: { IS_MZ: IS_MZ }, ops: ops, locks: locks, cheats: cheats, LOCK: LOCK, CHEAT: CHEAT, PARAM_NAMES: PARAM_NAMES, _itemMaxOverride: 0, _hotkey: 'F10', _speedKey: 'Control', _speedBoost: 2, _uiScale: 'auto' };
   if (root) { root.Forge = MTC; root.__FORGE_CORE__ = true; }
   if (typeof module !== 'undefined' && module.exports) module.exports = MTC;
 
@@ -404,6 +408,37 @@
     var LS = 'forge:';
     function store(k, v) { try { localStorage.setItem(LS + k, JSON.stringify(v)); } catch (e) {} }
     function load(k, d) { try { var s = localStorage.getItem(LS + k); return s == null ? d : JSON.parse(s); } catch (e) { return d; } }
+    function resolveUiScale(v) {
+      if (v !== 'auto' && v != null && String(v).trim() !== '') {
+        var n = parseFloat(v);
+        if (!isNaN(n) && n > 0) return Math.max(0.75, Math.min(3, n));
+      }
+      var base = 816;
+      var gameW = (typeof Graphics !== 'undefined' && Graphics.width) ? Graphics.width : 0;
+      var viewW = window.innerWidth || document.documentElement.clientWidth || base;
+      var w = Math.max(gameW || base, viewW);
+      var scale = w / base;
+      var dpr = window.devicePixelRatio || 1;
+      if (dpr > 1.15) scale *= Math.min(2, 0.75 + dpr * 0.35);
+      return Math.max(1, Math.min(2.75, scale));
+    }
+    function scalePx(n, fx) {
+      if (!fx || fx === 1) return n;
+      return Math.round(n * fx);
+    }
+    function scalePxCss(css, fx) {
+      if (!fx || fx === 1) return css;
+      return css.replace(/(\d+(?:\.\d+)?)px/g, function (_, n) {
+        return scalePx(parseFloat(n), fx) + 'px';
+      });
+    }
+    function scaleStyle(style, fx) {
+      if (!style || !fx || fx === 1) return style;
+      return style.replace(/(\d+(?:\.\d+)?)px/g, function (_, n) {
+        return scalePx(parseFloat(n), fx) + 'px';
+      });
+    }
+    var uiFx = resolveUiScale(API._uiScale || 'auto');
     // persisted speed settings (UI-controlled; override core/param defaults if the user changed them)
     API._speedKey = load('speedKey', API._speedKey || 'Control');
     API._speedUseKey = load('speedUseKey', true);
@@ -416,7 +451,7 @@
         if (k === 'class') n.className = props[k];
         else if (k === 'text') n.textContent = props[k];
         else if (k === 'html') n.innerHTML = props[k];
-        else if (k === 'style') n.setAttribute('style', props[k]);
+        else if (k === 'style') n.setAttribute('style', scaleStyle(props[k], uiFx));
         else if (k.slice(0, 2) === 'on' && typeof props[k] === 'function') n.addEventListener(k.slice(2).toLowerCase(), props[k]);
         else if (props[k] != null) n.setAttribute(k, props[k]);
       }
@@ -507,12 +542,12 @@ input::placeholder{color:var(--fg-text-faint)}\
 
     // ---------- shadow host ----------
     var host = el('div', { id: 'forge-host' });
-    host.style.cssText = 'position:fixed!important;top:0!important;left:0!important;width:0!important;height:0!important;z-index:2147483647!important;margin:0!important;padding:0!important;border:0!important;pointer-events:none!important';
+    host.style.cssText = 'position:fixed!important;top:0!important;left:0!important;width:0!important;height:0!important;z-index:2147483647!important;margin:0!important;padding:0!important;border:0!important;pointer-events:none!important;overflow:visible!important';
     document.body.appendChild(host);
     var shadow = host.attachShadow({ mode: 'open' });
     var rootEl = el('div', { id: 'forge-root' });
     rootEl.setAttribute('data-theme', load('theme', 'dark'));
-    shadow.appendChild(el('style', { text: CSS }));
+    shadow.appendChild(el('style', { text: scalePxCss(CSS, uiFx) }));
     shadow.appendChild(rootEl);
 
     // Swallow events so panel interaction never leaks to the game. BUBBLE phase: the panel's own
@@ -547,8 +582,8 @@ input::placeholder{color:var(--fg-text-faint)}\
     // ---------- panel skeleton ----------
     var vw = window.innerWidth || 816, vh = window.innerHeight || 624;
     // Default size fits the window (many MV games are ~816x624); leave a margin.
-    var st = load('panel', { x: 16, y: 16, w: Math.min(880, vw - 32), h: Math.min(560, vh - 32) });
-    st.w = Math.max(420, Math.min(st.w, vw - 8)); st.h = Math.max(320, Math.min(st.h, vh - 8));
+    var st = load('panel', { x: scalePx(16, uiFx), y: scalePx(16, uiFx), w: Math.min(scalePx(880, uiFx), vw - scalePx(32, uiFx)), h: Math.min(scalePx(560, uiFx), vh - scalePx(32, uiFx)) });
+    st.w = Math.max(scalePx(420, uiFx), Math.min(st.w, vw - scalePx(8, uiFx))); st.h = Math.max(scalePx(320, uiFx), Math.min(st.h, vh - scalePx(8, uiFx)));
     st.x = Math.max(0, Math.min(st.x, vw - st.w)); st.y = Math.max(0, Math.min(st.y, vh - st.h));   // keep fully on-screen
     var panel = el('div', { class: 'fg-panel' });
     panel.style.left = st.x + 'px'; panel.style.top = st.y + 'px'; panel.style.width = st.w + 'px'; panel.style.height = st.h + 'px';
@@ -571,8 +606,8 @@ input::placeholder{color:var(--fg-text-faint)}\
 
     // ---------- launcher (docks to bottom-right corner by default; 'launcherPos' is a fresh key so
     // any stale mid-screen position from older builds is ignored) ----------
-    var lp = load('launcherPos', { x: vw - 56, y: vh - 56 });
-    lp.x = Math.max(4, Math.min(lp.x, vw - 46)); lp.y = Math.max(4, Math.min(lp.y, vh - 46));
+    var lp = load('launcherPos', { x: vw - scalePx(56, uiFx), y: vh - scalePx(56, uiFx) });
+    lp.x = Math.max(scalePx(4, uiFx), Math.min(lp.x, vw - scalePx(46, uiFx))); lp.y = Math.max(scalePx(4, uiFx), Math.min(lp.y, vh - scalePx(46, uiFx)));
     var launcher = el('button', { class: 'fg-launcher', text: '⚒', title: 'Forge (F10)' });
     launcher.style.left = lp.x + 'px'; launcher.style.top = lp.y + 'px';
     launcher.addEventListener('click', function (e) { if (!launcher._dragged) toggle(); });
@@ -585,7 +620,7 @@ input::placeholder{color:var(--fg-text-faint)}\
         if (e.target.closest && e.target.closest('input,button.fg-iconbtn')) return;
         e.preventDefault(); e.stopPropagation(); var sx = e.clientX, sy = e.clientY, ox = parseInt(target.style.left) || 0, oy = parseInt(target.style.top) || 0, moved = false;
         if (isLauncher) target._dragged = false;
-        function mv(ev) { ev.stopPropagation(); var dx = ev.clientX - sx, dy = ev.clientY - sy; if (Math.abs(dx) + Math.abs(dy) > 3) moved = true; var nx = Math.max(0, Math.min(window.innerWidth - target.offsetWidth, ox + dx)), ny = Math.max(0, Math.min(window.innerHeight - 30, oy + dy)); target.style.left = nx + 'px'; target.style.top = ny + 'px'; if (isLauncher) target._dragged = moved; }
+        function mv(ev) { ev.stopPropagation(); var dx = ev.clientX - sx, dy = ev.clientY - sy; if (Math.abs(dx) + Math.abs(dy) > 3) moved = true; var nx = Math.max(0, Math.min(window.innerWidth - target.offsetWidth, ox + dx)), ny = Math.max(0, Math.min(window.innerHeight - scalePx(30, uiFx), oy + dy)); target.style.left = nx + 'px'; target.style.top = ny + 'px'; if (isLauncher) target._dragged = moved; }
         function up(ev) { if (ev) { ev.stopPropagation(); ev.preventDefault(); } document.removeEventListener('mousemove', mv, true); document.removeEventListener('mouseup', up, true); if (onEnd) onEnd(parseInt(target.style.left), parseInt(target.style.top)); setTimeout(function () { if (isLauncher) target._dragged = false; }, 0); }
         document.addEventListener('mousemove', mv, true); document.addEventListener('mouseup', up, true);
       });
@@ -593,7 +628,7 @@ input::placeholder{color:var(--fg-text-faint)}\
     makeDraggable(titlebar, panel, function (x, y) { st.x = x; st.y = y; store('panel', st); });
     resize.addEventListener('mousedown', function (e) {
       e.preventDefault(); e.stopPropagation(); var sx = e.clientX, sy = e.clientY, ow = panel.offsetWidth, oh = panel.offsetHeight;
-      function mv(ev) { ev.stopPropagation(); var w = Math.max(480, ow + ev.clientX - sx), h = Math.max(360, oh + ev.clientY - sy); panel.style.width = w + 'px'; panel.style.height = h + 'px'; if (activeRenderer && activeRenderer.onResize) activeRenderer.onResize(); }
+      function mv(ev) { ev.stopPropagation(); var w = Math.max(scalePx(480, uiFx), ow + ev.clientX - sx), h = Math.max(scalePx(360, uiFx), oh + ev.clientY - sy); panel.style.width = w + 'px'; panel.style.height = h + 'px'; if (activeRenderer && activeRenderer.onResize) activeRenderer.onResize(); }
       function up(ev) { if (ev) { ev.stopPropagation(); ev.preventDefault(); } document.removeEventListener('mousemove', mv, true); document.removeEventListener('mouseup', up, true); st.w = panel.offsetWidth; st.h = panel.offsetHeight; store('panel', st); }
       document.addEventListener('mousemove', mv, true); document.addEventListener('mouseup', up, true);
     });
@@ -605,7 +640,7 @@ input::placeholder{color:var(--fg-text-faint)}\
       var sizer = el('div', { class: 'fg-list__sizer' });
       var win = el('div', { class: 'fg-list__window' });
       sizer.appendChild(win); listEl.appendChild(sizer);
-      var rowH = opts.rowH || 30, pool = [], model = [], view = [], query = '';
+      var rowH = opts.rowH || scalePx(30, uiFx), pool = [], model = [], view = [], query = '';
       // ONE delegated row click (recycled rows must not accumulate per-draw listeners).
       if (opts.onRowClick) listEl.addEventListener('click', function (e) { var r = e.target && e.target.closest ? e.target.closest('.fg-row') : null; if (r && r._item) opts.onRowClick(r._item); });
       function rebuild() { model = opts.getModel() || []; applyFilter(); }
@@ -1069,6 +1104,7 @@ input::placeholder{color:var(--fg-text-faint)}\
   if (window.Forge) {
     window.Forge._hotkey = (P.Hotkey || 'F10').trim();
     window.Forge._itemMaxOverride = Number(P.ItemMaxOverride) || 0;
+    window.Forge._uiScale = (P.UiScale || 'auto').trim();
     // speed key: plugin-param is the first-run default; a key rebound in the panel (persisted) wins
     try { if (!localStorage.getItem('forge:speedKey')) window.Forge._speedKey = (P.SpeedKey || 'Control').trim(); } catch (e) { window.Forge._speedKey = (P.SpeedKey || 'Control').trim(); }
   }

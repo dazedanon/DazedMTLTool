@@ -84,8 +84,9 @@
             if (!isNaN(n) && n > 0) { return Math.max(0.75, Math.min(3, n)); }
         }
         var base = 816;
-        var w = (typeof Graphics !== 'undefined' && Graphics.width) ? Graphics.width :
-            (window.innerWidth || base);
+        var gameW = (typeof Graphics !== 'undefined' && Graphics.width) ? Graphics.width : 0;
+        var viewW = window.innerWidth || document.documentElement.clientWidth || base;
+        var w = Math.max(gameW || base, viewW);
         var scale = w / base;
         var dpr = window.devicePixelRatio || 1;
         if (dpr > 1.15) { scale *= Math.min(2, 0.75 + dpr * 0.35); }

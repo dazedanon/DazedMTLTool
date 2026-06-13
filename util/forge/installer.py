@@ -89,6 +89,81 @@ def status(game_root: Path) -> dict:
     }
 
 
+def _find_plugin_block_span(content: str, plugin_name: str) -> tuple[int, int] | None:
+    """Return [start, end) span of the plugin object in plugins.js, or None."""
+    m = re.search(rf'"name"\s*:\s*"{re.escape(plugin_name)}"', content)
+    if not m:
+        return None
+    start = content.rfind("{", 0, m.start())
+    if start < 0:
+        return None
+    depth = 0
+    for i in range(start, len(content)):
+        ch = content[i]
+        if ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                end = i + 1
+                while end < len(content) and content[end] in " \t\r\n":
+                    end += 1
+                if end < len(content) and content[end] == ",":
+                    end += 1
+                return start, end
+    return None
+
+
+def _remove_plugin_block(content: str, plugin_name: str) -> str:
+    compact = rf"\{{[^{{}}]*\"name\"\s*:\s*\"{re.escape(plugin_name)}\"[^{{}}]*\}}\s*,?"
+    content = re.sub(compact, "", content)
+    while True:
+        span = _find_plugin_block_span(content, plugin_name)
+        if span is None:
+            break
+        start, end = span
+        before = content[:start].rstrip()
+        after = content[end:].lstrip()
+        if before.endswith(","):
+            before = before[:-1].rstrip()
+        elif after.startswith(","):
+            after = after[1:].lstrip()
+        gap = "\n" if before and after and not before.endswith("\n") else ""
+        content = before + gap + after
+    lines = [
+        line
+        for line in re.split(r"\r?\n", content)
+        if not re.search(rf"\"name\"\s*:\s*\"{re.escape(plugin_name)}\"", line)
+    ]
+    content = "\n".join(lines)
+    # Leftover fragments from a previously corrupted multi-line entry.
+    content = re.sub(
+        r"\{\s*\"status\"\s*:\s*true\s*,\s*\"description\"\s*:\s*\"Forge[^\"]*\""
+        r"\s*,\s*\"parameters\"\s*:\s*\{[^{}]*\}\s*\}\s*,?",
+        "",
+        content,
+    )
+    return content
+
+
+def _upsert_plugin_entry(content: str, plugin_name: str, entry: str, nl: str) -> str:
+    """Insert or replace a Forge plugin entry in plugins.js."""
+    span = _find_plugin_block_span(content, plugin_name)
+    if span is not None:
+        start, end = span
+        before = content[:start].rstrip()
+        after = content[end:].lstrip()
+        sep = nl if before.endswith(",") or not before else "," + nl
+        return before + sep + entry + nl + after
+    idx = content.rfind("];")
+    if idx < 0:
+        raise ValueError("Could not find plugin list end ( ]; ) in plugins.js.")
+    before = content[:idx].rstrip()
+    after = content[idx:]
+    sep = nl if before.endswith(",") else "," + nl
+    return before + sep + entry + nl + "    " + after
+
+
 def install(game_root: Path, source_js: Path | None = None, cfg: dict | None = None) -> tuple[bool, str]:
     """Copy Forge_MV.js or Forge_MZ.js into the game and declare it in plugins.js."""
     info = detect_engine(game_root)
@@ -113,15 +188,11 @@ def install(game_root: Path, source_js: Path | None = None, cfg: dict | None = N
     hotkey = (cfg or {}).get("forgeHotkey", "F10")
     ui_scale = (cfg or {}).get("uiScale", "auto")
     entry = plugin_entry(engine, hotkey, ui_scale)
-    if not _is_declared(content, plugin_name):
-        idx = content.rfind("];")
-        if idx < 0:
-            return False, "Could not find plugin list end ( ]; ) in plugins.js."
-        before = content[:idx].rstrip()
-        after = content[idx:]
-        sep = nl if before.endswith(",") else "," + nl
-        content = before + sep + entry + nl + "    " + after
+    try:
+        content = _upsert_plugin_entry(content, plugin_name, entry, nl)
         plugins_js.write_text(content, encoding="utf-8", newline="")
+    except ValueError as exc:
+        return False, str(exc)
 
     return True, f"Forge installed for RPG Maker {engine}. Press {hotkey} in-game to open."
 
@@ -138,13 +209,9 @@ def uninstall(game_root: Path) -> tuple[bool, str]:
     content, nl = _read_plugins_js(plugins_js)
 
     if _is_declared(content, plugin_name):
-        kept = [
-            line for line in re.split(r"\r?\n", content)
-            if not re.search(rf'"name"\s*:\s*"{re.escape(plugin_name)}"', line)
-        ]
-        new_text = nl.join(kept)
-        new_text = re.sub(r",(\s*)\];", r"\1];", new_text)
-        plugins_js.write_text(new_text, encoding="utf-8", newline="")
+        content = _remove_plugin_block(content, plugin_name)
+        content = re.sub(r",(\s*)\];", r"\1];", content)
+        plugins_js.write_text(content, encoding="utf-8", newline="")
 
     if target.is_file():
         target.unlink()
