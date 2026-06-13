@@ -421,6 +421,26 @@
       return n;
     }
 
+    // Inline SVG icons (no font/emoji dependency -> render identically on Windows/macOS/Linux).
+    function svg(inner) { return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + inner + '</svg>'; }
+    var ICONS = {
+      vars: svg('<line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/>'),
+      switches: svg('<rect x="1" y="5" width="22" height="14" rx="7"/><circle cx="16" cy="12" r="3"/>'),
+      inv: svg('<path d="M16.5 9.4 7.5 4.21"/><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><path d="m3.27 6.96 8.73 5.05 8.73-5.05"/><line x1="12" y1="22.08" x2="12" y2="12"/>'),
+      actors: svg('<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>'),
+      party: svg('<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>'),
+      map: svg('<path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>'),
+      commonev: svg('<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>'),
+      locks: svg('<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>'),
+      battle: svg('<circle cx="12" cy="12" r="10"/><line x1="22" y1="12" x2="18" y2="12"/><line x1="6" y1="12" x2="2" y2="12"/><line x1="12" y1="6" x2="12" y2="2"/><line x1="12" y1="22" x2="12" y2="18"/>'),
+      tool: svg('<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>'),
+      refresh: svg('<polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>'),
+      theme: svg('<circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 0 0 18z" fill="currentColor" stroke="none"/>'),
+      close: svg('<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>'),
+      lock: svg('<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>'),
+      unlock: svg('<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/>')
+    };
+
     var CSS = "\
 :host{position:fixed!important;top:0!important;left:0!important;width:0!important;height:0!important;z-index:2147483647!important;margin:0!important;padding:0!important;border:0!important;pointer-events:none!important;contain:none}\
 *{box-sizing:border-box;font-family:var(--font-ui);-webkit-user-select:none;user-select:none}\
@@ -432,17 +452,17 @@
 --fs-xs:11px;--fs-sm:12px;--fs-md:13px;--fs-lg:15px;color:var(--fg-text);font-size:var(--fs-md)}\
 #forge-root[data-theme=light]{--fg-bg:#f6f7f9;--fg-bg-elev:#fff;--fg-bg-input:#eef0f4;--fg-bg-row-alt:#f0f2f5;--fg-border:#dde0e7;--fg-border-strong:#c7ccd8;--fg-text:#1a1d24;--fg-text-dim:#5a6172;--fg-text-faint:#9097a6;--fg-accent-weak:#dce6ff}\
 .fg-panel{position:fixed;display:flex;flex-direction:column;background:var(--fg-bg);border-radius:var(--rad-lg);box-shadow:var(--sh-panel);overflow:hidden;z-index:2147483000;min-width:480px;min-height:360px;pointer-events:auto}\
-.fg-titlebar{display:flex;align-items:center;gap:var(--sp-2);height:38px;padding:0 var(--sp-2) 0 var(--sp-3);background:var(--fg-bg-elev);border-bottom:1px solid var(--fg-border);cursor:move;flex:0 0 auto}\
-.fg-brand{font-weight:700;font-size:var(--fs-md);letter-spacing:.3px;color:var(--fg-text)}\
+.fg-titlebar{display:flex;align-items:center;gap:6px;height:33px;padding:0 6px 0 10px;background:var(--fg-bg-elev);border-bottom:1px solid var(--fg-border);cursor:move;flex:0 0 auto}\
+.fg-brand{font-weight:700;font-size:var(--fs-md);letter-spacing:.3px;color:var(--fg-text);margin-right:8px;white-space:nowrap}\
 .fg-brand b{color:var(--fg-accent)}\
-.fg-search{flex:1;height:26px;background:var(--fg-bg-input);border:1px solid var(--fg-border);border-radius:var(--rad-md);color:var(--fg-text);padding:0 var(--sp-3);font-size:var(--fs-sm);outline:none;min-width:80px}\
+.fg-search{flex:1;height:23px;background:var(--fg-bg-input);border:1px solid var(--fg-border);border-radius:var(--rad-md);color:var(--fg-text);padding:0 9px;font-size:var(--fs-sm);outline:none;min-width:80px}\
 .fg-search:focus{border-color:var(--fg-accent)}\
-.fg-iconbtn{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:var(--rad-md);background:transparent;color:var(--fg-text-dim);border:0;cursor:pointer;font-size:14px;transition:background var(--dur)}\
+.fg-iconbtn{display:inline-flex;align-items:center;justify-content:center;width:23px;height:23px;border-radius:var(--rad-md);background:transparent;color:var(--fg-text-dim);border:0;cursor:pointer;font-size:13px;transition:background var(--dur)}\
 .fg-iconbtn:hover{background:var(--fg-bg-input);color:var(--fg-text)}\
 .fg-body{flex:1;display:flex;min-height:0}\
 .fg-rail{flex:0 0 var(--rail-w);display:flex;flex-direction:column;gap:2px;padding:var(--sp-2) var(--sp-1);background:var(--fg-bg-elev);border-right:1px solid var(--fg-border);overflow-y:auto}\
 .fg-rail__item{display:flex;flex-direction:column;align-items:center;gap:2px;padding:var(--sp-2) 0;border-radius:var(--rad-md);cursor:pointer;color:var(--fg-text-dim);font-size:10px;transition:all var(--dur);border:0;background:transparent}\
-.fg-rail__item .ic{font-size:17px;line-height:1}\
+.fg-rail__item .ic{display:flex;align-items:center;justify-content:center}\n.fg-rail__item .ic svg{width:19px;height:19px}\n.fg-iconbtn svg{width:15px;height:15px}\n.fg-lock svg{width:15px;height:15px}\n.fg-launcher svg{width:21px;height:21px}\
 .fg-rail__item:hover{background:var(--fg-bg-input);color:var(--fg-text)}\
 .fg-rail__item.is-active{background:var(--fg-accent-weak);color:var(--fg-accent)}\
 .fg-content{flex:1;display:flex;flex-direction:column;min-width:0}\
@@ -555,9 +575,9 @@ input::placeholder{color:var(--fg-text-faint)}\
     var titlebar = el('div', { class: 'fg-titlebar' }, [
       el('span', { class: 'fg-brand', html: '<b>F</b>orge' }),
       search,
-      el('button', { class: 'fg-iconbtn', title: 'Rescan', text: '⟳', onclick: function () { render(); toast('Rescanned'); } }),
-      el('button', { class: 'fg-iconbtn', title: 'Theme', text: '◑', onclick: function () { var t = rootEl.getAttribute('data-theme') === 'light' ? 'dark' : 'light'; rootEl.setAttribute('data-theme', t); store('theme', t); } }),
-      el('button', { class: 'fg-iconbtn', title: 'Close (F10)', text: '✕', onclick: function () { hide(); } })
+      el('button', { class: 'fg-iconbtn', title: 'Rescan', html: ICONS.refresh, onclick: function () { render(); toast('Rescanned'); } }),
+      el('button', { class: 'fg-iconbtn', title: 'Theme', html: ICONS.theme, onclick: function () { var t = rootEl.getAttribute('data-theme') === 'light' ? 'dark' : 'light'; rootEl.setAttribute('data-theme', t); store('theme', t); } }),
+      el('button', { class: 'fg-iconbtn', title: 'Close (F10)', html: ICONS.close, onclick: function () { hide(); } })
     ]);
     var rail = el('div', { class: 'fg-rail' });
     var content = el('div', { class: 'fg-content' });
@@ -572,7 +592,7 @@ input::placeholder{color:var(--fg-text-faint)}\
     // any stale mid-screen position from older builds is ignored) ----------
     var lp = load('launcherPos', { x: vw - 56, y: vh - 56 });
     lp.x = Math.max(4, Math.min(lp.x, vw - 46)); lp.y = Math.max(4, Math.min(lp.y, vh - 46));
-    var launcher = el('button', { class: 'fg-launcher', text: '⚒', title: 'Forge (F10)' });
+    var launcher = el('button', { class: 'fg-launcher', html: ICONS.tool, title: 'Forge (F10)' });
     launcher.style.left = lp.x + 'px'; launcher.style.top = lp.y + 'px';
     launcher.addEventListener('click', function (e) { if (!launcher._dragged) toggle(); });
     rootEl.appendChild(launcher);
@@ -672,7 +692,7 @@ input::placeholder{color:var(--fg-text-faint)}\
     function defaultMatch(it, q) { q = q.toLowerCase(); return String(it.id) === q || (it.name && it.name.toLowerCase().indexOf(q) >= 0); }
 
     // Variables
-    section('vars', '▣', 'Variables', listSection(
+    section('vars', ICONS.vars, 'Variables', listSection(
       function () { return API.ops.vars.list(); },
       function (row, it) {
         row.className = 'fg-row' + (API.locks.isVarFrozen(it.id) ? ' is-frozen' : '');
@@ -687,7 +707,7 @@ input::placeholder{color:var(--fg-text-faint)}\
     ));
 
     // Switches
-    section('switches', '⇄', 'Switches', listSection(
+    section('switches', ICONS.switches, 'Switches', listSection(
       function () { return API.ops.switches.list(); },
       function (row, it) {
         row.className = 'fg-row' + (API.locks.isSwitchFrozen(it.id) ? ' is-frozen' : '');
@@ -703,7 +723,7 @@ input::placeholder{color:var(--fg-text-faint)}\
     ));
 
     // Items / Weapons / Armors (segmented)
-    section('inv', '🜚', 'Items', function (body, head) {
+    section('inv', ICONS.inv, 'Items', function (body, head) {
       var kind = 'item';
       var seg = el('div', { class: 'fg-segmented' });
       ['item', 'weapon', 'armor'].forEach(function (k) {
@@ -733,7 +753,7 @@ input::placeholder{color:var(--fg-text-faint)}\
     });
 
     // Actors (master-detail)
-    section('actors', '👤', 'Actors', function (body) {
+    section('actors', ICONS.actors, 'Actors', function (body) {
       var detail = el('div', { class: 'fg-detail' });
       var selectedId = null;
       var vl = VirtualList({
@@ -802,7 +822,7 @@ input::placeholder{color:var(--fg-text-faint)}\
     });
 
     // Party / Main
-    section('party', '★', 'Party', function (body) {
+    section('party', ICONS.party, 'Party', function (body) {
       var d = el('div', { class: 'fg-detail' });
       function rebuild() {
         d.innerHTML = '';
@@ -824,7 +844,7 @@ input::placeholder{color:var(--fg-text-faint)}\
     });
 
     // Map / Teleport
-    section('map', '🗺', 'Map', function (body) {
+    section('map', ICONS.map, 'Map', function (body) {
       var d = el('div', { class: 'fg-detail' });
       function rebuild() {
         d.innerHTML = '';
@@ -847,7 +867,7 @@ input::placeholder{color:var(--fg-text-faint)}\
     });
 
     // Common Events
-    section('commonev', '⚡', 'Common Ev.', listSection(
+    section('commonev', ICONS.commonev, 'Common Ev.', listSection(
       function () { return API.ops.commonev.list(); },
       function (row, it) {
         row.className = 'fg-row'; row.innerHTML = '';
@@ -858,7 +878,7 @@ input::placeholder{color:var(--fg-text-faint)}\
     ));
 
     // Data Lock (aggregated frozen targets)
-    section('locks', '🛡', 'Data Lock', function (body, head) {
+    section('locks', ICONS.locks, 'Data Lock', function (body, head) {
       head.appendChild(el('button', { class: 'fg-btn fg-btn--danger', text: 'Unfreeze all', onclick: function () { API.locks.clearAll(); rebuild(); toast('All unfrozen'); } }));
       var d = el('div', { class: 'fg-detail' });
       function rebuild() {
@@ -886,7 +906,7 @@ input::placeholder{color:var(--fg-text-faint)}\
     });
 
     // Battle cheats
-    section('battle', '⚔', 'Cheats', function (body) {
+    section('battle', ICONS.battle, 'Cheats', function (body) {
       var d = el('div', { class: 'fg-detail' });
       function tog(label, get, set) {
         var t = el('button', { class: 'fg-toggle' + (get() ? ' is-on' : '') });
@@ -974,14 +994,14 @@ input::placeholder{color:var(--fg-text-faint)}\
     // ---------- render / navigation ----------
     function escapeHtml(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
     function lockBtn(frozen, onToggle) {
-      var b = el('button', { class: 'fg-lock' + (frozen ? ' is-frozen' : ''), text: frozen ? '🔒' : '🔓', title: 'Freeze value' });
-      b.addEventListener('click', function () { frozen = !frozen; b.className = 'fg-lock' + (frozen ? ' is-frozen' : ''); b.textContent = frozen ? '🔒' : '🔓'; onToggle(frozen); });
+      var b = el('button', { class: 'fg-lock' + (frozen ? ' is-frozen' : ''), html: frozen ? ICONS.lock : ICONS.unlock, title: 'Freeze value' });
+      b.addEventListener('click', function () { frozen = !frozen; b.className = 'fg-lock' + (frozen ? ' is-frozen' : ''); b.innerHTML = frozen ? ICONS.lock : ICONS.unlock; onToggle(frozen); });
       return b;
     }
     function refreshActive() { if (activeRenderer && activeRenderer.refresh) activeRenderer.refresh(); updateStatus(); }
 
     SECTIONS.forEach(function (s) {
-      var item = el('button', { class: 'fg-rail__item', title: s.title }, [el('span', { class: 'ic', text: s.icon }), el('span', { text: s.title.split(' ')[0] })]);
+      var item = el('button', { class: 'fg-rail__item', title: s.title }, [el('span', { class: 'ic', html: s.icon }), el('span', { text: s.title.split(' ')[0] })]);
       item.addEventListener('click', function () { selectSection(s.id); });
       s._rail = item; rail.appendChild(item);
     });
@@ -1017,7 +1037,7 @@ input::placeholder{color:var(--fg-text-faint)}\
       statusbar.innerHTML = '';
       statusbar.appendChild(el('span', { text: API.env.IS_MZ ? 'RPG Maker MZ' : 'RPG Maker MV' }));
       statusbar.appendChild(el('span', { class: 'fg-spacer', style: 'flex:1' }));
-      statusbar.appendChild(el('span', { text: (frozen ? '🔒 ' + frozen + ' frozen · ' : '') + 'F10 to toggle' }));
+      statusbar.appendChild(el('span', { text: (frozen ? frozen + ' frozen   ·   ' : '') + 'F10 to toggle' }));
     }
 
     search.addEventListener('input', debounce(function () { if (activeRenderer && activeRenderer.setQuery) activeRenderer.setQuery(search.value.trim()); }, 120));
