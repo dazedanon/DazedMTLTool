@@ -2638,16 +2638,6 @@ class WorkflowTab(QWidget):
         apply_pt_btn.clicked.connect(self._apply_playtest_settings)
         action_row.addWidget(apply_pt_btn)
 
-        action_row.addStretch(1)
-
-        self._install_both_btn = _make_btn("⬇  Install Both", "#3a5a7a")
-        self._install_both_btn.setFixedHeight(30)
-        self._install_both_btn.setToolTip(
-            "Install TL Inspector and Forge as separate plugins (MV/MZ)"
-        )
-        self._install_both_btn.clicked.connect(self._install_both_playtest)
-        action_row.addWidget(self._install_both_btn)
-
         settings_inner.addLayout(action_row)
         layout.addWidget(settings_box)
         self._step8_settings_box = settings_box
@@ -2724,6 +2714,14 @@ class WorkflowTab(QWidget):
         self._step8_forge_credits.setTextFormat(Qt.RichText)
         self._step8_forge_credits.setOpenExternalLinks(True)
         plugins_inner.addWidget(self._step8_forge_credits)
+
+        self._install_both_btn = _make_btn("⬇  Install Both", "#3a5a7a")
+        self._install_both_btn.setMinimumHeight(30)
+        self._install_both_btn.setToolTip(
+            "Install TL Inspector and Forge as separate plugins (MV/MZ)"
+        )
+        self._install_both_btn.clicked.connect(self._install_both_playtest)
+        plugins_inner.addWidget(self._install_both_btn)
 
         layout.addWidget(plugins_box)
         self._step8_playtest_box = plugins_box
