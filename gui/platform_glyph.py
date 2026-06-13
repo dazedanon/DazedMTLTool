@@ -40,7 +40,6 @@ _LINUX_NAV_FALLBACKS: dict[str, str] = {
     "\U00002694": "\u2694",
     "\U0001F504": "\u21bb",  # 🔄 Update → ↻
     "\U00002699\uFE0F": "\u2699",  # ⚙️ Config → ⚙
-    "\U0000270F\uFE0F": "\u270E",  # ✏️ Rewrite → ✎
     "\U000026A1": "\u26a1",  # ⚡ Workflow
 }
 
