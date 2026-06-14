@@ -46,6 +46,24 @@ If you see `ModuleNotFoundError: No module named 'colorama'` (or similar), activ
 
 Tests mock `translateAI` / `getSpeaker` — no API key required. Enable `CODE122` for the duration of the run.
 
+## Database `_original` fixtures
+
+Mini database JSON files for scalar field preservation (notes deferred to Phase 2):
+
+| Fixture | Parser | Fields |
+|---------|--------|--------|
+| `Actors_original_fixture.json` | `searchNames` | `name`, `nickname`, `profile` |
+| `Items_original_fixture.json` | `searchNames` | `name`, `description` |
+| `Skills_original_fixture.json` | `searchNames` | `name`, `description`, `message1` |
+| `States_original_fixture.json` | `searchSS` | `name`, `description`, `message1` |
+| `System_original_fixture.json` | `searchSystem` | `gameTitle`, `terms.basic[1]`, `armorTypes[1]`, `terms.messages.alwaysDash` |
+
+Expected `_original` shapes are in `db_original_manifest.json`.
+
+```bash
+./tests/run_tests.sh tests.test_mvmz_db_original -v
+```
+
 ## Manual check
 
 Copy the fixture into `files/` and run the tool with batch/consume or live translate, then diff against the manifest’s `expected_original` fields in `translated/Map_original_fixture.json`.

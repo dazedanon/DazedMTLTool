@@ -138,10 +138,10 @@ TLSYSTEMSWITCHES = False
 JOIN408 = False
 
 # Dialogue / Scroll / Choices (Main Codes)
-CODE101 = True
-CODE401 = True
-CODE405 = True
-CODE102 = True
+CODE101 = False
+CODE401 = False
+CODE405 = False
+CODE102 = False
 
 # Optional
 CODE408 = False
@@ -557,6 +557,189 @@ def _101_name_source(cmd, is_var: bool) -> str:
     if not is_var and len(params) > 4 and params[4] is not None:
         return str(params[4])
     return ""
+
+
+def _entry_orig(entry) -> dict:
+    """Return _original dict on a database entry, or empty dict if absent."""
+    orig = entry.get("_original") if isinstance(entry, dict) else None
+    return orig if isinstance(orig, dict) else {}
+
+
+def _entry_field_source(entry, field: str) -> str:
+    """Prefer _original[field]; else entry[field] (database scalar fields)."""
+    if not isinstance(entry, dict):
+        return ""
+    orig = _entry_orig(entry)
+    slot = orig.get(field)
+    if slot is not None and not isinstance(slot, (dict, list)) and str(slot).strip():
+        return str(slot)
+    val = entry.get(field)
+    if val is not None:
+        return str(val)
+    return ""
+
+
+def _apply_entry_field_original(entry, field: str, raw: str) -> None:
+    """Set _original[field] only when empty and raw contains Japanese."""
+    if not isinstance(entry, dict) or not raw or not str(raw).strip():
+        return
+    if not re.search(LANGREGEX, raw):
+        return
+    orig = entry.get("_original")
+    if not isinstance(orig, dict):
+        orig = {}
+        entry["_original"] = orig
+    existing = orig.get(field)
+    if existing is not None and not isinstance(existing, (dict, list)) and str(existing).strip():
+        return
+    orig[field] = raw
+
+
+def _system_orig(data) -> dict:
+    """Get or create root _original dict on System.json."""
+    orig = data.get("_original") if isinstance(data, dict) else None
+    if isinstance(orig, dict):
+        return orig
+    orig = {}
+    data["_original"] = orig
+    return orig
+
+
+def _system_scalar_source(data, field: str) -> str:
+    """Prefer root _original[field]; else data[field]."""
+    if not isinstance(data, dict):
+        return ""
+    orig = data.get("_original")
+    if isinstance(orig, dict):
+        slot = orig.get(field)
+        if slot is not None and not isinstance(slot, (dict, list)) and str(slot).strip():
+            return str(slot)
+    val = data.get(field)
+    if val is not None:
+        return str(val)
+    return ""
+
+
+def _apply_system_scalar_original(data, field: str, raw: str) -> None:
+    """Set root _original[field] only when empty and raw contains Japanese."""
+    if not raw or not str(raw).strip() or not re.search(LANGREGEX, raw):
+        return
+    orig = _system_orig(data)
+    existing = orig.get(field)
+    if existing is not None and not isinstance(existing, (dict, list)) and str(existing).strip():
+        return
+    orig[field] = raw
+
+
+def _system_list_source(data, list_name: str, index: int) -> str:
+    """Prefer _original[list_name][str(index)]; else data[list_name][index]."""
+    if not isinstance(data, dict):
+        return ""
+    orig = data.get("_original")
+    if isinstance(orig, dict):
+        list_orig = orig.get(list_name)
+        if isinstance(list_orig, dict):
+            slot = list_orig.get(str(index))
+            if slot is not None and str(slot).strip():
+                return str(slot)
+    lst = data.get(list_name) or []
+    if index < len(lst) and lst[index] is not None:
+        return str(lst[index])
+    return ""
+
+
+def _apply_system_list_original(data, list_name: str, index: int, raw: str) -> None:
+    """Set _original[list_name][str(index)] only when empty and raw contains Japanese."""
+    if not raw or not str(raw).strip() or not re.search(LANGREGEX, raw):
+        return
+    orig = _system_orig(data)
+    list_orig = orig.get(list_name)
+    if not isinstance(list_orig, dict):
+        list_orig = {}
+        orig[list_name] = list_orig
+    key = str(index)
+    existing = list_orig.get(key)
+    if existing is not None and str(existing).strip():
+        return
+    list_orig[key] = raw
+
+
+def _system_terms_source(data, category: str, index: int) -> str:
+    """Prefer _original.terms[category][str(index)]; else terms[category][index]."""
+    if not isinstance(data, dict):
+        return ""
+    orig = data.get("_original")
+    if isinstance(orig, dict):
+        terms_orig = orig.get("terms")
+        if isinstance(terms_orig, dict):
+            cat_orig = terms_orig.get(category)
+            if isinstance(cat_orig, dict):
+                slot = cat_orig.get(str(index))
+                if slot is not None and str(slot).strip():
+                    return str(slot)
+    term_list = (data.get("terms") or {}).get(category)
+    if isinstance(term_list, list) and index < len(term_list) and term_list[index] is not None:
+        return str(term_list[index])
+    return ""
+
+
+def _apply_system_terms_original(data, category: str, index: int, raw: str) -> None:
+    """Set _original.terms[category][str(index)] only when empty and raw contains Japanese."""
+    if not raw or not str(raw).strip() or not re.search(LANGREGEX, raw):
+        return
+    orig = _system_orig(data)
+    terms = orig.get("terms")
+    if not isinstance(terms, dict):
+        terms = {}
+        orig["terms"] = terms
+    cat = terms.get(category)
+    if not isinstance(cat, dict):
+        cat = {}
+        terms[category] = cat
+    key = str(index)
+    existing = cat.get(key)
+    if existing is not None and str(existing).strip():
+        return
+    cat[key] = raw
+
+
+def _system_terms_message_source(data, key: str) -> str:
+    """Prefer _original.terms.messages[key]; else terms.messages[key]."""
+    if not isinstance(data, dict):
+        return ""
+    orig = data.get("_original")
+    if isinstance(orig, dict):
+        terms_orig = orig.get("terms")
+        if isinstance(terms_orig, dict):
+            msg_orig = terms_orig.get("messages")
+            if isinstance(msg_orig, dict):
+                slot = msg_orig.get(key)
+                if slot is not None and str(slot).strip():
+                    return str(slot)
+    messages = (data.get("terms") or {}).get("messages") or {}
+    val = messages.get(key)
+    if val is not None:
+        return str(val)
+    return ""
+
+
+def _apply_system_terms_message_original(data, key: str, raw: str) -> None:
+    """Set _original.terms.messages[key] only when empty and raw contains Japanese."""
+    if not raw or not str(raw).strip() or not re.search(LANGREGEX, raw):
+        return
+    orig = _system_orig(data)
+    terms = orig.get("terms")
+    if not isinstance(terms, dict):
+        terms = {}
+        orig["terms"] = terms
+    msg = terms.get("messages")
+    if not isinstance(msg, dict):
+        msg = {}
+        terms["messages"] = msg
+    existing = msg.get(key)
+    if existing is not None and str(existing).strip():
+        return
+    msg[key] = raw
 
 
 _COLOR_SPEAKER_RE = re.compile(
@@ -1445,9 +1628,13 @@ def parseScenario(data, filename):
 def searchNames(data, pbar, context, filename):
     totalTokens = [0, 0]
     nameList = []
+    nameSourceList = []
     profileList = []
+    profileSourceList = []
     nicknameList = []
+    nicknameSourceList = []
     descriptionList = []
+    descriptionSourceList = []
     # For Skills: collect messages across all entries for batch translation
     messagesList = []  # List of tuples: (entry_idx, message_field, message_text, needs_taro)
     # Collect name mappings for vocab per run
@@ -1581,7 +1768,7 @@ def searchNames(data, pbar, context, filename):
             for msg_num in range(1, 5):
                 msg_field = f"message{msg_num}"
                 if msg_field in entry and entry[msg_field]:
-                    msg_text = entry[msg_field]
+                    msg_text = _entry_field_source(entry, msg_field)
                     # Skip if IGNORETLTEXT is enabled and no Japanese text
                     if IGNORETLTEXT and not re.search(LANGREGEX, msg_text):
                         continue
@@ -1590,7 +1777,7 @@ def searchNames(data, pbar, context, filename):
                         messages_batch.append("Taro" + msg_text)
                     else:
                         messages_batch.append(msg_text)
-                    messages_map.append((idx, msg_field, needs_taro))
+                    messages_map.append((idx, msg_field, needs_taro, msg_text))
         
         # Batch translate all messages
         if messages_batch:
@@ -1604,12 +1791,13 @@ def searchNames(data, pbar, context, filename):
             totalTokens[1] += response[1][1]
             
             # Apply translations back to data
-            for msg_idx, (entry_idx, msg_field, needs_taro) in enumerate(messages_map):
+            for msg_idx, (entry_idx, msg_field, needs_taro, raw_msg) in enumerate(messages_map):
                 if msg_idx < len(translated_messages):
                     translation = translated_messages[msg_idx]
                     if needs_taro:
                         translation = translation.replace("Taro", "")
                     data[entry_idx][msg_field] = translation
+                    _apply_entry_field_original(data[entry_idx], msg_field, raw_msg)
             
             # Update progress for messages
             if pbar is not None:
@@ -1630,52 +1818,70 @@ def searchNames(data, pbar, context, filename):
             filling = True
             if context in "Actors":
                 if len(nameList) < BATCHSIZE:
-                    if data[i]["name"] != "":
+                    name_src = _entry_field_source(data[i], "name")
+                    if name_src != "":
                         # Skip if IGNORETLTEXT is enabled and no Japanese text
-                        if not (IGNORETLTEXT and not re.search(LANGREGEX, data[i]["name"])):
-                            nameList.append(data[i]["name"])
-                    if "nickname" in data[i] and data[i]["nickname"]:
-                        # Skip if IGNORETLTEXT is enabled and no Japanese text
-                        if not (IGNORETLTEXT and not re.search(LANGREGEX, data[i]["nickname"])):
-                            nicknameList.append(data[i]["nickname"])
-                    if "profile" in data[i] and data[i]["profile"]:
-                        # Skip if IGNORETLTEXT is enabled and no Japanese text
-                        if not (IGNORETLTEXT and not re.search(LANGREGEX, data[i]["profile"])):
-                            profileList.append(data[i]["profile"].replace("\n", " "))
+                        if not (IGNORETLTEXT and not re.search(LANGREGEX, name_src)):
+                            nameList.append(name_src)
+                            nameSourceList.append(name_src)
+                    if "nickname" in data[i]:
+                        nick_src = _entry_field_source(data[i], "nickname")
+                        if nick_src:
+                            # Skip if IGNORETLTEXT is enabled and no Japanese text
+                            if not (IGNORETLTEXT and not re.search(LANGREGEX, nick_src)):
+                                nicknameList.append(nick_src)
+                                nicknameSourceList.append(nick_src)
+                    if "profile" in data[i]:
+                        prof_src = _entry_field_source(data[i], "profile")
+                        if prof_src:
+                            # Skip if IGNORETLTEXT is enabled and no Japanese text
+                            if not (IGNORETLTEXT and not re.search(LANGREGEX, prof_src)):
+                                profileList.append(prof_src.replace("\n", " "))
+                                profileSourceList.append(prof_src)
                     i += 1
                 else:
                     batchFull = True
             if context in ["Armors", "Weapons", "Items"]:
                 if len(nameList) < BATCHSIZE:
+                    name_src = _entry_field_source(data[i], "name")
                     # Skip if IGNORETLTEXT is enabled and no Japanese text
-                    if not (IGNORETLTEXT and not re.search(LANGREGEX, data[i]["name"])):
-                        nameList.append(data[i]["name"])
-                    if "description" in data[i] and data[i]["description"] != "":
-                        description = data[i]["description"]
-                        # Skip if IGNORETLTEXT is enabled and no Japanese text
-                        if not (IGNORETLTEXT and not re.search(LANGREGEX, description)):
-                            description = description.replace("\n", " ")
-                            descriptionList.append(description)
+                    if not (IGNORETLTEXT and not re.search(LANGREGEX, name_src)):
+                        nameList.append(name_src)
+                        nameSourceList.append(name_src)
+                    if "description" in data[i]:
+                        desc_src = _entry_field_source(data[i], "description")
+                        if desc_src != "":
+                            # Skip if IGNORETLTEXT is enabled and no Japanese text
+                            if not (IGNORETLTEXT and not re.search(LANGREGEX, desc_src)):
+                                descriptionList.append(desc_src.replace("\n", " "))
+                                descriptionSourceList.append(desc_src)
                     i += 1
                 else:
                     batchFull = True
             if context in ["Skills"]:
                 if len(nameList) < BATCHSIZE:
+                    name_src = _entry_field_source(data[i], "name")
                     # Skip if IGNORETLTEXT is enabled and no Japanese text
-                    if not (IGNORETLTEXT and not re.search(LANGREGEX, data[i]["name"])):
-                        nameList.append(data[i]["name"])
-                    if "description" in data[i] and data[i]["description"]:
-                        # Skip if IGNORETLTEXT is enabled and no Japanese text
-                        if not (IGNORETLTEXT and not re.search(LANGREGEX, data[i]["description"])):
-                            descriptionList.append(data[i]["description"].replace("\n", " "))
+                    if not (IGNORETLTEXT and not re.search(LANGREGEX, name_src)):
+                        nameList.append(name_src)
+                        nameSourceList.append(name_src)
+                    if "description" in data[i]:
+                        desc_src = _entry_field_source(data[i], "description")
+                        if desc_src:
+                            # Skip if IGNORETLTEXT is enabled and no Japanese text
+                            if not (IGNORETLTEXT and not re.search(LANGREGEX, desc_src)):
+                                descriptionList.append(desc_src.replace("\n", " "))
+                                descriptionSourceList.append(desc_src)
                     i += 1
                 else:
                     batchFull = True
             if context in ["Enemies", "Classes", "MapInfos"]:
                 if len(nameList) < BATCHSIZE:
+                    name_src = _entry_field_source(data[i], "name")
                     # Skip if IGNORETLTEXT is enabled and no Japanese text
-                    if not (IGNORETLTEXT and not re.search(LANGREGEX, data[i]["name"])):
-                        nameList.append(data[i]["name"])
+                    if not (IGNORETLTEXT and not re.search(LANGREGEX, name_src)):
+                        nameList.append(name_src)
+                        nameSourceList.append(name_src)
                     i += 1
                 else:
                     batchFull = True
@@ -1728,24 +1934,30 @@ def searchNames(data, pbar, context, filename):
                             continue
                         else:
                             # Get Text
-                            if data[j]["name"] != "":
+                            if data[j]["name"] != "" and nameSourceList:
                                 with open("log/translations.txt", "a", encoding="utf-8") as file:
                                     file.write(f'{data[j]["name"]} ({translatedNameBatch[0]})\n')
                                 # Actors are excluded from vocab updates
-                                    data[j]["name"] = translatedNameBatch[0]
-                                translatedNameBatch.pop(0)
-                            if "nickname" in data[j] and data[j]["nickname"]:
-                                data[j]["nickname"] = translatedNicknameBatch[0]
-                                translatedNicknameBatch.pop(0)
-                            if "profile" in data[j] and data[j]["profile"]:
-                                data[j]["profile"] = dazedwrap.wrapText(translatedProfileBatch[0], LISTWIDTH)
-                                translatedProfileBatch.pop(0)
+                                raw_name = nameSourceList.pop(0)
+                                data[j]["name"] = translatedNameBatch.pop(0)
+                                _apply_entry_field_original(data[j], "name", raw_name)
+                            if "nickname" in data[j] and data[j]["nickname"] and nicknameSourceList:
+                                raw_nick = nicknameSourceList.pop(0)
+                                data[j]["nickname"] = translatedNicknameBatch.pop(0)
+                                _apply_entry_field_original(data[j], "nickname", raw_nick)
+                            if "profile" in data[j] and data[j]["profile"] and profileSourceList:
+                                raw_prof = profileSourceList.pop(0)
+                                data[j]["profile"] = dazedwrap.wrapText(translatedProfileBatch.pop(0), LISTWIDTH)
+                                _apply_entry_field_original(data[j], "profile", raw_prof)
 
                             # If Batch is empty. Move on.
                             if len(translatedNameBatch) == 0:
                                 nameList.clear()
+                                nameSourceList.clear()
                                 profileList.clear()
+                                profileSourceList.clear()
                                 nicknameList.clear()
+                                nicknameSourceList.clear()
                                 batchFull = False
                                 filling = False
                             j += 1
@@ -1793,23 +2005,32 @@ def searchNames(data, pbar, context, filename):
                                 continue
                             else:
                                 # Get Text
+                                raw_name = nameSourceList.pop(0) if nameSourceList else _entry_field_source(data[j], "name")
                                 file.write(f"{data[j]['name']} ({translatedNameBatch[0]})\n")
                                 if vocab_enabled:
                                     try:
-                                        vocab_pairs.append((data[j]['name'], translatedNameBatch[0]))
+                                        vocab_pairs.append((raw_name, translatedNameBatch[0]))
                                     except Exception:
                                         pass
-                                data[j]["name"] = translatedNameBatch[0]
-                                translatedNameBatch.pop(0)
-                                if "description" in data[j] and data[j]["description"] != "":
-                                    translatedDescriptionBatch[0] = dazedwrap.wrapText(translatedDescriptionBatch[0], LISTWIDTH)
-                                    data[j]["description"] = translatedDescriptionBatch[0]
-                                    translatedDescriptionBatch.pop(0)
+                                data[j]["name"] = translatedNameBatch.pop(0)
+                                _apply_entry_field_original(data[j], "name", raw_name)
+                                desc_src = _entry_field_source(data[j], "description") if "description" in data[j] else ""
+                                if (
+                                    desc_src
+                                    and not (IGNORETLTEXT and not re.search(LANGREGEX, desc_src))
+                                    and descriptionSourceList
+                                ):
+                                    raw_desc = descriptionSourceList.pop(0)
+                                    wrapped = dazedwrap.wrapText(translatedDescriptionBatch.pop(0), LISTWIDTH)
+                                    data[j]["description"] = wrapped
+                                    _apply_entry_field_original(data[j], "description", raw_desc)
 
                             # If Batch is empty. Move on.
                             if len(translatedNameBatch) == 0:
                                 nameList.clear()
+                                nameSourceList.clear()
                                 descriptionList.clear()
+                                descriptionSourceList.clear()
                                 batchFull = False
                                 filling = False
                             j += 1
@@ -1838,20 +2059,22 @@ def searchNames(data, pbar, context, filename):
                             j += 1
                             continue
                         else:
+                            raw_name = nameSourceList.pop(0) if nameSourceList else _entry_field_source(data[j], "name")
                             with open("log/translations.txt", "a", encoding="utf-8") as file:
                                 file.write(f'{data[j]["name"]} ({translatedNameBatch[0]})\n')
                             # Get Text
                             if vocab_enabled:
                                 try:
-                                    vocab_pairs.append((data[j]["name"], translatedNameBatch[0]))
+                                    vocab_pairs.append((raw_name, translatedNameBatch[0]))
                                 except Exception:
                                     pass
-                            data[j]["name"] = translatedNameBatch[0]
-                            translatedNameBatch.pop(0)
+                            data[j]["name"] = translatedNameBatch.pop(0)
+                            _apply_entry_field_original(data[j], "name", raw_name)
 
                             # If Batch is empty. Move on.
                             if len(translatedNameBatch) == 0:
                                 nameList.clear()
+                                nameSourceList.clear()
                                 batchFull = False
                                 filling = False
                             j += 1
@@ -1864,8 +2087,13 @@ def searchNames(data, pbar, context, filename):
             if mismatch == True:
                 MISMATCH.append(nameList)
                 nameList.clear()
+                nameSourceList.clear()
                 profileList.clear()
+                profileSourceList.clear()
+                nicknameList.clear()
+                nicknameSourceList.clear()
                 descriptionList.clear()
+                descriptionSourceList.clear()
                 filling = False
                 mismatch = False
                 batchFull = False
@@ -4048,26 +4276,28 @@ def searchSS(state, pbar):
 
     # --- Batch collection for basic fields and messages ---
     batch_texts = []
-    batch_map = []  # [(field_type, field_name, needs_taro_prefix), ...]
+    batch_map = []  # [(field_type, field_name, needs_taro_prefix, raw_source), ...]
     
     # Name
     if "name" in state and state["name"]:
+        name_src = _entry_field_source(state, "name")
         # Skip if IGNORETLTEXT is enabled and no Japanese text
-        if not (IGNORETLTEXT and not re.search(LANGREGEX, state["name"])):
-            batch_texts.append(state["name"])
-            batch_map.append(("name", "name", False))
+        if not (IGNORETLTEXT and not re.search(LANGREGEX, name_src)):
+            batch_texts.append(name_src)
+            batch_map.append(("name", "name", False, name_src))
     
     # Description
     if "description" in state and state["description"]:
+        desc_src = _entry_field_source(state, "description")
         # Skip if IGNORETLTEXT is enabled and no Japanese text
-        if not (IGNORETLTEXT and not re.search(LANGREGEX, state["description"])):
-            batch_texts.append(state["description"])
-            batch_map.append(("description", "description", False))
+        if not (IGNORETLTEXT and not re.search(LANGREGEX, desc_src)):
+            batch_texts.append(desc_src)
+            batch_map.append(("description", "description", False, desc_src))
     
     # Messages - collect all with Taro prefix handling
     for msg_field in ["message1", "message2", "message3", "message4"]:
         if msg_field in state and state[msg_field]:
-            msg_text = state[msg_field]
+            msg_text = _entry_field_source(state, msg_field)
             # Skip if IGNORETLTEXT is enabled and no Japanese text
             if IGNORETLTEXT and not re.search(LANGREGEX, msg_text):
                 continue
@@ -4076,7 +4306,7 @@ def searchSS(state, pbar):
                 batch_texts.append("Taro" + msg_text)
             else:
                 batch_texts.append(msg_text)
-            batch_map.append(("message", msg_field, needs_taro))
+            batch_map.append(("message", msg_field, needs_taro, msg_text))
     
     # --- Batch translate all basic fields ---
     nameResponse = ""
@@ -4097,15 +4327,18 @@ def searchSS(state, pbar):
         totalTokens[1] += response[1][1]
         
         # Map translations back to their fields
-        for idx, (field_type, field_name, needs_taro) in enumerate(batch_map):
+        for idx, (field_type, field_name, needs_taro, raw_source) in enumerate(batch_map):
             if idx < len(translated_batch):
                 translation = translated_batch[idx]
                 if field_type == "name":
                     nameResponse = [translation, [0, 0]]
+                    _apply_entry_field_original(state, "name", raw_source)
                 elif field_type == "description":
                     descriptionResponse = [translation, [0, 0]]
+                    _apply_entry_field_original(state, "description", raw_source)
                 elif field_type == "message":
                     response_obj = [translation, [0, 0]]
+                    _apply_entry_field_original(state, field_name, raw_source)
                     if field_name == "message1":
                         message1Response = response_obj
                     elif field_name == "message2":
@@ -4199,16 +4432,18 @@ def searchSystem(data, pbar):
     context = "Reply with only the " + LANGUAGE + ' translation of the UI textbox."'
 
     # Title - batch as a single-item list
+    title_src = _system_scalar_source(data, "gameTitle")
     # Skip if IGNORETLTEXT is enabled and no Japanese text
-    if not (IGNORETLTEXT and not re.search(LANGREGEX, data["gameTitle"])):
+    if not (IGNORETLTEXT and not re.search(LANGREGEX, title_src)):
         response = translateAI(
-            [data["gameTitle"]],
+            [title_src],
             " Reply with the " + LANGUAGE + " translation of the game title name",
             False,
         )
         totalTokens[0] += response[1][0]
         totalTokens[1] += response[1][1]
         data["gameTitle"] = response[0][0].strip(".")
+        _apply_system_scalar_original(data, "gameTitle", title_src)
     if pbar is not None:
         pbar.refresh()
 
@@ -4218,13 +4453,16 @@ def searchSystem(data, pbar):
             termList = data["terms"][term]
             term_values = []
             term_indices = []
+            term_sources = []
             for i in range(len(termList)):
                 if termList[i] is not None:
+                    src = _system_terms_source(data, term, i)
                     # Skip if IGNORETLTEXT is enabled and no Japanese text
-                    if IGNORETLTEXT and not re.search(LANGREGEX, str(termList[i])):
+                    if IGNORETLTEXT and not re.search(LANGREGEX, src):
                         continue
-                    term_values.append(termList[i])
+                    term_values.append(src)
                     term_indices.append(i)
+                    term_sources.append(src)
             
             if term_values:
                 response = translateAI(term_values, context)
@@ -4234,6 +4472,7 @@ def searchSystem(data, pbar):
                 
                 for n, idx in enumerate(term_indices[: len(tl_list)]):
                     termList[idx] = tl_list[n].replace('"', "").strip()
+                    _apply_system_terms_original(data, term, idx, term_sources[n])
                 
                 if pbar is not None:
                     pbar.refresh()
@@ -4241,13 +4480,15 @@ def searchSystem(data, pbar):
     # Armor Types - batch translate all
     armor_values = []
     armor_indices = []
+    armor_sources = []
     for i in range(len(data["armorTypes"])):
-        val = data["armorTypes"][i]
+        src = _system_list_source(data, "armorTypes", i)
         # Skip if IGNORETLTEXT is enabled and no Japanese text
-        if IGNORETLTEXT and (not val or not re.search(LANGREGEX, str(val))):
+        if IGNORETLTEXT and (not src or not re.search(LANGREGEX, src)):
             continue
-        armor_values.append(val)
+        armor_values.append(src)
         armor_indices.append(i)
+        armor_sources.append(src)
     if armor_values:
         response = translateAI(
             armor_values,
@@ -4259,19 +4500,22 @@ def searchSystem(data, pbar):
         tl_list = response[0]
         for n, idx in enumerate(armor_indices[: len(tl_list)]):
             data["armorTypes"][idx] = tl_list[n].replace('"', "").strip()
+            _apply_system_list_original(data, "armorTypes", idx, armor_sources[n])
         if pbar is not None:
             pbar.refresh()
 
     # Skill Types - batch translate all
     skill_values = []
     skill_indices = []
+    skill_sources = []
     for i in range(len(data["skillTypes"])):
-        val = data["skillTypes"][i]
+        src = _system_list_source(data, "skillTypes", i)
         # Skip if IGNORETLTEXT is enabled and no Japanese text
-        if IGNORETLTEXT and (not val or not re.search(LANGREGEX, str(val))):
+        if IGNORETLTEXT and (not src or not re.search(LANGREGEX, src)):
             continue
-        skill_values.append(val)
+        skill_values.append(src)
         skill_indices.append(i)
+        skill_sources.append(src)
     if skill_values:
         response = translateAI(
             skill_values,
@@ -4283,19 +4527,22 @@ def searchSystem(data, pbar):
         tl_list = response[0]
         for n, idx in enumerate(skill_indices[: len(tl_list)]):
             data["skillTypes"][idx] = tl_list[n].replace('"', "").strip()
+            _apply_system_list_original(data, "skillTypes", idx, skill_sources[n])
         if pbar is not None:
             pbar.refresh()
 
     # Equip Types - batch translate all (not present in RPG Maker Ace)
     equip_values = []
     equip_indices = []
+    equip_sources = []
     for i in range(len(data.get("equipTypes", []) or [])):
-        val = data["equipTypes"][i]
+        src = _system_list_source(data, "equipTypes", i)
         # Skip if IGNORETLTEXT is enabled and no Japanese text
-        if IGNORETLTEXT and (not val or not re.search(LANGREGEX, str(val))):
+        if IGNORETLTEXT and (not src or not re.search(LANGREGEX, src)):
             continue
-        equip_values.append(val)
+        equip_values.append(src)
         equip_indices.append(i)
+        equip_sources.append(src)
     if equip_values:
         response = translateAI(
             equip_values,
@@ -4307,19 +4554,24 @@ def searchSystem(data, pbar):
         tl_list = response[0]
         for n, idx in enumerate(equip_indices[: len(tl_list)]):
             data["equipTypes"][idx] = tl_list[n].replace('"', "").strip()
+            _apply_system_list_original(data, "equipTypes", idx, equip_sources[n])
         if pbar is not None:
             pbar.refresh()
 
     # Elements - batch translate all (skip empty)
     element_values = []
     element_indices = []
+    element_sources = []
     for i in range(len(data["elements"])):
-        if data["elements"][i]:  # Skip empty strings
-            # Skip if IGNORETLTEXT is enabled and no Japanese text
-            if IGNORETLTEXT and not re.search(LANGREGEX, str(data["elements"][i])):
-                continue
-            element_values.append(data["elements"][i])
-            element_indices.append(i)
+        src = _system_list_source(data, "elements", i)
+        if not src:
+            continue
+        # Skip if IGNORETLTEXT is enabled and no Japanese text
+        if IGNORETLTEXT and not re.search(LANGREGEX, src):
+            continue
+        element_values.append(src)
+        element_indices.append(i)
+        element_sources.append(src)
     
     if element_values:
         response = translateAI(
@@ -4332,19 +4584,24 @@ def searchSystem(data, pbar):
         tl_list = response[0]
         for n, idx in enumerate(element_indices[: len(tl_list)]):
             data["elements"][idx] = tl_list[n].replace('"', "").strip()
+            _apply_system_list_original(data, "elements", idx, element_sources[n])
         if pbar is not None:
             pbar.refresh()
 
     # Weapon Types - batch translate all (skip empty)
     weapon_values = []
     weapon_indices = []
+    weapon_sources = []
     for i in range(len(data["weaponTypes"])):
-        if data["weaponTypes"][i]:  # Skip empty strings
-            # Skip if IGNORETLTEXT is enabled and no Japanese text
-            if IGNORETLTEXT and not re.search(LANGREGEX, str(data["weaponTypes"][i])):
-                continue
-            weapon_values.append(data["weaponTypes"][i])
-            weapon_indices.append(i)
+        src = _system_list_source(data, "weaponTypes", i)
+        if not src:
+            continue
+        # Skip if IGNORETLTEXT is enabled and no Japanese text
+        if IGNORETLTEXT and not re.search(LANGREGEX, src):
+            continue
+        weapon_values.append(src)
+        weapon_indices.append(i)
+        weapon_sources.append(src)
     
     if weapon_values:
         response = translateAI(
@@ -4357,6 +4614,7 @@ def searchSystem(data, pbar):
         tl_list = response[0]
         for n, idx in enumerate(weapon_indices[: len(tl_list)]):
             data["weaponTypes"][idx] = tl_list[n].replace('"', "").strip()
+            _apply_system_list_original(data, "weaponTypes", idx, weapon_sources[n])
         if pbar is not None:
             pbar.refresh()
 
@@ -4364,13 +4622,16 @@ def searchSystem(data, pbar):
     if TLSYSTEMVARIABLES and "variables" in data and isinstance(data["variables"], list):
         var_indices = []
         var_values = []
+        var_sources = []
         for idx, val in enumerate(data["variables"]):
-            if isinstance(val, str) and val.strip():
+            src = _system_list_source(data, "variables", idx)
+            if isinstance(val, str) and src.strip():
                 # Skip if IGNORETLTEXT is enabled and no Japanese text
-                if IGNORETLTEXT and not re.search(LANGREGEX, val):
+                if IGNORETLTEXT and not re.search(LANGREGEX, src):
                     continue
                 var_indices.append(idx)
-                var_values.append(val)
+                var_values.append(src)
+                var_sources.append(src)
         if var_values:
             response = translateAI(
                 var_values,
@@ -4383,6 +4644,7 @@ def searchSystem(data, pbar):
             # Assign back translations to corresponding indices
             for n, idx in enumerate(var_indices[: len(tl_list)]):
                 data["variables"][idx] = tl_list[n].replace('"', '').strip()
+                _apply_system_list_original(data, "variables", idx, var_sources[n])
             if pbar is not None:
                 pbar.refresh()
 
@@ -4390,13 +4652,16 @@ def searchSystem(data, pbar):
     if TLSYSTEMSWITCHES and "switches" in data and isinstance(data["switches"], list):
         switch_indices = []
         switch_values = []
+        switch_sources = []
         for idx, val in enumerate(data["switches"]):
-            if isinstance(val, str) and val.strip():
+            src = _system_list_source(data, "switches", idx)
+            if isinstance(val, str) and src.strip():
                 # Skip if IGNORETLTEXT is enabled and no Japanese text
-                if IGNORETLTEXT and not re.search(LANGREGEX, val):
+                if IGNORETLTEXT and not re.search(LANGREGEX, src):
                     continue
                 switch_indices.append(idx)
-                switch_values.append(val)
+                switch_values.append(src)
+                switch_sources.append(src)
         if switch_values:
             response = translateAI(
                 switch_values,
@@ -4409,6 +4674,7 @@ def searchSystem(data, pbar):
             # Assign back translations to corresponding indices
             for n, idx in enumerate(switch_indices[: len(tl_list)]):
                 data["switches"][idx] = tl_list[n].replace('"', '').strip()
+                _apply_system_list_original(data, "switches", idx, switch_sources[n])
             if pbar is not None:
                 pbar.refresh()
 
@@ -4417,13 +4683,16 @@ def searchSystem(data, pbar):
     if messages:
         msg_keys = []
         msg_values = []
+        msg_sources = []
         for key, value in messages.items():
-            if isinstance(value, str) and value.strip():
+            src = _system_terms_message_source(data, key)
+            if isinstance(value, str) and src.strip():
                 # Skip if IGNORETLTEXT is enabled and no Japanese text
-                if IGNORETLTEXT and not re.search(LANGREGEX, value):
+                if IGNORETLTEXT and not re.search(LANGREGEX, src):
                     continue
                 msg_keys.append(key)
-                msg_values.append(value)
+                msg_values.append(src)
+                msg_sources.append(src)
         
         if msg_values:
             response = translateAI(
@@ -4446,6 +4715,7 @@ def searchSystem(data, pbar):
                 for char in charList:
                     translatedText = translatedText.replace(char, "")
                 messages[key] = translatedText
+                _apply_system_terms_message_original(data, key, msg_sources[n])
             
             if pbar is not None:
                 pbar.refresh()
