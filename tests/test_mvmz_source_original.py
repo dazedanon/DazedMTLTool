@@ -1,0 +1,363 @@
+#!/usr/bin/env python3
+"""Integration tests for _original source preservation in rpgmakermvmz searchCodes."""
+
+from __future__ import annotations
+
+import copy
+import json
+import os
+import re
+import sys
+import unittest
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+os.chdir(ROOT)
+sys.path.insert(0, str(ROOT))
+
+import modules.rpgmakermvmz as mvmz  # noqa: E402
+
+LANGREGEX = mvmz.LANGREGEX
+
+
+def _mock_translate(text, history, batch=False):
+    def tr(s):
+        if not isinstance(s, str):
+            return s
+        m = re.match(r"^(\[[^\]]+\]:\s?)", s)
+        if m:
+            return m.group(1) + "EN_TRANSLATED"
+        return "EN_TRANSLATED"
+
+    if isinstance(text, list):
+        return [[tr(t) for t in text], [0, 0]]
+    return [tr(text), [0, 0]]
+
+
+def _mock_speaker(name):
+    return [f"Speaker_{name}", [0, 0]]
+
+
+FIXTURE_MAP = ROOT / "tests" / "fixtures" / "Map_original_fixture.json"
+FIXTURE_MANIFEST = ROOT / "tests" / "fixtures" / "Map_original_fixture_manifest.json"
+CASE_MARKER_RE = re.compile(r"# CASE:(\S+)")
+
+
+def _load_fixture_page():
+    data = json.loads(FIXTURE_MAP.read_text(encoding="utf-8-sig"))
+    event = next(e for e in data["events"] if e and e.get("id") == 1)
+    return {"list": copy.deepcopy(event["pages"][0]["list"])}
+
+
+def _case_commands(page_list):
+    """Map manifest case id -> command immediately following its 108 marker."""
+    cases = {}
+    pending = None
+    for cmd in page_list:
+        if not cmd:
+            continue
+        if cmd.get("code") == 108:
+            m = CASE_MARKER_RE.search(str(cmd.get("parameters", [""])[0]))
+            pending = m.group(1) if m else None
+            continue
+        if pending:
+            cases[pending] = cmd
+            pending = None
+    return cases
+
+
+def _load_fixture_manifest():
+    return json.loads(FIXTURE_MANIFEST.read_text(encoding="utf-8"))
+
+
+def _load_map_excerpt():
+    """Small real snippets from Map002 event 17 + Map001 102 + synthetic 101/122."""
+    map2 = json.loads((ROOT / "files" / "Map002.json").read_text(encoding="utf-8-sig"))
+    ev17 = next(e for e in map2["events"] if e and e.get("id") == 17)
+    real = copy.deepcopy(ev17["pages"][0]["list"][7:14])  # 101 + 401 dialogue block
+
+    map1 = json.loads((ROOT / "files" / "Map001.json").read_text(encoding="utf-8-sig"))
+    choice_cmd = None
+    for ev in map1["events"]:
+        if not ev:
+            continue
+        for pg in ev.get("pages") or []:
+            if not pg:
+                continue
+            for cmd in pg.get("list") or []:
+                if cmd and cmd.get("code") == 102:
+                    choice_cmd = copy.deepcopy(cmd)
+                    break
+            if choice_cmd:
+                break
+        if choice_cmd:
+            break
+    assert choice_cmd is not None, "Map001 should contain a 102 choice command"
+
+    synthetic = [
+        {"code": 101, "indent": 0, "parameters": ["", 0, 0, 2, "\\C[2]アリス\\C[0]"]},
+        {"code": 401, "indent": 0, "parameters": ["こんにちは、世界。"]},
+        {
+            "code": 122,
+            "indent": 0,
+            "parameters": [101, 101, 0, 0, "`変数テスト`"],
+        },
+    ]
+
+    return {"list": real + [choice_cmd] + synthetic}
+
+
+def _resolve_case_command(page_list, entry, marked_cases=None):
+    """Find manifest case command by CASE marker or by code + expected _original."""
+    marked_cases = marked_cases if marked_cases is not None else _case_commands(page_list)
+    cid = entry["id"]
+    cmd = marked_cases.get(cid)
+    if cmd is not None and cmd.get("code") == entry.get("code"):
+        return cmd
+    exp = entry.get("expected_original")
+    code = entry.get("code")
+    if code is not None and exp is not None:
+        for candidate in page_list:
+            if candidate and candidate.get("code") == code and candidate.get("_original") == exp:
+                return candidate
+    return cmd
+
+
+def _run_search_codes(page):
+    """Full Pass 1 -> mock translate -> Pass 2 cycle."""
+    captured = []
+
+    def translate(text, history, batch=False):
+        captured.append(copy.deepcopy(text))
+        return _mock_translate(text, history, batch)
+
+    def speaker(name):
+        return _mock_speaker(name)
+
+    orig_t = mvmz.translateAI
+    orig_s = mvmz.getSpeaker
+    orig_122 = mvmz.CODE122
+    orig_408 = mvmz.CODE408
+    mvmz.translateAI = translate
+    mvmz.getSpeaker = speaker
+    mvmz.CODE122 = True
+    mvmz.CODE408 = True
+    try:
+        page_copy = copy.deepcopy(page)
+        mvmz.searchCodes(page_copy, None, [], "TestMap.json")
+        return page_copy, captured
+    finally:
+        mvmz.translateAI = orig_t
+        mvmz.getSpeaker = orig_s
+        mvmz.CODE122 = orig_122
+        mvmz.CODE408 = orig_408
+
+
+def _find_commands(page, code):
+    return [cmd for cmd in page["list"] if cmd and cmd.get("code") == code]
+
+
+def _has_japanese(s: str) -> bool:
+    return bool(re.search(LANGREGEX, s or ""))
+
+
+class TestMVMZSourceOriginal(unittest.TestCase):
+    def test_first_pass_writes_original(self):
+        page, _ = _run_search_codes(_load_map_excerpt())
+
+        cmds401 = _find_commands(page, 401)
+        with_orig = [c for c in cmds401 if c.get("_original")]
+        self.assertGreater(len(with_orig), 0, "401 dialogue should have _original")
+        for c in with_orig:
+            self.assertTrue(_has_japanese(c["_original"]))
+            self.assertNotEqual(c["parameters"][0], c["_original"])
+
+        c102 = _find_commands(page, 102)[0]
+        self.assertIsInstance(c102.get("_original"), list)
+        self.assertEqual(len(c102["_original"]), len(c102["parameters"][0]))
+        for i, orig in enumerate(c102["_original"]):
+            if orig:
+                self.assertTrue(_has_japanese(orig), f"choice {i} _original should be Japanese")
+                self.assertNotEqual(c102["parameters"][0][i], orig)
+
+        c101 = next(c for c in _find_commands(page, 101) if len(c.get("parameters", [])) > 4)
+        self.assertIn("_original", c101)
+        self.assertIn("アリス", c101["_original"])
+        self.assertIn("\\C[2]", c101["_original"])
+        self.assertIn("Speaker_", c101["parameters"][4])
+
+        c122 = _find_commands(page, 122)[0]
+        self.assertEqual(c122["_original"], "変数テスト")
+        self.assertIn("EN_TRANSLATED", c122["parameters"][4])
+
+    def test_rerun_uses_original_not_display_text(self):
+        page1, captured1 = _run_search_codes(_load_map_excerpt())
+        originals_snapshot = json.dumps(
+            {i: cmd.get("_original") for i, cmd in enumerate(page1["list"]) if cmd},
+            ensure_ascii=False,
+        )
+
+        page2, captured2 = _run_search_codes(page1)
+        originals_after = json.dumps(
+            {i: cmd.get("_original") for i, cmd in enumerate(page2["list"]) if cmd},
+            ensure_ascii=False,
+        )
+        self.assertEqual(originals_snapshot, originals_after, "_original must not change on re-run")
+
+        # Every batch sent to translateAI on re-run should still contain Japanese
+        for payload in captured2:
+            items = payload if isinstance(payload, list) else [payload]
+            for item in items:
+                if not isinstance(item, str):
+                    continue
+                if item == "EN_TRANSLATED":
+                    continue
+                if _has_japanese(item):
+                    continue
+                if re.match(r"^\[.+?\]:\s*EN_TRANSLATED$", item):
+                    continue
+                self.fail(f"Re-run sent non-Japanese to translateAI: {item!r}")
+
+    def test_map002_micro_page_real_data(self):
+        """Translate a tiny slice of Map002 event 17 only (7 commands)."""
+        map2 = json.loads((ROOT / "files" / "Map002.json").read_text(encoding="utf-8-sig"))
+        ev17 = next(e for e in map2["events"] if e and e.get("id") == 17)
+        micro = {"list": copy.deepcopy(ev17["pages"][0]["list"][8:11])}  # 3x401 only
+
+        page, _ = _run_search_codes(micro)
+        c401 = _find_commands(page, 401)
+        self.assertGreaterEqual(len(c401), 1)
+        with_orig = [c for c in c401 if c.get("_original")]
+        self.assertGreaterEqual(len(with_orig), 1)
+        for c in with_orig:
+            self.assertTrue(_has_japanese(c["_original"]))
+
+    def test_speaker_color_line_full_original(self):
+        """Standalone \\C[n]Name\\C[n] speaker 401 lines keep the full string in _original."""
+        page = {
+            "list": [
+                {"code": 401, "indent": 0, "parameters": ["\\C[2]エルーシャ\\C[0]"]},
+                {"code": 401, "indent": 0, "parameters": ["「テストセリフ」"]},
+            ]
+        }
+        page, _ = _run_search_codes(page)
+        speaker_cmd = page["list"][0]
+        self.assertEqual(speaker_cmd.get("_original"), "\\C[2]エルーシャ\\C[0]")
+        self.assertIn("\\C[2]", speaker_cmd["parameters"][0])
+        self.assertIn("Speaker_エルーシャ", speaker_cmd["parameters"][0])
+
+        # Re-run: _original unchanged, getSpeaker still receives Japanese name
+        speakers_seen = []
+
+        def speaker(name):
+            speakers_seen.append(name)
+            return _mock_speaker(name)
+
+        orig_t, orig_s = mvmz.translateAI, mvmz.getSpeaker
+        mvmz.getSpeaker = speaker
+        mvmz.translateAI = lambda text, history, batch=False: _mock_translate(text, history, batch)
+        try:
+            mvmz.searchCodes(page, None, [], "TestMap.json")
+        finally:
+            mvmz.getSpeaker = orig_s
+            mvmz.translateAI = orig_t
+        self.assertEqual(speaker_cmd["_original"], "\\C[2]エルーシャ\\C[0]")
+        self.assertIn("エルーシャ", speakers_seen)
+
+    def test_405_split_rerun_uses_anchor_original_only(self):
+        """English 405 siblings after a split must not pollute re-run source."""
+        page = {
+            "list": [
+                {
+                    "code": 405,
+                    "indent": 0,
+                    "parameters": ["EN_LINE_1"],
+                    "_original": "第一行\n第二行",
+                },
+                {"code": 405, "indent": 0, "parameters": ["EN_LINE_2"]},
+            ]
+        }
+        _, captured = _run_search_codes(page)
+        self.assertGreater(len(captured), 0)
+        payloads = captured if isinstance(captured[0], str) else captured
+        for payload in payloads:
+            if not isinstance(payload, str):
+                continue
+            self.assertIn("第一行", payload)
+            self.assertNotIn("EN_LINE_1", payload)
+            self.assertNotIn("EN_LINE_2", payload)
+
+
+    def test_408_choice_help_original(self):
+        page = {
+            "list": [
+                {"code": 108, "indent": 0, "parameters": ["選択肢ヘルプ"]},
+                {"code": 408, "indent": 0, "parameters": ["これは選択肢のヘルプです。"]},
+            ]
+        }
+        page, captured = _run_search_codes(page)
+        cmd = _find_commands(page, 408)[0]
+        self.assertEqual(cmd.get("_original"), "これは選択肢のヘルプです。")
+        self.assertNotEqual(cmd["parameters"][0], cmd["_original"])
+        self.assertGreater(len(captured), 0)
+
+        page2, captured2 = _run_search_codes(page)
+        self.assertEqual(cmd["_original"], _find_commands(page2, 408)[0]["_original"])
+        for payload in captured2:
+            items = payload if isinstance(payload, list) else [payload]
+            for item in items:
+                if not isinstance(item, str) or item == "EN_TRANSLATED":
+                    continue
+                self.assertTrue(_has_japanese(item), f"408 re-run sent non-Japanese: {item!r}")
+
+
+class TestFixtureMapOriginal(unittest.TestCase):
+    """Full fixture map covering every _original preservation code path."""
+
+    def test_fixture_all_cases_original(self):
+        page, _ = _run_search_codes(_load_fixture_page())
+        marked = _case_commands(page["list"])
+        manifest = _load_fixture_manifest()
+
+        for entry in manifest["cases"]:
+            cid = entry["id"]
+            cmd = _resolve_case_command(page["list"], entry, marked)
+            expected = entry["expected_original"]
+            with self.subTest(case=cid):
+                self.assertIsNotNone(cmd, f"could not resolve fixture case {cid}")
+                self.assertEqual(cmd.get("_original"), expected, entry.get("summary", cid))
+                if isinstance(expected, str):
+                    self.assertTrue(_has_japanese(expected))
+                    if cmd.get("parameters"):
+                        display = cmd["parameters"][0]
+                        if isinstance(display, str):
+                            self.assertNotEqual(display, expected)
+
+    def test_fixture_rerun_preserves_original(self):
+        page1, _ = _run_search_codes(_load_fixture_page())
+        page2, captured2 = _run_search_codes(page1)
+        manifest = _load_fixture_manifest()
+
+        for entry in manifest["cases"]:
+            cid = entry["id"]
+            cmd1 = _resolve_case_command(page1["list"], entry)
+            cmd2 = _resolve_case_command(page2["list"], entry)
+            with self.subTest(case=cid):
+                self.assertIsNotNone(cmd1)
+                self.assertIsNotNone(cmd2)
+                self.assertEqual(cmd1.get("_original"), cmd2.get("_original"))
+
+        for payload in captured2:
+            items = payload if isinstance(payload, list) else [payload]
+            for item in items:
+                if not isinstance(item, str) or item == "EN_TRANSLATED":
+                    continue
+                if _has_japanese(item):
+                    continue
+                if re.match(r"^\[.+?\]:\s*EN_TRANSLATED$", item):
+                    continue
+                self.fail(f"Fixture re-run sent non-Japanese to translateAI: {item!r}")
+
+
+if __name__ == "__main__":
+    unittest.main(verbosity=2)

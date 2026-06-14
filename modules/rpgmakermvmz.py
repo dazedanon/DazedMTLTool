@@ -435,6 +435,150 @@ def saveProgress(data, filename):
         traceback.print_exc()
 
 
+def _scalar_original(cmd) -> str | None:
+    """Return scalar _original on an event command, or None if absent/empty."""
+    orig = cmd.get("_original")
+    if orig is not None and not isinstance(orig, list) and str(orig).strip():
+        return str(orig)
+    return None
+
+
+def _param_source(cmd, index: int) -> str:
+    """Prefer scalar _original; else parameters[index] (401/405 dialogue lines)."""
+    orig = _scalar_original(cmd)
+    if orig is not None:
+        return orig
+    params = cmd.get("parameters") or []
+    if index < len(params) and params[index] is not None:
+        return str(params[index])
+    return ""
+
+
+def _group_source(codeList, start: int, end: int) -> str:
+    """Join source text for a merged 401/405 group (indices start..end inclusive)."""
+    if start < len(codeList):
+        orig = _scalar_original(codeList[start])
+        if orig is not None:
+            return orig
+    parts = []
+    for idx in range(start, end + 1):
+        if idx >= len(codeList):
+            break
+        cmd = codeList[idx]
+        if not cmd or cmd.get("code") not in (401, 405, -1):
+            continue
+        params = cmd.get("parameters") or []
+        if not params:
+            continue
+        src = _param_source(cmd, 0)
+        if src.strip():
+            parts.append(src)
+    return "\n".join(parts)
+
+
+def _group_raw_source(codeList, group_start: int, source_parts: list[str]) -> str:
+    """Batch source for merged 401/405; anchor _original wins on re-run."""
+    if group_start < len(codeList):
+        orig = _scalar_original(codeList[group_start])
+        if orig is not None:
+            return orig
+    return "\n".join(source_parts)
+
+
+def _apply_original(cmd, raw_source: str) -> None:
+    """Set scalar _original only when not already present (re-run safe)."""
+    if not raw_source or not str(raw_source).strip():
+        return
+    if _scalar_original(cmd) is not None:
+        return
+    cmd["_original"] = raw_source
+
+
+def _choice_source(cmd, index: int) -> str:
+    """Prefer _original[index] for code 102 choices; else parameters[0][index]."""
+    orig_list = cmd.get("_original")
+    if isinstance(orig_list, list) and index < len(orig_list):
+        slot = orig_list[index]
+        if slot is not None and str(slot).strip():
+            return str(slot)
+    params = cmd.get("parameters") or [[]]
+    choices = params[0] if params else []
+    if isinstance(choices, list) and index < len(choices) and choices[index] is not None:
+        return str(choices[index])
+    return ""
+
+
+def _apply_choice_original(cmd, index: int, raw_source: str) -> None:
+    """Set _original[index] for code 102 only when that slot is empty."""
+    if not raw_source or not str(raw_source).strip():
+        return
+    params = cmd.get("parameters") or [[]]
+    choices = params[0] if params else []
+    n = len(choices) if isinstance(choices, list) else 0
+    orig_list = cmd.get("_original")
+    if not isinstance(orig_list, list):
+        orig_list = [None] * n
+        cmd["_original"] = orig_list
+    while len(orig_list) < n:
+        orig_list.append(None)
+    if index < len(orig_list):
+        existing = orig_list[index]
+        if existing is not None and str(existing).strip():
+            return
+        orig_list[index] = raw_source
+
+
+def _122_inner_source(cmd) -> str | None:
+    """Inner quoted value for code 122: _original or extract from parameters[4]."""
+    orig = _scalar_original(cmd)
+    if orig is not None:
+        return orig
+    params = cmd.get("parameters") or []
+    if len(params) <= 4:
+        return None
+    jaString = params[4]
+    if not isinstance(jaString, str):
+        return None
+    if len(re.findall(r"([\'\"\`])", jaString)) >= 2:
+        matchedText = re.search(r"[\'\"\`](.*)[\'\"\`]", jaString)
+        if matchedText and matchedText.group(1).strip():
+            return matchedText.group(1)
+    return None
+
+
+def _101_name_source(cmd, is_var: bool) -> str:
+    """Speaker name field for code 101: _original or parameters[4]/[0]."""
+    orig = _scalar_original(cmd)
+    if orig is not None:
+        return orig
+    params = cmd.get("parameters") or []
+    if is_var and len(params) > 0 and params[0] is not None:
+        return str(params[0])
+    if not is_var and len(params) > 4 and params[4] is not None:
+        return str(params[4])
+    return ""
+
+
+_COLOR_SPEAKER_RE = re.compile(
+    r"^[\\]+[cC]\[\d+\]【?(.+?)】?[\\]+[cC]\[\d+\](?:[\\]+[A-Za-z]+(?:\[[^\]]*\])?)*[\\]*$"
+)
+
+
+def _replace_speaker_in_param(param_str: str, source_name: str, translated_name: str) -> str:
+    """Replace a speaker name inside a 401/101 parameter while keeping colour/bracket wrappers."""
+    if not param_str or not translated_name:
+        return param_str
+    m = _COLOR_SPEAKER_RE.match(param_str)
+    if m:
+        return param_str.replace(m.group(1), translated_name, 1)
+    bracket_disp = re.findall(r"【(.+?)】", param_str)
+    if bracket_disp:
+        return param_str.replace(bracket_disp[0], translated_name, 1)
+    if source_name and source_name in param_str:
+        return param_str.replace(source_name, translated_name, 1)
+    return param_str
+
+
 def checkSave(data, filename, tokens):
     """Save progress only if the given tokens reflect an actual translation.
     tokens should be a [input_tokens, output_tokens] pair returned by a search/translate call.
@@ -1799,6 +1943,7 @@ def searchCodes(page, pbar, jobList, filename):
 
             # Declare Varss
             currentGroup = []
+            sourceGroup = []
             nametag = ""
 
             ## Event Code: 401 Show Text
@@ -1806,13 +1951,15 @@ def searchCodes(page, pbar, jobList, filename):
                 # Save Code and starting index (j)
                 code = codeList[i]["code"]
                 j = i
+                groupStart = j
                 endtag = ""
                 instantLineFlag = False
 
                 # Grab String
                 if len(codeList[i]["parameters"]) > 0:
                     jaString = codeList[i]["parameters"][0]
-                    oldjaString = jaString
+                    oldjaString = _param_source(codeList[i], 0)
+                    speakerWork = oldjaString
                 else:
                     codeList[i]["code"] = -1
                     i += 1
@@ -1846,7 +1993,7 @@ def searchCodes(page, pbar, jobList, filename):
                     nametag += ffMatch.group(0)
 
                 # m and z Codes
-                match = re.search(r"(.*?)[\\]+m\[\d+?\][\\]+z\[\d+?\]", jaString)
+                match = re.search(r"(.*?)[\\]+m\[\d+?\][\\]+z\[\d+?\]", speakerWork)
                 if match:
                     speakerList.append(match.group(1))
                     if "\\c" in speakerList[0]:
@@ -1858,7 +2005,7 @@ def searchCodes(page, pbar, jobList, filename):
                 # Brackets (support multiple names like 【A】【B】)
                 if len(speakerList) == 0:
                     # Check for bracket at start with dialogue following (【name】dialogue...)
-                    inlineBracketMatch = re.match(r"^\s*【([^】]+)】(.+)", jaString, re.DOTALL)
+                    inlineBracketMatch = re.match(r"^\s*【([^】]+)】(.+)", speakerWork, re.DOTALL)
                     
                     if inlineBracketMatch:
                         # Inline bracket with dialogue on same line
@@ -1866,14 +2013,14 @@ def searchCodes(page, pbar, jobList, filename):
                     else:
                         # Only consider bracketed names when the line starts with '【' and
                         # ends with either '】' or trailing variable/control codes like \n[2], \FF[\w[3]], etc.
-                        startsWithBracket = re.match(r"^\s*【", jaString) is not None
+                        startsWithBracket = re.match(r"^\s*【", speakerWork) is not None
                         endsWithBracket = re.search(
                             r"(】\s*|(?:[\\]+[A-Za-z]+(?:\[(?:[^\[\]]|\[[^\]]*\])*\])+\s*)$)",
-                            jaString,
+                            speakerWork,
                         ) is not None
 
                         if startsWithBracket and endsWithBracket:
-                            candidates = re.findall(r"【(.*?)】", jaString)
+                            candidates = re.findall(r"【(.*?)】", speakerWork)
                             if candidates:
                                 candidates = [c.strip() for c in candidates]
                                 if candidates:
@@ -1883,19 +2030,19 @@ def searchCodes(page, pbar, jobList, filename):
                 if len(speakerList) == 0:
                     speakerList = re.findall(
                         r"^[\\]+[cC]\[\d+\]【?(.+?)】?[\\]+[cC]\[\d+\](?:[\\]+[A-Za-z]+(?:\[[^\]]*\])?)*[\\]*$",
-                        jaString,
+                        speakerWork,
                     )
 
                 # Colons
                 if len(speakerList) == 0:
                     speakerList = re.findall(
                         r"(.+)：$",
-                        jaString,
+                        speakerWork,
                     )
 
                 # [Speaker] standalone line format (written back by inline re-export)
                 if len(speakerList) == 0:
-                    inlineFmtMatch = re.match(r"^\[([^\[\]\n]+)\]\s*$", jaString)
+                    inlineFmtMatch = re.match(r"^\[([^\[\]\n]+)\]\s*$", speakerWork)
                     if inlineFmtMatch:
                         speakerList = [inlineFmtMatch.group(1).strip()]
 
@@ -1903,7 +2050,7 @@ def searchCodes(page, pbar, jobList, filename):
                 if len(speakerList) == 0 and INLINE401SPEAKERS:
                     inlineSpeakerMatch = re.match(
                         r'^(?:\[([^\]]{1,30})\]\s*|([^\s「」。、！？…\\\n“”"(:\[\]]{1,20})(?:[::：]?\s*)(?=[「“"(]))(.*)',
-                        jaString, re.DOTALL
+                        speakerWork, re.DOTALL
                     )
                     if inlineSpeakerMatch:
                         speakerList = [(inlineSpeakerMatch.group(1) or inlineSpeakerMatch.group(2)).strip()]
@@ -1914,7 +2061,7 @@ def searchCodes(page, pbar, jobList, filename):
                 if len(speakerList) == 0 and FIRSTLINESPEAKERS is True:
                     # Test Speaker
                     if (
-                        len(jaString) < 40
+                        len(speakerWork) < 40
                         and "code" in codeList[i + 1]
                         and codeList[i + 1]["code"] in [401, 405, -1]
                         and len(codeList[i + 1]["parameters"]) > 0
@@ -1941,12 +2088,12 @@ def searchCodes(page, pbar, jobList, filename):
                             "*",
                             "[",
                         ]:
-                            speakerList = re.findall(r".+", jaString)
+                            speakerList = re.findall(r".+", speakerWork)
 
                 # Replace Speaker
                 if len(speakerList) != 0:
                     # Check if speaker+dialogue are on same line
-                    sameLineMatch = re.match(r"^\s*【([^】]+)】(.+)", jaString, re.DOTALL)
+                    sameLineMatch = re.match(r"^\s*【([^】]+)】(.+)", speakerWork, re.DOTALL)
                     if inlineSpeakerMatch and len(speakerList) == 1:
                         # Strip speaker prefix, keep everything after as dialogue
                         response = getSpeaker(speakerList[0])
@@ -1995,8 +2142,13 @@ def searchCodes(page, pbar, jobList, filename):
                         # Set Data
                         if not setData and len(speakerList) > 1:
                             codeList[i]["parameters"][0] = nametag + jaStringUpdated
+                            _apply_original(codeList[i], oldjaString)
                         elif not setData and len(speakerList) == 1:
-                            codeList[i]["parameters"][0] = nametag + jaString.replace(speakerList[0], speaker)
+                            paramStr = codeList[i]["parameters"][0]
+                            codeList[i]["parameters"][0] = nametag + _replace_speaker_in_param(
+                                paramStr, speakerList[0], speaker
+                            )
+                            _apply_original(codeList[i], oldjaString)
                         nametag = ""
 
                         # Iterate to next string
@@ -2006,14 +2158,12 @@ def searchCodes(page, pbar, jobList, filename):
                             i += 1
                             j = i
                         jaString = codeList[i]["parameters"][0]
+                        groupStart = i
 
-                # Validate Japanese Text
-                if not re.search(LANGREGEX, jaString) and IGNORETLTEXT:
-                    i += 1
-                    continue
-
-                # Using this to keep track of 401's in a row.
+                # Using this to keep track of 401's in a row (display text for Pass 2 formatting).
                 currentGroup.append(jaString)
+                anchor_has_orig = _scalar_original(codeList[groupStart]) is not None
+                sourceGroup.append(_param_source(codeList[i], 0))
 
                 # Join Up 401's into single string
                 if len(codeList) > i + 1:
@@ -2027,6 +2177,8 @@ def searchCodes(page, pbar, jobList, filename):
                         jaString = codeList[i]["parameters"][0]
                         if jaString.strip():
                             currentGroup.append(jaString)
+                            if not anchor_has_orig:
+                                sourceGroup.append(_param_source(codeList[i], 0))
 
                         # Make sure not the end of the list.
                         if len(codeList) <= i + 1:
@@ -2034,8 +2186,16 @@ def searchCodes(page, pbar, jobList, filename):
 
                 # Format String
                 if len(currentGroup) > 0:
-                    finalJAString = "\n".join(currentGroup)
-                    oldjaString = finalJAString
+                    rawSource = _group_raw_source(codeList, groupStart, sourceGroup)
+                    if not rawSource.strip():
+                        i += 1
+                        continue
+                    if not re.search(LANGREGEX, rawSource) and IGNORETLTEXT:
+                        i += 1
+                        continue
+
+                    finalJAString = rawSource
+                    oldjaString = rawSource
 
                     # Set Back
                     if not setData:
@@ -2137,6 +2297,7 @@ def searchCodes(page, pbar, jobList, filename):
                         match = []
                         nametag = ""
                         currentGroup = []
+                        sourceGroup = []
                         syncIndex = i + 1
 
                         # Keep textHistory list at length maxHistory
@@ -2148,6 +2309,7 @@ def searchCodes(page, pbar, jobList, filename):
                     else:
                         # Grab Translated String
                         if len(list401) > 0:
+                            rawSource = _group_raw_source(codeList, groupStart, sourceGroup)
                             translatedText = list401[0]
 
                             # Remove speaker prefix if present
@@ -2235,10 +2397,13 @@ def searchCodes(page, pbar, jobList, filename):
                                 codeList[j]["code"] = code
                                 syncIndex = i + 1
 
+                            _apply_original(codeList[j], rawSource)
+
                             # Reset
                             speaker = ""
                             match = []
                             currentGroup = []
+                            sourceGroup = []
                             list401.pop(0)
 
             ## Event Code: 122 [Set Variables]
@@ -2277,48 +2442,49 @@ def searchCodes(page, pbar, jobList, filename):
                 #     continue
 
                 # Set String
-                matchedText = None
-                if len(re.findall(r"([\'\"\`])", jaString)) >= 2:
-                    matchedText = re.search(r"[\'\"\`](.*)[\'\"\`]", jaString)
-                    if matchedText and matchedText.group(1).strip():
-                        # Skip if IGNORETLTEXT is enabled and no Japanese text
-                        if IGNORETLTEXT and not re.search(LANGREGEX, matchedText.group(1)):
-                            i += 1
-                            continue
+                innerSource = _122_inner_source(codeList[i])
+                if innerSource is not None and innerSource.strip():
+                    # Skip if IGNORETLTEXT is enabled and no Japanese text
+                    if IGNORETLTEXT and not re.search(LANGREGEX, innerSource):
+                        i += 1
+                        continue
 
-                        # Remove Textwrap
-                        finalJAString = matchedText.group(1).replace("\\n", " ")
+                    # Remove Textwrap
+                    finalJAString = innerSource.replace("\\n", " ")
 
-                        # Pass 1
-                        if setData:
-                            if finalJAString != "":
-                                list122.append(finalJAString)
+                    # Pass 1
+                    if setData:
+                        if finalJAString != "":
+                            list122.append(finalJAString)
 
-                        # Pass 2
-                        else:
-                            if len(list122) > 0:
-                                # Grab and Replace
-                                translatedText = list122[0]
-                                translatedText = jaString.replace(jaString, translatedText)
+                    # Pass 2
+                    else:
+                        if len(list122) > 0:
+                            rawInner = innerSource
+                            hadSemicolon = ';' in jaString
+                            # Grab and Replace
+                            translatedText = list122[0]
+                            translatedText = jaString.replace(jaString, translatedText)
 
-                                # Remove characters that may break scripts
-                                charList = ['"', "\\n"]
-                                for char in charList:
-                                    translatedText = translatedText.replace(char, "")
+                            # Remove characters that may break scripts
+                            charList = ['"', "\\n"]
+                            for char in charList:
+                                translatedText = translatedText.replace(char, "")
 
-                                # Force 4 Escapes
-                                translatedText = re.sub(r'(?<![\\])([\\]{1})(?=\w)', r'\\\\', translatedText)
+                            # Force 4 Escapes
+                            translatedText = re.sub(r'(?<![\\])([\\]{1})(?=\w)', r'\\\\', translatedText)
 
-                                # Textwrap
-                                translatedText = dazedwrap.wrapText(translatedText, width=LISTWIDTH)
-                                translatedText = translatedText.replace("\n", "\\n")
+                            # Textwrap
+                            translatedText = dazedwrap.wrapText(translatedText, width=LISTWIDTH)
+                            translatedText = translatedText.replace("\n", "\\n")
 
-                                # Set
-                                codeList[i]["parameters"][4] = f"`{translatedText}`"
-                                if ';' in jaString:
-                                    codeList[i]["parameters"][4] += ';'
+                            # Set
+                            codeList[i]["parameters"][4] = f"`{translatedText}`"
+                            if hadSemicolon:
+                                codeList[i]["parameters"][4] += ';'
 
-                                list122.pop(0)
+                            _apply_original(codeList[i], rawInner)
+                            list122.pop(0)
 
             ## Event Code: 357 [Picture Text] [Optional]
             if "code" in codeList[i] and codeList[i]["code"] == 357 and CODE357 is True:
@@ -2714,25 +2880,26 @@ def searchCodes(page, pbar, jobList, filename):
                     continue
 
                 # Get Speaker
-                match = re.search(r"^(?:[\\]+[cC]\[\d+?\])?([^\\]+)", jaString)
+                rawName = _101_name_source(codeList[i], isVar)
+                match = re.search(r"^(?:[\\]+[cC]\[\d+?\])?([^\\]+)", rawName)
                 if match:
-                    jaString = match.group(1)
-                    response = getSpeaker(jaString)
+                    sourceName = match.group(1)
+                    response = getSpeaker(sourceName)
                     totalTokens[0] += response[1][0]
                     totalTokens[1] += response[1][1]
                     speaker = response[0]
 
                     # Validate Speaker is not empty
                     if len(speaker) > 0:
-                        if isVar == False:
-                            codeList[i]["parameters"][4] = codeList[i]["parameters"][4].replace(jaString, speaker)
-                            i += 1
-                            continue
-                        else:
-                            codeList[i]["parameters"][0] = codeList[i]["parameters"][0].replace(jaString, speaker)
-                            isVar = False
-                            i += 1
-                            continue
+                        paramIdx = 0 if isVar else 4
+                        paramStr = codeList[i]["parameters"][paramIdx]
+                        codeList[i]["parameters"][paramIdx] = _replace_speaker_in_param(
+                            paramStr, sourceName, speaker
+                        )
+                        _apply_original(codeList[i], rawName)
+                        isVar = False
+                        i += 1
+                        continue
                     else:
                         speaker = ""
 
@@ -3155,52 +3322,72 @@ def searchCodes(page, pbar, jobList, filename):
                         i += 1
                         continue
 
-                jaString = codeList[i]["parameters"][0]
-                match = re.search(r"(.+)", jaString)
-                if match:
-                    # Skip if IGNORETLTEXT is enabled and no Japanese text
-                    if IGNORETLTEXT and not re.search(LANGREGEX, jaString):
+                if not codeList[i].get("parameters"):
+                    i += 1
+                    continue
+
+                groupStart408 = i
+                j = i
+                source408Parts = []
+                rawSource = _param_source(codeList[i], 0)
+                ojaString = rawSource
+                anchor408HasOrig = _scalar_original(codeList[groupStart408]) is not None
+                source408Parts.append(rawSource)
+
+                if not rawSource.strip():
+                    i += 1
+                    continue
+
+                # Skip if IGNORETLTEXT is enabled and no Japanese text
+                if IGNORETLTEXT and not re.search(LANGREGEX, rawSource):
+                    i += 1
+                    continue
+
+                # Join Up 408's into single string
+                if len(codeList) > i + 1 and JOIN408 is True:
+                    while codeList[i + 1]["code"] in [408] and len(codeList[i]["parameters"]) > 0 and len(codeList[i + 1]["parameters"]) > 0 and not re.match(r"^(\s*[\\]+[aAbBdDeEfFgGhHjJlLmMoOpPqQrRsStTuUwWxXyYzZ]+\[[\w\d\[\]\\]+\])", codeList[i+1]["parameters"][0]):
+                        if not setData:
+                            codeList[i]["parameters"] = []
+                            codeList[i]["code"] = -1
                         i += 1
-                        continue
+                        j = i
 
-                    # Remove Textwrap
-                    jaString = codeList[i]["parameters"][0]
-                    ojaString = jaString
-                    jaString = jaString.replace("\n", " ")
+                        lineSource = _param_source(codeList[i], 0)
+                        if lineSource.strip() and not anchor408HasOrig:
+                            source408Parts.append(lineSource)
 
-                    # Join Up 408's into single string
-                    if len(codeList) > i + 1 and JOIN408 is True:
-                        while codeList[i + 1]["code"] in [408] and len(codeList[i]["parameters"]) > 0 and len(codeList[i + 1]["parameters"]) > 0 and not re.match(r"^(\s*[\\]+[aAbBdDeEfFgGhHjJlLmMoOpPqQrRsStTuUwWxXyYzZ]+\[[\w\d\[\]\\]+\])", codeList[i+1]["parameters"][0]):
-                            if not setData:
-                                codeList[i]["parameters"] = []
-                                codeList[i]["code"] = -1
-                            i += 1
-                            j = i
+                        if len(codeList) <= i + 1:
+                            break
 
-                            jaString = codeList[i]["parameters"][0]
-                            if jaString.strip():
-                                currentGroup.append(jaString)
+                rawSource = _group_raw_source(codeList, groupStart408, source408Parts)
+                ojaString = rawSource
+                jaString = rawSource.replace("\n", " ")
 
-                            # Make sure not the end of the list.
-                            if len(codeList) <= i + 1:
-                                break
+                # Pass 1
+                if setData:
+                    list408.append(jaString)
 
-                    # Pass 1
-                    if setData:
-                        # Remove Textwrap
-                        jaString = jaString.replace("\n", " ")
-                        list408.append(jaString)
-                    
-                    # Pass 2
-                    else:
+                # Pass 2
+                else:
+                    if len(list408) > 0:
                         translatedText = list408[0]
                         list408.pop(0)
 
-                        # Textwrap
-                        # translatedText = dazedwrap.wrapText(translatedText, width=WIDTH)
+                        merged408 = len(source408Parts) > 1
+                        if merged408:
+                            codeList[i]["parameters"] = [translatedText]
+                        else:
+                            param0 = codeList[i]["parameters"][0]
+                            if ojaString in param0:
+                                codeList[i]["parameters"][0] = param0.replace(ojaString, translatedText)
+                            else:
+                                flatSource = ojaString.replace("\n", " ")
+                                if flatSource in param0:
+                                    codeList[i]["parameters"][0] = param0.replace(flatSource, translatedText)
+                                else:
+                                    codeList[i]["parameters"][0] = translatedText
 
-                        # Set Data
-                        codeList[i]["parameters"][0] = codeList[i]["parameters"][0].replace(ojaString, translatedText)
+                        _apply_original(codeList[i], rawSource)
 
             ## Event Code: 108 (Script)
             if "code" in codeList[i] and (codeList[i]["code"] == 108) and CODE108 is True:
@@ -3484,18 +3671,19 @@ def searchCodes(page, pbar, jobList, filename):
                 choiceList = []
                 varList = []
                 choiceIndexMap = []  # Track which original indices we're processing
+                choiceSourceList = []
                 
                 # Process each string in the parameters list
                 for choice in range(len(codeList[i]["parameters"][0])):
-                    jaString = codeList[i]["parameters"][0][choice]
-                    jaString = jaString.replace(" 。", ".")
+                    rawSource = _choice_source(codeList[i], choice)
+                    jaString = rawSource.replace(" 。", ".")
 
                     # Avoid Empty Strings
                     if not jaString.strip():
                         continue
 
                     # Skip if IGNORETLTEXT is enabled and no Japanese text
-                    if IGNORETLTEXT and not re.search(LANGREGEX, jaString):
+                    if IGNORETLTEXT and not re.search(LANGREGEX, rawSource):
                         continue
 
                     # If and En Statements
@@ -3510,6 +3698,7 @@ def searchCodes(page, pbar, jobList, filename):
                     varList.append(ifVar)
                     choiceList.append(jaString)
                     choiceIndexMap.append(choice)
+                    choiceSourceList.append(rawSource)
 
                 # Translate the list
                 if len(choiceList) > 0:
@@ -3539,6 +3728,7 @@ def searchCodes(page, pbar, jobList, filename):
                             
                             # Set the translation back to the original position
                             codeList[i]["parameters"][0][originalIndex] = translatedText
+                            _apply_choice_original(codeList[i], originalIndex, choiceSourceList[idx])
                     else:
                         if filename not in MISMATCH:
                             MISMATCH.append(filename)
