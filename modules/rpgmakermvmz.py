@@ -2385,6 +2385,7 @@ def searchCodes(page, pbar, jobList, filename):
                                 # 3. Make copies for each additional line and insert them
                                 for idx, line in enumerate(lines[1:]):
                                     new_item = copy.deepcopy(codeList[j])
+                                    new_item.pop("_original", None)
                                     new_item["parameters"] = [line]
                                     codeList.insert(j + idx + 1, new_item)
                                 
