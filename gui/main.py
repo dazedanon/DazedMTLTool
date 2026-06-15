@@ -132,6 +132,9 @@ class UpdateThread(QThread):
     PROTECTED = {".env", "venv", "log", "files", "translated",
                  "vocab.txt", "last_update_sha.txt"}
 
+    # GitLab zip archives do not preserve Unix execute bits; restore after apply.
+    EXECUTABLE_SUFFIXES = {".sh"}
+
     progress  = pyqtSignal(str)           # status message
     finished  = pyqtSignal(bool, str)     # (success, message)
 
@@ -214,6 +217,9 @@ class UpdateThread(QThread):
                 else:
                     dst.parent.mkdir(parents=True, exist_ok=True)
                     shutil.copy2(src, dst)
+                    if dst.suffix in self.EXECUTABLE_SUFFIXES:
+                        mode = dst.stat().st_mode | 0o111
+                        dst.chmod(mode)
 
         Path(self.SHA_FILE).write_text(latest_sha)
         try:
