@@ -44,7 +44,15 @@ Do **not** use `pytest` unless you install it yourself — this project uses the
 
 If you see `ModuleNotFoundError: No module named 'colorama'` (or similar), activate the venv or use `./tests/run_tests.sh` instead of system `python3`.
 
-Tests mock `translateAI` / `getSpeaker` — no API key required. Enable `CODE122` for the duration of the run.
+Tests mock `translateAI` / `getSpeaker` — no API key required.
+
+### Optional `_original` config (in `modules/rpgmakermvmz.py`)
+
+| Flag | Scope | Default |
+|------|-------|---------|
+| `PRESERVEORIGINAL` | Map/event commands and database JSON | `True` |
+
+Set to `False` to skip writing `_original`. Existing `_original` keys are still read on re-run.
 
 ## Database `_original` fixtures
 

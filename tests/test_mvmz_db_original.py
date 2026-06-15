@@ -37,7 +37,7 @@ def _has_japanese(s: str) -> bool:
     return bool(re.search(LANGREGEX, s or ""))
 
 
-def _run_search_names(data, context, filename):
+def _run_search_names(data, context, filename, *, preserve_original=True):
     captured = []
 
     def translate(text, history, batch=False):
@@ -46,8 +46,10 @@ def _run_search_names(data, context, filename):
 
     orig_t = mvmz.translateAI
     orig_vocab = mvmz.update_vocab_section
+    orig_preserve = mvmz.PRESERVEORIGINAL
     mvmz.translateAI = translate
     mvmz.update_vocab_section = lambda *args, **kwargs: None
+    mvmz.PRESERVEORIGINAL = preserve_original
     try:
         data_copy = copy.deepcopy(data)
         mvmz.searchNames(data_copy, None, context, filename)
@@ -55,6 +57,7 @@ def _run_search_names(data, context, filename):
     finally:
         mvmz.translateAI = orig_t
         mvmz.update_vocab_section = orig_vocab
+        mvmz.PRESERVEORIGINAL = orig_preserve
 
 
 def _run_search_ss(state):
@@ -65,13 +68,16 @@ def _run_search_ss(state):
         return _mock_translate(text, history, batch)
 
     orig_t = mvmz.translateAI
+    orig_preserve = mvmz.PRESERVEORIGINAL
     mvmz.translateAI = translate
+    mvmz.PRESERVEORIGINAL = True
     try:
         state_copy = copy.deepcopy(state)
         mvmz.searchSS(state_copy, None)
         return state_copy, captured
     finally:
         mvmz.translateAI = orig_t
+        mvmz.PRESERVEORIGINAL = orig_preserve
 
 
 def _run_search_system(data):
@@ -82,13 +88,16 @@ def _run_search_system(data):
         return _mock_translate(text, history, batch)
 
     orig_t = mvmz.translateAI
+    orig_preserve = mvmz.PRESERVEORIGINAL
     mvmz.translateAI = translate
+    mvmz.PRESERVEORIGINAL = True
     try:
         data_copy = copy.deepcopy(data)
         mvmz.searchSystem(data_copy, None)
         return data_copy, captured
     finally:
         mvmz.translateAI = orig_t
+        mvmz.PRESERVEORIGINAL = orig_preserve
 
 
 def _assert_batches_japanese(captured):
@@ -199,6 +208,14 @@ class TestSystemOriginal(unittest.TestCase):
         result2, captured2 = _run_search_system(result1)
         self.assertEqual(result2["_original"], orig_snapshot)
         _assert_batches_japanese(captured2)
+
+
+class TestPreserveOriginalDisabled(unittest.TestCase):
+    def test_db_preserve_disabled_skips_original(self):
+        data = json.loads((FIXTURES / "Items_original_fixture.json").read_text(encoding="utf-8"))
+        result, _ = _run_search_names(data, "Items", "Items.json", preserve_original=False)
+        entry = result[MANIFEST["items"]["entry_index"]]
+        self.assertNotIn("_original", entry)
 
 
 if __name__ == "__main__":

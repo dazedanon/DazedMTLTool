@@ -130,6 +130,8 @@ BRFLAG = False
 FIXTEXTWRAP = True
 # IGNORETLTEXT: Skip Translated Text.
 IGNORETLTEXT = False
+# PRESERVEORIGINAL: Store Japanese source in _original fields (maps + database) for re-run safety.
+PRESERVEORIGINAL = False
 # TLSYSTEMVARIABLES: Translate System Variables. (Optional but sometimes necessary. Can break stuff.)
 TLSYSTEMVARIABLES = False
 # TLSYSTEMSWITCHES: Translate System Switches. (Optional. Translates switch names in System.json.)
@@ -487,6 +489,8 @@ def _group_raw_source(codeList, group_start: int, source_parts: list[str]) -> st
 
 def _apply_original(cmd, raw_source: str) -> None:
     """Set scalar _original only when not already present (re-run safe)."""
+    if not PRESERVEORIGINAL:
+        return
     if not raw_source or not str(raw_source).strip():
         return
     if _scalar_original(cmd) is not None:
@@ -510,6 +514,8 @@ def _choice_source(cmd, index: int) -> str:
 
 def _apply_choice_original(cmd, index: int, raw_source: str) -> None:
     """Set _original[index] for code 102 only when that slot is empty."""
+    if not PRESERVEORIGINAL:
+        return
     if not raw_source or not str(raw_source).strip():
         return
     params = cmd.get("parameters") or [[]]
@@ -581,6 +587,8 @@ def _entry_field_source(entry, field: str) -> str:
 
 def _apply_entry_field_original(entry, field: str, raw: str) -> None:
     """Set _original[field] only when empty and raw contains Japanese."""
+    if not PRESERVEORIGINAL:
+        return
     if not isinstance(entry, dict) or not raw or not str(raw).strip():
         return
     if not re.search(LANGREGEX, raw):
@@ -622,6 +630,8 @@ def _system_scalar_source(data, field: str) -> str:
 
 def _apply_system_scalar_original(data, field: str, raw: str) -> None:
     """Set root _original[field] only when empty and raw contains Japanese."""
+    if not PRESERVEORIGINAL:
+        return
     if not raw or not str(raw).strip() or not re.search(LANGREGEX, raw):
         return
     orig = _system_orig(data)
@@ -650,6 +660,8 @@ def _system_list_source(data, list_name: str, index: int) -> str:
 
 def _apply_system_list_original(data, list_name: str, index: int, raw: str) -> None:
     """Set _original[list_name][str(index)] only when empty and raw contains Japanese."""
+    if not PRESERVEORIGINAL:
+        return
     if not raw or not str(raw).strip() or not re.search(LANGREGEX, raw):
         return
     orig = _system_orig(data)
@@ -685,6 +697,8 @@ def _system_terms_source(data, category: str, index: int) -> str:
 
 def _apply_system_terms_original(data, category: str, index: int, raw: str) -> None:
     """Set _original.terms[category][str(index)] only when empty and raw contains Japanese."""
+    if not PRESERVEORIGINAL:
+        return
     if not raw or not str(raw).strip() or not re.search(LANGREGEX, raw):
         return
     orig = _system_orig(data)
@@ -725,6 +739,8 @@ def _system_terms_message_source(data, key: str) -> str:
 
 def _apply_system_terms_message_original(data, key: str, raw: str) -> None:
     """Set _original.terms.messages[key] only when empty and raw contains Japanese."""
+    if not PRESERVEORIGINAL:
+        return
     if not raw or not str(raw).strip() or not re.search(LANGREGEX, raw):
         return
     orig = _system_orig(data)

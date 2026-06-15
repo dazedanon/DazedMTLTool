@@ -123,7 +123,7 @@ def _resolve_case_command(page_list, entry, marked_cases=None):
     return cmd
 
 
-def _run_search_codes(page):
+def _run_search_codes(page, *, preserve_original=True):
     """Full Pass 1 -> mock translate -> Pass 2 cycle."""
     captured = []
 
@@ -138,10 +138,20 @@ def _run_search_codes(page):
     orig_s = mvmz.getSpeaker
     orig_122 = mvmz.CODE122
     orig_408 = mvmz.CODE408
+    orig_101 = mvmz.CODE101
+    orig_401 = mvmz.CODE401
+    orig_405 = mvmz.CODE405
+    orig_102 = mvmz.CODE102
+    orig_preserve = mvmz.PRESERVEORIGINAL
     mvmz.translateAI = translate
     mvmz.getSpeaker = speaker
     mvmz.CODE122 = True
     mvmz.CODE408 = True
+    mvmz.CODE101 = True
+    mvmz.CODE401 = True
+    mvmz.CODE405 = True
+    mvmz.CODE102 = True
+    mvmz.PRESERVEORIGINAL = preserve_original
     try:
         page_copy = copy.deepcopy(page)
         mvmz.searchCodes(page_copy, None, [], "TestMap.json")
@@ -151,6 +161,11 @@ def _run_search_codes(page):
         mvmz.getSpeaker = orig_s
         mvmz.CODE122 = orig_122
         mvmz.CODE408 = orig_408
+        mvmz.CODE101 = orig_101
+        mvmz.CODE401 = orig_401
+        mvmz.CODE405 = orig_405
+        mvmz.CODE102 = orig_102
+        mvmz.PRESERVEORIGINAL = orig_preserve
 
 
 def _find_commands(page, code):
@@ -254,13 +269,16 @@ class TestMVMZSourceOriginal(unittest.TestCase):
             return _mock_speaker(name)
 
         orig_t, orig_s = mvmz.translateAI, mvmz.getSpeaker
+        orig_401 = mvmz.CODE401
         mvmz.getSpeaker = speaker
+        mvmz.CODE401 = True
         mvmz.translateAI = lambda text, history, batch=False: _mock_translate(text, history, batch)
         try:
             mvmz.searchCodes(page, None, [], "TestMap.json")
         finally:
             mvmz.getSpeaker = orig_s
             mvmz.translateAI = orig_t
+            mvmz.CODE401 = orig_401
         self.assertEqual(speaker_cmd["_original"], "\\C[2]エルーシャ\\C[0]")
         self.assertIn("エルーシャ", speakers_seen)
 
@@ -357,6 +375,16 @@ class TestFixtureMapOriginal(unittest.TestCase):
                 if re.match(r"^\[.+?\]:\s*EN_TRANSLATED$", item):
                     continue
                 self.fail(f"Fixture re-run sent non-Japanese to translateAI: {item!r}")
+
+    def test_preserve_original_codes_disabled(self):
+        """PRESERVEORIGINAL=False must not write _original on map commands."""
+        page = {
+            "list": [
+                {"code": 401, "indent": 0, "parameters": ["こんにちは"]},
+            ]
+        }
+        page, _ = _run_search_codes(page, preserve_original=False)
+        self.assertNotIn("_original", page["list"][0])
 
 
 if __name__ == "__main__":

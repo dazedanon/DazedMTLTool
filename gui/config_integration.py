@@ -110,7 +110,7 @@ class ConfigIntegration:
             # Find configuration lines used by the RPG Maker config UI.
             bool_pattern = (
                 r'^(FIRSTLINESPEAKERS|INLINE401SPEAKERS|FACENAME101|NAMES|'
-                r'BRFLAG|FIXTEXTWRAP|IGNORETLTEXT|TLSYSTEMVARIABLES|'
+                r'BRFLAG|FIXTEXTWRAP|IGNORETLTEXT|PRESERVEORIGINAL|TLSYSTEMVARIABLES|'
                 r'TLSYSTEMSWITCHES|JOIN408|SPEAKERS408|CODE\d+)\s*=\s*(True|False)'
             )
             int_pattern = r'^(CODE122_VAR_MIN|CODE122_VAR_MAX)\s*=\s*(\d+)'
