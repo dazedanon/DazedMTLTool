@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=DazedMTLTool
+GenericName=Translation Tool
+Comment=AI translation tool for visual novels and RPG games
+Exec=bash -c 'exec "$(cd "$(dirname "%k")" && pwd)/scripts/launch.sh"'
+Icon=%k/assets/icon.png
+Terminal=false
+Categories=Development;Utility;
+StartupWMClass=DazedMTLTool

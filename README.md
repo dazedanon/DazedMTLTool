@@ -124,12 +124,11 @@ This means Python wasn't added to your PATH. You have two options:
 
 ### 3. Launch the GUI
 
-**Double-click `START.bat`**. It will:
-- Create a virtual environment automatically.
-- Install all dependencies.
-- Launch the GUI.
+**Windows:** Double-click `START.bat`. It will create a virtual environment, install dependencies, and open the GUI.
 
-That's it! From now on, just double-click `START.bat` to open the tool.
+**Linux/macOS:** Run `./START.sh`, or double-click `DazedMTLTool.desktop` (choose **Allow Launching** when your file manager asks). From then on, either method works.
+
+That's it! Use the same launcher each time you want to open the tool.
 
 ---
 
@@ -160,10 +159,10 @@ Specialized tabs with extra options for those specific engines.
 
 ## Vocab & Prompt
 
-### vocab.txt
+### data/vocab.txt
 This file gives the AI context about your game — character names, genders, recurring terms, etc. The better your vocab file, the more consistent the translation.
 
-Open `vocab.txt` (or copy `vocab.txt.example` to `vocab.txt` if it doesn't exist) and add entries like:
+On first run, `data/vocab.txt` is created automatically from `data/vocab_base.txt` if it does not exist yet. Add entries like:
 
 ```plaintext
 # Game Characters
@@ -176,14 +175,14 @@ Format: Japanese name, English name in parentheses, then gender.
 
 > **Note:** A very large vocab file can increase API costs and potentially reduce quality. Focus on the most important characters and terms.
 
-### prompt.txt
-This is the system prompt sent to the AI. A default `prompt.txt` is included and works well for most games. You generally don't need to edit it unless you want to customize the translation style.
+### data/prompt.txt
+This is the system prompt sent to the AI. A default `data/prompt.txt` is included and works well for most games. You generally don't need to edit it unless you want to customize the translation style.
 
 ---
 
 ## Tips
 
-- **Check `log/translations.txt`** after a run to see what was translated. You can copy useful terms from it into `vocab.txt` for consistency in future runs.
+- **Check `log/translations.txt`** after a run to see what was translated. You can copy useful terms from it into `data/vocab.txt` for consistency in future runs.
 - **Start small** — Translate a few files first to make sure the output looks good before doing the whole game.
 - **Wordwrap** — If text overflows or looks awkward in-game, adjust the `width` setting in `.env` or the Config tab. `60` is a good default for most RPG Maker games.
 - **Version control** — Using [Git](https://git-scm.com/) with the game folder is highly recommended. It lets you track every change the translation makes, compare with original files, and roll back if needed.
@@ -300,8 +299,8 @@ Here's the recommended step-by-step process for translating an RPG Maker MV/MZ g
 
 | Step | Action |
 |------|--------|
-| **1** | **Parse speakers → vocab.txt** — Use the Parse Speakers feature to pull character names from the game files into `vocab.txt`. |
-| **2** | **Identify speaker genders** — Figure out which characters are male/female and update `vocab.txt` accordingly. This helps the AI use correct pronouns. |
+| **1** | **Parse speakers → vocab** — Use the Parse Speakers feature to pull character names from the game files into `data/vocab.txt`. |
+| **2** | **Identify speaker genders** — Figure out which characters are male/female and update `data/vocab.txt` accordingly. This helps the AI use correct pronouns. |
 | **3** | **Translate Actors.json, MapInfos.json** — These are small files with character and map names. Good to do first. |
 | **4** | **Translate Items, System, Weapons, etc.** — All the data files that aren't maps or events. Place them in `files/`, translate, then copy results back. |
 | **5** | **Find speaker names** — Enable CODE 101 (Speakers), check for bracketed names, or use the "First Line = Speaker" option to capture speaker names properly. |

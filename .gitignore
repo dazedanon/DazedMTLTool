@@ -18,8 +18,8 @@ __pycache__
 
 !assets/*.png
 !.pre-commit-config.yaml
-!prompt.txt
-!vocab_base.txt
+!data/prompt.txt
+!data/vocab_base.txt
 !requirements.txt
 !util/tl_inspector/TLInspector.js
 !util/forge/Forge_MZ.js

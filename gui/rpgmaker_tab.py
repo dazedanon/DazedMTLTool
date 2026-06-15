@@ -19,8 +19,7 @@ except ImportError:
     ConfigIntegration = None
 try:
     # Prefer importing the project's canonical defaults if available
-    import set_defaults
-    CANONICAL_DEFAULTS = getattr(set_defaults, 'DEFAULTS', None)
+    from util.defaults import DEFAULTS as CANONICAL_DEFAULTS
 except Exception:
     CANONICAL_DEFAULTS = None
 

@@ -19,8 +19,10 @@ import tempfile
 MODEL = os.getenv("model")
 TIMEOUT = int(os.getenv("timeout"))
 LANGUAGE = os.getenv("language").capitalize()
-PROMPT = Path("prompt.txt").read_text(encoding="utf-8")
-VOCAB = Path("vocab.txt").read_text(encoding="utf-8")
+from util.paths import PROMPT_PATH, VOCAB_PATH
+
+PROMPT = PROMPT_PATH.read_text(encoding="utf-8")
+VOCAB = VOCAB_PATH.read_text(encoding="utf-8")
 LOCK = threading.Lock()
 WIDTH = int(os.getenv("width"))
 LISTWIDTH = int(os.getenv("listWidth"))

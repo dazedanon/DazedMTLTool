@@ -11,6 +11,10 @@ from dotenv import load_dotenv
 # This needs to be before the module imports as some of them currently try to read and use some of these values
 # upon import, in which case if they are unset the script will crash before we can output these messages.
 load_dotenv()
+from util.paths import migrate_root_data_files, ensure_vocab_file
+
+migrate_root_data_files()
+ensure_vocab_file()
 _missing_envs = [
     env for env in [
         "api",

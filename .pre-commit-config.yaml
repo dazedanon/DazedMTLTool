@@ -3,6 +3,6 @@
   'hooks':
   - 'id': 'set-defaults'
     'name': 'Set Defaults in rpgmakermvmz.py'
-    'entry': 'python set_defaults.py'
+    'entry': 'python -m util.defaults'
     'language': 'python'
     'files': '^modules/rpgmakermvmz.py$'

@@ -1316,7 +1316,8 @@ class TranslationConfig:
         # Load prompt and vocab files if not provided
         if prompt is None:
             try:
-                self.prompt = Path("prompt.txt").read_text(encoding="utf-8")
+                from util.paths import PROMPT_PATH, VOCAB_PATH
+                self.prompt = PROMPT_PATH.read_text(encoding="utf-8")
             except FileNotFoundError:
                 self.prompt = ""
         else:
@@ -1324,7 +1325,7 @@ class TranslationConfig:
             
         if vocab is None:
             try:
-                self.vocab = Path("vocab.txt").read_text(encoding="utf-8")
+                self.vocab = VOCAB_PATH.read_text(encoding="utf-8")
             except FileNotFoundError:
                 self.vocab = ""
         else:

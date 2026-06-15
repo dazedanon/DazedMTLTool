@@ -1,7 +1,9 @@
 import re
 from copy import deepcopy
 
-# Canonical defaults used by the GUI and the `set_defaults` script.
+from util.paths import PROJECT_ROOT
+
+# Canonical defaults used by the GUI and the pre-commit hook.
 # Stored as booleans for easier consumption by the GUI.
 DEFAULTS = {
     'FIRSTLINESPEAKERS': False,
@@ -56,4 +58,4 @@ def set_defaults(file_path):
 
 
 if __name__ == "__main__":
-    set_defaults('modules/rpgmakermvmz.py')
+    set_defaults(PROJECT_ROOT / "modules/rpgmakermvmz.py")

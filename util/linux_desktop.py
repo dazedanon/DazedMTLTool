@@ -1,0 +1,72 @@
+"""Install/update the Linux .desktop entry for taskbar and window icons."""
+
+from __future__ import annotations
+
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+from util.paths import ICON_PATH, PROJECT_ROOT
+
+DESKTOP_ID = "DazedMTLTool"
+LAUNCH_SCRIPT = PROJECT_ROOT / "scripts" / "launch.sh"
+
+
+def installed_desktop_path() -> Path:
+    data_home = os.environ.get("XDG_DATA_HOME", "")
+    if data_home:
+        base = Path(data_home)
+    else:
+        base = Path.home() / ".local" / "share"
+    return base / "applications" / f"{DESKTOP_ID}.desktop"
+
+
+def _desktop_content(root: Path, icon: Path, launch: Path) -> str:
+    return (
+        "[Desktop Entry]\n"
+        "Type=Application\n"
+        f"Name={DESKTOP_ID}\n"
+        "GenericName=Translation Tool\n"
+        "Comment=AI translation tool for visual novels and RPG games\n"
+        f"Exec={launch}\n"
+        f"Icon={icon}\n"
+        f"Path={root}\n"
+        "Terminal=false\n"
+        "Categories=Development;Utility;\n"
+        f"StartupWMClass={DESKTOP_ID}\n"
+    )
+
+
+def ensure_linux_desktop_entry() -> None:
+    """Write ~/.local/share/applications/DazedMTLTool.desktop with absolute paths."""
+    if not sys.platform.startswith("linux"):
+        return
+    if not LAUNCH_SCRIPT.is_file() or not ICON_PATH.is_file():
+        return
+
+    desktop_path = installed_desktop_path()
+    content = _desktop_content(PROJECT_ROOT, ICON_PATH, LAUNCH_SCRIPT)
+
+    try:
+        if desktop_path.is_file() and desktop_path.read_text(encoding="utf-8") == content:
+            return
+        desktop_path.parent.mkdir(parents=True, exist_ok=True)
+        desktop_path.write_text(content, encoding="utf-8")
+        desktop_path.chmod(0o755)
+    except OSError as exc:
+        print(f"Warning: could not install Linux desktop entry ({exc})")
+        return
+
+    _refresh_desktop_database(desktop_path.parent)
+
+
+def _refresh_desktop_database(applications_dir: Path) -> None:
+    for cmd in (
+        ["update-desktop-database", str(applications_dir)],
+        ["kbuildsycoca5", "--noincremental"],
+    ):
+        try:
+            subprocess.run(cmd, check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        except OSError:
+            pass

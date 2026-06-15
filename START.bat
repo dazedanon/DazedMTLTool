@@ -184,28 +184,29 @@ echo    Launching DazedMTLTool GUI...
 echo ==========================================
 echo.
 
-:: Ensure vocab.txt exists (create from example if available)
-if not exist "vocab.txt" (
-    if exist "vocab.txt.example" (
-        echo vocab.txt not found - creating from vocab.txt.example...
-        copy /Y "vocab.txt.example" "vocab.txt" >nul 2>&1
+:: Ensure data/vocab.txt exists (create from vocab_base.txt if available)
+if not exist "data\\vocab.txt" (
+    if not exist "data" mkdir data
+    if exist "data\\vocab_base.txt" (
+        echo data\vocab.txt not found - creating from data\vocab_base.txt...
+        copy /Y "data\vocab_base.txt" "data\vocab.txt" >nul 2>&1
         if errorlevel 1 (
-            echo ERROR: Failed to copy vocab.txt.example to vocab.txt.
+            echo ERROR: Failed to copy data\vocab_base.txt to data\vocab.txt.
         ) else (
-            echo Created vocab.txt from vocab.txt.example
+            echo Created data\vocab.txt from data\vocab_base.txt
         )
     ) else (
-        echo vocab.txt and vocab.txt.example not found - creating empty vocab.txt to avoid import errors...
-        type NUL > "vocab.txt"
+        echo data\vocab.txt not found - creating empty file to avoid import errors...
+        type NUL > "data\vocab.txt"
         if errorlevel 1 (
-            echo ERROR: Failed to create empty vocab.txt.
+            echo ERROR: Failed to create empty data\vocab.txt.
         ) else (
-            echo Created empty vocab.txt
+            echo Created empty data\vocab.txt
         )
     )
 )
 
-python start_gui.py
+python scripts/start_gui.py
 
 :: Check if GUI launched successfully
 if errorlevel 1 (

@@ -19,8 +19,10 @@ from util.translation import TranslationConfig, translateAI as sharedtranslateAI
 MODEL = os.getenv("model")
 TIMEOUT = int(os.getenv("timeout"))
 LANGUAGE = os.getenv("language").capitalize()
-PROMPT = Path("prompt.txt").read_text(encoding="utf-8")
-VOCAB = Path("vocab.txt").read_text(encoding="utf-8")
+from util.paths import PROMPT_PATH, VOCAB_PATH
+
+PROMPT = PROMPT_PATH.read_text(encoding="utf-8")
+VOCAB = VOCAB_PATH.read_text(encoding="utf-8")
 LOCK = threading.Lock()
 THREAD_CTX = threading.local()
 WIDTH = int(os.getenv("width"))
@@ -803,7 +805,7 @@ def update_vocab_section(category: str, pairs: list[tuple[str, str]]):
     The existing section is replaced entirely; other sections are preserved.
     """
     try:
-        vocab_path = Path("vocab.txt")
+        vocab_path = VOCAB_PATH
 
         # Helper: normalized comparison to detect no-op translations
         def _norm(s: str) -> str:
@@ -5071,7 +5073,7 @@ def finalizeSpeakerParse():
                         _speakerCache[orig] = norm
                         NAMESLIST.append([orig, norm])
 
-        vocab_path = Path("vocab.txt")
+        vocab_path = VOCAB_PATH
         if not vocab_path.exists():
             return
         content = vocab_path.read_text(encoding="utf-8")

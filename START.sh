@@ -127,23 +127,24 @@ activate_venv() {
 }
 
 ensure_vocab_file() {
-    if [[ -f "vocab.txt" ]]; then
+    mkdir -p data
+    if [[ -f "data/vocab.txt" ]]; then
         return 0
     fi
 
-    if [[ -f "vocab.txt.example" ]]; then
-        echo "vocab.txt not found - creating from vocab.txt.example..."
-        if cp "vocab.txt.example" "vocab.txt"; then
-            echo "Created vocab.txt from vocab.txt.example"
+    if [[ -f "data/vocab_base.txt" ]]; then
+        echo "data/vocab.txt not found - creating from data/vocab_base.txt..."
+        if cp "data/vocab_base.txt" "data/vocab.txt"; then
+            echo "Created data/vocab.txt from data/vocab_base.txt"
         else
-            echo "ERROR: Failed to copy vocab.txt.example to vocab.txt."
+            echo "ERROR: Failed to copy data/vocab_base.txt to data/vocab.txt."
         fi
     else
-        echo "vocab.txt and vocab.txt.example not found - creating empty vocab.txt to avoid import errors..."
-        if : > "vocab.txt"; then
-            echo "Created empty vocab.txt"
+        echo "data/vocab.txt not found - creating empty file to avoid import errors..."
+        if : > "data/vocab.txt"; then
+            echo "Created empty data/vocab.txt"
         else
-            echo "ERROR: Failed to create empty vocab.txt."
+            echo "ERROR: Failed to create empty data/vocab.txt."
         fi
     fi
 }
@@ -227,7 +228,7 @@ echo
 
 ensure_vocab_file
 
-if ! python start_gui.py; then
+if ! exec python "$SCRIPT_DIR/scripts/start_gui.py"; then
     echo
     echo "ERROR: Failed to launch GUI."
     echo "Check the error messages above."

@@ -22,6 +22,8 @@ import sys
 import threading
 from pathlib import Path
 
+from util.paths import VOCAB_BASE_PATH, VOCAB_PATH
+
 import jsbeautifier
 
 from PyQt5.QtCore import Qt, QEvent, QSettings, QThread, QTimer, pyqtSignal
@@ -3576,7 +3578,7 @@ class WorkflowTab(QWidget):
 
     def _read_vocab_speakers(self) -> list[tuple[str, str]]:
         """Parse the '# Speakers' section from vocab.txt and return (orig, tl) pairs."""
-        vocab_path = Path("vocab.txt")
+        vocab_path = VOCAB_PATH
         if not vocab_path.exists():
             return []
         try:
@@ -3606,7 +3608,7 @@ class WorkflowTab(QWidget):
         return results
 
     def _reload_vocab(self):
-        vocab_path = Path("vocab.txt")
+        vocab_path = VOCAB_PATH
         try:
             if vocab_path.exists():
                 text = vocab_path.read_text(encoding="utf-8")
@@ -3623,10 +3625,10 @@ class WorkflowTab(QWidget):
     def _save_vocab(self):
         try:
             game_text = self.vocab_editor.toPlainText().rstrip("\n")
-            base_path = Path("vocab_base.txt")
+            base_path = VOCAB_BASE_PATH
             base_text = base_path.read_text(encoding="utf-8") if base_path.exists() else ""
             combined = game_text + "\n\n" + self._BASE_SEPARATOR + base_text
-            Path("vocab.txt").write_text(combined, encoding="utf-8")
+            VOCAB_PATH.write_text(combined, encoding="utf-8")
             self._log("✅ vocab.txt saved (base terms from vocab_base.txt appended).")
         except Exception as exc:
             self._log(f"❌ Could not save vocab.txt: {exc}")
@@ -3795,7 +3797,7 @@ class WorkflowTab(QWidget):
             self._log("⚠  No game folder set. Complete Step 0 first.")
             return
 
-        src = Path("vocab.txt")
+        src = VOCAB_PATH
         if not src.exists():
             self._log("⚠  vocab.txt not found — save it in Step 3 first.")
             return

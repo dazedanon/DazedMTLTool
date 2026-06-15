@@ -12,8 +12,7 @@ import re
 from gui.platform_glyph import platform_glyph
 
 try:
-    import set_defaults
-    CANONICAL_DEFAULTS = getattr(set_defaults, 'DEFAULTS', None)
+    from util.defaults import DEFAULTS as CANONICAL_DEFAULTS
 except Exception:
     CANONICAL_DEFAULTS = None
 

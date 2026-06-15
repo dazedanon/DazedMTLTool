@@ -19,20 +19,16 @@ from PyQt5.QtWidgets import (
     QTextEdit, QSplitter, QGroupBox, QStatusBar, QStackedWidget, QToolButton,
     QDialog
 )
-from PyQt5.QtCore import Qt, QThread, pyqtSignal, QTimer, QSettings
-from PyQt5.QtGui import QIcon, QFont, QPixmap, QScreen
+from PyQt5.QtCore import Qt, QThread, pyqtSignal, QTimer, QSettings, QCoreApplication
+from PyQt5.QtGui import QIcon, QFont, QPixmap, QScreen, QGuiApplication
 
 
-def _project_root() -> Path:
-    """Directory containing start_gui.py / requirements.txt (parent of gui/)."""
-    return Path(__file__).resolve().parent.parent
+from util.paths import PROJECT_ROOT, ICON_PATH, LAST_UPDATE_SHA_PATH
 
 
 def load_application_icon() -> QIcon:
     """Prefer ICO on Windows; PNG is fine for all platforms. Empty if missing."""
-    root = _project_root()
-    for rel in ("assets/icon.ico", "assets/icon.png"):
-        path = root / rel
+    for path in (PROJECT_ROOT / "assets/icon.ico", ICON_PATH):
         if path.is_file():
             icon = QIcon(str(path))
             if not icon.isNull():
@@ -126,14 +122,13 @@ class UpdateThread(QThread):
     REPO_USER   = "DazedAnon"
     REPO_NAME   = "DazedMTLTool"
     REPO_BRANCH = "main"
-    SHA_FILE    = "last_update_sha.txt"
+    SHA_FILE    = str(LAST_UPDATE_SHA_PATH)
 
     # Paths (relative, top-level) that should never be touched during update
-    PROTECTED = {".env", "venv", "log", "files", "translated",
-                 "vocab.txt", "last_update_sha.txt"}
+    PROTECTED = {".env", "venv", "log", "files", "translated", "data"}
 
     # GitLab zip archives do not preserve Unix execute bits; restore after apply.
-    EXECUTABLE_SUFFIXES = {".sh"}
+    EXECUTABLE_SUFFIXES = {".sh", ".desktop"}
 
     progress  = pyqtSignal(str)           # status message
     finished  = pyqtSignal(bool, str)     # (success, message)
@@ -902,6 +897,14 @@ def main():
         # Set high DPI scale factor policy
         if hasattr(QApplication, 'setHighDpiScaleFactorRoundingPolicy'):
             QApplication.setHighDpiScaleFactorRoundingPolicy(Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
+
+        if sys.platform.startswith("linux"):
+            from util.linux_desktop import ensure_linux_desktop_entry
+            ensure_linux_desktop_entry()
+            QGuiApplication.setDesktopFileName("DazedMTLTool")
+
+        QCoreApplication.setOrganizationName("DazedTranslations")
+        QCoreApplication.setApplicationName("DazedMTLTool")
         
         app = QApplication(sys.argv)
 
@@ -934,9 +937,7 @@ def main():
         return 1
     
     # Set application properties
-    app.setApplicationName("DazedMTLTool")
     app.setApplicationVersion("1.0")
-    app.setOrganizationName("DazedTranslations")
     
     # Apply dark theme with cleaner, more compact styling
     app.setStyleSheet("""
