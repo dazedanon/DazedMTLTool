@@ -84,12 +84,14 @@ def _linux_nav_pixmap(glyph: str, *, size: int, font_px: int, color: QColor) -> 
     return pixmap
 
 
-def _linux_nav_icon(icon_text: str, *, size: int, font_px: int) -> QIcon:
+def _linux_nav_icon(icon_text: str, *, size: int, font_px: int, normal_color: QColor | None = None) -> QIcon:
     """Render a nav glyph into a fixed-size pixmap so every tab aligns the same."""
     glyph = platform_nav_glyph(icon_text)
+    gray_color = normal_color or QColor("#cccccc")
+    white_color = QColor("#ffffff") if normal_color is None else normal_color.lighter(125)
     icon = QIcon()
-    gray = _linux_nav_pixmap(glyph, size=size, font_px=font_px, color=QColor("#cccccc"))
-    white = _linux_nav_pixmap(glyph, size=size, font_px=font_px, color=QColor("#ffffff"))
+    gray = _linux_nav_pixmap(glyph, size=size, font_px=font_px, color=gray_color)
+    white = _linux_nav_pixmap(glyph, size=size, font_px=font_px, color=white_color)
     icon.addPixmap(gray, QIcon.Normal, QIcon.Off)
     icon.addPixmap(gray, QIcon.Disabled, QIcon.Off)
     icon.addPixmap(white, QIcon.Active, QIcon.Off)
@@ -97,15 +99,18 @@ def _linux_nav_icon(icon_text: str, *, size: int, font_px: int) -> QIcon:
     return icon
 
 
-def _nav_toolbutton_stylesheet(*, horizontal: bool, icon_only: bool) -> str:
+def _nav_toolbutton_stylesheet(*, horizontal: bool, icon_only: bool, update_available: bool = False) -> str:
     border_prop = "border-bottom" if horizontal else "border-left"
+    accent = "#ff5252" if update_available else "#007acc"
+    text_color = "#ff5252" if update_available else "#cccccc"
+    checked_color = "#ff8a80" if update_available else "#ffffff"
     if icon_only:
         return f"""
             QToolButton {{
                 background-color: transparent;
                 border: none;
                 {border_prop}: 3px solid transparent;
-                color: #cccccc;
+                color: {text_color};
                 padding: 0px;
                 margin: 0px;
             }}
@@ -114,8 +119,8 @@ def _nav_toolbutton_stylesheet(*, horizontal: bool, icon_only: bool) -> str:
             }}
             QToolButton:checked {{
                 background-color: #37373d;
-                {border_prop}: 3px solid #007acc;
-                color: #ffffff;
+                {border_prop}: 3px solid {accent};
+                color: {checked_color};
             }}
         """
 
@@ -125,7 +130,7 @@ def _nav_toolbutton_stylesheet(*, horizontal: bool, icon_only: bool) -> str:
             background-color: transparent;
             border: none;
             {border_prop}: 3px solid transparent;
-            color: #cccccc;
+            color: {text_color};
             font-size: {font_size};
             font-family: 'DejaVu Sans Mono', monospace;
             padding: 0px;
@@ -136,26 +141,37 @@ def _nav_toolbutton_stylesheet(*, horizontal: bool, icon_only: bool) -> str:
         }}
         QToolButton:checked {{
             background-color: #37373d;
-            {border_prop}: 3px solid #007acc;
-            color: #ffffff;
+            {border_prop}: 3px solid {accent};
+            color: {checked_color};
         }}
     """
 
 
-def configure_nav_toolbutton(btn, icon_text: str, *, horizontal: bool = False) -> None:
+def configure_nav_toolbutton(
+    btn,
+    icon_text: str,
+    *,
+    horizontal: bool = False,
+    update_available: bool = False,
+) -> None:
     """Apply nav icon — on Linux render BMP symbols into fixed pixmaps for alignment."""
     if sys.platform.startswith("linux"):
         # Scale to the button cell (leave room for the 3px active border).
         icon_dim = max(28, min(btn.width(), btn.height()) - 8)
         font_px = max(22, int(icon_dim * 0.78))
-        btn.setIcon(_linux_nav_icon(icon_text, size=icon_dim, font_px=font_px))
+        normal_color = QColor("#ff5252") if update_available else None
+        btn.setIcon(_linux_nav_icon(icon_text, size=icon_dim, font_px=font_px, normal_color=normal_color))
         btn.setIconSize(QSize(icon_dim, icon_dim))
         btn.setText("")
         btn.setToolButtonStyle(Qt.ToolButtonIconOnly)
-        btn.setStyleSheet(_nav_toolbutton_stylesheet(horizontal=horizontal, icon_only=True))
+        btn.setStyleSheet(_nav_toolbutton_stylesheet(
+            horizontal=horizontal, icon_only=True, update_available=update_available,
+        ))
         return
 
     btn.setIcon(QIcon())
     btn.setText(icon_text)
     btn.setToolButtonStyle(Qt.ToolButtonTextOnly)
-    btn.setStyleSheet(_nav_toolbutton_stylesheet(horizontal=horizontal, icon_only=False))
+    btn.setStyleSheet(_nav_toolbutton_stylesheet(
+        horizontal=horizontal, icon_only=False, update_available=update_available,
+    ))

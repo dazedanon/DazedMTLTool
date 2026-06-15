@@ -183,6 +183,38 @@ def ensure_decrypter(force: bool = False, log_fn=print) -> bool:
     return True
 
 
+def seed_ace_tools(log_fn=None) -> None:
+    """Copy offline-bundled Ace tools if missing (no network)."""
+    _seed_from_offline(RV2JSON_LOCAL, "RV2JSON.exe", log_fn)
+    _seed_from_offline(DECRYPTER_LOCAL, DECRYPTER_ASSET, log_fn)
+
+
+def check_ace_tools_update() -> bool:
+    """Return True if upstream Ace tools differ from the local copies."""
+    seed_ace_tools()
+    versions = _load_versions()
+
+    try:
+        remote_sha, _ = _rv2json_upstream()
+        if not RV2JSON_LOCAL.is_file() or versions.get("rv2json_sha", "") != remote_sha:
+            return True
+    except Exception:
+        if not RV2JSON_LOCAL.is_file():
+            return True
+
+    try:
+        tag, _ = _decrypter_upstream()
+        if not (DECRYPTER_LOCAL.is_file() or DECRYPTER_LEGACY.is_file()):
+            return True
+        if DECRYPTER_LOCAL.is_file() and versions.get("decrypter_tag", "") != tag:
+            return True
+    except Exception:
+        if not (DECRYPTER_LOCAL.is_file() or DECRYPTER_LEGACY.is_file()):
+            return True
+
+    return False
+
+
 def ensure_ace_tools(force: bool = False, log_fn=print) -> bool:
     """Ensure both Ace tools are present (download / update if needed)."""
     ok_rv = ensure_rv2json(force=force, log_fn=log_fn)

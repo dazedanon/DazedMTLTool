@@ -45,14 +45,14 @@ def main():
         sys.exit(1)
 
     try:
-        from util.ace.update_tools import ensure_ace_tools
-        ensure_ace_tools()
+        from util.ace.update_tools import seed_ace_tools
+        seed_ace_tools()
     except Exception as exc:
         print(f"Warning: Ace tool setup failed ({exc}). Ace features may be unavailable.")
 
     try:
-        from util.forge.update_tools import ensure_forge_plugins
-        ensure_forge_plugins()
+        from util.forge.update_tools import seed_forge_plugins
+        seed_forge_plugins()
     except Exception as exc:
         print(f"Warning: Forge plugin setup failed ({exc}). Playtest Forge may be unavailable.")
         

@@ -220,18 +220,6 @@ else
 fi
 echo
 
-echo "Checking RPG Maker Ace tools..."
-if ! python -m util.ace.update_tools; then
-    echo "WARNING: Ace tool download failed. Ace translation features may not work until fixed."
-fi
-echo
-
-echo "Checking Forge plugins..."
-if ! python -m util.forge.update_tools; then
-    echo "WARNING: Forge update failed. Playtest Forge features use the bundled upstream copy."
-fi
-echo
-
 echo "=========================================="
 echo "   Launching DazedMTLTool GUI..."
 echo "=========================================="

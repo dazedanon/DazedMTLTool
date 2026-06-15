@@ -151,6 +151,26 @@ def refresh_forge_plugins(log_fn=print) -> bool:
     return True
 
 
+def seed_forge_plugins(log_fn=None) -> None:
+    """Copy offline-bundled Forge plugins if missing (no network)."""
+    for engine in PLUGIN_BY_ENGINE:
+        _seed_from_offline(engine, log_fn)
+
+
+def check_forge_plugins_update() -> bool:
+    """Return True if upstream Forge plugins differ from the local copies."""
+    seed_forge_plugins()
+    missing = [e for e in PLUGIN_BY_ENGINE if not bundled_plugin_path(e).is_file()]
+    if missing:
+        return True
+    versions = _load_versions()
+    local_commit = versions.get("commit", "")
+    try:
+        return _upstream_commit() != local_commit
+    except Exception:
+        return False
+
+
 def ensure_forge_plugins(force: bool = False, log_fn=print) -> bool:
     """Ensure Forge plugins are present; fetch upstream when missing or stale."""
     for engine in PLUGIN_BY_ENGINE:

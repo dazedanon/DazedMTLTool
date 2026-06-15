@@ -40,6 +40,86 @@ def load_application_icon() -> QIcon:
     return QIcon()
 
 
+def check_tool_update() -> str | None:
+    """Return latest commit SHA when a tool update is available, else None."""
+    try:
+        api = (
+            f"https://gitgud.io/api/v4/projects/"
+            f"{UpdateThread.REPO_USER}%2F{UpdateThread.REPO_NAME}"
+            f"/repository/branches/{UpdateThread.REPO_BRANCH}"
+        )
+        req = urllib.request.Request(api, headers={"User-Agent": "DazedMTLTool"})
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            latest_sha = json.loads(resp.read())["commit"]["id"]
+        sha_path = Path(UpdateThread.SHA_FILE)
+        current_sha = sha_path.read_text().strip() if sha_path.is_file() else ""
+        if latest_sha != current_sha:
+            return latest_sha
+    except Exception:
+        pass
+    return None
+
+
+def check_all_updates() -> dict:
+    """Check tool, Ace, and Forge for available updates."""
+    results = {"tool": None, "ace": False, "forge": False}
+    results["tool"] = check_tool_update()
+    try:
+        from util.ace.update_tools import check_ace_tools_update
+        results["ace"] = check_ace_tools_update()
+    except Exception:
+        pass
+    try:
+        from util.forge.update_tools import check_forge_plugins_update
+        results["forge"] = check_forge_plugins_update()
+    except Exception:
+        pass
+    return results
+
+
+def any_updates_available(results: dict) -> bool:
+    return bool(results.get("tool")) or results.get("ace") or results.get("forge")
+
+
+class BackgroundUpdateCheckThread(QThread):
+    """Checks for tool, Ace, and Forge updates without blocking the UI."""
+
+    finished = pyqtSignal(dict)
+
+    def run(self):
+        self.finished.emit(check_all_updates())
+
+
+class AuxToolsUpdateThread(QThread):
+    """Download Ace and/or Forge updates without updating the main tool."""
+
+    progress = pyqtSignal(str)
+    finished = pyqtSignal(bool, str)
+
+    def __init__(self, update_ace: bool = False, update_forge: bool = False, parent=None):
+        super().__init__(parent)
+        self.update_ace = update_ace
+        self.update_forge = update_forge
+
+    def run(self):
+        try:
+            if self.update_ace:
+                from util.ace.update_tools import ensure_ace_tools
+                self.progress.emit("Updating RPG Maker Ace tools…")
+                if not ensure_ace_tools(log_fn=lambda m: self.progress.emit(m)):
+                    self.finished.emit(False, "Ace tool update failed.")
+                    return
+            if self.update_forge:
+                from util.forge.update_tools import ensure_forge_plugins
+                self.progress.emit("Updating Forge plugins…")
+                if not ensure_forge_plugins(log_fn=lambda m: self.progress.emit(m)):
+                    self.finished.emit(False, "Forge plugin update failed.")
+                    return
+            self.finished.emit(True, "components_updated")
+        except Exception as exc:
+            self.finished.emit(False, str(exc))
+
+
 class UpdateThread(QThread):
     """Downloads and applies a tool update from the GitGud repository."""
 
@@ -79,17 +159,21 @@ class UpdateThread(QThread):
         except Exception as exc:
             self.finished.emit(False, str(exc))
 
-    # ------------------------------------------------------------------ #
-
-    def _fetch_latest_sha(self):
+    @classmethod
+    def fetch_latest_sha(cls) -> str:
         api = (
             f"https://gitgud.io/api/v4/projects/"
-            f"{self.REPO_USER}%2F{self.REPO_NAME}"
-            f"/repository/branches/{self.REPO_BRANCH}"
+            f"{cls.REPO_USER}%2F{cls.REPO_NAME}"
+            f"/repository/branches/{cls.REPO_BRANCH}"
         )
         req = urllib.request.Request(api, headers={"User-Agent": "DazedMTLTool"})
         with urllib.request.urlopen(req, timeout=15) as resp:
             return json.loads(resp.read())["commit"]["id"]
+
+    # ------------------------------------------------------------------ #
+
+    def _fetch_latest_sha(self):
+        return self.fetch_latest_sha()
 
     def _read_stored_sha(self):
         p = Path(self.SHA_FILE)
@@ -150,7 +234,7 @@ class UpdateThread(QThread):
 class UpdateDialog(QDialog):
     """Modal dialog that shows update progress and result."""
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, pending_updates: dict | None = None):
         super().__init__(parent)
         self.setWindowTitle("Tool Update")
         self.setMinimumWidth(420)
@@ -172,12 +256,54 @@ class UpdateDialog(QDialog):
         layout.addWidget(self.close_btn)
 
         self._thread = None
+        self._pending = pending_updates or {}
 
     def start(self, check_only=False):
-        self._thread = UpdateThread(check_only=check_only, parent=self)
-        self._thread.progress.connect(self.status_label.setText)
-        self._thread.finished.connect(self._on_finished)
+        if self._pending:
+            self._show_pending_updates()
+            return
+
+        self._thread = BackgroundUpdateCheckThread(parent=self)
+        self._thread.finished.connect(self._on_check_finished)
         self._thread.start()
+
+    def _update_labels(self) -> list[str]:
+        labels = []
+        if self._pending.get("tool"):
+            labels.append("DazedMTLTool")
+        if self._pending.get("ace"):
+            labels.append("RPG Maker Ace tools")
+        if self._pending.get("forge"):
+            labels.append("Forge plugins")
+        return labels
+
+    def _show_pending_updates(self):
+        self.progress_bar.setRange(0, 1)
+        self.progress_bar.setValue(1)
+        self.close_btn.setText("Close")
+
+        labels = self._update_labels()
+        if not labels:
+            self.status_label.setText("✅ Already up to date.")
+            return
+
+        detail = "\n".join(f"  • {label}" for label in labels)
+        tool_sha = self._pending.get("tool")
+        if tool_sha:
+            detail = f"  • DazedMTLTool ({tool_sha[:8]})\n" + "\n".join(
+                f"  • {label}" for label in labels if label != "DazedMTLTool"
+            )
+        self.status_label.setText(
+            f"🆕 Updates available:\n{detail}\n\nClick 'Update Now' to install."
+        )
+        self.close_btn.setText("Cancel")
+        update_btn = QPushButton("Update Now")
+        update_btn.clicked.connect(self._do_update)
+        self.layout().insertWidget(self.layout().count() - 1, update_btn)
+
+    def _on_check_finished(self, results: dict):
+        self._pending = results
+        self._show_pending_updates()
 
     def _on_finished(self, success, message):
         self.progress_bar.setRange(0, 1)
@@ -190,6 +316,11 @@ class UpdateDialog(QDialog):
 
         if message == "already_up_to_date":
             self.status_label.setText("✅ Already up to date.")
+        elif message == "components_updated":
+            self._pending = {"tool": None, "ace": False, "forge": False}
+            self.status_label.setText("✅ Component updates installed.")
+            if isinstance(self.parent(), DazedMTLGUI):
+                self.parent().clear_update_indicator()
         elif message.startswith("update_available:"):
             sha = message.split(":", 1)[1]
             self.status_label.setText(
@@ -201,12 +332,14 @@ class UpdateDialog(QDialog):
             self.layout().insertWidget(self.layout().count() - 1, update_btn)
         elif message.startswith("updated:"):
             sha = message.split(":", 1)[1]
+            self._pending = {"tool": None, "ace": False, "forge": False}
             self.status_label.setText(
                 f"✅ Updated to {sha}.\n\nPlease restart the tool for changes to take effect."
             )
+            if isinstance(self.parent(), DazedMTLGUI):
+                self.parent().clear_update_indicator()
 
-    def _do_update(self):
-        # Remove any extra buttons so only the close button remains
+    def _clear_extra_buttons(self):
         for i in reversed(range(self.layout().count())):
             item = self.layout().itemAt(i)
             if item and item.widget() and item.widget() is not self.close_btn:
@@ -215,9 +348,37 @@ class UpdateDialog(QDialog):
                     if w.text() != "Close":
                         self.layout().removeWidget(w)
                         w.deleteLater()
+
+    def _do_update(self):
+        self._clear_extra_buttons()
         self.progress_bar.setRange(0, 0)
-        self.status_label.setText("Downloading update…")
-        self.start(check_only=False)
+        self.close_btn.setText("Cancel")
+
+        if self._pending.get("tool"):
+            self.status_label.setText("Downloading update…")
+            self._thread = UpdateThread(check_only=False, parent=self)
+            self._thread.progress.connect(self.status_label.setText)
+            self._thread.finished.connect(self._on_finished)
+            self._thread.start()
+            return
+
+        update_ace = bool(self._pending.get("ace"))
+        update_forge = bool(self._pending.get("forge"))
+        if update_ace or update_forge:
+            self.status_label.setText("Downloading component updates…")
+            self._thread = AuxToolsUpdateThread(
+                update_ace=update_ace,
+                update_forge=update_forge,
+                parent=self,
+            )
+            self._thread.progress.connect(self.status_label.setText)
+            self._thread.finished.connect(self._on_finished)
+            self._thread.start()
+            return
+
+        self.progress_bar.setRange(0, 1)
+        self.progress_bar.setValue(1)
+        self.status_label.setText("✅ Already up to date.")
 
 # Import configuration widgets
 from gui.config_tab import ConfigTab
@@ -230,10 +391,15 @@ class DazedMTLGUI(QMainWindow):
     def __init__(self):
         super().__init__()
         self.settings = QSettings("DazedTranslations", "DazedMTLTool")
+        self._pending_updates: dict = {}
+        self._update_check_thread = None
+        self._update_icon = "🔄"
+        self.btn_update = None
         self.init_ui()
         self.setup_status_bar()
         self.setup_font_scaling()
         self.restore_window_state()
+        QTimer.singleShot(500, self.start_background_update_check)
         
     def restore_window_state(self):
         """Restore window geometry and state from settings."""
@@ -427,10 +593,10 @@ class DazedMTLGUI(QMainWindow):
         sidebar_layout.addStretch()
 
         # Update button at the bottom of the sidebar
-        btn_update = self.create_nav_button("🔄", "Check for Updates")
-        btn_update.setCheckable(False)
-        btn_update.clicked.connect(self.show_update_dialog)
-        sidebar_layout.addWidget(btn_update)
+        self.btn_update = self.create_nav_button(self._update_icon, "Check for Updates")
+        self.btn_update.setCheckable(False)
+        self.btn_update.clicked.connect(self.show_update_dialog)
+        sidebar_layout.addWidget(self.btn_update)
 
         sidebar.setLayout(sidebar_layout)
         
@@ -485,11 +651,52 @@ class DazedMTLGUI(QMainWindow):
         self.config_tab.config_changed.connect(self.on_config_changed)
         self.content_stack.addWidget(self.config_tab)
         
+    def start_background_update_check(self):
+        """Check for tool, Ace, and Forge updates after the GUI is visible."""
+        if self._update_check_thread and self._update_check_thread.isRunning():
+            return
+        self._update_check_thread = BackgroundUpdateCheckThread(self)
+        self._update_check_thread.finished.connect(self._on_background_update_check)
+        self._update_check_thread.start()
+
+    def _on_background_update_check(self, results: dict):
+        self._pending_updates = results
+        if any_updates_available(results):
+            self.set_update_indicator()
+        else:
+            self.clear_update_indicator()
+
+    def set_update_indicator(self):
+        """Highlight the update button when updates are available."""
+        if not self.btn_update:
+            return
+        self.btn_update.setToolTip("Updates available — click to install")
+        from gui.platform_glyph import configure_nav_toolbutton
+        configure_nav_toolbutton(
+            self.btn_update, self._update_icon, horizontal=False, update_available=True,
+        )
+
+    def clear_update_indicator(self):
+        """Restore the default update button appearance."""
+        self._pending_updates = {}
+        if not self.btn_update:
+            return
+        self.btn_update.setToolTip("Check for Updates")
+        from gui.platform_glyph import configure_nav_toolbutton
+        configure_nav_toolbutton(
+            self.btn_update, self._update_icon, horizontal=False, update_available=False,
+        )
+
     def show_update_dialog(self):
         """Open the update dialog and check for a newer version."""
-        dlg = UpdateDialog(self)
+        dlg = UpdateDialog(self, pending_updates=self._pending_updates.copy())
         dlg.start(check_only=True)
         dlg.exec_()
+        self._pending_updates = dlg._pending
+        if any_updates_available(dlg._pending):
+            self.set_update_indicator()
+        else:
+            self.clear_update_indicator()
 
     def on_config_changed(self):
         """Handle configuration changes."""
