@@ -24,7 +24,7 @@ if ! "$PYTHON" -c "import colorama, dotenv, tqdm" >/dev/null 2>&1; then
 fi
 
 if [[ "$#" -eq 0 ]]; then
-    set -- discover -s tests -p 'test_mvmz_*.py' -v
+    set -- discover -s tests -p 'test_*.py' -v
 fi
 
 exec "$PYTHON" -m unittest "$@"
