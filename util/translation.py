@@ -1085,22 +1085,10 @@ def runTranslationBatches(poll=60):
 
 
 # ===== Mistral (la Plateforme) adaptive rate limiting =====
-# Mistral enforces independent request and token limits, both PER-MODEL.
-# Verified live against api.mistral.ai (the response headers are authoritative):
-#   * x-ratelimit-limit-req-minute  — requests/minute. PER-MODEL and varies a
-#     lot: mistral-medium=25, mistral-small=50, codestral=125, ministral-3b=750.
-#     Mistral's dashboard shows this /60 as "RPS" (25/min = 0.42 "RPS"), so the
-#     effective rate spans well below AND above 1 req/sec. There is NO
-#     per-second header; we divide req-minute by 60 to get the pacing interval.
-#   * x-ratelimit-limit-tokens-minute — input+output throughput, a true minute
-#     window, also per-model (e.g. 50k–1.3M).
-#   * Tokens per month — overall cap (not paced here; surfaces as a 429).
-# The limiter paces requests >= 1/RPS apart (so a burst of file threads can't
-# overrun the per-minute request budget) AND charges them against a
-# minute-windowed token budget. It starts from a conservative seed, then the
-# live headers on the first response pin req_per_sec / tok_per_min to the exact
-# per-model values. One limiter is shared across all file threads (this tool
-# runs one model per session). Override the seeds with
+# Mistral enforces per-minute request and token limits that vary by tier/model.
+# The limiter starts from a conservative seed, then pins itself to the real
+# limits read from the live x-ratelimit-* response headers. One limiter is
+# shared across file threads. Override seeds via
 # mistralReqPerSec / mistralTokPerMin / mistralTokenHeadroom.
 _mistral_limiter = None
 _mistral_limiter_lock = threading.Lock()
@@ -1141,10 +1129,10 @@ def _header_float(headers, *names):
 class AdaptiveLimiter:
     """Paces requests off live ratelimit headers.
 
-    Two dimensions, enforced together by acquire():
-      * requests: spaced >= min_interval (1/RPS) apart — Mistral's request cap
-        is per-second, so this prevents bursts from tripping it.
-      * tokens: a minute-windowed budget (input+output), with a headroom margin.
+    acquire() enforces two gates together:
+      * requests: spaced >= min_interval (1/RPS) apart, so bursts can't overrun
+        the per-minute request cap.
+      * tokens: a minute-windowed input+output budget with a headroom margin.
     """
 
     def __init__(self, req_per_sec, tok_per_min, headroom):
@@ -1179,42 +1167,37 @@ class AdaptiveLimiter:
             time.sleep(min(sleep_for, 5))
 
     def update(self, headers):
-        """Sync budgets from the live ratelimit headers (authoritative).
-
-        Accepts both the per-second request headers and (for forward/back compat)
-        the older per-minute request header names; the token headers are minute."""
+        """Sync budgets from the live ratelimit headers."""
         if not headers:
             return
         with self.lock:
-            # The authoritative request limit is x-ratelimit-limit-req-MINUTE
-            # (verified live: mistral-medium=25, ministral-3b=750, codestral=125;
-            # Mistral's dashboard "RPS" is just this number / 60). There is no
-            # per-second header. Convert to RPS for the pacing interval. A
-            # per-second header is still accepted first in case Mistral adds one.
+            # Mistral's documented request cap is x-ratelimit-limit-requests
+            # (RPM); accept alternate spellings too and /60 to a pacing interval.
+            # A true per-second header, if present, is used undivided.
             limit_rps = _header_float(headers, "x-ratelimit-limit-req-second",
                                       "x-ratelimit-limit-requests-second")
             if limit_rps is None:
-                limit_rpm = _header_float(headers, "x-ratelimit-limit-req-minute",
+                limit_rpm = _header_float(headers, "x-ratelimit-limit-requests",
+                                          "x-ratelimit-limit-req-minute",
                                           "x-ratelimit-limit-requests-minute")
                 if limit_rpm is not None:
                     limit_rps = limit_rpm / 60.0
             if limit_rps and limit_rps > 0:
                 self.req_per_sec = limit_rps
                 self.min_interval = 1.0 / self.req_per_sec
-            limit_tok = _header_int(headers, "x-ratelimit-limit-tokens-minute",
-                                    "x-ratelimit-limit-tokens")
+            limit_tok = _header_int(headers, "x-ratelimit-limit-tokens",
+                                    "x-ratelimit-limit-tokens-minute")
             if limit_tok and limit_tok > 0:
                 self.tok_per_min = limit_tok
-            rem_tok = _header_int(headers, "x-ratelimit-remaining-tokens-minute",
-                                  "x-ratelimit-remaining-tokens")
+            rem_tok = _header_int(headers, "x-ratelimit-remaining-tokens",
+                                  "x-ratelimit-remaining-tokens-minute")
             if rem_tok is not None:
                 self.tokens_remaining = rem_tok
-            # Remaining requests this minute -> also cap the pace so a fresh
-            # limiter that joins mid-window doesn't burst the leftover budget.
-            rem_req = _header_int(headers, "x-ratelimit-remaining-req-minute",
+            # If the minute's request budget is already spent, hold off ~a minute.
+            rem_req = _header_int(headers, "x-ratelimit-remaining-requests",
+                                  "x-ratelimit-remaining-req-minute",
                                   "x-ratelimit-remaining-requests-minute")
             if rem_req is not None and rem_req <= 0:
-                # budget already spent this minute — hold off ~ a minute
                 self.next_request_at = max(self.next_request_at, time.monotonic() + 60.0)
 
 
@@ -1222,19 +1205,14 @@ def _get_mistral_limiter():
     global _mistral_limiter
     with _mistral_limiter_lock:
         if _mistral_limiter is None:
-            # mistralReqPerMin kept as a deprecated alias: a per-minute number is
-            # converted to RPS so old .env files keep pacing sanely.
+            # mistralReqPerMin is a deprecated per-minute alias, converted to RPS.
             rps_env = os.getenv("mistralReqPerSec")
             if rps_env:
                 req_per_sec = float(rps_env)
             elif os.getenv("mistralReqPerMin"):
                 req_per_sec = max(0.05, float(os.getenv("mistralReqPerMin")) / 60.0)
             else:
-                # Per-model RPS varies and is often well under 1 (free-tier
-                # mistral-medium ~0.83, magistral ~0.08). Start conservative so
-                # the FIRST request doesn't over-burst; the live header from that
-                # first response then corrects req_per_sec to the model's exact
-                # value (which is why few large batches > many tiny ones).
+                # Conservative seed; the first response's headers correct it.
                 req_per_sec = 0.5
             _mistral_limiter = AdaptiveLimiter(
                 req_per_sec,
