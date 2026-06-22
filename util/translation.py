@@ -2893,7 +2893,15 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None, mism
                 for j in range(len(final_translations)):
                     if j in all_replacements:
                         final_translations[j] = restore_script_codes(final_translations[j], all_replacements[j])
-                
+
+                # Cache BEFORE re-inserting non-Japanese originals.  The cache key
+                # (subbedT) is already built from the Japanese-only content, so the
+                # cached value must also contain only the AI-translated items.  Storing
+                # the expanded (file-specific) list would inject the wrong English
+                # neighbours into a different file that hits the same cache key.
+                if not config.estimateMode:
+                    cache_translation(subbedT, list(final_translations), config.language)
+
                 # Re-insert corrupted / no-japanese originals at their original positions
                 if corrupted_map or no_japanese_map:
                     expanded = []
@@ -2929,8 +2937,8 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None, mism
             except Exception:
                 pass  # Don't fail if logging fails
 
-            # Cache the entire payload and its translation
-            if not config.estimateMode:
+            # Cache single-string result (list case is already cached above, before expansion)
+            if not config.estimateMode and not isinstance(tItem, list):
                 cache_translation(subbedT, final_translations, config.language)
 
             if isinstance(tItem, list):
