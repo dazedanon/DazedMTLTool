@@ -525,6 +525,28 @@ def save_cache():
         except Exception:
             pass
 
+def expand_clean_to_batch(clean_values, tItem, corrupted_map, no_japanese_map):
+    """Re-insert skipped originals around AI-translated (clean) values.
+
+    The cache key is built from the Japanese-only payload, so cached values hold
+    only the translatable items. corrupted_map / no_japanese_map hold the skipped
+    originals keyed by their position in the full batch. Returns a list aligned
+    1:1 with tItem. Falls back to the source line if clean_values runs short.
+    """
+    expanded = []
+    clean_idx = 0
+    for j in range(len(tItem)):
+        if j in corrupted_map:
+            expanded.append(corrupted_map[j])
+        elif j in no_japanese_map:
+            expanded.append(no_japanese_map[j])
+        elif clean_idx < len(clean_values):
+            expanded.append(clean_values[clean_idx])
+            clean_idx += 1
+        else:
+            expanded.append(tItem[j])
+    return expanded
+
 def get_cache_key(payload, language):
     """Generate a cache key for a payload (can be single string or JSON batch)"""
     # Use hash to keep keys short but unique
@@ -2581,8 +2603,16 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None, mism
             # Estimate mode: keep original tList[index]; cached length may differ.
             if not config.estimateMode:
                 if isinstance(tItem, list):
-                    tList[index] = cached_result
-                    history = cached_result[-config.maxHistory:]
+                    # Cached value is Japanese-only; re-expand skipped items for this batch.
+                    if (corrupted_map or no_japanese_map) and isinstance(cached_result, list):
+                        expanded_cached = expand_clean_to_batch(
+                            cached_result, tItem, corrupted_map, no_japanese_map
+                        )
+                        tList[index] = expanded_cached
+                        history = expanded_cached[-config.maxHistory:]
+                    else:
+                        tList[index] = cached_result
+                        history = cached_result[-config.maxHistory:] if isinstance(cached_result, list) else cached_result
                 else:
                     tList[index] = cached_result
                     history = cached_result
@@ -2895,17 +2925,9 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None, mism
 
                 # Re-insert skipped items at original positions
                 if corrupted_map or no_japanese_map:
-                    expanded = []
-                    clean_idx = 0
-                    for j in range(len(tItem)):
-                        if j in corrupted_map:
-                            expanded.append(corrupted_map[j])
-                        elif j in no_japanese_map:
-                            expanded.append(no_japanese_map[j])
-                        else:
-                            expanded.append(final_translations[clean_idx])
-                            clean_idx += 1
-                    final_translations = expanded
+                    final_translations = expand_clean_to_batch(
+                        final_translations, tItem, corrupted_map, no_japanese_map
+                    )
             else:
                 final_translations = restore_script_codes(final_translations, all_replacements[0])
             
