@@ -14,6 +14,7 @@ from dotenv import load_dotenv
 from retry import retry
 from tqdm import tqdm
 from util.translation import TranslationConfig, translateAI as sharedtranslateAI, getPricingConfig, calculateCost, getPricingConfig, calculateCost, get_var_translation, set_var_translations_batch
+from util.speaker_prefix import SPEAKER_BRACKET_INNER, strip_speaker_prefix
 
 # Globals
 MODEL = os.getenv("model")
@@ -2288,7 +2289,7 @@ def searchCodes(page, pbar, jobList, filename):
 
                 # [Speaker] standalone line format (written back by inline re-export)
                 if len(speakerList) == 0:
-                    inlineFmtMatch = re.match(r"^\[([^\[\]\n]+)\]\s*$", speakerWork)
+                    inlineFmtMatch = re.match(rf"^\[({SPEAKER_BRACKET_INNER})\]\s*$", speakerWork, re.IGNORECASE)
                     if inlineFmtMatch:
                         speakerList = [inlineFmtMatch.group(1).strip()]
 
@@ -2559,9 +2560,7 @@ def searchCodes(page, pbar, jobList, filename):
                             translatedText = list401[0]
 
                             # Remove speaker prefix if present
-                            match = re.search(r'(^\[(.+?)\]\s?[|:]\s?)', translatedText)
-                            if match:
-                                translatedText = translatedText.replace(match.group(1), "") 
+                            translatedText = strip_speaker_prefix(translatedText)
 
                             # Remove 。 that appears after ... in AI output
                             translatedText = re.sub(r'\.\.\.(。)+', '...', translatedText)
@@ -2884,9 +2883,7 @@ def searchCodes(page, pbar, jobList, filename):
                                         list357.pop(0)
 
                                         # Remove speaker prefix if present (same pattern used for 401)
-                                        m = re.search(r'(^\[.+?\]\s?[|:]\s?)', translatedText)
-                                        if m:
-                                            translatedText = translatedText.replace(m.group(1), "")
+                                        translatedText = strip_speaker_prefix(translatedText)
 
                                         if FIXTEXTWRAP:
                                             translatedText = dazedwrap.wrapText(translatedText, width=WIDTH)
@@ -3282,7 +3279,7 @@ def searchCodes(page, pbar, jobList, filename):
                                         translatedText = list355655[0]
                                         list355655.pop(0)
                                         # Strip speaker prefix if present
-                                        translatedText = re.sub(r'^\[.*?\]\s*[|:]\s*', '', translatedText)
+                                        translatedText = strip_speaker_prefix(translatedText)
                                         # Replace double quotes to avoid breaking the JSON/JS syntax
                                         translatedText = translatedText.replace('\\"', "'")
                                         translatedText = translatedText.replace('"', "'")
@@ -3542,7 +3539,7 @@ def searchCodes(page, pbar, jobList, filename):
                                     translatedText = list355655[0]
                                     list355655.pop(0)
                                     # Strip speaker prefix if present
-                                    translatedText = re.sub(r'^\[.*?\]\s*[|:]\s*', '', translatedText)
+                                    translatedText = strip_speaker_prefix(translatedText)
                                     # Replace double quotes to avoid breaking JS syntax
                                     translatedText = translatedText.replace('\\"', "'")
                                     translatedText = translatedText.replace('"', "'")
@@ -4949,15 +4946,15 @@ def translateAI(text, history, history_ctx=None):
                 return name
             return m.group(0)
 
-        speaker_prefix = re.match(
-            r"^(?P<open>\s*\[)(?P<speaker>(?:\\n\[\d+\]|[^\]\n])+)(?P<close>\]\s*[|:]\s*)",
+        tag_match = re.match(
+            rf"^(?P<open>\s*\[)(?P<speaker>{SPEAKER_BRACKET_INNER})(?P<close>\]\s*[|:：]\s*)",
             s,
             re.IGNORECASE,
         )
-        if speaker_prefix:
-            speaker = _VAR_ACTOR_RE.sub(_display_actor_name, speaker_prefix.group("speaker"))
-            body = _VAR_ACTOR_RE.sub(_repl, s[speaker_prefix.end():])
-            return f"{speaker_prefix.group('open')}{speaker}{speaker_prefix.group('close')}{body}"
+        if tag_match:
+            speaker = _VAR_ACTOR_RE.sub(_display_actor_name, tag_match.group("speaker"))
+            body = _VAR_ACTOR_RE.sub(_repl, s[tag_match.end():])
+            return f"{tag_match.group('open')}{speaker}{tag_match.group('close')}{body}"
 
         return _VAR_ACTOR_RE.sub(_repl, s)
 

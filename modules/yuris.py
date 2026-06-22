@@ -11,6 +11,7 @@ from colorama import Fore
 from tqdm import tqdm
 
 import util.dazedwrap as dazedwrap
+from util.speaker_prefix import strip_speaker_prefix
 from util.translation import (
     TranslationConfig,
     calculateCost,
@@ -302,10 +303,9 @@ def translateYuris(data, filename):
 
 def stripSpeakerPrefix(translated_text):
     """Same behavior as modules/json.translateJSON: strip [Name]: prefix from TL lines."""
-    match = re.search(r"(^\[.+?\]\s?[|:]\s?)", translated_text)
-    if match:
-        translated_text = translated_text.replace(match.group(1), "")
-    else:
+    before_strip = translated_text
+    translated_text = strip_speaker_prefix(translated_text)
+    if translated_text == before_strip:
         cjk_m = re.match(
             r"^[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]+\s*[\(（:]\s*",
             translated_text,

@@ -13,6 +13,7 @@ from dotenv import load_dotenv
 from retry import retry
 from tqdm import tqdm
 from util.translation import TranslationConfig, translateAI as sharedtranslateAI, getPricingConfig, calculateCost, getPricingConfig, calculateCost
+from util.speaker_prefix import strip_speaker_prefix
 import tempfile
 
 # Globals
@@ -324,7 +325,7 @@ def translateKiriKiri(data, pbar, filename, jobList):
                     translatedText = stringList[0]
                     stringList.pop(0)
                     # Remove Speaker label if present
-                    translatedText = re.sub(r"\[.*?\]:\s", "", translatedText)
+                    translatedText = strip_speaker_prefix(translatedText)
                     # Wrap and convert newlines to [r]
                     translatedText = dazedwrap.wrapText(translatedText, width=WIDTH)
                     translatedText = translatedText.replace("\n", "[r]")
@@ -362,7 +363,7 @@ def translateKiriKiri(data, pbar, filename, jobList):
                         if len(stringList) > 0:
                             translatedText = stringList[0]
                             stringList.pop(0)
-                            translatedText = re.sub(r"\[.*?\]:\s", "", translatedText)
+                            translatedText = strip_speaker_prefix(translatedText)
                             translatedText = dazedwrap.wrapText(translatedText, width=WIDTH)
                             translatedText = translatedText.replace("\n", "[r]")
                             indent_match = re.match(r"^([ \t\u3000]+)", data[i])
@@ -402,7 +403,7 @@ def translateKiriKiri(data, pbar, filename, jobList):
                     stringList.pop(0)
 
                     # Remove Speaker
-                    translatedText = re.sub(r"\[.*?\]:\s", "", translatedText)
+                    translatedText = strip_speaker_prefix(translatedText)
 
                     # Textwrap
                     translatedText = dazedwrap.wrapText(translatedText, width=WIDTH)

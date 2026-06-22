@@ -13,6 +13,7 @@ from dotenv import load_dotenv
 from retry import retry
 from tqdm import tqdm
 from util.translation import TranslationConfig, translateAI as sharedtranslateAI, getPricingConfig, calculateCost, getPricingConfig, calculateCost
+from util.speaker_prefix import SPEAKER_TAG_RE, extract_dialogue_after_speaker, strip_speaker_prefix
 import tempfile
 
 # Globals
@@ -208,27 +209,20 @@ def translateTxt(data, filename, translatedList):
     global LOCK, ESTIMATE, FILENAME, PBAR, MISMATCH
     i = 0
 
-    # Regex
-    lineTextRegex = r"(?:^\[.+?\]:)?(.+)"
-    speakerTextRegex = r"^\[(.+?)\]"
-
     while i < len(data):
         # Speaker
-        match = re.search(speakerTextRegex, data[i])
+        match = SPEAKER_TAG_RE.match(data[i])
         if match:
             # Get Speaker
             speakerData = getSpeaker(match.group(1))
             speaker = speakerData[0]
             tokens[0] += speakerData[1][0]
             tokens[1] += speakerData[1][1]
-            data[i] = data[i].replace(match.group(1), speaker)
+            data[i] = data[i].replace(match.group(1), speaker, 1)
 
         # Dialogue
-        match = re.search(lineTextRegex, data[i])
-        jaString = None
-        if match:
-            # Set String
-            jaString = match.group(1)
+        jaString = extract_dialogue_after_speaker(data[i])
+        if jaString is not None:
 
             # Pass 1
             if not translatedList:
@@ -254,7 +248,7 @@ def translateTxt(data, filename, translatedList):
                         stringList = None
 
                     # Remove speaker
-                    translatedText = re.sub(r"(^\[.+?\]\s?[|:]\s?)", "", translatedText)
+                    translatedText = strip_speaker_prefix(translatedText)
 
                     # # Textwrap
                     # translatedText = dazedwrap.wrapText(translatedText, width=WIDTH)

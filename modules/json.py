@@ -13,6 +13,7 @@ from dotenv import load_dotenv
 from retry import retry
 from tqdm import tqdm
 from util.translation import TranslationConfig, translateAI as sharedtranslateAI, getPricingConfig, calculateCost, getPricingConfig, calculateCost
+from util.speaker_prefix import strip_speaker_prefix
 import tempfile
 
 # Globals
@@ -912,10 +913,9 @@ def translateDialogueSrcTl(data, filename):
 
             # Strip speaker prefix if the AI echoed it back
             # Handles: [Speaker]: text  |  Speaker: text  |  Speaker(text) / CJK(text)
-            match = re.search(r'^\[.+?\]\s?[|:]\s?', translatedText)
-            if match:
-                translatedText = translatedText[match.end():]
-            else:
+            before_strip = translatedText
+            translatedText = strip_speaker_prefix(translatedText)
+            if translatedText == before_strip:
                 # Fallback: strip any leading Japanese/CJK name followed by ( or :
                 cjk_m = re.match(r'^[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]+\s*[\(（:]\s*', translatedText)
                 if cjk_m:
@@ -1149,10 +1149,9 @@ def translateJSON(data, filename, translatedList):
                         stringList = None
 
                     # Remove speaker prefix — handles [Name]: / Name: / CJK(text)
-                    match = re.search(r'(^\[.+?\]\s?[|:]\s?)', translatedText)
-                    if match:
-                        translatedText = translatedText.replace(match.group(1), "")
-                    else:
+                    before_strip = translatedText
+                    translatedText = strip_speaker_prefix(translatedText)
+                    if translatedText == before_strip:
                         cjk_m = re.match(r'^[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]+\s*[\(（:]\s*', translatedText)
                         if cjk_m:
                             translatedText = translatedText[cjk_m.end():]

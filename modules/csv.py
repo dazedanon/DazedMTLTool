@@ -14,6 +14,7 @@ from dotenv import load_dotenv
 from retry import retry
 from tqdm import tqdm
 from util.translation import TranslationConfig, translateAI as sharedtranslateAI, getPricingConfig, calculateCost
+from util.speaker_prefix import strip_speaker_prefix
 import tempfile
 
 # Globals
@@ -330,8 +331,7 @@ def translateCSV(data, pbar, writeFile, writer, filename, translatedList):
                 translatedList.pop(0)
                 
                 # Remove speaker prefix from translation if present
-                if speaker:
-                    translatedText = re.sub(r"^\[?(.+?)\]?\s?[|:]\s?", "", translatedText)
+                translatedText = strip_speaker_prefix(translatedText)
                 
                 # Add wordwrap
                 translatedText = dazedwrap.wrapText(translatedText, WIDTH)

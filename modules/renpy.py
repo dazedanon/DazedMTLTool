@@ -13,6 +13,7 @@ from dotenv import load_dotenv
 from retry import retry
 from tqdm import tqdm
 from util.translation import TranslationConfig, translateAI as sharedtranslateAI, getPricingConfig, calculateCost, getPricingConfig, calculateCost
+from util.speaker_prefix import strip_speaker_prefix
 import tempfile
 
 # Globals
@@ -251,9 +252,7 @@ def translateRenpy(data, filename, translatedList):
                         translatedList = None
 
                     # Remove speaker
-                    if speaker != "":
-                        matchSpeakerList = re.findall(r"^\[?(.+?)\]?\s?[|:]\s?", translatedText)
-                        translatedText = re.sub(r"^\[?(.+?)\]?\s?[|:]\s?", "", translatedText)
+                    translatedText = strip_speaker_prefix(translatedText)
 
                     # Escape Quotes
                     translatedText = re.sub(r'[\\]*(")', '\\"', translatedText)

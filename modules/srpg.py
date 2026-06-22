@@ -14,6 +14,7 @@ from dotenv import load_dotenv
 from retry import retry
 from tqdm import tqdm
 from util.translation import TranslationConfig, translateAI as sharedtranslateAI, getPricingConfig, calculateCost
+from util.speaker_prefix import strip_speaker_prefix
 
 # Globals
 MODEL = os.getenv("model")
@@ -501,10 +502,7 @@ def translateBookmark(data, filename, translatedDataList=None, pbar=None):
                                     else:
                                         if dataList:
                                             translated = dataList[0]
-                                            if speaker:
-                                                match = re.search(r'(^\[.+?\]\s?[|:]\s?)', translated)
-                                                if match:
-                                                    translated = translated.replace(match.group(1), "")
+                                            translated = strip_speaker_prefix(translated)
                                             translated = dazedwrap.wrapText(translated, width=WIDTH)
                                             command["data"][i] = translated
                                             dataList.pop(0)
@@ -1389,10 +1387,7 @@ def translateRecollection(data, filename, translatedDataList=None, pbar=None):
                                     translated = dataList[0]
 
                                     # Remove speaker
-                                    if speaker:
-                                        match = re.search(r'(^\[.+?\]\s?[|:]\s?)', translated)
-                                        if match:
-                                            translated = translated.replace(match.group(1), "")
+                                    translated = strip_speaker_prefix(translated)
                                     
                                     # Textwrap
                                     translated = dazedwrap.wrapText(translated, width=WIDTH)
@@ -1843,10 +1838,7 @@ def translateMap(data, filename, translatedDataList=None, pbar=None):
                                             else:
                                                 if dataList:
                                                     translated = dataList[0]
-                                                    if speaker:
-                                                        match = re.search(r'(^\[.+?\]\s?[|:]\s?)', translated)
-                                                        if match:
-                                                            translated = translated.replace(match.group(1), "")
+                                                    translated = strip_speaker_prefix(translated)
                                                     translated = dazedwrap.wrapText(translated, width=WIDTH)
                                                     command["data"][i] = translated
                                                     dataList.pop(0)
@@ -1919,10 +1911,7 @@ def translateMap(data, filename, translatedDataList=None, pbar=None):
                                     else:
                                         if dataList:
                                             translated = dataList[0]
-                                            if speaker:
-                                                match = re.search(r'(^\[.+?\]\s?[|:]\s?)', translated)
-                                                if match:
-                                                    translated = translated.replace(match.group(1), "")
+                                            translated = strip_speaker_prefix(translated)
                                             translated = dazedwrap.wrapText(translated, width=WIDTH)
                                             command["data"][i] = translated
                                             dataList.pop(0)

@@ -14,6 +14,7 @@ from dotenv import load_dotenv
 from retry import retry
 from tqdm import tqdm
 from util.translation import TranslationConfig, translateAI as sharedtranslateAI, getPricingConfig, calculateCost, getPricingConfig, calculateCost
+from util.speaker_prefix import strip_speaker_prefix
 
 # OpenAI initialization centralized in util/translation.py
 
@@ -391,9 +392,7 @@ def searchCodes(events, pbar, jobList, filename):
                         translatedText = stringList[0]
 
                         # Remove speaker
-                        matchSpeakerList = re.findall(r"^(\[.+?\]\s?[|:]\s?)\s?", translatedText)
-                        if len(matchSpeakerList) > 0:
-                            translatedText = translatedText.replace(matchSpeakerList[0], "")
+                        translatedText = strip_speaker_prefix(translatedText)
 
                         # Textwrap
                         if FIXTEXTWRAP is True:
@@ -667,9 +666,7 @@ def searchCodes(events, pbar, jobList, filename):
                             translatedText = list300[0]
 
                             # Remove speaker
-                            matchSpeakerList = re.findall(r"^(\[.+?\]\s?[|:]\s?)\s?", translatedText)
-                            if len(matchSpeakerList) > 0:
-                                translatedText = translatedText.replace(matchSpeakerList[0], "")
+                            translatedText = strip_speaker_prefix(translatedText)
 
                             # Textwrap
                             if FIXTEXTWRAP is True:
