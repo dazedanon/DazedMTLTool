@@ -2434,6 +2434,7 @@ def searchCodes(page, pbar, jobList, filename):
                 # Format String
                 if len(currentGroup) > 0:
                     rawSource = _group_raw_source(codeList, groupStart, sourceGroup)
+                    # Skip empty or IGNORETLTEXT groups; clear speaker since this continue bypasses the normal reset below.
                     if (not rawSource.strip()) or (IGNORETLTEXT and not re.search(LANGREGEX, rawSource)):
                         speaker = ""
                         i += 1
