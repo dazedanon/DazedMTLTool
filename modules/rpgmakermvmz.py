@@ -2434,10 +2434,8 @@ def searchCodes(page, pbar, jobList, filename):
                 # Format String
                 if len(currentGroup) > 0:
                     rawSource = _group_raw_source(codeList, groupStart, sourceGroup)
-                    if not rawSource.strip():
-                        i += 1
-                        continue
-                    if not re.search(LANGREGEX, rawSource) and IGNORETLTEXT:
+                    if (not rawSource.strip()) or (IGNORETLTEXT and not re.search(LANGREGEX, rawSource)):
+                        speaker = ""
                         i += 1
                         continue
 
