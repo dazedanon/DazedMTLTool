@@ -49,18 +49,42 @@ $utf8    = New-Object System.Text.UTF8Encoding($false)   # no BOM
 $content = [IO.File]::ReadAllText($pluginsJs)
 $nl      = if ($content -match "`r`n") { "`r`n" } else { "`n" }
 $declared  = [regex]::IsMatch($content, '"name"\s*:\s*"TLInspector"')
+$hasRemnants = [regex]::IsMatch($content, '"description"\s*:\s*"TL source inspector"')
 $fileThere = Test-Path -LiteralPath $target
 
 # --- Already installed -> offer to remove -----------------------------------
-if ($declared -or $fileThere) {
+if ($declared -or $hasRemnants -or $fileThere) {
     Write-Host ""
     Write-Host "TLInspector is currently INSTALLED." -ForegroundColor Yellow
     $ans = Read-Host "Remove it? (Y/N)"
     if ($ans -match '^(y|yes)$') {
-        if ($declared) {
-            $kept = ($content -split "`r?`n") | Where-Object { $_ -notmatch '"name"\s*:\s*"TLInspector"' }
-            $newText = ($kept -join $nl)
-            # drop a now-dangling comma before the closing  ];
+        if ($declared -or $hasRemnants) {
+            $newText = $content
+            while ($true) {
+                $m = [regex]::Match($newText, '"name"\s*:\s*"TLInspector"')
+                if (-not $m.Success) { break }
+                $start = $newText.LastIndexOf('{', $m.Index)
+                if ($start -lt 0) { break }
+                $depth = 0
+                $end = -1
+                for ($i = $start; $i -lt $newText.Length; $i++) {
+                    if ($newText[$i] -eq '{') { $depth++ }
+                    elseif ($newText[$i] -eq '}') {
+                        $depth--
+                        if ($depth -eq 0) { $end = $i + 1; break }
+                    }
+                }
+                if ($end -lt 0) { break }
+                while ($end -lt $newText.Length -and $newText[$end] -match '\s') { $end++ }
+                if ($end -lt $newText.Length -and $newText[$end] -eq ',') { $end++ }
+                $before = $newText.Substring(0, $start).TrimEnd()
+                $after = $newText.Substring($end).TrimStart()
+                if ($before.EndsWith(',')) { $before = $before.Substring(0, $before.Length - 1).TrimEnd() }
+                elseif ($after.StartsWith(',')) { $after = $after.Substring(1).TrimStart() }
+                $newText = $before + $after
+            }
+            $newText = [regex]::Replace($newText, ',\s*\{\s*"status"\s*:\s*true\s*,\s*"description"\s*:\s*"TL source inspector"\s*,\s*"parameters"\s*:\s*\{[^{}]*\}\s*\}', '')
+            $newText = [regex]::Replace($newText, '\{\s*"status"\s*:\s*true\s*,\s*"description"\s*:\s*"TL source inspector"\s*,\s*"parameters"\s*:\s*\{[^{}]*\}\s*\}\s*,?', '')
             $newText = [regex]::Replace($newText, ',(\s*)\];', '$1];')
             [IO.File]::WriteAllText($pluginsJs, $newText, $utf8)
             Write-Host "Removed the TLInspector entry from plugins.js"

@@ -44,6 +44,78 @@ def _is_declared(content: str) -> bool:
     return bool(re.search(r'"name"\s*:\s*"TLInspector"', content))
 
 
+def _has_remnants(content: str) -> bool:
+    return bool(
+        re.search(
+            r'"description"\s*:\s*"TL source inspector"',
+            content,
+        )
+    )
+
+
+def _find_plugin_block_span(content: str, plugin_name: str = PLUGIN_NAME) -> tuple[int, int] | None:
+    """Return [start, end) span of the plugin object in plugins.js, or None."""
+    m = re.search(rf'"name"\s*:\s*"{re.escape(plugin_name)}"', content)
+    if not m:
+        return None
+    start = content.rfind("{", 0, m.start())
+    if start < 0:
+        return None
+    depth = 0
+    for i in range(start, len(content)):
+        ch = content[i]
+        if ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                end = i + 1
+                while end < len(content) and content[end] in " \t\r\n":
+                    end += 1
+                if end < len(content) and content[end] == ",":
+                    end += 1
+                return start, end
+    return None
+
+
+def _remove_plugin_block(content: str, plugin_name: str = PLUGIN_NAME) -> str:
+    compact = rf"\{{[^{{}}]*\"name\"\s*:\s*\"{re.escape(plugin_name)}\"[^{{}}]*\}}\s*,?"
+    content = re.sub(compact, "", content)
+    while True:
+        span = _find_plugin_block_span(content, plugin_name)
+        if span is None:
+            break
+        start, end = span
+        before = content[:start].rstrip()
+        after = content[end:].lstrip()
+        if before.endswith(","):
+            before = before[:-1].rstrip()
+        elif after.startswith(","):
+            after = after[1:].lstrip()
+        gap = "\n" if before and after and not before.endswith("\n") else ""
+        content = before + gap + after
+    lines = [
+        line
+        for line in re.split(r"\r?\n", content)
+        if not re.search(rf"\"name\"\s*:\s*\"{re.escape(plugin_name)}\"", line)
+    ]
+    content = "\n".join(lines)
+    # Leftover fragments from a previously corrupted multi-line entry.
+    content = re.sub(
+        r",\s*\{\s*\"status\"\s*:\s*true\s*,\s*\"description\"\s*:\s*\"TL source inspector\""
+        r"\s*,\s*\"parameters\"\s*:\s*\{[^{}]*\}\s*\}",
+        "",
+        content,
+    )
+    content = re.sub(
+        r"\{\s*\"status\"\s*:\s*true\s*,\s*\"description\"\s*:\s*\"TL source inspector\""
+        r"\s*,\s*\"parameters\"\s*:\s*\{[^{}]*\}\s*\}\s*,?",
+        "",
+        content,
+    )
+    return content
+
+
 def status(game_root: Path) -> dict:
     """Return install state for the game folder."""
     info = detect_engine(game_root)
@@ -123,16 +195,12 @@ def uninstall(game_root: Path) -> tuple[bool, str]:
 
     _, plugins_js, plugins_dir = info
     target = plugins_dir / f"{PLUGIN_NAME}.js"
-    content, nl = _read_plugins_js(plugins_js)
+    content, _ = _read_plugins_js(plugins_js)
 
-    if _is_declared(content):
-        kept = [
-            line for line in re.split(r"\r?\n", content)
-            if not re.search(r'"name"\s*:\s*"TLInspector"', line)
-        ]
-        new_text = nl.join(kept)
-        new_text = re.sub(r",(\s*)\];", r"\1];", new_text)
-        plugins_js.write_text(new_text, encoding="utf-8", newline="")
+    if _is_declared(content) or _has_remnants(content):
+        content = _remove_plugin_block(content)
+        content = re.sub(r",(\s*)\];", r"\1];", content)
+        plugins_js.write_text(content, encoding="utf-8", newline="")
 
     if target.is_file():
         target.unlink()
