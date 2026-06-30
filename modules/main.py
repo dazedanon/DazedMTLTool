@@ -343,6 +343,8 @@ files to translate are in the /files folder and that you picked the right game e
                 totalCost = runFiles(False)
             finally:
                 set_batch_phase(None)
+            if totalCost != "Fail":
+                clearBatchFiles()
     else:
         totalCost = runFiles(estimate)
 

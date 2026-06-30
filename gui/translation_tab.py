@@ -637,6 +637,12 @@ class TranslationWorker(QThread):
                 
             # Report results
             if total_cost != "Fail" and not self.should_stop:
+                if self.batch_mode:
+                    try:
+                        from util.translation import clearBatchFiles
+                        clearBatchFiles()
+                    except Exception:
+                        pass
                 self.emit_log("")
                 self.emit_log(f"💰 {total_cost}")
                 if self.batch_mode:
@@ -2426,18 +2432,25 @@ class TranslationTab(QWidget):
                     "pointing at anthropic.com.\n\nChange your model/API settings and try again.",
                 )
                 return
-            batch_resume_state = batchRunState()
-            if batch_resume_state and not skip_confirm:
-                reply = QMessageBox.question(
-                    self,
-                    "Resume Batch?",
-                    f"A previous batch run was interrupted ({batch_resume_state}).\n\n"
-                    "Resume it instead of re-collecting?\n"
-                    "(Re-collecting would queue new requests and bill again.)",
-                    QMessageBox.Yes | QMessageBox.No,
-                )
-                if reply != QMessageBox.Yes:
-                    batch_resume_state = None
+            if skip_confirm:
+                # Workflow auto-start: each phase is an independent batch run.
+                # Never resume stale queue/results left over from a prior phase.
+                from util.translation import clearBatchFiles
+                clearBatchFiles()
+                batch_resume_state = None
+            else:
+                batch_resume_state = batchRunState()
+                if batch_resume_state:
+                    reply = QMessageBox.question(
+                        self,
+                        "Resume Batch?",
+                        f"A previous batch run was interrupted ({batch_resume_state}).\n\n"
+                        "Resume it instead of re-collecting?\n"
+                        "(Re-collecting would queue new requests and bill again.)",
+                        QMessageBox.Yes | QMessageBox.No,
+                    )
+                    if reply != QMessageBox.Yes:
+                        batch_resume_state = None
         
         # Confirm start (skipped when called programmatically from the Workflow tab)
         if not skip_confirm:
