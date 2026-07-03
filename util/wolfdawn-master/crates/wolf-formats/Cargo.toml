@@ -1,0 +1,13 @@
+[package]
+name = "wolf-formats"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+description = "Byte-faithful typed read/write of Wolf RPG data files (maps, databases, common events). Round-trip contract lives here."
+
+[dependencies]
+wolf-core = { path = "../wolf-core" }
+
+[dev-dependencies]
+# For the end-to-end gate: unpack Data.wolf and parse/round-trip its inner files.
+wolf-archive = { path = "../wolf-archive" }

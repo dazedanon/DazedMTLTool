@@ -1,0 +1,17 @@
+[workspace]
+resolver = "2"
+members = ["crates/*"]
+
+[workspace.package]
+edition = "2021"
+version = "0.1.0"
+license = "MIT"
+repository = "https://gitgud.io/zero64801/wolfdawn"
+
+# Hand-rolled LZ4/AES/Huffman are intentionally dependency-free; keep it that way
+# in the lower layers. Encoding (SJIS<->UTF-8) deps belong only in the decompiler layer.
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
