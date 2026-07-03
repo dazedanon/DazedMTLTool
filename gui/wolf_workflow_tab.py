@@ -22,7 +22,9 @@ Mirrors the RPGMaker WorkflowTab, driven by the vendored WolfDawn ``wolf`` CLI
                                              name translations into vocab.txt
                         Phase 1  Database  - item/skill/state descriptions and system
                                              messages (DataBase/CDataBase.project)
-                        Phase 2  Dialogue  - maps, CommonEvent, Game.dat, Evtext
+                        Phase 2  Dialogue  - maps, CommonEvent, Game.dat, Evtext;
+                                             speaker handling and text-wrap settings
+                                             live under this phase in Step 3
   Step 4  Inject    - inject translations + curated names back into the Data/ binaries
                       and refresh the git-tracked wolf_json/ with the translated
                       JSON; quick-inject picks just a few translated files for
@@ -1092,9 +1094,6 @@ class WolfWorkflowTab(QWidget):
 
         self._add_phase_buttons(layout)
 
-        self._add_speaker_options(layout)
-        self._add_wrap_options(layout)
-
     def _add_phase_buttons(self, layout: QVBoxLayout):
         """Three ordered translation phases selected by manifest kind."""
         layout.addWidget(_make_hr())
@@ -1126,8 +1125,11 @@ class WolfWorkflowTab(QWidget):
         layout.addWidget(self._subheading("Phase 2 · Dialogue & events"))
         layout.addWidget(self._desc(
             "The bulk of the script: map events (.mps), CommonEvent, Game.dat and Evtext. Run last "
-            "so it benefits from the names and terms translated in the earlier phases."
+            "so it benefits from the names and terms translated in the earlier phases. Speaker "
+            "handling and text wrap below apply only to this phase."
         ))
+        self._add_speaker_options(layout)
+        self._add_wrap_options(layout)
         p2 = self._register(_make_btn("▶ Phase 2 · Translate dialogue & events", "#00a86b"))
         p2.clicked.connect(
             lambda: self._navigate_to_translation(kinds=PHASE_DIALOGUE_KINDS, auto_start=True)
