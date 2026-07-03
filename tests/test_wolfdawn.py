@@ -154,6 +154,96 @@ class TestTranslationWriteback(unittest.TestCase):
         self.assertEqual(data["scenes"][0]["lines"][0]["text"], "こんにちは")
 
 
+import re  # noqa: E402
+
+
+def _mock_translate_speaker(text, history=None, history_ctx=None):
+    """Emulate a model that keeps the [Speaker]: format when present."""
+    def one(t):
+        m = re.match(r"^\[([^\]]*)\]:\s*(.*)$", t, re.DOTALL)
+        if m:
+            return f"[EN_{m.group(1)}]: EN_{m.group(2)}"
+        return f"EN_{t}"
+
+    if isinstance(text, list):
+        return [[one(t) for t in text], [1, 1]]
+    return [one(text), [1, 1]]
+
+
+SPEAKER_MAP_DOC = {
+    "file": "OP.mps",
+    "kind": "map",
+    "scenes": [
+        {
+            "event": 0, "name": "ev",
+            "lines": [
+                {"cmd": 26, "str": 0, "speaker": "市民", "speaker_src": "literal_line1_lowconf",
+                 "source": "市民\nおはよう\n元気？", "text": "市民\nおはよう\n元気？"},
+                {"cmd": 27, "str": 0, "speaker": "セルリア", "speaker_src": "literal_line1",
+                 "source": "セルリア\nふふふ", "text": "セルリア\nふふふ"},
+                {"cmd": 28, "str": 0, "speaker": "Narration", "speaker_src": "narration",
+                 "source": "むかしむかし", "text": "むかしむかし"},
+            ],
+        }
+    ],
+}
+
+
+class _SpeakerHarness:
+    """Run parseDocument with the speaker-aware mock and a chosen speaker config."""
+
+    def __init__(self, config):
+        self.config = config
+        self.captured = []
+
+    def run(self, data, filename="OP.mps.json"):
+        def translate(text, history=None, history_ctx=None):
+            self.captured.append(copy.deepcopy(text))
+            return _mock_translate_speaker(text, history, history_ctx)
+
+        orig_t, orig_est, orig_cfg = wd.translateAI, wd.ESTIMATE, wd.SPEAKER_CONFIG
+        wd.translateAI = translate
+        wd.ESTIMATE = False
+        wd.SPEAKER_CONFIG = self.config
+        try:
+            result = wd.parseDocument(copy.deepcopy(data), filename)
+            return result, self.captured
+        finally:
+            wd.translateAI, wd.ESTIMATE, wd.SPEAKER_CONFIG = orig_t, orig_est, orig_cfg
+
+
+class TestSpeakerReshaping(unittest.TestCase):
+    def test_firstline_speakers_reshaped_and_restored(self):
+        cfg = {"literal_line1": True, "literal_line1_lowconf": True}
+        (data, _t, err), captured = _SpeakerHarness(cfg).run(SPEAKER_MAP_DOC)
+        self.assertIsNone(err)
+        # Model saw the [Speaker]: transport for the two nameplate lines.
+        self.assertEqual(
+            captured[0],
+            ["[市民]: おはよう\n元気？", "[セルリア]: ふふふ", "むかしむかし"],
+        )
+        lines = data["scenes"][0]["lines"]
+        # Restored to WOLF's native Speaker\nbody layout.
+        self.assertEqual(lines[0]["text"], "EN_市民\nEN_おはよう\n元気？")
+        self.assertEqual(lines[1]["text"], "EN_セルリア\nEN_ふふふ")
+        # Narration was translated as a plain blob.
+        self.assertEqual(lines[2]["text"], "EN_むかしむかし")
+        # Sources are preserved for the inject drift guard.
+        self.assertEqual(lines[0]["source"], "市民\nおはよう\n元気？")
+        # Original layout (newline count) preserved on the reshaped lines.
+        self.assertEqual(lines[0]["source"].count("\n"), lines[0]["text"].count("\n"))
+
+    def test_disabled_format_sends_raw_blob(self):
+        cfg = {"literal_line1": True, "literal_line1_lowconf": False}
+        (data, _t, err), captured = _SpeakerHarness(cfg).run(SPEAKER_MAP_DOC)
+        self.assertIsNone(err)
+        # Low-confidence line is sent as the raw source (no reshaping).
+        self.assertIn("市民\nおはよう\n元気？", captured[0])
+        self.assertIn("[セルリア]: ふふふ", captured[0])
+        lines = data["scenes"][0]["lines"]
+        self.assertEqual(lines[0]["text"], "EN_市民\nおはよう\n元気？")
+
+
 class TestOpenFiles(unittest.TestCase):
     def test_rejects_unknown_kind(self):
         with tempfile.TemporaryDirectory() as td:

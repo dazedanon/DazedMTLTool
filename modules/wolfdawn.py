@@ -17,6 +17,13 @@ Only entries whose ``source`` contains target-language (Japanese by default)
 text are sent to the model; everything else keeps ``text == source`` so inject
 is a no-op for it. Translated text is written back verbatim (no re-wrapping) to
 keep WolfDawn's inline-code and byte-exact guards happy.
+
+Speakers: WolfDawn tags each line with ``speaker`` / ``speaker_src``. For the
+first-line formats (``literal_line1`` / ``literal_line1_lowconf``) the speaker
+name is baked into line 1 of ``source``. Those lines are reshaped into the shared
+``[Speaker]: line`` convention (which the prompt already translates) and restored
+to WOLF's native ``Speaker\nline`` layout on write-back. See ``util.wolf_speakers``;
+which formats are reshaped is configurable from the workflow.
 """
 
 import json
@@ -36,6 +43,7 @@ from util.translation import (
     getPricingConfig,
     calculateCost,
 )
+from util import wolf_speakers
 
 # Globals (mirror the other engine modules; populated from .env at import time)
 MODEL = os.getenv("model")
@@ -53,6 +61,12 @@ FILENAME = None
 
 # Regex - default matches Japanese (kanji, kana, full-width forms).
 LANGREGEX = r"[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]+"
+
+# Speaker handling: for first-line-speaker formats, reshape the line into the
+# shared "[Speaker]: line" transport before translating and restore WOLF's
+# native "Speaker\nline" layout on write-back. Which formats are reshaped is
+# configurable from the workflow (data/wolf_speakers.json).
+SPEAKER_CONFIG = wolf_speakers.load_config()
 
 # Pricing / batching from the configured model
 PRICING_CONFIG = getPricingConfig(MODEL)
@@ -172,7 +186,22 @@ def parseDocument(data, filename):
         if not translatable:
             return [data, totalTokens, None]
 
-        sources = [e["source"] for e in translatable]
+        # Reshape first-line-speaker lines into the shared "[Speaker]: line"
+        # transport format. plans[i] carries what is needed to restore each
+        # entry after translation.
+        sources = []
+        plans = []  # (entry, prefix, has_speaker)
+        for entry in translatable:
+            src = entry["source"]
+            split = wolf_speakers.split_source(src, entry.get("speaker_src", ""), SPEAKER_CONFIG)
+            if split is not None:
+                prefix, speaker, body = split
+                sources.append(wolf_speakers.to_prefixed(speaker, body))
+                plans.append((entry, prefix, True))
+            else:
+                sources.append(src)
+                plans.append((entry, "", False))
+
         try:
             response = translateAI(sources, [])
         except Exception as e:
@@ -183,9 +212,18 @@ def parseDocument(data, filename):
         totalTokens[1] += tokens[1]
 
         # Write translations back (skip in estimate mode: translated == sources).
-        if not ESTIMATE and isinstance(translated, list) and len(translated) == len(translatable):
-            for entry, text in zip(translatable, translated):
-                if isinstance(text, str):
+        if not ESTIMATE and isinstance(translated, list) and len(translated) == len(plans):
+            for (entry, prefix, has_speaker), text in zip(plans, translated):
+                if not isinstance(text, str):
+                    continue
+                if has_speaker:
+                    speaker_en, body_en = wolf_speakers.parse_prefixed(text)
+                    if speaker_en is not None:
+                        entry["text"] = wolf_speakers.restore_source(prefix, speaker_en, body_en)
+                    else:
+                        # Model dropped the [Speaker]: prefix; keep its output as-is.
+                        entry["text"] = prefix + text
+                else:
                     entry["text"] = text
 
     return [data, totalTokens, None]

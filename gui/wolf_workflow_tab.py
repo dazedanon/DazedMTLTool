@@ -816,6 +816,7 @@ class WolfWorkflowTab(QWidget):
         ))
 
         self._add_tl_mode_selector(layout)
+        self._add_speaker_options(layout)
 
         btn = self._register(_make_btn("Translate all files now", "#00a86b"))
         btn.clicked.connect(lambda: self._navigate_to_translation(auto_start=True))
@@ -824,6 +825,47 @@ class WolfWorkflowTab(QWidget):
         open_btn = self._register(_make_btn("Open Translation tab (no auto-start)", "#3a3a3a"))
         open_btn.clicked.connect(lambda: self._navigate_to_translation(auto_start=False))
         layout.addWidget(open_btn)
+
+    def _add_speaker_options(self, layout: QVBoxLayout):
+        """Toggles for which speaker formats are reshaped into '[Speaker]: line'."""
+        from util import wolf_speakers
+
+        layout.addWidget(_make_hr())
+        layout.addWidget(self._subheading("Speaker handling"))
+        layout.addWidget(self._desc(
+            "WolfDawn tags who is speaking on each line. For lines where the name is baked "
+            "into the first line (a nameplate), the translator reshapes them into the "
+            "\"[Speaker]: line\" format the prompt understands, translates the speaker tag, then "
+            "restores WOLF's native \"Speaker⏎line\" layout on inject. Turn the formats off if a "
+            "game's first lines are not really speaker names."
+        ))
+
+        cfg = wolf_speakers.load_config()
+
+        self._speaker_hi_cb = QCheckBox(
+            "High-confidence nameplates (a face window precedes the line)"
+        )
+        self._speaker_hi_cb.setChecked(bool(cfg.get("literal_line1", True)))
+        self._speaker_hi_cb.stateChanged.connect(self._save_speaker_options)
+        layout.addWidget(self._speaker_hi_cb)
+
+        self._speaker_lo_cb = QCheckBox(
+            "Low-confidence first-line guesses (short first line, no preceding face window)"
+        )
+        self._speaker_lo_cb.setChecked(bool(cfg.get("literal_line1_lowconf", True)))
+        self._speaker_lo_cb.stateChanged.connect(self._save_speaker_options)
+        layout.addWidget(self._speaker_lo_cb)
+
+    def _save_speaker_options(self):
+        from util import wolf_speakers
+
+        try:
+            wolf_speakers.save_config({
+                "literal_line1": self._speaker_hi_cb.isChecked(),
+                "literal_line1_lowconf": self._speaker_lo_cb.isChecked(),
+            })
+        except Exception as exc:
+            self._log(f"❌ Could not save speaker options: {exc}")
 
     def _add_tl_mode_selector(self, layout: QVBoxLayout):
         """Normal vs Batch selector; applies to the name glossary (1b) and full runs."""
