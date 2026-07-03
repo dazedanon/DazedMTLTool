@@ -11,7 +11,7 @@ from colorama import Fore
 from tqdm import tqdm
 
 import util.dazedwrap as dazedwrap
-from util.speaker_prefix import strip_speaker_prefix
+from util.speakers import strip_speaker_prefix
 from util.translation import (
     TranslationConfig,
     calculateCost,

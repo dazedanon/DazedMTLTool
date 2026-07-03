@@ -22,7 +22,7 @@ Speakers: WolfDawn tags each line with ``speaker`` / ``speaker_src``. For the
 first-line formats (``literal_line1`` / ``literal_line1_lowconf``) the speaker
 name is baked into line 1 of ``source``. Those lines are reshaped into the shared
 ``[Speaker]: line`` convention (which the prompt already translates) and restored
-to WOLF's native ``Speaker\nline`` layout on write-back. See ``util.wolf_speakers``;
+to WOLF's native ``Speaker\nline`` layout on write-back. See ``util.speakers``;
 which formats are reshaped is configurable from the workflow.
 """
 
@@ -43,7 +43,7 @@ from util.translation import (
     getPricingConfig,
     calculateCost,
 )
-from util import wolf_speakers
+from util import speakers as wolf_speakers
 
 # Globals (mirror the other engine modules; populated from .env at import time)
 MODEL = os.getenv("model")

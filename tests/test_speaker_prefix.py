@@ -1,6 +1,6 @@
 import unittest
 
-from util.speaker_prefix import (
+from util.speakers import (
     SPEAKER_TAG_RE,
     extract_dialogue_after_speaker,
     strip_speaker_prefix,

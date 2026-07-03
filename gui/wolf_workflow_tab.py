@@ -828,7 +828,7 @@ class WolfWorkflowTab(QWidget):
 
     def _add_speaker_options(self, layout: QVBoxLayout):
         """Toggles for which speaker formats are reshaped into '[Speaker]: line'."""
-        from util import wolf_speakers
+        from util import speakers as wolf_speakers
 
         layout.addWidget(_make_hr())
         layout.addWidget(self._subheading("Speaker handling"))
@@ -857,7 +857,7 @@ class WolfWorkflowTab(QWidget):
         layout.addWidget(self._speaker_lo_cb)
 
     def _save_speaker_options(self):
-        from util import wolf_speakers
+        from util import speakers as wolf_speakers
 
         try:
             wolf_speakers.save_config({

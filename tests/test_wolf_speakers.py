@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Unit tests for util/wolf_speakers.py (first-line speaker reshaping)."""
+"""Unit tests for the WOLF first-line speaker reshaping in util/speakers.py."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 os.chdir(ROOT)
 sys.path.insert(0, str(ROOT))
 
-from util import wolf_speakers as ws  # noqa: E402
+from util import speakers as ws  # noqa: E402
 
 ALL_ON = {"literal_line1": True, "literal_line1_lowconf": True}
 ALL_OFF = {"literal_line1": False, "literal_line1_lowconf": False}

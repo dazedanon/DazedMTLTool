@@ -14,7 +14,7 @@ from dotenv import load_dotenv
 from retry import retry
 from tqdm import tqdm
 from util.translation import TranslationConfig, translateAI as sharedtranslateAI, getPricingConfig, calculateCost, getPricingConfig, calculateCost, get_var_translation, set_var_translations_batch
-from util.speaker_prefix import SPEAKER_BRACKET_INNER, strip_speaker_prefix
+from util.speakers import SPEAKER_BRACKET_INNER, strip_speaker_prefix
 
 # Globals
 MODEL = os.getenv("model")

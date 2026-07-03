@@ -13,7 +13,7 @@ from dotenv import load_dotenv
 from retry import retry
 from tqdm import tqdm
 from util.translation import TranslationConfig, translateAI as sharedtranslateAI, getPricingConfig, calculateCost, getPricingConfig, calculateCost
-from util.speaker_prefix import SPEAKER_TAG_RE, extract_dialogue_after_speaker, strip_speaker_prefix
+from util.speakers import SPEAKER_TAG_RE, extract_dialogue_after_speaker, strip_speaker_prefix
 import tempfile
 
 # Globals
