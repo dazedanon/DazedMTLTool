@@ -29,6 +29,7 @@
 !package.nw
 !SRPG_Unpacker.exe
 !(SRPG_Unpacker Patcher).bat
+!Data/BasicData/CommonEvent.dat
 
 # Ignore
 previous_patch_sha.txt

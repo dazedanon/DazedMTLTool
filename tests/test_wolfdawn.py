@@ -39,7 +39,7 @@ class _WolfTranslateHarness:
     def __init__(self):
         self.captured = []
 
-    def run(self, data, filename="doc.json", estimate=False):
+    def run(self, data, filename="doc.json", estimate=False, safe_notes=None):
         def translate(text, history, history_ctx=None):
             self.captured.append(copy.deepcopy(text))
             return _mock_translate(text, history, history_ctx)
@@ -47,9 +47,12 @@ class _WolfTranslateHarness:
         orig_t = wd.translateAI
         orig_estimate = wd.ESTIMATE
         orig_wrap = wd.WRAP
+        orig_notes = wd.SAFE_NOTES
         wd.translateAI = translate
         wd.ESTIMATE = estimate
         wd.WRAP = False  # keep write-back byte-faithful; wrapping tested separately
+        if safe_notes is not None:
+            wd.SAFE_NOTES = safe_notes
         try:
             data_copy = copy.deepcopy(data)
             result = wd.parseDocument(data_copy, filename)
@@ -58,6 +61,7 @@ class _WolfTranslateHarness:
             wd.translateAI = orig_t
             wd.ESTIMATE = orig_estimate
             wd.WRAP = orig_wrap
+            wd.SAFE_NOTES = orig_notes
 
 
 MAP_DOC = {
@@ -93,8 +97,11 @@ GAMEDAT_DOC = {
 
 NAMES_DOC = {
     "kind": "names",
-    "count": 1,
-    "names": [{"source": "剣", "text": "剣", "occurrences": 2, "note": "Item"}],
+    "count": 2,
+    "names": [
+        {"source": "剣", "text": "剣", "occurrences": 2, "note": "武器"},
+        {"source": "スイッチ状態", "text": "スイッチ状態", "occurrences": 1, "note": "通常変数名"},
+    ],
 }
 
 TXTDIR_DOC = {
@@ -111,7 +118,7 @@ class TestCollectEntries(unittest.TestCase):
         self.assertEqual(len(wd.collectEntries(MAP_DOC)), 2)
         self.assertEqual(len(wd.collectEntries(DB_DOC)), 1)
         self.assertEqual(len(wd.collectEntries(GAMEDAT_DOC)), 1)
-        self.assertEqual(len(wd.collectEntries(NAMES_DOC)), 1)
+        self.assertEqual(len(wd.collectEntries(NAMES_DOC)), 2)
         self.assertEqual(len(wd.collectEntries(TXTDIR_DOC)), 1)
 
 
@@ -139,11 +146,27 @@ class TestTranslationWriteback(unittest.TestCase):
         self.assertIsNone(err)
         self.assertEqual(data["lines"][0]["text"], "EN_ゲームタイトル")
 
-    def test_names_translates(self):
-        (data, _t, err), _c = _WolfTranslateHarness().run(NAMES_DOC, "names.json")
+    def test_names_translate_only_safe_notes(self):
+        # Only the entry whose note is opted-in gets translated.
+        (data, _t, err), _c = _WolfTranslateHarness().run(
+            NAMES_DOC, "names.json", safe_notes=["武器"]
+        )
         self.assertIsNone(err)
         self.assertEqual(data["names"][0]["text"], "EN_剣")
         self.assertEqual(data["names"][0]["source"], "剣")
+        # The unsafe category (variable name) is left identical to the source.
+        self.assertEqual(data["names"][1]["text"], "スイッチ状態")
+        self.assertEqual(data["names"][1]["source"], "スイッチ状態")
+
+    def test_names_default_translates_nothing(self):
+        # Empty safe list = safe default: no name is translated.
+        (data, _t, err), captured = _WolfTranslateHarness().run(
+            NAMES_DOC, "names.json", safe_notes=[]
+        )
+        self.assertIsNone(err)
+        self.assertEqual(captured, [])
+        for entry in data["names"]:
+            self.assertEqual(entry["text"], entry["source"])
 
     def test_txtdir_translates(self):
         (data, _t, err), _c = _WolfTranslateHarness().run(TXTDIR_DOC, "Evtext.json")

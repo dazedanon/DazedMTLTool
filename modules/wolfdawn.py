@@ -17,6 +17,14 @@ Only entries whose ``source`` contains target-language (Japanese by default)
 text are sent to the model; everything else keeps ``text == source`` so inject
 is a no-op for it.
 
+names.json safety: WolfDawn's ``names-extract`` groups every value name under a
+``note`` category, and many categories are logic keys (variable / file / event
+names) that break the game if translated. So for ``kind == "names"`` documents,
+only entries whose ``note`` is in the opt-in safe list (``SAFE_NOTES``, from
+``data/wolf_safe_notes.json`` via :mod:`util.wolf_names`) are translated; the rest
+are left as source. The list is empty by default, so nothing is translated until
+the user opts categories in from the workflow.
+
 Text wrapping: translated dialogue is re-wrapped to a character width (like the
 RPGMaker module, via :mod:`util.dazedwrap`) so English fits WOLF's message box.
 Wrapping is applied to the dialogue *body* only - a speaker's nameplate line (the
@@ -51,6 +59,7 @@ from util.translation import (
     calculateCost,
 )
 from util import speakers as wolf_speakers
+from util import wolf_names
 
 # Globals (mirror the other engine modules; populated from .env at import time)
 MODEL = os.getenv("model")
@@ -74,6 +83,13 @@ LANGREGEX = r"[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]+"
 # native "Speaker\nline" layout on write-back. Which formats are reshaped is
 # configurable from the workflow (data/wolf_speakers.json).
 SPEAKER_CONFIG = wolf_speakers.load_config()
+
+# names.json safety: WolfDawn tags every value name with a ``note`` category. Many
+# categories are logic keys (variable/file/event names) that break the game if
+# translated, so only entries whose ``note`` is in this opt-in list are sent to
+# the model; the rest keep text == source. Empty by default = translate nothing.
+# Configured from the workflow (data/wolf_safe_notes.json).
+SAFE_NOTES = wolf_names.load_safe_notes()
 
 # Text wrapping: rewrap translated dialogue to a character width the same way the
 # RPGMaker module does (util.dazedwrap), so English lines fit WOLF's message box.
@@ -113,9 +129,12 @@ TRANSLATION_CONFIG = TranslationConfig(
 
 def handleWolfDawn(filename, estimate):
     """Entry point used by the CLI/GUI dispatchers. Returns a summary string or 'Fail'."""
-    global ESTIMATE, TOKENS, FILENAME
+    global ESTIMATE, TOKENS, FILENAME, SAFE_NOTES
     ESTIMATE = estimate
     FILENAME = filename
+    # Re-read the safe note categories so edits made in the workflow this session
+    # take effect even when translation runs in-process (module import is cached).
+    SAFE_NOTES = wolf_names.load_safe_notes()
 
     start = time.time()
     translatedData = openFiles(filename)
@@ -215,12 +234,21 @@ def parseDocument(data, filename):
     totalTokens = [0, 0]
 
     entries = collectEntries(data)
-    # Only translate entries that actually contain target-language text; the rest
-    # keep text == source so WolfDawn treats them as untouched on inject.
-    translatable = [
-        e for e in entries
-        if isinstance(e.get("source"), str) and re.search(LANGREGEX, e["source"])
-    ]
+    is_names = data.get("kind") == "names"
+
+    def _translatable(e):
+        src = e.get("source")
+        if not (isinstance(src, str) and re.search(LANGREGEX, src)):
+            return False
+        # names.json: only translate categories the user marked safe (by note).
+        if is_names and not wolf_names.is_note_safe(e.get("note", ""), SAFE_NOTES):
+            return False
+        return True
+
+    # Only translate entries that actually contain target-language text (and, for
+    # names.json, sit in a safe note category); the rest keep text == source so
+    # WolfDawn treats them as untouched on inject.
+    translatable = [e for e in entries if _translatable(e)]
 
     with tqdm(bar_format=BAR_FORMAT, position=POSITION, total=len(translatable), leave=LEAVE) as pbar:
         pbar.desc = filename
