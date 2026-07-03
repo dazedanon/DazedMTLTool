@@ -7,6 +7,11 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
+if sys.platform.startswith("linux"):
+    from util.linux_desktop import configure_qt_platform
+
+    configure_qt_platform()
+
 
 def check_dependencies():
     """Check if required dependencies are installed."""

@@ -13,6 +13,12 @@ import zipfile
 import shutil
 import tempfile
 from pathlib import Path
+
+if sys.platform.startswith("linux"):
+    from util.linux_desktop import configure_qt_platform
+
+    configure_qt_platform()
+
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QTabWidget, QVBoxLayout, QHBoxLayout,
     QWidget, QPushButton, QLabel, QFileDialog, QMessageBox, QProgressBar,
@@ -1002,7 +1008,9 @@ def main():
             QApplication.setHighDpiScaleFactorRoundingPolicy(Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
 
         if sys.platform.startswith("linux"):
-            from util.linux_desktop import ensure_linux_desktop_entry
+            from util.linux_desktop import ensure_linux_desktop_entry, install_qt_message_filter
+
+            install_qt_message_filter()
             ensure_linux_desktop_entry()
             QGuiApplication.setDesktopFileName("DazedMTLTool")
 

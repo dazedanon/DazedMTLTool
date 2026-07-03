@@ -12,6 +12,42 @@ from util.paths import ICON_PATH, PROJECT_ROOT
 DESKTOP_ID = "DazedMTLTool"
 LAUNCH_SCRIPT = PROJECT_ROOT / "scripts" / "launch.sh"
 
+# Qt logs this on Wayland whenever a dialog tries to steal focus (harmless noise).
+_WAYLAND_ACTIVATE_WARNING = "Wayland does not support QWindow::requestActivate()"
+
+
+def _append_qt_logging_rule(rule: str) -> None:
+    category = rule.split("=", 1)[0]
+    existing = os.environ.get("QT_LOGGING_RULES", "")
+    if category in existing:
+        return
+    os.environ["QT_LOGGING_RULES"] = f"{existing};{rule}" if existing else rule
+
+
+def configure_qt_platform() -> None:
+    """Apply Linux/Qt environment tweaks before constructing QApplication."""
+    if not sys.platform.startswith("linux"):
+        return
+    _append_qt_logging_rule("qt.qpa.wayland=false")
+
+
+def install_qt_message_filter() -> None:
+    """Drop the noisy Wayland requestActivate warning (QT rules miss some builds)."""
+    if not sys.platform.startswith("linux"):
+        return
+    try:
+        from PyQt5.QtCore import QtMsgType, qInstallMessageHandler
+    except ImportError:
+        return
+
+    def _handler(mode, _context, message):
+        if _WAYLAND_ACTIVATE_WARNING in message:
+            return
+        if mode in (QtMsgType.QtWarningMsg, QtMsgType.QtCriticalMsg, QtMsgType.QtFatalMsg):
+            print(message, file=sys.stderr)
+
+    qInstallMessageHandler(_handler)
+
 
 def installed_desktop_path() -> Path:
     data_home = os.environ.get("XDG_DATA_HOME", "")
