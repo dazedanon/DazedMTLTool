@@ -22,7 +22,9 @@ import sys
 import threading
 from pathlib import Path
 
-from util.paths import VOCAB_BASE_PATH, VOCAB_PATH
+from util.paths import VOCAB_PATH
+from util.vocab import BASE_SEPARATOR as _SHARED_BASE_SEPARATOR
+from util.vocab import read_game_vocab, write_game_vocab
 
 import jsbeautifier
 
@@ -1075,8 +1077,10 @@ class WorkflowTab(QWidget):
         "</rules>\n"
         "\n"
         "<output_format>\n"
-        "Output EXACTLY two sections with these headers. Do not add any preamble, explanation, "
-        "or text outside the entries.\n"
+        "Return the ENTIRE glossary inside ONE fenced code block (a ``` block), with nothing before "
+        "or after it, so it can be copied in a single click and pasted straight into the tool.\n"
+        "Inside the code block, output EXACTLY two sections with these headers. Do not add any "
+        "preamble, explanation, or text outside the entries.\n"
         "\n"
         "# Game Characters\n"
         "# Worldbuilding Terms\n"
@@ -1194,10 +1198,11 @@ class WorkflowTab(QWidget):
         "</safety_check>\n"
         "\n"
         "<output_format>\n"
-        "Provide the translated file as a complete replacement of js/plugins.js. Only change the "
+        "Provide the translated file as a complete replacement of js/plugins.js, inside a single "
+        "fenced code block (```js ... ```) so it can be copied in one click. Only change the "
         "string values identified above. Preserve all original formatting, indentation, comments, and structure.\n"
         "\n"
-        "After the file, output a summary:\n"
+        "After the code block, output a summary:\n"
         "\n"
         "### Translations Made\n"
         "  Plugin: <plugin name>\n"
@@ -1268,8 +1273,9 @@ class WorkflowTab(QWidget):
         "</safety_check>\n"
         "\n"
         "<output_format>\n"
-        "For each .rb file that needed changes, provide the full translated file content. "
-        "Only change string values identified as safe. "
+        "For each .rb file that needed changes, provide the full translated file content inside its "
+        "own fenced code block (```ruby ... ```), preceded by the filename, so each file can be "
+        "copied in one click. Only change string values identified as safe. "
         "Preserve all Ruby syntax, indentation, comments, and structure exactly.\n"
         "\n"
         "After all files, output a summary:\n"
@@ -3555,7 +3561,7 @@ class WorkflowTab(QWidget):
     # Step 1 – Vocab
     # ─────────────────────────────────────────────────────────────────────────
 
-    _BASE_SEPARATOR = "# ── Base Vocabulary (auto-appended from vocab_base.txt — do not edit below) ──\n"
+    _BASE_SEPARATOR = _SHARED_BASE_SEPARATOR
 
     def _copy_glossary_prompt(self):
         """Copy the glossary prompt to clipboard, injecting known speakers from vocab.txt."""
@@ -3608,27 +3614,14 @@ class WorkflowTab(QWidget):
         return results
 
     def _reload_vocab(self):
-        vocab_path = VOCAB_PATH
         try:
-            if vocab_path.exists():
-                text = vocab_path.read_text(encoding="utf-8")
-                # Strip the auto-appended base section so editor shows only game-specific content
-                sep_idx = text.find(self._BASE_SEPARATOR)
-                if sep_idx != -1:
-                    text = text[:sep_idx].rstrip("\n")
-                self.vocab_editor.setPlainText(text)
-            else:
-                self.vocab_editor.setPlainText("# Add character glossary entries here\n")
+            self.vocab_editor.setPlainText(read_game_vocab())
         except Exception as exc:
             self._log(f"❌ Could not load vocab.txt: {exc}")
 
     def _save_vocab(self):
         try:
-            game_text = self.vocab_editor.toPlainText().rstrip("\n")
-            base_path = VOCAB_BASE_PATH
-            base_text = base_path.read_text(encoding="utf-8") if base_path.exists() else ""
-            combined = game_text + "\n\n" + self._BASE_SEPARATOR + base_text
-            VOCAB_PATH.write_text(combined, encoding="utf-8")
+            write_game_vocab(self.vocab_editor.toPlainText())
             self._log("✅ vocab.txt saved (base terms from vocab_base.txt appended).")
         except Exception as exc:
             self._log(f"❌ Could not save vocab.txt: {exc}")

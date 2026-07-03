@@ -5,8 +5,10 @@ Mirrors the RPGMaker WorkflowTab, driven by the vendored WolfDawn ``wolf`` CLI
 (see util/wolfdawn):
 
   Step 0  Project   - select game folder, unpack .wolf archives, extract text
-                      (strings-extract per file + names-extract) into files/
-  Step 1  Glossary  - translate the project-wide name glossary first
+                      (strings-extract per file + names-extract) into files/, and
+                      copy the gameupdate/ patch files (incl. .gitignore) for git tracking
+  Step 1  Glossary  - build vocab.txt (characters/terms) and translate the
+                      project-wide name-value glossary first
   Step 2  Translate - run the "Wolf RPG (WolfDawn)" module over files/
   Step 3  Inject    - inject translations + names back into the Data/ binaries
   Step 4  Package   - run from a loose Data/ folder, or repack Data.wolf
@@ -26,7 +28,9 @@ from pathlib import Path
 from PyQt5.QtCore import Qt, QSettings, QThread, QTimer, pyqtSignal
 from PyQt5.QtGui import QFont
 from PyQt5.QtWidgets import (
+    QApplication,
     QCheckBox,
+    QComboBox,
     QFileDialog,
     QHBoxLayout,
     QLabel,
@@ -41,12 +45,108 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
+from gui.translation_tab import (
+    BATCH_COLLECT_LIVE_CHARGE_NOTE,
+    BATCH_MODE_BENEFIT_NOTE,
+    BATCH_MODE_LABEL,
+)
 from gui.workflow_tab import _make_btn, _make_hr, _make_section_label
 from util.project_scanner import detect_wolf_layout
+from util.vocab import read_game_vocab, write_game_vocab
+
+# Workflow-level label for the non-batch (live) translation path. The Translation
+# tab's own mode is called "Translate"; _workflow_mode_text() maps to that.
+_TL_NORMAL_LABEL = "Normal Translate"
 
 MANIFEST_NAME = "manifest.json"
 NAMES_JSON = "names.json"
 WORK_DIR_NAME = "wolf_json"
+
+# Glossary-discovery prompt for Copilot / Cursor, tailored to WolfDawn's extracted
+# JSON (source/text pairs staged in files/). Produces the same two-section format
+# the shared vocab.txt expects, so the AI output pastes straight into the editor.
+_WOLF_GLOSSARY_PROMPT = (
+    "You are an expert Japanese WOLF RPG Editor game analyst building a translation glossary.\n"
+    "\n"
+    "<task>\n"
+    "Extract named characters and lore-specific worldbuilding terms from this game's extracted "
+    "text. Produce a structured glossary in the exact format specified below. It will be loaded "
+    "directly into a translation tool, so strict format compliance is required.\n"
+    "</task>\n"
+    "\n"
+    "--- attach the extracted JSON in files/ here before continuing ---\n"
+    "\n"
+    "<data_format>\n"
+    "The files/ folder holds WolfDawn extractions as JSON. Each file is a list of entries with a\n"
+    "'source' field (the original Japanese) and a 'text' field (initially empty/identical).\n"
+    "Analyse the 'source' fields only. The files are:\n"
+    "  - DataBase.project.json, CDataBase.project.json, SysDatabase.project.json — databases:\n"
+    "    richest, small source of character/actor names, classes, factions, and lore titles.\n"
+    "  - CommonEvent.dat.json — common events: dialogue and system text.\n"
+    "  - Game.dat.json — game/system strings (title, terms).\n"
+    "  - <Map>.mps.json — per-map events: the main story dialogue (can be large).\n"
+    "  - Evtext.json — external event text, when present.\n"
+    "  - names.json — item/skill/enemy value names (the tool handles these; do NOT list them).\n"
+    "</data_format>\n"
+    "\n"
+    "<file_strategy>\n"
+    "Map files can be extremely large. Do NOT read them sequentially — you will hit context "
+    "limits. Instead:\n"
+    "1. Read the DataBase.project.json files IN FULL first — small and the best source of names.\n"
+    "2. For large map files, SEARCH (grep) the 'source' fields instead of reading sequentially. "
+    "Prioritise dialogue because it is the best evidence for character voice:\n"
+    "   - Speaker patterns such as 【Name】, [Name], Name「…」, Name：, and <Name> at the start of a line\n"
+    "   - Katakana clusters or kanji compound proper nouns that recur across dialogue\n"
+    "   Scan the lowest-numbered maps first — early maps have the most story content.\n"
+    "3. Stop once you stop finding new names or terms. Do not pad the output.\n"
+    "</file_strategy>\n"
+    "\n"
+    "<rules>\n"
+    "Apply to both sections:\n"
+    "- Separator: use a plain hyphen-minus (-). Never use an em dash or en dash. "
+    "The translation tool only recognises the plain hyphen.\n"
+    "- Descriptions must be entirely in English. Refer to other characters by English name only.\n"
+    "- Never give two spelling options (e.g. 'Sylfia / Sylphia' is wrong). Commit to one translation.\n"
+    "\n"
+    "# Game Characters — rules:\n"
+    "- Discover named characters from the databases and dialogue. Skip unnamed NPCs, generic "
+    "enemies, and narration-only entries.\n"
+    "- For each character include: gender, role, speech register, and personality. Note if the "
+    "name is player-chosen (a hero/actor whose name comes from a variable or input prompt).\n"
+    "\n"
+    "# Worldbuilding Terms — rules:\n"
+    "- Include: faction/organisation names, locations mentioned in dialogue but not on maps, "
+    "unique magic systems, lore titles, recurring in-universe concepts.\n"
+    "- Exclude: skill names, item names, weapon/armour names (the tool handles those via "
+    "names.json). Skip generic RPG words. Do not repeat character names here.\n"
+    "</rules>\n"
+    "\n"
+    "<output_format>\n"
+    "Return the ENTIRE glossary inside ONE fenced code block (a ``` block), with nothing before "
+    "or after it, so it can be copied in a single click and pasted straight into the tool.\n"
+    "Inside the code block, output EXACTLY two sections with these headers. Do not add any "
+    "preamble, explanation, or text outside the entries.\n"
+    "\n"
+    "# Game Characters\n"
+    "# Worldbuilding Terms\n"
+    "\n"
+    "Entry format:  Japanese (English) - description\n"
+    "\n"
+    "<example>\n"
+    "# Game Characters\n"
+    "シロ (Shiro) - Female; protagonist; player-named; speaks in a flustered, cute register "
+    "with feminine speech markers\n"
+    "ゼクス (Zex) - Male; antagonist; cold and commanding; uses an archaic formal register\n"
+    "カナエ (Kanae) - Female; NPC shopkeeper; warm and motherly; ends sentences with わね\n"
+    "\n"
+    "# Worldbuilding Terms\n"
+    "虚無の穴 (Void Rift) - Dimensional tear referenced repeatedly in late-game dialogue; "
+    "not a named map location\n"
+    "裁定者 (Arbiter) - Title held by the ruling council; lore-specific rank with no "
+    "real-world equivalent\n"
+    "</example>\n"
+    "</output_format>\n"
+)
 
 
 class _WolfTaskWorker(QThread):
@@ -270,6 +370,13 @@ class WolfWorkflowTab(QWidget):
         lbl.setStyleSheet("color:#9d9d9d;font-size:12px;background:transparent;")
         return lbl
 
+    def _subheading(self, text: str) -> QLabel:
+        lbl = QLabel(text)
+        lbl.setStyleSheet(
+            "color:#4ec9b0;font-size:13px;font-weight:bold;background:transparent;padding-top:4px;"
+        )
+        return lbl
+
     def _register(self, btn: QPushButton) -> QPushButton:
         self._buttons.append(btn)
         return btn
@@ -373,6 +480,17 @@ class WolfWorkflowTab(QWidget):
         layout.addWidget(self._desc(
             "Extracts maps, common events, databases, Game.dat, external event text, and the "
             "project-wide name glossary, then imports them into files/ for translation."
+        ))
+
+        gu_btn = self._register(_make_btn("③ Set up git tracking (copy gameupdate/ files)", "#3a3a3a"))
+        gu_btn.clicked.connect(self._apply_gameupdate)
+        layout.addWidget(gu_btn)
+        layout.addWidget(self._desc(
+            "Copies the tool's gameupdate/ folder into the game's root folder: the updater "
+            "scripts (GameUpdate.bat / GameUpdate_linux.sh), the patch scripts (patch.sh / "
+            "patch.ps1), and a .gitignore that excludes the original game files. Do this early so "
+            "you can track the translation project with git and later ship it as a git-based patch "
+            "players apply themselves. Existing files are overwritten."
         ))
 
     def _browse_folder(self):
@@ -547,20 +665,91 @@ class WolfWorkflowTab(QWidget):
     # ── Step 1: Glossary / names ───────────────────────────────────────────────
 
     def _build_step1_glossary(self, layout: QVBoxLayout):
-        layout.addWidget(_make_section_label("Step 1 · Name Glossary (recommended first)"))
+        layout.addWidget(_make_section_label("Step 1 · Glossary (build before translating)"))
+        layout.addWidget(self._desc(
+            "Two glossaries keep the translation consistent. Build them before Step 2 so the AI "
+            "already knows every character and term while translating."
+        ))
+
+        # ── 1a: Character & worldbuilding glossary (vocab.txt) ──
+        layout.addWidget(self._subheading("1a · Character & Worldbuilding Glossary (vocab.txt)"))
+        layout.addWidget(self._desc(
+            "vocab.txt is the project-wide glossary used by every translation batch to keep "
+            "character names, speech register, honorifics, and lore terms consistent. Copy the "
+            "prompt below into Cursor or Copilot Chat with the extracted files/ JSON open, let it "
+            "analyse the game, then paste its output into the editor and save."
+        ))
+        prompt_btn = _make_btn("📋 Copy glossary prompt for Copilot / Cursor", "#5a3a7a")
+        prompt_btn.clicked.connect(self._copy_wolf_glossary_prompt)
+        layout.addWidget(prompt_btn)
+
+        fmt = QLabel(
+            "Format:  Japanese (English) - description\n"
+            "Example: シロ (Shiro) - Female; protagonist; flustered, cute register"
+        )
+        fmt.setFont(QFont("Consolas", 9))
+        fmt.setWordWrap(True)
+        fmt.setStyleSheet(
+            "color:#569cd6;background-color:#1a1e2a;border:1px solid #2a3a5a;"
+            "padding:5px 10px;border-radius:4px;font-size:12px;border-left:3px solid #2a6a9a;"
+        )
+        layout.addWidget(fmt)
+
+        self.vocab_editor = QTextEdit()
+        self.vocab_editor.setMinimumHeight(120)
+        self.vocab_editor.setFont(QFont("Consolas", 9))
+        self.vocab_editor.setStyleSheet(
+            "QTextEdit{background-color:#252526;color:#d4d4d4;border:1px solid #3c3c3c;"
+            "border-radius:4px;padding:8px;selection-background-color:#264f78;}"
+        )
+        self._reload_vocab()
+        layout.addWidget(self.vocab_editor, 1)
+
+        vrow = QHBoxLayout()
+        save_btn = _make_btn("💾 Save vocab.txt", "#3a7a3a")
+        save_btn.clicked.connect(self._save_vocab)
+        vrow.addWidget(save_btn)
+        reload_btn = _make_btn("↺ Reload", "#555")
+        reload_btn.clicked.connect(self._reload_vocab)
+        vrow.addWidget(reload_btn)
+        vrow.addStretch()
+        layout.addLayout(vrow)
+
+        layout.addWidget(_make_hr())
+
+        # ── 1b: Name-value glossary (names.json) ──
+        layout.addWidget(self._subheading("1b · Name Value Glossary (item / skill / enemy names)"))
         layout.addWidget(self._desc(
             "WOLF databases reference item/skill/enemy names by value across many files, so "
-            "translating the glossary first keeps them consistent. This translates only "
-            f"{NAMES_JSON} using the Wolf RPG (WolfDawn) module, then you can inject it in Step 3."
+            f"translating {NAMES_JSON} first keeps those consistent. This translates only "
+            f"{NAMES_JSON} using the Wolf RPG (WolfDawn) module; it is injected in Step 3. "
+            "You can also translate it together with everything else in Step 2, but doing it "
+            "first is the higher-quality path. It uses the translation mode (Normal / Batch) "
+            "selected in Step 2."
         ))
         btn = self._register(_make_btn("Translate name glossary now", "#007acc"))
         btn.clicked.connect(lambda: self._navigate_to_translation(only=NAMES_JSON, auto_start=True))
         layout.addWidget(btn)
-        layout.addWidget(_make_hr())
-        layout.addWidget(self._desc(
-            "Optional: you can also open the glossary in Step 2 together with everything else. "
-            "Doing names first is just the higher-quality path."
-        ))
+
+    def _copy_wolf_glossary_prompt(self):
+        try:
+            QApplication.clipboard().setText(_WOLF_GLOSSARY_PROMPT)
+            self._log("📋 Glossary prompt copied. Paste it into Cursor/Copilot with files/ open.")
+        except Exception as exc:
+            self._log(f"❌ Could not copy glossary prompt: {exc}")
+
+    def _reload_vocab(self):
+        try:
+            self.vocab_editor.setPlainText(read_game_vocab())
+        except Exception as exc:
+            self._log(f"❌ Could not load vocab.txt: {exc}")
+
+    def _save_vocab(self):
+        try:
+            write_game_vocab(self.vocab_editor.toPlainText())
+            self._log("✅ vocab.txt saved (base terms from vocab_base.txt appended).")
+        except Exception as exc:
+            self._log(f"❌ Could not save vocab.txt: {exc}")
 
     # ── Step 2: Translate ──────────────────────────────────────────────────────
 
@@ -571,6 +760,9 @@ class WolfWorkflowTab(QWidget):
             "Wolf RPG (WolfDawn) module and starts translating. Only the 'text' fields are "
             "filled in; 'source' is preserved so injection can verify each line."
         ))
+
+        self._add_tl_mode_selector(layout)
+
         btn = self._register(_make_btn("Translate all files now", "#00a86b"))
         btn.clicked.connect(lambda: self._navigate_to_translation(auto_start=True))
         layout.addWidget(btn)
@@ -578,6 +770,48 @@ class WolfWorkflowTab(QWidget):
         open_btn = self._register(_make_btn("Open Translation tab (no auto-start)", "#3a3a3a"))
         open_btn.clicked.connect(lambda: self._navigate_to_translation(auto_start=False))
         layout.addWidget(open_btn)
+
+    def _add_tl_mode_selector(self, layout: QVBoxLayout):
+        """Normal vs Batch selector; applies to the name glossary (1b) and full runs."""
+        row = QHBoxLayout()
+        lbl = QLabel("Translation mode:")
+        lbl.setStyleSheet("color:#cccccc;font-size:12px;font-weight:bold;background:transparent;")
+        self._tl_mode_combo = QComboBox()
+        self._tl_mode_combo.addItem(_TL_NORMAL_LABEL)
+        self._tl_mode_combo.addItem(BATCH_MODE_LABEL)
+        self._tl_mode_combo.setFixedWidth(220)
+        self._tl_mode_combo.setToolTip(
+            "Applies to both the Step 1 name glossary and the full run here.\n"
+            "Normal translates live; Batch uses the Anthropic Batches API (~50% cheaper, Claude only)."
+        )
+        saved = self._setting("tl_mode", BATCH_MODE_LABEL) or BATCH_MODE_LABEL
+        idx = self._tl_mode_combo.findText(str(saved))
+        if idx >= 0:
+            self._tl_mode_combo.setCurrentIndex(idx)
+        self._tl_mode_combo.currentTextChanged.connect(self._on_tl_mode_changed)
+        row.addWidget(lbl)
+        row.addWidget(self._tl_mode_combo)
+        row.addStretch()
+        layout.addLayout(row)
+
+        self._batch_note = QLabel(BATCH_MODE_BENEFIT_NOTE + "\n" + BATCH_COLLECT_LIVE_CHARGE_NOTE)
+        self._batch_note.setWordWrap(True)
+        self._batch_note.setStyleSheet("color:#8fbc8f;font-size:11px;background:transparent;")
+        layout.addWidget(self._batch_note)
+        self._on_tl_mode_changed(self._tl_mode_combo.currentText())
+
+    def _on_tl_mode_changed(self, mode_text: str):
+        is_batch = mode_text == BATCH_MODE_LABEL
+        if hasattr(self, "_batch_note"):
+            self._batch_note.setVisible(is_batch)
+        self._save_setting("tl_mode", mode_text)
+
+    def _workflow_mode_text(self) -> str:
+        """Map the selector to the Translation tab's own mode label."""
+        combo = getattr(self, "_tl_mode_combo", None)
+        if combo is not None and combo.currentText() == BATCH_MODE_LABEL:
+            return BATCH_MODE_LABEL
+        return "Translate"
 
     def _navigate_to_translation(self, only: str | None = None, auto_start: bool = False):
         """Switch to the Translation tab, select the WolfDawn module, and check files."""
@@ -592,6 +826,16 @@ class WolfWorkflowTab(QWidget):
                 if "WolfDawn" in combo.itemText(i):
                     combo.setCurrentIndex(i)
                     break
+        except Exception:
+            pass
+
+        # Apply the chosen translation mode (after the module, since changing the
+        # module can refresh the mode list).
+        try:
+            mode_combo = tt.mode_combo
+            mode_idx = mode_combo.findText(self._workflow_mode_text())
+            if mode_idx >= 0:
+                mode_combo.setCurrentIndex(mode_idx)
         except Exception:
             pass
 
@@ -768,6 +1012,46 @@ class WolfWorkflowTab(QWidget):
             "Rebuilds Data.wolf from the translated Data/ folder, inheriting the original "
             "archive's encryption where possible (--like the backed-up original)."
         ))
+
+    def _apply_gameupdate(self):
+        if not self._require_root():
+            return
+        from util.paths import PROJECT_ROOT
+
+        src = PROJECT_ROOT / "gameupdate"
+        dst = Path(self._game_root)
+        if not src.is_dir():
+            QMessageBox.warning(
+                self, "gameupdate",
+                f"The tool's gameupdate/ folder was not found at {src}.",
+            )
+            return
+
+        def task(log):
+            import shutil
+
+            copied = 0
+            errors: list[str] = []
+            log(f"Copying gameupdate patch files: {src} → {dst} …")
+            for fp in sorted(src.rglob("*")):
+                if not fp.is_file():
+                    continue
+                rel = fp.relative_to(src)
+                target = dst / rel
+                try:
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(fp, target)
+                    copied += 1
+                    log(f"  copied {rel}")
+                except Exception as exc:
+                    errors.append(f"{rel}: {exc}")
+            for e in errors:
+                log(f"  ⚠ {e}")
+            if errors:
+                return False, f"Copied {copied} file(s); {len(errors)} failed (see log)."
+            return True, f"Copied {copied} gameupdate file(s) into {dst.name}."
+
+        self._run_task(task)
 
     def _package_loose(self):
         if not self._require_root():
