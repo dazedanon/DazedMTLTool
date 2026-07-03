@@ -22,6 +22,7 @@ An AI-powered game translation tool with a GUI. Translate RPG Maker, Ren'Py, Tyr
 - [Folder Structure](#folder-structure)
 - [Finding Untranslated Text (Snipping Tool OCR)](#finding-untranslated-text-snipping-tool-ocr)
 - [RPG Maker Translation Workflow](#rpg-maker-translation-workflow)
+- [Wolf RPG (WolfDawn) Translation Workflow](#wolf-rpg-wolfdawn-translation-workflow)
 - [Using Copilot & VSCode](#using-copilot--vscode)
 - [Version Control with Git](#version-control-with-git)
 - [Troubleshooting](#troubleshooting)
@@ -311,6 +312,28 @@ Here's the recommended step-by-step process for translating an RPG Maker MV/MZ g
 | **10** | **Playtest → find issues → fix → repeat** — Play through the game, screenshot any untranslated text, search for it in the game files, and re-translate as needed. |
 
 > **Note:** Some text (e.g., CODE 122 variables) may only update when starting a new save file.
+
+---
+
+## Wolf RPG (WolfDawn) Translation Workflow
+
+WOLF RPG Editor games are handled by a dedicated, guided workflow built on the bundled [WolfDawn](https://gitgud.io/zero64801/wolfdawn) `wolf` CLI.
+It unpacks the game's `.wolf` archives, extracts every translatable string to JSON, translates it with the same AI pipeline used elsewhere, then injects the results back into the game byte-exact.
+
+Open the **Workflow** tab and choose **Wolf RPG (WolfDawn)** from the engine selector at the top.
+
+| Step | Action |
+|------|--------|
+| **0 Project** | Select the game folder, **Unpack** the `.wolf` archives into a loose `Data/` folder, then **Extract text** (maps, common events, databases, `Game.dat`, external event text, and the project-wide name glossary). Everything is staged into `files/` for translation. |
+| **1 Glossary** | Translate the name glossary (`names.json`) first. WOLF references item/skill/enemy names by value across many files, so doing names first keeps them consistent. |
+| **2 Translate** | Run the `Wolf RPG (WolfDawn)` module over `files/`. Only the `text` fields are filled in; `source` is preserved so injection can verify each line. |
+| **3 Inject** | Write the translations back into the `Data/` binaries. The name glossary is applied consistently across every file. Toggle `--en-punct` (convert Japanese punctuation to ASCII) and `--allow-code-drift` (relax the inline-code guard) as needed. Use **Check name consistency** to catch names translated differently across files. |
+| **4 Package** | Either run from the loose `Data/` folder (backs up `Data.wolf` → `Data.wolf.bak`), or **Repack** a fresh `Data.wolf`, inheriting the original archive's encryption. |
+| **5 Saves** | *(Optional)* Update existing `.sav` files so old Japanese saves load cleanly in the translated build. Originals are backed up automatically. |
+
+> **`wolf` binary:** A prebuilt `wolf` CLI is bundled under `util/wolfdawn/bin/<platform>/`, so no build step is needed on supported platforms. If no bundled binary is present for your platform, the tool falls back to compiling it from the vendored source with `cargo build --release`, which requires a [Rust toolchain](https://rustup.rs/); the freshly built binary is then saved into the bundle for reuse. A clear error is shown if neither a bundled binary nor `cargo` is available.
+
+> **Legacy modules:** The older `Wolf RPG` / `Wolf RPG 2` modules (configured in the Engine Config tab) still exist for edge cases, but the WolfDawn workflow above is the recommended path.
 
 ---
 

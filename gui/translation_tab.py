@@ -1436,6 +1436,7 @@ class TranslationTab(QWidget):
             from modules.nscript import handleOnscripter
             from modules.wolf import handleWOLF
             from modules.wolf2 import handleWOLF2
+            from modules.wolfdawn import handleWolfDawn
             from modules.regex import handleRegex
             from modules.text import handleText
             from modules.renpy import handleRenpy
@@ -1454,6 +1455,7 @@ class TranslationTab(QWidget):
                 ["Lune", [".l"], handleLune],
                 ["Yuris", [".json"], handleYuris],
                 ["NScript", [".nscript"], handleOnscripter],
+                ["Wolf RPG (WolfDawn)", [".json"], handleWolfDawn],
                 ["Wolf RPG", [".json"], handleWOLF],
                 ["Wolf RPG 2", [".txt"], handleWOLF2],
                 ["Regex", [".txt", ".json", ".script", ".csv"], handleRegex],

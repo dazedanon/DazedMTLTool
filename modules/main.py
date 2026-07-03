@@ -47,6 +47,7 @@ from modules.yuris import handleYuris
 from modules.nscript import handleOnscripter
 from modules.wolf import handleWOLF
 from modules.wolf2 import handleWOLF2
+from modules.wolfdawn import handleWolfDawn
 from modules.regex import handleRegex
 from modules.text import handleText
 from modules.renpy import handleRenpy
@@ -71,6 +72,7 @@ MODULES = [
     ["Lune", ["json"], handleLune],
     ["Yuris", ["json"], handleYuris],
     ["NScript", ["txt"], handleOnscripter],
+    ["Wolf RPG (WolfDawn)", ["json"], handleWolfDawn],
     ["Wolf", ["json"], handleWOLF],
     ["Wolf", ["txt"], handleWOLF2],
     ["Regex", ["txt", "json", "script", "csv"], handleRegex],

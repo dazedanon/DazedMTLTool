@@ -52,6 +52,11 @@ _ACE_MARKERS = {
 }
 _ACE_DATA_SCRIPTS = {".rvdata2", ".rvdata"}
 
+# WOLF RPG Editor markers. Games ship data inside .wolf archives (one Data.wolf,
+# or split BasicData/MapData/... .wolf files), or as a loose Data/ folder holding
+# the unpacked binaries (CommonEvent.dat, *.mps maps, *.project databases).
+_WOLF_LOOSE_MARKERS = ("BasicData/CommonEvent.dat", "CommonEvent.dat")
+
 
 # ---------------------------------------------------------------------------
 # Public API
@@ -60,8 +65,11 @@ _ACE_DATA_SCRIPTS = {".rvdata2", ".rvdata"}
 def find_data_folder(game_root: str | Path) -> tuple[Optional[Path], str]:
     """Return (data_path, engine_name) for *game_root*.
 
-    engine_name is one of: "MVMZ", "ACE", "UNKNOWN".
+    engine_name is one of: "MVMZ", "ACE", "WOLF", "UNKNOWN".
     data_path is None when nothing is found.
+
+    For "WOLF" the data_path is the loose Data/ folder when already unpacked, or
+    the game root when only .wolf archives are present (still packed).
     """
     root = Path(game_root)
     if not root.is_dir():
@@ -85,12 +93,92 @@ def find_data_folder(game_root: str | Path) -> tuple[Optional[Path], str]:
         if rvdata:
             return ace_data, "ACE"
 
+    # ---- WOLF RPG Editor: loose Data/ or .wolf archives ----
+    wolf = detect_wolf_layout(root)
+    if wolf["engine"] == "WOLF":
+        return (wolf["data_dir"] or root), "WOLF"
+
     # ---- Fallback: any sub-directory that holds .json files ----
     for child in root.iterdir():
         if child.is_dir() and _has_json_data(child):
             return child, "UNKNOWN"
 
     return None, "UNKNOWN"
+
+
+def find_wolf_archives(game_root: str | Path) -> list[Path]:
+    """Return .wolf archive files in the game root (and its Data/ subfolder)."""
+    root = Path(game_root)
+    archives: list[Path] = []
+    for base in (root, root / "Data"):
+        if base.is_dir():
+            archives.extend(sorted(base.glob("*.wolf")))
+    # De-dupe while preserving order.
+    seen: set[Path] = set()
+    unique: list[Path] = []
+    for a in archives:
+        rp = a.resolve()
+        if rp not in seen:
+            seen.add(rp)
+            unique.append(a)
+    return unique
+
+
+def _wolf_loose_data_dir(root: Path) -> Optional[Path]:
+    """Return the loose (unpacked) WOLF Data/ folder if it looks unpacked."""
+    for data_dir in (root / "Data", root):
+        if not data_dir.is_dir():
+            continue
+        for marker in _WOLF_LOOSE_MARKERS:
+            if (data_dir / marker).is_file():
+                return data_dir
+        # A folder with .mps maps (directly or under MapData/) is unpacked WOLF.
+        if list(data_dir.glob("*.mps")) or list((data_dir / "MapData").glob("*.mps")):
+            return data_dir
+    return None
+
+
+def detect_wolf_layout(game_root: str | Path) -> dict:
+    """Inspect *game_root* for a WOLF RPG Editor game.
+
+    Returns a dict:
+        engine     : "WOLF" or "UNKNOWN"
+        root       : Path to the game root
+        archives   : list[Path] of .wolf archives found (may be empty)
+        data_dir   : Path to the loose/unpacked Data/ folder, or None
+        unpacked   : bool - True when a usable loose Data/ folder exists
+        basic_data : Path to Data/BasicData (or Data/ when flattened), or None
+        map_data   : Path to Data/MapData (or Data/ when flattened), or None
+    """
+    root = Path(game_root)
+    result = {
+        "engine": "UNKNOWN",
+        "root": root,
+        "archives": [],
+        "data_dir": None,
+        "unpacked": False,
+        "basic_data": None,
+        "map_data": None,
+    }
+    if not root.is_dir():
+        return result
+
+    archives = find_wolf_archives(root)
+    loose = _wolf_loose_data_dir(root)
+
+    if not archives and loose is None:
+        return result
+
+    result["engine"] = "WOLF"
+    result["archives"] = archives
+    if loose is not None:
+        result["data_dir"] = loose
+        result["unpacked"] = True
+        basic = loose / "BasicData"
+        result["basic_data"] = basic if basic.is_dir() else loose
+        maps = loose / "MapData"
+        result["map_data"] = maps if maps.is_dir() else loose
+    return result
 
 
 def list_data_files(data_path: str | Path, engine: str = "MVMZ") -> list[dict]:

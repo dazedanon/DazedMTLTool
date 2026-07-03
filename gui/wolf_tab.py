@@ -69,16 +69,29 @@ class WolfTab(QWidget):
         main_layout.setSpacing(10)
         
         # Title and description
-        title = QLabel("Wolf RPG Editor Translation Settings")
+        title = QLabel("Wolf RPG Editor Translation Settings (Legacy)")
         title.setStyleSheet("font-size: 15px; font-weight: bold; color: #007acc;")
         main_layout.addWidget(title)
 
         description = QLabel(
-            "Enable translation options for Wolf RPG Editor projects. Only enable what you need."
+            "These toggles configure the legacy 'Wolf RPG' / 'Wolf RPG 2' modules (event-code "
+            "based extraction). Only enable what you need."
         )
         description.setWordWrap(True)
         description.setStyleSheet("color: #888888; font-size: 10px; margin-bottom: 5px;")
         main_layout.addWidget(description)
+
+        recommend = QLabel(
+            "Recommended: use the Workflow tab and pick \"Wolf RPG (WolfDawn)\" for a guided, "
+            "end-to-end pipeline (unpack \u2192 extract \u2192 translate \u2192 inject \u2192 package). "
+            "It does not use the options below."
+        )
+        recommend.setWordWrap(True)
+        recommend.setStyleSheet(
+            "color:#c8c8c8;font-size:11px;background-color:#26333a;"
+            "border-left:3px solid #007acc;padding:6px 8px;margin-bottom:6px;"
+        )
+        main_layout.addWidget(recommend)
         
         # Two-column layout for checkboxes
         columns_layout = QHBoxLayout()

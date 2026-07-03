@@ -71,28 +71,17 @@ def _load_fixture_manifest():
 
 
 def _load_map_excerpt():
-    """Small real snippets from Map002 event 17 + Map001 102 + synthetic 101/122."""
-    map2 = json.loads((ROOT / "files" / "Map002.json").read_text(encoding="utf-8-sig"))
-    ev17 = next(e for e in map2["events"] if e and e.get("id") == 17)
-    real = copy.deepcopy(ev17["pages"][0]["list"][7:14])  # 101 + 401 dialogue block
+    """Hand-authored page mirroring a 101+401 dialogue block, a 102 choice, and
+    synthetic 101/401/122 commands. Fully self-contained (no files/ dependency)."""
+    # 101 message box (4 params, no speaker name) + 401 dialogue lines.
+    real = [
+        {"code": 101, "indent": 0, "parameters": ["", 0, 0, 2]},
+        {"code": 401, "indent": 0, "parameters": ["これは本物のセリフです。"]},
+        {"code": 401, "indent": 0, "parameters": ["二行目のテキストです。"]},
+    ]
 
-    map1 = json.loads((ROOT / "files" / "Map001.json").read_text(encoding="utf-8-sig"))
-    choice_cmd = None
-    for ev in map1["events"]:
-        if not ev:
-            continue
-        for pg in ev.get("pages") or []:
-            if not pg:
-                continue
-            for cmd in pg.get("list") or []:
-                if cmd and cmd.get("code") == 102:
-                    choice_cmd = copy.deepcopy(cmd)
-                    break
-            if choice_cmd:
-                break
-        if choice_cmd:
-            break
-    assert choice_cmd is not None, "Map001 should contain a 102 choice command"
+    # 102 choice command: parameters[0] is the list of Japanese choice strings.
+    choice_cmd = {"code": 102, "indent": 0, "parameters": [["買う", "売る", "やめる"], -1, 0, 2, 0]}
 
     synthetic = [
         {"code": 101, "indent": 0, "parameters": ["", 0, 0, 2, "\\C[2]アリス\\C[0]"]},
@@ -233,11 +222,15 @@ class TestMVMZSourceOriginal(unittest.TestCase):
                     continue
                 self.fail(f"Re-run sent non-Japanese to translateAI: {item!r}")
 
-    def test_map002_micro_page_real_data(self):
-        """Translate a tiny slice of Map002 event 17 only (7 commands)."""
-        map2 = json.loads((ROOT / "files" / "Map002.json").read_text(encoding="utf-8-sig"))
-        ev17 = next(e for e in map2["events"] if e and e.get("id") == 17)
-        micro = {"list": copy.deepcopy(ev17["pages"][0]["list"][8:11])}  # 3x401 only
+    def test_micro_page_401_original(self):
+        """Translate a tiny 3x401 dialogue slice and confirm _original capture."""
+        micro = {
+            "list": [
+                {"code": 401, "indent": 0, "parameters": ["一行目のセリフ。"]},
+                {"code": 401, "indent": 0, "parameters": ["二行目のセリフ。"]},
+                {"code": 401, "indent": 0, "parameters": ["三行目のセリフ。"]},
+            ]
+        }
 
         page, _ = _run_search_codes(micro)
         c401 = _find_commands(page, 401)

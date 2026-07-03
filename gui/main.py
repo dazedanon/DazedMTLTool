@@ -17,7 +17,7 @@ from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QTabWidget, QVBoxLayout, QHBoxLayout,
     QWidget, QPushButton, QLabel, QFileDialog, QMessageBox, QProgressBar,
     QTextEdit, QSplitter, QGroupBox, QStatusBar, QStackedWidget, QToolButton,
-    QDialog
+    QDialog, QComboBox
 )
 from PyQt5.QtCore import Qt, QThread, pyqtSignal, QTimer, QSettings, QCoreApplication
 from PyQt5.QtGui import QIcon, QFont, QPixmap, QScreen, QGuiApplication
@@ -385,6 +385,7 @@ class UpdateDialog(QDialog):
 from gui.config_tab import ConfigTab
 from gui.translation_tab import TranslationTab
 from gui.workflow_tab import WorkflowTab
+from gui.wolf_workflow_tab import WolfWorkflowTab
 
 class DazedMTLGUI(QMainWindow):
     """Main GUI window for the DazedMTLTool."""
@@ -426,6 +427,52 @@ class DazedMTLGUI(QMainWindow):
         except Exception as e:
             print(f"Warning: Could not save window state: {e}")
             
+    def stop_all_background_threads(self):
+        """Gracefully stop every background ``QThread`` before the process exits.
+
+        A ``QThread`` that is destroyed while still running aborts the whole
+        process with SIGABRT ("QThread: Destroyed while thread is still
+        running"). Background workers here (startup update check, model-list
+        fetch, workflow/wolf tasks, translation worker) do blocking network or
+        subprocess I/O and can outlive the window, so we sweep every live
+        ``QThread`` and quit/wait it, terminating only as a last resort.
+        """
+        import gc
+
+        current = QThread.currentThread()
+        threads = []
+        for obj in gc.get_objects():
+            try:
+                if isinstance(obj, QThread) and obj is not current:
+                    threads.append(obj)
+            except Exception:
+                continue
+
+        for t in threads:
+            try:
+                if not t.isRunning():
+                    continue
+                # Nudge cooperative workers to stop before we block on them.
+                for stopper in ("stop", "requestInterruption"):
+                    fn = getattr(t, stopper, None)
+                    if callable(fn):
+                        try:
+                            fn()
+                        except Exception:
+                            pass
+                try:
+                    t.quit()
+                except Exception:
+                    pass
+                if not t.wait(3000):
+                    try:
+                        t.terminate()
+                        t.wait(1000)
+                    except Exception:
+                        pass
+            except Exception:
+                continue
+
     def closeEvent(self, event):
         """Handle application close event."""
         # Save window geometry/state
@@ -460,6 +507,13 @@ class DazedMTLGUI(QMainWindow):
                                 pass
                 except Exception:
                     pass
+        except Exception:
+            pass
+
+        # Stop every remaining background thread (model fetch, update check,
+        # workflow/wolf workers) so the process can exit without aborting.
+        try:
+            self.stop_all_background_threads()
         except Exception:
             pass
 
@@ -643,15 +697,64 @@ class DazedMTLGUI(QMainWindow):
         self.translation_tab = TranslationTab(self)
         self.content_stack.addWidget(self.translation_tab)
 
-        # Workflow / Automation Tab (index 1)
-        self.workflow_tab = WorkflowTab(self)
-        self.content_stack.addWidget(self.workflow_tab)
+        # Workflow / Automation Tab (index 1) — engine selector swaps between the
+        # RPGMaker and Wolf guided panels while keeping a single sidebar button.
+        self.content_stack.addWidget(self._create_workflow_container())
 
         # Configuration Tab (index 2)
         self.config_tab = ConfigTab()
         self.config_tab.config_changed.connect(self.on_config_changed)
         self.content_stack.addWidget(self.config_tab)
-        
+
+    def _create_workflow_container(self) -> QWidget:
+        """Wrap the RPGMaker and Wolf guided workflows behind an engine selector."""
+        container = QWidget()
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+
+        # ── Engine selector bar ──
+        bar = QWidget()
+        bar.setStyleSheet(
+            "QWidget{background-color:#252526;border-bottom:1px solid #3a3a3a;}"
+        )
+        bar_layout = QHBoxLayout(bar)
+        bar_layout.setContentsMargins(16, 6, 16, 6)
+        bar_layout.setSpacing(8)
+
+        engine_label = QLabel("Engine:")
+        engine_label.setStyleSheet(
+            "color:#9d9d9d;font-size:12px;font-weight:bold;background:transparent;border:none;"
+        )
+        bar_layout.addWidget(engine_label)
+
+        self.workflow_engine_combo = QComboBox()
+        self.workflow_engine_combo.addItem("RPG Maker (MV/MZ/Ace)")
+        self.workflow_engine_combo.addItem("Wolf RPG (WolfDawn)")
+        self.workflow_engine_combo.setStyleSheet(
+            "QComboBox{background-color:#3c3c3c;color:#cccccc;border:1px solid #555555;"
+            "border-radius:4px;padding:3px 8px;font-size:12px;min-width:220px;}"
+            "QComboBox:hover{border-color:#007acc;}"
+            "QComboBox QAbstractItemView{background-color:#2d2d30;color:#cccccc;"
+            "selection-background-color:#007acc;}"
+        )
+        bar_layout.addWidget(self.workflow_engine_combo)
+        bar_layout.addStretch()
+        layout.addWidget(bar)
+
+        # ── Stacked guided panels ──
+        self.workflow_stack = QStackedWidget()
+        self.workflow_tab = WorkflowTab(self)
+        self.wolf_workflow_tab = WolfWorkflowTab(self)
+        self.workflow_stack.addWidget(self.workflow_tab)
+        self.workflow_stack.addWidget(self.wolf_workflow_tab)
+        layout.addWidget(self.workflow_stack, 1)
+
+        self.workflow_engine_combo.currentIndexChanged.connect(
+            self.workflow_stack.setCurrentIndex
+        )
+        return container
+
     def start_background_update_check(self):
         """Check for tool, Ace, and Forge updates after the GUI is visible."""
         if self._update_check_thread and self._update_check_thread.isRunning():
@@ -1251,6 +1354,13 @@ def main():
                                     pass
                     except Exception:
                         pass
+            except Exception:
+                pass
+
+            # Final safety net: stop any remaining background threads so a
+            # QThread is never destroyed while still running (SIGABRT).
+            try:
+                window.stop_all_background_threads()
             except Exception:
                 pass
 

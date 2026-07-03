@@ -30,3 +30,7 @@ util/forge/.forge_version.json
 util/ace/*.exe
 util/ace/.tools_version.json
 !util/ace/offline/*.exe
+
+# WolfDawn: ignore the Rust build tree, but keep the committed prebuilt binaries.
+util/wolfdawn-master/target/
+!util/wolfdawn/bin/**

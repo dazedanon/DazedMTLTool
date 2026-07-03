@@ -95,6 +95,9 @@ def run_handler(project_root, module_name, filename, estimate_only):
         elif "NScript" in module_name:
             from modules.nscript import handleOnscripter
             handler = handleOnscripter
+        elif "WolfDawn" in module_name:
+            from modules.wolfdawn import handleWolfDawn
+            handler = handleWolfDawn
         elif "Wolf RPG 2" in module_name:
             from modules.wolf2 import handleWOLF2
             handler = handleWOLF2
