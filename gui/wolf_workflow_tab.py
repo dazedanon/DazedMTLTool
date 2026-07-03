@@ -22,9 +22,9 @@ Mirrors the RPGMaker WorkflowTab, driven by the vendored WolfDawn ``wolf`` CLI
                                              name translations into vocab.txt
                         Phase 1  Database  - item/skill/state descriptions and system
                                              messages (DataBase/CDataBase.project)
-                        Phase 2  Dialogue  - maps, CommonEvent, Game.dat, Evtext;
-                                             speaker handling and text-wrap settings
-                                             live under this phase in Step 3
+                        Phase 2  Maps / events - .mps maps, CommonEvent, Game.dat,
+                                             Evtext; speaker handling and text-wrap
+                                             settings live under this phase in Step 3
   Step 4  Inject    - inject translations + curated names back into the Data/ binaries
                       and refresh the git-tracked wolf_json/ with the translated
                       JSON; quick-inject picks just a few translated files for
@@ -96,10 +96,10 @@ WORK_DIR_NAME = "wolf_json"
 
 # Translation phases, keyed by the manifest ``kind`` of each extracted file.
 # Mirrors RPGMaker's DB-first strategy: translate names first (they seed the
-# glossary), then database descriptions, then the bulk dialogue.
+# glossary), then database descriptions, then maps and event scripts.
 PHASE_NAMES_KINDS = {"names"}
 PHASE_DB_KINDS = {"db"}
-PHASE_DIALOGUE_KINDS = {"map", "common", "gamedat", "txt", "txt-dir"}
+PHASE_MAPS_EVENTS_KINDS = {"map", "common", "gamedat", "txt", "txt-dir"}
 
 # WolfDawn's inject commands print e.g. "applied 91 translation(s) (0 untranslated,
 # 0 drifted); wrote <path>". We parse the counts to distinguish a real inject from a
@@ -1089,7 +1089,7 @@ class WolfWorkflowTab(QWidget):
             "(WolfDawn) module. Only the 'text' fields are filled in; 'source' is preserved so "
             "injection can verify each line. Run the phases in order: Phase 0 translates the safe "
             "names and writes them into vocab.txt, so Phases 1 and 2 translate descriptions and "
-            "dialogue with consistent item / skill / character names (RPGMaker's DB-first strategy)."
+            "in-engine text with consistent item / skill / character names (RPGMaker's DB-first strategy)."
         ))
 
         self._add_phase_buttons(layout)
@@ -1122,17 +1122,18 @@ class WolfWorkflowTab(QWidget):
         layout.addWidget(p1)
 
         layout.addWidget(_make_hr())
-        layout.addWidget(self._subheading("Phase 2 · Dialogue & events"))
+        layout.addWidget(self._subheading("Phase 2 · Maps / events"))
         layout.addWidget(self._desc(
-            "The bulk of the script: map events (.mps), CommonEvent, Game.dat and Evtext. Run last "
-            "so it benefits from the names and terms translated in the earlier phases. Speaker "
-            "handling and text wrap below apply only to this phase."
+            "Map scripts (.mps), common events (CommonEvent.dat), Game.dat, and Evtext - story "
+            "dialogue, UI/objective strings, and other event text. Run last so it benefits from "
+            "the names and terms translated in the earlier phases. Speaker handling and text wrap "
+            "below apply to the dialogue-like lines in this phase."
         ))
         self._add_speaker_options(layout)
         self._add_wrap_options(layout)
-        p2 = self._register(_make_btn("▶ Phase 2 · Translate dialogue & events", "#00a86b"))
+        p2 = self._register(_make_btn("▶ Phase 2 · Translate maps / events", "#00a86b"))
         p2.clicked.connect(
-            lambda: self._navigate_to_translation(kinds=PHASE_DIALOGUE_KINDS, auto_start=True)
+            lambda: self._navigate_to_translation(kinds=PHASE_MAPS_EVENTS_KINDS, auto_start=True)
         )
         layout.addWidget(p2)
 
