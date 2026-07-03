@@ -1679,7 +1679,7 @@ class WolfWorkflowTab(QWidget):
             "across Data/. Use this once translation is complete before packaging in Step 5."
         ))
         inject_btn = self._register(_make_btn("Inject all translations", "#00a86b"))
-        inject_btn.clicked.connect(self._inject)
+        inject_btn.clicked.connect(lambda: self._inject())
         layout.addWidget(inject_btn)
 
     def _translated_or_source(self, json_name: str) -> Path | None:
