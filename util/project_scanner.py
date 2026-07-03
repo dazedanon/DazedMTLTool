@@ -181,6 +181,77 @@ def detect_wolf_layout(game_root: str | Path) -> dict:
     return result
 
 
+_WOLF_CORE_JSON = frozenset({
+    "names.json",
+    "CommonEvent.dat.json",
+    "Game.dat.json",
+    "DataBase.project.json",
+    "CDataBase.project.json",
+    "SysDatabase.project.json",
+    "Evtext.json",
+})
+
+_WOLF_CORE_KINDS = frozenset({"names", "common", "db", "gamedat", "txt-dir"})
+
+
+def list_wolf_json_files(
+    work_dir: str | Path,
+    manifest: dict | None = None,
+) -> list[dict]:
+    """Return importable WolfDawn JSON descriptors from a game's wolf_json/ folder.
+
+    Each item matches :func:`list_data_files` (name, path, size_kb, category, default).
+    Uses ``manifest.json`` entries when present; otherwise scans ``*.json`` in *work_dir*.
+    """
+    work_dir = Path(work_dir)
+    rows: list[tuple[str, Path, str]] = []
+
+    if manifest and manifest.get("entries"):
+        for entry in manifest["entries"]:
+            json_name = entry.get("json")
+            if not json_name:
+                continue
+            fp = work_dir / json_name
+            if fp.is_file():
+                rows.append((json_name, fp, str(entry.get("kind") or "")))
+    elif work_dir.is_dir():
+        for fp in sorted(work_dir.glob("*.json")):
+            if fp.name == "manifest.json":
+                continue
+            rows.append((fp.name, fp, ""))
+
+    results: list[dict] = []
+    for name, fp, kind in rows:
+        size_kb = fp.stat().st_size / 1024
+        if name in _WOLF_CORE_JSON or kind in _WOLF_CORE_KINDS:
+            cat = "core"
+            default = True
+        elif name.endswith(".mps.json") or kind == "map":
+            cat = "map"
+            default = True
+        else:
+            cat = "other"
+            default = False
+        results.append({
+            "name": name,
+            "path": fp,
+            "size_kb": round(size_kb, 1),
+            "category": cat,
+            "default": default,
+        })
+
+    def _sort_key(item):
+        if item["category"] == "core":
+            return (0, item["name"])
+        if item["category"] == "map":
+            stem = item["name"].removesuffix(".mps.json")
+            return (1, stem)
+        return (2, item["name"])
+
+    results.sort(key=_sort_key)
+    return results
+
+
 def list_data_files(data_path: str | Path, engine: str = "MVMZ") -> list[dict]:
     """Return a sorted list of importable file descriptors.
 
