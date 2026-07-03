@@ -5,18 +5,25 @@ Mirrors the RPGMaker WorkflowTab, driven by the vendored WolfDawn ``wolf`` CLI
 (see util/wolfdawn):
 
   Step 0  Project   - select game folder, unpack .wolf archives, extract text
-                      (strings-extract per file + names-extract) into files/, and
-                      copy the gameupdate/ patch files (incl. .gitignore) for git tracking
+                      (strings-extract per file + names-extract) into files/, copy
+                      the gameupdate/ patch files (incl. .gitignore) for git tracking,
+                      and format the extracted JSON to the canonical layout so injects
+                      produce clean git diffs
   Step 1  Glossary  - build vocab.txt (characters/terms) and translate the
                       project-wide name-value glossary first
   Step 2  Translate - run the "Wolf RPG (WolfDawn)" module over files/
   Step 3  Inject    - inject translations + names back into the Data/ binaries
+                      and refresh the git-tracked wolf_json/ with the translated
+                      JSON; quick-inject picks just a few translated files for
+                      fast in-game / git iteration, or inject everything at once
   Step 4  Package   - run from a loose Data/ folder, or repack Data.wolf
   Step 5  Saves     - fix baked strings in existing .sav files (optional)
 
 The extracted JSON is staged in ``<game_root>/wolf_json/`` (a manifest maps each
 file back to its base binary), then imported into ``files/`` for the shared
-translation pipeline, mirroring how the Ace workflow uses ``ace_json/``.
+translation pipeline, mirroring how the Ace workflow uses ``ace_json/``. On
+inject, the translated JSON is copied back into ``wolf_json/`` so the game
+project's git history tracks both the JSON source and the updated binaries.
 """
 
 from __future__ import annotations
@@ -35,6 +42,8 @@ from PyQt5.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QListWidget,
+    QListWidgetItem,
     QMessageBox,
     QPushButton,
     QScrollArea,
@@ -304,6 +313,8 @@ class WolfWorkflowTab(QWidget):
             page_layout.addWidget(nav)
             self._step_tabs.addTab(page, tab_label)
 
+        self._step_tabs.currentChanged.connect(self._on_step_changed)
+
         splitter.addWidget(self._step_tabs)
 
         # Right: log panel
@@ -493,6 +504,16 @@ class WolfWorkflowTab(QWidget):
             "players apply themselves. Existing files are overwritten."
         ))
 
+        fmt_btn = self._register(_make_btn("④ Format extracted JSON (dazedformat)", "#3a3a3a"))
+        fmt_btn.clicked.connect(self._format_json)
+        layout.addWidget(fmt_btn)
+        layout.addWidget(self._desc(
+            "Normalises the extracted JSON in wolf_json/ and files/ to a consistent layout "
+            "(json.dump, indent 4) — the same format the translator writes back. Run this once "
+            "after extracting and commit it as your baseline, so later injects produce clean, "
+            "line-level git diffs instead of reformatting the whole file."
+        ))
+
     def _browse_folder(self):
         start = self.folder_edit.text() or str(Path.home())
         folder = QFileDialog.getExistingDirectory(self, "Select WOLF Game Folder", start)
@@ -658,6 +679,39 @@ class WolfWorkflowTab(QWidget):
             return True, (
                 f"Extracted {len(manifest_entries)} document(s) and imported {copied} into files/. "
                 "Go to Step 2 to translate."
+            )
+
+        self._run_task(task)
+
+    def _format_json(self):
+        if not self._require_root():
+            return
+        work_dir = self._work_dir()
+        files_dir = Path("files")
+        if not work_dir.is_dir() and not files_dir.is_dir():
+            QMessageBox.information(
+                self, "Format JSON",
+                "Nothing to format yet. Run ② Extract text first.",
+            )
+            return
+
+        def task(log):
+            from util.dazedformat import format_json_files
+
+            total = 0
+            errors: list[str] = []
+            for label, d in (("wolf_json/", work_dir), ("files/", files_dir)):
+                if not Path(d).is_dir():
+                    continue
+                log(f"Formatting JSON in {label} …")
+                count, errs = format_json_files(d, log=log)
+                total += count
+                errors.extend(errs)
+            if errors:
+                return False, f"Formatted {total} file(s), {len(errors)} error(s) — see log."
+            return True, (
+                f"Formatted {total} JSON file(s). Commit this as your baseline before "
+                "translating so injects give clean git diffs."
             )
 
         self._run_task(task)
@@ -892,6 +946,48 @@ class WolfWorkflowTab(QWidget):
         check_btn.clicked.connect(self._names_check)
         layout.addWidget(check_btn)
 
+        layout.addWidget(_make_hr())
+        layout.addWidget(self._subheading("Quick inject — write only specific files into the game"))
+        layout.addWidget(self._desc(
+            "For iterating: after translating a few files, tick just those here and inject them "
+            "straight into the game's Data/ so you can review the git diff in the game project and "
+            "test in-game. Only files that already have a translation in translated/ are listed. "
+            f"Tick {NAMES_JSON} to also re-apply the name glossary across Data/."
+        ))
+
+        self.inject_list = QListWidget()
+        self.inject_list.setMaximumHeight(220)
+        self.inject_list.setStyleSheet(
+            "QListWidget{background-color:#252526;border:1px solid #3a3a3a;border-radius:4px;"
+            "color:#cccccc;font-size:12px;padding:2px;}"
+            "QListWidget::item{padding:3px 4px;}"
+            "QListWidget::item:selected{background:#264f78;color:#ffffff;}"
+        )
+        layout.addWidget(self.inject_list)
+
+        list_row = QHBoxLayout()
+        refresh_btn = self._register(_make_btn("↻ Refresh list", "#3a3a3a"))
+        refresh_btn.clicked.connect(self._refresh_inject_list)
+        sel_all_btn = self._register(_make_btn("Select all", "#3a3a3a"))
+        sel_all_btn.clicked.connect(lambda: self._set_inject_checks(True))
+        sel_none_btn = self._register(_make_btn("Select none", "#3a3a3a"))
+        sel_none_btn.clicked.connect(lambda: self._set_inject_checks(False))
+        list_row.addWidget(refresh_btn)
+        list_row.addWidget(sel_all_btn)
+        list_row.addWidget(sel_none_btn)
+        list_row.addStretch()
+        layout.addLayout(list_row)
+
+        quick_btn = self._register(_make_btn("Inject selected files", "#00a86b"))
+        quick_btn.clicked.connect(self._inject_selected)
+        layout.addWidget(quick_btn)
+
+        layout.addWidget(_make_hr())
+        layout.addWidget(self._subheading("Full inject"))
+        layout.addWidget(self._desc(
+            "Injects every extracted document and applies the name glossary across Data/. "
+            "Use this once translation is complete before packaging in Step 4."
+        ))
         inject_btn = self._register(_make_btn("Inject all translations", "#00a86b"))
         inject_btn.clicked.connect(self._inject)
         layout.addWidget(inject_btn)
@@ -903,6 +999,67 @@ class WolfWorkflowTab(QWidget):
             if p.is_file():
                 return p
         return None
+
+    def _on_step_changed(self, idx: int):
+        # Index 3 == Inject: keep the quick-inject picker in sync with translated/.
+        if idx == 3:
+            self._refresh_inject_list()
+
+    def _refresh_inject_list(self):
+        if not hasattr(self, "inject_list"):
+            return
+        self.inject_list.clear()
+        manifest = self._read_manifest()
+        if not manifest:
+            item = QListWidgetItem("Run Step 0 (extract) first — no manifest found.")
+            item.setFlags(Qt.ItemIsEnabled)
+            self.inject_list.addItem(item)
+            return
+        listed = 0
+        for entry in manifest.get("entries", []):
+            json_name = entry.get("json")
+            if not json_name:
+                continue
+            if not (Path("translated") / json_name).is_file():
+                continue
+            item = QListWidgetItem(json_name)
+            item.setData(Qt.UserRole, json_name)
+            item.setFlags(Qt.ItemIsUserCheckable | Qt.ItemIsEnabled)
+            item.setCheckState(Qt.Unchecked)
+            self.inject_list.addItem(item)
+            listed += 1
+        if listed == 0:
+            item = QListWidgetItem("No translated files in translated/ yet — run Step 2.")
+            item.setFlags(Qt.ItemIsEnabled)
+            self.inject_list.addItem(item)
+
+    def _set_inject_checks(self, checked: bool):
+        if not hasattr(self, "inject_list"):
+            return
+        state = Qt.Checked if checked else Qt.Unchecked
+        for i in range(self.inject_list.count()):
+            it = self.inject_list.item(i)
+            if it.flags() & Qt.ItemIsUserCheckable:
+                it.setCheckState(state)
+
+    def _inject_selected(self):
+        if not self._require_manifest():
+            return
+        selected = set()
+        for i in range(self.inject_list.count()):
+            it = self.inject_list.item(i)
+            if (it.flags() & Qt.ItemIsUserCheckable) and it.checkState() == Qt.Checked:
+                name = it.data(Qt.UserRole)
+                if name:
+                    selected.add(name)
+        if not selected:
+            QMessageBox.information(
+                self, "Nothing selected",
+                "Tick the files you want to inject, then try again. "
+                "Use “↻ Refresh list” if you just translated something.",
+            )
+            return
+        self._inject(only_json=selected)
 
     def _names_check(self):
         if not self._require_manifest():
@@ -926,12 +1083,36 @@ class WolfWorkflowTab(QWidget):
 
         self._run_task(task)
 
-    def _inject(self):
+    def _inject(self, only_json: set[str] | None = None):
+        """Inject translations into the game's Data/ binaries.
+
+        only_json:
+            None      — full inject: every document + name glossary across Data/.
+            set(names)— quick inject: only those JSON files; the name glossary is
+                        re-applied across Data/ only when NAMES_JSON is included.
+        """
         if not self._require_manifest():
             return
         manifest = self._read_manifest()
         en_punct = self.en_punct_cb.isChecked()
         allow_drift = self.drift_cb.isChecked()
+        quick = only_json is not None
+        game_json_dir = self._work_dir()
+
+        def _sync_json(json_name: str, src: Path, log):
+            """Copy the translated JSON into the game's git-tracked wolf_json/ so the
+            diff shows both the updated JSON source and the injected binary."""
+            dest = game_json_dir / json_name
+            try:
+                if src.resolve() == dest.resolve():
+                    return
+            except Exception:
+                pass
+            try:
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(src, dest)
+            except Exception as e:
+                log(f"  ⚠ could not update {json_name} in {WORK_DIR_NAME}/: {e}")
 
         def task(log):
             from util import wolfdawn
@@ -944,6 +1125,8 @@ class WolfWorkflowTab(QWidget):
             # Non-name documents: inject each back onto its base binary.
             for entry in entries:
                 if entry["kind"] == "names":
+                    continue
+                if only_json is not None and entry["json"] not in only_json:
                     continue
                 src = self._translated_or_source(entry["json"])
                 if src is None:
@@ -958,13 +1141,16 @@ class WolfWorkflowTab(QWidget):
                 )
                 if res.ok:
                     applied += 1
+                    _sync_json(entry["json"], src, log)
                 else:
                     failed += 1
                     log(f"  ⚠ inject exit {res.returncode} for {entry['json']}")
 
-            # Name glossary: apply across the whole data dir.
+            # Name glossary: apply across the whole data dir. For a quick inject,
+            # only do this if the user explicitly selected the names file, since it
+            # rewrites many binaries and would add noise to the git diff otherwise.
             names_entry = next((e for e in entries if e["kind"] == "names"), None)
-            if names_entry:
+            if names_entry and (only_json is None or names_entry["json"] in only_json):
                 src = self._translated_or_source(names_entry["json"])
                 if src is not None:
                     log("Applying name glossary across Data/ …")
@@ -974,6 +1160,7 @@ class WolfWorkflowTab(QWidget):
                     )
                     if res.ok:
                         applied += 1
+                        _sync_json(names_entry["json"], src, log)
                     else:
                         failed += 1
                         log(f"  ⚠ names-inject exit {res.returncode}")
@@ -981,7 +1168,10 @@ class WolfWorkflowTab(QWidget):
             msg = f"Injected {applied} document(s)"
             if failed:
                 msg += f", {failed} had guard/errors (see log)"
-            msg += ". Continue to Step 4 to package."
+            if quick:
+                msg += ". Review the git diff in the game project and test in-game."
+            else:
+                msg += ". Continue to Step 4 to package."
             return failed == 0, msg
 
         self._run_task(task)
