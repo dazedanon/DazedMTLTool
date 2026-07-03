@@ -17,6 +17,10 @@ otherwise the base section would not be stripped on reload.
 
 from __future__ import annotations
 
+import os
+import re
+import threading
+
 from util.paths import VOCAB_BASE_PATH, VOCAB_PATH
 
 BASE_SEPARATOR = (
@@ -24,6 +28,10 @@ BASE_SEPARATOR = (
 )
 
 _EMPTY_PLACEHOLDER = "# Add character glossary entries here\n"
+
+# Guards the read-modify-write in update_vocab_section against concurrent
+# translation file-threads clobbering each other's sections.
+_VOCAB_LOCK = threading.Lock()
 
 
 def read_game_vocab() -> str:
@@ -45,3 +53,77 @@ def write_game_vocab(game_text: str) -> None:
     )
     combined = game_text + "\n\n" + BASE_SEPARATOR + base_text
     VOCAB_PATH.write_text(combined, encoding="utf-8")
+
+
+def _norm(s: str) -> str:
+    """Normalise for no-op detection: collapse whitespace and case-fold."""
+    if s is None:
+        return ""
+    return re.sub(r"\s+", " ", str(s)).strip().casefold()
+
+
+def update_vocab_section(category: str, pairs) -> None:
+    """Insert or replace a ``# {category}`` section in the game-specific vocab.
+
+    Mirrors the RPGMaker auto-glossary behaviour (translated DB names feed
+    ``vocab.txt`` so later phases stay consistent), but always writes *above*
+    the auto-appended base section (:data:`BASE_SEPARATOR`) so the base vocab is
+    preserved and not stripped on the next :func:`read_game_vocab`.
+
+    - ``category``: section header text, e.g. ``"Weapon · 武器"``.
+    - ``pairs``: iterable of ``(source, translated)``. Deduped by source (last
+      wins); no-ops (empty translation or unchanged after normalisation) are
+      dropped. When nothing survives filtering the file is left untouched.
+    """
+    dedup: dict[str, str] = {}
+    for src, dst in pairs:
+        if not src:
+            continue
+        if dst is None or _norm(dst) == "" or _norm(dst) == _norm(src):
+            continue
+        dedup[str(src)] = str(dst)
+    if not dedup:
+        return
+
+    with _VOCAB_LOCK:
+        existing = VOCAB_PATH.read_text(encoding="utf-8") if VOCAB_PATH.is_file() else ""
+
+        # Keep the auto-appended base section (separator + base vocab) intact.
+        idx = existing.find(BASE_SEPARATOR)
+        if idx != -1:
+            game_part = existing[:idx]
+            base_part = existing[idx:]
+        else:
+            game_part = existing
+            base_part = ""
+
+        block_lines = [f"{src} ({dst})" for src, dst in dedup.items()]
+        new_block = f"# {category}\n" + "\n".join(block_lines) + "\n\n"
+
+        # Match this category's section up to the next '#' header or end of the
+        # game portion. Handles '#Cat', '# Cat', '## Cat', etc.
+        pattern = re.compile(
+            rf"^[\t ]*#+\s*{re.escape(category)}\s*$\r?\n.*?(?=^[\t ]*#|\Z)",
+            re.MULTILINE | re.DOTALL,
+        )
+        if pattern.search(game_part):
+            new_game = pattern.sub(lambda _m: new_block, game_part, count=1)
+        else:
+            new_game = game_part.rstrip("\n")
+            if new_game:
+                new_game += "\n\n"
+            new_game += new_block
+
+        if base_part:
+            combined = new_game.rstrip("\n") + "\n\n" + base_part
+        else:
+            combined = new_game
+
+        if combined == existing:
+            return
+
+        tmp_path = VOCAB_PATH.with_suffix(
+            VOCAB_PATH.suffix + f".{os.getpid()}.{threading.get_ident()}.tmp"
+        )
+        tmp_path.write_text(combined, encoding="utf-8")
+        os.replace(tmp_path, VOCAB_PATH)

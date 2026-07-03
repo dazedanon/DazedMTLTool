@@ -23,7 +23,10 @@ names) that break the game if translated. So for ``kind == "names"`` documents,
 only entries whose ``note`` is in the opt-in safe list (``SAFE_NOTES``, from
 ``data/wolf_safe_notes.json`` via :mod:`util.wolf_names`) are translated; the rest
 are left as source. The list is empty by default, so nothing is translated until
-the user opts categories in from the workflow.
+the user opts categories in from the workflow. After translating names.json, the
+safe entries are harvested into ``vocab.txt`` (grouped by ``note``, with bilingual
+headers) so later phases (DB descriptions, dialogue) keep item / skill / term
+names consistent - the WOLF equivalent of RPGMaker's DB-first glossary seeding.
 
 Text wrapping: translated dialogue is re-wrapped to a character width (like the
 RPGMaker module, via :mod:`util.dazedwrap`) so English fits WOLF's message box.
@@ -61,6 +64,7 @@ from util.translation import (
     calculateCost,
 )
 from util import speakers as wolf_speakers
+from util import vocab as wolf_vocab
 from util import wolf_names
 
 # Globals (mirror the other engine modules; populated from .env at import time)
@@ -131,13 +135,17 @@ TRANSLATION_CONFIG = TranslationConfig(
 
 def handleWolfDawn(filename, estimate):
     """Entry point used by the CLI/GUI dispatchers. Returns a summary string or 'Fail'."""
-    global ESTIMATE, TOKENS, FILENAME, SAFE_NOTES, SPEAKER_CONFIG
+    global ESTIMATE, TOKENS, FILENAME, SAFE_NOTES, SPEAKER_CONFIG, VOCAB
     ESTIMATE = estimate
     FILENAME = filename
     # Re-read workflow-configured settings so edits made this session take effect
     # even when translation runs in-process (the module import is cached).
     SAFE_NOTES = wolf_names.load_safe_notes()
     SPEAKER_CONFIG = wolf_speakers.load_config()
+    # Reload the glossary so a later phase (DB text / dialogue) picks up names
+    # that an earlier Phase 0 (names) harvested into vocab.txt.
+    VOCAB = VOCAB_PATH.read_text(encoding="utf-8")
+    TRANSLATION_CONFIG.vocab = VOCAB
 
     start = time.time()
     translatedData = openFiles(filename)
@@ -303,7 +311,38 @@ def parseDocument(data, filename):
                 else:
                     entry["text"] = _wrap_plain(text, is_firstline)
 
+    # Phase 0 feeds the glossary: harvest the just-translated safe name values
+    # into vocab.txt (grouped by note) so the DB-text and dialogue phases keep
+    # item/skill/term names consistent. Mirrors the RPGMaker DB-first strategy.
+    if is_names and not ESTIMATE:
+        _harvest_names_to_vocab(data)
+
     return [data, totalTokens, None]
+
+
+def _harvest_names_to_vocab(data):
+    """Write translated safe names.json entries into vocab.txt, grouped by note.
+
+    Each note category becomes a bilingual ``# English · 日本語`` section (English
+    sourced from the staged DB labels, else a static map, else JP-only). Only
+    safe notes with an actual translation are written; the base vocab section is
+    preserved by :func:`util.vocab.update_vocab_section`.
+    """
+    try:
+        db_labels = wolf_names.derive_db_labels("files")
+        by_note: dict[str, list] = {}
+        for entry in data.get("names") or []:
+            note = entry.get("note", "")
+            if not wolf_names.is_note_safe(note, SAFE_NOTES):
+                continue
+            src, dst = entry.get("source"), entry.get("text")
+            if not isinstance(src, str) or not isinstance(dst, str):
+                continue
+            by_note.setdefault(note, []).append((src, dst))
+        for note, pairs in by_note.items():
+            wolf_vocab.update_vocab_section(wolf_names.note_header(note, db_labels), pairs)
+    except Exception:
+        traceback.print_exc()
 
 
 def getResultString(translatedData, translationTime, filename):

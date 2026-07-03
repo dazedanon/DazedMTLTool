@@ -38,19 +38,30 @@ class _WolfTranslateHarness:
 
     def __init__(self):
         self.captured = []
+        # Captured (category, pairs) from the names -> vocab.txt harvest, so tests
+        # can assert on it without writing to the real data/vocab.txt.
+        self.vocab_writes = []
 
     def run(self, data, filename="doc.json", estimate=False, safe_notes=None):
         def translate(text, history, history_ctx=None):
             self.captured.append(copy.deepcopy(text))
             return _mock_translate(text, history, history_ctx)
 
+        def capture_vocab(category, pairs):
+            self.vocab_writes.append((category, list(pairs)))
+
         orig_t = wd.translateAI
         orig_estimate = wd.ESTIMATE
         orig_wrap = wd.WRAP
         orig_notes = wd.SAFE_NOTES
+        orig_update = wd.wolf_vocab.update_vocab_section
+        orig_labels = wd.wolf_names.derive_db_labels
         wd.translateAI = translate
         wd.ESTIMATE = estimate
         wd.WRAP = False  # keep write-back byte-faithful; wrapping tested separately
+        # Never touch the real glossary / DB files during tests.
+        wd.wolf_vocab.update_vocab_section = capture_vocab
+        wd.wolf_names.derive_db_labels = lambda _p: {}
         if safe_notes is not None:
             wd.SAFE_NOTES = safe_notes
         try:
@@ -62,6 +73,8 @@ class _WolfTranslateHarness:
             wd.ESTIMATE = orig_estimate
             wd.WRAP = orig_wrap
             wd.SAFE_NOTES = orig_notes
+            wd.wolf_vocab.update_vocab_section = orig_update
+            wd.wolf_names.derive_db_labels = orig_labels
 
 
 MAP_DOC = {
@@ -167,6 +180,20 @@ class TestTranslationWriteback(unittest.TestCase):
         self.assertEqual(captured, [])
         for entry in data["names"]:
             self.assertEqual(entry["text"], entry["source"])
+
+    def test_names_harvest_to_vocab(self):
+        # Phase 0 seeds vocab.txt: only translated safe-note pairs are harvested,
+        # under a bilingual header (English from the static NOTE_EN fallback).
+        harness = _WolfTranslateHarness()
+        (_data, _t, err), _c = harness.run(NAMES_DOC, "names.json", safe_notes=["武器"])
+        self.assertIsNone(err)
+        self.assertEqual(harness.vocab_writes, [("Weapon · 武器", [("剣", "EN_剣")])])
+
+    def test_names_harvest_skipped_in_estimate(self):
+        # Estimate mode must not seed the glossary.
+        harness = _WolfTranslateHarness()
+        harness.run(NAMES_DOC, "names.json", estimate=True, safe_notes=["武器"])
+        self.assertEqual(harness.vocab_writes, [])
 
     def test_txtdir_translates(self):
         (data, _t, err), _c = _WolfTranslateHarness().run(TXTDIR_DOC, "Evtext.json")

@@ -28,6 +28,30 @@ from util.paths import DATA_DIR
 
 SAFE_NOTES_PATH = DATA_DIR / "wolf_safe_notes.json"
 
+# WolfDawn labels standard database types bilingually in a document's group
+# ``typeName`` (e.g. ``"Weapon · 武器"``). names.json ``note`` values are the JP
+# half only, so this static map provides an English label for the common,
+# safe-to-translate categories when the live DB labels are unavailable. Games
+# with custom categories fall back to a JP-only header.
+NOTE_EN: dict[str, str] = {
+    "武器": "Weapon",
+    "防具": "Armor",
+    "技能": "Skill",
+    "アイテム": "Item",
+    "状態設定": "State Setting",
+    "用語設定": "Term Setting",
+    "戦闘コマンド": "Battle Command",
+    "システム設定": "System Setting",
+    "属性名の設定": "Attribute",
+    "主人公ステータス": "Hero Status",
+    "敵グループ": "Enemy Group",
+    "敵ｷｬﾗ個体ﾃﾞｰﾀ": "Enemy Data",
+}
+
+# WolfDawn joins the English and Japanese halves of a database label with this
+# separator, e.g. ``"Weapon · 武器"``.
+_LABEL_SEP = " · "
+
 
 def load_safe_notes() -> list[str]:
     """Return the saved list of ``note`` categories that are safe to translate."""
@@ -61,3 +85,50 @@ def is_note_safe(note: str, safe_notes) -> bool:
     if not safe_notes:
         return False
     return note in safe_notes
+
+
+def derive_db_labels(files_dir) -> dict[str, str]:
+    """Build a ``{japanese_note: english}`` map from staged WolfDawn ``db`` files.
+
+    WolfDawn tags each database group with a bilingual ``typeName`` (e.g.
+    ``"Weapon · 武器"``). Splitting on the separator recovers the game-accurate
+    English label for a names.json ``note`` (the JP half), so harvested vocab
+    sections can be headed bilingually without hardcoding categories per game.
+    """
+    from pathlib import Path
+
+    labels: dict[str, str] = {}
+    try:
+        base = Path(files_dir)
+        if not base.is_dir():
+            return labels
+        for path in sorted(base.glob("*.project.json")):
+            try:
+                data = json.loads(path.read_text(encoding="utf-8-sig"))
+            except Exception:
+                continue
+            if data.get("kind") != "db":
+                continue
+            for group in data.get("groups") or []:
+                type_name = group.get("typeName") or ""
+                if _LABEL_SEP in type_name:
+                    english, _, japanese = type_name.partition(_LABEL_SEP)
+                    english, japanese = english.strip(), japanese.strip()
+                    if english and japanese and japanese not in labels:
+                        labels[japanese] = english
+    except Exception:
+        pass
+    return labels
+
+
+def note_header(note: str, db_labels: dict[str, str] | None = None) -> str:
+    """Return a bilingual vocab section header for a names.json ``note``.
+
+    Prefers the live DB label (:func:`derive_db_labels`), then the static
+    :data:`NOTE_EN` map, and falls back to the JP note alone. Formats matching
+    WolfDawn's own labels, e.g. ``"Weapon · 武器"``.
+    """
+    english = (db_labels or {}).get(note) or NOTE_EN.get(note)
+    if english and english != note:
+        return f"{english}{_LABEL_SEP}{note}"
+    return note

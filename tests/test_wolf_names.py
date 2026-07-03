@@ -53,5 +53,46 @@ class TestIsNoteSafe(unittest.TestCase):
         self.assertFalse(wn.is_note_safe("", []))
 
 
+class TestNoteHeader(unittest.TestCase):
+    def test_static_fallback_is_bilingual(self):
+        self.assertEqual(wn.note_header("武器"), "Weapon · 武器")
+
+    def test_live_db_label_wins_over_static(self):
+        labels = {"武器": "Blade"}
+        self.assertEqual(wn.note_header("武器", labels), "Blade · 武器")
+
+    def test_unknown_note_stays_japanese_only(self):
+        self.assertEqual(wn.note_header("■MOBセリフ"), "■MOBセリフ")
+
+
+class TestDeriveDbLabels(unittest.TestCase):
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.dir = Path(self._tmp.name)
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def test_parses_bilingual_typenames_from_db_files(self):
+        import json
+
+        (self.dir / "DataBase.project.json").write_text(
+            json.dumps({
+                "kind": "db",
+                "groups": [
+                    {"typeName": "Weapon · 武器", "lines": []},
+                    {"typeName": "Skill · 技能", "lines": []},
+                    {"typeName": "■MOBセリフ", "lines": []},  # no separator -> skipped
+                ],
+            }),
+            encoding="utf-8",
+        )
+        labels = wn.derive_db_labels(self.dir)
+        self.assertEqual(labels, {"武器": "Weapon", "技能": "Skill"})
+
+    def test_missing_dir_returns_empty(self):
+        self.assertEqual(wn.derive_db_labels(self.dir / "nope"), {})
+
+
 if __name__ == "__main__":
     unittest.main()
