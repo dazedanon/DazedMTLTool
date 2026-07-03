@@ -38,7 +38,9 @@ project's git history tracks both the JSON source and the updated binaries.
 from __future__ import annotations
 
 import json
+import re
 import shutil
+import tempfile
 from pathlib import Path
 
 from PyQt5.QtCore import Qt, QSettings, QThread, QTimer, pyqtSignal
@@ -81,6 +83,23 @@ _TL_NORMAL_LABEL = "Normal Translate"
 MANIFEST_NAME = "manifest.json"
 NAMES_JSON = "names.json"
 WORK_DIR_NAME = "wolf_json"
+
+# WolfDawn's inject commands print e.g. "applied 91 translation(s) (0 untranslated,
+# 0 drifted); wrote <path>". We parse the counts to distinguish a real inject from a
+# silent no-op (exit 0 but 0 applied because the base was already translated).
+_INJECT_COUNTS_RE = re.compile(
+    r"applied\s+(\d+)\s+translation.*?(\d+)\s+drifted", re.IGNORECASE | re.DOTALL
+)
+
+
+def _parse_inject_counts(stdout: str):
+    """Return (applied, drifted) ints from wolf inject output, or (None, None)."""
+    if not stdout:
+        return None, None
+    m = _INJECT_COUNTS_RE.search(stdout)
+    if not m:
+        return None, None
+    return int(m.group(1)), int(m.group(2))
 
 # Glossary-discovery prompt for Copilot / Cursor, tailored to WolfDawn's extracted
 # JSON (source/text pairs staged in files/). Produces the same two-section format
@@ -285,6 +304,93 @@ class WolfWorkflowTab(QWidget):
             return json.loads(mp.read_text(encoding="utf-8"))
         except Exception:
             return None
+
+    # ─────────────────────────── pristine originals ──────────────────────────
+    # WolfDawn injects by locating each Japanese `source` string inside the base
+    # binary and replacing it. That only works against the *original* (untranslated)
+    # binary: once a file has been injected it holds English, so re-injecting can no
+    # longer find the Japanese sources and every line is reported as "drift" (a
+    # silent no-op). To keep injection idempotent and re-runnable, we always inject
+    # from a pristine snapshot of the binaries into the live Data/ folder.
+
+    def _originals_dir(self) -> Path:
+        return self._work_dir() / "originals"
+
+    def _orig_base_for(self, entry: dict, data_dir: Path) -> Path:
+        """Pristine-snapshot path mirroring an entry's base under originals/."""
+        base = Path(entry["base"])
+        try:
+            rel = base.relative_to(data_dir)
+        except ValueError:
+            rel = Path(base.name)
+        return self._originals_dir() / rel
+
+    def _snapshot_originals(self, entries: list[dict], data_dir: Path, log) -> None:
+        """Copy the pristine base binaries into originals/ (only when missing, so a
+        good snapshot is never clobbered by a later extract of injected data)."""
+        for entry in entries:
+            if entry.get("kind") == "names":
+                continue
+            src = Path(entry["base"])
+            dst = self._orig_base_for(entry, data_dir)
+            if dst.exists():
+                continue
+            try:
+                if src.is_dir():
+                    shutil.copytree(src, dst, dirs_exist_ok=True)
+                elif src.is_file():
+                    dst.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(src, dst)
+            except Exception as exc:
+                log(f"  ⚠ could not snapshot original {src.name}: {exc}")
+
+    def _ensure_originals(self, manifest: dict, log) -> None:
+        """Make sure a pristine snapshot exists; if entries are missing it and the
+        game still has its .wolf archives (packaging renames them to .wolf.bak),
+        rebuild the snapshot by unpacking those archives into originals/."""
+        from util import wolfdawn
+
+        data_dir = Path(manifest["data_dir"])
+        entries = manifest.get("entries", [])
+        missing = [
+            e for e in entries
+            if e.get("kind") != "names" and not self._orig_base_for(e, data_dir).exists()
+        ]
+        if not missing:
+            return
+
+        root = Path(self._game_root)
+        # Only the binary archives (MapData / BasicData) are needed for inject.
+        archives: list[Path] = []
+        for base in (root, data_dir):
+            if base.is_dir():
+                for pat in ("*.wolf", "*.wolf.bak"):
+                    archives.extend(base.glob(pat))
+        wanted = [a for a in archives if a.name.lower().startswith(("mapdata", "basicdata"))]
+        if not wanted:
+            log(
+                "  ⚠ No pristine originals and no .wolf archives to rebuild them from. "
+                "Re-run Step 0 (Unpack + Extract) on the untranslated game so injection "
+                "has an original to work from."
+            )
+            return
+
+        originals = self._originals_dir()
+        originals.mkdir(parents=True, exist_ok=True)
+        log("Rebuilding pristine originals from the game's .wolf archives …")
+        with tempfile.TemporaryDirectory() as tmp:
+            inputs: list[str] = []
+            for arc in wanted:
+                # unpack-all only accepts a .wolf extension; present .bak copies as .wolf.
+                if arc.suffix == ".bak":
+                    staged = Path(tmp) / arc.with_suffix("").name  # X.wolf.bak -> X.wolf
+                    shutil.copy2(arc, staged)
+                    inputs.append(str(staged))
+                else:
+                    inputs.append(str(arc))
+            res = wolfdawn.unpack_all(inputs, str(originals), log_fn=log)
+            if not res.ok:
+                log(f"  ⚠ could not rebuild originals (unpack exit {res.returncode}).")
 
     # ───────────────────────────────── UI setup ──────────────────────────────
 
@@ -721,6 +827,11 @@ class WolfWorkflowTab(QWidget):
             (work_dir / MANIFEST_NAME).write_text(
                 json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8"
             )
+
+            # Snapshot the pristine (untranslated) binaries now, while Data/ is still
+            # the extracted source, so later injects always have an original to read
+            # from and re-injecting a file actually updates the binary.
+            self._snapshot_originals(manifest_entries, Path(data_dir), log)
 
             # Import all extracted JSON (except the manifest) into files/.
             files_dir = Path("files")
@@ -1524,12 +1635,17 @@ class WolfWorkflowTab(QWidget):
         def task(log):
             from util import wolfdawn
 
+            # Guarantee a pristine snapshot to inject from (rebuild from archives if
+            # an older extraction predates snapshotting).
+            self._ensure_originals(manifest, log)
+
             entries = manifest["entries"]
             data_dir = manifest["data_dir"]
+            data_dir_path = Path(data_dir)
             applied = 0
             failed = 0
 
-            # Non-name documents: inject each back onto its base binary.
+            # Non-name documents: inject each pristine original onto its live binary.
             for entry in entries:
                 if entry["kind"] == "names":
                     continue
@@ -1539,16 +1655,31 @@ class WolfWorkflowTab(QWidget):
                 if src is None:
                     log(f"  ⚠ no JSON for {entry['json']} — skipped")
                     continue
-                base = entry["base"]
-                out = base  # in-place (txt-dir writes each file under this dir)
-                log(f"Injecting {entry['json']} → {Path(base).name} …")
+                out = entry["base"]  # live game binary (or txt-dir) we write into
+                orig = self._orig_base_for(entry, data_dir_path)
+                base = str(orig) if orig.exists() else out
+                if not orig.exists():
+                    log(
+                        f"  ⚠ no pristine original for {entry['json']}; injecting against the "
+                        "live binary, which fails if it was already translated."
+                    )
+                log(f"Injecting {entry['json']} → {Path(out).name} …")
                 res = wolfdawn.strings_inject(
                     str(src), base, out,
                     allow_code_drift=allow_drift, en_punct=en_punct, log_fn=log,
                 )
-                if res.ok:
+                a, d = _parse_inject_counts(res.stdout)
+                if res.ok and not (a == 0 and (d or 0) > 0):
                     applied += 1
                     _sync_json(entry["json"], src, log)
+                elif res.ok:
+                    # Exit 0 but nothing applied and lines drifted = stale/injected base.
+                    failed += 1
+                    log(
+                        f"  ⚠ {entry['json']}: 0 applied, {d} skipped as drift — the base "
+                        "looks already translated. Restore the pristine original (re-run "
+                        "Step 0 Unpack on the untranslated game) and inject again."
+                    )
                 else:
                     failed += 1
                     log(f"  ⚠ inject exit {res.returncode} for {entry['json']}")
@@ -1561,14 +1692,24 @@ class WolfWorkflowTab(QWidget):
             if names_entry and (only_json is None or names_entry["json"] in only_json):
                 src = self._translated_or_source(names_entry["json"])
                 if src is not None:
+                    # Runs in place on the live Data/, which the strings-inject pass
+                    # above just regenerated from the pristine originals (so name
+                    # values are still Japanese and match names.json's sources).
                     log("Applying curated name values across Data/ …")
                     res = wolfdawn.names_inject(
                         str(src), data_dir,
                         allow_code_drift=allow_drift, en_punct=en_punct, log_fn=log,
                     )
-                    if res.ok:
+                    a, d = _parse_inject_counts(res.stdout)
+                    if res.ok and not (a == 0 and (d or 0) > 0):
                         applied += 1
                         _sync_json(names_entry["json"], src, log)
+                    elif res.ok:
+                        failed += 1
+                        log(
+                            f"  ⚠ names: 0 applied, {d} skipped as drift — run a full inject "
+                            "so the binaries are reset from the originals first."
+                        )
                     else:
                         failed += 1
                         log(f"  ⚠ names-inject exit {res.returncode}")

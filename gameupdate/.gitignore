@@ -31,6 +31,9 @@
 !(SRPG_Unpacker Patcher).bat
 !Data/BasicData/CommonEvent.dat
 
+# WolfDawn pristine originals kept locally for re-injection (never shipped)
+wolf_json/originals/
+
 # Ignore
 previous_patch_sha.txt
 kabe3_save.dat
