@@ -14,13 +14,12 @@ Mirrors the RPGMaker WorkflowTab, driven by the vendored WolfDawn ``wolf`` CLI
   Step 2  Names     - curate names.json (item/skill/enemy value names). Blindly
                       translating all of them breaks games that reference names by
                       value, so a repo-aware AI classifies which categories are safe
-                      to translate and leaves the rest as source. Done before
-                      translating so Phase 0 can seed the glossary from them.
+                      to translate and leaves the rest as source. Pick Normal/Batch
+                      translation mode here and run Phase 0 (names -> vocab.txt).
   Step 3  Translate - run the "Wolf RPG (WolfDawn)" module over files/ in three
-                      ordered phases (RPGMaker's DB-first strategy):
-                        Phase 0  Names     - the safe name categories from Step 2;
-                                             their translations are harvested into
-                                             vocab.txt so later phases stay consistent
+                      ordered phases (RPGMaker's DB-first strategy; mode set in Step 2):
+                        Phase 0  Names     - also runnable from Step 2; harvests safe
+                                             name translations into vocab.txt
                         Phase 1  Database  - item/skill/state descriptions and system
                                              messages (DataBase/CDataBase.project)
                         Phase 2  Dialogue  - maps, CommonEvent, Game.dat, Evtext
@@ -1058,8 +1057,6 @@ class WolfWorkflowTab(QWidget):
             "dialogue with consistent item / skill / character names (RPGMaker's DB-first strategy)."
         ))
 
-        self._add_tl_mode_selector(layout)
-
         self._add_phase_buttons(layout)
 
         self._add_speaker_options(layout)
@@ -1071,8 +1068,8 @@ class WolfWorkflowTab(QWidget):
         layout.addWidget(self._subheading("Phase 0 · Names → vocab.txt"))
         layout.addWidget(self._desc(
             "Translates only the safe name categories you approved in Step 2 and harvests them into "
-            "vocab.txt (grouped by category, e.g. \"Weapon · 武器\"). Curate safe categories in Step 2 "
-            "first, or nothing is translated. Also runnable from Step 2."
+            "vocab.txt (grouped by category, e.g. \"Weapon · 武器\"). Curate safe categories and pick "
+            "the translation mode in Step 2 first, or nothing is translated. Also runnable from Step 2."
         ))
         p0 = self._register(_make_btn("▶ Phase 0 · Translate names", "#00a86b"))
         p0.clicked.connect(
@@ -1248,7 +1245,7 @@ class WolfWorkflowTab(QWidget):
             return False
 
     def _add_tl_mode_selector(self, layout: QVBoxLayout):
-        """Normal vs Batch selector for the full translation run."""
+        """Normal vs Batch selector for all Wolf workflow translation phases."""
         row = QHBoxLayout()
         lbl = QLabel("Translation mode:")
         lbl.setStyleSheet("color:#cccccc;font-size:12px;font-weight:bold;background:transparent;")
@@ -1435,8 +1432,10 @@ class WolfWorkflowTab(QWidget):
             "After saving, translate only the approved categories. The WolfDawn module skips every "
             "other name (leaving it identical to the source) and harvests the translated names into "
             "vocab.txt (grouped by category) so the later Translate phases stay consistent. This is "
-            "the same as Phase 0 in Step 3; run it here first, or from the Translate step."
+            "the first translation step - pick Normal or Batch below, then run Phase 0 here or from "
+            "Step 3 (the same mode applies to all phases)."
         ))
+        self._add_tl_mode_selector(layout)
         tl_btn = self._register(_make_btn("Translate safe names now (Phase 0)", "#00a86b"))
         tl_btn.clicked.connect(
             lambda: self._navigate_to_translation(kinds=PHASE_NAMES_KINDS, auto_start=True)
