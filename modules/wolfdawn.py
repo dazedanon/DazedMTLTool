@@ -36,8 +36,10 @@ Speakers: WolfDawn tags each line with ``speaker`` / ``speaker_src``. For the
 first-line formats (``literal_line1`` / ``literal_line1_lowconf``) the speaker
 name is baked into line 1 of ``source``. Those lines are reshaped into the shared
 ``[Speaker]: line`` convention (which the prompt already translates) and restored
-to WOLF's native ``Speaker\nline`` layout on write-back. See ``util.speakers``;
-which formats are reshaped is configurable from the workflow.
+to WOLF's native ``Speaker\nline`` layout on write-back. See ``util.speakers``.
+Detection is WolfDawn's, so the reliable nameplate (``literal_line1``) is always
+reshaped; only the low-confidence guess (``literal_line1_lowconf``) is gated by a
+per-game, AI-recommended setting from the workflow.
 """
 
 import json
@@ -129,12 +131,13 @@ TRANSLATION_CONFIG = TranslationConfig(
 
 def handleWolfDawn(filename, estimate):
     """Entry point used by the CLI/GUI dispatchers. Returns a summary string or 'Fail'."""
-    global ESTIMATE, TOKENS, FILENAME, SAFE_NOTES
+    global ESTIMATE, TOKENS, FILENAME, SAFE_NOTES, SPEAKER_CONFIG
     ESTIMATE = estimate
     FILENAME = filename
-    # Re-read the safe note categories so edits made in the workflow this session
-    # take effect even when translation runs in-process (module import is cached).
+    # Re-read workflow-configured settings so edits made this session take effect
+    # even when translation runs in-process (the module import is cached).
     SAFE_NOTES = wolf_names.load_safe_notes()
+    SPEAKER_CONFIG = wolf_speakers.load_config()
 
     start = time.time()
     translatedData = openFiles(filename)

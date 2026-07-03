@@ -348,19 +348,30 @@ def _has_japanese(text: str) -> bool:
 #
 # When translating we reshape those into ``[Speaker]: body`` (the prompt already
 # knows to translate the tag) and, on write-back, restore WOLF's native
-# ``Speaker\nbody`` layout so injection stays byte-faithful. Which formats are
-# reshaped is configurable (``data/wolf_speakers.json``) so the workflow can
-# toggle the high-confidence nameplate and the low-confidence guess separately.
+# ``Speaker\nbody`` layout so injection stays byte-faithful.
+#
+# WolfDawn does the detection, so there is nothing to configure for the reliable
+# format: ``literal_line1`` is a real nameplate (a face window precedes the line),
+# always reshaped, no toggle. Only ``literal_line1_lowconf`` is a heuristic guess
+# (short line 1, no face window) that can occasionally be wrong; whether to trust
+# it is a per-game call, so it is the single configurable format
+# (``data/wolf_speakers.json``), recommended by the workflow's speaker-format AI
+# prompt rather than guessed by hand.
 # ============================================================================
 
 # speaker_src values whose name is baked into line 1 of the source text.
 FIRSTLINE_SRCS = ("literal_line1", "literal_line1_lowconf")
 
-# Default: reshape both first-line formats. WolfDawn already gates the
-# low-confidence one (short line 1, no control codes, no sentence punctuation),
-# so it is safe enough to enable by default.
+# Reliable nameplate - always reshaped, not user-configurable.
+ALWAYS_ON_SRCS = ("literal_line1",)
+
+# Heuristic guess - reshaping is gated by config (per-game, AI-recommended).
+CONFIGURABLE_SRCS = ("literal_line1_lowconf",)
+
+# Default: also reshape the low-confidence guess. WolfDawn already gates it (short
+# line 1, no control codes, no sentence punctuation), so it is safe enough on by
+# default; the speaker-format prompt can advise turning it off for a given game.
 DEFAULT_CONFIG = {
-    "literal_line1": True,
     "literal_line1_lowconf": True,
 }
 
@@ -394,8 +405,14 @@ def save_config(config: dict) -> None:
 
 
 def is_firstline_enabled(speaker_src: str, config: dict | None = None) -> bool:
-    """True if *speaker_src* is a first-line format that is enabled in *config*."""
-    if speaker_src not in FIRSTLINE_SRCS:
+    """True if *speaker_src* is a first-line format that should be reshaped.
+
+    The reliable nameplate (``literal_line1``) is always on; the low-confidence
+    guess is gated by *config* (per-game, AI-recommended).
+    """
+    if speaker_src in ALWAYS_ON_SRCS:
+        return True
+    if speaker_src not in CONFIGURABLE_SRCS:
         return False
     cfg = config if config is not None else DEFAULT_CONFIG
     return bool(cfg.get(speaker_src, DEFAULT_CONFIG.get(speaker_src, False)))

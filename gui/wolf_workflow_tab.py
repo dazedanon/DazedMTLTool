@@ -244,6 +244,47 @@ _WOLF_NAMES_PROMPT = (
     "</output_format>\n"
 )
 
+# Speaker-format prompt for a repo-aware AI. WolfDawn already detects and tags who
+# speaks on each line, so the only decision left is whether its LOW-confidence
+# first-line guesses are really speaker names for this game. The AI inspects the
+# extracted text and returns a single ENABLE/DISABLE recommendation.
+_WOLF_SPEAKER_PROMPT = (
+    "You are an expert Japanese WOLF RPG Editor translator helping configure a translation tool.\n"
+    "\n"
+    "<background>\n"
+    "WolfDawn extracts each line with a 'speaker' and a 'speaker_src' tag describing how it "
+    "detected the speaker. Two tags carry the speaker name baked into the FIRST line of the "
+    "'source' text (the rest is the dialogue body):\n"
+    "  - literal_line1          : HIGH confidence - a face/name window precedes the line, so the "
+    "first line really is a nameplate. The tool always reshapes these; nothing to decide.\n"
+    "  - literal_line1_lowconf  : LOW confidence - a short first line with NO preceding face "
+    "window. WolfDawn guesses it is a speaker name, but it might actually be the start of the "
+    "dialogue or narration.\n"
+    "When a first-line format is trusted, the tool reshapes 'Name\\nbody' into '[Name]: body' for "
+    "translation, then restores 'Name\\nbody' on inject (byte-safe either way).\n"
+    "</background>\n"
+    "\n"
+    "--- attach the extracted JSON in files/ here (maps / CommonEvent) before continuing ---\n"
+    "\n"
+    "<task>\n"
+    "Decide whether the LOW-confidence first-line guesses (speaker_src = literal_line1_lowconf) "
+    "should be treated as speaker names for THIS game. Inspect a good sample of those entries in "
+    "files/: look at the first line of each such 'source' and judge whether it is genuinely a "
+    "character/speaker label as opposed to real dialogue or narration.\n"
+    "  - ENABLE  if the low-confidence first lines are overwhelmingly real speaker names.\n"
+    "  - DISABLE if many are actually dialogue/narration (reshaping them would mislabel lines).\n"
+    "(The high-confidence nameplates are always handled; you are only ruling on the guesses.)\n"
+    "</task>\n"
+    "\n"
+    "<output_format>\n"
+    "Return ONLY a fenced code block containing the recommendation and a one-line reason, e.g.\n"
+    "```\n"
+    "LOWCONF_FIRSTLINE: ENABLE - low-confidence first lines are short character names (市民, 兵士...).\n"
+    "```\n"
+    "Use exactly ENABLE or DISABLE after the colon.\n"
+    "</output_format>\n"
+)
+
 
 class _WolfTaskWorker(QThread):
     """Run a blocking WolfDawn task callable off the UI thread.
@@ -998,41 +1039,53 @@ class WolfWorkflowTab(QWidget):
         layout.addWidget(open_btn)
 
     def _add_speaker_options(self, layout: QVBoxLayout):
-        """Toggles for which speaker formats are reshaped into '[Speaker]: line'."""
+        """Speaker handling: nameplates are automatic; the low-confidence guess is
+        an AI-recommended per-game setting."""
         from util import speakers as wolf_speakers
 
         layout.addWidget(_make_hr())
         layout.addWidget(self._subheading("Speaker handling"))
         layout.addWidget(self._desc(
-            "WolfDawn tags who is speaking on each line. For lines where the name is baked "
-            "into the first line (a nameplate), the translator reshapes them into the "
-            "\"[Speaker]: line\" format the prompt understands, translates the speaker tag, then "
-            "restores WOLF's native \"Speaker⏎line\" layout on inject. Turn the formats off if a "
-            "game's first lines are not really speaker names."
+            "WolfDawn already detects who speaks on each line, so this is automatic: lines "
+            "with a real nameplate (a face window precedes the name) are always reshaped into "
+            "the \"[Speaker]: line\" format the prompt understands, translated, and restored to "
+            "WOLF's native \"Speaker⏎line\" layout on inject. The only judgement call is whether "
+            "to trust WolfDawn's low-confidence guesses (a short first line with no face window "
+            "that might be a name - or might just be the start of dialogue)."
+        ))
+        layout.addWidget(self._desc(
+            "Ask the AI managing the game repo to decide: the prompt has it inspect the "
+            "extracted files/ and recommend whether low-confidence first-line names should be "
+            "reshaped for this game. Then set the box below to match."
         ))
 
+        prompt_btn = _make_btn("📋 Copy speaker-format prompt for Copilot / Cursor", "#5a3a7a")
+        prompt_btn.clicked.connect(self._copy_wolf_speaker_prompt)
+        layout.addWidget(prompt_btn)
+
         cfg = wolf_speakers.load_config()
-
-        self._speaker_hi_cb = QCheckBox(
-            "High-confidence nameplates (a face window precedes the line)"
-        )
-        self._speaker_hi_cb.setChecked(bool(cfg.get("literal_line1", True)))
-        self._speaker_hi_cb.stateChanged.connect(self._save_speaker_options)
-        layout.addWidget(self._speaker_hi_cb)
-
         self._speaker_lo_cb = QCheckBox(
-            "Low-confidence first-line guesses (short first line, no preceding face window)"
+            "Reshape low-confidence first-line names (enable if the AI says this game uses them)"
         )
         self._speaker_lo_cb.setChecked(bool(cfg.get("literal_line1_lowconf", True)))
         self._speaker_lo_cb.stateChanged.connect(self._save_speaker_options)
         layout.addWidget(self._speaker_lo_cb)
+
+    def _copy_wolf_speaker_prompt(self):
+        try:
+            QApplication.clipboard().setText(_WOLF_SPEAKER_PROMPT)
+            self._log(
+                "📋 Speaker-format prompt copied. Paste it into Cursor/Copilot with files/ open; "
+                "set the low-confidence box to match its recommendation."
+            )
+        except Exception as exc:
+            self._log(f"❌ Could not copy speaker prompt: {exc}")
 
     def _save_speaker_options(self):
         from util import speakers as wolf_speakers
 
         try:
             wolf_speakers.save_config({
-                "literal_line1": self._speaker_hi_cb.isChecked(),
                 "literal_line1_lowconf": self._speaker_lo_cb.isChecked(),
             })
         except Exception as exc:

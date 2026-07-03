@@ -14,8 +14,8 @@ sys.path.insert(0, str(ROOT))
 
 from util import speakers as ws  # noqa: E402
 
-ALL_ON = {"literal_line1": True, "literal_line1_lowconf": True}
-ALL_OFF = {"literal_line1": False, "literal_line1_lowconf": False}
+ALL_ON = {"literal_line1_lowconf": True}
+ALL_OFF = {"literal_line1_lowconf": False}
 
 
 class TestSplitSource(unittest.TestCase):
@@ -29,6 +29,11 @@ class TestSplitSource(unittest.TestCase):
 
     def test_disabled_format_returns_none(self):
         self.assertIsNone(ws.split_source("市民\nおはよう", "literal_line1_lowconf", ALL_OFF))
+
+    def test_highconf_always_on_ignores_config(self):
+        # The reliable nameplate is reshaped regardless of config (no toggle).
+        out = ws.split_source("セルリア\nふふふ", "literal_line1", ALL_OFF)
+        self.assertEqual(out, ("", "セルリア", "ふふふ"))
 
     def test_non_firstline_src_returns_none(self):
         for src in ("narration", "ui", "choice", "string_var", ""):
@@ -94,10 +99,10 @@ class TestConfigIO(unittest.TestCase):
         try:
             with tempfile.TemporaryDirectory() as td:
                 ws.CONFIG_PATH = Path(td) / "wolf_speakers.json"
-                ws.save_config({"literal_line1": False, "literal_line1_lowconf": True})
-                loaded = ws.load_config()
-                self.assertFalse(loaded["literal_line1"])
-                self.assertTrue(loaded["literal_line1_lowconf"])
+                ws.save_config({"literal_line1_lowconf": False})
+                self.assertFalse(ws.load_config()["literal_line1_lowconf"])
+                ws.save_config({"literal_line1_lowconf": True})
+                self.assertTrue(ws.load_config()["literal_line1_lowconf"])
         finally:
             ws.CONFIG_PATH = orig
 
