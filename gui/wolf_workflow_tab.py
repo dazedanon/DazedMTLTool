@@ -452,9 +452,9 @@ class WolfWorkflowTab(QWidget):
             "Pick the WOLF game's root folder (the one containing Game.exe and Data.wolf, "
             "or a loose Data/ folder). The tool unpacks the .wolf archives with WolfDawn, "
             "extracts all translatable text, and stages it in files/ ready to translate.\n\n"
-            "A prebuilt WolfDawn 'wolf' CLI ships with the tool, so no setup is needed. "
-            "(If no prebuilt binary exists for your platform, it is compiled once from "
-            "source with cargo, which requires Rust.)"
+            "A prebuilt WolfDawn 'wolf' CLI ships with the tool (Windows and Linux), so no "
+            "setup is needed. If your platform's binary is missing, it's downloaded once "
+            "from the WolfDawn release page and cached for offline use."
         ))
 
         row = QHBoxLayout()

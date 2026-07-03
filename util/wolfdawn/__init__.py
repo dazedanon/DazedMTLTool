@@ -1,13 +1,15 @@
 """WolfDawn CLI bootstrap and thin subprocess wrappers.
 
-WolfDawn is the vendored Rust toolchain under ``util/wolfdawn-master`` that
-unpacks, extracts, injects, and repacks WOLF RPG Editor game data. It ships as
-source, so the ``wolf`` binary is built on demand with ``cargo build --release``
-the first time it is needed (mirrors the on-demand tool bootstrap in
-``util/ace``). Everything the DazedMTLTool Wolf workflow needs goes through the
-helpers here so command syntax and exit-code handling live in one place.
+WolfDawn is the Rust toolchain (https://gitgud.io/zero64801/wolfdawn) that
+unpacks, extracts, injects, and repacks WOLF RPG Editor game data. DazedMTLTool
+ships prebuilt ``wolf`` binaries offline under ``util/wolfdawn/bin/<platform>/``
+so end users never need a Rust toolchain. When no offline binary is bundled for
+the running platform, the tool pulls a prebuilt one from the WolfDawn release
+page and caches it into that same folder. Everything the Wolf workflow needs
+goes through the helpers here so command syntax and exit-code handling live in
+one place.
 
-Exit codes emitted by ``wolf`` (see crates/wolf-cli/src/main.rs):
+Exit codes emitted by ``wolf`` (see WolfDawn crates/wolf-cli/src/main.rs):
     0   success
     2   round-trip mismatch / inject guard / name-consistency failure
     4   read / parse / write / crypto failure
@@ -16,9 +18,14 @@ Exit codes emitted by ``wolf`` (see crates/wolf-cli/src/main.rs):
 
 from __future__ import annotations
 
-import shutil
+import io
+import json
+import re
 import subprocess
 import sys
+import urllib.error
+import urllib.request
+import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Optional, Sequence, Union
@@ -26,9 +33,10 @@ from typing import Iterable, Optional, Sequence, Union
 __all__ = [
     "WolfDawnError",
     "WolfResult",
-    "wolfdawn_source_dir",
     "wolf_binary_path",
+    "bundled_binary_path",
     "ensure_wolf_binary",
+    "download_wolf_binary",
     "unpack_all",
     "strings_extract",
     "names_extract",
@@ -39,20 +47,35 @@ __all__ = [
     "names_check",
 ]
 
-# ``util/wolfdawn`` -> repo root is two parents up; the vendored source sits at
-# ``util/wolfdawn-master``.
-_PACKAGE_DIR = Path(__file__).resolve().parent
-_UTIL_DIR = _PACKAGE_DIR.parent
-_SOURCE_DIR = _UTIL_DIR / "wolfdawn-master"
 # Committed, prebuilt binaries live here (per-platform) so end users don't need a
-# Rust toolchain. A build is only attempted when no bundled binary is present.
+# Rust toolchain. When one is missing we download it from the WolfDawn release.
+_PACKAGE_DIR = Path(__file__).resolve().parent
 _BUNDLED_DIR = _PACKAGE_DIR / "bin"
+
+# WolfDawn upstream project on gitgud.io (a GitLab instance). The numeric project
+# id is used for the uploads URL because the human-readable project path sits
+# behind a Cloudflare challenge, while ``/-/project/<id>/uploads/...`` does not.
+_GITGUD_HOST = "https://gitgud.io"
+_WOLFDAWN_PROJECT_ID = 48753
+_RELEASES_API = f"{_GITGUD_HOST}/api/v4/projects/{_WOLFDAWN_PROJECT_ID}/releases"
+# Substring that identifies each platform's prebuilt zip in a release. Only the
+# assets the upstream maintainer publishes can be pulled; unpublished platforms
+# fall back to the committed offline binary.
+_RELEASE_ASSET_MATCH = {
+    "windows": "win",
+    "linux": "linux",
+    "macos": "mac",
+}
+_DOWNLOAD_UA = (
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) "
+    "DazedMTLTool WolfDawn-fetch"
+)
 
 PathLike = Union[str, Path]
 
 
 class WolfDawnError(RuntimeError):
-    """Raised when the WolfDawn binary can't be built/located or a command fails hard."""
+    """Raised when the WolfDawn binary can't be located/downloaded or a command fails hard."""
 
 
 @dataclass
@@ -77,11 +100,6 @@ class WolfResult:
         return self
 
 
-def wolfdawn_source_dir() -> Path:
-    """Absolute path to the vendored WolfDawn Rust workspace."""
-    return _SOURCE_DIR
-
-
 def _exe_name() -> str:
     return "wolf.exe" if sys.platform.startswith("win") else "wolf"
 
@@ -94,101 +112,120 @@ def _platform_dir() -> str:
     return "linux"
 
 
-def bundled_binary_path() -> Path:
-    """Committed prebuilt binary path for the current platform (may not exist)."""
-    return _BUNDLED_DIR / _platform_dir() / _exe_name()
-
-
-def _built_binary_path() -> Path:
-    """Path of a locally cargo-built binary under the source tree's target/."""
-    return _SOURCE_DIR / "target" / "release" / _exe_name()
+def bundled_binary_path(platform: Optional[str] = None) -> Path:
+    """Committed/cached prebuilt binary path for a platform (may not exist)."""
+    platform = platform or _platform_dir()
+    exe = "wolf.exe" if platform == "windows" else "wolf"
+    return _BUNDLED_DIR / platform / exe
 
 
 def wolf_binary_path() -> Path:
-    """Preferred ``wolf`` binary path: bundled if present, else the built path."""
-    bundled = bundled_binary_path()
-    if bundled.is_file():
-        return bundled
-    return _built_binary_path()
+    """Preferred ``wolf`` binary path for the current platform (may not exist)."""
+    return bundled_binary_path()
 
 
-def _persist_binary(src: Path, log_fn=None) -> Path:
-    """Copy a freshly built binary into the committed per-platform bundle dir."""
-    dest = bundled_binary_path()
+def _find_release_upload_url(platform: str) -> Optional[str]:
+    """Look up the newest release and return the download URL of ``platform``'s zip.
+
+    WolfDawn attaches prebuilt zips to a release as GitLab *uploads* referenced
+    from the release description markdown, e.g.
+    ``[WolfDawn-win64.zip](/uploads/<hash>/WolfDawn-win64.zip)``. Returns the
+    numeric-project uploads URL (which bypasses the Cloudflare challenge) or
+    ``None`` when the platform isn't published.
+    """
+    match = _RELEASE_ASSET_MATCH.get(platform)
+    if not match:
+        return None
+    req = urllib.request.Request(_RELEASES_API, headers={"User-Agent": _DOWNLOAD_UA})
+    with urllib.request.urlopen(req, timeout=30) as resp:
+        releases = json.loads(resp.read().decode("utf-8"))
+    link_re = re.compile(r"\[([^\]]+)\]\((/uploads/[0-9a-f]+/[^)]+)\)")
+    for release in releases:
+        description = release.get("description") or ""
+        for filename, upload_path in link_re.findall(description):
+            name = filename.lower()
+            if match in name and name.endswith(".zip"):
+                return f"{_GITGUD_HOST}/-/project/{_WOLFDAWN_PROJECT_ID}{upload_path}"
+    return None
+
+
+def _extract_wolf_from_zip(zip_bytes: bytes, dest: Path, log_fn=None) -> Path:
+    """Extract the ``wolf``/``wolf.exe`` member from a release zip into ``dest``."""
+    want = dest.name.lower()
+    with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
+        member = None
+        for info in zf.infolist():
+            base = info.filename.rsplit("/", 1)[-1].lower()
+            if base == want:
+                member = info
+                break
+        if member is None:
+            names = ", ".join(i.filename for i in zf.infolist())
+            raise WolfDawnError(
+                f"WolfDawn release zip did not contain '{dest.name}' (found: {names})."
+            )
+        payload = zf.read(member)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_bytes(payload)
     try:
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(src, dest)
         dest.chmod(0o755)
-        _log(f"Saved WolfDawn binary to {dest}", log_fn)
-        return dest
-    except Exception as exc:  # pragma: no cover - best effort persistence
-        _log(f"Warning: could not persist WolfDawn binary to {dest}: {exc}", log_fn)
-        return src
+    except OSError:  # pragma: no cover - non-POSIX filesystems
+        pass
+    _log(f"Saved WolfDawn binary to {dest}", log_fn)
+    return dest
+
+
+def download_wolf_binary(platform: Optional[str] = None, log_fn=print) -> Path:
+    """Pull the prebuilt ``wolf`` binary from the WolfDawn release and cache it.
+
+    Downloads the platform's release zip, extracts the ``wolf`` executable into
+    ``util/wolfdawn/bin/<platform>/``, and returns its path. Raises
+    :class:`WolfDawnError` when the platform has no published binary or the
+    download fails.
+    """
+    platform = platform or _platform_dir()
+    dest = bundled_binary_path(platform)
+    _log(f"Looking up WolfDawn '{platform}' binary on {_GITGUD_HOST} ...", log_fn)
+    try:
+        url = _find_release_upload_url(platform)
+    except (urllib.error.URLError, TimeoutError, ValueError) as exc:
+        raise WolfDawnError(
+            f"Could not reach the WolfDawn release page: {exc}. "
+            f"Place a prebuilt binary at {dest} to work fully offline."
+        ) from exc
+    if not url:
+        raise WolfDawnError(
+            f"No prebuilt WolfDawn binary is published for '{platform}'. "
+            f"Place one at {dest}, or build it from source "
+            "(https://gitgud.io/zero64801/wolfdawn)."
+        )
+    _log(f"Downloading WolfDawn binary from {url} ...", log_fn)
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": _DOWNLOAD_UA})
+        with urllib.request.urlopen(req, timeout=120) as resp:
+            zip_bytes = resp.read()
+    except (urllib.error.URLError, TimeoutError) as exc:
+        raise WolfDawnError(f"Failed to download WolfDawn binary: {exc}") from exc
+    return _extract_wolf_from_zip(zip_bytes, dest, log_fn)
 
 
 def ensure_wolf_binary(force: bool = False, log_fn=print) -> Path:
-    """Return the ``wolf`` binary path, building it with cargo only if needed.
+    """Return the ``wolf`` binary path, downloading it only if needed.
 
     Resolution order:
-      1. Committed, prebuilt binary under ``util/wolfdawn/bin/<platform>/`` — used
-         directly so end users never need a Rust toolchain.
-      2. A locally cargo-built binary under the source ``target/release``.
-      3. Build from source with ``cargo build --release`` and persist the result
-         into the committed bundle dir for reuse.
+      1. Committed/cached prebuilt binary under ``util/wolfdawn/bin/<platform>/``
+         — used directly so the tool works fully offline.
+      2. Otherwise (or when ``force`` is set), pull the prebuilt binary from the
+         WolfDawn release page and cache it into that same folder.
 
-    Raises :class:`WolfDawnError` with actionable guidance when the source tree
-    is missing, ``cargo`` is not on PATH, or the build fails.
+    Raises :class:`WolfDawnError` with actionable guidance when no offline binary
+    is present and the download can't be completed.
     """
     if not force:
         bundled = bundled_binary_path()
         if bundled.is_file():
             return bundled
-        built = _built_binary_path()
-        if built.is_file():
-            return _persist_binary(built, log_fn)
-
-    if not _SOURCE_DIR.is_dir():
-        raise WolfDawnError(
-            f"WolfDawn source not found at {_SOURCE_DIR}. The vendored "
-            "'wolfdawn-master' tree is required to build the 'wolf' CLI."
-        )
-
-    cargo = shutil.which("cargo")
-    if not cargo:
-        raise WolfDawnError(
-            "WolfDawn needs to be compiled but 'cargo' (the Rust toolchain) was "
-            "not found on PATH. Install Rust from https://rustup.rs/ and try "
-            "again, or place a prebuilt binary at "
-            f"{bundled_binary_path()}."
-        )
-
-    _log(f"Building WolfDawn 'wolf' binary (cargo build --release) in {_SOURCE_DIR} ...", log_fn)
-    try:
-        proc = subprocess.run(
-            [cargo, "build", "--release", "--bin", "wolf"],
-            cwd=str(_SOURCE_DIR),
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-        )
-    except Exception as exc:  # pragma: no cover - subprocess spawn failure
-        raise WolfDawnError(f"Failed to run cargo build for WolfDawn: {exc}") from exc
-
-    if proc.returncode != 0:
-        tail = (proc.stderr or proc.stdout or "").strip().splitlines()[-20:]
-        raise WolfDawnError(
-            "cargo build --release failed for WolfDawn:\n" + "\n".join(tail)
-        )
-
-    built = _built_binary_path()
-    if not built.is_file():
-        raise WolfDawnError(
-            f"cargo build reported success but {built} is missing. "
-            "Check the WolfDawn workspace layout."
-        )
-    _log("WolfDawn 'wolf' binary ready", log_fn)
-    return _persist_binary(built, log_fn)
+    return download_wolf_binary(log_fn=log_fn)
 
 
 def _log(msg: str, log_fn) -> None:

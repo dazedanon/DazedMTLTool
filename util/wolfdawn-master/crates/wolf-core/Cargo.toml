@@ -1,6 +1,0 @@
-[package]
-name = "wolf-core"
-edition.workspace = true
-version.workspace = true
-license.workspace = true
-description = "Low-level Wolf RPG wire primitives: byte reader/writer, length-prefixed strings, codecs. No Wolf domain semantics."

@@ -331,7 +331,7 @@ Open the **Workflow** tab and choose **Wolf RPG (WolfDawn)** from the engine sel
 | **4 Package** | Either run from the loose `Data/` folder (backs up `Data.wolf` → `Data.wolf.bak`), or **Repack** a fresh `Data.wolf`, inheriting the original archive's encryption. |
 | **5 Saves** | *(Optional)* Update existing `.sav` files so old Japanese saves load cleanly in the translated build. Originals are backed up automatically. |
 
-> **`wolf` binary:** A prebuilt `wolf` CLI is bundled under `util/wolfdawn/bin/<platform>/`, so no build step is needed on supported platforms. If no bundled binary is present for your platform, the tool falls back to compiling it from the vendored source with `cargo build --release`, which requires a [Rust toolchain](https://rustup.rs/); the freshly built binary is then saved into the bundle for reuse. A clear error is shown if neither a bundled binary nor `cargo` is available.
+> **`wolf` binary:** Prebuilt `wolf` CLIs for Windows and Linux are bundled offline under `util/wolfdawn/bin/<platform>/`, so no toolchain or build step is needed. If your platform's binary is missing, the tool downloads a prebuilt one from the [WolfDawn release page](https://gitgud.io/zero64801/wolfdawn) and caches it into that same folder for offline reuse. A clear error is shown if no bundled binary is present and the download can't be completed (e.g. no published binary for your platform).
 
 > **Legacy modules:** The older `Wolf RPG` / `Wolf RPG 2` modules (configured in the Engine Config tab) still exist for edge cases, but the WolfDawn workflow above is the recommended path.
 

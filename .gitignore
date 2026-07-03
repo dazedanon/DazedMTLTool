@@ -31,6 +31,5 @@ util/ace/*.exe
 util/ace/.tools_version.json
 !util/ace/offline/*.exe
 
-# WolfDawn: ignore the Rust build tree, but keep the committed prebuilt binaries.
-util/wolfdawn-master/target/
+# WolfDawn: keep the committed prebuilt binaries (offline) under version control.
 !util/wolfdawn/bin/**
