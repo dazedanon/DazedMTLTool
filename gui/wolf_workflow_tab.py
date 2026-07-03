@@ -460,6 +460,39 @@ class WolfWorkflowTab(QWidget):
             if not res.ok:
                 log(f"  ⚠ could not rebuild originals (unpack exit {res.returncode}).")
 
+    def _restore_live_from_originals(
+        self, entries: list[dict], data_dir: Path, log
+    ) -> None:
+        """Copy pristine originals onto live Data/ binaries before names-inject.
+
+        ``names-inject`` rewrites every DB pair, CommonEvent.dat, and every map.
+        Resetting from ``wolf_json/originals/`` first keeps them on one baseline.
+        """
+        restored = 0
+        for entry in entries:
+            if entry.get("kind") == "names":
+                continue
+            orig = self._orig_base_for(entry, data_dir)
+            live = Path(entry["base"])
+            if not orig.exists():
+                log(f"  ⚠ no pristine original for {entry['json']} — live file left as-is")
+                continue
+            try:
+                if orig.is_dir():
+                    if live.exists():
+                        shutil.rmtree(live)
+                    shutil.copytree(orig, live)
+                else:
+                    live.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(orig, live)
+                restored += 1
+            except Exception as exc:
+                log(f"  ⚠ could not restore {live.name} from originals: {exc}")
+        if restored:
+            log(
+                f"Restored {restored} live binary file(s) from {WORK_DIR_NAME}/originals/."
+            )
+
     # ───────────────────────────────── UI setup ──────────────────────────────
 
     def _init_ui(self):
@@ -1575,7 +1608,8 @@ class WolfWorkflowTab(QWidget):
             "Writes the translated text back into the game's Data/ binaries with WolfDawn, "
             "byte-exact. The curated name values from Step 2 are applied across Data/ (only the "
             "entries you translated change). Lines whose inline codes changed are skipped and "
-            "reported (unless you allow drift)."
+            "reported (unless you allow drift). Full inject and any inject that includes "
+            f"{NAMES_JSON} reset live Data/ from {WORK_DIR_NAME}/originals/ first."
         ))
 
         self.en_punct_cb = QCheckBox("Convert Japanese punctuation to ASCII (--en-punct)")
@@ -1786,11 +1820,42 @@ class WolfWorkflowTab(QWidget):
             applied = 0
             failed = 0
 
+            names_entry = next((e for e in entries if e["kind"] == "names"), None)
+            names_src = (
+                self._translated_or_source(names_entry["json"])
+                if names_entry
+                else None
+            )
+            will_names = bool(
+                names_entry
+                and names_src is not None
+                and (only_json is None or names_entry["json"] in only_json)
+            )
+
+            if only_json is None or will_names:
+                log(f"Resetting live Data/ from {WORK_DIR_NAME}/originals/ …")
+                self._restore_live_from_originals(entries, data_dir_path, log)
+
+            if only_json is None:
+                strings_targets = {
+                    e["json"] for e in entries if e.get("kind") != "names"
+                }
+            elif will_names:
+                strings_targets = {
+                    e["json"]
+                    for e in entries
+                    if e.get("kind") != "names"
+                    and (Path("translated") / e["json"]).is_file()
+                }
+                strings_targets |= {j for j in only_json if j != NAMES_JSON}
+            else:
+                strings_targets = set(only_json or ())
+
             # Non-name documents: inject each pristine original onto its live binary.
             for entry in entries:
                 if entry["kind"] == "names":
                     continue
-                if only_json is not None and entry["json"] not in only_json:
+                if entry["json"] not in strings_targets:
                     continue
                 src = self._translated_or_source(entry["json"])
                 if src is None:
@@ -1829,31 +1894,26 @@ class WolfWorkflowTab(QWidget):
             # curated translated/names.json exists (Step 2). For a quick inject, only
             # do this if the user explicitly ticked the names file, since it rewrites
             # many binaries and would add noise to the git diff otherwise.
-            names_entry = next((e for e in entries if e["kind"] == "names"), None)
-            if names_entry and (only_json is None or names_entry["json"] in only_json):
-                src = self._translated_or_source(names_entry["json"])
-                if src is not None:
-                    # Runs in place on the live Data/, which the strings-inject pass
-                    # above just regenerated from the pristine originals (so name
-                    # values are still Japanese and match names.json's sources).
-                    log("Applying curated name values across Data/ …")
-                    res = wolfdawn.names_inject(
-                        str(src), data_dir,
-                        allow_code_drift=allow_drift, en_punct=en_punct, log_fn=log,
+            if will_names and names_entry and names_src is not None:
+                log("Applying curated name values across Data/ …")
+                res = wolfdawn.names_inject(
+                    str(names_src), data_dir,
+                    allow_code_drift=allow_drift, en_punct=en_punct, log_fn=log,
+                )
+                a, d = _parse_inject_counts(res.stdout)
+                if res.ok and not (a == 0 and (d or 0) > 0):
+                    applied += 1
+                    _sync_json(names_entry["json"], names_src, log)
+                elif res.ok:
+                    failed += 1
+                    log(
+                        f"  ⚠ names: 0 applied, {d} skipped as drift — sources in "
+                        f"{NAMES_JSON} no longer match the live binaries. Re-run Step 0 "
+                        "extract on the untranslated game, translate again, and inject."
                     )
-                    a, d = _parse_inject_counts(res.stdout)
-                    if res.ok and not (a == 0 and (d or 0) > 0):
-                        applied += 1
-                        _sync_json(names_entry["json"], src, log)
-                    elif res.ok:
-                        failed += 1
-                        log(
-                            f"  ⚠ names: 0 applied, {d} skipped as drift — run a full inject "
-                            "so the binaries are reset from the originals first."
-                        )
-                    else:
-                        failed += 1
-                        log(f"  ⚠ names-inject exit {res.returncode}")
+                else:
+                    failed += 1
+                    log(f"  ⚠ names-inject exit {res.returncode}")
 
             msg = f"Injected {applied} document(s)"
             if failed:
