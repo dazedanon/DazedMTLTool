@@ -46,8 +46,10 @@ class _WolfTranslateHarness:
 
         orig_t = wd.translateAI
         orig_estimate = wd.ESTIMATE
+        orig_wrap = wd.WRAP
         wd.translateAI = translate
         wd.ESTIMATE = estimate
+        wd.WRAP = False  # keep write-back byte-faithful; wrapping tested separately
         try:
             data_copy = copy.deepcopy(data)
             result = wd.parseDocument(data_copy, filename)
@@ -55,6 +57,7 @@ class _WolfTranslateHarness:
         finally:
             wd.translateAI = orig_t
             wd.ESTIMATE = orig_estimate
+            wd.WRAP = orig_wrap
 
 
 MAP_DOC = {
@@ -192,8 +195,10 @@ SPEAKER_MAP_DOC = {
 class _SpeakerHarness:
     """Run parseDocument with the speaker-aware mock and a chosen speaker config."""
 
-    def __init__(self, config):
+    def __init__(self, config, wrap=False, width=0):
         self.config = config
+        self.wrap = wrap
+        self.width = width
         self.captured = []
 
     def run(self, data, filename="OP.mps.json"):
@@ -201,15 +206,17 @@ class _SpeakerHarness:
             self.captured.append(copy.deepcopy(text))
             return _mock_translate_speaker(text, history, history_ctx)
 
-        orig_t, orig_est, orig_cfg = wd.translateAI, wd.ESTIMATE, wd.SPEAKER_CONFIG
+        orig = (wd.translateAI, wd.ESTIMATE, wd.SPEAKER_CONFIG, wd.WRAP, wd.WRAPWIDTH)
         wd.translateAI = translate
         wd.ESTIMATE = False
         wd.SPEAKER_CONFIG = self.config
+        wd.WRAP = self.wrap
+        wd.WRAPWIDTH = self.width
         try:
             result = wd.parseDocument(copy.deepcopy(data), filename)
             return result, self.captured
         finally:
-            wd.translateAI, wd.ESTIMATE, wd.SPEAKER_CONFIG = orig_t, orig_est, orig_cfg
+            (wd.translateAI, wd.ESTIMATE, wd.SPEAKER_CONFIG, wd.WRAP, wd.WRAPWIDTH) = orig
 
 
 class TestSpeakerReshaping(unittest.TestCase):
@@ -242,6 +249,55 @@ class TestSpeakerReshaping(unittest.TestCase):
         self.assertIn("[セルリア]: ふふふ", captured[0])
         lines = data["scenes"][0]["lines"]
         self.assertEqual(lines[0]["text"], "EN_市民\nおはよう\n元気？")
+
+
+class TestWrapping(unittest.TestCase):
+    """dazedwrap-style re-wrapping, with the speaker name kept on its own line."""
+
+    def setUp(self):
+        self._orig = (wd.WRAP, wd.WRAPWIDTH)
+
+    def tearDown(self):
+        wd.WRAP, wd.WRAPWIDTH = self._orig
+
+    def _set(self, enabled, width):
+        wd.WRAP, wd.WRAPWIDTH = enabled, width
+
+    def test_wrap_body_respects_width_and_keeps_words(self):
+        self._set(True, 10)
+        out = wd._wrap_body("alpha beta gamma delta")
+        self.assertGreater(out.count("\n"), 0)  # actually wrapped
+        for line in out.split("\n"):
+            self.assertLessEqual(len(line), 10)
+        self.assertEqual(out.replace("\n", " "), "alpha beta gamma delta")
+
+    def test_wrap_disabled_is_noop(self):
+        self._set(False, 10)
+        self.assertEqual(wd._wrap_body("alpha beta gamma delta"), "alpha beta gamma delta")
+
+    def test_zero_width_is_noop(self):
+        self._set(True, 0)
+        self.assertEqual(wd._wrap_body("alpha beta gamma delta"), "alpha beta gamma delta")
+
+    def test_wrap_plain_preserves_nameplate_line(self):
+        self._set(True, 12)
+        out = wd._wrap_plain("Name\nalpha beta gamma delta epsilon", is_firstline=True)
+        self.assertEqual(out.split("\n", 1)[0], "Name")  # name never merged into body
+        for line in out.split("\n")[1:]:
+            self.assertLessEqual(len(line), 12)
+
+    def test_wrap_plain_preserves_window_prefix(self):
+        self._set(True, 12)
+        out = wd._wrap_plain("@1\nName\nalpha beta gamma delta", is_firstline=True)
+        self.assertTrue(out.startswith("@1\nName\n"))
+
+    def test_speaker_body_wrapped_but_name_kept(self):
+        # Integration: even at a tiny width the (translated) name stays on line 1.
+        cfg = {"literal_line1": True, "literal_line1_lowconf": True}
+        (data, _t, err), _c = _SpeakerHarness(cfg, wrap=True, width=6).run(SPEAKER_MAP_DOC)
+        self.assertIsNone(err)
+        line0 = data["scenes"][0]["lines"][0]["text"]
+        self.assertEqual(line0.split("\n", 1)[0], "EN_市民")
 
 
 class TestOpenFiles(unittest.TestCase):

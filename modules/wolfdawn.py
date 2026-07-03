@@ -15,8 +15,14 @@ Supported document ``kind``s (all share the ``{source, text}`` leaf pattern):
 
 Only entries whose ``source`` contains target-language (Japanese by default)
 text are sent to the model; everything else keeps ``text == source`` so inject
-is a no-op for it. Translated text is written back verbatim (no re-wrapping) to
-keep WolfDawn's inline-code and byte-exact guards happy.
+is a no-op for it.
+
+Text wrapping: translated dialogue is re-wrapped to a character width (like the
+RPGMaker module, via :mod:`util.dazedwrap`) so English fits WOLF's message box.
+Wrapping is applied to the dialogue *body* only - a speaker's nameplate line (the
+``\n`` right after a name) is kept on its own line and never folded into the body.
+Configurable from the workflow (``.env``: ``wolfWrap`` / ``wolfWidth``); a width of
+0 (or ``wolfWrap=false``) writes the model output back verbatim.
 
 Speakers: WolfDawn tags each line with ``speaker`` / ``speaker_src``. For the
 first-line formats (``literal_line1`` / ``literal_line1_lowconf``) the speaker
@@ -36,6 +42,7 @@ import traceback
 from colorama import Fore
 from tqdm import tqdm
 
+import util.dazedwrap as dazedwrap
 from util.paths import PROMPT_PATH, VOCAB_PATH
 from util.translation import (
     TranslationConfig,
@@ -67,6 +74,17 @@ LANGREGEX = r"[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]+"
 # native "Speaker\nline" layout on write-back. Which formats are reshaped is
 # configurable from the workflow (data/wolf_speakers.json).
 SPEAKER_CONFIG = wolf_speakers.load_config()
+
+# Text wrapping: rewrap translated dialogue to a character width the same way the
+# RPGMaker module does (util.dazedwrap), so English lines fit WOLF's message box.
+# Only the dialogue *body* is wrapped - the speaker's name line (the "\n" after a
+# nameplate) is kept on its own line and never merged into the body. Configurable
+# from the workflow (.env: wolfWrap / wolfWidth). Width <= 0 disables wrapping.
+WRAP = (os.getenv("wolfWrap", "true").strip().lower() == "true")
+try:
+    WRAPWIDTH = int(os.getenv("wolfWidth") or 0)
+except ValueError:
+    WRAPWIDTH = 0
 
 # Pricing / batching from the configured model
 PRICING_CONFIG = getPricingConfig(MODEL)
@@ -167,6 +185,30 @@ def collectEntries(data):
     return entries
 
 
+def _wrap_body(body):
+    """Word-wrap a dialogue body to WRAPWIDTH (no-op when wrapping is disabled)."""
+    if not WRAP or WRAPWIDTH <= 0 or not isinstance(body, str) or not body:
+        return body
+    return dazedwrap.wrapText(body, WRAPWIDTH)
+
+
+def _wrap_plain(text, is_firstline):
+    """Wrap a non-reshaped entry, protecting a nameplate first line if present.
+
+    ``is_firstline`` is True for first-line-speaker formats that are turned off in
+    the config: their model output is still ``Speaker\\nbody``, so line 1 (the
+    name) is kept intact and only the body is wrapped. Any leading ``@<option>``
+    window prefix is also preserved.
+    """
+    if not WRAP or WRAPWIDTH <= 0 or not isinstance(text, str) or not text:
+        return text
+    prefix, rest = wolf_speakers.split_window_prefix(text)
+    if is_firstline and "\n" in rest:
+        name, body = rest.split("\n", 1)
+        return prefix + name + "\n" + _wrap_body(body)
+    return prefix + _wrap_body(rest)
+
+
 def parseDocument(data, filename):
     """Translate every translatable leaf entry and return [data, tokens, error]."""
     global PBAR
@@ -190,17 +232,18 @@ def parseDocument(data, filename):
         # transport format. plans[i] carries what is needed to restore each
         # entry after translation.
         sources = []
-        plans = []  # (entry, prefix, has_speaker)
+        plans = []  # (entry, prefix, has_speaker, is_firstline)
         for entry in translatable:
             src = entry["source"]
+            is_firstline = entry.get("speaker_src", "") in wolf_speakers.FIRSTLINE_SRCS
             split = wolf_speakers.split_source(src, entry.get("speaker_src", ""), SPEAKER_CONFIG)
             if split is not None:
                 prefix, speaker, body = split
                 sources.append(wolf_speakers.to_prefixed(speaker, body))
-                plans.append((entry, prefix, True))
+                plans.append((entry, prefix, True, is_firstline))
             else:
                 sources.append(src)
-                plans.append((entry, "", False))
+                plans.append((entry, "", False, is_firstline))
 
         try:
             response = translateAI(sources, [])
@@ -213,18 +256,21 @@ def parseDocument(data, filename):
 
         # Write translations back (skip in estimate mode: translated == sources).
         if not ESTIMATE and isinstance(translated, list) and len(translated) == len(plans):
-            for (entry, prefix, has_speaker), text in zip(plans, translated):
+            for (entry, prefix, has_speaker, is_firstline), text in zip(plans, translated):
                 if not isinstance(text, str):
                     continue
                 if has_speaker:
                     speaker_en, body_en = wolf_speakers.parse_prefixed(text)
                     if speaker_en is not None:
-                        entry["text"] = wolf_speakers.restore_source(prefix, speaker_en, body_en)
+                        # Wrap only the body; the name stays on its own line.
+                        entry["text"] = wolf_speakers.restore_source(
+                            prefix, speaker_en, _wrap_body(body_en)
+                        )
                     else:
                         # Model dropped the [Speaker]: prefix; keep its output as-is.
-                        entry["text"] = prefix + text
+                        entry["text"] = prefix + _wrap_body(text)
                 else:
-                    entry["text"] = text
+                    entry["text"] = _wrap_plain(text, is_firstline)
 
     return [data, totalTokens, None]
 

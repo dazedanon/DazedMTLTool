@@ -401,6 +401,21 @@ def is_firstline_enabled(speaker_src: str, config: dict | None = None) -> bool:
     return bool(cfg.get(speaker_src, DEFAULT_CONFIG.get(speaker_src, False)))
 
 
+def split_window_prefix(text: str) -> tuple[str, str]:
+    """Split a leading ``@<option>\\n`` window prefix off *text*.
+
+    Returns ``(prefix, rest)`` where ``prefix`` is ``""`` when there is no such
+    prefix. The prefix is preserved verbatim so wrapping/reshaping stays
+    byte-faithful for WolfDawn's inject drift-guard.
+    """
+    if not isinstance(text, str):
+        return "", text
+    m = _WINDOW_PREFIX_RE.match(text)
+    if not m:
+        return "", text
+    return m.group(0), text[m.end():]
+
+
 def split_source(source: str, speaker_src: str, config: dict | None = None):
     """Split a first-line-speaker source into (prefix, speaker, body).
 
@@ -409,12 +424,7 @@ def split_source(source: str, speaker_src: str, config: dict | None = None):
     """
     if not isinstance(source, str) or not is_firstline_enabled(speaker_src, config):
         return None
-    prefix = ""
-    rest = source
-    m = _WINDOW_PREFIX_RE.match(source)
-    if m:
-        prefix = m.group(0)
-        rest = source[m.end():]
+    prefix, rest = split_window_prefix(source)
     if "\n" not in rest:
         return None
     line1, body = rest.split("\n", 1)

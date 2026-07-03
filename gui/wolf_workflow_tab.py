@@ -47,6 +47,7 @@ from PyQt5.QtWidgets import (
     QMessageBox,
     QPushButton,
     QScrollArea,
+    QSpinBox,
     QSplitter,
     QTabWidget,
     QTextEdit,
@@ -817,6 +818,7 @@ class WolfWorkflowTab(QWidget):
 
         self._add_tl_mode_selector(layout)
         self._add_speaker_options(layout)
+        self._add_wrap_options(layout)
 
         btn = self._register(_make_btn("Translate all files now", "#00a86b"))
         btn.clicked.connect(lambda: self._navigate_to_translation(auto_start=True))
@@ -866,6 +868,91 @@ class WolfWorkflowTab(QWidget):
             })
         except Exception as exc:
             self._log(f"❌ Could not save speaker options: {exc}")
+
+    def _add_wrap_options(self, layout: QVBoxLayout):
+        """Dialogue text-wrap width (like the RPGMaker workflow, via dazedwrap)."""
+        layout.addWidget(_make_hr())
+        layout.addWidget(self._subheading("Text wrap width"))
+        layout.addWidget(self._desc(
+            "Re-wraps the translated English dialogue so it fits WOLF's message box. "
+            "Only the dialogue body is wrapped - a speaker's name line (the line break "
+            "right after a nameplate) is always kept separate. Lower the width if lines "
+            "overflow in-game; raise it if text wraps too early. Applies on the next run."
+        ))
+
+        wrap_env = self._read_env_values(["wolfWrap", "wolfWidth"])
+
+        self._wrap_enable_cb = QCheckBox("Wrap translated dialogue")
+        enabled = str(wrap_env.get("wolfWrap", "true")).strip().lower() != "false"
+        self._wrap_enable_cb.setChecked(enabled)
+        self._wrap_enable_cb.stateChanged.connect(self._apply_wrap_config)
+        layout.addWidget(self._wrap_enable_cb)
+
+        row = QHBoxLayout()
+        width_lbl = QLabel("Width (characters):")
+        width_lbl.setStyleSheet("color:#cccccc;font-size:12px;background:transparent;")
+        self._wrap_width_spin = QSpinBox()
+        self._wrap_width_spin.setRange(20, 300)
+        try:
+            self._wrap_width_spin.setValue(int(wrap_env.get("wolfWidth") or 55))
+        except ValueError:
+            self._wrap_width_spin.setValue(55)
+        self._wrap_width_spin.setFixedWidth(70)
+        self._wrap_width_spin.valueChanged.connect(self._apply_wrap_config)
+        row.addWidget(width_lbl)
+        row.addWidget(self._wrap_width_spin)
+        row.addStretch()
+        layout.addLayout(row)
+
+    def _apply_wrap_config(self, *args):
+        """Persist wolfWrap / wolfWidth to .env so the next translation run uses them."""
+        updates = {
+            "wolfWrap": "true" if self._wrap_enable_cb.isChecked() else "false",
+            "wolfWidth": str(self._wrap_width_spin.value()),
+        }
+        if self._write_env_values(updates):
+            self._log(
+                "Text wrap updated: "
+                + ", ".join(f"{k}={v}" for k, v in updates.items())
+            )
+
+    def _read_env_values(self, keys) -> dict:
+        """Read a few `key='value'` pairs from .env (best effort)."""
+        import re as _re
+        out = {}
+        env_path = Path(".env")
+        if not env_path.exists():
+            return out
+        try:
+            text = env_path.read_text(encoding="utf-8")
+        except Exception:
+            return out
+        for key in keys:
+            m = _re.search(rf"^{_re.escape(key)}\s*=\s*'([^']*)'", text, _re.MULTILINE)
+            if m:
+                out[key] = m.group(1)
+        return out
+
+    def _write_env_values(self, updates: dict) -> bool:
+        """Update/insert `key='value'` pairs in .env. Returns True on success."""
+        import re as _re
+        env_path = Path(".env")
+        try:
+            text = env_path.read_text(encoding="utf-8") if env_path.exists() else ""
+            for key, val in updates.items():
+                text, n = _re.subn(
+                    rf"^({_re.escape(key)}\s*=\s*')[^']*(')",
+                    rf"\g<1>{val}\g<2>",
+                    text,
+                    flags=_re.MULTILINE,
+                )
+                if n == 0:
+                    text = text.rstrip("\n") + f"\n{key}='{val}'\n"
+            env_path.write_text(text, encoding="utf-8")
+            return True
+        except Exception as exc:
+            self._log(f"❌ Could not update .env: {exc}")
+            return False
 
     def _add_tl_mode_selector(self, layout: QVBoxLayout):
         """Normal vs Batch selector; applies to the name glossary (1b) and full runs."""
