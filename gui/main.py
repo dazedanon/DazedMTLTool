@@ -401,6 +401,7 @@ class DazedMTLGUI(QMainWindow):
         self.settings = QSettings("DazedTranslations", "DazedMTLTool")
         self._pending_updates: dict = {}
         self._update_check_thread = None
+        self._shutdown_started = False
         self._update_icon = "🔄"
         self.btn_update = None
         self.init_ui()
@@ -437,43 +438,33 @@ class DazedMTLGUI(QMainWindow):
         """Gracefully stop every background ``QThread`` before the process exits.
 
         A ``QThread`` that is destroyed while still running aborts the whole
-        process with SIGABRT ("QThread: Destroyed while thread is still
-        running"). Background workers here (startup update check, model-list
-        fetch, workflow/wolf tasks, translation worker) do blocking network or
-        subprocess I/O and can outlive the window, so we sweep every live
-        ``QThread`` and quit/wait it, terminating only as a last resort.
+        process with SIGABRT. Idempotent so ``closeEvent`` and ``aboutToQuit``
+        can both call this safely.
         """
+        if getattr(self, "_shutdown_started", False):
+            return
+        self._shutdown_started = True
+
         import gc
 
         current = QThread.currentThread()
-        threads = []
         for obj in gc.get_objects():
             try:
-                if isinstance(obj, QThread) and obj is not current:
-                    threads.append(obj)
-            except Exception:
-                continue
-
-        for t in threads:
-            try:
-                if not t.isRunning():
+                if not isinstance(obj, QThread) or obj is current:
                     continue
-                # Nudge cooperative workers to stop before we block on them.
+                if not obj.isRunning():
+                    continue
                 for stopper in ("stop", "requestInterruption"):
-                    fn = getattr(t, stopper, None)
+                    fn = getattr(obj, stopper, None)
                     if callable(fn):
                         try:
                             fn()
                         except Exception:
                             pass
-                try:
-                    t.quit()
-                except Exception:
-                    pass
-                if not t.wait(3000):
+                if not obj.wait(400):
                     try:
-                        t.terminate()
-                        t.wait(1000)
+                        obj.terminate()
+                        obj.wait(400)
                     except Exception:
                         pass
             except Exception:
@@ -481,34 +472,27 @@ class DazedMTLGUI(QMainWindow):
 
     def closeEvent(self, event):
         """Handle application close event."""
-        # Save window geometry/state
         try:
             self.save_window_state()
         except Exception:
             pass
 
-        # Attempt to stop any running translation worker to ensure
-        # ThreadPoolExecutors and subprocesses are shut down so the
-        # Python process can exit cleanly.
         try:
             if hasattr(self, 'translation_tab') and self.translation_tab:
                 tt = self.translation_tab
-                # Stop log tailing first (if active)
                 try:
                     if hasattr(tt, 'translation_log_viewer') and tt.translation_log_viewer:
-                        tt.translation_log_viewer.stop_tail()
+                        tt.translation_log_viewer.stop_tail(drain=False)
                 except Exception:
                     pass
 
-                # If a worker exists and is running, request it to stop and wait
                 try:
                     if hasattr(tt, 'translation_worker') and tt.translation_worker and tt.translation_worker.isRunning():
                         tt.translation_worker.stop()
-                        # Wait up to 5s for graceful stop, otherwise terminate
-                        if not tt.translation_worker.wait(5000):
+                        if not tt.translation_worker.wait(2000):
                             try:
                                 tt.translation_worker.terminate()
-                                tt.translation_worker.wait(2000)
+                                tt.translation_worker.wait(500)
                             except Exception:
                                 pass
                 except Exception:
@@ -516,15 +500,13 @@ class DazedMTLGUI(QMainWindow):
         except Exception:
             pass
 
-        # Stop every remaining background thread (model fetch, update check,
-        # workflow/wolf workers) so the process can exit without aborting.
         try:
             self.stop_all_background_threads()
         except Exception:
             pass
 
         event.accept()
-        
+
     def setup_font_scaling(self):
         """Set up font scaling based on configuration."""
         try:
@@ -1341,32 +1323,6 @@ def main():
         # ThreadPoolExecutor threads and subprocesses are shut down so the
         # Python interpreter can exit cleanly.
         def _on_about_to_quit():
-            try:
-                if hasattr(window, 'translation_tab') and window.translation_tab:
-                    tt = window.translation_tab
-                    try:
-                        if hasattr(tt, 'translation_log_viewer') and tt.translation_log_viewer:
-                            tt.translation_log_viewer.stop_tail()
-                    except Exception:
-                        pass
-
-                    try:
-                        if hasattr(tt, 'translation_worker') and tt.translation_worker and tt.translation_worker.isRunning():
-                            tt.translation_worker.stop()
-                            # Wait briefly for graceful shutdown
-                            if not tt.translation_worker.wait(3000):
-                                try:
-                                    tt.translation_worker.terminate()
-                                    tt.translation_worker.wait(2000)
-                                except Exception:
-                                    pass
-                    except Exception:
-                        pass
-            except Exception:
-                pass
-
-            # Final safety net: stop any remaining background threads so a
-            # QThread is never destroyed while still running (SIGABRT).
             try:
                 window.stop_all_background_threads()
             except Exception:

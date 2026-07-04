@@ -114,6 +114,7 @@ class LogViewer(QWidget):
         self._tail_interval = 300  # ms
         self._tail_f = None
         self._tail_buffer = ""  # Buffer for incomplete lines
+        self._tailing = False
         # Default: prefer the most recent file in log/history, else legacy path
         try:
             latest = self._latest_history_file()
@@ -187,6 +188,8 @@ class LogViewer(QWidget):
         if interval_ms:
             self._tail_interval = interval_ms
 
+        self._tailing = True
+
         # Ensure directory exists but don't create the file
         try:
             self._tail_path.parent.mkdir(parents=True, exist_ok=True)
@@ -215,26 +218,30 @@ class LogViewer(QWidget):
 
         self._tail_timer.start(self._tail_interval)
 
-    def stop_tail(self):
+    def stop_tail(self, *, drain: bool = True):
         """Stop tailing the log file and close internal file handle.
 
-        Performs a final drain so no data written before this call is lost.
+        When *drain* is True and tailing was active, performs one final read so
+        lines written just before shutdown are not lost. On application exit,
+        pass ``drain=False`` so a large history file is not loaded into the UI.
         """
+        self._tailing = False
         try:
             self._tail_timer.stop()
         except Exception:
             pass
-        # Final drain: read any remaining data before closing the handle
-        try:
-            self._poll_tail()
-        except Exception:
-            pass
-        # Flush any leftover partial line sitting in the buffer
-        if self._tail_buffer and self._tail_buffer.strip():
+        if drain and self._tail_f is not None:
             try:
-                self.append_log_message(self._tail_buffer)
+                self._poll_tail()
             except Exception:
                 pass
+            if self._tail_buffer and self._tail_buffer.strip():
+                try:
+                    self.append_log_message(self._tail_buffer)
+                except Exception:
+                    pass
+                self._tail_buffer = ""
+        else:
             self._tail_buffer = ""
         if self._tail_f:
             try:
@@ -245,6 +252,8 @@ class LogViewer(QWidget):
 
     def _poll_tail(self):
         """Timer callback: read any new data from the tailed file and append it."""
+        if not self._tailing:
+            return
         # If file handle doesn't exist yet, try to open it if the file was created
         if not self._tail_f and self._tail_path.exists():
             try:

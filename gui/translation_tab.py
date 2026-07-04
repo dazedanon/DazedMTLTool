@@ -1533,10 +1533,6 @@ class TranslationTab(QWidget):
             pass
         self._file_list_filter_installed = False
 
-    def closeEvent(self, event):
-        self._remove_file_list_event_filter()
-        super().closeEvent(event)
-
     def eventFilter(self, obj, event):
         """Intercept mouse presses on the file list.
 
@@ -2966,11 +2962,9 @@ class TranslationTab(QWidget):
         
     def closeEvent(self, event):
         """Handle widget close event."""
+        self._remove_file_list_event_filter()
         if hasattr(self, 'log_timer'):
             self.log_timer.stop()
-        if hasattr(self, 'translation_worker') and self.translation_worker.isRunning():
-            self.translation_worker.stop()
-            if not self.translation_worker.wait(3000):
-                self.translation_worker.terminate()
-                self.translation_worker.wait(1000)
+        if hasattr(self, 'translation_log_viewer') and self.translation_log_viewer:
+            self.translation_log_viewer.stop_tail(drain=False)
         event.accept()
