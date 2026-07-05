@@ -38,11 +38,10 @@ class _WolfTranslateHarness:
 
     def __init__(self):
         self.captured = []
-        # Captured (category, pairs) from the names -> vocab.txt harvest, so tests
-        # can assert on it without writing to the real data/vocab.txt.
         self.vocab_writes = []
+        self.vocab_remove_writes = []
 
-    def run(self, data, filename="doc.json", estimate=False, safe_notes=None):
+    def run(self, data, filename="doc.json", estimate=False):
         def translate(text, history, history_ctx=None):
             self.captured.append(copy.deepcopy(text))
             return _mock_translate(text, history, history_ctx)
@@ -53,7 +52,6 @@ class _WolfTranslateHarness:
         orig_t = wd.translateAI
         orig_estimate = wd.ESTIMATE
         orig_wrap = wd.WRAP
-        orig_notes = wd.SAFE_NOTES
         orig_update = wd.wolf_vocab.update_vocab_section
         orig_labels = wd.wolf_names.derive_db_labels
         wd.translateAI = translate
@@ -62,8 +60,6 @@ class _WolfTranslateHarness:
         # Never touch the real glossary / DB files during tests.
         wd.wolf_vocab.update_vocab_section = capture_vocab
         wd.wolf_names.derive_db_labels = lambda _p: {}
-        if safe_notes is not None:
-            wd.SAFE_NOTES = safe_notes
         try:
             data_copy = copy.deepcopy(data)
             result = wd.parseDocument(data_copy, filename)
@@ -72,7 +68,6 @@ class _WolfTranslateHarness:
             wd.translateAI = orig_t
             wd.ESTIMATE = orig_estimate
             wd.WRAP = orig_wrap
-            wd.SAFE_NOTES = orig_notes
             wd.wolf_vocab.update_vocab_section = orig_update
             wd.wolf_names.derive_db_labels = orig_labels
 
@@ -110,10 +105,25 @@ GAMEDAT_DOC = {
 
 NAMES_DOC = {
     "kind": "names",
-    "count": 2,
+    "count": 3,
     "names": [
-        {"source": "剣", "text": "剣", "occurrences": 2, "note": "武器"},
-        {"source": "スイッチ状態", "text": "スイッチ状態", "occurrences": 1, "note": "通常変数名"},
+        {"source": "剣", "text": "剣", "occurrences": 2, "note": "武器", "safety": "safe"},
+        {"source": "槍", "text": "槍", "occurrences": 1, "note": "武器", "safety": "refs"},
+        {
+            "source": "スイッチ状態",
+            "text": "スイッチ状態",
+            "occurrences": 1,
+            "note": "通常変数名",
+            "safety": "verify",
+        },
+    ],
+}
+
+LEGACY_NAMES_DOC = {
+    "kind": "names",
+    "count": 1,
+    "names": [
+        {"source": "剣", "text": "剣", "occurrences": 1, "note": "武器"},
     ],
 }
 
@@ -159,41 +169,68 @@ class TestTranslationWriteback(unittest.TestCase):
         self.assertIsNone(err)
         self.assertEqual(data["lines"][0]["text"], "EN_ゲームタイトル")
 
-    def test_names_translate_only_safe_notes(self):
-        # Only the entry whose note is opted-in gets translated.
-        (data, _t, err), _c = _WolfTranslateHarness().run(
-            NAMES_DOC, "names.json", safe_notes=["武器"]
+    def test_names_translate_only_safe_and_refs(self):
+        (data, _t, err), captured = _WolfTranslateHarness().run(
+            NAMES_DOC, "names.json"
         )
         self.assertIsNone(err)
         self.assertEqual(data["names"][0]["text"], "EN_剣")
-        self.assertEqual(data["names"][0]["source"], "剣")
-        # The unsafe category (variable name) is left identical to the source.
-        self.assertEqual(data["names"][1]["text"], "スイッチ状態")
-        self.assertEqual(data["names"][1]["source"], "スイッチ状態")
+        self.assertEqual(data["names"][1]["text"], "EN_槍")
+        self.assertEqual(data["names"][2]["text"], "スイッチ状態")
+        self.assertEqual(captured, [["剣", "槍"]])
 
-    def test_names_default_translates_nothing(self):
-        # Empty safe list = safe default: no name is translated.
+    def test_names_without_safety_badges_translate_nothing(self):
         (data, _t, err), captured = _WolfTranslateHarness().run(
-            NAMES_DOC, "names.json", safe_notes=[]
+            LEGACY_NAMES_DOC, "names.json"
         )
         self.assertIsNone(err)
         self.assertEqual(captured, [])
-        for entry in data["names"]:
-            self.assertEqual(entry["text"], entry["source"])
+        self.assertEqual(data["names"][0]["text"], "剣")
 
     def test_names_harvest_to_vocab(self):
-        # Phase 0 seeds vocab.txt: only translated safe-note pairs are harvested,
-        # under a bilingual header (English from the static NOTE_EN fallback).
         harness = _WolfTranslateHarness()
-        (_data, _t, err), _c = harness.run(NAMES_DOC, "names.json", safe_notes=["武器"])
+        (_data, _t, err), _c = harness.run(NAMES_DOC, "names.json")
         self.assertIsNone(err)
-        self.assertEqual(harness.vocab_writes, [("Weapon · 武器", [("剣", "EN_剣")])])
+        self.assertEqual(
+            harness.vocab_writes,
+            [
+                ("Weapon · 武器", [("剣", "EN_剣"), ("槍", "EN_槍")]),
+            ],
+        )
 
     def test_names_harvest_skipped_in_estimate(self):
-        # Estimate mode must not seed the glossary.
         harness = _WolfTranslateHarness()
-        harness.run(NAMES_DOC, "names.json", estimate=True, safe_notes=["武器"])
+        harness.run(NAMES_DOC, "names.json", estimate=True)
         self.assertEqual(harness.vocab_writes, [])
+
+    def test_names_harvest_skips_profile_blurbs(self):
+        doc = {
+            "kind": "names",
+            "names": [
+                {"source": "ダガー", "text": "EN_ダガー", "note": "武器", "safety": "safe"},
+                {
+                    "source": "セルリアと申します。\nよろしくお願いいたします。",
+                    "text": "EN_profile",
+                    "note": "├■プロフィール",
+                    "safety": "safe",
+                },
+            ],
+        }
+        harness = _WolfTranslateHarness()
+        harness.vocab_remove_writes = []
+        orig_remove = wd.wolf_vocab.remove_vocab_section
+
+        def capture_remove(category):
+            harness.vocab_remove_writes.append(category)
+
+        wd.wolf_vocab.remove_vocab_section = capture_remove
+        try:
+            (_data, _t, err), _c = harness.run(doc, "names.json")
+        finally:
+            wd.wolf_vocab.remove_vocab_section = orig_remove
+        self.assertIsNone(err)
+        self.assertEqual(harness.vocab_writes, [("Weapon · 武器", [("ダガー", "EN_ダガー")])])
+        self.assertEqual(harness.vocab_remove_writes, ["├■プロフィール"])
 
     def test_txtdir_translates(self):
         (data, _t, err), _c = _WolfTranslateHarness().run(TXTDIR_DOC, "Evtext.json")

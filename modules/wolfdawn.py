@@ -17,16 +17,13 @@ Only entries whose ``source`` contains target-language (Japanese by default)
 text are sent to the model; everything else keeps ``text == source`` so inject
 is a no-op for it.
 
-names.json safety: WolfDawn's ``names-extract`` groups every value name under a
-``note`` category, and many categories are logic keys (variable / file / event
-names) that break the game if translated. So for ``kind == "names"`` documents,
-only entries whose ``note`` is in the opt-in safe list (``SAFE_NOTES``, from
-``data/wolf_safe_notes.json`` via :mod:`util.wolf_names`) are translated; the rest
-are left as source. The list is empty by default, so nothing is translated until
-the user opts categories in from the workflow. After translating names.json, the
-safe entries are harvested into ``vocab.txt`` (grouped by ``note``, with bilingual
-headers) so later phases (DB descriptions, dialogue) keep item / skill / term
-names consistent - the WOLF equivalent of RPGMaker's DB-first glossary seeding.
+names.json safety: WolfDawn tags every value name with a static ``safety`` badge
+(``safe``, ``refs``, or ``verify``). For ``kind == "names"`` documents, only
+entries whose badge is ``safe`` or ``refs`` are translated; ``verify`` names and
+legacy entries without a badge keep ``text == source``. After translating
+names.json, translatable entries are harvested into ``vocab.txt`` (grouped by
+``note``, with bilingual headers) so later phases keep item / skill / term names
+consistent.
 
 Text wrapping: translated dialogue is re-wrapped to a character width (like the
 RPGMaker module, via :mod:`util.dazedwrap`) so English fits WOLF's message box.
@@ -90,12 +87,7 @@ LANGREGEX = r"[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]+"
 # configurable from the workflow (data/wolf_speakers.json).
 SPEAKER_CONFIG = wolf_speakers.load_config()
 
-# names.json safety: WolfDawn tags every value name with a ``note`` category. Many
-# categories are logic keys (variable/file/event names) that break the game if
-# translated, so only entries whose ``note`` is in this opt-in list are sent to
-# the model; the rest keep text == source. Empty by default = translate nothing.
-# Configured from the workflow (data/wolf_safe_notes.json).
-SAFE_NOTES = wolf_names.load_safe_notes()
+# names.json: translate per-entry safe/refs badges only (see util.wolf_names).
 
 # Text wrapping: rewrap translated dialogue to a character width the same way the
 # RPGMaker module does (util.dazedwrap), so English lines fit WOLF's message box.
@@ -135,12 +127,11 @@ TRANSLATION_CONFIG = TranslationConfig(
 
 def handleWolfDawn(filename, estimate):
     """Entry point used by the CLI/GUI dispatchers. Returns a summary string or 'Fail'."""
-    global ESTIMATE, TOKENS, FILENAME, SAFE_NOTES, SPEAKER_CONFIG, VOCAB
+    global ESTIMATE, TOKENS, FILENAME, SPEAKER_CONFIG, VOCAB
     ESTIMATE = estimate
     FILENAME = filename
     # Re-read workflow-configured settings so edits made this session take effect
     # even when translation runs in-process (the module import is cached).
-    SAFE_NOTES = wolf_names.load_safe_notes()
     SPEAKER_CONFIG = wolf_speakers.load_config()
     # Reload the glossary so a later phase (DB text / dialogue) picks up names
     # that an earlier Phase 0 (names) harvested into vocab.txt.
@@ -251,13 +242,13 @@ def parseDocument(data, filename):
         src = e.get("source")
         if not (isinstance(src, str) and re.search(LANGREGEX, src)):
             return False
-        # names.json: only translate categories the user marked safe (by note).
-        if is_names and not wolf_names.is_note_safe(e.get("note", ""), SAFE_NOTES):
+        # names.json: only translate WolfDawn safe/refs entries (per-name badge).
+        if is_names and not wolf_names.is_name_translatable(e):
             return False
         return True
 
     # Only translate entries that actually contain target-language text (and, for
-    # names.json, sit in a safe note category); the rest keep text == source so
+    # names.json, carry a translatable safety badge); the rest keep text == source so
     # WolfDawn treats them as untouched on inject.
     translatable = [e for e in entries if _translatable(e)]
 
@@ -321,26 +312,33 @@ def parseDocument(data, filename):
 
 
 def _harvest_names_to_vocab(data):
-    """Write translated safe names.json entries into vocab.txt, grouped by note.
+    """Write short translated name labels into vocab.txt, grouped by note.
 
-    Each note category becomes a bilingual ``# English · 日本語`` section (English
-    sourced from the staged DB labels, else a static map, else JP-only). Only
-    safe notes with an actual translation are written; the base vocab section is
-    preserved by :func:`util.vocab.update_vocab_section`.
+    Profile blurbs and other content-shaped names are translated in names.json but
+    skipped here. Categories with no harvestable terms remove any stale section.
     """
     try:
         db_labels = wolf_names.derive_db_labels("files")
         by_note: dict[str, list] = {}
+        touched_notes: set[str] = set()
         for entry in data.get("names") or []:
-            note = entry.get("note", "")
-            if not wolf_names.is_note_safe(note, SAFE_NOTES):
+            if not wolf_names.is_name_translatable(entry):
+                continue
+            note = str(entry.get("note", ""))
+            touched_notes.add(note)
+            if not wolf_names.is_vocab_harvest_candidate(entry):
                 continue
             src, dst = entry.get("source"), entry.get("text")
             if not isinstance(src, str) or not isinstance(dst, str):
                 continue
             by_note.setdefault(note, []).append((src, dst))
-        for note, pairs in by_note.items():
-            wolf_vocab.update_vocab_section(wolf_names.note_header(note, db_labels), pairs)
+        for note in touched_notes:
+            header = wolf_names.note_header(note, db_labels)
+            pairs = by_note.get(note, [])
+            if pairs:
+                wolf_vocab.update_vocab_section(header, pairs)
+            else:
+                wolf_vocab.remove_vocab_section(header)
     except Exception:
         traceback.print_exc()
 

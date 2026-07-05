@@ -1,0 +1,42 @@
+#!/usr/bin/env python3
+"""Unit tests for WolfDawn inject stdout parsers."""
+
+from __future__ import annotations
+
+import os
+import sys
+import unittest
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+os.chdir(ROOT)
+sys.path.insert(0, str(ROOT))
+
+from util import wolfdawn  # noqa: E402
+
+
+class WolfInjectCountsTests(unittest.TestCase):
+    def test_parse_names_inject_counts(self):
+        out = (
+            "applied 2336 name change(s) (0 drifted/unmatched); "
+            "wrote 78 file(s) in place\n"
+            "WARNING: 2 line(s) left UNTRANSLATED by a safety guard\n"
+        )
+        applied, drifted = wolfdawn.parse_names_inject_counts(out)
+        self.assertEqual(applied, 2336)
+        self.assertEqual(drifted, 0)
+        self.assertTrue(wolfdawn.inject_had_applied(applied))
+
+    def test_parse_strings_inject_counts(self):
+        out = "applied 91 translation(s) (3 drifted); wrote Map001.mps\n"
+        applied, drifted = wolfdawn.parse_strings_inject_counts(out)
+        self.assertEqual(applied, 91)
+        self.assertEqual(drifted, 3)
+
+    def test_inject_had_applied_rejects_zero(self):
+        self.assertFalse(wolfdawn.inject_had_applied(0))
+        self.assertFalse(wolfdawn.inject_had_applied(None))
+
+
+if __name__ == "__main__":
+    unittest.main()

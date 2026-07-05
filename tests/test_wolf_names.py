@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Unit tests for the WOLF names safe-note config in util/wolf_names.py."""
+"""Unit tests for WolfDawn names.json helpers in util/wolf_names.py."""
 
 from __future__ import annotations
 
+import json
 import os
 import sys
 import tempfile
@@ -16,41 +17,62 @@ sys.path.insert(0, str(ROOT))
 from util import wolf_names as wn  # noqa: E402
 
 
-class TestSafeNotesIO(unittest.TestCase):
-    def setUp(self):
-        self._orig = wn.SAFE_NOTES_PATH
-        self._tmp = tempfile.TemporaryDirectory()
-        wn.SAFE_NOTES_PATH = Path(self._tmp.name) / "wolf_safe_notes.json"
+class TestNameTranslatable(unittest.TestCase):
+    def test_safe_and_refs_are_translatable(self):
+        self.assertTrue(wn.is_name_translatable({"safety": "safe"}))
+        self.assertTrue(wn.is_name_translatable({"safety": "refs"}))
 
-    def tearDown(self):
-        wn.SAFE_NOTES_PATH = self._orig
-        self._tmp.cleanup()
-
-    def test_default_is_empty(self):
-        self.assertEqual(wn.load_safe_notes(), [])
-
-    def test_round_trip_preserves_order_and_unicode(self):
-        wn.save_safe_notes(["武器", "技能", "アイテム"])
-        self.assertEqual(wn.load_safe_notes(), ["武器", "技能", "アイテム"])
-
-    def test_save_dedupes(self):
-        wn.save_safe_notes(["武器", "武器", "技能"])
-        self.assertEqual(wn.load_safe_notes(), ["武器", "技能"])
-
-    def test_ignores_non_list_payload(self):
-        wn.SAFE_NOTES_PATH.write_text('{"武器": true}', encoding="utf-8")
-        self.assertEqual(wn.load_safe_notes(), [])
+    def test_verify_and_missing_are_not_translatable(self):
+        self.assertFalse(wn.is_name_translatable({"safety": "verify"}))
+        self.assertFalse(wn.is_name_translatable({}))
+        self.assertFalse(wn.is_name_translatable({"safety": ""}))
 
 
-class TestIsNoteSafe(unittest.TestCase):
-    def test_membership(self):
-        safe = ["武器", "技能"]
-        self.assertTrue(wn.is_note_safe("武器", safe))
-        self.assertFalse(wn.is_note_safe("通常変数名", safe))
+class TestVocabHarvestCandidate(unittest.TestCase):
+    def test_short_weapon_name_harvests(self):
+        entry = {"source": "ダガー", "note": "武器", "safety": "safe"}
+        self.assertTrue(wn.is_vocab_harvest_candidate(entry))
 
-    def test_empty_list_is_never_safe(self):
-        self.assertFalse(wn.is_note_safe("武器", []))
-        self.assertFalse(wn.is_note_safe("", []))
+    def test_multiline_profile_skipped(self):
+        entry = {
+            "source": "セルリアと申します。\nよろしくお願いいたします。",
+            "note": "├■プロフィール",
+            "safety": "safe",
+        }
+        self.assertFalse(wn.is_vocab_harvest_candidate(entry))
+
+    def test_profile_note_skipped_even_when_single_line(self):
+        entry = {"source": "ローザだ。", "note": "├■プロフィール", "safety": "safe"}
+        self.assertFalse(wn.is_vocab_harvest_candidate(entry))
+
+    def test_resistance_label_still_harvests(self):
+        entry = {"source": "物理50％軽減", "note": "┣ 属性耐性", "safety": "safe"}
+        self.assertTrue(wn.is_vocab_harvest_candidate(entry))
+
+
+class TestCountNameSafety(unittest.TestCase):
+    DOC = {
+        "kind": "names",
+        "names": [
+            {"source": "a", "safety": "safe"},
+            {"source": "b", "safety": "refs"},
+            {"source": "c", "safety": "verify"},
+            {"source": "d"},
+        ],
+    }
+
+    def test_counts_badges(self):
+        counts = wn.count_name_safety(self.DOC)
+        self.assertEqual(counts["safe"], 1)
+        self.assertEqual(counts["refs"], 1)
+        self.assertEqual(counts["verify"], 1)
+        self.assertEqual(counts["unknown"], 1)
+        self.assertEqual(counts["translatable"], 2)
+
+    def test_summary_mentions_translatable_count(self):
+        summary = wn.format_name_safety_summary(self.DOC)
+        self.assertIn("2 of 4", summary)
+        self.assertIn("verify", summary)
 
 
 class TestNoteHeader(unittest.TestCase):
@@ -74,15 +96,12 @@ class TestDeriveDbLabels(unittest.TestCase):
         self._tmp.cleanup()
 
     def test_parses_bilingual_typenames_from_db_files(self):
-        import json
-
         (self.dir / "DataBase.project.json").write_text(
             json.dumps({
                 "kind": "db",
                 "groups": [
                     {"typeName": "Weapon · 武器", "lines": []},
                     {"typeName": "Skill · 技能", "lines": []},
-                    {"typeName": "■MOBセリフ", "lines": []},  # no separator -> skipped
                 ],
             }),
             encoding="utf-8",

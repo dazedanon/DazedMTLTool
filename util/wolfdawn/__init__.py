@@ -42,10 +42,50 @@ __all__ = [
     "names_extract",
     "strings_inject",
     "names_inject",
+    "parse_strings_inject_counts",
+    "parse_names_inject_counts",
+    "inject_had_applied",
     "pack",
     "save_update",
     "names_check",
 ]
+
+# strings-inject: "applied N translation(s) (M drifted)"; names-inject uses "name change(s)".
+_INJECT_COUNTS_RE = re.compile(
+    r"applied\s+(\d+)\s+translation.*?(\d+)\s+drifted", re.IGNORECASE | re.DOTALL
+)
+_NAMES_INJECT_COUNTS_RE = re.compile(
+    r"applied\s+(\d+)\s+name change.*?(\d+)\s+drifted", re.IGNORECASE | re.DOTALL
+)
+
+
+def parse_strings_inject_counts(stdout: str) -> tuple[int | None, int | None]:
+    """Return (applied, drifted) from wolf strings-inject output, or (None, None)."""
+    if not stdout:
+        return None, None
+    m = _INJECT_COUNTS_RE.search(stdout)
+    if not m:
+        return None, None
+    return int(m.group(1)), int(m.group(2))
+
+
+def parse_names_inject_counts(stdout: str) -> tuple[int | None, int | None]:
+    """Return (applied, drifted) from wolf names-inject output, or (None, None)."""
+    if not stdout:
+        return None, None
+    m = _NAMES_INJECT_COUNTS_RE.search(stdout)
+    if not m:
+        return None, None
+    return int(m.group(1)), int(m.group(2))
+
+
+def inject_had_applied(applied: int | None) -> bool:
+    """True when WolfDawn reported at least one applied change.
+
+    WolfDawn may exit 2 when a few lines fail safety guards but still writes the
+    rest; treat a positive applied count as success for inject bookkeeping.
+    """
+    return applied is not None and applied > 0
 
 # Committed, prebuilt binaries live here (per-platform) so end users don't need a
 # Rust toolchain. When one is missing we download it from the WolfDawn release.

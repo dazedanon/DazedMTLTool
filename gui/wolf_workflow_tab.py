@@ -8,32 +8,26 @@ Mirrors the RPGMaker WorkflowTab, driven by the vendored WolfDawn ``wolf`` CLI
   Step 1  Pre-process - optional dazedformat + gameupdate/ copy before translating
   Step 2  Glossary    - build vocab.txt (characters / worldbuilding terms) before
                         translating so the AI keeps names and voice consistent
-  Step 3  Names       - curate names.json (item/skill/enemy value names). Blindly
-                        translating all of them breaks games that reference names by
-                        value, so a repo-aware AI classifies which categories are safe
-                        to translate and leaves the rest as source. Pick Normal/Batch
-                        translation mode here and run Phase 0 (names -> vocab.txt).
-  Step 4  Translate   - run the "Wolf RPG (WolfDawn)" module over files/ in three
-                        ordered phases (RPGMaker's DB-first strategy; mode set in Step 3):
-                          Phase 0  Names     - also runnable from Step 3; harvests safe
-                                               name translations into vocab.txt
+  Step 3  Names       - translate names.json (Phase 0). WolfDawn safe/refs entries
+                        are translated per-name; verify names are skipped. Harvests
+                        short name terms into vocab.txt.
+  Step 4  Translate   - WolfDawn module over files/ in two phases (after Step 3):
                           Phase 1  Database  - item/skill/state descriptions and system
                                                messages (DataBase/CDataBase.project)
                           Phase 2  Maps / events - .mps maps, CommonEvent, Game.dat,
                                                Evtext; speaker handling and text-wrap
                                                settings live under this phase
-  Step 5  Inject      - inject translations + curated names back into the Data/ binaries
+  Step 5  Inject      - inject translations + translated names back into the Data/ binaries
                         and refresh the git-tracked wolf_json/ with the translated
                         JSON; quick-inject picks just a few translated files for
                         fast in-game / git iteration, or inject everything at once
   Step 6  Package     - run from a loose Data/ folder, or repack Data.wolf
   Step 7  Saves       - fix baked strings in existing .sav files (optional)
 
-names.json is staged into files/ but is NOT translated in the bulk phases - many
-WOLF "value names" double as logic keys (referenced by value in event code), so
-translating them all corrupts the game. Step 3 marks the safe subset (by category),
-Phase 0 translates only those and harvests them into vocab.txt, and Step 5 injects
-the result.
+names.json is staged into files/ but is NOT translated in the bulk phases - WolfDawn
+tags each name safe / refs / verify and Phase 0 translates only safe+refs entries
+(per-name, not per-category), harvests them into vocab.txt, and Step 5 injects the
+result.
 
 The extracted JSON is staged in ``<game_root>/wolf_json/`` (a manifest maps each
 file back to its base binary), then imported into ``files/`` for the shared
@@ -110,23 +104,6 @@ PHASE_NAMES_KINDS = {"names"}
 PHASE_DB_KINDS = {"db"}
 PHASE_MAPS_EVENTS_KINDS = {"map", "common", "gamedat", "txt", "txt-dir"}
 
-# WolfDawn's inject commands print e.g. "applied 91 translation(s) (0 untranslated,
-# 0 drifted); wrote <path>". We parse the counts to distinguish a real inject from a
-# silent no-op (exit 0 but 0 applied because the base was already translated).
-_INJECT_COUNTS_RE = re.compile(
-    r"applied\s+(\d+)\s+translation.*?(\d+)\s+drifted", re.IGNORECASE | re.DOTALL
-)
-
-
-def _parse_inject_counts(stdout: str):
-    """Return (applied, drifted) ints from wolf inject output, or (None, None)."""
-    if not stdout:
-        return None, None
-    m = _INJECT_COUNTS_RE.search(stdout)
-    if not m:
-        return None, None
-    return int(m.group(1)), int(m.group(2))
-
 # Glossary-discovery prompt for Copilot / Cursor, tailored to WolfDawn's extracted
 # JSON (source/text pairs staged in files/). Produces the same two-section format
 # the shared vocab.txt expects, so the AI output pastes straight into the editor.
@@ -151,7 +128,7 @@ _WOLF_GLOSSARY_PROMPT = (
     "  - Game.dat.json — game/system strings (title, terms).\n"
     "  - <Map>.mps.json — per-map events: the main story dialogue (can be large).\n"
     "  - Evtext.json — external event text, when present.\n"
-    "  - names.json — item/skill/enemy value names (curated separately in Step 3; do NOT list them).\n"
+    "  - names.json — item/skill/enemy value names (translated separately in Step 3; do NOT list them).\n"
     "</data_format>\n"
     "\n"
     "<file_strategy>\n"
@@ -182,8 +159,8 @@ _WOLF_GLOSSARY_PROMPT = (
     "# Worldbuilding Terms — rules:\n"
     "- Include: faction/organisation names, locations mentioned in dialogue but not on maps, "
     "unique magic systems, lore titles, recurring in-universe concepts.\n"
-    "- Exclude: skill names, item names, weapon/armour names (curated separately via "
-    "names.json in Step 3). Skip generic RPG words. Do not repeat character names here.\n"
+    "- Exclude: skill names, item names, weapon/armour names (translated via names.json in "
+    "Step 3). Skip generic RPG words. Do not repeat character names here.\n"
     "</rules>\n"
     "\n"
     "<output_format>\n"
@@ -213,62 +190,6 @@ _WOLF_GLOSSARY_PROMPT = (
     "</output_format>\n"
 )
 
-
-# Names-safety prompt for a repo-aware AI (Cursor / Copilot with the extracted
-# files/ JSON open). WolfDawn groups every value name in names.json under a WOLF
-# database category (the 'note' field). Some categories are pure on-screen text,
-# others are logic keys (variable / file / event names) that break the game if
-# translated. The AI classifies by CATEGORY and returns the list of safe note
-# values as a JSON array; the tool then translates only those categories.
-_WOLF_NAMES_PROMPT = (
-    "You are an expert Japanese WOLF RPG Editor translator and reverse-engineer. Accuracy "
-    "matters more than coverage: translating the wrong names breaks the game, so be conservative.\n"
-    "\n"
-    "<background>\n"
-    "names.json (a 'kind':'names' object with a 'names' list) is a project-wide list of every "
-    "\"value name\" WolfDawn found referenced across the WOLF game. Each entry has a Japanese "
-    "'source', a 'text', an 'occurrences' count, and a 'note' - the WOLF database CATEGORY the "
-    "name came from (e.g. 武器 = weapons, 技能 = skills, システム変数名 = system variable names, "
-    "SEリスト = sound-effect list, マップ設定 = map settings).\n"
-    "Translating everything WILL break the game: many categories are logic keys - the engine "
-    "compares them by value, looks entries up by exact name, builds file/CG/BGM/SE paths from "
-    "them, or uses them as variable / switch / event / map names. Only categories that are "
-    "purely on-screen display text are safe to translate.\n"
-    "</background>\n"
-    "\n"
-    "--- attach the extracted JSON in files/ here (especially names.json) before continuing ---\n"
-    "\n"
-    "<task>\n"
-    "Group the names.json entries by their 'note' value and classify each DISTINCT note "
-    "category as SAFE or UNSAFE. Return the list of SAFE categories only. Do NOT translate "
-    "anything yourself and do NOT edit names.json - the tool does the translation, filtered to "
-    "the categories you approve.\n"
-    "</task>\n"
-    "\n"
-    "<how_to_decide>\n"
-    "For each note category, look at its example 'source' values and how they are used in the "
-    "other files/ JSON (grep the strings across maps / CommonEvent / databases):\n"
-    "- SAFE  -> the category is text shown to the player and nothing depends on its exact value:\n"
-    "           item / weapon / armour / skill names, enemy names, state names, class/job names,\n"
-    "           in-game terms (用語), battle commands, attribute names, actor/party display names.\n"
-    "- UNSAFE -> the category is (or might be) used as an identifier / key:\n"
-    "           variable / switch / string-variable names, SE / BGM / BGS lists, picture numbers,\n"
-    "           character / face / parallax / window image names, map settings, event names,\n"
-    "           anything looked up or compared by value, or built into a filename or path.\n"
-    "When a category is ambiguous, or its values look like identifiers (ASCII, digits, "
-    "underscores, paths, bracket tags like [SE]), classify it UNSAFE. Prefer leaving a category "
-    "out over risking a break.\n"
-    "</how_to_decide>\n"
-    "\n"
-    "<output_format>\n"
-    "Return ONLY a JSON array of the SAFE note strings, copied EXACTLY as they appear in the "
-    "'note' fields (same characters, including any brackets or symbols), inside ONE fenced code "
-    "block and nothing else. Example:\n"
-    "```json\n"
-    "[\"武器\", \"防具\", \"技能\", \"アイテム\", \"用語設定\"]\n"
-    "```\n"
-    "</output_format>\n"
-)
 
 # Speaker-format prompt for a repo-aware AI. WolfDawn already detects and tags who
 # speaks on each line, so the only decision left is whether its LOW-confidence
@@ -1539,8 +1460,8 @@ class WolfWorkflowTab(QWidget):
         layout.addLayout(vrow)
 
         note = self._desc(
-            "You don't need to add item / skill / enemy value names here: they're curated in "
-            "Step 3 and the safe ones are harvested into vocab.txt automatically during Phase 0. "
+            "You don't need to add item / skill / enemy value names here: Phase 0 translates "
+            "WolfDawn safe/refs entries from names.json and harvests them into vocab.txt "
             "Focus this glossary on characters and worldbuilding terms."
         )
         layout.addWidget(note)
@@ -1572,33 +1493,19 @@ class WolfWorkflowTab(QWidget):
         layout.addWidget(self._desc(
             "Sends the extracted files in files/ to the Translation tab using the Wolf RPG "
             "(WolfDawn) module. Only the 'text' fields are filled in; 'source' is preserved so "
-            "injection can verify each line. Run the phases in order: Phase 0 translates the safe "
-            "names and writes them into vocab.txt, so Phases 1 and 2 translate descriptions and "
-            "in-engine text with consistent item / skill / character names (RPGMaker's DB-first strategy)."
+            "injection can verify each line. Run Step 3 (names) first so vocab.txt is seeded, "
+            "then Phase 1 (database text) and Phase 2 (maps / events) in order."
         ))
 
         self._add_phase_buttons(layout)
 
     def _add_phase_buttons(self, layout: QVBoxLayout):
-        """Three ordered translation phases selected by manifest kind."""
-        layout.addWidget(_make_hr())
-        layout.addWidget(self._subheading("Phase 0 · Names → vocab.txt"))
-        layout.addWidget(self._desc(
-            "Translates only the safe name categories you approved in Step 3 and harvests them into "
-            "vocab.txt (grouped by category, e.g. \"Weapon · 武器\"). Curate safe categories and pick "
-            "the translation mode in Step 3 first, or nothing is translated. Also runnable from Step 3."
-        ))
-        p0 = self._register(_make_btn("▶ Phase 0 · Translate names", "#00a86b"))
-        p0.clicked.connect(
-            lambda: self._navigate_to_translation(kinds=PHASE_NAMES_KINDS, auto_start=True)
-        )
-        layout.addWidget(p0)
-
+        """Two translation phases (names are handled in Step 3)."""
         layout.addWidget(_make_hr())
         layout.addWidget(self._subheading("Phase 1 · Database text"))
         layout.addWidget(self._desc(
             "Item / skill / state descriptions and system messages from DataBase.project and "
-            "CDataBase.project. Run after Phase 0 so names stay consistent."
+            "CDataBase.project. Run after Step 3 (names) so vocab.txt stays consistent."
         ))
         p1 = self._register(_make_btn("▶ Phase 1 · Translate database text", "#00a86b"))
         p1.clicked.connect(
@@ -1610,9 +1517,9 @@ class WolfWorkflowTab(QWidget):
         layout.addWidget(self._subheading("Phase 2 · Maps / events"))
         layout.addWidget(self._desc(
             "Map scripts (.mps), common events (CommonEvent.dat), Game.dat, and Evtext - story "
-            "dialogue, UI/objective strings, and other event text. Run last so it benefits from "
-            "the names and terms translated in the earlier phases. Speaker handling and text wrap "
-            "below apply to the dialogue-like lines in this phase."
+            "dialogue, UI/objective strings, and other event text. Run after Phase 1 so it "
+            "benefits from the names and terms already in vocab.txt. Speaker handling and text "
+            "wrap below apply to the dialogue-like lines in this phase."
         ))
         self._add_speaker_options(layout)
         self._add_wrap_options(layout)
@@ -1877,84 +1784,31 @@ class WolfWorkflowTab(QWidget):
     # ── Step 2: Names ──────────────────────────────────────────────────────────
 
     def _build_step3_names(self, layout: QVBoxLayout):
-        layout.addWidget(_make_section_label("Step 3 · Curate Name Values (names.json)"))
+        layout.addWidget(_make_section_label("Step 3 · Translate Name Values (names.json)"))
         layout.addWidget(self._desc(
-            "names.json lists every item / skill / enemy / variable value name WolfDawn found. "
-            "Translating all of them WILL break the game: many double as logic keys (compared by "
-            "value, used as variable / file / event names). WolfDawn tags each name with its WOLF "
-            "database category (a 'note'), so instead of judging thousands of names you choose "
-            "which categories are safe on-screen text. The translator only touches those; by "
-            "default none are selected, so nothing changes until you opt categories in."
+            "names.json is WolfDawn's project-wide name glossary. Each entry has a safety badge: "
+            "safe (display-only), refs (referenced by name but rewritten on inject), or verify "
+            "(also in indirect literals - skipped). Phase 0 translates every safe and refs entry "
+            "individually, regardless of category, and harvests them into vocab.txt."
         ))
 
-        layout.addWidget(self._subheading("1 · Ask a repo-aware AI which categories are safe"))
-        layout.addWidget(self._desc(
-            "Copy the prompt into Cursor or Copilot Chat with the extracted files/ JSON open. It "
-            "groups names by category, checks how each is used, and returns a JSON list of the "
-            "safe categories in a code block. Conservative by design - ambiguous categories are "
-            "left out."
-        ))
-        prompt_btn = _make_btn("📋 Copy names-safety prompt for Copilot / Cursor", "#5a3a7a")
-        prompt_btn.clicked.connect(self._copy_wolf_names_prompt)
-        layout.addWidget(prompt_btn)
+        self.names_summary_label = QLabel("Open this step after extraction to see name counts.")
+        self.names_summary_label.setWordWrap(True)
+        self.names_summary_label.setStyleSheet(
+            "color:#9cdcfe;font-size:13px;padding:8px 10px;"
+            "background-color:#1a2430;border:1px solid #2a4a6a;border-radius:4px;"
+        )
+        layout.addWidget(self.names_summary_label)
+
+        refresh_btn = _make_btn("↻ Refresh name counts", "#555")
+        refresh_btn.clicked.connect(self._refresh_names_summary)
+        layout.addWidget(refresh_btn)
 
         layout.addWidget(_make_hr())
-        layout.addWidget(self._subheading("2 · Choose safe categories"))
+        layout.addWidget(self._subheading("Translate names (Phase 0)"))
         layout.addWidget(self._desc(
-            "Paste the AI's JSON list below and click Apply to tick the matching categories, or "
-            "tick them by hand. Each row shows the category, how many names it has, and an "
-            "example. Save writes your choice to data/wolf_safe_notes.json."
-        ))
-
-        self.names_paste = QTextEdit()
-        self.names_paste.setMaximumHeight(70)
-        self.names_paste.setFont(QFont("Consolas", 9))
-        self.names_paste.setPlaceholderText('Paste the AI list here, e.g. ["武器", "技能", "アイテム"]')
-        self.names_paste.setStyleSheet(
-            "QTextEdit{background-color:#252526;color:#d4d4d4;border:1px solid #3c3c3c;"
-            "border-radius:4px;padding:6px;selection-background-color:#264f78;}"
-        )
-        layout.addWidget(self.names_paste)
-
-        prow = QHBoxLayout()
-        apply_btn = _make_btn("Apply pasted list", "#007acc")
-        apply_btn.clicked.connect(self._apply_pasted_notes)
-        prow.addWidget(apply_btn)
-        prow.addStretch()
-        layout.addLayout(prow)
-
-        self.notes_list = QListWidget()
-        self.notes_list.setMinimumHeight(200)
-        self.notes_list.setStyleSheet(
-            "QListWidget{background-color:#252526;border:1px solid #3a3a3a;border-radius:4px;"
-            "color:#cccccc;font-size:12px;padding:2px;}"
-            "QListWidget::item{padding:3px 4px;}"
-            "QListWidget::item:selected{background:#264f78;color:#ffffff;}"
-        )
-        layout.addWidget(self.notes_list, 1)
-
-        nrow = QHBoxLayout()
-        save_btn = _make_btn("💾 Save safe categories", "#3a7a3a")
-        save_btn.clicked.connect(self._save_safe_notes)
-        nrow.addWidget(save_btn)
-        reload_btn = _make_btn("↻ Refresh", "#555")
-        reload_btn.clicked.connect(self._reload_notes_list)
-        nrow.addWidget(reload_btn)
-        none_btn = _make_btn("Select none", "#3a3a3a")
-        none_btn.clicked.connect(lambda: self._set_note_checks(False))
-        nrow.addWidget(none_btn)
-        nrow.addStretch()
-        layout.addLayout(nrow)
-        self._reload_notes_list()
-
-        layout.addWidget(_make_hr())
-        layout.addWidget(self._subheading("3 · Translate the safe names (Phase 0)"))
-        layout.addWidget(self._desc(
-            "After saving, translate only the approved categories. The WolfDawn module skips every "
-            "other name (leaving it identical to the source) and harvests the translated names into "
-            "vocab.txt (grouped by category) so the later Translate phases stay consistent. This is "
-            "the first translation step - pick Normal or Batch below, then run Phase 0 here or from "
-            "Step 4 (the same mode applies to all phases)."
+            "Pick Normal or Batch below, then run Phase 0. Only safe and refs entries are sent to "
+            "the model; verify names stay identical to source so inject skips them."
         ))
         self._add_tl_mode_selector(layout)
         tl_btn = self._register(_make_btn("Translate safe names now (Phase 0)", "#00a86b"))
@@ -1962,13 +1816,32 @@ class WolfWorkflowTab(QWidget):
             lambda: self._navigate_to_translation(kinds=PHASE_NAMES_KINDS, auto_start=True)
         )
         layout.addWidget(tl_btn)
+        self._refresh_names_summary()
 
-    def _copy_wolf_names_prompt(self):
+    def _load_names_document(self) -> tuple[dict | None, Path | None]:
+        """Read names.json from files/ or wolf_json/."""
+        src = self._names_json_path()
+        if src is None:
+            return None, None
         try:
-            QApplication.clipboard().setText(_WOLF_NAMES_PROMPT)
-            self._log("📋 Names-safety prompt copied. Paste it into Cursor/Copilot with files/ open.")
+            with open(src, "r", encoding="utf-8-sig") as f:
+                return json.load(f), src
         except Exception as exc:
-            self._log(f"❌ Could not copy names prompt: {exc}")
+            self._log(f"❌ Could not read {NAMES_JSON}: {exc}")
+            return None, src
+
+    def _refresh_names_summary(self):
+        if not hasattr(self, "names_summary_label"):
+            return
+        data, src = self._load_names_document()
+        if not isinstance(data, dict):
+            self.names_summary_label.setText(
+                "No names.json found - run Step 0 (Extract text) first."
+            )
+            return
+        summary = wolf_names.format_name_safety_summary(data)
+        where = src.parent.name if src else WORK_DIR_NAME
+        self.names_summary_label.setText(f"{summary}\nSource: {where}/{NAMES_JSON}")
 
     def _names_json_path(self) -> Path | None:
         """Locate names.json for reading its note categories (files/ then wolf_json/)."""
@@ -1978,124 +1851,14 @@ class WolfWorkflowTab(QWidget):
                 return p
         return None
 
-    def _distinct_notes(self):
-        """Return [(note, count, sample_source), ...] from names.json, or None."""
-        src = self._names_json_path()
-        if src is None:
-            return None
-        try:
-            with open(src, "r", encoding="utf-8-sig") as f:
-                data = json.load(f)
-        except Exception as exc:
-            self._log(f"❌ Could not read {NAMES_JSON}: {exc}")
-            return None
-        counts: dict[str, int] = {}
-        samples: dict[str, str] = {}
-        for entry in data.get("names", []):
-            if not isinstance(entry, dict):
-                continue
-            note = str(entry.get("note", ""))
-            counts[note] = counts.get(note, 0) + 1
-            if note not in samples:
-                samples[note] = str(entry.get("source", ""))
-        # Most populous categories first - the safe display ones tend to be larger.
-        ordered = sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))
-        return [(note, cnt, samples.get(note, "")) for note, cnt in ordered]
-
-    def _reload_notes_list(self):
-        if not hasattr(self, "notes_list"):
-            return
-        self.notes_list.clear()
-        notes = self._distinct_notes()
-        if notes is None:
-            item = QListWidgetItem("No names.json found — run Step 0 (Extract text) first.")
-            item.setFlags(Qt.ItemIsEnabled)
-            self.notes_list.addItem(item)
-            return
-        safe = set(wolf_names.load_safe_notes())
-        for note, cnt, sample in notes:
-            sample = sample.replace("\n", " ").replace("\r", " ")
-            if len(sample) > 40:
-                sample = sample[:40] + "…"
-            label = f"{note or '(no category)'}   ·   {cnt} name(s)   ·   e.g. {sample}"
-            item = QListWidgetItem(label)
-            item.setData(Qt.UserRole, note)
-            item.setFlags(Qt.ItemIsUserCheckable | Qt.ItemIsEnabled)
-            item.setCheckState(Qt.Checked if note in safe else Qt.Unchecked)
-            self.notes_list.addItem(item)
-
-    def _set_note_checks(self, checked: bool):
-        if not hasattr(self, "notes_list"):
-            return
-        state = Qt.Checked if checked else Qt.Unchecked
-        for i in range(self.notes_list.count()):
-            it = self.notes_list.item(i)
-            if it.flags() & Qt.ItemIsUserCheckable:
-                it.setCheckState(state)
-
-    def _apply_pasted_notes(self):
-        text = self.names_paste.toPlainText().strip()
-        if text.startswith("```"):
-            lines = text.splitlines()
-            if lines and lines[0].startswith("```"):
-                lines = lines[1:]
-            if lines and lines[-1].strip().startswith("```"):
-                lines = lines[:-1]
-            text = "\n".join(lines).strip()
-        try:
-            parsed = json.loads(text)
-            if not isinstance(parsed, list):
-                raise ValueError("expected a JSON array of note strings")
-            wanted = {str(n) for n in parsed}
-        except Exception as exc:
-            QMessageBox.warning(
-                self, "Invalid list",
-                f"Paste the AI's JSON array of category names.\n{exc}",
-            )
-            return
-        matched = 0
-        unmatched = set(wanted)
-        for i in range(self.notes_list.count()):
-            it = self.notes_list.item(i)
-            if not (it.flags() & Qt.ItemIsUserCheckable):
-                continue
-            note = it.data(Qt.UserRole)
-            if note in wanted:
-                it.setCheckState(Qt.Checked)
-                matched += 1
-                unmatched.discard(note)
-            else:
-                it.setCheckState(Qt.Unchecked)
-        msg = f"Ticked {matched} categor(y/ies) from the pasted list."
-        if unmatched:
-            msg += f" {len(unmatched)} not found in this game: {', '.join(sorted(unmatched))}"
-        self._log(msg)
-
-    def _save_safe_notes(self):
-        if not hasattr(self, "notes_list"):
-            return
-        safe = []
-        for i in range(self.notes_list.count()):
-            it = self.notes_list.item(i)
-            if (it.flags() & Qt.ItemIsUserCheckable) and it.checkState() == Qt.Checked:
-                safe.append(it.data(Qt.UserRole))
-        try:
-            wolf_names.save_safe_notes(safe)
-            self._log(
-                f"✅ Saved {len(safe)} safe categor(y/ies) to data/wolf_safe_notes.json. "
-                "Translate the safe names below, then inject in Step 5."
-            )
-        except Exception as exc:
-            self._log(f"❌ Could not save safe categories: {exc}")
-
     # ── Step 4: Inject ─────────────────────────────────────────────────────────
 
     def _build_step4_inject(self, layout: QVBoxLayout):
         layout.addWidget(_make_section_label("Step 5 · Inject Translations"))
         layout.addWidget(self._desc(
             "Writes the translated text back into the game's Data/ binaries with WolfDawn, "
-            "byte-exact. The curated name values from Step 3 are applied across Data/ (only the "
-            "entries you translated change). Lines whose inline codes changed are skipped and "
+            "byte-exact. Translated safe/refs name values from names.json are applied across Data/ "
+            "(only the entries you translated change). Lines whose inline codes changed are skipped and "
             "reported (unless you allow drift). Full inject and any inject that includes "
             f"{NAMES_JSON} reset live Data/ from {WORK_DIR_NAME}/originals/ first."
         ))
@@ -2126,8 +1889,9 @@ class WolfWorkflowTab(QWidget):
             "For iterating: after translating a few files, tick just those here and inject them "
             "straight into the game's Data/ so you can review the git diff in the game project and "
             "test in-game. Only files that already have a translation in translated/ are listed. "
-            f"{NAMES_JSON} appears here once you've curated and saved it in Step 3; tick it to "
-            "apply the safe name values across Data/."
+            f"{NAMES_JSON} appears here once Phase 0 has translated it (checked by default). "
+            "Name injection resets live Data/ from wolf_json/originals/ first, then applies "
+            "every safe/refs name across all binaries."
         ))
 
         self.inject_list = QListWidget()
@@ -2160,7 +1924,7 @@ class WolfWorkflowTab(QWidget):
         layout.addWidget(_make_hr())
         layout.addWidget(self._subheading("Full inject"))
         layout.addWidget(self._desc(
-            "Injects every extracted document and applies the curated name values (Step 3) "
+            "Injects every extracted document and applies translated name values from names.json "
             "across Data/. Use this once translation is complete before packaging in Step 6."
         ))
         inject_btn = self._register(_make_btn("Inject all translations", "#00a86b"))
@@ -2180,9 +1944,9 @@ class WolfWorkflowTab(QWidget):
         self._current_step_index = idx
         if previous == 0 and idx != 0:
             self._auto_import_if_needed()
-        # Index 3 == Names: refresh the note-category checklist from names.json.
+        # Index 3 == Names: refresh the per-name safety summary.
         if idx == 3:
-            self._reload_notes_list()
+            self._refresh_names_summary()
         # Index 5 == Inject: keep the quick-inject picker in sync with translated/.
         elif idx == 5:
             self._refresh_inject_list()
@@ -2207,7 +1971,8 @@ class WolfWorkflowTab(QWidget):
             item = QListWidgetItem(json_name)
             item.setData(Qt.UserRole, json_name)
             item.setFlags(Qt.ItemIsUserCheckable | Qt.ItemIsEnabled)
-            item.setCheckState(Qt.Unchecked)
+            default_checked = json_name == NAMES_JSON
+            item.setCheckState(Qt.Checked if default_checked else Qt.Unchecked)
             self.inject_list.addItem(item)
             listed += 1
         if listed == 0:
@@ -2269,12 +2034,12 @@ class WolfWorkflowTab(QWidget):
         """Inject translations into the game's Data/ binaries.
 
         only_json:
-            None      — full inject: every document + curated name values across Data/.
-            set(names)— quick inject: only those JSON files; the curated name values
+            None      — full inject: every document + translated name values across Data/.
+            set(names)— quick inject: only those JSON files; name values from names.json
                         are applied across Data/ only when NAMES_JSON is included.
 
-        Name values are applied only when translated/names.json exists (i.e. the
-        user curated it in Step 3); otherwise names are left untouched.
+        Name values are applied only when translated/names.json exists (i.e. Phase 0
+        has run); otherwise names are left untouched.
         """
         if not self._require_manifest():
             return
@@ -2328,6 +2093,8 @@ class WolfWorkflowTab(QWidget):
                 log(f"Resetting live Data/ from {WORK_DIR_NAME}/originals/ …")
                 self._restore_live_from_originals(entries, data_dir_path, log)
 
+            names_restored = only_json is None or will_names
+
             if only_json is None:
                 strings_targets = {
                     e["json"] for e in entries if e.get("kind") != "names"
@@ -2366,10 +2133,18 @@ class WolfWorkflowTab(QWidget):
                     str(src), base, out,
                     allow_code_drift=allow_drift, en_punct=en_punct, log_fn=log,
                 )
-                a, d = _parse_inject_counts(res.stdout)
-                if res.ok and not (a == 0 and (d or 0) > 0):
+                a, d = wolfdawn.parse_strings_inject_counts(res.stdout)
+                strings_ok = wolfdawn.inject_had_applied(a) or (
+                    res.ok and not (a == 0 and (d or 0) > 0)
+                )
+                if strings_ok:
                     applied += 1
                     _sync_json(entry["json"], src, log)
+                    if not res.ok and wolfdawn.inject_had_applied(a):
+                        log(
+                            f"  ⚠ {entry['json']}: wolf exited {res.returncode} "
+                            f"after applying {a} change(s) — see warnings above"
+                        )
                 elif res.ok:
                     # Exit 0 but nothing applied and lines drifted = stale/injected base.
                     failed += 1
@@ -2382,21 +2157,43 @@ class WolfWorkflowTab(QWidget):
                     failed += 1
                     log(f"  ⚠ inject exit {res.returncode} for {entry['json']}")
 
-            # Curated name values: apply across the whole data dir, but only when a
-            # curated translated/names.json exists (Step 3). For a quick inject, only
-            # do this if the user explicitly ticked the names file, since it rewrites
-            # many binaries and would add noise to the git diff otherwise.
+            # Name values: apply across the whole data dir when translated/names.json
+            # exists. For a quick inject, only include NAMES_JSON when you want names
+            # applied (it rewrites many binaries).
             if will_names and names_entry and names_src is not None:
-                log("Applying curated name values across Data/ …")
+                if not names_restored:
+                    log(
+                        f"Resetting live Data/ from {WORK_DIR_NAME}/originals/ "
+                        "before name injection …"
+                    )
+                    self._restore_live_from_originals(entries, data_dir_path, log)
+                log("Applying translated name values across Data/ …")
                 res = wolfdawn.names_inject(
                     str(names_src), data_dir,
                     allow_code_drift=allow_drift, en_punct=en_punct, log_fn=log,
                 )
-                a, d = _parse_inject_counts(res.stdout)
-                if res.ok and not (a == 0 and (d or 0) > 0):
+                out = (res.stdout or "") + (res.stderr or "")
+                a, d = wolfdawn.parse_names_inject_counts(out)
+                # Keep wolf_json/names.json aligned with translated/ even when the
+                # binary pass is a no-op (stale base) or exits 2 after partial guards.
+                _sync_json(names_entry["json"], names_src, log)
+                if wolfdawn.inject_had_applied(a):
                     applied += 1
-                    _sync_json(names_entry["json"], names_src, log)
-                elif res.ok:
+                    if not res.ok:
+                        log(
+                            f"  ⚠ names: wolf exited {res.returncode} after applying "
+                            f"{a} name change(s) — see warnings above"
+                        )
+                elif res.ok and a == 0:
+                    failed += 1
+                    log(
+                        f"  ⚠ names: 0 applied — the live Data/ binaries no longer contain "
+                        "the Japanese 'source' strings in names.json (often because a prior "
+                        "inject already translated them without resetting from originals). "
+                        "Use “Inject all translations”, or tick names.json in quick inject "
+                        f"(which resets from {WORK_DIR_NAME}/originals/ first)."
+                    )
+                elif res.ok and (d or 0) > 0:
                     failed += 1
                     log(
                         f"  ⚠ names: 0 applied, {d} skipped as drift — sources in "

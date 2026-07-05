@@ -127,3 +127,39 @@ def update_vocab_section(category: str, pairs) -> None:
         )
         tmp_path.write_text(combined, encoding="utf-8")
         os.replace(tmp_path, VOCAB_PATH)
+
+
+def remove_vocab_section(category: str) -> None:
+    """Remove a ``# {category}`` section from the game-specific vocab, if present."""
+    with _VOCAB_LOCK:
+        if not VOCAB_PATH.is_file():
+            return
+        existing = VOCAB_PATH.read_text(encoding="utf-8")
+
+        idx = existing.find(BASE_SEPARATOR)
+        if idx != -1:
+            game_part = existing[:idx]
+            base_part = existing[idx:]
+        else:
+            game_part = existing
+            base_part = ""
+
+        pattern = re.compile(
+            rf"^[\t ]*#+\s*{re.escape(category)}\s*$\r?\n.*?(?=^[\t ]*#|\Z)",
+            re.MULTILINE | re.DOTALL,
+        )
+        new_game = pattern.sub("", game_part, count=1)
+        if new_game == game_part:
+            return
+        new_game = re.sub(r"\n{3,}", "\n\n", new_game).rstrip("\n")
+        if base_part:
+            combined = new_game + "\n\n" + base_part if new_game else base_part
+        else:
+            combined = new_game + "\n" if new_game else ""
+        if combined == existing:
+            return
+        tmp_path = VOCAB_PATH.with_suffix(
+            VOCAB_PATH.suffix + f".{os.getpid()}.{threading.get_ident()}.tmp"
+        )
+        tmp_path.write_text(combined, encoding="utf-8")
+        os.replace(tmp_path, VOCAB_PATH)
