@@ -114,7 +114,7 @@ class AuxToolsUpdateThread(QThread):
             if self.update_forge:
                 from util.forge.update_tools import ensure_forge_plugins
                 self.progress.emit("Updating Forge plugins…")
-                if not ensure_forge_plugins(log_fn=lambda m: self.progress.emit(m)):
+                if not ensure_forge_plugins(force=True, log_fn=lambda m: self.progress.emit(m)):
                     self.finished.emit(False, "Forge plugin update failed.")
                     return
             self.finished.emit(True, "components_updated")

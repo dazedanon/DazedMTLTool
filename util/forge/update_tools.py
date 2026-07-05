@@ -1,6 +1,7 @@
 """Download / update Forge plugins from len's upstream repo (gitgud.io).
 
 Upstream: https://gitgud.io/zero64801/forge-mvmz
+CI builds a unified forge.js plugin (master branch artifacts).
 Offline copies: util/forge/upstream/
 Active plugins: util/forge/Forge_MZ.js, util/forge/Forge_MV.js
 """
@@ -81,11 +82,11 @@ def _upstream_commit() -> str:
     return commit
 
 
-def _raw_file_url(filename: str) -> str:
-    enc = urllib.parse.quote(filename, safe="")
+def _artifact_url(filename: str) -> str:
+    """Latest successful build_job artifact on the tracked branch."""
     return (
-        f"{GITGUD_API}/projects/{_project_id()}/repository/files/{enc}/raw"
-        f"?ref={FORGE_BRANCH}"
+        f"https://gitgud.io/{FORGE_PROJECT}/-/jobs/artifacts/{FORGE_BRANCH}"
+        f"/raw/{filename}?job=build_job"
     )
 
 
@@ -109,13 +110,18 @@ def _seed_from_offline(engine: str, log_fn) -> bool:
     return True
 
 
-def _fetch_plugin(engine: str, log_fn) -> None:
-    name = PLUGIN_BY_ENGINE[engine]
-    _log(f"Downloading {name}.js from {FORGE_PROJECT}...", log_fn)
-    data = _download_bytes(_raw_file_url(f"{name}.js"))
-    bundled_plugin_path(engine).write_bytes(data)
+def _fetch_plugins(log_fn) -> bytes:
+    """Download the unified forge.js CI artifact."""
+    _log(f"Downloading forge.js from {FORGE_PROJECT} ({FORGE_BRANCH} CI)...", log_fn)
+    return _download_bytes(_artifact_url("forge.js"))
+
+
+def _install_plugin_bytes(data: bytes) -> None:
+    """Write forge.js into both engine plugin paths and the offline bundle."""
     UPSTREAM_DIR.mkdir(parents=True, exist_ok=True)
-    upstream_plugin_path(engine).write_bytes(data)
+    for engine in PLUGIN_BY_ENGINE:
+        bundled_plugin_path(engine).write_bytes(data)
+        upstream_plugin_path(engine).write_bytes(data)
 
 
 def _download_bytes(url: str) -> bytes:
@@ -125,23 +131,24 @@ def _download_bytes(url: str) -> bytes:
 
 
 def refresh_forge_plugins(log_fn=print) -> bool:
-    """Download len's latest Forge_MV.js and Forge_MZ.js."""
+    """Download len's latest forge.js and install Forge_MV/MZ copies."""
     try:
         commit = _upstream_commit()
     except Exception as exc:
         _log(f"ERROR: could not contact upstream ({exc})", log_fn)
         return False
 
-    ok = True
-    for engine in PLUGIN_BY_ENGINE:
-        try:
-            _fetch_plugin(engine, log_fn)
-        except Exception as exc:
-            _log(f"ERROR: download failed for {PLUGIN_BY_ENGINE[engine]} ({exc})", log_fn)
-            ok = False
-
-    if not ok:
+    try:
+        data = _fetch_plugins(log_fn)
+    except Exception as exc:
+        _log(f"ERROR: download failed for forge.js ({exc})", log_fn)
         return False
+
+    if not data.strip().startswith(b"//"):
+        _log("ERROR: forge.js download did not look like a plugin file.", log_fn)
+        return False
+
+    _install_plugin_bytes(data)
 
     versions = _load_versions()
     versions["commit"] = commit
@@ -193,7 +200,11 @@ def ensure_forge_plugins(force: bool = False, log_fn=print) -> bool:
     if need_fetch:
         if refresh_forge_plugins(log_fn=log_fn):
             return True
-        return all(bundled_plugin_path(e).is_file() for e in PLUGIN_BY_ENGINE)
+        have_local = all(bundled_plugin_path(e).is_file() for e in PLUGIN_BY_ENGINE)
+        if force or not have_local:
+            _log("ERROR: Forge plugin update failed.", log_fn)
+            return False
+        _log("Warning: could not update Forge plugins; using local copy.", log_fn)
 
     return True
 

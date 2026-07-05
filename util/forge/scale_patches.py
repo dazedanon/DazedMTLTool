@@ -81,6 +81,8 @@ def _sub(text: str, pattern: str, repl, *, label: str, count: int = 1) -> str:
 
 def apply_ui_scale_patches(text: str, engine: str) -> str:
     """Return upstream Forge JS with Dazed overlay scaling (install-time only)."""
+    if not ("@param Hotkey" in text or "@param hotkey" in text):
+        return text
     if engine == "MZ":
         text = _sub(
             text,

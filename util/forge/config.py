@@ -140,14 +140,23 @@ def _patch_forge_runtime(forge_text: str, hotkey: str, ui_scale: str, engine: st
     return forge_text
 
 
+def is_legacy_forge_plugin(text: str) -> bool:
+    """True for pre-rewrite Forge_MV/MZ plugins with RPG Maker @param blocks."""
+    return "@param Hotkey" in text or "@param hotkey" in text
+
+
 def prepare_forge_js(engine: str, source: Path | None = None, cfg: dict | None = None) -> str:
     """Build the Forge plugin written into a game folder (vanilla source + Dazed patches)."""
     src = source or bundled_plugin_path(engine)
+    text = src.read_text(encoding="utf-8")
+    if not is_legacy_forge_plugin(text):
+        return text
+
     effective = {**load_config(), **(cfg or {})}
     hotkey = effective.get("forgeHotkey", "F10")
     ui_scale = effective.get("uiScale", "auto")
 
-    text = apply_ui_scale_patches(src.read_text(encoding="utf-8"), engine)
+    text = apply_ui_scale_patches(text, engine)
     text = _patch_forge_hotkey(text, hotkey, engine)
     text = _patch_forge_ui_scale_default(text, str(ui_scale), engine)
     text = _patch_forge_mtc_defaults(text, hotkey, str(ui_scale))
