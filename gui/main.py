@@ -45,14 +45,7 @@ def load_application_icon() -> QIcon:
 def check_tool_update() -> str | None:
     """Return latest commit SHA when a tool update is available, else None."""
     try:
-        api = (
-            f"https://gitgud.io/api/v4/projects/"
-            f"{UpdateThread.REPO_USER}%2F{UpdateThread.REPO_NAME}"
-            f"/repository/branches/{UpdateThread.REPO_BRANCH}"
-        )
-        req = urllib.request.Request(api, headers={"User-Agent": "DazedMTLTool"})
-        with urllib.request.urlopen(req, timeout=15) as resp:
-            latest_sha = json.loads(resp.read())["commit"]["id"]
+        latest_sha = UpdateThread.fetch_latest_sha()
         sha_path = Path(UpdateThread.SHA_FILE)
         current_sha = sha_path.read_text().strip() if sha_path.is_file() else ""
         if latest_sha != current_sha:
@@ -146,12 +139,14 @@ class AuxToolsUpdateThread(QThread):
 
 
 class UpdateThread(QThread):
-    """Downloads and applies a tool update from the GitGud repository."""
+    """Downloads and applies a tool update from git.dazedtl.dev (Gitea)."""
 
-    REPO_USER   = "DazedAnon"
-    REPO_NAME   = "DazedMTLTool"
+    REPO_HOST = "https://git.dazedtl.dev"
+    REPO_OWNER = "dazed"
+    REPO_SLUG = "dazed-mtl-tool"
     REPO_BRANCH = "main"
-    SHA_FILE    = str(LAST_UPDATE_SHA_PATH)
+    ARCHIVE_ROOT = "dazed-mtl-tool"
+    SHA_FILE = str(LAST_UPDATE_SHA_PATH)
 
     # Paths (relative, top-level) that should never be touched during update
     PROTECTED = {".env", "venv", "log", "files", "translated", "data"}
@@ -187,13 +182,24 @@ class UpdateThread(QThread):
             self.finished.emit(False, str(exc))
 
     @classmethod
-    def fetch_latest_sha(cls) -> str:
-        api = (
-            f"https://gitgud.io/api/v4/projects/"
-            f"{cls.REPO_USER}%2F{cls.REPO_NAME}"
-            f"/repository/branches/{cls.REPO_BRANCH}"
+    def branch_api_url(cls) -> str:
+        return (
+            f"{cls.REPO_HOST}/api/v1/repos/"
+            f"{cls.REPO_OWNER}/{cls.REPO_SLUG}/branches/{cls.REPO_BRANCH}"
         )
-        req = urllib.request.Request(api, headers={"User-Agent": "DazedMTLTool"})
+
+    @classmethod
+    def archive_zip_url(cls) -> str:
+        return (
+            f"{cls.REPO_HOST}/{cls.REPO_OWNER}/{cls.REPO_SLUG}/"
+            f"archive/{cls.REPO_BRANCH}.zip"
+        )
+
+    @classmethod
+    def fetch_latest_sha(cls) -> str:
+        req = urllib.request.Request(
+            cls.branch_api_url(), headers={"User-Agent": "DazedMTLTool"}
+        )
         with urllib.request.urlopen(req, timeout=15) as resp:
             return json.loads(resp.read())["commit"]["id"]
 
@@ -207,10 +213,7 @@ class UpdateThread(QThread):
         return p.read_text().strip() if p.exists() else ""
 
     def _download_and_apply(self, latest_sha):
-        zip_url = (
-            f"https://gitgud.io/{self.REPO_USER}/{self.REPO_NAME}/-/archive/"
-            f"{self.REPO_BRANCH}/{self.REPO_NAME}-{self.REPO_BRANCH}.zip"
-        )
+        zip_url = self.archive_zip_url()
 
         self.progress.emit("Downloading update…")
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -226,7 +229,7 @@ class UpdateThread(QThread):
             with zipfile.ZipFile(zip_path, "r") as zf:
                 zf.extractall(tmp)
 
-            extracted = tmp / f"{self.REPO_NAME}-{self.REPO_BRANCH}"
+            extracted = tmp / self.ARCHIVE_ROOT
             root      = Path(".").resolve()
 
             self.progress.emit("Applying update…")
