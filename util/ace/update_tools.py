@@ -2,6 +2,10 @@
 
 RV2JSON.exe     — https://github.com/Sinflower/RV2JSON (bin/RV2JSON.exe)
 Decrypter CLI   — https://github.com/uuksu/RPGMakerDecrypter (release asset)
+
+End users receive curated copies via the offline bundle (``util/ace/offline/``)
+shipped with DazedMTLTool updates. Upstream fetches are maintainer-only
+(``--refresh-offline`` or ``--force``).
 """
 
 from __future__ import annotations
@@ -67,15 +71,13 @@ def _log(msg: str, log_fn) -> None:
 
 
 def _seed_from_offline(local: Path, offline_name: str, log_fn) -> bool:
-    """Copy a bundled offline exe into the active path if missing."""
-    if local.is_file():
-        return True
+    """Copy a bundled offline exe into the active path when the bundle exists."""
     src = OFFLINE_DIR / offline_name
     if not src.is_file():
-        return False
+        return local.is_file()
     local.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(src, local)
-    _log(f"Using offline bundled {offline_name}", log_fn)
+    _log(f"Synced {offline_name} from offline bundle", log_fn)
     return True
 
 
@@ -103,17 +105,14 @@ def _decrypter_upstream() -> tuple[str, str]:
     raise RuntimeError(f"No {DECRYPTER_ASSET} asset in latest {DECRYPTER_REPO} release")
 
 
-def ensure_rv2json(force: bool = False, log_fn=print) -> bool:
-    """Download RV2JSON.exe if missing or upstream changed. Returns True if ready."""
-    _seed_from_offline(RV2JSON_LOCAL, "RV2JSON.exe", log_fn)
+def _fetch_rv2json_upstream(force: bool, log_fn=print) -> bool:
+    """Download RV2JSON.exe from upstream (maintainer-only)."""
     versions = _load_versions()
     try:
         remote_sha, download_url = _rv2json_upstream()
     except Exception as exc:
         if RV2JSON_LOCAL.is_file():
             _log(f"Warning: Could not check RV2JSON update ({exc}); using local copy.", log_fn)
-            return True
-        if _seed_from_offline(RV2JSON_LOCAL, "RV2JSON.exe", log_fn):
             return True
         _log(f"ERROR: RV2JSON unavailable ({exc}).", log_fn)
         return False
@@ -129,8 +128,6 @@ def ensure_rv2json(force: bool = False, log_fn=print) -> bool:
         if RV2JSON_LOCAL.is_file():
             _log(f"Warning: RV2JSON update failed ({exc}); keeping existing copy.", log_fn)
             return True
-        if _seed_from_offline(RV2JSON_LOCAL, "RV2JSON.exe", log_fn):
-            return True
         _log(f"ERROR: RV2JSON download failed: {exc}", log_fn)
         return False
 
@@ -140,9 +137,8 @@ def ensure_rv2json(force: bool = False, log_fn=print) -> bool:
     return True
 
 
-def ensure_decrypter(force: bool = False, log_fn=print) -> bool:
-    """Download RPGMakerDecrypter CLI if missing or upstream release changed."""
-    _seed_from_offline(DECRYPTER_LOCAL, DECRYPTER_ASSET, log_fn)
+def _fetch_decrypter_upstream(force: bool, log_fn=print) -> bool:
+    """Download RPGMakerDecrypter CLI from upstream (maintainer-only)."""
     if DECRYPTER_LOCAL.is_file():
         pass  # prefer CLI (offline bundle or download)
     elif DECRYPTER_LEGACY.is_file():
@@ -155,8 +151,6 @@ def ensure_decrypter(force: bool = False, log_fn=print) -> bool:
     except Exception as exc:
         if DECRYPTER_LOCAL.is_file() or DECRYPTER_LEGACY.is_file():
             _log(f"Warning: Could not check decrypter update ({exc}); using local copy.", log_fn)
-            return True
-        if _seed_from_offline(DECRYPTER_LOCAL, DECRYPTER_ASSET, log_fn):
             return True
         _log(f"ERROR: Decrypter unavailable ({exc}).", log_fn)
         return False
@@ -172,8 +166,6 @@ def ensure_decrypter(force: bool = False, log_fn=print) -> bool:
         if DECRYPTER_LOCAL.is_file() or DECRYPTER_LEGACY.is_file():
             _log(f"Warning: Decrypter update failed ({exc}); keeping existing copy.", log_fn)
             return True
-        if _seed_from_offline(DECRYPTER_LOCAL, DECRYPTER_ASSET, log_fn):
-            return True
         _log(f"ERROR: Decrypter download failed: {exc}", log_fn)
         return False
 
@@ -183,40 +175,52 @@ def ensure_decrypter(force: bool = False, log_fn=print) -> bool:
     return True
 
 
+def ensure_rv2json(force: bool = False, log_fn=print) -> bool:
+    """Ensure RV2JSON.exe is present from the offline bundle (no upstream fetch)."""
+    _seed_from_offline(RV2JSON_LOCAL, "RV2JSON.exe", log_fn)
+    if force:
+        return _fetch_rv2json_upstream(force=force, log_fn=log_fn)
+    if RV2JSON_LOCAL.is_file():
+        return True
+    _log(
+        f"ERROR: RV2JSON.exe not found. Update DazedMTLTool or ask the maintainer "
+        f"to refresh util/ace/offline/RV2JSON.exe.",
+        log_fn,
+    )
+    return False
+
+
+def ensure_decrypter(force: bool = False, log_fn=print) -> bool:
+    """Ensure the RPG Maker decrypter CLI is present from the offline bundle."""
+    _seed_from_offline(DECRYPTER_LOCAL, DECRYPTER_ASSET, log_fn)
+    if DECRYPTER_LOCAL.is_file():
+        if not force:
+            return True
+    elif DECRYPTER_LEGACY.is_file() and not force:
+        _log("Using legacy RPGMakerDecrypter.exe (local).", log_fn)
+        return True
+
+    if force:
+        return _fetch_decrypter_upstream(force=force, log_fn=log_fn)
+
+    if DECRYPTER_LOCAL.is_file() or DECRYPTER_LEGACY.is_file():
+        return True
+    _log(
+        f"ERROR: {DECRYPTER_ASSET} not found. Update DazedMTLTool or ask the maintainer "
+        f"to refresh util/ace/offline/{DECRYPTER_ASSET}.",
+        log_fn,
+    )
+    return False
+
+
 def seed_ace_tools(log_fn=None) -> None:
-    """Copy offline-bundled Ace tools if missing (no network)."""
+    """Sync runtime Ace tools from the offline bundle (no network)."""
     _seed_from_offline(RV2JSON_LOCAL, "RV2JSON.exe", log_fn)
     _seed_from_offline(DECRYPTER_LOCAL, DECRYPTER_ASSET, log_fn)
 
 
-def check_ace_tools_update() -> bool:
-    """Return True if upstream Ace tools differ from the local copies."""
-    seed_ace_tools()
-    versions = _load_versions()
-
-    try:
-        remote_sha, _ = _rv2json_upstream()
-        if not RV2JSON_LOCAL.is_file() or versions.get("rv2json_sha", "") != remote_sha:
-            return True
-    except Exception:
-        if not RV2JSON_LOCAL.is_file():
-            return True
-
-    try:
-        tag, _ = _decrypter_upstream()
-        if not (DECRYPTER_LOCAL.is_file() or DECRYPTER_LEGACY.is_file()):
-            return True
-        if DECRYPTER_LOCAL.is_file() and versions.get("decrypter_tag", "") != tag:
-            return True
-    except Exception:
-        if not (DECRYPTER_LOCAL.is_file() or DECRYPTER_LEGACY.is_file()):
-            return True
-
-    return False
-
-
 def ensure_ace_tools(force: bool = False, log_fn=print) -> bool:
-    """Ensure both Ace tools are present (download / update if needed)."""
+    """Ensure both Ace tools are present (offline bundle; upstream only with force=True)."""
     ok_rv = ensure_rv2json(force=force, log_fn=log_fn)
     ok_dec = ensure_decrypter(force=force, log_fn=log_fn)
     return ok_rv and ok_dec

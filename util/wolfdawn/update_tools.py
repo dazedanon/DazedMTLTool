@@ -1,9 +1,7 @@
-"""Check for and apply WolfDawn ``wolf`` binary updates.
+"""Check for and apply WolfDawn ``wolf`` binary updates (maintainer-only upstream fetch).
 
-Resolution order for each platform:
-  1. Temporary shallow clone + ``cargo`` source build (when possible on this machine)
-  2. Prebuilt zip from the latest GitLab release
-  3. Keep the existing offline bundled binary
+End users receive prebuilt binaries under ``util/wolfdawn/bin/<platform>/`` via
+DazedMTLTool updates. Maintainers refresh them with ``--refresh-all`` or ``--force``.
 """
 
 from __future__ import annotations
@@ -22,7 +20,6 @@ from util.wolfdawn import (
 )
 from util.wolfdawn.build_tools import (
     build_and_install_platforms,
-    buildable_from_source,
     upstream_commit,
 )
 
@@ -67,39 +64,6 @@ def _platform_versions() -> dict[str, str]:
 
 def _local_version(platform: str) -> str:
     return _platform_versions().get(platform, "")
-
-
-def _record_platform_version(platform: str, version: str) -> None:
-    versions = _load_versions()
-    platforms = versions.setdefault("platforms", {})
-    if not isinstance(platforms, dict):
-        platforms = {}
-        versions["platforms"] = platforms
-    platforms[platform] = version
-    if version and not versions.get("commit"):
-        versions["commit"] = version
-    _save_versions(versions)
-
-
-def _desired_version(platform: str) -> str:
-    """Best upstream version we can install for ``platform`` on this machine."""
-    if buildable_from_source(platform):
-        return upstream_commit()
-    asset = _latest_release_asset(platform)
-    if asset:
-        return asset[0]
-    return upstream_commit()
-
-
-def check_wolfdawn_update(platform: str | None = None) -> bool:
-    """Return True when upstream WolfDawn differs from the bundled binary."""
-    platform = platform or _platform_dir()
-    if not bundled_binary_path(platform).is_file():
-        return True
-    try:
-        return _local_version(platform) != _desired_version(platform)
-    except Exception:
-        return False
 
 
 def _refresh_from_release(platform: str, log_fn=print) -> str | None:
@@ -169,30 +133,27 @@ def refresh_wolfdawn_binary(
 
 
 def ensure_wolfdawn_binary(force: bool = False, log_fn=print) -> bool:
-    """Ensure the ``wolf`` binary is present; refresh when missing or stale."""
+    """Ensure the bundled ``wolf`` binary is present (no upstream fetch by default)."""
     platform = _platform_dir()
     bundled = bundled_binary_path(platform)
-    missing = not bundled.is_file()
 
-    need_fetch = missing or force
-    if not need_fetch:
-        try:
-            need_fetch = check_wolfdawn_update(platform)
-        except Exception as exc:
-            if missing:
-                _log(f"ERROR: WolfDawn upstream unavailable ({exc})", log_fn)
-                return False
-            _log(f"Warning: could not check WolfDawn update ({exc}); using local copy.", log_fn)
-
-    if need_fetch:
+    if force:
         if refresh_wolfdawn_binary(platforms=BUNDLED_PLATFORMS, log_fn=log_fn):
             return bundled_binary_path(platform).is_file()
-        if force or missing:
-            _log("ERROR: WolfDawn update failed.", log_fn)
-            return False
-        _log("Warning: could not update WolfDawn; using local copy.", log_fn)
+        if bundled.is_file():
+            _log("Warning: WolfDawn update failed; using bundled copy.", log_fn)
+            return True
+        _log("ERROR: WolfDawn update failed.", log_fn)
+        return False
 
-    return bundled.is_file()
+    if bundled.is_file():
+        return True
+    _log(
+        f"ERROR: no bundled WolfDawn binary for '{platform}' at {bundled}. "
+        "Update DazedMTLTool to receive a prebuilt wolf binary.",
+        log_fn,
+    )
+    return False
 
 
 def main() -> int:

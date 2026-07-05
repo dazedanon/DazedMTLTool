@@ -4,6 +4,9 @@ Upstream: https://gitgud.io/zero64801/forge-mvmz
 CI builds a unified forge.js plugin (master branch artifacts).
 Offline copies: util/forge/upstream/
 Active plugins: util/forge/Forge_MZ.js, util/forge/Forge_MV.js
+
+End users receive curated copies shipped with DazedMTLTool updates.
+Upstream fetches are maintainer-only (``--refresh-offline`` or ``--force``).
 """
 
 from __future__ import annotations
@@ -164,49 +167,31 @@ def seed_forge_plugins(log_fn=None) -> None:
         _seed_from_offline(engine, log_fn)
 
 
-def check_forge_plugins_update() -> bool:
-    """Return True if upstream Forge plugins differ from the local copies."""
-    seed_forge_plugins()
-    missing = [e for e in PLUGIN_BY_ENGINE if not bundled_plugin_path(e).is_file()]
-    if missing:
-        return True
-    versions = _load_versions()
-    local_commit = versions.get("commit", "")
-    try:
-        return _upstream_commit() != local_commit
-    except Exception:
-        return False
-
-
 def ensure_forge_plugins(force: bool = False, log_fn=print) -> bool:
-    """Ensure Forge plugins are present; fetch upstream when missing or stale."""
+    """Ensure Forge plugins are present from the offline bundle (no upstream fetch)."""
     for engine in PLUGIN_BY_ENGINE:
         _seed_from_offline(engine, log_fn)
 
     missing = [e for e in PLUGIN_BY_ENGINE if not bundled_plugin_path(e).is_file()]
-    versions = _load_versions()
-    local_commit = versions.get("commit", "")
+    if missing and not force:
+        names = ", ".join(PLUGIN_BY_ENGINE[e] + ".js" for e in missing)
+        _log(
+            f"ERROR: Forge plugin(s) missing ({names}). "
+            "Update DazedMTLTool or ask the maintainer to refresh util/forge/upstream/.",
+            log_fn,
+        )
+        return False
 
-    need_fetch = bool(missing) or force
-    if not need_fetch:
-        try:
-            need_fetch = _upstream_commit() != local_commit
-        except Exception as exc:
-            if missing:
-                _log(f"ERROR: Forge upstream unavailable ({exc})", log_fn)
-                return False
-            _log(f"Warning: could not check Forge update ({exc}); using local copy.", log_fn)
-
-    if need_fetch:
+    if force:
         if refresh_forge_plugins(log_fn=log_fn):
             return True
         have_local = all(bundled_plugin_path(e).is_file() for e in PLUGIN_BY_ENGINE)
-        if force or not have_local:
+        if not have_local:
             _log("ERROR: Forge plugin update failed.", log_fn)
             return False
         _log("Warning: could not update Forge plugins; using local copy.", log_fn)
 
-    return True
+    return all(bundled_plugin_path(e).is_file() for e in PLUGIN_BY_ENGINE)
 
 
 def main() -> int:

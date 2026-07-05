@@ -4,7 +4,7 @@ An AI-powered game translation tool with a GUI. Translate RPG Maker, Ren'Py, Tyr
 
 ## Credits
 
-- **[Sinflower](https://github.com/Sinflower)** — [RV2JSON](https://github.com/Sinflower/RV2JSON) — enables RPGMaker Ace games to be translated the same way as MV/MZ by converting rvdata2 files to JSON and back. A copy is bundled offline in `util/ace/offline/`; newer builds are downloaded when online.
+- **[Sinflower](https://github.com/Sinflower)** — [RV2JSON](https://github.com/Sinflower/RV2JSON) — enables RPGMaker Ace games to be translated the same way as MV/MZ by converting rvdata2 files to JSON and back. A curated copy is bundled offline in `util/ace/offline/` and updates with DazedMTLTool.
 - **Sakura & Kao_SSS** — TL Inspector (`util/tl_inspector/`) — in-game translation source inspector and live-edit plugin for RPG Maker MV/MZ playtesting.
 - **Len** — [Forge](https://gitgud.io/zero64801/forge-mvmz) MV/MZ playtest plugin (`util/forge/`), Mistral API support (provider integration and adaptive rate limiting), and batch translation mode (Anthropic Message Batches API).
 
@@ -333,7 +333,7 @@ Open the **Workflow** tab and choose **Wolf RPG (WolfDawn)** from the engine sel
 | **6 Package** | Run from loose `Data/` (backs up `Data.wolf` → `.bak`) or repack `Data.wolf`. |
 | **7 Saves** | *(Optional)* Update existing `.sav` files for the translated build. |
 
-> **`wolf` binary:** Prebuilt `wolf` CLIs for Windows and Linux are bundled offline under `util/wolfdawn/bin/<platform>/`, so no toolchain or build step is needed. If your platform's binary is missing, the tool downloads a prebuilt one from the [WolfDawn release page](https://gitgud.io/zero64801/wolfdawn) and caches it into that same folder for offline reuse. A clear error is shown if no bundled binary is present and the download can't be completed (e.g. no published binary for your platform).
+> **`wolf` binary:** Prebuilt `wolf` CLIs for Windows and Linux are bundled offline under `util/wolfdawn/bin/<platform>/`, so no toolchain or build step is needed. They update when you update DazedMTLTool. If your platform's binary is missing, update the tool or ask the maintainer to refresh the bundled copy.
 
 > **Legacy modules:** The older `Wolf RPG` / `Wolf RPG 2` modules (configured in the Engine Config tab) still exist for edge cases, but the WolfDawn workflow above is the recommended path.
 

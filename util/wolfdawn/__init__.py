@@ -3,9 +3,8 @@
 WolfDawn is the Rust toolchain (https://gitgud.io/zero64801/wolfdawn) that
 unpacks, extracts, injects, and repacks WOLF RPG Editor game data. DazedMTLTool
 ships prebuilt ``wolf`` binaries offline under ``util/wolfdawn/bin/<platform>/``
-so end users never need a Rust toolchain. When no offline binary is bundled for
-the running platform, the tool pulls a prebuilt one from the WolfDawn release
-page and caches it into that same folder. Everything the Wolf workflow needs
+so end users never need a Rust toolchain or a live upstream fetch. Binaries are
+updated when DazedMTLTool itself is updated. Everything the Wolf workflow needs
 goes through the helpers here so command syntax and exit-code handling live in
 one place.
 
@@ -97,7 +96,7 @@ def inject_had_applied(applied: int | None) -> bool:
     return applied is not None and applied > 0
 
 # Committed, prebuilt binaries live here (per-platform) so end users don't need a
-# Rust toolchain. When one is missing we download it from the WolfDawn release.
+# Rust toolchain or a live upstream fetch.
 _PACKAGE_DIR = Path(__file__).resolve().parent
 _BUNDLED_DIR = _PACKAGE_DIR / "bin"
 
@@ -266,23 +265,20 @@ def download_wolf_binary(platform: Optional[str] = None, log_fn=print) -> Path:
     return _extract_wolf_from_zip(zip_bytes, dest, log_fn)
 
 
-def ensure_wolf_binary(force: bool = False, log_fn=print) -> Path:
-    """Return the ``wolf`` binary path, downloading it only if needed.
+def ensure_wolf_binary(log_fn=print) -> Path:
+    """Return the bundled ``wolf`` binary path (no upstream fetch at runtime).
 
-    Resolution order:
-      1. Committed/cached prebuilt binary under ``util/wolfdawn/bin/<platform>/``
-         — used directly so the tool works fully offline.
-      2. Otherwise (or when ``force`` is set), pull the prebuilt binary from the
-         WolfDawn release page and cache it into that same folder.
-
-    Raises :class:`WolfDawnError` with actionable guidance when no offline binary
-    is present and the download can't be completed.
+    Raises :class:`WolfDawnError` when no offline binary is present for this
+    platform. Maintainers refresh bundled binaries with
+    ``python -m util.wolfdawn.update_tools --refresh-all``.
     """
-    if not force:
-        bundled = bundled_binary_path()
-        if bundled.is_file():
-            return bundled
-    return download_wolf_binary(log_fn=log_fn)
+    bundled = bundled_binary_path()
+    if bundled.is_file():
+        return bundled
+    raise WolfDawnError(
+        f"No bundled WolfDawn binary for '{_platform_dir()}' at {bundled}. "
+        "Update DazedMTLTool to receive a prebuilt wolf binary."
+    )
 
 
 def _log(msg: str, log_fn) -> None:
