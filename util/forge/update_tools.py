@@ -109,7 +109,8 @@ def _seed_from_offline(engine: str, log_fn) -> bool:
     if not offline.is_file():
         return False
     shutil.copy2(offline, dest)
-    _log(f"Using offline bundled {dest.name}", log_fn)
+    if log_fn:
+        _log(f"Using offline bundled {dest.name}", log_fn)
     return True
 
 

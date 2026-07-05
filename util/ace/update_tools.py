@@ -77,7 +77,8 @@ def _seed_from_offline(local: Path, offline_name: str, log_fn) -> bool:
         return local.is_file()
     local.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(src, local)
-    _log(f"Synced {offline_name} from offline bundle", log_fn)
+    if log_fn:
+        _log(f"Synced {offline_name} from offline bundle", log_fn)
     return True
 
 
