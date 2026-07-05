@@ -23,7 +23,7 @@ from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QTabWidget, QVBoxLayout, QHBoxLayout,
     QWidget, QPushButton, QLabel, QFileDialog, QMessageBox, QProgressBar,
     QTextEdit, QSplitter, QGroupBox, QStatusBar, QStackedWidget, QToolButton,
-    QDialog, QComboBox
+    QDialog, QComboBox, QFrame
 )
 from PyQt5.QtCore import Qt, QThread, pyqtSignal, QTimer, QSettings, QCoreApplication
 from PyQt5.QtGui import QIcon, QFont, QPixmap, QScreen, QGuiApplication
@@ -80,11 +80,21 @@ class UpdateThread(QThread):
     # GitLab zip archives do not preserve Unix execute bits; restore after apply.
     EXECUTABLE_SUFFIXES = {".sh", ".desktop"}
 
-    progress  = pyqtSignal(str)           # status message
-    finished  = pyqtSignal(bool, str)     # (success, message)
+    progress  = pyqtSignal(str, int, str)  # (stage, percent or -1, detail)
+    finished  = pyqtSignal(bool, str)       # (success, message)
+
+    STAGES = ("Downloading", "Extracting", "Applying")
 
     def __init__(self, parent=None):
         super().__init__(parent)
+
+    @staticmethod
+    def _fmt_bytes(num: int) -> str:
+        if num >= 1024 * 1024:
+            return f"{num / (1024 * 1024):.1f} MB"
+        if num >= 1024:
+            return f"{num / 1024:.0f} KB"
+        return f"{num} B"
 
     # ------------------------------------------------------------------ #
 
@@ -133,41 +143,68 @@ class UpdateThread(QThread):
         p = Path(self.SHA_FILE)
         return p.read_text().strip() if p.exists() else ""
 
-    def _download_and_apply(self, latest_sha):
-        zip_url = self.archive_zip_url()
+    def _download_archive(self, zip_path: Path):
+        req = urllib.request.Request(
+            self.archive_zip_url(), headers={"User-Agent": "DazedMTLTool"}
+        )
+        with urllib.request.urlopen(req, timeout=120) as resp, open(zip_path, "wb") as fh:
+            total = int(resp.headers.get("Content-Length", 0) or 0)
+            downloaded = 0
+            while True:
+                chunk = resp.read(256 * 1024)
+                if not chunk:
+                    break
+                fh.write(chunk)
+                downloaded += len(chunk)
+                if total > 0:
+                    pct = min(70, int(downloaded * 70 / total))
+                    detail = (
+                        f"{self._fmt_bytes(downloaded)} of {self._fmt_bytes(total)}"
+                    )
+                else:
+                    pct = -1
+                    detail = f"{self._fmt_bytes(downloaded)} downloaded"
+                self.progress.emit("Downloading", pct, detail)
 
-        self.progress.emit("Downloading update…")
+    def _download_and_apply(self, latest_sha):
         with tempfile.TemporaryDirectory() as tmp_dir:
-            tmp     = Path(tmp_dir)
+            tmp = Path(tmp_dir)
             zip_path = tmp / "update.zip"
 
-            req = urllib.request.Request(zip_url, headers={"User-Agent": "DazedMTLTool"})
-            with urllib.request.urlopen(req, timeout=120) as resp, \
-                 open(zip_path, "wb") as fh:
-                shutil.copyfileobj(resp, fh)
+            self.progress.emit(
+                "Downloading",
+                -1,
+                f"Fetching archive from {self.REPO_HOST}",
+            )
+            self._download_archive(zip_path)
 
-            self.progress.emit("Extracting…")
+            self.progress.emit("Extracting", 75, "Unpacking update archive…")
             with zipfile.ZipFile(zip_path, "r") as zf:
                 zf.extractall(tmp)
 
             extracted = tmp / self.ARCHIVE_ROOT
-            root      = Path(".").resolve()
+            root = Path(".").resolve()
 
-            self.progress.emit("Applying update…")
-            for src in extracted.rglob("*"):
-                rel   = src.relative_to(extracted)
-                parts = rel.parts
-                if not parts or parts[0] in self.PROTECTED:
-                    continue
+            install_files = [
+                src
+                for src in extracted.rglob("*")
+                if src.is_file()
+                and src.relative_to(extracted).parts
+                and src.relative_to(extracted).parts[0] not in self.PROTECTED
+            ]
+            total_files = max(len(install_files), 1)
+
+            self.progress.emit("Applying", 85, "Installing updated files…")
+            for index, src in enumerate(install_files, start=1):
+                rel = src.relative_to(extracted)
                 dst = root / rel
-                if src.is_dir():
-                    dst.mkdir(parents=True, exist_ok=True)
-                else:
-                    dst.parent.mkdir(parents=True, exist_ok=True)
-                    shutil.copy2(src, dst)
-                    if dst.suffix in self.EXECUTABLE_SUFFIXES:
-                        mode = dst.stat().st_mode | 0o111
-                        dst.chmod(mode)
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(src, dst)
+                if dst.suffix in self.EXECUTABLE_SUFFIXES:
+                    mode = dst.stat().st_mode | 0o111
+                    dst.chmod(mode)
+                pct = 85 + int(index * 15 / total_files)
+                self.progress.emit("Applying", min(100, pct), str(rel))
 
         Path(self.SHA_FILE).write_text(latest_sha)
         self.finished.emit(True, f"updated:{latest_sha[:8]}")
@@ -176,31 +213,273 @@ class UpdateThread(QThread):
 class UpdateDialog(QDialog):
     """Modal dialog that shows update progress and result."""
 
+    _DIALOG_STYLE = """
+        QDialog {
+            background-color: #2b2b2b;
+        }
+        QLabel#updateTitle {
+            font-size: 18px;
+            font-weight: bold;
+            color: #ffffff;
+            background: transparent;
+        }
+        QLabel#updateHeadline {
+            font-size: 14px;
+            font-weight: bold;
+            color: #ffffff;
+            background: transparent;
+        }
+        QLabel#updateDetail {
+            font-size: 12px;
+            color: #aaaaaa;
+            background: transparent;
+        }
+        QLabel#updateVersionKey {
+            font-size: 11px;
+            color: #888888;
+            background: transparent;
+        }
+        QLabel#updateVersionValue {
+            font-size: 13px;
+            font-weight: bold;
+            color: #ffffff;
+            background: transparent;
+            font-family: Consolas, "Courier New", monospace;
+        }
+        QLabel#updateVersionArrow {
+            font-size: 16px;
+            color: #007acc;
+            background: transparent;
+            padding: 0 8px;
+        }
+        QFrame#updateVersionFrame {
+            background-color: #353535;
+            border: 1px solid #4a4a4a;
+            border-radius: 6px;
+        }
+        QLabel#updateStep {
+            font-size: 11px;
+            color: #777777;
+            background-color: #3a3a3a;
+            border: 1px solid #4a4a4a;
+            border-radius: 10px;
+            padding: 4px 10px;
+        }
+        QLabel#updateStepActive {
+            font-size: 11px;
+            color: #ffffff;
+            background-color: #007acc;
+            border: 1px solid #007acc;
+            border-radius: 10px;
+            padding: 4px 10px;
+        }
+        QLabel#updateStepDone {
+            font-size: 11px;
+            color: #ffffff;
+            background-color: #2d6a4f;
+            border: 1px solid #40916c;
+            border-radius: 10px;
+            padding: 4px 10px;
+        }
+        QPushButton#updatePrimaryBtn {
+            background-color: #0078d4;
+            color: #ffffff;
+            border: none;
+            padding: 8px 18px;
+            border-radius: 4px;
+            font-weight: bold;
+            min-width: 110px;
+        }
+        QPushButton#updatePrimaryBtn:hover {
+            background-color: #106ebe;
+        }
+        QPushButton#updateSecondaryBtn {
+            background-color: #404040;
+            color: #ffffff;
+            border: 1px solid #555555;
+            padding: 8px 18px;
+            border-radius: 4px;
+            min-width: 90px;
+        }
+        QPushButton#updateSecondaryBtn:hover {
+            background-color: #4a4a4a;
+        }
+        QProgressBar {
+            background-color: #404040;
+            border: 1px solid #555555;
+            border-radius: 4px;
+            text-align: center;
+            color: #ffffff;
+            height: 22px;
+        }
+        QProgressBar::chunk {
+            background-color: #007acc;
+            border-radius: 3px;
+        }
+    """
+
     def __init__(self, parent=None, pending_tool_sha: str | None = None):
         super().__init__(parent)
         self.setWindowTitle("Tool Update")
-        self.setMinimumWidth(420)
+        self.setMinimumWidth(480)
         self.setModal(True)
-
-        layout = QVBoxLayout(self)
-        layout.setSpacing(10)
-
-        self.status_label = QLabel("Checking for updates…")
-        self.status_label.setWordWrap(True)
-        layout.addWidget(self.status_label)
-
-        self.progress_bar = QProgressBar()
-        self.progress_bar.setRange(0, 0)   # indeterminate
-        layout.addWidget(self.progress_bar)
-
-        self.close_btn = QPushButton("Cancel")
-        self.close_btn.clicked.connect(self.reject)
-        layout.addWidget(self.close_btn)
+        self.setStyleSheet(self._DIALOG_STYLE)
 
         self._thread = None
         self._pending_tool_sha = pending_tool_sha
+        self._current_stage = ""
+        self._step_labels: dict[str, QLabel] = {}
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(24, 20, 24, 20)
+        layout.setSpacing(14)
+
+        header = QHBoxLayout()
+        header.setSpacing(12)
+        icon = QLabel()
+        app_icon = load_application_icon()
+        if not app_icon.isNull():
+            icon.setPixmap(app_icon.pixmap(40, 40))
+        else:
+            icon.setText("⬆")
+            icon.setStyleSheet("font-size: 28px; background: transparent;")
+        header.addWidget(icon)
+
+        title_col = QVBoxLayout()
+        title_col.setSpacing(2)
+        self.title_label = QLabel("DazedMTLTool Update")
+        self.title_label.setObjectName("updateTitle")
+        self.subtitle_label = QLabel("Stay current with the latest fixes and features.")
+        self.subtitle_label.setObjectName("updateDetail")
+        title_col.addWidget(self.title_label)
+        title_col.addWidget(self.subtitle_label)
+        header.addLayout(title_col, stretch=1)
+        layout.addLayout(header)
+
+        self.version_frame = QFrame()
+        self.version_frame.setObjectName("updateVersionFrame")
+        version_layout = QHBoxLayout(self.version_frame)
+        version_layout.setContentsMargins(16, 12, 16, 12)
+        version_layout.setSpacing(0)
+
+        current_col = QVBoxLayout()
+        current_col.setSpacing(2)
+        current_key = QLabel("Installed")
+        current_key.setObjectName("updateVersionKey")
+        self.current_version_label = QLabel(self._installed_sha_display())
+        self.current_version_label.setObjectName("updateVersionValue")
+        current_col.addWidget(current_key)
+        current_col.addWidget(self.current_version_label)
+
+        arrow = QLabel("→")
+        arrow.setObjectName("updateVersionArrow")
+        arrow.setAlignment(Qt.AlignCenter)
+
+        new_col = QVBoxLayout()
+        new_col.setSpacing(2)
+        new_key = QLabel("Available")
+        new_key.setObjectName("updateVersionKey")
+        self.new_version_label = QLabel("Checking…")
+        self.new_version_label.setObjectName("updateVersionValue")
+        new_col.addWidget(new_key)
+        new_col.addWidget(self.new_version_label)
+
+        version_layout.addLayout(current_col, stretch=1)
+        version_layout.addWidget(arrow)
+        version_layout.addLayout(new_col, stretch=1)
+        layout.addWidget(self.version_frame)
+
+        self.headline_label = QLabel("Checking for updates…")
+        self.headline_label.setObjectName("updateHeadline")
+        self.headline_label.setWordWrap(True)
+        layout.addWidget(self.headline_label)
+
+        self.detail_label = QLabel("")
+        self.detail_label.setObjectName("updateDetail")
+        self.detail_label.setWordWrap(True)
+        layout.addWidget(self.detail_label)
+
+        steps_row = QHBoxLayout()
+        steps_row.setSpacing(8)
+        for stage in UpdateThread.STAGES:
+            pill = QLabel(stage)
+            pill.setObjectName("updateStep")
+            pill.setAlignment(Qt.AlignCenter)
+            self._step_labels[stage] = pill
+            steps_row.addWidget(pill)
+        steps_row.addStretch()
+        self.steps_widget = QWidget()
+        self.steps_widget.setLayout(steps_row)
+        layout.addWidget(self.steps_widget)
+
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setRange(0, 0)
+        self.progress_bar.setFormat("%p%")
+        self.progress_bar.setTextVisible(True)
+        layout.addWidget(self.progress_bar)
+
+        button_row = QHBoxLayout()
+        button_row.addStretch()
+        self.cancel_btn = QPushButton("Cancel")
+        self.cancel_btn.setObjectName("updateSecondaryBtn")
+        self.cancel_btn.clicked.connect(self.reject)
+        self.action_btn = QPushButton("Update Now")
+        self.action_btn.setObjectName("updatePrimaryBtn")
+        self.action_btn.clicked.connect(self._do_update)
+        self.action_btn.hide()
+        button_row.addWidget(self.cancel_btn)
+        button_row.addWidget(self.action_btn)
+        layout.addLayout(button_row)
+
+    @staticmethod
+    def _short_sha(sha: str | None) -> str:
+        if not sha:
+            return "Unknown"
+        return sha[:8]
+
+    @classmethod
+    def _installed_sha_display(cls) -> str:
+        sha_path = Path(UpdateThread.SHA_FILE)
+        if sha_path.is_file():
+            return cls._short_sha(sha_path.read_text().strip())
+        return "Not recorded"
+
+    def _set_stage_pills(self, active_stage: str | None = None):
+        stage_order = list(UpdateThread.STAGES)
+        active_index = stage_order.index(active_stage) if active_stage in stage_order else -1
+        for index, stage in enumerate(stage_order):
+            pill = self._step_labels[stage]
+            if active_stage and index < active_index:
+                pill.setObjectName("updateStepDone")
+            elif stage == active_stage:
+                pill.setObjectName("updateStepActive")
+            else:
+                pill.setObjectName("updateStep")
+            pill.style().unpolish(pill)
+            pill.style().polish(pill)
+
+    def _set_progress(self, percent: int):
+        if percent < 0:
+            self.progress_bar.setRange(0, 0)
+            self.progress_bar.setFormat("")
+            return
+        self.progress_bar.setRange(0, 100)
+        self.progress_bar.setValue(max(0, min(100, percent)))
+        self.progress_bar.setFormat("%p%")
+
+    def _show_checking(self):
+        self.headline_label.setText("Checking for updates…")
+        self.detail_label.setText(
+            f"Connecting to {UpdateThread.REPO_HOST} ({UpdateThread.REPO_BRANCH})"
+        )
+        self.new_version_label.setText("Checking…")
+        self.action_btn.hide()
+        self.cancel_btn.setText("Cancel")
+        self.steps_widget.hide()
+        self._set_progress(-1)
 
     def start(self):
+        self._show_checking()
         if self._pending_tool_sha:
             self._show_pending_updates()
             return
@@ -210,75 +489,106 @@ class UpdateDialog(QDialog):
         self._thread.start()
 
     def _show_pending_updates(self):
-        self.progress_bar.setRange(0, 1)
-        self.progress_bar.setValue(1)
-        self.close_btn.setText("Close")
+        self.steps_widget.hide()
+        self._set_progress(-1)
+        self.progress_bar.hide()
+        self.cancel_btn.setText("Close")
 
         tool_sha = self._pending_tool_sha
+        self.new_version_label.setText(self._short_sha(tool_sha))
+
         if not tool_sha:
-            self.status_label.setText("✅ Already up to date.")
+            self.headline_label.setText("You're up to date")
+            self.detail_label.setText(
+                f"No newer build found on {UpdateThread.REPO_BRANCH}."
+            )
+            self.subtitle_label.setText("You're running the latest version.")
+            self.action_btn.hide()
             return
 
-        self.status_label.setText(
-            f"🆕 Update available:\n"
-            f"  • DazedMTLTool ({tool_sha[:8]})\n\n"
-            f"Click 'Update Now' to install."
+        self.headline_label.setText("A new version is available")
+        self.detail_label.setText(
+            "Install the update to get the latest improvements. "
+            "Your config, projects, and translated files are preserved."
         )
-        self.close_btn.setText("Cancel")
-        update_btn = QPushButton("Update Now")
-        update_btn.clicked.connect(self._do_update)
-        self.layout().insertWidget(self.layout().count() - 1, update_btn)
+        self.subtitle_label.setText("A newer build is ready to install.")
+        self.action_btn.show()
+        self.cancel_btn.setText("Not Now")
 
     def _on_check_finished(self, tool_sha: str | None):
         self._pending_tool_sha = tool_sha
         self._show_pending_updates()
 
+    def _on_progress(self, stage: str, percent: int, detail: str):
+        self._current_stage = stage
+        self.steps_widget.show()
+        self.progress_bar.show()
+        self._set_stage_pills(stage)
+        self.headline_label.setText(stage)
+        self.detail_label.setText(detail)
+        self._set_progress(percent)
+
     def _on_finished(self, success, message):
-        self.progress_bar.setRange(0, 1)
-        self.progress_bar.setValue(1)
-        self.close_btn.setText("Close")
+        self.steps_widget.hide()
+        self.action_btn.hide()
+        self.cancel_btn.setText("Close")
 
         if not success:
-            self.status_label.setText(f"❌ Update failed:\n{message}")
+            self.progress_bar.hide()
+            self.headline_label.setText("Update failed")
+            self.detail_label.setText(message)
+            self.subtitle_label.setText("Something went wrong while updating.")
             return
 
+        self.progress_bar.show()
+        self._set_progress(100)
+
         if message == "already_up_to_date":
-            self.status_label.setText("✅ Already up to date.")
+            self.headline_label.setText("You're up to date")
+            self.detail_label.setText(
+                f"No newer build found on {UpdateThread.REPO_BRANCH}."
+            )
+            self.subtitle_label.setText("You're running the latest version.")
+            self.new_version_label.setText(self._installed_sha_display())
         elif message.startswith("updated:"):
             sha = message.split(":", 1)[1]
             self._pending_tool_sha = None
-            self.status_label.setText(
-                f"✅ Updated to {sha}.\n\nPlease restart the tool for changes to take effect."
+            self.new_version_label.setText(sha)
+            self.current_version_label.setText(sha)
+            self.headline_label.setText("Update installed successfully")
+            self.detail_label.setText(
+                "Restart DazedMTLTool to load the new version."
             )
+            self.subtitle_label.setText("Update complete.")
             if isinstance(self.parent(), DazedMTLGUI):
                 self.parent().clear_update_indicator()
 
-    def _clear_extra_buttons(self):
-        for i in reversed(range(self.layout().count())):
-            item = self.layout().itemAt(i)
-            if item and item.widget() and item.widget() is not self.close_btn:
-                w = item.widget()
-                if isinstance(w, QPushButton) and w.text() in ("Update Now", "Cancel"):
-                    if w.text() != "Close":
-                        self.layout().removeWidget(w)
-                        w.deleteLater()
-
     def _do_update(self):
-        self._clear_extra_buttons()
-        self.progress_bar.setRange(0, 0)
-        self.close_btn.setText("Cancel")
+        self.progress_bar.show()
+        self.action_btn.hide()
+        self.cancel_btn.setText("Cancel")
+        self.subtitle_label.setText("Installing the latest build…")
+        self.steps_widget.show()
+        self._set_stage_pills("Downloading")
+        self._set_progress(-1)
 
         if self._pending_tool_sha:
-            self.status_label.setText("Downloading update…")
+            self.new_version_label.setText(self._short_sha(self._pending_tool_sha))
+            self.headline_label.setText("Downloading")
+            self.detail_label.setText(
+                f"Fetching archive from {UpdateThread.REPO_HOST}"
+            )
             self._thread = UpdateThread(parent=self)
-            self._thread.progress.connect(self.status_label.setText)
+            self._thread.progress.connect(self._on_progress)
             self._thread.finished.connect(self._on_finished)
             self._thread.start()
             return
 
-        self.progress_bar.setRange(0, 1)
-        self.progress_bar.setValue(1)
-        self.status_label.setText("✅ Already up to date.")
+        self._set_progress(100)
+        self.headline_label.setText("You're up to date")
+        self.detail_label.setText(
+            f"No newer build found on {UpdateThread.REPO_BRANCH}."
+        )
 
 # Import configuration widgets
 from gui.config_tab import ConfigTab
