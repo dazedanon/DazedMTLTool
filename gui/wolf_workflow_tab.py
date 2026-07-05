@@ -86,7 +86,14 @@ from gui.workflow_tab import (
 )
 from util import wolf_names
 from util.paths import PROJECT_ROOT
-from util.project_scanner import detect_wolf_layout, list_wolf_json_files
+from util.project_scanner import (
+    detect_wolf_layout,
+    find_wolf_text_archives,
+    list_wolf_json_files,
+    wolf_has_maps,
+    wolf_maps_dir,
+    wolf_maps_packed,
+)
 from util.vocab import read_game_vocab, write_game_vocab
 
 # Workflow-level label for the non-batch (live) translation path. The Translation
@@ -1007,6 +1014,26 @@ class WolfWorkflowTab(QWidget):
 
         manifest = self._read_manifest()
         if manifest and manifest.get("entries"):
+            info = self._layout or detect_wolf_layout(self._game_root)
+            data_dir = info.get("data_dir")
+            has_map_entries = any(e.get("kind") == "map" for e in manifest["entries"])
+            if (
+                not has_map_entries
+                and data_dir
+                and (
+                    wolf_maps_packed(self._game_root, data_dir)
+                    or wolf_has_maps(data_dir)
+                )
+            ):
+                self._log(
+                    "Auto-setup: maps missing from wolf_json/ — unpacking MapData if needed "
+                    "and extracting map files …"
+                )
+                self._extract_to_work_dir(
+                    supplement_maps=True,
+                    on_done=lambda ok, _m: self._scan_wolf_files() if ok else None,
+                )
+                return
             self._scan_wolf_files()
             return
 
@@ -1330,7 +1357,30 @@ class WolfWorkflowTab(QWidget):
 
         self._run_task(task, on_done=on_done)
 
-    def _extract_to_work_dir(self, *, interactive: bool = True, on_done=None):
+    def _ensure_text_archives_unpacked(self, data_dir: Path, log) -> bool:
+        """Unpack BasicData/MapData archives when their binaries are not loose yet."""
+        from util import wolfdawn
+
+        archives = find_wolf_text_archives(self._game_root, data_dir)
+        ok = True
+        basic = data_dir / "BasicData"
+        if "BasicData" in archives and not (basic / "CommonEvent.dat").is_file():
+            log(f"Unpacking {archives['BasicData'].name} …")
+            res = wolfdawn.unpack_all([str(archives["BasicData"])], str(data_dir), log_fn=log)
+            if not res.ok:
+                log(f"  ⚠ unpack failed (exit {res.returncode})")
+                ok = False
+        if "MapData" in archives and not wolf_has_maps(data_dir):
+            log(f"Unpacking {archives['MapData'].name} …")
+            res = wolfdawn.unpack_all([str(archives["MapData"])], str(data_dir), log_fn=log)
+            if not res.ok:
+                log(f"  ⚠ unpack failed (exit {res.returncode})")
+                ok = False
+        return ok
+
+    def _extract_to_work_dir(
+        self, *, interactive: bool = True, on_done=None, supplement_maps: bool = False
+    ):
         if not self._require_root():
             return
         info = detect_wolf_layout(self._game_root)
@@ -1352,13 +1402,26 @@ class WolfWorkflowTab(QWidget):
         def task(log):
             from util import wolfdawn
 
-            basic = Path(info["basic_data"]) if info.get("basic_data") else Path(data_dir)
-            maps_dir = Path(info["map_data"]) if info.get("map_data") else Path(data_dir)
+            if not self._ensure_text_archives_unpacked(Path(data_dir), log):
+                return False, "Could not unpack text archives (see log)."
+
+            layout = detect_wolf_layout(self._game_root)
+            self._layout = layout
+            basic = Path(layout["basic_data"]) if layout.get("basic_data") else Path(data_dir)
+            maps_dir = wolf_maps_dir(data_dir)
             work_dir.mkdir(parents=True, exist_ok=True)
 
-            manifest_entries: list[dict] = []
+            existing_manifest = self._read_manifest() if supplement_maps else None
+            existing_entries = list(existing_manifest.get("entries", [])) if existing_manifest else []
+            existing_json = {e["json"] for e in existing_entries if e.get("json")}
+
+            manifest_entries: list[dict] = (
+                existing_entries.copy() if supplement_maps else []
+            )
 
             def _extract_one(base: Path, out_name: str, kind: str):
+                if supplement_maps and out_name in existing_json:
+                    return
                 out = work_dir / out_name
                 log(f"Extracting {base.name} …")
                 res = wolfdawn.strings_extract(str(base), str(out), log_fn=log)
@@ -1367,34 +1430,54 @@ class WolfWorkflowTab(QWidget):
                 else:
                     log(f"  ⚠ skipped {base.name} (exit {res.returncode})")
 
-            ce = basic / "CommonEvent.dat"
-            if ce.is_file():
-                _extract_one(ce, "CommonEvent.dat.json", "common")
-            for stem in ("DataBase", "CDataBase", "SysDatabase"):
-                proj = basic / f"{stem}.project"
-                if proj.is_file():
-                    _extract_one(proj, f"{stem}.project.json", "db")
-            gd = basic / "Game.dat"
-            if gd.is_file():
-                _extract_one(gd, "Game.dat.json", "gamedat")
+            if not supplement_maps:
+                ce = basic / "CommonEvent.dat"
+                if ce.is_file():
+                    _extract_one(ce, "CommonEvent.dat.json", "common")
+                for stem in ("DataBase", "CDataBase", "SysDatabase"):
+                    proj = basic / f"{stem}.project"
+                    if proj.is_file():
+                        _extract_one(proj, f"{stem}.project.json", "db")
+                gd = basic / "Game.dat"
+                if gd.is_file():
+                    _extract_one(gd, "Game.dat.json", "gamedat")
+
             for mps in sorted(maps_dir.glob("*.mps")):
                 _extract_one(mps, f"{mps.name}.json", "map")
-            evtext = Path(data_dir) / "Evtext"
-            if evtext.is_dir() and any(evtext.glob("*.txt")):
-                out = work_dir / "Evtext.json"
-                log("Extracting Evtext/ …")
-                res = wolfdawn.strings_extract(str(evtext), str(out), log_fn=log)
-                if res.ok and out.is_file():
-                    manifest_entries.append({"json": "Evtext.json", "base": str(evtext), "kind": "txt-dir"})
 
-            log("Extracting name glossary …")
-            names_out = work_dir / NAMES_JSON
-            res = wolfdawn.names_extract(str(data_dir), str(names_out), log_fn=log)
-            if res.ok and names_out.is_file():
-                manifest_entries.append({"json": NAMES_JSON, "base": str(data_dir), "kind": "names"})
+            if not supplement_maps:
+                evtext = Path(data_dir) / "Evtext"
+                if evtext.is_dir() and any(evtext.glob("*.txt")):
+                    out = work_dir / "Evtext.json"
+                    log("Extracting Evtext/ …")
+                    res = wolfdawn.strings_extract(str(evtext), str(out), log_fn=log)
+                    if res.ok and out.is_file():
+                        manifest_entries.append({"json": "Evtext.json", "base": str(evtext), "kind": "txt-dir"})
+
+                log("Extracting name glossary …")
+                names_out = work_dir / NAMES_JSON
+                res = wolfdawn.names_extract(str(data_dir), str(names_out), log_fn=log)
+                if res.ok and names_out.is_file():
+                    manifest_entries.append({"json": NAMES_JSON, "base": str(data_dir), "kind": "names"})
+            elif any(e.get("kind") == "map" for e in manifest_entries):
+                log("Refreshing name glossary (maps were added) …")
+                names_out = work_dir / NAMES_JSON
+                res = wolfdawn.names_extract(str(data_dir), str(names_out), log_fn=log)
+                if res.ok and names_out.is_file():
+                    manifest_entries = [
+                        e for e in manifest_entries if e.get("json") != NAMES_JSON
+                    ]
+                    manifest_entries.append({"json": NAMES_JSON, "base": str(data_dir), "kind": "names"})
+
+            new_entries = [
+                e for e in manifest_entries
+                if supplement_maps and e.get("json") not in existing_json
+            ] if supplement_maps else manifest_entries
 
             if not manifest_entries:
                 return False, "Nothing was extracted. Check the Data/ folder layout."
+            if supplement_maps and not new_entries:
+                return True, f"No new map files to extract in {WORK_DIR_NAME}/."
 
             manifest = {
                 "root": game_root,
@@ -1404,10 +1487,18 @@ class WolfWorkflowTab(QWidget):
             (work_dir / MANIFEST_NAME).write_text(
                 json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8"
             )
-            self._snapshot_originals(manifest_entries, Path(data_dir), log)
+            snapshot_entries = new_entries if supplement_maps else manifest_entries
+            self._snapshot_originals(snapshot_entries, Path(data_dir), log)
+            map_count = sum(1 for e in manifest_entries if e.get("kind") == "map")
+            if supplement_maps:
+                added = sum(1 for e in new_entries if e.get("kind") == "map")
+                return True, (
+                    f"Added {added} map file(s) ({map_count} total in {WORK_DIR_NAME}/). "
+                    "Import checked files into files/ from Step 0."
+                )
             return True, (
-                f"Extracted {len(manifest_entries)} document(s) into {WORK_DIR_NAME}/. "
-                "Import checked files into files/ from Step 0."
+                f"Extracted {len(manifest_entries)} document(s) into {WORK_DIR_NAME}/ "
+                f"({map_count} map(s)). Import checked files into files/ from Step 0."
             )
 
         self._run_task(task, on_done=on_done)

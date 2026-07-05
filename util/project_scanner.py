@@ -57,6 +57,54 @@ _ACE_DATA_SCRIPTS = {".rvdata2", ".rvdata"}
 # the unpacked binaries (CommonEvent.dat, *.mps maps, *.project databases).
 _WOLF_LOOSE_MARKERS = ("BasicData/CommonEvent.dat", "CommonEvent.dat")
 
+_WOLF_TEXT_ARCHIVE_STEMS = ("BasicData", "MapData")
+
+
+def wolf_maps_dir(data_dir: str | Path) -> Path:
+    """Return the folder that holds map ``.mps`` files (``MapData/`` or flat ``Data/``)."""
+    data_dir = Path(data_dir)
+    nested = data_dir / "MapData"
+    return nested if nested.is_dir() else data_dir
+
+
+def wolf_has_maps(data_dir: str | Path) -> bool:
+    """True when loose ``.mps`` map files are present under *data_dir*."""
+    return any(wolf_maps_dir(data_dir).glob("*.mps"))
+
+
+def find_wolf_text_archives(
+    game_root: str | Path,
+    data_dir: str | Path | None = None,
+) -> dict[str, Path]:
+    """Return ``{BasicData|MapData: archive_path}`` for text-relevant ``.wolf`` files."""
+    game_root = Path(game_root)
+    data_dir = Path(data_dir) if data_dir else None
+    found: dict[str, Path] = {}
+    bases: list[Path] = [game_root]
+    if data_dir is not None:
+        bases.append(data_dir)
+    if (game_root / "Data").is_dir():
+        bases.append(game_root / "Data")
+    for base in bases:
+        if not base.is_dir():
+            continue
+        for stem in _WOLF_TEXT_ARCHIVE_STEMS:
+            if stem in found:
+                continue
+            for name in (f"{stem}.wolf", f"{stem}.wolf.bak"):
+                arc = base / name
+                if arc.is_file():
+                    found[stem] = arc
+                    break
+    return found
+
+
+def wolf_maps_packed(game_root: str | Path, data_dir: str | Path) -> bool:
+    """True when map ``.mps`` are not loose but a ``MapData`` archive exists."""
+    if wolf_has_maps(data_dir):
+        return False
+    return "MapData" in find_wolf_text_archives(game_root, data_dir)
+
 
 # ---------------------------------------------------------------------------
 # Public API
@@ -176,8 +224,7 @@ def detect_wolf_layout(game_root: str | Path) -> dict:
         result["unpacked"] = True
         basic = loose / "BasicData"
         result["basic_data"] = basic if basic.is_dir() else loose
-        maps = loose / "MapData"
-        result["map_data"] = maps if maps.is_dir() else loose
+        result["map_data"] = wolf_maps_dir(loose)
     return result
 
 
