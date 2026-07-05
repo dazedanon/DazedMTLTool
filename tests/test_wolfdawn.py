@@ -141,7 +141,8 @@ class TestCollectEntries(unittest.TestCase):
         self.assertEqual(len(wd.collectEntries(MAP_DOC)), 2)
         self.assertEqual(len(wd.collectEntries(DB_DOC)), 1)
         self.assertEqual(len(wd.collectEntries(GAMEDAT_DOC)), 1)
-        self.assertEqual(len(wd.collectEntries(NAMES_DOC)), 2)
+        # All name leaves, including verify — safety filtering is in parseDocument.
+        self.assertEqual(len(wd.collectEntries(NAMES_DOC)), 3)
         self.assertEqual(len(wd.collectEntries(TXTDIR_DOC)), 1)
 
 
