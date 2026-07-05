@@ -12,6 +12,7 @@ from pathlib import Path
 
 from util.playtest.config import load_config
 from util.forge.scale_patches import apply_ui_scale_patches
+from util.forge.modern_patches import apply_modern_forge_patches
 
 _PKG_ROOT = Path(__file__).resolve().parent
 
@@ -38,10 +39,16 @@ def _js_literal(value) -> str:
     return json.dumps(str(value))
 
 
-def plugin_entry(engine: str, hotkey: str, ui_scale: str = "auto") -> str:
+def plugin_entry(engine: str, hotkey: str, ui_scale: str = "auto", *, modern: bool = False) -> str:
+    name = PLUGIN_BY_ENGINE[engine]
+    if modern:
+        return (
+            f'        {{ "name": "{name}", "status": true, '
+            f'"description": "Forge — in-game cheat & editor overlay", '
+            f'"parameters": {{}} }}'
+        )
     hk = _js_literal(hotkey.strip() or "F10")
     scale = _js_literal(ui_scale.strip() or "auto")
-    name = PLUGIN_BY_ENGINE[engine]
     if engine == "MZ":
         return (
             f'        {{ "name": "{name}", "status": true, '
@@ -149,12 +156,12 @@ def prepare_forge_js(engine: str, source: Path | None = None, cfg: dict | None =
     """Build the Forge plugin written into a game folder (vanilla source + Dazed patches)."""
     src = source or bundled_plugin_path(engine)
     text = src.read_text(encoding="utf-8")
-    if not is_legacy_forge_plugin(text):
-        return text
-
     effective = {**load_config(), **(cfg or {})}
     hotkey = effective.get("forgeHotkey", "F10")
     ui_scale = effective.get("uiScale", "auto")
+
+    if not is_legacy_forge_plugin(text):
+        return apply_modern_forge_patches(text, hotkey, str(ui_scale))
 
     text = apply_ui_scale_patches(text, engine)
     text = _patch_forge_hotkey(text, hotkey, engine)

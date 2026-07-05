@@ -8,7 +8,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from util.forge.config import PLUGIN_BY_ENGINE, plugin_entry, prepare_forge_js
+from util.forge.config import PLUGIN_BY_ENGINE, is_legacy_forge_plugin, plugin_entry, prepare_forge_js
 
 _PKG_ROOT = Path(__file__).resolve().parent
 
@@ -187,7 +187,8 @@ def install(game_root: Path, source_js: Path | None = None, cfg: dict | None = N
 
     hotkey = (cfg or {}).get("forgeHotkey", "F10")
     ui_scale = (cfg or {}).get("uiScale", "auto")
-    entry = plugin_entry(engine, hotkey, ui_scale)
+    modern = not is_legacy_forge_plugin((source_js or default_src).read_text(encoding="utf-8"))
+    entry = plugin_entry(engine, hotkey, ui_scale, modern=modern)
     try:
         content = _upsert_plugin_entry(content, plugin_name, entry, nl)
         plugins_js.write_text(content, encoding="utf-8", newline="")
