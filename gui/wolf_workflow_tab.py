@@ -59,6 +59,7 @@ from PyQt5.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QMessageBox,
+    QProgressBar,
     QPushButton,
     QScrollArea,
     QSizePolicy,
@@ -243,11 +244,13 @@ _WOLF_SPEAKER_PROMPT = (
 class _WolfTaskWorker(QThread):
     """Run a blocking WolfDawn task callable off the UI thread.
 
-    The task receives a ``log`` callable and returns ``(success, message)``.
+    The task receives ``log`` and ``progress`` callables and returns
+    ``(success, message)``.
     """
 
     done = pyqtSignal(bool, str)
     log = pyqtSignal(str)
+    progress = pyqtSignal(int, int, str)
 
     def __init__(self, task):
         super().__init__()
@@ -255,7 +258,10 @@ class _WolfTaskWorker(QThread):
 
     def run(self):
         try:
-            ok, msg = self._task(self.log.emit)
+            ok, msg = self._task(
+                self.log.emit,
+                lambda current, total, label: self.progress.emit(current, total, label),
+            )
             self.done.emit(bool(ok), str(msg))
         except Exception as exc:  # pragma: no cover - defensive
             import traceback
@@ -391,7 +397,7 @@ class WolfWorkflowTab(QWidget):
             except Exception as exc:
                 log(f"  ⚠ could not snapshot original {src.name}: {exc}")
 
-    def _ensure_originals(self, manifest: dict, log) -> None:
+    def _ensure_originals(self, manifest: dict, log, progress=None) -> None:
         """Make sure a pristine snapshot exists; if entries are missing it and the
         game still has its .wolf archives (packaging renames them to .wolf.bak),
         rebuild the snapshot by unpacking those archives into originals/."""
@@ -435,7 +441,13 @@ class WolfWorkflowTab(QWidget):
                     inputs.append(str(staged))
                 else:
                     inputs.append(str(arc))
-            res = wolfdawn.unpack_all(inputs, str(originals), log_fn=log)
+            res = wolfdawn.unpack_all(
+                inputs,
+                str(originals),
+                log_fn=log,
+                progress_fn=progress,
+                progress_total=len(inputs),
+            )
             if not res.ok:
                 log(f"  ⚠ could not rebuild originals (unpack exit {res.returncode}).")
 
@@ -587,6 +599,34 @@ class WolfWorkflowTab(QWidget):
         )
         lp_layout.addWidget(log_header)
 
+        self.task_progress_row = QWidget()
+        progress_layout = QVBoxLayout(self.task_progress_row)
+        progress_layout.setContentsMargins(10, 8, 10, 4)
+        progress_layout.setSpacing(4)
+        self.task_progress_label = QLabel("")
+        self.task_progress_label.setStyleSheet("color:#9d9d9d;font-size:11px;background:transparent;")
+        progress_layout.addWidget(self.task_progress_label)
+        self.task_progress_bar = QProgressBar()
+        self.task_progress_bar.setFixedHeight(16)
+        self.task_progress_bar.setTextVisible(True)
+        self.task_progress_bar.setStyleSheet("""
+            QProgressBar {
+                border: 1px solid #3c3c3c;
+                border-radius: 3px;
+                text-align: center;
+                background-color: #252526;
+                color: #cccccc;
+                font-size: 10px;
+            }
+            QProgressBar::chunk {
+                background-color: #007acc;
+                border-radius: 2px;
+            }
+        """)
+        progress_layout.addWidget(self.task_progress_bar)
+        self.task_progress_row.setVisible(False)
+        lp_layout.addWidget(self.task_progress_row)
+
         self.log_area = QTextEdit()
         self.log_area.setReadOnly(True)
         self.log_area.setFont(QFont("Consolas", 9))
@@ -670,6 +710,24 @@ class WolfWorkflowTab(QWidget):
         for btn in self._buttons:
             btn.setEnabled(not busy)
 
+    def _show_task_progress(self, current: int, total: int, label: str):
+        self.task_progress_row.setVisible(True)
+        self.task_progress_label.setText(label)
+        if total <= 0:
+            self.task_progress_bar.setRange(0, 0)
+            self.task_progress_bar.setFormat("")
+        else:
+            self.task_progress_bar.setRange(0, total)
+            self.task_progress_bar.setValue(max(0, min(current, total)))
+            self.task_progress_bar.setFormat(f"{current}/{total}  %p%")
+
+    def _hide_task_progress(self):
+        self.task_progress_row.setVisible(False)
+        self.task_progress_label.clear()
+        self.task_progress_bar.setRange(0, 100)
+        self.task_progress_bar.setValue(0)
+        self.task_progress_bar.setFormat("")
+
     def _run_task(self, task, on_done=None):
         """Run *task* in a worker thread; disables buttons until it finishes."""
         if self._worker is not None and self._worker.isRunning():
@@ -679,11 +737,14 @@ class WolfWorkflowTab(QWidget):
             QMessageBox.information(self, "Busy", "An import is already running. Please wait.")
             return
         self._set_busy(True)
+        self._show_task_progress(0, 0, "Working …")
         worker = _WolfTaskWorker(task)
         self._worker = worker
         worker.log.connect(self._log)
+        worker.progress.connect(self._show_task_progress)
 
         def _finished(ok: bool, msg: str):
+            self._hide_task_progress()
             self._set_busy(False)
             if msg:
                 self._log(("✅ " if ok else "❌ ") + msg)
@@ -1241,7 +1302,7 @@ class WolfWorkflowTab(QWidget):
         work_dir = self._work_dir()
         files_dir = Path("files")
 
-        def task(log):
+        def task(log, progress=None):
             from util.dazedformat import format_json_files
 
             total = 0
@@ -1289,7 +1350,7 @@ class WolfWorkflowTab(QWidget):
             self._log("⚠  No game folder set. Complete Step 0 first.")
             return
 
-        def task(log):
+        def task(log, progress=None):
             from util.dazedformat import format_json_files
 
             work_dir = self._work_dir()
@@ -1347,35 +1408,62 @@ class WolfWorkflowTab(QWidget):
             return
         out_dir = root / "Data"
 
-        def task(log):
+        def task(log, progress=None):
             from util import wolfdawn
             log(f"Unpacking {len(archives)} archive(s) into {out_dir} …")
-            res = wolfdawn.unpack_all([str(a) for a in archives], str(out_dir), log_fn=log)
+            res = wolfdawn.unpack_all(
+                [str(a) for a in archives],
+                str(out_dir),
+                log_fn=log,
+                progress_fn=progress,
+                progress_total=len(archives),
+            )
             if not res.ok:
                 return False, f"unpack-all exited {res.returncode}"
             return True, "Unpacked archives into Data/."
 
         self._run_task(task, on_done=on_done)
 
-    def _ensure_text_archives_unpacked(self, data_dir: Path, log) -> bool:
+    def _ensure_text_archives_unpacked(self, data_dir: Path, log, progress=None) -> bool:
         """Unpack BasicData/MapData archives when their binaries are not loose yet."""
         from util import wolfdawn
 
         archives = find_wolf_text_archives(self._game_root, data_dir)
-        ok = True
+        pending: list[Path] = []
         basic = data_dir / "BasicData"
         if "BasicData" in archives and not (basic / "CommonEvent.dat").is_file():
-            log(f"Unpacking {archives['BasicData'].name} …")
-            res = wolfdawn.unpack_all([str(archives["BasicData"])], str(data_dir), log_fn=log)
-            if not res.ok:
-                log(f"  ⚠ unpack failed (exit {res.returncode})")
-                ok = False
+            pending.append(archives["BasicData"])
         if "MapData" in archives and not wolf_has_maps(data_dir):
-            log(f"Unpacking {archives['MapData'].name} …")
-            res = wolfdawn.unpack_all([str(archives["MapData"])], str(data_dir), log_fn=log)
+            pending.append(archives["MapData"])
+        if not pending:
+            return True
+
+        ok = True
+        total = len(pending)
+        for idx, arc in enumerate(pending):
+            if progress:
+                progress(idx, total, f"Unpacking {arc.name} ({idx + 1}/{total}) …")
+            log(f"Unpacking {arc.name} …")
+
+            def scoped_progress(current, _total, label, base=idx, archive=arc):
+                if not progress:
+                    return
+                step = min(current, 1)
+                detail = label or archive.name
+                progress(base + step, total, detail)
+
+            res = wolfdawn.unpack_all(
+                [str(arc)],
+                str(data_dir),
+                log_fn=log,
+                progress_fn=scoped_progress if progress else None,
+                progress_total=1,
+            )
             if not res.ok:
                 log(f"  ⚠ unpack failed (exit {res.returncode})")
                 ok = False
+            elif progress:
+                progress(idx + 1, total, f"Unpacked {arc.name}")
         return ok
 
     def _extract_to_work_dir(
@@ -1399,10 +1487,10 @@ class WolfWorkflowTab(QWidget):
         work_dir = self._work_dir()
         game_root = self._game_root
 
-        def task(log):
+        def task(log, progress=None):
             from util import wolfdawn
 
-            if not self._ensure_text_archives_unpacked(Path(data_dir), log):
+            if not self._ensure_text_archives_unpacked(Path(data_dir), log, progress):
                 return False, "Could not unpack text archives (see log)."
 
             layout = detect_wolf_layout(self._game_root)
@@ -2104,7 +2192,7 @@ class WolfWorkflowTab(QWidget):
             return
         manifest = self._read_manifest()
 
-        def task(log):
+        def task(log, progress=None):
             from util import wolfdawn
 
             json_files = []
@@ -2155,12 +2243,12 @@ class WolfWorkflowTab(QWidget):
             except Exception as e:
                 log(f"  ⚠ could not update {json_name} in {WORK_DIR_NAME}/: {e}")
 
-        def task(log):
+        def task(log, progress=None):
             from util import wolfdawn
 
             # Guarantee a pristine snapshot to inject from (rebuild from archives if
             # an older extraction predates snapshotting).
-            self._ensure_originals(manifest, log)
+            self._ensure_originals(manifest, log, progress)
 
             entries = manifest["entries"]
             data_dir = manifest["data_dir"]
@@ -2343,7 +2431,7 @@ class WolfWorkflowTab(QWidget):
             QMessageBox.information(self, "Package", "No .wolf archives to back up — already loose.")
             return
 
-        def task(log):
+        def task(log, progress=None):
             renamed = 0
             for arc in archives:
                 bak = arc.with_suffix(arc.suffix + ".bak")
@@ -2373,7 +2461,7 @@ class WolfWorkflowTab(QWidget):
                 like = cand
                 break
 
-        def task(log):
+        def task(log, progress=None):
             from util import wolfdawn
 
             log(f"Repacking {data_dir} → {output} …")
@@ -2423,7 +2511,7 @@ class WolfWorkflowTab(QWidget):
         basic = info.get("basic_data")
         game_dat = Path(basic) / "Game.dat" if basic else None
 
-        def task(log):
+        def task(log, progress=None):
             from util import wolfdawn
 
             if not game_dat or not game_dat.is_file():
