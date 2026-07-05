@@ -124,6 +124,26 @@ def wolf_binary_path() -> Path:
     return bundled_binary_path()
 
 
+def _latest_release_asset(platform: str) -> Optional[tuple[str, str]]:
+    """Return ``(tag_name, download_url)`` for the newest release with a platform zip."""
+    match = _RELEASE_ASSET_MATCH.get(platform)
+    if not match:
+        return None
+    req = urllib.request.Request(_RELEASES_API, headers={"User-Agent": _DOWNLOAD_UA})
+    with urllib.request.urlopen(req, timeout=30) as resp:
+        releases = json.loads(resp.read().decode("utf-8"))
+    link_re = re.compile(r"\[([^\]]+)\]\((/uploads/[0-9a-f]+/[^)]+)\)")
+    for release in releases:
+        tag = release.get("tag_name") or ""
+        description = release.get("description") or ""
+        for filename, upload_path in link_re.findall(description):
+            name = filename.lower()
+            if match in name and name.endswith(".zip"):
+                url = f"{_GITGUD_HOST}/-/project/{_WOLFDAWN_PROJECT_ID}{upload_path}"
+                return tag, url
+    return None
+
+
 def _find_release_upload_url(platform: str) -> Optional[str]:
     """Look up the newest release and return the download URL of ``platform``'s zip.
 
@@ -133,20 +153,8 @@ def _find_release_upload_url(platform: str) -> Optional[str]:
     numeric-project uploads URL (which bypasses the Cloudflare challenge) or
     ``None`` when the platform isn't published.
     """
-    match = _RELEASE_ASSET_MATCH.get(platform)
-    if not match:
-        return None
-    req = urllib.request.Request(_RELEASES_API, headers={"User-Agent": _DOWNLOAD_UA})
-    with urllib.request.urlopen(req, timeout=30) as resp:
-        releases = json.loads(resp.read().decode("utf-8"))
-    link_re = re.compile(r"\[([^\]]+)\]\((/uploads/[0-9a-f]+/[^)]+)\)")
-    for release in releases:
-        description = release.get("description") or ""
-        for filename, upload_path in link_re.findall(description):
-            name = filename.lower()
-            if match in name and name.endswith(".zip"):
-                return f"{_GITGUD_HOST}/-/project/{_WOLFDAWN_PROJECT_ID}{upload_path}"
-    return None
+    asset = _latest_release_asset(platform)
+    return asset[1] if asset else None
 
 
 def _extract_wolf_from_zip(zip_bytes: bytes, dest: Path, log_fn=None) -> Path:

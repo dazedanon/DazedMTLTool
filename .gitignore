@@ -29,6 +29,7 @@ __pycache__
 util/forge/.forge_version.json
 util/ace/*.exe
 util/ace/.tools_version.json
+util/wolfdawn/.wolf_version.json
 !util/ace/offline/*.exe
 
 # WolfDawn: keep the committed prebuilt binaries (offline) under version control.
