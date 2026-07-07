@@ -265,6 +265,18 @@ def download_wolf_binary(platform: Optional[str] = None, log_fn=print) -> Path:
     return _extract_wolf_from_zip(zip_bytes, dest, log_fn)
 
 
+def _ensure_executable(path: Path) -> None:
+    """Ensure a bundled binary is executable (git checkout may drop +x)."""
+    if _platform_dir() == "windows":
+        return
+    try:
+        if path.stat().st_mode & 0o111:
+            return
+        path.chmod(0o755)
+    except OSError:  # pragma: no cover - non-POSIX filesystems
+        pass
+
+
 def ensure_wolf_binary(log_fn=print) -> Path:
     """Return the bundled ``wolf`` binary path (no upstream fetch at runtime).
 
@@ -274,6 +286,7 @@ def ensure_wolf_binary(log_fn=print) -> Path:
     """
     bundled = bundled_binary_path()
     if bundled.is_file():
+        _ensure_executable(bundled)
         return bundled
     raise WolfDawnError(
         f"No bundled WolfDawn binary for '{_platform_dir()}' at {bundled}. "

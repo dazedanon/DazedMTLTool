@@ -202,6 +202,16 @@ class WolfBundledOnlyTests(unittest.TestCase):
             with patch("util.wolfdawn.bundled_binary_path", return_value=wolf):
                 self.assertEqual(ensure_wolf_binary(), wolf)
 
+    def test_ensure_wolf_binary_makes_bundled_copy_executable(self):
+        with tempfile.TemporaryDirectory() as raw:
+            wolf = Path(raw) / "wolf"
+            wolf.write_bytes(b"\x7fELF")
+            wolf.chmod(0o644)
+            with patch("util.wolfdawn.bundled_binary_path", return_value=wolf):
+                with patch("util.wolfdawn._platform_dir", return_value="linux"):
+                    ensure_wolf_binary()
+            self.assertTrue(wolf.stat().st_mode & 0o111)
+
     def test_ensure_wolf_binary_raises_when_missing(self):
         missing = Path("/nonexistent/wolf/missing")
         with patch("util.wolfdawn.bundled_binary_path", return_value=missing):
