@@ -87,6 +87,33 @@ class TestNoteHeader(unittest.TestCase):
         self.assertEqual(wn.note_header("■MOBセリフ"), "■MOBセリフ")
 
 
+class TestCollectNameNotes(unittest.TestCase):
+    DOC = {
+        "kind": "names",
+        "names": [
+            {"source": "a", "note": "武器"},
+            {"source": "b", "note": "技能"},
+            {"source": "c", "note": "武器"},
+            {"source": "d"},
+        ],
+    }
+
+    def test_collects_unique_sorted_notes(self):
+        self.assertEqual(wn.collect_name_notes(self.DOC), ["技能", "武器"])
+
+    def test_parse_json_notes(self):
+        self.assertEqual(
+            wn.parse_name_wrap_notes('["武器","├■プロフィール"]'),
+            frozenset({"武器", "├■プロフィール"}),
+        )
+
+    def test_parse_comma_separated_notes(self):
+        self.assertEqual(
+            wn.parse_name_wrap_notes("武器,技能"),
+            frozenset({"武器", "技能"}),
+        )
+
+
 class TestDeriveDbLabels(unittest.TestCase):
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory()

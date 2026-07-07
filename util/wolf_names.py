@@ -189,3 +189,40 @@ def note_header(note: str, db_labels: dict[str, str] | None = None) -> str:
     if english and english != note:
         return f"{english}{_LABEL_SEP}{note}"
     return note
+
+
+def collect_name_notes(data: dict[str, Any]) -> list[str]:
+    """Return sorted unique ``note`` values from a names.json document."""
+    notes: set[str] = set()
+    for entry in parse_names_entries(data):
+        note = str(entry.get("note", "")).strip()
+        if note:
+            notes.add(note)
+    return sorted(notes)
+
+
+def parse_name_wrap_notes(raw: str) -> frozenset[str]:
+    """Parse ``wolfNameWrapNotes`` from ``.env`` (JSON array or comma-separated)."""
+    text = (raw or "").strip()
+    if not text:
+        return frozenset()
+    try:
+        parsed = json.loads(text)
+        if isinstance(parsed, list):
+            return frozenset(str(item).strip() for item in parsed if str(item).strip())
+    except json.JSONDecodeError:
+        pass
+    return frozenset(part.strip() for part in text.split(",") if part.strip())
+
+
+def load_name_wrap_config() -> tuple[bool, int, frozenset[str]]:
+    """Return ``(enabled, width, notes)`` from workflow ``.env`` settings."""
+    import os
+
+    enabled = os.getenv("wolfNameWrap", "false").strip().lower() == "true"
+    try:
+        width = int(os.getenv("wolfNameWrapWidth") or 0)
+    except ValueError:
+        width = 0
+    notes = parse_name_wrap_notes(os.getenv("wolfNameWrapNotes", ""))
+    return enabled, width, notes

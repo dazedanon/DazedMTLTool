@@ -2006,6 +2006,8 @@ class WolfWorkflowTab(QWidget):
         refresh_btn.clicked.connect(self._refresh_names_summary)
         layout.addWidget(refresh_btn)
 
+        self._add_name_wrap_options(layout)
+
         layout.addWidget(_make_hr())
         layout.addWidget(self._subheading("Translate names (Phase 0)"))
         layout.addWidget(self._desc(
@@ -2044,6 +2046,154 @@ class WolfWorkflowTab(QWidget):
         summary = wolf_names.format_name_safety_summary(data)
         where = src.parent.name if src else WORK_DIR_NAME
         self.names_summary_label.setText(f"{summary}\nSource: {where}/{NAMES_JSON}")
+        self._refresh_name_wrap_categories()
+
+    def _add_name_wrap_options(self, layout: QVBoxLayout):
+        """Per-category dazedwrap for names.json (Step 3)."""
+        layout.addWidget(_make_hr())
+        layout.addWidget(self._subheading("Category word wrap (dazedwrap)"))
+        layout.addWidget(self._desc(
+            "Re-wrap translated name values in selected categories (profile blurbs, "
+            "descriptions, and other multi-line fields) to a character width so English "
+            "fits in-game UI. Short row labels are usually left alone. Applies on the "
+            "next Phase 0 run."
+        ))
+
+        wrap_env = self._read_env_values(["wolfNameWrap", "wolfNameWrapWidth", "wolfNameWrapNotes"])
+        self._name_wrap_enable_cb = QCheckBox("Apply dazedwrap to selected categories")
+        enabled = str(wrap_env.get("wolfNameWrap", "false")).strip().lower() == "true"
+        self._name_wrap_enable_cb.setChecked(enabled)
+        self._name_wrap_enable_cb.stateChanged.connect(self._apply_name_wrap_config)
+        layout.addWidget(self._name_wrap_enable_cb)
+
+        width_row = QHBoxLayout()
+        width_lbl = QLabel("Wrap width (characters):")
+        width_lbl.setStyleSheet("color:#cccccc;font-size:12px;background:transparent;")
+        self._name_wrap_width_spin = QSpinBox()
+        self._name_wrap_width_spin.setRange(20, 300)
+        try:
+            self._name_wrap_width_spin.setValue(int(wrap_env.get("wolfNameWrapWidth") or 60))
+        except ValueError:
+            self._name_wrap_width_spin.setValue(60)
+        self._name_wrap_width_spin.setFixedWidth(70)
+        self._name_wrap_width_spin.valueChanged.connect(self._apply_name_wrap_config)
+        width_row.addWidget(width_lbl)
+        width_row.addWidget(self._name_wrap_width_spin)
+        width_row.addStretch()
+        layout.addLayout(width_row)
+
+        self._name_wrap_notes_list = QListWidget()
+        self._name_wrap_notes_list.setMaximumHeight(180)
+        self._name_wrap_notes_list.setStyleSheet(
+            "QListWidget{background-color:#252526;border:1px solid #3a3a3a;border-radius:4px;"
+            "color:#cccccc;font-size:12px;padding:2px;}"
+            "QListWidget::item{padding:3px 4px;}"
+            "QListWidget::item:selected{background:#264f78;color:#ffffff;}"
+        )
+        self._name_wrap_notes_list.itemChanged.connect(self._apply_name_wrap_config)
+        layout.addWidget(self._name_wrap_notes_list)
+
+        list_row = QHBoxLayout()
+        refresh_cats_btn = _make_btn("↻ Refresh categories", "#3a3a3a")
+        refresh_cats_btn.clicked.connect(self._refresh_name_wrap_categories)
+        sel_all_btn = _make_btn("Select all", "#3a3a3a")
+        sel_all_btn.clicked.connect(lambda: self._set_name_wrap_checks(True))
+        sel_none_btn = _make_btn("Select none", "#3a3a3a")
+        sel_none_btn.clicked.connect(lambda: self._set_name_wrap_checks(False))
+        list_row.addWidget(refresh_cats_btn)
+        list_row.addWidget(sel_all_btn)
+        list_row.addWidget(sel_none_btn)
+        list_row.addStretch()
+        layout.addLayout(list_row)
+
+        self._saved_name_wrap_notes = wolf_names.parse_name_wrap_notes(
+            wrap_env.get("wolfNameWrapNotes", "")
+        )
+
+    def _set_name_wrap_checks(self, checked: bool):
+        if not hasattr(self, "_name_wrap_notes_list"):
+            return
+        state = Qt.Checked if checked else Qt.Unchecked
+        self._name_wrap_notes_list.blockSignals(True)
+        for i in range(self._name_wrap_notes_list.count()):
+            item = self._name_wrap_notes_list.item(i)
+            if item.flags() & Qt.ItemIsUserCheckable:
+                item.setCheckState(state)
+        self._name_wrap_notes_list.blockSignals(False)
+        self._apply_name_wrap_config()
+
+    def _refresh_name_wrap_categories(self):
+        if not hasattr(self, "_name_wrap_notes_list"):
+            return
+        saved = getattr(self, "_saved_name_wrap_notes", frozenset())
+        wrap_env = self._read_env_values(["wolfNameWrapNotes"])
+        if wrap_env.get("wolfNameWrapNotes"):
+            saved = wolf_names.parse_name_wrap_notes(wrap_env["wolfNameWrapNotes"])
+        self._saved_name_wrap_notes = saved
+
+        self._name_wrap_notes_list.blockSignals(True)
+        self._name_wrap_notes_list.clear()
+        data, _src = self._load_names_document()
+        if not isinstance(data, dict):
+            item = QListWidgetItem("Run Step 0 (Extract text) first to list categories.")
+            item.setFlags(Qt.ItemIsEnabled)
+            self._name_wrap_notes_list.addItem(item)
+            self._name_wrap_notes_list.blockSignals(False)
+            return
+
+        notes = wolf_names.collect_name_notes(data)
+        if not notes:
+            item = QListWidgetItem("No categories found in names.json.")
+            item.setFlags(Qt.ItemIsEnabled)
+            self._name_wrap_notes_list.addItem(item)
+            self._name_wrap_notes_list.blockSignals(False)
+            return
+
+        db_labels = wolf_names.derive_db_labels("files")
+        for note in notes:
+            label = wolf_names.note_header(note, db_labels)
+            item = QListWidgetItem(label)
+            item.setData(Qt.UserRole, note)
+            item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
+            item.setCheckState(Qt.Checked if note in saved else Qt.Unchecked)
+            self._name_wrap_notes_list.addItem(item)
+        self._name_wrap_notes_list.blockSignals(False)
+
+    def _selected_name_wrap_notes(self) -> list[str]:
+        if not hasattr(self, "_name_wrap_notes_list"):
+            return []
+        notes: list[str] = []
+        for i in range(self._name_wrap_notes_list.count()):
+            item = self._name_wrap_notes_list.item(i)
+            if not (item.flags() & Qt.ItemIsUserCheckable):
+                continue
+            if item.checkState() == Qt.Checked:
+                note = item.data(Qt.UserRole)
+                if note:
+                    notes.append(str(note))
+        return notes
+
+    def _apply_name_wrap_config(self, *args):
+        """Persist names.json category wrap settings to .env."""
+        if not hasattr(self, "_name_wrap_enable_cb"):
+            return
+        notes = self._selected_name_wrap_notes()
+        enabled = self._name_wrap_enable_cb.isChecked() and bool(notes)
+        updates = {
+            "wolfNameWrap": "true" if enabled else "false",
+            "wolfNameWrapWidth": str(self._name_wrap_width_spin.value()),
+            "wolfNameWrapNotes": json.dumps(notes, ensure_ascii=False),
+        }
+        self._saved_name_wrap_notes = frozenset(notes)
+        if self._write_env_values(updates):
+            if enabled:
+                self._log(
+                    "Name category wrap updated: "
+                    f"width={updates['wolfNameWrapWidth']}, "
+                    f"categories={len(notes)}"
+                )
+            else:
+                self._log("Name category wrap disabled.")
 
     def _names_json_path(self) -> Path | None:
         """Locate names.json for reading its note categories (files/ then wolf_json/)."""
@@ -2149,6 +2299,7 @@ class WolfWorkflowTab(QWidget):
         # Index 3 == Names: refresh the per-name safety summary.
         if idx == 3:
             self._refresh_names_summary()
+            self._refresh_name_wrap_categories()
         # Index 5 == Inject: keep the quick-inject picker in sync with translated/.
         elif idx == 5:
             self._refresh_inject_list()

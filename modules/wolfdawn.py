@@ -32,6 +32,11 @@ Wrapping is applied to the dialogue *body* only - a speaker's nameplate line (th
 Configurable from the workflow (``.env``: ``wolfWrap`` / ``wolfWidth``); a width of
 0 (or ``wolfWrap=false``) writes the model output back verbatim.
 
+names.json category wrap (Step 3): selected ``note`` categories can be re-wrapped
+with dazedwrap at a dedicated width (``.env``: ``wolfNameWrap``,
+``wolfNameWrapWidth``, ``wolfNameWrapNotes``). Other name categories keep the
+model output verbatim.
+
 Speakers: WolfDawn tags each line with ``speaker`` / ``speaker_src``. For the
 first-line formats (``literal_line1`` / ``literal_line1_lowconf``) the speaker
 name is baked into line 1 of ``source``. Those lines are reshaped into the shared
@@ -100,6 +105,15 @@ try:
 except ValueError:
     WRAPWIDTH = 0
 
+# names.json: optional per-category dazedwrap (Step 3 workflow UI).
+NAME_WRAP_ENABLED, NAME_WRAP_WIDTH, NAME_WRAP_NOTES = wolf_names.load_name_wrap_config()
+
+
+def reload_name_wrap_config() -> None:
+    """Re-read names.json category wrap settings from ``.env``."""
+    global NAME_WRAP_ENABLED, NAME_WRAP_WIDTH, NAME_WRAP_NOTES
+    NAME_WRAP_ENABLED, NAME_WRAP_WIDTH, NAME_WRAP_NOTES = wolf_names.load_name_wrap_config()
+
 # Pricing / batching from the configured model
 PRICING_CONFIG = getPricingConfig(MODEL)
 INPUTAPICOST = PRICING_CONFIG["inputAPICost"]
@@ -133,6 +147,7 @@ def handleWolfDawn(filename, estimate):
     # Re-read workflow-configured settings so edits made this session take effect
     # even when translation runs in-process (the module import is cached).
     SPEAKER_CONFIG = wolf_speakers.load_config()
+    reload_name_wrap_config()
     # Reload the glossary so a later phase (DB text / dialogue) picks up names
     # that an earlier Phase 0 (names) harvested into vocab.txt.
     VOCAB = VOCAB_PATH.read_text(encoding="utf-8")
@@ -213,6 +228,18 @@ def _wrap_body(body):
     return dazedwrap.wrapText(body, WRAPWIDTH)
 
 
+def _wrap_names_entry(text, entry):
+    """Apply dazedwrap to a names.json entry when its ``note`` is selected in Step 3."""
+    if not NAME_WRAP_ENABLED or NAME_WRAP_WIDTH <= 0:
+        return text
+    if not isinstance(text, str) or not text:
+        return text
+    note = str(entry.get("note", ""))
+    if note not in NAME_WRAP_NOTES:
+        return text
+    return dazedwrap.wrapText(text, NAME_WRAP_WIDTH)
+
+
 def _wrap_plain(text, is_firstline):
     """Wrap a non-reshaped entry, protecting a nameplate first line if present.
 
@@ -289,7 +316,9 @@ def parseDocument(data, filename):
             for (entry, prefix, has_speaker, is_firstline), text in zip(plans, translated):
                 if not isinstance(text, str):
                     continue
-                if has_speaker:
+                if is_names:
+                    entry["text"] = _wrap_names_entry(text, entry)
+                elif has_speaker:
                     speaker_en, body_en = wolf_speakers.parse_prefixed(text)
                     if speaker_en is not None:
                         # Wrap only the body; the name stays on its own line.

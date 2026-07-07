@@ -388,6 +388,62 @@ class TestWrapping(unittest.TestCase):
         self.assertEqual(line0.split("\n", 1)[0], "EN_市民")
 
 
+class TestNameCategoryWrap(unittest.TestCase):
+    """dazedwrap for selected names.json note categories (Step 3)."""
+
+    def setUp(self):
+        self._orig = (wd.NAME_WRAP_ENABLED, wd.NAME_WRAP_WIDTH, wd.NAME_WRAP_NOTES)
+
+    def tearDown(self):
+        wd.NAME_WRAP_ENABLED, wd.NAME_WRAP_WIDTH, wd.NAME_WRAP_NOTES = self._orig
+
+    def _set(self, enabled, width, notes):
+        wd.NAME_WRAP_ENABLED = enabled
+        wd.NAME_WRAP_WIDTH = width
+        wd.NAME_WRAP_NOTES = frozenset(notes)
+
+    def test_wrap_names_entry_only_selected_notes(self):
+        self._set(True, 10, {"├■プロフィール"})
+        long_text = "alpha beta gamma delta epsilon"
+        entry = {"note": "├■プロフィール"}
+        wrapped = wd._wrap_names_entry(long_text, entry)
+        self.assertGreater(wrapped.count("\n"), 0)
+        entry_other = {"note": "武器"}
+        self.assertEqual(wd._wrap_names_entry(long_text, entry_other), long_text)
+
+    def test_wrap_names_entry_disabled_is_noop(self):
+        self._set(False, 10, {"├■プロフィール"})
+        long_text = "alpha beta gamma delta epsilon"
+        entry = {"note": "├■プロフィール"}
+        self.assertEqual(wd._wrap_names_entry(long_text, entry), long_text)
+
+    def test_names_translation_wraps_selected_category(self):
+        doc = {
+            "kind": "names",
+            "names": [
+                {"source": "剣", "text": "剣", "note": "武器", "safety": "safe"},
+                {
+                    "source": "alpha beta gamma delta epsilon zeta",
+                    "text": "alpha beta gamma delta epsilon zeta",
+                    "note": "├■プロフィール",
+                    "safety": "safe",
+                },
+            ],
+        }
+        self._set(True, 8, {"├■プロフィール"})
+        orig_wrap = wd.WRAP
+        wd.WRAP = True
+        wd.WRAPWIDTH = 4
+        try:
+            (data, _t, err), _c = _WolfTranslateHarness().run(doc, "names.json")
+        finally:
+            wd.WRAP = orig_wrap
+        self.assertIsNone(err)
+        names = {n["note"]: n["text"] for n in data["names"]}
+        self.assertEqual(names["武器"], "EN_剣")
+        self.assertGreater(names["├■プロフィール"].count("\n"), 0)
+
+
 class TestOpenFiles(unittest.TestCase):
     def test_rejects_unknown_kind(self):
         with tempfile.TemporaryDirectory() as td:
