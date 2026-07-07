@@ -9,7 +9,6 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import pyqtSignal
 import re
-from gui.platform_glyph import platform_glyph
 try:
     from util.defaults import DEFAULTS as CANONICAL_DEFAULTS
 except Exception:
@@ -17,9 +16,12 @@ except Exception:
 
 def create_section_label(text):
     """Create a styled section header label."""
-    label = QLabel(platform_glyph(text))
-    label.setStyleSheet("font-size: 12px; font-weight: bold; color: #007acc; padding: 2px 0px;")
-    return label
+    from gui.qt_icons import make_section_header
+
+    return make_section_header(
+        text,
+        "font-size: 12px; font-weight: bold; color: #007acc; padding: 2px 0px;",
+    )
 
 class WolfTab(QWidget):
     config_changed = pyqtSignal()
@@ -184,7 +186,10 @@ class WolfTab(QWidget):
         button_layout = QHBoxLayout()
         button_layout.setSpacing(10)
         
-        self.reset_btn = QPushButton(platform_glyph("🔄 Reset to Defaults"))
+        from gui.qt_icons import apply_button_icon
+
+        self.reset_btn = QPushButton()
+        apply_button_icon(self.reset_btn, "🔄 Reset to Defaults", color="#cccccc")
         self.reset_btn.clicked.connect(self.reset_to_defaults_with_message)
         self.reset_btn.setMaximumWidth(180)
         self.reset_btn.setMinimumHeight(32)

@@ -13,7 +13,6 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import Qt, pyqtSignal, QTimer, QThread
 from PyQt5.QtGui import QIcon
-from gui.platform_glyph import platform_glyph
 from dotenv import load_dotenv, set_key, dotenv_values
 
 from gui.rpgmaker_tab import RPGMakerTab
@@ -96,17 +95,18 @@ class ModelFetchThread(QThread):
 
 def create_section_header(title):
     """Create a clean section header without boxes."""
-    label = QLabel(platform_glyph(title))
-    label.setStyleSheet("""
-        QLabel {
-            font-size: 13px;
-            font-weight: bold;
-            color: #007acc;
-            padding: 8px 0px 5px 0px;
-            background-color: transparent;
-        }
-    """)
-    return label
+    from gui.qt_icons import make_section_header
+
+    return make_section_header(
+        title,
+        "QLabel {"
+        "font-size: 13px;"
+        "font-weight: bold;"
+        "color: #007acc;"
+        "padding: 8px 0px 5px 0px;"
+        "background-color: transparent;"
+        "}",
+    )
 
 def create_horizontal_line():
     """Create a horizontal separator line."""
@@ -598,11 +598,15 @@ class ConfigTab(QWidget):
         button_layout = QHBoxLayout()
         button_layout.setSpacing(10)
         
-        reset_button = QPushButton(platform_glyph("🔄 Reset to Defaults"))
+        from gui import qt_icons
+
+        reset_button = QPushButton()
+        qt_icons.apply_button_icon(reset_button, "🔄 Reset to Defaults", color="#cccccc")
         reset_button.clicked.connect(self.reset_to_defaults_with_save)
         reset_button.setMinimumHeight(32)
 
-        save_button = QPushButton("💾 Save Changes")
+        save_button = QPushButton()
+        qt_icons.apply_button_icon(save_button, "💾 Save Changes", color="#cccccc")
         save_button.clicked.connect(lambda: self.save_to_env(show_message=True))
         save_button.setMinimumHeight(32)
 

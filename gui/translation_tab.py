@@ -28,10 +28,10 @@ from PyQt5.QtWidgets import (
     QSplitter, QFileDialog, QComboBox, QCheckBox, QProgressBar, QFrame, QFormLayout, QStackedWidget
 )
 from PyQt5.QtWidgets import QSizePolicy
-from PyQt5.QtCore import Qt, QTimer, pyqtSignal, QThread, QMutex, QProcess, QEvent, QRect, QSettings
+from PyQt5.QtCore import Qt, QTimer, pyqtSignal, QThread, QMutex, QProcess, QEvent, QRect, QSettings, QSize
 from PyQt5.QtGui import QFont
 from gui.log_viewer import LogViewer
-from gui.platform_glyph import platform_glyph
+from gui import qt_icons
 
 
 def _strip_ansi(text):
@@ -42,17 +42,16 @@ def _strip_ansi(text):
 
 def create_section_header(title):
     """Create a clean section header without boxes."""
-    label = QLabel(platform_glyph(title))
-    label.setStyleSheet("""
-        QLabel {
-            font-size: 13px;
-            font-weight: bold;
-            color: #007acc;
-            padding: 8px 0px 5px 0px;
-            background-color: transparent;
-        }
-    """)
-    return label
+    return qt_icons.make_section_header(
+        title,
+        "QLabel {"
+        "font-size: 13px;"
+        "font-weight: bold;"
+        "color: #007acc;"
+        "padding: 8px 0px 5px 0px;"
+        "background-color: transparent;"
+        "}",
+    )
 
 def create_horizontal_line():
     """Create a horizontal separator line."""
@@ -844,53 +843,31 @@ class TranslationTab(QWidget):
             }
         """
         
-        select_all_btn = QPushButton("✓")
-        select_all_btn.setToolTip("Select all files")
-        select_all_btn.clicked.connect(self.select_all_files)
-        select_all_btn.setStyleSheet(first_button_style)
-        file_buttons.addWidget(select_all_btn)
-        
-        deselect_all_btn = QPushButton("✗")
-        deselect_all_btn.setToolTip("Deselect all files")
-        deselect_all_btn.clicked.connect(self.deselect_all_files)
-        deselect_all_btn.setStyleSheet(icon_button_style)
-        file_buttons.addWidget(deselect_all_btn)
-        
-        add_files_btn = QPushButton(platform_glyph("➕"))
-        add_files_btn.setToolTip("Add files to translate")
-        add_files_btn.clicked.connect(self.add_input_files)
-        add_files_btn.setStyleSheet(icon_button_style)
-        file_buttons.addWidget(add_files_btn)
-        
-        remove_files_btn = QPushButton("🗑️")
-        remove_files_btn.setToolTip("Remove selected files")
-        remove_files_btn.clicked.connect(self.remove_selected_files)
-        remove_files_btn.setStyleSheet(icon_button_style)
-        file_buttons.addWidget(remove_files_btn)
-        
-        open_folder_btn = QPushButton(platform_glyph("📁"))
-        open_folder_btn.setToolTip("Open files folder in explorer")
-        open_folder_btn.clicked.connect(self.open_input_folder)
-        open_folder_btn.setStyleSheet(icon_button_style)
-        file_buttons.addWidget(open_folder_btn)
-        
-        refresh_btn = QPushButton(platform_glyph("🔄"))
-        refresh_btn.setToolTip("Refresh file list")
-        refresh_btn.clicked.connect(self.refresh_file_lists)
-        refresh_btn.setStyleSheet(icon_button_style)
-        file_buttons.addWidget(refresh_btn)
+        _icon_size = QSize(18, 18)
 
-        self.sidebar_export_btn = QPushButton("📤")
-        self.sidebar_export_btn.setToolTip("Export selected files → Game Folder\nCopy translated files for the checked items into your game's data directory")
-        self.sidebar_export_btn.clicked.connect(self._export_selected_files)
-        self.sidebar_export_btn.setStyleSheet(icon_button_style)
-        file_buttons.addWidget(self.sidebar_export_btn)
+        def _icon_button(glyph, tooltip, slot, style):
+            btn = QPushButton()
+            qt_icons.apply_button_icon(btn, glyph, color="#dddddd")
+            btn.setIconSize(_icon_size)
+            btn.setToolTip(tooltip)
+            btn.clicked.connect(slot)
+            btn.setStyleSheet(style)
+            file_buttons.addWidget(btn)
+            return btn
 
-        pricing_test_btn = QPushButton("💰")
-        pricing_test_btn.setToolTip("Check live pricing for the current model")
-        pricing_test_btn.clicked.connect(self._check_model_pricing)
-        pricing_test_btn.setStyleSheet(icon_button_style)
-        file_buttons.addWidget(pricing_test_btn)
+        select_all_btn = _icon_button("✓", "Select all files", self.select_all_files, first_button_style)
+        deselect_all_btn = _icon_button("✗", "Deselect all files", self.deselect_all_files, icon_button_style)
+        add_files_btn = _icon_button("➕", "Add files to translate", self.add_input_files, icon_button_style)
+        remove_files_btn = _icon_button("🗑️", "Remove selected files", self.remove_selected_files, icon_button_style)
+        open_folder_btn = _icon_button("📁", "Open files folder in explorer", self.open_input_folder, icon_button_style)
+        refresh_btn = _icon_button("🔄", "Refresh file list", self.refresh_file_lists, icon_button_style)
+        self.sidebar_export_btn = _icon_button(
+            "📤",
+            "Export selected files → Game Folder\nCopy translated files for the checked items into your game's data directory",
+            self._export_selected_files,
+            icon_button_style,
+        )
+        pricing_test_btn = _icon_button("💰", "Check live pricing for the current model", self._check_model_pricing, icon_button_style)
         
         # Add stretch to push buttons to top
         file_buttons.addStretch()
@@ -1122,22 +1099,26 @@ class TranslationTab(QWidget):
 
         # Summary button (shown after completion) - icon-only
         # Use a simple left-arrow for the back action and place it on the left
-        self.reset_view_button = QPushButton("←")
+        self.reset_view_button = QPushButton()
+        qt_icons.apply_button_icon(self.reset_view_button, "←", color="#dddddd")
         self.reset_view_button.setToolTip("Back to File Selection")
         self.reset_view_button.clicked.connect(self.reset_to_file_view)
         self.reset_view_button.setVisible(False)
         # Button to open the translations (translated) folder - icon-only
-        self.open_translations_button = QPushButton(platform_glyph("📂"))
+        self.open_translations_button = QPushButton()
+        qt_icons.apply_button_icon(self.open_translations_button, "📂", color="#dddddd")
         self.open_translations_button.setToolTip("Open the translated files folder")
         self.open_translations_button.clicked.connect(self.open_output_folder)
         self.open_translations_button.setVisible(False)
         # Sync translated/ → files/ (RPG Maker only)
-        self.sync_translated_button = QPushButton(platform_glyph("🔄"))
+        self.sync_translated_button = QPushButton()
+        qt_icons.apply_button_icon(self.sync_translated_button, "🔄", color="#dddddd")
         self.sync_translated_button.setToolTip("Sync translated/ → files/\nCopy translated files back into files/ so the next phase starts from the latest state")
         self.sync_translated_button.clicked.connect(self._sync_translated_to_files)
         self.sync_translated_button.setVisible(False)
         # Export active files → game folder (RPG Maker only)
-        self.export_active_button = QPushButton("📤")
+        self.export_active_button = QPushButton()
+        qt_icons.apply_button_icon(self.export_active_button, "📤", color="#dddddd")
         self.export_active_button.setToolTip("Export translated files → Game Folder\nCopy the files from this translation run into your game's data directory")
         self.export_active_button.clicked.connect(self._export_last_run_files)
         self.export_active_button.setVisible(False)
@@ -1169,11 +1150,10 @@ class TranslationTab(QWidget):
         self.open_translations_button.setStyleSheet(icon_btn_style)
         self.sync_translated_button.setStyleSheet(icon_btn_style)
         self.export_active_button.setStyleSheet(icon_btn_style)
-        # Ensure emoji/icons are readable
-        self.reset_view_button.setFont(QFont('Segoe UI', 12))
-        self.open_translations_button.setFont(QFont('Segoe UI', 12))
-        self.sync_translated_button.setFont(QFont('Segoe UI', 12))
-        self.export_active_button.setFont(QFont('Segoe UI', 12))
+        # Size the icons to fill the compact buttons.
+        for _b in (self.reset_view_button, self.open_translations_button,
+                   self.sync_translated_button, self.export_active_button):
+            _b.setIconSize(QSize(20, 20))
 
         # Create the stop button here so it sits in the same row as the
         # back/open buttons. Use a compact icon style to match them but
@@ -1202,12 +1182,12 @@ class TranslationTab(QWidget):
 
         # Use a clear stop-sign emoji so the glyph is rendered as a stop icon
         # and not as a colored square on some platforms.
-        self.stop_button = QPushButton(platform_glyph("🛑"))
+        self.stop_button = QPushButton()
+        qt_icons.apply_button_icon(self.stop_button, "🛑", color="#ffffff")
         self.stop_button.setToolTip("Stop Translation")
         self.stop_button.clicked.connect(self.stop_translation)
         self.stop_button.setStyleSheet(stop_button_style)
-        # Slightly larger font for the emoji to make it visually clear
-        self.stop_button.setFont(QFont('Segoe UI', 14))
+        self.stop_button.setIconSize(QSize(20, 20))
         self.stop_button.setVisible(False)
 
         # Place both buttons on the left and totals on the right

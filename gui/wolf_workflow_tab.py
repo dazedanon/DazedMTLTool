@@ -1134,10 +1134,12 @@ class WolfWorkflowTab(QWidget):
         items = list_wolf_json_files(work_dir, manifest)
         self._file_items = items
         self.file_list.clear()
+        from gui.qt_icons import file_category_icon
+
         for item in items:
             cat = item["category"]
-            icon = "📄" if cat == "core" else ("🗺" if cat == "map" else "❓")
-            lw = QListWidgetItem(f"{icon}  {item['name']}  ({item['size_kb']:.1f} KB)")
+            lw = QListWidgetItem(f"{item['name']}  ({item['size_kb']:.1f} KB)")
+            lw.setIcon(file_category_icon(cat))
             lw.setData(Qt.UserRole, item)
             lw.setFlags(lw.flags() | Qt.ItemIsEnabled | Qt.ItemIsSelectable | Qt.ItemIsUserCheckable)
             lw.setCheckState(Qt.Checked if item["default"] else Qt.Unchecked)

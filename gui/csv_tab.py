@@ -8,8 +8,6 @@ from PyQt5.QtWidgets import (
     QPushButton, QLabel, QMessageBox, QSpinBox, QFrame, QComboBox
 )
 from PyQt5.QtCore import Qt, pyqtSignal
-from gui.platform_glyph import platform_glyph
-
 try:
     from .config_integration import ConfigIntegration
 except ImportError:
@@ -18,17 +16,18 @@ except ImportError:
 
 def create_section_label(text):
     """Create a section label for grouping settings."""
-    label = QLabel(platform_glyph(text))
-    label.setStyleSheet("""
-        QLabel {
-            font-size: 12px;
-            font-weight: bold;
-            color: #007acc;
-            padding: 5px 0px 3px 0px;
-            background-color: transparent;
-        }
-    """)
-    return label
+    from gui.qt_icons import make_section_header
+
+    return make_section_header(
+        text,
+        "QLabel {"
+        "font-size: 12px;"
+        "font-weight: bold;"
+        "color: #007acc;"
+        "padding: 5px 0px 3px 0px;"
+        "background-color: transparent;"
+        "}",
+    )
 
 
 def create_horizontal_line():
@@ -248,7 +247,10 @@ class CSVTab(QWidget):
         button_layout = QHBoxLayout()
         button_layout.setSpacing(10)
         
-        self.reset_button = QPushButton(platform_glyph("🔄 Reset to Defaults"))
+        from gui.qt_icons import apply_button_icon
+
+        self.reset_button = QPushButton()
+        apply_button_icon(self.reset_button, "🔄 Reset to Defaults", color="#cccccc")
         self.reset_button.clicked.connect(self.reset_to_defaults_with_message)
         self.reset_button.setMaximumWidth(180)
         self.reset_button.setMinimumHeight(32)

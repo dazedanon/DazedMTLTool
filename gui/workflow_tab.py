@@ -28,7 +28,7 @@ from util.vocab import read_game_vocab, write_game_vocab
 
 import jsbeautifier
 
-from PyQt5.QtCore import Qt, QEvent, QSettings, QThread, QTimer, pyqtSignal
+from PyQt5.QtCore import Qt, QEvent, QSettings, QSize, QThread, QTimer, pyqtSignal
 from PyQt5.QtGui import QFont
 from PyQt5.QtWidgets import (
     QApplication,
@@ -398,7 +398,7 @@ def _make_btn(text: str, color: str = "#007acc") -> QPushButton:
     Dark utility colours (max channel < 115) use the flat sidebar style.
     Action colours use flat dark bg + coloured outline + coloured text.
     """
-    btn = QPushButton(text)
+    btn = QPushButton()
     try:
         c = color.lstrip("#")
         if len(c) == 3:
@@ -409,6 +409,7 @@ def _make_btn(text: str, color: str = "#007acc") -> QPushButton:
         r = g = b = 0
         is_flat = False
     _PAD = "padding:6px 14px;"
+    _icon_color = "#cccccc"
     if is_flat:
         btn.setStyleSheet(
             f"QPushButton{{background-color:#2d2d30;color:#cccccc;"
@@ -425,6 +426,7 @@ def _make_btn(text: str, color: str = "#007acc") -> QPushButton:
         gt = min(255, g + 80)
         bt = min(255, b + 80)
         text_color = f"#{rt:02x}{gt:02x}{bt:02x}"
+        _icon_color = text_color
         base = 0x2d
         rh = min(255, int(base + (r - base) * 0.18))
         gh = min(255, int(base + (g - base) * 0.18))
@@ -443,6 +445,11 @@ def _make_btn(text: str, color: str = "#007acc") -> QPushButton:
             f"QPushButton:pressed{{background-color:#1a1a1a;}}"
             f"QPushButton:disabled{{background-color:#2d2d30;color:#555555;border-color:#444444;}}"
         )
+    from gui import qt_icons
+
+    qt_icons.apply_button_icon(btn, text, color=_icon_color)
+    if not btn.icon().isNull():
+        btn.setIconSize(QSize(16, 16))
     return btn
 
 
@@ -470,9 +477,11 @@ def _make_text_btn(label: str, tooltip: str = "", *, min_width: int = 52) -> QPu
 
 def _make_icon_btn(icon_text: str, tooltip: str = "") -> QPushButton:
     """Compact icon-only button (e.g. folder browse)."""
-    from gui.platform_glyph import platform_glyph
+    from gui import qt_icons
 
-    btn = QPushButton(platform_glyph(icon_text))
+    btn = QPushButton()
+    qt_icons.apply_button_icon(btn, icon_text, color="#dddddd")
+    btn.setIconSize(QSize(18, 18))
     btn.setToolTip(tooltip)
     btn.setFont(QFont("Segoe UI", 12))
     btn.setFixedSize(40, 36)
@@ -1848,7 +1857,10 @@ class WorkflowTab(QWidget):
         import_row = QHBoxLayout()
         import_row.setSpacing(8)
         import_row.setAlignment(Qt.AlignVCenter)
-        import_btn = QPushButton("↓  Import Selected → files/")
+        from gui import qt_icons
+
+        import_btn = QPushButton()
+        qt_icons.apply_button_icon(import_btn, "↓  Import Selected → files/", color="#4da8f0")
         import_btn.setStyleSheet(
             "QPushButton{background-color:#2d2d30;color:#4da8f0;border:1px solid #007acc;"
             "padding:0px;border-radius:4px;font-size:12px;font-weight:bold;"
@@ -1862,7 +1874,8 @@ class WorkflowTab(QWidget):
         import_btn.clicked.connect(lambda _checked=False: self._import_files())
         self._register_import_button(import_btn)
         import_row.addWidget(import_btn)
-        clear_translated_btn = QPushButton("✕  Clear translated/")
+        clear_translated_btn = QPushButton()
+        qt_icons.apply_button_icon(clear_translated_btn, "✕  Clear translated/", color="#cc4444")
         clear_translated_btn.setStyleSheet(
             "QPushButton{background-color:#2d2d30;color:#cc4444;border:1px solid #8b0000;"
             "padding:0px;border-radius:4px;font-size:12px;font-weight:bold;"
@@ -3381,10 +3394,12 @@ class WorkflowTab(QWidget):
         self._file_items = items
         self.file_list.clear()
 
+        from gui.qt_icons import file_category_icon
+
         for item in items:
             cat = item["category"]
-            icon = "📄" if cat == "core" else ("🗺" if cat == "map" else "❓")
-            lw = QListWidgetItem(f"{icon}  {item['name']}  ({item['size_kb']:.1f} KB)")
+            lw = QListWidgetItem(f"{item['name']}  ({item['size_kb']:.1f} KB)")
+            lw.setIcon(file_category_icon(cat))
             lw.setData(Qt.UserRole, item)
             lw.setFlags(lw.flags() | Qt.ItemIsEnabled | Qt.ItemIsSelectable | Qt.ItemIsUserCheckable)
             lw.setCheckState(Qt.Checked if item["default"] else Qt.Unchecked)

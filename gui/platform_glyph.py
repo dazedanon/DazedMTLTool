@@ -158,11 +158,32 @@ def configure_nav_toolbutton(
     """Apply nav icon - engine PNG when available, else emoji/glyph fallback."""
     from util.paths import ENGINE_ICONS_DIR
 
+    icon_dim = max(28, min(btn.width(), btn.height()) - 8)
+
     engine_png = (ENGINE_ICONS_DIR / f"{engine_key}.png") if engine_key else None
     if engine_png is not None and engine_png.is_file():
-        icon_dim = max(28, min(btn.width(), btn.height()) - 8)
         icon = QIcon(str(engine_png))
         btn.setIcon(icon)
+        btn.setIconSize(QSize(icon_dim, icon_dim))
+        btn.setText("")
+        btn.setToolButtonStyle(Qt.ToolButtonIconOnly)
+        btn.setStyleSheet(_nav_toolbutton_stylesheet(
+            horizontal=horizontal, icon_only=True, update_available=update_available,
+        ))
+        return
+
+    # Preferred path: render a real vector icon via qtawesome so the glyph is
+    # identical on Windows and Linux (no tofu, no emoji font dependency).
+    from gui import qt_icons
+
+    icon_name = qt_icons.icon_for_emoji(icon_text)
+    if qt_icons.HAS_QTA and icon_name:
+        off_color = "#ff8a80" if update_available else "#cccccc"
+        on_color = "#ff5252" if update_available else "#ffffff"
+        btn.setIcon(qt_icons.two_state_icon(
+            icon_name, icon_dim, off_color=off_color, on_color=on_color,
+            disabled_color="#666666",
+        ))
         btn.setIconSize(QSize(icon_dim, icon_dim))
         btn.setText("")
         btn.setToolButtonStyle(Qt.ToolButtonIconOnly)
