@@ -94,6 +94,8 @@ from util.project_scanner import (
     wolf_has_maps,
     wolf_maps_dir,
     wolf_maps_packed,
+    wolf_repair_nested_data_dir,
+    wolf_unpack_out_dir,
 )
 from util.vocab import read_game_vocab, write_game_vocab
 
@@ -1406,20 +1408,38 @@ class WolfWorkflowTab(QWidget):
             if interactive:
                 QMessageBox.information(self, "Unpack", "No .wolf archives found to unpack.")
             return
-        out_dir = root / "Data"
+        root = Path(self._game_root)
 
         def task(log, progress=None):
+            from collections import defaultdict
+
             from util import wolfdawn
-            log(f"Unpacking {len(archives)} archive(s) into {out_dir} …")
-            res = wolfdawn.unpack_all(
-                [str(a) for a in archives],
-                str(out_dir),
-                log_fn=log,
-                progress_fn=progress,
-                progress_total=len(archives),
-            )
-            if not res.ok:
-                return False, f"unpack-all exited {res.returncode}"
+
+            groups: dict[Path, list[Path]] = defaultdict(list)
+            for arc in archives:
+                groups[wolf_unpack_out_dir(root, arc)].append(arc)
+
+            total = len(archives)
+            done = 0
+            for target, group in groups.items():
+                log(f"Unpacking {len(group)} archive(s) into {target} …")
+                res = wolfdawn.unpack_all(
+                    [str(a) for a in group],
+                    str(target),
+                    log_fn=log,
+                    progress_fn=(
+                        (lambda c, _t, label, base=done: progress(base + min(c, 1), total, label))
+                        if progress
+                        else None
+                    ),
+                    progress_total=len(group),
+                )
+                done += len(group)
+                if progress:
+                    progress(done, total, f"Unpacked {len(group)} archive(s)")
+                if not res.ok:
+                    return False, f"unpack-all exited {res.returncode}"
+            wolf_repair_nested_data_dir(root)
             return True, "Unpacked archives into Data/."
 
         self._run_task(task, on_done=on_done)

@@ -172,16 +172,66 @@ def find_wolf_archives(game_root: str | Path) -> list[Path]:
     return unique
 
 
+def _wolf_dir_has_loose_data(data_dir: Path) -> bool:
+    """True when *data_dir* looks like an unpacked WOLF Data folder."""
+    if not data_dir.is_dir():
+        return False
+    for marker in _WOLF_LOOSE_MARKERS:
+        if (data_dir / marker).is_file():
+            return True
+    if list(data_dir.glob("*.mps")) or list((data_dir / "MapData").glob("*.mps")):
+        return True
+    return False
+
+
+def wolf_unpack_out_dir(game_root: str | Path, archive: str | Path) -> Path:
+    """Return the ``-o`` directory for ``wolf unpack-all`` on *archive*.
+
+    ``wolf`` unpacks ``Name.wolf`` to ``<out>/Name/``. A root-level ``Data.wolf``
+    must therefore unpack to the game root (yielding ``Data/``), not into an
+    existing ``Data/`` folder (which would incorrectly create ``Data/Data/``).
+    """
+    game_root = Path(game_root).resolve()
+    archive = Path(archive).resolve()
+    if archive.stem == "Data" and archive.parent == game_root:
+        return game_root
+    data_dir = game_root / "Data"
+    if data_dir.is_dir() and archive.parent == data_dir:
+        return data_dir
+    return archive.parent
+
+
+def wolf_repair_nested_data_dir(game_root: str | Path) -> bool:
+    """Hoist ``Data/Data/`` to ``Data/`` after a mistaken ``Data.wolf`` unpack.
+
+    Returns True when the nested layout was repaired.
+    """
+    outer = Path(game_root) / "Data"
+    inner = outer / "Data"
+    if not inner.is_dir() or not _wolf_dir_has_loose_data(inner):
+        return False
+    if any(p.name != "Data" for p in outer.iterdir()):
+        return False
+    for child in list(inner.iterdir()):
+        dest = outer / child.name
+        if dest.exists():
+            if dest.is_dir():
+                shutil.rmtree(dest)
+            else:
+                dest.unlink()
+        shutil.move(str(child), str(dest))
+    try:
+        inner.rmdir()
+    except OSError:
+        return False
+    return True
+
+
 def _wolf_loose_data_dir(root: Path) -> Optional[Path]:
     """Return the loose (unpacked) WOLF Data/ folder if it looks unpacked."""
+    wolf_repair_nested_data_dir(root)
     for data_dir in (root / "Data", root):
-        if not data_dir.is_dir():
-            continue
-        for marker in _WOLF_LOOSE_MARKERS:
-            if (data_dir / marker).is_file():
-                return data_dir
-        # A folder with .mps maps (directly or under MapData/) is unpacked WOLF.
-        if list(data_dir.glob("*.mps")) or list((data_dir / "MapData").glob("*.mps")):
+        if _wolf_dir_has_loose_data(data_dir):
             return data_dir
     return None
 
