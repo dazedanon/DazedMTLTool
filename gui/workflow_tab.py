@@ -446,8 +446,30 @@ def _make_btn(text: str, color: str = "#007acc") -> QPushButton:
     return btn
 
 
+_ACTION_BTN_STYLE = (
+    "QPushButton{background-color:#2d2d30;color:white;"
+    "font-weight:bold;font-size:12px;border:1px solid #555555;"
+    "border-radius:4px;padding:4px 10px;"
+    "min-height:36px;max-height:36px;}"
+    "QPushButton:hover{background-color:#3e3e42;border-color:#007acc;}"
+    "QPushButton:pressed{background-color:#007acc;}"
+    "QPushButton:disabled{background-color:#2d2d30;color:#555555;border-color:#444444;}"
+)
+
+
+def _make_text_btn(label: str, tooltip: str = "", *, min_width: int = 52) -> QPushButton:
+    """Compact labeled button for file-list actions (All / None / Core / Import)."""
+    btn = QPushButton(label)
+    btn.setToolTip(tooltip)
+    btn.setFont(QFont("Segoe UI", 10))
+    btn.setMinimumWidth(min_width)
+    btn.setFixedHeight(36)
+    btn.setStyleSheet(_ACTION_BTN_STYLE)
+    return btn
+
+
 def _make_icon_btn(icon_text: str, tooltip: str = "") -> QPushButton:
-    """Compact icon-only button matching the Translation tab action buttons."""
+    """Compact icon-only button (e.g. folder browse)."""
     from gui.platform_glyph import platform_glyph
 
     btn = QPushButton(platform_glyph(icon_text))
@@ -859,20 +881,20 @@ class WorkflowTab(QWidget):
         # Action row
         row1 = QHBoxLayout()
         row1.setSpacing(6)
-        select_all_btn = _make_icon_btn("✓", "Select all importable files")
+        select_all_btn = _make_text_btn("All", "Select all importable files", min_width=44)
         select_all_btn.clicked.connect(self._select_all_files)
         row1.addWidget(select_all_btn)
 
-        deselect_all_btn = _make_icon_btn("✗", "Deselect all files")
+        deselect_all_btn = _make_text_btn("None", "Deselect all files", min_width=52)
         deselect_all_btn.clicked.connect(self._deselect_all_files)
         row1.addWidget(deselect_all_btn)
 
-        sel_core = _make_icon_btn("◆", "Core Only: select database files and deselect maps")
+        sel_core = _make_text_btn("Core", "Core only: select database files and deselect maps", min_width=52)
         sel_core.setToolTip("Select only core database files; deselect map files")
         sel_core.clicked.connect(self._select_core_only)
         row1.addWidget(sel_core)
 
-        import_btn = _make_icon_btn("📥", "Import selected files into files/")
+        import_btn = _make_text_btn("Import", "Import selected files into files/", min_width=64)
         import_btn.setEnabled(False)
         import_btn.setToolTip("Replace files/ with exactly the checked files above")
         import_btn.clicked.connect(lambda _checked=False: self._import_files())

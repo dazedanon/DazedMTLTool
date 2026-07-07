@@ -83,6 +83,7 @@ from gui.workflow_tab import (
     _make_btn,
     _make_hr,
     _make_icon_btn,
+    _make_text_btn,
     _make_section_label,
 )
 from util import wolf_names
@@ -821,17 +822,17 @@ class WolfWorkflowTab(QWidget):
 
         row1 = QHBoxLayout()
         row1.setSpacing(6)
-        select_all_btn = _make_icon_btn("✓", "Select all importable files")
+        select_all_btn = _make_text_btn("All", "Select all importable files", min_width=44)
         select_all_btn.clicked.connect(self._select_all_files)
         row1.addWidget(select_all_btn)
-        deselect_all_btn = _make_icon_btn("✗", "Deselect all files")
+        deselect_all_btn = _make_text_btn("None", "Deselect all files", min_width=52)
         deselect_all_btn.clicked.connect(self._deselect_all_files)
         row1.addWidget(deselect_all_btn)
-        sel_core = _make_icon_btn("◆", "Core only: databases, common events, names")
+        sel_core = _make_text_btn("Core", "Core only: databases, common events, names", min_width=52)
         sel_core.setToolTip("Select core JSON files; deselect map scripts")
         sel_core.clicked.connect(self._select_core_only)
         row1.addWidget(sel_core)
-        import_btn = _make_icon_btn("📥", "Import selected files into files/")
+        import_btn = _make_text_btn("Import", "Import selected files into files/", min_width=64)
         import_btn.setEnabled(False)
         import_btn.setToolTip("Replace files/ with exactly the checked files above")
         import_btn.clicked.connect(lambda _checked=False: self._import_files())

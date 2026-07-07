@@ -12,6 +12,7 @@ PROMPT_PATH = DATA_DIR / "prompt.txt"
 LAST_UPDATE_SHA_PATH = DATA_DIR / "last_update_sha.txt"
 ENV_PATH = PROJECT_ROOT / ".env"
 ICON_PATH = PROJECT_ROOT / "assets" / "icon.png"
+ENGINE_ICONS_DIR = PROJECT_ROOT / "assets" / "engine_icons"
 
 _ROOT_DATA_FILES = (
     "vocab.txt",

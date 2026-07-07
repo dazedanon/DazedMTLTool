@@ -153,8 +153,24 @@ def configure_nav_toolbutton(
     *,
     horizontal: bool = False,
     update_available: bool = False,
+    engine_key: str | None = None,
 ) -> None:
-    """Apply nav icon — on Linux render BMP symbols into fixed pixmaps for alignment."""
+    """Apply nav icon - engine PNG when available, else emoji/glyph fallback."""
+    from util.paths import ENGINE_ICONS_DIR
+
+    engine_png = (ENGINE_ICONS_DIR / f"{engine_key}.png") if engine_key else None
+    if engine_png is not None and engine_png.is_file():
+        icon_dim = max(28, min(btn.width(), btn.height()) - 8)
+        icon = QIcon(str(engine_png))
+        btn.setIcon(icon)
+        btn.setIconSize(QSize(icon_dim, icon_dim))
+        btn.setText("")
+        btn.setToolButtonStyle(Qt.ToolButtonIconOnly)
+        btn.setStyleSheet(_nav_toolbutton_stylesheet(
+            horizontal=horizontal, icon_only=True, update_available=update_available,
+        ))
+        return
+
     if sys.platform.startswith("linux"):
         # Scale to the button cell (leave room for the 3px active border).
         icon_dim = max(28, min(btn.width(), btn.height()) - 8)

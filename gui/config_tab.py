@@ -189,13 +189,13 @@ class ConfigTab(QWidget):
         self.nav_buttons.append(btn_general)
         
         # RPG Maker MV/MZ button
-        btn_mvmz = self.create_nav_button("🎮", "RPG Maker MV/MZ")
+        btn_mvmz = self.create_nav_button("🎮", "RPG Maker MV/MZ", engine_key="mvmz")
         btn_mvmz.clicked.connect(lambda: self.switch_page(1))
         nav_layout.addWidget(btn_mvmz)
         self.nav_buttons.append(btn_mvmz)
         
         # Wolf RPG button
-        btn_wolf = self.create_nav_button("🐺", "Wolf RPG")
+        btn_wolf = self.create_nav_button("🐺", "Wolf RPG", engine_key="wolf")
         btn_wolf.clicked.connect(lambda: self.switch_page(2))
         nav_layout.addWidget(btn_wolf)
         self.nav_buttons.append(btn_wolf)
@@ -207,7 +207,7 @@ class ConfigTab(QWidget):
         self.nav_buttons.append(btn_csv)
 
         # SRPG Studio button
-        btn_srpg = self.create_nav_button("⚔️", "SRPG Studio")
+        btn_srpg = self.create_nav_button("⚔️", "SRPG Studio", engine_key="srpg")
         btn_srpg.clicked.connect(lambda: self.switch_page(4))
         nav_layout.addWidget(btn_srpg)
         self.nav_buttons.append(btn_srpg)
@@ -246,7 +246,7 @@ class ConfigTab(QWidget):
         # Select first page by default
         self.switch_page(0)
     
-    def create_nav_button(self, icon_text, tooltip):
+    def create_nav_button(self, icon_text, tooltip, engine_key=None):
         """Create a navigation button for the top bar."""
         from gui.platform_glyph import configure_nav_toolbutton
 
@@ -254,7 +254,9 @@ class ConfigTab(QWidget):
         btn.setToolTip(tooltip)
         btn.setFixedSize(50, 50)
         btn.setCheckable(True)
-        configure_nav_toolbutton(btn, icon_text, horizontal=True)
+        configure_nav_toolbutton(
+            btn, icon_text, horizontal=True, engine_key=engine_key,
+        )
         return btn
     
     def switch_page(self, index):
