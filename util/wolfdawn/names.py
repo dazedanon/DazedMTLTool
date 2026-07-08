@@ -191,6 +191,32 @@ def note_header(note: str, db_labels: dict[str, str] | None = None) -> str:
     return note
 
 
+def format_note_category_summary(
+    data: dict[str, Any],
+    *,
+    top_n: int = 8,
+    db_labels: dict[str, str] | None = None,
+) -> str:
+    """Multi-line breakdown of top ``note`` categories for the Names workflow step."""
+    from collections import Counter
+
+    counts: Counter[str] = Counter()
+    for entry in parse_names_entries(data):
+        note = str(entry.get("note", "")).strip()
+        if note:
+            counts[note] += 1
+    if not counts:
+        return "No note categories found."
+    lines = [f"Top categories in this game ({len(counts)} unique):"]
+    for note, count in counts.most_common(top_n):
+        header = note_header(note, db_labels)
+        lines.append(f"  {count:4d}  {header}")
+    remaining = len(counts) - min(top_n, len(counts))
+    if remaining > 0:
+        lines.append(f"  … and {remaining} more categor{'y' if remaining == 1 else 'ies'}")
+    return "\n".join(lines)
+
+
 def collect_name_notes(data: dict[str, Any]) -> list[str]:
     """Return sorted unique ``note`` values from a names.json document."""
     notes: set[str] = set()

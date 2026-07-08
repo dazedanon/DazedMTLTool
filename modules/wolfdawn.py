@@ -30,13 +30,17 @@ consistent.
 
 Text wrapping: optional advanced ``wolfWrap`` / ``wolfWidth`` (via :mod:`util.dazedwrap`)
 can still re-wrap dialogue bodies at translate time, but the normal Wolf workflow
-leaves JSON line breaks alone and runs WolfDawn ``relayout`` after inject (Step 5)
+leaves JSON line breaks alone and runs WolfDawn ``relayout`` after inject (Step 6)
 to fit the message box. Defaults to off (``wolfWrap=false``).
 
 names.json category wrap (Step 3): selected ``note`` categories can be re-wrapped
 with dazedwrap at a dedicated width (``.env``: ``wolfNameWrap``,
 ``wolfNameWrapWidth``, ``wolfNameWrapNotes``). Other name categories keep the
 model output verbatim.
+
+Database sheet filter (Step 4): optional ``wolfDbIncludeGroups`` or
+``wolfDbIncludeTiers`` in ``.env`` limit which ``kind: db`` lines are collected.
+When unset, all database lines are translated.
 
 Speakers: WolfDawn tags each line with ``speaker`` / ``speaker_src``. For the
 first-line formats (``literal_line1`` / ``literal_line1_lowconf``) the speaker
@@ -69,6 +73,7 @@ from util.translation import (
 from util import speakers as wolf_speakers
 from util import vocab as wolf_vocab
 from util.wolfdawn import codes as wolf_codes
+from util.wolfdawn import db_classify as wolf_db
 from util.wolfdawn import names as wolf_names
 
 # Globals (mirror the other engine modules; populated from .env at import time)
@@ -223,7 +228,14 @@ def collectEntries(data):
             for line in scene.get("lines") or []:
                 entries.append(line)
     elif kind == "db":
+        include_tiers, include_groups = wolf_db.load_db_filter_config()
+        json_file = wolf_db.json_file_from_doc(data)
         for group in data.get("groups") or []:
+            type_name = str(group.get("typeName") or "")
+            if not wolf_db.group_matches_filter(
+                json_file, type_name, include_tiers, include_groups
+            ):
+                continue
             for line in group.get("lines") or []:
                 entries.append(line)
     elif kind in ("gamedat", "txt"):

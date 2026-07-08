@@ -324,14 +324,25 @@ Open the **Workflow** tab and choose **Wolf RPG (WolfDawn)** from the engine sel
 
 | Step | Action |
 |------|--------|
-| **0 Project** | Select the game root folder (browse or Enter — detection also runs when you reopen the tab). If `wolf_json/` does not exist yet, the tool automatically unpacks `.wolf` archives when needed and extracts text into the game's `wolf_json/` folder (maps, common events, databases, `Game.dat`, Evtext, and `names.json`). A checklist lists every JSON file in `wolf_json/`; tick the ones you want and click **Import** (or leave Step 0 — checked files auto-import into the tool's `files/` folder, matching the RPG Maker workflow). Extraction snapshots pristine binaries into `wolf_json/originals/` for idempotent inject in Step 5. |
+| **0 Project** | Select the game root folder (browse or Enter — detection also runs when you reopen the tab). If `wolf_json/` does not exist yet, the tool automatically unpacks `.wolf` archives when needed and extracts text into the game's `wolf_json/` folder (maps, common events, databases, `Game.dat`, Evtext, and `names.json`). A checklist lists every JSON file in `wolf_json/`; tick the ones you want and click **Import** (or leave Step 0 — checked files auto-import into the tool's `files/` folder, matching the RPG Maker workflow). Extraction snapshots pristine binaries into `wolf_json/originals/` for idempotent inject in Step 6. |
 | **1 Pre-process** | Optional: **dazedformat** normalises JSON in `wolf_json/` and `files/` (`json.dump`, indent 4) for clean git diffs; **Copy gameupdate/** installs the updater scripts, patch scripts, and `.gitignore` into the game root for git-based patching. Paths auto-fill from Step 0. |
-| **2 Glossary** | Build `vocab.txt` before translating: copy the WOLF-tailored prompt into Cursor/Copilot with the extracted `files/` JSON, let it discover character names, speech registers, and lore terms, then paste the result into the in-tab editor and save. Item/skill/enemy value names (`names.json`) are curated in Step 3 and harvested into `vocab.txt` automatically during Phase 0 — do not list them here. |
-| **3 Names** | Curate `names.json` (item/skill/enemy/variable value names). **Translating all of them breaks the game** - many WOLF value names double as logic keys. WolfDawn tags each name with its WOLF database **category** (`note`), so you pick which *categories* are safe. Copy the **names-safety prompt**, paste the AI's JSON list, **Save** to `data/wolf_safe_notes.json`, pick **Translation mode** (Normal or Batch), and run **Translate safe names (Phase 0)**. |
-| **4 Translate** | Run the `Wolf RPG (WolfDawn)` module in three ordered phases: **Phase 0 · Names → vocab.txt**, **Phase 1 · Database text**, **Phase 2 · Maps / events** (with speaker handling and text-wrap settings). Only `text` fields are filled in; `source` is preserved for inject drift checks. |
-| **5 Inject** | Write translations back into the game's `Data/` binaries and refresh git-tracked `wolf_json/`. Uses pristine originals from `wolf_json/originals/`. Quick inject or inject all. |
-| **6 Package** | Run from loose `Data/` (backs up `Data.wolf` → `.bak`) or repack `Data.wolf`. |
-| **7 Saves** | *(Optional)* Update existing `.sav` files for the translated build. |
+| **2 Glossary** | Build `vocab.txt` before translating: copy the WOLF-tailored prompt into Cursor/Copilot with the extracted `files/` JSON, let it discover character names, speech registers, and lore terms, then paste the result into the in-tab editor and save. Item/skill/enemy value names (`names.json`) are translated in Step 3 and harvested into `vocab.txt` automatically during Phase 0 — do not list them here. |
+| **3 Names** | Translate `names.json` (item/skill/enemy/map value names). WolfDawn tags each name with a per-entry **safety** badge (`safe`, `refs`, or `verify`). Phase 0 translates only `safe` and `refs` entries; `verify` names stay Japanese so inject skips them. Review the category breakdown for this game, pick **Translation mode** (Normal or Batch), and run **Translate safe names (Phase 0)**. |
+| **4 Database** | Review the **discovery summary** to see where this game's text lives (standard RPG sheets vs custom dialogue tables). Database sheets are classified as foundation (items, skills, descriptions — translate first) or narrative (custom event/profile sheets — translate after foundation). Use **Translate foundation DB** then **Translate narrative DB**, or tick specific sheets and run **Translate checked sheets only**. Optional: copy the **DB structure prompt** for an AI audit and import the returned JSON into `wolf_json/db_profile.json`. |
+| **5 Maps/Events** | Translate map scripts (`.mps`), common events (`CommonEvent.dat`), `Game.dat`, and Evtext. Run after Steps 3–4 so vocab and database terms are consistent. Configure speaker handling for low-confidence nameplate guesses. Batch mode is recommended for large `CommonEvent.dat` files. |
+| **6 Inject** | Write translations back into the game's `Data/` binaries and refresh git-tracked `wolf_json/`. Uses pristine originals from `wolf_json/originals/`. Quick inject or inject all; optional relayout reflows message boxes for English text length. |
+| **7 Package** | Run from loose `Data/` (backs up `Data.wolf` → `.bak`) or repack `Data.wolf`. |
+| **8 Saves** | *(Optional)* Update existing `.sav` files for the translated build. |
+
+### Recommended order by game layout
+
+After Step 0 extract, the **Database** tab discovery report classifies your game:
+
+| Layout | What to do |
+|--------|------------|
+| **DB-heavy** (most dialogue in custom database sheets) | Names → foundation DB → narrative DB → maps/events |
+| **Classic RPG** (most dialogue in maps/common events) | Names → foundation DB → maps/events (skip narrative DB if none) |
+| **Hybrid** | Names → foundation DB → narrative DB → maps/events |
 
 > **`wolf` binary:** Prebuilt `wolf` CLIs for Windows and Linux are bundled offline under `util/wolfdawn/bin/<platform>/`, so no toolchain or build step is needed. They update when you update DazedMTLTool. If your platform's binary is missing, update the tool or ask the maintainer to refresh the bundled copy.
 

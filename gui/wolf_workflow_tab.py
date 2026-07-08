@@ -11,23 +11,21 @@ Mirrors the RPGMaker WorkflowTab, driven by the vendored WolfDawn ``wolf`` CLI
   Step 3  Names       - translate names.json (Phase 0). WolfDawn safe/refs entries
                         are translated per-name; verify names are skipped. Harvests
                         short name terms into vocab.txt.
-  Step 4  Translate   - WolfDawn module over files/ in two phases (after Step 3):
-                          Phase 1  Database  - item/skill/state descriptions and system
-                                               messages (DataBase/CDataBase.project)
-                          Phase 2  Maps / events - .mps maps, CommonEvent, Game.dat,
-                                               Evtext; speaker handling lives under this phase
-  Step 5  Inject      - inject translations + translated names back into the Data/ binaries
+  Step 4  Database    - discover content layout; translate foundation DB sheets
+                        (items, skills, descriptions) before narrative custom sheets
+  Step 5  Maps/Events - .mps maps, CommonEvent, Game.dat, Evtext; speaker handling
+  Step 6  Inject      - inject translations + translated names back into the Data/ binaries
                         and refresh the git-tracked wolf_json/ with the translated
                         JSON; quick-inject picks just a few translated files for
                         fast in-game / git iteration, or inject everything at once.
                         After a successful inject, optional WolfDawn relayout reflows
                         Message text (and optionally DB descriptions) to the message box.
-  Step 6  Package     - run from a loose Data/ folder, or repack Data.wolf
-  Step 7  Saves       - fix baked strings in existing .sav files (optional)
+  Step 7  Package     - run from a loose Data/ folder, or repack Data.wolf
+  Step 8  Saves       - fix baked strings in existing .sav files (optional)
 
 names.json is staged into files/ but is NOT translated in the bulk phases - WolfDawn
 tags each name safe / refs / verify and Phase 0 translates only safe+refs entries
-(per-name, not per-category), harvests them into vocab.txt, and Step 5 injects the
+(per-name, not per-category), harvests them into vocab.txt, and Step 6 injects the
 result.
 
 The extracted JSON is staged in ``<game_root>/wolf_json/`` (a manifest maps each
@@ -88,6 +86,7 @@ from gui.workflow_tab import (
     _make_section_label,
 )
 from util.wolfdawn import names as wolf_names
+from util.wolfdawn import db_classify as wolf_db
 from util.paths import PROJECT_ROOT
 from util.project_scanner import (
     detect_wolf_layout,
@@ -579,10 +578,11 @@ class WolfWorkflowTab(QWidget):
             ("1  Pre-process", self._build_step1_preprocess),
             ("2  Glossary", self._build_step1_glossary),
             ("3  Names", self._build_step3_names),
-            ("4  Translate", self._build_step2_translate),
-            ("5  Inject", self._build_step4_inject),
-            ("6  Package", self._build_step5_package),
-            ("7  Saves", self._build_step6_saves),
+            ("4  Database", self._build_step4_database),
+            ("5  Maps/Events", self._build_step5_maps_events),
+            ("6  Inject", self._build_step4_inject),
+            ("7  Package", self._build_step5_package),
+            ("8  Saves", self._build_step6_saves),
         ]
 
         for tab_label, builder in _tab_defs:
@@ -1685,7 +1685,7 @@ class WolfWorkflowTab(QWidget):
         layout.addWidget(self._desc(
             "vocab.txt is the project-wide glossary used by every translation batch to keep "
             "character names, speech register, honorifics, and lore terms consistent. Build it "
-            "before translating (Step 4) so the AI already knows every character and term. "
+            "before translating (Steps 4-5) so the AI already knows every character and term. "
             "Copy the prompt below into Cursor or Copilot Chat with the extracted files/ JSON "
             "open, let it analyse the game, then paste its output into the editor and save."
         ))
@@ -1752,56 +1752,341 @@ class WolfWorkflowTab(QWidget):
         except Exception as exc:
             self._log(f"❌ Could not save vocab.txt: {exc}")
 
-    # ── Step 3: Translate (phased) ─────────────────────────────────────────────
+    # ── Step 4: Database ───────────────────────────────────────────────────────
 
-    def _build_step2_translate(self, layout: QVBoxLayout):
-        layout.addWidget(_make_section_label("Step 4 · Translate (phased)"))
+    def _build_step4_database(self, layout: QVBoxLayout):
+        layout.addWidget(_make_section_label("Step 4 · Database (discover + translate)"))
         layout.addWidget(self._desc(
-            "Sends the extracted files in files/ to the Translation tab using the Wolf RPG "
-            "(WolfDawn) module. Only the 'text' fields are filled in; 'source' is preserved so "
-            "injection can verify each line. Lines whose text is already translated (no Japanese) "
-            "are skipped, so re-running a phase only sends unfinished lines. Run Step 3 (names) "
-            "first so vocab.txt is seeded, then Phase 1 (database text) and Phase 2 "
-            "(maps / events) in order."
+            "WOLF database files (DataBase, CDataBase, SysDatabase) hold item/skill "
+            "descriptions in classic RPG games, but many games store most dialogue in "
+            "custom database sheets instead of maps. Review the discovery summary below, "
+            "then translate foundation sheets (items, skills, system text) before "
+            "narrative custom sheets."
         ))
 
-        self._add_phase_buttons(layout)
-
-    def _add_phase_buttons(self, layout: QVBoxLayout):
-        """Two translation phases (names are handled in Step 3)."""
-        layout.addWidget(_make_hr())
-        layout.addWidget(self._subheading("Phase 1 · Database text"))
-        layout.addWidget(self._desc(
-            "Item / skill / state descriptions and system messages from DataBase.project and "
-            "CDataBase.project. Run after Step 3 (names) so vocab.txt stays consistent."
-        ))
-        p1 = self._register(_make_btn("▶ Phase 1 · Translate database text", "#00a86b"))
-        p1.clicked.connect(
-            lambda: self._navigate_to_translation(kinds=PHASE_DB_KINDS, auto_start=True)
+        self.db_discovery_label = QLabel(
+            "Open this step after extraction to see where this game's text lives."
         )
-        layout.addWidget(p1)
+        self.db_discovery_label.setWordWrap(True)
+        self.db_discovery_label.setStyleSheet(
+            "color:#9cdcfe;font-size:13px;padding:8px 10px;"
+            "background-color:#1a2430;border:1px solid #2a4a6a;border-radius:4px;"
+        )
+        layout.addWidget(self.db_discovery_label)
+
+        disc_row = QHBoxLayout()
+        refresh_disc_btn = _make_btn("↻ Refresh discovery", "#555")
+        refresh_disc_btn.clicked.connect(self._refresh_db_discovery)
+        audit_btn = _make_btn("📋 Copy DB structure prompt for AI audit", "#5a3a7a")
+        audit_btn.clicked.connect(self._copy_db_audit_prompt)
+        import_btn = _make_btn("Import AI profile JSON", "#3a3a3a")
+        import_btn.clicked.connect(self._import_db_profile_dialog)
+        disc_row.addWidget(refresh_disc_btn)
+        disc_row.addWidget(audit_btn)
+        disc_row.addWidget(import_btn)
+        disc_row.addStretch()
+        layout.addLayout(disc_row)
 
         layout.addWidget(_make_hr())
-        layout.addWidget(self._subheading("Phase 2 · Maps / events"))
+        layout.addWidget(self._subheading("Database sheets"))
         layout.addWidget(self._desc(
-            "Map scripts (.mps), common events (CommonEvent.dat), Game.dat, and Evtext - story "
-            "dialogue, UI/objective strings, and other event text. Run after Phase 1 so it "
-            "benefits from the names and terms already in vocab.txt. Speaker handling below "
-            "applies to the dialogue-like lines in this phase. Message box layout is handled "
-            "after inject (Step 5 Relayout), not here."
+            "Each sheet is classified as foundation (translate first), system, or "
+            "narrative (custom dialogue - defer until foundation is done). Tick the "
+            "sheets to include in the next database translation run."
+        ))
+
+        self._db_groups_list = QListWidget()
+        self._db_groups_list.setMinimumHeight(200)
+        self._db_groups_list.setStyleSheet(
+            "QListWidget{background-color:#252526;border:1px solid #3a3a3a;border-radius:4px;"
+            "color:#cccccc;font-size:12px;padding:2px;}"
+            "QListWidget::item{padding:3px 4px;}"
+            "QListWidget::item:selected{background:#264f78;color:#ffffff;}"
+        )
+        self._db_groups_list.itemChanged.connect(self._save_db_profile_from_ui)
+        layout.addWidget(self._db_groups_list)
+
+        grp_row = QHBoxLayout()
+        sel_found_btn = _make_btn("Select foundation", "#3a3a3a")
+        sel_found_btn.clicked.connect(self._select_db_foundation_groups)
+        sel_narr_btn = _make_btn("Select narrative", "#3a3a3a")
+        sel_narr_btn.clicked.connect(self._select_db_narrative_groups)
+        sel_all_db_btn = _make_btn("Select all", "#3a3a3a")
+        sel_all_db_btn.clicked.connect(lambda: self._set_db_group_checks(True))
+        sel_none_db_btn = _make_btn("Select none", "#3a3a3a")
+        sel_none_db_btn.clicked.connect(lambda: self._set_db_group_checks(False))
+        grp_row.addWidget(sel_found_btn)
+        grp_row.addWidget(sel_narr_btn)
+        grp_row.addWidget(sel_all_db_btn)
+        grp_row.addWidget(sel_none_db_btn)
+        grp_row.addStretch()
+        layout.addLayout(grp_row)
+
+        layout.addWidget(_make_hr())
+        layout.addWidget(self._subheading("Translate database"))
+        layout.addWidget(self._desc(
+            "Run after Step 3 (names) so vocab.txt stays consistent. Only checked sheets "
+            "are sent to the model. Re-running skips lines already translated."
+        ))
+        self._add_tl_mode_selector(layout)
+
+        found_btn = self._register(_make_btn("▶ Translate foundation DB", "#00a86b"))
+        found_btn.clicked.connect(
+            lambda: self._translate_db_tiers(wolf_db.FOUNDATION_TIERS, auto_start=True)
+        )
+        layout.addWidget(found_btn)
+
+        narr_btn = self._register(_make_btn("▶ Translate narrative DB", "#00a86b"))
+        narr_btn.clicked.connect(
+            lambda: self._translate_db_tiers(wolf_db.NARRATIVE_TIERS, auto_start=True)
+        )
+        layout.addWidget(narr_btn)
+
+        checked_btn = self._register(_make_btn("▶ Translate checked sheets only", "#3a3a3a"))
+        checked_btn.clicked.connect(
+            lambda: self._translate_db_checked(auto_start=True)
+        )
+        layout.addWidget(checked_btn)
+
+        self._db_content_dist: wolf_db.ContentDistribution | None = None
+        self._refresh_db_discovery()
+
+    def _wolf_json_work_dir(self) -> Path | None:
+        if not self._game_root:
+            return None
+        return self._work_dir()
+
+    def _refresh_db_discovery(self):
+        if not hasattr(self, "db_discovery_label"):
+            return
+        dist = wolf_db.analyze_content_distribution("files")
+        self._db_content_dist = dist
+        self.db_discovery_label.setText(wolf_db.format_discovery_summary(dist))
+        self._refresh_db_groups_list(dist)
+
+    def _refresh_db_groups_list(self, dist: wolf_db.ContentDistribution | None = None):
+        if not hasattr(self, "_db_groups_list"):
+            return
+        if dist is None:
+            dist = self._db_content_dist or wolf_db.analyze_content_distribution("files")
+            self._db_content_dist = dist
+
+        work_dir = self._wolf_json_work_dir()
+        profile = wolf_db.load_db_profile(work_dir) if work_dir else {}
+        checks = wolf_db.merge_profile_with_groups(profile, dist.groups)
+
+        self._db_groups_list.blockSignals(True)
+        self._db_groups_list.clear()
+        if not dist.groups:
+            item = QListWidgetItem("No database JSON in files/ - run Step 0 (Extract) first.")
+            item.setFlags(Qt.ItemIsEnabled)
+            self._db_groups_list.addItem(item)
+            self._db_groups_list.blockSignals(False)
+            return
+
+        tier_labels = {
+            wolf_db.TIER_FOUNDATION: "foundation",
+            wolf_db.TIER_SYSTEM: "system",
+            wolf_db.TIER_NARRATIVE: "narrative",
+            wolf_db.TIER_UNKNOWN: "unknown",
+        }
+        for g in sorted(dist.groups, key=lambda x: (x.tier, -x.line_count, x.type_name)):
+            tier_lbl = tier_labels.get(g.tier, g.tier)
+            label = f"[{tier_lbl}] {g.type_name} ({g.line_count} lines) — {g.json_file}"
+            item = QListWidgetItem(label)
+            item.setData(Qt.UserRole, g.key)
+            item.setData(Qt.UserRole + 1, g.tier)
+            item.setFlags(Qt.ItemIsUserCheckable | Qt.ItemIsEnabled)
+            checked = checks.get(g.key, g.default_checked)
+            item.setCheckState(Qt.Checked if checked else Qt.Unchecked)
+            self._db_groups_list.addItem(item)
+        self._db_groups_list.blockSignals(False)
+
+    def _set_db_group_checks(self, checked: bool):
+        if not hasattr(self, "_db_groups_list"):
+            return
+        state = Qt.Checked if checked else Qt.Unchecked
+        self._db_groups_list.blockSignals(True)
+        for i in range(self._db_groups_list.count()):
+            item = self._db_groups_list.item(i)
+            if item.flags() & Qt.ItemIsUserCheckable:
+                item.setCheckState(state)
+        self._db_groups_list.blockSignals(False)
+        self._save_db_profile_from_ui()
+
+    def _select_db_foundation_groups(self):
+        if not hasattr(self, "_db_groups_list"):
+            return
+        foundation = wolf_db.FOUNDATION_TIERS
+        self._db_groups_list.blockSignals(True)
+        for i in range(self._db_groups_list.count()):
+            item = self._db_groups_list.item(i)
+            if item.flags() & Qt.ItemIsUserCheckable:
+                tier = item.data(Qt.UserRole + 1)
+                item.setCheckState(Qt.Checked if tier in foundation else Qt.Unchecked)
+        self._db_groups_list.blockSignals(False)
+        self._save_db_profile_from_ui()
+
+    def _select_db_narrative_groups(self):
+        if not hasattr(self, "_db_groups_list"):
+            return
+        narrative = wolf_db.NARRATIVE_TIERS
+        self._db_groups_list.blockSignals(True)
+        for i in range(self._db_groups_list.count()):
+            item = self._db_groups_list.item(i)
+            if item.flags() & Qt.ItemIsUserCheckable:
+                tier = item.data(Qt.UserRole + 1)
+                item.setCheckState(Qt.Checked if tier in narrative else Qt.Unchecked)
+        self._db_groups_list.blockSignals(False)
+        self._save_db_profile_from_ui()
+
+    def _get_db_groups_checked(self) -> list[str]:
+        keys: list[str] = []
+        if not hasattr(self, "_db_groups_list"):
+            return keys
+        for i in range(self._db_groups_list.count()):
+            item = self._db_groups_list.item(i)
+            if (item.flags() & Qt.ItemIsUserCheckable) and item.checkState() == Qt.Checked:
+                key = item.data(Qt.UserRole)
+                if key:
+                    keys.append(str(key))
+        return keys
+
+    def _save_db_profile_from_ui(self):
+        work_dir = self._wolf_json_work_dir()
+        if work_dir is None:
+            return
+        dist = self._db_content_dist or wolf_db.analyze_content_distribution("files")
+        checked = set(self._get_db_groups_checked())
+        foundation: list[str] = []
+        narrative: list[str] = []
+        defer: list[str] = []
+        for g in dist.groups:
+            if g.key in checked:
+                if g.tier == wolf_db.TIER_NARRATIVE:
+                    narrative.append(g.key)
+                else:
+                    foundation.append(g.key)
+            else:
+                defer.append(g.key)
+        profile = wolf_db.load_db_profile(work_dir)
+        profile.update({
+            "archetype": dist.archetype,
+            "foundation_groups": foundation,
+            "narrative_groups": narrative,
+            "defer_groups": defer,
+        })
+        if not profile.get("notes"):
+            profile["notes"] = wolf_db.archetype_guidance(dist).split("\n")[0]
+        try:
+            wolf_db.save_db_profile(work_dir, profile)
+        except Exception as exc:
+            self._log(f"❌ Could not save db_profile.json: {exc}")
+
+    def _copy_db_audit_prompt(self):
+        dist = self._db_content_dist or wolf_db.analyze_content_distribution("files")
+        try:
+            QApplication.clipboard().setText(wolf_db.build_ai_audit_prompt(dist))
+            self._log(
+                "📋 Database structure prompt copied. Paste into Cursor/Copilot; "
+                "import the returned JSON with Import AI profile JSON."
+            )
+        except Exception as exc:
+            self._log(f"❌ Could not copy DB audit prompt: {exc}")
+
+    def _import_db_profile_dialog(self):
+        from PyQt5.QtWidgets import QInputDialog
+
+        text, ok = QInputDialog.getMultiLineText(
+            self,
+            "Import AI profile",
+            "Paste the JSON profile returned by the AI audit:",
+            "",
+        )
+        if not ok or not text.strip():
+            return
+        work_dir = self._wolf_json_work_dir()
+        if work_dir is None:
+            QMessageBox.warning(self, "No game folder", "Complete Step 0 first.")
+            return
+        try:
+            profile = wolf_db.import_ai_profile(text)
+            existing = wolf_db.load_db_profile(work_dir)
+            existing.update(profile)
+            wolf_db.save_db_profile(work_dir, existing)
+            self._log("✅ db_profile.json saved from AI audit.")
+            self._refresh_db_discovery()
+        except Exception as exc:
+            QMessageBox.warning(self, "Import failed", str(exc))
+
+    def _set_db_filter_env(self, *, groups: list[str] | None = None, clear: bool = False):
+        if clear:
+            self._write_env_values({
+                "wolfDbIncludeGroups": "",
+                "wolfDbIncludeTiers": "",
+            })
+            return
+        if groups is not None:
+            self._write_env_values({
+                "wolfDbIncludeGroups": json.dumps(groups, ensure_ascii=False),
+                "wolfDbIncludeTiers": "",
+            })
+
+    def _translate_db_tiers(self, tiers: frozenset[str], *, auto_start: bool):
+        dist = self._db_content_dist or wolf_db.analyze_content_distribution("files")
+        groups = wolf_db.selected_groups_for_tiers(dist.groups, tiers)
+        if not groups:
+            QMessageBox.information(
+                self, "No sheets",
+                f"No database sheets match tier(s): {', '.join(sorted(tiers))}.",
+            )
+            return
+        self._set_db_filter_env(groups=groups)
+        self._navigate_to_translation(
+            kinds=PHASE_DB_KINDS, auto_start=auto_start, db_filter_active=True
+        )
+
+    def _translate_db_checked(self, *, auto_start: bool):
+        groups = self._get_db_groups_checked()
+        if not groups:
+            QMessageBox.information(
+                self, "Nothing selected",
+                "Tick at least one database sheet, then try again.",
+            )
+            return
+        self._set_db_filter_env(groups=groups)
+        self._navigate_to_translation(
+            kinds=PHASE_DB_KINDS, auto_start=auto_start, db_filter_active=True
+        )
+
+    # ── Step 5: Maps / Events ──────────────────────────────────────────────────
+
+    def _build_step5_maps_events(self, layout: QVBoxLayout):
+        layout.addWidget(_make_section_label("Step 5 · Maps / Events"))
+        layout.addWidget(self._desc(
+            "Map scripts (.mps), common events (CommonEvent.dat), Game.dat, and Evtext - "
+            "story dialogue, UI/objective strings, and other event text. Run after Steps "
+            "3-4 so vocab.txt and database terms are already consistent. CommonEvent.dat "
+            "can be very large; Batch mode is recommended for big files."
         ))
         self._add_speaker_options(layout)
-        p2 = self._register(_make_btn("▶ Phase 2 · Translate maps / events", "#00a86b"))
+        self._add_tl_mode_selector(layout)
+        p2 = self._register(_make_btn("▶ Translate maps / events", "#00a86b"))
         p2.clicked.connect(
-            lambda: self._navigate_to_translation(kinds=PHASE_MAPS_EVENTS_KINDS, auto_start=True)
+            lambda: self._navigate_to_translation(
+                kinds=PHASE_MAPS_EVENTS_KINDS, auto_start=True, db_filter_active=False
+            )
         )
         layout.addWidget(p2)
 
         layout.addWidget(_make_hr())
         open_btn = self._register(_make_btn("Open Translation tab (no auto-start)", "#3a3a3a"))
-        open_btn.clicked.connect(lambda: self._navigate_to_translation(auto_start=False))
+        open_btn.clicked.connect(
+            lambda: self._navigate_to_translation(db_filter_active=False)
+        )
         layout.addWidget(open_btn)
 
+    # ── Legacy translate helpers (speaker options shared with maps step) ───────
     def _add_speaker_options(self, layout: QVBoxLayout):
         """Speaker handling: nameplates are automatic; the low-confidence guess is
         an AI-recommended per-game setting."""
@@ -1929,8 +2214,8 @@ class WolfWorkflowTab(QWidget):
 
     def _workflow_mode_text(self) -> str:
         """Map the selector to the Translation tab's own mode label."""
-        combo = getattr(self, "_tl_mode_combo", None)
-        if combo is not None and combo.currentText() == BATCH_MODE_LABEL:
+        saved = self._setting("tl_mode", BATCH_MODE_LABEL) or BATCH_MODE_LABEL
+        if saved == BATCH_MODE_LABEL:
             return BATCH_MODE_LABEL
         return "Translate"
 
@@ -1939,13 +2224,20 @@ class WolfWorkflowTab(QWidget):
         only: str | None = None,
         kinds: set[str] | None = None,
         auto_start: bool = False,
+        db_filter_active: bool | None = None,
     ):
         """Switch to the Translation tab, select the WolfDawn module, and check files.
 
         Selection precedence: ``only`` (a single filename) > ``kinds`` (a phase's
         manifest kinds, e.g. ``{"db"}``) > legacy bulk (everything except
         names.json).
+
+        When ``db_filter_active`` is False, database group/tier filters in ``.env``
+        are cleared so maps/events runs are unaffected. When True, the filter set
+        by :meth:`_set_db_filter_env` is kept for the DB translation run.
         """
+        if db_filter_active is False:
+            self._set_db_filter_env(clear=True)
         pw = self.parent_window
         tt = getattr(pw, "translation_tab", None) if pw else None
         if tt is None:
@@ -2034,7 +2326,9 @@ class WolfWorkflowTab(QWidget):
         self._add_tl_mode_selector(layout)
         tl_btn = self._register(_make_btn("Translate safe names now (Phase 0)", "#00a86b"))
         tl_btn.clicked.connect(
-            lambda: self._navigate_to_translation(kinds=PHASE_NAMES_KINDS, auto_start=True)
+            lambda: self._navigate_to_translation(
+                kinds=PHASE_NAMES_KINDS, auto_start=True, db_filter_active=False
+            )
         )
         layout.addWidget(tl_btn)
 
@@ -2063,8 +2357,12 @@ class WolfWorkflowTab(QWidget):
             )
             return
         summary = wolf_names.format_name_safety_summary(data)
+        db_labels = wolf_names.derive_db_labels("files")
+        categories = wolf_names.format_note_category_summary(data, db_labels=db_labels)
         where = src.parent.name if src else WORK_DIR_NAME
-        self.names_summary_label.setText(f"{summary}\nSource: {where}/{NAMES_JSON}")
+        self.names_summary_label.setText(
+            f"{summary}\n\n{categories}\n\nSource: {where}/{NAMES_JSON}"
+        )
         self._refresh_name_wrap_categories()
 
     def _add_name_wrap_options(self, layout: QVBoxLayout):
@@ -2225,7 +2523,7 @@ class WolfWorkflowTab(QWidget):
     # ── Step 4: Inject ─────────────────────────────────────────────────────────
 
     def _build_step4_inject(self, layout: QVBoxLayout):
-        layout.addWidget(_make_section_label("Step 5 · Inject Translations"))
+        layout.addWidget(_make_section_label("Step 6 · Inject Translations"))
         layout.addWidget(self._desc(
             "Writes the translated text back into the game's Data/ binaries with WolfDawn, "
             "byte-exact. Translated safe/refs name values from names.json are applied across Data/ "
@@ -2297,7 +2595,7 @@ class WolfWorkflowTab(QWidget):
         layout.addWidget(self._subheading("Full inject"))
         layout.addWidget(self._desc(
             "Injects every extracted document and applies translated name values from names.json "
-            "across Data/. Use this once translation is complete before packaging in Step 6."
+            "across Data/. Use this once translation is complete before packaging in Step 7."
         ))
         inject_btn = self._register(_make_btn("Inject all translations", "#00a86b"))
         inject_btn.clicked.connect(lambda: self._inject())
@@ -2572,8 +2870,11 @@ class WolfWorkflowTab(QWidget):
         if idx == 3:
             self._refresh_names_summary()
             self._refresh_name_wrap_categories()
-        # Index 5 == Inject: keep the quick-inject picker in sync with translated/.
-        elif idx == 5:
+        # Index 4 == Database: refresh discovery report and sheet list.
+        elif idx == 4:
+            self._refresh_db_discovery()
+        # Index 6 == Inject: keep the quick-inject picker in sync with translated/.
+        elif idx == 6:
             self._refresh_inject_list()
 
     def _refresh_inject_list(self):
@@ -2601,7 +2902,7 @@ class WolfWorkflowTab(QWidget):
             self.inject_list.addItem(item)
             listed += 1
         if listed == 0:
-            item = QListWidgetItem("No translated files in translated/ yet — run Step 4.")
+            item = QListWidgetItem("No translated files in translated/ yet — run Steps 4-5.")
             item.setFlags(Qt.ItemIsEnabled)
             self.inject_list.addItem(item)
 
@@ -2647,7 +2948,7 @@ class WolfWorkflowTab(QWidget):
                 if p:
                     json_files.append(str(p))
             if not json_files:
-                return False, "No translated JSON found. Run Step 4 first."
+                return False, "No translated JSON found. Run Steps 4-5 first."
             res = wolfdawn.names_check(json_files, log_fn=log)
             if res.returncode == 0:
                 return True, "Name usage is consistent across files."
@@ -2888,12 +3189,12 @@ class WolfWorkflowTab(QWidget):
         }
 
     def _find_db_projects(self, data_dir: Path) -> list[Path]:
-        """DataBase.project / CDataBase.project under BasicData or flat Data/."""
+        """DataBase / CDataBase / SysDatabase.project under BasicData or flat Data/."""
         found: list[Path] = []
         for base in (data_dir / "BasicData", data_dir):
             if not base.is_dir():
                 continue
-            for name in ("DataBase.project", "CDataBase.project"):
+            for name in ("DataBase.project", "CDataBase.project", "SysDatabase.project"):
                 p = base / name
                 if p.is_file() and p not in found:
                     found.append(p)
@@ -2982,7 +3283,7 @@ class WolfWorkflowTab(QWidget):
             if failures:
                 return False, "Relayout failed — " + "; ".join(failures)
             return True, "Relayout complete." + (
-                " Continue to Step 6 to package." if not manual else ""
+                " Continue to Step 7 to package." if not manual else ""
             )
 
         self._run_task(task)
@@ -2990,7 +3291,7 @@ class WolfWorkflowTab(QWidget):
     # ── Step 5: Package ────────────────────────────────────────────────────────
 
     def _build_step5_package(self, layout: QVBoxLayout):
-        layout.addWidget(_make_section_label("Step 6 · Package the Translated Game"))
+        layout.addWidget(_make_section_label("Step 7 · Package the Translated Game"))
         layout.addWidget(self._desc(
             "Choose how the translated build runs. A loose Data/ folder is simplest for "
             "playtesting; repacking rebuilds a single Data.wolf archive for distribution."
@@ -3068,7 +3369,7 @@ class WolfWorkflowTab(QWidget):
     # ── Step 6: Saves ──────────────────────────────────────────────────────────
 
     def _build_step6_saves(self, layout: QVBoxLayout):
-        layout.addWidget(_make_section_label("Step 7 · Update Existing Saves (optional)"))
+        layout.addWidget(_make_section_label("Step 8 · Update Existing Saves (optional)"))
         layout.addWidget(self._desc(
             "WOLF .sav files bake in the game title and some strings at save time. This rewrites "
             "them so old Japanese saves load cleanly in the translated build. It is only needed "
