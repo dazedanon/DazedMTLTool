@@ -138,6 +138,18 @@ def inject_had_applied(applied: int | None) -> bool:
     """
     return applied is not None and applied > 0
 
+
+def parse_inject_cli_error(stdout: str, stderr: str = "") -> str | None:
+    """Return the first wolf inject CLI error line, if any."""
+    for line in _inject_output_text(stdout, stderr).splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        for prefix in ("strings-inject:", "names-inject:"):
+            if prefix in line:
+                return line.split(prefix, 1)[-1].strip()
+    return None
+
 # Committed, prebuilt binaries live here (per-platform) so end users don't need a
 # Rust toolchain or a live upstream fetch.
 _PACKAGE_DIR = Path(__file__).resolve().parent
@@ -163,6 +175,11 @@ _DOWNLOAD_UA = (
 )
 
 PathLike = Union[str, Path]
+
+
+def db_dat_sibling(project_path: PathLike) -> Path:
+    """Sibling ``.dat`` for a WolfDawn ``*.project`` database pair."""
+    return Path(project_path).with_suffix(".dat")
 
 
 class WolfDawnError(RuntimeError):

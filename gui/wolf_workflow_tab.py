@@ -383,6 +383,39 @@ class WolfWorkflowTab(QWidget):
             rel = Path(base.name)
         return self._originals_dir() / rel
 
+    def _snapshot_db_dat_sibling(
+        self, entry: dict, data_dir: Path, log=None
+    ) -> None:
+        """Snapshot the ``.dat`` sibling for a database ``.project`` entry.
+
+        WolfDawn ``strings-inject`` on ``kind == "db"`` needs both files in the
+        ``--base`` directory. The manifest only lists the ``.project`` path.
+        """
+        from util.wolfdawn import db_dat_sibling
+
+        if entry.get("kind") != "db":
+            return
+        proj_orig = self._orig_base_for(entry, data_dir)
+        dat_orig = db_dat_sibling(proj_orig)
+        if dat_orig.exists():
+            return
+        dat_live = db_dat_sibling(Path(entry["base"]))
+        if not dat_live.is_file():
+            return
+        try:
+            dat_orig.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(dat_live, dat_orig)
+        except Exception as exc:
+            if log:
+                log(f"  ⚠ could not snapshot {dat_orig.name}: {exc}")
+
+    def _ensure_db_dat_snapshots(
+        self, entries: list[dict], data_dir: Path, log=None
+    ) -> None:
+        """Backfill missing database ``.dat`` files in originals/."""
+        for entry in entries:
+            self._snapshot_db_dat_sibling(entry, data_dir, log)
+
     def _snapshot_originals(self, entries: list[dict], data_dir: Path, log) -> None:
         """Copy the pristine base binaries into originals/ (only when missing, so a
         good snapshot is never clobbered by a later extract of injected data)."""
@@ -392,6 +425,7 @@ class WolfWorkflowTab(QWidget):
             src = Path(entry["base"])
             dst = self._orig_base_for(entry, data_dir)
             if dst.exists():
+                self._snapshot_db_dat_sibling(entry, data_dir, log)
                 continue
             try:
                 if src.is_dir():
@@ -401,6 +435,8 @@ class WolfWorkflowTab(QWidget):
                     shutil.copy2(src, dst)
             except Exception as exc:
                 log(f"  ⚠ could not snapshot original {src.name}: {exc}")
+                continue
+            self._snapshot_db_dat_sibling(entry, data_dir, log)
 
     def _ensure_originals(self, manifest: dict, log, progress=None, *, quiet: bool = False) -> None:
         """Make sure a pristine snapshot exists; if entries are missing it and the
@@ -458,6 +494,7 @@ class WolfWorkflowTab(QWidget):
             )
             if not res.ok:
                 emit(f"  ⚠ could not rebuild originals (unpack exit {res.returncode}).")
+        self._ensure_db_dat_snapshots(entries, data_dir, None if quiet else log)
 
     def _restore_live_from_originals(
         self, entries: list[dict], data_dir: Path, log, *, quiet: bool = False
@@ -467,6 +504,8 @@ class WolfWorkflowTab(QWidget):
         ``names-inject`` rewrites every DB pair, CommonEvent.dat, and every map.
         Resetting from ``wolf_json/originals/`` first keeps them on one baseline.
         """
+        from util.wolfdawn import db_dat_sibling
+
         emit = (lambda _msg: None) if quiet else log
         restored = 0
         for entry in entries:
@@ -485,6 +524,11 @@ class WolfWorkflowTab(QWidget):
                 else:
                     live.parent.mkdir(parents=True, exist_ok=True)
                     shutil.copy2(orig, live)
+                    if entry.get("kind") == "db":
+                        dat_orig = db_dat_sibling(orig)
+                        dat_live = db_dat_sibling(live)
+                        if dat_orig.is_file():
+                            shutil.copy2(dat_orig, dat_live)
                 restored += 1
             except Exception as exc:
                 emit(f"  ⚠ could not restore {live.name} from originals: {exc}")
@@ -2502,6 +2546,23 @@ class WolfWorkflowTab(QWidget):
             return f"wolf exited {exit_code}"
         return "inject failed"
 
+    def _strings_inject_failure_reason(self, res) -> str:
+        from util import wolfdawn
+
+        cli_err = wolfdawn.parse_inject_cli_error(res.stdout, res.stderr)
+        if cli_err:
+            return cli_err
+        a, d = wolfdawn.parse_strings_inject_counts(res.stdout, res.stderr)
+        untranslated = wolfdawn.parse_strings_inject_untranslated(res.stdout, res.stderr)
+        mismatches = wolfdawn.parse_strings_inject_mismatches(res.stdout, res.stderr)
+        if res.ok:
+            return self._inject_failure_reason(drift=d or 0)
+        return self._inject_failure_reason(
+            exit_code=res.returncode,
+            untranslated=untranslated,
+            mismatches=len(mismatches),
+        )
+
     def _on_step_changed(self, idx: int):
         previous = self._current_step_index
         self._current_step_index = idx
@@ -2625,6 +2686,7 @@ class WolfWorkflowTab(QWidget):
             entries = manifest["entries"]
             data_dir = manifest["data_dir"]
             data_dir_path = Path(data_dir)
+            self._ensure_db_dat_snapshots(entries, data_dir_path)
 
             names_entry = next((e for e in entries if e["kind"] == "names"), None)
             names_json = names_entry["json"] if names_entry else NAMES_JSON
@@ -2678,6 +2740,16 @@ class WolfWorkflowTab(QWidget):
                         (json_name, self._inject_failure_reason(no_original=True))
                     )
                     continue
+                if entry.get("kind") == "db":
+                    from util.wolfdawn import db_dat_sibling
+
+                    if not db_dat_sibling(orig).is_file():
+                        failures.append((
+                            json_name,
+                            "missing database .dat pair in originals "
+                            f"(re-run Step 0 extract on the untranslated game)",
+                        ))
+                        continue
                 res = wolfdawn.strings_inject(
                     str(inject_src), base, out,
                     allow_code_drift=allow_drift, en_punct=en_punct, log_fn=None,
@@ -2701,16 +2773,12 @@ class WolfWorkflowTab(QWidget):
                 elif res.ok:
                     failures.append((
                         json_name,
-                        self._inject_failure_reason(drift=d or 0),
+                        self._strings_inject_failure_reason(res),
                     ))
                 else:
                     failures.append((
                         json_name,
-                        self._inject_failure_reason(
-                            exit_code=res.returncode,
-                            untranslated=untranslated,
-                            mismatches=len(mismatches),
-                        ),
+                        self._strings_inject_failure_reason(res),
                     ))
 
             if will_names and names_entry and names_src is not None:

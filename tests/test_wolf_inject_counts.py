@@ -51,6 +51,18 @@ class WolfInjectCountsTests(unittest.TestCase):
         self.assertFalse(wolfdawn.inject_had_applied(0))
         self.assertFalse(wolfdawn.inject_had_applied(None))
 
+    def test_parse_inject_cli_error(self):
+        err = wolfdawn.parse_inject_cli_error(
+            "", "strings-inject: cannot read input or DB pair\n"
+        )
+        self.assertEqual(err, "cannot read input or DB pair")
+
+    def test_db_dat_sibling(self):
+        self.assertEqual(
+            wolfdawn.db_dat_sibling("BasicData/DataBase.project").name,
+            "DataBase.dat",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
