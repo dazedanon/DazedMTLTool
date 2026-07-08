@@ -2460,8 +2460,6 @@ class WolfWorkflowTab(QWidget):
             json_name = entry.get("json")
             if not json_name:
                 continue
-            if entry.get("kind") == "names":
-                continue
             if not self._translated_path(json_name):
                 continue
             item = QListWidgetItem(json_name)
