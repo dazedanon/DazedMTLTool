@@ -59,6 +59,20 @@ class WolfCodesRepairTests(unittest.TestCase):
             "Fortune-teller\nHa!\\^",
         )
 
+    def test_apply_font_size_replaces_existing_codes(self):
+        text = r"Go to the \c[21]\f[20]tavern\c[19]\f[18]!"
+        new_text, count = wolf_codes.apply_font_size(text, 16)
+        self.assertEqual(count, 2)
+        self.assertIn(r"\f[16]", new_text)
+        self.assertNotIn(r"\f[20]", new_text)
+        self.assertNotIn(r"\f[18]", new_text)
+
+    def test_apply_font_size_prepends_when_missing(self):
+        text = "Plain text without font codes"
+        new_text, count = wolf_codes.apply_font_size(text, 18)
+        self.assertEqual(count, 1)
+        self.assertTrue(new_text.startswith(r"\f[18]"))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -29,6 +29,40 @@ WOLF_INLINE_CODE_RE = re.compile(
 # Placeholder transport (same convention as util.translation.protect_script_codes).
 _PLACEHOLDER_PREFIX = "__WOLF_CODE_"
 
+# Wolf font-size codes: ``\f[18]``, ``\f[20]``, etc.
+WOLF_FONT_SIZE_RE = re.compile(r"\\f\[(\d+)\]")
+
+
+def detect_font_sizes(text: str) -> list[int]:
+    """Return sorted unique ``\\f[N]`` sizes in *text*."""
+    if not isinstance(text, str) or not text:
+        return []
+    sizes: set[int] = set()
+    for match in WOLF_FONT_SIZE_RE.finditer(text):
+        try:
+            sizes.add(int(match.group(1)))
+        except (TypeError, ValueError):
+            continue
+    return sorted(sizes)
+
+
+def apply_font_size(text: str, size: int) -> tuple[str, int]:
+    """Replace every ``\\f[N]`` in *text* with ``\\f[size]``.
+
+    Returns ``(new_text, replacements)``. When no ``\\f[N]`` codes exist, prepends
+    ``\\f[size]`` at the start of the string (after an optional opening quote).
+    """
+    if not isinstance(text, str) or not text.strip() or size <= 0:
+        return text, 0
+    size = int(size)
+    matches = list(WOLF_FONT_SIZE_RE.finditer(text))
+    if matches:
+        new_text = WOLF_FONT_SIZE_RE.sub(rf"\\f[{size}]", text)
+        return new_text, len(matches)
+    if text.startswith('"'):
+        return rf'\f[{size}]' + text, 1
+    return rf"\f[{size}]{text}", 1
+
 
 def _tokenize(rest: str) -> list[tuple[str, str]]:
     """Split *rest* into ``('lit', ...)`` and ``('code', ...)`` tokens."""

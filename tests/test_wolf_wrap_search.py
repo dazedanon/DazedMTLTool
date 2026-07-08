@@ -214,5 +214,54 @@ class TestWrapPreview(unittest.TestCase):
         self.assertLessEqual(info["longest"], 30 + 10)
 
 
+class TestNamesCategoryWrap(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.translated = Path(self.tmp.name) / "translated"
+        self.translated.mkdir()
+        self.category = "├■街の噂（MOB）"
+        fixture = {
+            "kind": "names",
+            "count": 2,
+            "names": [
+                {
+                    "source": "短い",
+                    "text": "Short line.",
+                    "note": self.category,
+                },
+                {
+                    "source": "長い",
+                    "text": (
+                        "This is a very long English rumor that should definitely "
+                        "wrap when the width is set to thirty-four characters."
+                    ),
+                    "note": self.category,
+                },
+            ],
+        }
+        self.path = self.translated / "names.json"
+        self.path.write_text(json.dumps(fixture, ensure_ascii=False, indent=4), encoding="utf-8")
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_names_categories_in_sheet_summaries(self):
+        summaries = ws.sheet_overflow_summaries(self.translated, width=34)
+        names_rows = [s for s in summaries if s.kind == "names" and s.sheet_name == self.category]
+        self.assertEqual(len(names_rows), 1)
+        self.assertEqual(names_rows[0].line_count, 2)
+        self.assertEqual(names_rows[0].overflow_count, 1)
+
+    def test_wrap_all_in_names_category(self):
+        doc = json.loads(self.path.read_text(encoding="utf-8"))
+        changed = ws.wrap_overflow_in_sheet(
+            self.path, doc, self.category, 34, kind="names",
+        )
+        self.assertEqual(changed, 1)
+        doc2 = json.loads(self.path.read_text(encoding="utf-8"))
+        long_entry = doc2["names"][1]["text"]
+        self.assertIn("\n", long_entry)
+
+
 if __name__ == "__main__":
     unittest.main()

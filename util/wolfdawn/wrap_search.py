@@ -92,9 +92,12 @@ class SheetOverflowSummary:
     line_count: int
     overflow_count: int
     tier: str = ""
+    kind: str = "db"
 
     @property
     def key(self) -> str:
+        if self.kind == "names":
+            return f"{self.json_file}|names|{self.sheet_name}"
         return group_key(self.json_file, self.sheet_name)
 
 
@@ -510,8 +513,13 @@ def wrap_overflow_in_sheet(
     doc: dict[str, Any],
     sheet_name: str,
     width: int,
+    *,
+    kind: str | None = None,
 ) -> int:
-    """Wrap every overflowing line in one DB sheet; return count changed."""
+    """Wrap every overflowing line in one DB sheet or names.json category."""
+    doc_kind = kind or doc.get("kind")
+    if doc_kind == "names":
+        return _wrap_overflow_in_names_category(path, doc, sheet_name, width)
     if doc.get("kind") != "db":
         return 0
     changed = 0
@@ -529,6 +537,62 @@ def wrap_overflow_in_sheet(
     if changed:
         save_document(path, doc)
     return changed
+
+
+def _wrap_overflow_in_names_category(
+    path: Path,
+    doc: dict[str, Any],
+    category: str,
+    width: int,
+) -> int:
+    """Wrap overflowing ``names[]`` entries sharing one ``note`` (category)."""
+    if doc.get("kind") != "names":
+        return 0
+    changed = 0
+    for entry in doc.get("names") or []:
+        if not isinstance(entry, dict):
+            continue
+        if str(entry.get("note") or "") != category:
+            continue
+        text = entry.get("text")
+        if not isinstance(text, str) or not text.strip():
+            continue
+        if not line_needs_wrap(text, width):
+            continue
+        if wrap_line_in_doc(entry, width):
+            changed += 1
+    if changed:
+        save_document(path, doc)
+    return changed
+
+
+def _names_category_summaries(
+    doc: dict[str, Any],
+    *,
+    json_file: str,
+    width: int,
+) -> list[SheetOverflowSummary]:
+    counts: dict[str, int] = {}
+    overflow: dict[str, int] = {}
+    for entry in doc.get("names") or []:
+        if not isinstance(entry, dict):
+            continue
+        note = str(entry.get("note") or "names.json")
+        counts[note] = counts.get(note, 0) + 1
+        text = entry.get("text")
+        if isinstance(text, str) and line_needs_wrap(text, width):
+            overflow[note] = overflow.get(note, 0) + 1
+    return [
+        SheetOverflowSummary(
+            json_file=json_file,
+            sheet_name=note,
+            line_count=counts[note],
+            overflow_count=overflow.get(note, 0),
+            tier="names",
+            kind="names",
+        )
+        for note in sorted(counts)
+    ]
 
 
 def sheet_overflow_summaries(
@@ -569,15 +633,27 @@ def sheet_overflow_summaries(
                     tier=group.tier,
                 )
             )
-    if summaries:
-        return summaries
-    return [
-        SheetOverflowSummary(
-            json_file=g.json_file,
-            sheet_name=g.type_name,
-            line_count=g.line_count,
-            overflow_count=0,
-            tier=g.tier,
-        )
-        for g in dist.groups
-    ]
+    if not summaries:
+        summaries = [
+            SheetOverflowSummary(
+                json_file=g.json_file,
+                sheet_name=g.type_name,
+                line_count=g.line_count,
+                overflow_count=0,
+                tier=g.tier,
+            )
+            for g in dist.groups
+        ]
+
+    seen_names: set[Path] = set()
+    for search_base in _iter_search_dirs(base, Path(files_dir) if files_dir else None):
+        names_path = search_base / "names.json"
+        if not names_path.is_file() or names_path in seen_names:
+            continue
+        seen_names.add(names_path)
+        doc = _load_json(names_path)
+        if doc and doc.get("kind") == "names":
+            summaries.extend(
+                _names_category_summaries(doc, json_file="names.json", width=width)
+            )
+    return summaries
