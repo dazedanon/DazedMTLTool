@@ -402,11 +402,14 @@ class WolfWorkflowTab(QWidget):
             except Exception as exc:
                 log(f"  ⚠ could not snapshot original {src.name}: {exc}")
 
-    def _ensure_originals(self, manifest: dict, log, progress=None) -> None:
+    def _ensure_originals(self, manifest: dict, log, progress=None, *, quiet: bool = False) -> None:
         """Make sure a pristine snapshot exists; if entries are missing it and the
         game still has its .wolf archives (packaging renames them to .wolf.bak),
         rebuild the snapshot by unpacking those archives into originals/."""
         from util import wolfdawn
+
+        emit = (lambda _msg: None) if quiet else log
+        wolf_log = None if quiet else log
 
         data_dir = Path(manifest["data_dir"])
         entries = manifest.get("entries", [])
@@ -426,7 +429,7 @@ class WolfWorkflowTab(QWidget):
                     archives.extend(base.glob(pat))
         wanted = [a for a in archives if a.name.lower().startswith(("mapdata", "basicdata"))]
         if not wanted:
-            log(
+            emit(
                 "  ⚠ No pristine originals and no .wolf archives to rebuild them from. "
                 "Re-run Step 0 (Unpack + Extract) on the untranslated game so injection "
                 "has an original to work from."
@@ -435,7 +438,7 @@ class WolfWorkflowTab(QWidget):
 
         originals = self._originals_dir()
         originals.mkdir(parents=True, exist_ok=True)
-        log("Rebuilding pristine originals from the game's .wolf archives …")
+        emit("Rebuilding pristine originals from the game's .wolf archives …")
         with tempfile.TemporaryDirectory() as tmp:
             inputs: list[str] = []
             for arc in wanted:
@@ -449,21 +452,22 @@ class WolfWorkflowTab(QWidget):
             res = wolfdawn.unpack_all(
                 inputs,
                 str(originals),
-                log_fn=log,
+                log_fn=wolf_log,
                 progress_fn=progress,
                 progress_total=len(inputs),
             )
             if not res.ok:
-                log(f"  ⚠ could not rebuild originals (unpack exit {res.returncode}).")
+                emit(f"  ⚠ could not rebuild originals (unpack exit {res.returncode}).")
 
     def _restore_live_from_originals(
-        self, entries: list[dict], data_dir: Path, log
+        self, entries: list[dict], data_dir: Path, log, *, quiet: bool = False
     ) -> None:
         """Copy pristine originals onto live Data/ binaries before names-inject.
 
         ``names-inject`` rewrites every DB pair, CommonEvent.dat, and every map.
         Resetting from ``wolf_json/originals/`` first keeps them on one baseline.
         """
+        emit = (lambda _msg: None) if quiet else log
         restored = 0
         for entry in entries:
             if entry.get("kind") == "names":
@@ -471,7 +475,7 @@ class WolfWorkflowTab(QWidget):
             orig = self._orig_base_for(entry, data_dir)
             live = Path(entry["base"])
             if not orig.exists():
-                log(f"  ⚠ no pristine original for {entry['json']} — live file left as-is")
+                emit(f"  ⚠ no pristine original for {entry['json']} — live file left as-is")
                 continue
             try:
                 if orig.is_dir():
@@ -483,8 +487,8 @@ class WolfWorkflowTab(QWidget):
                     shutil.copy2(orig, live)
                 restored += 1
             except Exception as exc:
-                log(f"  ⚠ could not restore {live.name} from originals: {exc}")
-        if restored:
+                emit(f"  ⚠ could not restore {live.name} from originals: {exc}")
+        if restored and not quiet:
             log(
                 f"Restored {restored} live binary file(s) from {WORK_DIR_NAME}/originals/."
             )
@@ -2211,12 +2215,11 @@ class WolfWorkflowTab(QWidget):
         layout.addWidget(_make_hr())
         layout.addWidget(self._subheading("Quick inject — write only specific files into the game"))
         layout.addWidget(self._desc(
-            "For iterating: after translating a few files, tick just those here and inject them "
-            "straight into the game's Data/ so you can review the git diff in the game project and "
-            "test in-game. Only files that already have a translation in translated/ are listed. "
-            f"{NAMES_JSON} appears here once Phase 0 has translated it (checked by default). "
-            "Name injection resets live Data/ from wolf_json/originals/ first, then applies "
-            "every safe/refs name across all binaries."
+            "For iterating: tick the files you want, then inject. Each selected JSON is "
+            f"copied into {WORK_DIR_NAME}/ and written into its Data/ binary with WolfDawn. "
+            f"{NAMES_JSON} is special: it applies translated name values across every binary "
+            f"(and resets live Data/ from {WORK_DIR_NAME}/originals/ first). "
+            "Only tick the files you actually want to inject."
         ))
 
         self.inject_list = QListWidget()
@@ -2383,16 +2386,13 @@ class WolfWorkflowTab(QWidget):
                 return p
         return None
 
-    def _repair_inject_json(self, src: Path, log) -> Path:
+    def _repair_inject_json(self, src: Path, log=None) -> Path:
         """Auto-repair WOLF inline codes in a translated JSON before inject."""
         from util.wolfdawn import codes as wolf_codes
 
         data = json.loads(src.read_text(encoding="utf-8-sig"))
         data, repairs = wolf_codes.repair_document(data)
         if repairs:
-            log(
-                f"  Auto-repaired {len(repairs)} line(s) with control-code drift in {src.name}"
-            )
             src.write_text(
                 json.dumps(data, ensure_ascii=False, indent=4) + "\n",
                 encoding="utf-8",
@@ -2400,27 +2400,24 @@ class WolfWorkflowTab(QWidget):
         return src
 
     def _sync_translated_json_to_wolf_json(
-        self, json_name: str, log, game_json_dir: Path
-    ) -> bool:
+        self, json_name: str, game_json_dir: Path
+    ) -> tuple[bool, str | None]:
         """Copy one translated/ (or files/) JSON into the game's wolf_json/ folder."""
         src = self._translated_or_source(json_name)
         if src is None:
-            return False
+            return False, "no translated copy"
         dest = game_json_dir / json_name
         try:
             if src.resolve() == dest.resolve():
-                log(f"  ↷ {json_name} already in {WORK_DIR_NAME}/ (same file)")
-                return True
+                return True, None
         except Exception:
             pass
         try:
             dest.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(src, dest)
-            log(f"  → synced {json_name} into {WORK_DIR_NAME}/")
-            return True
+            return True, None
         except Exception as exc:
-            log(f"  ⚠ could not update {json_name} in {WORK_DIR_NAME}/: {exc}")
-            return False
+            return False, str(exc)
 
     def _inject_sync_targets(
         self,
@@ -2438,17 +2435,72 @@ class WolfWorkflowTab(QWidget):
             j for j in only_json if self._translated_or_source(j) is not None
         )
 
-    def _log_inject_guard_lines(self, mismatches: list[str], untranslated: int | None, log):
-        """Surface WolfDawn guard failures instead of burying them in the scrollback."""
-        if untranslated:
-            log(f"  ⚠ {untranslated} line(s) left untranslated by WolfDawn safety guards")
-        if not mismatches:
-            return
-        log(f"  ⚠ {len(mismatches)} control-code mismatch(es) (first 10):")
-        for line in mismatches[:10]:
-            log(f"    {line}")
-        if len(mismatches) > 10:
-            log(f"    … and {len(mismatches) - 10} more (see log above)")
+    def _emit_inject_summary(
+        self,
+        log,
+        *,
+        injected: list[str],
+        failed: list[tuple[str, str]],
+        skipped_files: int = 0,
+        skipped_lines: int = 0,
+    ) -> None:
+        """Concise inject report: successes, optional guard summary, then failures."""
+        if injected:
+            if len(injected) <= 12:
+                log("Injected: " + ", ".join(injected))
+            else:
+                log(f"Injected: {len(injected)} file(s)")
+        if skipped_files:
+            log(
+                f"Warnings: {skipped_files} file(s) had {skipped_lines} line(s) "
+                "skipped by WolfDawn safety guards"
+            )
+        for name, reason in failed:
+            log(f"Failed: {name} — {reason}")
+        if not injected and not failed:
+            log("Injected: (nothing)")
+
+    def _inject_failure_reason(
+        self,
+        *,
+        drift: int | None = None,
+        exit_code: int | None = None,
+        untranslated: int | None = None,
+        mismatches: int | None = None,
+        no_source: bool = False,
+        no_json: bool = False,
+        no_original: bool = False,
+        names_drift: bool = False,
+        names_stale: bool = False,
+    ) -> str:
+        if no_json:
+            return "no translated JSON"
+        if no_source:
+            return "no translated copy to sync"
+        if no_original:
+            return "no pristine original"
+        if names_stale:
+            return (
+                "sources no longer match live Data/ "
+                "(re-run Step 0 extract on the untranslated game)"
+            )
+        if names_drift:
+            return (
+                "0 applied — live Data/ no longer has Japanese name sources "
+                f"(reset from {WORK_DIR_NAME}/originals/ and inject again)"
+            )
+        if drift:
+            return f"0 applied, {drift} skipped as drift"
+        if untranslated or mismatches:
+            parts = []
+            if untranslated:
+                parts.append(f"{untranslated} untranslated line(s)")
+            if mismatches:
+                parts.append(f"{mismatches} control-code mismatch(es)")
+            return "; ".join(parts)
+        if exit_code is not None:
+            return f"wolf exited {exit_code}"
+        return "inject failed"
 
     def _on_step_changed(self, idx: int):
         previous = self._current_step_index
@@ -2483,7 +2535,7 @@ class WolfWorkflowTab(QWidget):
             item = QListWidgetItem(json_name)
             item.setData(Qt.UserRole, json_name)
             item.setFlags(Qt.ItemIsUserCheckable | Qt.ItemIsEnabled)
-            default_checked = json_name == NAMES_JSON
+            default_checked = False
             item.setCheckState(Qt.Checked if default_checked else Qt.Unchecked)
             self.inject_list.addItem(item)
             listed += 1
@@ -2558,24 +2610,24 @@ class WolfWorkflowTab(QWidget):
         manifest = self._read_manifest()
         en_punct = self.en_punct_cb.isChecked()
         allow_drift = self.drift_cb.isChecked()
-        quick = only_json is not None
         game_json_dir = self._work_dir()
 
         def task(log, progress=None):
             from util import wolfdawn
 
-            # Guarantee a pristine snapshot to inject from (rebuild from archives if
-            # an older extraction predates snapshotting).
-            self._ensure_originals(manifest, log, progress)
+            injected: list[str] = []
+            failures: list[tuple[str, str]] = []
+            skipped_files = 0
+            skipped_lines = 0
+
+            self._ensure_originals(manifest, log, progress, quiet=True)
 
             entries = manifest["entries"]
             data_dir = manifest["data_dir"]
             data_dir_path = Path(data_dir)
-            applied = 0
-            failed = 0
-            guard_failures: list[str] = []
 
             names_entry = next((e for e in entries if e["kind"] == "names"), None)
+            names_json = names_entry["json"] if names_entry else NAMES_JSON
             names_src = (
                 self._translated_or_source(names_entry["json"])
                 if names_entry
@@ -2588,8 +2640,9 @@ class WolfWorkflowTab(QWidget):
             )
 
             if only_json is None or will_names:
-                log(f"Resetting live Data/ from {WORK_DIR_NAME}/originals/ …")
-                self._restore_live_from_originals(entries, data_dir_path, log)
+                self._restore_live_from_originals(
+                    entries, data_dir_path, log, quiet=True
+                )
 
             names_restored = only_json is None or will_names
 
@@ -2597,42 +2650,37 @@ class WolfWorkflowTab(QWidget):
                 strings_targets = {
                     e["json"] for e in entries if e.get("kind") != "names"
                 }
-            elif will_names:
-                strings_targets = {
-                    e["json"]
-                    for e in entries
-                    if e.get("kind") != "names"
-                    and self._translated_path(e["json"]) is not None
-                }
-                strings_targets |= {j for j in only_json if j != NAMES_JSON}
             else:
-                strings_targets = set(only_json or ())
+                # Quick inject: only the JSON files the user ticked (names uses
+                # names-inject separately; do not pull in every translated file).
+                strings_targets = {j for j in only_json if j != NAMES_JSON}
 
-            # Non-name documents: inject each pristine original onto its live binary.
             for entry in entries:
                 if entry["kind"] == "names":
                     continue
                 if entry["json"] not in strings_targets:
                     continue
-                inject_src = self._translated_path(entry["json"])
+                json_name = entry["json"]
+                inject_src = self._translated_path(json_name)
                 if inject_src is None:
-                    inject_src = self._translated_or_source(entry["json"])
+                    inject_src = self._translated_or_source(json_name)
                 if inject_src is None:
-                    log(f"  ⚠ no JSON for {entry['json']} — skipped")
+                    failures.append(
+                        (json_name, self._inject_failure_reason(no_json=True))
+                    )
                     continue
-                inject_src = self._repair_inject_json(inject_src, log)
-                out = entry["base"]  # live game binary (or txt-dir) we write into
+                inject_src = self._repair_inject_json(inject_src)
+                out = entry["base"]
                 orig = self._orig_base_for(entry, data_dir_path)
                 base = str(orig) if orig.exists() else out
                 if not orig.exists():
-                    log(
-                        f"  ⚠ no pristine original for {entry['json']}; injecting against the "
-                        "live binary, which fails if it was already translated."
+                    failures.append(
+                        (json_name, self._inject_failure_reason(no_original=True))
                     )
-                log(f"Injecting {entry['json']} → {Path(out).name} …")
+                    continue
                 res = wolfdawn.strings_inject(
                     str(inject_src), base, out,
-                    allow_code_drift=allow_drift, en_punct=en_punct, log_fn=log,
+                    allow_code_drift=allow_drift, en_punct=en_punct, log_fn=None,
                 )
                 a, d = wolfdawn.parse_strings_inject_counts(res.stdout, res.stderr)
                 untranslated = wolfdawn.parse_strings_inject_untranslated(
@@ -2645,103 +2693,99 @@ class WolfWorkflowTab(QWidget):
                     res.ok and not (a == 0 and (d or 0) > 0)
                 )
                 if strings_ok:
-                    applied += 1
-                    if mismatches or (untranslated or 0) > 0:
-                        guard_failures.append(entry["json"])
-                        self._log_inject_guard_lines(mismatches, untranslated, log)
-                    if not res.ok and wolfdawn.inject_had_applied(a):
-                        log(
-                            f"  ⚠ {entry['json']}: wolf exited {res.returncode} "
-                            f"after applying {a} change(s) — see warnings above"
-                        )
+                    injected.append(json_name)
+                    guard_skips = (untranslated or 0) + len(mismatches)
+                    if guard_skips:
+                        skipped_files += 1
+                        skipped_lines += untranslated or 0
                 elif res.ok:
-                    failed += 1
-                    guard_failures.append(entry["json"])
-                    log(
-                        f"  ⚠ {entry['json']}: 0 applied, {d} skipped as drift — the base "
-                        "looks already translated. Restore the pristine original (re-run "
-                        "Step 0 Unpack on the untranslated game) and inject again."
-                    )
+                    failures.append((
+                        json_name,
+                        self._inject_failure_reason(drift=d or 0),
+                    ))
                 else:
-                    failed += 1
-                    guard_failures.append(entry["json"])
-                    self._log_inject_guard_lines(mismatches, untranslated, log)
-                    log(f"  ⚠ inject exit {res.returncode} for {entry['json']}")
+                    failures.append((
+                        json_name,
+                        self._inject_failure_reason(
+                            exit_code=res.returncode,
+                            untranslated=untranslated,
+                            mismatches=len(mismatches),
+                        ),
+                    ))
 
-            # Name values: apply across the whole data dir when translated/names.json
-            # exists. For a quick inject, only include NAMES_JSON when you want names
-            # applied (it rewrites many binaries).
             if will_names and names_entry and names_src is not None:
                 if not names_restored:
-                    log(
-                        f"Resetting live Data/ from {WORK_DIR_NAME}/originals/ "
-                        "before name injection …"
+                    self._restore_live_from_originals(
+                        entries, data_dir_path, log, quiet=True
                     )
-                    self._restore_live_from_originals(entries, data_dir_path, log)
-                log("Applying translated name values across Data/ …")
                 res = wolfdawn.names_inject(
                     str(names_src), data_dir,
-                    allow_code_drift=allow_drift, en_punct=en_punct, log_fn=log,
+                    allow_code_drift=allow_drift, en_punct=en_punct, log_fn=None,
                 )
-                out = (res.stdout or "") + (res.stderr or "")
                 a, d = wolfdawn.parse_names_inject_counts(res.stdout, res.stderr)
                 if wolfdawn.inject_had_applied(a):
-                    applied += 1
-                    if not res.ok:
-                        log(
-                            f"  ⚠ names: wolf exited {res.returncode} after applying "
-                            f"{a} name change(s) — see warnings above"
-                        )
+                    injected.append(names_json)
                 elif res.ok and a == 0:
-                    failed += 1
-                    log(
-                        f"  ⚠ names: 0 applied — the live Data/ binaries no longer contain "
-                        "the Japanese 'source' strings in names.json (often because a prior "
-                        "inject already translated them without resetting from originals). "
-                        "Use “Inject all translations”, or tick names.json in quick inject "
-                        f"(which resets from {WORK_DIR_NAME}/originals/ first)."
-                    )
+                    failures.append((
+                        names_json,
+                        self._inject_failure_reason(names_drift=True),
+                    ))
                 elif res.ok and (d or 0) > 0:
-                    failed += 1
-                    log(
-                        f"  ⚠ names: 0 applied, {d} skipped as drift — sources in "
-                        f"{NAMES_JSON} no longer match the live binaries. Re-run Step 0 "
-                        "extract on the untranslated game, translate again, and inject."
-                    )
+                    failures.append((
+                        names_json,
+                        self._inject_failure_reason(names_stale=True),
+                    ))
                 else:
-                    failed += 1
-                    log(f"  ⚠ names-inject exit {res.returncode}")
+                    failures.append((
+                        names_json,
+                        self._inject_failure_reason(exit_code=res.returncode),
+                    ))
 
-            # Refresh wolf_json/ from translated/ for git (full inject: every translated
-            # manifest JSON including names.json; quick inject: only what was selected).
             sync_targets = self._inject_sync_targets(entries, only_json)
-            synced = 0
             for json_name in sync_targets:
-                if self._sync_translated_json_to_wolf_json(
-                    json_name, log, game_json_dir
-                ):
-                    synced += 1
-            if synced:
-                log(f"Synced {synced} translated JSON file(s) into {WORK_DIR_NAME}/")
+                ok, err = self._sync_translated_json_to_wolf_json(
+                    json_name, game_json_dir
+                )
+                if not ok:
+                    failures.append((
+                        json_name,
+                        self._inject_failure_reason(
+                            no_source=err == "no translated copy",
+                        )
+                        if err == "no translated copy"
+                        else f"could not sync to {WORK_DIR_NAME}/ ({err})",
+                    ))
 
-            msg = f"Injected {applied} document(s)"
-            if guard_failures:
-                msg += f"; {len(guard_failures)} had guard warnings (see log)"
-            if failed:
-                msg += f"; {failed} failed"
-            if quick:
-                msg += ". Review the git diff in the game project and test in-game."
-            else:
-                msg += ". Continue to Step 6 to package."
-            inject_state["applied"] = applied
-            return failed == 0, msg
+            self._emit_inject_summary(
+                log,
+                injected=injected,
+                failed=failures,
+                skipped_files=skipped_files,
+                skipped_lines=skipped_lines,
+            )
+            inject_state["applied"] = len(injected)
+            inject_state["had_failures"] = bool(failures)
+            inject_state["only_json"] = only_json
+            return not failures, ""
 
         def _after_inject(ok: bool, msg: str):
-            if inject_state.get("applied", 0) > 0 and self._relayout_after_enabled():
-                # Defer until the inject worker has fully finished (busy flag clear).
-                QTimer.singleShot(0, lambda: self._run_relayout(manual=False))
+            selection = inject_state.get("only_json")
+            names_only = (
+                selection is not None
+                and selection
+                and selection.issubset({NAMES_JSON})
+            )
+            if names_only or not self._relayout_after_enabled():
+                self._log("Relayout: not run")
+                return
+            if inject_state.get("applied", 0) <= 0:
+                self._log("Relayout: not run")
+                return
+            QTimer.singleShot(
+                0, lambda: self._run_relayout(manual=False, quiet=True)
+            )
 
-        inject_state: dict = {"applied": 0}
+        inject_state: dict = {"applied": 0, "had_failures": False}
         self._run_task(task, on_done=_after_inject)
 
     def _relayout_after_enabled(self) -> bool:
@@ -2787,7 +2831,7 @@ class WolfWorkflowTab(QWidget):
                     found.append(p)
         return found
 
-    def _sync_relayout_tree(self, src_root: Path, dest_root: Path, log) -> int:
+    def _sync_relayout_tree(self, src_root: Path, dest_root: Path, log=None) -> int:
         """Copy every file under *src_root* onto *dest_root*, preserving relative paths."""
         copied = 0
         for src in src_root.rglob("*"):
@@ -2798,10 +2842,9 @@ class WolfWorkflowTab(QWidget):
             dest.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(src, dest)
             copied += 1
-            log(f"  ← {rel}")
         return copied
 
-    def _run_relayout(self, *, manual: bool = False):
+    def _run_relayout(self, *, manual: bool = False, quiet: bool = False):
         """Reflow Message text (and optionally DB descriptions) on live Data/."""
         if not self._require_manifest():
             return
@@ -2816,12 +2859,10 @@ class WolfWorkflowTab(QWidget):
         def task(log, progress=None):
             from util import wolfdawn
 
-            log(
-                f"Relayout Message text in {data_dir} "
-                f"(width={opts['width']}"
-                + (f", max-rows={opts['max_rows']}" if opts["max_rows"] else "")
-                + ") …"
-            )
+            if not quiet:
+                log(f"Relayouting {data_dir} …")
+
+            failures: list[str] = []
             with tempfile.TemporaryDirectory(prefix="wolfdawn-relayout-") as tmp:
                 out_dir = Path(tmp) / "out"
                 out_dir.mkdir(parents=True, exist_ok=True)
@@ -2830,49 +2871,48 @@ class WolfWorkflowTab(QWidget):
                     out_dir=out_dir,
                     width=opts["width"],
                     max_rows=opts["max_rows"] or None,
-                    log_fn=log,
+                    log_fn=None,
                 )
-                if res.stdout:
-                    for line in res.stdout.splitlines():
-                        log(line)
                 if not res.ok and res.returncode not in (0, 2):
-                    return False, f"relayout exited {res.returncode}"
-                n = self._sync_relayout_tree(out_dir, data_dir, log)
-                log(f"Applied {n} reflowed file(s) onto live Data/.")
+                    failures.append(f"message reflow exited {res.returncode}")
+                else:
+                    self._sync_relayout_tree(out_dir, data_dir)
 
-            if do_desc:
+            if do_desc and not failures:
                 projects = self._find_db_projects(data_dir)
                 if not projects:
-                    log("No DataBase.project / CDataBase.project found — skip desc-relayout.")
+                    pass
                 for proj in projects:
                     with tempfile.TemporaryDirectory(prefix="wolfdawn-desc-") as tmp:
                         tmp_path = Path(tmp)
                         out_proj = tmp_path / proj.name
-                        log(
-                            f"desc-relayout {proj.name} "
-                            f"(width={opts['desc_width']}, max-lines={opts['desc_max_lines']}) …"
-                        )
                         dres = wolfdawn.desc_relayout(
                             proj,
                             out_proj,
                             width=opts["desc_width"],
                             max_lines=opts["desc_max_lines"],
-                            log_fn=log,
+                            log_fn=None,
                         )
-                        if dres.stdout:
-                            for line in dres.stdout.splitlines():
-                                log(line)
                         if not dres.ok and dres.returncode not in (0, 2):
-                            log(f"  ⚠ desc-relayout exit {dres.returncode} for {proj.name}")
+                            failures.append(
+                                f"desc-relayout exited {dres.returncode} for {proj.name}"
+                            )
                             continue
-                        # WolfDawn may also write a sibling .dat next to the out .project
                         for produced in tmp_path.iterdir():
                             if not produced.is_file():
                                 continue
                             dest = proj.parent / produced.name
                             shutil.copy2(produced, dest)
-                            log(f"  ← {dest.relative_to(data_dir)}")
 
+            if quiet:
+                if failures:
+                    log("Relayout: failed — " + "; ".join(failures))
+                else:
+                    log("Relayout: applied")
+                return not failures, ""
+
+            if failures:
+                return False, "Relayout failed — " + "; ".join(failures)
             return True, "Relayout complete." + (
                 " Continue to Step 6 to package." if not manual else ""
             )
