@@ -18,10 +18,10 @@ Mirrors the RPGMaker WorkflowTab, driven by the vendored WolfDawn ``wolf`` CLI
                         and refresh the git-tracked wolf_json/ with the translated
                         JSON; quick-inject picks just a few translated files for
                         fast in-game / git iteration, or inject everything at once.
-                        After a successful inject, optional WolfDawn relayout reflows
-                        Message text (and optionally DB descriptions) to the message box.
-  Step 7  Package     - run from a loose Data/ folder, or repack Data.wolf
-  Step 8  Saves       - fix baked strings in existing .sav files (optional)
+  Step 7  Fix wrap    - search translated JSON by in-game text; wrap DB sheet rows;
+                        re-inject (Advanced: wolf relayout for event messages)
+  Step 8  Package     - run from a loose Data/ folder, or repack Data.wolf
+  Step 9  Saves       - fix baked strings in existing .sav files (optional)
 
 names.json is staged into files/ but is NOT translated in the bulk phases - WolfDawn
 tags each name safe / refs / verify and Phase 0 translates only safe+refs entries
@@ -44,7 +44,7 @@ import tempfile
 from pathlib import Path
 
 from PyQt5.QtCore import Qt, QSettings, QThread, QTimer, pyqtSignal, QEvent
-from PyQt5.QtGui import QColor, QFont
+from PyQt5.QtGui import QColor, QFont, QTextCharFormat, QTextCursor
 from PyQt5.QtWidgets import (
     QApplication,
     QAbstractItemView,
@@ -87,6 +87,10 @@ from gui.workflow_tab import (
 )
 from util.wolfdawn import names as wolf_names
 from util.wolfdawn import db_classify as wolf_db
+from util.wolfdawn import selective_wrap as wolf_selwrap
+from util.wolfdawn import wrap_search as wolf_ws
+
+import util.dazedwrap as dazedwrap
 from util.paths import PROJECT_ROOT
 from util.project_scanner import (
     detect_wolf_layout,
@@ -581,8 +585,9 @@ class WolfWorkflowTab(QWidget):
             ("4  Database", self._build_step4_database),
             ("5  Maps/Events", self._build_step5_maps_events),
             ("6  Inject", self._build_step4_inject),
-            ("7  Package", self._build_step5_package),
-            ("8  Saves", self._build_step6_saves),
+            ("7  Fix wrap", self._build_step7_relayout),
+            ("8  Package", self._build_step5_package),
+            ("9  Saves", self._build_step6_saves),
         ]
 
         for tab_label, builder in _tab_defs:
@@ -2595,26 +2600,184 @@ class WolfWorkflowTab(QWidget):
         layout.addWidget(self._subheading("Full inject"))
         layout.addWidget(self._desc(
             "Injects every extracted document and applies translated name values from names.json "
-            "across Data/. Use this once translation is complete before packaging in Step 7."
+            "across Data/. Use this once translation is complete before packaging in Step 8."
         ))
         inject_btn = self._register(_make_btn("Inject all translations", "#00a86b"))
         inject_btn.clicked.connect(lambda: self._inject())
         layout.addWidget(inject_btn)
 
-        self._add_relayout_options(layout)
-
-    def _add_relayout_options(self, layout: QVBoxLayout):
-        """Post-inject WolfDawn message-box / DB-description reflow."""
         layout.addWidget(_make_hr())
-        layout.addWidget(self._subheading("Relayout (after inject)"))
         layout.addWidget(self._desc(
-            "Runs WolfDawn on the live Data/ binaries after a successful inject: reflow Message "
-            "text to the message-box width (page-split overflow), and optionally refit DB "
-            "description fields. Layout is no longer done at translate time - leave dialogue "
-            "unwrapped in JSON and let this step fix the box."
+            "English text is often longer than Japanese. Step 7 (Fix wrapping): paste "
+            "overflowing in-game text to find the sheet, wrap, and re-inject."
         ))
 
-        self._relayout_after_cb = QCheckBox("Relayout after inject")
+    def _build_step7_relayout(self, layout: QVBoxLayout):
+        """Search-first fix wrapping: find sheet by in-game text, wrap, re-inject."""
+        layout.addWidget(_make_section_label("Step 7 · Fix wrapping"))
+        layout.addWidget(self._desc(
+            "Paste text you see overflowing in the game. Search covers database sheets "
+            "(Step 4), names.json profile blurbs (Step 3), maps, and common events. "
+            "Wrap at the right width, then re-inject that file from Step 6 or below."
+        ))
+
+        search_row = QHBoxLayout()
+        self._wrap_search_edit = QLineEdit()
+        self._wrap_search_edit.setPlaceholderText(
+            'Paste in-game text, e.g. "there\'s a pure" or "gatekeeper just randomly"'
+        )
+        search_btn = _make_btn("Search", "#007acc")
+        search_btn.clicked.connect(self._run_wrap_search)
+        self._wrap_search_edit.returnPressed.connect(self._run_wrap_search)
+        search_row.addWidget(self._wrap_search_edit, 1)
+        search_row.addWidget(search_btn)
+        layout.addLayout(search_row)
+
+        self._wrap_results_list = QListWidget()
+        self._wrap_results_list.setMaximumHeight(160)
+        self._wrap_results_list.setStyleSheet(
+            "QListWidget{background-color:#252526;border:1px solid #3a3a3a;border-radius:4px;"
+            "color:#cccccc;font-size:12px;padding:2px;}"
+            "QListWidget::item{padding:4px 6px;}"
+            "QListWidget::item:selected{background:#264f78;color:#ffffff;}"
+        )
+        self._wrap_results_list.currentItemChanged.connect(self._on_wrap_hit_selected)
+        layout.addWidget(self._wrap_results_list)
+
+        self._wrap_detail_label = QLabel("Select a search result to edit.")
+        self._wrap_detail_label.setWordWrap(True)
+        self._wrap_detail_label.setStyleSheet(
+            "color:#9cdcfe;font-size:12px;background:transparent;"
+        )
+        layout.addWidget(self._wrap_detail_label)
+
+        self._wrap_text_editor = QTextEdit()
+        self._wrap_text_editor.setMaximumHeight(120)
+        self._wrap_text_editor.setStyleSheet(
+            "QTextEdit{background-color:#252526;color:#d4d4d4;border:1px solid #3c3c3c;"
+            "font-family:monospace;font-size:12px;padding:6px;}"
+        )
+        self._wrap_text_editor.setEnabled(False)
+        self._wrap_text_editor.textChanged.connect(self._update_wrap_preview)
+        layout.addWidget(self._wrap_text_editor)
+
+        width_row = QHBoxLayout()
+        w_lbl = QLabel("Wrap width (characters):")
+        w_lbl.setStyleSheet("color:#cccccc;font-size:12px;background:transparent;")
+        self._wrap_width_spin = QSpinBox()
+        self._wrap_width_spin.setRange(10, 120)
+        try:
+            self._wrap_width_spin.setValue(int(self._setting("wrap_fix_width", 36) or 36))
+        except (TypeError, ValueError):
+            self._wrap_width_spin.setValue(36)
+        self._wrap_width_spin.setFixedWidth(70)
+        self._wrap_width_spin.valueChanged.connect(self._on_wrap_width_changed)
+        width_row.addWidget(w_lbl)
+        width_row.addWidget(self._wrap_width_spin)
+        width_row.addStretch()
+        layout.addLayout(width_row)
+
+        self._wrap_preview_label = QLabel("Wrap preview")
+        self._wrap_preview_label.setStyleSheet(
+            "color:#858585;font-size:11px;background:transparent;"
+        )
+        layout.addWidget(self._wrap_preview_label)
+
+        self._wrap_preview = QTextEdit()
+        self._wrap_preview.setReadOnly(True)
+        self._wrap_preview.setMaximumHeight(110)
+        self._wrap_preview.setPlaceholderText(
+            "Wrapped lines appear here when you select a result and adjust width."
+        )
+        self._wrap_preview.setStyleSheet(
+            "QTextEdit{background-color:#1e1e1e;color:#b5cea8;border:1px solid #3c3c3c;"
+            "border-left:3px solid #007acc;font-family:monospace;font-size:12px;padding:6px;}"
+        )
+        layout.addWidget(self._wrap_preview)
+
+        btn_row = QHBoxLayout()
+        wrap_row_btn = _make_btn("Wrap this row", "#00a86b")
+        wrap_row_btn.clicked.connect(self._wrap_current_row)
+        wrap_sheet_btn = _make_btn("Wrap all overflowing in sheet", "#00a86b")
+        wrap_sheet_btn.clicked.connect(self._wrap_current_sheet)
+        save_row_btn = _make_btn("Save text", "#3a3a3a")
+        save_row_btn.clicked.connect(self._save_wrap_row_text)
+        inject_btn = _make_btn("Inject this file", "#007acc")
+        inject_btn.clicked.connect(self._inject_current_wrap_file)
+        btn_row.addWidget(wrap_row_btn)
+        btn_row.addWidget(wrap_sheet_btn)
+        btn_row.addWidget(save_row_btn)
+        btn_row.addWidget(inject_btn)
+        btn_row.addStretch()
+        layout.addLayout(btn_row)
+
+        self._wrap_status_label = QLabel("")
+        self._wrap_status_label.setWordWrap(True)
+        self._wrap_status_label.setStyleSheet(
+            "color:#8fbc8f;font-size:12px;background:transparent;"
+        )
+        layout.addWidget(self._wrap_status_label)
+
+        layout.addWidget(_make_hr())
+        sheets_toggle = QPushButton("▸  Browse database sheets (overflow counts)")
+        sheets_toggle.setCheckable(True)
+        sheets_toggle.setChecked(False)
+        sheets_toggle.setStyleSheet(
+            "QPushButton{text-align:left;color:#cccccc;background:transparent;border:none;"
+            "font-size:12px;padding:4px 0;}"
+            "QPushButton:hover{color:#ffffff;}"
+        )
+        self._wrap_sheets_toggle = sheets_toggle
+        sheets_toggle.toggled.connect(self._toggle_wrap_sheets_panel)
+        layout.addWidget(sheets_toggle)
+
+        self._wrap_sheets_panel = QWidget()
+        sheets_panel_layout = QVBoxLayout(self._wrap_sheets_panel)
+        sheets_panel_layout.setContentsMargins(0, 0, 0, 0)
+        sheets_panel_layout.addWidget(self._desc(
+            "Sheets with lines longer than the wrap width above. Double-click to open in "
+            "the editor (first overflowing line)."
+        ))
+        self._wrap_sheets_list = QListWidget()
+        self._wrap_sheets_list.setMaximumHeight(140)
+        self._wrap_sheets_list.setStyleSheet(
+            "QListWidget{background-color:#252526;border:1px solid #3a3a3a;border-radius:4px;"
+            "color:#cccccc;font-size:12px;}"
+        )
+        self._wrap_sheets_list.itemDoubleClicked.connect(self._on_wrap_sheet_double_clicked)
+        sheets_panel_layout.addWidget(self._wrap_sheets_list)
+        self._wrap_sheets_panel.setVisible(False)
+        layout.addWidget(self._wrap_sheets_panel)
+
+        layout.addWidget(_make_hr())
+        adv_toggle = QPushButton("▸  Advanced (event message windows & item descriptions)")
+        adv_toggle.setCheckable(True)
+        adv_toggle.setChecked(False)
+        adv_toggle.setStyleSheet(sheets_toggle.styleSheet())
+        adv_toggle.toggled.connect(self._toggle_wrap_advanced_panel)
+        layout.addWidget(adv_toggle)
+        self._wrap_advanced_toggle = adv_toggle
+
+        self._wrap_advanced_panel = QWidget()
+        adv_layout = QVBoxLayout(self._wrap_advanced_panel)
+        adv_layout.setContentsMargins(0, 0, 0, 0)
+        self._build_wrap_advanced_panel(adv_layout)
+        self._wrap_advanced_panel.setVisible(False)
+        layout.addWidget(self._wrap_advanced_panel)
+
+        self._current_wrap_hit: wolf_ws.WrapHit | None = None
+        self._current_wrap_hit_id: dict | None = None
+        self._current_wrap_path: Path | None = None
+        self._current_wrap_doc: dict | None = None
+
+    def _build_wrap_advanced_panel(self, layout: QVBoxLayout):
+        """wolf relayout / desc-relayout for non-DB-UI text."""
+        layout.addWidget(self._desc(
+            "Use these only for standard event message windows (maps / CommonEvent) and "
+            "item description boxes (説明 fields). Bulletin boards and custom DB UI "
+            "use the search workflow above."
+        ))
+        self._relayout_after_cb = QCheckBox("Automatically relayout after Step 6 inject")
         self._relayout_after_cb.setChecked(
             self._setting("relayout_after_inject", "false") == "true"
         )
@@ -2626,20 +2789,8 @@ class WolfWorkflowTab(QWidget):
         )
         layout.addWidget(self._relayout_after_cb)
 
-        self._relayout_desc_cb = QCheckBox("Also refit DB descriptions (desc-relayout)")
-        self._relayout_desc_cb.setChecked(
-            str(self._setting("relayout_desc", "true")).lower() != "false"
-        )
-        self._relayout_desc_cb.stateChanged.connect(
-            lambda: self._save_setting(
-                "relayout_desc",
-                "true" if self._relayout_desc_cb.isChecked() else "false",
-            )
-        )
-        layout.addWidget(self._relayout_desc_cb)
-
         msg_row = QHBoxLayout()
-        width_lbl = QLabel("Message width (cells):")
+        width_lbl = QLabel("Message width:")
         width_lbl.setStyleSheet("color:#cccccc;font-size:12px;background:transparent;")
         self._relayout_width_spin = QSpinBox()
         self._relayout_width_spin.setRange(20, 300)
@@ -2651,7 +2802,7 @@ class WolfWorkflowTab(QWidget):
         self._relayout_width_spin.valueChanged.connect(
             lambda v: self._save_setting("relayout_width", v)
         )
-        max_rows_lbl = QLabel("Max rows (0=default):")
+        max_rows_lbl = QLabel("Max rows (0=auto):")
         max_rows_lbl.setStyleSheet("color:#cccccc;font-size:12px;background:transparent;")
         self._relayout_max_rows_spin = QSpinBox()
         self._relayout_max_rows_spin.setRange(0, 20)
@@ -2670,8 +2821,24 @@ class WolfWorkflowTab(QWidget):
         msg_row.addStretch()
         layout.addLayout(msg_row)
 
+        relayout_btn = _make_btn("Relayout event messages (wolf relayout)", "#3a3a3a")
+        relayout_btn.clicked.connect(lambda: self._run_relayout(manual=True))
+        layout.addWidget(relayout_btn)
+
+        self._relayout_desc_cb = QCheckBox("Also refit item description boxes (desc-relayout)")
+        self._relayout_desc_cb.setChecked(
+            str(self._setting("relayout_desc", "true")).lower() != "false"
+        )
+        self._relayout_desc_cb.stateChanged.connect(
+            lambda: self._save_setting(
+                "relayout_desc",
+                "true" if self._relayout_desc_cb.isChecked() else "false",
+            )
+        )
+        layout.addWidget(self._relayout_desc_cb)
+
         desc_row = QHBoxLayout()
-        desc_width_lbl = QLabel("Desc width (cells):")
+        desc_width_lbl = QLabel("Desc width:")
         desc_width_lbl.setStyleSheet("color:#cccccc;font-size:12px;background:transparent;")
         self._relayout_desc_width_spin = QSpinBox()
         self._relayout_desc_width_spin.setRange(20, 300)
@@ -2706,9 +2873,387 @@ class WolfWorkflowTab(QWidget):
         desc_row.addStretch()
         layout.addLayout(desc_row)
 
-        now_btn = self._register(_make_btn("Relayout Data/ now", "#007acc"))
-        now_btn.clicked.connect(lambda: self._run_relayout(manual=True))
-        layout.addWidget(now_btn)
+        wrap_env = self._read_env_values(["wolfWrap", "wolfWidth"])
+        self._wolf_wrap_cb = QCheckBox("Wrap dialogue at translate time (wolfWrap, rare)")
+        self._wolf_wrap_cb.setChecked(
+            str(wrap_env.get("wolfWrap", "false")).strip().lower() == "true"
+        )
+        self._wolf_wrap_cb.stateChanged.connect(self._apply_wolf_wrap_config)
+        layout.addWidget(self._wolf_wrap_cb)
+        tw_row = QHBoxLayout()
+        tw_lbl = QLabel("wolfWrap width:")
+        tw_lbl.setStyleSheet("color:#cccccc;font-size:12px;background:transparent;")
+        self._wolf_wrap_width_spin = QSpinBox()
+        self._wolf_wrap_width_spin.setRange(20, 300)
+        try:
+            self._wolf_wrap_width_spin.setValue(int(wrap_env.get("wolfWidth") or 55))
+        except ValueError:
+            self._wolf_wrap_width_spin.setValue(55)
+        self._wolf_wrap_width_spin.setFixedWidth(70)
+        self._wolf_wrap_width_spin.valueChanged.connect(self._apply_wolf_wrap_config)
+        tw_row.addWidget(tw_lbl)
+        tw_row.addWidget(self._wolf_wrap_width_spin)
+        tw_row.addStretch()
+        layout.addLayout(tw_row)
+
+    def _toggle_wrap_sheets_panel(self, expanded: bool):
+        if hasattr(self, "_wrap_sheets_panel"):
+            self._wrap_sheets_panel.setVisible(expanded)
+            btn = getattr(self, "_wrap_sheets_toggle", None)
+            if btn is not None:
+                label = "▾  Browse database sheets (overflow counts)" if expanded else (
+                    "▸  Browse database sheets (overflow counts)"
+                )
+                btn.setText(label)
+            if expanded:
+                self._refresh_wrap_sheets_list()
+
+    def _toggle_wrap_advanced_panel(self, expanded: bool):
+        if hasattr(self, "_wrap_advanced_panel"):
+            self._wrap_advanced_panel.setVisible(expanded)
+            btn = getattr(self, "_wrap_advanced_toggle", None)
+            if btn is not None:
+                label = (
+                    "▾  Advanced (event message windows & item descriptions)"
+                    if expanded else
+                    "▸  Advanced (event message windows & item descriptions)"
+                )
+                btn.setText(label)
+
+    def _translated_and_files_dirs(self) -> tuple[Path, Path]:
+        root = self._tool_root()
+        return root / "translated", root / "files"
+
+    def _wrap_search_extra_dirs(self) -> list[Path]:
+        work = self._wolf_json_work_dir()
+        return [work] if work is not None else []
+
+    def _wrap_profile_width(self, sheet_name: str) -> int:
+        work = self._wolf_json_work_dir()
+        if work is not None:
+            profile = wolf_ws.load_wrap_profile(work)
+            return wolf_ws.get_sheet_width(
+                profile,
+                sheet_name,
+                default=int(self._setting("wrap_fix_width", 36) or 36),
+            )
+        try:
+            return int(self._setting("wrap_fix_width", 36) or 36)
+        except (TypeError, ValueError):
+            return 36
+
+    def _remember_sheet_width(self, sheet_name: str, width: int, json_file: str):
+        work = self._wolf_json_work_dir()
+        if work is not None:
+            wolf_ws.set_sheet_width(work, sheet_name, width, json_file=json_file)
+
+    def _on_wrap_width_changed(self, value: int):
+        self._save_setting("wrap_fix_width", value)
+        self._update_wrap_preview()
+
+    def _update_wrap_preview(self):
+        if not hasattr(self, "_wrap_preview"):
+            return
+        editor = getattr(self, "_wrap_text_editor", None)
+        if editor is None or not editor.isEnabled():
+            self._wrap_preview.clear()
+            if hasattr(self, "_wrap_preview_label"):
+                self._wrap_preview_label.setText("Wrap preview")
+            if editor is not None:
+                editor.setExtraSelections([])
+            return
+        text = editor.toPlainText()
+        width = self._wrap_width_spin.value()
+        summary = wolf_ws.wrap_preview_summary(text, width)
+        preview = wolf_ws.format_wrap_preview(text, width)
+        info = wolf_ws.wrap_preview_info(text, width)
+        if hasattr(self, "_wrap_preview_label"):
+            if summary:
+                self._wrap_preview_label.setText(summary)
+                color = "#ce9178" if info.get("needs_wrap") else "#8fbc8f"
+                self._wrap_preview_label.setStyleSheet(
+                    f"color:{color};font-size:11px;background:transparent;"
+                )
+            else:
+                self._wrap_preview_label.setText("Wrap preview")
+                self._wrap_preview_label.setStyleSheet(
+                    "color:#858585;font-size:11px;background:transparent;"
+                )
+        self._wrap_preview.setPlainText(preview)
+        border = "#ce9178" if info.get("needs_wrap") else "#007acc"
+        self._wrap_preview.setStyleSheet(
+            "QTextEdit{background-color:#1e1e1e;color:#b5cea8;border:1px solid #3c3c3c;"
+            f"border-left:3px solid {border};font-family:monospace;font-size:12px;padding:6px;}}"
+        )
+        self._apply_wrap_source_highlights(text, width, info)
+
+    def _apply_wrap_source_highlights(
+        self,
+        text: str,
+        width: int,
+        info: dict,
+    ):
+        """Mark in-width vs overflow segments on the source editor."""
+        editor = getattr(self, "_wrap_text_editor", None)
+        if editor is None or not editor.isEnabled() or not text.strip():
+            editor and editor.setExtraSelections([])
+            return
+        fmt_fit = QTextCharFormat()
+        fmt_fit.setBackground(QColor("#264f78"))
+        fmt_overflow = QTextCharFormat()
+        fmt_overflow.setBackground(QColor("#4a3728"))
+        selections = []
+        norm = text.replace("\r\n", "\n").replace("\r", "\n")
+        offset = 0
+        for line in norm.split("\n"):
+            line_len = len(line)
+            fit_end, _overflow = wolf_ws.split_line_at_visible_width(line, width)
+            if fit_end > 0:
+                sel = QTextEdit.ExtraSelection()
+                cursor = QTextCursor(editor.document())
+                cursor.setPosition(offset)
+                cursor.setPosition(offset + fit_end, QTextCursor.KeepAnchor)
+                sel.cursor = cursor
+                sel.format = fmt_fit
+                selections.append(sel)
+            if fit_end < line_len:
+                sel = QTextEdit.ExtraSelection()
+                cursor = QTextCursor(editor.document())
+                cursor.setPosition(offset + fit_end)
+                cursor.setPosition(offset + line_len, QTextCursor.KeepAnchor)
+                sel.cursor = cursor
+                sel.format = fmt_overflow
+                selections.append(sel)
+            offset += line_len + 1
+        editor.setExtraSelections(selections)
+
+    def _run_wrap_search(self):
+        query = self._wrap_search_edit.text().strip()
+        if not query:
+            return
+        tdir, fdir = self._translated_and_files_dirs()
+        extra = self._wrap_search_extra_dirs()
+        hits = wolf_ws.search_translated_text(
+            query, tdir, files_dir=fdir, extra_dirs=extra,
+        )
+        self._wrap_results_list.clear()
+        self._current_wrap_hit = None
+        if not hits:
+            where = "translated/, files/"
+            if extra:
+                where += f", {WORK_DIR_NAME}/"
+            item = QListWidgetItem(f"No matches in {where}.")
+            item.setFlags(Qt.ItemIsEnabled)
+            self._wrap_results_list.addItem(item)
+            self._wrap_detail_label.setText("No matches.")
+            self._wrap_text_editor.clear()
+            self._wrap_text_editor.setEnabled(False)
+            self._update_wrap_preview()
+            return
+        width = self._wrap_width_spin.value()
+        for hit in hits:
+            item = QListWidgetItem(hit.summary(width))
+            item.setData(Qt.UserRole, hit.hit_id)
+            item.setData(Qt.UserRole + 1, hit)
+            self._wrap_results_list.addItem(item)
+        self._wrap_results_list.setCurrentRow(0)
+        self._wrap_status_label.setText(f"Found {len(hits)} match(es).")
+
+    def _on_wrap_hit_selected(self, current: QListWidgetItem | None, _previous):
+        if current is None:
+            return
+        hit = current.data(Qt.UserRole + 1)
+        if not isinstance(hit, wolf_ws.WrapHit):
+            return
+        self._current_wrap_hit = hit
+        self._current_wrap_hit_id = hit.hit_id
+        tdir, fdir = self._translated_and_files_dirs()
+        extra = self._wrap_search_extra_dirs()
+        path, doc, line = wolf_ws.load_hit_from_id(
+            tdir, hit.hit_id, files_dir=fdir, extra_dirs=extra,
+        )
+        self._current_wrap_path = path
+        self._current_wrap_doc = doc
+        w = self._wrap_profile_width(hit.sheet_name)
+        self._wrap_width_spin.blockSignals(True)
+        self._wrap_width_spin.setValue(w)
+        self._wrap_width_spin.blockSignals(False)
+        if line is not None:
+            text = str(line.get("text") or hit.text)
+        else:
+            text = hit.text
+        self._wrap_text_editor.setEnabled(True)
+        self._wrap_text_editor.setPlainText(text)
+        kind_labels = {
+            "db": "Database sheet",
+            "names": "Name / profile text",
+            "gamedat": "Game.dat",
+            "map": "Event dialogue",
+            "common": "Event dialogue",
+        }
+        kind_lbl = kind_labels.get(hit.kind, hit.kind)
+        if hit.kind == "names":
+            detail = (
+                f"{kind_lbl}: {hit.sheet_name}  ·  {hit.json_file}  ·  "
+                f"entry #{hit.row}  ·  longest line {hit.max_line_len} chars"
+            )
+        elif hit.kind == "db":
+            detail = (
+                f"{kind_lbl}: {hit.sheet_name}  ·  {hit.json_file}  ·  "
+                f"row {hit.row}  ·  {hit.field_name}  ·  longest line {hit.max_line_len} chars"
+            )
+        else:
+            detail = (
+                f"{kind_lbl}: {hit.sheet_name}  ·  {hit.json_file}  ·  "
+                f"{hit.field_name}  ·  longest line {hit.max_line_len} chars"
+            )
+        self._wrap_detail_label.setText(detail)
+        self._update_wrap_preview()
+
+    def _save_wrap_row_text(self):
+        if not self._current_wrap_hit_id or not self._current_wrap_path or not self._current_wrap_doc:
+            QMessageBox.information(self, "Fix wrapping", "Select a search result first.")
+            return
+        line = wolf_ws.locate_line(self._current_wrap_doc, self._current_wrap_hit_id)
+        if line is None:
+            QMessageBox.warning(self, "Fix wrapping", "Could not locate line in JSON.")
+            return
+        line["text"] = self._wrap_text_editor.toPlainText()
+        wolf_ws.save_document(self._current_wrap_path, self._current_wrap_doc)
+        self._wrap_status_label.setText(f"Saved {self._current_wrap_path.name}.")
+        self._log(f"✅ Saved wrap edit to {self._current_wrap_path.name}")
+
+    def _wrap_current_row(self):
+        if not self._current_wrap_hit_id or not self._current_wrap_path or not self._current_wrap_doc:
+            QMessageBox.information(self, "Fix wrapping", "Select a search result first.")
+            return
+        width = self._wrap_width_spin.value()
+        line = wolf_ws.locate_line(self._current_wrap_doc, self._current_wrap_hit_id)
+        if line is not None:
+            line["text"] = self._wrap_text_editor.toPlainText()
+        changed = wolf_ws.wrap_hit_in_file(
+            self._current_wrap_path,
+            self._current_wrap_doc,
+            self._current_wrap_hit_id,
+            width,
+        )
+        if self._current_wrap_hit:
+            self._remember_sheet_width(
+                self._current_wrap_hit.sheet_name,
+                width,
+                self._current_wrap_hit.json_file,
+            )
+        path, doc, line = wolf_ws.load_hit_from_id(
+            self._translated_and_files_dirs()[0],
+            self._current_wrap_hit_id,
+            files_dir=self._translated_and_files_dirs()[1],
+            extra_dirs=self._wrap_search_extra_dirs(),
+        )
+        if line is not None:
+            self._wrap_text_editor.setPlainText(str(line.get("text") or ""))
+        msg = f"Wrapped row at width {width}." if changed else "Row already fits at this width."
+        self._wrap_status_label.setText(msg + f" Inject {self._current_wrap_path.name} from Step 6.")
+        self._log(f"{'✅' if changed else 'ℹ'}  {msg}")
+        self._update_wrap_preview()
+
+    def _wrap_current_sheet(self):
+        hit = self._current_wrap_hit
+        if not hit or hit.kind != "db":
+            QMessageBox.information(
+                self, "Fix wrapping",
+                "Select a database sheet result first (not map dialogue).",
+            )
+            return
+        tdir, fdir = self._translated_and_files_dirs()
+        path = tdir / hit.json_file
+        if not path.is_file():
+            path = fdir / hit.json_file
+        if not path.is_file():
+            QMessageBox.warning(self, "Fix wrapping", f"{hit.json_file} not found.")
+            return
+        doc = json.loads(path.read_text(encoding="utf-8-sig"))
+        width = self._wrap_width_spin.value()
+        count = wolf_ws.wrap_overflow_in_sheet(path, doc, hit.sheet_name, width)
+        self._remember_sheet_width(hit.sheet_name, width, hit.json_file)
+        self._refresh_wrap_sheets_list()
+        msg = f"Wrapped {count} overflowing line(s) in {hit.sheet_name} at width {width}."
+        self._wrap_status_label.setText(msg + f" Inject {hit.json_file}.")
+        self._log(f"✅ {msg}")
+
+    def _inject_current_wrap_file(self):
+        hit = self._current_wrap_hit
+        if not hit:
+            QMessageBox.information(self, "Inject", "Select a search result first.")
+            return
+        if not self._require_manifest():
+            return
+        self._inject(only_json={hit.json_file})
+
+    def _refresh_wrap_sheets_list(self):
+        if not hasattr(self, "_wrap_sheets_list"):
+            return
+        tdir, fdir = self._translated_and_files_dirs()
+        width = self._wrap_width_spin.value() if hasattr(self, "_wrap_width_spin") else 36
+        summaries = wolf_ws.sheet_overflow_summaries(tdir, width, files_dir=fdir)
+        self._wrap_sheets_list.clear()
+        if not summaries:
+            item = QListWidgetItem("No database JSON — translate DB sheets first.")
+            item.setFlags(Qt.ItemIsEnabled)
+            self._wrap_sheets_list.addItem(item)
+            return
+        for s in sorted(summaries, key=lambda x: (-x.overflow_count, x.sheet_name)):
+            flag = f"  ⚠ {s.overflow_count} overflow" if s.overflow_count else "  ok"
+            item = QListWidgetItem(
+                f"{s.sheet_name} ({s.line_count} lines){flag}  —  {s.json_file}"
+            )
+            item.setData(Qt.UserRole, s.sheet_name)
+            item.setData(Qt.UserRole + 1, s.json_file)
+            self._wrap_sheets_list.addItem(item)
+
+    def _on_wrap_sheet_double_clicked(self, item: QListWidgetItem):
+        sheet = item.data(Qt.UserRole)
+        jf = item.data(Qt.UserRole + 1)
+        if not sheet or not jf:
+            return
+        tdir, fdir = self._translated_and_files_dirs()
+        width = self._wrap_width_spin.value()
+        path = tdir / str(jf)
+        if not path.is_file():
+            path = fdir / str(jf)
+        if not path.is_file():
+            return
+        doc = json.loads(path.read_text(encoding="utf-8-sig"))
+        for group in doc.get("groups") or []:
+            if str(group.get("typeName") or "") != sheet:
+                continue
+            for line in group.get("lines") or []:
+                text = line.get("text")
+                if isinstance(text, str) and wolf_selwrap.line_needs_wrap(text, width):
+                    hit = wolf_ws.WrapHit(
+                        json_file=str(jf),
+                        kind="db",
+                        sheet_name=str(sheet),
+                        row=line.get("row"),
+                        field_name=str(line.get("fieldName") or ""),
+                        text=str(text),
+                        max_line_len=dazedwrap.max_line_visible_length(str(text)),
+                    )
+                    self._wrap_search_edit.setText(str(text)[:40])
+                    self._wrap_results_list.clear()
+                    item_r = QListWidgetItem(hit.summary(width))
+                    item_r.setData(Qt.UserRole, hit.hit_id)
+                    item_r.setData(Qt.UserRole + 1, hit)
+                    self._wrap_results_list.addItem(item_r)
+                    self._wrap_results_list.setCurrentRow(0)
+                    return
+
+    def _apply_wolf_wrap_config(self):
+        enabled = self._wolf_wrap_cb.isChecked() if hasattr(self, "_wolf_wrap_cb") else False
+        width = self._wolf_wrap_width_spin.value() if hasattr(self, "_wolf_wrap_width_spin") else 55
+        self._write_env_values({
+            "wolfWrap": "true" if enabled else "false",
+            "wolfWidth": str(width),
+        })
 
     def _tool_root(self) -> Path:
         """DazedMTLTool project root (``files/``, ``translated/``, etc.)."""
@@ -2876,6 +3421,10 @@ class WolfWorkflowTab(QWidget):
         # Index 6 == Inject: keep the quick-inject picker in sync with translated/.
         elif idx == 6:
             self._refresh_inject_list()
+        # Index 7 == Fix wrap: refresh sheet overflow list.
+        elif idx == 7:
+            if getattr(self, "_wrap_sheets_panel", None) and self._wrap_sheets_panel.isVisible():
+                self._refresh_wrap_sheets_list()
 
     def _refresh_inject_list(self):
         if not hasattr(self, "inject_list"):
@@ -3249,8 +3798,6 @@ class WolfWorkflowTab(QWidget):
 
             if do_desc and not failures:
                 projects = self._find_db_projects(data_dir)
-                if not projects:
-                    pass
                 for proj in projects:
                     with tempfile.TemporaryDirectory(prefix="wolfdawn-desc-") as tmp:
                         tmp_path = Path(tmp)
@@ -3283,7 +3830,7 @@ class WolfWorkflowTab(QWidget):
             if failures:
                 return False, "Relayout failed — " + "; ".join(failures)
             return True, "Relayout complete." + (
-                " Continue to Step 7 to package." if not manual else ""
+                " Continue to Step 8 to package." if not manual else ""
             )
 
         self._run_task(task)
@@ -3291,7 +3838,7 @@ class WolfWorkflowTab(QWidget):
     # ── Step 5: Package ────────────────────────────────────────────────────────
 
     def _build_step5_package(self, layout: QVBoxLayout):
-        layout.addWidget(_make_section_label("Step 7 · Package the Translated Game"))
+        layout.addWidget(_make_section_label("Step 8 · Package the Translated Game"))
         layout.addWidget(self._desc(
             "Choose how the translated build runs. A loose Data/ folder is simplest for "
             "playtesting; repacking rebuilds a single Data.wolf archive for distribution."
@@ -3369,7 +3916,7 @@ class WolfWorkflowTab(QWidget):
     # ── Step 6: Saves ──────────────────────────────────────────────────────────
 
     def _build_step6_saves(self, layout: QVBoxLayout):
-        layout.addWidget(_make_section_label("Step 8 · Update Existing Saves (optional)"))
+        layout.addWidget(_make_section_label("Step 9 · Update Existing Saves (optional)"))
         layout.addWidget(self._desc(
             "WOLF .sav files bake in the game title and some strings at save time. This rewrites "
             "them so old Japanese saves load cleanly in the translated build. It is only needed "
