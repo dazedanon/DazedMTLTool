@@ -2402,23 +2402,41 @@ class WolfWorkflowTab(QWidget):
     def _sync_translated_json_to_wolf_json(
         self, json_name: str, log, game_json_dir: Path
     ) -> bool:
-        """Copy one translated/ JSON into the game's wolf_json/ folder."""
-        src = self._translated_path(json_name)
+        """Copy one translated/ (or files/) JSON into the game's wolf_json/ folder."""
+        src = self._translated_or_source(json_name)
         if src is None:
             return False
         dest = game_json_dir / json_name
         try:
             if src.resolve() == dest.resolve():
+                log(f"  ↷ {json_name} already in {WORK_DIR_NAME}/ (same file)")
                 return True
         except Exception:
             pass
         try:
             dest.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(src, dest)
+            log(f"  → synced {json_name} into {WORK_DIR_NAME}/")
             return True
         except Exception as exc:
             log(f"  ⚠ could not update {json_name} in {WORK_DIR_NAME}/: {exc}")
             return False
+
+    def _inject_sync_targets(
+        self,
+        entries: list[dict],
+        only_json: set[str] | None,
+    ) -> list[str]:
+        """JSON files to copy from translated/ into the game's wolf_json/ after inject."""
+        if only_json is None:
+            return sorted(
+                e["json"]
+                for e in entries
+                if e.get("json") and self._translated_or_source(e["json"]) is not None
+            )
+        return sorted(
+            j for j in only_json if self._translated_or_source(j) is not None
+        )
 
     def _log_inject_guard_lines(self, mismatches: list[str], untranslated: int | None, log):
         """Surface WolfDawn guard failures instead of burying them in the scrollback."""
@@ -2694,16 +2712,9 @@ class WolfWorkflowTab(QWidget):
                     failed += 1
                     log(f"  ⚠ names-inject exit {res.returncode}")
 
-            # Refresh wolf_json/ from translated/ for git (full inject: all docs;
-            # quick inject: only the files we touched).
-            if only_json is None:
-                sync_targets = [
-                    e["json"] for e in entries if e.get("kind") != "names"
-                ]
-            else:
-                sync_targets = sorted(strings_targets)
-                if will_names and names_entry:
-                    sync_targets.append(names_entry["json"])
+            # Refresh wolf_json/ from translated/ for git (full inject: every translated
+            # manifest JSON including names.json; quick inject: only what was selected).
+            sync_targets = self._inject_sync_targets(entries, only_json)
             synced = 0
             for json_name in sync_targets:
                 if self._sync_translated_json_to_wolf_json(
