@@ -134,7 +134,7 @@ FIXTEXTWRAP = True
 # IGNORETLTEXT: Skip Translated Text.
 IGNORETLTEXT = False
 # PRESERVEORIGINAL: Store Japanese source in _original fields (maps + database) for re-run safety.
-PRESERVEORIGINAL = False
+PRESERVEORIGINAL = True
 # TLSYSTEMVARIABLES: Translate System Variables. (Optional but sometimes necessary. Can break stuff.)
 TLSYSTEMVARIABLES = False
 # TLSYSTEMSWITCHES: Translate System Switches. (Optional. Translates switch names in System.json.)
