@@ -2006,8 +2006,6 @@ class WolfWorkflowTab(QWidget):
         refresh_btn.clicked.connect(self._refresh_names_summary)
         layout.addWidget(refresh_btn)
 
-        self._add_name_wrap_options(layout)
-
         layout.addWidget(_make_hr())
         layout.addWidget(self._subheading("Translate names (Phase 0)"))
         layout.addWidget(self._desc(
@@ -2020,6 +2018,8 @@ class WolfWorkflowTab(QWidget):
             lambda: self._navigate_to_translation(kinds=PHASE_NAMES_KINDS, auto_start=True)
         )
         layout.addWidget(tl_btn)
+
+        self._add_name_wrap_options(layout)
         self._refresh_names_summary()
 
     def _load_names_document(self) -> tuple[dict | None, Path | None]:
