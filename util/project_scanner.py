@@ -184,6 +184,46 @@ def _wolf_dir_has_loose_data(data_dir: Path) -> bool:
     return False
 
 
+def wolf_unpack_target_dir(game_root: str | Path, archive: str | Path) -> Path:
+    """Return the folder ``wolf unpack-all`` writes for *archive* (``<out>/<stem>/``)."""
+    archive = Path(archive)
+    return wolf_unpack_out_dir(game_root, archive) / archive.stem
+
+
+def _wolf_archive_unpack_ok(game_root: str | Path, archive: Path) -> bool:
+    """True when *archive*'s expected unpack folder exists and looks populated."""
+    target = wolf_unpack_target_dir(game_root, archive)
+    if not target.is_dir():
+        return False
+    stem = archive.stem
+    if stem == "Data":
+        return _wolf_dir_has_loose_data(target)
+    if stem == "BasicData":
+        return (target / "CommonEvent.dat").is_file() or any(target.glob("*.dat"))
+    if stem == "MapData":
+        return wolf_has_maps(wolf_unpack_out_dir(game_root, archive))
+    try:
+        return any(target.iterdir())
+    except OSError:
+        return False
+
+
+def find_wolf_unpack_gaps(
+    game_root: str | Path,
+    archives: list[Path] | None = None,
+) -> list[Path]:
+    """Return ``.wolf`` archives whose unpack output folder is missing or empty.
+
+    Used to catch interrupted unpacks: a game may already have ``BasicData/`` loose
+    while ``MapData.wolf`` was never finished, and the old ``unpacked`` flag still
+    read as true.
+    """
+    root = Path(game_root)
+    if archives is None:
+        archives = find_wolf_archives(root)
+    return [arc for arc in archives if not _wolf_archive_unpack_ok(root, arc)]
+
+
 def wolf_unpack_out_dir(game_root: str | Path, archive: str | Path) -> Path:
     """Return the ``-o`` directory for ``wolf unpack-all`` on *archive*.
 
@@ -245,6 +285,9 @@ def detect_wolf_layout(game_root: str | Path) -> dict:
         archives   : list[Path] of .wolf archives found (may be empty)
         data_dir   : Path to the loose/unpacked Data/ folder, or None
         unpacked   : bool - True when a usable loose Data/ folder exists
+        unpack_gaps: list[Path] of .wolf archives not yet unpacked (empty when
+                     there are no archives, or every archive has output on disk)
+        unpack_complete: bool - True when there are no pending unpack gaps
         basic_data : Path to Data/BasicData (or Data/ when flattened), or None
         map_data   : Path to Data/MapData (or Data/ when flattened), or None
     """
@@ -255,6 +298,8 @@ def detect_wolf_layout(game_root: str | Path) -> dict:
         "archives": [],
         "data_dir": None,
         "unpacked": False,
+        "unpack_gaps": [],
+        "unpack_complete": True,
         "basic_data": None,
         "map_data": None,
     }
@@ -269,6 +314,9 @@ def detect_wolf_layout(game_root: str | Path) -> dict:
 
     result["engine"] = "WOLF"
     result["archives"] = archives
+    gaps = find_wolf_unpack_gaps(root, archives)
+    result["unpack_gaps"] = gaps
+    result["unpack_complete"] = not gaps
     if loose is not None:
         result["data_dir"] = loose
         result["unpacked"] = True

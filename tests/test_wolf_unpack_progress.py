@@ -7,10 +7,13 @@ from pathlib import Path
 from unittest.mock import patch
 
 from util.wolfdawn import (
+    WolfResult,
     _UNPACK_ARCHIVE_DONE_RE,
+    _UNPACK_ONE_DONE_RE,
     _UNPACK_SUMMARY_RE,
     _run_streaming,
     count_unpack_archives,
+    unpack_all,
 )
 
 
@@ -46,6 +49,45 @@ class WolfUnpackProgressTests(unittest.TestCase):
             (base / "MapData.wolf").write_bytes(b"")
             (base / "BasicData.wolf").write_bytes(b"")
             self.assertEqual(count_unpack_archives([base]), 2)
+
+    def test_unpack_one_done_regex(self):
+        line = "unpacked 74 files -> /tmp/out/MapData"
+        match = _UNPACK_ONE_DONE_RE.match(line)
+        self.assertIsNotNone(match)
+        self.assertEqual(match.group("files"), "74")
+
+    def test_unpack_all_uses_separate_subprocess_per_archive(self):
+        import tempfile
+
+        calls: list[list[str]] = []
+
+        def fake_run(args, log_fn=None):
+            calls.append(list(args))
+            name = Path(args[1]).name
+            files = "10" if name.startswith("Basic") else "5"
+            return WolfResult(
+                returncode=0,
+                stdout=f"unpacked {files} files -> /tmp/out\n",
+                stderr="",
+                argv=["wolf", *args],
+            )
+
+        with tempfile.TemporaryDirectory() as raw:
+            base = Path(raw)
+            a = base / "BasicData.wolf"
+            b = base / "MapData.wolf"
+            a.write_bytes(b"x")
+            b.write_bytes(b"x")
+            out = base / "out"
+            with patch("util.wolfdawn._run", side_effect=fake_run):
+                result = unpack_all([a, b], out, progress_total=2)
+
+        self.assertTrue(result.ok)
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(calls[0][:2], ["unpack", str(a)])
+        self.assertEqual(calls[1][:2], ["unpack", str(b)])
+        self.assertTrue(str(out / "BasicData") in calls[0][3])
+        self.assertTrue(str(out / "MapData") in calls[1][3])
 
     def test_run_streaming_emits_unpack_progress(self):
         events: list[tuple[int, int, str]] = []

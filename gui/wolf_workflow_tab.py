@@ -92,6 +92,7 @@ from util.paths import PROJECT_ROOT
 from util.project_scanner import (
     detect_wolf_layout,
     find_wolf_text_archives,
+    find_wolf_unpack_gaps,
     list_wolf_json_files,
     wolf_has_maps,
     wolf_maps_dir,
@@ -1077,6 +1078,19 @@ class WolfWorkflowTab(QWidget):
         if self._worker is not None and self._worker.isRunning():
             return
 
+        info = self._layout or detect_wolf_layout(self._game_root)
+        self._layout = info
+        gaps = info.get("unpack_gaps") or []
+        if gaps or (info.get("archives") and not info.get("unpacked")):
+            pending = gaps or info.get("archives") or []
+            self._log(f"Auto-setup: unpacking {len(pending)} archive(s) …")
+            self._unpack(
+                on_done=self._on_auto_unpack_done,
+                interactive=False,
+                archives=pending,
+            )
+            return
+
         manifest = self._read_manifest()
         if manifest and manifest.get("entries"):
             info = self._layout or detect_wolf_layout(self._game_root)
@@ -1102,12 +1116,6 @@ class WolfWorkflowTab(QWidget):
             self._scan_wolf_files()
             return
 
-        info = self._layout or detect_wolf_layout(self._game_root)
-        self._layout = info
-        if info.get("archives") and not info.get("unpacked"):
-            self._log("Auto-setup: unpacking .wolf archives …")
-            self._unpack(on_done=self._on_auto_unpack_done, interactive=False)
-            return
         if info.get("data_dir"):
             self._log("Auto-setup: extracting text into wolf_json/ …")
             self._extract_to_work_dir(on_done=lambda ok, _m: self._scan_wolf_files() if ok else None)
@@ -1118,6 +1126,11 @@ class WolfWorkflowTab(QWidget):
         if not ok:
             return
         self._layout = detect_wolf_layout(self._game_root)
+        gaps = self._layout.get("unpack_gaps") or []
+        if gaps:
+            names = ", ".join(a.name for a in gaps)
+            self._log(f"⚠  Unpack still incomplete: {names}")
+            return
         if self._layout.get("data_dir"):
             self._log("Auto-setup: extracting text into wolf_json/ …")
             self._extract_to_work_dir(on_done=lambda ok2, _m: self._scan_wolf_files() if ok2 else None)
@@ -1401,12 +1414,14 @@ class WolfWorkflowTab(QWidget):
 
         self._run_task(task)
 
-    def _unpack(self, on_done=None, *, interactive: bool = True):
+    def _unpack(self, on_done=None, *, interactive: bool = True, archives=None):
         if not self._require_root():
             return
         root = Path(self._game_root)
         info = detect_wolf_layout(root)
-        archives = info["archives"]
+        if archives is None:
+            gaps = info.get("unpack_gaps") or find_wolf_unpack_gaps(root)
+            archives = gaps if gaps else info["archives"]
         if not archives:
             self._log("Unpack: no .wolf archives found (already unpacked?).")
             if interactive:

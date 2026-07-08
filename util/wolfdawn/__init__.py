@@ -77,6 +77,9 @@ ProgressFn = Callable[[int, int, str], None]
 _UNPACK_ARCHIVE_DONE_RE = re.compile(
     r"^\s+(?P<name>\S+\.wolf)\s+->\s+(?P<dest>.+?)\s+\((?P<files>\d+) files\)\s*$"
 )
+_UNPACK_ONE_DONE_RE = re.compile(
+    r"^unpacked\s+(?P<files>\d+)\s+files\s+->", re.IGNORECASE
+)
 _UNPACK_SUMMARY_RE = re.compile(
     r"^unpack-all:\s+(?P<archives>\d+) archive\(s\),\s+(?P<files>\d+) files\s*$"
 )
@@ -445,23 +448,38 @@ def _run_streaming(
 
 def count_unpack_archives(inputs: Union[PathLike, Iterable[PathLike]]) -> int | None:
     """Return how many ``.wolf`` archives *inputs* will unpack, or None if unknown."""
+    expanded = _expand_wolf_archives(inputs)
+    if expanded is None:
+        return None
+    return len(expanded)
+
+
+def _expand_wolf_archives(inputs: Union[PathLike, Iterable[PathLike]]) -> list[Path] | None:
+    """Expand directory inputs to ``*.wolf`` files; return None if any path is invalid."""
     if isinstance(inputs, (str, Path)):
         inputs = [inputs]
-    total = 0
+    archives: list[Path] = []
     for item in inputs:
         path = Path(item)
         if path.is_file():
             lower = path.name.lower()
             if lower.endswith(".wolf") or lower.endswith(".wolf.bak"):
-                total += 1
+                archives.append(path)
             else:
                 return None
         elif path.is_dir():
-            total += len(list(path.glob("*.wolf")))
+            archives.extend(sorted(path.glob("*.wolf")))
         else:
             return None
-    return total
+    return archives
 
+
+def _parse_unpack_one_files(stdout: str) -> str | None:
+    for line in (stdout or "").splitlines():
+        match = _UNPACK_ONE_DONE_RE.match(line.strip())
+        if match:
+            return match.group("files")
+    return None
 
 # ---------------------------------------------------------------------------
 # Command wrappers
@@ -474,28 +492,90 @@ def unpack_all(
     progress_fn: ProgressFn | None = None,
     progress_total: int | None = None,
 ) -> WolfResult:
-    """``wolf unpack-all <data-dir|archive.wolf>... -o <out-dir>``.
+    """Unpack each ``Name.wolf`` to ``<out-dir>/Name/``.
 
-    Each ``Name.wolf`` is unpacked to ``<out-dir>/Name/``.
-
-    When *progress_fn* is set, it receives ``(current, total, label)`` as each
-    archive finishes. Pass *progress_total* when known; otherwise the archive
-    count is inferred from ``unpack-all: N archive(s), …`` in the CLI output.
+    WolfDawn reads each archive entirely into memory (``std::fs::read``), so this
+    runs ``wolf unpack`` once per archive in a fresh subprocess. That way peak
+    RAM is freed between large archives instead of stacking in one long
+    ``unpack-all`` process.
     """
-    if isinstance(inputs, (str, Path)):
-        inputs = [inputs]
-    input_list = [_str(p) for p in inputs]
-    if progress_total is None:
-        progress_total = count_unpack_archives(inputs)
-    args = ["unpack-all", *input_list, "-o", _str(out_dir)]
-    if progress_fn is not None:
-        return _run_streaming(
-            args,
-            log_fn=log_fn,
-            progress_fn=progress_fn,
-            progress_total=progress_total,
+    archives = _expand_wolf_archives(inputs)
+    if archives is None:
+        return WolfResult(
+            returncode=64,
+            stdout="",
+            stderr="invalid unpack input path",
+            argv=["wolf", "unpack", "…"],
         )
-    return _run(args, log_fn=log_fn)
+    if not archives:
+        return WolfResult(
+            returncode=4,
+            stdout="",
+            stderr="no .wolf archives found in the given paths",
+            argv=["wolf", "unpack", "…"],
+        )
+
+    total = progress_total if progress_total is not None else len(archives)
+    out_root = Path(out_dir)
+    ok = 0
+    failed = 0
+    total_files = 0
+    log_lines: list[str] = []
+    last_argv: list[str] = []
+
+    for index, archive in enumerate(archives):
+        stem = archive.stem
+        target = out_root / stem
+        if progress_fn and total > 0:
+            _emit_unpack_progress(
+                progress_fn,
+                index,
+                total,
+                f"Unpacking {archive.name} ({index + 1} of {total}) …",
+            )
+        res = _run(["unpack", _str(archive), "-o", _str(target)], log_fn=log_fn)
+        last_argv = res.argv
+        if res.stdout:
+            log_lines.append(res.stdout.strip())
+        if res.ok:
+            ok += 1
+            files = _parse_unpack_one_files(res.stdout) or "?"
+            try:
+                total_files += int(files)
+            except ValueError:
+                pass
+            if progress_fn and total > 0:
+                label = f"Unpacked {archive.name} ({files} files)"
+                if index + 1 < total:
+                    label += f" — archive {index + 2} of {total} …"
+                _emit_unpack_progress(progress_fn, index + 1, total, label)
+        else:
+            failed += 1
+            if log_fn:
+                log_fn(f"  {archive.name} FAILED (exit {res.returncode})")
+
+    summary = f"unpack-all: {ok} archive(s), {total_files} files"
+    if failed:
+        summary += f", {failed} failed"
+    if log_fn:
+        log_fn(summary)
+    log_lines.append(summary)
+
+    return WolfResult(
+        returncode=0 if ok > 0 else 4,
+        stdout="\n".join(log_lines),
+        stderr="",
+        argv=last_argv or ["wolf", "unpack", "…"],
+    )
+
+
+def unpack_one(
+    archive: PathLike,
+    out_dir: PathLike,
+    log_fn=None,
+) -> WolfResult:
+    """``wolf unpack <archive.wolf> -o <out-dir>``."""
+    return _run(["unpack", _str(archive), "-o", _str(out_dir)], log_fn=log_fn)
 
 
 def strings_extract(input_path: PathLike, out_json: PathLike, log_fn=None) -> WolfResult:

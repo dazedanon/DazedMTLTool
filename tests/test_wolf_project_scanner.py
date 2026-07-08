@@ -15,11 +15,13 @@ sys.path.insert(0, str(ROOT))
 from util.project_scanner import (  # noqa: E402
     detect_wolf_layout,
     find_wolf_text_archives,
+    find_wolf_unpack_gaps,
     wolf_has_maps,
     wolf_maps_dir,
     wolf_maps_packed,
     wolf_repair_nested_data_dir,
     wolf_unpack_out_dir,
+    wolf_unpack_target_dir,
 )
 
 
@@ -113,6 +115,55 @@ class WolfProjectScannerTests(unittest.TestCase):
             info = detect_wolf_layout(base)
             self.assertTrue(info["unpacked"])
             self.assertEqual(info["data_dir"], outer)
+
+    def test_find_wolf_unpack_gaps_when_mapdata_missing(self):
+        with tempfile.TemporaryDirectory() as raw:
+            base = Path(raw)
+            data = base / "Data"
+            basic = data / "BasicData"
+            basic.mkdir(parents=True)
+            (basic / "CommonEvent.dat").write_bytes(b"")
+            (data / "BasicData.wolf").write_bytes(b"")
+            (data / "MapData.wolf").write_bytes(b"")
+            gaps = find_wolf_unpack_gaps(base)
+            self.assertEqual(gaps, [data / "MapData.wolf"])
+
+    def test_find_wolf_unpack_gaps_empty_when_split_archives_unpacked(self):
+        with tempfile.TemporaryDirectory() as raw:
+            base = Path(raw)
+            data = base / "Data"
+            basic = data / "BasicData"
+            maps = data / "MapData"
+            basic.mkdir(parents=True)
+            maps.mkdir(parents=True)
+            (basic / "CommonEvent.dat").write_bytes(b"")
+            (maps / "town.mps").write_bytes(b"")
+            (data / "BasicData.wolf").write_bytes(b"")
+            (data / "MapData.wolf").write_bytes(b"")
+            self.assertEqual(find_wolf_unpack_gaps(base), [])
+
+    def test_detect_wolf_layout_reports_unpack_gaps(self):
+        with tempfile.TemporaryDirectory() as raw:
+            base = Path(raw)
+            data = base / "Data"
+            basic = data / "BasicData"
+            basic.mkdir(parents=True)
+            (basic / "CommonEvent.dat").write_bytes(b"")
+            map_arc = data / "MapData.wolf"
+            map_arc.write_bytes(b"")
+            info = detect_wolf_layout(base)
+            self.assertFalse(info["unpack_complete"])
+            self.assertEqual(info["unpack_gaps"], [map_arc])
+            self.assertTrue(info["unpacked"])
+
+    def test_wolf_unpack_target_dir(self):
+        with tempfile.TemporaryDirectory() as raw:
+            base = Path(raw)
+            data = base / "Data"
+            data.mkdir()
+            arc = data / "MapData.wolf"
+            arc.write_bytes(b"")
+            self.assertEqual(wolf_unpack_target_dir(base, arc), data / "MapData")
 
 
 if __name__ == "__main__":
