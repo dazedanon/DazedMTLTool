@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Unit tests for WolfDawn names.json helpers in util/wolf_names.py."""
+"""Unit tests for WolfDawn names.json helpers in util/wolfdawn/names.py."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 os.chdir(ROOT)
 sys.path.insert(0, str(ROOT))
 
-from util import wolf_names as wn  # noqa: E402
+from util.wolfdawn import names as wn  # noqa: E402
 
 
 class TestNameTranslatable(unittest.TestCase):

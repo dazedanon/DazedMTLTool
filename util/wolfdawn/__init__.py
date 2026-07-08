@@ -42,6 +42,8 @@ __all__ = [
     "strings_inject",
     "names_inject",
     "parse_strings_inject_counts",
+    "parse_strings_inject_untranslated",
+    "parse_strings_inject_mismatches",
     "parse_names_inject_counts",
     "inject_had_applied",
     "pack",
@@ -54,6 +56,17 @@ __all__ = [
 # strings-inject: "applied N translation(s) (M drifted)"; names-inject uses "name change(s)".
 _INJECT_COUNTS_RE = re.compile(
     r"applied\s+(\d+)\s+translation.*?(\d+)\s+drifted", re.IGNORECASE | re.DOTALL
+)
+_INJECT_UNTRANSLATED_RE = re.compile(
+    r"applied\s+\d+\s+translation.*?\((\d+)\s+untranslated", re.IGNORECASE | re.DOTALL
+)
+_INJECT_MISMATCH_RE = re.compile(
+    r"^(?:event\s+\d+\s+)?cmd\s+(\d+)\s+str\s+(\d+):\s+control-code mismatch",
+    re.IGNORECASE | re.MULTILINE,
+)
+_INJECT_MISMATCH_EVENT_RE = re.compile(
+    r"^event\s+(\d+)\s+cmd\s+(\d+)\s+str\s+(\d+):\s+control-code mismatch",
+    re.IGNORECASE | re.MULTILINE,
 )
 _NAMES_INJECT_COUNTS_RE = re.compile(
     r"applied\s+(\d+)\s+name change.*?(\d+)\s+drifted", re.IGNORECASE | re.DOTALL
@@ -69,21 +82,46 @@ _UNPACK_SUMMARY_RE = re.compile(
 )
 
 
-def parse_strings_inject_counts(stdout: str) -> tuple[int | None, int | None]:
+def _inject_output_text(stdout: str, stderr: str) -> str:
+    """WolfDawn prints per-line guards to stderr and the summary to either stream."""
+    return "\n".join(part for part in (stdout or "", stderr or "") if part)
+
+
+def parse_strings_inject_counts(stdout: str, stderr: str = "") -> tuple[int | None, int | None]:
     """Return (applied, drifted) from wolf strings-inject output, or (None, None)."""
-    if not stdout:
+    text = _inject_output_text(stdout, stderr)
+    if not text:
         return None, None
-    m = _INJECT_COUNTS_RE.search(stdout)
+    m = _INJECT_COUNTS_RE.search(text)
     if not m:
         return None, None
     return int(m.group(1)), int(m.group(2))
 
 
-def parse_names_inject_counts(stdout: str) -> tuple[int | None, int | None]:
+def parse_strings_inject_untranslated(stdout: str, stderr: str = "") -> int | None:
+    """Return the untranslated line count from strings-inject summary, if present."""
+    text = _inject_output_text(stdout, stderr)
+    m = _INJECT_UNTRANSLATED_RE.search(text)
+    return int(m.group(1)) if m else None
+
+
+def parse_strings_inject_mismatches(stdout: str, stderr: str = "") -> list[str]:
+    """Return human-readable control-code mismatch locations from inject output."""
+    text = _inject_output_text(stdout, stderr)
+    out: list[str] = []
+    for line in text.splitlines():
+        line = line.strip()
+        if "control-code mismatch" in line:
+            out.append(line)
+    return out
+
+
+def parse_names_inject_counts(stdout: str, stderr: str = "") -> tuple[int | None, int | None]:
     """Return (applied, drifted) from wolf names-inject output, or (None, None)."""
-    if not stdout:
+    text = _inject_output_text(stdout, stderr)
+    if not text:
         return None, None
-    m = _NAMES_INJECT_COUNTS_RE.search(stdout)
+    m = _NAMES_INJECT_COUNTS_RE.search(text)
     if not m:
         return None, None
     return int(m.group(1)), int(m.group(2))

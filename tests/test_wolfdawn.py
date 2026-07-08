@@ -41,7 +41,7 @@ class _WolfTranslateHarness:
         self.vocab_writes = []
         self.vocab_remove_writes = []
 
-    def run(self, data, filename="doc.json", estimate=False):
+    def run(self, data, filename="doc.json", estimate=False, ignore_tl_text=True):
         def translate(text, history, history_ctx=None):
             self.captured.append(copy.deepcopy(text))
             return _mock_translate(text, history, history_ctx)
@@ -52,11 +52,13 @@ class _WolfTranslateHarness:
         orig_t = wd.translateAI
         orig_estimate = wd.ESTIMATE
         orig_wrap = wd.WRAP
+        orig_ignore = wd.IGNORETLTEXT
         orig_update = wd.wolf_vocab.update_vocab_section
         orig_labels = wd.wolf_names.derive_db_labels
         wd.translateAI = translate
         wd.ESTIMATE = estimate
         wd.WRAP = False  # keep write-back byte-faithful; wrapping tested separately
+        wd.IGNORETLTEXT = ignore_tl_text
         # Never touch the real glossary / DB files during tests.
         wd.wolf_vocab.update_vocab_section = capture_vocab
         wd.wolf_names.derive_db_labels = lambda _p: {}
@@ -68,6 +70,7 @@ class _WolfTranslateHarness:
             wd.translateAI = orig_t
             wd.ESTIMATE = orig_estimate
             wd.WRAP = orig_wrap
+            wd.IGNORETLTEXT = orig_ignore
             wd.wolf_vocab.update_vocab_section = orig_update
             wd.wolf_names.derive_db_labels = orig_labels
 
@@ -243,6 +246,213 @@ class TestTranslationWriteback(unittest.TestCase):
         self.assertIsNone(err)
         # In estimate mode text stays equal to source.
         self.assertEqual(data["scenes"][0]["lines"][0]["text"], "こんにちは")
+
+    def test_collect_pass_does_not_mutate_or_write(self):
+        """Batch collect must not reflow JP into text or overwrite translated/."""
+        orig_phase = os.environ.get("BATCH_PHASE")
+        os.environ["BATCH_PHASE"] = "collect"
+        orig_wrap = wd.WRAP
+        orig_width = wd.WRAPWIDTH
+        wd.WRAP = True
+        wd.WRAPWIDTH = 20
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                (root / "files").mkdir()
+                (root / "translated").mkdir()
+                doc = copy.deepcopy(MAP_DOC)
+                # A long JP line that wrap would reflow if write-back ran.
+                doc["scenes"][0]["lines"][0]["source"] = "あ" * 40
+                doc["scenes"][0]["lines"][0]["text"] = "あ" * 40
+                src_path = root / "files" / "Map001.mps.json"
+                src_path.write_text(json.dumps(doc, ensure_ascii=False), encoding="utf-8")
+                out_path = root / "translated" / "Map001.mps.json"
+                out_path.write_text('{"kind":"map","marker":"keep-me"}', encoding="utf-8")
+
+                old_cwd = os.getcwd()
+                os.chdir(root)
+                try:
+                    # Echo sources (what collect's queue path effectively returns).
+                    def echo(text, history, history_ctx=None):
+                        return [text if isinstance(text, list) else text, [0, 0]]
+
+                    orig_t = wd.translateAI
+                    wd.translateAI = echo
+                    try:
+                        result = wd.handleWolfDawn("Map001.mps.json", estimate=False)
+                    finally:
+                        wd.translateAI = orig_t
+                finally:
+                    os.chdir(old_cwd)
+
+                self.assertNotEqual(result, "Fail")
+                # Prior translated/ content must be left alone.
+                self.assertEqual(
+                    out_path.read_text(encoding="utf-8"),
+                    '{"kind":"map","marker":"keep-me"}',
+                )
+        finally:
+            wd.WRAP = orig_wrap
+            wd.WRAPWIDTH = orig_width
+            if orig_phase is None:
+                os.environ.pop("BATCH_PHASE", None)
+            else:
+                os.environ["BATCH_PHASE"] = orig_phase
+
+    def test_echoed_source_does_not_get_wrapped_into_text(self):
+        """If the model/collect echoes JP source, leave text alone even with wrap on."""
+        orig_wrap = wd.WRAP
+        orig_width = wd.WRAPWIDTH
+        wd.WRAP = True
+        wd.WRAPWIDTH = 10
+        try:
+            doc = {
+                "kind": "map",
+                "scenes": [
+                    {
+                        "event": 1,
+                        "name": "ev",
+                        "lines": [
+                            {
+                                "cmd": 0,
+                                "str": 0,
+                                "source": "あいうえおかきくけこさしすせそ",
+                                "text": "あいうえおかきくけこさしすせそ",
+                            },
+                        ],
+                    }
+                ],
+            }
+
+            def echo(text, history, history_ctx=None):
+                return [text if isinstance(text, list) else text, [1, 1]]
+
+            orig_t = wd.translateAI
+            wd.translateAI = echo
+            try:
+                data, _tok, err = wd.parseDocument(copy.deepcopy(doc), "echo.mps.json")
+            finally:
+                wd.translateAI = orig_t
+            self.assertIsNone(err)
+            # Must still be the unbroken source, not a wrapped JP reflow.
+            self.assertEqual(
+                data["scenes"][0]["lines"][0]["text"],
+                "あいうえおかきくけこさしすせそ",
+            )
+        finally:
+            wd.WRAP = orig_wrap
+            wd.WRAPWIDTH = orig_width
+
+    def test_skips_already_translated_text(self):
+        doc = {
+            "kind": "map",
+            "scenes": [
+                {
+                    "event": 1,
+                    "name": "ev",
+                    "lines": [
+                        {
+                            "cmd": 0,
+                            "str": 0,
+                            "source": "こんにちは",
+                            "text": "Hello",
+                        },
+                        {
+                            "cmd": 1,
+                            "str": 0,
+                            "source": "さようなら",
+                            "text": "さようなら",
+                        },
+                        {
+                            "cmd": 2,
+                            "str": 0,
+                            "source": "まだ日本語",
+                            "text": "Partial 日本語 left",
+                        },
+                    ],
+                }
+            ],
+        }
+        (data, _t, err), captured = _WolfTranslateHarness().run(doc, "partial.mps.json")
+        self.assertIsNone(err)
+        lines = data["scenes"][0]["lines"]
+        self.assertEqual(lines[0]["text"], "Hello")
+        self.assertEqual(lines[1]["text"], "EN_さようなら")
+        # Still-Japanese body is not skipped; the model still gets ``source``.
+        self.assertEqual(lines[2]["text"], "EN_まだ日本語")
+        self.assertEqual(captured, [["さようなら", "まだ日本語"]])
+
+    def test_skips_english_body_with_japanese_nameplate(self):
+        doc = {
+            "kind": "map",
+            "scenes": [
+                {
+                    "event": 1,
+                    "name": "ev",
+                    "lines": [
+                        {
+                            "cmd": 0,
+                            "str": 0,
+                            "speaker": "司祭",
+                            "speaker_src": "literal_line1_lowconf",
+                            "source": "司祭\n皆さんお待たせしました……。",
+                            "text": "司祭\nSorry to keep you all waiting......",
+                        },
+                        {
+                            "cmd": 1,
+                            "str": 0,
+                            "speaker": "UI",
+                            "speaker_src": "ui",
+                            "source": "まだだ",
+                            "text": "まだだ",
+                        },
+                    ],
+                }
+            ],
+        }
+        (data, _t, err), captured = _WolfTranslateHarness().run(doc, "nameplate.mps.json")
+        self.assertIsNone(err)
+        lines = data["scenes"][0]["lines"]
+        self.assertEqual(lines[0]["text"], "司祭\nSorry to keep you all waiting......")
+        self.assertEqual(lines[1]["text"], "EN_まだだ")
+        self.assertEqual(captured, [["まだだ"]])
+
+    def test_ignore_tl_text_false_retranslates(self):
+        doc = {
+            "kind": "map",
+            "scenes": [
+                {
+                    "event": 1,
+                    "name": "ev",
+                    "lines": [
+                        {"cmd": 0, "str": 0, "source": "こんにちは", "text": "Hello"},
+                    ],
+                }
+            ],
+        }
+        (data, _t, err), captured = _WolfTranslateHarness().run(
+            doc, "force.mps.json", ignore_tl_text=False
+        )
+        self.assertIsNone(err)
+        self.assertEqual(data["scenes"][0]["lines"][0]["text"], "EN_こんにちは")
+        self.assertEqual(captured, [["こんにちは"]])
+
+    def test_names_already_translated_still_harvest(self):
+        doc = {
+            "kind": "names",
+            "names": [
+                {"source": "剣", "text": "Sword", "note": "武器", "safety": "safe"},
+                {"source": "槍", "text": "Spear", "note": "武器", "safety": "refs"},
+            ],
+        }
+        harness = _WolfTranslateHarness()
+        (_data, _t, err), captured = harness.run(doc, "names.json")
+        self.assertIsNone(err)
+        self.assertEqual(captured, [])
+        self.assertEqual(
+            harness.vocab_writes,
+            [("Weapon · 武器", [("剣", "Sword"), ("槍", "Spear")])],
+        )
 
 
 import re  # noqa: E402

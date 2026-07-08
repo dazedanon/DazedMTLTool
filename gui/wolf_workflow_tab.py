@@ -87,7 +87,7 @@ from gui.workflow_tab import (
     _make_text_btn,
     _make_section_label,
 )
-from util import wolf_names
+from util.wolfdawn import names as wolf_names
 from util.paths import PROJECT_ROOT
 from util.project_scanner import (
     detect_wolf_layout,
@@ -1696,8 +1696,10 @@ class WolfWorkflowTab(QWidget):
         layout.addWidget(self._desc(
             "Sends the extracted files in files/ to the Translation tab using the Wolf RPG "
             "(WolfDawn) module. Only the 'text' fields are filled in; 'source' is preserved so "
-            "injection can verify each line. Run Step 3 (names) first so vocab.txt is seeded, "
-            "then Phase 1 (database text) and Phase 2 (maps / events) in order."
+            "injection can verify each line. Lines whose text is already translated (no Japanese) "
+            "are skipped, so re-running a phase only sends unfinished lines. Run Step 3 (names) "
+            "first so vocab.txt is seeded, then Phase 1 (database text) and Phase 2 "
+            "(maps / events) in order."
         ))
 
         self._add_phase_buttons(layout)
@@ -2166,7 +2168,9 @@ class WolfWorkflowTab(QWidget):
             "byte-exact. Translated safe/refs name values from names.json are applied across Data/ "
             "(only the entries you translated change). Lines whose inline codes changed are skipped and "
             "reported (unless you allow drift). Full inject and any inject that includes "
-            f"{NAMES_JSON} reset live Data/ from {WORK_DIR_NAME}/originals/ first."
+            f"{NAMES_JSON} reset live Data/ from {WORK_DIR_NAME}/originals/ first. "
+            f"Before each inject, inline \\\\codes are auto-repaired from source; on a full inject "
+            f"every translated/ JSON is copied into {WORK_DIR_NAME}/ for the game-repo diff."
         ))
 
         self.en_punct_cb = QCheckBox("Convert Japanese punctuation to ASCII (--en-punct)")
@@ -2346,13 +2350,72 @@ class WolfWorkflowTab(QWidget):
         now_btn.clicked.connect(lambda: self._run_relayout(manual=True))
         layout.addWidget(now_btn)
 
+    def _tool_root(self) -> Path:
+        """DazedMTLTool project root (``files/``, ``translated/``, etc.)."""
+        return Path(__file__).resolve().parent.parent
+
+    def _translated_path(self, json_name: str) -> Path | None:
+        """Absolute path to ``translated/<json_name>`` when it exists."""
+        p = self._tool_root() / "translated" / json_name
+        return p if p.is_file() else None
+
     def _translated_or_source(self, json_name: str) -> Path | None:
         """Prefer translated/<name>; fall back to files/<name>."""
-        for base in ("translated", "files"):
-            p = Path(base) / json_name
+        root = self._tool_root()
+        for sub in ("translated", "files"):
+            p = root / sub / json_name
             if p.is_file():
                 return p
         return None
+
+    def _repair_inject_json(self, src: Path, log) -> Path:
+        """Auto-repair WOLF inline codes in a translated JSON before inject."""
+        from util.wolfdawn import codes as wolf_codes
+
+        data = json.loads(src.read_text(encoding="utf-8-sig"))
+        data, repairs = wolf_codes.repair_document(data)
+        if repairs:
+            log(
+                f"  Auto-repaired {len(repairs)} line(s) with control-code drift in {src.name}"
+            )
+            src.write_text(
+                json.dumps(data, ensure_ascii=False, indent=4) + "\n",
+                encoding="utf-8",
+            )
+        return src
+
+    def _sync_translated_json_to_wolf_json(
+        self, json_name: str, log, game_json_dir: Path
+    ) -> bool:
+        """Copy one translated/ JSON into the game's wolf_json/ folder."""
+        src = self._translated_path(json_name)
+        if src is None:
+            return False
+        dest = game_json_dir / json_name
+        try:
+            if src.resolve() == dest.resolve():
+                return True
+        except Exception:
+            pass
+        try:
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(src, dest)
+            return True
+        except Exception as exc:
+            log(f"  ⚠ could not update {json_name} in {WORK_DIR_NAME}/: {exc}")
+            return False
+
+    def _log_inject_guard_lines(self, mismatches: list[str], untranslated: int | None, log):
+        """Surface WolfDawn guard failures instead of burying them in the scrollback."""
+        if untranslated:
+            log(f"  ⚠ {untranslated} line(s) left untranslated by WolfDawn safety guards")
+        if not mismatches:
+            return
+        log(f"  ⚠ {len(mismatches)} control-code mismatch(es) (first 10):")
+        for line in mismatches[:10]:
+            log(f"    {line}")
+        if len(mismatches) > 10:
+            log(f"    … and {len(mismatches) - 10} more (see log above)")
 
     def _on_step_changed(self, idx: int):
         previous = self._current_step_index
@@ -2382,7 +2445,9 @@ class WolfWorkflowTab(QWidget):
             json_name = entry.get("json")
             if not json_name:
                 continue
-            if not (Path("translated") / json_name).is_file():
+            if entry.get("kind") == "names":
+                continue
+            if not self._translated_path(json_name):
                 continue
             item = QListWidgetItem(json_name)
             item.setData(Qt.UserRole, json_name)
@@ -2465,21 +2530,6 @@ class WolfWorkflowTab(QWidget):
         quick = only_json is not None
         game_json_dir = self._work_dir()
 
-        def _sync_json(json_name: str, src: Path, log):
-            """Copy the translated JSON into the game's git-tracked wolf_json/ so the
-            diff shows both the updated JSON source and the injected binary."""
-            dest = game_json_dir / json_name
-            try:
-                if src.resolve() == dest.resolve():
-                    return
-            except Exception:
-                pass
-            try:
-                dest.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(src, dest)
-            except Exception as e:
-                log(f"  ⚠ could not update {json_name} in {WORK_DIR_NAME}/: {e}")
-
         def task(log, progress=None):
             from util import wolfdawn
 
@@ -2492,6 +2542,7 @@ class WolfWorkflowTab(QWidget):
             data_dir_path = Path(data_dir)
             applied = 0
             failed = 0
+            guard_failures: list[str] = []
 
             names_entry = next((e for e in entries if e["kind"] == "names"), None)
             names_src = (
@@ -2520,7 +2571,7 @@ class WolfWorkflowTab(QWidget):
                     e["json"]
                     for e in entries
                     if e.get("kind") != "names"
-                    and (Path("translated") / e["json"]).is_file()
+                    and self._translated_path(e["json"]) is not None
                 }
                 strings_targets |= {j for j in only_json if j != NAMES_JSON}
             else:
@@ -2532,10 +2583,13 @@ class WolfWorkflowTab(QWidget):
                     continue
                 if entry["json"] not in strings_targets:
                     continue
-                src = self._translated_or_source(entry["json"])
-                if src is None:
+                inject_src = self._translated_path(entry["json"])
+                if inject_src is None:
+                    inject_src = self._translated_or_source(entry["json"])
+                if inject_src is None:
                     log(f"  ⚠ no JSON for {entry['json']} — skipped")
                     continue
+                inject_src = self._repair_inject_json(inject_src, log)
                 out = entry["base"]  # live game binary (or txt-dir) we write into
                 orig = self._orig_base_for(entry, data_dir_path)
                 base = str(orig) if orig.exists() else out
@@ -2546,24 +2600,32 @@ class WolfWorkflowTab(QWidget):
                     )
                 log(f"Injecting {entry['json']} → {Path(out).name} …")
                 res = wolfdawn.strings_inject(
-                    str(src), base, out,
+                    str(inject_src), base, out,
                     allow_code_drift=allow_drift, en_punct=en_punct, log_fn=log,
                 )
-                a, d = wolfdawn.parse_strings_inject_counts(res.stdout)
+                a, d = wolfdawn.parse_strings_inject_counts(res.stdout, res.stderr)
+                untranslated = wolfdawn.parse_strings_inject_untranslated(
+                    res.stdout, res.stderr
+                )
+                mismatches = wolfdawn.parse_strings_inject_mismatches(
+                    res.stdout, res.stderr
+                )
                 strings_ok = wolfdawn.inject_had_applied(a) or (
                     res.ok and not (a == 0 and (d or 0) > 0)
                 )
                 if strings_ok:
                     applied += 1
-                    _sync_json(entry["json"], src, log)
+                    if mismatches or (untranslated or 0) > 0:
+                        guard_failures.append(entry["json"])
+                        self._log_inject_guard_lines(mismatches, untranslated, log)
                     if not res.ok and wolfdawn.inject_had_applied(a):
                         log(
                             f"  ⚠ {entry['json']}: wolf exited {res.returncode} "
                             f"after applying {a} change(s) — see warnings above"
                         )
                 elif res.ok:
-                    # Exit 0 but nothing applied and lines drifted = stale/injected base.
                     failed += 1
+                    guard_failures.append(entry["json"])
                     log(
                         f"  ⚠ {entry['json']}: 0 applied, {d} skipped as drift — the base "
                         "looks already translated. Restore the pristine original (re-run "
@@ -2571,6 +2633,8 @@ class WolfWorkflowTab(QWidget):
                     )
                 else:
                     failed += 1
+                    guard_failures.append(entry["json"])
+                    self._log_inject_guard_lines(mismatches, untranslated, log)
                     log(f"  ⚠ inject exit {res.returncode} for {entry['json']}")
 
             # Name values: apply across the whole data dir when translated/names.json
@@ -2589,10 +2653,7 @@ class WolfWorkflowTab(QWidget):
                     allow_code_drift=allow_drift, en_punct=en_punct, log_fn=log,
                 )
                 out = (res.stdout or "") + (res.stderr or "")
-                a, d = wolfdawn.parse_names_inject_counts(out)
-                # Keep wolf_json/names.json aligned with translated/ even when the
-                # binary pass is a no-op (stale base) or exits 2 after partial guards.
-                _sync_json(names_entry["json"], names_src, log)
+                a, d = wolfdawn.parse_names_inject_counts(res.stdout, res.stderr)
                 if wolfdawn.inject_had_applied(a):
                     applied += 1
                     if not res.ok:
@@ -2620,9 +2681,30 @@ class WolfWorkflowTab(QWidget):
                     failed += 1
                     log(f"  ⚠ names-inject exit {res.returncode}")
 
+            # Refresh wolf_json/ from translated/ for git (full inject: all docs;
+            # quick inject: only the files we touched).
+            if only_json is None:
+                sync_targets = [
+                    e["json"] for e in entries if e.get("kind") != "names"
+                ]
+            else:
+                sync_targets = sorted(strings_targets)
+                if will_names and names_entry:
+                    sync_targets.append(names_entry["json"])
+            synced = 0
+            for json_name in sync_targets:
+                if self._sync_translated_json_to_wolf_json(
+                    json_name, log, game_json_dir
+                ):
+                    synced += 1
+            if synced:
+                log(f"Synced {synced} translated JSON file(s) into {WORK_DIR_NAME}/")
+
             msg = f"Injected {applied} document(s)"
+            if guard_failures:
+                msg += f"; {len(guard_failures)} had guard warnings (see log)"
             if failed:
-                msg += f", {failed} had guard/errors (see log)"
+                msg += f"; {failed} failed"
             if quick:
                 msg += ". Review the git diff in the game project and test in-game."
             else:

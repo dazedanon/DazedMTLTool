@@ -15,7 +15,10 @@ Supported document ``kind``s (all share the ``{source, text}`` leaf pattern):
 
 Only entries whose ``source`` contains target-language (Japanese by default)
 text are sent to the model; everything else keeps ``text == source`` so inject
-is a no-op for it.
+is a no-op for it. When ``IGNORETLTEXT`` is on (default), entries whose ``text``
+is already translated are skipped so Phase 2 can resume a partial run without
+retranslating completed lines. Skip looks past Japanese nameplates on line 1
+and Japanese embedded only in WOLF control codes (e.g. ``\\r[...]`` ruby).
 
 names.json safety: WolfDawn tags every value name with a static ``safety`` badge
 (``safe``, ``refs``, or ``verify``). For ``kind == "names"`` documents, only
@@ -65,7 +68,8 @@ from util.translation import (
 )
 from util import speakers as wolf_speakers
 from util import vocab as wolf_vocab
-from util import wolf_names
+from util.wolfdawn import codes as wolf_codes
+from util.wolfdawn import names as wolf_names
 
 # Globals (mirror the other engine modules; populated from .env at import time)
 MODEL = os.getenv("model")
@@ -84,13 +88,24 @@ FILENAME = None
 # Regex - default matches Japanese (kanji, kana, full-width forms).
 LANGREGEX = r"[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]+"
 
+# Skip lines whose ``text`` is already translated. WolfDawn keeps Japanese in
+# ``source`` forever, so skip-translated must look at ``text``, not ``source``.
+# Set False for a forced full retranslate.
+IGNORETLTEXT = True
+
+# Control codes that can embed Japanese inside an otherwise-translated line
+# (ruby ``\r[kanji,kana]``, colour / font indexes, ``\cself[n]``, etc.).
+_WOLF_CODE_RE = re.compile(
+    r"\\(?:r\[[^\]]*\]|c(?:self)?\[[^\]]*\]|[A-Za-z]+\[[^\]]*\]|[A-Za-z])"
+)
+
 # Speaker handling: for first-line-speaker formats, reshape the line into the
 # shared "[Speaker]: line" transport before translating and restore WOLF's
 # native "Speaker\nline" layout on write-back. Which formats are reshaped is
 # configurable from the workflow (data/wolf_speakers.json).
 SPEAKER_CONFIG = wolf_speakers.load_config()
 
-# names.json: translate per-entry safe/refs badges only (see util.wolf_names).
+# names.json: translate per-entry safe/refs badges only (see util.wolfdawn.names).
 
 # Text wrapping: optional advanced rewrap via dazedwrap (wolfWrap/wolfWidth). Defaults
 # off - the workflow uses WolfDawn relayout after inject instead.
@@ -134,6 +149,11 @@ TRANSLATION_CONFIG = TranslationConfig(
 )
 
 
+def _batch_phase() -> str:
+    """Current Anthropic batch phase from the GUI subprocess env (``collect`` / ``consume``)."""
+    return (os.getenv("BATCH_PHASE") or "").strip().lower()
+
+
 def handleWolfDawn(filename, estimate):
     """Entry point used by the CLI/GUI dispatchers. Returns a summary string or 'Fail'."""
     global ESTIMATE, TOKENS, FILENAME, SPEAKER_CONFIG, VOCAB
@@ -151,7 +171,11 @@ def handleWolfDawn(filename, estimate):
     start = time.time()
     translatedData = openFiles(filename)
 
-    if not estimate:
+    # Batch collect only queues API requests; text is still Japanese. Writing
+    # translated/ here would overwrite prior work with rewrapped source (and with
+    # wolfWrap on, the git diff looks like "translations" that never changed).
+    # Real English is written on the consume pass (or a live non-batch run).
+    if not estimate and _batch_phase() != "collect":
         try:
             with open("translated/" + filename, "w", encoding="utf-8", newline="\n") as outFile:
                 json.dump(translatedData[0], outFile, ensure_ascii=False, indent=4)
@@ -252,6 +276,44 @@ def _wrap_plain(text, is_firstline):
     return prefix + _wrap_body(rest)
 
 
+def _text_check_body(text: str, speaker_src: str = "") -> str:
+    """Body text used for skip-translated checks (nameplates / codes ignored).
+
+    Already-translated WOLF dialogue often keeps a Japanese speaker name on
+    line 1 (``司祭\\nSorry to keep you...``) and may embed Japanese only inside
+    control codes like ``\\r[我,わ]``. Those lines are finished translations.
+    """
+    if not isinstance(text, str):
+        return ""
+    _prefix, rest = wolf_speakers.split_window_prefix(text)
+    if "\n" in rest:
+        first, body = rest.split("\n", 1)
+        # Known first-line speaker formats, or a short nameplate-like first line.
+        if (
+            speaker_src in wolf_speakers.FIRSTLINE_SRCS
+            or speaker_src in ("ui", "narration")
+            or (0 < len(first.strip()) <= 20 and re.search(LANGREGEX, first))
+        ):
+            rest = body
+    return _WOLF_CODE_RE.sub("", rest)
+
+
+def _text_still_needs_translation(entry) -> bool:
+    """True when ``text`` still needs the model (empty, Japanese, or identical)."""
+    txt = entry.get("text")
+    if not isinstance(txt, str) or not txt.strip():
+        return True
+    src = entry.get("source")
+    # Fresh / unfinished extract: text still mirrors Japanese source.
+    if isinstance(src, str) and txt == src:
+        return True
+    # Fully English (no Japanese chars at all).
+    if not re.search(LANGREGEX, txt):
+        return False
+    # Japanese only in the nameplate / control codes while the body is done.
+    return bool(re.search(LANGREGEX, _text_check_body(txt, entry.get("speaker_src", ""))))
+
+
 def parseDocument(data, filename):
     """Translate every translatable leaf entry and return [data, tokens, error]."""
     global PBAR
@@ -264,71 +326,92 @@ def parseDocument(data, filename):
         src = e.get("source")
         if not (isinstance(src, str) and re.search(LANGREGEX, src)):
             return False
+        # Already translated: look at ``text`` (source stays Japanese forever).
+        # Fresh extracts keep ``text == source``, so they still queue.
+        if IGNORETLTEXT and not _text_still_needs_translation(e):
+            return False
         # names.json: only translate WolfDawn safe/refs entries (per-name badge).
         if is_names and not wolf_names.is_name_translatable(e):
             return False
         return True
 
-    # Only translate entries that actually contain target-language text (and, for
-    # names.json, carry a translatable safety badge); the rest keep text == source so
-    # WolfDawn treats them as untouched on inject.
+    # Only translate entries that still need work; names.json also requires a
+    # safe/refs badge. Untouched leaves keep ``text == source`` so WolfDawn
+    # treats them as no-ops on inject.
     translatable = [e for e in entries if _translatable(e)]
 
     with tqdm(bar_format=BAR_FORMAT, position=POSITION, total=len(translatable), leave=LEAVE) as pbar:
         pbar.desc = filename
         PBAR = pbar
-        if not translatable:
-            return [data, totalTokens, None]
-
-        # Reshape first-line-speaker lines into the shared "[Speaker]: line"
-        # transport format. plans[i] carries what is needed to restore each
-        # entry after translation.
-        sources = []
-        plans = []  # (entry, prefix, has_speaker, is_firstline)
-        for entry in translatable:
-            src = entry["source"]
-            is_firstline = entry.get("speaker_src", "") in wolf_speakers.FIRSTLINE_SRCS
-            split = wolf_speakers.split_source(src, entry.get("speaker_src", ""), SPEAKER_CONFIG)
-            if split is not None:
-                prefix, speaker, body = split
-                sources.append(wolf_speakers.to_prefixed(speaker, body))
-                plans.append((entry, prefix, True, is_firstline))
-            else:
-                sources.append(src)
-                plans.append((entry, "", False, is_firstline))
-
-        try:
-            response = translateAI(sources, [])
-        except Exception as e:
-            return [data, totalTokens, e]
-
-        translated, tokens = response[0], response[1]
-        totalTokens[0] += tokens[0]
-        totalTokens[1] += tokens[1]
-
-        # Write translations back (skip in estimate mode: translated == sources).
-        if not ESTIMATE and isinstance(translated, list) and len(translated) == len(plans):
-            for (entry, prefix, has_speaker, is_firstline), text in zip(plans, translated):
-                if not isinstance(text, str):
-                    continue
-                if is_names:
-                    entry["text"] = _wrap_names_entry(text, entry)
-                elif has_speaker:
-                    speaker_en, body_en = wolf_speakers.parse_prefixed(text)
-                    if speaker_en is not None:
-                        # Wrap only the body; the name stays on its own line.
-                        entry["text"] = wolf_speakers.restore_source(
-                            prefix, speaker_en, _wrap_body(body_en)
-                        )
-                    else:
-                        # Model dropped the [Speaker]: prefix; keep its output as-is.
-                        entry["text"] = prefix + _wrap_body(text)
+        if translatable:
+            # Reshape first-line-speaker lines into the shared "[Speaker]: line"
+            # transport format. plans[i] carries what is needed to restore each
+            # entry after translation.
+            sources = []
+            plans = []  # (entry, prefix, has_speaker, is_firstline, code_map)
+            for entry in translatable:
+                src = entry["source"]
+                protected_src, code_map = wolf_codes.protect_wolf_codes(src)
+                is_firstline = entry.get("speaker_src", "") in wolf_speakers.FIRSTLINE_SRCS
+                split = wolf_speakers.split_source(
+                    protected_src, entry.get("speaker_src", ""), SPEAKER_CONFIG
+                )
+                if split is not None:
+                    prefix, speaker, body = split
+                    sources.append(wolf_speakers.to_prefixed(speaker, body))
+                    plans.append((entry, prefix, True, is_firstline, code_map))
                 else:
-                    entry["text"] = _wrap_plain(text, is_firstline)
+                    sources.append(protected_src)
+                    plans.append((entry, "", False, is_firstline, code_map))
 
-    # Phase 0 feeds the glossary: harvest the just-translated safe name values
-    # into vocab.txt (grouped by note) so the DB-text and dialogue phases keep
-    # item/skill/term names consistent. Mirrors the RPGMaker DB-first strategy.
+            try:
+                response = translateAI(sources, [])
+            except Exception as e:
+                return [data, totalTokens, e]
+
+            translated, tokens = response[0], response[1]
+            totalTokens[0] += tokens[0]
+            totalTokens[1] += tokens[1]
+
+            # Write translations back. Skip estimate mode, and skip the batch
+            # collect pass (response is still the Japanese source list — wrapping
+            # it into ``text`` only reflows JP and is what poisoned translated/).
+            collecting = _batch_phase() == "collect"
+            if (
+                not ESTIMATE
+                and not collecting
+                and isinstance(translated, list)
+                and len(translated) == len(plans)
+            ):
+                for (entry, prefix, has_speaker, is_firstline, code_map), text, src in zip(
+                    plans, translated, sources
+                ):
+                    if not isinstance(text, str):
+                        continue
+                    # Model / collect echoed the sent payload — leave the entry alone.
+                    if text == src:
+                        continue
+                    text = wolf_codes.restore_wolf_code_placeholders(text, code_map)
+                    if is_names:
+                        entry["text"] = _wrap_names_entry(text, entry)
+                    elif has_speaker:
+                        speaker_en, body_en = wolf_speakers.parse_prefixed(text)
+                        if speaker_en is not None:
+                            # Wrap only the body; the name stays on its own line.
+                            entry["text"] = wolf_speakers.restore_source(
+                                prefix, speaker_en, _wrap_body(body_en)
+                            )
+                        else:
+                            # Model dropped the [Speaker]: prefix; keep its output as-is.
+                            entry["text"] = prefix + _wrap_body(text)
+                    else:
+                        entry["text"] = _wrap_plain(text, is_firstline)
+                    wolf_codes.repair_entry(entry)
+
+    # Phase 0 feeds the glossary: harvest safe name values into vocab.txt
+    # (grouped by note) so the DB-text and dialogue phases keep item/skill/term
+    # names consistent. Runs even when every name was already translated (skip),
+    # so a resume still seeds vocab. Mirrors the RPGMaker DB-first strategy.
     if is_names and not ESTIMATE:
         _harvest_names_to_vocab(data)
 
