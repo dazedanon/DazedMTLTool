@@ -28,16 +28,6 @@ names.json, translatable entries are harvested into ``vocab.txt`` (grouped by
 ``note``, with bilingual headers) so later phases keep item / skill / term names
 consistent.
 
-Text wrapping: optional advanced ``wolfWrap`` / ``wolfWidth`` (via :mod:`util.dazedwrap`)
-can still re-wrap dialogue bodies at translate time, but the normal Wolf workflow
-leaves JSON line breaks alone and runs WolfDawn ``relayout`` after inject (Step 6)
-to fit the message box. Defaults to off (``wolfWrap=false``).
-
-names.json category wrap (Step 3): selected ``note`` categories can be re-wrapped
-with dazedwrap at a dedicated width (``.env``: ``wolfNameWrap``,
-``wolfNameWrapWidth``, ``wolfNameWrapNotes``). Other name categories keep the
-model output verbatim.
-
 Database sheet filter (Step 4): optional ``wolfDbIncludeGroups`` or
 ``wolfDbIncludeTiers`` in ``.env`` limit which ``kind: db`` lines are collected.
 When unset, all database lines are translated.
@@ -61,8 +51,6 @@ import traceback
 
 from colorama import Fore
 from tqdm import tqdm
-
-import util.dazedwrap as dazedwrap
 from util.paths import PROMPT_PATH, VOCAB_PATH
 from util.translation import (
     TranslationConfig,
@@ -110,25 +98,6 @@ _WOLF_CODE_RE = re.compile(
 # configurable from the workflow (data/wolf_speakers.json).
 SPEAKER_CONFIG = wolf_speakers.load_config()
 
-# names.json: translate per-entry safe badges only (see util.wolfdawn.names).
-
-# Text wrapping: optional advanced rewrap via dazedwrap (wolfWrap/wolfWidth). Defaults
-# off - the workflow uses WolfDawn relayout after inject instead.
-WRAP = (os.getenv("wolfWrap", "false").strip().lower() == "true")
-try:
-    WRAPWIDTH = int(os.getenv("wolfWidth") or 0)
-except ValueError:
-    WRAPWIDTH = 0
-
-# names.json: optional per-category dazedwrap (Step 3 workflow UI).
-NAME_WRAP_ENABLED, NAME_WRAP_WIDTH, NAME_WRAP_NOTES = wolf_names.load_name_wrap_config()
-
-
-def reload_name_wrap_config() -> None:
-    """Re-read names.json category wrap settings from ``.env``."""
-    global NAME_WRAP_ENABLED, NAME_WRAP_WIDTH, NAME_WRAP_NOTES
-    NAME_WRAP_ENABLED, NAME_WRAP_WIDTH, NAME_WRAP_NOTES = wolf_names.load_name_wrap_config()
-
 # Pricing / batching from the configured model
 PRICING_CONFIG = getPricingConfig(MODEL)
 INPUTAPICOST = PRICING_CONFIG["inputAPICost"]
@@ -167,7 +136,6 @@ def handleWolfDawn(filename, estimate):
     # Re-read workflow-configured settings so edits made this session take effect
     # even when translation runs in-process (the module import is cached).
     SPEAKER_CONFIG = wolf_speakers.load_config()
-    reload_name_wrap_config()
     # Reload the glossary so a later phase (DB text / dialogue) picks up names
     # that an earlier Phase 0 (names) harvested into vocab.txt.
     VOCAB = VOCAB_PATH.read_text(encoding="utf-8")
@@ -177,8 +145,7 @@ def handleWolfDawn(filename, estimate):
     translatedData = openFiles(filename)
 
     # Batch collect only queues API requests; text is still Japanese. Writing
-    # translated/ here would overwrite prior work with rewrapped source (and with
-    # wolfWrap on, the git diff looks like "translations" that never changed).
+    # translated/ here would overwrite prior work with source echoed back.
     # Real English is written on the consume pass (or a live non-batch run).
     if not estimate and _batch_phase() != "collect":
         try:
@@ -250,42 +217,6 @@ def collectEntries(data):
             entries.append(name)
 
     return entries
-
-
-def _wrap_body(body):
-    """Word-wrap a dialogue body to WRAPWIDTH (no-op when wrapping is disabled)."""
-    if not WRAP or WRAPWIDTH <= 0 or not isinstance(body, str) or not body:
-        return body
-    return dazedwrap.wrapText(body, WRAPWIDTH)
-
-
-def _wrap_names_entry(text, entry):
-    """Apply dazedwrap to a names.json entry when its ``note`` is selected in Step 3."""
-    if not NAME_WRAP_ENABLED or NAME_WRAP_WIDTH <= 0:
-        return text
-    if not isinstance(text, str) or not text:
-        return text
-    note = str(entry.get("note", ""))
-    if note not in NAME_WRAP_NOTES:
-        return text
-    return dazedwrap.wrapText(text, NAME_WRAP_WIDTH)
-
-
-def _wrap_plain(text, is_firstline):
-    """Wrap a non-reshaped entry, protecting a nameplate first line if present.
-
-    ``is_firstline`` is True for first-line-speaker formats that are turned off in
-    the config: their model output is still ``Speaker\\nbody``, so line 1 (the
-    name) is kept intact and only the body is wrapped. Any leading ``@<option>``
-    window prefix is also preserved.
-    """
-    if not WRAP or WRAPWIDTH <= 0 or not isinstance(text, str) or not text:
-        return text
-    prefix, rest = wolf_speakers.split_window_prefix(text)
-    if is_firstline and "\n" in rest:
-        name, body = rest.split("\n", 1)
-        return prefix + name + "\n" + _wrap_body(body)
-    return prefix + _wrap_body(rest)
 
 
 def _text_check_body(text: str, speaker_src: str = "") -> str:
@@ -404,20 +335,16 @@ def parseDocument(data, filename):
                     if text == src:
                         continue
                     text = wolf_codes.restore_wolf_code_placeholders(text, code_map)
-                    if is_names:
-                        entry["text"] = _wrap_names_entry(text, entry)
-                    elif has_speaker:
+                    if has_speaker:
                         speaker_en, body_en = wolf_speakers.parse_prefixed(text)
                         if speaker_en is not None:
-                            # Wrap only the body; the name stays on its own line.
                             entry["text"] = wolf_speakers.restore_source(
-                                prefix, speaker_en, _wrap_body(body_en)
+                                prefix, speaker_en, body_en
                             )
                         else:
-                            # Model dropped the [Speaker]: prefix; keep its output as-is.
-                            entry["text"] = prefix + _wrap_body(text)
+                            entry["text"] = prefix + text
                     else:
-                        entry["text"] = _wrap_plain(text, is_firstline)
+                        entry["text"] = text
                     wolf_codes.repair_entry(entry)
 
     # Phase 0 feeds the glossary: harvest safe name values into vocab.txt

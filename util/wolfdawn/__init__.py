@@ -49,6 +49,8 @@ __all__ = [
     "pack",
     "save_update",
     "names_check",
+    "names_wrap",
+    "parse_names_wrap_counts",
     "relayout",
     "desc_relayout",
 ]
@@ -655,6 +657,58 @@ def names_check(json_files: Iterable[PathLike], log_fn=None) -> WolfResult:
     return _run(args, log_fn=log_fn)
 
 
+_NAMES_WRAP_WOULD_RE = re.compile(
+    r"(\d+)\s+entry\(ies\)\s+WOULD\s+be\s+re-wrapped", re.IGNORECASE
+)
+_NAMES_WRAP_APPLIED_RE = re.compile(
+    r"(\d+)\s+entry\(ies\)\s+re-wrapped", re.IGNORECASE
+)
+
+
+def parse_names_wrap_counts(stdout: str, stderr: str = "") -> int | None:
+    """Return how many entries names-wrap would change or did change, or None."""
+    blob = f"{stdout}\n{stderr}"
+    for pattern in (_NAMES_WRAP_APPLIED_RE, _NAMES_WRAP_WOULD_RE):
+        match = pattern.search(blob)
+        if match:
+            return int(match.group(1))
+    return None
+
+
+def names_wrap(
+    names_json: PathLike,
+    *,
+    dry_run: bool = False,
+    log_fn=None,
+) -> WolfResult:
+    """``wolf names-wrap <names.json> [--dry-run]``.
+
+    Re-wraps translated multi-line glossary entries to each category's
+    JP-measured width and line count. One-line names are never wrapped.
+    """
+    args = ["names-wrap", _str(names_json)]
+    if dry_run:
+        args.append("--dry-run")
+    return _run(args, log_fn=log_fn)
+
+
+def _relayout_metric_arg(value: int | str | None, *, zero_is_auto: bool = False) -> str | None:
+    """Format one relayout geometry flag (``55``, ``auto``, or omit)."""
+    if value is None:
+        return None
+    if isinstance(value, str):
+        token = value.strip().lower()
+        if not token or token == "auto":
+            return "auto"
+        try:
+            value = int(token)
+        except ValueError:
+            return token
+    if zero_is_auto and int(value) == 0:
+        return "auto"
+    return str(int(value))
+
+
 def pack(
     directory: PathLike,
     output: PathLike,
@@ -700,12 +754,12 @@ def relayout(
     data_dir: PathLike,
     out_dir: Optional[PathLike] = None,
     *,
-    width: Optional[int] = None,
-    width_face: Optional[int] = None,
-    max_rows: Optional[int] = None,
+    width: int | str | None = None,
+    width_face: int | str | None = None,
+    max_rows: int | str | None = None,
     sub_width: Optional[int] = None,
-    base_font: Optional[int] = None,
-    no_formup: bool = False,
+    base_font: int | str | None = None,
+    no_fixup: bool = False,
     no_resolve: bool = False,
     log_fn=None,
 ) -> WolfResult:
@@ -713,22 +767,26 @@ def relayout(
 
     Without ``-o`` this is a dry run. With ``-o``, only changed map / CommonEvent
     files are written under ``out_dir`` (paths relative to ``data_dir``).
+    Pass ``width="auto"`` or ``max_rows=0`` to measure geometry from JP text.
     """
     args: list[str] = ["relayout", _str(data_dir)]
     if out_dir is not None:
         args += ["-o", _str(out_dir)]
-    if width is not None:
-        args += ["--width", str(int(width))]
-    if width_face is not None:
-        args += ["--width-face", str(int(width_face))]
-    if max_rows is not None and int(max_rows) > 0:
-        args += ["--max-rows", str(int(max_rows))]
+    width_arg = _relayout_metric_arg(width)
+    if width_arg is not None:
+        args += ["--width", width_arg]
+    width_face_arg = _relayout_metric_arg(width_face)
+    if width_face_arg is not None:
+        args += ["--width-face", width_face_arg]
+    if max_rows is not None:
+        args += ["--max-rows", _relayout_metric_arg(max_rows, zero_is_auto=True) or "auto"]
     if sub_width is not None:
         args += ["--sub-width", str(int(sub_width))]
     if base_font is not None:
-        args += ["--base-font", str(int(base_font))]
-    if no_formup:
-        args.append("--no-formup")
+        base_arg = _relayout_metric_arg(base_font, zero_is_auto=True)
+        args += ["--base-font", base_arg if base_arg is not None else "0"]
+    if no_fixup:
+        args.append("--no-fixup")
     if no_resolve:
         args.append("--no-resolve")
     return _run(args, log_fn=log_fn)
@@ -738,33 +796,36 @@ def desc_relayout(
     project: PathLike,
     output: PathLike,
     *,
-    width: Optional[int] = None,
-    max_lines: Optional[int] = None,
-    font: Optional[int] = None,
+    width: int | str | None = None,
+    max_lines: int | str | None = None,
+    font: int | str | None = None,
     min_font: Optional[int] = None,
     types: Optional[str] = None,
     keep_breaks: bool = False,
-    no_formup: bool = False,
+    no_fixup: bool = False,
     log_fn=None,
 ) -> WolfResult:
     """``wolf desc-relayout <X.project> -o <out.project> [flags]``.
 
-    ``width`` may be omitted when ``wolfdawn-roles.json`` defines ``descBoxes``.
+    ``width`` may be omitted or set to ``auto`` to measure from JP text.
     ``max_lines=0`` means auto (read each field's ``[N行]`` hint).
     """
     args: list[str] = ["desc-relayout", _str(project), "-o", _str(output)]
-    if width is not None:
-        args += ["--width", str(int(width))]
+    width_arg = _relayout_metric_arg(width)
+    if width_arg is not None:
+        args += ["--width", width_arg]
     if max_lines is not None:
-        args += ["--max-lines", str(int(max_lines))]
+        max_arg = _relayout_metric_arg(max_lines, zero_is_auto=True)
+        args += ["--max-lines", max_arg if max_arg is not None else "0"]
     if font is not None:
-        args += ["--font", str(int(font))]
+        font_arg = _relayout_metric_arg(font, zero_is_auto=True)
+        args += ["--font", font_arg if font_arg is not None else "0"]
     if min_font is not None:
         args += ["--min-font", str(int(min_font))]
     if types:
         args += ["--types", str(types)]
     if keep_breaks:
         args.append("--keep-breaks")
-    if no_formup:
-        args.append("--no-formup")
+    if no_fixup:
+        args.append("--no-fixup")
     return _run(args, log_fn=log_fn)

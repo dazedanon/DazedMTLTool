@@ -22,7 +22,10 @@ from __future__ import annotations
 
 import json
 import re
-from typing import Any
+from pathlib import Path
+from typing import Any, Union
+
+PathLike = Union[str, Path]
 
 SAFETY_SAFE = "safe"
 SAFETY_REFS = "refs"
@@ -227,28 +230,46 @@ def collect_name_notes(data: dict[str, Any]) -> list[str]:
     return sorted(notes)
 
 
-def parse_name_wrap_notes(raw: str) -> frozenset[str]:
-    """Parse ``wolfNameWrapNotes`` from ``.env`` (JSON array or comma-separated)."""
-    text = (raw or "").strip()
-    if not text:
-        return frozenset()
-    try:
-        parsed = json.loads(text)
-        if isinstance(parsed, list):
-            return frozenset(str(item).strip() for item in parsed if str(item).strip())
-    except json.JSONDecodeError:
-        pass
-    return frozenset(part.strip() for part in text.split(",") if part.strip())
+def apply_names_wrap(
+    names_path: PathLike,
+    *,
+    dry_run: bool = False,
+    log_fn=None,
+) -> tuple[bool, str]:
+    """Run ``wolf names-wrap`` on one names.json file.
 
+    Returns ``(ok, summary)``. *ok* is False only when the CLI exits with a hard
+    error; overflow warnings still count as success.
+    """
+    from util import wolfdawn
 
-def load_name_wrap_config() -> tuple[bool, int, frozenset[str]]:
-    """Return ``(enabled, width, notes)`` from workflow ``.env`` settings."""
-    import os
+    emit = log_fn or (lambda _msg: None)
+    path = Path(names_path)
+    if not path.is_file():
+        return False, f"names.json not found: {path}"
 
-    enabled = os.getenv("wolfNameWrap", "false").strip().lower() == "true"
-    try:
-        width = int(os.getenv("wolfNameWrapWidth") or 0)
-    except ValueError:
-        width = 0
-    notes = parse_name_wrap_notes(os.getenv("wolfNameWrapNotes", ""))
-    return enabled, width, notes
+    res = wolfdawn.names_wrap(path, dry_run=dry_run, log_fn=None)
+    for line in (res.stdout or "").splitlines():
+        line = line.strip()
+        if line:
+            emit(line)
+    for line in (res.stderr or "").splitlines():
+        line = line.strip()
+        if line:
+            emit(line)
+
+    if not res.ok and res.returncode not in (0, 2):
+        return False, f"names-wrap exited {res.returncode}"
+
+    count = wolfdawn.parse_names_wrap_counts(res.stdout, res.stderr)
+    if dry_run:
+        summary = (
+            f"dry run: {count} entr{'y' if count == 1 else 'ies'} would be re-wrapped"
+            if count is not None
+            else "dry run complete"
+        )
+    elif count is not None:
+        summary = f"re-wrapped {count} entr{'y' if count == 1 else 'ies'}"
+    else:
+        summary = "names-wrap complete"
+    return True, summary

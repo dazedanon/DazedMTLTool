@@ -101,19 +101,6 @@ class TestCollectNameNotes(unittest.TestCase):
     def test_collects_unique_sorted_notes(self):
         self.assertEqual(wn.collect_name_notes(self.DOC), ["技能", "武器"])
 
-    def test_parse_json_notes(self):
-        self.assertEqual(
-            wn.parse_name_wrap_notes('["武器","├■プロフィール"]'),
-            frozenset({"武器", "├■プロフィール"}),
-        )
-
-    def test_parse_comma_separated_notes(self):
-        self.assertEqual(
-            wn.parse_name_wrap_notes("武器,技能"),
-            frozenset({"武器", "技能"}),
-        )
-
-
 class TestDeriveDbLabels(unittest.TestCase):
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory()

@@ -30,7 +30,8 @@ class TestRelayoutWrappers(unittest.TestCase):
         self.assertIn("--width", captured["args"])
         self.assertIn("55", captured["args"])
         self.assertNotIn("-o", captured["args"])
-        self.assertNotIn("--max-rows", captured["args"])  # 0 omitted
+        self.assertIn("--max-rows", captured["args"])
+        self.assertIn("auto", captured["args"])
 
     def test_relayout_write_args(self):
         captured = {}
@@ -79,8 +80,55 @@ class TestRelayoutWrappers(unittest.TestCase):
         self.assertIn("--width", args)
         self.assertIn("75", args)
         self.assertIn("--max-lines", args)
-        self.assertIn("0", args)
+        self.assertIn("auto", args)
         self.assertIn("--keep-breaks", args)
+
+    def test_relayout_auto_width(self):
+        captured = {}
+
+        def fake_run(args, log_fn=None):
+            captured["args"] = list(args)
+            return wolfdawn.WolfResult(0, "", "", [str(a) for a in args])
+
+        with patch.object(wolfdawn, "_run", side_effect=fake_run):
+            wolfdawn.relayout("/game/Data", width="auto", max_rows="auto")
+        args = captured["args"]
+        self.assertIn("--width", args)
+        self.assertIn("auto", args)
+        self.assertIn("--max-rows", args)
+
+    def test_names_wrap_args(self):
+        captured = {}
+
+        def fake_run(args, log_fn=None):
+            captured["args"] = list(args)
+            return wolfdawn.WolfResult(
+                0,
+                "names-wrap: 3 entry(ies) re-wrapped",
+                "",
+                [str(a) for a in args],
+            )
+
+        with patch.object(wolfdawn, "_run", side_effect=fake_run):
+            res = wolfdawn.names_wrap("/tmp/names.json")
+        self.assertEqual(captured["args"], ["names-wrap", "/tmp/names.json"])
+        self.assertEqual(wolfdawn.parse_names_wrap_counts(res.stdout), 3)
+
+    def test_names_wrap_dry_run(self):
+        captured = {}
+
+        def fake_run(args, log_fn=None):
+            captured["args"] = list(args)
+            return wolfdawn.WolfResult(
+                0,
+                "names-wrap: 2 entry(ies) WOULD be re-wrapped",
+                "",
+                [str(a) for a in args],
+            )
+
+        with patch.object(wolfdawn, "_run", side_effect=fake_run):
+            wolfdawn.names_wrap("/tmp/names.json", dry_run=True)
+        self.assertEqual(captured["args"], ["names-wrap", "/tmp/names.json", "--dry-run"])
 
 
 if __name__ == "__main__":

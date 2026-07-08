@@ -1,8 +1,8 @@
 """Search translated WolfDawn JSON for text to fix wrapping.
 
-Primary workflow: paste in-game text, find the database sheet and row, wrap at
-the right width, re-inject. Sheet names match ``typeName`` in DB JSON and
-``note`` in names.json (e.g. ``├■街の噂（MOB）``).
+Paste in-game text, open the matching line, then wrap that line or every
+overflowing line in the same group (database sheet, names category, map /
+CommonEvent file, or Game.dat).
 """
 
 from __future__ import annotations
@@ -491,6 +491,160 @@ def wrap_line_in_doc(line: dict[str, Any], width: int) -> bool:
         return False
     line["text"] = new_text
     return True
+
+
+@dataclass
+class ScopeStats:
+    """Line counts for the wrap group containing one search hit."""
+
+    label: str
+    total: int
+    overflow: int
+
+
+def scope_label(hit: WrapHit | dict[str, Any]) -> str:
+    """Human-readable group name for status messages."""
+    if isinstance(hit, WrapHit):
+        kind, sheet, jf = hit.kind, hit.sheet_name, hit.json_file
+    else:
+        kind = str(hit.get("kind") or "")
+        sheet = str(hit.get("sheet_name") or "")
+        jf = str(hit.get("json_file") or "")
+    if kind == "db":
+        return f"sheet {sheet}"
+    if kind == "names":
+        return f"category {sheet}"
+    if kind == "gamedat":
+        return "Game.dat"
+    if kind == "common":
+        return "CommonEvent"
+    if kind == "map":
+        return sheet or jf
+    return sheet or jf
+
+
+def scope_stats(
+    doc: dict[str, Any],
+    hit: WrapHit | dict[str, Any],
+    width: int,
+) -> ScopeStats:
+    """Count lines and overflows in the same group as *hit*."""
+    if isinstance(hit, WrapHit):
+        kind, sheet_name = hit.kind, hit.sheet_name
+    else:
+        kind = str(hit.get("kind") or doc.get("kind") or "")
+        sheet_name = str(hit.get("sheet_name") or "")
+
+    total = 0
+    overflow = 0
+
+    if kind == "db":
+        for group in doc.get("groups") or []:
+            if str(group.get("typeName") or "") != sheet_name:
+                continue
+            for line in group.get("lines") or []:
+                text = line.get("text")
+                if not isinstance(text, str) or not text.strip():
+                    continue
+                total += 1
+                if line_needs_wrap(text, width):
+                    overflow += 1
+            break
+    elif kind == "names":
+        for entry in doc.get("names") or []:
+            if not isinstance(entry, dict):
+                continue
+            if str(entry.get("note") or "") != sheet_name:
+                continue
+            text = entry.get("text")
+            if not isinstance(text, str) or not text.strip():
+                continue
+            total += 1
+            if line_needs_wrap(text, width):
+                overflow += 1
+    elif kind in ("map", "common"):
+        for scene in doc.get("scenes") or []:
+            for line in scene.get("lines") or []:
+                text = line.get("text")
+                if not isinstance(text, str) or not text.strip():
+                    continue
+                total += 1
+                if line_needs_wrap(text, width):
+                    overflow += 1
+    elif kind == "gamedat":
+        for line in doc.get("lines") or []:
+            if not isinstance(line, dict):
+                continue
+            text = line.get("text")
+            if not isinstance(text, str) or not text.strip():
+                continue
+            total += 1
+            if line_needs_wrap(text, width):
+                overflow += 1
+
+    return ScopeStats(label=scope_label(hit), total=total, overflow=overflow)
+
+
+def _wrap_overflow_in_event_file(path: Path, doc: dict[str, Any], width: int) -> int:
+    """Wrap overflowing dialogue lines in one map or CommonEvent JSON file."""
+    if doc.get("kind") not in ("map", "common"):
+        return 0
+    changed = 0
+    for scene in doc.get("scenes") or []:
+        for line in scene.get("lines") or []:
+            text = line.get("text")
+            if not isinstance(text, str) or not text.strip():
+                continue
+            if not line_needs_wrap(text, width):
+                continue
+            if wrap_line_in_doc(line, width):
+                changed += 1
+    if changed:
+        save_document(path, doc)
+    return changed
+
+
+def _wrap_overflow_in_gamedat(path: Path, doc: dict[str, Any], width: int) -> int:
+    if doc.get("kind") != "gamedat":
+        return 0
+    changed = 0
+    for line in doc.get("lines") or []:
+        if not isinstance(line, dict):
+            continue
+        text = line.get("text")
+        if not isinstance(text, str) or not text.strip():
+            continue
+        if not line_needs_wrap(text, width):
+            continue
+        if wrap_line_in_doc(line, width):
+            changed += 1
+    if changed:
+        save_document(path, doc)
+    return changed
+
+
+def wrap_overflow_in_scope(
+    path: Path,
+    doc: dict[str, Any],
+    hit: WrapHit | dict[str, Any],
+    width: int,
+) -> int:
+    """Wrap every overflowing line in the same group as *hit*."""
+    if isinstance(hit, WrapHit):
+        kind, sheet_name = hit.kind, hit.sheet_name
+    else:
+        kind = str(hit.get("kind") or doc.get("kind") or "")
+        sheet_name = str(hit.get("sheet_name") or "")
+
+    if kind == "names":
+        return _wrap_overflow_in_names_category(path, doc, sheet_name, width)
+    if kind == "db":
+        return wrap_overflow_in_sheet(path, doc, sheet_name, width, kind="db")
+    if kind in ("map", "common"):
+        return _wrap_overflow_in_event_file(path, doc, width)
+    if kind == "gamedat":
+        return _wrap_overflow_in_gamedat(path, doc, width)
+    return 0
 
 
 def wrap_hit_in_file(

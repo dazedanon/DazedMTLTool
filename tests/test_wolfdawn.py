@@ -493,10 +493,8 @@ SPEAKER_MAP_DOC = {
 class _SpeakerHarness:
     """Run parseDocument with the speaker-aware mock and a chosen speaker config."""
 
-    def __init__(self, config, wrap=False, width=0):
+    def __init__(self, config):
         self.config = config
-        self.wrap = wrap
-        self.width = width
         self.captured = []
 
     def run(self, data, filename="OP.mps.json"):
@@ -504,17 +502,15 @@ class _SpeakerHarness:
             self.captured.append(copy.deepcopy(text))
             return _mock_translate_speaker(text, history, history_ctx)
 
-        orig = (wd.translateAI, wd.ESTIMATE, wd.SPEAKER_CONFIG, wd.WRAP, wd.WRAPWIDTH)
+        orig = (wd.translateAI, wd.ESTIMATE, wd.SPEAKER_CONFIG)
         wd.translateAI = translate
         wd.ESTIMATE = False
         wd.SPEAKER_CONFIG = self.config
-        wd.WRAP = self.wrap
-        wd.WRAPWIDTH = self.width
         try:
             result = wd.parseDocument(copy.deepcopy(data), filename)
             return result, self.captured
         finally:
-            (wd.translateAI, wd.ESTIMATE, wd.SPEAKER_CONFIG, wd.WRAP, wd.WRAPWIDTH) = orig
+            (wd.translateAI, wd.ESTIMATE, wd.SPEAKER_CONFIG) = orig
 
 
 class TestSpeakerReshaping(unittest.TestCase):
@@ -547,132 +543,6 @@ class TestSpeakerReshaping(unittest.TestCase):
         self.assertIn("[セルリア]: ふふふ", captured[0])
         lines = data["scenes"][0]["lines"]
         self.assertEqual(lines[0]["text"], "EN_市民\nおはよう\n元気？")
-
-
-class TestWrapping(unittest.TestCase):
-    """dazedwrap-style re-wrapping, with the speaker name kept on its own line."""
-
-    def setUp(self):
-        self._orig = (wd.WRAP, wd.WRAPWIDTH)
-
-    def tearDown(self):
-        wd.WRAP, wd.WRAPWIDTH = self._orig
-
-    def _set(self, enabled, width):
-        wd.WRAP, wd.WRAPWIDTH = enabled, width
-
-    def test_wrap_body_respects_width_and_keeps_words(self):
-        self._set(True, 10)
-        out = wd._wrap_body("alpha beta gamma delta")
-        self.assertGreater(out.count("\n"), 0)  # actually wrapped
-        for line in out.split("\n"):
-            self.assertLessEqual(len(line), 10)
-        self.assertEqual(out.replace("\n", " "), "alpha beta gamma delta")
-
-    def test_wrap_disabled_is_noop(self):
-        self._set(False, 10)
-        self.assertEqual(wd._wrap_body("alpha beta gamma delta"), "alpha beta gamma delta")
-
-    def test_zero_width_is_noop(self):
-        self._set(True, 0)
-        self.assertEqual(wd._wrap_body("alpha beta gamma delta"), "alpha beta gamma delta")
-
-    def test_wrap_plain_preserves_nameplate_line(self):
-        self._set(True, 12)
-        out = wd._wrap_plain("Name\nalpha beta gamma delta epsilon", is_firstline=True)
-        self.assertEqual(out.split("\n", 1)[0], "Name")  # name never merged into body
-        for line in out.split("\n")[1:]:
-            self.assertLessEqual(len(line), 12)
-
-    def test_wrap_plain_preserves_window_prefix(self):
-        self._set(True, 12)
-        out = wd._wrap_plain("@1\nName\nalpha beta gamma delta", is_firstline=True)
-        self.assertTrue(out.startswith("@1\nName\n"))
-
-    def test_speaker_body_wrapped_but_name_kept(self):
-        # Integration: even at a tiny width the (translated) name stays on line 1.
-        cfg = {"literal_line1": True, "literal_line1_lowconf": True}
-        (data, _t, err), _c = _SpeakerHarness(cfg, wrap=True, width=6).run(SPEAKER_MAP_DOC)
-        self.assertIsNone(err)
-        line0 = data["scenes"][0]["lines"][0]["text"]
-        self.assertEqual(line0.split("\n", 1)[0], "EN_市民")
-
-
-class TestNameCategoryWrap(unittest.TestCase):
-    """dazedwrap for selected names.json note categories (Step 3)."""
-
-    def setUp(self):
-        self._orig = (wd.NAME_WRAP_ENABLED, wd.NAME_WRAP_WIDTH, wd.NAME_WRAP_NOTES)
-
-    def tearDown(self):
-        wd.NAME_WRAP_ENABLED, wd.NAME_WRAP_WIDTH, wd.NAME_WRAP_NOTES = self._orig
-
-    def _set(self, enabled, width, notes):
-        wd.NAME_WRAP_ENABLED = enabled
-        wd.NAME_WRAP_WIDTH = width
-        wd.NAME_WRAP_NOTES = frozenset(notes)
-
-    def test_wrap_names_entry_only_selected_notes(self):
-        self._set(True, 10, {"├■プロフィール"})
-        long_text = "alpha beta gamma delta epsilon"
-        entry = {"note": "├■プロフィール"}
-        wrapped = wd._wrap_names_entry(long_text, entry)
-        self.assertGreater(wrapped.count("\n"), 0)
-        entry_other = {"note": "武器"}
-        self.assertEqual(wd._wrap_names_entry(long_text, entry_other), long_text)
-
-    def test_wrap_names_entry_disabled_is_noop(self):
-        self._set(False, 10, {"├■プロフィール"})
-        long_text = "alpha beta gamma delta epsilon"
-        entry = {"note": "├■プロフィール"}
-        self.assertEqual(wd._wrap_names_entry(long_text, entry), long_text)
-
-    def test_names_translation_wraps_selected_category(self):
-        # Narrow JP source (8 cells of CJK) so LANGREGEX matches; mock returns long EN.
-        profile_src = "あいうえ"  # 4 CJK → matches LANGREGEX
-        doc = {
-            "kind": "names",
-            "names": [
-                {"source": "剣", "text": "剣", "note": "武器", "safety": "safe"},
-                {
-                    "source": profile_src,
-                    "text": profile_src,
-                    "note": "├■プロフィール",
-                    "safety": "safe",
-                },
-            ],
-        }
-        self._set(True, 8, {"├■プロフィール"})
-        long_en = "alpha beta gamma delta epsilon zeta eta theta"
-        orig_t = wd.translateAI
-        orig_estimate = wd.ESTIMATE
-        orig_wrap = wd.WRAP
-        orig_update = wd.wolf_vocab.update_vocab_section
-        orig_labels = wd.wolf_names.derive_db_labels
-
-        def translate(text, history, history_ctx=None):
-            out = []
-            for t in text:
-                out.append(long_en if t == profile_src else f"EN_{t}")
-            return [out, [1, 1]]
-
-        wd.translateAI = translate
-        wd.ESTIMATE = False
-        wd.WRAP = False
-        wd.wolf_vocab.update_vocab_section = lambda *_a, **_k: None
-        wd.wolf_names.derive_db_labels = lambda _p: {}
-        try:
-            data, _t, err = wd.parseDocument(copy.deepcopy(doc), "names.json")
-        finally:
-            wd.translateAI = orig_t
-            wd.ESTIMATE = orig_estimate
-            wd.WRAP = orig_wrap
-            wd.wolf_vocab.update_vocab_section = orig_update
-            wd.wolf_names.derive_db_labels = orig_labels
-        self.assertIsNone(err)
-        names = {n["note"]: n["text"] for n in data["names"]}
-        self.assertEqual(names["武器"], "EN_剣")
-        self.assertGreater(names["├■プロフィール"].count("\n"), 0)
 
 
 class TestOpenFiles(unittest.TestCase):

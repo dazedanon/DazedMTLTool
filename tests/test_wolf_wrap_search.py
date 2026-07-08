@@ -263,5 +263,64 @@ class TestNamesCategoryWrap(unittest.TestCase):
         self.assertIn("\n", long_entry)
 
 
+class TestEventScopeWrap(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.translated = Path(self.tmp.name) / "translated"
+        self.translated.mkdir()
+        self.path = self.translated / "Map001.mps.json"
+        self.path.write_text(
+            json.dumps(
+                {
+                    "kind": "map",
+                    "file": "Map001.mps",
+                    "scenes": [
+                        {
+                            "event": 1,
+                            "lines": [
+                                {
+                                    "text": (
+                                        "This is a very long line of dialogue that "
+                                        "should wrap at thirty four visible chars."
+                                    ),
+                                },
+                                {"text": "Short line."},
+                            ],
+                        }
+                    ],
+                },
+                ensure_ascii=False,
+                indent=4,
+            ),
+            encoding="utf-8",
+        )
+        self.hit = ws.WrapHit(
+            json_file="Map001.mps.json",
+            kind="map",
+            sheet_name="Map001.mps",
+            row=1,
+            field_name="scene 0 line 0",
+            text="very long line",
+            max_line_len=80,
+            scene_index=0,
+            line_index=0,
+            map_file="Map001.mps",
+        )
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_scope_stats_for_map_file(self):
+        doc = json.loads(self.path.read_text(encoding="utf-8"))
+        stats = ws.scope_stats(doc, self.hit, 34)
+        self.assertEqual(stats.total, 2)
+        self.assertEqual(stats.overflow, 1)
+
+    def test_wrap_all_in_map_file(self):
+        doc = json.loads(self.path.read_text(encoding="utf-8"))
+        changed = ws.wrap_overflow_in_scope(self.path, doc, self.hit, 34)
+        self.assertEqual(changed, 1)
+
+
 if __name__ == "__main__":
     unittest.main()
