@@ -15,12 +15,13 @@ Mirrors the RPGMaker WorkflowTab, driven by the vendored WolfDawn ``wolf`` CLI
                           Phase 1  Database  - item/skill/state descriptions and system
                                                messages (DataBase/CDataBase.project)
                           Phase 2  Maps / events - .mps maps, CommonEvent, Game.dat,
-                                               Evtext; speaker handling and text-wrap
-                                               settings live under this phase
+                                               Evtext; speaker handling lives under this phase
   Step 5  Inject      - inject translations + translated names back into the Data/ binaries
                         and refresh the git-tracked wolf_json/ with the translated
                         JSON; quick-inject picks just a few translated files for
-                        fast in-game / git iteration, or inject everything at once
+                        fast in-game / git iteration, or inject everything at once.
+                        After a successful inject, optional WolfDawn relayout reflows
+                        Message text (and optionally DB descriptions) to the message box.
   Step 6  Package     - run from a loose Data/ folder, or repack Data.wolf
   Step 7  Saves       - fix baked strings in existing .sav files (optional)
 
@@ -1720,11 +1721,11 @@ class WolfWorkflowTab(QWidget):
         layout.addWidget(self._desc(
             "Map scripts (.mps), common events (CommonEvent.dat), Game.dat, and Evtext - story "
             "dialogue, UI/objective strings, and other event text. Run after Phase 1 so it "
-            "benefits from the names and terms already in vocab.txt. Speaker handling and text "
-            "wrap below apply to the dialogue-like lines in this phase."
+            "benefits from the names and terms already in vocab.txt. Speaker handling below "
+            "applies to the dialogue-like lines in this phase. Message box layout is handled "
+            "after inject (Step 5 Relayout), not here."
         ))
         self._add_speaker_options(layout)
-        self._add_wrap_options(layout)
         p2 = self._register(_make_btn("▶ Phase 2 · Translate maps / events", "#00a86b"))
         p2.clicked.connect(
             lambda: self._navigate_to_translation(kinds=PHASE_MAPS_EVENTS_KINDS, auto_start=True)
@@ -1788,53 +1789,6 @@ class WolfWorkflowTab(QWidget):
             })
         except Exception as exc:
             self._log(f"❌ Could not save speaker options: {exc}")
-
-    def _add_wrap_options(self, layout: QVBoxLayout):
-        """Dialogue text-wrap width (like the RPGMaker workflow, via dazedwrap)."""
-        layout.addWidget(_make_hr())
-        layout.addWidget(self._subheading("Text wrap width"))
-        layout.addWidget(self._desc(
-            "Re-wraps the translated English dialogue so it fits WOLF's message box. "
-            "Only the dialogue body is wrapped - a speaker's name line (the line break "
-            "right after a nameplate) is always kept separate. Lower the width if lines "
-            "overflow in-game; raise it if text wraps too early. Applies on the next run."
-        ))
-
-        wrap_env = self._read_env_values(["wolfWrap", "wolfWidth"])
-
-        self._wrap_enable_cb = QCheckBox("Wrap translated dialogue")
-        enabled = str(wrap_env.get("wolfWrap", "true")).strip().lower() != "false"
-        self._wrap_enable_cb.setChecked(enabled)
-        self._wrap_enable_cb.stateChanged.connect(self._apply_wrap_config)
-        layout.addWidget(self._wrap_enable_cb)
-
-        row = QHBoxLayout()
-        width_lbl = QLabel("Width (characters):")
-        width_lbl.setStyleSheet("color:#cccccc;font-size:12px;background:transparent;")
-        self._wrap_width_spin = QSpinBox()
-        self._wrap_width_spin.setRange(20, 300)
-        try:
-            self._wrap_width_spin.setValue(int(wrap_env.get("wolfWidth") or 55))
-        except ValueError:
-            self._wrap_width_spin.setValue(55)
-        self._wrap_width_spin.setFixedWidth(70)
-        self._wrap_width_spin.valueChanged.connect(self._apply_wrap_config)
-        row.addWidget(width_lbl)
-        row.addWidget(self._wrap_width_spin)
-        row.addStretch()
-        layout.addLayout(row)
-
-    def _apply_wrap_config(self, *args):
-        """Persist wolfWrap / wolfWidth to .env so the next translation run uses them."""
-        updates = {
-            "wolfWrap": "true" if self._wrap_enable_cb.isChecked() else "false",
-            "wolfWidth": str(self._wrap_width_spin.value()),
-        }
-        if self._write_env_values(updates):
-            self._log(
-                "Text wrap updated: "
-                + ", ".join(f"{k}={v}" for k, v in updates.items())
-            )
 
     def _read_env_values(self, keys) -> dict:
         """Read a few `key='value'` pairs from .env (best effort)."""
@@ -2283,6 +2237,115 @@ class WolfWorkflowTab(QWidget):
         inject_btn.clicked.connect(lambda: self._inject())
         layout.addWidget(inject_btn)
 
+        self._add_relayout_options(layout)
+
+    def _add_relayout_options(self, layout: QVBoxLayout):
+        """Post-inject WolfDawn message-box / DB-description reflow."""
+        layout.addWidget(_make_hr())
+        layout.addWidget(self._subheading("Relayout (after inject)"))
+        layout.addWidget(self._desc(
+            "Runs WolfDawn on the live Data/ binaries after a successful inject: reflow Message "
+            "text to the message-box width (page-split overflow), and optionally refit DB "
+            "description fields. Layout is no longer done at translate time - leave dialogue "
+            "unwrapped in JSON and let this step fix the box."
+        ))
+
+        self._relayout_after_cb = QCheckBox("Relayout after inject")
+        self._relayout_after_cb.setChecked(
+            str(self._setting("relayout_after_inject", "true")).lower() != "false"
+        )
+        self._relayout_after_cb.stateChanged.connect(
+            lambda: self._save_setting(
+                "relayout_after_inject",
+                "true" if self._relayout_after_cb.isChecked() else "false",
+            )
+        )
+        layout.addWidget(self._relayout_after_cb)
+
+        self._relayout_desc_cb = QCheckBox("Also refit DB descriptions (desc-relayout)")
+        self._relayout_desc_cb.setChecked(
+            str(self._setting("relayout_desc", "true")).lower() != "false"
+        )
+        self._relayout_desc_cb.stateChanged.connect(
+            lambda: self._save_setting(
+                "relayout_desc",
+                "true" if self._relayout_desc_cb.isChecked() else "false",
+            )
+        )
+        layout.addWidget(self._relayout_desc_cb)
+
+        msg_row = QHBoxLayout()
+        width_lbl = QLabel("Message width (cells):")
+        width_lbl.setStyleSheet("color:#cccccc;font-size:12px;background:transparent;")
+        self._relayout_width_spin = QSpinBox()
+        self._relayout_width_spin.setRange(20, 300)
+        try:
+            self._relayout_width_spin.setValue(int(self._setting("relayout_width", 55) or 55))
+        except (TypeError, ValueError):
+            self._relayout_width_spin.setValue(55)
+        self._relayout_width_spin.setFixedWidth(70)
+        self._relayout_width_spin.valueChanged.connect(
+            lambda v: self._save_setting("relayout_width", v)
+        )
+        max_rows_lbl = QLabel("Max rows (0=default):")
+        max_rows_lbl.setStyleSheet("color:#cccccc;font-size:12px;background:transparent;")
+        self._relayout_max_rows_spin = QSpinBox()
+        self._relayout_max_rows_spin.setRange(0, 20)
+        try:
+            self._relayout_max_rows_spin.setValue(int(self._setting("relayout_max_rows", 0) or 0))
+        except (TypeError, ValueError):
+            self._relayout_max_rows_spin.setValue(0)
+        self._relayout_max_rows_spin.setFixedWidth(70)
+        self._relayout_max_rows_spin.valueChanged.connect(
+            lambda v: self._save_setting("relayout_max_rows", v)
+        )
+        msg_row.addWidget(width_lbl)
+        msg_row.addWidget(self._relayout_width_spin)
+        msg_row.addWidget(max_rows_lbl)
+        msg_row.addWidget(self._relayout_max_rows_spin)
+        msg_row.addStretch()
+        layout.addLayout(msg_row)
+
+        desc_row = QHBoxLayout()
+        desc_width_lbl = QLabel("Desc width (cells):")
+        desc_width_lbl.setStyleSheet("color:#cccccc;font-size:12px;background:transparent;")
+        self._relayout_desc_width_spin = QSpinBox()
+        self._relayout_desc_width_spin.setRange(20, 300)
+        try:
+            self._relayout_desc_width_spin.setValue(
+                int(self._setting("relayout_desc_width", 75) or 75)
+            )
+        except (TypeError, ValueError):
+            self._relayout_desc_width_spin.setValue(75)
+        self._relayout_desc_width_spin.setFixedWidth(70)
+        self._relayout_desc_width_spin.valueChanged.connect(
+            lambda v: self._save_setting("relayout_desc_width", v)
+        )
+        desc_lines_lbl = QLabel("Desc max lines (0=auto):")
+        desc_lines_lbl.setStyleSheet("color:#cccccc;font-size:12px;background:transparent;")
+        self._relayout_desc_lines_spin = QSpinBox()
+        self._relayout_desc_lines_spin.setRange(0, 20)
+        try:
+            self._relayout_desc_lines_spin.setValue(
+                int(self._setting("relayout_desc_max_lines", 0) or 0)
+            )
+        except (TypeError, ValueError):
+            self._relayout_desc_lines_spin.setValue(0)
+        self._relayout_desc_lines_spin.setFixedWidth(70)
+        self._relayout_desc_lines_spin.valueChanged.connect(
+            lambda v: self._save_setting("relayout_desc_max_lines", v)
+        )
+        desc_row.addWidget(desc_width_lbl)
+        desc_row.addWidget(self._relayout_desc_width_spin)
+        desc_row.addWidget(desc_lines_lbl)
+        desc_row.addWidget(self._relayout_desc_lines_spin)
+        desc_row.addStretch()
+        layout.addLayout(desc_row)
+
+        now_btn = self._register(_make_btn("Relayout Data/ now", "#007acc"))
+        now_btn.clicked.connect(lambda: self._run_relayout(manual=True))
+        layout.addWidget(now_btn)
+
     def _translated_or_source(self, json_name: str) -> Path | None:
         """Prefer translated/<name>; fall back to files/<name>."""
         for base in ("translated", "files"):
@@ -2564,7 +2627,149 @@ class WolfWorkflowTab(QWidget):
                 msg += ". Review the git diff in the game project and test in-game."
             else:
                 msg += ". Continue to Step 6 to package."
+            inject_state["applied"] = applied
             return failed == 0, msg
+
+        def _after_inject(ok: bool, msg: str):
+            if inject_state.get("applied", 0) > 0 and self._relayout_after_enabled():
+                # Defer until the inject worker has fully finished (busy flag clear).
+                QTimer.singleShot(0, lambda: self._run_relayout(manual=False))
+
+        inject_state: dict = {"applied": 0}
+        self._run_task(task, on_done=_after_inject)
+
+    def _relayout_after_enabled(self) -> bool:
+        cb = getattr(self, "_relayout_after_cb", None)
+        if cb is not None:
+            return cb.isChecked()
+        return str(self._setting("relayout_after_inject", "true")).lower() != "false"
+
+    def _relayout_desc_enabled(self) -> bool:
+        cb = getattr(self, "_relayout_desc_cb", None)
+        if cb is not None:
+            return cb.isChecked()
+        return str(self._setting("relayout_desc", "true")).lower() != "false"
+
+    def _relayout_settings(self) -> dict:
+        def _spin(attr: str, key: str, default: int) -> int:
+            w = getattr(self, attr, None)
+            if w is not None:
+                return int(w.value())
+            try:
+                return int(self._setting(key, default) or default)
+            except (TypeError, ValueError):
+                return default
+
+        return {
+            "width": _spin("_relayout_width_spin", "relayout_width", 55),
+            "max_rows": _spin("_relayout_max_rows_spin", "relayout_max_rows", 0),
+            "desc_width": _spin("_relayout_desc_width_spin", "relayout_desc_width", 75),
+            "desc_max_lines": _spin(
+                "_relayout_desc_lines_spin", "relayout_desc_max_lines", 0
+            ),
+        }
+
+    def _find_db_projects(self, data_dir: Path) -> list[Path]:
+        """DataBase.project / CDataBase.project under BasicData or flat Data/."""
+        found: list[Path] = []
+        for base in (data_dir / "BasicData", data_dir):
+            if not base.is_dir():
+                continue
+            for name in ("DataBase.project", "CDataBase.project"):
+                p = base / name
+                if p.is_file() and p not in found:
+                    found.append(p)
+        return found
+
+    def _sync_relayout_tree(self, src_root: Path, dest_root: Path, log) -> int:
+        """Copy every file under *src_root* onto *dest_root*, preserving relative paths."""
+        copied = 0
+        for src in src_root.rglob("*"):
+            if not src.is_file():
+                continue
+            rel = src.relative_to(src_root)
+            dest = dest_root / rel
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(src, dest)
+            copied += 1
+            log(f"  ← {rel}")
+        return copied
+
+    def _run_relayout(self, *, manual: bool = False):
+        """Reflow Message text (and optionally DB descriptions) on live Data/."""
+        if not self._require_manifest():
+            return
+        manifest = self._read_manifest()
+        data_dir = Path(manifest["data_dir"])
+        if not data_dir.is_dir():
+            QMessageBox.warning(self, "Relayout", f"Data/ folder not found:\n{data_dir}")
+            return
+        opts = self._relayout_settings()
+        do_desc = self._relayout_desc_enabled()
+
+        def task(log, progress=None):
+            from util import wolfdawn
+
+            log(
+                f"Relayout Message text in {data_dir} "
+                f"(width={opts['width']}"
+                + (f", max-rows={opts['max_rows']}" if opts["max_rows"] else "")
+                + ") …"
+            )
+            with tempfile.TemporaryDirectory(prefix="wolfdawn-relayout-") as tmp:
+                out_dir = Path(tmp) / "out"
+                out_dir.mkdir(parents=True, exist_ok=True)
+                res = wolfdawn.relayout(
+                    data_dir,
+                    out_dir=out_dir,
+                    width=opts["width"],
+                    max_rows=opts["max_rows"] or None,
+                    log_fn=log,
+                )
+                if res.stdout:
+                    for line in res.stdout.splitlines():
+                        log(line)
+                if not res.ok and res.returncode not in (0, 2):
+                    return False, f"relayout exited {res.returncode}"
+                n = self._sync_relayout_tree(out_dir, data_dir, log)
+                log(f"Applied {n} reflowed file(s) onto live Data/.")
+
+            if do_desc:
+                projects = self._find_db_projects(data_dir)
+                if not projects:
+                    log("No DataBase.project / CDataBase.project found — skip desc-relayout.")
+                for proj in projects:
+                    with tempfile.TemporaryDirectory(prefix="wolfdawn-desc-") as tmp:
+                        tmp_path = Path(tmp)
+                        out_proj = tmp_path / proj.name
+                        log(
+                            f"desc-relayout {proj.name} "
+                            f"(width={opts['desc_width']}, max-lines={opts['desc_max_lines']}) …"
+                        )
+                        dres = wolfdawn.desc_relayout(
+                            proj,
+                            out_proj,
+                            width=opts["desc_width"],
+                            max_lines=opts["desc_max_lines"],
+                            log_fn=log,
+                        )
+                        if dres.stdout:
+                            for line in dres.stdout.splitlines():
+                                log(line)
+                        if not dres.ok and dres.returncode not in (0, 2):
+                            log(f"  ⚠ desc-relayout exit {dres.returncode} for {proj.name}")
+                            continue
+                        # WolfDawn may also write a sibling .dat next to the out .project
+                        for produced in tmp_path.iterdir():
+                            if not produced.is_file():
+                                continue
+                            dest = proj.parent / produced.name
+                            shutil.copy2(produced, dest)
+                            log(f"  ← {dest.relative_to(data_dir)}")
+
+            return True, "Relayout complete." + (
+                " Continue to Step 6 to package." if not manual else ""
+            )
 
         self._run_task(task)
 

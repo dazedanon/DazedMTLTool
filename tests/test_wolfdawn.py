@@ -418,26 +418,47 @@ class TestNameCategoryWrap(unittest.TestCase):
         self.assertEqual(wd._wrap_names_entry(long_text, entry), long_text)
 
     def test_names_translation_wraps_selected_category(self):
+        # Narrow JP source (8 cells of CJK) so LANGREGEX matches; mock returns long EN.
+        profile_src = "あいうえ"  # 4 CJK → matches LANGREGEX
         doc = {
             "kind": "names",
             "names": [
                 {"source": "剣", "text": "剣", "note": "武器", "safety": "safe"},
                 {
-                    "source": "alpha beta gamma delta epsilon zeta",
-                    "text": "alpha beta gamma delta epsilon zeta",
+                    "source": profile_src,
+                    "text": profile_src,
                     "note": "├■プロフィール",
                     "safety": "safe",
                 },
             ],
         }
         self._set(True, 8, {"├■プロフィール"})
+        long_en = "alpha beta gamma delta epsilon zeta eta theta"
+        orig_t = wd.translateAI
+        orig_estimate = wd.ESTIMATE
         orig_wrap = wd.WRAP
-        wd.WRAP = True
-        wd.WRAPWIDTH = 4
+        orig_update = wd.wolf_vocab.update_vocab_section
+        orig_labels = wd.wolf_names.derive_db_labels
+
+        def translate(text, history, history_ctx=None):
+            out = []
+            for t in text:
+                out.append(long_en if t == profile_src else f"EN_{t}")
+            return [out, [1, 1]]
+
+        wd.translateAI = translate
+        wd.ESTIMATE = False
+        wd.WRAP = False
+        wd.wolf_vocab.update_vocab_section = lambda *_a, **_k: None
+        wd.wolf_names.derive_db_labels = lambda _p: {}
         try:
-            (data, _t, err), _c = _WolfTranslateHarness().run(doc, "names.json")
+            data, _t, err = wd.parseDocument(copy.deepcopy(doc), "names.json")
         finally:
+            wd.translateAI = orig_t
+            wd.ESTIMATE = orig_estimate
             wd.WRAP = orig_wrap
+            wd.wolf_vocab.update_vocab_section = orig_update
+            wd.wolf_names.derive_db_labels = orig_labels
         self.assertIsNone(err)
         names = {n["note"]: n["text"] for n in data["names"]}
         self.assertEqual(names["武器"], "EN_剣")

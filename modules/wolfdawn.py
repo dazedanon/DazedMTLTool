@@ -25,12 +25,10 @@ names.json, translatable entries are harvested into ``vocab.txt`` (grouped by
 ``note``, with bilingual headers) so later phases keep item / skill / term names
 consistent.
 
-Text wrapping: translated dialogue is re-wrapped to a character width (like the
-RPGMaker module, via :mod:`util.dazedwrap`) so English fits WOLF's message box.
-Wrapping is applied to the dialogue *body* only - a speaker's nameplate line (the
-``\n`` right after a name) is kept on its own line and never folded into the body.
-Configurable from the workflow (``.env``: ``wolfWrap`` / ``wolfWidth``); a width of
-0 (or ``wolfWrap=false``) writes the model output back verbatim.
+Text wrapping: optional advanced ``wolfWrap`` / ``wolfWidth`` (via :mod:`util.dazedwrap`)
+can still re-wrap dialogue bodies at translate time, but the normal Wolf workflow
+leaves JSON line breaks alone and runs WolfDawn ``relayout`` after inject (Step 5)
+to fit the message box. Defaults to off (``wolfWrap=false``).
 
 names.json category wrap (Step 3): selected ``note`` categories can be re-wrapped
 with dazedwrap at a dedicated width (``.env``: ``wolfNameWrap``,
@@ -94,12 +92,9 @@ SPEAKER_CONFIG = wolf_speakers.load_config()
 
 # names.json: translate per-entry safe/refs badges only (see util.wolf_names).
 
-# Text wrapping: rewrap translated dialogue to a character width the same way the
-# RPGMaker module does (util.dazedwrap), so English lines fit WOLF's message box.
-# Only the dialogue *body* is wrapped - the speaker's name line (the "\n" after a
-# nameplate) is kept on its own line and never merged into the body. Configurable
-# from the workflow (.env: wolfWrap / wolfWidth). Width <= 0 disables wrapping.
-WRAP = (os.getenv("wolfWrap", "true").strip().lower() == "true")
+# Text wrapping: optional advanced rewrap via dazedwrap (wolfWrap/wolfWidth). Defaults
+# off - the workflow uses WolfDawn relayout after inject instead.
+WRAP = (os.getenv("wolfWrap", "false").strip().lower() == "true")
 try:
     WRAPWIDTH = int(os.getenv("wolfWidth") or 0)
 except ValueError:

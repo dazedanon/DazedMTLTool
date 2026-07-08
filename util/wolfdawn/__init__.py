@@ -47,6 +47,8 @@ __all__ = [
     "pack",
     "save_update",
     "names_check",
+    "relayout",
+    "desc_relayout",
 ]
 
 # strings-inject: "applied N translation(s) (M drifted)"; names-inject uses "name change(s)".
@@ -552,4 +554,78 @@ def save_update(
     if translations:
         args.append("--translations")
         args += [_str(p) for p in translations]
+    return _run(args, log_fn=log_fn)
+
+
+def relayout(
+    data_dir: PathLike,
+    out_dir: Optional[PathLike] = None,
+    *,
+    width: Optional[int] = None,
+    width_face: Optional[int] = None,
+    max_rows: Optional[int] = None,
+    sub_width: Optional[int] = None,
+    base_font: Optional[int] = None,
+    no_formup: bool = False,
+    no_resolve: bool = False,
+    log_fn=None,
+) -> WolfResult:
+    """``wolf relayout <data-dir> [-o <out-dir>] [flags]``.
+
+    Without ``-o`` this is a dry run. With ``-o``, only changed map / CommonEvent
+    files are written under ``out_dir`` (paths relative to ``data_dir``).
+    """
+    args: list[str] = ["relayout", _str(data_dir)]
+    if out_dir is not None:
+        args += ["-o", _str(out_dir)]
+    if width is not None:
+        args += ["--width", str(int(width))]
+    if width_face is not None:
+        args += ["--width-face", str(int(width_face))]
+    if max_rows is not None and int(max_rows) > 0:
+        args += ["--max-rows", str(int(max_rows))]
+    if sub_width is not None:
+        args += ["--sub-width", str(int(sub_width))]
+    if base_font is not None:
+        args += ["--base-font", str(int(base_font))]
+    if no_formup:
+        args.append("--no-formup")
+    if no_resolve:
+        args.append("--no-resolve")
+    return _run(args, log_fn=log_fn)
+
+
+def desc_relayout(
+    project: PathLike,
+    output: PathLike,
+    *,
+    width: Optional[int] = None,
+    max_lines: Optional[int] = None,
+    font: Optional[int] = None,
+    min_font: Optional[int] = None,
+    types: Optional[str] = None,
+    keep_breaks: bool = False,
+    no_formup: bool = False,
+    log_fn=None,
+) -> WolfResult:
+    """``wolf desc-relayout <X.project> -o <out.project> [flags]``.
+
+    ``width`` may be omitted when ``wolfdawn-roles.json`` defines ``descBoxes``.
+    ``max_lines=0`` means auto (read each field's ``[N行]`` hint).
+    """
+    args: list[str] = ["desc-relayout", _str(project), "-o", _str(output)]
+    if width is not None:
+        args += ["--width", str(int(width))]
+    if max_lines is not None:
+        args += ["--max-lines", str(int(max_lines))]
+    if font is not None:
+        args += ["--font", str(int(font))]
+    if min_font is not None:
+        args += ["--min-font", str(int(min_font))]
+    if types:
+        args += ["--types", str(types)]
+    if keep_breaks:
+        args.append("--keep-breaks")
+    if no_formup:
+        args.append("--no-formup")
     return _run(args, log_fn=log_fn)
