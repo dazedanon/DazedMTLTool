@@ -2271,7 +2271,7 @@ class WolfWorkflowTab(QWidget):
 
         self._relayout_after_cb = QCheckBox("Relayout after inject")
         self._relayout_after_cb.setChecked(
-            str(self._setting("relayout_after_inject", "true")).lower() != "false"
+            self._setting("relayout_after_inject", "false") == "true"
         )
         self._relayout_after_cb.stateChanged.connect(
             lambda: self._save_setting(
@@ -2739,7 +2739,7 @@ class WolfWorkflowTab(QWidget):
         cb = getattr(self, "_relayout_after_cb", None)
         if cb is not None:
             return cb.isChecked()
-        return str(self._setting("relayout_after_inject", "true")).lower() != "false"
+        return self._setting("relayout_after_inject", "false") == "true"
 
     def _relayout_desc_enabled(self) -> bool:
         cb = getattr(self, "_relayout_desc_cb", None)
