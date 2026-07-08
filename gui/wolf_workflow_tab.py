@@ -8,9 +8,9 @@ Mirrors the RPGMaker WorkflowTab, driven by the vendored WolfDawn ``wolf`` CLI
   Step 1  Pre-process - optional dazedformat + gameupdate/ copy before translating
   Step 2  Glossary    - build vocab.txt (characters / worldbuilding terms) before
                         translating so the AI keeps names and voice consistent
-  Step 3  Names       - translate names.json (Phase 0). WolfDawn safe/refs entries
-                        are translated per-name; verify names are skipped. Harvests
-                        short name terms into vocab.txt.
+  Step 3  Names       - translate names.json (Phase 0). WolfDawn safe entries
+                        are translated per-name; refs and verify names are skipped.
+                        Harvests short name terms into vocab.txt.
   Step 4  Database    - discover content layout; translate foundation DB sheets
                         (items, skills, descriptions) before narrative custom sheets
   Step 5  Maps/Events - .mps maps, CommonEvent, Game.dat, Evtext; speaker handling
@@ -24,7 +24,7 @@ Mirrors the RPGMaker WorkflowTab, driven by the vendored WolfDawn ``wolf`` CLI
   Step 9  Saves       - fix baked strings in existing .sav files (optional)
 
 names.json is staged into files/ but is NOT translated in the bulk phases - WolfDawn
-tags each name safe / refs / verify and Phase 0 translates only safe+refs entries
+tags each name safe / refs / verify and Phase 0 translates only safe entries
 (per-name, not per-category), harvests them into vocab.txt, and Step 6 injects the
 result.
 
@@ -1732,7 +1732,7 @@ class WolfWorkflowTab(QWidget):
 
         note = self._desc(
             "You don't need to add item / skill / enemy value names here: Phase 0 translates "
-            "WolfDawn safe/refs entries from names.json and harvests them into vocab.txt "
+            "WolfDawn safe entries from names.json and harvests them into vocab.txt "
             "Focus this glossary on characters and worldbuilding terms."
         )
         layout.addWidget(note)
@@ -2305,8 +2305,8 @@ class WolfWorkflowTab(QWidget):
         layout.addWidget(_make_section_label("Step 3 · Translate Name Values (names.json)"))
         layout.addWidget(self._desc(
             "names.json is WolfDawn's project-wide name glossary. Each entry has a safety badge: "
-            "safe (display-only), refs (referenced by name but rewritten on inject), or verify "
-            "(also in indirect literals - skipped). Phase 0 translates every safe and refs entry "
+            "safe (display-only), refs (referenced by name - skipped), or verify "
+            "(also in indirect literals - skipped). Phase 0 translates every safe entry "
             "individually, regardless of category, and harvests them into vocab.txt."
         ))
 
@@ -2325,8 +2325,8 @@ class WolfWorkflowTab(QWidget):
         layout.addWidget(_make_hr())
         layout.addWidget(self._subheading("Translate names (Phase 0)"))
         layout.addWidget(self._desc(
-            "Pick Normal or Batch below, then run Phase 0. Only safe and refs entries are sent to "
-            "the model; verify names stay identical to source so inject skips them."
+            "Pick Normal or Batch below, then run Phase 0. Only safe entries are sent to "
+            "the model; refs and verify names stay identical to source so inject skips them."
         ))
         self._add_tl_mode_selector(layout)
         tl_btn = self._register(_make_btn("Translate safe names now (Phase 0)", "#00a86b"))
@@ -2531,7 +2531,7 @@ class WolfWorkflowTab(QWidget):
         layout.addWidget(_make_section_label("Step 6 · Inject Translations"))
         layout.addWidget(self._desc(
             "Writes the translated text back into the game's Data/ binaries with WolfDawn, "
-            "byte-exact. Translated safe/refs name values from names.json are applied across Data/ "
+            "byte-exact. Translated safe name values from names.json are applied across Data/ "
             "(only the entries you translated change). Lines whose inline codes changed are skipped and "
             "reported (unless you allow drift). Full inject and any inject that includes "
             f"{NAMES_JSON} reset live Data/ from {WORK_DIR_NAME}/originals/ first. "

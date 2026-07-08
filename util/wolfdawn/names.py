@@ -6,11 +6,11 @@ a ``note`` field (the WOLF database category it came from), and a static
 ``safety`` badge from WolfDawn's command-stream analysis:
 
 * ``safe`` - display-only; no command references the string by name.
-* ``refs`` - referenced by name, but WolfDawn rewrites every literal on inject.
+* ``refs`` - referenced by name (picture codes, switch labels, etc.); skipped.
 * ``verify`` - also appears in indirect literals; left untranslated by default.
 
-:mod:`modules.wolfdawn` translates only entries whose badge is ``safe`` or
-``refs``. ``verify`` and legacy entries without a badge keep ``text == source``
+:mod:`modules.wolfdawn` translates only entries whose badge is ``safe``.
+``refs``, ``verify``, and legacy entries without a badge keep ``text == source``
 so injection is a no-op for them.
 
 Phase 0 still harvests translated **short name-like** entries into ``vocab.txt``,
@@ -27,7 +27,7 @@ from typing import Any
 SAFETY_SAFE = "safe"
 SAFETY_REFS = "refs"
 SAFETY_VERIFY = "verify"
-_TRANSLATABLE_SAFETY = frozenset({SAFETY_SAFE, SAFETY_REFS})
+_TRANSLATABLE_SAFETY = frozenset({SAFETY_SAFE})
 
 # names.json ``note`` values that are content fields, not short display names.
 _VOCAB_SKIP_NOTE_RE = re.compile(
@@ -77,7 +77,7 @@ def entry_safety(entry: dict[str, Any]) -> str:
 
 
 def is_name_translatable(entry: dict[str, Any]) -> bool:
-    """True when WolfDawn marks *entry* as safe or refs (per-name, not per-category)."""
+    """True when WolfDawn marks *entry* as safe (per-name, not per-category)."""
     return entry_safety(entry) in _TRANSLATABLE_SAFETY
 
 
@@ -127,7 +127,7 @@ def count_name_safety(data: dict[str, Any]) -> dict[str, int]:
             counts["verify"] += 1
         else:
             counts["unknown"] += 1
-    counts["translatable"] = counts["safe"] + counts["refs"]
+    counts["translatable"] = counts["safe"]
     return counts
 
 
@@ -151,7 +151,7 @@ def format_name_safety_summary(data: dict[str, Any]) -> str:
     badge_text = ", ".join(parts) if parts else "no badges"
     return (
         f"{counts['translatable']} of {counts['total']} name(s) will translate "
-        f"({badge_text}). Verify names are skipped."
+        f"({badge_text}). Refs and verify names are skipped."
     )
 
 

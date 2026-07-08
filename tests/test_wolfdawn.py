@@ -173,15 +173,15 @@ class TestTranslationWriteback(unittest.TestCase):
         self.assertIsNone(err)
         self.assertEqual(data["lines"][0]["text"], "EN_ゲームタイトル")
 
-    def test_names_translate_only_safe_and_refs(self):
+    def test_names_translate_only_safe(self):
         (data, _t, err), captured = _WolfTranslateHarness().run(
             NAMES_DOC, "names.json"
         )
         self.assertIsNone(err)
         self.assertEqual(data["names"][0]["text"], "EN_剣")
-        self.assertEqual(data["names"][1]["text"], "EN_槍")
+        self.assertEqual(data["names"][1]["text"], "槍")
         self.assertEqual(data["names"][2]["text"], "スイッチ状態")
-        self.assertEqual(captured, [["剣", "槍"]])
+        self.assertEqual(captured, [["剣"]])
 
     def test_names_without_safety_badges_translate_nothing(self):
         (data, _t, err), captured = _WolfTranslateHarness().run(
@@ -198,7 +198,7 @@ class TestTranslationWriteback(unittest.TestCase):
         self.assertEqual(
             harness.vocab_writes,
             [
-                ("Weapon · 武器", [("剣", "EN_剣"), ("槍", "EN_槍")]),
+                ("Weapon · 武器", [("剣", "EN_剣")]),
             ],
         )
 
@@ -451,7 +451,7 @@ class TestTranslationWriteback(unittest.TestCase):
         self.assertEqual(captured, [])
         self.assertEqual(
             harness.vocab_writes,
-            [("Weapon · 武器", [("剣", "Sword"), ("槍", "Spear")])],
+            [("Weapon · 武器", [("剣", "Sword")])],
         )
 
 

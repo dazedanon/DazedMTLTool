@@ -22,7 +22,7 @@ and Japanese embedded only in WOLF control codes (e.g. ``\\r[...]`` ruby).
 
 names.json safety: WolfDawn tags every value name with a static ``safety`` badge
 (``safe``, ``refs``, or ``verify``). For ``kind == "names"`` documents, only
-entries whose badge is ``safe`` or ``refs`` are translated; ``verify`` names and
+entries whose badge is ``safe`` are translated; ``refs`` and ``verify`` names and
 legacy entries without a badge keep ``text == source``. After translating
 names.json, translatable entries are harvested into ``vocab.txt`` (grouped by
 ``note``, with bilingual headers) so later phases keep item / skill / term names
@@ -110,7 +110,7 @@ _WOLF_CODE_RE = re.compile(
 # configurable from the workflow (data/wolf_speakers.json).
 SPEAKER_CONFIG = wolf_speakers.load_config()
 
-# names.json: translate per-entry safe/refs badges only (see util.wolfdawn.names).
+# names.json: translate per-entry safe badges only (see util.wolfdawn.names).
 
 # Text wrapping: optional advanced rewrap via dazedwrap (wolfWrap/wolfWidth). Defaults
 # off - the workflow uses WolfDawn relayout after inject instead.
@@ -342,13 +342,13 @@ def parseDocument(data, filename):
         # Fresh extracts keep ``text == source``, so they still queue.
         if IGNORETLTEXT and not _text_still_needs_translation(e):
             return False
-        # names.json: only translate WolfDawn safe/refs entries (per-name badge).
+        # names.json: only translate WolfDawn safe entries (per-name badge).
         if is_names and not wolf_names.is_name_translatable(e):
             return False
         return True
 
     # Only translate entries that still need work; names.json also requires a
-    # safe/refs badge. Untouched leaves keep ``text == source`` so WolfDawn
+    # safe badge. Untouched leaves keep ``text == source`` so WolfDawn
     # treats them as no-ops on inject.
     translatable = [e for e in entries if _translatable(e)]
 

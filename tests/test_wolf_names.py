@@ -18,11 +18,11 @@ from util.wolfdawn import names as wn  # noqa: E402
 
 
 class TestNameTranslatable(unittest.TestCase):
-    def test_safe_and_refs_are_translatable(self):
+    def test_safe_is_translatable(self):
         self.assertTrue(wn.is_name_translatable({"safety": "safe"}))
-        self.assertTrue(wn.is_name_translatable({"safety": "refs"}))
 
-    def test_verify_and_missing_are_not_translatable(self):
+    def test_refs_verify_and_missing_are_not_translatable(self):
+        self.assertFalse(wn.is_name_translatable({"safety": "refs"}))
         self.assertFalse(wn.is_name_translatable({"safety": "verify"}))
         self.assertFalse(wn.is_name_translatable({}))
         self.assertFalse(wn.is_name_translatable({"safety": ""}))
@@ -67,11 +67,11 @@ class TestCountNameSafety(unittest.TestCase):
         self.assertEqual(counts["refs"], 1)
         self.assertEqual(counts["verify"], 1)
         self.assertEqual(counts["unknown"], 1)
-        self.assertEqual(counts["translatable"], 2)
+        self.assertEqual(counts["translatable"], 1)
 
     def test_summary_mentions_translatable_count(self):
         summary = wn.format_name_safety_summary(self.DOC)
-        self.assertIn("2 of 4", summary)
+        self.assertIn("1 of 4", summary)
         self.assertIn("verify", summary)
 
 
