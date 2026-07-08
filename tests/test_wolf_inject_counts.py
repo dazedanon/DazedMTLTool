@@ -27,6 +27,13 @@ class WolfInjectCountsTests(unittest.TestCase):
         self.assertEqual(drifted, 0)
         self.assertTrue(wolfdawn.inject_had_applied(applied))
 
+    def test_parse_names_inject_dry_run_counts(self):
+        out = "would apply 0 name change(s) (0 drifted/unmatched); dry run — did NOT write"
+        applied, drifted = wolfdawn.parse_names_inject_counts(out)
+        self.assertEqual(applied, 0)
+        self.assertEqual(drifted, 0)
+        self.assertFalse(wolfdawn.inject_had_applied(applied))
+
     def test_parse_strings_inject_counts(self):
         out = "applied 91 translation(s) (3 drifted); wrote Map001.mps\n"
         applied, drifted = wolfdawn.parse_strings_inject_counts(out)

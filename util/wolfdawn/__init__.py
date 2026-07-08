@@ -69,7 +69,8 @@ _INJECT_MISMATCH_EVENT_RE = re.compile(
     re.IGNORECASE | re.MULTILINE,
 )
 _NAMES_INJECT_COUNTS_RE = re.compile(
-    r"applied\s+(\d+)\s+name change.*?(\d+)\s+drifted", re.IGNORECASE | re.DOTALL
+    r"(?:would apply|applied)\s+(\d+)\s+name change.*?(\d+)\s+(?:drifted|unmatched)",
+    re.IGNORECASE | re.DOTALL,
 )
 
 ProgressFn = Callable[[int, int, str], None]
@@ -632,6 +633,7 @@ def names_inject(
     out_dir: Optional[PathLike] = None,
     allow_code_drift: bool = False,
     en_punct: bool = False,
+    dry_run: bool = False,
     log_fn=None,
 ) -> WolfResult:
     """``wolf names-inject <names.json> --data <data-dir> [-o <out-dir>] [flags]``."""
@@ -642,6 +644,8 @@ def names_inject(
         args.append("--allow-code-drift")
     if en_punct:
         args.append("--en-punct")
+    if dry_run:
+        args.append("--dry-run")
     return _run(args, log_fn=log_fn)
 
 

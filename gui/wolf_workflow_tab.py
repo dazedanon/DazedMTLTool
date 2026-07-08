@@ -2530,13 +2530,9 @@ class WolfWorkflowTab(QWidget):
     def _build_step4_inject(self, layout: QVBoxLayout):
         layout.addWidget(_make_section_label("Step 6 · Inject Translations"))
         layout.addWidget(self._desc(
-            "Writes the translated text back into the game's Data/ binaries with WolfDawn, "
-            "byte-exact. Translated safe name values from names.json are applied across Data/ "
-            "(only the entries you translated change). Lines whose inline codes changed are skipped and "
-            "reported (unless you allow drift). Full inject and any inject that includes "
-            f"{NAMES_JSON} reset live Data/ from {WORK_DIR_NAME}/originals/ first. "
-            f"Before each inject, inline \\\\codes are auto-repaired from source; on a full inject "
-            f"every translated/ JSON is copied into {WORK_DIR_NAME}/ for the game-repo diff."
+            "Tick translated JSON files below, then inject them into the game's Data/ "
+            "binaries. Each file is reported individually — failures are shown in a "
+            "dialog and in the log."
         ))
 
         self.en_punct_cb = QCheckBox("Convert Japanese punctuation to ASCII (--en-punct)")
@@ -2560,17 +2556,10 @@ class WolfWorkflowTab(QWidget):
         layout.addWidget(check_btn)
 
         layout.addWidget(_make_hr())
-        layout.addWidget(self._subheading("Quick inject — write only specific files into the game"))
-        layout.addWidget(self._desc(
-            "For iterating: tick the files you want, then inject. Each selected JSON is "
-            f"copied into {WORK_DIR_NAME}/ and written into its Data/ binary with WolfDawn. "
-            f"{NAMES_JSON} is special: it applies translated name values across every binary "
-            f"(and resets live Data/ from {WORK_DIR_NAME}/originals/ first). "
-            "Only tick the files you actually want to inject."
-        ))
+        layout.addWidget(self._subheading("Translated files"))
 
         self.inject_list = QListWidget()
-        self.inject_list.setMaximumHeight(220)
+        self.inject_list.setMaximumHeight(280)
         self.inject_list.setStyleSheet(
             "QListWidget{background-color:#252526;border:1px solid #3a3a3a;border-radius:4px;"
             "color:#cccccc;font-size:12px;padding:2px;}"
@@ -2580,7 +2569,7 @@ class WolfWorkflowTab(QWidget):
         layout.addWidget(self.inject_list)
 
         list_row = QHBoxLayout()
-        refresh_btn = self._register(_make_btn("↻ Refresh list", "#3a3a3a"))
+        refresh_btn = self._register(_make_btn("↻ Refresh", "#3a3a3a"))
         refresh_btn.clicked.connect(self._refresh_inject_list)
         sel_all_btn = self._register(_make_btn("Select all", "#3a3a3a"))
         sel_all_btn.clicked.connect(lambda: self._set_inject_checks(True))
@@ -2592,25 +2581,22 @@ class WolfWorkflowTab(QWidget):
         list_row.addStretch()
         layout.addLayout(list_row)
 
-        quick_btn = self._register(_make_btn("Inject selected files", "#00a86b"))
-        quick_btn.clicked.connect(self._inject_selected)
-        layout.addWidget(quick_btn)
-
-        layout.addWidget(_make_hr())
-        layout.addWidget(self._subheading("Full inject"))
-        layout.addWidget(self._desc(
-            "Injects every extracted document and applies translated name values from names.json "
-            "across Data/. Use this once translation is complete before packaging in Step 8."
-        ))
-        inject_btn = self._register(_make_btn("Inject all translations", "#00a86b"))
-        inject_btn.clicked.connect(lambda: self._inject())
-        layout.addWidget(inject_btn)
+        btn_row = QHBoxLayout()
+        inject_sel_btn = self._register(_make_btn("Inject selected", "#00a86b"))
+        inject_sel_btn.clicked.connect(self._inject_selected)
+        inject_all_btn = self._register(_make_btn("Inject all", "#00a86b"))
+        inject_all_btn.clicked.connect(self._inject_all)
+        btn_row.addWidget(inject_sel_btn)
+        btn_row.addWidget(inject_all_btn)
+        btn_row.addStretch()
+        layout.addLayout(btn_row)
 
         layout.addWidget(_make_hr())
         layout.addWidget(self._desc(
             "English text is often longer than Japanese. Step 7 (Fix wrapping): paste "
             "overflowing in-game text to find the sheet, wrap, and re-inject."
         ))
+        self._refresh_inject_list()
 
     def _build_step7_relayout(self, layout: QVBoxLayout):
         """Search-first fix wrapping: find sheet by in-game text, wrap, re-inject."""
@@ -3187,7 +3173,7 @@ class WolfWorkflowTab(QWidget):
             return
         if not self._require_manifest():
             return
-        self._inject(only_json={hit.json_file})
+        self._inject({hit.json_file})
 
     def _refresh_wrap_sheets_list(self):
         if not hasattr(self, "_wrap_sheets_list"):
@@ -3273,18 +3259,17 @@ class WolfWorkflowTab(QWidget):
                 return p
         return None
 
-    def _repair_inject_json(self, src: Path, log=None) -> Path:
-        """Auto-repair WOLF inline codes in a translated JSON before inject."""
-        from util.wolfdawn import codes as wolf_codes
+    def _injectable_filenames(self) -> list[str]:
+        """JSON files in translated/ that the manifest knows how to inject."""
+        from util.wolfdawn import inject as wolf_inject
 
-        data = json.loads(src.read_text(encoding="utf-8-sig"))
-        data, repairs = wolf_codes.repair_document(data)
-        if repairs:
-            src.write_text(
-                json.dumps(data, ensure_ascii=False, indent=4) + "\n",
-                encoding="utf-8",
-            )
-        return src
+        manifest = self._read_manifest()
+        if not manifest:
+            return []
+        return wolf_inject.list_injectable(
+            self._tool_root() / "translated",
+            manifest.get("entries", []),
+        )
 
     def _sync_translated_json_to_wolf_json(
         self, json_name: str, game_json_dir: Path
@@ -3306,105 +3291,83 @@ class WolfWorkflowTab(QWidget):
         except Exception as exc:
             return False, str(exc)
 
-    def _inject_sync_targets(
-        self,
-        entries: list[dict],
-        only_json: set[str] | None,
-    ) -> list[str]:
-        """JSON files to copy from translated/ into the game's wolf_json/ after inject."""
-        if only_json is None:
-            return sorted(
-                e["json"]
-                for e in entries
-                if e.get("json") and self._translated_or_source(e["json"]) is not None
-            )
-        return sorted(
-            j for j in only_json if self._translated_or_source(j) is not None
-        )
+    def _inject(self, selected: set[str]):
+        """Inject the selected translated JSON files into live Data/."""
+        if not self._require_manifest():
+            return
+        manifest = self._read_manifest()
+        en_punct = self.en_punct_cb.isChecked()
+        allow_drift = self.drift_cb.isChecked()
+        game_json_dir = self._work_dir()
 
-    def _emit_inject_summary(
-        self,
-        log,
-        *,
-        injected: list[str],
-        failed: list[tuple[str, str]],
-        skipped_files: int = 0,
-        skipped_lines: int = 0,
-    ) -> None:
-        """Concise inject report: successes, optional guard summary, then failures."""
-        if injected:
-            if len(injected) <= 12:
-                log("Injected: " + ", ".join(injected))
-            else:
-                log(f"Injected: {len(injected)} file(s)")
-        if skipped_files:
-            log(
-                f"Warnings: {skipped_files} file(s) had {skipped_lines} line(s) "
-                "skipped by WolfDawn safety guards"
-            )
-        for name, reason in failed:
-            log(f"Failed: {name} — {reason}")
-        if not injected and not failed:
-            log("Injected: (nothing)")
+        def task(log, progress=None):
+            from util.wolfdawn import inject as wolf_inject
 
-    def _inject_failure_reason(
-        self,
-        *,
-        drift: int | None = None,
-        exit_code: int | None = None,
-        untranslated: int | None = None,
-        mismatches: int | None = None,
-        no_source: bool = False,
-        no_json: bool = False,
-        no_original: bool = False,
-        names_drift: bool = False,
-        names_stale: bool = False,
-    ) -> str:
-        if no_json:
-            return "no translated JSON"
-        if no_source:
-            return "no translated copy to sync"
-        if no_original:
-            return "no pristine original"
-        if names_stale:
-            return (
-                "sources no longer match live Data/ "
-                "(re-run Step 0 extract on the untranslated game)"
-            )
-        if names_drift:
-            return (
-                "0 applied — live Data/ no longer has Japanese name sources "
-                f"(reset from {WORK_DIR_NAME}/originals/ and inject again)"
-            )
-        if drift:
-            return f"0 applied, {drift} skipped as drift"
-        if untranslated or mismatches:
-            parts = []
-            if untranslated:
-                parts.append(f"{untranslated} untranslated line(s)")
-            if mismatches:
-                parts.append(f"{mismatches} control-code mismatch(es)")
-            return "; ".join(parts)
-        if exit_code is not None:
-            return f"wolf exited {exit_code}"
-        return "inject failed"
+            entries = manifest["entries"]
+            data_dir_path = Path(manifest["data_dir"])
+            game_root = Path(manifest.get("root") or self._game_root)
+            originals_dir = game_root / WORK_DIR_NAME / "originals"
 
-    def _strings_inject_failure_reason(self, res) -> str:
-        from util import wolfdawn
+            self._ensure_originals(manifest, log, progress, quiet=True)
 
-        cli_err = wolfdawn.parse_inject_cli_error(res.stdout, res.stderr)
-        if cli_err:
-            return cli_err
-        a, d = wolfdawn.parse_strings_inject_counts(res.stdout, res.stderr)
-        untranslated = wolfdawn.parse_strings_inject_untranslated(res.stdout, res.stderr)
-        mismatches = wolfdawn.parse_strings_inject_mismatches(res.stdout, res.stderr)
-        if res.ok:
-            return self._inject_failure_reason(drift=d or 0)
-        return self._inject_failure_reason(
-            exit_code=res.returncode,
-            untranslated=untranslated,
-            mismatches=len(mismatches),
-        )
+            report = wolf_inject.inject_selected(
+                sorted(selected),
+                manifest_entries=entries,
+                data_dir=data_dir_path,
+                originals_dir=originals_dir,
+                translated_dir=self._tool_root() / "translated",
+                game_root=game_root,
+                allow_code_drift=allow_drift,
+                en_punct=en_punct,
+                log_fn=log,
+            )
+
+            for json_name in sorted(selected):
+                ok, err = self._sync_translated_json_to_wolf_json(
+                    json_name, game_json_dir
+                )
+                if not ok:
+                    report.sync_failures.append((json_name, err or "unknown error"))
+                    log(f"  ✗ sync {json_name}: {err}")
+
+            title, body = wolf_inject.format_report_dialog(report)
+            inject_state["dialog"] = (title, body)
+            inject_state["report"] = report
+            inject_state["selected"] = set(selected)
+            return report.ok, title
+
+        def _after_inject(ok: bool, msg: str):
+            title, body = inject_state.get("dialog", ("Inject", msg))
+            report = inject_state.get("report")
+            if report and (report.failed or report.sync_failures):
+                QMessageBox.warning(self, title, body)
+            elif report and report.succeeded:
+                QMessageBox.information(self, title, body)
+            elif body:
+                QMessageBox.information(self, title, body)
+
+            selection = inject_state.get("selected") or set()
+            names_only = selection and selection.issubset({NAMES_JSON})
+            if names_only or not self._relayout_after_enabled():
+                self._log("Relayout: not run")
+                return
+            if not report or not any(
+                r.success and r.json_name != NAMES_JSON for r in report.files
+            ):
+                self._log("Relayout: not run")
+                return
+            QTimer.singleShot(
+                0, lambda: self._run_relayout(manual=False, quiet=True)
+            )
+
+        inject_state: dict = {}
+        self._run_task(task, on_done=_after_inject)
+
+    def _relayout_after_enabled(self) -> bool:
+        cb = getattr(self, "_relayout_after_cb", None)
+        if cb is not None:
+            return cb.isChecked()
+        return self._setting("relayout_after_inject", "false") == "true"
 
     def _on_step_changed(self, idx: int):
         previous = self._current_step_index
@@ -3418,7 +3381,7 @@ class WolfWorkflowTab(QWidget):
         # Index 4 == Database: refresh discovery report and sheet list.
         elif idx == 4:
             self._refresh_db_discovery()
-        # Index 6 == Inject: keep the quick-inject picker in sync with translated/.
+        # Index 6 == Inject: keep the file list in sync with translated/.
         elif idx == 6:
             self._refresh_inject_list()
         # Index 7 == Fix wrap: refresh sheet overflow list.
@@ -3430,30 +3393,33 @@ class WolfWorkflowTab(QWidget):
         if not hasattr(self, "inject_list"):
             return
         self.inject_list.clear()
-        manifest = self._read_manifest()
-        if not manifest:
+        if not self._read_manifest():
             item = QListWidgetItem("Run Step 0 (extract) first — no manifest found.")
             item.setFlags(Qt.ItemIsEnabled)
             self.inject_list.addItem(item)
             return
-        listed = 0
-        for entry in manifest.get("entries", []):
-            json_name = entry.get("json")
-            if not json_name:
-                continue
-            if not self._translated_path(json_name):
-                continue
+        files = self._injectable_filenames()
+        if not files:
+            item = QListWidgetItem("No injectable files in translated/ yet.")
+            item.setFlags(Qt.ItemIsEnabled)
+            self.inject_list.addItem(item)
+            return
+        for json_name in files:
             item = QListWidgetItem(json_name)
             item.setData(Qt.UserRole, json_name)
             item.setFlags(Qt.ItemIsUserCheckable | Qt.ItemIsEnabled)
-            default_checked = False
-            item.setCheckState(Qt.Checked if default_checked else Qt.Unchecked)
+            item.setCheckState(Qt.Unchecked)
             self.inject_list.addItem(item)
-            listed += 1
-        if listed == 0:
-            item = QListWidgetItem("No translated files in translated/ yet — run Steps 4-5.")
-            item.setFlags(Qt.ItemIsEnabled)
-            self.inject_list.addItem(item)
+
+    def _selected_inject_files(self) -> set[str]:
+        selected: set[str] = set()
+        for i in range(self.inject_list.count()):
+            it = self.inject_list.item(i)
+            if (it.flags() & Qt.ItemIsUserCheckable) and it.checkState() == Qt.Checked:
+                name = it.data(Qt.UserRole)
+                if name:
+                    selected.add(name)
+        return selected
 
     def _set_inject_checks(self, checked: bool):
         if not hasattr(self, "inject_list"):
@@ -3467,21 +3433,26 @@ class WolfWorkflowTab(QWidget):
     def _inject_selected(self):
         if not self._require_manifest():
             return
-        selected = set()
-        for i in range(self.inject_list.count()):
-            it = self.inject_list.item(i)
-            if (it.flags() & Qt.ItemIsUserCheckable) and it.checkState() == Qt.Checked:
-                name = it.data(Qt.UserRole)
-                if name:
-                    selected.add(name)
+        selected = self._selected_inject_files()
         if not selected:
             QMessageBox.information(
                 self, "Nothing selected",
-                "Tick the files you want to inject, then try again. "
-                "Use “↻ Refresh list” if you just translated something.",
+                "Tick one or more files in the list, then click Inject selected.",
             )
             return
-        self._inject(only_json=selected)
+        self._inject(selected)
+
+    def _inject_all(self):
+        if not self._require_manifest():
+            return
+        files = self._injectable_filenames()
+        if not files:
+            QMessageBox.information(
+                self, "Nothing to inject",
+                "No injectable files found in translated/. Translate something first.",
+            )
+            return
+        self._inject(set(files))
 
     def _names_check(self):
         if not self._require_manifest():
@@ -3504,213 +3475,6 @@ class WolfWorkflowTab(QWidget):
             return True, "names-check reported inconsistencies (see log above)."
 
         self._run_task(task)
-
-    def _inject(self, only_json: set[str] | None = None):
-        """Inject translations into the game's Data/ binaries.
-
-        only_json:
-            None      — full inject: every document + translated name values across Data/.
-            set(names)— quick inject: only those JSON files; name values from names.json
-                        are applied across Data/ only when NAMES_JSON is included.
-
-        Name values are applied only when translated/names.json exists (i.e. Phase 0
-        has run); otherwise names are left untouched.
-        """
-        if not self._require_manifest():
-            return
-        manifest = self._read_manifest()
-        en_punct = self.en_punct_cb.isChecked()
-        allow_drift = self.drift_cb.isChecked()
-        game_json_dir = self._work_dir()
-
-        def task(log, progress=None):
-            from util import wolfdawn
-
-            injected: list[str] = []
-            failures: list[tuple[str, str]] = []
-            skipped_files = 0
-            skipped_lines = 0
-
-            self._ensure_originals(manifest, log, progress, quiet=True)
-
-            entries = manifest["entries"]
-            data_dir = manifest["data_dir"]
-            data_dir_path = Path(data_dir)
-            self._ensure_db_dat_snapshots(entries, data_dir_path)
-
-            names_entry = next((e for e in entries if e["kind"] == "names"), None)
-            names_json = names_entry["json"] if names_entry else NAMES_JSON
-            names_src = (
-                self._translated_or_source(names_entry["json"])
-                if names_entry
-                else None
-            )
-            will_names = bool(
-                names_entry
-                and names_src is not None
-                and (only_json is None or names_entry["json"] in only_json)
-            )
-
-            if only_json is None or will_names:
-                self._restore_live_from_originals(
-                    entries, data_dir_path, log, quiet=True
-                )
-
-            names_restored = only_json is None or will_names
-
-            if only_json is None:
-                strings_targets = {
-                    e["json"] for e in entries if e.get("kind") != "names"
-                }
-            else:
-                # Quick inject: only the JSON files the user ticked (names uses
-                # names-inject separately; do not pull in every translated file).
-                strings_targets = {j for j in only_json if j != NAMES_JSON}
-
-            for entry in entries:
-                if entry["kind"] == "names":
-                    continue
-                if entry["json"] not in strings_targets:
-                    continue
-                json_name = entry["json"]
-                inject_src = self._translated_path(json_name)
-                if inject_src is None:
-                    inject_src = self._translated_or_source(json_name)
-                if inject_src is None:
-                    failures.append(
-                        (json_name, self._inject_failure_reason(no_json=True))
-                    )
-                    continue
-                inject_src = self._repair_inject_json(inject_src)
-                out = entry["base"]
-                orig = self._orig_base_for(entry, data_dir_path)
-                base = str(orig) if orig.exists() else out
-                if not orig.exists():
-                    failures.append(
-                        (json_name, self._inject_failure_reason(no_original=True))
-                    )
-                    continue
-                if entry.get("kind") == "db":
-                    from util.wolfdawn import db_dat_sibling
-
-                    if not db_dat_sibling(orig).is_file():
-                        failures.append((
-                            json_name,
-                            "missing database .dat pair in originals "
-                            f"(re-run Step 0 extract on the untranslated game)",
-                        ))
-                        continue
-                res = wolfdawn.strings_inject(
-                    str(inject_src), base, out,
-                    allow_code_drift=allow_drift, en_punct=en_punct, log_fn=None,
-                )
-                a, d = wolfdawn.parse_strings_inject_counts(res.stdout, res.stderr)
-                untranslated = wolfdawn.parse_strings_inject_untranslated(
-                    res.stdout, res.stderr
-                )
-                mismatches = wolfdawn.parse_strings_inject_mismatches(
-                    res.stdout, res.stderr
-                )
-                strings_ok = wolfdawn.inject_had_applied(a) or (
-                    res.ok and not (a == 0 and (d or 0) > 0)
-                )
-                if strings_ok:
-                    injected.append(json_name)
-                    guard_skips = (untranslated or 0) + len(mismatches)
-                    if guard_skips:
-                        skipped_files += 1
-                        skipped_lines += untranslated or 0
-                elif res.ok:
-                    failures.append((
-                        json_name,
-                        self._strings_inject_failure_reason(res),
-                    ))
-                else:
-                    failures.append((
-                        json_name,
-                        self._strings_inject_failure_reason(res),
-                    ))
-
-            if will_names and names_entry and names_src is not None:
-                if not names_restored:
-                    self._restore_live_from_originals(
-                        entries, data_dir_path, log, quiet=True
-                    )
-                res = wolfdawn.names_inject(
-                    str(names_src), data_dir,
-                    allow_code_drift=allow_drift, en_punct=en_punct, log_fn=None,
-                )
-                a, d = wolfdawn.parse_names_inject_counts(res.stdout, res.stderr)
-                if wolfdawn.inject_had_applied(a):
-                    injected.append(names_json)
-                elif res.ok and a == 0:
-                    failures.append((
-                        names_json,
-                        self._inject_failure_reason(names_drift=True),
-                    ))
-                elif res.ok and (d or 0) > 0:
-                    failures.append((
-                        names_json,
-                        self._inject_failure_reason(names_stale=True),
-                    ))
-                else:
-                    failures.append((
-                        names_json,
-                        self._inject_failure_reason(exit_code=res.returncode),
-                    ))
-
-            sync_targets = self._inject_sync_targets(entries, only_json)
-            for json_name in sync_targets:
-                ok, err = self._sync_translated_json_to_wolf_json(
-                    json_name, game_json_dir
-                )
-                if not ok:
-                    failures.append((
-                        json_name,
-                        self._inject_failure_reason(
-                            no_source=err == "no translated copy",
-                        )
-                        if err == "no translated copy"
-                        else f"could not sync to {WORK_DIR_NAME}/ ({err})",
-                    ))
-
-            self._emit_inject_summary(
-                log,
-                injected=injected,
-                failed=failures,
-                skipped_files=skipped_files,
-                skipped_lines=skipped_lines,
-            )
-            inject_state["applied"] = len(injected)
-            inject_state["had_failures"] = bool(failures)
-            inject_state["only_json"] = only_json
-            return not failures, ""
-
-        def _after_inject(ok: bool, msg: str):
-            selection = inject_state.get("only_json")
-            names_only = (
-                selection is not None
-                and selection
-                and selection.issubset({NAMES_JSON})
-            )
-            if names_only or not self._relayout_after_enabled():
-                self._log("Relayout: not run")
-                return
-            if inject_state.get("applied", 0) <= 0:
-                self._log("Relayout: not run")
-                return
-            QTimer.singleShot(
-                0, lambda: self._run_relayout(manual=False, quiet=True)
-            )
-
-        inject_state: dict = {"applied": 0, "had_failures": False}
-        self._run_task(task, on_done=_after_inject)
-
-    def _relayout_after_enabled(self) -> bool:
-        cb = getattr(self, "_relayout_after_cb", None)
-        if cb is not None:
-            return cb.isChecked()
-        return self._setting("relayout_after_inject", "false") == "true"
 
     def _relayout_desc_enabled(self) -> bool:
         cb = getattr(self, "_relayout_desc_cb", None)
