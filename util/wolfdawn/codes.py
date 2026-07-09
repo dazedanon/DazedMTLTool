@@ -251,6 +251,10 @@ def rebuild_text_preserving_source_codes(source: str, text: str) -> str:
     ``\\f[N]`` sizes are taken from *text* when present (manual wrap / names-wrap
     shrink). Other control codes (``\\c``, ``\\^``, …) always come from *source*.
     A leading body ``\\f[N]`` that *source* lacks is kept from *text*.
+
+    When *source* has no inline codes at all (typical spoken ``Name\\nbody``),
+    *text* is returned unchanged so a body ``\\f[N]`` after the nameplate cannot
+    be mis-read as a code slot and wipe the dialogue.
     """
     if not isinstance(source, str) or not isinstance(text, str):
         return text
@@ -270,6 +274,13 @@ def rebuild_text_preserving_source_codes(source: str, text: str) -> str:
     txt_font_sizes = _font_sizes_in_order(txt_rest)
 
     if not src_parts:
+        return out_prefix + txt_rest
+
+    # Source has no inline codes to restore. Keep the translation intact -
+    # including Manual-wrap ``Name\\n\\f[N]body`` (body font after the nameplate).
+    # Slot-rebuilding would treat the mid-line ``\\f`` as a break, keep only
+    # ``Name\\n``, prepend ``\\f[N]``, and drop the body (``\\f[N]Name\\n``).
+    if not any(kind == "code" for kind, _ in src_parts):
         return out_prefix + txt_rest
 
     # Rebuild using source code skeleton + translated literal slots.
@@ -297,8 +308,14 @@ def rebuild_text_preserving_source_codes(source: str, text: str) -> str:
                 rebuilt.append(val)
         else:
             if lit_i < len(txt_lit):
-                rebuilt.append(txt_lit[lit_i])
-                lit_i += 1
+                # Last source literal: keep every remaining translated literal so
+                # extra mid-line ``\\f[N]`` in *text* cannot truncate the body.
+                if lit_i == len(src_lit) - 1 and len(txt_lit) > lit_i + 1:
+                    rebuilt.append("".join(txt_lit[lit_i:]))
+                    lit_i = len(txt_lit)
+                else:
+                    rebuilt.append(txt_lit[lit_i])
+                    lit_i += 1
             else:
                 rebuilt.append(val)
     return out_prefix + "".join(rebuilt)

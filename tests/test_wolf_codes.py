@@ -78,6 +78,25 @@ class WolfCodesRepairTests(unittest.TestCase):
         fixed = wolf_codes.rebuild_text_preserving_source_codes(source, text)
         self.assertEqual(fixed, text)
 
+    def test_rebuild_keeps_nameplate_body_font(self):
+        """Spoken ``Name\\n\\f[N]body`` must not become ``\\f[N]Name\\n`` on inject repair."""
+        source = (
+            "市民\n俺達の税金で好き放題しやがって……、\n"
+            "王子が代行として実権を握ってからは\n"
+            "毎晩毎晩パーティー三昧だって話じゃねえか……。"
+        )
+        text = (
+            "Citizen\n\\f[21]Spending our tax money however he\n"
+            "pleases...... ever since the Prince\n"
+            "took over as regent, it's been\n"
+            "nothing but parties every single\n"
+            "night, I tell you......"
+        )
+        fixed = wolf_codes.rebuild_text_preserving_source_codes(source, text)
+        self.assertEqual(fixed, text)
+        self.assertIn("Spending our tax money", fixed)
+        self.assertFalse(fixed.rstrip().endswith("Citizen"))
+
     def test_document_has_font_size_drift_for_db(self):
         doc = {
             "kind": "db",

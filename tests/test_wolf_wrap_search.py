@@ -243,58 +243,87 @@ class TestManualFontAndWrap(unittest.TestCase):
 
 
 class TestEventScopeWrap(unittest.TestCase):
-    def test_wrap_all_in_map_scene_only(self):
+    def test_wrap_all_in_spoken_format_across_scenes(self):
         with tempfile.TemporaryDirectory() as tmp:
-            path = Path(tmp) / "Map001.mps.json"
+            root = Path(tmp)
             long_a = (
+                "Celria\n"
                 "This is a very long line of dialogue that "
                 "should wrap at thirty four visible chars."
             )
             long_b = (
+                "Citizen\n"
                 "Another very long line of dialogue that also "
                 "should wrap at thirty four visible chars."
             )
+            ui_line = (
+                "\\f[24]Rosa profile card that is also long enough "
+                "to wrap at thirty four visible chars easily."
+            )
+            path = root / "CommonEvent.dat.json"
             doc = {
-                "kind": "map",
-                "file": "Map001.mps",
+                "kind": "common",
+                "file": "CommonEvent.dat",
                 "scenes": [
                     {
                         "event": 1,
                         "name": "Intro",
                         "lines": [
-                            {"text": long_a},
-                            {"text": "Short line."},
+                            {
+                                "speaker": "セルリア",
+                                "speaker_src": "literal_line1_lowconf",
+                                "text": long_a,
+                            },
                         ],
                     },
                     {
                         "event": 2,
-                        "name": "Other",
-                        "lines": [{"text": long_b}],
+                        "name": "Town",
+                        "lines": [
+                            {
+                                "speaker": "市民",
+                                "speaker_src": "literal_line1_lowconf",
+                                "text": long_b,
+                            },
+                            {
+                                "speaker": "UI",
+                                "speaker_src": "ui",
+                                "text": ui_line,
+                            },
+                        ],
                     },
                 ],
             }
             path.write_text(json.dumps(doc, ensure_ascii=False), encoding="utf-8")
             hit = ws.WrapHit(
-                json_file="Map001.mps.json",
-                kind="map",
-                sheet_name="Map001.mps",
+                json_file="CommonEvent.dat.json",
+                kind="common",
+                sheet_name="CommonEvent",
                 row=1,
-                field_name="UI",
+                field_name="セルリア",
                 text="very long line",
                 max_line_len=80,
                 scene_index=0,
                 line_index=0,
-                map_file="Map001.mps",
             )
             stats = ws.scope_stats(doc, hit, 34)
             self.assertEqual(stats.total, 2)
-            self.assertEqual(stats.overflow, 1)
-            self.assertIn("event 1", stats.label)
-            self.assertIn("Intro", stats.label)
-            self.assertEqual(ws.wrap_overflow_in_scope(path, doc, hit, 34), 1)
-            # Scene 2 must stay untouched.
-            self.assertEqual(doc["scenes"][1]["lines"][0]["text"], long_b)
-            self.assertNotEqual(doc["scenes"][0]["lines"][0]["text"], long_a)
+            self.assertEqual(stats.overflow, 2)
+            self.assertIn("spoken", stats.label)
+            changed = ws.wrap_overflow_in_scope(
+                path, doc, hit, 34, translated_dir=root
+            )
+            self.assertEqual(changed, 2)
+            saved = json.loads(path.read_text(encoding="utf-8"))
+            a = saved["scenes"][0]["lines"][0]["text"]
+            b = saved["scenes"][1]["lines"][0]["text"]
+            ui = saved["scenes"][1]["lines"][1]["text"]
+            self.assertTrue(a.startswith("Celria\n"))
+            self.assertTrue(b.startswith("Citizen\n"))
+            self.assertNotEqual(a, long_a)
+            self.assertNotEqual(b, long_b)
+            # UI format must stay untouched.
+            self.assertEqual(ui, ui_line)
 
 
 class TestFitTextToBox(unittest.TestCase):
@@ -386,6 +415,96 @@ class TestFitTextToBox(unittest.TestCase):
             # JP body is \\f[18]; shrink should land near 12, not floor at 8.
             self.assertGreaterEqual(
                 wolf_codes.infer_base_font_size(str(line["text"])), 12
+            )
+
+
+class TestNameplateWrap(unittest.TestCase):
+    TEXT = (
+        "Celria\n"
+        "The number of cases involving 'illegal Magic Drugs' and 'monster attacks' "
+        "seems strangely high\n"
+        "for a town of this size."
+    )
+
+    def test_preserves_speaker_newline(self):
+        wrapped = ws.wrap_preserving_nameplate(
+            self.TEXT,
+            50,
+            speaker_src="literal_line1_lowconf",
+            speaker="セルリア",
+        )
+        self.assertTrue(wrapped.startswith("Celria\n"))
+        self.assertNotIn("Celria The", wrapped)
+
+    def test_never_wipes_body(self):
+        """Regression: group wrap must not leave ``\\f[N]Name\\n`` with empty body."""
+        text = (
+            "Citizen\n"
+            "Spending our tax money however he pleases...... ever since\n"
+            "the Prince took over as regent, it's been nothing but\n"
+            "parties every single night, I tell you......"
+        )
+        kw = dict(speaker_src="literal_line1_lowconf", speaker="市民")
+        for width, max_lines, font in (
+            (35, 2, None),
+            (40, 1, None),
+            (21, 2, 21),
+            (50, 0, 18),
+        ):
+            if font is not None:
+                out, _ = ws.apply_manual_font_and_wrap(
+                    text, width, font=font, **kw
+                )
+            else:
+                out, _ = ws.fit_text_to_box(
+                    text, width, max_lines=max_lines or None, **kw
+                )
+            self.assertIn("\n", out, msg=repr(out))
+            body = out.split("\n", 1)[1]
+            self.assertTrue(body.strip(), msg=f"wiped at w={width}: {out!r}")
+            self.assertIn("Spending", body)
+            self.assertIn("parties", body)
+
+    def test_fit_max_lines_counts_body_only(self):
+        fitted, changed = ws.fit_text_to_box(
+            self.TEXT,
+            40,
+            max_lines=2,
+            speaker_src="literal_line1_lowconf",
+            speaker="セルリア",
+        )
+        self.assertTrue(changed)
+        self.assertTrue(fitted.startswith("Celria\n"))
+        body_lines = ws.count_body_soft_lines(
+            fitted,
+            speaker_src="literal_line1_lowconf",
+            speaker="セルリア",
+        )
+        self.assertLessEqual(body_lines, 2)
+
+    def test_dialogue_geometry_roundtrip(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            work = Path(tmp)
+            ws.set_format_geometry(
+                work, "literal_line1_lowconf", width=48, max_lines=3, font=16
+            )
+            ws.set_format_geometry(work, "ui", width=28, max_lines=8, font=24)
+            spoken = ws.get_format_geometry(
+                ws.load_wrap_profile(work), "literal_line1"
+            )
+            ui = ws.get_format_geometry(ws.load_wrap_profile(work), "ui")
+            self.assertEqual(spoken["width"], 48)
+            self.assertEqual(spoken["max_lines"], 3)
+            self.assertEqual(ui["width"], 28)
+            self.assertEqual(ui["font"], 24)
+            # Spoken aliases share one bucket.
+            self.assertEqual(
+                ws.wrap_format_key("literal_line1"),
+                ws.wrap_format_key("literal_line1_lowconf"),
+            )
+            self.assertNotEqual(
+                ws.wrap_format_key("literal_line1"),
+                ws.wrap_format_key("ui"),
             )
 
 

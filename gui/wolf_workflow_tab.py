@@ -2812,10 +2812,16 @@ class WolfWorkflowTab(QWidget):
         work = self._wolf_json_work_dir()
         return [work] if work is not None else []
 
-    def _wrap_profile_width(self, sheet_name: str) -> int:
+    def _wrap_profile_width(self, sheet_name: str, *, kind: str | None = None) -> int:
         work = self._wolf_json_work_dir()
         if work is not None:
             profile = wolf_ws.load_wrap_profile(work)
+            if kind in ("map", "common"):
+                geom = wolf_ws.get_format_geometry(
+                    profile, self._current_wrap_speaker_src()
+                )
+                if geom.get("width"):
+                    return int(geom["width"])
             return wolf_ws.get_sheet_width(
                 profile,
                 sheet_name,
@@ -2826,6 +2832,47 @@ class WolfWorkflowTab(QWidget):
         except (TypeError, ValueError):
             return 36
 
+    def _current_wrap_speaker_src(self) -> str:
+        kw = self._current_wrap_speaker_kw()
+        return str(kw.get("speaker_src") or "")
+
+    def _load_dialogue_geometry_into_spins(self):
+        """Load wrap settings for this line's ``speaker_src`` format bucket."""
+        work = self._wolf_json_work_dir()
+        width = None
+        max_lines = None
+        font = None
+        speaker_src = self._current_wrap_speaker_src()
+        if work is not None:
+            geom = wolf_ws.get_format_geometry(
+                wolf_ws.load_wrap_profile(work), speaker_src
+            )
+            width = geom.get("width")
+            max_lines = geom.get("max_lines")
+            font = geom.get("font")
+        if width is None:
+            try:
+                width = int(self._setting("wrap_fix_width", 36) or 36)
+            except (TypeError, ValueError):
+                width = 36
+        if max_lines is None:
+            max_lines = 0
+        self._wrap_width_spin.blockSignals(True)
+        self._wrap_width_spin.setValue(int(width))
+        self._wrap_width_spin.blockSignals(False)
+        if hasattr(self, "_wrap_manual_width_spin"):
+            self._wrap_manual_width_spin.blockSignals(True)
+            self._wrap_manual_width_spin.setValue(int(width))
+            self._wrap_manual_width_spin.blockSignals(False)
+        if hasattr(self, "_wrap_max_lines_spin"):
+            self._wrap_max_lines_spin.blockSignals(True)
+            self._wrap_max_lines_spin.setValue(int(max_lines))
+            self._wrap_max_lines_spin.blockSignals(False)
+        if font is not None and hasattr(self, "_wrap_font_spin"):
+            self._wrap_font_spin.blockSignals(True)
+            self._wrap_font_spin.setValue(int(font))
+            self._wrap_font_spin.blockSignals(False)
+
     def _remember_sheet_width(
         self,
         sheet_name: str,
@@ -2833,16 +2880,30 @@ class WolfWorkflowTab(QWidget):
         json_file: str,
         *,
         max_lines: int | None = None,
+        font: int | None = None,
+        kind: str | None = None,
+        speaker_src: str | None = None,
     ):
         work = self._wolf_json_work_dir()
-        if work is not None:
-            wolf_ws.set_sheet_width(
+        if work is None:
+            return
+        if kind in ("map", "common"):
+            src = speaker_src if speaker_src is not None else self._current_wrap_speaker_src()
+            wolf_ws.set_format_geometry(
                 work,
-                sheet_name,
-                width,
-                json_file=json_file,
+                src,
+                width=width,
                 max_lines=max_lines,
+                font=font,
             )
+            return
+        wolf_ws.set_sheet_width(
+            work,
+            sheet_name,
+            width,
+            json_file=json_file,
+            max_lines=max_lines,
+        )
 
     def _wrap_mode(self) -> str:
         combo = getattr(self, "_wrap_mode_combo", None)
@@ -3050,10 +3111,31 @@ class WolfWorkflowTab(QWidget):
                 f"{kind_lbl}: {hit.sheet_name}  ·  {hit.json_file}  ·  "
                 f"row {hit.row}  ·  {hit.field_name}{overflow_note}"
             )
+        if hit.kind in ("map", "common"):
+            fmt = wolf_ws.wrap_format_label(self._current_wrap_speaker_src())
+            return (
+                f"{kind_lbl}: {scope.label}  ·  {hit.json_file}  ·  "
+                f"{hit.field_name}{overflow_note}  ·  "
+                f"shared wrap: {fmt}"
+            )
         return (
             f"{kind_lbl}: {hit.sheet_name}  ·  {hit.json_file}  ·  "
             f"{hit.field_name}{overflow_note}"
         )
+
+    def _current_wrap_speaker_kw(self) -> dict[str, str]:
+        """speaker_src / speaker for nameplate-aware wrap preview."""
+        line = None
+        if self._current_wrap_doc is not None and self._current_wrap_hit_id is not None:
+            line = wolf_ws.locate_line(
+                self._current_wrap_doc, self._current_wrap_hit_id
+            )
+        if isinstance(line, dict):
+            return {
+                "speaker_src": str(line.get("speaker_src") or ""),
+                "speaker": str(line.get("speaker") or ""),
+            }
+        return {"speaker_src": "", "speaker": ""}
 
     def _update_wrap_preview(self):
         if not hasattr(self, "_wrap_preview"):
@@ -3071,11 +3153,21 @@ class WolfWorkflowTab(QWidget):
             text = self._current_wrap_hit.text
         width = self._active_wrap_width()
         body_font = self._wrap_font_value() if self._wrap_mode() == "manual" else None
+        plate_kw = self._current_wrap_speaker_kw()
         # Manual: preview scaled fonts. Relayout + max lines: preview fit-to-box.
         preview_src = text
         preview_width = width
         if body_font is not None and preview_src.strip():
-            preview_src, _ = wolf_codes.scale_font_sizes(preview_src, body_font)
+            prefix, nameplate, body = wolf_ws.split_nameplate_body(
+                preview_src, **plate_kw
+            )
+            work = body if nameplate else preview_src
+            work, _ = wolf_codes.scale_font_sizes(work, body_font)
+            preview_src = (
+                wolf_ws.join_nameplate_body(prefix, nameplate, work)
+                if nameplate
+                else work
+            )
         elif self._wrap_mode() == "relayout" and width > 0:
             max_lines = self._wrap_max_lines_value()
             if max_lines > 0 and preview_src.strip():
@@ -3090,23 +3182,34 @@ class WolfWorkflowTab(QWidget):
                     if isinstance(source, str) and wolf_codes.detect_font_sizes(source):
                         box_font = wolf_codes.infer_base_font_size(source)
                 preview_src, _ = wolf_ws.fit_text_to_box(
-                    preview_src, width, max_lines=max_lines, box_font=box_font
+                    preview_src,
+                    width,
+                    max_lines=max_lines,
+                    box_font=box_font,
+                    **plate_kw,
                 )
                 # Soft breaks are already final; don't reflow at the narrow cell width.
+                _, nameplate, body = wolf_ws.split_nameplate_body(
+                    preview_src, **plate_kw
+                )
+                measure = body if nameplate else preview_src
                 preview_width = max(
                     width,
-                    dazedwrap.max_line_visible_length(preview_src),
+                    dazedwrap.max_line_visible_length(measure),
                 )
-        summary = wolf_ws.wrap_preview_summary(preview_src, preview_width)
+        summary = wolf_ws.wrap_preview_summary(
+            preview_src, preview_width, **plate_kw
+        )
         preview_html = wolf_ws.format_wrap_preview_html(
             preview_src if self._wrap_mode() == "relayout" else text,
             preview_width,
             body_font=body_font,
+            **plate_kw,
         )
-        info = wolf_ws.wrap_preview_info(preview_src, preview_width)
+        info = wolf_ws.wrap_preview_info(preview_src, preview_width, **plate_kw)
         if hasattr(self, "_wrap_preview_label"):
             if summary:
-                soft = wolf_ws.count_soft_lines(preview_src)
+                soft = wolf_ws.count_body_soft_lines(preview_src, **plate_kw)
                 max_lines = self._wrap_max_lines_value()
                 if (
                     self._wrap_mode() == "relayout"
@@ -3137,7 +3240,10 @@ class WolfWorkflowTab(QWidget):
         over_lines = False
         if self._wrap_mode() == "relayout":
             max_lines = self._wrap_max_lines_value()
-            over_lines = max_lines > 0 and wolf_ws.count_soft_lines(preview_src) > max_lines
+            over_lines = (
+                max_lines > 0
+                and wolf_ws.count_body_soft_lines(preview_src, **plate_kw) > max_lines
+            )
         border = "#ce9178" if info.get("needs_wrap") or over_lines else "#007acc"
         self._wrap_preview.setStyleSheet(
             "QTextEdit{background-color:#1e1e1e;color:#d4d4d4;border:1px solid #3c3c3c;"
@@ -3199,8 +3305,10 @@ class WolfWorkflowTab(QWidget):
         self._current_wrap_doc = doc
         if hit.kind == "names":
             self._load_names_geometry_into_spins(hit)
+        elif hit.kind in ("map", "common"):
+            self._load_dialogue_geometry_into_spins()
         else:
-            w = self._wrap_profile_width(hit.sheet_name)
+            w = self._wrap_profile_width(hit.sheet_name, kind=hit.kind)
             self._wrap_width_spin.blockSignals(True)
             self._wrap_width_spin.setValue(w)
             self._wrap_width_spin.blockSignals(False)
@@ -3271,6 +3379,8 @@ class WolfWorkflowTab(QWidget):
                     self._current_wrap_hit.sheet_name,
                     width,
                     self._current_wrap_hit.json_file,
+                    font=font,
+                    kind=self._current_wrap_hit.kind,
                 )
             path, doc, line = wolf_ws.load_hit_from_id(
                 self._translated_and_files_dirs()[0],
@@ -3327,6 +3437,7 @@ class WolfWorkflowTab(QWidget):
                 width,
                 self._current_wrap_hit.json_file,
                 max_lines=max_lines or None,
+                kind=self._current_wrap_hit.kind,
             )
         path, doc, line = wolf_ws.load_hit_from_id(
             self._translated_and_files_dirs()[0],
@@ -3364,14 +3475,18 @@ class WolfWorkflowTab(QWidget):
         if self._wrap_mode() == "manual":
             width = self._active_wrap_width()
             font = self._wrap_font_value()
+            tdir = self._translated_and_files_dirs()[0]
             count = wolf_ws.wrap_overflow_manual_in_scope(
                 self._current_wrap_path,
                 self._current_wrap_doc,
                 hit,
                 width,
                 font=font,
+                translated_dir=tdir if hit.kind in ("map", "common") else None,
             )
-            self._remember_sheet_width(hit.sheet_name, width, hit.json_file)
+            self._remember_sheet_width(
+                hit.sheet_name, width, hit.json_file, font=font, kind=hit.kind
+            )
             if hit.kind == "names":
                 roles_path = wolf_names.roles_json_path_for_names(self._current_wrap_path)
                 wolf_names.upsert_name_wrap_role(
@@ -3417,15 +3532,21 @@ class WolfWorkflowTab(QWidget):
             )
             return
         max_lines = self._wrap_max_lines_value()
+        tdir = self._translated_and_files_dirs()[0]
         count = wolf_ws.wrap_overflow_in_scope(
             self._current_wrap_path,
             self._current_wrap_doc,
             hit,
             width,
             max_lines=max_lines or None,
+            translated_dir=tdir if hit.kind in ("map", "common") else None,
         )
         self._remember_sheet_width(
-            hit.sheet_name, width, hit.json_file, max_lines=max_lines or None
+            hit.sheet_name,
+            width,
+            hit.json_file,
+            max_lines=max_lines or None,
+            kind=hit.kind,
         )
         scope = wolf_ws.scope_label(hit, self._current_wrap_doc)
         if max_lines > 0:
