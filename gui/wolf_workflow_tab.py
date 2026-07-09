@@ -1407,6 +1407,10 @@ class WolfWorkflowTab(QWidget):
             self._last_import_signature = self._pending_import_signature
         self._pending_import_signature = None
         self._log(f"✅ Imported {count} file(s) into files/")
+        # Step 4 discovery scans files/; refresh if we're already on Database
+        # (auto-import from Step 0 often finishes after the first discovery pass).
+        if getattr(self, "_current_step_index", None) == 4:
+            self._refresh_db_discovery()
 
     def _populate_preprocess_paths(self):
         game_root = self.folder_edit.text().strip()
@@ -1819,13 +1823,17 @@ class WolfWorkflowTab(QWidget):
     # ── Step 4: Database ───────────────────────────────────────────────────────
 
     def _build_step4_database(self, layout: QVBoxLayout):
-        layout.addWidget(_make_section_label("Step 4 · Database (discover + translate)"))
-        layout.addWidget(self._desc(
+        layout.setSpacing(6)
+        title = _make_section_label("Step 4 · Database")
+        title.setToolTip(
             "WOLF database files (DataBase, CDataBase, SysDatabase) hold item/skill "
             "descriptions in classic RPG games, but many games store most dialogue in "
-            "custom database sheets instead of maps. Review the discovery summary below, "
-            "then translate foundation sheets (items, skills, system text) before "
-            "narrative custom sheets."
+            "custom database sheets instead of maps. Review discovery, then translate "
+            "foundation sheets (items, skills, system text) before narrative custom sheets."
+        )
+        layout.addWidget(title)
+        layout.addWidget(self._desc(
+            "Review discovery → tick sheets → translate foundation first, then narrative."
         ))
 
         self.db_discovery_label = QLabel(
@@ -1833,17 +1841,21 @@ class WolfWorkflowTab(QWidget):
         )
         self.db_discovery_label.setWordWrap(True)
         self.db_discovery_label.setStyleSheet(
-            "color:#9cdcfe;font-size:13px;padding:8px 10px;"
+            "color:#9cdcfe;font-size:12px;padding:6px 8px;"
             "background-color:#1a2430;border:1px solid #2a4a6a;border-radius:4px;"
         )
         layout.addWidget(self.db_discovery_label)
 
         disc_row = QHBoxLayout()
-        refresh_disc_btn = _make_btn("↻ Refresh discovery", "#555")
+        disc_row.setSpacing(6)
+        refresh_disc_btn = _make_btn("↻ Refresh", "#555")
+        refresh_disc_btn.setToolTip("Re-scan files/ for database / map / CommonEvent line counts.")
         refresh_disc_btn.clicked.connect(self._refresh_db_discovery)
-        audit_btn = _make_btn("📋 Copy DB structure prompt for AI audit", "#5a3a7a")
+        audit_btn = _make_btn("📋 Copy AI audit prompt", "#5a3a7a")
+        audit_btn.setToolTip("Copy a DB structure prompt for Cursor/Copilot to audit sheet roles.")
         audit_btn.clicked.connect(self._copy_db_audit_prompt)
-        import_btn = _make_btn("Import AI profile JSON", "#3a3a3a")
+        import_btn = _make_btn("Import AI profile", "#3a3a3a")
+        import_btn.setToolTip("Paste JSON returned by the AI audit into db_profile.json.")
         import_btn.clicked.connect(self._import_db_profile_dialog)
         disc_row.addWidget(refresh_disc_btn)
         disc_row.addWidget(audit_btn)
@@ -1851,26 +1863,25 @@ class WolfWorkflowTab(QWidget):
         disc_row.addStretch()
         layout.addLayout(disc_row)
 
-        layout.addWidget(_make_hr())
-        layout.addWidget(self._subheading("Database sheets"))
-        layout.addWidget(self._desc(
-            "Each sheet is classified as foundation (translate first), system, or "
-            "narrative (custom dialogue - defer until foundation is done). Tick the "
-            "sheets to include in the next database translation run."
-        ))
-
         self._db_groups_list = QListWidget()
-        self._db_groups_list.setMinimumHeight(200)
+        self._db_groups_list.setMinimumHeight(160)
+        self._db_groups_list.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self._db_groups_list.setStyleSheet(
             "QListWidget{background-color:#252526;border:1px solid #3a3a3a;border-radius:4px;"
-            "color:#cccccc;font-size:12px;padding:2px;}"
-            "QListWidget::item{padding:3px 4px;}"
+            "color:#cccccc;font-size:12px;padding:1px;}"
+            "QListWidget::item{padding:2px 4px;}"
             "QListWidget::item:selected{background:#264f78;color:#ffffff;}"
         )
         self._db_groups_list.itemChanged.connect(self._save_db_profile_from_ui)
-        layout.addWidget(self._db_groups_list)
+        self._db_groups_list.setToolTip(
+            "Each sheet is foundation (translate first), system, or narrative "
+            "(custom dialogue - defer until foundation is done). Tick sheets for "
+            "the next database translation run."
+        )
+        layout.addWidget(self._db_groups_list, 1)
 
         grp_row = QHBoxLayout()
+        grp_row.setSpacing(6)
         sel_found_btn = _make_btn("Select foundation", "#3a3a3a")
         sel_found_btn.clicked.connect(self._select_db_foundation_groups)
         sel_narr_btn = _make_btn("Select narrative", "#3a3a3a")
@@ -1886,32 +1897,36 @@ class WolfWorkflowTab(QWidget):
         grp_row.addStretch()
         layout.addLayout(grp_row)
 
-        layout.addWidget(_make_hr())
-        layout.addWidget(self._subheading("Translate database"))
-        layout.addWidget(self._desc(
-            "Run after Step 3 (names) so vocab.txt stays consistent. Only checked sheets "
-            "are sent to the model. Re-running skips lines already translated. Short "
-            "foundation labels (map names, titles) are merged into vocab.txt."
-        ))
         self._add_tl_mode_selector(layout)
 
-        found_btn = self._register(_make_btn("▶ Translate foundation DB", "#00a86b"))
+        tl_row = QHBoxLayout()
+        tl_row.setSpacing(6)
+        found_btn = self._register(_make_btn("▶ Foundation DB", "#00a86b"))
+        found_btn.setToolTip(
+            "Translate foundation/system sheets (items, skills, system text). "
+            "Run after Step 3 (names). Re-running skips lines already translated."
+        )
         found_btn.clicked.connect(
             lambda: self._translate_db_tiers(wolf_db.FOUNDATION_TIERS, auto_start=True)
         )
-        layout.addWidget(found_btn)
-
-        narr_btn = self._register(_make_btn("▶ Translate narrative DB", "#00a86b"))
+        narr_btn = self._register(_make_btn("▶ Narrative DB", "#00a86b"))
+        narr_btn.setToolTip(
+            "Translate narrative custom sheets after foundation is done. "
+            "Short foundation labels are merged into vocab.txt."
+        )
         narr_btn.clicked.connect(
             lambda: self._translate_db_tiers(wolf_db.NARRATIVE_TIERS, auto_start=True)
         )
-        layout.addWidget(narr_btn)
-
-        checked_btn = self._register(_make_btn("▶ Translate checked sheets only", "#3a3a3a"))
+        checked_btn = self._register(_make_btn("▶ Checked sheets", "#3a3a3a"))
+        checked_btn.setToolTip("Translate only the sheets currently ticked above.")
         checked_btn.clicked.connect(
             lambda: self._translate_db_checked(auto_start=True)
         )
-        layout.addWidget(checked_btn)
+        tl_row.addWidget(found_btn)
+        tl_row.addWidget(narr_btn)
+        tl_row.addWidget(checked_btn)
+        tl_row.addStretch()
+        layout.addLayout(tl_row)
 
         self._db_content_dist: wolf_db.ContentDistribution | None = None
         # Defer discovery until the step is shown - files/ may hold RPGMaker JSON.
@@ -2437,39 +2452,38 @@ class WolfWorkflowTab(QWidget):
     # ── Step 6: Precheck ───────────────────────────────────────────────────────
 
     def _build_step6_precheck(self, layout: QVBoxLayout):
-        layout.addWidget(_make_section_label("Step 6 · Inject Precheck"))
+        layout.setSpacing(6)
+        title = _make_section_label("Step 6 · Inject Precheck")
+        title.setToolTip(
+            "Reconcile names.json → glossary spellings, report name inconsistencies, "
+            "then dry-run selected JSON for safety skips (control-code mismatch, or "
+            "text not Shift-JIS encodable). Fix safety rows here, then Step 7 (Inject)."
+        )
+        layout.addWidget(title)
         layout.addWidget(self._desc(
-            "Before inject: reconcile names.json → extract glossary spellings, "
-            "report name inconsistencies, then dry-run the selected JSON for real "
-            "safety skips (control-code mismatch, or text not Shift-JIS encodable). "
-            "Fix safety rows here, then continue to Step 7 (Inject)."
+            "Pick files → Precheck → fix safety skips below → Step 7 Inject."
         ))
 
-        layout.addWidget(self._subheading("Translated files"))
         self.precheck_list = QListWidget()
-        self.precheck_list.setMaximumHeight(200)
+        self.precheck_list.setMinimumHeight(72)
+        self.precheck_list.setMaximumHeight(120)
+        self.precheck_list.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
         self.precheck_list.setStyleSheet(
             "QListWidget{background-color:#252526;border:1px solid #3a3a3a;border-radius:4px;"
-            "color:#cccccc;font-size:12px;padding:2px;}"
-            "QListWidget::item{padding:3px 4px;}"
+            "color:#cccccc;font-size:12px;padding:1px;}"
+            "QListWidget::item{padding:2px 4px;}"
             "QListWidget::item:selected{background:#264f78;color:#ffffff;}"
         )
         layout.addWidget(self.precheck_list)
 
         list_row = QHBoxLayout()
+        list_row.setSpacing(6)
         refresh_btn = self._register(_make_btn("↻ Refresh", "#3a3a3a"))
         refresh_btn.clicked.connect(self._refresh_precheck_list)
         sel_all_btn = self._register(_make_btn("Select all", "#3a3a3a"))
         sel_all_btn.clicked.connect(lambda: self._set_checklist_checks(self.precheck_list, True))
         sel_none_btn = self._register(_make_btn("Select none", "#3a3a3a"))
         sel_none_btn.clicked.connect(lambda: self._set_checklist_checks(self.precheck_list, False))
-        list_row.addWidget(refresh_btn)
-        list_row.addWidget(sel_all_btn)
-        list_row.addWidget(sel_none_btn)
-        list_row.addStretch()
-        layout.addLayout(list_row)
-
-        precheck_row = QHBoxLayout()
         precheck_btn = self._register(_make_btn("Precheck selected", "#007acc"))
         precheck_btn.setToolTip(
             "Reconcile names → glossary, run names-check, then dry-run inject "
@@ -2481,25 +2495,32 @@ class WolfWorkflowTab(QWidget):
             "Same as Precheck selected, for every injectable file in translated/."
         )
         precheck_all_btn.clicked.connect(self._precheck_inject_all)
-        precheck_row.addWidget(precheck_btn)
-        precheck_row.addWidget(precheck_all_btn)
-        precheck_row.addStretch()
-        layout.addLayout(precheck_row)
+        list_row.addWidget(refresh_btn)
+        list_row.addWidget(sel_all_btn)
+        list_row.addWidget(sel_none_btn)
+        list_row.addStretch()
+        list_row.addWidget(precheck_btn)
+        list_row.addWidget(precheck_all_btn)
+        layout.addLayout(list_row)
 
         self._inject_precheck_label = QLabel("Run precheck to list safety-guard skips.")
         self._inject_precheck_label.setWordWrap(True)
-        self._inject_precheck_label.setStyleSheet("color:#9cdcfe;font-size:12px;")
+        self._inject_precheck_label.setStyleSheet(
+            "color:#9cdcfe;font-size:11px;background:transparent;padding:0;"
+        )
         layout.addWidget(self._inject_precheck_label)
 
         self._inject_issue_list = QListWidget()
-        self._inject_issue_list.setMaximumHeight(200)
+        self._inject_issue_list.setMinimumHeight(80)
+        self._inject_issue_list.setMaximumHeight(140)
+        self._inject_issue_list.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
         self._inject_issue_list.setWordWrap(True)
         self._inject_issue_list.setTextElideMode(Qt.ElideNone)
         self._inject_issue_list.setUniformItemSizes(False)
         self._inject_issue_list.setStyleSheet(
             "QListWidget{background-color:#252526;border:1px solid #3a3a3a;border-radius:4px;"
-            "color:#cccccc;font-size:12px;padding:2px;}"
-            "QListWidget::item{padding:4px;}"
+            "color:#cccccc;font-size:12px;padding:1px;}"
+            "QListWidget::item{padding:3px 6px;}"
             "QListWidget::item:selected{background:#264f78;color:#ffffff;}"
         )
         self._inject_issue_list.currentItemChanged.connect(self._on_inject_issue_selected)
@@ -2507,22 +2528,26 @@ class WolfWorkflowTab(QWidget):
 
         self._inject_issue_meta = QLabel("")
         self._inject_issue_meta.setWordWrap(True)
-        self._inject_issue_meta.setStyleSheet("color:#808080;font-size:11px;")
+        self._inject_issue_meta.setStyleSheet(
+            "color:#808080;font-size:11px;background:transparent;padding:0;"
+        )
         layout.addWidget(self._inject_issue_meta)
 
         self._inject_issue_edit = QTextEdit()
         self._inject_issue_edit.setPlaceholderText(
             "Select a precheck row to edit its translated text, then Save line."
         )
-        self._inject_issue_edit.setMaximumHeight(120)
+        self._inject_issue_edit.setMinimumHeight(100)
+        self._inject_issue_edit.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self._inject_issue_edit.setStyleSheet(
             "QTextEdit{background-color:#1e1e1e;color:#d4d4d4;border:1px solid #3c3c3c;"
-            "border-radius:4px;padding:6px;font-size:12px;}"
+            "border-left:3px solid #007acc;border-radius:0;padding:4px;font-size:12px;}"
         )
-        layout.addWidget(self._inject_issue_edit)
+        layout.addWidget(self._inject_issue_edit, 1)
 
         edit_row = QHBoxLayout()
-        save_line_btn = self._register(_make_btn("Save line", "#3a3a3a"))
+        edit_row.setSpacing(6)
+        save_line_btn = self._register(_make_btn("Save line", "#00a86b"))
         save_line_btn.clicked.connect(self._save_inject_issue_line)
         edit_row.addWidget(save_line_btn)
         edit_row.addStretch()
@@ -3894,7 +3919,9 @@ class WolfWorkflowTab(QWidget):
         if self._step_tabs.currentIndex() != idx:
             self._step_tabs.setCurrentIndex(idx)
         else:
-            self._refresh_step_strip(idx)
+            # Re-selecting the current step still runs enter hooks (e.g. Step 4
+            # discovery refresh) so the strip click always feels live.
+            self._on_step_changed(idx)
 
     def _advance_step(self, from_idx: int):
         """Mark *from_idx* done and move to the next step."""
@@ -3907,6 +3934,10 @@ class WolfWorkflowTab(QWidget):
         self._refresh_step_strip(idx)
         if previous == 0 and idx != 0:
             self._auto_import_if_needed()
+        self._enter_step(idx)
+
+    def _enter_step(self, idx: int):
+        """Refresh step-local data whenever a step is shown or re-selected."""
         # Index 3 == Names: refresh the per-name safety summary.
         if idx == 3:
             self._refresh_names_summary()
