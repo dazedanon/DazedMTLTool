@@ -516,23 +516,33 @@ def inject_selected(
     return report
 
 
-def format_report_dialog(report: InjectReport) -> tuple[str, str]:
-    """Return (title, body) for a completion dialog."""
-    if report.ok and report.succeeded:
-        title = "Inject complete"
-        lines = [f"✓ {r.json_name}: {r.summary}" for r in report.succeeded]
-    elif report.failed or report.sync_failures:
-        title = "Inject finished with errors"
-        lines = []
-        for r in report.succeeded:
-            lines.append(f"✓ {r.json_name}: {r.summary}")
+def format_report_dialog(report: InjectReport) -> tuple[str, str] | None:
+    """Return ``(title, body)`` for a failure dialog, or ``None`` on full success.
+
+    Success details already go to the workflow log; a per-file success popup
+    overflows the screen on large games.
+    """
+    if report.failed or report.sync_failures:
+        lines: list[str] = []
+        ok_n = len(report.succeeded)
+        if ok_n:
+            lines.append(f"{ok_n} file(s) succeeded; failures:")
         for r in report.failed:
             lines.append(f"✗ {r.json_name}: {r.summary}")
             if r.detail:
                 lines.append(f"    {r.detail}")
         for name, err in report.sync_failures:
             lines.append(f"✗ sync {name}: {err}")
-    else:
-        title = "Inject"
-        lines = ["Nothing was injected."]
-    return title, "\n".join(lines)
+        return "Inject finished with errors", "\n".join(lines)
+    return None
+
+
+def format_report_status(report: InjectReport) -> str:
+    """One-line status for the log / status bar after inject."""
+    ok_n = len(report.succeeded)
+    fail_n = len(report.failed) + len(report.sync_failures)
+    if fail_n:
+        return f"Inject: {ok_n} ok, {fail_n} failed (see dialog)."
+    if ok_n:
+        return f"Inject complete: {ok_n} file(s)."
+    return "Inject: nothing was injected."

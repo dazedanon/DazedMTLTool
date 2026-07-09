@@ -244,7 +244,17 @@ class InjectOrderTests(unittest.TestCase):
 
 
 class ReportDialogTests(unittest.TestCase):
-    def test_failure_dialog_lists_every_problem(self):
+    def test_success_has_no_dialog(self):
+        report = wi.InjectReport(
+            files=[
+                wi.FileInjectResult("a.json", True, "applied 3 line(s)"),
+                wi.FileInjectResult("b.json", True, "no changes needed"),
+            ],
+        )
+        self.assertIsNone(wi.format_report_dialog(report))
+        self.assertEqual(wi.format_report_status(report), "Inject complete: 2 file(s).")
+
+    def test_failure_dialog_lists_only_problems(self):
         report = wi.InjectReport(
             files=[
                 wi.FileInjectResult("a.json", True, "applied 3 line(s)"),
@@ -252,11 +262,18 @@ class ReportDialogTests(unittest.TestCase):
             ],
             sync_failures=[("c.json", "permission denied")],
         )
-        title, body = wi.format_report_dialog(report)
+        dialog = wi.format_report_dialog(report)
+        self.assertIsNotNone(dialog)
+        title, body = dialog
         self.assertIn("errors", title)
         self.assertIn("✗ b.json", body)
         self.assertIn("✗ sync c.json", body)
-        self.assertIn("✓ a.json", body)
+        self.assertNotIn("✓ a.json", body)
+        self.assertIn("1 file(s) succeeded", body)
+        self.assertEqual(
+            wi.format_report_status(report),
+            "Inject: 1 ok, 2 failed (see dialog).",
+        )
 
 
 if __name__ == "__main__":

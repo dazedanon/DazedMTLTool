@@ -3624,21 +3624,25 @@ class WolfWorkflowTab(QWidget):
                     report.sync_failures.append((json_name, err or "unknown error"))
                     log(f"  ✗ sync {json_name}: {err}")
 
-            title, body = wolf_inject.format_report_dialog(report)
-            inject_state["dialog"] = (title, body)
+            dialog = wolf_inject.format_report_dialog(report)
+            status = wolf_inject.format_report_status(report)
+            inject_state["dialog"] = dialog
             inject_state["report"] = report
             inject_state["selected"] = set(selected)
-            return report.ok, title
+            log(status)
+            return report.ok, status
 
         def _after_inject(ok: bool, msg: str):
-            title, body = inject_state.get("dialog", ("Inject", msg))
+            dialog = inject_state.get("dialog")
             report = inject_state.get("report")
-            if report and (report.failed or report.sync_failures):
+            if dialog:
+                title, body = dialog
                 QMessageBox.warning(self, title, body)
-            elif report and report.succeeded:
-                QMessageBox.information(self, title, body)
-            elif body:
-                QMessageBox.information(self, title, body)
+            elif report is not None and not report.succeeded and not (
+                report.failed or report.sync_failures
+            ):
+                QMessageBox.information(self, "Inject", msg or "Nothing was injected.")
+            # Full success: no popup (per-file detail is already in the log).
 
         inject_state: dict = {}
         self._run_task(task, on_done=_after_inject)
