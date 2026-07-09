@@ -213,6 +213,38 @@ class TestWrapPreview(unittest.TestCase):
         self.assertLess(info["longest"], len(text))
         self.assertLessEqual(info["longest"], 30 + 10)
 
+    def test_render_wolf_text_html_hides_codes_and_styles(self):
+        text = r'That \c[21]\f[20]cafe\c[19]\f[18] over there'
+        html = ws.render_wolf_text_html(text, default_font_px=18)
+        self.assertNotIn(r"\c[", html)
+        self.assertNotIn(r"\f[", html)
+        self.assertIn("cafe", html)
+        self.assertIn("font-size:20px", html)
+        self.assertIn("font-size:18px", html)
+        # Emphasis colour for \\c[21]
+        self.assertIn(ws.wolf_preview_color(21), html)
+
+    def test_format_wrap_preview_html_includes_gutters(self):
+        text = (
+            r'\f[18]"That \c[21]\f[20]cafe\c[19]\f[18] over there has been'
+            '\npacked lately."'
+        )
+        html = ws.format_wrap_preview_html(text, 40)
+        self.assertIn("(37)", html)
+        self.assertIn("cafe", html)
+        self.assertNotIn(r"\f[18]", html)
+        self.assertIn("font-size:20px", html)
+        self.assertIn(ws.wolf_preview_color(21), html)
+
+    def test_format_wrap_preview_html_simulates_body_font(self):
+        text = r'That \c[21]\f[20]cafe\c[19]\f[18] over there'
+        html = ws.format_wrap_preview_html(text, 40, body_font=13)
+        # 20*13/18 ≈ 14; body 13
+        self.assertIn("font-size:14px", html)
+        self.assertIn("font-size:13px", html)
+        self.assertNotIn("font-size:20px", html)
+        self.assertNotIn("font-size:18px", html)
+
 
 class TestNamesCategoryWrap(unittest.TestCase):
     def setUp(self):
@@ -261,6 +293,28 @@ class TestNamesCategoryWrap(unittest.TestCase):
         doc2 = json.loads(self.path.read_text(encoding="utf-8"))
         long_entry = doc2["names"][1]["text"]
         self.assertIn("\n", long_entry)
+
+    def test_names_search_summary_shows_translated_text(self):
+        hits = ws.search_translated_text("maids", self.translated)
+        # Seed a maid line so EN query matches EN text, not JP source.
+        doc = json.loads(self.path.read_text(encoding="utf-8"))
+        doc["names"].append(
+            {
+                "source": "「メイドがどんどん辞めていく」",
+                "text": '"Yeah, maids keep quitting one after another."',
+                "note": self.category,
+            }
+        )
+        self.path.write_text(json.dumps(doc, ensure_ascii=False, indent=4), encoding="utf-8")
+        hits = ws.search_translated_text("maids", self.translated)
+        self.assertEqual(len(hits), 1)
+        summary = hits[0].summary(40)
+        self.assertIn("maids", summary)
+        self.assertNotIn("メイド", summary)
+        self.assertIn("entry #2", summary)
+        # Translated preview is the first line of the summary.
+        self.assertIn("\n", summary)
+        self.assertTrue(summary.split("\n", 1)[0].strip().startswith('"Yeah'))
 
 
 class TestEventScopeWrap(unittest.TestCase):

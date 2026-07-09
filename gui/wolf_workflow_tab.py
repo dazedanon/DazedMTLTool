@@ -43,7 +43,7 @@ import shutil
 import tempfile
 from pathlib import Path
 
-from PyQt5.QtCore import Qt, QSettings, QThread, QTimer, pyqtSignal, QEvent
+from PyQt5.QtCore import Qt, QSettings, QSize, QThread, QTimer, pyqtSignal, QEvent
 from PyQt5.QtGui import QColor, QFont
 from PyQt5.QtWidgets import (
     QApplication,
@@ -2454,11 +2454,9 @@ class WolfWorkflowTab(QWidget):
         """Search-first fix wrapping: find sheet by in-game text, wrap, re-inject."""
         layout.addWidget(_make_section_label("Step 7 · Fix wrapping"))
         layout.addWidget(self._desc(
-            "Paste overflowing in-game text to find it in translated JSON. Choose "
-            "Relayout (cell width + max lines) or Manual (wrap width + body font), "
-            "then wrap one line or the whole group and inject. Manual mode scales "
-            "emphasis ``\\f[N]`` with the body font (e.g. ``\\f[20]``/``\\f[18]`` → "
-            "``\\f[16]``/``\\f[14]``). names.json Relayout uses WolfDawn ``names-wrap``."
+            "Paste overflowing in-game text to find it in translated JSON. "
+            "Relayout uses cell width + max lines (names.json → wolf names-wrap). "
+            "Manual uses wrap width + body font; emphasis \\f[N] scales with the body."
         ))
 
         search_row = QHBoxLayout()
@@ -2474,11 +2472,15 @@ class WolfWorkflowTab(QWidget):
         layout.addLayout(search_row)
 
         self._wrap_results_list = QListWidget()
-        self._wrap_results_list.setMaximumHeight(160)
+        self._wrap_results_list.setMaximumHeight(220)
+        self._wrap_results_list.setWordWrap(True)
+        self._wrap_results_list.setTextElideMode(Qt.ElideNone)
+        self._wrap_results_list.setUniformItemSizes(False)
+        self._wrap_results_list.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self._wrap_results_list.setStyleSheet(
             "QListWidget{background-color:#252526;border:1px solid #3a3a3a;border-radius:4px;"
             "color:#cccccc;font-size:12px;padding:2px;}"
-            "QListWidget::item{padding:4px 6px;}"
+            "QListWidget::item{padding:8px;}"
             "QListWidget::item:selected{background:#264f78;color:#ffffff;}"
         )
         self._wrap_results_list.currentItemChanged.connect(self._on_wrap_hit_selected)
@@ -2605,9 +2607,9 @@ class WolfWorkflowTab(QWidget):
 
         self._wrap_preview = QTextEdit()
         self._wrap_preview.setReadOnly(True)
-        self._wrap_preview.setMaximumHeight(160)
+        self._wrap_preview.setMaximumHeight(200)
         self._wrap_preview.setPlaceholderText(
-            "Select a search result to preview wrap at the current width."
+            "Select a search result to preview wrap with simulated \\c / \\f styling."
         )
         self._wrap_preview.setStyleSheet(
             "QTextEdit{background-color:#1e1e1e;color:#b5cea8;border:1px solid #3c3c3c;"
@@ -2747,6 +2749,14 @@ class WolfWorkflowTab(QWidget):
 
     def _on_wrap_font_changed(self, value: int):
         self._save_setting("wrap_fix_font", value)
+        self._update_wrap_preview()
+        hit = self._current_wrap_hit
+        doc = self._current_wrap_doc
+        if hit is not None and doc is not None and hasattr(self, "_wrap_detail_label"):
+            text = self._current_wrap_line_text() or hit.text
+            self._wrap_detail_label.setText(
+                self._format_wrap_detail(hit, doc, text, self._active_wrap_width())
+            )
 
     def _wrap_max_lines_value(self) -> int:
         spin = getattr(self, "_wrap_max_lines_spin", None)
@@ -2892,9 +2902,16 @@ class WolfWorkflowTab(QWidget):
         if self._current_wrap_hit is not None and not text.strip():
             text = self._current_wrap_hit.text
         width = self._active_wrap_width()
-        summary = wolf_ws.wrap_preview_summary(text, width)
-        preview = wolf_ws.format_wrap_preview(text, width)
-        info = wolf_ws.wrap_preview_info(text, width)
+        body_font = self._wrap_font_value() if self._wrap_mode() == "manual" else None
+        # Manual mode: preview the scaled fonts Wrap would write (document unchanged).
+        preview_src = text
+        if body_font is not None and preview_src.strip():
+            preview_src, _ = wolf_codes.scale_font_sizes(preview_src, body_font)
+        summary = wolf_ws.wrap_preview_summary(preview_src, width)
+        preview_html = wolf_ws.format_wrap_preview_html(
+            text, width, body_font=body_font
+        )
+        info = wolf_ws.wrap_preview_info(preview_src, width)
         if hasattr(self, "_wrap_preview_label"):
             if summary:
                 self._wrap_preview_label.setText(summary)
@@ -2907,11 +2924,11 @@ class WolfWorkflowTab(QWidget):
                 self._wrap_preview_label.setStyleSheet(
                     "color:#858585;font-size:11px;background:transparent;"
                 )
-        self._wrap_preview.setPlainText(preview)
+        self._wrap_preview.setHtml(preview_html)
         border = "#ce9178" if info.get("needs_wrap") else "#007acc"
         self._wrap_preview.setStyleSheet(
-            "QTextEdit{background-color:#1e1e1e;color:#b5cea8;border:1px solid #3c3c3c;"
-            f"border-left:3px solid {border};font-family:monospace;font-size:12px;padding:6px;}}"
+            "QTextEdit{background-color:#1e1e1e;color:#d4d4d4;border:1px solid #3c3c3c;"
+            f"border-left:3px solid {border};padding:6px;}}"
         )
 
     def _run_wrap_search(self):
@@ -2937,10 +2954,17 @@ class WolfWorkflowTab(QWidget):
             self._update_wrap_preview()
             return
         width = self._active_wrap_width()
+        list_w = max(self._wrap_results_list.viewport().width(), 320)
+        metrics = self._wrap_results_list.fontMetrics()
         for hit in hits:
-            item = QListWidgetItem(hit.summary(width))
+            summary = hit.summary(width)
+            item = QListWidgetItem(summary)
             item.setData(Qt.UserRole, hit.hit_id)
             item.setData(Qt.UserRole + 1, hit)
+            # Size for wrapped two-line (or more) summaries without eliding.
+            text_w = max(list_w - 24, 200)
+            br = metrics.boundingRect(0, 0, text_w, 4000, Qt.TextWordWrap, summary)
+            item.setSizeHint(QSize(list_w, max(br.height() + 16, 48)))
             self._wrap_results_list.addItem(item)
         self._wrap_results_list.setCurrentRow(0)
         self._wrap_status_label.setText(f"Found {len(hits)} match(es).")

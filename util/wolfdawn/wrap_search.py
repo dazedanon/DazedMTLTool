@@ -65,23 +65,27 @@ class WrapHit:
         return loc
 
     def summary(self, width: int = 0) -> str:
-        overflow = f"  longest line: {self.max_line_len} chars"
+        overflow = ""
         if width > 0 and self.max_line_len > width:
-            overflow += " (overflow)"
-        preview = self.text.replace("\n", " ")[:90]
-        if len(self.text) > 90:
-            preview += "…"
+            overflow = " · overflow"
+        elif self.max_line_len:
+            overflow = f" · {self.max_line_len} chars"
+        preview = self.text.replace("\n", " ").replace("\r", " ").strip()
+        if len(preview) > 120:
+            preview = preview[:120] + "…"
         if self.kind == "db":
-            loc = f"row {self.row}  ·  {self.field_name}"
+            loc = f"row {self.row} · {self.field_name}"
         elif self.kind == "names":
-            loc = f"entry #{self.row}  ·  {self.field_name[:60]}"
+            loc = f"entry #{self.row}"
         elif self.kind == "gamedat":
             loc = self.field_name or f"line {self.line_index}"
         else:
             loc = self.field_name or self.map_file or self.json_file
+        # Translated text first so it stays visible even if the row is short;
+        # metadata is secondary.
         return (
-            f"Sheet: {self.sheet_name}  ·  {self.json_file}  ·  {loc}\n"
-            f"  {preview}{overflow}"
+            f"{preview}\n"
+            f"{self.sheet_name} · {self.json_file} · {loc}{overflow}"
         )
 
 
@@ -282,10 +286,12 @@ def search_translated_text(
                     if not isinstance(entry, dict):
                         continue
                     text = entry.get("text")
-                    if not _text_matches(text, q):
+                    source = entry.get("source")
+                    # Match translated text (preferred) or JP source so either side finds the row.
+                    if not (_text_matches(text, q) or _text_matches(source, q)):
                         continue
                     note = str(entry.get("note") or "names.json")
-                    source = str(entry.get("source") or "")[:80]
+                    display = str(text) if isinstance(text, str) and text.strip() else str(source or "")
                     key = (jf, "names", idx)
                     if key in seen:
                         continue
@@ -296,9 +302,9 @@ def search_translated_text(
                             kind="names",
                             sheet_name=note,
                             row=idx,
-                            field_name=source or f"entry {idx}",
-                            text=str(text),
-                            max_line_len=dazedwrap.max_line_visible_length(str(text)),
+                            field_name=f"entry {idx}",
+                            text=display,
+                            max_line_len=dazedwrap.max_line_visible_length(display),
                         )
                     )
             elif kind == "gamedat":
@@ -421,6 +427,154 @@ def wrap_preview_summary(text: str, width: int) -> str:
     return (
         f"Will wrap to {info['output_line_count']} line(s) at width {width} "
         f"(longest input line {longest} visible chars)."
+    )
+
+
+# Approximate System DB Type 12 colours for preview only (games-specific in real Wolf).
+_WOLF_PREVIEW_COLORS: dict[int, str] = {
+    0: "#d4d4d4",
+    1: "#ff6b6b",
+    2: "#4ecdc4",
+    3: "#ffe66d",
+    4: "#95e1a3",
+    5: "#a78bfa",
+    6: "#f9a8d4",
+    7: "#67e8f9",
+    8: "#fdba74",
+    9: "#86efac",
+    10: "#f87171",
+    13: "#c4b5fd",  # common ruby colour slot
+    16: "#fbbf24",
+    18: "#f472b6",
+    19: "#c8b89a",  # body / restore (cafe-style games)
+    20: "#93c5fd",
+    21: "#f0c040",  # emphasis / place names
+}
+
+_WOLF_PREVIEW_TOKEN_RE = re.compile(
+    r"\\c\[(\d+)\]|"
+    r"\\f\[(\d+)\]|"
+    r"\\r\[[^\]]*\]|"
+    r"\\[A-Za-z]+\[[^\]]*\]|"
+    r"\\."
+)
+
+
+def wolf_preview_color(index: int, *, default: str = "#d4d4d4") -> str:
+    """Return a CSS hex colour for Wolf ``\\c[index]`` (preview approximation)."""
+    try:
+        idx = int(index)
+    except (TypeError, ValueError):
+        return default
+    if idx in _WOLF_PREVIEW_COLORS:
+        return _WOLF_PREVIEW_COLORS[idx]
+    # Stable distinct hue for unknown System DB slots.
+    hue = (idx * 47) % 360
+    return f"hsl({hue}, 55%, 68%)"
+
+
+def _html_escape(text: str) -> str:
+    return (
+        text.replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace('"', "&quot;")
+    )
+
+
+def render_wolf_text_html(
+    text: str,
+    *,
+    default_color: str = "#d4d4d4",
+    default_font_px: int = 18,
+) -> str:
+    """Render Wolf text as HTML, applying ``\\c`` / ``\\f`` and hiding other codes.
+
+    Used by the Step 7 wrap preview so emphasis like
+    ``\\c[21]\\f[20]cafe\\c[19]\\f[18]`` shows as larger coloured glyphs instead
+    of raw escape sequences. Colours are approximate (System DB Type 12 is
+    per-game).
+    """
+    if not isinstance(text, str) or not text:
+        return ""
+    color = default_color
+    font_px = max(8, int(default_font_px))
+    parts: list[str] = []
+    last = 0
+
+    def _flush(literal: str) -> None:
+        if not literal:
+            return
+        parts.append(
+            f'<span style="color:{color};font-size:{font_px}px">'
+            f"{_html_escape(literal)}</span>"
+        )
+
+    for m in _WOLF_PREVIEW_TOKEN_RE.finditer(text):
+        if m.start() > last:
+            _flush(text[last : m.start()])
+        raw = m.group(0)
+        if raw.startswith(r"\c[") and m.group(1) is not None:
+            color = wolf_preview_color(int(m.group(1)), default=default_color)
+        elif raw.startswith(r"\f[") and m.group(2) is not None:
+            font_px = max(8, int(m.group(2)))
+        # Other codes (\\r, \\^, \\cdb, …) are omitted from the visual preview.
+        last = m.end()
+    if last < len(text):
+        _flush(text[last:])
+    return "".join(parts)
+
+
+def format_wrap_preview_html(
+    text: str,
+    width: int,
+    *,
+    body_font: int | None = None,
+) -> str:
+    """Rich HTML wrap preview: line gutters + simulated ``\\c`` / ``\\f`` styling.
+
+    When *body_font* is set, proportionally scale every ``\\f[N]`` (and ensure a
+    leading body size) before wrapping/rendering - same as Manual wrap would do.
+    """
+    from util.wolfdawn import codes as wolf_codes
+
+    preview_text = text if isinstance(text, str) else ""
+    if body_font is not None and int(body_font) > 0 and preview_text.strip():
+        preview_text, _ = wolf_codes.scale_font_sizes(preview_text, int(body_font))
+
+    info = wrap_preview_info(preview_text, width)
+    wrapped = info.get("wrapped") or ""
+    if not wrapped:
+        return ""
+
+    body = (
+        int(body_font)
+        if body_font is not None and int(body_font) > 0
+        else wolf_codes.infer_base_font_size(preview_text, default=18)
+    )
+    lines = wrapped.replace("\r\n", "\n").replace("\r", "\n").split("\n")
+    rows: list[str] = []
+    for i, line in enumerate(lines):
+        vis = dazedwrap.max_line_visible_length(line)
+        overflow = vis > width > 0
+        gutter_color = "#ce9178" if overflow else "#858585"
+        marker = "⚠" if overflow else "&nbsp;"
+        gutter = (
+            f'<span style="color:{gutter_color};font-family:monospace;font-size:11px">'
+            f"{marker} {i + 1:2d} ({vis:2d})&nbsp;&nbsp;</span>"
+        )
+        body_html = render_wolf_text_html(
+            line, default_color="#d4d4d4", default_font_px=body
+        )
+        rows.append(
+            f'<div style="white-space:pre-wrap;line-height:1.35;margin:0 0 2px 0">'
+            f"{gutter}{body_html}</div>"
+        )
+    return (
+        '<div style="font-family:\'Segoe UI\',\'Noto Sans\',sans-serif;'
+        'background-color:transparent">'
+        + "".join(rows)
+        + "</div>"
     )
 
 
