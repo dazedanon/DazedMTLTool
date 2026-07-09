@@ -2739,15 +2739,18 @@ class WolfWorkflowTab(QWidget):
         font_lbl = QLabel("Body font \\f[N]:")
         font_lbl.setStyleSheet("color:#cccccc;font-size:12px;background:transparent;")
         self._wrap_font_spin = QSpinBox()
-        self._wrap_font_spin.setRange(8, 32)
+        self._wrap_font_spin.setRange(0, 32)
+        self._wrap_font_spin.setSpecialValueText("0 (keep)")
         try:
-            self._wrap_font_spin.setValue(int(self._setting("wrap_fix_font", 18) or 18))
+            saved_font = int(self._setting("wrap_fix_font", 18) or 18)
         except (TypeError, ValueError):
-            self._wrap_font_spin.setValue(18)
-        self._wrap_font_spin.setFixedWidth(70)
+            saved_font = 18
+        self._wrap_font_spin.setValue(max(0, saved_font))
+        self._wrap_font_spin.setFixedWidth(90)
         self._wrap_font_spin.setToolTip(
-            "Target body font applied on Wrap. Emphasis overrides (e.g. \\f[20]…\\f[18]) "
-            "scale proportionally; a leading \\f[body] is always set."
+            "Target body font applied on Wrap. 0 = do not add or change \\f[N] "
+            "(wrap width only). N > 0 scales emphasis (e.g. \\f[20]…\\f[18]) and "
+            "sets a leading \\f[body]."
         )
         self._wrap_font_spin.valueChanged.connect(self._on_wrap_font_changed)
         self._wrap_font_detect_label = QLabel("")
@@ -2895,14 +2898,17 @@ class WolfWorkflowTab(QWidget):
             return int(self._wrap_width_spin.value())
         return 36
 
-    def _wrap_font_value(self) -> int:
+    def _wrap_font_value(self) -> int | None:
+        """Body ``\\f[N]`` for Manual wrap, or ``None`` when 0 (leave fonts alone)."""
         spin = getattr(self, "_wrap_font_spin", None)
         if spin is not None:
-            return int(spin.value())
+            value = int(spin.value())
+            return value if value > 0 else None
         try:
-            return int(self._setting("wrap_fix_font", 18) or 18)
+            value = int(self._setting("wrap_fix_font", 18) or 18)
         except (TypeError, ValueError):
             return 18
+        return value if value > 0 else None
 
     def _on_wrap_manual_width_changed(self, value: int):
         self._save_setting("wrap_fix_manual_width", value)
@@ -3030,10 +3036,14 @@ class WolfWorkflowTab(QWidget):
             mode = self._wrap_mode()
             if mode == "manual":
                 font = self._wrap_font_value()
+                font_note = (
+                    "fonts unchanged"
+                    if font is None
+                    else f"body \\f[{font}], emphasis \\f scales with body"
+                )
                 return (
                     f"{kind_lbl}: {hit.sheet_name}  ·  {hit.json_file}  ·  "
-                    f"entry #{hit.row}  ·  Manual wrap={width}, body \\f[{font}]  ·  "
-                    "emphasis \\f scales with body"
+                    f"entry #{hit.row}  ·  Manual wrap={width}, {font_note}"
                 )
             lines = self._wrap_max_lines_value()
             geom = (
@@ -3185,15 +3195,21 @@ class WolfWorkflowTab(QWidget):
             return
         sizes = wolf_codes.detect_font_sizes(text)
         base = wolf_codes.infer_base_font_size(text) if sizes else None
+        keep_fonts = int(self._wrap_font_spin.value()) <= 0
         if sizes and base is not None:
-            self._wrap_font_spin.blockSignals(True)
-            self._wrap_font_spin.setValue(base)
-            self._wrap_font_spin.blockSignals(False)
+            # Don't overwrite an explicit "0 (keep)" choice when selecting a line.
+            if not keep_fonts:
+                self._wrap_font_spin.blockSignals(True)
+                self._wrap_font_spin.setValue(base)
+                self._wrap_font_spin.blockSignals(False)
             shown = ", ".join(f"\\f[{s}]" for s in sizes[:4])
             if len(sizes) > 4:
                 shown += ", …"
+            keep_note = " — Wrap keeps these" if keep_fonts else f" (body ≈ \\f[{base}])"
+            self._wrap_font_detect_label.setText(f"In text: {shown}{keep_note}")
+        elif keep_fonts:
             self._wrap_font_detect_label.setText(
-                f"In text: {shown} (body ≈ \\f[{base}])"
+                "No \\f[N] — Wrap will not add any (font = 0)"
             )
         else:
             self._wrap_font_detect_label.setText(
@@ -3233,11 +3249,18 @@ class WolfWorkflowTab(QWidget):
                 text = str(line.get("text") or "")
                 self._current_wrap_text = text
                 self._sync_wrap_font_controls(text)
-            msg = (
-                f"Manual wrap at width {width}, body \\f[{font}]."
-                if changed
-                else "Already matches Manual wrap (width + font)."
-            )
+            if font is None:
+                msg = (
+                    f"Manual wrap at width {width} (fonts unchanged)."
+                    if changed
+                    else "Already matches Manual wrap (width only)."
+                )
+            else:
+                msg = (
+                    f"Manual wrap at width {width}, body \\f[{font}]."
+                    if changed
+                    else "Already matches Manual wrap (width + font)."
+                )
             self._wrap_status_label.setText(
                 msg + " Inject all from Step 7 when ready."
             )
@@ -3310,9 +3333,14 @@ class WolfWorkflowTab(QWidget):
                     font=font,
                 )
             scope = wolf_ws.scope_label(hit)
+            font_note = (
+                "fonts unchanged"
+                if font is None
+                else f"body \\f[{font}]"
+            )
             msg = (
                 f"Manual-wrapped {count} line(s) in {scope} "
-                f"(width {width}, body \\f[{font}])."
+                f"(width {width}, {font_note})."
             )
             self._wrap_status_label.setText(msg + " Inject all from Step 7 when ready.")
             self._log(f"✅ {msg}")

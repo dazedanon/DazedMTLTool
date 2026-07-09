@@ -172,6 +172,21 @@ class TestManualFontAndWrap(unittest.TestCase):
         self.assertFalse(skipped)
         self.assertEqual(short, "Short.")
 
+    def test_manual_font_zero_or_none_does_not_add_font(self):
+        text = "A short line that needs wrapping because it is quite long for width thirty."
+        for font in (None, 0):
+            new_text, changed = ws.apply_manual_font_and_wrap(text, 30, font=font)
+            self.assertTrue(changed)
+            self.assertNotIn(r"\f[", new_text)
+            self.assertLessEqual(dazedwrap.max_line_visible_length(new_text), 30)
+
+        # Existing fonts stay put when font is disabled.
+        with_f = r"\f[18]Hello there this is a longer line for wrapping please."
+        kept, changed = ws.apply_manual_font_and_wrap(with_f, 20, font=None)
+        self.assertTrue(changed)
+        self.assertTrue(kept.startswith(r"\f[18]"))
+        self.assertNotIn(r"\f[14]", kept)
+
     def test_manual_reflows_soft_breaks_that_already_fit(self):
         """Hard \\n lines can each fit width while the preview still reflows."""
         text = (
