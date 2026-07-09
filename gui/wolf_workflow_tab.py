@@ -615,14 +615,14 @@ class WolfWorkflowTab(QWidget):
         _tab_defs = [
             ("0  Project", self._build_step0),
             ("1  Pre-process", self._build_step1_preprocess),
-            ("2  Glossary", self._build_step1_glossary),
+            ("2  Glossary", self._build_step2_glossary),
             ("3  Names", self._build_step3_names),
             ("4  Database", self._build_step4_database),
             ("5  Maps/Events", self._build_step5_maps_events),
             ("6  Precheck", self._build_step6_precheck),
-            ("7  Inject", self._build_step4_inject),
-            ("8  Package", self._build_step5_package),
-            ("9  Fix wrap", self._build_step7_relayout),
+            ("7  Inject", self._build_step7_inject),
+            ("8  Package", self._build_step8_package),
+            ("9  Fix wrap", self._build_step9_relayout),
         ]
         self._step_labels = [label for label, _ in _tab_defs]
 
@@ -1738,7 +1738,7 @@ class WolfWorkflowTab(QWidget):
 
     # ── Step 2: Glossary ───────────────────────────────────────────────────────
 
-    def _build_step1_glossary(self, layout: QVBoxLayout):
+    def _build_step2_glossary(self, layout: QVBoxLayout):
         layout.addWidget(_make_section_label("Step 2 · Glossary (build before translating)"))
         layout.addWidget(self._desc(
             "vocab.txt is the project-wide glossary used by every translation batch to keep "
@@ -2353,7 +2353,7 @@ class WolfWorkflowTab(QWidget):
                 lambda: tt.start_translation(skip_confirm=True) if tt is not None else None,
             )
 
-    # ── Step 2: Names ──────────────────────────────────────────────────────────
+    # ── Step 3: Names ──────────────────────────────────────────────────────────
 
     def _build_step3_names(self, layout: QVBoxLayout):
         layout.addWidget(_make_section_label("Step 3 · Translate Name Values (names.json)"))
@@ -2520,7 +2520,7 @@ class WolfWorkflowTab(QWidget):
 
     # ── Step 7: Inject ─────────────────────────────────────────────────────────
 
-    def _build_step4_inject(self, layout: QVBoxLayout):
+    def _build_step7_inject(self, layout: QVBoxLayout):
         layout.addWidget(_make_section_label("Step 7 · Inject Translations"))
         layout.addWidget(self._desc(
             "Tick translated JSON files below, then inject them into the game's Data/ "
@@ -2604,7 +2604,7 @@ class WolfWorkflowTab(QWidget):
         ))
         self._refresh_inject_list()
 
-    def _build_step7_relayout(self, layout: QVBoxLayout):
+    def _build_step9_relayout(self, layout: QVBoxLayout):
         """Search-first fix wrapping: find sheet by in-game text, wrap, re-inject."""
         layout.addWidget(_make_section_label("Step 9 · Fix wrapping"))
         layout.addWidget(self._desc(
@@ -3903,7 +3903,7 @@ class WolfWorkflowTab(QWidget):
 
     # ── Step 8: Package (+ optional saves) ─────────────────────────────────────
 
-    def _build_step5_package(self, layout: QVBoxLayout):
+    def _build_step8_package(self, layout: QVBoxLayout):
         layout.addWidget(_make_section_label("Step 8 · Package the Translated Game"))
         layout.addWidget(self._desc(
             "Make the injected build playable so you can spot overflow in-game, then "

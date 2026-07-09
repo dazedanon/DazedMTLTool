@@ -141,12 +141,18 @@ TXTDIR_DOC = {
 
 class TestCollectEntries(unittest.TestCase):
     def test_counts_per_kind(self):
-        self.assertEqual(len(wd.collectEntries(MAP_DOC)), 2)
-        self.assertEqual(len(wd.collectEntries(DB_DOC)), 1)
-        self.assertEqual(len(wd.collectEntries(GAMEDAT_DOC)), 1)
-        # All name leaves, including verify — safety filtering is in parseDocument.
-        self.assertEqual(len(wd.collectEntries(NAMES_DOC)), 3)
-        self.assertEqual(len(wd.collectEntries(TXTDIR_DOC)), 1)
+        # Live .env may still have a DB sheet filter from the last GUI run.
+        orig_filter = wd.wolf_db.load_db_filter_config
+        wd.wolf_db.load_db_filter_config = lambda: (frozenset(), frozenset())
+        try:
+            self.assertEqual(len(wd.collectEntries(MAP_DOC)), 2)
+            self.assertEqual(len(wd.collectEntries(DB_DOC)), 1)
+            self.assertEqual(len(wd.collectEntries(GAMEDAT_DOC)), 1)
+            # All name leaves, including verify - safety filtering is in parseDocument.
+            self.assertEqual(len(wd.collectEntries(NAMES_DOC)), 3)
+            self.assertEqual(len(wd.collectEntries(TXTDIR_DOC)), 1)
+        finally:
+            wd.wolf_db.load_db_filter_config = orig_filter
 
 
 class TestTranslationWriteback(unittest.TestCase):
@@ -248,20 +254,15 @@ class TestTranslationWriteback(unittest.TestCase):
         self.assertEqual(data["scenes"][0]["lines"][0]["text"], "こんにちは")
 
     def test_collect_pass_does_not_mutate_or_write(self):
-        """Batch collect must not reflow JP into text or overwrite translated/."""
+        """Batch collect must not overwrite translated/ with Japanese source."""
         orig_phase = os.environ.get("BATCH_PHASE")
         os.environ["BATCH_PHASE"] = "collect"
-        orig_wrap = wd.WRAP
-        orig_width = wd.WRAPWIDTH
-        wd.WRAP = True
-        wd.WRAPWIDTH = 20
         try:
             with tempfile.TemporaryDirectory() as tmp:
                 root = Path(tmp)
                 (root / "files").mkdir()
                 (root / "translated").mkdir()
                 doc = copy.deepcopy(MAP_DOC)
-                # A long JP line that wrap would reflow if write-back ran.
                 doc["scenes"][0]["lines"][0]["source"] = "あ" * 40
                 doc["scenes"][0]["lines"][0]["text"] = "あ" * 40
                 src_path = root / "files" / "Map001.mps.json"
@@ -292,56 +293,45 @@ class TestTranslationWriteback(unittest.TestCase):
                     '{"kind":"map","marker":"keep-me"}',
                 )
         finally:
-            wd.WRAP = orig_wrap
-            wd.WRAPWIDTH = orig_width
             if orig_phase is None:
                 os.environ.pop("BATCH_PHASE", None)
             else:
                 os.environ["BATCH_PHASE"] = orig_phase
 
-    def test_echoed_source_does_not_get_wrapped_into_text(self):
-        """If the model/collect echoes JP source, leave text alone even with wrap on."""
-        orig_wrap = wd.WRAP
-        orig_width = wd.WRAPWIDTH
-        wd.WRAP = True
-        wd.WRAPWIDTH = 10
+    def test_echoed_source_does_not_overwrite_text(self):
+        """If the model/collect echoes JP source, leave text alone."""
+        doc = {
+            "kind": "map",
+            "scenes": [
+                {
+                    "event": 1,
+                    "name": "ev",
+                    "lines": [
+                        {
+                            "cmd": 0,
+                            "str": 0,
+                            "source": "あいうえおかきくけこさしすせそ",
+                            "text": "あいうえおかきくけこさしすせそ",
+                        },
+                    ],
+                }
+            ],
+        }
+
+        def echo(text, history, history_ctx=None):
+            return [text if isinstance(text, list) else text, [1, 1]]
+
+        orig_t = wd.translateAI
+        wd.translateAI = echo
         try:
-            doc = {
-                "kind": "map",
-                "scenes": [
-                    {
-                        "event": 1,
-                        "name": "ev",
-                        "lines": [
-                            {
-                                "cmd": 0,
-                                "str": 0,
-                                "source": "あいうえおかきくけこさしすせそ",
-                                "text": "あいうえおかきくけこさしすせそ",
-                            },
-                        ],
-                    }
-                ],
-            }
-
-            def echo(text, history, history_ctx=None):
-                return [text if isinstance(text, list) else text, [1, 1]]
-
-            orig_t = wd.translateAI
-            wd.translateAI = echo
-            try:
-                data, _tok, err = wd.parseDocument(copy.deepcopy(doc), "echo.mps.json")
-            finally:
-                wd.translateAI = orig_t
-            self.assertIsNone(err)
-            # Must still be the unbroken source, not a wrapped JP reflow.
-            self.assertEqual(
-                data["scenes"][0]["lines"][0]["text"],
-                "あいうえおかきくけこさしすせそ",
-            )
+            data, _tok, err = wd.parseDocument(copy.deepcopy(doc), "echo.mps.json")
         finally:
-            wd.WRAP = orig_wrap
-            wd.WRAPWIDTH = orig_width
+            wd.translateAI = orig_t
+        self.assertIsNone(err)
+        self.assertEqual(
+            data["scenes"][0]["lines"][0]["text"],
+            "あいうえおかきくけこさしすせそ",
+        )
 
     def test_skips_already_translated_text(self):
         doc = {
