@@ -127,21 +127,23 @@ def _wolf_output_snippet(stdout: str, stderr: str, *, limit: int = 400) -> str:
 def _interpret_strings_result(json_name: str, res: wolfdawn.WolfResult) -> FileInjectResult:
     cli_err = wolfdawn.parse_inject_cli_error(res.stdout, res.stderr)
     applied, drifted = wolfdawn.parse_strings_inject_counts(res.stdout, res.stderr)
-    untranslated = wolfdawn.parse_strings_inject_untranslated(res.stdout, res.stderr)
+    safety = wolfdawn.parse_strings_inject_safety_count(res.stdout, res.stderr)
     mismatches = wolfdawn.parse_strings_inject_mismatches(res.stdout, res.stderr)
     detail = _wolf_output_snippet(res.stdout, res.stderr)
 
-    if not res.ok:
-        reason = cli_err or f"wolf exited {res.returncode}"
-        return FileInjectResult(json_name, False, reason, applied=applied, detail=detail)
-
+    # Exit 2 with a positive applied count still wrote the good lines; treat as success
+    # and surface safety skips in the summary (see inject_had_applied).
     if wolfdawn.inject_had_applied(applied):
         msg = f"applied {applied} line(s)"
         if drifted:
             msg += f" ({drifted} drifted)"
-        if untranslated:
-            msg += f" ({untranslated} skipped by safety guard)"
+        if safety:
+            msg += f" ({safety} skipped by safety guard)"
         return FileInjectResult(json_name, True, msg, applied=applied, detail=detail)
+
+    if not res.ok:
+        reason = cli_err or f"wolf exited {res.returncode}"
+        return FileInjectResult(json_name, False, reason, applied=applied, detail=detail)
 
     if (drifted or 0) > 0:
         return FileInjectResult(
@@ -152,11 +154,11 @@ def _interpret_strings_result(json_name: str, res: wolfdawn.WolfResult) -> FileI
             detail=detail,
         )
 
-    if untranslated or mismatches:
+    if safety or mismatches:
         parts = []
-        if untranslated:
-            parts.append(f"{untranslated} line(s) skipped by safety guard")
-        if mismatches:
+        if safety:
+            parts.append(f"{safety} line(s) skipped by safety guard")
+        elif mismatches:
             parts.append(f"{len(mismatches)} control-code mismatch(es)")
         return FileInjectResult(
             json_name, False, "; ".join(parts), applied=0, detail=detail

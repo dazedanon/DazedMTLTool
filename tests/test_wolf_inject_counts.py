@@ -45,11 +45,14 @@ class WolfInjectCountsTests(unittest.TestCase):
             "event 374 cmd 233 str 0: control-code mismatch - source has [\"\\\\^\"], "
             "translation has [\"\\\\ \"]\n"
             "applied 24547 translation(s) (37 untranslated, 0 drifted); wrote CommonEvent.dat\n"
+            "WARNING: 1 line(s) left UNTRANSLATED by a safety guard - "
+            "1 control-code mismatch, 0 not encodable\n"
         )
         applied, drifted = wolfdawn.parse_strings_inject_counts("", stderr)
         self.assertEqual(applied, 24547)
         self.assertEqual(drifted, 0)
         self.assertEqual(wolfdawn.parse_strings_inject_untranslated("", stderr), 37)
+        self.assertEqual(wolfdawn.parse_strings_inject_safety_count("", stderr), 1)
         mismatches = wolfdawn.parse_strings_inject_mismatches("", stderr)
         self.assertEqual(len(mismatches), 1)
         self.assertIn("control-code mismatch", mismatches[0])

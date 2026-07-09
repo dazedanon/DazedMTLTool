@@ -44,6 +44,8 @@ __all__ = [
     "parse_strings_inject_counts",
     "parse_strings_inject_untranslated",
     "parse_strings_inject_mismatches",
+    "parse_strings_inject_safety_count",
+    "parse_strings_inject_safety_lines",
     "parse_names_inject_counts",
     "inject_had_applied",
     "pack",
@@ -56,20 +58,25 @@ __all__ = [
     "desc_relayout",
 ]
 
-# strings-inject: "applied N translation(s) (M drifted)"; names-inject uses "name change(s)".
+# strings-inject: "applied N" / "would apply N"; names-inject uses "name change(s)".
+# WolfDawn counts identity lines (text == source) as "untranslated" - not safety skips.
 _INJECT_COUNTS_RE = re.compile(
-    r"applied\s+(\d+)\s+translation.*?(\d+)\s+drifted", re.IGNORECASE | re.DOTALL
+    r"(?:would apply|applied)\s+(\d+)\s+translation.*?(\d+)\s+drifted",
+    re.IGNORECASE | re.DOTALL,
 )
 _INJECT_UNTRANSLATED_RE = re.compile(
-    r"applied\s+\d+\s+translation.*?\((\d+)\s+untranslated", re.IGNORECASE | re.DOTALL
+    r"(?:would apply|applied)\s+\d+\s+translation.*?\((\d+)\s+untranslated",
+    re.IGNORECASE | re.DOTALL,
 )
-_INJECT_MISMATCH_RE = re.compile(
-    r"^(?:event\s+\d+\s+)?cmd\s+(\d+)\s+str\s+(\d+):\s+control-code mismatch",
-    re.IGNORECASE | re.MULTILINE,
+_INJECT_SAFETY_COUNT_RE = re.compile(
+    r"WARNING:\s*(\d+)\s+line\(s\)\s+left\s+UNTRANSLATED\s+by\s+a\s+safety\s+guard",
+    re.IGNORECASE,
 )
-_INJECT_MISMATCH_EVENT_RE = re.compile(
-    r"^event\s+(\d+)\s+cmd\s+(\d+)\s+str\s+(\d+):\s+control-code mismatch",
-    re.IGNORECASE | re.MULTILINE,
+_INJECT_SAFETY_LINE_RE = re.compile(
+    r"^(?P<locator>.+?):\s+"
+    r"(?P<kind>control-code mismatch|text not representable in Shift-JIS)\b"
+    r"(?P<rest>.*)$",
+    re.IGNORECASE,
 )
 _NAMES_INJECT_COUNTS_RE = re.compile(
     r"(?:would apply|applied)\s+(\d+)\s+name change.*?(\d+)\s+(?:drifted|unmatched)",
@@ -95,7 +102,7 @@ def _inject_output_text(stdout: str, stderr: str) -> str:
 
 
 def parse_strings_inject_counts(stdout: str, stderr: str = "") -> tuple[int | None, int | None]:
-    """Return (applied, drifted) from wolf strings-inject output, or (None, None)."""
+    """Return (applied / would-apply, drifted) from wolf strings-inject output."""
     text = _inject_output_text(stdout, stderr)
     if not text:
         return None, None
@@ -106,21 +113,52 @@ def parse_strings_inject_counts(stdout: str, stderr: str = "") -> tuple[int | No
 
 
 def parse_strings_inject_untranslated(stdout: str, stderr: str = "") -> int | None:
-    """Return the untranslated line count from strings-inject summary, if present."""
+    """Return identity-line count (``text == source``), not safety-guard skips."""
     text = _inject_output_text(stdout, stderr)
     m = _INJECT_UNTRANSLATED_RE.search(text)
     return int(m.group(1)) if m else None
 
 
-def parse_strings_inject_mismatches(stdout: str, stderr: str = "") -> list[str]:
-    """Return human-readable control-code mismatch locations from inject output."""
+def parse_strings_inject_safety_count(stdout: str, stderr: str = "") -> int | None:
+    """Return WARNING safety-guard skip count, if WolfDawn printed one."""
     text = _inject_output_text(stdout, stderr)
-    out: list[str] = []
-    for line in text.splitlines():
-        line = line.strip()
-        if "control-code mismatch" in line:
-            out.append(line)
+    m = _INJECT_SAFETY_COUNT_RE.search(text)
+    return int(m.group(1)) if m else None
+
+
+def parse_strings_inject_safety_lines(
+    stdout: str, stderr: str = ""
+) -> list[tuple[str, str, str]]:
+    """Return ``(locator, kind, full_line)`` for each per-line safety diagnostic.
+
+    *kind* is ``code_mismatch`` or ``unrepresentable``.
+    """
+    text = _inject_output_text(stdout, stderr)
+    out: list[tuple[str, str, str]] = []
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+        m = _INJECT_SAFETY_LINE_RE.match(line)
+        if not m:
+            continue
+        kind_raw = m.group("kind").lower()
+        kind = (
+            "unrepresentable"
+            if "representable" in kind_raw
+            else "code_mismatch"
+        )
+        out.append((m.group("locator").strip(), kind, line))
     return out
+
+
+def parse_strings_inject_mismatches(stdout: str, stderr: str = "") -> list[str]:
+    """Return human-readable control-code mismatch lines from inject output."""
+    return [
+        full
+        for _loc, kind, full in parse_strings_inject_safety_lines(stdout, stderr)
+        if kind == "code_mismatch"
+    ]
 
 
 def parse_names_inject_counts(stdout: str, stderr: str = "") -> tuple[int | None, int | None]:
@@ -619,6 +657,7 @@ def strings_inject(
     output: PathLike,
     allow_code_drift: bool = False,
     en_punct: bool = False,
+    dry_run: bool = False,
     log_fn=None,
 ) -> WolfResult:
     """``wolf strings-inject <edited.json> --base <orig> -o <out> [flags]``."""
@@ -627,6 +666,8 @@ def strings_inject(
         args.append("--allow-code-drift")
     if en_punct:
         args.append("--en-punct")
+    if dry_run:
+        args.append("--dry-run")
     return _run(args, log_fn=log_fn)
 
 

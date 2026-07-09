@@ -14,20 +14,20 @@ Mirrors the RPGMaker WorkflowTab, driven by the vendored WolfDawn ``wolf`` CLI
   Step 4  Database    - discover content layout; translate foundation DB sheets
                         (items, skills, descriptions) before narrative custom sheets
   Step 5  Maps/Events - .mps maps, CommonEvent, Game.dat, Evtext; speaker handling
-  Step 6  Inject      - inject translations + translated names back into the Data/ binaries
-                        and refresh the git-tracked wolf_json/ with the translated
-                        JSON; quick-inject picks just a few translated files for
-                        fast in-game / git iteration, or inject everything at once.
-  Step 7  Fix wrap    - search translated JSON by in-game text; Relayout
+  Step 6  Precheck    - dry-run selected JSON for safety-guard skips; edit those
+                        lines before writing binaries
+  Step 7  Inject      - inject translations into Data/ binaries and refresh
+                        wolf_json/; quick-inject picks a few files or all
+  Step 8  Fix wrap    - search translated JSON by in-game text; Relayout
                         (names-wrap / cell geometry) or Manual (width + font);
                         inject the edited file
-  Step 8  Package     - run from a loose Data/ folder, or repack Data.wolf
-  Step 9  Saves       - fix baked strings in existing .sav files (optional)
+  Step 9  Package     - run from a loose Data/ folder, or repack Data.wolf
+  Step 10 Saves       - fix baked strings in existing .sav files (optional)
 
 names.json is staged into files/ but is NOT translated in the bulk phases - WolfDawn
 tags each name safe / refs / verify and Phase 0 translates only safe entries
-(per-name, not per-category), harvests them into vocab.txt, and Step 6 injects the
-result. All text wrapping lives in Step 7.
+(per-name, not per-category), harvests them into vocab.txt, and Step 7 injects the
+result. All text wrapping lives in Step 8.
 
 The extracted JSON is staged in ``<game_root>/wolf_json/`` (a manifest maps each
 file back to its base binary), then imported into ``files/`` for the shared
@@ -584,10 +584,11 @@ class WolfWorkflowTab(QWidget):
             ("3  Names", self._build_step3_names),
             ("4  Database", self._build_step4_database),
             ("5  Maps/Events", self._build_step5_maps_events),
-            ("6  Inject", self._build_step4_inject),
-            ("7  Fix wrap", self._build_step7_relayout),
-            ("8  Package", self._build_step5_package),
-            ("9  Saves", self._build_step6_saves),
+            ("6  Precheck", self._build_step6_precheck),
+            ("7  Inject", self._build_step4_inject),
+            ("8  Fix wrap", self._build_step7_relayout),
+            ("9  Package", self._build_step5_package),
+            ("10 Saves", self._build_step6_saves),
         ]
 
         for tab_label, builder in _tab_defs:
@@ -2375,14 +2376,103 @@ class WolfWorkflowTab(QWidget):
                 return p
         return None
 
-    # ── Step 4: Inject ─────────────────────────────────────────────────────────
+    # ── Step 6: Precheck ───────────────────────────────────────────────────────
+
+    def _build_step6_precheck(self, layout: QVBoxLayout):
+        layout.addWidget(_make_section_label("Step 6 · Inject Precheck"))
+        layout.addWidget(self._desc(
+            "Dry-run selected translated JSON before writing binaries. Lists only real "
+            "safety skips: control-code mismatch, or text not Shift-JIS encodable. "
+            "Fix those lines here, then continue to Step 7 (Inject)."
+        ))
+
+        layout.addWidget(self._subheading("Translated files"))
+        self.precheck_list = QListWidget()
+        self.precheck_list.setMaximumHeight(200)
+        self.precheck_list.setStyleSheet(
+            "QListWidget{background-color:#252526;border:1px solid #3a3a3a;border-radius:4px;"
+            "color:#cccccc;font-size:12px;padding:2px;}"
+            "QListWidget::item{padding:3px 4px;}"
+            "QListWidget::item:selected{background:#264f78;color:#ffffff;}"
+        )
+        layout.addWidget(self.precheck_list)
+
+        list_row = QHBoxLayout()
+        refresh_btn = self._register(_make_btn("↻ Refresh", "#3a3a3a"))
+        refresh_btn.clicked.connect(self._refresh_precheck_list)
+        sel_all_btn = self._register(_make_btn("Select all", "#3a3a3a"))
+        sel_all_btn.clicked.connect(lambda: self._set_checklist_checks(self.precheck_list, True))
+        sel_none_btn = self._register(_make_btn("Select none", "#3a3a3a"))
+        sel_none_btn.clicked.connect(lambda: self._set_checklist_checks(self.precheck_list, False))
+        list_row.addWidget(refresh_btn)
+        list_row.addWidget(sel_all_btn)
+        list_row.addWidget(sel_none_btn)
+        list_row.addStretch()
+        layout.addLayout(list_row)
+
+        precheck_row = QHBoxLayout()
+        precheck_btn = self._register(_make_btn("Precheck selected", "#007acc"))
+        precheck_btn.clicked.connect(self._precheck_inject_selected)
+        precheck_all_btn = self._register(_make_btn("Precheck all", "#007acc"))
+        precheck_all_btn.clicked.connect(self._precheck_inject_all)
+        precheck_row.addWidget(precheck_btn)
+        precheck_row.addWidget(precheck_all_btn)
+        precheck_row.addStretch()
+        layout.addLayout(precheck_row)
+
+        self._inject_precheck_label = QLabel("Run precheck to list safety-guard skips.")
+        self._inject_precheck_label.setWordWrap(True)
+        self._inject_precheck_label.setStyleSheet("color:#9cdcfe;font-size:12px;")
+        layout.addWidget(self._inject_precheck_label)
+
+        self._inject_issue_list = QListWidget()
+        self._inject_issue_list.setMaximumHeight(200)
+        self._inject_issue_list.setWordWrap(True)
+        self._inject_issue_list.setTextElideMode(Qt.ElideNone)
+        self._inject_issue_list.setUniformItemSizes(False)
+        self._inject_issue_list.setStyleSheet(
+            "QListWidget{background-color:#252526;border:1px solid #3a3a3a;border-radius:4px;"
+            "color:#cccccc;font-size:12px;padding:2px;}"
+            "QListWidget::item{padding:4px;}"
+            "QListWidget::item:selected{background:#264f78;color:#ffffff;}"
+        )
+        self._inject_issue_list.currentItemChanged.connect(self._on_inject_issue_selected)
+        layout.addWidget(self._inject_issue_list)
+
+        self._inject_issue_meta = QLabel("")
+        self._inject_issue_meta.setWordWrap(True)
+        self._inject_issue_meta.setStyleSheet("color:#808080;font-size:11px;")
+        layout.addWidget(self._inject_issue_meta)
+
+        self._inject_issue_edit = QTextEdit()
+        self._inject_issue_edit.setPlaceholderText(
+            "Select a precheck row to edit its translated text, then Save line."
+        )
+        self._inject_issue_edit.setMaximumHeight(120)
+        self._inject_issue_edit.setStyleSheet(
+            "QTextEdit{background-color:#1e1e1e;color:#d4d4d4;border:1px solid #3c3c3c;"
+            "border-radius:4px;padding:6px;font-size:12px;}"
+        )
+        layout.addWidget(self._inject_issue_edit)
+
+        edit_row = QHBoxLayout()
+        save_line_btn = self._register(_make_btn("Save line", "#3a3a3a"))
+        save_line_btn.clicked.connect(self._save_inject_issue_line)
+        edit_row.addWidget(save_line_btn)
+        edit_row.addStretch()
+        layout.addLayout(edit_row)
+
+        self._inject_precheck_issues: list = []
+        self._refresh_precheck_list()
+
+    # ── Step 7: Inject ─────────────────────────────────────────────────────────
 
     def _build_step4_inject(self, layout: QVBoxLayout):
-        layout.addWidget(_make_section_label("Step 6 · Inject Translations"))
+        layout.addWidget(_make_section_label("Step 7 · Inject Translations"))
         layout.addWidget(self._desc(
             "Tick translated JSON files below, then inject them into the game's Data/ "
-            "binaries. Each file is reported individually — failures are shown in a "
-            "dialog and in the log."
+            "binaries. Run Step 6 (Precheck) first if you want to catch safety-guard "
+            "skips before writing. Each file is reported individually."
         ))
 
         self.en_punct_cb = QCheckBox("Convert Japanese punctuation to ASCII (--en-punct)")
@@ -2424,9 +2514,9 @@ class WolfWorkflowTab(QWidget):
         refresh_btn = self._register(_make_btn("↻ Refresh", "#3a3a3a"))
         refresh_btn.clicked.connect(self._refresh_inject_list)
         sel_all_btn = self._register(_make_btn("Select all", "#3a3a3a"))
-        sel_all_btn.clicked.connect(lambda: self._set_inject_checks(True))
+        sel_all_btn.clicked.connect(lambda: self._set_checklist_checks(self.inject_list, True))
         sel_none_btn = self._register(_make_btn("Select none", "#3a3a3a"))
-        sel_none_btn.clicked.connect(lambda: self._set_inject_checks(False))
+        sel_none_btn.clicked.connect(lambda: self._set_checklist_checks(self.inject_list, False))
         list_row.addWidget(refresh_btn)
         list_row.addWidget(sel_all_btn)
         list_row.addWidget(sel_none_btn)
@@ -2445,14 +2535,14 @@ class WolfWorkflowTab(QWidget):
 
         layout.addWidget(_make_hr())
         layout.addWidget(self._desc(
-            "English text is often longer than Japanese. Step 7 (Fix wrapping): paste "
+            "English text is often longer than Japanese. Step 8 (Fix wrapping): paste "
             "overflowing in-game text to find the sheet, wrap, and re-inject."
         ))
         self._refresh_inject_list()
 
     def _build_step7_relayout(self, layout: QVBoxLayout):
         """Search-first fix wrapping: find sheet by in-game text, wrap, re-inject."""
-        layout.addWidget(_make_section_label("Step 7 · Fix wrapping"))
+        layout.addWidget(_make_section_label("Step 8 · Fix wrapping"))
         layout.addWidget(self._desc(
             "Paste overflowing in-game text to find it in translated JSON. "
             "Relayout uses cell width + max lines (names.json → wolf names-wrap). "
@@ -3071,7 +3161,7 @@ class WolfWorkflowTab(QWidget):
                 else "Line already fits (manual)."
             )
             self._wrap_status_label.setText(
-                msg + f" Inject {self._current_wrap_path.name} from Step 6."
+                msg + f" Inject {self._current_wrap_path.name} from Step 7."
             )
             self._log(f"{'✅' if changed else 'ℹ'}  {msg}")
             self._update_wrap_preview()
@@ -3112,7 +3202,7 @@ class WolfWorkflowTab(QWidget):
         if line is not None:
             self._current_wrap_text = str(line.get("text") or "")
         msg = f"Wrapped line at width {width}." if changed else "Line already fits at this width."
-        self._wrap_status_label.setText(msg + f" Inject {self._current_wrap_path.name} from Step 6.")
+        self._wrap_status_label.setText(msg + f" Inject {self._current_wrap_path.name} from Step 7.")
         self._log(f"{'✅' if changed else 'ℹ'}  {msg}")
         self._update_wrap_preview()
 
@@ -3279,7 +3369,7 @@ class WolfWorkflowTab(QWidget):
                 self._reload_wrap_hit_editor(hit, self._active_wrap_width())
             if not quiet and hasattr(self, "_wrap_status_label"):
                 self._wrap_status_label.setText(
-                    summary + " Re-inject names.json from Step 6."
+                    summary + " Re-inject names.json from Step 7."
                 )
 
         self._run_task(task, on_done=_after)
@@ -3348,8 +3438,8 @@ class WolfWorkflowTab(QWidget):
         if not self._require_manifest():
             return
         manifest = self._read_manifest()
-        en_punct = self.en_punct_cb.isChecked()
-        allow_drift = self.drift_cb.isChecked()
+        en_punct = self._inject_flag_en_punct()
+        allow_drift = self._inject_flag_allow_drift()
         game_json_dir = self._work_dir()
 
         def task(log, progress=None):
@@ -3412,50 +3502,208 @@ class WolfWorkflowTab(QWidget):
         # Index 4 == Database: refresh discovery report and sheet list.
         elif idx == 4:
             self._refresh_db_discovery()
-        # Index 6 == Inject: keep the file list in sync with translated/.
+        # Index 6 == Precheck: keep the file list in sync with translated/.
         elif idx == 6:
+            self._refresh_precheck_list()
+        # Index 7 == Inject: keep the file list in sync with translated/.
+        elif idx == 7:
             self._refresh_inject_list()
 
-    def _refresh_inject_list(self):
-        if not hasattr(self, "inject_list"):
-            return
-        self.inject_list.clear()
+    def _fill_injectable_checklist(self, list_widget: QListWidget):
+        """Populate a checkable file list from translated/ + manifest."""
+        list_widget.clear()
         if not self._read_manifest():
-            item = QListWidgetItem("Run Step 0 (extract) first — no manifest found.")
+            item = QListWidgetItem("Run Step 0 (extract) first - no manifest found.")
             item.setFlags(Qt.ItemIsEnabled)
-            self.inject_list.addItem(item)
+            list_widget.addItem(item)
             return
         files = self._injectable_filenames()
         if not files:
             item = QListWidgetItem("No injectable files in translated/ yet.")
             item.setFlags(Qt.ItemIsEnabled)
-            self.inject_list.addItem(item)
+            list_widget.addItem(item)
             return
         for json_name in files:
             item = QListWidgetItem(json_name)
             item.setData(Qt.UserRole, json_name)
             item.setFlags(Qt.ItemIsUserCheckable | Qt.ItemIsEnabled)
             item.setCheckState(Qt.Unchecked)
-            self.inject_list.addItem(item)
+            list_widget.addItem(item)
 
-    def _selected_inject_files(self) -> set[str]:
+    def _refresh_precheck_list(self):
+        if not hasattr(self, "precheck_list"):
+            return
+        self._fill_injectable_checklist(self.precheck_list)
+
+    def _refresh_inject_list(self):
+        if not hasattr(self, "inject_list"):
+            return
+        self._fill_injectable_checklist(self.inject_list)
+
+    def _selected_checklist_files(self, list_widget: QListWidget) -> set[str]:
         selected: set[str] = set()
-        for i in range(self.inject_list.count()):
-            it = self.inject_list.item(i)
+        for i in range(list_widget.count()):
+            it = list_widget.item(i)
             if (it.flags() & Qt.ItemIsUserCheckable) and it.checkState() == Qt.Checked:
                 name = it.data(Qt.UserRole)
                 if name:
                     selected.add(name)
         return selected
 
-    def _set_inject_checks(self, checked: bool):
-        if not hasattr(self, "inject_list"):
-            return
+    def _selected_precheck_files(self) -> set[str]:
+        return self._selected_checklist_files(self.precheck_list)
+
+    def _selected_inject_files(self) -> set[str]:
+        return self._selected_checklist_files(self.inject_list)
+
+    def _set_checklist_checks(self, list_widget: QListWidget, checked: bool):
         state = Qt.Checked if checked else Qt.Unchecked
-        for i in range(self.inject_list.count()):
-            it = self.inject_list.item(i)
+        for i in range(list_widget.count()):
+            it = list_widget.item(i)
             if it.flags() & Qt.ItemIsUserCheckable:
                 it.setCheckState(state)
+
+    def _precheck_inject_selected(self):
+        if not self._require_manifest():
+            return
+        selected = self._selected_precheck_files()
+        if not selected:
+            QMessageBox.information(
+                self,
+                "Nothing selected",
+                "Tick one or more files, then click Precheck selected.",
+            )
+            return
+        self._run_inject_precheck(selected)
+
+    def _precheck_inject_all(self):
+        if not self._require_manifest():
+            return
+        files = self._injectable_filenames()
+        if not files:
+            QMessageBox.information(
+                self,
+                "Nothing to precheck",
+                "No injectable files found in translated/.",
+            )
+            return
+        self._run_inject_precheck(set(files))
+
+    def _inject_flag_en_punct(self) -> bool:
+        if hasattr(self, "en_punct_cb"):
+            return self.en_punct_cb.isChecked()
+        return self._setting("en_punct", "true") == "true"
+
+    def _inject_flag_allow_drift(self) -> bool:
+        if hasattr(self, "drift_cb"):
+            return self.drift_cb.isChecked()
+        return self._setting("allow_code_drift", "false") == "true"
+
+    def _run_inject_precheck(self, selected: set[str]):
+        manifest = self._read_manifest()
+        en_punct = self._inject_flag_en_punct()
+        allow_drift = self._inject_flag_allow_drift()
+        state: dict = {}
+
+        def task(log, progress=None):
+            from util.wolfdawn import inject_precheck as wolf_pre
+
+            entries = manifest["entries"]
+            data_dir_path = Path(manifest["data_dir"])
+            game_root = Path(manifest.get("root") or self._game_root)
+            originals_dir = game_root / WORK_DIR_NAME / "originals"
+            self._ensure_originals(manifest, log, progress, quiet=True)
+            report = wolf_pre.precheck_selected(
+                sorted(selected),
+                manifest_entries=entries,
+                data_dir=data_dir_path,
+                originals_dir=originals_dir,
+                translated_dir=self._tool_root() / "translated",
+                allow_code_drift=allow_drift,
+                en_punct=en_punct,
+                log_fn=log,
+            )
+            state["report"] = report
+            return True, wolf_pre.format_precheck_summary(report)
+
+        def _after(ok: bool, msg: str):
+            from util.wolfdawn import inject_precheck as wolf_pre
+
+            report = state.get("report")
+            if not report:
+                self._inject_precheck_label.setText(msg or "Precheck failed.")
+                return
+            self._populate_inject_precheck(report)
+            self._inject_precheck_label.setText(wolf_pre.format_precheck_summary(report))
+            if report.safety_issues:
+                QMessageBox.warning(
+                    self,
+                    "Inject precheck",
+                    wolf_pre.format_precheck_summary(report)
+                    + "\n\nSelect a safety row below, fix the text, Save line, then re-run precheck.",
+                )
+            else:
+                QMessageBox.information(self, "Inject precheck", msg)
+
+        self._run_task(task, on_done=_after)
+
+    def _populate_inject_precheck(self, report):
+        from util.wolfdawn import inject_precheck as wolf_pre
+
+        self._inject_issue_list.clear()
+        self._inject_issue_edit.clear()
+        self._inject_issue_meta.setText("")
+        issues = wolf_pre.issues_for_ui(report)
+        self._inject_precheck_issues = issues
+        for issue in issues:
+            item = QListWidgetItem(issue.summary())
+            item.setData(Qt.UserRole, issue)
+            item.setForeground(QColor("#f48771"))
+            self._inject_issue_list.addItem(item)
+            fm = self._inject_issue_list.fontMetrics()
+            item.setSizeHint(
+                QSize(
+                    self._inject_issue_list.viewport().width(),
+                    max(fm.height() * 3 + 10, 48),
+                )
+            )
+
+    def _on_inject_issue_selected(self, current, _previous):
+        if current is None:
+            self._inject_issue_edit.clear()
+            self._inject_issue_meta.setText("")
+            return
+        issue = current.data(Qt.UserRole)
+        if issue is None:
+            return
+        meta_parts = [issue.json_file, issue.locator, issue.message]
+        self._inject_issue_meta.setText(" · ".join(p for p in meta_parts if p))
+        self._inject_issue_edit.setPlainText(issue.text or issue.source or "")
+
+    def _save_inject_issue_line(self):
+        item = self._inject_issue_list.currentItem()
+        if item is None:
+            QMessageBox.information(self, "Save line", "Select a precheck row first.")
+            return
+        issue = item.data(Qt.UserRole)
+        if issue is None:
+            return
+        from util.wolfdawn import inject_precheck as wolf_pre
+
+        new_text = self._inject_issue_edit.toPlainText()
+        ok, err = wolf_pre.apply_issue_text(
+            self._tool_root() / "translated", issue, new_text
+        )
+        if not ok:
+            QMessageBox.warning(self, "Save line", err or "Could not save.")
+            return
+        item.setText(issue.summary())
+        self._log(f"Saved precheck edit: {issue.json_file} · {issue.locator}")
+        QMessageBox.information(
+            self,
+            "Save line",
+            "Saved. Re-run Precheck to confirm the safety skip is gone.",
+        )
 
     def _inject_selected(self):
         if not self._require_manifest():
@@ -3506,7 +3754,7 @@ class WolfWorkflowTab(QWidget):
     # ── Step 5: Package ────────────────────────────────────────────────────────
 
     def _build_step5_package(self, layout: QVBoxLayout):
-        layout.addWidget(_make_section_label("Step 8 · Package the Translated Game"))
+        layout.addWidget(_make_section_label("Step 9 · Package the Translated Game"))
         layout.addWidget(self._desc(
             "Choose how the translated build runs. A loose Data/ folder is simplest for "
             "playtesting; repacking rebuilds a single Data.wolf archive for distribution."
@@ -3581,10 +3829,10 @@ class WolfWorkflowTab(QWidget):
 
         self._run_task(task)
 
-    # ── Step 6: Saves ──────────────────────────────────────────────────────────
+    # ── Step 10: Saves ─────────────────────────────────────────────────────────
 
     def _build_step6_saves(self, layout: QVBoxLayout):
-        layout.addWidget(_make_section_label("Step 9 · Update Existing Saves (optional)"))
+        layout.addWidget(_make_section_label("Step 10 · Update Existing Saves (optional)"))
         layout.addWidget(self._desc(
             "WOLF .sav files bake in the game title and some strings at save time. This rewrites "
             "them so old Japanese saves load cleanly in the translated build. It is only needed "
