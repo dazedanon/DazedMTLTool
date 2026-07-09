@@ -153,6 +153,21 @@ class TestContentDistribution(unittest.TestCase):
             self.assertEqual(dist.map_files, 1)
             self.assertEqual(dist.map_lines, 1)
 
+    def test_skips_rpgmaker_array_json(self):
+        """files/ may hold RPGMaker list JSON; must not crash Wolf discovery."""
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            (base / "Actors.json").write_text(
+                json.dumps([{"id": 1, "name": "Hero"}]),
+                encoding="utf-8",
+            )
+            (base / "DataBase.project.json").write_text(
+                json.dumps(NARRATIVE_DB, ensure_ascii=False),
+                encoding="utf-8",
+            )
+            dist = wdb.analyze_content_distribution(base)
+            self.assertGreater(dist.db_lines, 0)
+
     def test_discovery_summary_mentions_database(self):
         with tempfile.TemporaryDirectory() as tmp:
             base = Path(tmp)

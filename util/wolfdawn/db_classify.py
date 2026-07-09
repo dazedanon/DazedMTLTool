@@ -183,10 +183,12 @@ def _count_json_lines(doc: dict[str, Any]) -> int:
 
 
 def _load_json(path: Path) -> dict[str, Any] | None:
+    """Load a WolfDawn JSON object. Skip arrays / non-objects (e.g. RPGMaker files/)."""
     try:
-        return json.loads(path.read_text(encoding="utf-8-sig"))
+        data = json.loads(path.read_text(encoding="utf-8-sig"))
     except Exception:
         return None
+    return data if isinstance(data, dict) else None
 
 
 @dataclass

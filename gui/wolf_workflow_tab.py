@@ -1906,8 +1906,7 @@ class WolfWorkflowTab(QWidget):
         layout.addWidget(checked_btn)
 
         self._db_content_dist: wolf_db.ContentDistribution | None = None
-        self._refresh_db_discovery()
-
+        # Defer discovery until the step is shown - files/ may hold RPGMaker JSON.
     def _wolf_json_work_dir(self) -> Path | None:
         if not self._game_root:
             return None
