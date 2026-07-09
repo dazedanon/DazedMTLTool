@@ -70,10 +70,19 @@ def rebuild_originals_from_archives(
     return True
 
 
-def names_inject_would_apply(names_json: Path, data_dir: Path) -> int | None:
+def names_inject_would_apply(
+    names_json: Path,
+    data_dir: Path,
+    *,
+    allow_code_drift: bool = False,
+) -> int | None:
     """Return how many name changes wolf would apply (dry run), or None if unknown."""
     res = wolfdawn.names_inject(
-        str(names_json), str(data_dir), dry_run=True, log_fn=None
+        str(names_json),
+        str(data_dir),
+        dry_run=True,
+        allow_code_drift=allow_code_drift,
+        log_fn=None,
     )
     applied, _drifted = wolfdawn.parse_names_inject_counts(res.stdout, res.stderr)
     return applied

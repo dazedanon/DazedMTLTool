@@ -46,22 +46,170 @@ def detect_font_sizes(text: str) -> list[int]:
     return sorted(sizes)
 
 
-def apply_font_size(text: str, size: int) -> tuple[str, int]:
-    """Replace every ``\\f[N]`` in *text* with ``\\f[size]``.
+def infer_base_font_size(text: str, *, default: int = 18) -> int:
+    """Guess the body / \"normal\" ``\\f[N]`` size for *text*.
 
-    Returns ``(new_text, replacements)``. When no ``\\f[N]`` codes exist, prepends
-    ``\\f[size]`` at the start of the string (after an optional opening quote).
+    Emphasis overrides (e.g. ``\\f[20]…\\f[18]``) keep a larger size for a span
+    then restore the body size. Prefer the most common size; on a tie, the
+    smaller one (body over emphasis).
+    """
+    if not isinstance(text, str) or not text:
+        return int(default)
+    counts: dict[int, int] = {}
+    for match in WOLF_FONT_SIZE_RE.finditer(text):
+        try:
+            size = int(match.group(1))
+        except (TypeError, ValueError):
+            continue
+        counts[size] = counts.get(size, 0) + 1
+    if not counts:
+        return int(default)
+    top = max(counts.values())
+    return min(size for size, n in counts.items() if n == top)
+
+
+def ensure_leading_font_size(text: str, size: int) -> str:
+    """Ensure *text* begins with ``\\f[size]`` so Wolf sets line height from the start.
+
+    Mid-line ``\\f[N]`` alone (e.g. ``"That \\c[21]\\f[14]cafe…``) leaves the
+    opening glyphs on the default face and mis-aligns the row. WolfDawn
+    ``names-wrap`` always leads with the body size for the same reason.
+    """
+    if not isinstance(text, str) or not text or int(size) <= 0:
+        return text
+    size = int(size)
+    lead = rf"\f[{size}]"
+    # Already starts with the desired body size.
+    m = WOLF_FONT_SIZE_RE.match(text)
+    if m and int(m.group(1)) == size:
+        return text
+    # Replace a different leading \\f[N] with the body size.
+    if m:
+        return lead + text[m.end() :]
+    return lead + text
+
+
+def scale_font_sizes(
+    text: str,
+    new_base: int,
+    *,
+    old_base: int | None = None,
+    min_size: int = 8,
+) -> tuple[str, int]:
+    """Scale every ``\\f[N]`` proportionally when the body font changes.
+
+    Example: body ``\\f[18]`` with emphasis ``\\f[20]`` shrunk to body 14 becomes
+    ``\\f[16]`` / ``\\f[14]`` (``round(N * new_base / old_base)``, floored at
+    *min_size*). Always ensures a leading ``\\f[new_base]`` so Wolf measures the
+    line from the body size (fixes mid-line emphasis like
+    ``"That \\c[21]\\f[14]cafe\\c[19]\\f[13]…``).
+
+    When *text* has no ``\\f[N]``, prepends ``\\f[new_base]``.
+    Returns ``(new_text, replacements)``.
+    """
+    if not isinstance(text, str) or not text.strip() or int(new_base) <= 0:
+        return text, 0
+    new_base = int(new_base)
+    min_size = max(1, int(min_size))
+    matches = list(WOLF_FONT_SIZE_RE.finditer(text))
+    if not matches:
+        return ensure_leading_font_size(text, new_base), 1
+
+    base = int(old_base) if old_base is not None and int(old_base) > 0 else infer_base_font_size(text)
+    if base <= 0:
+        base = new_base
+
+    def _scale(match: re.Match) -> str:
+        try:
+            old = int(match.group(1))
+        except (TypeError, ValueError):
+            return match.group(0)
+        scaled = max(min_size, int(round(old * new_base / base)))
+        return rf"\f[{scaled}]"
+
+    had_leading = bool(WOLF_FONT_SIZE_RE.match(text))
+    new_text = WOLF_FONT_SIZE_RE.sub(_scale, text)
+    new_text = ensure_leading_font_size(new_text, new_base)
+    count = len(matches) + (0 if had_leading else 1)
+    return new_text, count
+
+
+def apply_font_size(text: str, size: int) -> tuple[str, int]:
+    """Force every ``\\f[N]`` in *text* to the same *size* (no proportional scale).
+
+    Prefer :func:`scale_font_sizes` when the line has emphasis overrides that
+    should stay relatively larger than the body font.
+
+    Always ensures a leading ``\\f[size]``. Returns ``(new_text, replacements)``.
     """
     if not isinstance(text, str) or not text.strip() or size <= 0:
         return text, 0
     size = int(size)
     matches = list(WOLF_FONT_SIZE_RE.finditer(text))
     if matches:
+        had_leading = bool(WOLF_FONT_SIZE_RE.match(text))
         new_text = WOLF_FONT_SIZE_RE.sub(rf"\\f[{size}]", text)
-        return new_text, len(matches)
-    if text.startswith('"'):
-        return rf'\f[{size}]' + text, 1
-    return rf"\f[{size}]{text}", 1
+        new_text = ensure_leading_font_size(new_text, size)
+        count = len(matches) + (0 if had_leading else 1)
+        return new_text, count
+    return ensure_leading_font_size(text, size), 1
+
+
+def _control_code_tokens(text: str) -> list[str]:
+    """Return the sequence of WolfDawn-compared control codes in *text*."""
+    if not isinstance(text, str) or not text:
+        return []
+    return [m.group(0) for m in WOLF_INLINE_CODE_RE.finditer(text)]
+
+
+def _normalize_font_size_codes(text: str) -> str:
+    """Replace every ``\\f[N]`` with a placeholder so size values are ignored."""
+    if not isinstance(text, str) or not text:
+        return text if isinstance(text, str) else ""
+    return WOLF_FONT_SIZE_RE.sub(r"\\f[_]", text)
+
+
+def font_size_codes_differ(source: str, text: str) -> bool:
+    """True when *source* and *text* differ only in ``\\f[N]`` size values / count.
+
+    Used after ``wolf names-wrap`` shrinks overflow with a leading ``\\f[N]`` and
+    scales inline font codes. Other control-code drift (missing ``\\c``, etc.)
+    returns False so inject still requires an explicit allow-code-drift.
+    """
+    if not isinstance(source, str) or not isinstance(text, str):
+        return False
+    if source == text:
+        return False
+    src_codes = _control_code_tokens(source)
+    txt_codes = _control_code_tokens(text)
+    if src_codes == txt_codes:
+        return False
+    # Same non-font codes, but font sizes / leading shrink differ.
+    src_norm = _normalize_font_size_codes(source)
+    txt_norm = _normalize_font_size_codes(text)
+    if _control_code_tokens(src_norm) == _control_code_tokens(txt_norm):
+        return True
+    # Leading shrink adds an extra \\f that source never had.
+    src_f = WOLF_FONT_SIZE_RE.findall(source)
+    txt_f = WOLF_FONT_SIZE_RE.findall(text)
+    if not txt_f:
+        return False
+    src_non_f = [c for c in src_codes if not WOLF_FONT_SIZE_RE.fullmatch(c)]
+    txt_non_f = [c for c in txt_codes if not WOLF_FONT_SIZE_RE.fullmatch(c)]
+    return src_non_f == txt_non_f and (src_f != txt_f or len(txt_f) > len(src_f))
+
+
+def names_doc_has_font_size_drift(doc: dict[str, Any]) -> bool:
+    """True when any names.json entry has font-size-only control-code drift."""
+    if not isinstance(doc, dict) or doc.get("kind") != "names":
+        return False
+    for entry in doc.get("names") or []:
+        if not isinstance(entry, dict):
+            continue
+        src, txt = entry.get("source"), entry.get("text")
+        if isinstance(src, str) and isinstance(txt, str) and font_size_codes_differ(src, txt):
+            return True
+    return False
 
 
 def _tokenize(rest: str) -> list[tuple[str, str]]:

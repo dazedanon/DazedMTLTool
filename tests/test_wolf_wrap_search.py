@@ -322,5 +322,65 @@ class TestEventScopeWrap(unittest.TestCase):
         self.assertEqual(changed, 1)
 
 
+class TestManualFontAndWrap(unittest.TestCase):
+    def test_scales_emphasis_then_wraps(self):
+        text = (
+            r"So they even take worries like this in the "
+            r"\c[21]\f[20]confessional\c[19]\f[18] booth every day."
+        )
+        new_text, changed = ws.apply_manual_font_and_wrap(text, 40, font=14)
+        self.assertTrue(changed)
+        self.assertIn(r"\f[16]", new_text)
+        self.assertIn(r"\f[14]", new_text)
+        self.assertLessEqual(dazedwrap.max_line_visible_length(new_text), 40)
+
+    def test_group_manual_skips_short_plain_lines(self):
+        text = "Short."
+        new_text, changed = ws.apply_manual_font_and_wrap(
+            text, 40, font=14, only_overflow_or_fonts=True
+        )
+        self.assertFalse(changed)
+        self.assertEqual(new_text, text)
+
+    def test_wrap_overflow_manual_in_names_category(self):
+        tmp = tempfile.TemporaryDirectory()
+        try:
+            path = Path(tmp.name) / "names.json"
+            doc = {
+                "kind": "names",
+                "names": [
+                    {
+                        "note": "噂",
+                        "source": "a",
+                        "text": (
+                            r"So they even take worries like this in the "
+                            r"\c[21]\f[20]confessional\c[19]\f[18] booth."
+                        ),
+                    },
+                    {"note": "噂", "source": "b", "text": "OK"},
+                    {"note": "other", "source": "c", "text": "x" * 80},
+                ],
+            }
+            path.write_text(json.dumps(doc, ensure_ascii=False), encoding="utf-8")
+            hit = ws.WrapHit(
+                json_file="names.json",
+                kind="names",
+                sheet_name="噂",
+                row=0,
+                field_name="name",
+                text=doc["names"][0]["text"],
+                max_line_len=80,
+            )
+            changed = ws.wrap_overflow_manual_in_scope(path, doc, hit, 36, font=14)
+            self.assertEqual(changed, 1)
+            saved = json.loads(path.read_text(encoding="utf-8"))
+            out = saved["names"][0]["text"]
+            self.assertIn(r"\f[14]", out)
+            self.assertEqual(saved["names"][1]["text"], "OK")
+            self.assertEqual(saved["names"][2]["text"], "x" * 80)
+        finally:
+            tmp.cleanup()
+
+
 if __name__ == "__main__":
     unittest.main()

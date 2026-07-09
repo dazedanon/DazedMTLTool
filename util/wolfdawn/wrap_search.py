@@ -153,12 +153,38 @@ def set_sheet_width(
     width: int,
     *,
     json_file: str,
+    max_lines: int | None = None,
 ) -> None:
     profile = load_wrap_profile(work_dir)
     sheets = profile.setdefault("sheets", {})
-    sheets[sheet_name] = {"width": int(width), "json_file": json_file}
+    entry = sheets.get(sheet_name)
+    if not isinstance(entry, dict):
+        entry = {}
+        sheets[sheet_name] = entry
+    entry["width"] = int(width)
+    entry["json_file"] = json_file
+    if max_lines is not None and int(max_lines) > 0:
+        entry["max_lines"] = int(max_lines)
+    elif "max_lines" in entry and max_lines == 0:
+        entry.pop("max_lines", None)
     profile["default_width"] = profile.get("default_width", DEFAULT_WRAP_WIDTH)
     save_wrap_profile(work_dir, profile)
+
+
+def get_sheet_max_lines(
+    profile: dict[str, Any],
+    sheet_name: str,
+    *,
+    default: int = 0,
+) -> int:
+    sheets = profile.get("sheets") or {}
+    entry = sheets.get(sheet_name)
+    if isinstance(entry, dict) and entry.get("max_lines") is not None:
+        try:
+            return int(entry["max_lines"])
+        except (TypeError, ValueError):
+            pass
+    return default
 
 
 def _load_json(path: Path) -> dict[str, Any] | None:
@@ -491,6 +517,189 @@ def wrap_line_in_doc(line: dict[str, Any], width: int) -> bool:
         return False
     line["text"] = new_text
     return True
+
+
+def apply_manual_font_and_wrap(
+    text: str,
+    width: int,
+    *,
+    font: int | None = None,
+    old_base: int | None = None,
+    only_overflow_or_fonts: bool = False,
+) -> tuple[str, bool]:
+    """Scale body ``\\f`` (keeping emphasis ratios), then wrap to *width*.
+
+    When *only_overflow_or_fonts* is True (group wrap), skip lines that already
+    fit and have no ``\\f[N]`` so short UI labels are not given a forced font.
+
+    Returns ``(new_text, changed)``.
+    """
+    from util.wolfdawn import codes as wolf_codes
+
+    if not isinstance(text, str) or not text.strip():
+        return text, False
+    new_text = text
+    has_f = bool(wolf_codes.detect_font_sizes(new_text))
+    needs_wrap = width > 0 and line_needs_wrap(new_text, width)
+    if only_overflow_or_fonts and not has_f and not needs_wrap:
+        return text, False
+    if font is not None and int(font) > 0 and (has_f or needs_wrap or not only_overflow_or_fonts):
+        new_text, _ = wolf_codes.scale_font_sizes(
+            new_text, int(font), old_base=old_base
+        )
+        needs_wrap = width > 0 and line_needs_wrap(new_text, width)
+    if needs_wrap:
+        new_text = wrap_line_text(new_text, width)
+    return new_text, new_text != text
+
+
+def wrap_hit_manual(
+    path: Path,
+    doc: dict[str, Any],
+    hit_id: dict[str, Any],
+    width: int,
+    *,
+    font: int | None = None,
+) -> bool:
+    """Apply manual font scale + wrap to one hit line."""
+    line = locate_line(doc, hit_id)
+    if line is None:
+        return False
+    text = line.get("text")
+    if not isinstance(text, str):
+        return False
+    new_text, changed = apply_manual_font_and_wrap(text, width, font=font)
+    if not changed:
+        return False
+    line["text"] = new_text
+    save_document(path, doc)
+    return True
+
+
+def wrap_overflow_manual_in_scope(
+    path: Path,
+    doc: dict[str, Any],
+    hit: WrapHit | dict[str, Any],
+    width: int,
+    *,
+    font: int | None = None,
+) -> int:
+    """Manual wrap (+ optional proportional font) for every line in *hit*'s group."""
+    if isinstance(hit, WrapHit):
+        kind, sheet_name = hit.kind, hit.sheet_name
+    else:
+        kind = str(hit.get("kind") or doc.get("kind") or "")
+        sheet_name = str(hit.get("sheet_name") or "")
+
+    if kind == "names":
+        return _wrap_manual_in_names_category(path, doc, sheet_name, width, font=font)
+    if kind == "db":
+        return _wrap_manual_in_db_sheet(path, doc, sheet_name, width, font=font)
+    if kind in ("map", "common"):
+        return _wrap_manual_in_event_file(path, doc, width, font=font)
+    if kind == "gamedat":
+        return _wrap_manual_in_gamedat(path, doc, width, font=font)
+    return 0
+
+
+def _apply_manual_to_line_dict(
+    line: dict[str, Any],
+    width: int,
+    *,
+    font: int | None,
+) -> bool:
+    text = line.get("text")
+    if not isinstance(text, str) or not text.strip():
+        return False
+    new_text, changed = apply_manual_font_and_wrap(
+        text, width, font=font, only_overflow_or_fonts=True
+    )
+    if not changed:
+        return False
+    line["text"] = new_text
+    return True
+
+
+def _wrap_manual_in_names_category(
+    path: Path,
+    doc: dict[str, Any],
+    category: str,
+    width: int,
+    *,
+    font: int | None = None,
+) -> int:
+    if doc.get("kind") != "names":
+        return 0
+    changed = 0
+    for entry in doc.get("names") or []:
+        if not isinstance(entry, dict):
+            continue
+        if str(entry.get("note") or "") != category:
+            continue
+        if _apply_manual_to_line_dict(entry, width, font=font):
+            changed += 1
+    if changed:
+        save_document(path, doc)
+    return changed
+
+
+def _wrap_manual_in_db_sheet(
+    path: Path,
+    doc: dict[str, Any],
+    sheet_name: str,
+    width: int,
+    *,
+    font: int | None = None,
+) -> int:
+    if doc.get("kind") != "db":
+        return 0
+    changed = 0
+    for group in doc.get("groups") or []:
+        if str(group.get("typeName") or "") != sheet_name:
+            continue
+        for line in group.get("lines") or []:
+            if _apply_manual_to_line_dict(line, width, font=font):
+                changed += 1
+    if changed:
+        save_document(path, doc)
+    return changed
+
+
+def _wrap_manual_in_event_file(
+    path: Path,
+    doc: dict[str, Any],
+    width: int,
+    *,
+    font: int | None = None,
+) -> int:
+    if doc.get("kind") not in ("map", "common"):
+        return 0
+    changed = 0
+    for scene in doc.get("scenes") or []:
+        for line in scene.get("lines") or []:
+            if _apply_manual_to_line_dict(line, width, font=font):
+                changed += 1
+    if changed:
+        save_document(path, doc)
+    return changed
+
+
+def _wrap_manual_in_gamedat(
+    path: Path,
+    doc: dict[str, Any],
+    width: int,
+    *,
+    font: int | None = None,
+) -> int:
+    if doc.get("kind") != "gamedat":
+        return 0
+    changed = 0
+    for line in doc.get("lines") or []:
+        if _apply_manual_to_line_dict(line, width, font=font):
+            changed += 1
+    if changed:
+        save_document(path, doc)
+    return changed
 
 
 @dataclass

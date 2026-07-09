@@ -44,7 +44,7 @@ import tempfile
 from pathlib import Path
 
 from PyQt5.QtCore import Qt, QSettings, QThread, QTimer, pyqtSignal, QEvent
-from PyQt5.QtGui import QColor, QFont, QTextCharFormat, QTextCursor
+from PyQt5.QtGui import QColor, QFont
 from PyQt5.QtWidgets import (
     QApplication,
     QAbstractItemView,
@@ -2392,7 +2392,9 @@ class WolfWorkflowTab(QWidget):
         )
         layout.addWidget(self.en_punct_cb)
 
-        self.drift_cb = QCheckBox("Allow inline-code drift (--allow-code-drift, riskier)")
+        self.drift_cb = QCheckBox(
+            "Allow inline-code drift (--allow-code-drift; auto for names-wrap \\f shrink)"
+        )
         self.drift_cb.setChecked(self._setting("allow_code_drift", "false") == "true")
         self.drift_cb.stateChanged.connect(
             lambda: self._save_setting(
@@ -2452,9 +2454,11 @@ class WolfWorkflowTab(QWidget):
         """Search-first fix wrapping: find sheet by in-game text, wrap, re-inject."""
         layout.addWidget(_make_section_label("Step 7 · Fix wrapping"))
         layout.addWidget(self._desc(
-            "Paste overflowing in-game text to find it in translated JSON. Adjust width "
-            "for one line or wrap every overflowing line in the same group (database "
-            "sheet, names category, map, CommonEvent, or Game.dat), then inject."
+            "Paste overflowing in-game text to find it in translated JSON. Choose "
+            "Relayout (cell width + max lines) or Manual (wrap width + body font), "
+            "then wrap one line or the whole group and inject. Manual mode scales "
+            "emphasis ``\\f[N]`` with the body font (e.g. ``\\f[20]``/``\\f[18]`` → "
+            "``\\f[16]``/``\\f[14]``). names.json Relayout uses WolfDawn ``names-wrap``."
         ))
 
         search_row = QHBoxLayout()
@@ -2487,50 +2491,111 @@ class WolfWorkflowTab(QWidget):
         )
         layout.addWidget(self._wrap_detail_label)
 
-        self._wrap_text_editor = QTextEdit()
-        self._wrap_text_editor.setMaximumHeight(120)
-        self._wrap_text_editor.setStyleSheet(
-            "QTextEdit{background-color:#252526;color:#d4d4d4;border:1px solid #3c3c3c;"
-            "font-family:monospace;font-size:12px;padding:6px;}"
+        mode_row = QHBoxLayout()
+        mode_lbl = QLabel("Mode:")
+        mode_lbl.setStyleSheet("color:#cccccc;font-size:12px;background:transparent;")
+        self._wrap_mode_combo = QComboBox()
+        self._wrap_mode_combo.addItem("Relayout (cell width + max lines)", "relayout")
+        self._wrap_mode_combo.addItem("Manual (wrap width + font)", "manual")
+        saved_mode = str(self._setting("wrap_fix_mode", "relayout") or "relayout")
+        idx = self._wrap_mode_combo.findData(saved_mode)
+        self._wrap_mode_combo.setCurrentIndex(idx if idx >= 0 else 0)
+        self._wrap_mode_combo.setToolTip(
+            "Relayout: wolf names-wrap / JP slot geometry (cell width + max lines).\n"
+            "Manual: force wrap width and body font; emphasis \\f[N] scales with the body."
         )
-        self._wrap_text_editor.setEnabled(False)
-        self._wrap_text_editor.textChanged.connect(self._update_wrap_preview)
-        layout.addWidget(self._wrap_text_editor)
+        self._wrap_mode_combo.currentIndexChanged.connect(self._on_wrap_mode_changed)
+        mode_row.addWidget(mode_lbl)
+        mode_row.addWidget(self._wrap_mode_combo)
+        mode_row.addStretch()
+        layout.addLayout(mode_row)
 
-        width_row = QHBoxLayout()
-        w_lbl = QLabel("Wrap width (characters):")
+        # Relayout controls: cell width + max lines
+        self._wrap_relayout_row = QWidget()
+        relayout_row = QHBoxLayout(self._wrap_relayout_row)
+        relayout_row.setContentsMargins(0, 0, 0, 0)
+        w_lbl = QLabel("Cell width (0=auto):")
         w_lbl.setStyleSheet("color:#cccccc;font-size:12px;background:transparent;")
         self._wrap_width_spin = QSpinBox()
-        self._wrap_width_spin.setRange(10, 120)
+        self._wrap_width_spin.setRange(0, 200)
         try:
             self._wrap_width_spin.setValue(int(self._setting("wrap_fix_width", 36) or 36))
         except (TypeError, ValueError):
             self._wrap_width_spin.setValue(36)
         self._wrap_width_spin.setFixedWidth(70)
+        self._wrap_width_spin.setToolTip(
+            "Halfwidth cells (ASCII=1, fullwidth=2). For names.json Relayout: "
+            "0 = measure from JP; N > 0 forces wolf names-wrap --width."
+        )
         self._wrap_width_spin.valueChanged.connect(self._on_wrap_width_changed)
-        width_row.addWidget(w_lbl)
-        width_row.addWidget(self._wrap_width_spin)
-        width_row.addStretch()
-        layout.addLayout(width_row)
+        lines_lbl = QLabel("Max lines (0=auto):")
+        lines_lbl.setStyleSheet("color:#cccccc;font-size:12px;background:transparent;")
+        self._wrap_max_lines_spin = QSpinBox()
+        self._wrap_max_lines_spin.setRange(0, 20)
+        try:
+            self._wrap_max_lines_spin.setValue(
+                int(self._setting("wrap_fix_max_lines", 0) or 0)
+            )
+        except (TypeError, ValueError):
+            self._wrap_max_lines_spin.setValue(0)
+        self._wrap_max_lines_spin.setFixedWidth(70)
+        self._wrap_max_lines_spin.setToolTip(
+            "wolf names-wrap --lines (0 = each entry's JP line count). "
+            "Saved as maxLines in wolfdawn-roles.json."
+        )
+        self._wrap_max_lines_spin.valueChanged.connect(self._on_wrap_max_lines_changed)
+        relayout_row.addWidget(w_lbl)
+        relayout_row.addWidget(self._wrap_width_spin)
+        relayout_row.addWidget(lines_lbl)
+        relayout_row.addWidget(self._wrap_max_lines_spin)
+        relayout_row.addStretch()
+        layout.addWidget(self._wrap_relayout_row)
 
-        font_row = QHBoxLayout()
-        font_lbl = QLabel("Font size \\f[N]:")
+        # Manual controls: wrap width + font size
+        self._wrap_manual_row = QWidget()
+        manual_row = QHBoxLayout(self._wrap_manual_row)
+        manual_row.setContentsMargins(0, 0, 0, 0)
+        mw_lbl = QLabel("Wrap width:")
+        mw_lbl.setStyleSheet("color:#cccccc;font-size:12px;background:transparent;")
+        self._wrap_manual_width_spin = QSpinBox()
+        self._wrap_manual_width_spin.setRange(10, 200)
+        try:
+            self._wrap_manual_width_spin.setValue(
+                int(self._setting("wrap_fix_manual_width", 36) or 36)
+            )
+        except (TypeError, ValueError):
+            self._wrap_manual_width_spin.setValue(36)
+        self._wrap_manual_width_spin.setFixedWidth(70)
+        self._wrap_manual_width_spin.setToolTip(
+            "Hard wrap width in halfwidth cells for Manual mode (dazedwrap)."
+        )
+        self._wrap_manual_width_spin.valueChanged.connect(self._on_wrap_manual_width_changed)
+        font_lbl = QLabel("Body font \\f[N]:")
         font_lbl.setStyleSheet("color:#cccccc;font-size:12px;background:transparent;")
         self._wrap_font_spin = QSpinBox()
         self._wrap_font_spin.setRange(8, 32)
-        self._wrap_font_spin.setValue(18)
+        try:
+            self._wrap_font_spin.setValue(int(self._setting("wrap_fix_font", 18) or 18))
+        except (TypeError, ValueError):
+            self._wrap_font_spin.setValue(18)
         self._wrap_font_spin.setFixedWidth(70)
+        self._wrap_font_spin.setToolTip(
+            "Target body font applied on Wrap. Emphasis overrides (e.g. \\f[20]…\\f[18]) "
+            "scale proportionally; a leading \\f[body] is always set."
+        )
+        self._wrap_font_spin.valueChanged.connect(self._on_wrap_font_changed)
         self._wrap_font_detect_label = QLabel("")
         self._wrap_font_detect_label.setStyleSheet(
             "color:#858585;font-size:11px;background:transparent;"
         )
-        apply_font_btn = _make_btn("Apply \\f to text", "#3a3a3a")
-        apply_font_btn.clicked.connect(self._apply_wrap_font_size)
-        font_row.addWidget(font_lbl)
-        font_row.addWidget(self._wrap_font_spin)
-        font_row.addWidget(apply_font_btn)
-        font_row.addWidget(self._wrap_font_detect_label, 1)
-        layout.addLayout(font_row)
+        manual_row.addWidget(mw_lbl)
+        manual_row.addWidget(self._wrap_manual_width_spin)
+        manual_row.addWidget(font_lbl)
+        manual_row.addWidget(self._wrap_font_spin)
+        manual_row.addWidget(self._wrap_font_detect_label, 1)
+        layout.addWidget(self._wrap_manual_row)
+
+        self._sync_wrap_mode_controls()
 
         self._wrap_preview_label = QLabel("Wrap preview")
         self._wrap_preview_label.setStyleSheet(
@@ -2540,9 +2605,9 @@ class WolfWorkflowTab(QWidget):
 
         self._wrap_preview = QTextEdit()
         self._wrap_preview.setReadOnly(True)
-        self._wrap_preview.setMaximumHeight(110)
+        self._wrap_preview.setMaximumHeight(160)
         self._wrap_preview.setPlaceholderText(
-            "Wrapped lines appear here when you select a result and adjust width."
+            "Select a search result to preview wrap at the current width."
         )
         self._wrap_preview.setStyleSheet(
             "QTextEdit{background-color:#1e1e1e;color:#b5cea8;border:1px solid #3c3c3c;"
@@ -2555,35 +2620,13 @@ class WolfWorkflowTab(QWidget):
         wrap_row_btn.clicked.connect(self._wrap_current_row)
         wrap_group_btn = _make_btn("Wrap all in group", "#00a86b")
         wrap_group_btn.clicked.connect(self._wrap_current_group)
-        save_row_btn = _make_btn("Save text", "#3a3a3a")
-        save_row_btn.clicked.connect(self._save_wrap_row_text)
         inject_btn = _make_btn("Inject this file", "#007acc")
         inject_btn.clicked.connect(self._inject_current_wrap_file)
         btn_row.addWidget(wrap_row_btn)
         btn_row.addWidget(wrap_group_btn)
-        btn_row.addWidget(save_row_btn)
         btn_row.addWidget(inject_btn)
         btn_row.addStretch()
         layout.addLayout(btn_row)
-
-        context_row = QHBoxLayout()
-        self._wrap_relayout_btn = _make_btn("Relayout messages on Data/ (wolf)", "#3a3a3a")
-        self._wrap_relayout_btn.clicked.connect(lambda: self._run_relayout(manual=True))
-        self._wrap_relayout_btn.setVisible(False)
-        self._wrap_relayout_btn.setToolTip(
-            "Reflow message boxes in live Data/ using JP-measured geometry. "
-            "Run after inject for map and CommonEvent dialogue."
-        )
-        self._wrap_names_smart_btn = _make_btn("Smart wrap names.json (wolf)", "#3a3a3a")
-        self._wrap_names_smart_btn.clicked.connect(lambda: self._run_names_wrap(manual=True))
-        self._wrap_names_smart_btn.setVisible(False)
-        self._wrap_names_smart_btn.setToolTip(
-            "Re-wrap multi-line name fields to each category's JP-measured width."
-        )
-        context_row.addWidget(self._wrap_relayout_btn)
-        context_row.addWidget(self._wrap_names_smart_btn)
-        context_row.addStretch()
-        layout.addLayout(context_row)
 
         self._wrap_status_label = QLabel("")
         self._wrap_status_label.setWordWrap(True)
@@ -2596,6 +2639,7 @@ class WolfWorkflowTab(QWidget):
         self._current_wrap_hit_id: dict | None = None
         self._current_wrap_path: Path | None = None
         self._current_wrap_doc: dict | None = None
+        self._current_wrap_text: str = ""
 
     def _translated_and_files_dirs(self) -> tuple[Path, Path]:
         root = self._tool_root()
@@ -2619,10 +2663,102 @@ class WolfWorkflowTab(QWidget):
         except (TypeError, ValueError):
             return 36
 
-    def _remember_sheet_width(self, sheet_name: str, width: int, json_file: str):
+    def _remember_sheet_width(
+        self,
+        sheet_name: str,
+        width: int,
+        json_file: str,
+        *,
+        max_lines: int | None = None,
+    ):
         work = self._wolf_json_work_dir()
         if work is not None:
-            wolf_ws.set_sheet_width(work, sheet_name, width, json_file=json_file)
+            wolf_ws.set_sheet_width(
+                work,
+                sheet_name,
+                width,
+                json_file=json_file,
+                max_lines=max_lines,
+            )
+
+    def _wrap_mode(self) -> str:
+        combo = getattr(self, "_wrap_mode_combo", None)
+        if combo is not None:
+            data = combo.currentData()
+            if data:
+                return str(data)
+        return str(self._setting("wrap_fix_mode", "relayout") or "relayout")
+
+    def _current_wrap_line_text(self) -> str:
+        """Return the selected line's text from the loaded document (or cache)."""
+        if self._current_wrap_doc is not None and self._current_wrap_hit_id is not None:
+            line = wolf_ws.locate_line(self._current_wrap_doc, self._current_wrap_hit_id)
+            if line is not None:
+                return str(line.get("text") or "")
+        return getattr(self, "_current_wrap_text", "") or ""
+
+    def _on_wrap_mode_changed(self, _index: int = 0):
+        mode = self._wrap_mode()
+        self._save_setting("wrap_fix_mode", mode)
+        self._sync_wrap_mode_controls()
+        self._update_wrap_preview()
+        hit = self._current_wrap_hit
+        doc = self._current_wrap_doc
+        if hit is not None and doc is not None and hasattr(self, "_wrap_detail_label"):
+            text = self._current_wrap_line_text() or hit.text
+            self._wrap_detail_label.setText(
+                self._format_wrap_detail(hit, doc, text, self._active_wrap_width())
+            )
+
+    def _sync_wrap_mode_controls(self):
+        mode = self._wrap_mode()
+        is_manual = mode == "manual"
+        if hasattr(self, "_wrap_relayout_row"):
+            self._wrap_relayout_row.setVisible(not is_manual)
+        if hasattr(self, "_wrap_manual_row"):
+            self._wrap_manual_row.setVisible(is_manual)
+
+    def _active_wrap_width(self) -> int:
+        if self._wrap_mode() == "manual" and hasattr(self, "_wrap_manual_width_spin"):
+            return int(self._wrap_manual_width_spin.value())
+        if hasattr(self, "_wrap_width_spin"):
+            return int(self._wrap_width_spin.value())
+        return 36
+
+    def _wrap_font_value(self) -> int:
+        spin = getattr(self, "_wrap_font_spin", None)
+        if spin is not None:
+            return int(spin.value())
+        try:
+            return int(self._setting("wrap_fix_font", 18) or 18)
+        except (TypeError, ValueError):
+            return 18
+
+    def _on_wrap_manual_width_changed(self, value: int):
+        self._save_setting("wrap_fix_manual_width", value)
+        self._update_wrap_preview()
+        hit = self._current_wrap_hit
+        doc = self._current_wrap_doc
+        if hit is not None and doc is not None and hasattr(self, "_wrap_detail_label"):
+            text = self._current_wrap_line_text() or hit.text
+            self._wrap_detail_label.setText(
+                self._format_wrap_detail(hit, doc, text, value)
+            )
+
+    def _on_wrap_font_changed(self, value: int):
+        self._save_setting("wrap_fix_font", value)
+
+    def _wrap_max_lines_value(self) -> int:
+        spin = getattr(self, "_wrap_max_lines_spin", None)
+        if spin is not None:
+            return int(spin.value())
+        try:
+            return int(self._setting("wrap_fix_max_lines", 0) or 0)
+        except (TypeError, ValueError):
+            return 0
+
+    def _on_wrap_max_lines_changed(self, value: int):
+        self._save_setting("wrap_fix_max_lines", value)
 
     def _on_wrap_width_changed(self, value: int):
         self._save_setting("wrap_fix_width", value)
@@ -2630,8 +2766,62 @@ class WolfWorkflowTab(QWidget):
         hit = self._current_wrap_hit
         doc = self._current_wrap_doc
         if hit is not None and doc is not None and hasattr(self, "_wrap_detail_label"):
-            text = self._wrap_text_editor.toPlainText() if self._wrap_text_editor.isEnabled() else hit.text
+            text = self._current_wrap_line_text() or hit.text
             self._wrap_detail_label.setText(self._format_wrap_detail(hit, doc, text, value))
+
+    def _load_names_geometry_into_spins(self, hit: wolf_ws.WrapHit):
+        """Prefer wolfdawn-roles.json, then wrap_profile, for names category geometry."""
+        width = None
+        max_lines = None
+        font = None
+        if self._current_wrap_path is not None:
+            roles = wolf_names.load_name_wrap_roles(
+                wolf_names.roles_json_path_for_names(self._current_wrap_path)
+            )
+            role = wolf_names.get_name_wrap_role(roles, hit.sheet_name)
+            if role:
+                if role.get("width"):
+                    try:
+                        width = int(role["width"])
+                    except (TypeError, ValueError):
+                        pass
+                if role.get("maxLines") is not None:
+                    try:
+                        max_lines = int(role["maxLines"])
+                    except (TypeError, ValueError):
+                        pass
+                if role.get("font"):
+                    try:
+                        font = int(role["font"])
+                    except (TypeError, ValueError):
+                        pass
+        work = self._wolf_json_work_dir()
+        if work is not None:
+            profile = wolf_ws.load_wrap_profile(work)
+            if width is None:
+                # 0 = JP auto for names-wrap; do not fall back to DB default 36.
+                width = wolf_ws.get_sheet_width(profile, hit.sheet_name, default=0)
+            if max_lines is None:
+                max_lines = wolf_ws.get_sheet_max_lines(profile, hit.sheet_name, default=0)
+        if width is None:
+            width = 0
+        if max_lines is None:
+            max_lines = 0
+        self._wrap_width_spin.blockSignals(True)
+        self._wrap_width_spin.setValue(int(width))
+        self._wrap_width_spin.blockSignals(False)
+        if hasattr(self, "_wrap_manual_width_spin") and width > 0:
+            self._wrap_manual_width_spin.blockSignals(True)
+            self._wrap_manual_width_spin.setValue(int(width))
+            self._wrap_manual_width_spin.blockSignals(False)
+        if hasattr(self, "_wrap_max_lines_spin"):
+            self._wrap_max_lines_spin.blockSignals(True)
+            self._wrap_max_lines_spin.setValue(int(max_lines))
+            self._wrap_max_lines_spin.blockSignals(False)
+        if font is not None and hasattr(self, "_wrap_font_spin"):
+            self._wrap_font_spin.blockSignals(True)
+            self._wrap_font_spin.setValue(int(font))
+            self._wrap_font_spin.blockSignals(False)
 
     def _format_wrap_detail(
         self,
@@ -2659,9 +2849,23 @@ class WolfWorkflowTab(QWidget):
             else ""
         )
         if hit.kind == "names":
+            mode = self._wrap_mode()
+            if mode == "manual":
+                font = self._wrap_font_value()
+                return (
+                    f"{kind_lbl}: {hit.sheet_name}  ·  {hit.json_file}  ·  "
+                    f"entry #{hit.row}  ·  Manual wrap={width}, body \\f[{font}]  ·  "
+                    "emphasis \\f scales with body"
+                )
+            lines = self._wrap_max_lines_value()
+            geom = (
+                f"width={'auto' if width <= 0 else width}"
+                + (f", max lines={lines}" if lines > 0 else ", max lines=auto")
+            )
             return (
                 f"{kind_lbl}: {hit.sheet_name}  ·  {hit.json_file}  ·  "
-                f"entry #{hit.row}{overflow_note}"
+                f"entry #{hit.row}  ·  Relayout {geom}  ·  "
+                "Wrap all in group → wolf names-wrap (JP slots + \\f shrink)"
             )
         if hit.kind == "db":
             return (
@@ -2676,16 +2880,18 @@ class WolfWorkflowTab(QWidget):
     def _update_wrap_preview(self):
         if not hasattr(self, "_wrap_preview"):
             return
-        editor = getattr(self, "_wrap_text_editor", None)
-        if editor is None or not editor.isEnabled():
+        text = self._current_wrap_line_text()
+        if not text.strip() and self._current_wrap_hit is None:
             self._wrap_preview.clear()
             if hasattr(self, "_wrap_preview_label"):
                 self._wrap_preview_label.setText("Wrap preview")
-            if editor is not None:
-                editor.setExtraSelections([])
+                self._wrap_preview_label.setStyleSheet(
+                    "color:#858585;font-size:11px;background:transparent;"
+                )
             return
-        text = editor.toPlainText()
-        width = self._wrap_width_spin.value()
+        if self._current_wrap_hit is not None and not text.strip():
+            text = self._current_wrap_hit.text
+        width = self._active_wrap_width()
         summary = wolf_ws.wrap_preview_summary(text, width)
         preview = wolf_ws.format_wrap_preview(text, width)
         info = wolf_ws.wrap_preview_info(text, width)
@@ -2707,47 +2913,6 @@ class WolfWorkflowTab(QWidget):
             "QTextEdit{background-color:#1e1e1e;color:#b5cea8;border:1px solid #3c3c3c;"
             f"border-left:3px solid {border};font-family:monospace;font-size:12px;padding:6px;}}"
         )
-        self._apply_wrap_source_highlights(text, width, info)
-
-    def _apply_wrap_source_highlights(
-        self,
-        text: str,
-        width: int,
-        info: dict,
-    ):
-        """Mark in-width vs overflow segments on the source editor."""
-        editor = getattr(self, "_wrap_text_editor", None)
-        if editor is None or not editor.isEnabled() or not text.strip():
-            editor and editor.setExtraSelections([])
-            return
-        fmt_fit = QTextCharFormat()
-        fmt_fit.setBackground(QColor("#264f78"))
-        fmt_overflow = QTextCharFormat()
-        fmt_overflow.setBackground(QColor("#4a3728"))
-        selections = []
-        norm = text.replace("\r\n", "\n").replace("\r", "\n")
-        offset = 0
-        for line in norm.split("\n"):
-            line_len = len(line)
-            fit_end, _overflow = wolf_ws.split_line_at_visible_width(line, width)
-            if fit_end > 0:
-                sel = QTextEdit.ExtraSelection()
-                cursor = QTextCursor(editor.document())
-                cursor.setPosition(offset)
-                cursor.setPosition(offset + fit_end, QTextCursor.KeepAnchor)
-                sel.cursor = cursor
-                sel.format = fmt_fit
-                selections.append(sel)
-            if fit_end < line_len:
-                sel = QTextEdit.ExtraSelection()
-                cursor = QTextCursor(editor.document())
-                cursor.setPosition(offset + fit_end)
-                cursor.setPosition(offset + line_len, QTextCursor.KeepAnchor)
-                sel.cursor = cursor
-                sel.format = fmt_overflow
-                selections.append(sel)
-            offset += line_len + 1
-        editor.setExtraSelections(selections)
 
     def _run_wrap_search(self):
         query = self._wrap_search_edit.text().strip()
@@ -2760,6 +2925,7 @@ class WolfWorkflowTab(QWidget):
         )
         self._wrap_results_list.clear()
         self._current_wrap_hit = None
+        self._current_wrap_text = ""
         if not hits:
             where = "translated/, files/"
             if extra:
@@ -2768,11 +2934,9 @@ class WolfWorkflowTab(QWidget):
             item.setFlags(Qt.ItemIsEnabled)
             self._wrap_results_list.addItem(item)
             self._wrap_detail_label.setText("No matches.")
-            self._wrap_text_editor.clear()
-            self._wrap_text_editor.setEnabled(False)
             self._update_wrap_preview()
             return
-        width = self._wrap_width_spin.value()
+        width = self._active_wrap_width()
         for hit in hits:
             item = QListWidgetItem(hit.summary(width))
             item.setData(Qt.UserRole, hit.hit_id)
@@ -2796,24 +2960,31 @@ class WolfWorkflowTab(QWidget):
         )
         self._current_wrap_path = path
         self._current_wrap_doc = doc
-        w = self._wrap_profile_width(hit.sheet_name)
-        self._wrap_width_spin.blockSignals(True)
-        self._wrap_width_spin.setValue(w)
-        self._wrap_width_spin.blockSignals(False)
+        if hit.kind == "names":
+            self._load_names_geometry_into_spins(hit)
+        else:
+            w = self._wrap_profile_width(hit.sheet_name)
+            self._wrap_width_spin.blockSignals(True)
+            self._wrap_width_spin.setValue(w)
+            self._wrap_width_spin.blockSignals(False)
+            if hasattr(self, "_wrap_max_lines_spin"):
+                work = self._wolf_json_work_dir()
+                max_lines = 0
+                if work is not None:
+                    max_lines = wolf_ws.get_sheet_max_lines(
+                        wolf_ws.load_wrap_profile(work), hit.sheet_name, default=0
+                    )
+                self._wrap_max_lines_spin.blockSignals(True)
+                self._wrap_max_lines_spin.setValue(max_lines)
+                self._wrap_max_lines_spin.blockSignals(False)
         if line is not None:
             text = str(line.get("text") or hit.text)
         else:
             text = hit.text
-        self._wrap_text_editor.setEnabled(True)
-        self._wrap_text_editor.setPlainText(text)
+        self._current_wrap_text = text
         self._wrap_detail_label.setText(
-            self._format_wrap_detail(hit, doc, text, self._wrap_width_spin.value())
+            self._format_wrap_detail(hit, doc, text, self._active_wrap_width())
         )
-        if hasattr(self, "_wrap_relayout_btn"):
-            show_relayout = hit.kind in ("map", "common")
-            self._wrap_relayout_btn.setVisible(show_relayout)
-        if hasattr(self, "_wrap_names_smart_btn"):
-            self._wrap_names_smart_btn.setVisible(hit.kind == "names")
         self._sync_wrap_font_controls(text)
         self._update_wrap_preview()
 
@@ -2821,61 +2992,78 @@ class WolfWorkflowTab(QWidget):
         if not hasattr(self, "_wrap_font_spin"):
             return
         sizes = wolf_codes.detect_font_sizes(text)
-        if sizes:
+        base = wolf_codes.infer_base_font_size(text) if sizes else None
+        if sizes and base is not None:
             self._wrap_font_spin.blockSignals(True)
-            self._wrap_font_spin.setValue(sizes[-1])
+            self._wrap_font_spin.setValue(base)
             self._wrap_font_spin.blockSignals(False)
             shown = ", ".join(f"\\f[{s}]" for s in sizes[:4])
             if len(sizes) > 4:
                 shown += ", …"
-            self._wrap_font_detect_label.setText(f"In text: {shown}")
+            self._wrap_font_detect_label.setText(
+                f"In text: {shown} (body ≈ \\f[{base}])"
+            )
         else:
-            self._wrap_font_detect_label.setText("No \\f[N] in text — Apply adds \\f at start")
-
-    def _apply_wrap_font_size(self):
-        if not self._wrap_text_editor.isEnabled():
-            QMessageBox.information(self, "Fix wrapping", "Select a search result first.")
-            return
-        text = self._wrap_text_editor.toPlainText()
-        size = self._wrap_font_spin.value()
-        new_text, count = wolf_codes.apply_font_size(text, size)
-        if new_text == text:
-            self._wrap_status_label.setText("No font size change applied.")
-            return
-        self._wrap_text_editor.setPlainText(new_text)
-        if self._current_wrap_hit_id and self._current_wrap_path and self._current_wrap_doc:
-            line = wolf_ws.locate_line(self._current_wrap_doc, self._current_wrap_hit_id)
-            if line is not None:
-                line["text"] = new_text
-                wolf_ws.save_document(self._current_wrap_path, self._current_wrap_doc)
-        self._sync_wrap_font_controls(new_text)
-        self._update_wrap_preview()
-        self._wrap_status_label.setText(
-            f"Set \\f[{size}] on {count} code(s). Save or inject when ready."
-        )
-        self._log(f"✅ Applied \\f[{size}] to wrap editor text ({count} change(s)).")
-
-    def _save_wrap_row_text(self):
-        if not self._current_wrap_hit_id or not self._current_wrap_path or not self._current_wrap_doc:
-            QMessageBox.information(self, "Fix wrapping", "Select a search result first.")
-            return
-        line = wolf_ws.locate_line(self._current_wrap_doc, self._current_wrap_hit_id)
-        if line is None:
-            QMessageBox.warning(self, "Fix wrapping", "Could not locate line in JSON.")
-            return
-        line["text"] = self._wrap_text_editor.toPlainText()
-        wolf_ws.save_document(self._current_wrap_path, self._current_wrap_doc)
-        self._wrap_status_label.setText(f"Saved {self._current_wrap_path.name}.")
-        self._log(f"✅ Saved wrap edit to {self._current_wrap_path.name}")
+            self._wrap_font_detect_label.setText(
+                "No \\f[N] yet — Wrap adds leading body \\f"
+            )
 
     def _wrap_current_row(self):
         if not self._current_wrap_hit_id or not self._current_wrap_path or not self._current_wrap_doc:
             QMessageBox.information(self, "Fix wrapping", "Select a search result first.")
             return
+
+        if self._wrap_mode() == "manual":
+            width = self._active_wrap_width()
+            font = self._wrap_font_value()
+            changed = wolf_ws.wrap_hit_manual(
+                self._current_wrap_path,
+                self._current_wrap_doc,
+                self._current_wrap_hit_id,
+                width,
+                font=font,
+            )
+            if self._current_wrap_hit:
+                self._remember_sheet_width(
+                    self._current_wrap_hit.sheet_name,
+                    width,
+                    self._current_wrap_hit.json_file,
+                )
+            path, doc, line = wolf_ws.load_hit_from_id(
+                self._translated_and_files_dirs()[0],
+                self._current_wrap_hit_id,
+                files_dir=self._translated_and_files_dirs()[1],
+                extra_dirs=self._wrap_search_extra_dirs(),
+            )
+            self._current_wrap_path = path
+            self._current_wrap_doc = doc
+            if line is not None:
+                text = str(line.get("text") or "")
+                self._current_wrap_text = text
+                self._sync_wrap_font_controls(text)
+            msg = (
+                f"Manual wrap at width {width}, body \\f[{font}]."
+                if changed
+                else "Line already fits (manual)."
+            )
+            self._wrap_status_label.setText(
+                msg + f" Inject {self._current_wrap_path.name} from Step 6."
+            )
+            self._log(f"{'✅' if changed else 'ℹ'}  {msg}")
+            self._update_wrap_preview()
+            return
+
+        # Relayout mode: single-line dazedwrap at cell width (names group uses wolf).
         width = self._wrap_width_spin.value()
-        line = wolf_ws.locate_line(self._current_wrap_doc, self._current_wrap_hit_id)
-        if line is not None:
-            line["text"] = self._wrap_text_editor.toPlainText()
+        if width <= 0:
+            QMessageBox.information(
+                self,
+                "Fix wrapping",
+                "Set Cell width to a positive value before wrapping a single line.\n"
+                "For names Relayout, use Wrap all in group (0 = JP auto).",
+            )
+            return
+        max_lines = self._wrap_max_lines_value()
         changed = wolf_ws.wrap_hit_in_file(
             self._current_wrap_path,
             self._current_wrap_doc,
@@ -2887,6 +3075,7 @@ class WolfWorkflowTab(QWidget):
                 self._current_wrap_hit.sheet_name,
                 width,
                 self._current_wrap_hit.json_file,
+                max_lines=max_lines or None,
             )
         path, doc, line = wolf_ws.load_hit_from_id(
             self._translated_and_files_dirs()[0],
@@ -2894,8 +3083,10 @@ class WolfWorkflowTab(QWidget):
             files_dir=self._translated_and_files_dirs()[1],
             extra_dirs=self._wrap_search_extra_dirs(),
         )
+        self._current_wrap_path = path
+        self._current_wrap_doc = doc
         if line is not None:
-            self._wrap_text_editor.setPlainText(str(line.get("text") or ""))
+            self._current_wrap_text = str(line.get("text") or "")
         msg = f"Wrapped line at width {width}." if changed else "Line already fits at this width."
         self._wrap_status_label.setText(msg + f" Inject {self._current_wrap_path.name} from Step 6.")
         self._log(f"{'✅' if changed else 'ℹ'}  {msg}")
@@ -2906,18 +3097,74 @@ class WolfWorkflowTab(QWidget):
         if not hit or not self._current_wrap_path or not self._current_wrap_doc:
             QMessageBox.information(self, "Fix wrapping", "Select a search result first.")
             return
+
+        if self._wrap_mode() == "manual":
+            width = self._active_wrap_width()
+            font = self._wrap_font_value()
+            count = wolf_ws.wrap_overflow_manual_in_scope(
+                self._current_wrap_path,
+                self._current_wrap_doc,
+                hit,
+                width,
+                font=font,
+            )
+            self._remember_sheet_width(hit.sheet_name, width, hit.json_file)
+            if hit.kind == "names":
+                roles_path = wolf_names.roles_json_path_for_names(self._current_wrap_path)
+                wolf_names.upsert_name_wrap_role(
+                    roles_path,
+                    hit.sheet_name,
+                    width=width,
+                    font=font,
+                )
+            scope = wolf_ws.scope_label(hit)
+            msg = (
+                f"Manual-wrapped {count} line(s) in {scope} "
+                f"(width {width}, body \\f[{font}])."
+            )
+            self._wrap_status_label.setText(msg + f" Inject {self._current_wrap_path.name}.")
+            self._log(f"✅ {msg}")
+            self._reload_wrap_hit_editor(hit, width)
+            return
+
+        if hit.kind == "names":
+            width = self._wrap_width_spin.value()
+            max_lines = self._wrap_max_lines_value()
+            self._run_names_wrap_on_path(
+                self._current_wrap_path,
+                note=hit.sheet_name,
+                hit=hit,
+                width=width if width > 0 else None,
+                lines=max_lines or None,
+                quiet=False,
+            )
+            return
+
         width = self._wrap_width_spin.value()
+        if width <= 0:
+            QMessageBox.information(
+                self,
+                "Fix wrapping",
+                "Set Cell width to a positive value (halfwidth cells) before wrapping.",
+            )
+            return
+        max_lines = self._wrap_max_lines_value()
         count = wolf_ws.wrap_overflow_in_scope(
             self._current_wrap_path,
             self._current_wrap_doc,
             hit,
             width,
         )
-        self._remember_sheet_width(hit.sheet_name, width, hit.json_file)
+        self._remember_sheet_width(
+            hit.sheet_name, width, hit.json_file, max_lines=max_lines or None
+        )
         scope = wolf_ws.scope_label(hit)
         msg = f"Wrapped {count} line(s) in {scope} at width {width}."
         self._wrap_status_label.setText(msg + f" Inject {self._current_wrap_path.name}.")
         self._log(f"✅ {msg}")
+        self._reload_wrap_hit_editor(hit, width)
+
+    def _reload_wrap_hit_editor(self, hit: wolf_ws.WrapHit, width: int):
         path, doc, line = wolf_ws.load_hit_from_id(
             self._translated_and_files_dirs()[0],
             hit.hit_id,
@@ -2927,12 +3174,91 @@ class WolfWorkflowTab(QWidget):
         self._current_wrap_path = path
         self._current_wrap_doc = doc
         if line is not None:
-            self._wrap_text_editor.setPlainText(str(line.get("text") or ""))
+            text = str(line.get("text") or "")
+            self._current_wrap_text = text
+            self._sync_wrap_font_controls(text)
         if doc is not None:
             self._wrap_detail_label.setText(
-                self._format_wrap_detail(hit, doc, self._wrap_text_editor.toPlainText(), width)
+                self._format_wrap_detail(
+                    hit, doc, self._current_wrap_line_text(), width
+                )
             )
         self._update_wrap_preview()
+
+    def _run_names_wrap_on_path(
+        self,
+        names_path: Path,
+        *,
+        note: str | None,
+        hit: wolf_ws.WrapHit | None = None,
+        width: int | None = None,
+        lines: int | None = None,
+        quiet: bool = False,
+    ):
+        persist_note = note
+        persist_width = width
+        persist_lines = lines
+
+        def task(log, progress=None):
+            if persist_note and (
+                (persist_width is not None and int(persist_width) > 0)
+                or (persist_lines is not None and int(persist_lines) > 0)
+            ):
+                roles_path = wolf_names.roles_json_path_for_names(names_path)
+                wolf_names.upsert_name_wrap_role(
+                    roles_path,
+                    persist_note,
+                    width=persist_width,
+                    max_lines=persist_lines,
+                )
+                log(
+                    f"Saved nameWraps rule for {persist_note} → {roles_path.name}"
+                    + (f" width={persist_width}" if persist_width else "")
+                    + (f" maxLines={persist_lines}" if persist_lines else "")
+                )
+                work = self._wolf_json_work_dir()
+                if work is not None and persist_width and int(persist_width) > 0:
+                    wolf_ws.set_sheet_width(
+                        work,
+                        persist_note,
+                        int(persist_width),
+                        json_file=NAMES_JSON,
+                        max_lines=persist_lines,
+                    )
+            ok, summary = wolf_names.apply_names_wrap(
+                names_path,
+                note=note,
+                width=width,
+                lines=lines,
+                dry_run=False,
+                log_fn=log,
+            )
+            if not ok:
+                return False, summary
+            self._sync_translated_json_to_wolf_json(NAMES_JSON, self._work_dir())
+            roles_src = wolf_names.roles_json_path_for_names(names_path)
+            if roles_src.is_file():
+                work = self._work_dir()
+                if work.is_dir():
+                    dest = work / roles_src.name
+                    try:
+                        if roles_src.resolve() != dest.resolve():
+                            shutil.copy2(roles_src, dest)
+                    except Exception:
+                        pass
+            return True, summary
+
+        def _after(ok: bool, summary: str):
+            if not ok:
+                return
+            if hit is not None:
+                self._reload_wrap_hit_editor(hit, self._active_wrap_width())
+            if not quiet and hasattr(self, "_wrap_status_label"):
+                self._wrap_status_label.setText(
+                    summary + " Re-inject names.json from Step 6."
+                )
+
+        self._run_task(task, on_done=_after)
 
     def _inject_current_wrap_file(self):
         hit = self._current_wrap_hit
@@ -3273,7 +3599,7 @@ class WolfWorkflowTab(QWidget):
 
         self._run_task(task)
 
-    def _run_names_wrap(self, *, manual: bool = False, dry_run: bool = False):
+    def _run_names_wrap(self, *, manual: bool = False, dry_run: bool = False, note: str | None = None):
         """Run ``wolf names-wrap`` on translated/names.json."""
         names_path = self._tool_root() / "translated" / NAMES_JSON
         if not names_path.is_file():
@@ -3286,21 +3612,46 @@ class WolfWorkflowTab(QWidget):
             )
             return
 
+        hit = (
+            self._current_wrap_hit
+            if self._current_wrap_hit is not None and self._current_wrap_hit.kind == "names"
+            else None
+        )
+        width = self._wrap_width_spin.value() if hasattr(self, "_wrap_width_spin") else 0
+        max_lines = self._wrap_max_lines_value()
+        wrap_width = width if width > 0 else None
+        wrap_lines = max_lines or None
+
         def task(log, progress=None):
+            if note and not dry_run and (wrap_width or wrap_lines):
+                roles_path = wolf_names.roles_json_path_for_names(names_path)
+                wolf_names.upsert_name_wrap_role(
+                    roles_path,
+                    note,
+                    width=wrap_width,
+                    max_lines=wrap_lines,
+                )
             ok, summary = wolf_names.apply_names_wrap(
                 names_path,
+                note=note,
+                width=wrap_width,
+                lines=wrap_lines,
                 dry_run=dry_run,
                 log_fn=log,
             )
             if not ok:
                 return False, f"names-wrap failed — {summary}"
-            if manual:
+            if manual and not dry_run:
                 self._sync_translated_json_to_wolf_json(NAMES_JSON, self._work_dir())
             return True, summary + (
                 "" if dry_run else " Re-inject names.json from Step 6 if needed."
             )
 
-        self._run_task(task)
+        def _after(ok: bool, _msg: str):
+            if ok and manual and not dry_run and hit is not None and hit.kind == "names":
+                self._reload_wrap_hit_editor(hit, self._active_wrap_width())
+
+        self._run_task(task, on_done=_after)
 
     # ── Step 5: Package ────────────────────────────────────────────────────────
 

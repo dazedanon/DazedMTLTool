@@ -130,6 +130,55 @@ class TestRelayoutWrappers(unittest.TestCase):
             wolfdawn.names_wrap("/tmp/names.json", dry_run=True)
         self.assertEqual(captured["args"], ["names-wrap", "/tmp/names.json", "--dry-run"])
 
+    def test_names_wrap_note_and_width(self):
+        captured = {}
+
+        def fake_run(args, log_fn=None):
+            captured["args"] = list(args)
+            return wolfdawn.WolfResult(0, "", "", [str(a) for a in args])
+
+        with patch.object(wolfdawn, "_run", side_effect=fake_run):
+            wolfdawn.names_wrap(
+                "/tmp/names.json",
+                note="├■街の噂（MOB）",
+                width=66,
+            )
+        self.assertEqual(
+            captured["args"],
+            ["names-wrap", "/tmp/names.json", "--width", "66", "--note", "├■街の噂（MOB）"],
+        )
+
+    def test_names_wrap_lines(self):
+        captured = {}
+
+        def fake_run(args, log_fn=None):
+            captured["args"] = list(args)
+            return wolfdawn.WolfResult(0, "", "", [str(a) for a in args])
+
+        with patch.object(wolfdawn, "_run", side_effect=fake_run):
+            wolfdawn.names_wrap("/tmp/names.json", width=50, lines=3, note="説明")
+        self.assertEqual(
+            captured["args"],
+            [
+                "names-wrap",
+                "/tmp/names.json",
+                "--width",
+                "50",
+                "--lines",
+                "3",
+                "--note",
+                "説明",
+            ],
+        )
+
+    def test_parse_names_wrap_shrink_count(self):
+        blob = (
+            '  shrunk to \\f[14] to fit its slot: "Hey! ..."\n'
+            '  shrunk to \\f[12] to fit its slot: "That sister..."\n'
+            "names-wrap: 7 entry(ies) re-wrapped"
+        )
+        self.assertEqual(wolfdawn.parse_names_wrap_shrink_count(blob), 2)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

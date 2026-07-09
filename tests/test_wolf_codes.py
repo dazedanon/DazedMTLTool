@@ -62,7 +62,8 @@ class WolfCodesRepairTests(unittest.TestCase):
     def test_apply_font_size_replaces_existing_codes(self):
         text = r"Go to the \c[21]\f[20]tavern\c[19]\f[18]!"
         new_text, count = wolf_codes.apply_font_size(text, 16)
-        self.assertEqual(count, 2)
+        self.assertEqual(count, 3)  # 2 replaced + leading body
+        self.assertTrue(new_text.startswith(r"\f[16]"))
         self.assertIn(r"\f[16]", new_text)
         self.assertNotIn(r"\f[20]", new_text)
         self.assertNotIn(r"\f[18]", new_text)
@@ -72,6 +73,81 @@ class WolfCodesRepairTests(unittest.TestCase):
         new_text, count = wolf_codes.apply_font_size(text, 18)
         self.assertEqual(count, 1)
         self.assertTrue(new_text.startswith(r"\f[18]"))
+
+    def test_infer_base_font_prefers_body_over_emphasis(self):
+        text = r"So they even take worries\nlike this in the\n\c[21]\f[20]confessional\c[19]\f[18]..."
+        self.assertEqual(wolf_codes.infer_base_font_size(text), 18)
+
+    def test_scale_font_sizes_keeps_emphasis_ratio(self):
+        text = (
+            r"So they even take worries\nlike this in the\n"
+            r"\c[21]\f[20]confessional\c[19]\f[18]..."
+        )
+        new_text, count = wolf_codes.scale_font_sizes(text, 14)
+        self.assertEqual(count, 3)  # 2 scaled + leading body insert
+        # 20 * 14/18 ≈ 15.56 → 16; 18 * 14/18 = 14
+        self.assertTrue(new_text.startswith(r"\f[14]"))
+        self.assertIn(r"\f[16]", new_text)
+        self.assertIn(r"\f[14]", new_text)
+        self.assertNotIn(r"\f[20]", new_text)
+        self.assertNotIn(r"\f[18]", new_text)
+
+    def test_scale_font_sizes_matches_names_wrap_style_shrink(self):
+        source_style = r"\c[21]\f[20]Brothel\c[19]\f[18] doesn't get much use"
+        new_text, _ = wolf_codes.scale_font_sizes(source_style, 17)
+        # 20*17/18 ≈ 18.89 → 19; body 17
+        self.assertTrue(new_text.startswith(r"\f[17]"))
+        self.assertIn(r"\f[19]", new_text)
+        self.assertIn(r"\f[17]", new_text)
+
+    def test_scale_font_sizes_leads_with_body_for_midline_emphasis(self):
+        # Cafe-style: body only appears after emphasis; Wolf needs \\f at start.
+        text = (
+            '"That \\c[21]\\f[14]cafe\\c[19]\\f[13] over there has been\n'
+            'packed lately." "Apparently\n'
+            "they're hiring waitresses.\""
+        )
+        new_text, count = wolf_codes.scale_font_sizes(text, 13)
+        self.assertGreaterEqual(count, 2)
+        self.assertTrue(new_text.startswith(r"\f[13]"))
+        self.assertIn(r"\c[21]\f[14]cafe\c[19]\f[13]", new_text)
+
+    def test_ensure_leading_font_size_idempotent(self):
+        text = r'\f[13]"That \c[21]\f[14]cafe\c[19]\f[13] over there"'
+        self.assertEqual(wolf_codes.ensure_leading_font_size(text, 13), text)
+
+    def test_apply_font_size_also_leads(self):
+        text = r'"That \c[21]\f[20]cafe\c[19]\f[18] over there"'
+        new_text, _ = wolf_codes.apply_font_size(text, 13)
+        self.assertTrue(new_text.startswith(r"\f[13]"))
+        self.assertNotIn(r"\f[20]", new_text)
+
+    def test_font_size_codes_differ_detects_names_wrap_shrink(self):
+        source = (
+            r"「おい！例の\c[21]\f[20]教会の特別奉仕活動\c[19]\f[18]があるってよ！」"
+        )
+        text = (
+            r'\f[14]"Hey! Apparently there\'s one of those '
+            r'\c[21]\f[16]Special Service Activities at the church\c[19]\f[14]!"'
+        )
+        self.assertTrue(wolf_codes.font_size_codes_differ(source, text))
+
+    def test_font_size_codes_differ_false_when_color_missing(self):
+        source = r"\c[21]\f[20]娼館\c[19]\f[18]"
+        text = r"\f[14]Brothel"  # dropped colour codes
+        self.assertFalse(wolf_codes.font_size_codes_differ(source, text))
+
+    def test_names_doc_has_font_size_drift(self):
+        doc = {
+            "kind": "names",
+            "names": [
+                {
+                    "source": r"\c[21]\f[20]娼館\c[19]\f[18]",
+                    "text": r"\f[14]\c[21]\f[16]Brothel\c[19]\f[14]",
+                }
+            ],
+        }
+        self.assertTrue(wolf_codes.names_doc_has_font_size_drift(doc))
 
 
 if __name__ == "__main__":

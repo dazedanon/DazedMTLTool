@@ -216,6 +216,8 @@ def _prepare_for_names_inject(
     originals_dir: Path,
     game_root: Path,
     log_fn: Callable[[str], None] | None = None,
+    *,
+    allow_code_drift: bool = False,
 ) -> str | None:
     """Restore live Data/ and ensure names-inject can match Japanese sources."""
     emit = log_fn or (lambda _msg: None)
@@ -227,7 +229,9 @@ def _prepare_for_names_inject(
             emit(f"  ⚠ {warning}")
 
     _restore()
-    would_apply = wolf_originals.names_inject_would_apply(names_src, data_dir)
+    would_apply = wolf_originals.names_inject_would_apply(
+        names_src, data_dir, allow_code_drift=allow_code_drift
+    )
     if wolfdawn.inject_had_applied(would_apply):
         return None
 
@@ -236,7 +240,9 @@ def _prepare_for_names_inject(
         game_root, originals_dir, force=True, log_fn=log_fn
     ):
         _restore()
-        would_apply = wolf_originals.names_inject_would_apply(names_src, data_dir)
+        would_apply = wolf_originals.names_inject_would_apply(
+            names_src, data_dir, allow_code_drift=allow_code_drift
+        )
         if wolfdawn.inject_had_applied(would_apply):
             emit(f"  ✓ ready — dry run would apply {would_apply} name change(s)")
             return None
@@ -253,7 +259,9 @@ def _inject_names(
     log_fn: Callable[[str], None] | None = None,
 ) -> FileInjectResult:
     emit = log_fn or (lambda _msg: None)
-    would_apply = wolf_originals.names_inject_would_apply(names_src, data_dir)
+    would_apply = wolf_originals.names_inject_would_apply(
+        names_src, data_dir, allow_code_drift=allow_code_drift
+    )
     if not wolfdawn.inject_had_applied(would_apply):
         return FileInjectResult(
             NAMES_JSON,
@@ -276,7 +284,9 @@ def _inject_names(
     if not result.success:
         return result
 
-    remaining = wolf_originals.names_inject_would_apply(names_src, data_dir)
+    remaining = wolf_originals.names_inject_would_apply(
+        names_src, data_dir, allow_code_drift=allow_code_drift
+    )
     if wolfdawn.inject_had_applied(remaining):
         result = FileInjectResult(
             NAMES_JSON,
@@ -401,6 +411,20 @@ def inject_selected(
     if NAMES_JSON in todo:
         emit("Preparing live Data/ for names.json…")
         names_src = translated_dir / NAMES_JSON
+        names_drift = allow_code_drift
+        if not names_drift:
+            try:
+                names_doc = json.loads(names_src.read_text(encoding="utf-8-sig"))
+            except Exception:
+                names_doc = None
+            if isinstance(names_doc, dict) and wolf_codes.names_doc_has_font_size_drift(
+                names_doc
+            ):
+                names_drift = True
+                emit(
+                    "  ℹ names-wrap changed \\f[N] sizes — "
+                    "passing --allow-code-drift for names-inject"
+                )
         prep_error = _prepare_for_names_inject(
             names_src,
             manifest_entries,
@@ -408,6 +432,7 @@ def inject_selected(
             originals_dir,
             game_root,
             log_fn=log_fn,
+            allow_code_drift=names_drift,
         )
         if prep_error:
             result = FileInjectResult(NAMES_JSON, False, prep_error)
@@ -419,7 +444,7 @@ def inject_selected(
             result = _inject_names(
                 names_src,
                 data_dir,
-                allow_code_drift=allow_code_drift,
+                allow_code_drift=names_drift,
                 en_punct=en_punct,
                 log_fn=log_fn,
             )

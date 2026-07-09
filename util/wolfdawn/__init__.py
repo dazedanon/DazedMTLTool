@@ -51,6 +51,7 @@ __all__ = [
     "names_check",
     "names_wrap",
     "parse_names_wrap_counts",
+    "parse_names_wrap_shrink_count",
     "relayout",
     "desc_relayout",
 ]
@@ -663,6 +664,7 @@ _NAMES_WRAP_WOULD_RE = re.compile(
 _NAMES_WRAP_APPLIED_RE = re.compile(
     r"(\d+)\s+entry\(ies\)\s+re-wrapped", re.IGNORECASE
 )
+_NAMES_WRAP_SHRUNK_RE = re.compile(r"shrunk to \\f\[(\d+)\]", re.IGNORECASE)
 
 
 def parse_names_wrap_counts(stdout: str, stderr: str = "") -> int | None:
@@ -675,18 +677,35 @@ def parse_names_wrap_counts(stdout: str, stderr: str = "") -> int | None:
     return None
 
 
+def parse_names_wrap_shrink_count(stdout: str, stderr: str = "") -> int:
+    """Return how many entries names-wrap shrunk with a leading ``\\f[N]``."""
+    blob = f"{stdout}\n{stderr}"
+    return len(_NAMES_WRAP_SHRUNK_RE.findall(blob))
+
+
 def names_wrap(
     names_json: PathLike,
     *,
+    width: int | None = None,
+    lines: int | None = None,
+    note: str | None = None,
     dry_run: bool = False,
     log_fn=None,
 ) -> WolfResult:
-    """``wolf names-wrap <names.json> [--dry-run]``.
+    """``wolf names-wrap <names.json> [--width N] [--lines N] [--note <category>] [--dry-run]``.
 
-    Re-wraps translated multi-line glossary entries to each category's
-    JP-measured width and line count. One-line names are never wrapped.
+    Re-wraps translated multi-line glossary entries to each category's slot
+    geometry (JP-measured, ``wolfdawn-roles.json`` overrides, or auto-expanded).
+    ``lines`` overrides each entry's JP line budget (``2+`` also wraps one-line
+    names). Entries that still overflow shrink via a leading ``\\f[N]``.
     """
     args = ["names-wrap", _str(names_json)]
+    if width is not None and int(width) > 0:
+        args += ["--width", str(int(width))]
+    if lines is not None and int(lines) > 0:
+        args += ["--lines", str(int(lines))]
+    if note:
+        args += ["--note", str(note)]
     if dry_run:
         args.append("--dry-run")
     return _run(args, log_fn=log_fn)

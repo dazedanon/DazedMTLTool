@@ -233,10 +233,16 @@ def collect_name_notes(data: dict[str, Any]) -> list[str]:
 def apply_names_wrap(
     names_path: PathLike,
     *,
+    note: str | None = None,
+    width: int | None = None,
+    lines: int | None = None,
     dry_run: bool = False,
     log_fn=None,
 ) -> tuple[bool, str]:
     """Run ``wolf names-wrap`` on one names.json file.
+
+    When *note* is set, only that category (``names[].note``) is processed.
+    Omit *width* / *lines* to measure slot geometry from JP text (recommended).
 
     Returns ``(ok, summary)``. *ok* is False only when the CLI exits with a hard
     error; overflow warnings still count as success.
@@ -248,7 +254,14 @@ def apply_names_wrap(
     if not path.is_file():
         return False, f"names.json not found: {path}"
 
-    res = wolfdawn.names_wrap(path, dry_run=dry_run, log_fn=None)
+    res = wolfdawn.names_wrap(
+        path,
+        note=note,
+        width=width,
+        lines=lines,
+        dry_run=dry_run,
+        log_fn=None,
+    )
     for line in (res.stdout or "").splitlines():
         line = line.strip()
         if line:
@@ -262,14 +275,104 @@ def apply_names_wrap(
         return False, f"names-wrap exited {res.returncode}"
 
     count = wolfdawn.parse_names_wrap_counts(res.stdout, res.stderr)
+    shrunk = wolfdawn.parse_names_wrap_shrink_count(res.stdout, res.stderr)
+    scope = f"category {note}" if note else "names.json"
+    parts: list[str] = []
     if dry_run:
-        summary = (
-            f"dry run: {count} entr{'y' if count == 1 else 'ies'} would be re-wrapped"
-            if count is not None
-            else "dry run complete"
-        )
+        if count is not None:
+            parts.append(
+                f"dry run: {count} entr{'y' if count == 1 else 'ies'} in {scope} "
+                "would be re-wrapped"
+            )
+        else:
+            parts.append(f"dry run complete for {scope}")
     elif count is not None:
-        summary = f"re-wrapped {count} entr{'y' if count == 1 else 'ies'}"
+        parts.append(
+            f"re-wrapped {count} entr{'y' if count == 1 else 'ies'} in {scope}"
+        )
     else:
-        summary = "names-wrap complete"
-    return True, summary
+        parts.append(f"names-wrap complete for {scope}")
+    if width is not None and int(width) > 0:
+        parts.append(f"width={int(width)}")
+    if lines is not None and int(lines) > 0:
+        parts.append(f"lines={int(lines)}")
+    if shrunk:
+        parts.append(f"{shrunk} shrunk with \\f[N]")
+    return True, "; ".join(parts)
+
+
+def roles_json_path_for_names(names_path: PathLike) -> Path:
+    """Return ``wolfdawn-roles.json`` beside *names_path* (WolfDawn looks there)."""
+    return Path(names_path).resolve().parent / "wolfdawn-roles.json"
+
+
+def load_name_wrap_roles(roles_path: PathLike) -> dict[str, Any]:
+    """Load ``wolfdawn-roles.json``, or an empty document."""
+    path = Path(roles_path)
+    if not path.is_file():
+        return {}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8-sig"))
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def get_name_wrap_role(roles: dict[str, Any], note: str) -> dict[str, Any] | None:
+    """Return the ``nameWraps`` entry matching *note*, if any."""
+    wraps = roles.get("nameWraps")
+    if not isinstance(wraps, list):
+        return None
+    for entry in wraps:
+        if not isinstance(entry, dict):
+            continue
+        entry_note = str(entry.get("note") or "")
+        if entry_note == note or (note and note in entry_note) or (entry_note and entry_note in note):
+            return entry
+    return None
+
+
+def upsert_name_wrap_role(
+    roles_path: PathLike,
+    note: str,
+    *,
+    width: int | None = None,
+    max_lines: int | None = None,
+    font: int | None = None,
+    min_font: int | None = None,
+) -> Path:
+    """Create/update a ``nameWraps`` rule for *note* in ``wolfdawn-roles.json``.
+
+    WolfDawn reads this file from the same directory as ``names.json``.
+    """
+    path = Path(roles_path)
+    data = load_name_wrap_roles(path)
+    wraps = data.get("nameWraps")
+    if not isinstance(wraps, list):
+        wraps = []
+        data["nameWraps"] = wraps
+
+    entry = None
+    for item in wraps:
+        if isinstance(item, dict) and str(item.get("note") or "") == note:
+            entry = item
+            break
+    if entry is None:
+        entry = {"note": note}
+        wraps.append(entry)
+
+    if width is not None and int(width) > 0:
+        entry["width"] = int(width)
+    if max_lines is not None and int(max_lines) > 0:
+        entry["maxLines"] = int(max_lines)
+    if font is not None and int(font) > 0:
+        entry["font"] = int(font)
+    if min_font is not None and int(min_font) > 0:
+        entry["minFont"] = int(min_font)
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(data, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    return path

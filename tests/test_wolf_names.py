@@ -127,5 +127,46 @@ class TestDeriveDbLabels(unittest.TestCase):
         self.assertEqual(wn.derive_db_labels(self.dir / "nope"), {})
 
 
+class TestNameWrapRoles(unittest.TestCase):
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.dir = Path(self._tmp.name)
+        self.names = self.dir / "names.json"
+        self.names.write_text("{}", encoding="utf-8")
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def test_roles_path_beside_names(self):
+        self.assertEqual(
+            wn.roles_json_path_for_names(self.names),
+            self.dir / "wolfdawn-roles.json",
+        )
+
+    def test_upsert_and_load_name_wrap_role(self):
+        roles_path = wn.roles_json_path_for_names(self.names)
+        wn.upsert_name_wrap_role(roles_path, "説明", width=48, max_lines=3)
+        roles = wn.load_name_wrap_roles(roles_path)
+        role = wn.get_name_wrap_role(roles, "説明")
+        self.assertIsNotNone(role)
+        assert role is not None
+        self.assertEqual(role["width"], 48)
+        self.assertEqual(role["maxLines"], 3)
+
+    def test_upsert_updates_existing_note(self):
+        roles_path = wn.roles_json_path_for_names(self.names)
+        wn.upsert_name_wrap_role(roles_path, "説明", width=40)
+        wn.upsert_name_wrap_role(roles_path, "説明", width=52, max_lines=4)
+        role = wn.get_name_wrap_role(wn.load_name_wrap_roles(roles_path), "説明")
+        self.assertEqual(role["width"], 52)
+        self.assertEqual(role["maxLines"], 4)
+
+    def test_upsert_persists_font(self):
+        roles_path = wn.roles_json_path_for_names(self.names)
+        wn.upsert_name_wrap_role(roles_path, "説明", width=40, font=14)
+        role = wn.get_name_wrap_role(wn.load_name_wrap_roles(roles_path), "説明")
+        self.assertEqual(role["font"], 14)
+
+
 if __name__ == "__main__":
     unittest.main()
