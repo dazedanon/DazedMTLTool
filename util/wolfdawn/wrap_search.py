@@ -633,6 +633,110 @@ def wrap_line_in_doc(line: dict[str, Any], width: int) -> bool:
     return True
 
 
+def count_soft_lines(text: str) -> int:
+    """Number of soft-wrapped lines in *text* (at least 1 for non-empty)."""
+    if not isinstance(text, str) or not text:
+        return 0
+    norm = text.replace("\r\n", "\n").replace("\r", "\n")
+    return max(1, len(norm.split("\n")))
+
+
+def fit_text_to_box(
+    text: str,
+    width: int,
+    *,
+    max_lines: int | None = None,
+    min_font: int = 8,
+    box_font: int | None = None,
+) -> tuple[str, bool]:
+    """Reflow *text* to *width*, then shrink ``\\f[N]`` until it fits *max_lines*.
+
+    Used by Relayout for DB / dialogue sheets. ``max_lines`` ``None``/``0`` means
+    wrap only (no font shrink).
+
+    Wolf message boxes are a fixed pixel width. Shrinking ``\\f[N]`` lets more
+    halfwidth cells fit on a line, so each shrink pass reflows at
+    ``round(width * box_font / current_font)`` (same idea as ``wolf relayout`` /
+    ``desc-relayout``). *box_font* defaults to the text's current body size
+    (or 18 when there is no ``\\f`` yet).
+    """
+    from util.wolfdawn import codes as wolf_codes
+
+    if not isinstance(text, str) or not text.strip() or width <= 0:
+        return text if isinstance(text, str) else "", False
+
+    limit = int(max_lines) if max_lines is not None else 0
+    sizes = wolf_codes.detect_font_sizes(text)
+    if box_font is not None and int(box_font) > 0:
+        native = int(box_font)
+    elif sizes:
+        native = wolf_codes.infer_base_font_size(text)
+    else:
+        native = 18
+    native = max(1, native)
+    min_font = max(1, int(min_font))
+
+    def _effective_width(current_font: int) -> int:
+        cur = max(1, int(current_font))
+        return max(1, int(round(width * native / cur)))
+
+    current = wolf_codes.infer_base_font_size(text, default=native) if sizes else native
+    new_text = wrap_line_text(text, _effective_width(current) if sizes else width)
+    if limit <= 0:
+        return new_text, new_text != text
+
+    # No \\f yet and already over budget: introduce the native body size first.
+    if not sizes and count_soft_lines(new_text) > limit:
+        new_text, _ = wolf_codes.scale_font_sizes(new_text, native)
+        current = native
+        new_text = wrap_line_text(new_text, _effective_width(current))
+
+    guard = 0
+    while count_soft_lines(new_text) > limit and guard < 64:
+        guard += 1
+        current = wolf_codes.infer_base_font_size(new_text, default=current)
+        if current <= min_font:
+            break
+        target = current - 1
+        new_text, _ = wolf_codes.scale_font_sizes(new_text, target)
+        current = target
+        new_text = wrap_line_text(new_text, _effective_width(current))
+
+    return new_text, new_text != text
+
+
+def apply_relayout_to_line_dict(
+    line: dict[str, Any],
+    width: int,
+    *,
+    max_lines: int | None = None,
+    min_font: int = 8,
+    box_font: int | None = None,
+) -> bool:
+    """Apply Relayout fit to one ``{text}`` leaf. Returns True if changed."""
+    from util.wolfdawn import codes as wolf_codes
+
+    text = line.get("text")
+    if not isinstance(text, str) or not text.strip() or width <= 0:
+        return False
+    native = box_font
+    if native is None:
+        source = line.get("source")
+        if isinstance(source, str) and wolf_codes.detect_font_sizes(source):
+            native = wolf_codes.infer_base_font_size(source)
+    new_text, changed = fit_text_to_box(
+        text,
+        width,
+        max_lines=max_lines,
+        min_font=min_font,
+        box_font=native,
+    )
+    if not changed:
+        return False
+    line["text"] = new_text
+    return True
+
+
 def apply_manual_font_and_wrap(
     text: str,
     width: int,
@@ -925,7 +1029,24 @@ def scope_stats(
     return ScopeStats(label=scope_label(hit), total=total, overflow=overflow)
 
 
-def _wrap_overflow_in_event_file(path: Path, doc: dict[str, Any], width: int) -> int:
+def _line_needs_relayout(text: str, width: int, max_lines: int | None) -> bool:
+    """True if width wrap or max-lines fit would change *text*."""
+    if line_needs_wrap(text, width):
+        return True
+    limit = int(max_lines) if max_lines is not None else 0
+    if limit <= 0:
+        return False
+    wrapped = wrap_line_text(text, width)
+    return count_soft_lines(wrapped) > limit or wrapped != text
+
+
+def _wrap_overflow_in_event_file(
+    path: Path,
+    doc: dict[str, Any],
+    width: int,
+    *,
+    max_lines: int | None = None,
+) -> int:
     """Wrap overflowing dialogue lines in one map or CommonEvent JSON file."""
     if doc.get("kind") not in ("map", "common"):
         return 0
@@ -935,16 +1056,22 @@ def _wrap_overflow_in_event_file(path: Path, doc: dict[str, Any], width: int) ->
             text = line.get("text")
             if not isinstance(text, str) or not text.strip():
                 continue
-            if not line_needs_wrap(text, width):
+            if not _line_needs_relayout(text, width, max_lines):
                 continue
-            if wrap_line_in_doc(line, width):
+            if apply_relayout_to_line_dict(line, width, max_lines=max_lines):
                 changed += 1
     if changed:
         save_document(path, doc)
     return changed
 
 
-def _wrap_overflow_in_gamedat(path: Path, doc: dict[str, Any], width: int) -> int:
+def _wrap_overflow_in_gamedat(
+    path: Path,
+    doc: dict[str, Any],
+    width: int,
+    *,
+    max_lines: int | None = None,
+) -> int:
     if doc.get("kind") != "gamedat":
         return 0
     changed = 0
@@ -954,9 +1081,9 @@ def _wrap_overflow_in_gamedat(path: Path, doc: dict[str, Any], width: int) -> in
         text = line.get("text")
         if not isinstance(text, str) or not text.strip():
             continue
-        if not line_needs_wrap(text, width):
+        if not _line_needs_relayout(text, width, max_lines):
             continue
-        if wrap_line_in_doc(line, width):
+        if apply_relayout_to_line_dict(line, width, max_lines=max_lines):
             changed += 1
     if changed:
         save_document(path, doc)
@@ -968,8 +1095,15 @@ def wrap_overflow_in_scope(
     doc: dict[str, Any],
     hit: WrapHit | dict[str, Any],
     width: int,
+    *,
+    max_lines: int | None = None,
 ) -> int:
-    """Wrap every overflowing line in the same group as *hit*."""
+    """Wrap overflowing lines in the same group/file as *hit*.
+
+    For DB / map / common / gamedat, *max_lines* also shrinks ``\\f[N]`` until
+    the soft line count fits (Relayout). Names categories ignore *max_lines*
+    here - use ``wolf names-wrap`` via the GUI instead.
+    """
     if isinstance(hit, WrapHit):
         kind, sheet_name = hit.kind, hit.sheet_name
     else:
@@ -979,11 +1113,13 @@ def wrap_overflow_in_scope(
     if kind == "names":
         return _wrap_overflow_in_names_category(path, doc, sheet_name, width)
     if kind == "db":
-        return wrap_overflow_in_sheet(path, doc, sheet_name, width, kind="db")
+        return wrap_overflow_in_sheet(
+            path, doc, sheet_name, width, kind="db", max_lines=max_lines
+        )
     if kind in ("map", "common"):
-        return _wrap_overflow_in_event_file(path, doc, width)
+        return _wrap_overflow_in_event_file(path, doc, width, max_lines=max_lines)
     if kind == "gamedat":
-        return _wrap_overflow_in_gamedat(path, doc, width)
+        return _wrap_overflow_in_gamedat(path, doc, width, max_lines=max_lines)
     return 0
 
 
@@ -992,11 +1128,14 @@ def wrap_hit_in_file(
     doc: dict[str, Any],
     hit_id: dict[str, Any],
     width: int,
+    *,
+    max_lines: int | None = None,
 ) -> bool:
+    """Relayout one hit line (wrap + optional max-lines font shrink)."""
     line = locate_line(doc, hit_id)
     if line is None:
         return False
-    if not wrap_line_in_doc(line, width):
+    if not apply_relayout_to_line_dict(line, width, max_lines=max_lines):
         return False
     save_document(path, doc)
     return True
@@ -1009,6 +1148,7 @@ def wrap_overflow_in_sheet(
     width: int,
     *,
     kind: str | None = None,
+    max_lines: int | None = None,
 ) -> int:
     """Wrap every overflowing line in one DB sheet or names.json category."""
     doc_kind = kind or doc.get("kind")
@@ -1024,9 +1164,9 @@ def wrap_overflow_in_sheet(
             text = line.get("text")
             if not isinstance(text, str) or not text.strip():
                 continue
-            if not line_needs_wrap(text, width):
+            if not _line_needs_relayout(text, width, max_lines):
                 continue
-            if wrap_line_in_doc(line, width):
+            if apply_relayout_to_line_dict(line, width, max_lines=max_lines):
                 changed += 1
     if changed:
         save_document(path, doc)

@@ -281,5 +281,97 @@ class TestEventScopeWrap(unittest.TestCase):
             self.assertEqual(ws.wrap_overflow_in_scope(path, doc, hit, 34), 1)
 
 
+class TestFitTextToBox(unittest.TestCase):
+    """DB Relayout: wrap + font shrink until soft line count fits."""
+
+    RUMOR = (
+        '\\f[14]"I heard there\'s a super hot female adventurer who\n'
+        "came to town recently!? Maybe I'll catch a glimpse\n"
+        'of her at the \\c[21]\\f[15]tavern\\c[19]\\f[14]!"'
+    )
+
+    def test_count_soft_lines(self):
+        self.assertEqual(ws.count_soft_lines("a\nb\nc"), 3)
+        self.assertEqual(ws.count_soft_lines("one line"), 1)
+        self.assertEqual(ws.count_soft_lines(""), 0)
+
+    def test_max_lines_zero_wraps_only(self):
+        fitted, changed = ws.fit_text_to_box(self.RUMOR, 44, max_lines=0)
+        self.assertTrue(changed)
+        self.assertEqual(ws.count_soft_lines(fitted), 3)
+        self.assertIn(r"\f[14]", fitted)
+
+    def test_max_lines_shrinks_font_and_fits(self):
+        fitted, changed = ws.fit_text_to_box(self.RUMOR, 44, max_lines=2)
+        self.assertTrue(changed)
+        self.assertLessEqual(ws.count_soft_lines(fitted), 2)
+        from util.wolfdawn import codes as wolf_codes
+
+        self.assertLess(wolf_codes.infer_base_font_size(fitted), 14)
+        self.assertIn("tavern", fitted)
+
+    def test_box_font_from_jp_source_scales_width(self):
+        """Native box px from JP source lets more cells fit when \\f shrinks."""
+        from util.wolfdawn import codes as wolf_codes
+
+        fitted, changed = ws.fit_text_to_box(
+            self.RUMOR, 44, max_lines=2, box_font=18
+        )
+        self.assertTrue(changed)
+        self.assertLessEqual(ws.count_soft_lines(fitted), 2)
+        # With box_font=18, body can stay larger than when native=14.
+        self.assertGreaterEqual(wolf_codes.infer_base_font_size(fitted), 12)
+        fitted2, changed2 = ws.fit_text_to_box(
+            fitted, 44, max_lines=2, box_font=18
+        )
+        self.assertFalse(changed2)
+        self.assertEqual(fitted2, fitted)
+
+    def test_wrap_hit_in_file_honors_max_lines(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "DataBase.project.json"
+            source = (
+                "「最近町に来た女冒険者が激マブらしいぞ！？\n"
+                "　\\c[21]\\f[20]酒場\\c[19]\\f[18]に行ったら会えるかな！」"
+            )
+            doc = {
+                "kind": "db",
+                "file": "DataBase.project",
+                "groups": [
+                    {
+                        "typeName": RUMOR_SHEET,
+                        "lines": [
+                            {
+                                "row": 21,
+                                "field": 25,
+                                "fieldName": GATEKEEPER_FIELD,
+                                "source": source,
+                                "text": self.RUMOR,
+                            }
+                        ],
+                    }
+                ],
+            }
+            path.write_text(json.dumps(doc, ensure_ascii=False), encoding="utf-8")
+            hit_id = {
+                "kind": "db",
+                "sheet_name": RUMOR_SHEET,
+                "row": 21,
+                "field_name": GATEKEEPER_FIELD,
+            }
+            self.assertTrue(
+                ws.wrap_hit_in_file(path, doc, hit_id, 44, max_lines=2)
+            )
+            line = ws.locate_line(doc, hit_id)
+            self.assertIsNotNone(line)
+            self.assertLessEqual(ws.count_soft_lines(str(line["text"])), 2)
+            from util.wolfdawn import codes as wolf_codes
+
+            # JP body is \\f[18]; shrink should land near 12, not floor at 8.
+            self.assertGreaterEqual(
+                wolf_codes.infer_base_font_size(str(line["text"])), 12
+            )
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -94,6 +94,7 @@ from util.wolfdawn import names as wolf_names
 from util.wolfdawn import codes as wolf_codes
 from util.wolfdawn import db_classify as wolf_db
 from util.wolfdawn import wrap_search as wolf_ws
+import util.dazedwrap as dazedwrap
 
 from util.paths import PROJECT_ROOT
 from util.project_scanner import (
@@ -2667,7 +2668,8 @@ class WolfWorkflowTab(QWidget):
         idx = self._wrap_mode_combo.findData(saved_mode)
         self._wrap_mode_combo.setCurrentIndex(idx if idx >= 0 else 0)
         self._wrap_mode_combo.setToolTip(
-            "Relayout: wolf names-wrap / JP slot geometry (cell width + max lines).\n"
+            "Relayout: names use wolf names-wrap; DB/dialogue wrap to cell width "
+            "and shrink \\f[N] to fit Max lines.\n"
             "Manual: force wrap width and body font; emphasis \\f[N] scales with the body."
         )
         self._wrap_mode_combo.currentIndexChanged.connect(self._on_wrap_mode_changed)
@@ -2706,8 +2708,10 @@ class WolfWorkflowTab(QWidget):
             self._wrap_max_lines_spin.setValue(0)
         self._wrap_max_lines_spin.setFixedWidth(70)
         self._wrap_max_lines_spin.setToolTip(
-            "wolf names-wrap --lines (0 = each entry's JP line count). "
-            "Saved as maxLines in wolfdawn-roles.json."
+            "Max soft lines after Relayout. For names: wolf names-wrap --lines "
+            "(0 = each entry's JP line count). For DB/dialogue: wrap to width, "
+            "then shrink \\f[N] until the line count fits. "
+            "Saved per sheet in wolfdawn-roles.json."
         )
         self._wrap_max_lines_spin.valueChanged.connect(self._on_wrap_max_lines_changed)
         relayout_row.addWidget(w_lbl)
@@ -3081,19 +3085,60 @@ class WolfWorkflowTab(QWidget):
             text = self._current_wrap_hit.text
         width = self._active_wrap_width()
         body_font = self._wrap_font_value() if self._wrap_mode() == "manual" else None
-        # Manual mode: preview the scaled fonts Wrap would write (document unchanged).
+        # Manual: preview scaled fonts. Relayout + max lines: preview fit-to-box.
         preview_src = text
+        preview_width = width
         if body_font is not None and preview_src.strip():
             preview_src, _ = wolf_codes.scale_font_sizes(preview_src, body_font)
-        summary = wolf_ws.wrap_preview_summary(preview_src, width)
+        elif self._wrap_mode() == "relayout" and width > 0:
+            max_lines = self._wrap_max_lines_value()
+            if max_lines > 0 and preview_src.strip():
+                box_font = None
+                line = None
+                if self._current_wrap_doc and self._current_wrap_hit_id:
+                    line = wolf_ws.locate_line(
+                        self._current_wrap_doc, self._current_wrap_hit_id
+                    )
+                if isinstance(line, dict):
+                    source = line.get("source")
+                    if isinstance(source, str) and wolf_codes.detect_font_sizes(source):
+                        box_font = wolf_codes.infer_base_font_size(source)
+                preview_src, _ = wolf_ws.fit_text_to_box(
+                    preview_src, width, max_lines=max_lines, box_font=box_font
+                )
+                # Soft breaks are already final; don't reflow at the narrow cell width.
+                preview_width = max(
+                    width,
+                    dazedwrap.max_line_visible_length(preview_src),
+                )
+        summary = wolf_ws.wrap_preview_summary(preview_src, preview_width)
         preview_html = wolf_ws.format_wrap_preview_html(
-            text, width, body_font=body_font
+            preview_src if self._wrap_mode() == "relayout" else text,
+            preview_width,
+            body_font=body_font,
         )
-        info = wolf_ws.wrap_preview_info(preview_src, width)
+        info = wolf_ws.wrap_preview_info(preview_src, preview_width)
         if hasattr(self, "_wrap_preview_label"):
             if summary:
+                soft = wolf_ws.count_soft_lines(preview_src)
+                max_lines = self._wrap_max_lines_value()
+                if (
+                    self._wrap_mode() == "relayout"
+                    and max_lines > 0
+                    and soft > 0
+                ):
+                    summary = f"{summary}  ·  {soft}/{max_lines} soft lines"
                 self._wrap_preview_label.setText(summary)
-                color = "#ce9178" if info.get("needs_wrap") else "#8fbc8f"
+                over_lines = (
+                    self._wrap_mode() == "relayout"
+                    and max_lines > 0
+                    and soft > max_lines
+                )
+                color = (
+                    "#ce9178"
+                    if info.get("needs_wrap") or over_lines
+                    else "#8fbc8f"
+                )
                 self._wrap_preview_label.setStyleSheet(
                     f"color:{color};font-size:11px;background:transparent;"
                 )
@@ -3103,7 +3148,11 @@ class WolfWorkflowTab(QWidget):
                     "color:#858585;font-size:11px;background:transparent;"
                 )
         self._wrap_preview.setHtml(preview_html)
-        border = "#ce9178" if info.get("needs_wrap") else "#007acc"
+        over_lines = False
+        if self._wrap_mode() == "relayout":
+            max_lines = self._wrap_max_lines_value()
+            over_lines = max_lines > 0 and wolf_ws.count_soft_lines(preview_src) > max_lines
+        border = "#ce9178" if info.get("needs_wrap") or over_lines else "#007acc"
         self._wrap_preview.setStyleSheet(
             "QTextEdit{background-color:#1e1e1e;color:#d4d4d4;border:1px solid #3c3c3c;"
             f"border-left:3px solid {border};padding:6px;}}"
@@ -3284,6 +3333,7 @@ class WolfWorkflowTab(QWidget):
             self._current_wrap_doc,
             self._current_wrap_hit_id,
             width,
+            max_lines=max_lines or None,
         )
         if self._current_wrap_hit:
             self._remember_sheet_width(
@@ -3302,7 +3352,19 @@ class WolfWorkflowTab(QWidget):
         self._current_wrap_doc = doc
         if line is not None:
             self._current_wrap_text = str(line.get("text") or "")
-        msg = f"Wrapped line at width {width}." if changed else "Line already fits at this width."
+        if changed:
+            if max_lines > 0:
+                msg = (
+                    f"Relayout at width {width}, max {max_lines} line(s) "
+                    f"(shrink \\f if needed)."
+                )
+            else:
+                msg = f"Wrapped line at width {width}."
+        else:
+            msg = (
+                f"Already fits width {width}"
+                + (f" / {max_lines} line(s)." if max_lines > 0 else ".")
+            )
         self._wrap_status_label.setText(msg + " Inject all from Step 7 when ready.")
         self._log(f"{'✅' if changed else 'ℹ'}  {msg}")
         self._update_wrap_preview()
@@ -3374,12 +3436,19 @@ class WolfWorkflowTab(QWidget):
             self._current_wrap_doc,
             hit,
             width,
+            max_lines=max_lines or None,
         )
         self._remember_sheet_width(
             hit.sheet_name, width, hit.json_file, max_lines=max_lines or None
         )
         scope = wolf_ws.scope_label(hit)
-        msg = f"Wrapped {count} line(s) in {scope} at width {width}."
+        if max_lines > 0:
+            msg = (
+                f"Relayout {count} line(s) in {scope} "
+                f"(width {width}, max {max_lines} lines)."
+            )
+        else:
+            msg = f"Wrapped {count} line(s) in {scope} at width {width}."
         self._wrap_status_label.setText(msg + " Inject all from Step 7 when ready.")
         self._log(f"✅ {msg}")
         self._reload_wrap_hit_editor(hit, width)
