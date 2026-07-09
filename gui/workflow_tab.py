@@ -1716,7 +1716,9 @@ class WorkflowTab(QWidget):
         tc_inner.setSpacing(4)
         tc_desc = QLabel(
             "Copies everything from the <code>gameupdate/</code> folder "
-            "into the game\'s root folder, overwriting existing files."
+            "into the game\'s root folder, overwriting existing files. "
+            "Writes <code>patch-config.txt</code> from Config → Game Update defaults "
+            "(set your org once there; edit <code>repo=</code> per game)."
         )
         tc_desc.setTextFormat(Qt.RichText)
         tc_desc.setWordWrap(True)
@@ -4612,6 +4614,16 @@ class WorkflowTab(QWidget):
         self._worker = w
         w.start()
 
+    def _write_gameupdate_patch_config(self, game_root: str):
+        """Write gameupdate/patch-config.txt from Config → Game Update defaults."""
+        from util.gameupdate_config import write_patch_config
+
+        ok, msg = write_patch_config(game_root)
+        if ok:
+            self._log(f"📝 Wrote patch-config.txt from Config defaults → {msg}")
+        else:
+            self._log(f"ℹ  patch-config.txt: {msg}")
+
     def _run_gameupdate(self):
         src = self.pp_gameupdate_edit.text().strip()
         dst = self.folder_edit.text().strip()
@@ -4634,6 +4646,9 @@ class WorkflowTab(QWidget):
         self._log(f"✅ gameupdate: copied {count} file(s).")
         for e in errors:
             self._log(f"   ⚠  {e}")
+        dst = self.folder_edit.text().strip()
+        if dst and not errors:
+            self._write_gameupdate_patch_config(dst)
 
     def _run_all_preprocess(self):
         """Launch all three pre-process tasks in sequence, chaining via signals."""
@@ -4688,6 +4703,8 @@ class WorkflowTab(QWidget):
                     self._log(f"✅ gameupdate: copied {count} file(s).")
                     for e in errors:
                         self._log(f"   ⚠  {e}")
+                    if not errors and game_root_dst:
+                        self._write_gameupdate_patch_config(game_root_dst)
                     run_next(rest)
                 worker.done.connect(on_copy_done)
             else:

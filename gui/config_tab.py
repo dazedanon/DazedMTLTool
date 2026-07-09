@@ -585,6 +585,62 @@ class ConfigTab(QWidget):
         ui_form.addRow(font_scale_label, self.font_scale_spin)
 
         right_column.addLayout(ui_form)
+
+        # Game Update defaults (written into gameupdate/patch-config.txt on copy)
+        right_column.addWidget(create_section_header("📦 Game Update Defaults"))
+        gu_form = QFormLayout()
+        gu_form.setSpacing(6)
+        gu_form.setContentsMargins(0, 0, 0, 12)
+        gu_form.setFieldGrowthPolicy(QFormLayout.FieldsStayAtSizeHint)
+        gu_form.setLabelAlignment(Qt.AlignRight | Qt.AlignVCenter)
+
+        def _gu_label(text: str) -> QLabel:
+            lbl = QLabel(text)
+            lbl.setFixedWidth(150)
+            lbl.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            return lbl
+
+        self.gu_forge_combo = QComboBox()
+        self.gu_forge_combo.addItem("GitLab / gitgud", "gitlab")
+        self.gu_forge_combo.addItem("GitHub", "github")
+        self.gu_forge_combo.addItem("Forgejo / Gitea", "forgejo")
+        self.gu_forge_combo.setFixedWidth(220)
+        self.gu_forge_combo.setToolTip(
+            "Where your patch repos live. Used when Step 1 writes patch-config.txt."
+        )
+        self.gu_forge_combo.currentIndexChanged.connect(self._on_gu_forge_changed)
+        gu_form.addRow(_gu_label("Forge:"), self.gu_forge_combo)
+
+        self.gu_host_edit = QLineEdit()
+        self.gu_host_edit.setFixedWidth(220)
+        self.gu_host_edit.setPlaceholderText("gitgud.io")
+        self.gu_host_edit.setToolTip(
+            "Hostname only (no https://). Leave blank to use the forge default."
+        )
+        gu_form.addRow(_gu_label("Host:"), self.gu_host_edit)
+
+        self.gu_username_edit = QLineEdit()
+        self.gu_username_edit.setFixedWidth(220)
+        self.gu_username_edit.setPlaceholderText("your-org-or-user")
+        self.gu_username_edit.setToolTip(
+            "Owner / org / group for all patch repos. Set once; rarely changes."
+        )
+        gu_form.addRow(_gu_label("Org / username:"), self.gu_username_edit)
+
+        self.gu_branch_edit = QLineEdit()
+        self.gu_branch_edit.setFixedWidth(220)
+        self.gu_branch_edit.setPlaceholderText("main")
+        self.gu_branch_edit.setToolTip("Default branch to track (usually main or master).")
+        gu_form.addRow(_gu_label("Branch:"), self.gu_branch_edit)
+
+        gu_hint = QLabel(
+            "Copied into each game's gameupdate/patch-config.txt when you run "
+            "Copy gameupdate/ (repo= is still per-game)."
+        )
+        gu_hint.setWordWrap(True)
+        gu_hint.setStyleSheet("color:#7a7a7a;font-size:11px;")
+        right_column.addLayout(gu_form)
+        right_column.addWidget(gu_hint)
         right_column.addStretch()
         
         # Add columns to layout
@@ -725,7 +781,39 @@ class ConfigTab(QWidget):
 
         # UI settings
         self.font_scale_spin.setValue(float(_get("font_scale", "1.0")))
-        
+
+        # Game Update defaults
+        from util.gameupdate_config import (
+            DEFAULT_BRANCH,
+            DEFAULT_FORGE,
+            default_host_for_forge,
+            normalize_forge,
+        )
+
+        forge = normalize_forge(_get("gameUpdateForge", DEFAULT_FORGE))
+        forge_idx = self.gu_forge_combo.findData(forge)
+        self.gu_forge_combo.setCurrentIndex(forge_idx if forge_idx >= 0 else 0)
+        host = _get("gameUpdateHost", "") or default_host_for_forge(forge)
+        self.gu_host_edit.setText(host)
+        self.gu_username_edit.setText(_get("gameUpdateUsername", ""))
+        self.gu_branch_edit.setText(_get("gameUpdateBranch", DEFAULT_BRANCH) or DEFAULT_BRANCH)
+
+    def _on_gu_forge_changed(self, _index: int = 0):
+        """Fill host with the forge default when the user switches forge."""
+        from util.gameupdate_config import default_host_for_forge
+
+        forge = self.gu_forge_combo.currentData() or "gitlab"
+        current = self.gu_host_edit.text().strip()
+        defaults = {
+            "gitgud.io",
+            "gitlab.com",
+            "github.com",
+            "codeberg.org",
+            "",
+        }
+        if current.lower() in defaults:
+            self.gu_host_edit.setText(default_host_for_forge(str(forge)))
+
     def connect_auto_save(self):
         """Connect all widgets to auto-save on change."""
         # Text fields - use editingFinished to avoid saving on every keystroke
@@ -750,6 +838,10 @@ class ConfigTab(QWidget):
         self.input_cost_spin.editingFinished.connect(self.auto_save)
         self.output_cost_spin.editingFinished.connect(self.auto_save)
         self.font_scale_spin.editingFinished.connect(self.auto_save)
+        self.gu_forge_combo.currentIndexChanged.connect(self.auto_save)
+        self.gu_host_edit.editingFinished.connect(self.auto_save)
+        self.gu_username_edit.editingFinished.connect(self.auto_save)
+        self.gu_branch_edit.editingFinished.connect(self.auto_save)
     
     def disconnect_auto_save(self):
         """Disconnect all widgets from auto-save."""
@@ -770,6 +862,10 @@ class ConfigTab(QWidget):
             self.input_cost_spin.editingFinished.disconnect(self.auto_save)
             self.output_cost_spin.editingFinished.disconnect(self.auto_save)
             self.font_scale_spin.editingFinished.disconnect(self.auto_save)
+            self.gu_forge_combo.currentIndexChanged.disconnect(self.auto_save)
+            self.gu_host_edit.editingFinished.disconnect(self.auto_save)
+            self.gu_username_edit.editingFinished.disconnect(self.auto_save)
+            self.gu_branch_edit.editingFinished.disconnect(self.auto_save)
         except (TypeError, RuntimeError):
             pass
     
@@ -808,6 +904,10 @@ class ConfigTab(QWidget):
                 "input_cost": str(self.input_cost_spin.value()),
                 "output_cost": str(self.output_cost_spin.value()),
                 "font_scale": str(self.font_scale_spin.value()),
+                "gameUpdateForge": str(self.gu_forge_combo.currentData() or "gitlab"),
+                "gameUpdateHost": self.gu_host_edit.text().strip(),
+                "gameUpdateUsername": self.gu_username_edit.text().strip(),
+                "gameUpdateBranch": self.gu_branch_edit.text().strip() or "main",
             }
             
             # Save to .env file and update os.environ so subprocesses inherit new values
@@ -867,6 +967,15 @@ class ConfigTab(QWidget):
 
         # UI settings
         self.font_scale_spin.setValue(1.0)
+
+        # Game Update defaults
+        from util.gameupdate_config import DEFAULT_BRANCH, DEFAULT_FORGE, DEFAULT_HOST
+
+        forge_idx = self.gu_forge_combo.findData(DEFAULT_FORGE)
+        self.gu_forge_combo.setCurrentIndex(forge_idx if forge_idx >= 0 else 0)
+        self.gu_host_edit.setText(DEFAULT_HOST)
+        self.gu_username_edit.clear()
+        self.gu_branch_edit.setText(DEFAULT_BRANCH)
         
         self.connect_auto_save()
     
@@ -902,6 +1011,10 @@ class ConfigTab(QWidget):
             "input_cost": self.input_cost_spin.value(),
             "output_cost": self.output_cost_spin.value(),
             "font_scale": self.font_scale_spin.value(),
+            "gameUpdateForge": str(self.gu_forge_combo.currentData() or "gitlab"),
+            "gameUpdateHost": self.gu_host_edit.text().strip(),
+            "gameUpdateUsername": self.gu_username_edit.text().strip(),
+            "gameUpdateBranch": self.gu_branch_edit.text().strip() or "main",
         }
         
     def validate(self):

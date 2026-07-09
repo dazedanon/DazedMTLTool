@@ -21,6 +21,7 @@
 !.gitignore
 !README.md
 !patch-config.txt
+!patch-config.example.txt
 !GameUpdate*
 !patch*
 !Game.dat
@@ -29,6 +30,8 @@
 !package.nw
 !SRPG_Unpacker.exe
 !(SRPG_Unpacker Patcher).bat
+!UberWolfCli.exe
+!UberWolfCli.LICENSE.txt
 !Data/BasicData/CommonEvent.dat
 !Data/BasicData/DataBase.dat
 !Data/BasicData/CDataBase.dat

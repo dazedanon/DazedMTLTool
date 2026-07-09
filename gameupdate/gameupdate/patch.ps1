@@ -194,7 +194,13 @@ function Test-WrongWorkingDirectory {
 
 function Read-PatchConfig {
     param([string]$ConfigPath)
-    $cfg = @{ username = ''; repo = ''; branch = '' }
+    $cfg = @{
+        forge    = 'gitlab'
+        host     = ''
+        username = ''
+        repo     = ''
+        branch   = ''
+    }
     if (-not (Test-Path -LiteralPath $ConfigPath)) {
         return $cfg
     }
@@ -206,12 +212,126 @@ function Read-PatchConfig {
         $k = $line.Substring(0, $eq).Trim().ToLowerInvariant()
         $v = if ($eq -lt $line.Length - 1) { $line.Substring($eq + 1).Trim() } else { '' }
         switch ($k) {
+            'forge' { $cfg.forge = $v }
+            'provider' { $cfg.forge = $v }
+            'host' { $cfg.host = $v }
             'username' { $cfg.username = $v }
+            'owner' { $cfg.username = $v }
+            'org' { $cfg.username = $v }
             'repo' { $cfg.repo = $v }
             'branch' { $cfg.branch = $v }
         }
     }
     return $cfg
+}
+
+function Resolve-PatchForge {
+    param([Parameter(Mandatory = $true)][hashtable]$Cfg)
+
+    $raw = ([string]$Cfg.forge).Trim().ToLowerInvariant()
+    if ([string]::IsNullOrWhiteSpace($raw)) { $raw = 'gitlab' }
+
+    $kind = switch -Regex ($raw) {
+        '^(gitlab|gl|gitgud)$' { 'gitlab' }
+        '^(github|gh)$' { 'github' }
+        '^(forgejo|gitea|fj|codeberg)$' { 'forgejo' }
+        default { $null }
+    }
+    if (-not $kind) {
+        throw ("PATCH_ERR:CONFIG:Unknown forge='{0}'. Use gitlab, github, or forgejo." -f $Cfg.forge)
+    }
+
+    $hostName = ([string]$Cfg.host).Trim()
+    $hostName = $hostName -replace '^https?://', ''
+    $hostName = $hostName.TrimEnd('/')
+    if ($hostName.Contains('/')) {
+        $hostName = $hostName.Split('/')[0]
+    }
+    if ([string]::IsNullOrWhiteSpace($hostName)) {
+        $hostName = switch ($kind) {
+            'gitlab' { 'gitgud.io' }
+            'github' { 'github.com' }
+            'forgejo' { 'codeberg.org' }
+        }
+    }
+
+    $webBase = "https://$hostName"
+    $apiBase = switch ($kind) {
+        'gitlab' { "$webBase/api/v4" }
+        'github' {
+            if ($hostName -eq 'github.com') { 'https://api.github.com' }
+            else { "$webBase/api/v3" }
+        }
+        'forgejo' { "$webBase/api/v1" }
+    }
+
+    return @{
+        kind     = $kind
+        host     = $hostName
+        webBase  = $webBase
+        apiBase  = $apiBase
+        username = ([string]$Cfg.username).Trim()
+        repo     = ([string]$Cfg.repo).Trim()
+        branch   = ([string]$Cfg.branch).Trim()
+    }
+}
+
+function New-PatchApiHeaders {
+    param([Parameter(Mandatory = $true)][hashtable]$Resolved)
+    $headers = @{ 'User-Agent' = 'DazedMTL-Patcher-1.0' }
+    if ($Resolved.kind -eq 'github') {
+        $headers['Accept'] = 'application/vnd.github+json'
+    }
+    return $headers
+}
+
+function Get-PatchLatestSha {
+    param(
+        [Parameter(Mandatory = $true)][hashtable]$Resolved,
+        [Parameter(Mandatory = $true)][hashtable]$Headers
+    )
+    $ownerEnc = [uri]::EscapeDataString($Resolved.username)
+    $repoEnc = [uri]::EscapeDataString($Resolved.repo)
+    $branchEnc = [uri]::EscapeDataString($Resolved.branch)
+
+    switch ($Resolved.kind) {
+        'gitlab' {
+            $id = [uri]::EscapeDataString($Resolved.username + '/' + $Resolved.repo)
+            $uri = "$($Resolved.apiBase)/projects/$id/repository/branches/$branchEnc"
+            return [string](Invoke-RestMethod -Uri $uri -Headers $Headers).commit.id
+        }
+        'github' {
+            $uri = "$($Resolved.apiBase)/repos/$ownerEnc/$repoEnc/commits/$branchEnc"
+            return [string](Invoke-RestMethod -Uri $uri -Headers $Headers).sha
+        }
+        'forgejo' {
+            $uri = "$($Resolved.apiBase)/repos/$ownerEnc/$repoEnc/branches/$branchEnc"
+            return [string](Invoke-RestMethod -Uri $uri -Headers $Headers).commit.id
+        }
+    }
+}
+
+function Get-PatchArchiveUrl {
+    param(
+        [Parameter(Mandatory = $true)][hashtable]$Resolved,
+        [Parameter(Mandatory = $true)][string]$Sha
+    )
+    $ownerEnc = [uri]::EscapeDataString($Resolved.username)
+    $repoEnc = [uri]::EscapeDataString($Resolved.repo)
+    $shaEnc = [uri]::EscapeDataString($Sha)
+
+    switch ($Resolved.kind) {
+        'gitlab' {
+            $id = [uri]::EscapeDataString($Resolved.username + '/' + $Resolved.repo)
+            return "$($Resolved.apiBase)/projects/$id/repository/archive.zip?sha=$shaEnc"
+        }
+        'github' {
+            return "$($Resolved.apiBase)/repos/$ownerEnc/$repoEnc/zipball/$shaEnc"
+        }
+        'forgejo' {
+            return "$($Resolved.apiBase)/repos/$ownerEnc/$repoEnc/archive/$shaEnc.zip"
+        }
+    }
 }
 
 function Invoke-SrpgUnpacker {
@@ -228,6 +348,140 @@ function Invoke-SrpgUnpacker {
     finally {
         Pop-Location
     }
+}
+
+function Test-WolfLooseDataReady {
+    param([Parameter(Mandatory = $true)][string]$DataDir)
+    if (-not (Test-Path -LiteralPath $DataDir -PathType Container)) {
+        return $false
+    }
+    $markers = @(
+        (Join-Path $DataDir 'BasicData\CommonEvent.dat'),
+        (Join-Path $DataDir 'CommonEvent.dat')
+    )
+    foreach ($marker in $markers) {
+        if (Test-Path -LiteralPath $marker -PathType Leaf) {
+            return $true
+        }
+    }
+    if (@(Get-ChildItem -LiteralPath $DataDir -Filter '*.mps' -File -ErrorAction SilentlyContinue).Count -gt 0) {
+        return $true
+    }
+    $basic = Join-Path $DataDir 'BasicData'
+    if (Test-Path -LiteralPath $basic -PathType Container) {
+        if (@(Get-ChildItem -LiteralPath $basic -Filter '*.dat' -File -ErrorAction SilentlyContinue).Count -gt 0) {
+            return $true
+        }
+    }
+    return $false
+}
+
+function Find-UberWolfCli {
+    param([Parameter(Mandatory = $true)][string]$Root)
+    $candidates = @(
+        (Join-Path $Root 'UberWolfCli.exe'),
+        (Join-Path $Root 'gameupdate\UberWolfCli.exe')
+    )
+    foreach ($path in $candidates) {
+        if (Test-Path -LiteralPath $path -PathType Leaf) {
+            return $path
+        }
+    }
+    return $null
+}
+
+function Invoke-WolfPreSetup {
+    <#
+    WOLF installs often ship Data.wolf, which overrides loose patched Data/ files.
+    Unpack once with UberWolfCli (bundled in the patch repo), then retire Data.wolf
+    so GameUpdate can copy injected .mps/.dat on top.
+    #>
+    param([Parameter(Mandatory = $true)][string]$Root)
+
+    $dataWolf = $null
+    foreach ($name in @('Data.wolf', 'data.wolf')) {
+        $candidate = Join-Path $Root $name
+        if (Test-Path -LiteralPath $candidate -PathType Leaf) {
+            $dataWolf = $candidate
+            break
+        }
+    }
+    if (-not $dataWolf) {
+        return
+    }
+
+    $dataDir = Join-Path $Root 'Data'
+    if (-not (Test-Path -LiteralPath $dataDir -PathType Container)) {
+        $dataDirAlt = Join-Path $Root 'data'
+        if (Test-Path -LiteralPath $dataDirAlt -PathType Container) {
+            $dataDir = $dataDirAlt
+        }
+    }
+
+    if (Test-WolfLooseDataReady -DataDir $dataDir) {
+        $bak = "$dataWolf.bak"
+        if (-not (Test-Path -LiteralPath $bak)) {
+            Write-Host '[Pre-Setup] Loose Data/ already present; retiring Data.wolf -> Data.wolf.bak'
+            Rename-Item -LiteralPath $dataWolf -NewName ([IO.Path]::GetFileName($bak)) -Force
+        }
+        else {
+            Write-Host '[Pre-Setup] Loose Data/ already present; removing leftover Data.wolf'
+            Remove-Item -LiteralPath $dataWolf -Force
+        }
+        return
+    }
+
+    $cli = Find-UberWolfCli -Root $Root
+    if (-not $cli) {
+        Write-Host '[Pre-Setup] Data.wolf found but UberWolfCli.exe is missing.'
+        Write-Host '            Copy UberWolfCli.exe into the game root (Step 1 gameupdate/) and re-run.'
+        return
+    }
+
+    Write-Host '[Pre-Setup] Unpacking Data.wolf with UberWolfCli (one-time)...'
+    $code = Invoke-SrpgUnpacker -ExePath $cli -WorkingDirectory $Root -Arguments @('-o', $dataWolf)
+    if ($code -ne 0) {
+        Write-Host ('[Pre-Setup] ERROR: UberWolfCli exited with code {0}.' -f $code)
+        return
+    }
+
+    # UberWolf writes next to the archive as <stem>/ (Data/). Also accept data.wolf~ leftovers.
+    $unpacked = Join-Path $Root 'Data'
+    if (-not (Test-Path -LiteralPath $unpacked -PathType Container)) {
+        $unpacked = Join-Path $Root 'data'
+    }
+    if (-not (Test-WolfLooseDataReady -DataDir $unpacked)) {
+        foreach ($alt in @('data.wolf~', 'Data.wolf~', 'Data~', 'data~')) {
+            $altPath = Join-Path $Root $alt
+            if (Test-Path -LiteralPath $altPath -PathType Container) {
+                Write-Host ("[Pre-Setup] Promoting {0} -> Data\" -f $alt)
+                if (Test-Path -LiteralPath (Join-Path $Root 'Data')) {
+                    Remove-FileOrDirectoryViaCmd -LiteralPath (Join-Path $Root 'Data')
+                }
+                Rename-Item -LiteralPath $altPath -NewName 'Data' -Force
+                $unpacked = Join-Path $Root 'Data'
+                break
+            }
+        }
+    }
+
+    if (-not (Test-WolfLooseDataReady -DataDir $unpacked)) {
+        Write-Host '[Pre-Setup] ERROR: Unpack finished but loose Data/ still looks empty.'
+        return
+    }
+
+    $bak = "$dataWolf.bak"
+    if (Test-Path -LiteralPath $dataWolf -PathType Leaf) {
+        if (-not (Test-Path -LiteralPath $bak)) {
+            Write-Host '[Pre-Setup] Retiring Data.wolf -> Data.wolf.bak'
+            Rename-Item -LiteralPath $dataWolf -NewName ([IO.Path]::GetFileName($bak)) -Force
+        }
+        else {
+            Write-Host '[Pre-Setup] Removing Data.wolf so loose Data/ takes priority'
+            Remove-Item -LiteralPath $dataWolf -Force
+        }
+    }
+    Write-Host '[Pre-Setup] Wolf Data/ is ready for patching.'
 }
 
 function Invoke-SrpgPreSetup {
@@ -512,9 +766,7 @@ function Invoke-PatchDownloadExtract {
     param(
         [Parameter(Mandatory = $true)][string]$Root,
         [Parameter(Mandatory = $true)][string]$StateFilePath,
-        [Parameter(Mandatory = $true)][string]$Username,
-        [Parameter(Mandatory = $true)][string]$Repo,
-        [Parameter(Mandatory = $true)][string]$Branch
+        [Parameter(Mandatory = $true)][hashtable]$Resolved
     )
 
     if ($PSVersionTable.PSEdition -ne 'Core') {
@@ -526,13 +778,11 @@ function Invoke-PatchDownloadExtract {
 
     Set-Location -LiteralPath $Root
 
-    $id = [uri]::EscapeDataString($Username + '/' + $Repo)
-    $branchEnc = [uri]::EscapeDataString($Branch)
-    $headers = @{ 'User-Agent' = 'DazedMTL-Patcher-1.0' }
+    $headers = New-PatchApiHeaders -Resolved $Resolved
     $dlAttempts = Get-EnvInt -Name 'GAMEUPDATE_DL_ATTEMPTS' -Default 2
 
     $latestSha = Invoke-WithRetry -Name 'Resolve latest patch SHA' -Attempts $dlAttempts -Action {
-        (Invoke-RestMethod -Uri ("https://gitgud.io/api/v4/projects/$id/repository/branches/$branchEnc") -Headers $headers).commit.id
+        Get-PatchLatestSha -Resolved $Resolved -Headers $headers
     }
     if (-not $latestSha) { throw 'PATCH_ERR:API:Latest commit SHA response was empty.' }
     $latestSha = ([string]$latestSha).Trim()
@@ -551,8 +801,7 @@ function Invoke-PatchDownloadExtract {
     $zipPath = Join-Path $Root ('dazedmtl_patch_' + [Guid]::NewGuid().ToString('N') + '.zip')
     Write-Host ('Downloading patch... ' + $zipPath)
     $stage = Join-Path ([IO.Path]::GetTempPath()) ('gu_' + [Guid]::NewGuid().ToString('N'))
-    $archiveSha = [uri]::EscapeDataString($latestSha)
-    $archiveUrl = "https://gitgud.io/api/v4/projects/$id/repository/archive.zip?sha=$archiveSha"
+    $archiveUrl = Get-PatchArchiveUrl -Resolved $Resolved -Sha $latestSha
 
     $dlSw = [System.Diagnostics.Stopwatch]::StartNew()
     Invoke-WithRetry -Name 'Download archive with Invoke-WebRequest' -Attempts $dlAttempts -Action {
@@ -599,7 +848,21 @@ function Invoke-PatchDownloadExtract {
             if ($dirs.Count -ne 1) {
                 throw ('PATCH_ERR:ZIP:Expected one root folder in archive, found {0}.' -f $dirs.Count)
             }
-            Copy-Item -Path (Join-Path $dirs[0].FullName '*') -Destination $PWD.Path -Recurse -Force
+            $stagedRoot = $dirs[0].FullName
+
+            # Stage UberWolfCli into the game root before unpack so first-time
+            # players can convert Data.wolf -> Data/ before English files land.
+            foreach ($cliName in @('UberWolfCli.exe', 'UberWolfCli.LICENSE.txt')) {
+                $stagedCli = Join-Path $stagedRoot $cliName
+                $destCli = Join-Path $Root $cliName
+                if ((Test-Path -LiteralPath $stagedCli -PathType Leaf) -and
+                    -not (Test-Path -LiteralPath $destCli -PathType Leaf)) {
+                    Copy-Item -LiteralPath $stagedCli -Destination $destCli -Force
+                }
+            }
+            Invoke-WolfPreSetup -Root $Root
+
+            Copy-Item -Path (Join-Path $stagedRoot '*') -Destination $PWD.Path -Recurse -Force
         }
         finally {
             if (Test-Path -LiteralPath $zipPath) {
@@ -717,8 +980,19 @@ try {
         exit 1
     }
 
-    Write-Host ('Pulling patch from https://gitgud.io/{0}/{1} (branch: {2})' -f $cfg.username, $cfg.repo, $cfg.branch)
+    try {
+        $resolved = Resolve-PatchForge -Cfg $cfg
+    }
+    catch {
+        Write-Host $_.Exception.Message
+        Wait-ConsolePause
+        exit 1
+    }
 
+    Write-Host ('Pulling patch from {0}/{1}/{2} ({3}, branch: {4})' -f `
+        $resolved.webBase, $resolved.username, $resolved.repo, $resolved.kind, $resolved.branch)
+
+    Invoke-WolfPreSetup -Root $GameRoot
     Invoke-SrpgPreSetup -Root $GameRoot
 
     $stateFile = Join-Path $PatchBundleRoot 'previous_patch_sha.txt'
@@ -726,7 +1000,7 @@ try {
     $patchDlExit = 1
     try {
         $patchDlExit = Invoke-PatchDownloadExtract -Root $GameRoot -StateFilePath $stateFile `
-            -Username $cfg.username -Repo $cfg.repo -Branch $cfg.branch
+            -Resolved $resolved
     }
     catch {
         Write-Host ''
@@ -753,6 +1027,9 @@ try {
     Write-Host 'Applying patch...'
 
     Invoke-SrpgPostApply -Root $GameRoot
+    # Safety: if Data/ is ready (from unpack or patch files) but Data.wolf
+    # remains, retire it so the archive does not override loose English files.
+    Invoke-WolfPreSetup -Root $GameRoot
 
     Write-Host 'Cleaning up...'
     Remove-PatchTempArtifacts -Root $GameRoot

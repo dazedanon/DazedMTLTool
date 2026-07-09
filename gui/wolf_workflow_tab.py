@@ -1030,7 +1030,9 @@ class WolfWorkflowTab(QWidget):
         tc_inner.setSpacing(4)
         tc_desc = QLabel(
             "Copies everything from the gameupdate/ folder into the game's root folder, "
-            "overwriting existing files (updater scripts, patch scripts, .gitignore)."
+            "overwriting existing files (updater scripts, patch scripts, .gitignore, "
+            "and UberWolfCli.exe). Writes patch-config.txt from Config → Game Update "
+            "defaults (set your org once there; edit repo= per game)."
         )
         tc_desc.setWordWrap(True)
         tc_desc.setStyleSheet("color:#9d9d9d;font-size:13px;")
@@ -1456,6 +1458,16 @@ class WolfWorkflowTab(QWidget):
 
         self._run_task(task)
 
+    def _write_gameupdate_patch_config(self, game_root: str):
+        """Write gameupdate/patch-config.txt from Config → Game Update defaults."""
+        from util.gameupdate_config import write_patch_config
+
+        ok, msg = write_patch_config(game_root)
+        if ok:
+            self._log(f"📝 Wrote patch-config.txt from Config defaults → {msg}")
+        else:
+            self._log(f"ℹ  patch-config.txt: {msg}")
+
     def _run_gameupdate(self):
         src = self.pp_gameupdate_edit.text().strip()
         dst = self.folder_edit.text().strip()
@@ -1478,6 +1490,9 @@ class WolfWorkflowTab(QWidget):
         self._log(f"✅ gameupdate: copied {count} file(s).")
         for e in errors:
             self._log(f"   ⚠  {e}")
+        dst = self.folder_edit.text().strip()
+        if dst and not errors:
+            self._write_gameupdate_patch_config(dst)
 
     def _run_all_preprocess(self):
         if not self._game_root:
@@ -1523,6 +1538,13 @@ class WolfWorkflowTab(QWidget):
                     except Exception as exc:
                         errors.append(f"{rel}: {exc}")
                 log(f"  Copied {copied} gameupdate file(s).")
+                from util.gameupdate_config import write_patch_config
+
+                ok, msg = write_patch_config(dst)
+                if ok:
+                    log(f"  Wrote patch-config.txt from Config defaults → {msg}")
+                else:
+                    log(f"  patch-config.txt: {msg}")
             if errors:
                 return False, "Pre-process finished with errors (see log)."
             return True, "Pre-process: dazedformat and gameupdate copy finished."

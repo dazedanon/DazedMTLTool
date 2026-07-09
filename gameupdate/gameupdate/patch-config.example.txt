@@ -1,0 +1,28 @@
+# GameUpdate patch source (copy to patch-config.txt and edit).
+# Lines starting with # are comments. Keys are case-insensitive.
+#
+# Tip: set forge / host / username / branch once in DazedMTLTool
+# Config → Game Update Defaults. Step 1 "Copy gameupdate/" writes
+# those into this file automatically (you still set repo= per game).
+
+# Where the patch repo lives:
+#   gitlab  - GitLab / gitgud.io / self-hosted GitLab (default)
+#   github  - GitHub.com or GitHub Enterprise
+#   forgejo - Forgejo (also accepts gitea)
+forge=gitlab
+
+# Host only (no https://). Defaults:
+#   gitlab  -> gitgud.io
+#   github  -> github.com
+#   forgejo -> codeberg.org
+# Examples: gitgud.io  gitlab.com  github.com  codeberg.org  git.example.com
+host=gitgud.io
+
+# Owner / org / group that owns the repo (set in Config; rarely changes)
+username=YOUR_ORG_OR_USER
+
+# Repository name (per game)
+repo=YOUR_PATCH_REPO
+
+# Branch to track
+branch=main
