@@ -52,6 +52,7 @@ from PyQt5.QtWidgets import (
     QStyle,
     QTabWidget,
     QTextEdit,
+    QToolButton,
     QVBoxLayout,
     QWidget,
     QAbstractItemView,
@@ -567,37 +568,53 @@ class WorkflowTab(QWidget):
         )
 
         self._step_tabs = QTabWidget()
+        self._step_tabs.setDocumentMode(True)
+        self._step_tabs.tabBar().setVisible(False)
         self._step_tabs.setStyleSheet("""
-            QTabWidget::pane {
-                border: none;
-                background-color: #1e1e1e;
-            }
-            QTabWidget::tab-bar {
-                alignment: left;
-            }
-            QTabBar {
+            QTabWidget::pane { border: none; background-color: #1e1e1e; top: 0; }
+            QTabBar { height: 0; max-height: 0; }
+        """)
+
+        # Compact always-visible strip - avoids the finicky overflow scroll arrows.
+        self._step_labels: list[str] = []
+        self._step_done: set[int] = set()
+        self._step_buttons: list[QToolButton] = []
+        self._step_strip = QWidget()
+        self._step_strip.setObjectName("mvStepStrip")
+        self._step_strip.setStyleSheet("""
+            QWidget#mvStepStrip {
                 background-color: #252526;
+                border-bottom: 1px solid #3a3a3a;
             }
-            QTabBar::tab {
-                background-color: #252526;
-                color: #7a7a7a;
-                padding: 9px 18px;
+            QToolButton {
+                background-color: transparent;
+                color: #8a8a8a;
                 border: none;
-                border-right: 1px solid #3a3a3a;
-                font-size: 12px;
-                min-width: 90px;
+                border-right: 1px solid #333333;
+                padding: 6px 2px;
+                font-size: 11px;
+                font-weight: 600;
             }
-            QTabBar::tab:selected {
-                background-color: #1e1e1e;
-                color: #e0e0e0;
-                font-weight: bold;
-                border-top: 2px solid #007acc;
-            }
-            QTabBar::tab:hover:!selected {
+            QToolButton:hover {
                 background-color: #2d2d30;
-                color: #cccccc;
+                color: #d0d0d0;
+            }
+            QToolButton:checked {
+                background-color: #1e1e1e;
+                color: #ffffff;
+                border-top: 2px solid #007acc;
+                padding-top: 4px;
+            }
+            QToolButton[done="true"] {
+                color: #6a9955;
+            }
+            QToolButton[done="true"]:checked {
+                color: #ffffff;
             }
         """)
+        strip_layout = QHBoxLayout(self._step_strip)
+        strip_layout.setContentsMargins(0, 0, 0, 0)
+        strip_layout.setSpacing(0)
 
         _tab_defs = [
             ("0  Project",      self._build_step0),
@@ -610,6 +627,7 @@ class WorkflowTab(QWidget):
             ("7  Export",       self._build_step7_export),
             ("8  Playtest",     self._build_step8_playtest),
         ]
+        self._step_labels = [label for label, _ in _tab_defs]
 
         for tab_label, builder in _tab_defs:
             # Each tab: outer page → scroll area → inner content widget
@@ -650,7 +668,7 @@ class WorkflowTab(QWidget):
                 back_btn.setFixedWidth(100)
                 _idx = tab_idx  # capture for lambda
                 back_btn.clicked.connect(
-                    lambda _checked, i=_idx: self._step_tabs.setCurrentIndex(i - 1)
+                    lambda _checked, i=_idx: self._goto_step(i - 1)
                 )
                 nav_layout.addWidget(back_btn)
 
@@ -660,20 +678,37 @@ class WorkflowTab(QWidget):
                 next_btn = _make_btn("Next →", "#007acc")
                 next_btn.setFixedWidth(100)
                 _idx = tab_idx  # capture for lambda
-                _lbl = tab_label  # original label without checkmark
                 next_btn.clicked.connect(
-                    lambda _checked, i=_idx, lbl=_lbl: (
-                        self._step_tabs.setTabText(i, "✓  " + lbl),
-                        self._step_tabs.setCurrentIndex(i + 1),
-                    )
+                    lambda _checked, i=_idx: self._advance_step(i)
                 )
                 nav_layout.addWidget(next_btn)
 
             page_layout.addWidget(nav)
             self._step_tabs.addTab(page, tab_label)
 
+            btn = QToolButton()
+            btn.setText(self._step_strip_label(tab_idx, done=False))
+            btn.setCheckable(True)
+            btn.setAutoExclusive(True)
+            btn.setToolButtonStyle(Qt.ToolButtonTextOnly)
+            btn.setToolTip(tab_label)
+            btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+            btn.setMinimumHeight(40)
+            btn.clicked.connect(lambda _c=False, i=tab_idx: self._goto_step(i))
+            strip_layout.addWidget(btn, 1)
+            self._step_buttons.append(btn)
+
         self._step_tabs.currentChanged.connect(self._on_step_tab_changed)
-        splitter.addWidget(self._step_tabs)
+        if self._step_buttons:
+            self._step_buttons[0].setChecked(True)
+
+        steps_host = QWidget()
+        steps_host_layout = QVBoxLayout(steps_host)
+        steps_host_layout.setContentsMargins(0, 0, 0, 0)
+        steps_host_layout.setSpacing(0)
+        steps_host_layout.addWidget(self._step_strip)
+        steps_host_layout.addWidget(self._step_tabs, 1)
+        splitter.addWidget(steps_host)
 
         # ---- Right: log area ----
         log_panel = QWidget()
@@ -753,10 +788,82 @@ class WorkflowTab(QWidget):
             pass
         return super().eventFilter(obj, event)
 
+    def _step_strip_label(self, idx: int, *, done: bool) -> str:
+        """Compact strip text: number + short name, optional checkmark for done."""
+        short_names = (
+            "Project",
+            "Prep",
+            "Speaker",
+            "Glossary",
+            "Phase1",
+            "Phase2",
+            "Plugins",
+            "Export",
+            "Playtest",
+        )
+        # Step 6 label swaps for Ace scripts.
+        if idx == 6 and len(self._step_labels) > 6:
+            raw = self._step_labels[6]
+            if "Script" in raw:
+                name = "Scripts"
+            else:
+                name = short_names[6]
+        else:
+            name = short_names[idx] if 0 <= idx < len(short_names) else str(idx)
+        mark = "✓" if done else ""
+        return f"{mark}{idx}\n{name}"
+
+    def _refresh_step_strip(self, current: int | None = None):
+        if current is None:
+            current = self._step_tabs.currentIndex() if hasattr(self, "_step_tabs") else 0
+        for i, btn in enumerate(getattr(self, "_step_buttons", [])):
+            if not btn.isVisible():
+                continue
+            done = i in self._step_done
+            btn.setText(self._step_strip_label(i, done=done))
+            btn.setProperty("done", "true" if done else "false")
+            btn.style().unpolish(btn)
+            btn.style().polish(btn)
+            if i == current and not btn.isChecked():
+                btn.blockSignals(True)
+                btn.setChecked(True)
+                btn.blockSignals(False)
+            elif i != current and btn.isChecked():
+                btn.blockSignals(True)
+                btn.setChecked(False)
+                btn.blockSignals(False)
+
+    def _goto_step(self, idx: int):
+        if not hasattr(self, "_step_tabs"):
+            return
+        idx = max(0, min(idx, self._step_tabs.count() - 1))
+        # Skip hidden steps (e.g. Playtest on Ace).
+        buttons = getattr(self, "_step_buttons", [])
+        if 0 <= idx < len(buttons) and not buttons[idx].isVisible():
+            # Prefer previous visible step.
+            for j in range(idx - 1, -1, -1):
+                if buttons[j].isVisible():
+                    idx = j
+                    break
+        if self._step_tabs.currentIndex() != idx:
+            self._step_tabs.setCurrentIndex(idx)
+        else:
+            self._refresh_step_strip(idx)
+
+    def _advance_step(self, from_idx: int):
+        """Mark *from_idx* done and move to the next visible step."""
+        self._step_done.add(from_idx)
+        nxt = from_idx + 1
+        buttons = getattr(self, "_step_buttons", [])
+        while nxt < len(buttons) and not buttons[nxt].isVisible():
+            nxt += 1
+        self._goto_step(nxt)
+
     def _on_step_tab_changed(self, index: int):
         """Refresh config-backed controls when their workflow page is shown."""
         previous_index = self._current_step_index
         self._current_step_index = index
+        self._refresh_step_strip(index)
 
         if previous_index == 0 and index != 0:
             self._auto_import_if_needed()
@@ -3201,8 +3308,13 @@ class WorkflowTab(QWidget):
             w = getattr(self, attr, None)
             if w is not None:
                 w.setVisible(not is_ace)
-        # Tab label
-        self._step_tabs.setTabText(6, "6  Scripts" if is_ace else "6  Plugins.js")
+        # Tab / strip label
+        step6_label = "6  Scripts" if is_ace else "6  Plugins.js"
+        self._step_tabs.setTabText(6, step6_label)
+        if hasattr(self, "_step_labels") and len(self._step_labels) > 6:
+            self._step_labels[6] = step6_label
+        if hasattr(self, "_step_buttons") and len(self._step_buttons) > 6:
+            self._step_buttons[6].setToolTip(step6_label)
         # Step 6 section header
         lbl = getattr(self, "_step6_section_label", None)
         if lbl is not None:
@@ -3239,14 +3351,18 @@ class WorkflowTab(QWidget):
                     "visible player-facing strings in plugins.js, using vocab.txt as a glossary."
                 )
         # Step 8 — TL Inspector (MV/MZ only; hidden for Ace)
+        show_playtest = not is_ace
         if hasattr(self, "_step_tabs") and self._step_tabs.count() > 8:
-            show_playtest = not is_ace
             if hasattr(self._step_tabs, "setTabVisible"):
                 self._step_tabs.setTabVisible(8, show_playtest)
             else:
                 self._step_tabs.setTabEnabled(8, show_playtest)
             if is_ace and self._step_tabs.currentIndex() == 8:
-                self._step_tabs.setCurrentIndex(7)
+                self._goto_step(7)
+        if hasattr(self, "_step_buttons") and len(self._step_buttons) > 8:
+            self._step_buttons[8].setVisible(show_playtest)
+            self._step_buttons[8].setEnabled(show_playtest)
+        self._refresh_step_strip()
         box = getattr(self, "_step8_playtest_box", None)
         install_both_btn = getattr(self, "_install_both_btn", None)
         if box is not None:

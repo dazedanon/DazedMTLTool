@@ -68,6 +68,7 @@ from PyQt5.QtWidgets import (
     QStyle,
     QTabWidget,
     QTextEdit,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
@@ -560,21 +561,53 @@ class WolfWorkflowTab(QWidget):
         )
 
         self._step_tabs = QTabWidget()
+        self._step_tabs.setDocumentMode(True)
+        self._step_tabs.tabBar().setVisible(False)
         self._step_tabs.setStyleSheet("""
-            QTabWidget::pane { border: none; background-color: #1e1e1e; }
-            QTabWidget::tab-bar { alignment: left; }
-            QTabBar { background-color: #252526; }
-            QTabBar::tab {
-                background-color: #252526; color: #7a7a7a;
-                padding: 9px 18px; border: none;
-                border-right: 1px solid #3a3a3a; font-size: 12px; min-width: 90px;
-            }
-            QTabBar::tab:selected {
-                background-color: #1e1e1e; color: #e0e0e0;
-                font-weight: bold; border-top: 2px solid #007acc;
-            }
-            QTabBar::tab:hover:!selected { background-color: #2d2d30; color: #cccccc; }
+            QTabWidget::pane { border: none; background-color: #1e1e1e; top: 0; }
+            QTabBar { height: 0; max-height: 0; }
         """)
+
+        # Compact always-visible strip - avoids the finicky overflow scroll arrows.
+        self._step_labels: list[str] = []
+        self._step_done: set[int] = set()
+        self._step_buttons: list[QToolButton] = []
+        self._step_strip = QWidget()
+        self._step_strip.setObjectName("wolfStepStrip")
+        self._step_strip.setStyleSheet("""
+            QWidget#wolfStepStrip {
+                background-color: #252526;
+                border-bottom: 1px solid #3a3a3a;
+            }
+            QToolButton {
+                background-color: transparent;
+                color: #8a8a8a;
+                border: none;
+                border-right: 1px solid #333333;
+                padding: 6px 2px;
+                font-size: 11px;
+                font-weight: 600;
+            }
+            QToolButton:hover {
+                background-color: #2d2d30;
+                color: #d0d0d0;
+            }
+            QToolButton:checked {
+                background-color: #1e1e1e;
+                color: #ffffff;
+                border-top: 2px solid #007acc;
+                padding-top: 6px;
+            }
+            QToolButton[done="true"] {
+                color: #6a9955;
+            }
+            QToolButton[done="true"]:checked {
+                color: #ffffff;
+            }
+        """)
+        strip_layout = QHBoxLayout(self._step_strip)
+        strip_layout.setContentsMargins(0, 0, 0, 0)
+        strip_layout.setSpacing(0)
 
         # Names curation comes before Translate so Phase 0 can seed vocab.txt.
         _tab_defs = [
@@ -590,6 +623,7 @@ class WolfWorkflowTab(QWidget):
             ("9  Package", self._build_step5_package),
             ("10 Saves", self._build_step6_saves),
         ]
+        self._step_labels = [label for label, _ in _tab_defs]
 
         for tab_label, builder in _tab_defs:
             page = QWidget()
@@ -623,7 +657,7 @@ class WolfWorkflowTab(QWidget):
                 back_btn = _make_btn("← Back", "#3a3a3a")
                 back_btn.setFixedWidth(100)
                 back_btn.clicked.connect(
-                    lambda _c, i=tab_idx: self._step_tabs.setCurrentIndex(i - 1)
+                    lambda _c, i=tab_idx: self._goto_step(i - 1)
                 )
                 nav_layout.addWidget(back_btn)
             nav_layout.addStretch()
@@ -631,19 +665,36 @@ class WolfWorkflowTab(QWidget):
                 next_btn = _make_btn("Next →", "#007acc")
                 next_btn.setFixedWidth(100)
                 next_btn.clicked.connect(
-                    lambda _c, i=tab_idx, lbl=tab_label: (
-                        self._step_tabs.setTabText(i, "✓  " + lbl),
-                        self._step_tabs.setCurrentIndex(i + 1),
-                    )
+                    lambda _c, i=tab_idx: self._advance_step(i)
                 )
                 nav_layout.addWidget(next_btn)
 
             page_layout.addWidget(nav)
             self._step_tabs.addTab(page, tab_label)
 
-        self._step_tabs.currentChanged.connect(self._on_step_changed)
+            btn = QToolButton()
+            btn.setText(self._step_strip_label(tab_idx, done=False))
+            btn.setCheckable(True)
+            btn.setAutoExclusive(True)
+            btn.setToolButtonStyle(Qt.ToolButtonTextOnly)
+            btn.setToolTip(tab_label)
+            btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+            btn.setMinimumHeight(40)
+            btn.clicked.connect(lambda _c=False, i=tab_idx: self._goto_step(i))
+            strip_layout.addWidget(btn, 1)
+            self._step_buttons.append(btn)
 
-        splitter.addWidget(self._step_tabs)
+        self._step_tabs.currentChanged.connect(self._on_step_changed)
+        if self._step_buttons:
+            self._step_buttons[0].setChecked(True)
+
+        steps_host = QWidget()
+        steps_host_layout = QVBoxLayout(steps_host)
+        steps_host_layout.setContentsMargins(0, 0, 0, 0)
+        steps_host_layout.setSpacing(0)
+        steps_host_layout.addWidget(self._step_strip)
+        steps_host_layout.addWidget(self._step_tabs, 1)
+        splitter.addWidget(steps_host)
 
         # Right: log panel
         log_panel = QWidget()
@@ -3502,9 +3553,61 @@ class WolfWorkflowTab(QWidget):
         inject_state: dict = {}
         self._run_task(task, on_done=_after_inject)
 
+    def _step_strip_label(self, idx: int, *, done: bool) -> str:
+        """Compact strip text: number + short name, optional checkmark for done."""
+        short_names = (
+            "Project",
+            "Prep",
+            "Glossary",
+            "Names",
+            "Database",
+            "Maps",
+            "Precheck",
+            "Inject",
+            "Wrap",
+            "Package",
+            "Saves",
+        )
+        name = short_names[idx] if 0 <= idx < len(short_names) else str(idx)
+        mark = "✓" if done else ""
+        return f"{mark}{idx}\n{name}"
+
+    def _refresh_step_strip(self, current: int | None = None):
+        if current is None:
+            current = self._step_tabs.currentIndex() if hasattr(self, "_step_tabs") else 0
+        for i, btn in enumerate(getattr(self, "_step_buttons", [])):
+            done = i in self._step_done
+            btn.setText(self._step_strip_label(i, done=done))
+            btn.setProperty("done", "true" if done else "false")
+            btn.style().unpolish(btn)
+            btn.style().polish(btn)
+            if i == current and not btn.isChecked():
+                btn.blockSignals(True)
+                btn.setChecked(True)
+                btn.blockSignals(False)
+            elif i != current and btn.isChecked():
+                btn.blockSignals(True)
+                btn.setChecked(False)
+                btn.blockSignals(False)
+
+    def _goto_step(self, idx: int):
+        if not hasattr(self, "_step_tabs"):
+            return
+        idx = max(0, min(idx, self._step_tabs.count() - 1))
+        if self._step_tabs.currentIndex() != idx:
+            self._step_tabs.setCurrentIndex(idx)
+        else:
+            self._refresh_step_strip(idx)
+
+    def _advance_step(self, from_idx: int):
+        """Mark *from_idx* done and move to the next step."""
+        self._step_done.add(from_idx)
+        self._goto_step(from_idx + 1)
+
     def _on_step_changed(self, idx: int):
         previous = self._current_step_index
         self._current_step_index = idx
+        self._refresh_step_strip(idx)
         if previous == 0 and idx != 0:
             self._auto_import_if_needed()
         # Index 3 == Names: refresh the per-name safety summary.
