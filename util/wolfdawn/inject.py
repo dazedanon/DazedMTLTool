@@ -105,8 +105,13 @@ def restore_live_from_originals(
     return warnings
 
 
-def repair_inject_json(src: Path) -> Path:
-    """Auto-repair WOLF inline codes in a translated JSON before inject."""
+def repair_inject_json(src: Path) -> tuple[Path, bool]:
+    """Auto-repair WOLF inline codes in a translated JSON before inject.
+
+    Returns ``(path, has_font_size_drift)``. Font-size drift is detected after
+    repair so intentional ``\\f[N]`` shrinks from Fix-wrap survive and inject
+    can auto-pass ``--allow-code-drift``.
+    """
     data = json.loads(src.read_text(encoding="utf-8-sig"))
     data, repairs = wolf_codes.repair_document(data)
     if repairs:
@@ -114,7 +119,7 @@ def repair_inject_json(src: Path) -> Path:
             json.dumps(data, ensure_ascii=False, indent=4) + "\n",
             encoding="utf-8",
         )
-    return src
+    return src, wolf_codes.document_has_font_size_drift(data)
 
 
 def _wolf_output_snippet(stdout: str, stderr: str, *, limit: int = 400) -> str:
@@ -484,7 +489,13 @@ def inject_selected(
 
     for json_name in strings_todo:
         entry = by_json[json_name]
-        inject_src = repair_inject_json(translated_dir / json_name)
+        inject_src, font_drift = repair_inject_json(translated_dir / json_name)
+        strings_drift = allow_code_drift or font_drift
+        if font_drift and not allow_code_drift:
+            emit(
+                f"  ℹ {json_name}: Fix-wrap / \\f[N] size changes — "
+                "passing --allow-code-drift for strings-inject"
+            )
         emit(f"Injecting {json_name}…")
         # After names-inject, live binaries already hold EN name-only fields.
         # Rebuilding from pristine JP originals would wipe those (rumor boards, etc.).
@@ -495,7 +506,7 @@ def inject_selected(
             inject_src,
             data_dir,
             originals_dir,
-            allow_code_drift=allow_code_drift,
+            allow_code_drift=strings_drift,
             en_punct=en_punct,
             base_path=live_base,
         )

@@ -3236,7 +3236,7 @@ class WolfWorkflowTab(QWidget):
             msg = (
                 f"Manual wrap at width {width}, body \\f[{font}]."
                 if changed
-                else "Line already fits (manual)."
+                else "Already matches Manual wrap (width + font)."
             )
             self._wrap_status_label.setText(
                 msg + " Inject all from Step 7 when ready."

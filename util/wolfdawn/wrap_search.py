@@ -641,10 +641,14 @@ def apply_manual_font_and_wrap(
     old_base: int | None = None,
     only_overflow_or_fonts: bool = False,
 ) -> tuple[str, bool]:
-    """Scale body ``\\f`` (keeping emphasis ratios), then wrap to *width*.
+    """Scale body ``\\f`` (keeping emphasis ratios), then reflow to *width*.
 
-    When *only_overflow_or_fonts* is True (group wrap), skip lines that already
-    fit and have no ``\\f[N]`` so short UI labels are not given a forced font.
+    Always reflows when the wrap layout would differ from the current text
+    (same as the live preview). Soft ``\\n`` breaks that already "fit" per line
+    are collapsed and rebuilt so Manual Wrap matches what the preview shows.
+
+    When *only_overflow_or_fonts* is True (group wrap), skip short plain lines
+    that already match the target layout and have no ``\\f[N]``.
 
     Returns ``(new_text, changed)``.
     """
@@ -652,18 +656,31 @@ def apply_manual_font_and_wrap(
 
     if not isinstance(text, str) or not text.strip():
         return text, False
-    new_text = text
-    has_f = bool(wolf_codes.detect_font_sizes(new_text))
-    needs_wrap = width > 0 and line_needs_wrap(new_text, width)
-    if only_overflow_or_fonts and not has_f and not needs_wrap:
+
+    has_f = bool(wolf_codes.detect_font_sizes(text))
+    overflows = width > 0 and line_needs_wrap(text, width)
+    wrapped_as_is = wrap_line_text(text, width) if width > 0 else text
+    layout_differs = width > 0 and wrapped_as_is != text
+
+    if only_overflow_or_fonts and not has_f and not overflows and not layout_differs:
         return text, False
-    if font is not None and int(font) > 0 and (has_f or needs_wrap or not only_overflow_or_fonts):
+
+    new_text = text
+    apply_font = (
+        font is not None
+        and int(font) > 0
+        and (has_f or overflows or layout_differs or not only_overflow_or_fonts)
+    )
+    if apply_font:
         new_text, _ = wolf_codes.scale_font_sizes(
             new_text, int(font), old_base=old_base
         )
-        needs_wrap = width > 0 and line_needs_wrap(new_text, width)
-    if needs_wrap:
-        new_text = wrap_line_text(new_text, width)
+
+    if width > 0:
+        wrapped = wrap_line_text(new_text, width)
+        if wrapped != new_text:
+            new_text = wrapped
+
     return new_text, new_text != text
 
 

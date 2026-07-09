@@ -336,14 +336,20 @@ def precheck_selected(
             continue
 
         emit(f"Precheck {json_name}…")
-        inject_src = repair_inject_json(src)
+        inject_src, font_drift = repair_inject_json(src)
+        strings_drift = allow_code_drift or font_drift
+        if font_drift and not allow_code_drift:
+            emit(
+                f"  ℹ {json_name}: Fix-wrap / \\f[N] size changes — "
+                "passing --allow-code-drift for dry-run"
+            )
         fp = _precheck_strings_file(
             json_name,
             entry,
             inject_src,
             data_dir,
             originals_dir,
-            allow_code_drift=allow_code_drift,
+            allow_code_drift=strings_drift,
             en_punct=en_punct,
         )
         if fp.error:

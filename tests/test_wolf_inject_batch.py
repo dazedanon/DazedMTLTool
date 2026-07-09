@@ -113,9 +113,11 @@ class InjectOrderTests(unittest.TestCase):
 
     def test_strings_alone_use_pristine_original_base(self):
         string_bases: list[str] = []
+        string_drift: list[bool] = []
 
-        def fake_strings(edited_json, base, output, **_k):
+        def fake_strings(edited_json, base, output, **kwargs):
             string_bases.append(str(base))
+            string_drift.append(bool(kwargs.get("allow_code_drift")))
             return mock.Mock(
                 ok=True,
                 returncode=0,
@@ -152,6 +154,72 @@ class InjectOrderTests(unittest.TestCase):
                 )
             self.assertTrue(report.ok)
             self.assertEqual(string_bases, [str(map_orig)])
+            self.assertEqual(string_drift, [False])
+
+    def test_strings_auto_allow_code_drift_for_font_size(self):
+        string_drift: list[bool] = []
+
+        def fake_strings(edited_json, base, output, **kwargs):
+            string_drift.append(bool(kwargs.get("allow_code_drift")))
+            return mock.Mock(
+                ok=True,
+                returncode=0,
+                stdout="applied 1 translation(s) (0 drifted)",
+                stderr="",
+            )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            translated = root / "translated"
+            originals = root / "originals"
+            data = root / "data"
+            translated.mkdir()
+            originals.mkdir()
+            data.mkdir()
+            doc = {
+                "kind": "db",
+                "groups": [
+                    {
+                        "typeName": "噂",
+                        "lines": [
+                            {
+                                "source": r"\c[21]\f[20]娼館\c[19]\f[18]",
+                                "text": r"\f[14]\c[21]\f[16]Brothel\c[19]\f[14]",
+                            }
+                        ],
+                    }
+                ],
+            }
+            import json
+
+            (translated / "DataBase.project.json").write_text(
+                json.dumps(doc, ensure_ascii=False), encoding="utf-8"
+            )
+            proj_live = data / "DataBase.project"
+            proj_orig = originals / "DataBase.project"
+            proj_live.write_bytes(b"live")
+            proj_orig.write_bytes(b"orig")
+            (data / "DataBase.dat").write_bytes(b"live-dat")
+            (originals / "DataBase.dat").write_bytes(b"orig-dat")
+            entries = [
+                {
+                    "json": "DataBase.project.json",
+                    "kind": "db",
+                    "base": str(proj_live),
+                },
+            ]
+            with mock.patch.object(wi.wolfdawn, "strings_inject", side_effect=fake_strings):
+                report = wi.inject_selected(
+                    ["DataBase.project.json"],
+                    manifest_entries=entries,
+                    data_dir=data,
+                    originals_dir=originals,
+                    translated_dir=translated,
+                    game_root=data.parent,
+                    allow_code_drift=False,
+                )
+            self.assertTrue(report.ok)
+            self.assertEqual(string_drift, [True])
 
     def test_names_result_mentions_safety_skips(self):
         res = mock.Mock(

@@ -60,6 +60,55 @@ class WolfCodesRepairTests(unittest.TestCase):
         )
 
 
+    def test_rebuild_preserves_translated_font_sizes(self):
+        """Fix-wrap Manual shrink must survive repair before inject."""
+        source = r"「\c[21]\f[20]富裕層\c[19]\f[18]の人手」"
+        text = r'\f[12]"\c[21]\f[13]Wealthy\c[19]\f[12] staff"'
+        fixed = wolf_codes.rebuild_text_preserving_source_codes(source, text)
+        self.assertTrue(fixed.startswith(r"\f[12]"))
+        self.assertIn(r"\f[13]", fixed)
+        self.assertIn(r"\c[21]", fixed)
+        self.assertIn(r"\c[19]", fixed)
+        self.assertNotIn(r"\f[20]", fixed)
+        self.assertNotIn(r"\f[18]", fixed)
+
+    def test_rebuild_keeps_leading_body_font_absent_from_source(self):
+        source = "これは説明文です。"
+        text = r"\f[14]This is a description."
+        fixed = wolf_codes.rebuild_text_preserving_source_codes(source, text)
+        self.assertEqual(fixed, text)
+
+    def test_document_has_font_size_drift_for_db(self):
+        doc = {
+            "kind": "db",
+            "groups": [
+                {
+                    "typeName": "噂",
+                    "lines": [
+                        {
+                            "source": r"\c[21]\f[20]娼館\c[19]\f[18]",
+                            "text": r"\f[14]\c[21]\f[16]Brothel\c[19]\f[14]",
+                        }
+                    ],
+                }
+            ],
+        }
+        self.assertTrue(wolf_codes.document_has_font_size_drift(doc))
+        self.assertFalse(
+            wolf_codes.document_has_font_size_drift(
+                {
+                    "kind": "db",
+                    "groups": [
+                        {
+                            "typeName": "x",
+                            "lines": [{"source": "あ", "text": "A"}],
+                        }
+                    ],
+                }
+            )
+        )
+
+
 class WolfFontScaleTests(unittest.TestCase):
     def test_scale_keeps_emphasis_ratio_and_leads_with_body(self):
         # Cafe-style mid-line emphasis: body must lead so Wolf sets line height.

@@ -172,6 +172,25 @@ class TestManualFontAndWrap(unittest.TestCase):
         self.assertFalse(skipped)
         self.assertEqual(short, "Short.")
 
+    def test_manual_reflows_soft_breaks_that_already_fit(self):
+        """Hard \\n lines can each fit width while the preview still reflows."""
+        text = (
+            '\\f[13]"I heard there\'s a super hot female\n'
+            "adventurer who came to town recently!?\n"
+            "Maybe I'll catch a glimpse of her at the\n"
+            r'\c[21]\f[14]tavern\c[19]\f[13]!"'
+        )
+        # Per-line lengths are under 55, so the old overflow check skipped wrap.
+        self.assertFalse(ws.line_needs_wrap(text, 55))
+        new_text, changed = ws.apply_manual_font_and_wrap(text, 55, font=13)
+        self.assertTrue(changed)
+        self.assertEqual(new_text, ws.wrap_line_text(text, 55))
+        self.assertIn("female adventurer who came", new_text.replace("\n", " "))
+        # Already at the target layout → no-op.
+        again, changed_again = ws.apply_manual_font_and_wrap(new_text, 55, font=13)
+        self.assertFalse(changed_again)
+        self.assertEqual(again, new_text)
+
     def test_wrap_overflow_manual_in_names_category(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "names.json"
