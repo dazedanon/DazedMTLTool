@@ -4249,15 +4249,19 @@ class WolfWorkflowTab(QWidget):
             return
         reply = QMessageBox.question(
             self,
-            "Copy wolf_json/ → files/?",
+            "Inject from wolf_json",
             f"About to inject {len(files)} file(s) from wolf_json/.\n\n"
             "Also copy those JSON into files/ so the tool keeps the same "
             "progress (overwrites matching names in files/)?\n\n"
             "Yes = inject and sync to files/\n"
-            "No = inject only, leave files/ as-is",
-            QMessageBox.Yes | QMessageBox.No,
+            "No = inject only, leave files/ as-is\n"
+            "Cancel = do nothing",
+            QMessageBox.Yes | QMessageBox.No | QMessageBox.Cancel,
             QMessageBox.Yes,
         )
+        if reply == QMessageBox.Cancel:
+            self._log("Inject from wolf_json cancelled.")
+            return
         sync_to_files = reply == QMessageBox.Yes
         if sync_to_files:
             self._log(
