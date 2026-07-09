@@ -18,15 +18,16 @@ Mirrors the RPGMaker WorkflowTab, driven by the vendored WolfDawn ``wolf`` CLI
                         and refresh the git-tracked wolf_json/ with the translated
                         JSON; quick-inject picks just a few translated files for
                         fast in-game / git iteration, or inject everything at once.
-  Step 7  Fix wrap    - search translated JSON by in-game text; wrap DB sheet rows;
-                        wolf names-wrap, relayout, and desc-relayout
+  Step 7  Fix wrap    - search translated JSON by in-game text; Relayout
+                        (names-wrap / cell geometry) or Manual (width + font);
+                        inject the edited file
   Step 8  Package     - run from a loose Data/ folder, or repack Data.wolf
   Step 9  Saves       - fix baked strings in existing .sav files (optional)
 
 names.json is staged into files/ but is NOT translated in the bulk phases - WolfDawn
 tags each name safe / refs / verify and Phase 0 translates only safe entries
 (per-name, not per-category), harvests them into vocab.txt, and Step 6 injects the
-result. All text wrapping (names-wrap, relayout, manual sheet wrap) lives in Step 7.
+result. All text wrapping lives in Step 7.
 
 The extracted JSON is staged in ``<game_root>/wolf_json/`` (a manifest maps each
 file back to its base binary), then imported into ``files/`` for the shared
@@ -90,7 +91,6 @@ from util.wolfdawn import codes as wolf_codes
 from util.wolfdawn import db_classify as wolf_db
 from util.wolfdawn import wrap_search as wolf_ws
 
-import util.dazedwrap as dazedwrap
 from util.paths import PROJECT_ROOT
 from util.project_scanner import (
     detect_wolf_layout,
@@ -3502,180 +3502,6 @@ class WolfWorkflowTab(QWidget):
             return True, "names-check reported inconsistencies (see log above)."
 
         self._run_task(task)
-
-    def _relayout_desc_enabled(self) -> bool:
-        return str(self._setting("relayout_desc", "true")).lower() != "false"
-
-    def _relayout_settings(self) -> dict:
-        def _int_setting(key: str, default: int) -> int:
-            try:
-                return int(self._setting(key, default) or default)
-            except (TypeError, ValueError):
-                return default
-
-        def _width(key: str) -> int | str:
-            if str(self._setting(f"{key}_auto", "true")).lower() != "false":
-                return "auto"
-            return _int_setting(key, 55 if key == "relayout_width" else 75)
-
-        return {
-            "width": _width("relayout_width"),
-            "max_rows": _int_setting("relayout_max_rows", 0),
-            "desc_width": _width("relayout_desc_width"),
-            "desc_max_lines": _int_setting("relayout_desc_max_lines", 0),
-        }
-
-    def _find_db_projects(self, data_dir: Path) -> list[Path]:
-        """DataBase / CDataBase / SysDatabase.project under BasicData or flat Data/."""
-        found: list[Path] = []
-        for base in (data_dir / "BasicData", data_dir):
-            if not base.is_dir():
-                continue
-            for name in ("DataBase.project", "CDataBase.project", "SysDatabase.project"):
-                p = base / name
-                if p.is_file() and p not in found:
-                    found.append(p)
-        return found
-
-    def _sync_relayout_tree(self, src_root: Path, dest_root: Path, log=None) -> int:
-        """Copy every file under *src_root* onto *dest_root*, preserving relative paths."""
-        copied = 0
-        for src in src_root.rglob("*"):
-            if not src.is_file():
-                continue
-            rel = src.relative_to(src_root)
-            dest = dest_root / rel
-            dest.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(src, dest)
-            copied += 1
-        return copied
-
-    def _run_relayout(self, *, manual: bool = False, quiet: bool = False):
-        """Reflow Message text (and optionally DB descriptions) on live Data/."""
-        if not self._require_manifest():
-            return
-        manifest = self._read_manifest()
-        data_dir = Path(manifest["data_dir"])
-        if not data_dir.is_dir():
-            QMessageBox.warning(self, "Relayout", f"Data/ folder not found:\n{data_dir}")
-            return
-        opts = self._relayout_settings()
-        do_desc = self._relayout_desc_enabled()
-
-        def task(log, progress=None):
-            from util import wolfdawn
-
-            if not quiet:
-                log(f"Relayouting {data_dir} …")
-
-            failures: list[str] = []
-            with tempfile.TemporaryDirectory(prefix="wolfdawn-relayout-") as tmp:
-                out_dir = Path(tmp) / "out"
-                out_dir.mkdir(parents=True, exist_ok=True)
-                res = wolfdawn.relayout(
-                    data_dir,
-                    out_dir=out_dir,
-                    width=opts["width"],
-                    max_rows=opts["max_rows"],
-                    log_fn=None,
-                )
-                if not res.ok and res.returncode not in (0, 2):
-                    failures.append(f"message reflow exited {res.returncode}")
-                else:
-                    self._sync_relayout_tree(out_dir, data_dir)
-
-            if do_desc and not failures:
-                projects = self._find_db_projects(data_dir)
-                for proj in projects:
-                    with tempfile.TemporaryDirectory(prefix="wolfdawn-desc-") as tmp:
-                        tmp_path = Path(tmp)
-                        out_proj = tmp_path / proj.name
-                        dres = wolfdawn.desc_relayout(
-                            proj,
-                            out_proj,
-                            width=opts["desc_width"],
-                            max_lines=opts["desc_max_lines"],
-                            log_fn=None,
-                        )
-                        if not dres.ok and dres.returncode not in (0, 2):
-                            failures.append(
-                                f"desc-relayout exited {dres.returncode} for {proj.name}"
-                            )
-                            continue
-                        for produced in tmp_path.iterdir():
-                            if not produced.is_file():
-                                continue
-                            dest = proj.parent / produced.name
-                            shutil.copy2(produced, dest)
-
-            if quiet:
-                if failures:
-                    log("Relayout: failed — " + "; ".join(failures))
-                else:
-                    log("Relayout: applied")
-                return not failures, ""
-
-            if failures:
-                return False, "Relayout failed — " + "; ".join(failures)
-            return True, "Relayout complete." + (
-                " Continue to Step 8 to package." if not manual else ""
-            )
-
-        self._run_task(task)
-
-    def _run_names_wrap(self, *, manual: bool = False, dry_run: bool = False, note: str | None = None):
-        """Run ``wolf names-wrap`` on translated/names.json."""
-        names_path = self._tool_root() / "translated" / NAMES_JSON
-        if not names_path.is_file():
-            names_path = self._work_dir() / NAMES_JSON
-        if not names_path.is_file():
-            QMessageBox.warning(
-                self,
-                "names-wrap",
-                "No names.json found in translated/ or wolf_json/. Run Step 0 first.",
-            )
-            return
-
-        hit = (
-            self._current_wrap_hit
-            if self._current_wrap_hit is not None and self._current_wrap_hit.kind == "names"
-            else None
-        )
-        width = self._wrap_width_spin.value() if hasattr(self, "_wrap_width_spin") else 0
-        max_lines = self._wrap_max_lines_value()
-        wrap_width = width if width > 0 else None
-        wrap_lines = max_lines or None
-
-        def task(log, progress=None):
-            if note and not dry_run and (wrap_width or wrap_lines):
-                roles_path = wolf_names.roles_json_path_for_names(names_path)
-                wolf_names.upsert_name_wrap_role(
-                    roles_path,
-                    note,
-                    width=wrap_width,
-                    max_lines=wrap_lines,
-                )
-            ok, summary = wolf_names.apply_names_wrap(
-                names_path,
-                note=note,
-                width=wrap_width,
-                lines=wrap_lines,
-                dry_run=dry_run,
-                log_fn=log,
-            )
-            if not ok:
-                return False, f"names-wrap failed — {summary}"
-            if manual and not dry_run:
-                self._sync_translated_json_to_wolf_json(NAMES_JSON, self._work_dir())
-            return True, summary + (
-                "" if dry_run else " Re-inject names.json from Step 6 if needed."
-            )
-
-        def _after(ok: bool, _msg: str):
-            if ok and manual and not dry_run and hit is not None and hit.kind == "names":
-                self._reload_wrap_hit_editor(hit, self._active_wrap_width())
-
-        self._run_task(task, on_done=_after)
 
     # ── Step 5: Package ────────────────────────────────────────────────────────
 
