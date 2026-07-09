@@ -21,8 +21,8 @@ Mirrors the RPGMaker WorkflowTab, driven by the vendored WolfDawn ``wolf`` CLI
                         or from the game's wolf_json/; translated inject also
                         refreshes wolf_json/ (full pass avoids name/DB wipe bugs);
                         wolf_json inject optionally copies those JSON into files/
-                        so tool progress is not left behind; optional layout-restore
-                        re-applies source whitespace pads
+                        and translated/ so tool progress is not left behind;
+                        optional layout-restore re-applies source whitespace pads
   Step 8  Package     - run from a loose Data/ folder or repack Data.wolf;
                         optional save rewrite for existing .sav files
   Step 9  Fix wrap    - search translated JSON by in-game text; Relayout
@@ -2586,7 +2586,7 @@ class WolfWorkflowTab(QWidget):
             "Inject every JSON into the game's Data/ binaries in one pass. "
             "Inject all uses translated/; Inject from wolf_json uses the game's "
             "wolf_json/ when that folder is the source of truth (and can copy those "
-            "JSON into files/ so tool progress is not left behind). "
+            "JSON into files/ and translated/ so tool progress is not left behind). "
             "A full inject keeps names.json and DB/map files in sync (partial injects "
             "can wipe name-only fields like rumor boards). Run Step 6 (Precheck) first "
             "if you want to catch safety-guard skips before writing."
@@ -2640,7 +2640,7 @@ class WolfWorkflowTab(QWidget):
             "Inject every injectable JSON from the game's wolf_json/ folder instead "
             "of translated/. Use when wolf_json/ is the source of truth (e.g. after "
             "editing or restoring committed game-repo JSON). Asks whether to copy "
-            "those JSON into files/ so tool progress is not left behind."
+            "those JSON into files/ and translated/ so tool progress is not left behind."
         )
         inject_wolf_btn.clicked.connect(self._inject_all_from_wolf_json)
         layout_restore_btn = self._register(_make_btn("Layout-restore", "#3a3a3a"))
@@ -3777,21 +3777,21 @@ class WolfWorkflowTab(QWidget):
         except Exception as exc:
             return False, str(exc)
 
-    def _sync_json_to_files(
-        self, json_name: str, source_dir: Path, files_dir: Path
+    def _sync_json_to_dir(
+        self, json_name: str, source_dir: Path, dest_dir: Path
     ) -> tuple[bool, str | None]:
-        """Copy one JSON from *source_dir* into the tool's files/ folder."""
+        """Copy one JSON from *source_dir* into *dest_dir* (e.g. files/ or translated/)."""
         src = source_dir / json_name
         if not src.is_file():
             return False, "source missing"
-        dest = files_dir / json_name
+        dest = dest_dir / json_name
         try:
             if src.resolve() == dest.resolve():
                 return True, None
         except Exception:
             pass
         try:
-            files_dir.mkdir(parents=True, exist_ok=True)
+            dest_dir.mkdir(parents=True, exist_ok=True)
             shutil.copy2(src, dest)
             return True, None
         except Exception as exc:
@@ -3804,24 +3804,28 @@ class WolfWorkflowTab(QWidget):
         source_dir: Path | None = None,
         sync_to_wolf_json: bool = True,
         sync_to_files: bool = False,
+        sync_to_translated: bool = False,
     ):
         """Inject the selected JSON files into live Data/.
 
         *source_dir* defaults to ``translated/``. When injecting from the game's
         ``wolf_json/``, pass that path and set *sync_to_wolf_json* False (the
-        source already is wolf_json/). Set *sync_to_files* to also copy the
-        injected JSON into the tool's ``files/`` folder.
+        source already is wolf_json/). Set *sync_to_files* / *sync_to_translated*
+        to also copy the injected JSON into the tool's ``files/`` and/or
+        ``translated/`` folders.
         """
         if not self._require_manifest():
             return
         manifest = self._read_manifest()
         en_punct = self._inject_flag_en_punct()
         game_json_dir = self._work_dir()
-        files_dir = self._tool_root() / "files"
+        tool_root = self._tool_root()
+        files_dir = tool_root / "files"
+        translated_dir = tool_root / "translated"
         inject_dir = (
             Path(source_dir)
             if source_dir is not None
-            else self._tool_root() / "translated"
+            else translated_dir
         )
 
         def task(log, progress=None):
@@ -3859,21 +3863,26 @@ class WolfWorkflowTab(QWidget):
                         )
                         log(f"  ✗ sync {json_name}: {err}")
 
-            if sync_to_files:
+            for label, enabled, dest in (
+                ("files/", sync_to_files, files_dir),
+                ("translated/", sync_to_translated, translated_dir),
+            ):
+                if not enabled:
+                    continue
                 synced = 0
                 for json_name in sorted(selected):
-                    ok, err = self._sync_json_to_files(
-                        json_name, inject_dir, files_dir
+                    ok, err = self._sync_json_to_dir(
+                        json_name, inject_dir, dest
                     )
                     if not ok:
                         report.sync_failures.append(
-                            (json_name, f"files/: {err or 'unknown error'}")
+                            (json_name, f"{label}: {err or 'unknown error'}")
                         )
-                        log(f"  ✗ sync files/{json_name}: {err}")
+                        log(f"  ✗ sync {label}{json_name}: {err}")
                     else:
                         synced += 1
                 if synced:
-                    log(f"Synced {synced} file(s) → files/")
+                    log(f"Synced {synced} file(s) → {label}")
 
             dialog = wolf_inject.format_report_dialog(report)
             status = wolf_inject.format_report_status(report)
@@ -4273,10 +4282,10 @@ class WolfWorkflowTab(QWidget):
             self,
             "Inject from wolf_json",
             f"About to inject {len(files)} file(s) from wolf_json/.\n\n"
-            "Also copy those JSON into files/ so the tool keeps the same "
-            "progress (overwrites matching names in files/)?\n\n"
-            "Yes = inject and sync to files/\n"
-            "No = inject only, leave files/ as-is\n"
+            "Also copy those JSON into files/ and translated/ so the tool "
+            "keeps the same progress (overwrites matching names)?\n\n"
+            "Yes = inject and sync to files/ + translated/\n"
+            "No = inject only, leave files/ and translated/ as-is\n"
             "Cancel = do nothing",
             QMessageBox.Yes | QMessageBox.No | QMessageBox.Cancel,
             QMessageBox.Yes,
@@ -4284,18 +4293,23 @@ class WolfWorkflowTab(QWidget):
         if reply == QMessageBox.Cancel:
             self._log("Inject from wolf_json cancelled.")
             return
-        sync_to_files = reply == QMessageBox.Yes
-        if sync_to_files:
+        sync_tool_dirs = reply == QMessageBox.Yes
+        if sync_tool_dirs:
             self._log(
-                f"Will sync {len(files)} wolf_json/ file(s) → files/ after inject."
+                f"Will sync {len(files)} wolf_json/ file(s) → files/ and "
+                "translated/ after inject."
             )
         else:
-            self._log("Skipping wolf_json/ → files/ sync; leaving files/ as-is.")
+            self._log(
+                "Skipping wolf_json/ → files/ + translated/ sync; "
+                "leaving those folders as-is."
+            )
         self._inject(
             set(files),
             source_dir=work,
             sync_to_wolf_json=False,
-            sync_to_files=sync_to_files,
+            sync_to_files=sync_tool_dirs,
+            sync_to_translated=sync_tool_dirs,
         )
 
     def _layout_restore_all(self):
