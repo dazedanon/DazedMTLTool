@@ -19,16 +19,17 @@ Mirrors the RPGMaker WorkflowTab, driven by the vendored WolfDawn ``wolf`` CLI
                         lines before writing binaries
   Step 7  Inject      - inject translations into Data/ binaries and refresh
                         wolf_json/; quick-inject picks a few files or all
-  Step 8  Fix wrap    - search translated JSON by in-game text; Relayout
+  Step 8  Package     - run from a loose Data/ folder or repack Data.wolf;
+                        optional save rewrite for existing .sav files
+  Step 9  Fix wrap    - search translated JSON by in-game text; Relayout
                         (names-wrap / cell geometry) or Manual (width + font);
-                        inject the edited file
-  Step 9  Package     - run from a loose Data/ folder, or repack Data.wolf
-  Step 10 Saves       - fix baked strings in existing .sav files (optional)
+                        inject the edited file, then re-package to verify
 
 names.json is staged into files/ but is NOT translated in the bulk phases - WolfDawn
 tags each name safe / refs / verify and Phase 0 translates only safe entries
 (per-name, not per-category), harvests them into vocab.txt, and Step 7 injects the
-result. All text wrapping lives in Step 8.
+result. Package (Step 8) makes the build playable; Fix wrap (Step 9) is the
+playtest feedback loop.
 
 The extracted JSON is staged in ``<game_root>/wolf_json/`` (a manifest maps each
 file back to its base binary), then imported into ``files/`` for the shared
@@ -620,9 +621,8 @@ class WolfWorkflowTab(QWidget):
             ("5  Maps/Events", self._build_step5_maps_events),
             ("6  Precheck", self._build_step6_precheck),
             ("7  Inject", self._build_step4_inject),
-            ("8  Fix wrap", self._build_step7_relayout),
-            ("9  Package", self._build_step5_package),
-            ("10 Saves", self._build_step6_saves),
+            ("8  Package", self._build_step5_package),
+            ("9  Fix wrap", self._build_step7_relayout),
         ]
         self._step_labels = [label for label, _ in _tab_defs]
 
@@ -2599,18 +2599,19 @@ class WolfWorkflowTab(QWidget):
 
         layout.addWidget(_make_hr())
         layout.addWidget(self._desc(
-            "English text is often longer than Japanese. Step 8 (Fix wrapping): paste "
-            "overflowing in-game text to find the sheet, wrap, and re-inject."
+            "Next: Step 8 (Package) so you can playtest, then Step 9 (Fix wrapping) "
+            "to paste overflowing in-game text, wrap, and re-inject."
         ))
         self._refresh_inject_list()
 
     def _build_step7_relayout(self, layout: QVBoxLayout):
         """Search-first fix wrapping: find sheet by in-game text, wrap, re-inject."""
-        layout.addWidget(_make_section_label("Step 8 · Fix wrapping"))
+        layout.addWidget(_make_section_label("Step 9 · Fix wrapping"))
         layout.addWidget(self._desc(
-            "Paste overflowing in-game text to find it in translated JSON. "
-            "Relayout uses cell width + max lines (names.json → wolf names-wrap). "
-            "Manual uses wrap width + body font; emphasis \\f[N] scales with the body."
+            "After packaging and playtesting, paste overflowing in-game text to find "
+            "it in translated JSON. Relayout uses cell width + max lines "
+            "(names.json → wolf names-wrap). Manual uses wrap width + body font; "
+            "emphasis \\f[N] scales with the body. Re-inject, then re-package to verify."
         ))
 
         search_row = QHBoxLayout()
@@ -3566,9 +3567,8 @@ class WolfWorkflowTab(QWidget):
             "Maps",
             "Precheck",
             "Inject",
-            "Wrap",
             "Package",
-            "Saves",
+            "Wrap",
         )
         name = short_names[idx] if 0 <= idx < len(short_names) else str(idx)
         mark = "✓" if done else ""
@@ -3901,13 +3901,14 @@ class WolfWorkflowTab(QWidget):
 
         self._run_task(task, on_done=_after)
 
-    # ── Step 5: Package ────────────────────────────────────────────────────────
+    # ── Step 8: Package (+ optional saves) ─────────────────────────────────────
 
     def _build_step5_package(self, layout: QVBoxLayout):
-        layout.addWidget(_make_section_label("Step 9 · Package the Translated Game"))
+        layout.addWidget(_make_section_label("Step 8 · Package the Translated Game"))
         layout.addWidget(self._desc(
-            "Choose how the translated build runs. A loose Data/ folder is simplest for "
-            "playtesting; repacking rebuilds a single Data.wolf archive for distribution."
+            "Make the injected build playable so you can spot overflow in-game, then "
+            "fix wrapping in Step 9. A loose Data/ folder is simplest for playtesting; "
+            "repacking rebuilds a single Data.wolf archive for distribution."
         ))
 
         loose_btn = self._register(_make_btn("Use loose Data/ folder (back up archives)", "#007acc"))
@@ -3927,6 +3928,28 @@ class WolfWorkflowTab(QWidget):
             "Rebuilds Data.wolf from the translated Data/ folder, inheriting the original "
             "archive's encryption where possible (--like the backed-up original)."
         ))
+
+        layout.addWidget(_make_hr())
+        layout.addWidget(self._subheading("Update existing saves (optional)"))
+        layout.addWidget(self._desc(
+            "WOLF .sav files bake in the game title and some strings at save time. Rewrite "
+            "them so old Japanese saves load cleanly in the translated build. Only needed "
+            "for players who already have saves, or to test against one. A timestamped "
+            "backup is made automatically."
+        ))
+
+        row = QHBoxLayout()
+        self.save_edit = QLineEdit()
+        self.save_edit.setPlaceholderText("Save folder or .sav file…")
+        row.addWidget(self.save_edit, 1)
+        browse_btn = self._register(_make_btn("Browse…", "#3a3a3a"))
+        browse_btn.clicked.connect(self._browse_saves)
+        row.addWidget(browse_btn)
+        layout.addLayout(row)
+
+        run_btn = self._register(_make_btn("Update saves", "#007acc"))
+        run_btn.clicked.connect(self._update_saves)
+        layout.addWidget(run_btn)
 
     def _package_loose(self):
         if not self._require_root():
@@ -3978,30 +4001,6 @@ class WolfWorkflowTab(QWidget):
             return True, f"Wrote {output.name}."
 
         self._run_task(task)
-
-    # ── Step 10: Saves ─────────────────────────────────────────────────────────
-
-    def _build_step6_saves(self, layout: QVBoxLayout):
-        layout.addWidget(_make_section_label("Step 10 · Update Existing Saves (optional)"))
-        layout.addWidget(self._desc(
-            "WOLF .sav files bake in the game title and some strings at save time. This rewrites "
-            "them so old Japanese saves load cleanly in the translated build. It is only needed "
-            "for players who already have saves, or to test against one. A timestamped backup is "
-            "made automatically."
-        ))
-
-        row = QHBoxLayout()
-        self.save_edit = QLineEdit()
-        self.save_edit.setPlaceholderText("Save folder or .sav file…")
-        row.addWidget(self.save_edit, 1)
-        browse_btn = self._register(_make_btn("Browse…", "#3a3a3a"))
-        browse_btn.clicked.connect(self._browse_saves)
-        row.addWidget(browse_btn)
-        layout.addLayout(row)
-
-        run_btn = self._register(_make_btn("Update saves", "#007acc"))
-        run_btn.clicked.connect(self._update_saves)
-        layout.addWidget(run_btn)
 
     def _browse_saves(self):
         start = self.save_edit.text() or (str(Path(self._game_root) / "Save") if self._game_root else str(Path.home()))
