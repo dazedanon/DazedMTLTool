@@ -2493,9 +2493,20 @@ class WolfWorkflowTab(QWidget):
         )
         layout.addWidget(self.drift_cb)
 
+        check_row = QHBoxLayout()
         check_btn = self._register(_make_btn("Check name consistency", "#3a3a3a"))
         check_btn.clicked.connect(self._names_check)
-        layout.addWidget(check_btn)
+        reconcile_btn = self._register(_make_btn("Reconcile names → glossary", "#007acc"))
+        reconcile_btn.setToolTip(
+            "Rewrite extract lines so each names.json source uses one English value. "
+            "Translated names.json entries win; if the glossary is still Japanese "
+            "(refs/verify), divergent extracts are unified to the majority spelling."
+        )
+        reconcile_btn.clicked.connect(self._names_reconcile)
+        check_row.addWidget(check_btn)
+        check_row.addWidget(reconcile_btn)
+        check_row.addStretch()
+        layout.addLayout(check_row)
 
         layout.addWidget(_make_hr())
         layout.addWidget(self._subheading("Translated files"))
@@ -3750,6 +3761,40 @@ class WolfWorkflowTab(QWidget):
             return True, "names-check reported inconsistencies (see log above)."
 
         self._run_task(task)
+
+    def _names_reconcile(self):
+        """Force extract JSON to one English per glossary name (names.json wins)."""
+        translated = self._tool_root() / "translated"
+        if not (translated / "names.json").is_file():
+            QMessageBox.warning(
+                self,
+                "Reconcile names",
+                "translated/names.json not found. Finish Step 3 first.",
+            )
+            return
+
+        def task(log, progress=None):
+            from util.wolfdawn import names as wolf_names
+
+            report = wolf_names.reconcile_translated_dir(translated, dry_run=False)
+            summary = wolf_names.format_reconcile_summary(report)
+            log(summary)
+            for change in report.changes[:40]:
+                log(
+                    f"  {change.json_file}: {change.source!r} "
+                    f"{change.old_text!r} → {change.new_text!r} ({change.reason})"
+                )
+            if len(report.changes) > 40:
+                log(f"  … and {len(report.changes) - 40} more")
+            return True, summary
+
+        def _after(ok: bool, msg: str):
+            if ok:
+                QMessageBox.information(self, "Reconcile names", msg)
+            else:
+                QMessageBox.warning(self, "Reconcile names", msg or "Reconcile failed.")
+
+        self._run_task(task, on_done=_after)
 
     # ── Step 5: Package ────────────────────────────────────────────────────────
 

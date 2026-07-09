@@ -148,5 +148,68 @@ class TestNameWrapRoles(unittest.TestCase):
         self.assertEqual(role["font"], 14)
 
 
+class TestNameReconcile(unittest.TestCase):
+    def test_glossary_wins_over_divergent_extracts(self):
+        names = {
+            "kind": "names",
+            "names": [{"source": "牧場主", "text": "Rancher", "safety": "safe"}],
+        }
+        db = {
+            "kind": "db",
+            "groups": [
+                {
+                    "type": 1,
+                    "lines": [
+                        {"source": "牧場主", "text": "Ranch Owner"},
+                        {"source": "牧場主", "text": "Rancher"},
+                        {"source": "牧場主", "text": "牧場主"},
+                    ],
+                }
+            ],
+        }
+        report = wn.reconcile_names_to_glossary(names, {"DataBase.project.json": db})
+        self.assertEqual(report.changed, 2)  # Owner + identity → Rancher
+        texts = [ln["text"] for ln in db["groups"][0]["lines"]]
+        self.assertEqual(texts, ["Rancher", "Rancher", "Rancher"])
+        self.assertTrue(all(c.reason == "glossary" for c in report.changes))
+
+    def test_majority_when_glossary_still_japanese(self):
+        names = {
+            "kind": "names",
+            "names": [{"source": "魔獣マニア", "text": "魔獣マニア", "safety": "refs"}],
+        }
+        db = {
+            "kind": "db",
+            "groups": [
+                {
+                    "type": 1,
+                    "lines": [
+                        {"source": "魔獣マニア", "text": "Beast Maniac"},
+                        {"source": "魔獣マニア", "text": "Monster Beast Maniac"},
+                        {"source": "魔獣マニア", "text": "Monster Beast Maniac"},
+                    ],
+                }
+            ],
+        }
+        report = wn.reconcile_names_to_glossary(names, {"DataBase.project.json": db})
+        self.assertEqual(report.changed, 1)
+        self.assertEqual(report.changes[0].new_text, "Monster Beast Maniac")
+        self.assertEqual(report.changes[0].reason, "majority")
+        texts = [ln["text"] for ln in db["groups"][0]["lines"]]
+        self.assertEqual(
+            texts,
+            ["Monster Beast Maniac", "Monster Beast Maniac", "Monster Beast Maniac"],
+        )
+
+    def test_tie_breaks_lexicographically(self):
+        chosen, reason = wn.choose_canonical(
+            "牧場主",
+            "牧場主",
+            {"Ranch Owner": 4, "Rancher": 4},
+        )
+        self.assertEqual(reason, "majority")
+        self.assertEqual(chosen, "Ranch Owner")
+
+
 if __name__ == "__main__":
     unittest.main()

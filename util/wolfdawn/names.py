@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import json
 import re
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Union
 
@@ -376,3 +377,234 @@ def upsert_name_wrap_role(
         encoding="utf-8",
     )
     return path
+
+
+# ── Name-consistency reconcile (names.json wins) ─────────────────────────────
+
+
+@dataclass
+class NameReconcileChange:
+    """One extract line rewritten to match the chosen canonical translation."""
+
+    json_file: str
+    source: str
+    old_text: str
+    new_text: str
+    reason: str  # glossary | majority
+
+
+@dataclass
+class NameReconcileReport:
+    changes: list[NameReconcileChange] = field(default_factory=list)
+    skipped_identity_glossary: list[str] = field(default_factory=list)
+    unresolved: list[str] = field(default_factory=list)
+    files_written: list[str] = field(default_factory=list)
+
+    @property
+    def changed(self) -> int:
+        return len(self.changes)
+
+
+def glossary_map(names_doc: dict[str, Any]) -> dict[str, str]:
+    """``source -> text`` from names.json (last entry wins if duplicates)."""
+    out: dict[str, str] = {}
+    for entry in parse_names_entries(names_doc):
+        src = entry.get("source")
+        txt = entry.get("text")
+        if isinstance(src, str) and src and isinstance(txt, str):
+            out[src] = txt
+    return out
+
+
+def _walk_source_text_leaves(obj: Any, visit) -> None:
+    """Call ``visit(leaf_dict)`` for every object with string source+text."""
+    if isinstance(obj, dict):
+        src, txt = obj.get("source"), obj.get("text")
+        if isinstance(src, str) and isinstance(txt, str):
+            visit(obj)
+        for value in obj.values():
+            _walk_source_text_leaves(value, visit)
+    elif isinstance(obj, list):
+        for item in obj:
+            _walk_source_text_leaves(item, visit)
+
+
+def _collect_extract_variants(
+    extract_docs: dict[str, dict[str, Any]],
+    glossary_sources: set[str],
+) -> dict[str, dict[str, int]]:
+    """source -> {text: count} for non-identity glossary-name lines in extracts."""
+    from collections import Counter
+
+    variants: dict[str, Counter[str]] = {}
+    for doc in extract_docs.values():
+        def visit(leaf: dict[str, Any], _doc=doc) -> None:
+            src = leaf["source"]
+            txt = leaf["text"]
+            if src not in glossary_sources or txt == src:
+                return
+            variants.setdefault(src, Counter())[txt] += 1
+
+        _walk_source_text_leaves(doc, visit)
+    return {src: dict(counts) for src, counts in variants.items()}
+
+
+def choose_canonical(
+    source: str,
+    glossary_text: str,
+    extract_variants: dict[str, int],
+) -> tuple[str | None, str]:
+    """Pick the canonical English for *source*.
+
+    Priority:
+    1. Translated ``names.json`` entry (``glossary_text != source``)
+    2. Majority among extract variants (tie → lexicographically first)
+    3. None if glossary is still JP and there are no extract variants
+    """
+    if glossary_text != source:
+        return glossary_text, "glossary"
+    if not extract_variants:
+        return None, "identity_glossary"
+    best_count = max(extract_variants.values())
+    candidates = sorted(t for t, n in extract_variants.items() if n == best_count)
+    return candidates[0], "majority"
+
+
+def reconcile_names_to_glossary(
+    names_doc: dict[str, Any],
+    extract_docs: dict[str, dict[str, Any]],
+    *,
+    dry_run: bool = False,
+) -> NameReconcileReport:
+    """Rewrite extract lines so each glossary name uses one canonical translation.
+
+    *names_doc* is not modified. Only exact full-string ``source`` matches are
+    touched (same rule as WolfDawn ``names-check``).
+    """
+    report = NameReconcileReport()
+    gloss = glossary_map(names_doc)
+    if not gloss:
+        return report
+
+    variants = _collect_extract_variants(extract_docs, set(gloss))
+    canonical: dict[str, tuple[str, str]] = {}
+    for source, gtext in gloss.items():
+        extract_texts = variants.get(source, {})
+        chosen, reason = choose_canonical(source, gtext, extract_texts)
+        if chosen is None:
+            continue
+        if reason == "majority" and len(extract_texts) < 2 and gtext == source:
+            # Glossary still JP and extracts already agree - nothing to reconcile.
+            continue
+        if reason == "glossary":
+            # Always apply glossary EN onto extracts (identity or wrong EN).
+            canonical[source] = (chosen, reason)
+        elif len(extract_texts) >= 2:
+            # Divergent extracts, glossary still JP - unify to majority.
+            canonical[source] = (chosen, reason)
+        # else: glossary JP, single extract variant - leave alone
+
+    for json_name, doc in extract_docs.items():
+        changed_here = 0
+
+        def visit(leaf: dict[str, Any], _name=json_name) -> None:
+            nonlocal changed_here
+            src = leaf["source"]
+            if src not in canonical:
+                return
+            chosen, reason = canonical[src]
+            old = leaf["text"]
+            if old == chosen:
+                return
+            # When unifying via majority (glossary still JP), do not invent EN onto
+            # identity lines - only collapse divergent translations.
+            if reason == "majority" and old == src:
+                return
+            report.changes.append(
+                NameReconcileChange(
+                    json_file=_name,
+                    source=src,
+                    old_text=old,
+                    new_text=chosen,
+                    reason=reason,
+                )
+            )
+            if not dry_run:
+                leaf["text"] = chosen
+            changed_here += 1
+
+        _walk_source_text_leaves(doc, visit)
+        if changed_here and not dry_run:
+            report.files_written.append(json_name)
+
+    return report
+
+
+def format_reconcile_summary(report: NameReconcileReport) -> str:
+    """Short human summary for the GUI / log."""
+    if not report.changes:
+        return "Name reconcile: nothing to change."
+    parts = [f"Name reconcile: {report.changed} line(s) updated"]
+    by_reason: dict[str, int] = {}
+    for c in report.changes:
+        by_reason[c.reason] = by_reason.get(c.reason, 0) + 1
+    if by_reason:
+        detail = ", ".join(f"{n} via {r}" for r, n in sorted(by_reason.items()))
+        parts.append(f"({detail})")
+    if report.files_written:
+        parts.append(f"in {len(report.files_written)} file(s)")
+    majority_sources = sorted({c.source for c in report.changes if c.reason == "majority"})
+    if majority_sources:
+        parts.append(
+            f"; {len(majority_sources)} name(s) used majority because names.json "
+            "is still Japanese (refs/verify) - translate them in names.json to lock the winner"
+        )
+    return " ".join(parts)
+
+
+def reconcile_translated_dir(
+    translated_dir: PathLike,
+    *,
+    dry_run: bool = False,
+) -> NameReconcileReport:
+    """Load ``translated/names.json`` + other JSON extracts and reconcile in place."""
+    base = Path(translated_dir)
+    names_path = base / "names.json"
+    if not names_path.is_file():
+        report = NameReconcileReport()
+        report.unresolved.append("names.json missing")
+        return report
+
+    names_doc = json.loads(names_path.read_text(encoding="utf-8-sig"))
+    if not isinstance(names_doc, dict):
+        report = NameReconcileReport()
+        report.unresolved.append("names.json invalid")
+        return report
+
+    extract_docs: dict[str, dict[str, Any]] = {}
+    for path in sorted(base.glob("*.json")):
+        if path.name in ("names.json", "wolfdawn-roles.json", "wrap_profile.json"):
+            continue
+        try:
+            data = json.loads(path.read_text(encoding="utf-8-sig"))
+        except Exception:
+            continue
+        if isinstance(data, dict) and data.get("kind") in (
+            "db",
+            "map",
+            "common",
+            "gamedat",
+            "txt",
+            "txt-dir",
+        ):
+            extract_docs[path.name] = data
+
+    report = reconcile_names_to_glossary(names_doc, extract_docs, dry_run=dry_run)
+    if not dry_run:
+        for name in report.files_written:
+            path = base / name
+            path.write_text(
+                json.dumps(extract_docs[name], ensure_ascii=False, indent=4) + "\n",
+                encoding="utf-8",
+            )
+    return report
