@@ -46,22 +46,22 @@ class _WolfTranslateHarness:
             self.captured.append(copy.deepcopy(text))
             return _mock_translate(text, history, history_ctx)
 
-        def capture_vocab(category, pairs):
-            self.vocab_writes.append((category, list(pairs)))
+        def capture_vocab(category, pairs, merge=False):
+            self.vocab_writes.append((category, list(pairs), merge))
 
         orig_t = wd.translateAI
         orig_estimate = wd.ESTIMATE
-        orig_wrap = wd.WRAP
         orig_ignore = wd.IGNORETLTEXT
         orig_update = wd.wolf_vocab.update_vocab_section
         orig_labels = wd.wolf_names.derive_db_labels
+        orig_db_filter = wd.wolf_db.load_db_filter_config
         wd.translateAI = translate
         wd.ESTIMATE = estimate
-        wd.WRAP = False  # keep write-back byte-faithful; wrapping tested separately
         wd.IGNORETLTEXT = ignore_tl_text
         # Never touch the real glossary / DB files during tests.
         wd.wolf_vocab.update_vocab_section = capture_vocab
         wd.wolf_names.derive_db_labels = lambda _p: {}
+        wd.wolf_db.load_db_filter_config = lambda: (frozenset(), frozenset())
         try:
             data_copy = copy.deepcopy(data)
             result = wd.parseDocument(data_copy, filename)
@@ -69,10 +69,10 @@ class _WolfTranslateHarness:
         finally:
             wd.translateAI = orig_t
             wd.ESTIMATE = orig_estimate
-            wd.WRAP = orig_wrap
             wd.IGNORETLTEXT = orig_ignore
             wd.wolf_vocab.update_vocab_section = orig_update
             wd.wolf_names.derive_db_labels = orig_labels
+            wd.wolf_db.load_db_filter_config = orig_db_filter
 
 
 MAP_DOC = {
@@ -198,7 +198,7 @@ class TestTranslationWriteback(unittest.TestCase):
         self.assertEqual(
             harness.vocab_writes,
             [
-                ("Weapon · 武器", [("剣", "EN_剣")]),
+                ("Weapon · 武器", [("剣", "EN_剣")], False),
             ],
         )
 
@@ -233,7 +233,7 @@ class TestTranslationWriteback(unittest.TestCase):
         finally:
             wd.wolf_vocab.remove_vocab_section = orig_remove
         self.assertIsNone(err)
-        self.assertEqual(harness.vocab_writes, [("Weapon · 武器", [("ダガー", "EN_ダガー")])])
+        self.assertEqual(harness.vocab_writes, [("Weapon · 武器", [("ダガー", "EN_ダガー")], False)])
         self.assertEqual(harness.vocab_remove_writes, ["├■プロフィール"])
 
     def test_txtdir_translates(self):
@@ -451,8 +451,93 @@ class TestTranslationWriteback(unittest.TestCase):
         self.assertEqual(captured, [])
         self.assertEqual(
             harness.vocab_writes,
-            [("Weapon · 武器", [("剣", "Sword")])],
+            [("Weapon · 武器", [("剣", "Sword")], False)],
         )
+
+    def test_db_foundation_labels_harvest_to_vocab(self):
+        doc = {
+            "file": "SysDatabase.project",
+            "kind": "db",
+            "groups": [
+                {
+                    "type": 0,
+                    "typeName": "Map Setting · マップ設定",
+                    "lines": [
+                        {
+                            "row": 0,
+                            "field": 0,
+                            "fieldName": "マップ名",
+                            "source": "礼拝堂",
+                            "text": "礼拝堂",
+                        },
+                        {
+                            "row": 1,
+                            "field": 0,
+                            "fieldName": "マップ名",
+                            "source": "大通り",
+                            "text": "大通り",
+                        },
+                        {
+                            "row": 0,
+                            "field": 1,
+                            "fieldName": "Description · 説明",
+                            "source": "静かな礼拝堂",
+                            "text": "静かな礼拝堂",
+                        },
+                    ],
+                },
+                {
+                    "type": 1,
+                    "typeName": "■イベント(セルリア)",
+                    "lines": [
+                        {
+                            "row": 0,
+                            "field": 0,
+                            "fieldName": "現在の行動",
+                            "source": "礼拝堂で黙とう中",
+                            "text": "礼拝堂で黙とう中",
+                        },
+                    ],
+                },
+            ],
+        }
+        harness = _WolfTranslateHarness()
+        (_data, _t, err), _c = harness.run(doc, "SysDatabase.project.json")
+        self.assertIsNone(err)
+        self.assertEqual(
+            harness.vocab_writes,
+            [
+                (
+                    "Map Setting · マップ設定",
+                    [("礼拝堂", "EN_礼拝堂"), ("大通り", "EN_大通り")],
+                    True,
+                ),
+            ],
+        )
+
+    def test_db_harvest_skipped_in_estimate(self):
+        doc = {
+            "file": "SysDatabase.project",
+            "kind": "db",
+            "groups": [
+                {
+                    "type": 0,
+                    "typeName": "Map Setting · マップ設定",
+                    "lines": [
+                        {
+                            "row": 0,
+                            "field": 0,
+                            "fieldName": "マップ名",
+                            "source": "礼拝堂",
+                            "text": "礼拝堂",
+                        },
+                    ],
+                },
+            ],
+        }
+        harness = _WolfTranslateHarness()
+        harness.run(doc, "SysDatabase.project.json", estimate=True)
+        self.assertEqual(harness.vocab_writes, [])
 
 
 import re  # noqa: E402

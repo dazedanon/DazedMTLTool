@@ -24,9 +24,10 @@ names.json safety: WolfDawn tags every value name with a static ``safety`` badge
 (``safe``, ``refs``, or ``verify``). For ``kind == "names"`` documents, only
 entries whose badge is ``safe`` are translated; ``refs`` and ``verify`` names and
 legacy entries without a badge keep ``text == source``. After translating
-names.json, translatable entries are harvested into ``vocab.txt`` (grouped by
-``note``, with bilingual headers) so later phases keep item / skill / term names
-consistent.
+names.json, short name-like entries are harvested into ``vocab.txt`` (grouped by
+``note``, with bilingual headers). After foundation DB sheets are translated,
+short label fields (map names, titles, etc.) are merged into the same glossary
+so later phases keep place / term names consistent without overwriting names.json.
 
 Database sheet filter (Step 4): optional ``wolfDbIncludeGroups`` or
 ``wolfDbIncludeTiers`` in ``.env`` limit which ``kind: db`` lines are collected.
@@ -353,6 +354,10 @@ def parseDocument(data, filename):
     # so a resume still seeds vocab. Mirrors the RPGMaker DB-first strategy.
     if is_names and not ESTIMATE:
         _harvest_names_to_vocab(data)
+    # Foundation DB label fields (map names, titles) merge into vocab.txt without
+    # replacing entries already seeded from names.json.
+    elif data.get("kind") == "db" and not ESTIMATE:
+        _harvest_db_to_vocab(data)
 
     return [data, totalTokens, None]
 
@@ -385,6 +390,25 @@ def _harvest_names_to_vocab(data):
                 wolf_vocab.update_vocab_section(header, pairs)
             else:
                 wolf_vocab.remove_vocab_section(header)
+    except Exception:
+        traceback.print_exc()
+
+
+def _harvest_db_to_vocab(data):
+    """Merge short foundation DB labels into vocab.txt, grouped by sheet.
+
+    Uses merge mode so names.json-seeded entries for the same section stay put.
+    Descriptions and narrative dialogue are filtered out.
+    """
+    try:
+        include_tiers, include_groups = wolf_db.load_db_filter_config()
+        by_sheet = wolf_db.collect_db_vocab_pairs(
+            data,
+            include_tiers=include_tiers,
+            include_groups=include_groups,
+        )
+        for type_name, pairs in by_sheet.items():
+            wolf_vocab.update_vocab_section(type_name, pairs, merge=True)
     except Exception:
         traceback.print_exc()
 

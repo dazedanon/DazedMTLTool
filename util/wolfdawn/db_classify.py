@@ -64,6 +64,28 @@ DIALOGUE_FIELDS_RE = re.compile(
     r"セリフ|コメント|相手|行為|台詞|会話|メッセージ_",
 )
 
+# Foundation DB lines that are short display labels (map names, term titles),
+# not descriptions / battle messages / dialogue. Used when seeding vocab.txt.
+_DB_VOCAB_FIELD_RE = re.compile(
+    r"マップ名|"
+    r"属性名|"
+    r"用語名|"
+    r"コマンド名|"
+    r"(?:^|·\s*)タイトル(?:$|[（(\s])|"
+    r"(?:^|·\s*)Name(?:\s*·|$)|"
+    r"(?:^|·\s*)Title(?:\s*·|$)|"
+    r"(?:^|·\s*)名称(?:$|[（(\s·])|"
+    r"(?:^|·\s*)称号(?!.*コメント)|"
+    r"(?:^|·\s*)好きなもの(?!.*コメント)",
+    re.IGNORECASE,
+)
+_DB_VOCAB_SKIP_FIELD_RE = re.compile(
+    r"説明|Description|文章|メッセージ|Message|セリフ|コメント|Comment|"
+    r"行為|相手|台詞|会話",
+    re.IGNORECASE,
+)
+_DB_VOCAB_HARVEST_MAX_LEN = 72
+
 ARCHETYPE_CLASSIC = "classic_rpg"
 ARCHETYPE_DB_HEAVY = "simulation_db_heavy"
 ARCHETYPE_HYBRID = "hybrid"
@@ -456,6 +478,79 @@ def load_db_filter_config() -> tuple[frozenset[str], frozenset[str]]:
         parse_db_filter_tiers(os.getenv("wolfDbIncludeTiers", "")),
         parse_db_filter_groups(os.getenv("wolfDbIncludeGroups", "")),
     )
+
+
+def is_db_vocab_harvest_candidate(
+    line: dict[str, Any],
+    *,
+    type_name: str = "",
+    tier: str | None = None,
+) -> bool:
+    """True when a foundation DB line should seed ``vocab.txt``.
+
+    Only short label-like fields on foundation/system/unknown sheets qualify.
+    Descriptions, battle messages, and narrative dialogue stay out.
+    """
+    resolved = tier
+    if resolved is None:
+        resolved = classify_group_tier(type_name, [line])
+    if resolved not in FOUNDATION_TIERS:
+        return False
+    field_name = str(line.get("fieldName") or "")
+    if _DB_VOCAB_SKIP_FIELD_RE.search(field_name):
+        return False
+    if not _DB_VOCAB_FIELD_RE.search(field_name):
+        return False
+    if DIALOGUE_FIELDS_RE.search(field_name):
+        return False
+    src = str(line.get("source") or "")
+    if not src.strip():
+        return False
+    if "\n" in src or "\r" in src:
+        return False
+    if len(src) > _DB_VOCAB_HARVEST_MAX_LEN:
+        return False
+    if len(re.findall(r"[。！？]", src)) >= 2:
+        return False
+    return True
+
+
+def collect_db_vocab_pairs(
+    doc: dict[str, Any],
+    *,
+    include_tiers: frozenset[str] | None = None,
+    include_groups: frozenset[str] | None = None,
+) -> dict[str, list[tuple[str, str]]]:
+    """Return ``{typeName: [(source, text), ...]}`` for harvestable DB terms.
+
+    Respects the same sheet filter used for translation when *include_tiers* /
+    *include_groups* are provided. Only foundation-tier sheets contribute.
+    """
+    if doc.get("kind") != "db":
+        return {}
+    json_file = json_file_from_doc(doc)
+    tiers = include_tiers if include_tiers is not None else frozenset()
+    groups = include_groups if include_groups is not None else frozenset()
+    by_sheet: dict[str, list[tuple[str, str]]] = {}
+    for group in doc.get("groups") or []:
+        type_name = str(group.get("typeName") or "")
+        lines = group.get("lines") or []
+        if not group_matches_filter(json_file, type_name, tiers, groups):
+            continue
+        tier = classify_group_tier(type_name, lines)
+        if tier not in FOUNDATION_TIERS:
+            continue
+        pairs: list[tuple[str, str]] = []
+        for line in lines:
+            if not is_db_vocab_harvest_candidate(line, type_name=type_name, tier=tier):
+                continue
+            src, dst = line.get("source"), line.get("text")
+            if not isinstance(src, str) or not isinstance(dst, str):
+                continue
+            pairs.append((src, dst))
+        if pairs:
+            by_sheet[type_name] = pairs
+    return by_sheet
 
 
 def group_matches_filter(

@@ -62,7 +62,26 @@ def _norm(s: str) -> str:
     return re.sub(r"\s+", " ", str(s)).strip().casefold()
 
 
-def update_vocab_section(category: str, pairs) -> None:
+_SECTION_PAIR_RE = re.compile(
+    r"^(.+?)\s+\((.+)\)\s*$",
+)
+
+
+def _parse_section_pairs(section_body: str) -> dict[str, str]:
+    """Parse ``src (dst)`` lines from a vocab section body (no header)."""
+    pairs: dict[str, str] = {}
+    for raw in section_body.splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        m = _SECTION_PAIR_RE.match(line)
+        if not m:
+            continue
+        pairs[m.group(1)] = m.group(2)
+    return pairs
+
+
+def update_vocab_section(category: str, pairs, *, merge: bool = False) -> None:
     """Insert or replace a ``# {category}`` section in the game-specific vocab.
 
     Mirrors the RPGMaker auto-glossary behaviour (translated DB names feed
@@ -74,6 +93,8 @@ def update_vocab_section(category: str, pairs) -> None:
     - ``pairs``: iterable of ``(source, translated)``. Deduped by source (last
       wins); no-ops (empty translation or unchanged after normalisation) are
       dropped. When nothing survives filtering the file is left untouched.
+    - ``merge``: when True, keep existing entries for this category and only add
+      sources that are not already present (names.json stays authoritative).
     """
     dedup: dict[str, str] = {}
     for src, dst in pairs:
@@ -97,16 +118,26 @@ def update_vocab_section(category: str, pairs) -> None:
             game_part = existing
             base_part = ""
 
-        block_lines = [f"{src} ({dst})" for src, dst in dedup.items()]
-        new_block = f"# {category}\n" + "\n".join(block_lines) + "\n\n"
-
         # Match this category's section up to the next '#' header or end of the
         # game portion. Handles '#Cat', '# Cat', '## Cat', etc.
         pattern = re.compile(
-            rf"^[\t ]*#+\s*{re.escape(category)}\s*$\r?\n.*?(?=^[\t ]*#|\Z)",
+            rf"^([\t ]*#+\s*{re.escape(category)}\s*$\r?\n)(.*?)(?=^[\t ]*#|\Z)",
             re.MULTILINE | re.DOTALL,
         )
-        if pattern.search(game_part):
+        match = pattern.search(game_part)
+        if merge and match:
+            merged = _parse_section_pairs(match.group(2))
+            for src, dst in dedup.items():
+                if src not in merged:
+                    merged[src] = dst
+            dedup = merged
+            if not dedup:
+                return
+
+        block_lines = [f"{src} ({dst})" for src, dst in dedup.items()]
+        new_block = f"# {category}\n" + "\n".join(block_lines) + "\n\n"
+
+        if match:
             new_game = pattern.sub(lambda _m: new_block, game_part, count=1)
         else:
             new_game = game_part.rstrip("\n")

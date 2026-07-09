@@ -12,7 +12,8 @@ Mirrors the RPGMaker WorkflowTab, driven by the vendored WolfDawn ``wolf`` CLI
                         are translated per-name; refs and verify names are skipped.
                         Harvests short name terms into vocab.txt.
   Step 4  Database    - discover content layout; translate foundation DB sheets
-                        (items, skills, descriptions) before narrative custom sheets
+                        (items, skills, descriptions) before narrative custom sheets;
+                        harvests short label fields (map names, titles) into vocab.txt
   Step 5  Maps/Events - .mps maps, CommonEvent, Game.dat, Evtext; speaker handling
   Step 6  Precheck    - dry-run selected JSON for safety-guard skips; edit those
                         lines before writing binaries
@@ -1784,7 +1785,8 @@ class WolfWorkflowTab(QWidget):
 
         note = self._desc(
             "You don't need to add item / skill / enemy value names here: Phase 0 translates "
-            "WolfDawn safe entries from names.json and harvests them into vocab.txt "
+            "WolfDawn safe entries from names.json and harvests them into vocab.txt. "
+            "Foundation DB also merges short labels (map names, titles) after Step 4. "
             "Focus this glossary on characters and worldbuilding terms."
         )
         layout.addWidget(note)
@@ -1883,7 +1885,8 @@ class WolfWorkflowTab(QWidget):
         layout.addWidget(self._subheading("Translate database"))
         layout.addWidget(self._desc(
             "Run after Step 3 (names) so vocab.txt stays consistent. Only checked sheets "
-            "are sent to the model. Re-running skips lines already translated."
+            "are sent to the model. Re-running skips lines already translated. Short "
+            "foundation labels (map names, titles) are merged into vocab.txt."
         ))
         self._add_tl_mode_selector(layout)
 

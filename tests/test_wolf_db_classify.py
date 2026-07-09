@@ -238,5 +238,93 @@ class TestDbProfile(unittest.TestCase):
         self.assertFalse(checks[groups[1].key])
 
 
+class TestDbVocabHarvest(unittest.TestCase):
+    def test_map_name_is_candidate(self):
+        line = {"fieldName": "マップ名", "source": "礼拝堂", "text": "Chapel"}
+        self.assertTrue(
+            wdb.is_db_vocab_harvest_candidate(
+                line,
+                type_name="Map Setting · マップ設定",
+                tier=wdb.TIER_UNKNOWN,
+            )
+        )
+
+    def test_description_is_not_candidate(self):
+        line = {
+            "fieldName": "Description · 説明",
+            "source": "味方一人のHPを回復",
+            "text": "Restores one ally's HP",
+        }
+        self.assertFalse(
+            wdb.is_db_vocab_harvest_candidate(
+                line,
+                type_name="Skill · 技能",
+                tier=wdb.TIER_FOUNDATION,
+            )
+        )
+
+    def test_usage_message_with_name_placeholder_is_not_candidate(self):
+        line = {
+            "fieldName": "Usage Message [Battle] (Name~ · 使用時文章[戦闘](人名~",
+            "source": "の攻撃！",
+            "text": "'s attack!",
+        }
+        self.assertFalse(
+            wdb.is_db_vocab_harvest_candidate(
+                line,
+                type_name="Skill · 技能",
+                tier=wdb.TIER_FOUNDATION,
+            )
+        )
+
+    def test_narrative_sheet_is_not_candidate(self):
+        line = {"fieldName": "マップ名", "source": "礼拝堂", "text": "Chapel"}
+        self.assertFalse(
+            wdb.is_db_vocab_harvest_candidate(
+                line,
+                type_name="■イベント(セルリア)",
+                tier=wdb.TIER_NARRATIVE,
+            )
+        )
+
+    def test_collect_pairs_groups_by_sheet(self):
+        doc = {
+            "file": "SysDatabase.project",
+            "kind": "db",
+            "groups": [
+                {
+                    "typeName": "Map Setting · マップ設定",
+                    "lines": [
+                        {
+                            "fieldName": "マップ名",
+                            "source": "礼拝堂",
+                            "text": "Chapel",
+                        },
+                        {
+                            "fieldName": "Description · 説明",
+                            "source": "静かな礼拝堂",
+                            "text": "A quiet chapel",
+                        },
+                    ],
+                },
+                {
+                    "typeName": "■イベント(セルリア)",
+                    "lines": [
+                        {
+                            "fieldName": "現在の行動",
+                            "source": "礼拝堂で黙とう中",
+                            "text": "Praying in the chapel",
+                        },
+                    ],
+                },
+            ],
+        }
+        pairs = wdb.collect_db_vocab_pairs(doc)
+        self.assertEqual(
+            pairs,
+            {"Map Setting · マップ設定": [("礼拝堂", "Chapel")]},
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

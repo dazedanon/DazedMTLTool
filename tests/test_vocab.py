@@ -63,6 +63,20 @@ class TestUpdateVocabSection(unittest.TestCase):
         self.assertIn("ヒール (Cure)", text)
         self.assertNotIn("ヒール (Heal)", text)
 
+    def test_merge_keeps_existing_and_adds_new(self):
+        vocab.update_vocab_section("Map Setting · マップ設定", [("礼拝堂", "Chapel")])
+        vocab.update_vocab_section(
+            "Map Setting · マップ設定",
+            [("礼拝堂", "Chapel Hall"), ("大通り", "Main Street")],
+            merge=True,
+        )
+
+        text = self.vocab_path.read_text(encoding="utf-8")
+        self.assertIn("礼拝堂 (Chapel)", text)
+        self.assertNotIn("礼拝堂 (Chapel Hall)", text)
+        self.assertIn("大通り (Main Street)", text)
+        self.assertEqual(text.count("# Map Setting · マップ設定"), 1)
+
 
 if __name__ == "__main__":
     unittest.main()
