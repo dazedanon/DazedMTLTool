@@ -243,25 +243,34 @@ class TestManualFontAndWrap(unittest.TestCase):
 
 
 class TestEventScopeWrap(unittest.TestCase):
-    def test_wrap_all_in_map_file(self):
+    def test_wrap_all_in_map_scene_only(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "Map001.mps.json"
+            long_a = (
+                "This is a very long line of dialogue that "
+                "should wrap at thirty four visible chars."
+            )
+            long_b = (
+                "Another very long line of dialogue that also "
+                "should wrap at thirty four visible chars."
+            )
             doc = {
                 "kind": "map",
                 "file": "Map001.mps",
                 "scenes": [
                     {
                         "event": 1,
+                        "name": "Intro",
                         "lines": [
-                            {
-                                "text": (
-                                    "This is a very long line of dialogue that "
-                                    "should wrap at thirty four visible chars."
-                                ),
-                            },
+                            {"text": long_a},
                             {"text": "Short line."},
                         ],
-                    }
+                    },
+                    {
+                        "event": 2,
+                        "name": "Other",
+                        "lines": [{"text": long_b}],
+                    },
                 ],
             }
             path.write_text(json.dumps(doc, ensure_ascii=False), encoding="utf-8")
@@ -270,15 +279,22 @@ class TestEventScopeWrap(unittest.TestCase):
                 kind="map",
                 sheet_name="Map001.mps",
                 row=1,
-                field_name="scene 0 line 0",
+                field_name="UI",
                 text="very long line",
                 max_line_len=80,
                 scene_index=0,
                 line_index=0,
                 map_file="Map001.mps",
             )
-            self.assertEqual(ws.scope_stats(doc, hit, 34).overflow, 1)
+            stats = ws.scope_stats(doc, hit, 34)
+            self.assertEqual(stats.total, 2)
+            self.assertEqual(stats.overflow, 1)
+            self.assertIn("event 1", stats.label)
+            self.assertIn("Intro", stats.label)
             self.assertEqual(ws.wrap_overflow_in_scope(path, doc, hit, 34), 1)
+            # Scene 2 must stay untouched.
+            self.assertEqual(doc["scenes"][1]["lines"][0]["text"], long_b)
+            self.assertNotEqual(doc["scenes"][0]["lines"][0]["text"], long_a)
 
 
 class TestFitTextToBox(unittest.TestCase):

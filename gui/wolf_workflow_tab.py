@@ -3015,7 +3015,7 @@ class WolfWorkflowTab(QWidget):
         scope = (
             wolf_ws.scope_stats(doc, hit, width)
             if doc is not None
-            else wolf_ws.ScopeStats(label=wolf_ws.scope_label(hit), total=0, overflow=0)
+            else wolf_ws.ScopeStats(label=wolf_ws.scope_label(hit, doc), total=0, overflow=0)
         )
         overflow_note = (
             f" · {scope.overflow} of {scope.total} lines overflow at width {width}"
@@ -3380,7 +3380,7 @@ class WolfWorkflowTab(QWidget):
                     width=width,
                     font=font,
                 )
-            scope = wolf_ws.scope_label(hit)
+            scope = wolf_ws.scope_label(hit, self._current_wrap_doc)
             font_note = (
                 "fonts unchanged"
                 if font is None
@@ -3427,7 +3427,7 @@ class WolfWorkflowTab(QWidget):
         self._remember_sheet_width(
             hit.sheet_name, width, hit.json_file, max_lines=max_lines or None
         )
-        scope = wolf_ws.scope_label(hit)
+        scope = wolf_ws.scope_label(hit, self._current_wrap_doc)
         if max_lines > 0:
             msg = (
                 f"Relayout {count} line(s) in {scope} "

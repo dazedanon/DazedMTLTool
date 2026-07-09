@@ -820,18 +820,16 @@ def wrap_overflow_manual_in_scope(
     font: int | None = None,
 ) -> int:
     """Manual wrap (+ optional proportional font) for every line in *hit*'s group."""
-    if isinstance(hit, WrapHit):
-        kind, sheet_name = hit.kind, hit.sheet_name
-    else:
-        kind = str(hit.get("kind") or doc.get("kind") or "")
-        sheet_name = str(hit.get("sheet_name") or "")
+    kind, sheet_name = _hit_kind_and_sheet(hit, doc)
 
     if kind == "names":
         return _wrap_manual_in_names_category(path, doc, sheet_name, width, font=font)
     if kind == "db":
         return _wrap_manual_in_db_sheet(path, doc, sheet_name, width, font=font)
     if kind in ("map", "common"):
-        return _wrap_manual_in_event_file(path, doc, width, font=font)
+        return _wrap_manual_in_event_scene(
+            path, doc, _hit_scene_index(hit), width, font=font
+        )
     if kind == "gamedat":
         return _wrap_manual_in_gamedat(path, doc, width, font=font)
     return 0
@@ -900,20 +898,24 @@ def _wrap_manual_in_db_sheet(
     return changed
 
 
-def _wrap_manual_in_event_file(
+def _wrap_manual_in_event_scene(
     path: Path,
     doc: dict[str, Any],
+    scene_index: int | None,
     width: int,
     *,
     font: int | None = None,
 ) -> int:
+    """Manual-wrap overflowing lines in one map/CommonEvent scene."""
     if doc.get("kind") not in ("map", "common"):
         return 0
+    scenes = doc.get("scenes") or []
+    if scene_index is None or not (0 <= scene_index < len(scenes)):
+        return 0
     changed = 0
-    for scene in doc.get("scenes") or []:
-        for line in scene.get("lines") or []:
-            if _apply_manual_to_line_dict(line, width, font=font):
-                changed += 1
+    for line in scenes[scene_index].get("lines") or []:
+        if _apply_manual_to_line_dict(line, width, font=font):
+            changed += 1
     if changed:
         save_document(path, doc)
     return changed
@@ -946,13 +948,66 @@ class ScopeStats:
     overflow: int
 
 
-def scope_label(hit: WrapHit | dict[str, Any]) -> str:
-    """Human-readable group name for status messages."""
+def _hit_kind_and_sheet(hit: WrapHit | dict[str, Any], doc: dict[str, Any] | None = None) -> tuple[str, str]:
     if isinstance(hit, WrapHit):
-        kind, sheet, jf = hit.kind, hit.sheet_name, hit.json_file
+        return hit.kind, hit.sheet_name
+    kind = str(hit.get("kind") or (doc or {}).get("kind") or "")
+    sheet = str(hit.get("sheet_name") or "")
+    return kind, sheet
+
+
+def _hit_scene_index(hit: WrapHit | dict[str, Any]) -> int | None:
+    if isinstance(hit, WrapHit):
+        return hit.scene_index
+    raw = hit.get("scene_index")
+    if raw is None:
+        return None
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        return None
+
+
+def _scene_group_label(doc: dict[str, Any] | None, hit: WrapHit | dict[str, Any]) -> str:
+    """Label for one map/CommonEvent scene (the wrap-group unit)."""
+    kind, sheet = _hit_kind_and_sheet(hit, doc)
+    si = _hit_scene_index(hit)
+    scene: dict[str, Any] | None = None
+    if doc is not None and si is not None:
+        scenes = doc.get("scenes") or []
+        if 0 <= si < len(scenes) and isinstance(scenes[si], dict):
+            scene = scenes[si]
+    event_id = None
+    name = ""
+    if scene is not None:
+        event_id = scene.get("event")
+        name = str(scene.get("name") or "").strip()
+    elif isinstance(hit, WrapHit) and hit.row is not None:
+        event_id = hit.row
+    elif isinstance(hit, dict) and hit.get("row") is not None:
+        event_id = hit.get("row")
+
+    parts: list[str] = []
+    if kind == "common":
+        parts.append("CommonEvent")
+    elif sheet:
+        parts.append(sheet)
+    if event_id is not None:
+        parts.append(f"event {event_id}")
+    if name:
+        parts.append(name)
+    elif si is not None and event_id is None:
+        parts.append(f"scene {si}")
+    return " · ".join(parts) if parts else (sheet or "event")
+
+
+def scope_label(hit: WrapHit | dict[str, Any], doc: dict[str, Any] | None = None) -> str:
+    """Human-readable group name for status messages."""
+    kind, sheet = _hit_kind_and_sheet(hit, doc)
+    jf = ""
+    if isinstance(hit, WrapHit):
+        jf = hit.json_file
     else:
-        kind = str(hit.get("kind") or "")
-        sheet = str(hit.get("sheet_name") or "")
         jf = str(hit.get("json_file") or "")
     if kind == "db":
         return f"sheet {sheet}"
@@ -960,10 +1015,8 @@ def scope_label(hit: WrapHit | dict[str, Any]) -> str:
         return f"category {sheet}"
     if kind == "gamedat":
         return "Game.dat"
-    if kind == "common":
-        return "CommonEvent"
-    if kind == "map":
-        return sheet or jf
+    if kind in ("map", "common"):
+        return _scene_group_label(doc, hit)
     return sheet or jf
 
 
@@ -973,11 +1026,7 @@ def scope_stats(
     width: int,
 ) -> ScopeStats:
     """Count lines and overflows in the same group as *hit*."""
-    if isinstance(hit, WrapHit):
-        kind, sheet_name = hit.kind, hit.sheet_name
-    else:
-        kind = str(hit.get("kind") or doc.get("kind") or "")
-        sheet_name = str(hit.get("sheet_name") or "")
+    kind, sheet_name = _hit_kind_and_sheet(hit, doc)
 
     total = 0
     overflow = 0
@@ -1007,8 +1056,15 @@ def scope_stats(
             if line_needs_wrap(text, width):
                 overflow += 1
     elif kind in ("map", "common"):
-        for scene in doc.get("scenes") or []:
-            for line in scene.get("lines") or []:
+        si = _hit_scene_index(hit)
+        scenes = doc.get("scenes") or []
+        if si is not None and 0 <= si < len(scenes):
+            scene_iter = [scenes[si]]
+        else:
+            # No scene on the hit: fall back to whole file (legacy).
+            scene_iter = scenes
+        for scene in scene_iter:
+            for line in (scene.get("lines") or []):
                 text = line.get("text")
                 if not isinstance(text, str) or not text.strip():
                     continue
@@ -1026,7 +1082,7 @@ def scope_stats(
             if line_needs_wrap(text, width):
                 overflow += 1
 
-    return ScopeStats(label=scope_label(hit), total=total, overflow=overflow)
+    return ScopeStats(label=scope_label(hit, doc), total=total, overflow=overflow)
 
 
 def _line_needs_relayout(text: str, width: int, max_lines: int | None) -> bool:
@@ -1040,26 +1096,29 @@ def _line_needs_relayout(text: str, width: int, max_lines: int | None) -> bool:
     return count_soft_lines(wrapped) > limit or wrapped != text
 
 
-def _wrap_overflow_in_event_file(
+def _wrap_overflow_in_event_scene(
     path: Path,
     doc: dict[str, Any],
+    scene_index: int | None,
     width: int,
     *,
     max_lines: int | None = None,
 ) -> int:
-    """Wrap overflowing dialogue lines in one map or CommonEvent JSON file."""
+    """Wrap overflowing dialogue lines in one map or CommonEvent scene."""
     if doc.get("kind") not in ("map", "common"):
         return 0
+    scenes = doc.get("scenes") or []
+    if scene_index is None or not (0 <= scene_index < len(scenes)):
+        return 0
     changed = 0
-    for scene in doc.get("scenes") or []:
-        for line in scene.get("lines") or []:
-            text = line.get("text")
-            if not isinstance(text, str) or not text.strip():
-                continue
-            if not _line_needs_relayout(text, width, max_lines):
-                continue
-            if apply_relayout_to_line_dict(line, width, max_lines=max_lines):
-                changed += 1
+    for line in scenes[scene_index].get("lines") or []:
+        text = line.get("text")
+        if not isinstance(text, str) or not text.strip():
+            continue
+        if not _line_needs_relayout(text, width, max_lines):
+            continue
+        if apply_relayout_to_line_dict(line, width, max_lines=max_lines):
+            changed += 1
     if changed:
         save_document(path, doc)
     return changed
@@ -1117,7 +1176,9 @@ def wrap_overflow_in_scope(
             path, doc, sheet_name, width, kind="db", max_lines=max_lines
         )
     if kind in ("map", "common"):
-        return _wrap_overflow_in_event_file(path, doc, width, max_lines=max_lines)
+        return _wrap_overflow_in_event_scene(
+            path, doc, _hit_scene_index(hit), width, max_lines=max_lines
+        )
     if kind == "gamedat":
         return _wrap_overflow_in_gamedat(path, doc, width, max_lines=max_lines)
     return 0
