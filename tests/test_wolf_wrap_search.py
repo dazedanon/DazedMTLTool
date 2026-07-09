@@ -235,10 +235,11 @@ class TestManualFontAndWrap(unittest.TestCase):
                 max_line_len=80,
             )
             changed = ws.wrap_overflow_manual_in_scope(path, doc, hit, 36, font=14)
-            self.assertEqual(changed, 1)
+            # Both 噂 entries get body font (short "OK" included); other category skipped.
+            self.assertEqual(changed, 2)
             saved = json.loads(path.read_text(encoding="utf-8"))
             self.assertIn(r"\f[14]", saved["names"][0]["text"])
-            self.assertEqual(saved["names"][1]["text"], "OK")
+            self.assertEqual(saved["names"][1]["text"], r"\f[14]OK")
             self.assertEqual(saved["names"][2]["text"], "x" * 80)
 
 
@@ -481,6 +482,28 @@ class TestNameplateWrap(unittest.TestCase):
             speaker="セルリア",
         )
         self.assertLessEqual(body_lines, 2)
+
+    def test_manual_group_applies_font_to_short_spoken_lines(self):
+        """Group wrap with body font must not skip short lines that already fit."""
+        short = "Celria\nJust now...... what did you say?"
+        line = {
+            "text": short,
+            "speaker": "セルリア",
+            "speaker_src": "literal_line1_lowconf",
+        }
+        self.assertTrue(ws._apply_manual_to_line_dict(line, 70, font=21))
+        self.assertEqual(
+            line["text"],
+            "Celria\n\\f[21]Just now...... what did you say?",
+        )
+        # Font 0 / None: still skip short plain lines (width-only group wrap).
+        line2 = {
+            "text": short,
+            "speaker": "セルリア",
+            "speaker_src": "literal_line1_lowconf",
+        }
+        self.assertFalse(ws._apply_manual_to_line_dict(line2, 70, font=None))
+        self.assertEqual(line2["text"], short)
 
     def test_dialogue_geometry_roundtrip(self):
         with tempfile.TemporaryDirectory() as tmp:

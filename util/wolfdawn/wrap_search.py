@@ -1075,8 +1075,9 @@ def apply_manual_font_and_wrap(
     are collapsed and rebuilt so Manual Wrap matches what the preview shows.
     Nameplate lines (``Celria\\n…``) stay on their own first line.
 
-    When *only_overflow_or_fonts* is True (group wrap), skip short plain lines
-    that already match the target layout and have no ``\\f[N]``.
+    When *only_overflow_or_fonts* is True, skip short plain lines that already
+    match the target layout and have no ``\\f[N]``. Manual group wrap passes
+    False whenever a body font is set so short spoken lines still get ``\\f``.
 
     Returns ``(new_text, changed)``.
     """
@@ -1195,11 +1196,14 @@ def _apply_manual_to_line_dict(
     text = line.get("text")
     if not isinstance(text, str) or not text.strip():
         return False
+    # Font set: apply to every line in the group (short spoken lines included).
+    # Font 0 / None: only reflow lines that overflow or already have \\f[N].
+    only_overflow = font is None or int(font) <= 0
     new_text, changed = apply_manual_font_and_wrap(
         text,
         width,
         font=font,
-        only_overflow_or_fonts=True,
+        only_overflow_or_fonts=only_overflow,
         speaker_src=str(line.get("speaker_src") or ""),
         speaker=str(line.get("speaker") or ""),
     )
