@@ -9,12 +9,11 @@ from __future__ import annotations
 
 import json
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Sequence
 
 import util.dazedwrap as dazedwrap
-from util.wolfdawn.db_classify import group_key, json_file_from_doc
 from util.wolfdawn.selective_wrap import line_needs_wrap, wrap_line_text
 
 WRAP_PROFILE_NAME = "wrap_profile.json"
@@ -87,22 +86,6 @@ class WrapHit:
             f"{preview}\n"
             f"{self.sheet_name} · {self.json_file} · {loc}{overflow}"
         )
-
-
-@dataclass
-class SheetOverflowSummary:
-    json_file: str
-    sheet_name: str
-    line_count: int
-    overflow_count: int
-    tier: str = ""
-    kind: str = "db"
-
-    @property
-    def key(self) -> str:
-        if self.kind == "names":
-            return f"{self.json_file}|names|{self.sheet_name}"
-        return group_key(self.json_file, self.sheet_name)
 
 
 def wrap_profile_path(work_dir: str | Path) -> Path:
@@ -402,20 +385,6 @@ def wrap_preview_info(text: str, width: int) -> dict[str, Any]:
     }
 
 
-def format_wrap_preview(text: str, width: int) -> str:
-    """Multiline preview with per-line visible character counts."""
-    info = wrap_preview_info(text, width)
-    if not info["wrapped"]:
-        return ""
-    lines = info["wrapped"].replace("\r\n", "\n").replace("\r", "\n").split("\n")
-    parts: list[str] = []
-    for i, line in enumerate(lines):
-        vis = dazedwrap.max_line_visible_length(line)
-        marker = "⚠" if vis > width else " "
-        parts.append(f"{marker} {i + 1:2d} ({vis:2d})  {line}")
-    return "\n".join(parts)
-
-
 def wrap_preview_summary(text: str, width: int) -> str:
     """One-line status for the preview header."""
     info = wrap_preview_info(text, width)
@@ -576,15 +545,6 @@ def format_wrap_preview_html(
         + "".join(rows)
         + "</div>"
     )
-
-
-def split_line_at_visible_width(line: str, width: int) -> tuple[int, int]:
-    """Return ``(fit_end, line_len)`` char indices in *line* for UI highlighting."""
-    line_len = len(line)
-    if not line or width <= 0:
-        return (line_len, line_len)
-    fit_end = dazedwrap.visible_word_wrap_end_index(line, width)
-    return (min(fit_end, line_len), line_len)
 
 
 def locate_line(doc: dict[str, Any], hit_id: dict[str, Any]) -> dict[str, Any] | None:
@@ -1081,96 +1041,3 @@ def _wrap_overflow_in_names_category(
     if changed:
         save_document(path, doc)
     return changed
-
-
-def _names_category_summaries(
-    doc: dict[str, Any],
-    *,
-    json_file: str,
-    width: int,
-) -> list[SheetOverflowSummary]:
-    counts: dict[str, int] = {}
-    overflow: dict[str, int] = {}
-    for entry in doc.get("names") or []:
-        if not isinstance(entry, dict):
-            continue
-        note = str(entry.get("note") or "names.json")
-        counts[note] = counts.get(note, 0) + 1
-        text = entry.get("text")
-        if isinstance(text, str) and line_needs_wrap(text, width):
-            overflow[note] = overflow.get(note, 0) + 1
-    return [
-        SheetOverflowSummary(
-            json_file=json_file,
-            sheet_name=note,
-            line_count=counts[note],
-            overflow_count=overflow.get(note, 0),
-            tier="names",
-            kind="names",
-        )
-        for note in sorted(counts)
-    ]
-
-
-def sheet_overflow_summaries(
-    translated_dir: str | Path,
-    width: int,
-    *,
-    files_dir: str | Path | None = None,
-) -> list[SheetOverflowSummary]:
-    """Per DB sheet overflow counts at *width*."""
-    from util.wolfdawn.db_classify import analyze_content_distribution, classify_db_document
-
-    base = Path(translated_dir)
-    if not base.is_dir():
-        base = Path(files_dir) if files_dir else base
-    dist = analyze_content_distribution(base)
-    summaries: list[SheetOverflowSummary] = []
-
-    for path in sorted(base.glob("*.project.json")):
-        doc = _load_json(path)
-        if not doc or doc.get("kind") != "db":
-            continue
-        jf = path.name
-        for group in classify_db_document(doc, json_file=jf):
-            overflow = 0
-            for g in doc.get("groups") or []:
-                if str(g.get("typeName") or "") != group.type_name:
-                    continue
-                for line in g.get("lines") or []:
-                    text = line.get("text")
-                    if isinstance(text, str) and line_needs_wrap(text, width):
-                        overflow += 1
-            summaries.append(
-                SheetOverflowSummary(
-                    json_file=jf,
-                    sheet_name=group.type_name,
-                    line_count=group.line_count,
-                    overflow_count=overflow,
-                    tier=group.tier,
-                )
-            )
-    if not summaries:
-        summaries = [
-            SheetOverflowSummary(
-                json_file=g.json_file,
-                sheet_name=g.type_name,
-                line_count=g.line_count,
-                overflow_count=0,
-                tier=g.tier,
-            )
-            for g in dist.groups
-        ]
-
-    seen_names: set[Path] = set()
-    for search_base in _iter_search_dirs(base, Path(files_dir) if files_dir else None):
-        names_path = search_base / "names.json"
-        if not names_path.is_file() or names_path in seen_names:
-            continue
-        seen_names.add(names_path)
-        doc = _load_json(names_path)
-        if doc and doc.get("kind") == "names":
-            summaries.extend(
-                _names_category_summaries(doc, json_file="names.json", width=width)
-            )
-    return summaries

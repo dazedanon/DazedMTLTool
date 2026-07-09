@@ -134,27 +134,6 @@ def scale_font_sizes(
     return new_text, count
 
 
-def apply_font_size(text: str, size: int) -> tuple[str, int]:
-    """Force every ``\\f[N]`` in *text* to the same *size* (no proportional scale).
-
-    Prefer :func:`scale_font_sizes` when the line has emphasis overrides that
-    should stay relatively larger than the body font.
-
-    Always ensures a leading ``\\f[size]``. Returns ``(new_text, replacements)``.
-    """
-    if not isinstance(text, str) or not text.strip() or size <= 0:
-        return text, 0
-    size = int(size)
-    matches = list(WOLF_FONT_SIZE_RE.finditer(text))
-    if matches:
-        had_leading = bool(WOLF_FONT_SIZE_RE.match(text))
-        new_text = WOLF_FONT_SIZE_RE.sub(rf"\\f[{size}]", text)
-        new_text = ensure_leading_font_size(new_text, size)
-        count = len(matches) + (0 if had_leading else 1)
-        return new_text, count
-    return ensure_leading_font_size(text, size), 1
-
-
 def _control_code_tokens(text: str) -> list[str]:
     """Return the sequence of WolfDawn-compared control codes in *text*."""
     if not isinstance(text, str) or not text:

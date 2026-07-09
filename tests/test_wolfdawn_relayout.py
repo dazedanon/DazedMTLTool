@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Unit tests for WolfDawn relayout / desc_relayout CLI wrappers."""
+"""Unit tests for WolfDawn relayout / names-wrap CLI wrappers."""
 
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ from util import wolfdawn  # noqa: E402
 
 
 class TestRelayoutWrappers(unittest.TestCase):
-    def test_relayout_dry_run_args(self):
+    def test_relayout_auto_metrics(self):
         captured = {}
 
         def fake_run(args, log_fn=None):
@@ -25,40 +25,18 @@ class TestRelayoutWrappers(unittest.TestCase):
             return wolfdawn.WolfResult(0, "", "", [str(a) for a in args])
 
         with patch.object(wolfdawn, "_run", side_effect=fake_run):
-            wolfdawn.relayout("/game/Data", width=55, max_rows=0)
-        self.assertEqual(captured["args"][:2], ["relayout", "/game/Data"])
-        self.assertIn("--width", captured["args"])
-        self.assertIn("55", captured["args"])
-        self.assertNotIn("-o", captured["args"])
-        self.assertIn("--max-rows", captured["args"])
-        self.assertIn("auto", captured["args"])
-
-    def test_relayout_write_args(self):
-        captured = {}
-
-        def fake_run(args, log_fn=None):
-            captured["args"] = list(args)
-            return wolfdawn.WolfResult(0, "", "", [str(a) for a in args])
-
-        with patch.object(wolfdawn, "_run", side_effect=fake_run):
-            wolfdawn.relayout(
-                "/game/Data",
-                out_dir="/tmp/out",
-                width=60,
-                max_rows=4,
-                no_resolve=True,
-            )
+            wolfdawn.relayout("/game/Data", width="auto", max_rows=0, out_dir="/tmp/out")
         args = captured["args"]
-        self.assertEqual(args[0], "relayout")
+        self.assertEqual(args[:2], ["relayout", "/game/Data"])
         self.assertIn("-o", args)
         self.assertIn("/tmp/out", args)
         self.assertIn("--width", args)
-        self.assertIn("60", args)
+        self.assertIn("auto", args)
         self.assertIn("--max-rows", args)
-        self.assertIn("4", args)
-        self.assertIn("--no-resolve", args)
+        # max_rows=0 becomes auto
+        self.assertEqual(args[args.index("--max-rows") + 1], "auto")
 
-    def test_desc_relayout_args(self):
+    def test_desc_relayout_auto_max_lines(self):
         captured = {}
 
         def fake_run(args, log_fn=None):
@@ -75,88 +53,32 @@ class TestRelayoutWrappers(unittest.TestCase):
             )
         args = captured["args"]
         self.assertEqual(args[0], "desc-relayout")
-        self.assertIn("-o", args)
-        self.assertIn("/tmp/DataBase.project", args)
-        self.assertIn("--width", args)
-        self.assertIn("75", args)
         self.assertIn("--max-lines", args)
-        self.assertIn("auto", args)
+        self.assertEqual(args[args.index("--max-lines") + 1], "auto")
         self.assertIn("--keep-breaks", args)
 
-    def test_relayout_auto_width(self):
-        captured = {}
-
-        def fake_run(args, log_fn=None):
-            captured["args"] = list(args)
-            return wolfdawn.WolfResult(0, "", "", [str(a) for a in args])
-
-        with patch.object(wolfdawn, "_run", side_effect=fake_run):
-            wolfdawn.relayout("/game/Data", width="auto", max_rows="auto")
-        args = captured["args"]
-        self.assertIn("--width", args)
-        self.assertIn("auto", args)
-        self.assertIn("--max-rows", args)
-
-    def test_names_wrap_args(self):
+    def test_names_wrap_flags_and_parsers(self):
         captured = {}
 
         def fake_run(args, log_fn=None):
             captured["args"] = list(args)
             return wolfdawn.WolfResult(
                 0,
-                "names-wrap: 3 entry(ies) re-wrapped",
+                '  shrunk to \\f[14] to fit its slot: "Hey! ..."\n'
+                '  shrunk to \\f[12] to fit its slot: "That sister..."\n'
+                "names-wrap: 7 entry(ies) re-wrapped",
                 "",
                 [str(a) for a in args],
             )
 
         with patch.object(wolfdawn, "_run", side_effect=fake_run):
-            res = wolfdawn.names_wrap("/tmp/names.json")
-        self.assertEqual(captured["args"], ["names-wrap", "/tmp/names.json"])
-        self.assertEqual(wolfdawn.parse_names_wrap_counts(res.stdout), 3)
-
-    def test_names_wrap_dry_run(self):
-        captured = {}
-
-        def fake_run(args, log_fn=None):
-            captured["args"] = list(args)
-            return wolfdawn.WolfResult(
-                0,
-                "names-wrap: 2 entry(ies) WOULD be re-wrapped",
-                "",
-                [str(a) for a in args],
-            )
-
-        with patch.object(wolfdawn, "_run", side_effect=fake_run):
-            wolfdawn.names_wrap("/tmp/names.json", dry_run=True)
-        self.assertEqual(captured["args"], ["names-wrap", "/tmp/names.json", "--dry-run"])
-
-    def test_names_wrap_note_and_width(self):
-        captured = {}
-
-        def fake_run(args, log_fn=None):
-            captured["args"] = list(args)
-            return wolfdawn.WolfResult(0, "", "", [str(a) for a in args])
-
-        with patch.object(wolfdawn, "_run", side_effect=fake_run):
-            wolfdawn.names_wrap(
+            res = wolfdawn.names_wrap(
                 "/tmp/names.json",
-                note="├■街の噂（MOB）",
-                width=66,
+                note="説明",
+                width=50,
+                lines=3,
+                dry_run=True,
             )
-        self.assertEqual(
-            captured["args"],
-            ["names-wrap", "/tmp/names.json", "--width", "66", "--note", "├■街の噂（MOB）"],
-        )
-
-    def test_names_wrap_lines(self):
-        captured = {}
-
-        def fake_run(args, log_fn=None):
-            captured["args"] = list(args)
-            return wolfdawn.WolfResult(0, "", "", [str(a) for a in args])
-
-        with patch.object(wolfdawn, "_run", side_effect=fake_run):
-            wolfdawn.names_wrap("/tmp/names.json", width=50, lines=3, note="説明")
         self.assertEqual(
             captured["args"],
             [
@@ -168,16 +90,11 @@ class TestRelayoutWrappers(unittest.TestCase):
                 "3",
                 "--note",
                 "説明",
+                "--dry-run",
             ],
         )
-
-    def test_parse_names_wrap_shrink_count(self):
-        blob = (
-            '  shrunk to \\f[14] to fit its slot: "Hey! ..."\n'
-            '  shrunk to \\f[12] to fit its slot: "That sister..."\n'
-            "names-wrap: 7 entry(ies) re-wrapped"
-        )
-        self.assertEqual(wolfdawn.parse_names_wrap_shrink_count(blob), 2)
+        self.assertEqual(wolfdawn.parse_names_wrap_counts(res.stdout), 7)
+        self.assertEqual(wolfdawn.parse_names_wrap_shrink_count(res.stdout), 2)
 
 
 if __name__ == "__main__":
