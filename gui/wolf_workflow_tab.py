@@ -17,8 +17,9 @@ Mirrors the RPGMaker WorkflowTab, driven by the vendored WolfDawn ``wolf`` CLI
   Step 5  Maps/Events - .mps maps, CommonEvent, Game.dat, Evtext; speaker handling
   Step 6  Precheck    - name consistency + reconcile, then dry-run inject for
                         safety-guard skips; edit those lines before writing binaries
-  Step 7  Inject      - always inject every translated JSON into Data/ and
-                        refresh wolf_json/ (full pass avoids name/DB wipe bugs);
+  Step 7  Inject      - inject every JSON into Data/ from translated/ (default)
+                        or from the game's wolf_json/; translated inject also
+                        refreshes wolf_json/ (full pass avoids name/DB wipe bugs);
                         optional layout-restore re-applies source whitespace pads
   Step 8  Package     - run from a loose Data/ folder or repack Data.wolf;
                         optional save rewrite for existing .sav files
@@ -2533,7 +2534,9 @@ class WolfWorkflowTab(QWidget):
     def _build_step7_inject(self, layout: QVBoxLayout):
         layout.addWidget(_make_section_label("Step 7 · Inject Translations"))
         layout.addWidget(self._desc(
-            "Inject every translated JSON into the game's Data/ binaries in one pass. "
+            "Inject every JSON into the game's Data/ binaries in one pass. "
+            "Inject all uses translated/; Inject from wolf_json uses the game's "
+            "wolf_json/ when that folder is the source of truth. "
             "A full inject keeps names.json and DB/map files in sync (partial injects "
             "can wipe name-only fields like rumor boards). Run Step 6 (Precheck) first "
             "if you want to catch safety-guard skips before writing."
@@ -2578,9 +2581,18 @@ class WolfWorkflowTab(QWidget):
         inject_all_btn = self._register(_make_btn("Inject all", "#00a86b"))
         inject_all_btn.setToolTip(
             "Always injects every file in translated/ that the manifest knows about. "
-            "names.json runs first; DB/map injects keep name-only fields."
+            "names.json runs first; DB/map injects keep name-only fields. "
+            "After inject, copies those JSON files into the game's wolf_json/."
         )
         inject_all_btn.clicked.connect(self._inject_all)
+        inject_wolf_btn = self._register(_make_btn("Inject from wolf_json", "#007acc"))
+        inject_wolf_btn.setToolTip(
+            "Inject every injectable JSON from the game's wolf_json/ folder instead "
+            "of translated/. Use when wolf_json/ is the source of truth (e.g. after "
+            "editing or restoring committed game-repo JSON). Does not copy from "
+            "translated/."
+        )
+        inject_wolf_btn.clicked.connect(self._inject_all_from_wolf_json)
         layout_restore_btn = self._register(_make_btn("Layout-restore", "#3a3a3a"))
         layout_restore_btn.setToolTip(
             "Re-run wolf layout-restore on every injectable translated JSON. "
@@ -2589,6 +2601,7 @@ class WolfWorkflowTab(QWidget):
         )
         layout_restore_btn.clicked.connect(self._layout_restore_all)
         btn_row.addWidget(inject_all_btn)
+        btn_row.addWidget(inject_wolf_btn)
         btn_row.addStretch()
         btn_row.addWidget(layout_restore_btn)
         layout.addLayout(btn_row)
@@ -3674,17 +3687,15 @@ class WolfWorkflowTab(QWidget):
                 return p
         return None
 
-    def _injectable_filenames(self) -> list[str]:
-        """JSON files in translated/ that the manifest knows how to inject."""
+    def _injectable_filenames(self, source_dir: Path | None = None) -> list[str]:
+        """JSON files in *source_dir* (default translated/) the manifest can inject."""
         from util.wolfdawn import inject as wolf_inject
 
         manifest = self._read_manifest()
         if not manifest:
             return []
-        return wolf_inject.list_injectable(
-            self._tool_root() / "translated",
-            manifest.get("entries", []),
-        )
+        root = source_dir if source_dir is not None else self._tool_root() / "translated"
+        return wolf_inject.list_injectable(root, manifest.get("entries", []))
 
     def _sync_translated_json_to_wolf_json(
         self, json_name: str, game_json_dir: Path
@@ -3706,13 +3717,29 @@ class WolfWorkflowTab(QWidget):
         except Exception as exc:
             return False, str(exc)
 
-    def _inject(self, selected: set[str]):
-        """Inject the selected translated JSON files into live Data/."""
+    def _inject(
+        self,
+        selected: set[str],
+        *,
+        source_dir: Path | None = None,
+        sync_to_wolf_json: bool = True,
+    ):
+        """Inject the selected JSON files into live Data/.
+
+        *source_dir* defaults to ``translated/``. When injecting from the game's
+        ``wolf_json/``, pass that path and set *sync_to_wolf_json* False (the
+        source already is wolf_json/).
+        """
         if not self._require_manifest():
             return
         manifest = self._read_manifest()
         en_punct = self._inject_flag_en_punct()
         game_json_dir = self._work_dir()
+        inject_dir = (
+            Path(source_dir)
+            if source_dir is not None
+            else self._tool_root() / "translated"
+        )
 
         def task(log, progress=None):
             from util.wolfdawn import inject as wolf_inject
@@ -3724,26 +3751,30 @@ class WolfWorkflowTab(QWidget):
 
             self._ensure_originals(manifest, log, progress, quiet=True)
 
+            log(f"Inject source: {inject_dir}")
             # allow_code_drift=False: inject still auto-passes it for \\f shrink.
             report = wolf_inject.inject_selected(
                 sorted(selected),
                 manifest_entries=entries,
                 data_dir=data_dir_path,
                 originals_dir=originals_dir,
-                translated_dir=self._tool_root() / "translated",
+                translated_dir=inject_dir,
                 game_root=game_root,
                 allow_code_drift=False,
                 en_punct=en_punct,
                 log_fn=log,
             )
 
-            for json_name in sorted(selected):
-                ok, err = self._sync_translated_json_to_wolf_json(
-                    json_name, game_json_dir
-                )
-                if not ok:
-                    report.sync_failures.append((json_name, err or "unknown error"))
-                    log(f"  ✗ sync {json_name}: {err}")
+            if sync_to_wolf_json and game_json_dir is not None:
+                for json_name in sorted(selected):
+                    ok, err = self._sync_translated_json_to_wolf_json(
+                        json_name, game_json_dir
+                    )
+                    if not ok:
+                        report.sync_failures.append(
+                            (json_name, err or "unknown error")
+                        )
+                        log(f"  ✗ sync {json_name}: {err}")
 
             dialog = wolf_inject.format_report_dialog(report)
             status = wolf_inject.format_report_status(report)
@@ -4105,6 +4136,35 @@ class WolfWorkflowTab(QWidget):
             )
             return
         self._inject(set(files))
+
+    def _inject_all_from_wolf_json(self):
+        """Inject every injectable JSON from the game's wolf_json/ folder."""
+        if not self._require_manifest():
+            return
+        if not self._game_root:
+            QMessageBox.information(
+                self,
+                "Inject from wolf_json",
+                "No game folder selected. Detect a project in Step 0 first.",
+            )
+            return
+        work = self._work_dir()
+        if not work.is_dir():
+            QMessageBox.information(
+                self,
+                "Inject from wolf_json",
+                f"No wolf_json/ folder at {work}.",
+            )
+            return
+        files = self._injectable_filenames(work)
+        if not files:
+            QMessageBox.information(
+                self,
+                "Nothing to inject",
+                f"No injectable JSON found in {work}.",
+            )
+            return
+        self._inject(set(files), source_dir=work, sync_to_wolf_json=False)
 
     def _layout_restore_all(self):
         """Re-run wolf layout-restore on every injectable translated JSON."""
