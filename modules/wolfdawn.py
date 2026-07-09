@@ -412,28 +412,37 @@ def _body_after_dropped_tag(text: str, original_speaker: str) -> str:
     return text
 
 
-def _maybe_fix_nameplate(entry, total_tokens: list) -> None:
-    """Swap a Japanese first-line nameplate for English on an otherwise-done line."""
-    if ESTIMATE or _batch_phase() == "collect":
-        return
+def _maybe_fix_nameplate(entry, total_tokens: list) -> bool:
+    """Resolve a Japanese first-line nameplate on an otherwise-done line.
+
+    Returns True when the nameplate was rewritten. During batch collect the
+    in-memory rewrite is discarded (translated/ is not written), but
+    ``getSpeaker`` still runs so the English gloss is cached before dialogue
+    batches are queued - otherwise those live speaker calls only show up in
+    Pass 2.
+    """
+    if ESTIMATE:
+        return False
     speaker_src = entry.get("speaker_src", "")
     if not wolf_speakers.is_firstline_enabled(speaker_src, SPEAKER_CONFIG):
-        return
+        return False
     txt = entry.get("text")
     if not isinstance(txt, str) or not txt.strip():
-        return
+        return False
     # Only touch finished dialogue (body already English / skip-translated).
     if _text_still_needs_translation(entry):
-        return
+        return False
     split = wolf_speakers.split_source(txt, speaker_src, SPEAKER_CONFIG)
     if split is None:
-        return
+        return False
     prefix, speaker, body = split
     if not re.search(LANGREGEX, speaker):
-        return
+        return False
     speaker_en = _resolve_nameplate(speaker, total_tokens)
     if speaker_en and speaker_en != speaker:
         entry["text"] = wolf_speakers.restore_source(prefix, speaker_en, body)
+        return True
+    return False
 
 
 def parseDocument(data, filename):
@@ -457,9 +466,11 @@ def parseDocument(data, filename):
             return False
         return True
 
-    # Fix Japanese nameplates on lines whose dialogue body is already done, so
-    # resume / re-wrap runs do not leave ``セルリア\\nPlease hold on...`` behind.
-    if IGNORETLTEXT and not ESTIMATE and _batch_phase() != "collect":
+    # Resolve Japanese nameplates on lines whose dialogue body is already done.
+    # Must run during batch collect too: those lines are skip-translated so they
+    # never hit the reshape/getSpeaker path, and deferring to consume is what
+    # made speaker Input/Output spam show up in Pass 2 after the batch returned.
+    if IGNORETLTEXT and not ESTIMATE:
         for entry in entries:
             if _translatable(entry):
                 continue

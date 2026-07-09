@@ -470,6 +470,52 @@ class TestTranslationWriteback(unittest.TestCase):
         # Short-string speaker resolve, then the remaining dialogue batch.
         self.assertEqual(captured, ["司祭", ["まだだ"]])
 
+    def test_collect_resolves_japanese_nameplate_before_queueing(self):
+        """Pass 1 must live-translate skip-translated JP nameplates (not defer to Pass 2)."""
+        doc = {
+            "kind": "map",
+            "scenes": [
+                {
+                    "event": 1,
+                    "name": "ev",
+                    "lines": [
+                        {
+                            "cmd": 0,
+                            "str": 0,
+                            "speaker": "客Ｆ",
+                            "speaker_src": "literal_line1_lowconf",
+                            "source": "客Ｆ\nまぁまぁ。",
+                            "text": "客Ｆ\nNow, now.",
+                        },
+                        {
+                            "cmd": 1,
+                            "str": 0,
+                            "speaker": "UI",
+                            "speaker_src": "ui",
+                            "source": "まだだ",
+                            "text": "まだだ",
+                        },
+                    ],
+                }
+            ],
+        }
+        orig_phase = os.environ.get("BATCH_PHASE")
+        os.environ["BATCH_PHASE"] = "collect"
+        try:
+            (data, _t, err), captured = _WolfTranslateHarness().run(doc, "collect_nameplate.mps.json")
+        finally:
+            if orig_phase is None:
+                os.environ.pop("BATCH_PHASE", None)
+            else:
+                os.environ["BATCH_PHASE"] = orig_phase
+
+        self.assertIsNone(err)
+        # Speaker resolved live during collect; dialogue list is also seen (queued).
+        self.assertEqual(captured[0], "客Ｆ")
+        self.assertEqual(captured[1], ["まだだ"])
+        # Collect does not persist translated/, but in-memory text is updated.
+        self.assertEqual(data["scenes"][0]["lines"][0]["text"], "En_客Ｆ\nNow, now.")
+
     def test_ignore_tl_text_false_retranslates(self):
         doc = {
             "kind": "map",
