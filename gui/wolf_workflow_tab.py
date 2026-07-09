@@ -15,8 +15,8 @@ Mirrors the RPGMaker WorkflowTab, driven by the vendored WolfDawn ``wolf`` CLI
                         (items, skills, descriptions) before narrative custom sheets;
                         harvests short label fields (map names, titles) into vocab.txt
   Step 5  Maps/Events - .mps maps, CommonEvent, Game.dat, Evtext; speaker handling
-  Step 6  Precheck    - dry-run selected JSON for safety-guard skips; edit those
-                        lines before writing binaries
+  Step 6  Precheck    - name consistency + reconcile, then dry-run inject for
+                        safety-guard skips; edit those lines before writing binaries
   Step 7  Inject      - always inject every translated JSON into Data/ and
                         refresh wolf_json/ (full pass avoids name/DB wipe bugs);
                         optional layout-restore re-applies source whitespace pads
@@ -2436,9 +2436,10 @@ class WolfWorkflowTab(QWidget):
     def _build_step6_precheck(self, layout: QVBoxLayout):
         layout.addWidget(_make_section_label("Step 6 · Inject Precheck"))
         layout.addWidget(self._desc(
-            "Dry-run selected translated JSON before writing binaries. Lists only real "
-            "safety skips: control-code mismatch, or text not Shift-JIS encodable. "
-            "Fix those lines here, then continue to Step 7 (Inject)."
+            "Before inject: reconcile names.json → extract glossary spellings, "
+            "report name inconsistencies, then dry-run the selected JSON for real "
+            "safety skips (control-code mismatch, or text not Shift-JIS encodable). "
+            "Fix safety rows here, then continue to Step 7 (Inject)."
         ))
 
         layout.addWidget(self._subheading("Translated files"))
@@ -2467,8 +2468,15 @@ class WolfWorkflowTab(QWidget):
 
         precheck_row = QHBoxLayout()
         precheck_btn = self._register(_make_btn("Precheck selected", "#007acc"))
+        precheck_btn.setToolTip(
+            "Reconcile names → glossary, run names-check, then dry-run inject "
+            "safety guards on the ticked files."
+        )
         precheck_btn.clicked.connect(self._precheck_inject_selected)
         precheck_all_btn = self._register(_make_btn("Precheck all", "#007acc"))
+        precheck_all_btn.setToolTip(
+            "Same as Precheck selected, for every injectable file in translated/."
+        )
         precheck_all_btn.clicked.connect(self._precheck_inject_all)
         precheck_row.addWidget(precheck_btn)
         precheck_row.addWidget(precheck_all_btn)
@@ -2533,36 +2541,14 @@ class WolfWorkflowTab(QWidget):
 
         self.en_punct_cb = QCheckBox("Convert Japanese punctuation to ASCII (--en-punct)")
         self.en_punct_cb.setChecked(self._setting("en_punct", "true") == "true")
+        self.en_punct_cb.setToolTip(
+            "Fold fullwidth JP punctuation to ASCII on inject. "
+            "Inline-code drift for \\f shrink is applied automatically."
+        )
         self.en_punct_cb.stateChanged.connect(
             lambda: self._save_setting("en_punct", "true" if self.en_punct_cb.isChecked() else "false")
         )
         layout.addWidget(self.en_punct_cb)
-
-        self.drift_cb = QCheckBox(
-            "Allow inline-code drift (--allow-code-drift; auto for names-wrap \\f shrink)"
-        )
-        self.drift_cb.setChecked(self._setting("allow_code_drift", "false") == "true")
-        self.drift_cb.stateChanged.connect(
-            lambda: self._save_setting(
-                "allow_code_drift", "true" if self.drift_cb.isChecked() else "false"
-            )
-        )
-        layout.addWidget(self.drift_cb)
-
-        check_row = QHBoxLayout()
-        check_btn = self._register(_make_btn("Check name consistency", "#3a3a3a"))
-        check_btn.clicked.connect(self._names_check)
-        reconcile_btn = self._register(_make_btn("Reconcile names → glossary", "#007acc"))
-        reconcile_btn.setToolTip(
-            "Rewrite extract lines so each names.json source uses one English value. "
-            "Translated names.json entries win; if the glossary is still Japanese "
-            "(refs/verify), divergent extracts are unified to the majority spelling."
-        )
-        reconcile_btn.clicked.connect(self._names_reconcile)
-        check_row.addWidget(check_btn)
-        check_row.addWidget(reconcile_btn)
-        check_row.addStretch()
-        layout.addLayout(check_row)
 
         layout.addWidget(_make_hr())
         layout.addWidget(self._subheading("Files that will be injected"))
@@ -3605,7 +3591,6 @@ class WolfWorkflowTab(QWidget):
             return
         manifest = self._read_manifest()
         en_punct = self._inject_flag_en_punct()
-        allow_drift = self._inject_flag_allow_drift()
         game_json_dir = self._work_dir()
 
         def task(log, progress=None):
@@ -3618,6 +3603,7 @@ class WolfWorkflowTab(QWidget):
 
             self._ensure_originals(manifest, log, progress, quiet=True)
 
+            # allow_code_drift=False: inject still auto-passes it for \\f shrink.
             report = wolf_inject.inject_selected(
                 sorted(selected),
                 manifest_entries=entries,
@@ -3625,7 +3611,7 @@ class WolfWorkflowTab(QWidget):
                 originals_dir=originals_dir,
                 translated_dir=self._tool_root() / "translated",
                 game_root=game_root,
-                allow_code_drift=allow_drift,
+                allow_code_drift=False,
                 en_punct=en_punct,
                 log_fn=log,
             )
@@ -3830,37 +3816,75 @@ class WolfWorkflowTab(QWidget):
             return self.en_punct_cb.isChecked()
         return self._setting("en_punct", "true") == "true"
 
-    def _inject_flag_allow_drift(self) -> bool:
-        if hasattr(self, "drift_cb"):
-            return self.drift_cb.isChecked()
-        return self._setting("allow_code_drift", "false") == "true"
-
     def _run_inject_precheck(self, selected: set[str]):
         manifest = self._read_manifest()
         en_punct = self._inject_flag_en_punct()
-        allow_drift = self._inject_flag_allow_drift()
         state: dict = {}
 
         def task(log, progress=None):
+            from util import wolfdawn
             from util.wolfdawn import inject_precheck as wolf_pre
+            from util.wolfdawn import names as wolf_names
+
+            translated = self._tool_root() / "translated"
+            name_notes: list[str] = []
+
+            # Name hygiene first (same work the old Step 7 buttons did).
+            if (translated / "names.json").is_file():
+                report_names = wolf_names.reconcile_translated_dir(
+                    translated, dry_run=False
+                )
+                reconcile_msg = wolf_names.format_reconcile_summary(report_names)
+                log(reconcile_msg)
+                for change in report_names.changes[:40]:
+                    log(
+                        f"  {change.json_file}: {change.source!r} "
+                        f"{change.old_text!r} → {change.new_text!r} ({change.reason})"
+                    )
+                if len(report_names.changes) > 40:
+                    log(f"  … and {len(report_names.changes) - 40} more")
+                name_notes.append(reconcile_msg)
+            else:
+                log("Name reconcile skipped (no translated/names.json).")
+
+            json_files = []
+            for entry in manifest["entries"]:
+                p = self._translated_or_source(entry["json"])
+                if p:
+                    json_files.append(str(p))
+            if json_files:
+                check = wolfdawn.names_check(json_files, log_fn=log)
+                if check.returncode == 0:
+                    name_notes.append("Name usage is consistent across files.")
+                else:
+                    name_notes.append(
+                        "names-check reported inconsistencies (see log)."
+                    )
+            else:
+                name_notes.append("names-check skipped (no JSON found).")
 
             entries = manifest["entries"]
             data_dir_path = Path(manifest["data_dir"])
             game_root = Path(manifest.get("root") or self._game_root)
             originals_dir = game_root / WORK_DIR_NAME / "originals"
             self._ensure_originals(manifest, log, progress, quiet=True)
+            # Font-size drift from wrap/names-wrap is auto-allowed inside precheck.
             report = wolf_pre.precheck_selected(
                 sorted(selected),
                 manifest_entries=entries,
                 data_dir=data_dir_path,
                 originals_dir=originals_dir,
-                translated_dir=self._tool_root() / "translated",
-                allow_code_drift=allow_drift,
+                translated_dir=translated,
+                allow_code_drift=False,
                 en_punct=en_punct,
                 log_fn=log,
             )
             state["report"] = report
-            return True, wolf_pre.format_precheck_summary(report)
+            state["name_notes"] = name_notes
+            summary = wolf_pre.format_precheck_summary(report)
+            if name_notes:
+                summary = " · ".join(name_notes) + "\n" + summary
+            return True, summary
 
         def _after(ok: bool, msg: str):
             from util.wolfdawn import inject_precheck as wolf_pre
@@ -3870,12 +3894,16 @@ class WolfWorkflowTab(QWidget):
                 self._inject_precheck_label.setText(msg or "Precheck failed.")
                 return
             self._populate_inject_precheck(report)
-            self._inject_precheck_label.setText(wolf_pre.format_precheck_summary(report))
+            label = wolf_pre.format_precheck_summary(report)
+            notes = state.get("name_notes") or []
+            if notes:
+                label = " · ".join(notes) + "\n" + label
+            self._inject_precheck_label.setText(label)
             if report.safety_issues:
                 QMessageBox.warning(
                     self,
                     "Inject precheck",
-                    wolf_pre.format_precheck_summary(report)
+                    (msg or label)
                     + "\n\nSelect a safety row below, fix the text, Save line, then re-run precheck.",
                 )
             else:
@@ -3993,62 +4021,6 @@ class WolfWorkflowTab(QWidget):
                 QMessageBox.information(self, "Layout-restore", msg)
             else:
                 QMessageBox.warning(self, "Layout-restore", msg or "layout-restore failed.")
-
-        self._run_task(task, on_done=_after)
-
-    def _names_check(self):
-        if not self._require_manifest():
-            return
-        manifest = self._read_manifest()
-
-        def task(log, progress=None):
-            from util import wolfdawn
-
-            json_files = []
-            for entry in manifest["entries"]:
-                p = self._translated_or_source(entry["json"])
-                if p:
-                    json_files.append(str(p))
-            if not json_files:
-                return False, "No translated JSON found. Run Steps 4-5 first."
-            res = wolfdawn.names_check(json_files, log_fn=log)
-            if res.returncode == 0:
-                return True, "Name usage is consistent across files."
-            return True, "names-check reported inconsistencies (see log above)."
-
-        self._run_task(task)
-
-    def _names_reconcile(self):
-        """Force extract JSON to one English per glossary name (names.json wins)."""
-        translated = self._tool_root() / "translated"
-        if not (translated / "names.json").is_file():
-            QMessageBox.warning(
-                self,
-                "Reconcile names",
-                "translated/names.json not found. Finish Step 3 first.",
-            )
-            return
-
-        def task(log, progress=None):
-            from util.wolfdawn import names as wolf_names
-
-            report = wolf_names.reconcile_translated_dir(translated, dry_run=False)
-            summary = wolf_names.format_reconcile_summary(report)
-            log(summary)
-            for change in report.changes[:40]:
-                log(
-                    f"  {change.json_file}: {change.source!r} "
-                    f"{change.old_text!r} → {change.new_text!r} ({change.reason})"
-                )
-            if len(report.changes) > 40:
-                log(f"  … and {len(report.changes) - 40} more")
-            return True, summary
-
-        def _after(ok: bool, msg: str):
-            if ok:
-                QMessageBox.information(self, "Reconcile names", msg)
-            else:
-                QMessageBox.warning(self, "Reconcile names", msg or "Reconcile failed.")
 
         self._run_task(task, on_done=_after)
 
