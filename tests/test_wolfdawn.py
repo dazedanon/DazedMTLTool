@@ -298,6 +298,56 @@ class TestTranslationWriteback(unittest.TestCase):
             else:
                 os.environ["BATCH_PHASE"] = orig_phase
 
+    def test_layout_restore_runs_after_write(self):
+        """After writing translated/, wolf layout-restore restores pad skeletons."""
+        pad = "                                  \n"
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "files").mkdir()
+            (root / "translated").mkdir()
+            # Use map kind so DB sheet filters from .env cannot skip the line.
+            doc = {
+                "kind": "map",
+                "file": "Map001.mps",
+                "scenes": [
+                    {
+                        "event": 1,
+                        "name": "ev",
+                        "lines": [
+                            {
+                                "cmd": 0,
+                                "str": 0,
+                                "source": pad + "なし",
+                                "text": pad + "なし",
+                            }
+                        ],
+                    }
+                ],
+            }
+            (root / "files" / "Map001.mps.json").write_text(
+                json.dumps(doc, ensure_ascii=False), encoding="utf-8"
+            )
+
+            def translate(text, history, history_ctx=None):
+                # Model drops the leading pad / newline - the bug layout-restore fixes.
+                if isinstance(text, list):
+                    return [["None" for _ in text], [1, 1]]
+                return ["None", [1, 1]]
+
+            old_cwd = os.getcwd()
+            os.chdir(root)
+            orig_t = wd.translateAI
+            wd.translateAI = translate
+            try:
+                result = wd.handleWolfDawn("Map001.mps.json", estimate=False)
+            finally:
+                wd.translateAI = orig_t
+                os.chdir(old_cwd)
+
+            self.assertNotEqual(result, "Fail")
+            out = json.loads((root / "translated" / "Map001.mps.json").read_text(encoding="utf-8"))
+            self.assertEqual(out["scenes"][0]["lines"][0]["text"], pad + "None")
+
     def test_echoed_source_does_not_overwrite_text(self):
         """If the model/collect echoes JP source, leave text alone."""
         doc = {

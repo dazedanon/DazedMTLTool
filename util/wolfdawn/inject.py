@@ -2,7 +2,9 @@
 
 One list of files in ``translated/``, user picks some or all, each file gets a
 clear pass/fail result. ``names.json`` uses ``names-inject`` (must run before
-per-file ``strings-inject`` when both are selected).
+per-file ``strings-inject`` when both are selected). After names-inject, each
+``strings-inject`` uses the live post-names binary as ``--base`` so name-only
+DB fields (rumor boards, etc.) are not rebuilt from pristine Japanese originals.
 """
 
 from __future__ import annotations
@@ -170,17 +172,20 @@ def _interpret_strings_result(json_name: str, res: wolfdawn.WolfResult) -> FileI
 def _interpret_names_result(json_name: str, res: wolfdawn.WolfResult) -> FileInjectResult:
     cli_err = wolfdawn.parse_inject_cli_error(res.stdout, res.stderr)
     applied, drifted = wolfdawn.parse_names_inject_counts(res.stdout, res.stderr)
+    safety = wolfdawn.parse_strings_inject_safety_count(res.stdout, res.stderr)
     detail = _wolf_output_snippet(res.stdout, res.stderr)
-
-    if not res.ok:
-        reason = cli_err or f"wolf exited {res.returncode}"
-        return FileInjectResult(json_name, False, reason, applied=applied, detail=detail)
 
     if wolfdawn.inject_had_applied(applied):
         msg = f"applied {applied} name change(s)"
         if drifted:
             msg += f" ({drifted} unmatched)"
+        if safety:
+            msg += f" ({safety} skipped by safety guard)"
         return FileInjectResult(json_name, True, msg, applied=applied, detail=detail)
+
+    if not res.ok:
+        reason = cli_err or f"wolf exited {res.returncode}"
+        return FileInjectResult(json_name, False, reason, applied=applied, detail=detail)
 
     if res.ok and (drifted or 0) > 0:
         return FileInjectResult(
@@ -320,9 +325,22 @@ def _inject_strings(
     *,
     allow_code_drift: bool,
     en_punct: bool,
+    base_path: Path | None = None,
 ) -> FileInjectResult:
+    """Inject one strings JSON.
+
+    ``base_path`` defaults to the pristine original. Pass the live binary when
+    names-inject already ran in this batch so name-only fields are preserved.
+    """
     orig = orig_base_for(entry, data_dir, originals_dir)
     out = entry["base"]
+    base = base_path if base_path is not None else orig
+    if not base.exists():
+        return FileInjectResult(
+            json_name,
+            False,
+            f"no inject base at {base} (re-run Step 0 extract)",
+        )
     if not orig.exists():
         return FileInjectResult(
             json_name,
@@ -330,16 +348,16 @@ def _inject_strings(
             f"no pristine original at {orig} (re-run Step 0 extract)",
         )
 
-    if entry.get("kind") == "db" and not db_dat_sibling(orig).is_file():
+    if entry.get("kind") == "db" and not db_dat_sibling(base).is_file():
         return FileInjectResult(
             json_name,
             False,
-            "missing database .dat pair in originals (re-run Step 0 extract)",
+            "missing database .dat pair beside inject base (re-run Step 0 extract)",
         )
 
     res = wolfdawn.strings_inject(
         str(inject_src),
-        str(orig),
+        str(base),
         out,
         allow_code_drift=allow_code_drift,
         en_punct=en_punct,
@@ -410,6 +428,7 @@ def inject_selected(
     if not todo:
         return report
 
+    names_applied = False
     if NAMES_JSON in todo:
         emit("Preparing live Data/ for names.json…")
         names_src = translated_dir / NAMES_JSON
@@ -452,15 +471,24 @@ def inject_selected(
             )
             report.files.append(result)
             emit(("  ✓ " if result.success else "  ✗ ") + f"{NAMES_JSON}: {result.summary}")
+            names_applied = result.success
 
     strings_todo = [n for n in todo if n != NAMES_JSON]
     if strings_todo:
         ensure_db_dat_snapshots(manifest_entries, data_dir, originals_dir)
+        if names_applied:
+            emit(
+                "  ℹ using live Data/ as strings-inject base "
+                "(preserve name-only fields from names-inject)"
+            )
 
     for json_name in strings_todo:
         entry = by_json[json_name]
         inject_src = repair_inject_json(translated_dir / json_name)
         emit(f"Injecting {json_name}…")
+        # After names-inject, live binaries already hold EN name-only fields.
+        # Rebuilding from pristine JP originals would wipe those (rumor boards, etc.).
+        live_base = Path(entry["base"]) if names_applied else None
         result = _inject_strings(
             json_name,
             entry,
@@ -469,6 +497,7 @@ def inject_selected(
             originals_dir,
             allow_code_drift=allow_code_drift,
             en_punct=en_punct,
+            base_path=live_base,
         )
         report.files.append(result)
         emit(("  ✓ " if result.success else "  ✗ ") + f"{json_name}: {result.summary}")

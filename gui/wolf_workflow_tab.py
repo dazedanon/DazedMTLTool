@@ -17,13 +17,14 @@ Mirrors the RPGMaker WorkflowTab, driven by the vendored WolfDawn ``wolf`` CLI
   Step 5  Maps/Events - .mps maps, CommonEvent, Game.dat, Evtext; speaker handling
   Step 6  Precheck    - dry-run selected JSON for safety-guard skips; edit those
                         lines before writing binaries
-  Step 7  Inject      - inject translations into Data/ binaries and refresh
-                        wolf_json/; quick-inject picks a few files or all
+  Step 7  Inject      - always inject every translated JSON into Data/ and
+                        refresh wolf_json/ (full pass avoids name/DB wipe bugs);
+                        optional layout-restore re-applies source whitespace pads
   Step 8  Package     - run from a loose Data/ folder or repack Data.wolf;
                         optional save rewrite for existing .sav files
   Step 9  Fix wrap    - search translated JSON by in-game text; Relayout
                         (names-wrap / cell geometry) or Manual (width + font);
-                        inject the edited file, then re-package to verify
+                        then Inject all from Step 7 and re-package to verify
 
 names.json is staged into files/ but is NOT translated in the bulk phases - WolfDawn
 tags each name safe / refs / verify and Phase 0 translates only safe entries
@@ -2523,9 +2524,10 @@ class WolfWorkflowTab(QWidget):
     def _build_step7_inject(self, layout: QVBoxLayout):
         layout.addWidget(_make_section_label("Step 7 · Inject Translations"))
         layout.addWidget(self._desc(
-            "Tick translated JSON files below, then inject them into the game's Data/ "
-            "binaries. Run Step 6 (Precheck) first if you want to catch safety-guard "
-            "skips before writing. Each file is reported individually."
+            "Inject every translated JSON into the game's Data/ binaries in one pass. "
+            "A full inject keeps names.json and DB/map files in sync (partial injects "
+            "can wipe name-only fields like rumor boards). Run Step 6 (Precheck) first "
+            "if you want to catch safety-guard skips before writing."
         ))
 
         self.en_punct_cb = QCheckBox("Convert Japanese punctuation to ASCII (--en-punct)")
@@ -2562,10 +2564,10 @@ class WolfWorkflowTab(QWidget):
         layout.addLayout(check_row)
 
         layout.addWidget(_make_hr())
-        layout.addWidget(self._subheading("Translated files"))
+        layout.addWidget(self._subheading("Files that will be injected"))
 
         self.inject_list = QListWidget()
-        self.inject_list.setMaximumHeight(280)
+        self.inject_list.setMaximumHeight(220)
         self.inject_list.setStyleSheet(
             "QListWidget{background-color:#252526;border:1px solid #3a3a3a;border-radius:4px;"
             "color:#cccccc;font-size:12px;padding:2px;}"
@@ -2574,44 +2576,51 @@ class WolfWorkflowTab(QWidget):
         )
         layout.addWidget(self.inject_list)
 
+        self._inject_count_label = QLabel("")
+        self._inject_count_label.setStyleSheet("color:#9cdcfe;font-size:12px;")
+        layout.addWidget(self._inject_count_label)
+
         list_row = QHBoxLayout()
         refresh_btn = self._register(_make_btn("↻ Refresh", "#3a3a3a"))
         refresh_btn.clicked.connect(self._refresh_inject_list)
-        sel_all_btn = self._register(_make_btn("Select all", "#3a3a3a"))
-        sel_all_btn.clicked.connect(lambda: self._set_checklist_checks(self.inject_list, True))
-        sel_none_btn = self._register(_make_btn("Select none", "#3a3a3a"))
-        sel_none_btn.clicked.connect(lambda: self._set_checklist_checks(self.inject_list, False))
         list_row.addWidget(refresh_btn)
-        list_row.addWidget(sel_all_btn)
-        list_row.addWidget(sel_none_btn)
         list_row.addStretch()
         layout.addLayout(list_row)
 
         btn_row = QHBoxLayout()
-        inject_sel_btn = self._register(_make_btn("Inject selected", "#00a86b"))
-        inject_sel_btn.clicked.connect(self._inject_selected)
         inject_all_btn = self._register(_make_btn("Inject all", "#00a86b"))
+        inject_all_btn.setToolTip(
+            "Always injects every file in translated/ that the manifest knows about. "
+            "names.json runs first; DB/map injects keep name-only fields."
+        )
         inject_all_btn.clicked.connect(self._inject_all)
-        btn_row.addWidget(inject_sel_btn)
+        layout_restore_btn = self._register(_make_btn("Layout-restore", "#3a3a3a"))
+        layout_restore_btn.setToolTip(
+            "Re-run wolf layout-restore on every injectable translated JSON. "
+            "Copies unambiguous positional whitespace pads from source onto text "
+            "(e.g. status-card <pad>\\nNAME). Safe to re-run; already-fixed lines are no-ops."
+        )
+        layout_restore_btn.clicked.connect(self._layout_restore_all)
         btn_row.addWidget(inject_all_btn)
         btn_row.addStretch()
+        btn_row.addWidget(layout_restore_btn)
         layout.addLayout(btn_row)
 
         layout.addWidget(_make_hr())
         layout.addWidget(self._desc(
             "Next: Step 8 (Package) so you can playtest, then Step 9 (Fix wrapping) "
-            "to paste overflowing in-game text, wrap, and re-inject."
+            "to paste overflowing in-game text, wrap, and Inject all again."
         ))
         self._refresh_inject_list()
 
     def _build_step9_relayout(self, layout: QVBoxLayout):
-        """Search-first fix wrapping: find sheet by in-game text, wrap, re-inject."""
+        """Search-first fix wrapping: find sheet by in-game text, wrap, Inject all."""
         layout.addWidget(_make_section_label("Step 9 · Fix wrapping"))
         layout.addWidget(self._desc(
             "After packaging and playtesting, paste overflowing in-game text to find "
             "it in translated JSON. Relayout uses cell width + max lines "
             "(names.json → wolf names-wrap). Manual uses wrap width + body font; "
-            "emphasis \\f[N] scales with the body. Re-inject, then re-package to verify."
+            "emphasis \\f[N] scales with the body. Then Inject all (Step 7) and re-package."
         ))
 
         search_row = QHBoxLayout()
@@ -2777,8 +2786,12 @@ class WolfWorkflowTab(QWidget):
         wrap_row_btn.clicked.connect(self._wrap_current_row)
         wrap_group_btn = _make_btn("Wrap all in group", "#00a86b")
         wrap_group_btn.clicked.connect(self._wrap_current_group)
-        inject_btn = _make_btn("Inject this file", "#007acc")
-        inject_btn.clicked.connect(self._inject_current_wrap_file)
+        inject_btn = _make_btn("Inject all", "#007acc")
+        inject_btn.setToolTip(
+            "Always injects every translated file (same as Step 7). "
+            "Partial injects can wipe name-only DB fields."
+        )
+        inject_btn.clicked.connect(self._inject_all)
         btn_row.addWidget(wrap_row_btn)
         btn_row.addWidget(wrap_group_btn)
         btn_row.addWidget(inject_btn)
@@ -3226,7 +3239,7 @@ class WolfWorkflowTab(QWidget):
                 else "Line already fits (manual)."
             )
             self._wrap_status_label.setText(
-                msg + f" Inject {self._current_wrap_path.name} from Step 7."
+                msg + " Inject all from Step 7 when ready."
             )
             self._log(f"{'✅' if changed else 'ℹ'}  {msg}")
             self._update_wrap_preview()
@@ -3267,7 +3280,7 @@ class WolfWorkflowTab(QWidget):
         if line is not None:
             self._current_wrap_text = str(line.get("text") or "")
         msg = f"Wrapped line at width {width}." if changed else "Line already fits at this width."
-        self._wrap_status_label.setText(msg + f" Inject {self._current_wrap_path.name} from Step 7.")
+        self._wrap_status_label.setText(msg + " Inject all from Step 7 when ready.")
         self._log(f"{'✅' if changed else 'ℹ'}  {msg}")
         self._update_wrap_preview()
 
@@ -3301,7 +3314,7 @@ class WolfWorkflowTab(QWidget):
                 f"Manual-wrapped {count} line(s) in {scope} "
                 f"(width {width}, body \\f[{font}])."
             )
-            self._wrap_status_label.setText(msg + f" Inject {self._current_wrap_path.name}.")
+            self._wrap_status_label.setText(msg + " Inject all from Step 7 when ready.")
             self._log(f"✅ {msg}")
             self._reload_wrap_hit_editor(hit, width)
             return
@@ -3339,7 +3352,7 @@ class WolfWorkflowTab(QWidget):
         )
         scope = wolf_ws.scope_label(hit)
         msg = f"Wrapped {count} line(s) in {scope} at width {width}."
-        self._wrap_status_label.setText(msg + f" Inject {self._current_wrap_path.name}.")
+        self._wrap_status_label.setText(msg + " Inject all from Step 7 when ready.")
         self._log(f"✅ {msg}")
         self._reload_wrap_hit_editor(hit, width)
 
@@ -3434,19 +3447,10 @@ class WolfWorkflowTab(QWidget):
                 self._reload_wrap_hit_editor(hit, self._active_wrap_width())
             if not quiet and hasattr(self, "_wrap_status_label"):
                 self._wrap_status_label.setText(
-                    summary + " Re-inject names.json from Step 7."
+                    summary + " Inject all from Step 7 when ready."
                 )
 
         self._run_task(task, on_done=_after)
-
-    def _inject_current_wrap_file(self):
-        hit = self._current_wrap_hit
-        if not hit:
-            QMessageBox.information(self, "Inject", "Select a search result first.")
-            return
-        if not self._require_manifest():
-            return
-        self._inject({hit.json_file})
 
     def _tool_root(self) -> Path:
         """DazedMTLTool project root (``files/``, ``translated/``, etc.)."""
@@ -3626,7 +3630,7 @@ class WolfWorkflowTab(QWidget):
             self._refresh_inject_list()
 
     def _fill_injectable_checklist(self, list_widget: QListWidget):
-        """Populate a checkable file list from translated/ + manifest."""
+        """Populate a checkable file list from translated/ + manifest (precheck)."""
         list_widget.clear()
         if not self._read_manifest():
             item = QListWidgetItem("Run Step 0 (extract) first - no manifest found.")
@@ -3652,9 +3656,31 @@ class WolfWorkflowTab(QWidget):
         self._fill_injectable_checklist(self.precheck_list)
 
     def _refresh_inject_list(self):
+        """Show every injectable file (read-only). Inject always uses the full set."""
         if not hasattr(self, "inject_list"):
             return
-        self._fill_injectable_checklist(self.inject_list)
+        self.inject_list.clear()
+        if hasattr(self, "_inject_count_label"):
+            self._inject_count_label.setText("")
+        if not self._read_manifest():
+            item = QListWidgetItem("Run Step 0 (extract) first - no manifest found.")
+            item.setFlags(Qt.ItemIsEnabled)
+            self.inject_list.addItem(item)
+            return
+        files = self._injectable_filenames()
+        if not files:
+            item = QListWidgetItem("No injectable files in translated/ yet.")
+            item.setFlags(Qt.ItemIsEnabled)
+            self.inject_list.addItem(item)
+            return
+        for json_name in files:
+            item = QListWidgetItem(json_name)
+            item.setFlags(Qt.ItemIsEnabled)
+            self.inject_list.addItem(item)
+        if hasattr(self, "_inject_count_label"):
+            self._inject_count_label.setText(
+                f"{len(files)} file(s) will be injected together."
+            )
 
     def _selected_checklist_files(self, list_widget: QListWidget) -> set[str]:
         selected: set[str] = set()
@@ -3668,9 +3694,6 @@ class WolfWorkflowTab(QWidget):
 
     def _selected_precheck_files(self) -> set[str]:
         return self._selected_checklist_files(self.precheck_list)
-
-    def _selected_inject_files(self) -> set[str]:
-        return self._selected_checklist_files(self.inject_list)
 
     def _set_checklist_checks(self, list_widget: QListWidget, checked: bool):
         state = Qt.Checked if checked else Qt.Unchecked
@@ -3821,18 +3844,6 @@ class WolfWorkflowTab(QWidget):
             "Saved. Re-run Precheck to confirm the safety skip is gone.",
         )
 
-    def _inject_selected(self):
-        if not self._require_manifest():
-            return
-        selected = self._selected_inject_files()
-        if not selected:
-            QMessageBox.information(
-                self, "Nothing selected",
-                "Tick one or more files in the list, then click Inject selected.",
-            )
-            return
-        self._inject(selected)
-
     def _inject_all(self):
         if not self._require_manifest():
             return
@@ -3844,6 +3855,49 @@ class WolfWorkflowTab(QWidget):
             )
             return
         self._inject(set(files))
+
+    def _layout_restore_all(self):
+        """Re-run wolf layout-restore on every injectable translated JSON."""
+        files = self._injectable_filenames()
+        if not files:
+            QMessageBox.information(
+                self,
+                "Layout-restore",
+                "No injectable files found in translated/.",
+            )
+            return
+        translated = self._tool_root() / "translated"
+        paths = [translated / name for name in files if (translated / name).is_file()]
+        if not paths:
+            QMessageBox.information(
+                self,
+                "Layout-restore",
+                "None of the injectable files exist under translated/.",
+            )
+            return
+
+        def task(log, progress=None):
+            from util import wolfdawn
+
+            log(f"layout-restore: {len(paths)} file(s)…")
+            res = wolfdawn.layout_restore(paths, log_fn=log)
+            for line in (res.stdout or "").splitlines():
+                if line.strip():
+                    log(line)
+            fixed = wolfdawn.parse_layout_restore_counts(res.stdout, res.stderr)
+            if not res.ok:
+                err = (res.stderr or res.stdout or "").strip() or f"exit {res.returncode}"
+                return False, f"layout-restore failed: {err}"
+            n = fixed if fixed is not None else 0
+            return True, f"layout-restore fixed {n} line(s) across {len(paths)} file(s)."
+
+        def _after(ok: bool, msg: str):
+            if ok:
+                QMessageBox.information(self, "Layout-restore", msg)
+            else:
+                QMessageBox.warning(self, "Layout-restore", msg or "layout-restore failed.")
+
+        self._run_task(task, on_done=_after)
 
     def _names_check(self):
         if not self._require_manifest():

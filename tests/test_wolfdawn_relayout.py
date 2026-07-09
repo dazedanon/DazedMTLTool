@@ -97,5 +97,45 @@ class TestRelayoutWrappers(unittest.TestCase):
         self.assertEqual(wolfdawn.parse_names_wrap_shrink_count(res.stdout), 2)
 
 
+class TestLayoutRestoreWrapper(unittest.TestCase):
+    def test_layout_restore_flags(self):
+        captured = {}
+
+        def fake_run(args, log_fn=None):
+            captured["args"] = list(args)
+            return wolfdawn.WolfResult(
+                0,
+                "layout-restore: 1 translation(s) got back their source's whitespace skeleton\n",
+                "",
+                [str(a) for a in args],
+            )
+
+        with patch.object(wolfdawn, "_run", side_effect=fake_run):
+            res = wolfdawn.layout_restore("/tmp/db.json", dry_run=True)
+        self.assertEqual(
+            captured["args"],
+            ["layout-restore", "/tmp/db.json", "--dry-run"],
+        )
+        self.assertEqual(wolfdawn.parse_layout_restore_counts(res.stdout), 1)
+
+    def test_layout_restore_multiple_files(self):
+        captured = {}
+
+        def fake_run(args, log_fn=None):
+            captured["args"] = list(args)
+            return wolfdawn.WolfResult(0, "", "", [str(a) for a in args])
+
+        with patch.object(wolfdawn, "_run", side_effect=fake_run):
+            wolfdawn.layout_restore(["/a.json", "/b.json"])
+        self.assertEqual(captured["args"], ["layout-restore", "/a.json", "/b.json"])
+
+    def test_parse_layout_restore_would_count(self):
+        out = (
+            "layout-restore: 3 translation(s) WOULD get back their "
+            "source's whitespace skeleton (dry run; no write)\n"
+        )
+        self.assertEqual(wolfdawn.parse_layout_restore_counts(out), 3)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

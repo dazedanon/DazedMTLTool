@@ -39,6 +39,7 @@ class ListInjectableTests(unittest.TestCase):
 class InjectOrderTests(unittest.TestCase):
     def test_names_runs_before_strings(self):
         calls: list[str] = []
+        string_bases: list[str] = []
 
         def fake_names(*_a, **_k):
             calls.append("names")
@@ -49,8 +50,9 @@ class InjectOrderTests(unittest.TestCase):
                 stderr="",
             )
 
-        def fake_strings(*_a, **_k):
+        def fake_strings(edited_json, base, output, **_k):
             calls.append("strings")
+            string_bases.append(str(base))
             return mock.Mock(
                 ok=True,
                 returncode=0,
@@ -105,6 +107,72 @@ class InjectOrderTests(unittest.TestCase):
             self.assertEqual(calls, ["names", "strings"])
             self.assertTrue(report.ok)
             self.assertEqual(len(report.succeeded), 2)
+            # After names-inject, strings must use live Data/ as --base so
+            # name-only fields are not rebuilt from pristine Japanese originals.
+            self.assertEqual(string_bases, [str(map_live)])
+
+    def test_strings_alone_use_pristine_original_base(self):
+        string_bases: list[str] = []
+
+        def fake_strings(edited_json, base, output, **_k):
+            string_bases.append(str(base))
+            return mock.Mock(
+                ok=True,
+                returncode=0,
+                stdout="applied 1 translation(s) (0 drifted)",
+                stderr="",
+            )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            translated = root / "translated"
+            originals = root / "originals"
+            data = root / "data"
+            translated.mkdir()
+            originals.mkdir()
+            data.mkdir()
+            (translated / "Map001.mps.json").write_text(
+                '{"kind":"map","scenes":[]}', encoding="utf-8"
+            )
+            map_live = data / "Map001.mps"
+            map_orig = originals / "Map001.mps"
+            map_live.write_bytes(b"live")
+            map_orig.write_bytes(b"orig")
+            entries = [
+                {"json": "Map001.mps.json", "kind": "map", "base": str(map_live)},
+            ]
+            with mock.patch.object(wi.wolfdawn, "strings_inject", side_effect=fake_strings):
+                report = wi.inject_selected(
+                    ["Map001.mps.json"],
+                    manifest_entries=entries,
+                    data_dir=data,
+                    originals_dir=originals,
+                    translated_dir=translated,
+                    game_root=data.parent,
+                )
+            self.assertTrue(report.ok)
+            self.assertEqual(string_bases, [str(map_orig)])
+
+    def test_names_result_mentions_safety_skips(self):
+        res = mock.Mock(
+            ok=True,
+            returncode=0,
+            stdout=(
+                "would apply 10 name change(s) (0 drifted/unmatched)\n"
+                "WARNING: 46 line(s) left UNTRANSLATED by a safety guard - "
+                "46 control-code mismatch, 0 not encodable\n"
+            ),
+            stderr="",
+        )
+        # parse_names_inject_counts needs "applied N name change"
+        res.stdout = (
+            "applied 10 name change(s) (0 drifted/unmatched)\n"
+            "WARNING: 46 line(s) left UNTRANSLATED by a safety guard - "
+            "46 control-code mismatch, 0 not encodable\n"
+        )
+        result = wi._interpret_names_result("names.json", res)
+        self.assertTrue(result.success)
+        self.assertIn("46 skipped by safety guard", result.summary)
 
 
 class ReportDialogTests(unittest.TestCase):

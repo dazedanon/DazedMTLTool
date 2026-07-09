@@ -54,6 +54,8 @@ __all__ = [
     "names_wrap",
     "parse_names_wrap_counts",
     "parse_names_wrap_shrink_count",
+    "layout_restore",
+    "parse_layout_restore_counts",
     "relayout",
     "desc_relayout",
 ]
@@ -747,6 +749,47 @@ def names_wrap(
         args += ["--lines", str(int(lines))]
     if note:
         args += ["--note", str(note)]
+    if dry_run:
+        args.append("--dry-run")
+    return _run(args, log_fn=log_fn)
+
+
+_LAYOUT_RESTORE_APPLIED_RE = re.compile(
+    r"(\d+)\s+translation\(s\)\s+got back their source's whitespace skeleton",
+    re.IGNORECASE,
+)
+_LAYOUT_RESTORE_WOULD_RE = re.compile(
+    r"(\d+)\s+translation\(s\)\s+WOULD get back their source's whitespace skeleton",
+    re.IGNORECASE,
+)
+
+
+def parse_layout_restore_counts(stdout: str, stderr: str = "") -> int | None:
+    """Return how many translations layout-restore fixed (or would fix), or None."""
+    blob = f"{stdout}\n{stderr}"
+    for pattern in (_LAYOUT_RESTORE_APPLIED_RE, _LAYOUT_RESTORE_WOULD_RE):
+        match = pattern.search(blob)
+        if match:
+            return int(match.group(1))
+    return None
+
+
+def layout_restore(
+    json_files: Union[PathLike, Iterable[PathLike]],
+    *,
+    dry_run: bool = False,
+    log_fn=None,
+) -> WolfResult:
+    """``wolf layout-restore <extract.json>... [--dry-run]``.
+
+    Rebuilds translations that dropped their source's positional whitespace pad
+    skeleton (e.g. status-card ``<pad>\\nNAME`` fields). Edits JSON in place.
+    """
+    if isinstance(json_files, (str, Path)):
+        paths = [json_files]
+    else:
+        paths = list(json_files)
+    args = ["layout-restore", *[_str(p) for p in paths]]
     if dry_run:
         args.append("--dry-run")
     return _run(args, log_fn=log_fn)

@@ -41,6 +41,10 @@ to WOLF's native ``Speaker\nline`` layout on write-back. See ``util.speakers``.
 Detection is WolfDawn's, so the reliable nameplate (``literal_line1``) is always
 reshaped; only the low-confidence guess (``literal_line1_lowconf``) is gated by a
 per-game, AI-recommended setting from the workflow.
+
+Layout restore: after each file is written to ``translated/``, ``wolf
+layout-restore`` copies unambiguous positional whitespace pads from ``source``
+onto ``text`` (status-card ``<pad>\\nNAME`` fields the model often strips).
 """
 
 import json
@@ -61,6 +65,7 @@ from util.translation import (
 )
 from util import speakers as wolf_speakers
 from util import vocab as wolf_vocab
+from util import wolfdawn
 from util.wolfdawn import codes as wolf_codes
 from util.wolfdawn import db_classify as wolf_db
 from util.wolfdawn import names as wolf_names
@@ -149,12 +154,34 @@ def handleWolfDawn(filename, estimate):
     # translated/ here would overwrite prior work with source echoed back.
     # Real English is written on the consume pass (or a live non-batch run).
     if not estimate and _batch_phase() != "collect":
+        out_path = "translated/" + filename
         try:
-            with open("translated/" + filename, "w", encoding="utf-8", newline="\n") as outFile:
+            with open(out_path, "w", encoding="utf-8", newline="\n") as outFile:
                 json.dump(translatedData[0], outFile, ensure_ascii=False, indent=4)
         except Exception:
             traceback.print_exc()
             return "Fail"
+        # Restore positional whitespace pads the model dropped (status-card
+        # ``<pad>\nNAME`` fields, etc.). WolfDawn edits the JSON in place.
+        try:
+            res = wolfdawn.layout_restore(out_path)
+            if not res.ok:
+                tqdm.write(
+                    Fore.YELLOW
+                    + f"{filename}: layout-restore exited {res.returncode}"
+                    + (f" ({res.stderr.strip()})" if res.stderr.strip() else "")
+                    + Fore.RESET
+                )
+            else:
+                fixed = wolfdawn.parse_layout_restore_counts(res.stdout, res.stderr)
+                if fixed:
+                    tqdm.write(
+                        Fore.CYAN
+                        + f"{filename}: layout-restore fixed {fixed} line(s)"
+                        + Fore.RESET
+                    )
+        except Exception:
+            traceback.print_exc()
 
     end = time.time()
     tqdm.write(getResultString(translatedData, end - start, filename))
