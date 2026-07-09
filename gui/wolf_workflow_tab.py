@@ -20,7 +20,9 @@ Mirrors the RPGMaker WorkflowTab, driven by the vendored WolfDawn ``wolf`` CLI
   Step 7  Inject      - inject every JSON into Data/ from translated/ (default)
                         or from the game's wolf_json/; translated inject also
                         refreshes wolf_json/ (full pass avoids name/DB wipe bugs);
-                        optional layout-restore re-applies source whitespace pads
+                        wolf_json inject optionally copies those JSON into files/
+                        so tool progress is not left behind; optional layout-restore
+                        re-applies source whitespace pads
   Step 8  Package     - run from a loose Data/ folder or repack Data.wolf;
                         optional save rewrite for existing .sav files
   Step 9  Fix wrap    - search translated JSON by in-game text; Relayout
@@ -2536,7 +2538,8 @@ class WolfWorkflowTab(QWidget):
         layout.addWidget(self._desc(
             "Inject every JSON into the game's Data/ binaries in one pass. "
             "Inject all uses translated/; Inject from wolf_json uses the game's "
-            "wolf_json/ when that folder is the source of truth. "
+            "wolf_json/ when that folder is the source of truth (and can copy those "
+            "JSON into files/ so tool progress is not left behind). "
             "A full inject keeps names.json and DB/map files in sync (partial injects "
             "can wipe name-only fields like rumor boards). Run Step 6 (Precheck) first "
             "if you want to catch safety-guard skips before writing."
@@ -2589,8 +2592,8 @@ class WolfWorkflowTab(QWidget):
         inject_wolf_btn.setToolTip(
             "Inject every injectable JSON from the game's wolf_json/ folder instead "
             "of translated/. Use when wolf_json/ is the source of truth (e.g. after "
-            "editing or restoring committed game-repo JSON). Does not copy from "
-            "translated/."
+            "editing or restoring committed game-repo JSON). Asks whether to copy "
+            "those JSON into files/ so tool progress is not left behind."
         )
         inject_wolf_btn.clicked.connect(self._inject_all_from_wolf_json)
         layout_restore_btn = self._register(_make_btn("Layout-restore", "#3a3a3a"))
@@ -2615,15 +2618,21 @@ class WolfWorkflowTab(QWidget):
 
     def _build_step9_relayout(self, layout: QVBoxLayout):
         """Search-first fix wrapping: find sheet by in-game text, wrap, Inject all."""
-        layout.addWidget(_make_section_label("Step 9 · Fix wrapping"))
+        layout.setSpacing(6)
+        title = _make_section_label("Step 9 · Fix wrapping")
+        title.setToolTip(
+            "Paste overflowing in-game text to find it in translated JSON. "
+            "Relayout: cell width + max lines (names.json → wolf names-wrap). "
+            "Manual: wrap width + body font; emphasis \\f[N] scales with the body. "
+            "Then Inject all (Step 7) and re-package."
+        )
+        layout.addWidget(title)
         layout.addWidget(self._desc(
-            "After packaging and playtesting, paste overflowing in-game text to find "
-            "it in translated JSON. Relayout uses cell width + max lines "
-            "(names.json → wolf names-wrap). Manual uses wrap width + body font; "
-            "emphasis \\f[N] scales with the body. Then Inject all (Step 7) and re-package."
+            "Paste overflowing text → pick a hit → Relayout or Manual → Wrap → Inject all."
         ))
 
         search_row = QHBoxLayout()
+        search_row.setSpacing(6)
         self._wrap_search_edit = QLineEdit()
         self._wrap_search_edit.setPlaceholderText(
             'Paste in-game text, e.g. "there\'s a pure" or "gatekeeper just randomly"'
@@ -2636,15 +2645,17 @@ class WolfWorkflowTab(QWidget):
         layout.addLayout(search_row)
 
         self._wrap_results_list = QListWidget()
-        self._wrap_results_list.setMaximumHeight(220)
+        self._wrap_results_list.setMinimumHeight(72)
+        self._wrap_results_list.setMaximumHeight(110)
+        self._wrap_results_list.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
         self._wrap_results_list.setWordWrap(True)
         self._wrap_results_list.setTextElideMode(Qt.ElideNone)
         self._wrap_results_list.setUniformItemSizes(False)
         self._wrap_results_list.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self._wrap_results_list.setStyleSheet(
             "QListWidget{background-color:#252526;border:1px solid #3a3a3a;border-radius:4px;"
-            "color:#cccccc;font-size:12px;padding:2px;}"
-            "QListWidget::item{padding:8px;}"
+            "color:#cccccc;font-size:12px;padding:1px;}"
+            "QListWidget::item{padding:3px 6px;}"
             "QListWidget::item:selected{background:#264f78;color:#ffffff;}"
         )
         self._wrap_results_list.currentItemChanged.connect(self._on_wrap_hit_selected)
@@ -2653,16 +2664,19 @@ class WolfWorkflowTab(QWidget):
         self._wrap_detail_label = QLabel("Select a search result to edit.")
         self._wrap_detail_label.setWordWrap(True)
         self._wrap_detail_label.setStyleSheet(
-            "color:#9cdcfe;font-size:12px;background:transparent;"
+            "color:#9cdcfe;font-size:11px;background:transparent;padding:0;"
         )
         layout.addWidget(self._wrap_detail_label)
 
-        mode_row = QHBoxLayout()
+        # Mode + active controls on one row to cut vertical chrome.
+        controls_row = QHBoxLayout()
+        controls_row.setSpacing(8)
         mode_lbl = QLabel("Mode:")
         mode_lbl.setStyleSheet("color:#cccccc;font-size:12px;background:transparent;")
         self._wrap_mode_combo = QComboBox()
-        self._wrap_mode_combo.addItem("Relayout (cell width + max lines)", "relayout")
-        self._wrap_mode_combo.addItem("Manual (wrap width + font)", "manual")
+        self._wrap_mode_combo.addItem("Relayout", "relayout")
+        self._wrap_mode_combo.addItem("Manual", "manual")
+        self._wrap_mode_combo.setMinimumWidth(110)
         saved_mode = str(self._setting("wrap_fix_mode", "relayout") or "relayout")
         idx = self._wrap_mode_combo.findData(saved_mode)
         self._wrap_mode_combo.setCurrentIndex(idx if idx >= 0 else 0)
@@ -2672,16 +2686,15 @@ class WolfWorkflowTab(QWidget):
             "Manual: force wrap width and body font; emphasis \\f[N] scales with the body."
         )
         self._wrap_mode_combo.currentIndexChanged.connect(self._on_wrap_mode_changed)
-        mode_row.addWidget(mode_lbl)
-        mode_row.addWidget(self._wrap_mode_combo)
-        mode_row.addStretch()
-        layout.addLayout(mode_row)
+        controls_row.addWidget(mode_lbl)
+        controls_row.addWidget(self._wrap_mode_combo)
 
         # Relayout controls: cell width + max lines
         self._wrap_relayout_row = QWidget()
         relayout_row = QHBoxLayout(self._wrap_relayout_row)
         relayout_row.setContentsMargins(0, 0, 0, 0)
-        w_lbl = QLabel("Cell width (0=auto):")
+        relayout_row.setSpacing(6)
+        w_lbl = QLabel("Width:")
         w_lbl.setStyleSheet("color:#cccccc;font-size:12px;background:transparent;")
         self._wrap_width_spin = QSpinBox()
         self._wrap_width_spin.setRange(0, 200)
@@ -2689,13 +2702,13 @@ class WolfWorkflowTab(QWidget):
             self._wrap_width_spin.setValue(int(self._setting("wrap_fix_width", 36) or 36))
         except (TypeError, ValueError):
             self._wrap_width_spin.setValue(36)
-        self._wrap_width_spin.setFixedWidth(70)
+        self._wrap_width_spin.setFixedWidth(64)
         self._wrap_width_spin.setToolTip(
-            "Halfwidth cells (ASCII=1, fullwidth=2). For names.json Relayout: "
-            "0 = measure from JP; N > 0 forces wolf names-wrap --width."
+            "Cell width in halfwidth cells (ASCII=1, fullwidth=2). 0 = auto "
+            "(names: measure from JP). N > 0 forces wolf names-wrap --width."
         )
         self._wrap_width_spin.valueChanged.connect(self._on_wrap_width_changed)
-        lines_lbl = QLabel("Max lines (0=auto):")
+        lines_lbl = QLabel("Lines:")
         lines_lbl.setStyleSheet("color:#cccccc;font-size:12px;background:transparent;")
         self._wrap_max_lines_spin = QSpinBox()
         self._wrap_max_lines_spin.setRange(0, 20)
@@ -2705,11 +2718,10 @@ class WolfWorkflowTab(QWidget):
             )
         except (TypeError, ValueError):
             self._wrap_max_lines_spin.setValue(0)
-        self._wrap_max_lines_spin.setFixedWidth(70)
+        self._wrap_max_lines_spin.setFixedWidth(64)
         self._wrap_max_lines_spin.setToolTip(
-            "Max soft lines after Relayout. For names: wolf names-wrap --lines "
-            "(0 = each entry's JP line count). For DB/dialogue: wrap to width, "
-            "then shrink \\f[N] until the line count fits. "
+            "Max soft lines (0 = auto). Names: wolf names-wrap --lines. "
+            "DB/dialogue: wrap to width, then shrink \\f[N] to fit. "
             "Saved per sheet in wolfdawn-roles.json."
         )
         self._wrap_max_lines_spin.valueChanged.connect(self._on_wrap_max_lines_changed)
@@ -2717,14 +2729,14 @@ class WolfWorkflowTab(QWidget):
         relayout_row.addWidget(self._wrap_width_spin)
         relayout_row.addWidget(lines_lbl)
         relayout_row.addWidget(self._wrap_max_lines_spin)
-        relayout_row.addStretch()
-        layout.addWidget(self._wrap_relayout_row)
+        controls_row.addWidget(self._wrap_relayout_row)
 
         # Manual controls: wrap width + font size
         self._wrap_manual_row = QWidget()
         manual_row = QHBoxLayout(self._wrap_manual_row)
         manual_row.setContentsMargins(0, 0, 0, 0)
-        mw_lbl = QLabel("Wrap width:")
+        manual_row.setSpacing(6)
+        mw_lbl = QLabel("Width:")
         mw_lbl.setStyleSheet("color:#cccccc;font-size:12px;background:transparent;")
         self._wrap_manual_width_spin = QSpinBox()
         self._wrap_manual_width_spin.setRange(10, 200)
@@ -2734,12 +2746,12 @@ class WolfWorkflowTab(QWidget):
             )
         except (TypeError, ValueError):
             self._wrap_manual_width_spin.setValue(36)
-        self._wrap_manual_width_spin.setFixedWidth(70)
+        self._wrap_manual_width_spin.setFixedWidth(64)
         self._wrap_manual_width_spin.setToolTip(
             "Hard wrap width in halfwidth cells for Manual mode (dazedwrap)."
         )
         self._wrap_manual_width_spin.valueChanged.connect(self._on_wrap_manual_width_changed)
-        font_lbl = QLabel("Body font \\f[N]:")
+        font_lbl = QLabel("Font:")
         font_lbl.setStyleSheet("color:#cccccc;font-size:12px;background:transparent;")
         self._wrap_font_spin = QSpinBox()
         self._wrap_font_spin.setRange(0, 32)
@@ -2749,11 +2761,10 @@ class WolfWorkflowTab(QWidget):
         except (TypeError, ValueError):
             saved_font = 18
         self._wrap_font_spin.setValue(max(0, saved_font))
-        self._wrap_font_spin.setFixedWidth(90)
+        self._wrap_font_spin.setFixedWidth(80)
         self._wrap_font_spin.setToolTip(
-            "Target body font applied on Wrap. 0 = do not add or change \\f[N] "
-            "(wrap width only). N > 0 scales emphasis (e.g. \\f[20]…\\f[18]) and "
-            "sets a leading \\f[body]."
+            "Body \\f[N] on Wrap. 0 = leave fonts alone (width only). "
+            "N > 0 scales emphasis and sets a leading \\f[body]."
         )
         self._wrap_font_spin.valueChanged.connect(self._on_wrap_font_changed)
         self._wrap_font_detect_label = QLabel("")
@@ -2765,29 +2776,33 @@ class WolfWorkflowTab(QWidget):
         manual_row.addWidget(font_lbl)
         manual_row.addWidget(self._wrap_font_spin)
         manual_row.addWidget(self._wrap_font_detect_label, 1)
-        layout.addWidget(self._wrap_manual_row)
+        controls_row.addWidget(self._wrap_manual_row, 1)
+        controls_row.addStretch()
+        layout.addLayout(controls_row)
 
         self._sync_wrap_mode_controls()
 
         self._wrap_preview_label = QLabel("Wrap preview")
         self._wrap_preview_label.setStyleSheet(
-            "color:#858585;font-size:11px;background:transparent;"
+            "color:#858585;font-size:11px;background:transparent;padding:0;"
         )
         layout.addWidget(self._wrap_preview_label)
 
         self._wrap_preview = QTextEdit()
         self._wrap_preview.setReadOnly(True)
-        self._wrap_preview.setMaximumHeight(200)
+        self._wrap_preview.setMinimumHeight(140)
+        self._wrap_preview.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self._wrap_preview.setPlaceholderText(
-            "Select a search result to preview wrap with simulated \\c / \\f styling."
+            "Wrap preview — select a hit to see \\c / \\f styling."
         )
         self._wrap_preview.setStyleSheet(
             "QTextEdit{background-color:#1e1e1e;color:#b5cea8;border:1px solid #3c3c3c;"
-            "border-left:3px solid #007acc;font-family:monospace;font-size:12px;padding:6px;}"
+            "border-left:3px solid #007acc;font-family:monospace;font-size:12px;padding:4px;}"
         )
-        layout.addWidget(self._wrap_preview)
+        layout.addWidget(self._wrap_preview, 1)
 
         btn_row = QHBoxLayout()
+        btn_row.setSpacing(6)
         wrap_row_btn = _make_btn("Wrap this line", "#00a86b")
         wrap_row_btn.clicked.connect(self._wrap_current_row)
         wrap_group_btn = _make_btn("Wrap all in group", "#00a86b")
@@ -2801,15 +2816,13 @@ class WolfWorkflowTab(QWidget):
         btn_row.addWidget(wrap_row_btn)
         btn_row.addWidget(wrap_group_btn)
         btn_row.addWidget(inject_btn)
-        btn_row.addStretch()
-        layout.addLayout(btn_row)
-
         self._wrap_status_label = QLabel("")
         self._wrap_status_label.setWordWrap(True)
         self._wrap_status_label.setStyleSheet(
-            "color:#8fbc8f;font-size:12px;background:transparent;"
+            "color:#8fbc8f;font-size:11px;background:transparent;"
         )
-        layout.addWidget(self._wrap_status_label)
+        btn_row.addWidget(self._wrap_status_label, 1)
+        layout.addLayout(btn_row)
 
         self._current_wrap_hit: wolf_ws.WrapHit | None = None
         self._current_wrap_hit_id: dict | None = None
@@ -3717,24 +3730,47 @@ class WolfWorkflowTab(QWidget):
         except Exception as exc:
             return False, str(exc)
 
+    def _sync_json_to_files(
+        self, json_name: str, source_dir: Path, files_dir: Path
+    ) -> tuple[bool, str | None]:
+        """Copy one JSON from *source_dir* into the tool's files/ folder."""
+        src = source_dir / json_name
+        if not src.is_file():
+            return False, "source missing"
+        dest = files_dir / json_name
+        try:
+            if src.resolve() == dest.resolve():
+                return True, None
+        except Exception:
+            pass
+        try:
+            files_dir.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(src, dest)
+            return True, None
+        except Exception as exc:
+            return False, str(exc)
+
     def _inject(
         self,
         selected: set[str],
         *,
         source_dir: Path | None = None,
         sync_to_wolf_json: bool = True,
+        sync_to_files: bool = False,
     ):
         """Inject the selected JSON files into live Data/.
 
         *source_dir* defaults to ``translated/``. When injecting from the game's
         ``wolf_json/``, pass that path and set *sync_to_wolf_json* False (the
-        source already is wolf_json/).
+        source already is wolf_json/). Set *sync_to_files* to also copy the
+        injected JSON into the tool's ``files/`` folder.
         """
         if not self._require_manifest():
             return
         manifest = self._read_manifest()
         en_punct = self._inject_flag_en_punct()
         game_json_dir = self._work_dir()
+        files_dir = self._tool_root() / "files"
         inject_dir = (
             Path(source_dir)
             if source_dir is not None
@@ -3775,6 +3811,22 @@ class WolfWorkflowTab(QWidget):
                             (json_name, err or "unknown error")
                         )
                         log(f"  ✗ sync {json_name}: {err}")
+
+            if sync_to_files:
+                synced = 0
+                for json_name in sorted(selected):
+                    ok, err = self._sync_json_to_files(
+                        json_name, inject_dir, files_dir
+                    )
+                    if not ok:
+                        report.sync_failures.append(
+                            (json_name, f"files/: {err or 'unknown error'}")
+                        )
+                        log(f"  ✗ sync files/{json_name}: {err}")
+                    else:
+                        synced += 1
+                if synced:
+                    log(f"Synced {synced} file(s) → files/")
 
             dialog = wolf_inject.format_report_dialog(report)
             status = wolf_inject.format_report_status(report)
@@ -4164,7 +4216,30 @@ class WolfWorkflowTab(QWidget):
                 f"No injectable JSON found in {work}.",
             )
             return
-        self._inject(set(files), source_dir=work, sync_to_wolf_json=False)
+        reply = QMessageBox.question(
+            self,
+            "Copy wolf_json/ → files/?",
+            f"About to inject {len(files)} file(s) from wolf_json/.\n\n"
+            "Also copy those JSON into files/ so the tool keeps the same "
+            "progress (overwrites matching names in files/)?\n\n"
+            "Yes = inject and sync to files/\n"
+            "No = inject only, leave files/ as-is",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.Yes,
+        )
+        sync_to_files = reply == QMessageBox.Yes
+        if sync_to_files:
+            self._log(
+                f"Will sync {len(files)} wolf_json/ file(s) → files/ after inject."
+            )
+        else:
+            self._log("Skipping wolf_json/ → files/ sync; leaving files/ as-is.")
+        self._inject(
+            set(files),
+            source_dir=work,
+            sync_to_wolf_json=False,
+            sync_to_files=sync_to_files,
+        )
 
     def _layout_restore_all(self):
         """Re-run wolf layout-restore on every injectable translated JSON."""
