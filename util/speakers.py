@@ -346,9 +346,10 @@ def _has_japanese(text: str) -> bool:
 #     "市民\nおぉっ！来た！帰ってきたぞ！"        speaker_src = literal_line1_lowconf
 #     "セルリア\nほーら、ローザも手を振って。"    speaker_src = literal_line1
 #
-# When translating we reshape those into ``[Speaker]: body`` (the prompt already
-# knows to translate the tag) and, on write-back, restore WOLF's native
-# ``Speaker\nbody`` layout so injection stays byte-faithful.
+# When translating we resolve the nameplate to English first (vocab /
+# ``getSpeaker``), reshape into ``[Speaker]: body`` with that English tag, and
+# on write-back restore WOLF's native ``Speaker\nbody`` layout using the
+# pre-resolved name so a model that echoes Japanese cannot poison ``text``.
 #
 # WolfDawn does the detection, so there is nothing to configure for the reliable
 # format: ``literal_line1`` is a real nameplate (a face window precedes the line),

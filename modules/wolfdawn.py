@@ -35,9 +35,11 @@ When unset, all database lines are translated.
 
 Speakers: WolfDawn tags each line with ``speaker`` / ``speaker_src``. For the
 first-line formats (``literal_line1`` / ``literal_line1_lowconf``) the speaker
-name is baked into line 1 of ``source``. Those lines are reshaped into the shared
-``[Speaker]: line`` convention (which the prompt already translates) and restored
-to WOLF's native ``Speaker\nline`` layout on write-back. See ``util.speakers``.
+name is baked into line 1 of ``source``. Those names are resolved to English first
+(vocab hit or a cached short-string ``getSpeaker`` call, same pattern as the other
+engines), then the line is reshaped into ``[Speaker]: line`` with the English tag
+and restored to WOLF's native ``Speaker\nline`` layout on write-back using that
+resolved name (not whatever the dialogue model echoed). See ``util.speakers``.
 Detection is WolfDawn's, so the reliable nameplate (``literal_line1``) is always
 reshaped; only the low-confidence guess (``literal_line1_lowconf``) is gated by a
 per-game, AI-recommended setting from the workflow.
@@ -62,6 +64,7 @@ from util.translation import (
     translateAI as sharedtranslateAI,
     getPricingConfig,
     calculateCost,
+    parseVocabWithCategories,
 )
 from util import speakers as wolf_speakers
 from util import vocab as wolf_vocab
@@ -98,11 +101,15 @@ _WOLF_CODE_RE = re.compile(
     r"\\(?:r\[[^\]]*\]|c(?:self)?\[[^\]]*\]|[A-Za-z]+\[[^\]]*\]|[A-Za-z])"
 )
 
-# Speaker handling: for first-line-speaker formats, reshape the line into the
-# shared "[Speaker]: line" transport before translating and restore WOLF's
-# native "Speaker\nline" layout on write-back. Which formats are reshaped is
-# configurable from the workflow (data/wolf_speakers.json).
+# Speaker handling: for first-line-speaker formats, resolve the nameplate to
+# English (vocab / cached short-string translation), reshape into the shared
+# "[Speaker]: line" transport, then restore WOLF's native "Speaker\nline"
+# layout on write-back. Which formats are reshaped is configurable from the
+# workflow (data/wolf_speakers.json).
 SPEAKER_CONFIG = wolf_speakers.load_config()
+NAMESLIST = []  # [[jp, en], ...] session glossary of resolved speaker names
+_speakerCache = {}
+_speakerCacheLock = threading.Lock()
 
 # Pricing / batching from the configured model
 PRICING_CONFIG = getPricingConfig(MODEL)
@@ -250,9 +257,10 @@ def collectEntries(data):
 def _text_check_body(text: str, speaker_src: str = "") -> str:
     """Body text used for skip-translated checks (nameplates / codes ignored).
 
-    Already-translated WOLF dialogue often keeps a Japanese speaker name on
+    Already-translated WOLF dialogue may still have a Japanese speaker name on
     line 1 (``司祭\\nSorry to keep you...``) and may embed Japanese only inside
-    control codes like ``\\r[我,わ]``. Those lines are finished translations.
+    control codes like ``\\r[我,わ]``. Body-only checks treat those as finished
+    dialogue; ``_maybe_fix_nameplate`` then swaps the nameplate to English.
     """
     if not isinstance(text, str):
         return ""
@@ -285,6 +293,149 @@ def _text_still_needs_translation(entry) -> bool:
     return bool(re.search(LANGREGEX, _text_check_body(txt, entry.get("speaker_src", ""))))
 
 
+def _vocab_speaker_lookup(speaker: str) -> str | None:
+    """Return an English gloss for *speaker* from vocab.txt, or None."""
+    if not speaker or not VOCAB:
+        return None
+    try:
+        for item in parseVocabWithCategories(VOCAB):
+            # parseVocabWithCategories yields ((jp, en), line, category) or (term, ...)
+            term = item[0]
+            if not isinstance(term, tuple) or len(term) != 2:
+                continue
+            jp, en = term
+            if jp == speaker and isinstance(en, str) and en.strip():
+                # Prefer a gloss that is not still Japanese.
+                if not re.search(LANGREGEX, en):
+                    return en.strip()
+    except Exception:
+        pass
+    return None
+
+
+def _normalize_speaker_name(translated: str) -> str:
+    """Title-case / tidy a short NPC-name translation (mirrors other engines)."""
+    out = translated.strip().title().replace("'S", "'s").replace("Speaker: ", "")
+    return re.sub(
+        r"(\d)(St|Nd|Rd|Th)\b",
+        lambda m: m.group(1) + m.group(2).lower(),
+        out,
+    )
+
+
+def getSpeaker(speaker: str):
+    """Resolve a WolfDawn nameplate to English with caching.
+
+    Order: session cache / NAMESLIST -> vocab.txt -> live short-string
+    translation (same prompt as the other engines). Single-string calls go
+    through the live API even during batch collect, so later dialogue batches
+    embed a stable English tag.
+    """
+    global NAMESLIST
+    if not speaker:
+        return ["", [0, 0]]
+    # Already English / no target-language characters - keep as-is.
+    if not re.search(LANGREGEX, speaker):
+        return [speaker, [0, 0]]
+
+    with _speakerCacheLock:
+        cached = _speakerCache.get(speaker)
+        if cached is not None:
+            return [cached, [0, 0]]
+        for jp, en in NAMESLIST:
+            if jp == speaker and en:
+                _speakerCache[speaker] = en
+                return [en, [0, 0]]
+
+    vocab_hit = _vocab_speaker_lookup(speaker)
+    if vocab_hit is not None:
+        with _speakerCacheLock:
+            _speakerCache[speaker] = vocab_hit
+            if not any(jp == speaker for jp, _en in NAMESLIST):
+                NAMESLIST.append([speaker, vocab_hit])
+        return [vocab_hit, [0, 0]]
+
+    # Estimate / preflight: do not spend tokens; leave Japanese for a real run.
+    if ESTIMATE:
+        return [speaker, [0, 0]]
+
+    response = translateAI(
+        speaker,
+        "Reply with the " + LANGUAGE + " translation of the NPC name.",
+    )
+    translated = _normalize_speaker_name(
+        response[0] if isinstance(response[0], str) else str(response[0])
+    )
+
+    # Retry once if the model returned something with no Latin / ? characters.
+    if re.search(r"([a-zA-Z？?])", translated) is None:
+        response = translateAI(
+            speaker,
+            "Reply with the " + LANGUAGE + " translation of the NPC name.",
+        )
+        translated = _normalize_speaker_name(
+            response[0] if isinstance(response[0], str) else str(response[0])
+        )
+
+    # Still Japanese after retries - keep original rather than inventing junk.
+    if re.search(LANGREGEX, translated) and not re.search(r"[A-Za-z]", translated):
+        translated = speaker
+
+    with _speakerCacheLock:
+        if speaker not in _speakerCache:
+            _speakerCache[speaker] = translated
+            if not any(jp == speaker for jp, _en in NAMESLIST):
+                NAMESLIST.append([speaker, translated])
+    return [translated, response[1]]
+
+
+def _resolve_nameplate(speaker: str, total_tokens: list) -> str:
+    """Translate *speaker* and accumulate token cost into *total_tokens*."""
+    en, tokens = getSpeaker(speaker)
+    total_tokens[0] += tokens[0]
+    total_tokens[1] += tokens[1]
+    return en
+
+
+def _body_after_dropped_tag(text: str, original_speaker: str) -> str:
+    """When the model drops ``[Speaker]:``, peel a leading JP nameplate if present."""
+    if not isinstance(text, str) or "\n" not in text:
+        return text
+    line1, rest = text.split("\n", 1)
+    if not line1.strip():
+        return text
+    if original_speaker and line1 == original_speaker:
+        return rest
+    # Short Japanese first line - treat as an echoed nameplate.
+    if 0 < len(line1.strip()) <= 20 and re.search(LANGREGEX, line1):
+        return rest
+    return text
+
+
+def _maybe_fix_nameplate(entry, total_tokens: list) -> None:
+    """Swap a Japanese first-line nameplate for English on an otherwise-done line."""
+    if ESTIMATE or _batch_phase() == "collect":
+        return
+    speaker_src = entry.get("speaker_src", "")
+    if not wolf_speakers.is_firstline_enabled(speaker_src, SPEAKER_CONFIG):
+        return
+    txt = entry.get("text")
+    if not isinstance(txt, str) or not txt.strip():
+        return
+    # Only touch finished dialogue (body already English / skip-translated).
+    if _text_still_needs_translation(entry):
+        return
+    split = wolf_speakers.split_source(txt, speaker_src, SPEAKER_CONFIG)
+    if split is None:
+        return
+    prefix, speaker, body = split
+    if not re.search(LANGREGEX, speaker):
+        return
+    speaker_en = _resolve_nameplate(speaker, total_tokens)
+    if speaker_en and speaker_en != speaker:
+        entry["text"] = wolf_speakers.restore_source(prefix, speaker_en, body)
+
+
 def parseDocument(data, filename):
     """Translate every translatable leaf entry and return [data, tokens, error]."""
     global PBAR
@@ -306,6 +457,16 @@ def parseDocument(data, filename):
             return False
         return True
 
+    # Fix Japanese nameplates on lines whose dialogue body is already done, so
+    # resume / re-wrap runs do not leave ``セルリア\\nPlease hold on...`` behind.
+    if IGNORETLTEXT and not ESTIMATE and _batch_phase() != "collect":
+        for entry in entries:
+            if _translatable(entry):
+                continue
+            src = entry.get("source")
+            if isinstance(src, str) and re.search(LANGREGEX, src):
+                _maybe_fix_nameplate(entry, totalTokens)
+
     # Only translate entries that still need work; names.json also requires a
     # safe badge. Untouched leaves keep ``text == source`` so WolfDawn
     # treats them as no-ops on inject.
@@ -316,10 +477,10 @@ def parseDocument(data, filename):
         PBAR = pbar
         if translatable:
             # Reshape first-line-speaker lines into the shared "[Speaker]: line"
-            # transport format. plans[i] carries what is needed to restore each
-            # entry after translation.
+            # transport format with a pre-resolved English nameplate. plans[i]
+            # carries what is needed to restore each entry after translation.
             sources = []
-            plans = []  # (entry, prefix, has_speaker, is_firstline, code_map)
+            plans = []  # (entry, prefix, has_speaker, is_firstline, code_map, speaker_en)
             for entry in translatable:
                 src = entry["source"]
                 protected_src, code_map = wolf_codes.protect_wolf_codes(src)
@@ -329,11 +490,12 @@ def parseDocument(data, filename):
                 )
                 if split is not None:
                     prefix, speaker, body = split
-                    sources.append(wolf_speakers.to_prefixed(speaker, body))
-                    plans.append((entry, prefix, True, is_firstline, code_map))
+                    speaker_en = _resolve_nameplate(speaker, totalTokens)
+                    sources.append(wolf_speakers.to_prefixed(speaker_en, body))
+                    plans.append((entry, prefix, True, is_firstline, code_map, speaker_en))
                 else:
                     sources.append(protected_src)
-                    plans.append((entry, "", False, is_firstline, code_map))
+                    plans.append((entry, "", False, is_firstline, code_map, ""))
 
             try:
                 response = translateAI(sources, [])
@@ -354,7 +516,7 @@ def parseDocument(data, filename):
                 and isinstance(translated, list)
                 and len(translated) == len(plans)
             ):
-                for (entry, prefix, has_speaker, is_firstline, code_map), text, src in zip(
+                for (entry, prefix, has_speaker, is_firstline, code_map, speaker_en), text, src in zip(
                     plans, translated, sources
                 ):
                     if not isinstance(text, str):
@@ -364,13 +526,27 @@ def parseDocument(data, filename):
                         continue
                     text = wolf_codes.restore_wolf_code_placeholders(text, code_map)
                     if has_speaker:
-                        speaker_en, body_en = wolf_speakers.parse_prefixed(text)
-                        if speaker_en is not None:
-                            entry["text"] = wolf_speakers.restore_source(
-                                prefix, speaker_en, body_en
+                        model_speaker, body_en = wolf_speakers.parse_prefixed(text)
+                        if model_speaker is None:
+                            body_en = _body_after_dropped_tag(
+                                text, entry.get("speaker") or ""
                             )
-                        else:
-                            entry["text"] = prefix + text
+                        # Always prefer the pre-resolved English nameplate. Only
+                        # take the model's tag when ours is still Japanese and
+                        # the model produced a Latin gloss.
+                        final_speaker = speaker_en or model_speaker or (
+                            entry.get("speaker") or ""
+                        )
+                        if (
+                            re.search(LANGREGEX, final_speaker)
+                            and isinstance(model_speaker, str)
+                            and model_speaker
+                            and not re.search(LANGREGEX, model_speaker)
+                        ):
+                            final_speaker = model_speaker
+                        entry["text"] = wolf_speakers.restore_source(
+                            prefix, final_speaker, body_en
+                        )
                     else:
                         entry["text"] = text
                     wolf_codes.repair_entry(entry)

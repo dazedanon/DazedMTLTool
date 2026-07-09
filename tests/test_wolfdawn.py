@@ -52,12 +52,18 @@ class _WolfTranslateHarness:
         orig_t = wd.translateAI
         orig_estimate = wd.ESTIMATE
         orig_ignore = wd.IGNORETLTEXT
+        orig_vocab = wd.VOCAB
         orig_update = wd.wolf_vocab.update_vocab_section
         orig_labels = wd.wolf_names.derive_db_labels
         orig_db_filter = wd.wolf_db.load_db_filter_config
+        orig_names = list(wd.NAMESLIST)
+        orig_cache = dict(wd._speakerCache)
         wd.translateAI = translate
         wd.ESTIMATE = estimate
         wd.IGNORETLTEXT = ignore_tl_text
+        wd.VOCAB = ""  # isolate speaker lookup from the real glossary
+        wd.NAMESLIST = []
+        wd._speakerCache.clear()
         # Never touch the real glossary / DB files during tests.
         wd.wolf_vocab.update_vocab_section = capture_vocab
         wd.wolf_names.derive_db_labels = lambda _p: {}
@@ -70,9 +76,13 @@ class _WolfTranslateHarness:
             wd.translateAI = orig_t
             wd.ESTIMATE = orig_estimate
             wd.IGNORETLTEXT = orig_ignore
+            wd.VOCAB = orig_vocab
             wd.wolf_vocab.update_vocab_section = orig_update
             wd.wolf_names.derive_db_labels = orig_labels
             wd.wolf_db.load_db_filter_config = orig_db_filter
+            wd.NAMESLIST = orig_names
+            wd._speakerCache.clear()
+            wd._speakerCache.update(orig_cache)
 
 
 MAP_DOC = {
@@ -453,9 +463,12 @@ class TestTranslationWriteback(unittest.TestCase):
         (data, _t, err), captured = _WolfTranslateHarness().run(doc, "nameplate.mps.json")
         self.assertIsNone(err)
         lines = data["scenes"][0]["lines"]
-        self.assertEqual(lines[0]["text"], "司祭\nSorry to keep you all waiting......")
+        # Dialogue body is skipped; Japanese nameplate is fixed via getSpeaker
+        # (mock returns EN_*, then title-cased like the other engines).
+        self.assertEqual(lines[0]["text"], "En_司祭\nSorry to keep you all waiting......")
         self.assertEqual(lines[1]["text"], "EN_まだだ")
-        self.assertEqual(captured, [["まだだ"]])
+        # Short-string speaker resolve, then the remaining dialogue batch.
+        self.assertEqual(captured, ["司祭", ["まだだ"]])
 
     def test_ignore_tl_text_false_retranslates(self):
         doc = {
@@ -627,15 +640,23 @@ class _SpeakerHarness:
             self.captured.append(copy.deepcopy(text))
             return _mock_translate_speaker(text, history, history_ctx)
 
-        orig = (wd.translateAI, wd.ESTIMATE, wd.SPEAKER_CONFIG)
+        orig = (wd.translateAI, wd.ESTIMATE, wd.SPEAKER_CONFIG, wd.VOCAB)
+        orig_names = list(wd.NAMESLIST)
+        orig_cache = dict(wd._speakerCache)
         wd.translateAI = translate
         wd.ESTIMATE = False
         wd.SPEAKER_CONFIG = self.config
+        wd.VOCAB = ""
+        wd.NAMESLIST = []
+        wd._speakerCache.clear()
         try:
             result = wd.parseDocument(copy.deepcopy(data), filename)
             return result, self.captured
         finally:
-            (wd.translateAI, wd.ESTIMATE, wd.SPEAKER_CONFIG) = orig
+            (wd.translateAI, wd.ESTIMATE, wd.SPEAKER_CONFIG, wd.VOCAB) = orig
+            wd.NAMESLIST = orig_names
+            wd._speakerCache.clear()
+            wd._speakerCache.update(orig_cache)
 
 
 class TestSpeakerReshaping(unittest.TestCase):
@@ -643,15 +664,18 @@ class TestSpeakerReshaping(unittest.TestCase):
         cfg = {"literal_line1": True, "literal_line1_lowconf": True}
         (data, _t, err), captured = _SpeakerHarness(cfg).run(SPEAKER_MAP_DOC)
         self.assertIsNone(err)
-        # Model saw the [Speaker]: transport for the two nameplate lines.
+        # Speakers are resolved first (live short-string), then the batch uses
+        # English nameplates in the [Speaker]: transport.
+        self.assertEqual(captured[0], "市民")
+        self.assertEqual(captured[1], "セルリア")
         self.assertEqual(
-            captured[0],
-            ["[市民]: おはよう\n元気？", "[セルリア]: ふふふ", "むかしむかし"],
+            captured[2],
+            ["[En_市民]: おはよう\n元気？", "[En_セルリア]: ふふふ", "むかしむかし"],
         )
         lines = data["scenes"][0]["lines"]
-        # Restored to WOLF's native Speaker\nbody layout.
-        self.assertEqual(lines[0]["text"], "EN_市民\nEN_おはよう\n元気？")
-        self.assertEqual(lines[1]["text"], "EN_セルリア\nEN_ふふふ")
+        # Restored with the pre-resolved English nameplate (not the model's tag).
+        self.assertEqual(lines[0]["text"], "En_市民\nEN_おはよう\n元気？")
+        self.assertEqual(lines[1]["text"], "En_セルリア\nEN_ふふふ")
         # Narration was translated as a plain blob.
         self.assertEqual(lines[2]["text"], "EN_むかしむかし")
         # Sources are preserved for the inject drift guard.
@@ -663,11 +687,65 @@ class TestSpeakerReshaping(unittest.TestCase):
         cfg = {"literal_line1": True, "literal_line1_lowconf": False}
         (data, _t, err), captured = _SpeakerHarness(cfg).run(SPEAKER_MAP_DOC)
         self.assertIsNone(err)
-        # Low-confidence line is sent as the raw source (no reshaping).
-        self.assertIn("市民\nおはよう\n元気？", captured[0])
-        self.assertIn("[セルリア]: ふふふ", captured[0])
+        # High-confidence speaker is resolved; low-confidence line stays raw.
+        self.assertEqual(captured[0], "セルリア")
+        batch = captured[1]
+        self.assertIn("市民\nおはよう\n元気？", batch)
+        self.assertIn("[En_セルリア]: ふふふ", batch)
         lines = data["scenes"][0]["lines"]
         self.assertEqual(lines[0]["text"], "EN_市民\nおはよう\n元気？")
+
+    def test_writeback_keeps_preresolved_speaker_when_model_leaves_japanese(self):
+        """Model echoing a JP tag must not overwrite the pre-resolved English name."""
+        cfg = {"literal_line1": True, "literal_line1_lowconf": True}
+        doc = {
+            "kind": "map",
+            "scenes": [
+                {
+                    "event": 0,
+                    "name": "ev",
+                    "lines": [
+                        {
+                            "cmd": 59,
+                            "str": 0,
+                            "speaker": "セルリア",
+                            "speaker_src": "literal_line1_lowconf",
+                            "source": "セルリア\nも、もう少し、耐えてください！",
+                            "text": "セルリア\nも、もう少し、耐えてください！",
+                        },
+                    ],
+                }
+            ],
+        }
+
+        def bad_model(text, history=None, history_ctx=None):
+            # Speakers resolve normally; dialogue batch keeps the JP tag.
+            if isinstance(text, str):
+                return [f"EN_{text}", [1, 1]]
+            return [["[セルリア]: Please hold on just a little longer!"], [1, 1]]
+
+        orig = (wd.translateAI, wd.ESTIMATE, wd.SPEAKER_CONFIG, wd.VOCAB)
+        orig_names = list(wd.NAMESLIST)
+        orig_cache = dict(wd._speakerCache)
+        wd.translateAI = bad_model
+        wd.ESTIMATE = False
+        wd.SPEAKER_CONFIG = cfg
+        wd.VOCAB = ""
+        wd.NAMESLIST = []
+        wd._speakerCache.clear()
+        try:
+            data, _t, err = wd.parseDocument(copy.deepcopy(doc), "bad.mps.json")
+        finally:
+            (wd.translateAI, wd.ESTIMATE, wd.SPEAKER_CONFIG, wd.VOCAB) = orig
+            wd.NAMESLIST = orig_names
+            wd._speakerCache.clear()
+            wd._speakerCache.update(orig_cache)
+
+        self.assertIsNone(err)
+        self.assertEqual(
+            data["scenes"][0]["lines"][0]["text"],
+            "En_セルリア\nPlease hold on just a little longer!",
+        )
 
 
 class TestOpenFiles(unittest.TestCase):
