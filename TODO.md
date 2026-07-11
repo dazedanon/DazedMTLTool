@@ -117,5 +117,3 @@ def cmd_usage(client, bid, model):
 - **Retranslate workflow:** when the user re-imports fresh JSON and runs Translate again, cache hits should fill `translated/` automatically for unchanged source lines; only new or edited source text should incur API cost.
 - **UI (later):** cache stats (hits / misses / estimated savings), export/import, clear cache for one game, optional “prefer cache” toggle.
 - **Invalidation:** optional metadata (model id, prompt version) in the key or entry if we need to avoid reusing stale translations after prompt or model changes.
-
-## According to someone from f95, the patcher breaks if a folder's name has an apostrophe
