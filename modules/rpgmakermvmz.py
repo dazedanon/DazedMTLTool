@@ -251,7 +251,7 @@ def handleMVMZ(filename, estimate):
     except Exception:
         pass
 
-    # Reload base prompt + optional per-game quirks (DAZED_GAME_ROOT).
+    # Reload system.md + per-game overlays (game.md / quirks / custom) via DAZED_GAME_ROOT.
     PROMPT = load_system_prompt()
     TRANSLATION_CONFIG.prompt = PROMPT
 

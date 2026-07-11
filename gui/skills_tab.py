@@ -59,8 +59,8 @@ class SkillsTab(QWidget):
 
         intro = QLabel(
             "Tool-level AI instructions live here. "
-            "Per-game quirks, the game IDE skill, and optional custom skills are edited "
-            "in Workflow Step 2 (they travel with the game folder)."
+            "Per-game quirks, Translation Frame (game skill), and optional custom skills are edited "
+            "in Workflow Step 2 (they travel with the game folder and merge into the API prompt)."
         )
         intro.setWordWrap(True)
         intro.setStyleSheet(_HINT_STYLE)

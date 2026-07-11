@@ -1945,7 +1945,7 @@ def createContext(config, subbedText, formatType, history=None):
     cache invalidation caused by changing vocabulary matches.
 
     Cached in static_system:
-      - data/skills/system.md content (plus optional game quirks overlay)
+      - data/skills/system.md content (plus optional game Translation Frame / quirks / custom overlays)
 
     Dynamic in vocab_text:
       - only vocab terms found in the current batch text

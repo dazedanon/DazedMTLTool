@@ -3018,7 +3018,7 @@ class TranslationTab(QWidget):
                 except Exception:
                     pass
 
-                # Per-game quirks overlay: Workflow Step 0 folder → DAZED_GAME_ROOT
+                # Per-game overlays (game.md / quirks / custom): Workflow folder → DAZED_GAME_ROOT
                 try:
                     game_root = ""
                     if self.settings:

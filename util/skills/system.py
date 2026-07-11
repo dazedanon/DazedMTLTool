@@ -1,4 +1,4 @@
-"""Load the static system prompt and optional per-game quirks overlay."""
+"""Load the static system prompt and optional per-game skill overlays."""
 
 from __future__ import annotations
 
@@ -10,11 +10,18 @@ from util.paths import (
     GAME_QUIRKS_RELATIVE,
     GAME_SKILL_RELATIVE,
     GAME_SKILL_RESERVED_NAMES,
+    LEGACY_GAME_SKILL_RELATIVE,
     LEGACY_QUIRKS_FILENAME,
     PROMPT_PATH,
 )
 
 _SKILL_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
+
+# Drop legacy IDE-only sections from older game skill files.
+_IDE_SECTION_RE = re.compile(
+    r"\n## (?:Voice rules|Tool boundaries)\b.*?(?=\n## |\Z)",
+    re.DOTALL | re.IGNORECASE,
+)
 
 
 def quirks_path_for_game(game_root: str | Path | None) -> Path | None:
@@ -38,27 +45,40 @@ def quirks_path_for_game(game_root: str | Path | None) -> Path | None:
 
 
 def game_skill_path_for_game(game_root: str | Path | None) -> Path | None:
-    """Return ``<game_root>/skills/translation.md`` when *game_root* is set."""
+    """Return ``<game_root>/skills/game.md`` when *game_root* is set.
+
+    Migrates legacy ``skills/translation.md`` to ``skills/game.md`` when needed.
+    """
     if not game_root:
         return None
-    return Path(game_root) / GAME_SKILL_RELATIVE
+    root = Path(game_root)
+    preferred = root / GAME_SKILL_RELATIVE
+    legacy = root / LEGACY_GAME_SKILL_RELATIVE
+    if not preferred.is_file() and legacy.is_file():
+        preferred.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            legacy.rename(preferred)
+        except OSError:
+            return legacy
+    return preferred
 
 
 def migrate_game_skill_text(text: str) -> str:
-    """Rewrite legacy quirk path names inside a game skill markdown body."""
+    """Normalize a game skill body for API use (path fixes + drop IDE scaffolding)."""
     if not text:
         return text
     # Common stale pointers from older Project Setup output.
     updated = text.replace("translation_quirks.txt", "skills/quirks.md")
     updated = updated.replace("`translation_quirks.md`", "`skills/quirks.md`")
-    # Bare relative quirks.md without skills/ prefix (keep skills/quirks.md intact).
     updated = re.sub(
         r"(?<!skills/)(?<![\w./-])quirks\.md(?![\w.-])",
         "skills/quirks.md",
         updated,
     )
-    # Avoid double skills/skills/
     updated = updated.replace("skills/skills/quirks.md", "skills/quirks.md")
+    # Older templates included IDE-only Voice rules / Tool boundaries sections.
+    updated = _IDE_SECTION_RE.sub("\n", updated)
+    updated = re.sub(r"\n{3,}", "\n\n", updated).strip() + "\n"
     return updated
 
 
@@ -98,7 +118,7 @@ def custom_skill_path_for_game(
 def list_custom_skill_paths(game_root: str | Path | None) -> list[Path]:
     """List user custom skill markdown files under ``<game>/skills/``.
 
-    Excludes built-in ``quirks.md`` and ``translation.md``.
+    Excludes built-in ``quirks.md`` and ``game.md`` (and legacy ``translation.md``).
     """
     skills = game_skills_dir(game_root)
     if skills is None or not skills.is_dir():
@@ -116,9 +136,10 @@ def list_custom_skill_paths(game_root: str | Path | None) -> list[Path]:
 def load_system_prompt(game_root: str | Path | None = None) -> str:
     """Load ``data/skills/system.md`` plus optional per-game overlays.
 
-    Overlay order:
-      1. ``skills/quirks.md`` (voice quirks)
-      2. Any other ``skills/*.md`` except ``translation.md`` (custom skills)
+    Overlay order (when ``DAZED_GAME_ROOT`` / *game_root* is set):
+      1. ``skills/game.md`` - Translation Frame / game skill (API)
+      2. ``skills/quirks.md`` - cross-cutting voice quirks
+      3. other ``skills/*.md`` - optional custom overlays
 
     Path resolution order for the game root:
       1. Explicit *game_root* argument
@@ -134,6 +155,12 @@ def load_system_prompt(game_root: str | Path | None = None) -> str:
         return base
 
     parts = [base.rstrip()] if base.strip() else []
+
+    skill_file = game_skill_path_for_game(root)
+    if skill_file and skill_file.is_file():
+        skill = migrate_game_skill_text(skill_file.read_text(encoding="utf-8")).strip()
+        if skill:
+            parts.append("## Game Translation Frame\n\n" + skill)
 
     quirks_file = quirks_path_for_game(root)
     if quirks_file and quirks_file.is_file():

@@ -22,13 +22,13 @@ Regenerate mode: if the user asks for only one block (`glossary`, `speakers`, `t
 | `glossary` | Named characters (gender, role, **per-character** speech register) + worldbuilding terms | Global dialect / person rules; honorific policy; speaker-format flags; formatting |
 | `speakers` | Tool flag ENABLE/SKIP + short evidence | Character bios; quirks; full glossary |
 | `translation_quirks` | Cross-cutting voice rules (battle-log person, global dialect, item-description style, **unusual** honorific habits) | Per-character register; "always keep -san" (tool base prompt already does); codes/wrap/line counts; speaker flags |
-| `game_skill` | **Translation Frame** (theme / era / register / naming / optional myth), pointer to `skills/quirks.md`, tool boundaries | File inventories; verbatim quirks; verbatim glossary; per-character register; restating base honorific/formatting policy |
+| `game_skill` | **Translation Frame** for the API (theme / era / register / naming / optional myth) saved at `skills/game.md` | File inventories; quirks bullets; glossary; per-character register; IDE scaffolding; restating base honorific/formatting policy |
 
 Hard rules:
 1. Per-character voice → `glossary` only.
 2. Category-wide / cross-cutting voice → `translation_quirks` only.
 3. Default honorifics policy is owned by the tool base prompt - only note **unusual** honorific habits in quirks.
-4. `game_skill` **references** `skills/quirks.md` only; do not reprint those rules or cite legacy names like `translation_quirks.txt`.
+4. `game_skill` is the title's Translation Frame for the translation API - keep it compact; do not reprint quirks or glossary.
 5. `speakers` is config, not lore.
 
 ---
@@ -98,25 +98,26 @@ Output as short imperative bullets suitable to paste into `skills/quirks.md`.
 
 ### Game skill rules (for `game_skill` block)
 
-Produce a durable IDE skill for this title saved at `skills/translation.md`.
+Produce the per-game translation skill saved at `skills/game.md`.
+DazedMTLTool **merges this file into the translation system prompt** (before quirks).
 
-**Translation Frame** (required section - one compact line per field; evidence-based only):
+**Translation Frame only** (one compact line per field; evidence-based):
 - `世界観 (Theme / setting)` - genre, world type, core atmosphere
 - `時代感 (Era / technology level)` - medieval / modern / sci-fi / historical / etc.
 - `文体方針 (Register policy)` - overall English style (plain RPG, mythic, courtly, modern casual, military, gothic, …)
 - `固有名詞方針 (Naming policy)` - invented names, titles, ranks, honorifics, myth-derived terms (high-level only; default honorific keep-policy stays in the tool base prompt)
 - `神話・伝承 (Myth / folklore basis)` - **omit unless** evidence supports a specific tradition or source family
 
-Also include:
-- **Voice rules** - pointer only to ``skills/quirks.md`` (authoritative)
-- **Tool boundaries** - codes/formatting owned by the tool; do not reprint quirks or glossary
-- Do **not** list repo files / "files that matter"
-- Do **not** put per-character register here (glossary) or battle-log / dialect bullets here (quirks)
+Do **not** include:
+- Voice-rules pointers, tool-boundary essays, or IDE instructions
+- Repo file inventories / "files that matter"
+- Per-character register (glossary) or battle-log / dialect bullets (quirks)
+- Verbatim quirks or glossary entries
 
-**Path names (required):**
-- Voice quirks file: ``skills/quirks.md`` (never ``translation_quirks.txt`` or any other legacy name)
-- This IDE skill file: ``skills/translation.md``
-- Optional user overlays (if mentioned): other ``skills/*.md`` files except ``quirks.md`` / ``translation.md``
+**Paths:**
+- Game skill (API): ``skills/game.md``
+- Quirks (API): ``skills/quirks.md`` (never ``translation_quirks.txt``)
+- Optional custom API overlays: other ``skills/*.md`` except those two
 
 <!-- /engine:rpgmaker -->
 
@@ -173,12 +174,10 @@ Label the fence language as `translation_quirks`. Inside: imperative bullet list
 
 ### Block `game_skill`
 
-Label the fence language as `game_skill`. Inside: full markdown for `skills/translation.md`.
-
-Required skeleton (fill in the blanks; keep the Voice rules path exactly):
+Label the fence language as `game_skill`. Inside: markdown for `skills/game.md` (Translation Frame only).
 
 ```markdown
-# <Game title> - Translation skill
+# <Game title> - Translation Frame
 
 ## Translation Frame
 世界観 (Theme / setting) - <one compact line>
@@ -186,15 +185,6 @@ Required skeleton (fill in the blanks; keep the Voice rules path exactly):
 文体方針 (Register policy) - <one compact line>
 固有名詞方針 (Naming policy) - <one compact line>
 神話・伝承 (Myth / folklore basis) - <one compact line, or omit this line entirely if unsupported>
-
-## Voice rules
-Follow `skills/quirks.md` as the authoritative cross-cutting voice guide for this title.
-Do not invent alternate quirk filenames.
-
-## Tool boundaries
-- DazedMTLTool owns formatting codes, wrap, line counts, and honorifics defaults via its base system skill.
-- Per-character register lives in the glossary (`vocab.txt`), not here.
-- Do not reprint quirks or glossary entries in this file.
 ```
 
 If known speakers were prepended in a `<known_speakers>` block above this skill, prefer those names in the glossary, then cross-check Actors.json for other major named actors.

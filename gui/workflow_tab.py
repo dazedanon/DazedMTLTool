@@ -445,10 +445,10 @@ _STEP_HELP: dict[int, str] = {
         "• <code>translation_quirks</code> → Quirks tab "
         "(<code>skills/quirks.md</code>)<br>"
         "• <code>game_skill</code> → Game skills → translation tab "
-        "(<code>skills/translation.md</code>)<br><br>"
+        "(<code>skills/game.md</code> - Translation Frame, merged into the API prompt)<br><br>"
         "Optional: <b>+</b> on Game skills adds custom <code>skills/*.md</code> "
-        "overlays (merged into the API prompt - can hurt quality; use sparingly).<br><br>"
-        "Use one game folder per translation run so quirks stay in the prompt cache."
+        "overlays (also merged into the API prompt - can hurt quality; use sparingly).<br><br>"
+        "Use one game folder per translation run so frame/quirks stay in the prompt cache."
     ),
     3: (
         "<b>Step 3 - TL Phase 1</b><br><br>"
@@ -1793,7 +1793,7 @@ class WorkflowTab(QWidget):
             "Quirks",
         )
 
-        # Game skills: built-in translation.md + optional custom overlays
+        # Game skills: built-in game.md + optional custom overlays
         game_skills_page = QWidget()
         gs_layout = QVBoxLayout(game_skills_page)
         gs_layout.setContentsMargins(0, 0, 0, 0)
@@ -1845,11 +1845,11 @@ class WorkflowTab(QWidget):
         gs_layout.addWidget(self._game_skills_stack, 1)
 
         self._add_game_skill_page(
-            "translation",
+            "game",
             _editor_page(
-                "<game>/skills/translation.md",
-                "Paste the game_skill block (Translation Frame + voice/tool pointers). "
-                "IDE companion skill for this game repo (not injected into the API prompt).",
+                "<game>/skills/game.md",
+                "Paste the game_skill Translation Frame. Merged into the translation "
+                "system prompt (before quirks) when this game folder is selected.",
                 self._save_game_skill,
                 self._reload_game_skill,
                 "game_skill_editor",
@@ -2437,7 +2437,7 @@ class WorkflowTab(QWidget):
         # Pre-populate all Phase 2 checkboxes from current module state
         self._populate_p2_checkboxes()
 
-    # ── Step 5: Plugins/scripts + Export ───────────────────────────────────
+    # ── Step 5: Plugins.js + Export ────────────────────────────────────────
 
     def _build_step5_finish(self, layout: QVBoxLayout):
         self._add_step_header(layout, "Step 5 — Plugins & Export", 5)
@@ -3692,7 +3692,7 @@ class WorkflowTab(QWidget):
         if bar is None or stack is None:
             return
 
-        # Remove existing custom tabs (index 0 is always translation).
+        # Remove existing custom tabs (index 0 is always game.md).
         while bar.count() > 1:
             bar.removeTab(1)
         while stack.count() > 1:
@@ -3757,8 +3757,8 @@ class WorkflowTab(QWidget):
             "<b>Custom skills are merged into the translation system prompt.</b><br><br>"
             "Extra or poorly written skills can <b>distract the model and hurt "
             "translation quality</b> (conflicting rules, prompt bloat, diluted quirks).<br><br>"
-            "Prefer <code>quirks.md</code> for voice rules and <code>translation.md</code> "
-            "for IDE guidance. Add a custom skill only if you need a rare, tightly scoped "
+            "Prefer <code>quirks.md</code> for voice rules and <code>game.md</code> "
+            "for the Translation Frame. Add a custom skill only if you need a rare, tightly scoped "
             "overlay - <b>at your own risk</b>."
         )
         warn.setStandardButtons(QMessageBox.Cancel | QMessageBox.Ok)
@@ -3783,7 +3783,7 @@ class WorkflowTab(QWidget):
                 self,
                 "Invalid name",
                 "Use a short name like battle-log or honorifics_extra.\n"
-                "Reserved: quirks, translation.",
+                "Reserved: quirks, game, translation.",
             )
             return
         if stem in self._custom_skill_editors:

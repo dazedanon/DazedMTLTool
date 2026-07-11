@@ -177,7 +177,12 @@ Format: Japanese name, English name in parentheses, then gender.
 > **Note:** A very large vocab file can increase API costs and potentially reduce quality. Focus on the most important characters and terms.
 
 ### data/skills/system.md
-This is the system prompt skill sent to the AI on every translation call. A default `data/skills/system.md` is included and works well for most games. You generally don't need to edit it unless you want to customize the translation style. Per-game voice rules go in `<game>/skills/quirks.md` instead.
+This is the system prompt skill sent to the AI on every translation call. A default `data/skills/system.md` is included and works well for most games. You generally don't need to edit it unless you want to customize the translation style.
+
+Per-game overlays (when a game folder is selected in Workflow) live next to the game:
+- `<game>/skills/game.md` - Translation Frame (theme / era / register / naming)
+- `<game>/skills/quirks.md` - cross-cutting voice habits
+- optional extra `<game>/skills/*.md` custom overlays
 
 ---
 

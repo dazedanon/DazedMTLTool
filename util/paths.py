@@ -20,9 +20,10 @@ TRANSLATION_CONTEXTS_PATH = DATA_DIR / "translation_contexts.json"
 # Per-game quirks skill (API overlay). Legacy flat file still migrated on load.
 GAME_QUIRKS_RELATIVE = Path("skills") / "quirks.md"
 LEGACY_QUIRKS_FILENAME = "translation_quirks.txt"
-GAME_SKILL_RELATIVE = Path("skills") / "translation.md"
+GAME_SKILL_RELATIVE = Path("skills") / "game.md"
+LEGACY_GAME_SKILL_RELATIVE = Path("skills") / "translation.md"
 # Built-in skill filenames under <game>/skills/ (not user-custom overlays).
-GAME_SKILL_RESERVED_NAMES = frozenset({"quirks.md", "translation.md"})
+GAME_SKILL_RESERVED_NAMES = frozenset({"quirks.md", "game.md", "translation.md"})
 
 _ROOT_DATA_FILES = (
     "vocab.txt",
