@@ -22,7 +22,7 @@ Regenerate mode: if the user asks for only one block (`glossary`, `speakers`, `t
 | `glossary` | Named characters (gender, role, **per-character** speech register) + worldbuilding terms | Global dialect / person rules; honorific policy; speaker-format flags; formatting |
 | `speakers` | Tool flag ENABLE/SKIP + short evidence | Character bios; quirks; full glossary |
 | `translation_quirks` | Cross-cutting voice rules (battle-log person, global dialect, item-description style, **unusual** honorific habits) | Per-character register; "always keep -san" (tool base prompt already does); codes/wrap/line counts; speaker flags |
-| `game_skill` | Game identity, which files matter, pointer to `skills/quirks.md`, what the tool owns | Verbatim quirks list; verbatim glossary; restating formatting/honorific base policy |
+| `game_skill` | Game identity, pointer to `skills/quirks.md`, what the tool owns | File inventories; verbatim quirks list; verbatim glossary; restating formatting/honorific base policy |
 
 Hard rules:
 1. Per-character voice → `glossary` only.
@@ -100,9 +100,9 @@ Output as short imperative bullets suitable to paste into `skills/quirks.md`.
 
 Produce a durable IDE skill for this title saved at `skills/translation.md`:
 - Short game identity (tone/genre/content notes)
-- Which files matter for dialogue/DB in this repo
 - A **Voice rules** section that points only at ``skills/quirks.md`` (authoritative)
 - What not to change (codes, formatting - tool-owned via base prompt)
+- Do **not** list repo files / "files that matter"
 - Do **not** reprint quirks or the glossary
 
 **Path names (required):**
@@ -174,10 +174,6 @@ Required skeleton (fill in the blanks; keep the Voice rules path exactly):
 
 ## Identity
 <1-3 sentences: tone, genre, content notes>
-
-## Files that matter
-- <dialogue / events paths for this repo>
-- <database paths>
 
 ## Voice rules
 Follow `skills/quirks.md` as the authoritative cross-cutting voice guide for this title.
