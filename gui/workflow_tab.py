@@ -1848,8 +1848,8 @@ class WorkflowTab(QWidget):
             "translation",
             _editor_page(
                 "<game>/skills/translation.md",
-                "Paste the game_skill block. IDE companion skill for this game repo "
-                "(not injected into the API prompt).",
+                "Paste the game_skill block (Translation Frame + voice/tool pointers). "
+                "IDE companion skill for this game repo (not injected into the API prompt).",
                 self._save_game_skill,
                 self._reload_game_skill,
                 "game_skill_editor",

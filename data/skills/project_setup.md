@@ -22,7 +22,7 @@ Regenerate mode: if the user asks for only one block (`glossary`, `speakers`, `t
 | `glossary` | Named characters (gender, role, **per-character** speech register) + worldbuilding terms | Global dialect / person rules; honorific policy; speaker-format flags; formatting |
 | `speakers` | Tool flag ENABLE/SKIP + short evidence | Character bios; quirks; full glossary |
 | `translation_quirks` | Cross-cutting voice rules (battle-log person, global dialect, item-description style, **unusual** honorific habits) | Per-character register; "always keep -san" (tool base prompt already does); codes/wrap/line counts; speaker flags |
-| `game_skill` | Game identity, pointer to `skills/quirks.md`, what the tool owns | File inventories; verbatim quirks list; verbatim glossary; restating formatting/honorific base policy |
+| `game_skill` | **Translation Frame** (theme / era / register / naming / optional myth), pointer to `skills/quirks.md`, tool boundaries | File inventories; verbatim quirks; verbatim glossary; per-character register; restating base honorific/formatting policy |
 
 Hard rules:
 1. Per-character voice → `glossary` only.
@@ -98,12 +98,20 @@ Output as short imperative bullets suitable to paste into `skills/quirks.md`.
 
 ### Game skill rules (for `game_skill` block)
 
-Produce a durable IDE skill for this title saved at `skills/translation.md`:
-- Short game identity (tone/genre/content notes)
-- A **Voice rules** section that points only at ``skills/quirks.md`` (authoritative)
-- What not to change (codes, formatting - tool-owned via base prompt)
+Produce a durable IDE skill for this title saved at `skills/translation.md`.
+
+**Translation Frame** (required section - one compact line per field; evidence-based only):
+- `世界観 (Theme / setting)` - genre, world type, core atmosphere
+- `時代感 (Era / technology level)` - medieval / modern / sci-fi / historical / etc.
+- `文体方針 (Register policy)` - overall English style (plain RPG, mythic, courtly, modern casual, military, gothic, …)
+- `固有名詞方針 (Naming policy)` - invented names, titles, ranks, honorifics, myth-derived terms (high-level only; default honorific keep-policy stays in the tool base prompt)
+- `神話・伝承 (Myth / folklore basis)` - **omit unless** evidence supports a specific tradition or source family
+
+Also include:
+- **Voice rules** - pointer only to ``skills/quirks.md`` (authoritative)
+- **Tool boundaries** - codes/formatting owned by the tool; do not reprint quirks or glossary
 - Do **not** list repo files / "files that matter"
-- Do **not** reprint quirks or the glossary
+- Do **not** put per-character register here (glossary) or battle-log / dialect bullets here (quirks)
 
 **Path names (required):**
 - Voice quirks file: ``skills/quirks.md`` (never ``translation_quirks.txt`` or any other legacy name)
@@ -172,8 +180,12 @@ Required skeleton (fill in the blanks; keep the Voice rules path exactly):
 ```markdown
 # <Game title> - Translation skill
 
-## Identity
-<1-3 sentences: tone, genre, content notes>
+## Translation Frame
+世界観 (Theme / setting) - <one compact line>
+時代感 (Era / technology level) - <one compact line>
+文体方針 (Register policy) - <one compact line>
+固有名詞方針 (Naming policy) - <one compact line>
+神話・伝承 (Myth / folklore basis) - <one compact line, or omit this line entirely if unsupported>
 
 ## Voice rules
 Follow `skills/quirks.md` as the authoritative cross-cutting voice guide for this title.
