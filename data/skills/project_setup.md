@@ -123,9 +123,93 @@ Do **not** include:
 
 <!-- engine:wolf -->
 
-### Wolf file strategy (stub)
+### Wolf file strategy
 
-When analysing a WolfDawn / WOLF project later: use `wolf_json/` extracts (`names.json`, DB sheets, map/common scenes). Prefer foundation DB + narrative sheets; grep large map dumps. Same four-block ownership rules apply.
+WolfDawn extractions live under `files/` as JSON lists of `{source, text}` entries.
+Analyse `source` only.
+
+**DB / system (read in full first):**
+- `DataBase.project.json`, `CDataBase.project.json`, `SysDatabase.project.json` - richest small source of character/actor names, classes, factions, lore titles
+- `CommonEvent.dat.json` - common events (dialogue + system text)
+- `Game.dat.json` - game/system strings (title, terms)
+- `Evtext.json` - external event text when present
+
+**Maps (grep / sample, do not read huge files sequentially):**
+- `<Map>.mps.json` - per-map events; main story dialogue; often very large
+- Prefer grep of `source` for speaker patterns and recurring proper nouns
+- Scan lowest-numbered maps first - early maps usually carry the most story
+
+**Exclude from glossary analysis:**
+- `names.json` - item / skill / enemy value names (translated separately in Step 3 Names; do **not** list them in the glossary)
+
+--- attach the extracted JSON in files/ here before continuing ---
+
+### Speakers analysis (for `speakers` block)
+
+WolfDawn already tags who speaks. High-confidence nameplates (`literal_line1`) are always reshaped - nothing to decide.
+
+The only flag is whether **low-confidence** first-line guesses (`speaker_src = literal_line1_lowconf`) are real speaker names for this game:
+- short first line with **no** preceding face window
+- might be a nameplate, or the start of dialogue / narration
+
+Inspect a sample of those entries in maps / CommonEvent:
+- `ENABLE` if low-confidence first lines are overwhelmingly real speaker names
+- `SKIP` if many are dialogue or narration (reshaping would mislabel lines)
+
+Do **not** emit RPG Maker flags (`INLINE401SPEAKERS`, `FIRSTLINESPEAKERS`, `FACENAME101`).
+
+**Wolf `speakers` schema (use this instead of the shared RPG Maker flag list):**
+
+```
+Patterns detected:
+- ...
+
+Flag decisions:
+LOWCONF_FIRSTLINE : ENABLE|SKIP - <one-line reason>
+
+Examples:
+- ...
+```
+
+### Glossary rules (for `glossary` block)
+
+- Separator: plain hyphen-minus `-` only (never em/en dash).
+- Descriptions entirely in English; refer to other characters by English name.
+- Commit to one spelling - never `Sylfia / Sylphia`.
+- Characters: gender, role, speech register, personality; note player-chosen names (variable / input).
+- Worldbuilding: factions, lore locations (mentioned in dialogue but not map labels), unique systems/titles.
+- Exclude: skill / item / weapon / armour names from `names.json`, generic RPG words, unnamed NPCs.
+
+### Quirks rules (for `translation_quirks` block)
+
+Find translation-only quirks, for example:
+- Battle log / system messages with a fixed person or register
+- Global dialect (archaic narration, cute speech markers game-wide)
+- Recurring item/skill description style
+- Unusual honorific habits
+
+Exclude: wrap geometry, inject layout, `names.json` harvest, speaker LOWCONF checkbox, character name lists.
+
+Output as short imperative bullets suitable to paste into `skills/quirks.md`.
+
+### Game skill rules (for `game_skill` block)
+
+Produce the per-game translation skill saved at `skills/game.md`.
+DazedMTLTool **merges this file into the translation system prompt** (before quirks).
+
+**Translation Frame only** (one compact line per field; evidence-based):
+- `世界観 (Theme / setting)` - genre, world type, core atmosphere
+- `時代感 (Era / technology level)` - medieval / modern / sci-fi / historical / etc.
+- `文体方針 (Register policy)` - overall English style
+- `固有名詞方針 (Naming policy)` - invented names, titles, ranks, honorifics (high-level only)
+- `神話・伝承 (Myth / folklore basis)` - **omit unless** evidence supports a specific tradition
+
+Do **not** include voice-rules pointers, tool-boundary essays, file inventories, per-character register (glossary), or quirks bullets.
+
+**Paths:**
+- Game skill (API): ``skills/game.md``
+- Quirks (API): ``skills/quirks.md``
+- Optional custom API overlays: other ``skills/*.md`` except those two
 
 <!-- /engine:wolf -->
 

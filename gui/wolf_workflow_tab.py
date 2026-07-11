@@ -6,8 +6,8 @@ Mirrors the RPGMaker WorkflowTab, driven by the vendored WolfDawn ``wolf`` CLI
 
   Step 0  Project     - select game folder; import wolf_json/ into files/ (like RPGMaker)
   Step 1  Pre-process - optional dazedformat + gameupdate/ copy before translating
-  Step 2  Glossary    - build vocab.txt (characters / worldbuilding terms) before
-                        translating so the AI keeps names and voice consistent
+  Step 2  Setup       - Project Setup skill + vocab / quirks / game skills editors
+                        (build glossary and API overlays before translating)
   Step 3  Names       - translate names.json (Phase 0). WolfDawn safe entries
                         are translated per-name; refs and verify names are skipped.
                         Harvests short name terms into vocab.txt.
@@ -99,7 +99,8 @@ from util.wolfdawn import db_classify as wolf_db
 from util.wolfdawn import wrap_search as wolf_ws
 import util.dazedwrap as dazedwrap
 
-from util.paths import PROJECT_ROOT
+from gui.setup_skills_editors import SetupSkillsEditors
+from util.paths import PROJECT_ROOT, VOCAB_PATH
 from util.project_scanner import (
     detect_wolf_layout,
     find_wolf_text_archives,
@@ -111,7 +112,7 @@ from util.project_scanner import (
     wolf_repair_nested_data_dir,
     wolf_unpack_out_dir,
 )
-from util.vocab import read_game_vocab, write_game_vocab
+from util.skills import load_project_setup
 
 # Workflow-level label for the non-batch (live) translation path. The Translation
 # tab's own mode is called "Translate"; _workflow_mode_text() maps to that.
@@ -127,93 +128,6 @@ WORK_DIR_NAME = "wolf_json"
 PHASE_NAMES_KINDS = {"names"}
 PHASE_DB_KINDS = {"db"}
 PHASE_MAPS_EVENTS_KINDS = {"map", "common", "gamedat", "txt", "txt-dir"}
-
-# Glossary-discovery prompt for Copilot / Cursor, tailored to WolfDawn's extracted
-# JSON (source/text pairs staged in files/). Produces the same two-section format
-# the shared vocab.txt expects, so the AI output pastes straight into the editor.
-_WOLF_GLOSSARY_PROMPT = (
-    "You are an expert Japanese WOLF RPG Editor game analyst building a translation glossary.\n"
-    "\n"
-    "<task>\n"
-    "Extract named characters and lore-specific worldbuilding terms from this game's extracted "
-    "text. Produce a structured glossary in the exact format specified below. It will be loaded "
-    "directly into a translation tool, so strict format compliance is required.\n"
-    "</task>\n"
-    "\n"
-    "--- attach the extracted JSON in files/ here before continuing ---\n"
-    "\n"
-    "<data_format>\n"
-    "The files/ folder holds WolfDawn extractions as JSON. Each file is a list of entries with a\n"
-    "'source' field (the original Japanese) and a 'text' field (initially empty/identical).\n"
-    "Analyse the 'source' fields only. The files are:\n"
-    "  - DataBase.project.json, CDataBase.project.json, SysDatabase.project.json — databases:\n"
-    "    richest, small source of character/actor names, classes, factions, and lore titles.\n"
-    "  - CommonEvent.dat.json — common events: dialogue and system text.\n"
-    "  - Game.dat.json — game/system strings (title, terms).\n"
-    "  - <Map>.mps.json — per-map events: the main story dialogue (can be large).\n"
-    "  - Evtext.json — external event text, when present.\n"
-    "  - names.json — item/skill/enemy value names (translated separately in Step 3; do NOT list them).\n"
-    "</data_format>\n"
-    "\n"
-    "<file_strategy>\n"
-    "Map files can be extremely large. Do NOT read them sequentially — you will hit context "
-    "limits. Instead:\n"
-    "1. Read the DataBase.project.json files IN FULL first — small and the best source of names.\n"
-    "2. For large map files, SEARCH (grep) the 'source' fields instead of reading sequentially. "
-    "Prioritise dialogue because it is the best evidence for character voice:\n"
-    "   - Speaker patterns such as 【Name】, [Name], Name「…」, Name：, and <Name> at the start of a line\n"
-    "   - Katakana clusters or kanji compound proper nouns that recur across dialogue\n"
-    "   Scan the lowest-numbered maps first — early maps have the most story content.\n"
-    "3. Stop once you stop finding new names or terms. Do not pad the output.\n"
-    "</file_strategy>\n"
-    "\n"
-    "<rules>\n"
-    "Apply to both sections:\n"
-    "- Separator: use a plain hyphen-minus (-). Never use an em dash or en dash. "
-    "The translation tool only recognises the plain hyphen.\n"
-    "- Descriptions must be entirely in English. Refer to other characters by English name only.\n"
-    "- Never give two spelling options (e.g. 'Sylfia / Sylphia' is wrong). Commit to one translation.\n"
-    "\n"
-    "# Game Characters — rules:\n"
-    "- Discover named characters from the databases and dialogue. Skip unnamed NPCs, generic "
-    "enemies, and narration-only entries.\n"
-    "- For each character include: gender, role, speech register, and personality. Note if the "
-    "name is player-chosen (a hero/actor whose name comes from a variable or input prompt).\n"
-    "\n"
-    "# Worldbuilding Terms — rules:\n"
-    "- Include: faction/organisation names, locations mentioned in dialogue but not on maps, "
-    "unique magic systems, lore titles, recurring in-universe concepts.\n"
-    "- Exclude: skill names, item names, weapon/armour names (translated via names.json in "
-    "Step 3). Skip generic RPG words. Do not repeat character names here.\n"
-    "</rules>\n"
-    "\n"
-    "<output_format>\n"
-    "Return the ENTIRE glossary inside ONE fenced code block (a ``` block), with nothing before "
-    "or after it, so it can be copied in a single click and pasted straight into the tool.\n"
-    "Inside the code block, output EXACTLY two sections with these headers. Do not add any "
-    "preamble, explanation, or text outside the entries.\n"
-    "\n"
-    "# Game Characters\n"
-    "# Worldbuilding Terms\n"
-    "\n"
-    "Entry format:  Japanese (English) - description\n"
-    "\n"
-    "<example>\n"
-    "# Game Characters\n"
-    "シロ (Shiro) - Female; protagonist; player-named; speaks in a flustered, cute register "
-    "with feminine speech markers\n"
-    "ゼクス (Zex) - Male; antagonist; cold and commanding; uses an archaic formal register\n"
-    "カナエ (Kanae) - Female; NPC shopkeeper; warm and motherly; ends sentences with わね\n"
-    "\n"
-    "# Worldbuilding Terms\n"
-    "虚無の穴 (Void Rift) - Dimensional tear referenced repeatedly in late-game dialogue; "
-    "not a named map location\n"
-    "裁定者 (Arbiter) - Title held by the ruling council; lore-specific rank with no "
-    "real-world equivalent\n"
-    "</example>\n"
-    "</output_format>\n"
-)
-
 
 # Speaker-format prompt for a repo-aware AI. WolfDawn already detects and tags who
 # speaks on each line, so the only decision left is whether its LOW-confidence
@@ -620,7 +534,7 @@ class WolfWorkflowTab(QWidget):
         _tab_defs = [
             ("0  Project", self._build_step0),
             ("1  Pre-process", self._build_step1_preprocess),
-            ("2  Glossary", self._build_step2_glossary),
+            ("2  Setup", self._build_step2_setup),
             ("3  Names", self._build_step3_names),
             ("4  Database", self._build_step4_database),
             ("5  Maps/Events", self._build_step5_maps_events),
@@ -1142,6 +1056,8 @@ class WolfWorkflowTab(QWidget):
 
         self._save_setting("last_game_folder", folder)
         self._game_root = folder
+        if hasattr(self, "setup_editors"):
+            self.setup_editors.reload_all()
         self.detected_label.setText("Scanning…")
         self.detected_label.setStyleSheet(
             "color:#9d9d9d;font-size:13px;padding:4px 8px;"
@@ -1767,80 +1683,97 @@ class WolfWorkflowTab(QWidget):
 
         self._run_task(task, on_done=on_done)
 
-    # ── Step 2: Glossary ───────────────────────────────────────────────────────
+    # ── Step 2: Setup ──────────────────────────────────────────────────────────
 
-    def _build_step2_glossary(self, layout: QVBoxLayout):
-        layout.addWidget(_make_section_label("Step 2 · Glossary (build before translating)"))
+    def _build_step2_setup(self, layout: QVBoxLayout):
+        layout.addWidget(_make_section_label("Step 2 · Setup (Project Setup + Skills)"))
         layout.addWidget(self._desc(
-            "vocab.txt is the project-wide glossary used by every translation batch to keep "
-            "character names, speech register, honorifics, and lore terms consistent. Build it "
-            "before translating (Steps 4-5) so the AI already knows every character and term. "
-            "Copy the prompt below into Cursor or Copilot Chat with the extracted files/ JSON "
-            "open, let it analyse the game, then paste its output into the editor and save."
+            "Copy Project Setup into Cursor/Copilot with files/ open. Paste glossary into Vocab, "
+            "quirks into Quirks, game_skill into Game skills. Speakers advice (LOWCONF_FIRSTLINE) "
+            "is applied via the Step 5 checkbox - keep that step self-contained."
         ))
-        prompt_btn = _make_btn("📋 Copy glossary prompt for Copilot / Cursor", "#5a3a7a")
-        prompt_btn.clicked.connect(self._copy_wolf_glossary_prompt)
-        layout.addWidget(prompt_btn)
 
-        fmt = QLabel(
-            "Format:  Japanese (English) - description\n"
-            "Example: シロ (Shiro) - Female; protagonist; flustered, cute register"
+        actions = QHBoxLayout()
+        actions.setSpacing(8)
+        copy_btn = _make_btn("📋  Copy Project Setup", "#555")
+        copy_btn.setFixedWidth(190)
+        copy_btn.setFixedHeight(32)
+        copy_btn.setToolTip(
+            "Clipboard skill for the game repo IDE. Returns glossary, speakers, "
+            "translation_quirks, and game_skill code blocks."
         )
-        fmt.setFont(QFont("Consolas", 9))
-        fmt.setWordWrap(True)
-        fmt.setStyleSheet(
-            "color:#569cd6;background-color:#1a1e2a;border:1px solid #2a3a5a;"
-            "padding:5px 10px;border-radius:4px;font-size:12px;border-left:3px solid #2a6a9a;"
-        )
-        layout.addWidget(fmt)
-
-        self.vocab_editor = QTextEdit()
-        self.vocab_editor.setMinimumHeight(120)
-        self.vocab_editor.setFont(QFont("Consolas", 9))
-        self.vocab_editor.setStyleSheet(
-            "QTextEdit{background-color:#252526;color:#d4d4d4;border:1px solid #3c3c3c;"
-            "border-radius:4px;padding:8px;selection-background-color:#264f78;}"
-        )
-        self._reload_vocab()
-        layout.addWidget(self.vocab_editor, 1)
-
-        vrow = QHBoxLayout()
-        save_btn = _make_btn("💾 Save vocab.txt", "#3a7a3a")
-        save_btn.clicked.connect(self._save_vocab)
-        vrow.addWidget(save_btn)
-        reload_btn = _make_btn("↺ Reload", "#555")
-        reload_btn.clicked.connect(self._reload_vocab)
-        vrow.addWidget(reload_btn)
-        vrow.addStretch()
-        layout.addLayout(vrow)
+        copy_btn.clicked.connect(self._copy_project_setup_prompt)
+        actions.addWidget(copy_btn)
+        actions.addStretch()
+        layout.addLayout(actions)
 
         note = self._desc(
-            "You don't need to add item / skill / enemy value names here: Phase 0 translates "
-            "WolfDawn safe entries from names.json and harvests them into vocab.txt. "
-            "Foundation DB also merges short labels (map names, titles) after Step 4. "
-            "Focus this glossary on characters and worldbuilding terms."
+            "Do not list names.json item/skill/enemy values in the glossary - Phase 0 "
+            "(Step 3) harvests those. Focus Vocab on characters and worldbuilding."
         )
         layout.addWidget(note)
 
-    def _copy_wolf_glossary_prompt(self):
-        try:
-            QApplication.clipboard().setText(_WOLF_GLOSSARY_PROMPT)
-            self._log("📋 Glossary prompt copied. Paste it into Cursor/Copilot with files/ open.")
-        except Exception as exc:
-            self._log(f"❌ Could not copy glossary prompt: {exc}")
+        self.setup_editors = SetupSkillsEditors(
+            self,
+            game_root_fn=lambda: self.folder_edit.text().strip() or self._game_root,
+            log_fn=self._log,
+        )
+        layout.addWidget(self.setup_editors, 1)
+        self.setup_editors.reload_all()
 
-    def _reload_vocab(self):
+    def _copy_project_setup_prompt(self):
+        """Copy the Wolf Project Setup skill, optionally prepending known vocab speakers."""
         try:
-            self.vocab_editor.setPlainText(read_game_vocab())
+            speakers = self._read_vocab_speakers()
+            prepend = ""
+            if speakers:
+                speaker_lines = "\n".join(f"  {orig} ({tl})" for orig, tl in speakers)
+                prepend = (
+                    "<known_speakers>\n"
+                    "These character names were already listed in vocab.txt.\n"
+                    "For the glossary block '# Game Characters', prefer entries for these names, "
+                    "then cross-check DataBase*.project.json and dialogue for other major names.\n"
+                    "\n"
+                    + speaker_lines
+                    + "\n</known_speakers>\n"
+                )
+            prompt = load_project_setup("wolf", prepend=prepend)
+            QApplication.clipboard().setText(prompt)
+            self._log("📋 Project Setup skill copied. Paste it into Cursor/Copilot with files/ open.")
         except Exception as exc:
-            self._log(f"❌ Could not load vocab.txt: {exc}")
+            self._log(f"❌ Could not load Project Setup skill: {exc}")
 
-    def _save_vocab(self):
+    def _read_vocab_speakers(self) -> list[tuple[str, str]]:
+        """Parse '# Speakers' (or '# Game Characters') from vocab.txt as (orig, tl) pairs."""
+        vocab_path = VOCAB_PATH
+        if not vocab_path.exists():
+            return []
         try:
-            write_game_vocab(self.vocab_editor.toPlainText())
-            self._log("✅ vocab.txt saved (base terms from vocab_base.txt appended).")
-        except Exception as exc:
-            self._log(f"❌ Could not save vocab.txt: {exc}")
+            content = vocab_path.read_text(encoding="utf-8")
+        except Exception:
+            return []
+
+        results = []
+        for header in (r"Speakers", r"Game Characters"):
+            m = re.search(
+                rf"^[	 ]*#\s*{header}\s*$\r?\n(.*?)(?=^[	 ]*#|\Z)",
+                content,
+                re.MULTILINE | re.DOTALL,
+            )
+            if not m:
+                continue
+            for line in m.group(1).splitlines():
+                line = line.strip()
+                if not line:
+                    continue
+                pm = re.match(r"^(.+?)\s+\((.+?)\)", line)
+                if pm:
+                    pair = (pm.group(1), pm.group(2))
+                    if pair not in results:
+                        results.append(pair)
+            if results:
+                break
+        return results
 
     # ── Step 4: Database ───────────────────────────────────────────────────────
 
@@ -3912,7 +3845,7 @@ class WolfWorkflowTab(QWidget):
         short_names = (
             "Project",
             "Prep",
-            "Glossary",
+            "Setup",
             "Names",
             "Database",
             "Maps",

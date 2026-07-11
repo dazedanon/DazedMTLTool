@@ -21,17 +21,8 @@ import threading
 from pathlib import Path
 
 from util.paths import VOCAB_PATH
-from util.skills import (
-    custom_skill_path_for_game,
-    game_skill_path_for_game,
-    list_custom_skill_paths,
-    load_project_setup,
-    migrate_game_skill_text,
-    quirks_path_for_game,
-    sanitize_custom_skill_stem,
-)
+from util.skills import load_project_setup
 from util.vocab import BASE_SEPARATOR as _SHARED_BASE_SEPARATOR
-from util.vocab import read_game_vocab, write_game_vocab
 
 import jsbeautifier
 
@@ -46,7 +37,6 @@ from PyQt5.QtWidgets import (
     QGridLayout,
     QGroupBox,
     QHBoxLayout,
-    QInputDialog,
     QLabel,
     QLineEdit,
     QListWidget,
@@ -57,9 +47,7 @@ from PyQt5.QtWidgets import (
     QSizePolicy,
     QSpinBox,
     QSplitter,
-    QStackedWidget,
     QStyle,
-    QTabBar,
     QTabWidget,
     QTextEdit,
     QToolButton,
@@ -67,6 +55,8 @@ from PyQt5.QtWidgets import (
     QWidget,
     QAbstractItemView,
 )
+
+from gui.setup_skills_editors import SetupSkillsEditors
 
 from gui.translation_tab import (
     BATCH_MODE_LABEL,
@@ -621,13 +611,6 @@ def _make_icon_btn(icon_text: str, tooltip: str = "") -> QPushButton:
 # ─────────────────────────────────────────────────────────────────────────────
 # Helpers
 # ─────────────────────────────────────────────────────────────────────────────
-
-class _PlainPasteTextEdit(QTextEdit):
-    """QTextEdit that always pastes as plain text to avoid spurious newlines."""
-
-    def insertFromMimeData(self, source):  # noqa: N802
-        self.insertPlainText(source.text())
-
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Main widget
@@ -1716,153 +1699,13 @@ class WorkflowTab(QWidget):
         layout.addWidget(top)
         self._populate_speaker_flags()
 
-        # ---- Editors (tabbed to save vertical space) -----------------------
-        editors = QTabWidget()
-        editors.setObjectName("setupEditors")
-        editors.setDocumentMode(False)
-        tab_bar = editors.tabBar()
-        tab_bar.setExpanding(False)
-        tab_bar.setMinimumHeight(34)
-        tab_bar.setStyleSheet(
-            "QTabBar::tab{background:#333337;color:#c0c0c0;min-width:90px;min-height:28px;"
-            "padding:6px 16px;border:1px solid #3c3c3c;border-bottom:none;"
-            "margin-right:3px;font-size:12px;font-weight:bold;}"
-            "QTabBar::tab:selected{background:#1e1e1e;color:#4ec9b0;"
-            "border-top:2px solid #4ec9b0;}"
-            "QTabBar::tab:hover{color:#ffffff;}"
+        self.setup_editors = SetupSkillsEditors(
+            self,
+            game_root_fn=lambda: self.folder_edit.text().strip(),
+            log_fn=self._log,
         )
-        editors.setStyleSheet(
-            "QTabWidget::pane{border:1px solid #3c3c3c;background:#1e1e1e;}"
-        )
-        _ed_ss = (
-            "QTextEdit{background-color:#1e1e1e;color:#d4d4d4;"
-            "border:none;padding:8px;"
-            "selection-background-color:#264f78;}"
-        )
-
-        def _editor_page(path_hint: str, tip: str, save_slot, reload_slot, attr: str):
-            page = QWidget()
-            vl = QVBoxLayout(page)
-            vl.setContentsMargins(8, 8, 8, 8)
-            vl.setSpacing(6)
-            tip_lbl = QLabel(tip)
-            tip_lbl.setWordWrap(True)
-            tip_lbl.setStyleSheet("color:#9d9d9d;font-size:12px;")
-            vl.addWidget(tip_lbl)
-            path_lbl = QLabel(path_hint)
-            path_lbl.setStyleSheet("color:#569cd6;font-size:11px;font-family:Consolas,monospace;")
-            vl.addWidget(path_lbl)
-            ed = _PlainPasteTextEdit()
-            ed.setMinimumHeight(160)
-            ed.setFont(QFont("Consolas", 9))
-            ed.setStyleSheet(_ed_ss)
-            setattr(self, attr, ed)
-            vl.addWidget(ed, 1)
-            row = QHBoxLayout()
-            row.setSpacing(8)
-            save_btn = _make_btn("💾  Save", "#3a7a3a")
-            save_btn.setFixedWidth(110)
-            save_btn.clicked.connect(save_slot)
-            row.addWidget(save_btn)
-            reload_btn = _make_btn("↺  Reload", "#555")
-            reload_btn.setFixedWidth(110)
-            reload_btn.clicked.connect(reload_slot)
-            row.addWidget(reload_btn)
-            row.addStretch()
-            vl.addLayout(row)
-            return page
-
-        editors.addTab(
-            _editor_page(
-                "data/vocab.txt  (game section)",
-                "Paste the glossary code block. Format: Japanese (English) - notes",
-                self._save_vocab,
-                self._reload_vocab,
-                "vocab_editor",
-            ),
-            "Vocab",
-        )
-        editors.addTab(
-            _editor_page(
-                "<game>/skills/quirks.md",
-                "Paste the translation_quirks block. Merged onto the system prompt at translate time.",
-                self._save_quirks,
-                self._reload_quirks,
-                "quirks_editor",
-            ),
-            "Quirks",
-        )
-
-        # Game skills: built-in game.md + optional custom overlays
-        game_skills_page = QWidget()
-        gs_layout = QVBoxLayout(game_skills_page)
-        gs_layout.setContentsMargins(0, 0, 0, 0)
-        gs_layout.setSpacing(0)
-
-        self._custom_skill_editors: dict[str, QTextEdit] = {}
-        self._game_skills_bar = QTabBar()
-        self._game_skills_bar.setDocumentMode(True)
-        self._game_skills_bar.setExpanding(False)
-        self._game_skills_bar.setDrawBase(False)
-        self._game_skills_bar.setMinimumHeight(30)
-        self._game_skills_bar.setStyleSheet(
-            "QTabBar::tab{background:#2d2d30;color:#9d9d9d;padding:6px 12px;"
-            "border:1px solid #3c3c3c;border-bottom:none;margin-right:2px;}"
-            "QTabBar::tab:selected{background:#1e1e1e;color:#e0e0e0;}"
-            "QTabBar::tab:hover{color:#ffffff;}"
-        )
-        self._game_skills_stack = QStackedWidget()
-        self._game_skills_stack.setStyleSheet("background:#1e1e1e;")
-        self._game_skills_bar.currentChanged.connect(self._game_skills_stack.setCurrentIndex)
-
-        strip = QWidget()
-        strip.setStyleSheet("background-color:#252526;")
-        strip_l = QHBoxLayout(strip)
-        strip_l.setContentsMargins(8, 6, 10, 0)
-        strip_l.setSpacing(6)
-        strip_l.addWidget(self._game_skills_bar, 0, Qt.AlignBottom)
-
-        add_btn = QPushButton("+ Add custom")
-        add_btn.setCursor(Qt.PointingHandCursor)
-        add_btn.setFixedHeight(30)
-        add_btn.setToolTip(
-            "Create a custom skills/*.md overlay.\n"
-            "Merged into the translation system prompt - can hurt quality."
-        )
-        add_btn.setStyleSheet(
-            "QPushButton{background-color:#2d2d30;color:#4ec9b0;"
-            "border:1px solid #3c3c3c;border-bottom:none;"
-            "border-top-left-radius:3px;border-top-right-radius:3px;"
-            "padding:0 12px;font-size:12px;font-weight:bold;}"
-            "QPushButton:hover{background-color:#3a3a3a;color:#7ee0c8;"
-            "border-color:#4ec9b0;}"
-            "QPushButton:pressed{background-color:#1e1e1e;}"
-        )
-        add_btn.clicked.connect(self._add_custom_skill)
-        strip_l.addWidget(add_btn, 0, Qt.AlignBottom)
-        strip_l.addStretch(1)
-        gs_layout.addWidget(strip)
-        gs_layout.addWidget(self._game_skills_stack, 1)
-
-        self._add_game_skill_page(
-            "game",
-            _editor_page(
-                "<game>/skills/game.md",
-                "Paste the game_skill Translation Frame. Merged into the translation "
-                "system prompt (before quirks) when this game folder is selected.",
-                self._save_game_skill,
-                self._reload_game_skill,
-                "game_skill_editor",
-            ),
-        )
-
-        editors.addTab(game_skills_page, "Game skills")
-        layout.addWidget(editors, 1)
-
-        self._reload_vocab()
-        self._reload_quirks()
-        self._reload_game_skill()
-        self._reload_custom_skills()
+        layout.addWidget(self.setup_editors, 1)
+        self.setup_editors.reload_all()
 
 
     def _run_parse_speakers(self):
@@ -3196,9 +3039,8 @@ class WorkflowTab(QWidget):
             return
 
         self._save_setting("last_game_folder", folder)
-        self._reload_quirks()
-        self._reload_game_skill()
-        self._reload_custom_skills()
+        if hasattr(self, "setup_editors"):
+            self.setup_editors.reload_all()
         self.detected_label.setText("Scanning…")
         self.detected_label.setStyleSheet(
             "color:#9d9d9d;font-size:13px;padding:4px 8px;"
@@ -3556,292 +3398,6 @@ class WorkflowTab(QWidget):
         except Exception as exc:
             self._log(f"❌ Could not load Project Setup skill: {exc}")
 
-    def _game_root_or_warn(self) -> str | None:
-        root = self.folder_edit.text().strip()
-        if not root:
-            self._log("⚠  Select a game folder in Step 0 first.")
-            return None
-        return root
-
-    def _reload_quirks(self):
-        root = self.folder_edit.text().strip()
-        path = quirks_path_for_game(root)
-        if not path or not path.is_file():
-            if hasattr(self, "quirks_editor"):
-                self.quirks_editor.setPlainText("")
-            return
-        try:
-            self.quirks_editor.setPlainText(path.read_text(encoding="utf-8"))
-        except Exception as exc:
-            self._log(f"❌ Could not load skills/quirks.md: {exc}")
-
-    def _save_quirks(self):
-        root = self._game_root_or_warn()
-        if not root:
-            return
-        path = quirks_path_for_game(root)
-        try:
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(self.quirks_editor.toPlainText().rstrip() + "\n", encoding="utf-8")
-            self._log(f"✅ Saved {path}")
-        except Exception as exc:
-            self._log(f"❌ Could not save skills/quirks.md: {exc}")
-
-    def _reload_game_skill(self):
-        root = self.folder_edit.text().strip()
-        path = game_skill_path_for_game(root)
-        if not path or not path.is_file():
-            if hasattr(self, "game_skill_editor"):
-                self.game_skill_editor.setPlainText("")
-            return
-        try:
-            raw = path.read_text(encoding="utf-8")
-            fixed = migrate_game_skill_text(raw)
-            self.game_skill_editor.setPlainText(fixed)
-            if fixed != raw:
-                path.write_text(fixed.rstrip() + "\n", encoding="utf-8")
-                self._log(
-                    f"↺  Updated legacy quirk path in {path.name} → skills/quirks.md"
-                )
-        except Exception as exc:
-            self._log(f"❌ Could not load game skill: {exc}")
-
-    def _save_game_skill(self):
-        root = self._game_root_or_warn()
-        if not root:
-            return
-        path = game_skill_path_for_game(root)
-        try:
-            path.parent.mkdir(parents=True, exist_ok=True)
-            text = migrate_game_skill_text(self.game_skill_editor.toPlainText())
-            self.game_skill_editor.setPlainText(text)
-            path.write_text(text.rstrip() + "\n", encoding="utf-8")
-            self._log(f"✅ Saved {path}")
-        except Exception as exc:
-            self._log(f"❌ Could not save game skill: {exc}")
-
-    def _add_game_skill_page(self, title: str, page: QWidget) -> int:
-        """Add a page to the Game skills bar + stack. Returns the new index."""
-        idx = self._game_skills_stack.addWidget(page)
-        self._game_skills_bar.addTab(title)
-        return idx
-
-    def _select_game_skill_tab(self, title: str) -> None:
-        for i in range(self._game_skills_bar.count()):
-            if self._game_skills_bar.tabText(i) == title:
-                self._game_skills_bar.setCurrentIndex(i)
-                return
-
-    def _custom_skill_editor_page(self, stem: str) -> QWidget:
-        """Editor page for one custom skill file under <game>/skills/<stem>.md."""
-        page = QWidget()
-        vl = QVBoxLayout(page)
-        vl.setContentsMargins(8, 8, 8, 8)
-        vl.setSpacing(6)
-
-        tip = QLabel(
-            "Custom skill - merged into the translation system prompt. "
-            "Extra or conflicting rules can hurt quality."
-        )
-        tip.setWordWrap(True)
-        tip.setStyleSheet("color:#c9a227;font-size:12px;")
-        vl.addWidget(tip)
-
-        path_lbl = QLabel(f"<game>/skills/{stem}.md")
-        path_lbl.setStyleSheet(
-            "color:#569cd6;font-size:11px;font-family:Consolas,monospace;"
-        )
-        vl.addWidget(path_lbl)
-
-        ed = _PlainPasteTextEdit()
-        ed.setMinimumHeight(160)
-        ed.setFont(QFont("Consolas", 9))
-        ed.setStyleSheet(
-            "QTextEdit{background-color:#1e1e1e;color:#d4d4d4;"
-            "border:none;padding:8px;"
-            "selection-background-color:#264f78;}"
-        )
-        self._custom_skill_editors[stem] = ed
-        vl.addWidget(ed, 1)
-
-        row = QHBoxLayout()
-        row.setSpacing(8)
-        save_btn = _make_btn("💾  Save", "#3a7a3a")
-        save_btn.setFixedWidth(110)
-        save_btn.clicked.connect(lambda _=False, s=stem: self._save_custom_skill(s))
-        row.addWidget(save_btn)
-
-        reload_btn = _make_btn("↺  Reload", "#555")
-        reload_btn.setFixedWidth(110)
-        reload_btn.clicked.connect(lambda _=False, s=stem: self._reload_one_custom_skill(s))
-        row.addWidget(reload_btn)
-
-        delete_btn = _make_btn("🗑  Delete", "#8b0000")
-        delete_btn.setFixedWidth(110)
-        delete_btn.setToolTip("Delete this custom skill file from the game folder")
-        delete_btn.clicked.connect(lambda _=False, s=stem: self._delete_custom_skill(s))
-        row.addWidget(delete_btn)
-        row.addStretch()
-        vl.addLayout(row)
-        return page
-
-    def _reload_custom_skills(self):
-        """Rebuild custom skill tabs from <game>/skills/*.md (excluding built-ins)."""
-        bar = getattr(self, "_game_skills_bar", None)
-        stack = getattr(self, "_game_skills_stack", None)
-        if bar is None or stack is None:
-            return
-
-        # Remove existing custom tabs (index 0 is always game.md).
-        while bar.count() > 1:
-            bar.removeTab(1)
-        while stack.count() > 1:
-            w = stack.widget(1)
-            stack.removeWidget(w)
-            if w is not None:
-                w.deleteLater()
-        self._custom_skill_editors = {}
-
-        root = self.folder_edit.text().strip()
-        for path in list_custom_skill_paths(root):
-            stem = path.stem
-            page = self._custom_skill_editor_page(stem)
-            self._add_game_skill_page(stem, page)
-            try:
-                self._custom_skill_editors[stem].setPlainText(
-                    path.read_text(encoding="utf-8")
-                )
-            except Exception as exc:
-                self._log(f"❌ Could not load skills/{stem}.md: {exc}")
-
-    def _reload_one_custom_skill(self, stem: str):
-        root = self.folder_edit.text().strip()
-        path = custom_skill_path_for_game(root, stem)
-        ed = self._custom_skill_editors.get(stem)
-        if ed is None:
-            return
-        if not path or not path.is_file():
-            ed.setPlainText("")
-            return
-        try:
-            ed.setPlainText(path.read_text(encoding="utf-8"))
-        except Exception as exc:
-            self._log(f"❌ Could not load skills/{stem}.md: {exc}")
-
-    def _save_custom_skill(self, stem: str):
-        root = self._game_root_or_warn()
-        if not root:
-            return
-        path = custom_skill_path_for_game(root, stem)
-        ed = self._custom_skill_editors.get(stem)
-        if path is None or ed is None:
-            self._log("❌ Invalid custom skill.")
-            return
-        try:
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(ed.toPlainText().rstrip() + "\n", encoding="utf-8")
-            self._log(f"✅ Saved {path}")
-        except Exception as exc:
-            self._log(f"❌ Could not save skills/{stem}.md: {exc}")
-
-    def _add_custom_skill(self):
-        root = self._game_root_or_warn()
-        if not root:
-            return
-
-        warn = QMessageBox(self)
-        warn.setIcon(QMessageBox.Warning)
-        warn.setWindowTitle("Custom skill - quality warning")
-        warn.setTextFormat(Qt.RichText)
-        warn.setText(
-            "<b>Custom skills are merged into the translation system prompt.</b><br><br>"
-            "Extra or poorly written skills can <b>distract the model and hurt "
-            "translation quality</b> (conflicting rules, prompt bloat, diluted quirks).<br><br>"
-            "Prefer <code>quirks.md</code> for voice rules and <code>game.md</code> "
-            "for the Translation Frame. Add a custom skill only if you need a rare, tightly scoped "
-            "overlay - <b>at your own risk</b>."
-        )
-        warn.setStandardButtons(QMessageBox.Cancel | QMessageBox.Ok)
-        warn.button(QMessageBox.Ok).setText("I understand - continue")
-        warn.setStyleSheet(
-            "QMessageBox{background-color:#252526;}"
-            "QLabel{color:#d4d4d4;font-size:13px;min-width:420px;}"
-        )
-        if warn.exec_() != QMessageBox.Ok:
-            return
-
-        name, ok = QInputDialog.getText(
-            self,
-            "New custom skill",
-            "Skill file name (letters, numbers, ._- ; saved as <game>/skills/<name>.md):",
-        )
-        if not ok:
-            return
-        stem = sanitize_custom_skill_stem(name)
-        if not stem:
-            QMessageBox.warning(
-                self,
-                "Invalid name",
-                "Use a short name like battle-log or honorifics_extra.\n"
-                "Reserved: quirks, game, translation.",
-            )
-            return
-        if stem in self._custom_skill_editors:
-            QMessageBox.information(
-                self, "Already exists", f"Custom skill '{stem}' is already open."
-            )
-            self._select_game_skill_tab(stem)
-            return
-
-        path = custom_skill_path_for_game(root, stem)
-        if path is None:
-            return
-        if path.is_file():
-            # File exists on disk but tab missing - just reload tabs.
-            self._reload_custom_skills()
-            self._select_game_skill_tab(stem)
-            return
-
-        try:
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(
-                f"# {stem}\n\n"
-                "# Keep this short and specific. Conflicting rules hurt quality.\n",
-                encoding="utf-8",
-            )
-        except Exception as exc:
-            self._log(f"❌ Could not create skills/{stem}.md: {exc}")
-            return
-
-        page = self._custom_skill_editor_page(stem)
-        idx = self._add_game_skill_page(stem, page)
-        self._game_skills_bar.setCurrentIndex(idx)
-        self._reload_one_custom_skill(stem)
-        self._log(f"✅ Created custom skill {path}")
-
-    def _delete_custom_skill(self, stem: str):
-        root = self._game_root_or_warn()
-        if not root:
-            return
-        path = custom_skill_path_for_game(root, stem)
-        reply = QMessageBox.question(
-            self,
-            "Delete custom skill",
-            f"Delete skills/{stem}.md from the game folder?",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No,
-        )
-        if reply != QMessageBox.Yes:
-            return
-        try:
-            if path and path.is_file():
-                path.unlink()
-            self._log(f"🗑  Deleted {path}")
-        except Exception as exc:
-            self._log(f"❌ Could not delete skills/{stem}.md: {exc}")
-            return
-        self._reload_custom_skills()
-
     def _read_vocab_speakers(self) -> list[tuple[str, str]]:
         """Parse the '# Speakers' section from vocab.txt and return (orig, tl) pairs."""
         vocab_path = VOCAB_PATH
@@ -3872,23 +3428,6 @@ class WorkflowTab(QWidget):
             if pm:
                 results.append((pm.group(1), pm.group(2)))
         return results
-
-    def _reload_vocab(self):
-        try:
-            self.vocab_editor.setPlainText(read_game_vocab())
-        except Exception as exc:
-            self._log(f"❌ Could not load vocab.txt: {exc}")
-
-    def _save_vocab(self):
-        try:
-            write_game_vocab(self.vocab_editor.toPlainText())
-            self._log("✅ vocab.txt saved (base terms from vocab_base.txt appended).")
-        except Exception as exc:
-            self._log(f"❌ Could not save vocab.txt: {exc}")
-
-    # ─────────────────────────────────────────────────────────────────────────
-    # Step 2 – Actor substitution
-    # ─────────────────────────────────────────────────────────────────────────
 
     # ─────────────────────────────────────────────────────────────────────────
     # Step 3 – Speaker detection
