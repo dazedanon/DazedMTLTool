@@ -15,6 +15,25 @@ check_dependency() {
   fi
 }
 
+# Run a Windows .exe. On Linux always go through wine (never rely on binfmt,
+# which can hang waiting on wineserver / GUI). On Windows / Git Bash, exec directly.
+run_windows_exe() {
+    local exe="$1"
+    shift
+    case "$(uname -s)" in
+        Linux*)
+            if ! command -v wine > /dev/null 2>&1; then
+                echo "ERROR: wine is required to run $(basename "$exe") on Linux."
+                return 1
+            fi
+            ( cd "$ROOT_DIR" && WINEDEBUG=-all wine "$exe" "$@" )
+            ;;
+        *)
+            ( cd "$ROOT_DIR" && "$exe" "$@" )
+            ;;
+    esac
+}
+
 # Check for jq, unzip, and curl
 check_dependency jq
 check_dependency unzip
@@ -263,12 +282,7 @@ invoke_wolf_pre_setup() {
     fi
 
     echo "[Pre-Setup] Unpacking Data.wolf with UberWolfCli (one-time)..."
-    # Native .exe works under Windows / Git Bash; wine covers Linux hosts.
-    if ( cd "$ROOT_DIR" && "$cli" -o "$data_wolf" ); then
-        :
-    elif command -v wine > /dev/null 2>&1 && ( cd "$ROOT_DIR" && wine "$cli" -o "$data_wolf" ); then
-        :
-    else
+    if ! run_windows_exe "$cli" -o "$data_wolf"; then
         echo "[Pre-Setup] ERROR: UberWolfCli unpack failed."
         return 0
     fi
@@ -315,7 +329,7 @@ if [ -f "$ROOT_DIR/data.dts" ]; then
         if [ ! -d "$ROOT_DIR/data" ] || [ ! -f "$ROOT_DIR/data/project.dat" ]; then
             if [ -f "$ROOT_DIR/data.dts" ]; then
                 echo "[Pre-Setup] Step 1: Unpacking data.dts -> data"
-                ( cd "$ROOT_DIR" && "$UNPACKER" -o data data.dts ) || echo "[Pre-Setup] ERROR: Unpack failed."
+                run_windows_exe "$UNPACKER" -o data data.dts || echo "[Pre-Setup] ERROR: Unpack failed."
             else
                 echo "[Pre-Setup] Step 1: Skipping unpack (no data folder and no data.dts found)."
             fi
@@ -327,7 +341,7 @@ if [ -f "$ROOT_DIR/data.dts" ]; then
         if [ ! -d "$ROOT_DIR/patch" ]; then
             if [ -f "$ROOT_DIR/data/project.dat" ]; then
                 echo "[Pre-Setup] Step 2: Creating patch from data/project.dat"
-                ( cd "$ROOT_DIR" && "$UNPACKER" ./data/project.dat -c ) || echo "[Pre-Setup] ERROR: Create Patch failed."
+                run_windows_exe "$UNPACKER" ./data/project.dat -c || echo "[Pre-Setup] ERROR: Create Patch failed."
             else
                 echo "[Pre-Setup] Step 2: Skipping create patch (data/project.dat not found)."
             fi
@@ -385,20 +399,17 @@ download_extract() {
     invoke_wolf_pre_setup
 
     echo "Applying patch..."
-    if ! cp -r "$inner"/* "$ROOT_DIR/"; then
+    if ! cp -rf "$inner"/* "$ROOT_DIR/"; then
         echo "Patch application failed!"
         rm -rf "$TMP_EX"
         rm -f "$ROOT_DIR/repo.zip"
         return 1
     fi
 
-    rm -rf "$TMP_EX"
-
-    echo "Cleaning up..."
-    rm -f "$ROOT_DIR/repo.zip"
-
     # --------------------------------------------------------
     # POST-APPLY: Run Steps 3 and 4 after patch files are merged
+    # (Must finish before "Cleaning up" so a slow wine/SRPG step is not
+    # mistaken for a hung cleanup - matches patch.ps1 order.)
     # --------------------------------------------------------
     UNPACKER="$ROOT_DIR/SRPG_Unpacker.exe"
     if [ -f "$ROOT_DIR/data.dts" ]; then
@@ -407,14 +418,14 @@ download_extract() {
 
             if [ -f "$ROOT_DIR/data/project.dat" ]; then
                 echo "Step 3: Applying patch to data/project.dat"
-                ( cd "$ROOT_DIR" && "$UNPACKER" ./data/project.dat -a ) || echo "ERROR: Apply Patch failed."
+                run_windows_exe "$UNPACKER" ./data/project.dat -a || echo "ERROR: Apply Patch failed."
             else
                 echo "ERROR: data/project.dat not found; cannot apply patch."
             fi
 
             if [ -d "$ROOT_DIR/data" ]; then
                 echo "Step 4: Packing data -> data.dts"
-                ( cd "$ROOT_DIR" && "$UNPACKER" -o data.dts data ) || echo "WARNING: Pack failed."
+                run_windows_exe "$UNPACKER" -o data.dts data || echo "WARNING: Pack failed."
             else
                 echo "Step 4: Skipping pack (data folder not found)."
             fi
@@ -426,7 +437,19 @@ download_extract() {
     # Retire Data.wolf if loose Data/ is ready after the patch copy.
     invoke_wolf_pre_setup
 
+    echo "Cleaning up..."
+    rm -rf "$TMP_EX"
+    rm -f "$ROOT_DIR/repo.zip"
+    # Legacy / accidental leftovers from older patchers.
+    rm -rf "$ROOT_DIR/_patch_extract_tmp"
+    shopt -s nullglob
+    for stale in "$ROOT_DIR"/dazedmtl_patch_*.zip; do
+        rm -f "$stale"
+    done
+    shopt -u nullglob
+
     echo "$latest_patch_sha" > "$STATE_FILE"
+    echo "Done."
 }
 
 # Check if previous_patch_sha.txt exists in gameupdate

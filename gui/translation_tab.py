@@ -74,6 +74,89 @@ BATCH_COLLECT_LIVE_CHARGE_NOTE = (
 )
 
 
+class _ShimLabel:
+    """Plain stand-in for QLabel used by Files-tab row helpers (no real Qt widget)."""
+
+    def __init__(self, text=""):
+        self._text = text
+        self._style = ""
+        self._visible = False
+        self._tooltip = ""
+
+    def setText(self, text):
+        self._text = text or ""
+
+    def text(self):
+        return self._text
+
+    def setStyleSheet(self, style):
+        self._style = style or ""
+
+    def setVisible(self, visible):
+        self._visible = bool(visible)
+
+    def setToolTip(self, tip):
+        self._tooltip = tip or ""
+
+    def toolTip(self):
+        return self._tooltip
+
+
+class _ShimCheckBox:
+    def __init__(self):
+        self._checked = False
+        self._enabled = False
+        self._visible = False
+
+    def setChecked(self, checked):
+        self._checked = bool(checked)
+
+    def isChecked(self):
+        return self._checked
+
+    def setEnabled(self, enabled):
+        self._enabled = bool(enabled)
+
+    def setVisible(self, visible):
+        self._visible = bool(visible)
+
+
+class _ShimProgressBar:
+    def __init__(self):
+        self._value = 0
+        self._maximum = 100
+        self._visible = False
+        self._text_visible = True
+        self._style = ""
+
+    def setValue(self, value):
+        self._value = int(value)
+
+    def setMaximum(self, maximum):
+        self._maximum = int(maximum)
+
+    def setVisible(self, visible):
+        self._visible = bool(visible)
+
+    def setTextVisible(self, visible):
+        self._text_visible = bool(visible)
+
+    def setStyleSheet(self, style):
+        self._style = style or ""
+
+
+class _ShimWidget:
+    def __init__(self):
+        self._visible = False
+        self._tooltip = ""
+
+    def setVisible(self, visible):
+        self._visible = bool(visible)
+
+    def setToolTip(self, tip):
+        self._tooltip = tip or ""
+
+
 class TranslationWorker(QThread):
     """Worker thread for running translations without blocking the UI."""
     
@@ -1162,31 +1245,12 @@ class TranslationTab(QWidget):
         self.batch_pipeline_stack.setStyleSheet("background: transparent;")
         self.batch_pipeline_stack.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
-        self.progress_list = QListWidget()
-        self.progress_list.setMinimumHeight(120)
-        self.progress_list.setSelectionMode(QListWidget.NoSelection)
-        self.progress_list.setFocusPolicy(Qt.NoFocus)
-        self.progress_list.setSpacing(1)  # Minimal spacing between items
-        self.progress_list.setStyleSheet("""
-            QListWidget {
-                outline: none;
-                border: 1px solid #555555;
-                border-radius: 3px;
-                background-color: #1e1e1e;
-                color: white;
-                font-size: 13px;
-            }
-            QListWidget::item {
-                padding: 0px;
-                border-bottom: 1px solid #333333;
-            }
-            QListWidget::item:last {
-                border-bottom: none;
-            }
-        """)
-        # Prefer a Batch-history-style table for per-file status; keep the list
-        # widget as a non-visible compatibility shim for any leftover references.
+        # Prefer a Batch-history-style table for per-file status. Keep a hidden,
+        # parented list as a compatibility shim so clear()/legacy refs stay safe
+        # without creating an orphan top-level window (minimize/restore glitches).
+        self.progress_list = QListWidget(self)
         self.progress_list.setVisible(False)
+        self.progress_list.setMaximumSize(0, 0)
 
         self.progress_files_summary = QLabel("No files in this run.")
         self.progress_files_summary.setStyleSheet("color:#9d9d9d;font-size:12px;padding:2px 0;")
@@ -1785,6 +1849,16 @@ class TranslationTab(QWidget):
             self.files_tab_btn.setText("Files")
             self._batch_tab_index = -1
             self.progress_content_stack.setCurrentIndex(1)
+        # Per-file Time is useful for live translate; for batch, Anthropic owns
+        # the wait and local write time is negligible.
+        table = getattr(self, "progress_table", None)
+        if table is not None and table.columnCount() > 5:
+            table.setColumnHidden(5, bool(batch_mode))
+        try:
+            if hasattr(self, "totals_time_label"):
+                self.totals_time_label.setVisible(not batch_mode)
+        except Exception:
+            pass
 
     def _on_batch_submit_yes(self):
         if hasattr(self, "translation_worker") and self.translation_worker:
@@ -2456,11 +2530,10 @@ class TranslationTab(QWidget):
         self._refresh_files_summary()
 
     def create_progress_item(self, filename):
-        """Add a Files-tab table row for a file and return a placeholder widget."""
+        """Add a Files-tab table row for a file and return a placeholder shim."""
         table = getattr(self, "progress_table", None)
         if table is None:
-            # Fallback empty widget if table is unavailable
-            return QWidget()
+            return _ShimWidget()
 
         row = table.rowCount()
         table.insertRow(row)
@@ -2473,25 +2546,16 @@ class TranslationTab(QWidget):
                 item.setData(Qt.UserRole, filename)
             table.setItem(row, col, item)
 
-        # Keep a small compatibility widget so older helpers that expect
-        # checkbox/label/progress_bar keys do not crash.
-        checkbox = QCheckBox()
+        # Non-Qt shims keep older helpers working without spawning orphan windows.
+        checkbox = _ShimCheckBox()
         checkbox.setEnabled(False)
-        checkbox.setVisible(False)
-        progress_label = QLabel("Waiting...")
-        progress_label.setVisible(False)
-        progress_bar = QProgressBar()
-        progress_bar.setVisible(False)
-        tokens_label = QLabel("")
-        tokens_label.setVisible(False)
-        cost_label = QLabel("")
-        cost_label.setVisible(False)
-        time_label = QLabel("")
-        time_label.setVisible(False)
-        status_label = QLabel("")
-        status_label.setVisible(False)
-        shim = QWidget()
-        shim.setVisible(False)
+        progress_label = _ShimLabel("Waiting...")
+        progress_bar = _ShimProgressBar()
+        tokens_label = _ShimLabel("")
+        cost_label = _ShimLabel("")
+        time_label = _ShimLabel("")
+        status_label = _ShimLabel("")
+        shim = _ShimWidget()
 
         self.file_progress_items[filename] = {
             "row": row,
@@ -2650,7 +2714,7 @@ class TranslationTab(QWidget):
                     filename,
                     tokens=tokens or None,
                     cost=cost or None,
-                    time_s=time_s or None,
+                    time_s=None if getattr(self, "_batch_active", False) else (time_s or None),
                 )
     
     def reset_to_file_view(self):
@@ -3083,7 +3147,7 @@ class TranslationTab(QWidget):
                     filename,
                     tokens=tokens_text,
                     cost=cost_text,
-                    time_s=time_text,
+                    time_s=None if getattr(self, "_batch_active", False) else time_text,
                 )
             except Exception:
                 pass
