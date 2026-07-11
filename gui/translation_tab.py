@@ -24,12 +24,13 @@ from tqdm import tqdm
 from dotenv import load_dotenv
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QGroupBox,
-    QTextEdit, QMessageBox, QListWidget, QListWidgetItem, 
-    QSplitter, QFileDialog, QComboBox, QCheckBox, QProgressBar, QFrame, QFormLayout, QStackedWidget
+    QTextEdit, QMessageBox, QListWidget, QListWidgetItem,
+    QSplitter, QFileDialog, QComboBox, QCheckBox, QProgressBar, QFrame, QFormLayout, QStackedWidget,
+    QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView,
 )
 from PyQt5.QtWidgets import QSizePolicy
 from PyQt5.QtCore import Qt, QTimer, pyqtSignal, QThread, QMutex, QProcess, QEvent, QRect, QSettings, QSize
-from PyQt5.QtGui import QFont
+from PyQt5.QtGui import QFont, QColor, QBrush
 from gui.log_viewer import LogViewer
 from gui import qt_icons
 
@@ -96,6 +97,7 @@ class TranslationWorker(QThread):
         self.batch_resume_state = batch_resume_state
         self._batch_submit_event = threading.Event()
         self._batch_submit_approved = False
+        self._batch_pending_estimate = None
         self.should_stop = False
         self.mutex = QMutex()  # For thread safety
         self.executor = None  # Store reference to executor for proper shutdown
@@ -107,6 +109,7 @@ class TranslationWorker(QThread):
         self._batch_submit_event.set()
 
     def _wait_batch_submit(self, estimate):
+        self._batch_pending_estimate = estimate
         self._batch_submit_event.clear()
         self.batch_phase_signal.emit("submit", estimate)
         self._batch_submit_event.wait()
@@ -129,7 +132,6 @@ class TranslationWorker(QThread):
         """Submit (if needed), poll until ended, fetch results. None if stopped while polling."""
         from util.translation import (
             submitTranslationBatches,
-            checkTranslationBatches,
             fetchTranslationBatches,
             _read_batch_file,
             BATCH_STATE_FILE,
@@ -139,30 +141,38 @@ class TranslationWorker(QThread):
         with _batch_file_lock():
             state = _read_batch_file(BATCH_STATE_FILE)
         if not state.get("batches"):
-            if not self._emit_batch_output(submitTranslationBatches):
+            est = self._batch_pending_estimate
+            file_set = list(self.selected_files or [])
+            if not self._emit_batch_output(
+                submitTranslationBatches,
+                file_set=file_set,
+                cost_estimate=est,
+            ):
                 return 0, 0
 
         poll = int(os.getenv("batchPollInterval", "60") or 60)
         self._emit_batch_phase("polling")
         self.emit_log(
-            f"[BATCH] polling every {poll}s (stop is safe — resume later with Batch Translate mode)..."
+            f"[BATCH] polling every {poll}s (stop is safe - resume later with Batch Translate mode)..."
         )
+        from util.translation import checkTranslationBatchStatuses
         while True:
             if self.should_stop:
-                self.emit_log("[BATCH] Stopped while polling. Batch keeps processing — resume later.")
+                self.emit_log("[BATCH] Stopped while polling. Batch keeps processing - resume later.")
                 return None
             buf = io.StringIO()
             with redirect_stdout(buf):
-                ended = checkTranslationBatches()
+                ended, statuses = checkTranslationBatchStatuses(print_status=True)
             for line in buf.getvalue().splitlines():
                 if line.strip():
                     self.emit_log(line)
-                    self._emit_batch_phase("poll_status", line.strip())
+            if statuses:
+                self._emit_batch_phase("poll_status", statuses)
             if ended:
                 break
             for _ in range(poll * 10):
                 if self.should_stop:
-                    self.emit_log("[BATCH] Stopped while polling. Batch keeps processing — resume later.")
+                    self.emit_log("[BATCH] Stopped while polling. Batch keeps processing - resume later.")
                     return None
                 time.sleep(0.1)
 
@@ -212,8 +222,26 @@ class TranslationWorker(QThread):
             self.mutex.unlock()
         
     def emit_log(self, message):
-        """Thread-safe log emission."""
+        """Thread-safe log emission.
+
+        Also mirrors into TRANSLATION_RUN_LOG so the LogViewer file-tail shows
+        batch/status lines (those never go through translateAI's Input/Output writer).
+        """
         self.log_signal.emit(message)
+        try:
+            run_log = os.getenv("TRANSLATION_RUN_LOG")
+            if not run_log or not message:
+                return
+            text = _strip_ansi(str(message)).rstrip()
+            if not text:
+                return
+            path = Path(run_log)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with open(path, "a", encoding="utf-8") as f:
+                f.write(text + "\n")
+                f.flush()
+        except Exception:
+            pass
         
     def emit_progress(self, current, total, filename):
         """Thread-safe progress emission."""
@@ -452,9 +480,8 @@ class TranslationWorker(QThread):
                 break
 
             filename = future_to_filename[future]
-            completed_count += 1
-            self.emit_progress(completed_count, total_files, filename)
-
+            # Resolve the future before emitting progress so cost lines from the
+            # subprocess are queued ahead of the file-complete progress event.
             try:
                 result = future.result()
                 if isinstance(result, tuple) and len(result) == 2 and result[0] == "SUBPROCESS_ERROR":
@@ -462,6 +489,8 @@ class TranslationWorker(QThread):
                 elif result and result not in ("Fail", "Stopped"):
                     total_cost = result
                 elif result == "Stopped":
+                    completed_count += 1
+                    self.emit_progress(completed_count, total_files, filename)
                     break
                 else:
                     self.emit_log(f"❌ Failed processing {filename}")
@@ -470,6 +499,9 @@ class TranslationWorker(QThread):
                 tb_line = str(traceback.extract_tb(sys.exc_info()[2])[-1].lineno)
                 self.emit_log(f"❌ Error processing {filename}: {str(e)} | Line: {tb_line}")
                 self.file_error_signal.emit(filename, str(e))
+
+            completed_count += 1
+            self.emit_progress(completed_count, total_files, filename)
 
         if self.executor:
             try:
@@ -587,7 +619,39 @@ class TranslationWorker(QThread):
                                 est = dict(est)
                                 est["files"] = len(matching_files)
                             if not self._wait_batch_submit(est):
-                                self.emit_log("[BATCH] Not submitted. Queue kept in log/batch_requests.json.")
+                                self.emit_log(
+                                    "[BATCH] Not submitted. Queue kept in log/batch_requests.json "
+                                    "(resume with Batch Translate to submit without re-collecting)."
+                                )
+                                self.finished_signal.emit(True, "Batch not submitted")
+                                return
+                            poll_result = self._run_batch_poll_fetch()
+                            if poll_result is None:
+                                self.finished_signal.emit(False, "Batch polling stopped")
+                                return
+                    elif self.batch_resume_state == "queued":
+                        # Resume a declined/interrupted collect: estimate + submit only.
+                        self.emit_log(
+                            "[BATCH] Resuming queued requests (skipping re-collect to avoid "
+                            "duplicate live charges and a second batch submission)..."
+                        )
+                        n_requests = pendingBatchRequests()
+                        if n_requests == 0:
+                            self.emit_log("[BATCH] Queue is empty - nothing to submit.")
+                            run_consume = False
+                        else:
+                            self._emit_batch_phase("collect_done", {
+                                "files": len(matching_files),
+                                "requests": n_requests,
+                            })
+                            est = self._emit_batch_output(estimateBatchCost)
+                            if est is not None:
+                                est = dict(est)
+                                est["files"] = len(matching_files)
+                            if not self._wait_batch_submit(est):
+                                self.emit_log(
+                                    "[BATCH] Not submitted. Queue kept in log/batch_requests.json."
+                                )
                                 self.finished_signal.emit(True, "Batch not submitted")
                                 return
                             poll_result = self._run_batch_poll_fetch()
@@ -605,9 +669,21 @@ class TranslationWorker(QThread):
                         self.emit_log("[BATCH] Resuming from fetched results...")
 
                     if run_consume and not self.should_stop:
+                        try:
+                            from util.batch_history import missing_result_count
+                            present, expected = missing_result_count()
+                            if expected and present < expected:
+                                self.emit_log(
+                                    f"[BATCH] WARNING: only {present}/{expected} results present. "
+                                    "Missing keys will fall back to the live API (full price)."
+                                )
+                        except Exception:
+                            pass
                         self._emit_batch_phase("consume")
                         self.emit_log("[BATCH] Pass 2/2: writing translated files...")
                         total_cost = self._run_files(matching_files, False, batch_phase="consume")
+                        if not self.should_stop:
+                            self._emit_batch_phase("done")
                 else:
                     total_cost = self._run_files(matching_files, self.estimate_only)
             finally:
@@ -723,6 +799,7 @@ class TranslationTab(QWidget):
         self.totals_widget = None
         self._batch_active = False
         self._batch_ui_phase = None
+        self._batch_consume_started = False
         self._batch_tab_index = -1
         
         self.setup_ui()
@@ -904,11 +981,29 @@ class TranslationTab(QWidget):
         self.batch_phase_title.setStyleSheet("color:#4ec9b0;font-weight:bold;font-size:13px;")
         batch_pipe_layout.addWidget(self.batch_phase_title)
 
+        # Step strip: Collect → Submit → Process → Write
+        self.batch_steps_row = QHBoxLayout()
+        self.batch_steps_row.setSpacing(6)
+        self._batch_step_labels = []
+        for i, name in enumerate(("1. Collect", "2. Submit", "3. Process", "4. Write")):
+            lab = QLabel(name)
+            lab.setAlignment(Qt.AlignCenter)
+            lab.setStyleSheet(self._batch_step_style("idle"))
+            self.batch_steps_row.addWidget(lab, 1)
+            self._batch_step_labels.append(lab)
+            if i < 3:
+                arrow = QLabel("→")
+                arrow.setStyleSheet("color:#666666;font-size:12px;")
+                arrow.setAlignment(Qt.AlignCenter)
+                self.batch_steps_row.addWidget(arrow, 0)
+        batch_pipe_layout.addLayout(self.batch_steps_row)
+
         self.batch_overall_bar = QProgressBar()
         self.batch_overall_bar.setRange(0, 100)
         self.batch_overall_bar.setValue(0)
         self.batch_overall_bar.setFixedHeight(20)
         self.batch_overall_bar.setTextVisible(True)
+        self.batch_overall_bar.setFormat("%p%")
         self.batch_overall_bar.setStyleSheet("""
             QProgressBar {
                 border: none;
@@ -943,12 +1038,26 @@ class TranslationTab(QWidget):
         submit_page = QWidget()
         submit_layout = QVBoxLayout(submit_page)
         submit_layout.setContentsMargins(0, 0, 0, 0)
-        submit_layout.setSpacing(4)
+        submit_layout.setSpacing(8)
         self.batch_submit_summary = QLabel("")
         self.batch_submit_summary.setWordWrap(True)
         self.batch_submit_summary.setAlignment(Qt.AlignTop)
         self.batch_submit_summary.setStyleSheet("color:#cccccc;font-size:12px;")
-        submit_layout.addWidget(self.batch_submit_summary, 1)
+        submit_layout.addWidget(self.batch_submit_summary)
+        # Cost chips row
+        self.batch_cost_row = QHBoxLayout()
+        self.batch_cost_row.setSpacing(8)
+        self.batch_cost_cached = QLabel("Batch+cache: —")
+        self.batch_cost_nocache = QLabel("Batch worst: —")
+        self.batch_cost_live = QLabel("Live: —")
+        for lab in (self.batch_cost_cached, self.batch_cost_nocache, self.batch_cost_live):
+            lab.setStyleSheet(
+                "color:#cccccc;background:#1e1e1e;border:1px solid #3e3e42;"
+                "border-radius:4px;padding:8px;font-size:12px;"
+            )
+            lab.setAlignment(Qt.AlignCenter)
+            self.batch_cost_row.addWidget(lab, 1)
+        submit_layout.addLayout(self.batch_cost_row)
         submit_btn_row = QHBoxLayout()
         submit_btn_row.addStretch()
         self.batch_submit_yes_btn = QPushButton("Submit Batch")
@@ -966,32 +1075,72 @@ class TranslationTab(QWidget):
         submit_btn_row.addWidget(self.batch_submit_no_btn)
         submit_btn_row.addWidget(self.batch_submit_yes_btn)
         submit_layout.addLayout(submit_btn_row)
+        submit_layout.addStretch(1)
         self.batch_pipeline_stack.addWidget(submit_page)
 
         poll_page = QWidget()
         poll_layout = QVBoxLayout(poll_page)
         poll_layout.setContentsMargins(0, 0, 0, 0)
+        poll_layout.setSpacing(8)
+        self.batch_poll_id = QLabel("Batch: —")
+        self.batch_poll_id.setStyleSheet("color:#9cdcfe;font-size:12px;font-family:monospace;")
+        self.batch_poll_id.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        poll_layout.addWidget(self.batch_poll_id)
         self.batch_poll_status = QLabel("Waiting for Anthropic to finish processing the batch…")
         self.batch_poll_status.setWordWrap(True)
         self.batch_poll_status.setStyleSheet("color:#cccccc;font-size:12px;")
         poll_layout.addWidget(self.batch_poll_status)
+        # Request count chips
+        self.batch_count_row = QHBoxLayout()
+        self.batch_count_row.setSpacing(6)
+        self._batch_count_labels = {}
+        for key, color in (
+            ("succeeded", "#4ec9b0"),
+            ("processing", "#007acc"),
+            ("errored", "#f44747"),
+            ("canceled", "#ce9178"),
+            ("expired", "#dcdcaa"),
+        ):
+            lab = QLabel(f"{key}: 0")
+            lab.setAlignment(Qt.AlignCenter)
+            lab.setStyleSheet(
+                f"color:{color};background:#1e1e1e;border:1px solid #3e3e42;"
+                f"border-radius:4px;padding:6px 4px;font-size:11px;font-weight:bold;"
+            )
+            self.batch_count_row.addWidget(lab, 1)
+            self._batch_count_labels[key] = lab
+        poll_layout.addLayout(self.batch_count_row)
         self.batch_poll_bar = QProgressBar()
-        self.batch_poll_bar.setRange(0, 0)  # indeterminate
+        self.batch_poll_bar.setRange(0, 100)
+        self.batch_poll_bar.setValue(0)
         self.batch_poll_bar.setFixedHeight(16)
+        self.batch_poll_bar.setTextVisible(True)
+        self.batch_poll_bar.setFormat("Requests complete: %v / %m")
         self.batch_poll_bar.setStyleSheet("""
-            QProgressBar { border: none; background-color: #2b2b2b; border-radius: 3px; }
-            QProgressBar::chunk { background-color: #007acc; border-radius: 3px; }
+            QProgressBar { border: none; background-color: #2b2b2b; border-radius: 3px; color:#ccc; text-align:center; }
+            QProgressBar::chunk { background-color: #4ec9b0; border-radius: 3px; }
         """)
         poll_layout.addWidget(self.batch_poll_bar)
+        self.batch_poll_hint = QLabel("Stop is safe - the batch keeps running on Anthropic. Resume later from Batches or Batch Translate.")
+        self.batch_poll_hint.setWordWrap(True)
+        self.batch_poll_hint.setStyleSheet("color:#888888;font-size:11px;")
+        poll_layout.addWidget(self.batch_poll_hint)
+        poll_layout.addStretch(1)
         self.batch_pipeline_stack.addWidget(poll_page)
 
         consume_page = QWidget()
         consume_layout = QVBoxLayout(consume_page)
         consume_layout.setContentsMargins(0, 0, 0, 0)
+        consume_layout.setSpacing(8)
         self.batch_consume_status = QLabel("Pass 2/2: writing translated files from batch results…")
         self.batch_consume_status.setWordWrap(True)
         self.batch_consume_status.setStyleSheet("color:#cccccc;font-size:12px;")
         consume_layout.addWidget(self.batch_consume_status)
+        self.batch_consume_hint = QLabel("Watch the Translation Log for [BATCH]/[CACHE] Input/Output pairs as each chunk is applied.")
+        self.batch_consume_hint.setWordWrap(True)
+        self.batch_consume_hint.setStyleSheet("color:#888888;font-size:11px;")
+        consume_layout.addWidget(self.batch_consume_hint)
+        consume_layout.addStretch(1)
         self.batch_pipeline_stack.addWidget(consume_page)
 
         batch_pipe_layout.addWidget(self.batch_pipeline_stack, 1)
@@ -1035,6 +1184,34 @@ class TranslationTab(QWidget):
                 border-bottom: none;
             }
         """)
+        # Prefer a Batch-history-style table for per-file status; keep the list
+        # widget as a non-visible compatibility shim for any leftover references.
+        self.progress_list.setVisible(False)
+
+        self.progress_files_summary = QLabel("No files in this run.")
+        self.progress_files_summary.setStyleSheet("color:#9d9d9d;font-size:12px;padding:2px 0;")
+
+        self.progress_table = QTableWidget(0, 6)
+        self.progress_table.setHorizontalHeaderLabels(
+            ["File", "Status", "Progress", "Tokens", "Cost", "Time"]
+        )
+        self.progress_table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.progress_table.setSelectionMode(QAbstractItemView.SingleSelection)
+        self.progress_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.progress_table.setAlternatingRowColors(True)
+        self.progress_table.verticalHeader().setVisible(False)
+        self.progress_table.setShowGrid(True)
+        self.progress_table.setStyleSheet(
+            "QTableWidget{background-color:#1e1e1e;color:#cccccc;gridline-color:#3a3a3a;"
+            "alternate-background-color:#252526;border:1px solid #555555;}"
+            "QHeaderView::section{background-color:#2d2d30;color:#cccccc;padding:4px;"
+            "border:1px solid #3a3a3a;font-weight:bold;}"
+        )
+        hdr = self.progress_table.horizontalHeader()
+        hdr.setSectionResizeMode(0, QHeaderView.Stretch)
+        for col in range(1, 6):
+            hdr.setSectionResizeMode(col, QHeaderView.ResizeToContents)
+        self.progress_table.verticalHeader().setDefaultSectionSize(28)
 
         self.progress_overview_page = QWidget()
         overview_layout = QVBoxLayout(self.progress_overview_page)
@@ -1045,7 +1222,9 @@ class TranslationTab(QWidget):
         self.progress_files_page = QWidget()
         files_page_layout = QVBoxLayout(self.progress_files_page)
         files_page_layout.setContentsMargins(0, 0, 0, 0)
-        files_page_layout.addWidget(self.progress_list)
+        files_page_layout.setSpacing(8)
+        files_page_layout.addWidget(self.progress_files_summary)
+        files_page_layout.addWidget(self.progress_table, 1)
 
         progress_tab_btn_style = """
             QPushButton {
@@ -1624,13 +1803,85 @@ class TranslationTab(QWidget):
         except Exception:
             pass
 
+    def _batch_step_style(self, state: str) -> str:
+        """CSS for a pipeline step chip: idle | active | done."""
+        if state == "active":
+            return (
+                "color:#ffffff;background:#007acc;border:1px solid #007acc;"
+                "border-radius:4px;padding:4px 6px;font-size:11px;font-weight:bold;"
+            )
+        if state == "done":
+            return (
+                "color:#4ec9b0;background:#1e1e1e;border:1px solid #4ec9b0;"
+                "border-radius:4px;padding:4px 6px;font-size:11px;"
+            )
+        return (
+            "color:#888888;background:#1e1e1e;border:1px solid #3e3e42;"
+            "border-radius:4px;padding:4px 6px;font-size:11px;"
+        )
+
+    def _set_batch_steps(self, active_index: int):
+        """Highlight pipeline steps. active_index 0..3, or 4 when fully done."""
+        labels = getattr(self, "_batch_step_labels", None) or []
+        for i, lab in enumerate(labels):
+            if i < active_index:
+                lab.setStyleSheet(self._batch_step_style("done"))
+            elif i == active_index and active_index < 4:
+                lab.setStyleSheet(self._batch_step_style("active"))
+            elif active_index >= 4:
+                lab.setStyleSheet(self._batch_step_style("done"))
+            else:
+                lab.setStyleSheet(self._batch_step_style("idle"))
+
+    def _update_batch_poll_dashboard(self, statuses):
+        """Render structured Anthropic batch statuses into the poll panel."""
+        if not isinstance(statuses, list) or not statuses:
+            return
+        totals = {"processing": 0, "succeeded": 0, "errored": 0, "canceled": 0, "expired": 0}
+        ids = []
+        api_states = []
+        expected = 0
+        for st in statuses:
+            ids.append(st.get("id") or "")
+            api_states.append(st.get("api_status") or "")
+            expected += int(st.get("request_count") or 0)
+            for k, v in (st.get("counts") or {}).items():
+                if k in totals:
+                    totals[k] += int(v or 0)
+        done = totals["succeeded"] + totals["errored"] + totals["canceled"] + totals["expired"]
+        total = max(expected, done + totals["processing"], 1)
+        if hasattr(self, "batch_poll_id"):
+            self.batch_poll_id.setText("Batch: " + (", ".join(i for i in ids if i) or "—"))
+        for key, lab in (getattr(self, "_batch_count_labels", {}) or {}).items():
+            lab.setText(f"{key}: {totals.get(key, 0)}")
+        if hasattr(self, "batch_poll_bar"):
+            self.batch_poll_bar.setRange(0, total)
+            self.batch_poll_bar.setValue(min(done, total))
+            self.batch_poll_bar.setFormat(f"Requests finished: {done} / {total}")
+        # Overall bar: process phase spans ~55-80%
+        frac = done / total if total else 0
+        self.batch_overall_bar.setValue(55 + int(20 * frac))
+        state_txt = ", ".join(sorted(set(api_states))) or "unknown"
+        self.batch_poll_status.setText(
+            f"Anthropic status: {state_txt}\n"
+            f"{totals['succeeded']} succeeded, {totals['processing']} still processing"
+            + (f", {totals['errored']} errored" if totals["errored"] else "")
+            + (f", {totals['canceled']} canceled" if totals["canceled"] else "")
+            + (f", {totals['expired']} expired" if totals["expired"] else "")
+            + "."
+        )
+        self.batch_live_status.setText(
+            f"Polling… {done}/{total} requests finished. Details stay in the Translation Log."
+        )
+
     def _on_batch_phase(self, phase, payload):
         """Update the inline batch pipeline panel for the current phase."""
         self._batch_ui_phase = phase
         self.batch_pipeline_widget.setVisible(True)
 
         if phase == "collect":
-            self.batch_phase_title.setText("Batch Translate — Pass 1/2: Collect")
+            self._set_batch_steps(0)
+            self.batch_phase_title.setText("Batch Translate - Pass 1/2: Collect")
             self.batch_overall_bar.setRange(0, 100)
             self.batch_overall_bar.setValue(15)
             self.batch_pipeline_stack.setCurrentIndex(0)
@@ -1642,59 +1893,83 @@ class TranslationTab(QWidget):
             info = payload or {}
             n_files = info.get("files", "?")
             n_req = info.get("requests", "?")
-            self.batch_phase_title.setText("Batch Translate — Collect complete")
+            self._set_batch_steps(1)
+            self.batch_phase_title.setText("Batch Translate - Collect complete")
             self.batch_overall_bar.setValue(30)
             self.batch_pipeline_stack.setCurrentIndex(0)
             self.batch_collect_status.setText(
-                f"Finished scanning {n_files} file(s) — {n_req} API request(s) queued.\n"
-                "Review the total cost below, then submit once for the whole batch."
+                f"Finished scanning {n_files} file(s) - {n_req} API request(s) queued.\n"
+                "Review the cost estimate, then submit once for the whole batch."
             )
             self.batch_live_status.setText(
-                f"All {n_files} files collected. Switch to the Files tab to inspect individual rows."
+                f"All {n_files} files collected. Open the Files tab to inspect per-file rows."
             )
         elif phase == "submit":
             est = payload or {}
             n_files = est.get("files", "?")
             n_req = est.get("requests", "?")
-            self.batch_phase_title.setText("Batch Translate — Review & Submit (once)")
+            self._set_batch_steps(1)
+            self.batch_phase_title.setText("Batch Translate - Review & Submit")
             self.batch_overall_bar.setValue(35)
             self.batch_pipeline_stack.setCurrentIndex(1)
             self.batch_submit_summary.setText(
-                f"All {n_files} file(s) scanned — {n_req} request(s) queued total.\n\n"
-                f"Submit everything in one Anthropic batch?\n\n"
-                f"Estimated cost: ${est.get('batch_cached_cost', 0):.2f} (batch + prompt cache)\n"
-                f"Worst case: ${est.get('batch_nocache_cost', 0):.2f} (batch, no cache hits)\n"
-                f"Live API would be: ${est.get('live_cost', 0):.2f}\n\n"
-                "One submission covers all files. The batch usually finishes within an hour. "
-                "You can stop safely and resume later."
+                f"{n_files} file(s) scanned - {n_req} request(s) queued.\n"
+                f"Model: {est.get('model') or os.getenv('model', '') or '—'}\n\n"
+                "One Anthropic submission covers every queued request (50% batch discount). "
+                "You can stop safely after submit and resume later."
             )
+            if hasattr(self, "batch_cost_cached"):
+                self.batch_cost_cached.setText(
+                    f"Batch + cache\n${float(est.get('batch_cached_cost') or 0):.2f}"
+                )
+                self.batch_cost_nocache.setText(
+                    f"Batch worst-case\n${float(est.get('batch_nocache_cost') or 0):.2f}"
+                )
+                self.batch_cost_live.setText(
+                    f"Live API\n${float(est.get('live_cost') or 0):.2f}"
+                )
             self.batch_submit_yes_btn.setText(f"Submit All ({n_req} requests)")
         elif phase == "polling":
-            self.batch_phase_title.setText("Batch Translate — Processing")
+            self._set_batch_steps(2)
+            self.batch_phase_title.setText("Batch Translate - Processing")
             self.batch_overall_bar.setRange(0, 100)
             self.batch_overall_bar.setValue(55)
             self.batch_pipeline_stack.setCurrentIndex(2)
-            self.batch_poll_status.setText("Submitted — waiting for Anthropic to process the batch…")
+            self.batch_poll_status.setText("Submitted - waiting for Anthropic to process the batch…")
+            if hasattr(self, "batch_poll_bar"):
+                self.batch_poll_bar.setRange(0, 100)
+                self.batch_poll_bar.setValue(0)
+                self.batch_poll_bar.setFormat("Waiting for first status…")
         elif phase == "poll_status":
-            if isinstance(payload, str) and payload.strip():
-                self.batch_poll_status.setText(payload.strip())
-                self.batch_overall_bar.setValue(min(75, self.batch_overall_bar.value() + 2))
+            self._set_batch_steps(2)
+            self.batch_pipeline_stack.setCurrentIndex(2)
+            self._update_batch_poll_dashboard(payload)
         elif phase == "consume":
-            self.batch_phase_title.setText("Batch Translate — Pass 2/2: Write")
+            self._batch_consume_started = True
+            self._set_batch_steps(3)
+            self.batch_phase_title.setText("Batch Translate - Pass 2/2: Write")
             self.batch_overall_bar.setValue(80)
             self.batch_pipeline_stack.setCurrentIndex(3)
+            self.batch_consume_status.setText("Pass 2/2: writing translated files from batch results…")
             self._reset_files_for_consume()
             if self.progress_tab_row.isVisible():
                 self._switch_progress_tab(0)
         elif phase == "done":
+            self._set_batch_steps(4)
             self.batch_overall_bar.setValue(100)
-            self.batch_phase_title.setText("Batch Translate — Complete")
+            self.batch_phase_title.setText("Batch Translate - Complete")
+            self.batch_pipeline_stack.setCurrentIndex(3)
+            self.batch_consume_status.setText(
+                "Pass 2/2 finished. Translations written - use the back arrow to return to the file list."
+            )
+            self.batch_live_status.setText("Batch complete")
 
         self._update_batch_stop_button()
 
     def _reset_batch_pipeline_ui(self):
         self._batch_active = False
         self._batch_ui_phase = None
+        self._batch_consume_started = False
         if hasattr(self, "batch_pipeline_widget"):
             self.batch_pipeline_widget.setVisible(False)
         if hasattr(self, "batch_live_status"):
@@ -1713,35 +1988,24 @@ class TranslationTab(QWidget):
             try:
                 item["checkbox"].setChecked(False)
                 item["label"].setText("Waiting...")
-                item["label"].setStyleSheet("color: #888888; font-size: 10px;")
-                item["progress_bar"].setVisible(True)
                 item["progress_bar"].setValue(0)
                 item["progress_bar"].setMaximum(100)
-                item["progress_bar"].setTextVisible(True)
-                item["progress_bar"].setStyleSheet("""
-                    QProgressBar {
-                        border: 1px solid #555555;
-                        border-radius: 2px;
-                        text-align: center;
-                        background-color: #2b2b2b;
-                        color: white;
-                    }
-                    QProgressBar::chunk {
-                        background-color: #007acc;
-                        border-radius: 1px;
-                    }
-                """)
-                item["tokens_label"].setVisible(False)
                 item["tokens_label"].setText("")
-                item["cost_label"].setVisible(False)
                 item["cost_label"].setText("")
-                item["time_label"].setVisible(False)
                 item["time_label"].setText("")
-                item["status_label"].setVisible(False)
                 item["status_label"].setText("")
                 item.pop("_skip_reason", None)
             except Exception:
                 pass
+            self._set_progress_row(
+                filename,
+                status="Waiting",
+                status_color="#888888",
+                progress="-",
+                tokens="-",
+                cost="-",
+                time_s="-",
+            )
         if hasattr(self, "_applied_file_totals"):
             self._applied_file_totals.clear()
         self.totals_input_tokens = 0
@@ -1759,35 +2023,23 @@ class TranslationTab(QWidget):
             pass
 
     def mark_file_queued(self, filename):
-        """Collect pass finished for a file — queued for batch, not translated yet."""
+        """Collect pass finished for a file - queued for batch, not translated yet."""
         if filename not in self.file_progress_items:
             return
         item = self.file_progress_items[filename]
         try:
             item["label"].setText("Collected")
-            item["label"].setStyleSheet("color: #d4a017; font-weight: bold; font-size: 10px;")
-            item["progress_bar"].setVisible(True)
             item["progress_bar"].setMaximum(100)
             item["progress_bar"].setValue(100)
-            item["progress_bar"].setTextVisible(False)
-            item["progress_bar"].setStyleSheet("""
-                QProgressBar {
-                    border: 1px solid #555555;
-                    border-radius: 2px;
-                    background-color: #2b2b2b;
-                }
-                QProgressBar::chunk {
-                    background-color: #6a5a20;
-                    border-radius: 1px;
-                }
-            """)
             item["checkbox"].setChecked(False)
-            item["status_label"].setVisible(False)
-            item["tokens_label"].setVisible(False)
-            item["cost_label"].setVisible(False)
-            item["time_label"].setVisible(False)
         except Exception:
             pass
+        self._set_progress_row(
+            filename,
+            status="Collected",
+            status_color="#d4a017",
+            progress="queued",
+        )
 
     def _check_model_pricing(self):
         """Fetch live pricing for the current model and print it to the log."""
@@ -1925,6 +2177,19 @@ class TranslationTab(QWidget):
             except Exception:
                 pass
         return selected
+
+    def select_files_by_name(self, file_names):
+        """Check the given relative file names (and uncheck others)."""
+        wanted = set(file_names or [])
+        if not wanted:
+            return
+        self.refresh_file_lists()
+        for i in range(self.file_list.count()):
+            item = self.file_list.item(i)
+            try:
+                item.setCheckState(Qt.Checked if item.text() in wanted else Qt.Unchecked)
+            except Exception:
+                pass
     
     def add_input_files(self):
         """Add files to the input directory, remembering last used directory."""
@@ -2135,111 +2400,141 @@ class TranslationTab(QWidget):
         except Exception as e:
             QMessageBox.warning(self, "Error", f"Failed to open folder:\n{str(e)}")
     
+    def _refresh_files_summary(self):
+        """Update the Files-tab summary line from current row states."""
+        if not hasattr(self, "progress_files_summary"):
+            return
+        items = getattr(self, "file_progress_items", {}) or {}
+        total = len(items)
+        if total == 0:
+            self.progress_files_summary.setText("No files in this run.")
+            return
+        counts = {}
+        for meta in items.values():
+            st = (meta.get("status_text") or "Waiting").split(" ")[0]
+            counts[st] = counts.get(st, 0) + 1
+        parts = [f"{total} file(s)"]
+        for key in (
+            "Done", "Collected", "Writing", "Scanning", "Translating",
+            "Failed", "Skipped", "Unsupported", "Waiting",
+        ):
+            if counts.get(key):
+                parts.append(f"{counts[key]} {key.lower()}")
+        self.progress_files_summary.setText(" · ".join(parts))
+
+    def _set_progress_row(self, filename, *, status=None, status_color=None,
+                          progress=None, tokens=None, cost=None, time_s=None):
+        """Update one Files-tab table row."""
+        meta = (getattr(self, "file_progress_items", {}) or {}).get(filename)
+        if not meta:
+            return
+        row = meta.get("row")
+        table = getattr(self, "progress_table", None)
+        if table is None or row is None or row >= table.rowCount():
+            return
+
+        def _cell(col, text, color=None):
+            item = table.item(row, col)
+            if item is None:
+                item = QTableWidgetItem("")
+                table.setItem(row, col, item)
+            item.setText(str(text))
+            if color:
+                item.setForeground(QBrush(QColor(color)))
+
+        if status is not None:
+            meta["status_text"] = status
+            _cell(1, status, status_color or "#cccccc")
+        if progress is not None:
+            _cell(2, progress, "#9cdcfe")
+        if tokens is not None:
+            _cell(3, tokens, "#f1c40f")
+        if cost is not None:
+            _cell(4, cost, "#4ec9b0")
+        if time_s is not None:
+            _cell(5, time_s, "#4da6ff")
+        self._refresh_files_summary()
+
     def create_progress_item(self, filename):
-        """Create a progress item widget for a file."""
-        widget = QWidget()
-        widget.setFixedHeight(36)  # Fixed height instead of minimum
-        layout = QHBoxLayout()
-        layout.setContentsMargins(6, 4, 6, 4)  # Reduced margins
-        layout.setSpacing(10)
-        
-        # Checkbox (initially unchecked, will check when done)
+        """Add a Files-tab table row for a file and return a placeholder widget."""
+        table = getattr(self, "progress_table", None)
+        if table is None:
+            # Fallback empty widget if table is unavailable
+            return QWidget()
+
+        row = table.rowCount()
+        table.insertRow(row)
+        values = [filename, "Waiting", "-", "-", "-", "-"]
+        colors = ["#ffffff", "#888888", "#666666", "#666666", "#666666", "#666666"]
+        for col, (val, color) in enumerate(zip(values, colors)):
+            item = QTableWidgetItem(val)
+            item.setForeground(QBrush(QColor(color)))
+            if col == 0:
+                item.setData(Qt.UserRole, filename)
+            table.setItem(row, col, item)
+
+        # Keep a small compatibility widget so older helpers that expect
+        # checkbox/label/progress_bar keys do not crash.
         checkbox = QCheckBox()
-        checkbox.setEnabled(False)  # Not interactive
-        checkbox.setFixedSize(18, 18)  # Slightly smaller
-        layout.addWidget(checkbox)
-        
-        # Filename label
-        filename_label = QLabel(filename)
-        filename_label.setStyleSheet("font-weight: bold; color: white; font-size: 13px;")
-        filename_label.setFixedWidth(250)  # Fixed width for consistent alignment
-        layout.addWidget(filename_label)
-        
-        # Progress label (small) shown next to filename
+        checkbox.setEnabled(False)
+        checkbox.setVisible(False)
         progress_label = QLabel("Waiting...")
-        progress_label.setStyleSheet("color: #888888; font-size: 10px;")
-        progress_label.setFixedWidth(110)
-        layout.addWidget(progress_label)
-
-        # Progress bar (stretch to fill remaining space)
+        progress_label.setVisible(False)
         progress_bar = QProgressBar()
-        progress_bar.setMaximum(100)
-        progress_bar.setValue(0)
-        progress_bar.setFixedHeight(18)  # Fixed height instead of minimum
-        progress_bar.setStyleSheet("""
-            QProgressBar {
-                border: 1px solid #555555;
-                border-radius: 2px;
-                text-align: center;
-                background-color: #2b2b2b;
-                color: white;
-            }
-            QProgressBar::chunk {
-                background-color: #007acc;
-                border-radius: 1px;
-            }
-        """)
-        layout.addWidget(progress_bar, 1)  # Stretch factor of 1 to fill remaining space
-
-    # Inline result labels (hidden until completion) - anchored to the right
-    # Order (visual): tokens | time | cost | status(check)
+        progress_bar.setVisible(False)
         tokens_label = QLabel("")
-        tokens_label.setStyleSheet("color: #f1c40f; font-weight: bold; font-size: 9px;")
-        tokens_label.setFixedWidth(100)
         tokens_label.setVisible(False)
-        tokens_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        layout.addWidget(tokens_label)
-
-        time_label = QLabel("")
-        time_label.setStyleSheet("color: #4da6ff; font-weight: bold; font-size: 9px;")
-        time_label.setFixedWidth(90)
-        time_label.setVisible(False)
-        time_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        layout.addWidget(time_label)
-
-        # Cost label (to the left of the status/checkmark)
         cost_label = QLabel("")
-        cost_label.setStyleSheet("color: #4ec9b0; font-weight: bold; font-size: 9px;")
-        cost_label.setFixedWidth(100)
         cost_label.setVisible(False)
-        cost_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        layout.addWidget(cost_label)
-
-        # Small status label (checkmark or X) placed to the right of cost
+        time_label = QLabel("")
+        time_label.setVisible(False)
         status_label = QLabel("")
-        status_label.setStyleSheet("font-weight: bold; font-size: 11px;")
-        status_label.setFixedWidth(100)
         status_label.setVisible(False)
-        status_label.setAlignment(Qt.AlignCenter)
-        layout.addWidget(status_label)
-            
-        widget.setLayout(layout)
-        
-        # Store references
+        shim = QWidget()
+        shim.setVisible(False)
+
         self.file_progress_items[filename] = {
-            'widget': widget,
-            'checkbox': checkbox,
-            'label': progress_label,
-            'progress_bar': progress_bar,
-            'tokens_label': tokens_label,
-            'cost_label': cost_label,
-            'time_label': time_label,
-            'status_label': status_label
+            "row": row,
+            "status_text": "Waiting",
+            "widget": shim,
+            "checkbox": checkbox,
+            "label": progress_label,
+            "progress_bar": progress_bar,
+            "tokens_label": tokens_label,
+            "cost_label": cost_label,
+            "time_label": time_label,
+            "status_label": status_label,
         }
-        
-        return widget
-    
+        self._refresh_files_summary()
+        return shim
+
     def update_file_item_progress(self, filename, current, total):
         """Update progress for a specific file."""
-        if filename in self.file_progress_items:
-            item = self.file_progress_items[filename]
-            item['progress_bar'].setMaximum(total if total > 0 else 100)
-            item['progress_bar'].setValue(current)
-            item['label'].setText(f"{current}/{total}")
-            item['label'].setStyleSheet("color: #007acc; font-weight: bold;")
-    
+        if filename not in self.file_progress_items:
+            return
+        item = self.file_progress_items[filename]
+        try:
+            item["progress_bar"].setMaximum(total if total > 0 else 100)
+            item["progress_bar"].setValue(current)
+            item["label"].setText(f"{current}/{total}")
+        except Exception:
+            pass
+        phase = getattr(self, "_batch_ui_phase", None)
+        if getattr(self, "_batch_active", False) and phase == "collect":
+            status, color = "Scanning", "#007acc"
+        elif getattr(self, "_batch_active", False) and phase == "consume":
+            status, color = "Writing", "#007acc"
+        else:
+            status, color = "Translating", "#007acc"
+        self._set_progress_row(
+            filename,
+            status=status,
+            status_color=color,
+            progress=f"{current}/{total}" if total else "-",
+        )
+
     def _apply_success_status_icon(self, item, completion_kind="normal"):
-        """Green checkmark for every successful row; tooltips explain skip / idle when relevant."""
+        """Mark a successful row; tooltips explain skip / idle when relevant."""
         try:
             item["status_label"].setText("✓")
             item["status_label"].setStyleSheet(
@@ -2248,12 +2543,20 @@ class TranslationTab(QWidget):
             if completion_kind == "skip":
                 reason = (item.get("_skip_reason") or "").strip()
                 tip = f"Skipped: {reason}" if reason else "Whole file skipped (paths/fonts only)."
+                status, color = "Skipped", "#dcdcaa"
             elif completion_kind == "idle":
                 tip = "No translatable lines (non-dialogue content only)."
+                status, color = "Done", "#4ec9b0"
             else:
                 tip = ""
+                status, color = "Done", "#4ec9b0"
             item["status_label"].setToolTip(tip)
             item["status_label"].setVisible(True)
+            # Mirror into the table when we know the filename
+            for fname, meta in (getattr(self, "file_progress_items", {}) or {}).items():
+                if meta is item:
+                    self._set_progress_row(fname, status=status, status_color=color, progress="✓")
+                    break
         except Exception:
             pass
 
@@ -2311,30 +2614,44 @@ class TranslationTab(QWidget):
                     if is_unsupported:
                         item['status_label'].setText("⚠")
                         item['status_label'].setStyleSheet("color: #f1c40f; font-weight: bold; font-size: 13px;")
+                        item['label'].setText("Not Supported")
+                        self._set_progress_row(
+                            filename,
+                            status="Unsupported",
+                            status_color="#f1c40f",
+                            progress="-",
+                        )
                     else:
                         item['status_label'].setText("✗")
                         item['status_label'].setStyleSheet("color: #f48771; font-weight: bold; font-size: 11px;")
+                        item['label'].setText("Failed")
+                        self._set_progress_row(
+                            filename,
+                            status="Failed",
+                            status_color="#f48771",
+                            progress="-",
+                        )
                     item['status_label'].setVisible(True)
-                    # Set tooltip with error message if provided
                     if error_message:
                         item['status_label'].setToolTip(f"Error: {error_message}")
                         item['widget'].setToolTip(f"Error: {error_message}")
                 except Exception:
                     pass
                 try:
-                    if is_unsupported:
-                        item['label'].setText("Not Supported")
-                        item['label'].setStyleSheet("color: #f1c40f; font-weight: bold; font-size: 10px;")
-                    else:
-                        item['label'].setText("Failed")
-                        item['label'].setStyleSheet("color: #f48771; font-weight: bold; font-size: 10px;")
-                except Exception:
-                    pass
-                try:
-                    # Hide progress bar and show error state
                     item['progress_bar'].setVisible(False)
                 except Exception:
                     pass
+            # Always refresh table status for success paths that used the icon helper
+            if success:
+                tokens = item.get("tokens_label").text() if item.get("tokens_label") else ""
+                cost = item.get("cost_label").text() if item.get("cost_label") else ""
+                time_s = item.get("time_label").text() if item.get("time_label") else ""
+                self._set_progress_row(
+                    filename,
+                    tokens=tokens or None,
+                    cost=cost or None,
+                    time_s=time_s or None,
+                )
     
     def reset_to_file_view(self):
         """Reset back to file selection view."""
@@ -2364,12 +2681,14 @@ class TranslationTab(QWidget):
         self.stop_button.setVisible(False)
         self.refresh_file_lists()
             
-    def start_translation(self, skip_confirm: bool = False):
+    def start_translation(self, skip_confirm: bool = False, forced_resume_state: str | None = None):
         """Start the translation process.
 
         skip_confirm: when True the confirmation dialog is bypassed (used when
         called programmatically from the Workflow tab so the user doesn't need
         an extra click to confirm what they just explicitly requested).
+        forced_resume_state: when set (from the Batch history tab), force Batch
+        Translate mode and resume with this state without the Resume? dialog.
         """
         # Get checked files
         selected_files = self.get_selected_files()
@@ -2388,6 +2707,12 @@ class TranslationTab(QWidget):
         
         # Get mode from dropdown
         mode = self.mode_combo.currentText()
+        if forced_resume_state:
+            # Batch history Resume always runs Batch Translate.
+            idx = self.mode_combo.findText(BATCH_MODE_LABEL)
+            if idx >= 0:
+                self.mode_combo.setCurrentIndex(idx)
+            mode = BATCH_MODE_LABEL
         estimate_only = (mode == "Estimate")
         parse_speakers = (mode == "Parse Speakers")
         batch_mode = (mode == BATCH_MODE_LABEL)
@@ -2410,28 +2735,51 @@ class TranslationTab(QWidget):
                     "pointing at anthropic.com.\n\nChange your model/API settings and try again.",
                 )
                 return
-            if skip_confirm:
+            if forced_resume_state:
+                batch_resume_state = forced_resume_state
+            elif skip_confirm:
                 # Workflow auto-start: each phase is an independent batch run.
                 # Never resume stale queue/results left over from a prior phase.
-                from util.translation import clearBatchFiles
+                from util.translation import clearBatchFiles, batchRunState as _brs
+                prior = _brs()
+                if prior:
+                    # Log discard so operators notice unpaid queue / in-flight work.
+                    print(
+                        f"[BATCH] Workflow start discarding prior batch state ({prior}).",
+                        flush=True,
+                    )
                 clearBatchFiles()
                 batch_resume_state = None
             else:
                 batch_resume_state = batchRunState()
                 if batch_resume_state:
-                    reply = QMessageBox.question(
-                        self,
-                        "Resume Batch?",
-                        f"A previous batch run was interrupted ({batch_resume_state}).\n\n"
-                        "Resume it instead of re-collecting?\n"
-                        "(Re-collecting would queue new requests and bill again.)",
-                        QMessageBox.Yes | QMessageBox.No,
-                    )
+                    if batch_resume_state == "queued":
+                        reply = QMessageBox.question(
+                            self,
+                            "Resume Queued Batch?",
+                            "A previous collect finished but the batch was not submitted.\n"
+                            "The queue is still in log/batch_requests.json.\n\n"
+                            "Resume and submit that queue?\n\n"
+                            "Choosing No discards the queue and re-collects "
+                            "(speaker/name strings bill at live rates again).",
+                            QMessageBox.Yes | QMessageBox.No,
+                        )
+                    else:
+                        reply = QMessageBox.question(
+                            self,
+                            "Resume Batch?",
+                            f"A previous batch run was interrupted ({batch_resume_state}).\n\n"
+                            "Resume it instead of re-collecting?\n\n"
+                            "Re-collecting discards the current run and can bill again "
+                            "(live collect charges + a new batch submission).",
+                            QMessageBox.Yes | QMessageBox.No,
+                        )
                     if reply != QMessageBox.Yes:
                         batch_resume_state = None
         
-        # Confirm start (skipped when called programmatically from the Workflow tab)
-        if not skip_confirm:
+        # Confirm start (skipped when called programmatically from the Workflow tab
+        # or when Batch history already confirmed Resume).
+        if not skip_confirm and not forced_resume_state:
             if batch_mode and not batch_resume_state:
                 reply = QMessageBox.question(
                     self,
@@ -2457,18 +2805,16 @@ class TranslationTab(QWidget):
             # Switch to progress view
             self.file_stack.setCurrentIndex(1)
             
-            # Initialize progress list with all files
+            # Initialize Files-tab table with all selected files
             self.progress_list.clear()
             self.file_progress_items.clear()
-            
+            if hasattr(self, "progress_table"):
+                self.progress_table.setRowCount(0)
+            if hasattr(self, "progress_files_summary"):
+                self.progress_files_summary.setText("No files in this run.")
+
             for filename in selected_files:
-                item_widget = self.create_progress_item(filename)
-                list_item = QListWidgetItem(self.progress_list)
-                # Set fixed size hint to match widget height
-                from PyQt5.QtCore import QSize
-                list_item.setSizeHint(QSize(0, 36))  # Width 0 = auto, height 36px
-                self.progress_list.addItem(list_item)
-                self.progress_list.setItemWidget(list_item, item_widget)
+                self.create_progress_item(filename)
             
             # Toggle button visibility
             self.translate_button.setVisible(False)
@@ -2519,15 +2865,22 @@ class TranslationTab(QWidget):
             self.files_total = len(selected_files)
             self._batch_active = batch_mode
             self._batch_ui_phase = None
+            self._batch_consume_started = False
+            self._finish_pending = None
             if batch_mode:
                 self._set_progress_view_mode(True, len(selected_files))
                 self.batch_overall_bar.setValue(0)
                 self.batch_pipeline_stack.setCurrentIndex(0)
                 self.batch_live_status.setText("")
+                # Resume-from-fetched jumps straight to write; arm the UI before the
+                # worker starts so early cost lines are not dropped as "pre-consume".
+                if batch_resume_state == "fetched":
+                    self._on_batch_phase("consume", None)
             else:
                 self._set_progress_view_mode(False, len(selected_files))
                 self._batch_active = False
                 self._batch_ui_phase = None
+                self._batch_consume_started = False
             self.files_translated_label.setText(f"0/{self.files_total}")
             self.translating_label.setText("Starting...")
             self.item_progress_label.setText("0/0")
@@ -2579,6 +2932,22 @@ class TranslationTab(QWidget):
                 run_log_path = history_dir / fname
                 # Don't create the file yet - it will be created when first log is written
                 
+                # Create the per-run log immediately with a header so the Translation
+                # Log panel is never blank while a batch resume/consume runs.
+                try:
+                    mode = BATCH_MODE_LABEL if batch_mode else mode
+                    with open(run_log_path, "a", encoding="utf-8") as f:
+                        f.write(
+                            f"[RUN] {mode}"
+                            + (f" resume={batch_resume_state}" if batch_resume_state else "")
+                            + f" files={len(selected_files)}\n"
+                        )
+                        for name in selected_files:
+                            f.write(f"[RUN]   - {name}\n")
+                        f.flush()
+                except Exception:
+                    pass
+
                 # Export env var so subprocess workers inherit the path
                 try:
                     os.environ['TRANSLATION_RUN_LOG'] = str(run_log_path)
@@ -2628,8 +2997,14 @@ class TranslationTab(QWidget):
             except Exception:
                 pass
         # During batch collect/poll/submit, per-file cost lines are not final translations.
-        if getattr(self, "_batch_active", False) and getattr(self, "_batch_ui_phase", None) != "consume":
-            return
+        # Accept costs once consume has started (and after done) - resume→consume is fast
+        # enough that log lines from the pool thread can arrive before/after the phase
+        # signal is processed on the UI thread.
+        if getattr(self, "_batch_active", False):
+            phase = getattr(self, "_batch_ui_phase", None)
+            consume_started = getattr(self, "_batch_consume_started", False)
+            if not consume_started and phase not in ("consume", "done"):
+                return
         try:
             stripped = _strip_ansi(message)
             pattern = (
@@ -2689,11 +3064,14 @@ class TranslationTab(QWidget):
                     item["_skip_reason"] = skip_reason
                 # Distinguish "no API usage" from real token counts in the list UI
                 if completion_kind in ("skip", "idle"):
-                    item["tokens_label"].setText("—")
+                    tokens_text = "-"
                 else:
-                    item["tokens_label"].setText(f"{input_tokens}/{output_tokens}")
-                item['cost_label'].setText(f"${cost:.4f}")
-                item['time_label'].setText(f"{time_s:.1f}s")
+                    tokens_text = f"{input_tokens}/{output_tokens}"
+                cost_text = f"${cost:.4f}"
+                time_text = f"{time_s:.1f}s"
+                item["tokens_label"].setText(tokens_text)
+                item['cost_label'].setText(cost_text)
+                item['time_label'].setText(time_text)
                 item['tokens_label'].setVisible(True)
                 item['cost_label'].setVisible(True)
                 item['time_label'].setVisible(True)
@@ -2701,6 +3079,12 @@ class TranslationTab(QWidget):
                     item['progress_bar'].setVisible(False)
                 except Exception:
                     pass
+                self._set_progress_row(
+                    filename,
+                    tokens=tokens_text,
+                    cost=cost_text,
+                    time_s=time_text,
+                )
             except Exception:
                 pass
 

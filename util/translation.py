@@ -756,9 +756,12 @@ def _read_batch_file(path):
         if path.exists():
             with open(path, "r", encoding="utf-8") as f:
                 data = json.load(f)
-                return data if isinstance(data, dict) else {}
-    except Exception:
-        pass
+                if isinstance(data, dict):
+                    return data
+                print(f"[BATCH] Corrupt batch file (not a JSON object): {path}", flush=True)
+    except Exception as exc:
+        # State/history corruption must not look like an empty run - log it.
+        print(f"[BATCH] Failed to read {path}: {exc}", flush=True)
     return {}
 
 
@@ -840,30 +843,54 @@ def pendingBatchRequests():
 
 
 def batchRunState():
-    """'submitted' when a batch is still in flight, 'fetched' when results are
-    waiting to be consumed, else None. Lets an interrupted batch run resume
-    instead of re-collecting and paying for a second submission."""
+    """Resume detector for an interrupted batch run.
+
+    Returns:
+      'submitted' - Anthropic batch(es) in flight (or ended but not fetched)
+      'fetched'   - results on disk waiting for consume
+      'queued'    - collect finished / submit declined; queue still on disk
+      None        - nothing to resume
+    """
     with _batch_file_lock():
-        if _read_batch_file(BATCH_STATE_FILE).get("batches"):
+        state = _read_batch_file(BATCH_STATE_FILE)
+        if state.get("batches"):
             return "submitted"
-        if _read_batch_file(BATCH_RESULTS_FILE):
+        if state.get("status") == "fetched" or _read_batch_file(BATCH_RESULTS_FILE):
             return "fetched"
+        if _read_batch_file(BATCH_QUEUE_FILE):
+            return "queued"
     return None
 
 
 def clearBatchFiles():
-    """Remove queue/state/results left over from any previous batch run."""
+    """Remove active queue/state/results. Never deletes durable batch history."""
     global _batch_results, _batch_queue_pending
     with BATCH_LOCK:
-        _batch_results = None
-        _batch_queue_pending = {}
+        fetched_ids = []
+        had_results = False
         with _batch_file_lock():
+            state = _read_batch_file(BATCH_STATE_FILE)
+            had_results = bool(_read_batch_file(BATCH_RESULTS_FILE)) or state.get("status") == "fetched"
+            if had_results:
+                fetched_ids = list(state.get("batch_ids") or [])
+                if not fetched_ids:
+                    fetched_ids = [b.get("id") for b in (state.get("batches") or []) if b.get("id")]
             for path in (BATCH_QUEUE_FILE, BATCH_STATE_FILE, BATCH_RESULTS_FILE):
                 try:
                     if path.exists():
                         path.unlink()
                 except Exception:
                     pass
+        _batch_results = None
+        _batch_queue_pending = {}
+    # Only mark history consumed when clearing after a successful fetch/consume,
+    # never when discarding a still-submitted or queued run.
+    if had_results:
+        try:
+            from util.batch_history import on_clear_active_files
+            on_clear_active_files(had_results=True, fetched_ids=fetched_ids or None)
+        except Exception as exc:
+            print(f"[BATCH] history consume mark failed: {exc}", flush=True)
 
 
 def _get_anthropic_client():
@@ -968,11 +995,13 @@ def estimateBatchCost(model=None):
     }
 
 
-def submitTranslationBatches():
+def submitTranslationBatches(file_set=None, cost_estimate=None):
     """Submit the queued requests to the Anthropic Message Batches API.
 
     Splits at the API limits and saves the custom_id -> cache-key mapping so
-    fetchTranslationBatches can route results back. Returns the batch ids."""
+    fetchTranslationBatches can route results back. Also appends durable
+    history entries (custom_ids survive later fetch/clear). Returns the batch ids.
+    """
     flush_batch_queue()
     with _batch_file_lock():
         queue = _read_batch_file(BATCH_QUEUE_FILE)
@@ -983,6 +1012,16 @@ def submitTranslationBatches():
     client = _get_anthropic_client()
     batches = []
     requests, id_map, size = [], {}, 0
+    models = set()
+    for entry in queue.values():
+        m = (entry.get("params") or {}).get("model")
+        if m:
+            models.add(m)
+    model = (
+        (cost_estimate or {}).get("model")
+        or next(iter(models), None)
+        or os.getenv("model", "")
+    )
 
     def _submit():
         nonlocal requests, id_map, size
@@ -1003,48 +1042,134 @@ def submitTranslationBatches():
             _submit()
     _submit()
 
+    submitted_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    state_doc = {
+        "batches": batches,
+        "submitted_at": submitted_at,
+        "model": model,
+        "file_set": list(file_set or []),
+        "cost_estimate": cost_estimate,
+        "request_count": sum(len(b.get("custom_ids") or {}) for b in batches),
+    }
     with BATCH_LOCK:
         with _batch_file_lock():
-            _write_batch_file(BATCH_STATE_FILE, {"batches": batches})
+            _write_batch_file(BATCH_STATE_FILE, state_doc)
+    try:
+        from util.batch_history import record_submit
+        record_submit(
+            batches,
+            model=model,
+            file_set=file_set,
+            cost_estimate=cost_estimate,
+        )
+    except Exception as exc:
+        print(f"[BATCH] history record_submit failed: {exc}", flush=True)
     return [b["id"] for b in batches]
 
 
 def checkTranslationBatches():
-    """Print the processing status of submitted batches. True when all ended."""
+    """Print the processing status of submitted batches. True when all ended.
+
+    Also returns a structured status list as the second value when called as
+    ``ended, statuses = checkTranslationBatchStatuses()`` - prefer that helper
+    for UI work. Kept for CLI/print compatibility.
+    """
+    ended, _statuses = checkTranslationBatchStatuses(print_status=True)
+    return ended
+
+
+def checkTranslationBatchStatuses(print_status=True):
+    """Return (all_ended, statuses) for submitted batches.
+
+    Each status dict: id, api_status, counts{processing,succeeded,errored,canceled,expired}.
+    """
     with _batch_file_lock():
         state = _read_batch_file(BATCH_STATE_FILE)
     if not state.get("batches"):
-        print("[BATCH] No submitted batches — submit the queue first.", flush=True)
-        return False
+        if print_status:
+            print("[BATCH] No submitted batches - submit the queue first.", flush=True)
+        return False, []
     client = _get_anthropic_client()
     all_ended = True
+    statuses = []
     for info in state["batches"]:
-        b = client.messages.batches.retrieve(info["id"])
-        counts = getattr(b, "request_counts", None)
-        suffix = f"  counts: {counts}" if counts else ""
-        print(f"[BATCH] {time.strftime('%H:%M:%S')}  {b.id}: {b.processing_status}{suffix}", flush=True)
-        if b.processing_status != "ended":
+        bid = info["id"]
+        b = client.messages.batches.retrieve(bid)
+        api_status = getattr(b, "processing_status", "") or ""
+        counts_obj = getattr(b, "request_counts", None)
+        counts = {
+            k: int(getattr(counts_obj, k, 0) or 0)
+            for k in ("processing", "succeeded", "errored", "canceled", "expired")
+        } if counts_obj is not None else {
+            "processing": 0, "succeeded": 0, "errored": 0, "canceled": 0, "expired": 0,
+        }
+        statuses.append({
+            "id": bid,
+            "api_status": api_status,
+            "counts": counts,
+            "request_count": len(info.get("custom_ids") or {}),
+        })
+        if print_status:
+            parts = [f"{k[:4]}={v}" for k, v in counts.items() if v]
+            suffix = ("  " + " ".join(parts)) if parts else ""
+            print(
+                f"[BATCH] {time.strftime('%H:%M:%S')}  {bid}: {api_status}{suffix}",
+                flush=True,
+            )
+        if api_status != "ended":
             all_ended = False
-    return all_ended
+    return all_ended, statuses
 
 
-def fetchTranslationBatches():
+def fetchTranslationBatches(batches=None):
     """Download finished batch results into the local results store.
 
     Successes are stored keyed by the payload cache key for the consume pass;
     errored/expired requests are reported and simply fall back to the live API
-    during consume. Returns (succeeded, errored) counts."""
+    during consume. Durable history retains custom_ids for later redownload.
+
+    batches: optional list of {id, custom_ids} (defaults to active batch_state).
+    Returns (succeeded, errored) counts.
+    """
     global _batch_results
     with _batch_file_lock():
         state = _read_batch_file(BATCH_STATE_FILE)
-    if not state.get("batches"):
-        print("[BATCH] No submitted batches — nothing to fetch.", flush=True)
+    batch_list = batches if batches is not None else (state.get("batches") or [])
+    if not batch_list:
+        print("[BATCH] No submitted batches - nothing to fetch.", flush=True)
         return 0, 0
+
+    try:
+        from util.batch_history import download_batch_results, record_fetch, _price_usage
+    except Exception:
+        download_batch_results = None
+        record_fetch = None
+        _price_usage = None
+
     client = _get_anthropic_client()
     results, errored = {}, []
-    for info in state["batches"]:
+    usage_totals = {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "cache_read_input_tokens": 0,
+        "cache_creation_input_tokens": 0,
+        "thinking_tokens": 0,
+    }
+    batch_ids = []
+    for info in batch_list:
+        bid = info.get("id")
+        if bid:
+            batch_ids.append(bid)
         id_map = info.get("custom_ids", {})
-        for r in client.messages.batches.results(info["id"]):
+        if download_batch_results is not None:
+            part, err_part, usage_part = download_batch_results(bid, id_map, client=client)
+            results.update(part)
+            errored.extend(err_part)
+            for k, v in usage_part.items():
+                usage_totals[k] = usage_totals.get(k, 0) + (v or 0)
+            continue
+        # Fallback if batch_history import failed - preserve prior behaviour.
+        for r in client.messages.batches.results(bid):
             key = id_map.get(r.custom_id)
             if key is None:
                 continue
@@ -1066,26 +1191,61 @@ def fetchTranslationBatches():
             out = getattr(u, "output_tokens", 0) or 0
             results[key] = {
                 "text": text,
-                # prompt_tokens matches _AnthropicCompat: total incl. cache fields.
                 "prompt_tokens": inp + cr + cw,
                 "completion_tokens": out,
                 "cache_read_input_tokens": cr,
                 "cache_creation_input_tokens": cw,
             }
+
+    model = state.get("model") or os.getenv("model", "")
+    actual_cost = None
+    if _price_usage is not None and model:
+        try:
+            actual_cost = _price_usage(usage_totals, model)
+        except Exception:
+            actual_cost = None
+
     with BATCH_LOCK:
         with _batch_file_lock():
             merged = _read_batch_file(BATCH_RESULTS_FILE)
             merged.update(results)
             _write_batch_file(BATCH_RESULTS_FILE, merged)
-            # Queue and state are consumed; only the results store remains.
-            for path in (BATCH_QUEUE_FILE, BATCH_STATE_FILE):
-                try:
-                    if path.exists():
-                        path.unlink()
-                except Exception:
-                    pass
+            # Drop the queue; keep a lightweight fetched marker (ids for consume→history).
+            # custom_ids stay in durable history - do not destroy recovery maps.
+            try:
+                if BATCH_QUEUE_FILE.exists():
+                    BATCH_QUEUE_FILE.unlink()
+            except Exception:
+                pass
+            _write_batch_file(
+                BATCH_STATE_FILE,
+                {
+                    "status": "fetched",
+                    "batch_ids": batch_ids,
+                    "batches": [],
+                    "model": model,
+                    "file_set": state.get("file_set") or [],
+                    "cost_estimate": state.get("cost_estimate"),
+                    "fetched_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                },
+            )
         _batch_results = None
+
+    if record_fetch is not None:
+        try:
+            record_fetch(
+                batch_ids,
+                succeeded=len(results),
+                errored=len(errored),
+                usage=usage_totals,
+                actual_cost=actual_cost,
+            )
+        except Exception as exc:
+            print(f"[BATCH] history record_fetch failed: {exc}", flush=True)
+
     print(f"[BATCH] fetched {len(results)} results ({len(errored)} errored).", flush=True)
+    if actual_cost is not None:
+        print(f"[BATCH] actual batch usage cost (est.): ${actual_cost:.4f}", flush=True)
     for cid, why in errored[:20]:
         print(f"[BATCH]   ! {cid}: {why}", flush=True)
     if len(errored) > 20:
@@ -2626,6 +2786,29 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None, mism
                 with lock:
                     pbar.update(len(tItem) if isinstance(tItem, list) else 1)
 
+            # Consume pass: still record what was applied. Cache hits used to
+            # skip the log entirely, which left the GUI Translation Log empty
+            # after a resume even though translated/ was written.
+            if batch_phase == "consume" and not config.estimateMode:
+                try:
+                    if isinstance(cached_result, list):
+                        out_payload = {
+                            f"Line{i+1}": string for i, string in enumerate(cached_result)
+                        }
+                        formatted_output = json.dumps(out_payload, indent=4, ensure_ascii=False)
+                    else:
+                        formatted_output = json.dumps(
+                            {"Line1": cached_result}, indent=4, ensure_ascii=False
+                        )
+                    Path(config.logFilePath).parent.mkdir(parents=True, exist_ok=True)
+                    with open(config.logFilePath, "a", encoding="utf-8") as logFile:
+                        logFile.write("[CACHE] Applied cached translation (no new API call)\n")
+                        logFile.write(f"Input:\n{subbedT}\n")
+                        logFile.write(f"Output:\n{formatted_output}\n")
+                        logFile.flush()
+                except Exception:
+                    pass
+
             continue
 
         # Create context — static_system is the stable prompt.txt content;
@@ -2701,6 +2884,7 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None, mism
         max_retries = 2  # 1 initial attempt + 2 retries
         final_translations = None
         last_raw_translation = ""
+        from_batch = False
         numLines = len(clean_tItem) if isinstance(tItem, list) else 1
 
         for attempt in range(max_retries + 1):
@@ -2726,7 +2910,7 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None, mism
                 if pbar:
                     pbar.write(f"Retrying translation... (Attempt {attempt + 1}/{max_retries + 1})")
 
-            # Translate — the consume pass tries the fetched batch result first;
+            # Translate - the consume pass tries the fetched batch result first;
             # a missing or invalid result falls through to the live API.
             from_batch = False
             if batch_phase == "consume" and attempt == 0:
@@ -2944,6 +3128,8 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None, mism
             # Only open and write to log file when we have something to log
             try:
                 with open(config.logFilePath, "a", encoding="utf-8") as logFile:
+                    if from_batch:
+                        logFile.write("[BATCH] Applied Anthropic batch result\n")
                     logFile.write(f"Input:\n{subbedT}\n")
                     logFile.write(f"Output:\n{formatted_output}\n")
                     logFile.flush()  # Ensure data is written to disk immediately

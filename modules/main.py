@@ -1,5 +1,6 @@
 import sys
 import os
+import time
 import traceback
 import datetime
 from pathlib import Path
@@ -128,7 +129,18 @@ def main():
         if resume_state:
             confirm = ""
             while confirm not in ("y", "n"):
-                confirm = input(f"A previous batch run was interrupted ({resume_state}). Resume it? (y/n)\n").strip().lower()
+                if resume_state == "queued":
+                    prompt = (
+                        "A previous collect finished but was not submitted (queued). "
+                        "Resume and submit that queue? (y/n)\n"
+                        "(n discards the queue and re-collects - live collect charges again)\n"
+                    )
+                else:
+                    prompt = (
+                        f"A previous batch run was interrupted ({resume_state}). Resume it? (y/n)\n"
+                        "(n discards it and can bill again)\n"
+                    )
+                confirm = input(prompt).strip().lower()
             if confirm == "n":
                 resume_state = None
 
@@ -322,21 +334,72 @@ files to translate are in the /files folder and that you picked the right game e
                 tqdm.write("[BATCH] No requests queued — nothing needed the API.")
                 run_consume = False
             else:
-                estimateBatchCost()
+                est = estimateBatchCost()
                 confirm = ""
                 while confirm not in ("y", "n"):
                     confirm = input("Submit batch? (y/n)\n").strip().lower()
                 if confirm == "n":
-                    tqdm.write("[BATCH] Not submitted. The queue is kept in log/batch_requests.json.")
+                    tqdm.write(
+                        "[BATCH] Not submitted. The queue is kept in log/batch_requests.json "
+                        "(resume Batch Translate later to submit without re-collecting)."
+                    )
                     return
-                runTranslationBatches(poll)
+                from util.translation import submitTranslationBatches, checkTranslationBatches, fetchTranslationBatches
+                if not submitTranslationBatches(cost_estimate=est):
+                    run_consume = False
+                else:
+                    tqdm.write(
+                        f"[BATCH] polling every {poll}s (Ctrl-C is safe - resume later)..."
+                    )
+                    while not checkTranslationBatches():
+                        time.sleep(poll)
+                    fetchTranslationBatches()
+        elif resume_state == "queued":
+            tqdm.write(
+                Fore.CYAN
+                + "[BATCH] Resuming queued requests (skipping re-collect)..."
+                + Fore.RESET
+            )
+            if pendingBatchRequests() == 0:
+                tqdm.write("[BATCH] Queue is empty - nothing to submit.")
+                run_consume = False
+            else:
+                est = estimateBatchCost()
+                confirm = ""
+                while confirm not in ("y", "n"):
+                    confirm = input("Submit batch? (y/n)\n").strip().lower()
+                if confirm == "n":
+                    tqdm.write("[BATCH] Not submitted. Queue kept.")
+                    return
+                from util.translation import submitTranslationBatches, checkTranslationBatches, fetchTranslationBatches
+                if not submitTranslationBatches(cost_estimate=est):
+                    run_consume = False
+                else:
+                    tqdm.write(
+                        f"[BATCH] polling every {poll}s (Ctrl-C is safe - resume later)..."
+                    )
+                    while not checkTranslationBatches():
+                        time.sleep(poll)
+                    fetchTranslationBatches()
         elif resume_state == "submitted":
             tqdm.write(Fore.CYAN + "[BATCH] Resuming the submitted batch..." + Fore.RESET)
             runTranslationBatches(poll)
-        else:  # "fetched" — results already downloaded, just write the files
+        else:  # "fetched" - results already downloaded, just write the files
             tqdm.write(Fore.CYAN + "[BATCH] Resuming from fetched results..." + Fore.RESET)
 
         if run_consume:
+            try:
+                from util.batch_history import missing_result_count
+                present, expected = missing_result_count()
+                if expected and present < expected:
+                    tqdm.write(
+                        Fore.YELLOW
+                        + f"[BATCH] WARNING: only {present}/{expected} results present. "
+                        "Missing keys fall back to the live API (full price)."
+                        + Fore.RESET
+                    )
+            except Exception:
+                pass
             # Pass 2 — write the translated files from the fetched results.
             # Anything the batch missed falls back to the live API.
             tqdm.write(Fore.CYAN + "[BATCH] Pass 2/2: writing translated files..." + Fore.RESET)

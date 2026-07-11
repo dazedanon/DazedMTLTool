@@ -595,6 +595,7 @@ from gui.config_tab import ConfigTab
 from gui.translation_tab import TranslationTab
 from gui.workflow_tab import WorkflowTab
 from gui.wolf_workflow_tab import WolfWorkflowTab
+from gui.batch_tab import BatchTab
 
 class DazedMTLGUI(QMainWindow):
     """Main GUI window for the DazedMTLTool."""
@@ -830,9 +831,16 @@ class DazedMTLGUI(QMainWindow):
         sidebar_layout.addWidget(btn_workflow)
         self.nav_buttons.append(btn_workflow)
 
-        # Configuration button (third)
+        # Batch history button (third)
+        btn_batches = self.create_nav_button("📦", "Batches")
+        btn_batches.setToolTip("Batches — Anthropic Message Batch history")
+        btn_batches.clicked.connect(lambda: self.switch_page(2))
+        sidebar_layout.addWidget(btn_batches)
+        self.nav_buttons.append(btn_batches)
+
+        # Configuration button (fourth)
         btn_config = self.create_nav_button("⚙️", "Configuration")
-        btn_config.clicked.connect(lambda: self.switch_page(2))
+        btn_config.clicked.connect(lambda: self.switch_page(3))
         sidebar_layout.addWidget(btn_config)
         self.nav_buttons.append(btn_config)
         
@@ -884,6 +892,8 @@ class DazedMTLGUI(QMainWindow):
         
     def setup_tabs(self):
         """Set up all the tabs in the interface."""
+        self.project_root = PROJECT_ROOT
+
         # Translation Execution Tab (index 0)
         self.translation_tab = TranslationTab(self)
         self.content_stack.addWidget(self.translation_tab)
@@ -892,7 +902,11 @@ class DazedMTLGUI(QMainWindow):
         # RPGMaker and Wolf guided panels while keeping a single sidebar button.
         self.content_stack.addWidget(self._create_workflow_container())
 
-        # Configuration Tab (index 2)
+        # Batch History Tab (index 2)
+        self.batch_tab = BatchTab(self)
+        self.content_stack.addWidget(self.batch_tab)
+
+        # Configuration Tab (index 3)
         self.config_tab = ConfigTab()
         self.config_tab.config_changed.connect(self.on_config_changed)
         self.content_stack.addWidget(self.config_tab)
