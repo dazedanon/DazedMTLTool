@@ -3018,6 +3018,20 @@ class TranslationTab(QWidget):
                 except Exception:
                     pass
 
+                # Per-game quirks overlay: Workflow Step 0 folder → DAZED_GAME_ROOT
+                try:
+                    game_root = ""
+                    if self.settings:
+                        game_root = str(
+                            self.settings.value("last_game_folder", "") or ""
+                        ).strip()
+                    if game_root and Path(game_root).is_dir():
+                        os.environ["DAZED_GAME_ROOT"] = game_root
+                    else:
+                        os.environ.pop("DAZED_GAME_ROOT", None)
+                except Exception:
+                    pass
+
                 # Try to create a hard link at legacy location so modules that
                 # still write to log/translationHistory.txt end up in this file.
                 # This will be created when the run_log_path file is first written to

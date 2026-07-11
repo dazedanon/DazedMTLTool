@@ -5,13 +5,12 @@ Provides a guided, step-by-step interface:
 
   Step 0  – Select game project folder and import data files into files/
   Step 1  – (Optional) Pre-process game files
-  Step 2  – Auto-detect speaker format and apply to module settings
-  Step 3  – Build glossary: parse speakers, then enrich with AI prompt
-  Step 4  – Translation: Phase 0 (DB), Phase 1 (dialogue), Phase 1b (111 cache)
-  Step 5  – Translation Phase 2 (risky codes)
-  Step 6  – Translate visible strings in js/plugins.js (or Ace scripts)
-  Step 7  – Export translated/ back to the game folder
-  Step 8  – Install TL Inspector and/or Forge playtest plugins
+  Step 2  – Setup: speaker flags, Project Setup skill, vocab / quirks / game skill
+  Step 3  – Translation: Phase 0 (DB), Phase 1 (dialogue), Phase 1b (111 cache)
+  Step 4  – Translation Phase 2 (risky codes)
+  Step 5  – Translate visible strings in js/plugins.js (or Ace scripts)
+  Step 6  – Export translated/ back to the game folder
+  Step 7  – Install TL Inspector and/or Forge playtest plugins
 """
 
 from __future__ import annotations
@@ -23,6 +22,11 @@ import threading
 from pathlib import Path
 
 from util.paths import VOCAB_PATH
+from util.skills import (
+    game_skill_path_for_game,
+    load_project_setup,
+    quirks_path_for_game,
+)
 from util.vocab import BASE_SEPARATOR as _SHARED_BASE_SEPARATOR
 from util.vocab import read_game_vocab, write_game_vocab
 
@@ -619,13 +623,12 @@ class WorkflowTab(QWidget):
         _tab_defs = [
             ("0  Project",      self._build_step0),
             ("1  Pre-process",  self._build_step1_preprocess),
-            ("2  Speaker",      self._build_step2_speaker),
-            ("3  Glossary",     self._build_step3_glossary),
-            ("4  TL Phase 1",   self._build_step4_translation),
-            ("5  TL Phase 2",   self._build_step5_tl_phase2),
-            ("6  Plugins.js",   self._build_step6_plugins_js),
-            ("7  Export",       self._build_step7_export),
-            ("8  Playtest",     self._build_step8_playtest),
+            ("2  Setup",        self._build_step2_setup),
+            ("3  TL Phase 1",   self._build_step4_translation),
+            ("4  TL Phase 2",   self._build_step5_tl_phase2),
+            ("5  Plugins.js",   self._build_step6_plugins_js),
+            ("6  Export",       self._build_step7_export),
+            ("7  Playtest",     self._build_step8_playtest),
         ]
         self._step_labels = [label for label, _ in _tab_defs]
 
@@ -793,21 +796,20 @@ class WorkflowTab(QWidget):
         short_names = (
             "Project",
             "Prep",
-            "Speaker",
-            "Glossary",
+            "Setup",
             "Phase1",
             "Phase2",
             "Plugins",
             "Export",
             "Playtest",
         )
-        # Step 6 label swaps for Ace scripts.
-        if idx == 6 and len(self._step_labels) > 6:
-            raw = self._step_labels[6]
+        # Step 5 label swaps for Ace scripts.
+        if idx == 5 and len(self._step_labels) > 5:
+            raw = self._step_labels[5]
             if "Script" in raw:
                 name = "Scripts"
             else:
-                name = short_names[6]
+                name = short_names[5]
         else:
             name = short_names[idx] if 0 <= idx < len(short_names) else str(idx)
         mark = "✓" if done else ""
@@ -868,9 +870,9 @@ class WorkflowTab(QWidget):
         if previous_index == 0 and index != 0:
             self._auto_import_if_needed()
 
-        if index == 5:
+        if index == 4:
             self._populate_p2_checkboxes()
-        if index == 8:
+        if index == 7:
             self._refresh_playtest_status()
             self._load_playtest_settings()
 
@@ -1023,226 +1025,6 @@ class WorkflowTab(QWidget):
     # ── Step 3: Vocab / Glossary ────────────────────────────────────────────
 
     # ── Copilot prompt templates ────────────────────────────────────────────
-
-    _SPEAKER_PROMPT = (
-        "You are an expert RPGMaker MV/MZ analyst helping configure a Japanese game translation tool.\n"
-        "\n"
-        "<task>\n"
-        "Examine the game's event files (Map*.json, CommonEvents.json, Troops.json) and determine "
-        "which speaker name format(s) the game uses. Output flag recommendations based on what you find.\n"
-        "</task>\n"
-        "\n"
-        "<context>\n"
-        "Code 101 opens the text window. Code 401 is a dialogue line. Multiple 401s in a row form "
-        "one message box. The translation tool needs to know how character names appear in the event "
-        "data so it can extract and translate them correctly.\n"
-        "</context>\n"
-        "\n"
-        "--- attach your game files here before continuing ---\n"
-        "\n"
-        "<always_on_formats>\n"
-        "The following formats are detected and translated automatically — no flag is needed. "
-        "If the game uses any of these, do NOT enable a flag for lines matching that exact pattern. "
-        "However, continue scanning to check whether other speakers use a flag-requiring pattern.\n"
-        "\n"
-        "## How dialogue commands work\n"
-        "\n"
-        "Code 101 opens the text window. Code 401 is a dialogue line. "
-        "Multiple 401s in a row form one message box.\n"
-        "\n"
-        "## IMPORTANT — Always-on formats (NO FLAG NEEDED, never enable any flag for these)\n"
-        "\n"
-        "The following formats are detected and translated automatically. "
-        "If the game uses ANY of these, do NOT enable any flag for lines matching that pattern. "
-        "However, **DO NOT STOP** — continue checking whether other speakers in the same game "
-        "use a different format that requires a flag.\n"
-        "\n"
-        "\n"
-        "  101 param[4] name       { \"code\": 101, \"parameters\": [\"\", 0, 2, 2, \"るな\"] }\n"
-        "  \\\\n<Name> or \\\\k<Name>   escape code with ANGLE BRACKETS anywhere inside a 401 line\n"
-        "  【Name】                  alone on a line, or 【Name】dialogue on the same line\n"
-        "  [Name]                  alone on a line, or [Name]dialogue on the same line\n"
-        "  \\\\c[N]Name\\\\c[0]       color-wrapped name on its own 401 line\n"
-        "  Name：                   line ending with a full-width colon\n"
-        "\n"
-        "## CRITICAL — \\\\N[X] / \\\\n[X] (square bracket + number) is NOT a speaker format\n"
-        "\n"
-        "  \\\\N[ActorID] and \\\\n[ActorID] (e.g. \\\\N[1], \\\\n[2]) are RPGMaker actor variable\n"
-        "  substitution codes. They expand to an actor's name at runtime, but the translation tool\n"
-        "  handles them purely as text substitution during translation — they are NEVER treated as\n"
-        "  a speaker name tag.\n"
-        "\n"
-        "  A 401 line containing ONLY \\\\N[X], or narration text that embeds \\\\N[X] (e.g.\n"
-        "  \"ローターが\\\\N[1]の乳首に装着される！\"), does NOT match any always-on speaker format.\n"
-        "  Do NOT count \\\\N[X] / \\\\n[X] codes as always-on speaker detection hits.\n"
-        "\n"
-        "  If a game's ONLY speaker indicator is a standalone \\\\N[X] line followed by dialogue,\n"
-        "  check whether FIRSTLINESPEAKERS would catch it (the standalone line must be < 40 chars\n"
-        "  AND contain at least one Japanese character — a bare \\\\N[1] with no Japanese text does\n"
-        "  NOT qualify for FIRSTLINESPEAKERS either).\n"
-        "</always_on_formats>\n"
-        "\n"
-        "<flags>\n"
-        "Only enable these when at least some speakers do NOT use an always-on format.\n"
-        "\n"
-        "<flag name=\"INLINE401SPEAKERS\">\n"
-        "The speaker name is embedded at the start of a 401 line directly before 「, "
-        "with no intervening markup or brackets.\n"
-        "<example>\n"
-        "{ \"code\": 401, \"parameters\": [\"エレナ「今日は晴れですね。\"] }\n"
-        "</example>\n"
-        "Enable if the game has dialogue lines matching this pattern.\n"
-        "</flag>\n"
-        "\n"
-        "<flag name=\"FIRSTLINESPEAKERS\">\n"
-        "The very first 401 in a message group is a short standalone name (under 40 chars), "
-        "and the following 401 starts with 「 \" ( （ * [. This commonly appears for NPCs even "
-        "in games where the protagonist uses an always-on format. The 101 command for these "
-        "lines typically has an empty face image (parameters[0] == \"\").\n"
-        "<example>\n"
-        "{ \"code\": 101, \"parameters\": [\"\", 0, 0, 2] }\n"
-        "{ \"code\": 401, \"parameters\": [\"衛兵さん\"] }        ← plain name, no color or brackets\n"
-        "{ \"code\": 401, \"parameters\": [\"「……起きたか」\"] }\n"
-        "</example>\n"
-        "Enable if ANY speakers in the game use this pattern, even if others use an always-on format.\n"
-        "</flag>\n"
-        "\n"
-        "<flag name=\"FACENAME101\" priority=\"last_resort\">\n"
-        "Enable ONLY when: (a) the game has no always-on format, AND (b) neither INLINE401SPEAKERS "
-        "nor FIRSTLINESPEAKERS applies, AND (c) the 101 code has a face image filename in "
-        "parameters[0] while parameters[4] is empty.\n"
-        "<example>\n"
-        "{ \"code\": 101, \"parameters\": [\"face_alice\", 0, 0, 2, \"\"] }\n"
-        "</example>\n"
-        "If you recommend this, you MUST list every unique face filename found in parameters[0] "
-        "of code 101 across all attached files.\n"
-        "</flag>\n"
-        "</flags>\n"
-        "\n"
-        "<instructions>\n"
-        "Follow these steps in order:\n"
-        "\n"
-        "1. Scan ALL 101→401 blocks across the sample files.\n"
-        "   (a) List every always-on pattern found — these need no flag.\n"
-        "   (b) List every flag-requiring pattern found separately.\n"
-        "   A game may use both simultaneously (e.g. protagonist via \\\\c[N]Name\\\\c[0], "
-        "NPCs via plain standalone name lines). Do not stop after finding one pattern.\n"
-        "\n"
-        "2. For each flag-requiring pattern from step 1:\n"
-        "   - INLINE401SPEAKERS → ENABLE if name「 inline pattern exists\n"
-        "   - FIRSTLINESPEAKERS → ENABLE if plain standalone name line exists\n"
-        "   Both may be enabled together if both patterns exist.\n"
-        "\n"
-        "3. Only if steps 1–2 found no flag-requiring patterns AND no always-on format "
-        "→ consider FACENAME101.\n"
-        "</instructions>\n"
-        "\n"
-        "<output_format>\n"
-        "Provide exactly four sections:\n"
-        "\n"
-        "1. Patterns detected — one entry per speaker type (protagonist, NPCs, signs/narration)\n"
-        "2. Flag decisions:\n"
-        "     INLINE401SPEAKERS : ENABLE / SKIP — <one-line reason>\n"
-        "     FIRSTLINESPEAKERS : ENABLE / SKIP — <one-line reason>\n"
-        "     FACENAME101       : ENABLE / SKIP — <one-line reason>\n"
-        "3. A short concrete example from the actual files for each detected pattern\n"
-        "4. (Only if FACENAME101 is ENABLE) Every unique face filename from parameters[0] of code 101\n"
-        "</output_format>\n"
-    )
-
-    _PROMPT_GLOSSARY = (
-        "You are an expert Japanese RPGMaker game analyst building a translation glossary.\n"
-        "\n"
-        "<task>\n"
-        "Extract named characters and lore-specific worldbuilding terms from this game's data files. "
-        "Produce a structured glossary in the exact format specified below. It will be loaded directly "
-        "into a translation tool, so strict format compliance is required.\n"
-        "</task>\n"
-        "\n"
-        "--- attach your game data files here before continuing ---\n"
-        "\n"
-        "<file_strategy>\n"
-        "Map files and CommonEvents.json can be extremely large. Do NOT read them sequentially — "
-        "you will hit context limits. Use this strategy:\n"
-        "\n"
-        "1. Read these small DB files IN FULL first — richest source of names, always small:\n"
-        "   Actors.json is mandatory for major character vocab. Use it as the canonical source "
-        "for actor IDs, Japanese names, nicknames, profiles, and \\N[n] name mappings.\n"
-        "   Then read Classes.json, Troops.json, Skills.json, Items.json,\n"
-        "   Armors.json, Weapons.json, States.json, System.json\n"
-        "\n"
-        "2. For large files (CommonEvents.json, Map*.json), SEARCH (grep) instead of reading "
-        "sequentially. Prioritise dialogue commands because they are the best evidence for "
-        "character voice:\n"
-        "   - Code 401 dialogue lines, plus nearby code 101 speaker/name parameters\n"
-        "   - Code 405 scrolling text when present\n"
-        "   - Speaker patterns such as 【Name】, [Name], Name：, \\\\n<Name>, and \\\\k<Name>\n"
-        "   - Capitalised katakana clusters or kanji compound proper nouns in dialogue/parameters fields\n"
-        "   Scan Map001.json through Map010.json at most — early maps have the most story content.\n"
-        "\n"
-        "3. Stop once you stop finding new names or terms. Do not pad the output.\n"
-        "</file_strategy>\n"
-        "\n"
-        "<rules>\n"
-        "Apply to both sections:\n"
-        "- Separator: use a plain hyphen-minus (-). Never use — or –. "
-        "The translation tool only recognises the plain hyphen.\n"
-        "- Descriptions must be entirely in English. Refer to other characters by English name only "
-        "(write 'her sister Ruin was kidnapped', not 'her sister ルイン was kidnapped').\n"
-        "- Never give two spelling options (e.g. 'Sylfia / Sylphia' is wrong). Commit to one translation.\n"
-        "\n"
-        "# Game Characters — rules:\n"
-        "- If a <known_speakers> list was provided, output entries for those names, then cross-check "
-        "Actors.json for major named actors that should also be included. Skip unnamed NPCs, generic "
-        "enemies, and narration-only entries.\n"
-        "- If no list was provided, discover named characters from the files, but still skip "
-        "unnamed NPCs and generic enemy types.\n"
-        "- For each character include: gender, role, speech register, personality, and whether "
-        "the name is player-chosen (check Actors.json ID 1).\n"
-        "- Any actor in Actors.json with a real name should get a full # Game Characters entry, "
-        "not only a \\N[n] placeholder mapping. If events reference \\N[3] or [EnglishName], "
-        "resolve it through Actors.json ID 3 and preserve the full character context.\n"
-        "- Event references are supporting evidence for personality/speech, but they must not "
-        "replace actor-database discovery. Do not miss major characters just because they appear "
-        "primarily in Actors.json.\n"
-        "\n"
-        "# Worldbuilding Terms — rules:\n"
-        "- Include: faction/organisation names, locations mentioned in dialogue but not on maps, "
-        "unique magic systems, lore titles, recurring in-universe concepts.\n"
-        "- Exclude: skill names, item names, weapon names, armour names (the tool handles those). "
-        "Skip generic RPG words (\u30dd\u30fc\u30b7\u30e7\u30f3, \u30ec\u30d9\u30eb, \u30b9\u30c6\u30fc\u30bf\u30b9, etc.). "
-        "Do not repeat character names here.\n"
-        "</rules>\n"
-        "\n"
-        "<output_format>\n"
-        "Return the ENTIRE glossary inside ONE fenced code block (a ``` block), with nothing before "
-        "or after it, so it can be copied in a single click and pasted straight into the tool.\n"
-        "Inside the code block, output EXACTLY two sections with these headers. Do not add any "
-        "preamble, explanation, or text outside the entries.\n"
-        "\n"
-        "# Game Characters\n"
-        "# Worldbuilding Terms\n"
-        "\n"
-        "Entry format:  Japanese (English) - description\n"
-        "\n"
-        "<example>\n"
-        "# Game Characters\n"
-        "アリア (Aria) - Female; protagonist; player-chosen name (Actors.json ID 1); "
-        "speaks cheerfully in casual feminine speech; nicknamed アリアちゃん by her sister\n"
-        "ゼクス (Zex) - Male; antagonist; cold and commanding; addresses others with contempt; "
-        "uses archaic formal register\n"
-        "カナエ (Kanae) - Female; NPC shopkeeper; warm and motherly; ends sentences with わね\n"
-        "\n"
-        "# Worldbuilding Terms\n"
-        "虚無の穴 (Void Rift) - Dimensional tear referenced repeatedly in Act 2 NPC dialogue; "
-        "not a named map location\n"
-        "鋼の誓約 (Iron Vow) - Sacred oath-binding ritual unique to the knightly order; "
-        "appears in story cutscenes\n"
-        "裁定者 (Arbiter) - Title held by the ruling council; lore-specific rank with no "
-        "real-world equivalent\n"
-        "</example>\n"
-        "</output_format>\n"
-    )
 
     _WRAP_PROMPT = (
         "You are an expert RPGMaker MV/MZ configuration analyst.\n"
@@ -1789,116 +1571,201 @@ class WorkflowTab(QWidget):
             "QCheckBox{border:none;background-color:transparent;}"
         )
 
-    def _build_step3_glossary(self, layout: QVBoxLayout):
 
-        layout.addWidget(_make_section_label("Step 3 — Vocab / Glossary"))
+    def _build_step2_setup(self, layout: QVBoxLayout):
+        """Combined speaker flags + Project Setup + vocab/quirks/game-skill editors."""
+        layout.addWidget(_make_section_label("Step 2 — Setup (Speakers + Glossary)"))
 
-        # ---- 3a: Parse Speakers ---------------------------------------------
-        parse_title = QLabel("3a — Parse Speakers")
-        parse_title.setStyleSheet("color:#4ec9b0;font-size:13px;font-weight:bold;")
-        layout.addWidget(parse_title)
+        # ---- Compact action bar --------------------------------------------
+        top = QWidget()
+        top.setObjectName("tbox")
+        top.setStyleSheet(self._task_box_style())
+        top_l = QVBoxLayout(top)
+        top_l.setContentsMargins(10, 8, 10, 8)
+        top_l.setSpacing(6)
 
-        parse_box = QWidget()
-        parse_box.setObjectName("tbox")
-        parse_box.setStyleSheet(self._task_box_style())
-        parse_inner = QVBoxLayout(parse_box)
-        parse_inner.setContentsMargins(10, 8, 10, 8)
-        parse_inner.setSpacing(4)
-
-        parse_hint = QLabel(
-            "Scan all event files (Maps, CommonEvents, Troops) for speaker names and "
-            "batch-translate them, then write them into the # Speakers section of vocab.txt.\n"
-            "Run this before the full translation so the AI already knows every character name."
+        hint = QLabel(
+            "1) Set speaker flags  ·  2) Parse Speakers into vocab  ·  "
+            "3) Copy Project Setup → IDE → paste glossary / quirks / game skill below"
         )
-        parse_hint.setWordWrap(True)
-        parse_hint.setStyleSheet("color:#9d9d9d;font-size:13px;")
-        parse_inner.addWidget(parse_hint)
+        hint.setWordWrap(True)
+        hint.setStyleSheet("color:#9d9d9d;font-size:12px;")
+        top_l.addWidget(hint)
 
-        parse_row = QHBoxLayout()
-        parse_speakers_btn = _make_btn("🔍  Parse Speakers", "#5a3a7a")
-        parse_speakers_btn.setFixedWidth(180)
-        parse_speakers_btn.setToolTip(
-            "Sets mode to 'Parse Speakers', selects all event files, and starts the run.\n"
-            "No text is translated — only speaker names are collected and written to vocab.txt."
+        from gui import qt_icons
+        actions = QHBoxLayout()
+        actions.setSpacing(8)
+
+        import_btn = QPushButton()
+        qt_icons.apply_button_icon(import_btn, "↓  Import → files/", color="#4da8f0")
+        import_btn.setStyleSheet(
+            "QPushButton{background-color:#2d2d30;color:#4da8f0;border:1px solid #007acc;"
+            "padding:0px 10px;border-radius:4px;font-size:12px;font-weight:bold;"
+            "font-family:'Segoe UI',sans-serif;}"
+            "QPushButton:hover{background-color:#1a2d3a;border-color:#1a9aff;color:#7ac8ff;}"
+            "QPushButton:pressed{background-color:#0a1a2a;}"
+            "QPushButton:disabled{background-color:#2d2d30;color:#555555;border-color:#444444;}"
         )
-        parse_speakers_btn.clicked.connect(self._run_parse_speakers)
-        parse_row.addWidget(parse_speakers_btn)
-        parse_row.addStretch()
-        parse_inner.addLayout(parse_row)
+        import_btn.setFixedHeight(32)
+        import_btn.setEnabled(False)
+        import_btn.clicked.connect(lambda _checked=False: self._import_files())
+        self._register_import_button(import_btn)
+        actions.addWidget(import_btn)
 
-        layout.addWidget(parse_box)
-
-        # ---- Copilot / Cursor prompt helpers --------------------------------
-        prompt_box_title = QLabel("3b — AI Prompt Helpers (Copilot / Cursor)")
-        prompt_box_title.setStyleSheet("color:#4ec9b0;font-size:13px;font-weight:bold;")
-        layout.addWidget(prompt_box_title)
-        prompt_box = QWidget()
-        prompt_box.setObjectName("tbox")
-        prompt_box.setStyleSheet(self._task_box_style())
-        pb_inner = QVBoxLayout(prompt_box)
-        pb_inner.setContentsMargins(10, 8, 10, 8)
-        pb_inner.setSpacing(4)
-
-        prompt_hint = QLabel(
-            "Copy the prompt and paste it into Copilot Chat or Cursor with your game files open. "
-            "Paste the AI's output back into vocab.txt."
+        clear_translated_btn = QPushButton()
+        qt_icons.apply_button_icon(clear_translated_btn, "✕  Clear TL", color="#cc4444")
+        clear_translated_btn.setStyleSheet(
+            "QPushButton{background-color:#2d2d30;color:#cc4444;border:1px solid #8b0000;"
+            "padding:0px 10px;border-radius:4px;font-size:12px;font-weight:bold;"
+            "font-family:'Segoe UI',sans-serif;}"
+            "QPushButton:hover{background-color:#3a2020;border-color:#cc2222;color:#ff6666;}"
+            "QPushButton:pressed{background-color:#4a1010;}"
         )
-        prompt_hint.setWordWrap(True)
-        prompt_hint.setStyleSheet("color:#9d9d9d;font-size:13px;")
-        pb_inner.addWidget(prompt_hint)
+        clear_translated_btn.setFixedHeight(32)
+        clear_translated_btn.setToolTip("Delete all files inside the translated/ folder")
+        clear_translated_btn.clicked.connect(self._clear_translated)
+        actions.addWidget(clear_translated_btn)
 
-        glossary_row = QHBoxLayout()
-        copy_glossary_btn = _make_btn("📋  Copy Prompt for Copilot", "#555")
-        copy_glossary_btn.setFixedWidth(220)
-        copy_glossary_btn.setToolTip("Copy the full glossary discovery prompt to clipboard")
-        copy_glossary_btn.clicked.connect(self._copy_glossary_prompt)
-        glossary_row.addWidget(copy_glossary_btn)
-        glossary_row.addStretch()
-        pb_inner.addLayout(glossary_row)
-
-        layout.addWidget(prompt_box)
-
-        # ---- vocab.txt editor -----------------------------------------------
-        vocab_title = QLabel("3c — vocab.txt editor")
-        vocab_title.setStyleSheet("color:#4ec9b0;font-size:13px;font-weight:bold;")
-        layout.addWidget(vocab_title)
-        format_hint = QLabel(
-            "Format:  Japanese (English) - Gender; role; speech register / personality notes\n"
-            "Example:  シロ (Shiro) - Female; protagonist; speaks in a flustered, cute register with feminine speech markers"
+        parse_btn = _make_btn("🔍  Parse Speakers", "#5a3a7a")
+        parse_btn.setFixedWidth(160)
+        parse_btn.setFixedHeight(32)
+        parse_btn.setToolTip(
+            "Collect speaker names from event files into vocab.txt # Speakers "
+            "(no dialogue translation)."
         )
-        format_hint.setFont(QFont("Consolas", 9))
-        format_hint.setStyleSheet(
-            "color:#569cd6;background-color:#1a1e2a;border:1px solid #2a3a5a;"
-            "padding:5px 10px;border-radius:4px;font-size:13px;"
-            "border-left:3px solid #2a6a9a;"
-        )
-        layout.addWidget(format_hint)
+        parse_btn.clicked.connect(self._run_parse_speakers)
+        actions.addWidget(parse_btn)
 
-        self.vocab_editor = _PlainPasteTextEdit()
-        self.vocab_editor.setMinimumHeight(80)
-        self.vocab_editor.setMaximumHeight(160)
-        self.vocab_editor.setFont(QFont("Consolas", 9))
-        self.vocab_editor.setStyleSheet(
-            "QTextEdit{background-color:#252526;color:#d4d4d4;"
-            "border:1px solid #3c3c3c;border-radius:4px;padding:8px;"
+        copy_btn = _make_btn("📋  Copy Project Setup", "#555")
+        copy_btn.setFixedWidth(190)
+        copy_btn.setFixedHeight(32)
+        copy_btn.setToolTip(
+            "Clipboard skill for the game repo IDE. Returns glossary, speakers, "
+            "translation_quirks, and game_skill code blocks."
+        )
+        copy_btn.clicked.connect(self._copy_project_setup_prompt)
+        actions.addWidget(copy_btn)
+        actions.addStretch()
+        top_l.addLayout(actions)
+
+        flags_row = QHBoxLayout()
+        flags_row.setSpacing(14)
+        flags_lbl = QLabel("Flags:")
+        flags_lbl.setStyleSheet("color:#4ec9b0;font-size:12px;font-weight:bold;")
+        flags_row.addWidget(flags_lbl)
+
+        self.spk_inline_cb = QCheckBox("INLINE401SPEAKERS")
+        self.spk_inline_cb.setToolTip("Speaker name inline before 「 in the 401 text")
+        self.spk_inline_cb.stateChanged.connect(self._apply_speaker_flags)
+        flags_row.addWidget(self.spk_inline_cb)
+
+        self.spk_firstline_cb = QCheckBox("FIRSTLINESPEAKERS")
+        self.spk_firstline_cb.setToolTip("First 401 line is a short speaker name")
+        self.spk_firstline_cb.stateChanged.connect(self._apply_speaker_flags)
+        flags_row.addWidget(self.spk_firstline_cb)
+
+        self.spk_face_cb = QCheckBox("FACENAME101")
+        self.spk_face_cb.setToolTip("Speaker inferred from 101 face-image filename")
+        self.spk_face_cb.stateChanged.connect(self._apply_speaker_flags)
+        flags_row.addWidget(self.spk_face_cb)
+        flags_row.addStretch()
+        top_l.addLayout(flags_row)
+
+        layout.addWidget(top)
+        self._populate_speaker_flags()
+
+        # ---- Editors (tabbed to save vertical space) -----------------------
+        editors = QTabWidget()
+        editors.setObjectName("setupEditors")
+        editors.setDocumentMode(False)
+        tab_bar = editors.tabBar()
+        tab_bar.setExpanding(False)
+        tab_bar.setMinimumHeight(34)
+        tab_bar.setStyleSheet(
+            "QTabBar::tab{background:#333337;color:#c0c0c0;min-width:90px;min-height:28px;"
+            "padding:6px 16px;border:1px solid #3c3c3c;border-bottom:none;"
+            "margin-right:3px;font-size:12px;font-weight:bold;}"
+            "QTabBar::tab:selected{background:#1e1e1e;color:#4ec9b0;"
+            "border-top:2px solid #4ec9b0;}"
+            "QTabBar::tab:hover{color:#ffffff;}"
+        )
+        editors.setStyleSheet(
+            "QTabWidget::pane{border:1px solid #3c3c3c;background:#1e1e1e;}"
+        )
+        _ed_ss = (
+            "QTextEdit{background-color:#1e1e1e;color:#d4d4d4;"
+            "border:none;padding:8px;"
             "selection-background-color:#264f78;}"
         )
+
+        def _editor_page(path_hint: str, tip: str, save_slot, reload_slot, attr: str):
+            page = QWidget()
+            vl = QVBoxLayout(page)
+            vl.setContentsMargins(8, 8, 8, 8)
+            vl.setSpacing(6)
+            tip_lbl = QLabel(tip)
+            tip_lbl.setWordWrap(True)
+            tip_lbl.setStyleSheet("color:#9d9d9d;font-size:12px;")
+            vl.addWidget(tip_lbl)
+            path_lbl = QLabel(path_hint)
+            path_lbl.setStyleSheet("color:#569cd6;font-size:11px;font-family:Consolas,monospace;")
+            vl.addWidget(path_lbl)
+            ed = _PlainPasteTextEdit()
+            ed.setMinimumHeight(160)
+            ed.setFont(QFont("Consolas", 9))
+            ed.setStyleSheet(_ed_ss)
+            setattr(self, attr, ed)
+            vl.addWidget(ed, 1)
+            row = QHBoxLayout()
+            row.setSpacing(8)
+            save_btn = _make_btn("💾  Save", "#3a7a3a")
+            save_btn.setFixedWidth(110)
+            save_btn.clicked.connect(save_slot)
+            row.addWidget(save_btn)
+            reload_btn = _make_btn("↺  Reload", "#555")
+            reload_btn.setFixedWidth(110)
+            reload_btn.clicked.connect(reload_slot)
+            row.addWidget(reload_btn)
+            row.addStretch()
+            vl.addLayout(row)
+            return page
+
+        editors.addTab(
+            _editor_page(
+                "data/vocab.txt  (game section)",
+                "Paste the glossary code block. Format: Japanese (English) - notes",
+                self._save_vocab,
+                self._reload_vocab,
+                "vocab_editor",
+            ),
+            "Vocab",
+        )
+        editors.addTab(
+            _editor_page(
+                "<game>/skills/quirks.md",
+                "Paste the translation_quirks block. Merged onto the system prompt at translate time.",
+                self._save_quirks,
+                self._reload_quirks,
+                "quirks_editor",
+            ),
+            "Quirks",
+        )
+        editors.addTab(
+            _editor_page(
+                "<game>/skills/translation.md",
+                "Paste the game_skill block. IDE companion skill for this game repo.",
+                self._save_game_skill,
+                self._reload_game_skill,
+                "game_skill_editor",
+            ),
+            "Game skill",
+        )
+        layout.addWidget(editors, 1)
+
         self._reload_vocab()
-        layout.addWidget(self.vocab_editor, 1)
+        self._reload_quirks()
+        self._reload_game_skill()
 
-        row = QHBoxLayout()
-        row.setSpacing(8)
-        save_vocab = _make_btn("💾  Save vocab.txt", "#3a7a3a")
-        save_vocab.setFixedWidth(180)
-        save_vocab.clicked.connect(self._save_vocab)
-        row.addWidget(save_vocab)
-
-        reload_vocab = _make_btn("↺  Reload", "#555")
-        reload_vocab.setFixedWidth(110)
-        reload_vocab.clicked.connect(self._reload_vocab)
-        row.addWidget(reload_vocab)
-        row.addStretch()
-        layout.addLayout(row)
 
     def _run_parse_speakers(self):
         """Configure Translation tab for Parse Speakers mode and auto-start."""
@@ -1947,102 +1814,6 @@ class WorkflowTab(QWidget):
         self._navigate_to_translation("events", auto_start=True)
 
     # ── Step 2: Speaker Detection ───────────────────────────────────────────
-
-    def _build_step2_speaker(self, layout: QVBoxLayout):
-        layout.addWidget(_make_section_label("Step 2 — Speaker Format Detection"))
-
-        # Import button row
-        _IMP_W = 220
-        _IMP_H = 36
-        _IMP_SS = (
-            "QPushButton{{"
-            "background-color:{bg};color:white;border:none;"
-            "padding:0px;border-radius:4px;font-size:12px;font-weight:bold;"
-            "font-family:'Segoe UI',sans-serif;}}"
-            "QPushButton:hover{{background-color:{hover};}}"
-            "QPushButton:pressed{{background-color:{press};}}"
-            "QPushButton:disabled{{background-color:#404040;color:#666666;}}"
-        )
-        import_row = QHBoxLayout()
-        import_row.setSpacing(8)
-        import_row.setAlignment(Qt.AlignVCenter)
-        from gui import qt_icons
-
-        import_btn = QPushButton()
-        qt_icons.apply_button_icon(import_btn, "↓  Import Selected → files/", color="#4da8f0")
-        import_btn.setStyleSheet(
-            "QPushButton{background-color:#2d2d30;color:#4da8f0;border:1px solid #007acc;"
-            "padding:0px;border-radius:4px;font-size:12px;font-weight:bold;"
-            "font-family:'Segoe UI',sans-serif;}"
-            "QPushButton:hover{background-color:#1a2d3a;border-color:#1a9aff;color:#7ac8ff;}"
-            "QPushButton:pressed{background-color:#0a1a2a;}"
-            "QPushButton:disabled{background-color:#2d2d30;color:#555555;border-color:#444444;}"
-        )
-        import_btn.setFixedSize(_IMP_W, _IMP_H)
-        import_btn.setEnabled(False)
-        import_btn.clicked.connect(lambda _checked=False: self._import_files())
-        self._register_import_button(import_btn)
-        import_row.addWidget(import_btn)
-        clear_translated_btn = QPushButton()
-        qt_icons.apply_button_icon(clear_translated_btn, "✕  Clear translated/", color="#cc4444")
-        clear_translated_btn.setStyleSheet(
-            "QPushButton{background-color:#2d2d30;color:#cc4444;border:1px solid #8b0000;"
-            "padding:0px;border-radius:4px;font-size:12px;font-weight:bold;"
-            "font-family:'Segoe UI',sans-serif;}"
-            "QPushButton:hover{background-color:#3a2020;border-color:#cc2222;color:#ff6666;}"
-            "QPushButton:pressed{background-color:#4a1010;}"
-        )
-        clear_translated_btn.setFixedSize(_IMP_W, _IMP_H)
-        clear_translated_btn.setToolTip("Delete all files inside the translated/ folder")
-        clear_translated_btn.clicked.connect(self._clear_translated)
-        import_row.addWidget(clear_translated_btn)
-        import_row.addStretch()
-        layout.addLayout(import_row)
-
-        hint = QLabel(
-            "Copy the prompt below, open Copilot (or any AI), attach a few of the game's "
-            "Map*.json / CommonEvents.json files, paste the prompt, and ask it which "
-            "speaker flags to enable. Then tick the matching boxes and click Apply."
-        )
-        hint.setWordWrap(True)
-        hint.setStyleSheet("color:#9d9d9d;font-size:13px;padding-bottom:6px;")
-        layout.addWidget(hint)
-
-        copy_row = QHBoxLayout()
-        copy_btn = _make_btn("📋  Copy Prompt for Copilot", "#555")
-        copy_btn.setFixedWidth(220)
-        copy_btn.setToolTip("Copies a prompt explaining all speaker formats — paste into Copilot with game files")
-        copy_btn.clicked.connect(self._copy_speaker_prompt)
-        copy_row.addWidget(copy_btn)
-        copy_row.addStretch()
-        layout.addLayout(copy_row)
-
-        # ---- Flag checkboxes ------------------------------------------------
-        cb_box_title = QLabel("Speaker flags")
-        cb_box_title.setStyleSheet("color:#4ec9b0;font-size:13px;font-weight:bold;")
-        layout.addWidget(cb_box_title)
-        cb_box = QWidget()
-        cb_box.setObjectName("tbox")
-        cb_box.setStyleSheet(self._task_box_style())
-        cb_inner = QVBoxLayout(cb_box)
-        cb_inner.setContentsMargins(10, 8, 10, 8)
-        cb_inner.setSpacing(3)
-
-        self.spk_inline_cb = QCheckBox("INLINE401SPEAKERS  —  speaker name inline before 「 in the 401 text")
-        self.spk_inline_cb.stateChanged.connect(self._apply_speaker_flags)
-        cb_inner.addWidget(self.spk_inline_cb)
-
-        self.spk_firstline_cb = QCheckBox("FIRSTLINESPEAKERS  —  first 401 line is a short speaker name")
-        self.spk_firstline_cb.stateChanged.connect(self._apply_speaker_flags)
-        cb_inner.addWidget(self.spk_firstline_cb)
-
-        self.spk_face_cb = QCheckBox("FACENAME101  —  speaker inferred from 101 face-image filename")
-        self.spk_face_cb.stateChanged.connect(self._apply_speaker_flags)
-        cb_inner.addWidget(self.spk_face_cb)
-
-        layout.addWidget(cb_box)
-
-        self._populate_speaker_flags()
 
     # ── Step 4: Translation ─────────────────────────────────────────────────
 
@@ -2113,7 +1884,7 @@ class WorkflowTab(QWidget):
 
     def _build_step4_translation(self, layout: QVBoxLayout):
 
-        layout.addWidget(_make_section_label("Step 4 — TL Phase 1"))
+        layout.addWidget(_make_section_label("Step 3 — TL Phase 1"))
 
         self._add_tl_mode_selector(layout)
 
@@ -2265,7 +2036,7 @@ class WorkflowTab(QWidget):
 
     def _build_step5_tl_phase2(self, layout: QVBoxLayout):
 
-        layout.addWidget(_make_section_label("Step 5 — TL Phase 2"))
+        layout.addWidget(_make_section_label("Step 4 — TL Phase 2"))
 
         self._step5_mode_hint = QLabel(f"Translation mode: {BATCH_MODE_LABEL}")
         self._step5_mode_hint.setStyleSheet("color:#8fbc8f;font-size:12px;margin-bottom:4px;")
@@ -2571,7 +2342,7 @@ class WorkflowTab(QWidget):
     # ── Step 5: plugins.js / Ace scripts Translation ───────────────────────
 
     def _build_step6_plugins_js(self, layout: QVBoxLayout):
-        self._step6_section_label = _make_section_label("Step 6 — Translate plugins.js")
+        self._step6_section_label = _make_section_label("Step 5 — Translate plugins.js")
         layout.addWidget(self._step6_section_label)
 
         self._step6_hint = QLabel(
@@ -2612,7 +2383,7 @@ class WorkflowTab(QWidget):
     # ── Step 6: Export ──────────────────────────────────────────────────────
 
     def _build_step7_export(self, layout: QVBoxLayout):
-        layout.addWidget(_make_section_label("Step 7 — Export to Game"))
+        layout.addWidget(_make_section_label("Step 6 — Export to Game"))
         hint = QLabel(
             "Copy translated files back into the game's data folder to patch the game in-place."
         )
@@ -2643,7 +2414,7 @@ class WorkflowTab(QWidget):
     # ── Step 8: Playtest (TL Inspector) ─────────────────────────────────────
 
     def _build_step8_playtest(self, layout: QVBoxLayout):
-        self._step8_section_label = _make_section_label("Step 8 — Playtest Tools")
+        self._step8_section_label = _make_section_label("Step 7 — Playtest Tools")
         layout.addWidget(self._step8_section_label)
 
         self._step8_main_hint = QLabel(
@@ -3257,6 +3028,8 @@ class WorkflowTab(QWidget):
             self._detected_on_show = True  # new folder chosen — treat as already-shown
             self._ask_clear_old_files()
             self._detect_folder()
+            self._reload_quirks()
+            self._reload_game_skill()
 
     def _ask_clear_old_files(self):
         """Prompt the user to clear /files and /translated to avoid stale data conflicts."""
@@ -3310,18 +3083,18 @@ class WorkflowTab(QWidget):
             w = getattr(self, attr, None)
             if w is not None:
                 w.setVisible(not is_ace)
-        # Tab / strip label
-        step6_label = "6  Scripts" if is_ace else "6  Plugins.js"
-        self._step_tabs.setTabText(6, step6_label)
-        if hasattr(self, "_step_labels") and len(self._step_labels) > 6:
-            self._step_labels[6] = step6_label
-        if hasattr(self, "_step_buttons") and len(self._step_buttons) > 6:
-            self._step_buttons[6].setToolTip(step6_label)
-        # Step 6 section header
+        # Tab / strip label (Plugins step is index 5 after Setup merge)
+        step6_label = "5  Scripts" if is_ace else "5  Plugins.js"
+        self._step_tabs.setTabText(5, step6_label)
+        if hasattr(self, "_step_labels") and len(self._step_labels) > 5:
+            self._step_labels[5] = step6_label
+        if hasattr(self, "_step_buttons") and len(self._step_buttons) > 5:
+            self._step_buttons[5].setToolTip(step6_label)
+        # Step 5 section header
         lbl = getattr(self, "_step6_section_label", None)
         if lbl is not None:
-            lbl.setText("Step 6 — Translate Ace Scripts (.rb)" if is_ace
-                        else "Step 6 — Translate plugins.js")
+            lbl.setText("Step 5 — Translate Ace Scripts (.rb)" if is_ace
+                        else "Step 5 — Translate plugins.js")
         # Hint text
         hint = getattr(self, "_step6_hint", None)
         if hint is not None:
@@ -3352,18 +3125,18 @@ class WorkflowTab(QWidget):
                     "Copy a prompt that instructs Copilot/Cursor to translate only "
                     "visible player-facing strings in plugins.js, using vocab.txt as a glossary."
                 )
-        # Step 8 — TL Inspector (MV/MZ only; hidden for Ace)
+        # Step 7 — TL Inspector (MV/MZ only; hidden for Ace)
         show_playtest = not is_ace
-        if hasattr(self, "_step_tabs") and self._step_tabs.count() > 8:
+        if hasattr(self, "_step_tabs") and self._step_tabs.count() > 7:
             if hasattr(self._step_tabs, "setTabVisible"):
-                self._step_tabs.setTabVisible(8, show_playtest)
+                self._step_tabs.setTabVisible(7, show_playtest)
             else:
-                self._step_tabs.setTabEnabled(8, show_playtest)
-            if is_ace and self._step_tabs.currentIndex() == 8:
-                self._goto_step(7)
-        if hasattr(self, "_step_buttons") and len(self._step_buttons) > 8:
-            self._step_buttons[8].setVisible(show_playtest)
-            self._step_buttons[8].setEnabled(show_playtest)
+                self._step_tabs.setTabEnabled(7, show_playtest)
+            if is_ace and self._step_tabs.currentIndex() == 7:
+                self._goto_step(6)
+        if hasattr(self, "_step_buttons") and len(self._step_buttons) > 7:
+            self._step_buttons[7].setVisible(show_playtest)
+            self._step_buttons[7].setEnabled(show_playtest)
         self._refresh_step_strip()
         box = getattr(self, "_step8_playtest_box", None)
         install_both_btn = getattr(self, "_install_both_btn", None)
@@ -3718,24 +3491,81 @@ class WorkflowTab(QWidget):
 
     _BASE_SEPARATOR = _SHARED_BASE_SEPARATOR
 
-    def _copy_glossary_prompt(self):
-        """Copy the glossary prompt to clipboard, injecting known speakers from vocab.txt."""
-        speakers = self._read_vocab_speakers()
-        if speakers:
-            speaker_lines = "\n".join(f"  {orig} ({tl})" for orig, tl in speakers)
-            known_block = (
-                "<known_speakers>\n"
-                "These character names were extracted from the game files by the Parse Speakers tool.\n"
-                "For the '# Game Characters' section, output entries for ONLY these names.\n"
-                "Skip any unnamed NPCs, generic enemies, or narration-only entries.\n"
-                "\n"
-                + speaker_lines
-                + "\n</known_speakers>\n\n"
-            )
-            final_prompt = known_block + self._PROMPT_GLOSSARY
-        else:
-            final_prompt = self._PROMPT_GLOSSARY
-        self._copy_to_clipboard(final_prompt, "Glossary prompt copied.")
+    def _copy_project_setup_prompt(self):
+        """Copy the Project Setup skill, optionally prepending known speakers."""
+        try:
+            speakers = self._read_vocab_speakers()
+            prepend = ""
+            if speakers:
+                speaker_lines = "\n".join(f"  {orig} ({tl})" for orig, tl in speakers)
+                prepend = (
+                    "<known_speakers>\n"
+                    "These character names were extracted from the game files by the Parse Speakers tool.\n"
+                    "For the glossary block '# Game Characters', prefer entries for these names, "
+                    "then cross-check Actors.json for other major named actors.\n"
+                    "\n"
+                    + speaker_lines
+                    + "\n</known_speakers>\n"
+                )
+            prompt = load_project_setup("rpgmaker", prepend=prepend)
+            self._copy_to_clipboard(prompt, "Project Setup skill copied.")
+        except Exception as exc:
+            self._log(f"❌ Could not load Project Setup skill: {exc}")
+
+    def _game_root_or_warn(self) -> str | None:
+        root = self.folder_edit.text().strip()
+        if not root:
+            self._log("⚠  Select a game folder in Step 0 first.")
+            return None
+        return root
+
+    def _reload_quirks(self):
+        root = self.folder_edit.text().strip()
+        path = quirks_path_for_game(root)
+        if not path or not path.is_file():
+            if hasattr(self, "quirks_editor"):
+                self.quirks_editor.setPlainText("")
+            return
+        try:
+            self.quirks_editor.setPlainText(path.read_text(encoding="utf-8"))
+        except Exception as exc:
+            self._log(f"❌ Could not load skills/quirks.md: {exc}")
+
+    def _save_quirks(self):
+        root = self._game_root_or_warn()
+        if not root:
+            return
+        path = quirks_path_for_game(root)
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(self.quirks_editor.toPlainText().rstrip() + "\n", encoding="utf-8")
+            self._log(f"✅ Saved {path}")
+        except Exception as exc:
+            self._log(f"❌ Could not save skills/quirks.md: {exc}")
+
+    def _reload_game_skill(self):
+        root = self.folder_edit.text().strip()
+        path = game_skill_path_for_game(root)
+        if not path or not path.is_file():
+            if hasattr(self, "game_skill_editor"):
+                self.game_skill_editor.setPlainText("")
+            return
+        try:
+            self.game_skill_editor.setPlainText(path.read_text(encoding="utf-8"))
+        except Exception as exc:
+            self._log(f"❌ Could not load game skill: {exc}")
+
+    def _save_game_skill(self):
+        root = self._game_root_or_warn()
+        if not root:
+            return
+        path = game_skill_path_for_game(root)
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(self.game_skill_editor.toPlainText().rstrip() + "\n", encoding="utf-8")
+            self._log(f"✅ Saved {path}")
+        except Exception as exc:
+            self._log(f"❌ Could not save game skill: {exc}")
 
     def _read_vocab_speakers(self) -> list[tuple[str, str]]:
         """Parse the '# Speakers' section from vocab.txt and return (orig, tl) pairs."""
@@ -3790,8 +3620,8 @@ class WorkflowTab(QWidget):
     # ─────────────────────────────────────────────────────────────────────────
 
     def _copy_speaker_prompt(self):
-        QApplication.clipboard().setText(self._SPEAKER_PROMPT)
-        self._log("Speaker format prompt copied to clipboard.")
+        # Legacy alias — Project Setup covers speakers analysis.
+        self._copy_project_setup_prompt()
 
     def _copy_wrap_prompt(self):
         QApplication.clipboard().setText(self._WRAP_PROMPT)

@@ -1477,8 +1477,8 @@ class TranslationConfig:
         # Load prompt and vocab files if not provided
         if prompt is None:
             try:
-                from util.paths import PROMPT_PATH, VOCAB_PATH
-                self.prompt = PROMPT_PATH.read_text(encoding="utf-8")
+                from util.skills import load_system_prompt
+                self.prompt = load_system_prompt()
             except FileNotFoundError:
                 self.prompt = ""
         else:
@@ -1945,7 +1945,7 @@ def createContext(config, subbedText, formatType, history=None):
     cache invalidation caused by changing vocabulary matches.
 
     Cached in static_system:
-      - prompt.txt content
+      - data/skills/system.md content (plus optional game quirks overlay)
 
     Dynamic in vocab_text:
       - only vocab terms found in the current batch text
@@ -2061,7 +2061,7 @@ def buildClaudeRequest(system, user, history, formatType, model, numLines=None, 
 def translateText(system, user, history, penalty, formatType, model, numLines=None, vocab_text=""):
     """Send translation request to the selected API.
 
-    system:     Static system prompt (prompt.txt). Cached by Claude.
+    system:     Static system prompt (data/skills/system.md). Cached by Claude.
     vocab_text: Per-batch vocabulary (dynamic, never cached to avoid cache busting).
     """
     # Ensure system content is not empty
@@ -2830,7 +2830,7 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None, mism
 
             continue
 
-        # Create context — static_system is the stable prompt.txt content;
+        # Create context — static_system is the stable system.md content;
         # vocab_text is the per-batch matched vocabulary (dynamic).
         static_system, vocab_text, user = createContext(config, subbedT, formatType, history)
 

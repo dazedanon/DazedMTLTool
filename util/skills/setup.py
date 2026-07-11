@@ -1,0 +1,62 @@
+"""Load editable clipboard skills from data/skills/."""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+from util.paths import SKILLS_DIR
+
+_ENGINE_MARKERS = {
+    "rpgmaker": ("<!-- engine:rpgmaker -->", "<!-- /engine:rpgmaker -->"),
+    "wolf": ("<!-- engine:wolf -->", "<!-- /engine:wolf -->"),
+}
+
+
+def _read_skill_file(name: str) -> str:
+    path = SKILLS_DIR / name
+    if not path.is_file():
+        raise FileNotFoundError(f"Skill file missing: {path}")
+    return path.read_text(encoding="utf-8")
+
+
+def _extract_engine_section(text: str, engine: str) -> str:
+    """Keep shared body + the requested engine block; drop other engine blocks."""
+    start_tag, end_tag = _ENGINE_MARKERS.get(engine, (None, None))
+    if not start_tag:
+        return text
+
+    result_parts: list[str] = []
+    pos = 0
+    while pos < len(text):
+        next_starts = [
+            (text.find(marker[0], pos), eng, marker)
+            for eng, marker in _ENGINE_MARKERS.items()
+            if text.find(marker[0], pos) != -1
+        ]
+        if not next_starts:
+            result_parts.append(text[pos:])
+            break
+        next_starts.sort(key=lambda x: x[0])
+        idx, eng, (s_tag, e_tag) = next_starts[0]
+        result_parts.append(text[pos:idx])
+        end_idx = text.find(e_tag, idx)
+        if end_idx == -1:
+            raise ValueError(f"Unclosed engine block {s_tag} in skill file")
+        block_body = text[idx + len(s_tag) : end_idx]
+        if eng == engine:
+            result_parts.append(block_body.strip("\n") + "\n")
+        pos = end_idx + len(e_tag)
+    return "".join(result_parts).strip() + "\n"
+
+
+def load_project_setup(engine: str = "rpgmaker", *, prepend: str = "") -> str:
+    """Load the Project Setup clipboard skill for *engine*."""
+    raw = _read_skill_file("project_setup.md")
+    body = _extract_engine_section(raw, engine)
+    if prepend:
+        return prepend.rstrip() + "\n\n" + body
+    return body
+
+
+def skills_dir() -> Path:
+    return SKILLS_DIR

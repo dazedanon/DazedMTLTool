@@ -8,11 +8,19 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = PROJECT_ROOT / "data"
 VOCAB_PATH = DATA_DIR / "vocab.txt"
 VOCAB_BASE_PATH = DATA_DIR / "vocab_base.txt"
-PROMPT_PATH = DATA_DIR / "prompt.txt"
+SKILLS_DIR = DATA_DIR / "skills"
+# Runtime translation system skill (formerly data/prompt.txt).
+PROMPT_PATH = SKILLS_DIR / "system.md"
+LEGACY_PROMPT_PATH = DATA_DIR / "prompt.txt"
 LAST_UPDATE_SHA_PATH = DATA_DIR / "last_update_sha.txt"
 ENV_PATH = PROJECT_ROOT / ".env"
 ICON_PATH = PROJECT_ROOT / "assets" / "icon.png"
 ENGINE_ICONS_DIR = PROJECT_ROOT / "assets" / "engine_icons"
+TRANSLATION_CONTEXTS_PATH = DATA_DIR / "translation_contexts.json"
+# Per-game quirks skill (API overlay). Legacy flat file still migrated on load.
+GAME_QUIRKS_RELATIVE = Path("skills") / "quirks.md"
+LEGACY_QUIRKS_FILENAME = "translation_quirks.txt"
+GAME_SKILL_RELATIVE = Path("skills") / "translation.md"
 
 _ROOT_DATA_FILES = (
     "vocab.txt",
@@ -32,7 +40,19 @@ def migrate_root_data_files() -> None:
             src.rename(dst)
 
 
+def migrate_prompt_to_skills() -> None:
+    """Move legacy ``data/prompt.txt`` to ``data/skills/system.md`` when needed."""
+    SKILLS_DIR.mkdir(parents=True, exist_ok=True)
+    if PROMPT_PATH.is_file():
+        return
+    for legacy in (LEGACY_PROMPT_PATH, PROJECT_ROOT / "prompt.txt"):
+        if legacy.is_file():
+            legacy.rename(PROMPT_PATH)
+            return
+
+
 migrate_root_data_files()
+migrate_prompt_to_skills()
 
 
 def ensure_vocab_file() -> None:

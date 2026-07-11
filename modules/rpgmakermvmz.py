@@ -15,14 +15,15 @@ from retry import retry
 from tqdm import tqdm
 from util.translation import TranslationConfig, translateAI as sharedtranslateAI, getPricingConfig, calculateCost, getPricingConfig, calculateCost, get_var_translation, set_var_translations_batch, convert_corner_brackets
 from util.speakers import SPEAKER_BRACKET_INNER, strip_speaker_prefix
+from util.skills import ctx, load_system_prompt
+from util.paths import VOCAB_PATH
 
 # Globals
 MODEL = os.getenv("model")
 TIMEOUT = int(os.getenv("timeout"))
 LANGUAGE = os.getenv("language").capitalize()
-from util.paths import PROMPT_PATH, VOCAB_PATH
 
-PROMPT = PROMPT_PATH.read_text(encoding="utf-8")
+PROMPT = load_system_prompt()
 VOCAB = VOCAB_PATH.read_text(encoding="utf-8")
 LOCK = threading.Lock()
 THREAD_CTX = threading.local()
@@ -240,7 +241,7 @@ def _pat355655_captured_text(match):
 
 
 def handleMVMZ(filename, estimate):
-    global ESTIMATE, TOKENS, FILENAME, MISMATCH
+    global ESTIMATE, TOKENS, FILENAME, MISMATCH, PROMPT
     ESTIMATE = estimate
     FILENAME = filename
     MISMATCH = []  # Reset per-file; prevents cross-file contamination in CLI mode
@@ -249,6 +250,10 @@ def handleMVMZ(filename, estimate):
         THREAD_CTX.filename = filename
     except Exception:
         pass
+
+    # Reload base prompt + optional per-game quirks (DAZED_GAME_ROOT).
+    PROMPT = load_system_prompt()
+    TRANSLATION_CONFIG.prompt = PROMPT
 
     # Translate
     start = time.time()
@@ -979,7 +984,7 @@ def parseMap(data, filename):
     if "Map" in filename:
         response = translateAI(
             data["displayName"],
-            "Reply with only the " + LANGUAGE + " translation of the RPG location name",
+            ctx("names.location"),
             False,
         )
         totalTokens[0] += response[1][0]
@@ -1097,7 +1102,7 @@ def _normalize_sg_desc(text: str) -> str:
             # Translate
             response = translateAI(
                 modifiedJAString,
-                "Reply with only the " + LANGUAGE + " translation.",
+                ctx("database.generic"),
                 False,
             )
             translatedText = response[0]
@@ -1132,7 +1137,7 @@ def translateNoteOmitSpace(event, regex):
         # Translate
         response = translateAI(
             jaString,
-            "Reply with the " + LANGUAGE + " translation of the location name.",
+            ctx("names.location_short"),
             False,
         )
         # Defend against unexpected response shapes
@@ -1181,7 +1186,7 @@ def translateLBNames(events):
         names_to_translate = [item[1] for item in lb_events]
         response = translateAI(
             names_to_translate,
-            "Reply with only the " + LANGUAGE + " translation of the name.",
+            ctx("names.generic"),
             True,
         )
         translated_names = response[0] if isinstance(response[0], list) else [response[0]]
@@ -1670,21 +1675,21 @@ def searchNames(data, pbar, context, filename):
 
     # Set the context of what we are translating
     if "Actors" in context:
-        newContext = "Reply with only the " + LANGUAGE + " translation of the NPC name"
+        newContext = ctx("names.npc_only")
     if "Armors" in context:
-        newContext = "Reply with only the " + LANGUAGE + " translation of the RPG equipment name"
+        newContext = ctx("database.armor")
     if "Classes" in context:
-        newContext = "Reply with only the " + LANGUAGE + " translation of the RPG class name"
+        newContext = ctx("database.class")
     if "MapInfos" in context:
-        newContext = "Reply with only the " + LANGUAGE + " translation of the location name"
+        newContext = ctx("names.location")
     if "Enemies" in context:
-        newContext = "Reply with only the " + LANGUAGE + " translation of the enemy NPC name"
+        newContext = ctx("names.enemy")
     if "Weapons" in context:
-        newContext = "Reply with only the " + LANGUAGE + " translation of the RPG weapon name"
+        newContext = ctx("database.weapon")
     if "Items" in context:
-        newContext = "Reply with only the " + LANGUAGE + " translation of the RPG item name"
+        newContext = ctx("database.item")
     if "Skills" in context:
-        newContext = "Reply with only the " + LANGUAGE + " translation of the RPG skill name"
+        newContext = ctx("database.skill")
 
     # Names
     with open("log/translations.txt", "a", encoding="utf-8") as file:
@@ -1753,7 +1758,7 @@ def searchNames(data, pbar, context, filename):
     # --- Batch translate all notes ---
     translatedNotesBatch = []
     if notesBatch:
-        response = translateAI(notesBatch, f"Reply with only the {LANGUAGE} translation of the note text.")
+        response = translateAI(notesBatch, ctx("database.note"))
         translatedNotesBatch = response[0]
         totalTokens[0] += response[1][0]
         totalTokens[1] += response[1][1]
@@ -2002,7 +2007,7 @@ def searchNames(data, pbar, context, filename):
                 if descriptionList:
                     response = translateAI(
                         descriptionList,
-                        f"Reply with only the {LANGUAGE} translation of the text.",
+                        ctx("events.generic_text"),
                         True,
                     )
                     translatedDescriptionBatch = response[0]
@@ -2954,7 +2959,7 @@ def searchCodes(page, pbar, jobList, filename):
                         question = codeList[i]["parameters"][3]["messageText"]
                         response = translateAI(
                             matchList,
-                            f"Previous text for context: {question}\n",
+                            ctx("events.plugin_with_context", context=question),
                             True,
                         )
                         totalTokens[0] += response[1][0]
@@ -3716,7 +3721,7 @@ def searchCodes(page, pbar, jobList, filename):
                         # Translate
                         response = translateAI(
                             matchList[0],
-                            "Reply with the " + LANGUAGE + " translation of the NPC name.",
+                            ctx("names.npc"),
                             False,
                         )
                         translatedText = response[0]
@@ -3812,7 +3817,7 @@ def searchCodes(page, pbar, jobList, filename):
                     if len(matchList) > 0:
                         # Translate
                         text = matchList[0]
-                        response = translateAI(text, "Reply with the " + LANGUAGE + " Translation")
+                        response = translateAI(text, ctx("events.generic"))
                         translatedText = response[0]
                         totalTokens[0] += response[1][0]
                         totalTokens[1] += response[1][1]
@@ -3851,7 +3856,7 @@ def searchCodes(page, pbar, jobList, filename):
                     if len(matchList) > 0:
                         # Translate
                         text = matchList[0]
-                        response = translateAI(text, "Reply with the " + LANGUAGE + " Translation")
+                        response = translateAI(text, ctx("events.generic"))
                         translatedText = response[0]
                         totalTokens[0] += response[1][0]
                         totalTokens[1] += response[1][1]
@@ -3894,7 +3899,7 @@ def searchCodes(page, pbar, jobList, filename):
                         question = translatedText
                         response = translateAI(
                             choiceList,
-                            f"Previous text for context: {question}\n",
+                            ctx("events.plugin_with_context", context=question),
                             True,
                         )
                         totalTokens[0] += response[1][0]
@@ -3949,11 +3954,11 @@ def searchCodes(page, pbar, jobList, filename):
                     if len(textHistory) > 0:
                         response = translateAI(
                             choiceList,
-                            f"Reply with the English translation of the dialogue choice.\n\nPrevious text for context: {str(textHistory)}\n",
+                            ctx("events.choice_with_context", context=str(textHistory)),
                             True,
                         )
                     else:
-                        response = translateAI(choiceList, "Reply with the English translation of the dialogue choice.")
+                        response = translateAI(choiceList, ctx("events.choice"))
                     
                     translatedTextList = response[0]
                     totalTokens[0] += response[1][0]
@@ -4143,7 +4148,7 @@ def searchCodes(page, pbar, jobList, filename):
 
         # 122
         if len(list122) > 0:
-            response = translateAI(list122, "Keep your translation as brief as possible")
+            response = translateAI(list122, ctx("events.code122_brief"))
             list122TL = response[0]
             totalTokens[0] += response[1][0]
             totalTokens[1] += response[1][1]
@@ -4168,7 +4173,7 @@ def searchCodes(page, pbar, jobList, filename):
 
         # 108
         if len(list108) > 0:
-            response = translateAI(list108, "This text is a label. Use title capitalization and keep it brief.")
+            response = translateAI(list108, ctx("events.label_108"))
             list108TL = response[0]
             totalTokens[0] += response[1][0]
             totalTokens[1] += response[1][1]
@@ -4224,7 +4229,7 @@ def searchCodes(page, pbar, jobList, filename):
         # 324
         if len(list324) > 0:
             # Generic short-text translation for parameter index 1
-            response = translateAI(list324, "Reply with only the " + LANGUAGE + " translation of the text.")
+            response = translateAI(list324, ctx("events.generic_text"))
             list324TL = response[0]
             totalTokens[0] += response[1][0]
             totalTokens[1] += response[1][1]
@@ -4236,7 +4241,7 @@ def searchCodes(page, pbar, jobList, filename):
         # 325
         if len(list325) > 0:
             # Use same short-text speaker-style translation as other name fields
-            response = translateAI(list325, "Reply with the " + LANGUAGE + " translation of the NPC name.")
+            response = translateAI(list325, ctx("names.npc"))
             list325TL = response[0]
             totalTokens[0] += response[1][0]
             totalTokens[1] += response[1][1]
@@ -4388,7 +4393,7 @@ def searchSS(state, pbar):
     # --- Batch translate all notes ---
     translatedNotesBatch = []
     if notesBatch:
-        response = translateAI(notesBatch, f"Reply with only the {LANGUAGE} translation of the note text.")
+        response = translateAI(notesBatch, ctx("database.note"))
         translatedNotesBatch = response[0]
         totalTokens[0] += response[1][0]
         totalTokens[1] += response[1][1]
@@ -4444,7 +4449,7 @@ def searchSS(state, pbar):
 
 def searchSystem(data, pbar):
     totalTokens = [0, 0]
-    context = "Reply with only the " + LANGUAGE + ' translation of the UI textbox."'
+    context = ctx("database.ui_term")
 
     # Title - batch as a single-item list
     title_src = _system_scalar_source(data, "gameTitle")
@@ -4452,7 +4457,7 @@ def searchSystem(data, pbar):
     if not (IGNORETLTEXT and not re.search(LANGREGEX, title_src)):
         response = translateAI(
             [title_src],
-            " Reply with the " + LANGUAGE + " translation of the game title name",
+            ctx("database.game_title"),
             False,
         )
         totalTokens[0] += response[1][0]
@@ -4507,7 +4512,7 @@ def searchSystem(data, pbar):
     if armor_values:
         response = translateAI(
             armor_values,
-            "Reply with only the " + LANGUAGE + " translation of the armor type",
+            ctx("database.type_armor"),
             False,
         )
         totalTokens[0] += response[1][0]
@@ -4534,7 +4539,7 @@ def searchSystem(data, pbar):
     if skill_values:
         response = translateAI(
             skill_values,
-            "Reply with only the " + LANGUAGE + " translation",
+            ctx("database.generic"),
             False,
         )
         totalTokens[0] += response[1][0]
@@ -4561,7 +4566,7 @@ def searchSystem(data, pbar):
     if equip_values:
         response = translateAI(
             equip_values,
-            "Reply with only the " + LANGUAGE + " translation of the equipment type. No disclaimers.",
+            ctx("database.type_equipment"),
             False,
         )
         totalTokens[0] += response[1][0]
@@ -4591,7 +4596,7 @@ def searchSystem(data, pbar):
     if element_values:
         response = translateAI(
             element_values,
-            "Reply with only the " + LANGUAGE + " translation of the element type",
+            ctx("database.element"),
             False,
         )
         totalTokens[0] += response[1][0]
@@ -4621,7 +4626,7 @@ def searchSystem(data, pbar):
     if weapon_values:
         response = translateAI(
             weapon_values,
-            "Reply with only the " + LANGUAGE + " translation of the weapon type",
+            ctx("database.type_weapon"),
             False,
         )
         totalTokens[0] += response[1][0]
@@ -4650,7 +4655,7 @@ def searchSystem(data, pbar):
         if var_values:
             response = translateAI(
                 var_values,
-                'Reply with only the ' + LANGUAGE + ' translation of the title',
+                ctx("database.actor_title"),
                 True,
             )
             totalTokens[0] += response[1][0]
@@ -4680,7 +4685,7 @@ def searchSystem(data, pbar):
         if switch_values:
             response = translateAI(
                 switch_values,
-                'Reply with only the ' + LANGUAGE + ' translation of the switch name',
+                ctx("database.switch"),
                 True,
             )
             totalTokens[0] += response[1][0]
@@ -4712,9 +4717,7 @@ def searchSystem(data, pbar):
         if msg_values:
             response = translateAI(
                 msg_values,
-                "Reply with only the "
-                + LANGUAGE
-                + ' translation of the battle text.\nTranslate "常時ダッシュ" as "Always Dash"\nTranslate "次の%1まで" as Next %1.',
+                ctx("database.battle_messages"),
                 False,
             )
             totalTokens[0] += response[1][0]
@@ -4805,7 +4808,7 @@ def getSpeaker(speaker: str):
         pass
     response = translateAI(
         speaker,
-        "Reply with the " + LANGUAGE + " translation of the NPC name.",
+        ctx("names.npc"),
         False,
     )
     try:
@@ -4822,7 +4825,7 @@ def getSpeaker(speaker: str):
             pass
         response = translateAI(
             speaker,
-            "Reply with the " + LANGUAGE + " translation of the NPC name.",
+            ctx("names.npc"),
             False,
         )
         try:
@@ -5033,7 +5036,7 @@ def finalizeSpeakerParse():
                 pass
             resp = translateAI(
                 to_translate,
-                "Reply with the " + LANGUAGE + " translation of the NPC name.",
+                ctx("names.npc"),
                 True,
             )
             try:

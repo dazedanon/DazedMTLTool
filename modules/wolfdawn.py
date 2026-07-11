@@ -58,7 +58,8 @@ import traceback
 
 from colorama import Fore
 from tqdm import tqdm
-from util.paths import PROMPT_PATH, VOCAB_PATH
+from util.paths import VOCAB_PATH
+from util.skills import ctx, load_system_prompt
 from util.translation import (
     TranslationConfig,
     translateAI as sharedtranslateAI,
@@ -78,7 +79,7 @@ MODEL = os.getenv("model")
 TIMEOUT = int(os.getenv("timeout"))
 LANGUAGE = os.getenv("language").capitalize()
 
-PROMPT = PROMPT_PATH.read_text(encoding="utf-8")
+PROMPT = load_system_prompt()
 VOCAB = VOCAB_PATH.read_text(encoding="utf-8")
 LOCK = threading.Lock()
 MAXHISTORY = 10
@@ -143,7 +144,7 @@ def _batch_phase() -> str:
 
 def handleWolfDawn(filename, estimate):
     """Entry point used by the CLI/GUI dispatchers. Returns a summary string or 'Fail'."""
-    global ESTIMATE, TOKENS, FILENAME, SPEAKER_CONFIG, VOCAB
+    global ESTIMATE, TOKENS, FILENAME, SPEAKER_CONFIG, VOCAB, PROMPT
     ESTIMATE = estimate
     FILENAME = filename
     # Re-read workflow-configured settings so edits made this session take effect
@@ -153,6 +154,9 @@ def handleWolfDawn(filename, estimate):
     # that an earlier Phase 0 (names) harvested into vocab.txt.
     VOCAB = VOCAB_PATH.read_text(encoding="utf-8")
     TRANSLATION_CONFIG.vocab = VOCAB
+    # Reload base prompt + optional per-game quirks (DAZED_GAME_ROOT).
+    PROMPT = load_system_prompt()
+    TRANSLATION_CONFIG.prompt = PROMPT
 
     start = time.time()
     translatedData = openFiles(filename)
@@ -361,7 +365,7 @@ def getSpeaker(speaker: str):
 
     response = translateAI(
         speaker,
-        "Reply with the " + LANGUAGE + " translation of the NPC name.",
+        ctx("names.npc"),
     )
     translated = _normalize_speaker_name(
         response[0] if isinstance(response[0], str) else str(response[0])
@@ -371,7 +375,7 @@ def getSpeaker(speaker: str):
     if re.search(r"([a-zA-Z？?])", translated) is None:
         response = translateAI(
             speaker,
-            "Reply with the " + LANGUAGE + " translation of the NPC name.",
+            ctx("names.npc"),
         )
         translated = _normalize_speaker_name(
             response[0] if isinstance(response[0], str) else str(response[0])

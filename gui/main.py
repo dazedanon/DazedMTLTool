@@ -595,6 +595,7 @@ from gui.config_tab import ConfigTab
 from gui.translation_tab import TranslationTab
 from gui.workflow_tab import WorkflowTab
 from gui.wolf_workflow_tab import WolfWorkflowTab
+from gui.skills_tab import SkillsTab
 from gui.batch_tab import BatchTab
 
 class DazedMTLGUI(QMainWindow):
@@ -838,9 +839,16 @@ class DazedMTLGUI(QMainWindow):
         sidebar_layout.addWidget(btn_batches)
         self.nav_buttons.append(btn_batches)
 
-        # Configuration button (fourth)
+        # Skills button (fourth)
+        btn_skills = self.create_nav_button("📚", "Skills")
+        btn_skills.setToolTip("Skills — edit system prompt, Project Setup, and translation contexts")
+        btn_skills.clicked.connect(lambda: self.switch_page(3))
+        sidebar_layout.addWidget(btn_skills)
+        self.nav_buttons.append(btn_skills)
+
+        # Configuration button (fifth)
         btn_config = self.create_nav_button("⚙️", "Configuration")
-        btn_config.clicked.connect(lambda: self.switch_page(3))
+        btn_config.clicked.connect(lambda: self.switch_page(4))
         sidebar_layout.addWidget(btn_config)
         self.nav_buttons.append(btn_config)
         
@@ -906,7 +914,11 @@ class DazedMTLGUI(QMainWindow):
         self.batch_tab = BatchTab(self)
         self.content_stack.addWidget(self.batch_tab)
 
-        # Configuration Tab (index 3)
+        # Skills Tab (index 3)
+        self.skills_tab = SkillsTab(self)
+        self.content_stack.addWidget(self.skills_tab)
+
+        # Configuration Tab (index 4)
         self.config_tab = ConfigTab()
         self.config_tab.config_changed.connect(self.on_config_changed)
         self.content_stack.addWidget(self.config_tab)

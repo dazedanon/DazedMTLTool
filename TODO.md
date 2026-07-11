@@ -2,7 +2,7 @@
 
 ## Custom game prompt
 
-- Keep the default prompt (`prompt.txt`) as the base for every game.
+- Keep the default prompt (`data/skills/system.md`) as the base for every game.
 - Add an optional **per-game custom prompt** in the UI that merges with the default (custom rules layered on top of shared instructions, not a full replacement unless explicitly chosen).
 - Surface this in settings / project setup so each game folder can carry its own tone, terminology notes, or content warnings without forking the global prompt.
 

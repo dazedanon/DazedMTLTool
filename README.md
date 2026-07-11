@@ -176,8 +176,8 @@ Format: Japanese name, English name in parentheses, then gender.
 
 > **Note:** A very large vocab file can increase API costs and potentially reduce quality. Focus on the most important characters and terms.
 
-### data/prompt.txt
-This is the system prompt sent to the AI. A default `data/prompt.txt` is included and works well for most games. You generally don't need to edit it unless you want to customize the translation style.
+### data/skills/system.md
+This is the system prompt skill sent to the AI on every translation call. A default `data/skills/system.md` is included and works well for most games. You generally don't need to edit it unless you want to customize the translation style. Per-game voice rules go in `<game>/skills/quirks.md` instead.
 
 ---
 
@@ -230,7 +230,7 @@ How it works (all engine modules are supported automatically):
 
 1. **Pass 1 (collect)** — files are processed normally, but instead of calling the API each
    request is queued to `log/batch_requests.json`. Requests are byte-identical to live ones:
-   the static `prompt.txt` block is cached with a 1h TTL, matched vocab and translation
+   the static `data/skills/system.md` block is cached with a 1h TTL, matched vocab and translation
    history ride along per request, and structured output enforces the exact line count.
    Speaker/variable names still translate live during this pass (they get embedded into the
    dialogue payloads, so both passes must resolve them identically) — they're a tiny share
