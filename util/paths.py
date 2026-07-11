@@ -21,6 +21,8 @@ TRANSLATION_CONTEXTS_PATH = DATA_DIR / "translation_contexts.json"
 GAME_QUIRKS_RELATIVE = Path("skills") / "quirks.md"
 LEGACY_QUIRKS_FILENAME = "translation_quirks.txt"
 GAME_SKILL_RELATIVE = Path("skills") / "translation.md"
+# Built-in skill filenames under <game>/skills/ (not user-custom overlays).
+GAME_SKILL_RESERVED_NAMES = frozenset({"quirks.md", "translation.md"})
 
 _ROOT_DATA_FILES = (
     "vocab.txt",

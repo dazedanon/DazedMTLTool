@@ -18,7 +18,7 @@ __pycache__
 
 !assets/*.png
 !.pre-commit-config.yaml
-!data/prompt.txt
+!data/skills/**
 !data/vocab_base.txt
 !requirements.txt
 !util/tl_inspector/TLInspector.js

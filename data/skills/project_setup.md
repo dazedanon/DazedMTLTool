@@ -28,7 +28,7 @@ Hard rules:
 1. Per-character voice → `glossary` only.
 2. Category-wide / cross-cutting voice → `translation_quirks` only.
 3. Default honorifics policy is owned by the tool base prompt - only note **unusual** honorific habits in quirks.
-4. `game_skill` **references** `skills/quirks.md`; do not reprint those rules.
+4. `game_skill` **references** `skills/quirks.md` only; do not reprint those rules or cite legacy names like `translation_quirks.txt`.
 5. `speakers` is config, not lore.
 
 ---
@@ -101,9 +101,14 @@ Output as short imperative bullets suitable to paste into `skills/quirks.md`.
 Produce a durable IDE skill for this title saved at `skills/translation.md`:
 - Short game identity (tone/genre/content notes)
 - Which files matter for dialogue/DB in this repo
-- Explicit pointer: follow `skills/quirks.md` for voice rules (authoritative)
+- A **Voice rules** section that points only at ``skills/quirks.md`` (authoritative)
 - What not to change (codes, formatting - tool-owned via base prompt)
 - Do **not** reprint quirks or the glossary
+
+**Path names (required):**
+- Voice quirks file: ``skills/quirks.md`` (never ``translation_quirks.txt`` or any other legacy name)
+- This IDE skill file: ``skills/translation.md``
+- Optional user overlays (if mentioned): other ``skills/*.md`` files except ``quirks.md`` / ``translation.md``
 
 <!-- /engine:rpgmaker -->
 
@@ -160,6 +165,28 @@ Label the fence language as `translation_quirks`. Inside: imperative bullet list
 
 ### Block `game_skill`
 
-Label the fence language as `game_skill`. Inside: full markdown for `skills/translation.md` (identity, file map, quirks pointer, tool boundaries).
+Label the fence language as `game_skill`. Inside: full markdown for `skills/translation.md`.
+
+Required skeleton (fill in the blanks; keep the Voice rules path exactly):
+
+```markdown
+# <Game title> - Translation skill
+
+## Identity
+<1-3 sentences: tone, genre, content notes>
+
+## Files that matter
+- <dialogue / events paths for this repo>
+- <database paths>
+
+## Voice rules
+Follow `skills/quirks.md` as the authoritative cross-cutting voice guide for this title.
+Do not invent alternate quirk filenames.
+
+## Tool boundaries
+- DazedMTLTool owns formatting codes, wrap, line counts, and honorifics defaults via its base system skill.
+- Per-character register lives in the glossary (`vocab.txt`), not here.
+- Do not reprint quirks or glossary entries in this file.
+```
 
 If known speakers were prepended in a `<known_speakers>` block above this skill, prefer those names in the glossary, then cross-check Actors.json for other major named actors.

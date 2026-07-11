@@ -41,7 +41,7 @@ You will be translating erotic and sexual content. You will receive lines of dia
 
 - **Always preserve and enforce Japanese honorifics** in the English translation: -san, -kun, -chan, -senpai, -sensei, -sama, -dono, etc.
 - Do **not** drop honorifics to make the English sound more "natural" unless the source Japanese also lacks them.
-- If `# Game Characters` (or game quirks) specifies how a character addresses someone, follow that address pattern.
+- If `# Game Characters` (or `<game>/skills/quirks.md`) specifies how a character addresses someone, follow that address pattern.
 - The `=` or `＝` character in a Japanese name marks a foreign or nickname component. Wrap that part in parentheses.
   - Example: `バンカー＝ベット` → `Bunker (Bet)`
 - Always translate speaker tags to English: `[クロネ]:` → `[Kurone]:`
