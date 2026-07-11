@@ -1467,7 +1467,8 @@ class TranslationConfig:
                  maxHistory=10,
                  estimateMode=False,
                  logFilePath="log/translationHistory.txt",
-                 mismatchLogPath="log/mismatchHistory.txt"):
+                 mismatchLogPath="log/mismatchHistory.txt",
+                 convertQuotes=None):
         
         # Load from environment if not provided
         self.model = model or os.getenv("model")
@@ -1504,6 +1505,24 @@ class TranslationConfig:
         self.estimateMode = estimateMode
         self.logFilePath = logFilePath
         self.mismatchLogPath = mismatchLogPath
+        if convertQuotes is None:
+            self.convertQuotes = os.getenv("convertQuotes", "true").strip().lower() in (
+                "true", "1", "yes",
+            )
+        else:
+            self.convertQuotes = bool(convertQuotes)
+
+
+def convert_corner_brackets(text, enabled=True):
+    """Replace Japanese corner brackets 「」『』 with ASCII double quotes when enabled."""
+    if not enabled or not isinstance(text, str):
+        return text
+    return (
+        text.replace("「", '"')
+        .replace("」", '"')
+        .replace("『", '"')
+        .replace("』", '"')
+    )
 
 
 _LITELLM_PRICING_URL = (
@@ -2295,7 +2314,7 @@ def cleanTranslatedText(translatedText, language):
         "。": ".",
         # Note: 「 and 」 are NOT replaced here — replacing them with ASCII " would
         # corrupt raw JSON strings before extraction.  They are handled per-line
-        # in _clean_extracted_line() after JSON parsing.
+        # in _clean_extracted_line() after JSON parsing (when convertQuotes is on).
         "—": "―",
         "】": "]",
         "【": "[",
@@ -2640,7 +2659,7 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None, mism
             return bool(inner) and all(c in '\u2026\u30FC' for c in inner)
 
         def _convert_ellipsis(s):
-            return str(s).replace('「', '"').replace('」', '"').replace('『', '"').replace('』', '"')
+            return convert_corner_brackets(str(s), config.convertQuotes)
 
         if isinstance(tItem, list):
             if all(_is_ellipsis_only(s) for s in tItem):
@@ -2700,7 +2719,7 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None, mism
                 item_str = str(tItem[j]).strip() if tItem[j] else ""
                 if item_str and item_str != "Placeholder Text" and not re.search(config.langRegex, item_str):
                     cleaned = cleanTranslatedText(tItem[j], config.language)
-                    cleaned = cleaned.replace("「", '"').replace("」", '"').strip()
+                    cleaned = convert_corner_brackets(cleaned, config.convertQuotes).strip()
                     no_japanese_map[j] = cleaned
 
         # Combine skip sets and rebuild protected_items / all_replacements
@@ -3047,9 +3066,7 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None, mism
                                     if not isinstance(line, str):
                                         return line
                                     line = line.replace("Placeholder Text", "").strip()
-                                    line = line.replace("「", '"').replace("」", '"')
-                                    line = line.replace("『", '"').replace("』", '"')
-                                    return line
+                                    return convert_corner_brackets(line, config.convertQuotes)
                                 final_translations = [_clean_extracted_line(line) for line in extracted]
                 else:
                     # Single string: extract from JSON schema response
@@ -3084,6 +3101,9 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None, mism
                                         pbar.write(f"  - {reason}")
                             else:
                                 # Accept output - all validations passed
+                                final_cleaned = convert_corner_brackets(
+                                    final_cleaned, config.convertQuotes
+                                )
                                 final_translations = final_cleaned
             else:
                 is_valid = False

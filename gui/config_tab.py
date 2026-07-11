@@ -511,6 +511,20 @@ class ConfigTab(QWidget):
         self.note_width_spin.setSuffix(" chars")
         self.note_width_spin.setFixedWidth(120)  # Small
         format_form.addRow(note_label, self.note_width_spin)
+
+        quotes_label = QLabel("Convert Quotes:")
+        quotes_label.setFixedWidth(150)
+        quotes_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        self.convert_quotes_cb = QCheckBox('Convert 「」 / 『』 to ""')
+        self.convert_quotes_cb.setChecked(True)
+        self.convert_quotes_cb.setToolTip(
+            "When enabled, Japanese corner brackets 「」 and 『』 are replaced "
+            'with ASCII double quotes "" in translated output (and on RPG Maker '
+            "source text before translation).\n\n"
+            "Leaving this on is recommended - the AI often fails to keep 「」 "
+            "consistent across lines."
+        )
+        format_form.addRow(quotes_label, self.convert_quotes_cb)
         
         right_column.addLayout(format_form)
         right_column.addWidget(create_horizontal_line())
@@ -774,6 +788,9 @@ class ConfigTab(QWidget):
         self.width_spin.setValue(int(_get("width", "60")))
         self.list_width_spin.setValue(int(_get("listWidth", "100")))
         self.note_width_spin.setValue(int(_get("noteWidth", "75")))
+        self.convert_quotes_cb.setChecked(
+            _get("convertQuotes", "true").strip().lower() in ("true", "1", "yes")
+        )
 
         # Custom API pricing
         self.input_cost_spin.setValue(float(_get("input_cost", "2.0")))
@@ -835,6 +852,7 @@ class ConfigTab(QWidget):
         self.width_spin.editingFinished.connect(self.auto_save)
         self.list_width_spin.editingFinished.connect(self.auto_save)
         self.note_width_spin.editingFinished.connect(self.auto_save)
+        self.convert_quotes_cb.stateChanged.connect(self._on_convert_quotes_changed)
         self.input_cost_spin.editingFinished.connect(self.auto_save)
         self.output_cost_spin.editingFinished.connect(self.auto_save)
         self.font_scale_spin.editingFinished.connect(self.auto_save)
@@ -859,6 +877,7 @@ class ConfigTab(QWidget):
             self.width_spin.editingFinished.disconnect(self.auto_save)
             self.list_width_spin.editingFinished.disconnect(self.auto_save)
             self.note_width_spin.editingFinished.disconnect(self.auto_save)
+            self.convert_quotes_cb.stateChanged.disconnect(self._on_convert_quotes_changed)
             self.input_cost_spin.editingFinished.disconnect(self.auto_save)
             self.output_cost_spin.editingFinished.disconnect(self.auto_save)
             self.font_scale_spin.editingFinished.disconnect(self.auto_save)
@@ -869,6 +888,19 @@ class ConfigTab(QWidget):
         except (TypeError, RuntimeError):
             pass
     
+    def _on_convert_quotes_changed(self, state):
+        """Warn when quote conversion is disabled, then auto-save."""
+        if state == Qt.Unchecked:
+            QMessageBox.warning(
+                self,
+                "Convert Quotes Disabled",
+                "The AI often struggles to keep 「」 and 『』 consistent "
+                "across translated lines.\n\n"
+                "Leaving conversion enabled is recommended unless you "
+                "specifically need the Japanese brackets in the output.",
+            )
+        self.auto_save()
+
     def auto_save(self):
         """Auto-save configuration without showing message."""
         self.save_to_env(show_message=False)
@@ -901,6 +933,7 @@ class ConfigTab(QWidget):
                 "width": str(self.width_spin.value()),
                 "listWidth": str(self.list_width_spin.value()),
                 "noteWidth": str(self.note_width_spin.value()),
+                "convertQuotes": "true" if self.convert_quotes_cb.isChecked() else "false",
                 "input_cost": str(self.input_cost_spin.value()),
                 "output_cost": str(self.output_cost_spin.value()),
                 "font_scale": str(self.font_scale_spin.value()),
@@ -964,6 +997,7 @@ class ConfigTab(QWidget):
         self.width_spin.setValue(60)
         self.list_width_spin.setValue(100)
         self.note_width_spin.setValue(75)
+        self.convert_quotes_cb.setChecked(True)
 
         # UI settings
         self.font_scale_spin.setValue(1.0)
@@ -1008,6 +1042,7 @@ class ConfigTab(QWidget):
             "width": self.width_spin.value(),
             "listWidth": self.list_width_spin.value(),
             "noteWidth": self.note_width_spin.value(),
+            "convertQuotes": self.convert_quotes_cb.isChecked(),
             "input_cost": self.input_cost_spin.value(),
             "output_cost": self.output_cost_spin.value(),
             "font_scale": self.font_scale_spin.value(),

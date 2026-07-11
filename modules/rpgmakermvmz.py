@@ -13,7 +13,7 @@ from colorama import Fore
 from dotenv import load_dotenv
 from retry import retry
 from tqdm import tqdm
-from util.translation import TranslationConfig, translateAI as sharedtranslateAI, getPricingConfig, calculateCost, getPricingConfig, calculateCost, get_var_translation, set_var_translations_batch
+from util.translation import TranslationConfig, translateAI as sharedtranslateAI, getPricingConfig, calculateCost, getPricingConfig, calculateCost, get_var_translation, set_var_translations_batch, convert_corner_brackets
 from util.speakers import SPEAKER_BRACKET_INNER, strip_speaker_prefix
 
 # Globals
@@ -2470,8 +2470,9 @@ def searchCodes(page, pbar, jobList, filename):
                     # Remove Extra Stuff bad for translation.
                     finalJAString = finalJAString.replace("ﾞ", "")
                     finalJAString = finalJAString.replace("　", "")
-                    finalJAString = finalJAString.replace("「", '"')
-                    finalJAString = finalJAString.replace("」", '"')
+                    finalJAString = convert_corner_brackets(
+                        finalJAString, TRANSLATION_CONFIG.convertQuotes
+                    )
                     finalJAString = finalJAString.replace("\\,", ',')
 
                     ### Remove format codes
