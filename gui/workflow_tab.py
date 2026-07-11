@@ -8,9 +8,8 @@ Provides a guided, step-by-step interface:
   Step 2  – Setup: speaker flags, Project Setup skill, vocab / quirks / game skill
   Step 3  – Translation: Phase 0 (DB), Phase 1 (dialogue), Phase 1b (111 cache)
   Step 4  – Translation Phase 2 (risky codes)
-  Step 5  – Translate visible strings in js/plugins.js (or Ace scripts)
-  Step 6  – Export translated/ back to the game folder
-  Step 7  – Install TL Inspector and/or Forge playtest plugins
+  Step 5  – Plugins/scripts prompt helpers + export translated/ to the game
+  Step 6  – Install TL Inspector and/or Forge playtest plugins
 """
 
 from __future__ import annotations
@@ -389,6 +388,114 @@ def _make_section_label(text: str) -> QLabel:
     return lbl
 
 
+def _make_help_button() -> QToolButton:
+    """Small circular ? control for step help dialogs."""
+    btn = QToolButton()
+    btn.setText("?")
+    btn.setFixedSize(24, 24)
+    btn.setCursor(Qt.PointingHandCursor)
+    btn.setToolTip("How to use this step")
+    btn.setStyleSheet(
+        "QToolButton{"
+        "background-color:#2d2d30;color:#9d9d9d;border:1px solid #555;"
+        "border-radius:12px;font-size:12px;font-weight:bold;padding:0;}"
+        "QToolButton:hover{background-color:#3a3a3a;color:#ffffff;border-color:#007acc;}"
+        "QToolButton:pressed{background-color:#1e1e1e;}"
+    )
+    return btn
+
+
+# Per-step help copy shown by the header ? button (keeps step UIs compact).
+_STEP_HELP: dict[int, str] = {
+    0: (
+        "<b>Step 0 - Project</b><br><br>"
+        "Select the game root folder (the folder that contains the game's data files).<br><br>"
+        "The tool detects MV/MZ/Ace layout, lists JSON files, and lets you import them into "
+        "<code>files/</code> for translation.<br><br>"
+        "Tip: when switching games, clear <code>files/</code> and <code>translated/</code> "
+        "so old project data does not mix in."
+    ),
+    1: (
+        "<b>Step 1 - Pre-process (optional)</b><br><br>"
+        "Optional prep against the game folder before importing:<br>"
+        "• Format data JSON (<code>dazedformat</code>)<br>"
+        "• Format <code>plugins.js</code> (MV/MZ) for easier editing<br>"
+        "• Copy a <code>gameupdate/</code> folder into the project<br><br>"
+        "Paths auto-fill when a project folder is detected. "
+        "Skip this step if you do not need those tasks."
+    ),
+    2: (
+        "<b>Step 2 - Setup (Speakers + Glossary)</b><br><br>"
+        "<b>1. Speaker flags</b> - enable the formats this game uses "
+        "(INLINE401 / FIRSTLINE / FACENAME). Tooltips explain each flag. "
+        "Project Setup's speakers block can recommend ENABLE/SKIP.<br><br>"
+        "<b>2. Parse Speakers</b> - collect speaker names from event files into "
+        "<code>vocab.txt</code> (# Speakers). Does not translate dialogue.<br><br>"
+        "<b>3. Copy Project Setup</b> - paste into Cursor/Copilot with the game repo open. "
+        "The AI returns labeled code blocks:<br>"
+        "• <code>glossary</code> → Vocab tab<br>"
+        "• <code>speakers</code> → apply flags above<br>"
+        "• <code>translation_quirks</code> → Quirks tab "
+        "(<code>skills/quirks.md</code>)<br>"
+        "• <code>game_skill</code> → Game skill tab "
+        "(<code>skills/translation.md</code>)<br><br>"
+        "Use one game folder per translation run so quirks stay in the prompt cache."
+    ),
+    3: (
+        "<b>Step 3 - TL Phase 1</b><br><br>"
+        "Safe dialogue / database translation.<br><br>"
+        "• Set text-wrap widths if needed (or copy the wrap analysis prompt)<br>"
+        "• Phase 0 - database names/descriptions<br>"
+        "• Phase 1 - dialogue / choices<br>"
+        "• Phase 1b - build the code 111 variable-translation cache<br><br>"
+        "Choose Normal or Batch mode at the top. Run each phase from the Translation tab "
+        "after the workflow applies the phase profile."
+    ),
+    4: (
+        "<b>Step 4 - TL Phase 2</b><br><br>"
+        "Risky / plugin-related codes (variables, plugin commands, etc.).<br><br>"
+        "Copy the Plugin Prompt and audit the game first, then enable only codes that "
+        "contain player-visible text. Set code 122 variable ID ranges carefully - "
+        "translating IDs used as logic keys will break the game."
+    ),
+    5: (
+        "<b>Step 5 - Plugins & Export</b><br><br>"
+        "<b>Plugins / scripts</b> (optional but recommended before shipping):<br>"
+        "<b>MV/MZ:</b> copy <code>vocab.txt</code> into the game folder, then copy the "
+        "plugins.js prompt and run it in your IDE with <code>plugins.js</code> attached. "
+        "Only translate player-visible UI strings - never plugin parameter keys or "
+        "internal identifiers.<br>"
+        "<b>Ace:</b> same idea for <code>ace_json/scripts/*.rb</code>.<br><br>"
+        "<b>Export</b> - copy finished translations from <code>translated/</code> back "
+        "into the game's data folder:<br>"
+        "• <b>Export Active Files</b> - only names currently in <code>files/</code><br>"
+        "• <b>Export ALL</b> - everything under <code>translated/</code>"
+    ),
+    6: (
+        "<b>Step 6 - Playtest</b><br><br>"
+        "Install playtest plugins into the MV/MZ game:<br>"
+        "• <b>TL Inspector</b> - inspect translated text in-game<br>"
+        "• <b>Forge</b> - additional playtest helpers<br><br>"
+        "Configure hotkeys/UI scale, then Install / Uninstall as needed. "
+        "Not available for Ace projects."
+    ),
+}
+
+
+def _show_step_help(parent: QWidget | None, title: str, html: str) -> None:
+    box = QMessageBox(parent)
+    box.setWindowTitle(title)
+    box.setIcon(QMessageBox.Information)
+    box.setTextFormat(Qt.RichText)
+    box.setText(html)
+    box.setStandardButtons(QMessageBox.Ok)
+    box.setStyleSheet(
+        "QMessageBox{background-color:#252526;}"
+        "QLabel{color:#d4d4d4;font-size:13px;min-width:420px;}"
+    )
+    box.exec_()
+
+
 def _make_hr() -> QFrame:
     hr = QFrame()
     hr.setFrameShape(QFrame.HLine)
@@ -626,9 +733,8 @@ class WorkflowTab(QWidget):
             ("2  Setup",        self._build_step2_setup),
             ("3  TL Phase 1",   self._build_step4_translation),
             ("4  TL Phase 2",   self._build_step5_tl_phase2),
-            ("5  Plugins.js",   self._build_step6_plugins_js),
-            ("6  Export",       self._build_step7_export),
-            ("7  Playtest",     self._build_step8_playtest),
+            ("5  Export",       self._build_step5_finish),
+            ("6  Playtest",     self._build_step8_playtest),
         ]
         self._step_labels = [label for label, _ in _tab_defs]
 
@@ -799,19 +905,10 @@ class WorkflowTab(QWidget):
             "Setup",
             "Phase1",
             "Phase2",
-            "Plugins",
             "Export",
             "Playtest",
         )
-        # Step 5 label swaps for Ace scripts.
-        if idx == 5 and len(self._step_labels) > 5:
-            raw = self._step_labels[5]
-            if "Script" in raw:
-                name = "Scripts"
-            else:
-                name = short_names[5]
-        else:
-            name = short_names[idx] if 0 <= idx < len(short_names) else str(idx)
+        name = short_names[idx] if 0 <= idx < len(short_names) else str(idx)
         mark = "✓" if done else ""
         return f"{mark}{idx}\n{name}"
 
@@ -872,7 +969,7 @@ class WorkflowTab(QWidget):
 
         if index == 4:
             self._populate_p2_checkboxes()
-        if index == 7:
+        if index == 6:
             self._refresh_playtest_status()
             self._load_playtest_settings()
 
@@ -950,8 +1047,35 @@ class WorkflowTab(QWidget):
 
     # ── Step 0: Project Folder ──────────────────────────────────────────────
 
+    def _add_step_header(
+        self,
+        layout: QVBoxLayout,
+        title: str,
+        step_idx: int,
+        *,
+        extra_widgets: list | None = None,
+    ) -> QLabel:
+        """Title row with optional trailing widgets and a ? help button on the right."""
+        row = QHBoxLayout()
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(8)
+        lbl = _make_section_label(title)
+        row.addWidget(lbl, 1)
+        for w in extra_widgets or []:
+            row.addWidget(w)
+        help_btn = _make_help_button()
+        help_html = _STEP_HELP.get(step_idx, "No help is available for this step.")
+        help_btn.clicked.connect(
+            lambda _=False, label=lbl, h=help_html: _show_step_help(
+                self, label.text(), h
+            )
+        )
+        row.addWidget(help_btn, 0, Qt.AlignTop)
+        layout.addLayout(row)
+        return lbl
+
     def _build_step0(self, layout: QVBoxLayout):
-        layout.addWidget(_make_section_label("Step 0 — Project Folder"))
+        self._add_step_header(layout, "Step 0 — Project Folder", 0)
 
         # Folder picker row
         row0 = QHBoxLayout()
@@ -1367,16 +1491,12 @@ class WorkflowTab(QWidget):
     # ── Step 1 (Optional): Pre-process ────────────────────────────────
 
     def _build_step1_preprocess(self, layout: QVBoxLayout):
-        header_row = QHBoxLayout()
-        header_row.addWidget(_make_section_label("Step 1 (Optional) — Pre-process"))
         opt_badge = QLabel("optional")
         opt_badge.setStyleSheet(
             "color:#7a7a7a;font-size:11px;border:1px solid #3c3c3c;"
-            "padding:1px 8px;border-radius:8px;margin-left:8px;"
+            "padding:1px 8px;border-radius:8px;"
             "background-color:#252526;"
         )
-        header_row.addWidget(opt_badge)
-        header_row.addStretch()
         # Collapse/expand toggle
         toggle_btn = QPushButton("▼")
         toggle_btn.setCheckable(True)
@@ -1386,22 +1506,18 @@ class WorkflowTab(QWidget):
             "QPushButton{background:transparent;color:#888;border:none;font-size:11px;}"
             "QPushButton:hover{color:#ccc;}"
         )
-        header_row.addWidget(toggle_btn)
-        layout.addLayout(header_row)
+        self._add_step_header(
+            layout,
+            "Step 1 (Optional) — Pre-process",
+            1,
+            extra_widgets=[opt_badge, toggle_btn],
+        )
 
-        # Collapsible container — wraps hint + tasks_box + run-all row
+        # Collapsible container — wraps tasks_box + run-all row
         collapse_widget = QWidget()
         collapse_layout = QVBoxLayout(collapse_widget)
         collapse_layout.setContentsMargins(0, 0, 0, 0)
         collapse_layout.setSpacing(4)
-
-        hint = QLabel(
-            "Three optional preparation tasks to run against the game folder before "
-            "importing files. Paths are auto-filled when a project folder is detected."
-        )
-        hint.setWordWrap(True)
-        hint.setStyleSheet("color:#9d9d9d;font-size:13px;padding-bottom:6px;")
-        collapse_layout.addWidget(hint)
 
         tasks_box = QGroupBox()
         tasks_box.setStyleSheet("QGroupBox{border:none;margin:0;padding:4px 0;}")
@@ -1574,7 +1690,7 @@ class WorkflowTab(QWidget):
 
     def _build_step2_setup(self, layout: QVBoxLayout):
         """Combined speaker flags + Project Setup + vocab/quirks/game-skill editors."""
-        layout.addWidget(_make_section_label("Step 2 — Setup (Speakers + Glossary)"))
+        self._add_step_header(layout, "Step 2 — Setup (Speakers + Glossary)", 2)
 
         # ---- Compact action bar --------------------------------------------
         top = QWidget()
@@ -1583,14 +1699,6 @@ class WorkflowTab(QWidget):
         top_l = QVBoxLayout(top)
         top_l.setContentsMargins(10, 8, 10, 8)
         top_l.setSpacing(6)
-
-        hint = QLabel(
-            "1) Set speaker flags  ·  2) Parse Speakers into vocab  ·  "
-            "3) Copy Project Setup → IDE → paste glossary / quirks / game skill below"
-        )
-        hint.setWordWrap(True)
-        hint.setStyleSheet("color:#9d9d9d;font-size:12px;")
-        top_l.addWidget(hint)
 
         from gui import qt_icons
         actions = QHBoxLayout()
@@ -1884,7 +1992,7 @@ class WorkflowTab(QWidget):
 
     def _build_step4_translation(self, layout: QVBoxLayout):
 
-        layout.addWidget(_make_section_label("Step 3 — TL Phase 1"))
+        self._add_step_header(layout, "Step 3 — TL Phase 1", 3)
 
         self._add_tl_mode_selector(layout)
 
@@ -2036,7 +2144,7 @@ class WorkflowTab(QWidget):
 
     def _build_step5_tl_phase2(self, layout: QVBoxLayout):
 
-        layout.addWidget(_make_section_label("Step 4 — TL Phase 2"))
+        self._add_step_header(layout, "Step 4 — TL Phase 2", 4)
 
         self._step5_mode_hint = QLabel(f"Translation mode: {BATCH_MODE_LABEL}")
         self._step5_mode_hint.setStyleSheet("color:#8fbc8f;font-size:12px;margin-bottom:4px;")
@@ -2339,26 +2447,39 @@ class WorkflowTab(QWidget):
         # Pre-populate all Phase 2 checkboxes from current module state
         self._populate_p2_checkboxes()
 
-    # ── Step 5: plugins.js / Ace scripts Translation ───────────────────────
+    # ── Step 5: Plugins/scripts + Export ───────────────────────────────────
 
-    def _build_step6_plugins_js(self, layout: QVBoxLayout):
-        self._step6_section_label = _make_section_label("Step 5 — Translate plugins.js")
-        layout.addWidget(self._step6_section_label)
+    def _build_step5_finish(self, layout: QVBoxLayout):
+        self._add_step_header(layout, "Step 5 — Plugins & Export", 5)
 
-        self._step6_hint = QLabel(
-            "Translate the visible Japanese strings in js/plugins.js without breaking "
-            "game logic. First copy vocab.txt into the game folder so the AI can use it "
-            "as a glossary, then copy the prompt and paste it into Copilot or Cursor with "
-            "plugins.js, vocab.txt, and optionally System.json attached."
-        )
-        self._step6_hint.setWordWrap(True)
-        self._step6_hint.setStyleSheet("color:#9d9d9d;font-size:13px;padding-bottom:6px;")
-        layout.addWidget(self._step6_hint)
+        box = QWidget()
+        box.setObjectName("tbox")
+        box.setStyleSheet(self._task_box_style())
+        box.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
+        inner = QVBoxLayout(box)
+        inner.setContentsMargins(14, 12, 14, 12)
+        inner.setSpacing(10)
 
-        _BTN_WIDTH = 240
+        _LBL = "color:#4ec9b0;font-size:12px;font-weight:bold;"
+        _LBL_W = 70
+        _BTN_H = 32
+        _BTN_W = 230
 
-        vocab_btn = _make_btn("📄  Copy vocab.txt → Game Folder", "#555")
-        vocab_btn.setFixedWidth(_BTN_WIDTH)
+        def _labeled_row(label: QLabel, *buttons: QPushButton) -> QHBoxLayout:
+            row = QHBoxLayout()
+            row.setSpacing(10)
+            label.setStyleSheet(_LBL)
+            label.setFixedWidth(_LBL_W)
+            label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            row.addWidget(label)
+            for btn in buttons:
+                btn.setFixedSize(_BTN_W, _BTN_H)
+                row.addWidget(btn)
+            return row
+
+        self._step6_section_label = QLabel("Plugins")
+
+        vocab_btn = _make_btn("📄  Copy vocab.txt → Game", "#555")
         vocab_btn.setToolTip(
             "Copy vocab.txt to <game root>/vocab.txt so you can attach it "
             "alongside plugins.js when running the AI prompt."
@@ -2366,66 +2487,39 @@ class WorkflowTab(QWidget):
         vocab_btn.clicked.connect(self._copy_vocab_to_game)
 
         self._step6_copy_btn = _make_btn("📋  Copy Prompt for Copilot", "#555")
-        self._step6_copy_btn.setFixedWidth(_BTN_WIDTH)
         self._step6_copy_btn.setToolTip(
             "Copy a prompt that instructs Copilot/Cursor to translate only "
             "visible player-facing strings in plugins.js, using vocab.txt as a glossary."
         )
         self._step6_copy_btn.clicked.connect(self._copy_plugins_js_translate_prompt)
 
-        btn_row = QHBoxLayout()
-        btn_row.setSpacing(8)
-        btn_row.addWidget(vocab_btn)
-        btn_row.addWidget(self._step6_copy_btn)
-        btn_row.addStretch()
-        layout.addLayout(btn_row)
-
-    # ── Step 6: Export ──────────────────────────────────────────────────────
-
-    def _build_step7_export(self, layout: QVBoxLayout):
-        layout.addWidget(_make_section_label("Step 6 — Export to Game"))
-        hint = QLabel(
-            "Copy translated files back into the game's data folder to patch the game in-place."
+        inner.addLayout(
+            _labeled_row(self._step6_section_label, vocab_btn, self._step6_copy_btn)
         )
-        hint.setWordWrap(True)
-        hint.setStyleSheet("color:#9d9d9d;font-size:13px;padding-bottom:4px;")
-        layout.addWidget(hint)
 
-        _EXP_W = 260
-        row = QHBoxLayout()
-        row.setSpacing(8)
+        export_lbl = QLabel("Export")
         export_active_btn = _make_btn("📤  Export Active Files", "#3a7a3a")
-        export_active_btn.setFixedWidth(_EXP_W)
         export_active_btn.setToolTip(
             "Only export files whose names match those currently in files/\n"
             "(i.e. the files you imported for this project)"
         )
         export_active_btn.clicked.connect(self._export_active_files)
-        row.addWidget(export_active_btn)
 
         export_all_btn = _make_btn("📤  Export ALL translated/", "#555")
-        export_all_btn.setFixedWidth(_EXP_W)
-        export_all_btn.setToolTip("Export every file in translated/ regardless of what is in files/")
+        export_all_btn.setToolTip(
+            "Export every file in translated/ regardless of what is in files/"
+        )
         export_all_btn.clicked.connect(self._export_to_game)
-        row.addWidget(export_all_btn)
-        row.addStretch()
-        layout.addLayout(row)
 
-    # ── Step 8: Playtest (TL Inspector) ─────────────────────────────────────
+        inner.addLayout(_labeled_row(export_lbl, export_active_btn, export_all_btn))
+        layout.addWidget(box, 0, Qt.AlignLeft)
+
+    # ── Step 6: Playtest (TL Inspector) ─────────────────────────────────────
 
     def _build_step8_playtest(self, layout: QVBoxLayout):
-        self._step8_section_label = _make_section_label("Step 7 — Playtest Tools")
-        layout.addWidget(self._step8_section_label)
-
-        self._step8_main_hint = QLabel(
-            "Install playtest plugins into your RPG Maker game. "
-            "<b>TL Inspector</b> and <b>Forge</b> work on MV and MZ. "
-            "Use <b>Install Both</b> to add both plugins at once."
+        self._step8_section_label = self._add_step_header(
+            layout, "Step 6 — Playtest Tools", 6
         )
-        self._step8_main_hint.setWordWrap(True)
-        self._step8_main_hint.setTextFormat(Qt.RichText)
-        self._step8_main_hint.setStyleSheet("color:#9d9d9d;font-size:13px;padding-bottom:4px;")
-        layout.addWidget(self._step8_main_hint)
 
         settings_box = QWidget()
         settings_box.setObjectName("tbox")
@@ -3076,43 +3170,17 @@ class WorkflowTab(QWidget):
             self._log(f"⚠  Could not remove {err}")
 
     def _update_step6_for_engine(self, is_ace: bool) -> None:
-        """Adapt the Step 6 tab label and content for MV/MZ (plugins.js) vs Ace (.rb scripts)."""
+        """Adapt plugins/scripts controls for MV/MZ vs Ace; hide Playtest on Ace."""
         # Step 1 prettier section — only relevant for MV/MZ
         for attr in ("_pp_dazedformat_title", "_pp_dazedformat_box",
                      "_pp_plugins_js_title", "_pp_plugins_js_box"):
             w = getattr(self, attr, None)
             if w is not None:
                 w.setVisible(not is_ace)
-        # Tab / strip label (Plugins step is index 5 after Setup merge)
-        step6_label = "5  Scripts" if is_ace else "5  Plugins.js"
-        self._step_tabs.setTabText(5, step6_label)
-        if hasattr(self, "_step_labels") and len(self._step_labels) > 5:
-            self._step_labels[5] = step6_label
-        if hasattr(self, "_step_buttons") and len(self._step_buttons) > 5:
-            self._step_buttons[5].setToolTip(step6_label)
-        # Step 5 section header
+        # Step 5 plugins subsection title + prompt tooltip
         lbl = getattr(self, "_step6_section_label", None)
         if lbl is not None:
-            lbl.setText("Step 5 — Translate Ace Scripts (.rb)" if is_ace
-                        else "Step 5 — Translate plugins.js")
-        # Hint text
-        hint = getattr(self, "_step6_hint", None)
-        if hint is not None:
-            if is_ace:
-                hint.setText(
-                    "Translate visible Japanese strings in the Ace script files "
-                    "(ace_json/scripts/*.rb) without breaking game logic. "
-                    "Attach the .rb files and vocab.txt to Copilot or Cursor, "
-                    "then paste the copied prompt."
-                )
-            else:
-                hint.setText(
-                    "Translate the visible Japanese strings in js/plugins.js without breaking "
-                    "game logic. First copy vocab.txt into the game folder so the AI can use it "
-                    "as a glossary, then copy the prompt and paste it into Copilot or Cursor with "
-                    "plugins.js, vocab.txt, and optionally System.json attached."
-                )
-        # Prompt button tooltip
+            lbl.setText("Scripts" if is_ace else "Plugins")
         btn = getattr(self, "_step6_copy_btn", None)
         if btn is not None:
             if is_ace:
@@ -3125,18 +3193,19 @@ class WorkflowTab(QWidget):
                     "Copy a prompt that instructs Copilot/Cursor to translate only "
                     "visible player-facing strings in plugins.js, using vocab.txt as a glossary."
                 )
-        # Step 7 — TL Inspector (MV/MZ only; hidden for Ace)
+        # Step 6 — TL Inspector (MV/MZ only; hidden for Ace)
         show_playtest = not is_ace
-        if hasattr(self, "_step_tabs") and self._step_tabs.count() > 7:
+        playtest_idx = 6
+        if hasattr(self, "_step_tabs") and self._step_tabs.count() > playtest_idx:
             if hasattr(self._step_tabs, "setTabVisible"):
-                self._step_tabs.setTabVisible(7, show_playtest)
+                self._step_tabs.setTabVisible(playtest_idx, show_playtest)
             else:
-                self._step_tabs.setTabEnabled(7, show_playtest)
-            if is_ace and self._step_tabs.currentIndex() == 7:
-                self._goto_step(6)
-        if hasattr(self, "_step_buttons") and len(self._step_buttons) > 7:
-            self._step_buttons[7].setVisible(show_playtest)
-            self._step_buttons[7].setEnabled(show_playtest)
+                self._step_tabs.setTabEnabled(playtest_idx, show_playtest)
+            if is_ace and self._step_tabs.currentIndex() == playtest_idx:
+                self._goto_step(5)
+        if hasattr(self, "_step_buttons") and len(self._step_buttons) > playtest_idx:
+            self._step_buttons[playtest_idx].setVisible(show_playtest)
+            self._step_buttons[playtest_idx].setEnabled(show_playtest)
         self._refresh_step_strip()
         box = getattr(self, "_step8_playtest_box", None)
         install_both_btn = getattr(self, "_install_both_btn", None)
@@ -4081,7 +4150,7 @@ class WorkflowTab(QWidget):
             pass
 
     # ─────────────────────────────────────────────────────────────────────────
-    # Step 6 – Export to game
+    # Step 5 – Export to game
     # ─────────────────────────────────────────────────────────────────────────
 
     def _do_copy_translated_to_files(self):
