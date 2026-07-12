@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "names": {
+    "npc": "Reply with the {language} translation of the NPC name.",
+    "npc_only": "Reply with only the {language} translation of the NPC name",
+    "enemy": "Reply with only the {language} translation of the enemy NPC name",
+    "location": "Reply with only the {language} translation of the RPG location name",
+    "location_short": "Reply with the {language} translation of the location name.",
+    "generic": "Reply with only the {language} translation of the name."
+  },
+  "database": {
+    "item": "Reply with only the {language} translation of the RPG item name",
+    "weapon": "Reply with only the {language} translation of the RPG weapon name",
+    "armor": "Reply with only the {language} translation of the RPG equipment name",
+    "class": "Reply with only the {language} translation of the RPG class name",
+    "skill": "Reply with only the {language} translation of the RPG skill name",
+    "note": "Reply with only the {language} translation of the note text.",
+    "type_armor": "Reply with only the {language} translation of the armor type",
+    "type_weapon": "Reply with only the {language} translation of the weapon type",
+    "type_equipment": "Reply with only the {language} translation of the equipment type. No disclaimers.",
+    "element": "Reply with only the {language} translation of the element type",
+    "ui_term": "Reply with only the {language} translation of the UI textbox.",
+    "game_title": "Reply with the {language} translation of the game title name",
+    "actor_title": "Reply with only the {language} translation of the title",
+    "switch": "Reply with only the {language} translation of the switch name",
+    "battle_messages": "Reply with only the {language} translation of the battle text.\nTranslate \"常時ダッシュ\" as \"Always Dash\"\nTranslate \"次の%1まで\" as Next %1.",
+    "generic": "Reply with only the {language} translation."
+  },
+  "events": {
+    "choice": "Reply with the {language} translation of the dialogue choice.",
+    "choice_with_context": "Reply with the {language} translation of the dialogue choice.\n\nPrevious text for context: {context}",
+    "plugin_with_context": "Previous text for context: {context}\n",
+    "code122_brief": "Keep your translation as brief as possible",
+    "label_108": "This text is a label. Use title capitalization and keep it brief.",
+    "generic_text": "Reply with only the {language} translation of the text.",
+    "generic": "Reply with the {language} translation."
+  }
+}
