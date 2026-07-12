@@ -2235,15 +2235,6 @@ def searchCodes(page, pbar, jobList, filename):
                 # Speaker Check
                 speakerList = []
 
-                # Remove any RPGMaker Code at start
-                ffMatch = re.search(
-                    r"^((?:[\\]+[^cCnNiIkKvV]+\[[\d\w]+\])+)",
-                    jaString,
-                )
-                if ffMatch != None:
-                    jaString = jaString.replace(ffMatch.group(0), "")
-                    nametag += ffMatch.group(0)
-
                 # m and z Codes
                 match = re.search(r"(.*?)[\\]+m\[\d+?\][\\]+z\[\d+?\]", speakerWork)
                 if match:

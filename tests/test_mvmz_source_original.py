@@ -240,6 +240,40 @@ class TestMVMZSourceOriginal(unittest.TestCase):
         for c in with_orig:
             self.assertTrue(_has_japanese(c["_original"]))
 
+    def test_leading_format_codes_not_duplicated(self):
+        """Leading \\F/\\AA/\\M codes must be restored once, including on re-run."""
+        src = "\\F4[2]\\AA[4]\\M4[yes]うなずいてみるよ"
+        page = {
+            "list": [
+                {"code": 101, "indent": 0, "parameters": ["", 0, 0, 2, "セラス"]},
+                {"code": 401, "indent": 0, "parameters": [src]},
+            ]
+        }
+
+        page1, captured1 = _run_search_codes(page)
+        cmd = _find_commands(page1, 401)[0]
+        self.assertEqual(cmd.get("_original"), src)
+        out = cmd["parameters"][0]
+        self.assertEqual(out.count("\\F4[2]"), 1, out)
+        self.assertEqual(out.count("\\AA[4]"), 1, out)
+        self.assertEqual(out.count("\\M4[yes]"), 1, out)
+        self.assertTrue(out.startswith("\\F4[2]\\AA[4]\\M4[yes]"), out)
+        for payload in captured1:
+            items = payload if isinstance(payload, list) else [payload]
+            for item in items:
+                if isinstance(item, str):
+                    self.assertNotIn("\\F4[2]", item, f"codes must be stripped before AI: {item!r}")
+
+        # Simulate a previously-bugged double prefix still sitting in parameters.
+        cmd["parameters"][0] = "\\F4[2]\\AA[4]\\M4[yes]" + out
+        page2, _ = _run_search_codes(page1)
+        cmd2 = _find_commands(page2, 401)[0]
+        out2 = cmd2["parameters"][0]
+        self.assertEqual(cmd2.get("_original"), src)
+        self.assertEqual(out2.count("\\F4[2]"), 1, out2)
+        self.assertEqual(out2.count("\\AA[4]"), 1, out2)
+        self.assertEqual(out2.count("\\M4[yes]"), 1, out2)
+
     def test_speaker_color_line_full_original(self):
         """Standalone \\C[n]Name\\C[n] speaker 401 lines keep the full string in _original."""
         page = {
