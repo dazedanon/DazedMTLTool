@@ -1,7 +1,10 @@
 """Forge plugin build — install-time hotkey and UI scale injection.
 
-Vanilla Forge_MV.js / Forge_MZ.js from len's repo stay untouched on disk.
+Vanilla Forge_MV.js / Forge_MZ.js stay untouched on disk.
 Patches are applied in memory when installing or applying settings to a game.
+
+MV uses the pre-rewrite legacy plugin (old NW.js / Chrome ~65).
+MZ uses the rewritten unified forge.js bundle.
 """
 
 from __future__ import annotations

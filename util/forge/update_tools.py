@@ -1,12 +1,18 @@
 """Download / update Forge plugins from len's upstream repo (gitgud.io).
 
 Upstream: https://gitgud.io/zero64801/forge-mvmz
-CI builds a unified forge.js plugin (master branch artifacts).
+CI builds a unified forge.js plugin (master branch artifacts) for MZ.
+
+RPG Maker MV ships with NW.js / Chrome ~65, which cannot run the rewritten
+Svelte Forge bundle. MV therefore keeps the pre-rewrite legacy plugin
+(``Forge_MV.js`` / ``upstream/Forge_MV.js`` / ``legacy/Forge_MV.js``).
+
 Offline copies: util/forge/upstream/
-Active plugins: util/forge/Forge_MZ.js, util/forge/Forge_MV.js
+Active plugins: util/forge/Forge_MZ.js (modern), util/forge/Forge_MV.js (legacy)
 
 End users receive curated copies shipped with DazedMTLTool updates.
-Upstream fetches are maintainer-only (``--refresh-offline`` or ``--force``).
+Upstream fetches are maintainer-only (``--refresh-offline`` or ``--force``)
+and only refresh the MZ modern plugin.
 """
 
 from __future__ import annotations
@@ -120,12 +126,11 @@ def _fetch_plugins(log_fn) -> bytes:
     return _download_bytes(_artifact_url("forge.js"))
 
 
-def _install_plugin_bytes(data: bytes) -> None:
-    """Write forge.js into both engine plugin paths and the offline bundle."""
+def _install_modern_mz_bytes(data: bytes) -> None:
+    """Write modern forge.js into MZ active + offline paths only (never MV)."""
     UPSTREAM_DIR.mkdir(parents=True, exist_ok=True)
-    for engine in PLUGIN_BY_ENGINE:
-        bundled_plugin_path(engine).write_bytes(data)
-        upstream_plugin_path(engine).write_bytes(data)
+    bundled_plugin_path("MZ").write_bytes(data)
+    upstream_plugin_path("MZ").write_bytes(data)
 
 
 def _download_bytes(url: str) -> bytes:
@@ -135,7 +140,7 @@ def _download_bytes(url: str) -> bytes:
 
 
 def refresh_forge_plugins(log_fn=print) -> bool:
-    """Download len's latest forge.js and install Forge_MV/MZ copies."""
+    """Download len's latest forge.js and refresh the MZ modern plugin only."""
     try:
         commit = _upstream_commit()
     except Exception as exc:
@@ -152,13 +157,17 @@ def refresh_forge_plugins(log_fn=print) -> bool:
         _log("ERROR: forge.js download did not look like a plugin file.", log_fn)
         return False
 
-    _install_plugin_bytes(data)
+    _install_modern_mz_bytes(data)
 
     versions = _load_versions()
     versions["commit"] = commit
     versions["branch"] = FORGE_BRANCH
     _save_versions(versions)
-    _log(f"Forge plugins updated ({commit[:12]})", log_fn)
+    _log(
+        f"Forge MZ plugin updated ({commit[:12]}). "
+        "MV keeps the legacy Chrome-65-compatible plugin.",
+        log_fn,
+    )
     return True
 
 
