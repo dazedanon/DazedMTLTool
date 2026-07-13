@@ -2396,6 +2396,11 @@ class WorkflowTab(QWidget):
         self._pt_forge_hotkey_edit = QLineEdit("F10")
         self._pt_forge_hotkey_edit.setFixedWidth(_PT_FIELD_W)
         self._pt_forge_hotkey_edit.setPlaceholderText("F10")
+        self._pt_forge_hotkey_edit.setToolTip(
+            "Key to open Forge (e.g. F10, F6, Ctrl+Shift+F).\n"
+            "Under Wine/Linux, F10 is often stolen by the window menu - use F6/F8 instead.\n"
+            "Click Apply to game after changing."
+        )
         hotkey_row.addWidget(self._pt_forge_hotkey_edit)
 
         hotkey_row.addStretch(1)

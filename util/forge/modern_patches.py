@@ -19,6 +19,10 @@ _MODIFIER_ALIASES = {
     "win": "meta",
 }
 
+_TOGGLE_UI_KEYSTR_RE = re.compile(
+    r"(id:`toggle_ui`,name:`Toggle Cheat UI`,desc:`Show/Hide the cheat panel`,keyStr:`)[^`]+(`)"
+)
+
 
 def forge_key_str(hotkey: str) -> str:
     """Convert a Dazed forgeHotkey value to Forge shortcut keyStr format."""
@@ -47,6 +51,30 @@ def _bootstrap_js(hotkey: str, ui_scale: str) -> str:
 (function () {{
   var toggleKey = {key_str};
   var uiScale = {scale};
+  // Forge's shortcut matcher uses legacy keyCode. Some NW.js/Wine builds deliver
+  // keydown with keyCode=0 while still setting key/code - map those back.
+  window.__dazedKeyCode = function (e) {{
+    var kc = e.keyCode || e.which || 0;
+    if (kc) return kc;
+    var key = String(e.key || "").toLowerCase();
+    var code = String(e.code || "");
+    if (key === "control") return 17;
+    if (key === "alt") return 18;
+    if (key === "shift") return 16;
+    if (key === "meta") return 91;
+    var fm = /^f(\\d{{1,2}})$/.exec(key) || /^f(\\d{{1,2}})$/i.exec(code);
+    if (fm) return 111 + parseInt(fm[1], 10);
+    var km = /^key([a-z])$/i.exec(code);
+    if (km) return km[1].toUpperCase().charCodeAt(0);
+    if (key.length === 1) {{
+      var c = key.charCodeAt(0);
+      if (c >= 97 && c <= 122) return c - 32;
+      if (c >= 48 && c <= 57) return c;
+    }}
+    var dm = /^digit([0-9])$/i.exec(code);
+    if (dm) return 48 + parseInt(dm[1], 10);
+    return 0;
+  }};
   try {{
     var saved = JSON.parse(localStorage.getItem("forge:shortcuts") || "{{}}");
     saved.toggle_ui = Object.assign({{}}, saved.toggle_ui, {{ keyStr: toggleKey, enabled: true }});
@@ -96,9 +124,45 @@ def _strip_existing_bootstrap(text: str) -> str:
     return text
 
 
+def _patch_toggle_ui_default(text: str, hotkey: str) -> str:
+    """Rewrite Forge's built-in toggle_ui default (Ctrl C) to the Dazed hotkey."""
+    key = forge_key_str(hotkey)
+    text, n = _TOGGLE_UI_KEYSTR_RE.subn(rf"\g<1>{key}\2", text, count=1)
+    if n == 0:
+        raise ValueError("Could not patch toggle_ui keyStr in modern Forge bundle")
+    return text
+
+
+def _patch_keycode_reads(text: str) -> str:
+    """Route Forge shortcut key reads through the keyCode polyfill."""
+    replacements = [
+        (
+            "$.currentKey.add(e.keyCode)",
+            "$.currentKey.add(window.__dazedKeyCode(e))",
+        ),
+        (
+            "$.currentKey.remove(e.keyCode)",
+            "$.currentKey.remove(window.__dazedKeyCode(e))",
+        ),
+        (
+            "static fromEvent(t){return Jc.has(t.keyCode)?e._fromCombiningAloneEvent(t):"
+            "new e(t.keyCode,t.ctrlKey,t.altKey,t.shiftKey,t.metaKey)}",
+            "static fromEvent(t){var k=window.__dazedKeyCode(t);return Jc.has(k)?"
+            "e._fromCombiningAloneEvent(t):new e(k,t.ctrlKey,t.altKey,t.shiftKey,t.metaKey)}",
+        ),
+    ]
+    for old, new in replacements:
+        if old not in text:
+            raise ValueError(f"Could not patch Forge keyCode read: missing {old!r}")
+        text = text.replace(old, new, 1)
+    return text
+
+
 def apply_modern_forge_patches(text: str, hotkey: str, ui_scale: str) -> str:
-    """Inject Dazed hotkey / UI-scale bootstrap before the Forge bundle runs."""
+    """Inject Dazed hotkey / UI-scale bootstrap and harden shortcut handling."""
     text = _strip_existing_bootstrap(text)
+    text = _patch_toggle_ui_default(text, hotkey)
+    text = _patch_keycode_reads(text)
     bootstrap = _bootstrap_js(hotkey, ui_scale)
     match = re.search(r"\*/\s*\n", text)
     if not match:
