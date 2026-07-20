@@ -74,8 +74,18 @@ class UpdateThread(QThread):
     ARCHIVE_ROOT = "dazed-mtl-tool"
     SHA_FILE = str(LAST_UPDATE_SHA_PATH)
 
-    # Paths (relative, top-level) that should never be touched during update
-    PROTECTED = {".env", "venv", "log", "files", "translated", "data"}
+    # Top-level paths that should never be touched during update
+    PROTECTED_TOP = {".env", "venv", "log", "files", "translated"}
+
+    # User-local files under data/ that must not be overwritten.
+    # Shipped defaults (translation_contexts.json, skills/*.md, vocab_base.txt, …)
+    # are intentionally updated so tool releases refresh prompts and contexts.
+    PROTECTED_DATA_FILES = frozenset({
+        "data/vocab.txt",
+        "data/last_update_sha.txt",
+        "data/wolf_speakers.json",
+        "data/wolf_safe_notes.json",
+    })
 
     # GitLab zip archives do not preserve Unix execute bits; restore after apply.
     EXECUTABLE_SUFFIXES = {".sh", ".desktop"}
@@ -87,6 +97,18 @@ class UpdateThread(QThread):
 
     def __init__(self, parent=None):
         super().__init__(parent)
+
+    @classmethod
+    def should_install(cls, rel: Path) -> bool:
+        """Return True when *rel* (path relative to archive root) may be copied."""
+        parts = rel.parts
+        if not parts:
+            return False
+        if parts[0] in cls.PROTECTED_TOP:
+            return False
+        if rel.as_posix() in cls.PROTECTED_DATA_FILES:
+            return False
+        return True
 
     @staticmethod
     def _fmt_bytes(num: int) -> str:
@@ -188,9 +210,7 @@ class UpdateThread(QThread):
             install_files = [
                 src
                 for src in extracted.rglob("*")
-                if src.is_file()
-                and src.relative_to(extracted).parts
-                and src.relative_to(extracted).parts[0] not in self.PROTECTED
+                if src.is_file() and self.should_install(src.relative_to(extracted))
             ]
             total_files = max(len(install_files), 1)
 

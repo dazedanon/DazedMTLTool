@@ -312,15 +312,23 @@ class _JsonFormatWorker(QThread):
             self.done.emit(False, f"dazedformat error: {exc}")
 
 
+# Never copy these into a game root when applying gameupdate/ (local updater state
+# or stray translator assets that must not overwrite a live install).
+_GAMEUPDATE_COPY_SKIP_NAMES = frozenset({
+    "previous_patch_sha.txt",
+})
+
+
 class _FileCopyWorker(QThread):
     """Recursively copy a source folder into a destination folder."""
     done = pyqtSignal(int, list)   # count_copied, errors
     log  = pyqtSignal(str)
 
-    def __init__(self, src: str, dst: str):
+    def __init__(self, src: str, dst: str, skip_names: frozenset[str] | None = None):
         super().__init__()
         self.src = src
         self.dst = dst
+        self.skip_names = skip_names or frozenset()
 
     def run(self):
         import shutil
@@ -335,6 +343,9 @@ class _FileCopyWorker(QThread):
         self.log.emit(f"Copying {src} → {dst} …")
         for fp in src.rglob("*"):
             if not fp.is_file():
+                continue
+            if fp.name in self.skip_names:
+                self.log.emit(f"  skipped {fp.relative_to(src)}")
                 continue
             rel = fp.relative_to(src)
             target = dst / rel
@@ -4281,7 +4292,7 @@ class WorkflowTab(QWidget):
         if not Path(src).is_dir():
             self._log(f"⚠  gameupdate folder not found: {src}")
             return
-        w = _FileCopyWorker(src, dst)
+        w = _FileCopyWorker(src, dst, skip_names=_GAMEUPDATE_COPY_SKIP_NAMES)
         w.log.connect(self._log)
         w.done.connect(self._on_gameupdate_done)
         self._worker = w
@@ -4316,7 +4327,14 @@ class WorkflowTab(QWidget):
             self._log(f"  ⏭  Skipped: B (format plugins.js): not found ({plugins_js or 'not set'})")
 
         if gameupdate_src and Path(gameupdate_src).is_dir() and game_root_dst:
-            queue.append(("[C] gameupdate copy", _FileCopyWorker(gameupdate_src, game_root_dst)))
+            queue.append((
+                "[C] gameupdate copy",
+                _FileCopyWorker(
+                    gameupdate_src,
+                    game_root_dst,
+                    skip_names=_GAMEUPDATE_COPY_SKIP_NAMES,
+                ),
+            ))
         else:
             reason = (f"source not found ({gameupdate_src or 'not set'})"
                       if not gameupdate_src or not Path(gameupdate_src).is_dir()

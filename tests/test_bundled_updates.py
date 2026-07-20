@@ -15,6 +15,42 @@ from unittest.mock import patch
 from util.wolfdawn import WolfDawnError, bundled_binary_path, ensure_wolf_binary
 
 
+class UpdateThreadInstallFilterTests(unittest.TestCase):
+    """Tool update must refresh shipped data/ assets while protecting user state."""
+
+    def test_installs_translation_contexts_and_skills(self):
+        from gui.main import UpdateThread
+
+        for rel in (
+            "data/translation_contexts.json",
+            "data/skills/system.md",
+            "data/skills/project_setup.md",
+            "data/vocab_base.txt",
+            "gui/main.py",
+            "gameupdate/GameUpdate.bat",
+            "gameupdate/gameupdate/patch.ps1",
+        ):
+            with self.subTest(rel=rel):
+                self.assertTrue(UpdateThread.should_install(Path(rel)))
+
+    def test_skips_user_local_data_and_workdir(self):
+        from gui.main import UpdateThread
+
+        for rel in (
+            "data/vocab.txt",
+            "data/last_update_sha.txt",
+            "data/wolf_speakers.json",
+            "data/wolf_safe_notes.json",
+            ".env",
+            "venv/pyvenv.cfg",
+            "log/translations.txt",
+            "files/Map001.json",
+            "translated/Map001.json",
+        ):
+            with self.subTest(rel=rel):
+                self.assertFalse(UpdateThread.should_install(Path(rel)))
+
+
 class CheckToolUpdateTests(unittest.TestCase):
     """Tool update check compares remote SHA to data/last_update_sha.txt only."""
 

@@ -85,6 +85,7 @@ from gui.translation_tab import (
     BATCH_MODE_LABEL,
 )
 from gui.workflow_tab import (
+    _GAMEUPDATE_COPY_SKIP_NAMES,
     _FileCopyWorker,
     _ImportWorker,
     _make_btn,
@@ -1396,7 +1397,7 @@ class WolfWorkflowTab(QWidget):
         if not Path(src).is_dir():
             self._log(f"⚠  gameupdate folder not found: {src}")
             return
-        w = _FileCopyWorker(src, dst)
+        w = _FileCopyWorker(src, dst, skip_names=_GAMEUPDATE_COPY_SKIP_NAMES)
         w.log.connect(self._log)
         w.done.connect(self._on_gameupdate_done)
         self._import_worker = w  # reuse slot; not WolfTaskWorker
@@ -1444,6 +1445,9 @@ class WolfWorkflowTab(QWidget):
                 copied = 0
                 for fp in sorted(Path(src).rglob("*")):
                     if not fp.is_file():
+                        continue
+                    if fp.name in _GAMEUPDATE_COPY_SKIP_NAMES:
+                        log(f"  skipped {fp.relative_to(src)}")
                         continue
                     rel = fp.relative_to(src)
                     target = Path(dst) / rel
