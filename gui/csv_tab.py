@@ -193,8 +193,8 @@ class CSVTab(QWidget):
         self.skip_if_target_translated_cb = QCheckBox("Skip if Target Translated")
         self.skip_if_target_translated_cb.setToolTip(
             "Check candidate rows in batches matching the global Batch Size setting. "
-            "Skip a batch only if every target is already translated (non-empty, no Japanese). "
-            "If any row still needs work, the whole batch is translated."
+            "Skip a batch when every target is already translated (non-empty, no Japanese). "
+            "If any row still needs work, translate only the unfinished rows in that batch."
         )
         left_column.addWidget(self.skip_if_target_translated_cb)
         

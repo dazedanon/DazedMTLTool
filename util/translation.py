@@ -1756,6 +1756,21 @@ def getPricingConfig(model):
     if _live_override:
         cfg.update(_live_override)
 
+    # Config / .env overrides win over model defaults so the Batch Size and
+    # Frequency Penalty controls actually affect translation batching.
+    env_batch = os.getenv("batchsize")
+    if env_batch not in (None, ""):
+        try:
+            cfg["batchSize"] = max(1, int(env_batch))
+        except (TypeError, ValueError):
+            pass
+    env_penalty = os.getenv("frequency_penalty")
+    if env_penalty not in (None, ""):
+        try:
+            cfg["frequencyPenalty"] = float(env_penalty)
+        except (TypeError, ValueError):
+            pass
+
     return cfg
 
 

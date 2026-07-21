@@ -89,7 +89,7 @@ class SkipTranslatedBatchIndexTests(unittest.TestCase):
         # First batch (0,1) all translated -> skip; second batch (2,3) needs work
         self.assertEqual(csv_mod._collect_process_indices(data), [2, 3])
 
-    def test_partial_batch_keeps_entire_batch(self):
+    def test_partial_batch_queues_only_untranslated_rows(self):
         csv_mod.SKIP_IF_TARGET_TRANSLATED = True
         csv_mod.BATCHSIZE = 3
         data = [
@@ -100,9 +100,9 @@ class SkipTranslatedBatchIndexTests(unittest.TestCase):
             ["お", "O"],
             ["か", "Ka"],
         ]
-        # Batch [0,1,2] has untranslated row 1 -> keep all three
+        # Batch [0,1,2] has work -> keep only untranslated row 1
         # Batch [3,4,5] all translated -> skip
-        self.assertEqual(csv_mod._collect_process_indices(data), [0, 1, 2])
+        self.assertEqual(csv_mod._collect_process_indices(data), [1])
 
     def test_uses_global_batch_size(self):
         csv_mod.SKIP_IF_TARGET_TRANSLATED = True
@@ -111,6 +111,18 @@ class SkipTranslatedBatchIndexTests(unittest.TestCase):
         data.append(["未翻訳", ""])
         # First 30 fully translated -> skipped; last singleton batch needs work
         self.assertEqual(csv_mod._collect_process_indices(data), [30])
+
+    def test_header_with_english_target_skipped_when_opt_in(self):
+        csv_mod.SKIP_IF_TARGET_TRANSLATED = True
+        csv_mod.SKIP_HEADER_ROW = False
+        csv_mod.BATCHSIZE = 10
+        data = [
+            ["Source", "Target"],
+            ["こんにちは", ""],
+            ["ありがとう", "Thank you."],
+        ]
+        # Header target looks translated; thank-you row preserved; only empty target queued
+        self.assertEqual(csv_mod._collect_process_indices(data), [1])
 
 
 class SkipIfTargetTranslatedCollectTests(unittest.TestCase):
@@ -176,14 +188,14 @@ class SkipIfTargetTranslatedCollectTests(unittest.TestCase):
             with patch.object(csv_mod, "dazedwrap") as mock_wrap:
                 mock_wrap.wrapText.side_effect = lambda text, _width: text
                 csv_mod.translateCSV(data, pbar, None, MagicMock(), "test.csv", None)
-        # First batch fully translated -> skipped; second batch kept whole
+        # First batch fully translated -> skipped; second batch keeps unfinished only
         self.assertEqual(mock_ai.call_args[0][0], ["さようなら", "ありがとう"])
         self.assertEqual(data[0][1], "Hello")
         self.assertEqual(data[1][1], "Good morning")
         self.assertEqual(data[2][1], "Goodbye")
         self.assertEqual(data[3][1], "Thank you")
 
-    def test_partial_batch_retranslates_already_done_rows(self):
+    def test_partial_batch_preserves_already_done_rows(self):
         csv_mod.SKIP_IF_TARGET_TRANSLATED = True
         csv_mod.BATCHSIZE = 2
         data = [
@@ -192,14 +204,14 @@ class SkipIfTargetTranslatedCollectTests(unittest.TestCase):
         ]
         pbar = MagicMock()
         with patch.object(
-            csv_mod, "translateAI", return_value=(["Hi again", "Goodbye"], [0, 0])
+            csv_mod, "translateAI", return_value=(["Goodbye"], [0, 0])
         ) as mock_ai:
             with patch.object(csv_mod, "dazedwrap") as mock_wrap:
                 mock_wrap.wrapText.side_effect = lambda text, _width: text
                 csv_mod.translateCSV(data, pbar, None, MagicMock(), "test.csv", None)
-        # Mixed batch: keep both rows, including the already-translated one
-        self.assertEqual(mock_ai.call_args[0][0], ["こんにちは", "さようなら"])
-        self.assertEqual(data[0][1], "Hi again")
+        # Mixed batch: only the unfinished row is sent; existing translation kept
+        self.assertEqual(mock_ai.call_args[0][0], ["さようなら"])
+        self.assertEqual(data[0][1], "Hello")
         self.assertEqual(data[1][1], "Goodbye")
 
 

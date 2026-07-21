@@ -42,13 +42,13 @@ FILENAME = None
 BRACKETNAMES = False
 
 # CSV Configuration Settings (configurable via GUI)
-CSV_DELIMITER = "	"  # CSV delimiter character (comma, semicolon, tab)
-SOURCE_COLUMN = 2  # Which column has the source text to translate (0-indexed)
-TARGET_COLUMN = 3  # Which column to write translations to
+CSV_DELIMITER = ","  # CSV delimiter character (comma, semicolon, tab)
+SOURCE_COLUMN = 0  # Which column has the source text to translate (0-indexed)
+TARGET_COLUMN = 1  # Which column to write translations to
 SPEAKER_COLUMN = 1  # Which column has speaker names (-1 = none)
-SKIP_HEADER_ROW = False  # Skip the first row (header)
+SKIP_HEADER_ROW = True  # Skip the first row (header)
 USE_TARGET_IF_NOT_EMPTY = False  # Use target column text if not empty (T++ style)
-SKIP_IF_TARGET_TRANSLATED = False  # Skip batches whose targets are already translated
+SKIP_IF_TARGET_TRANSLATED = True  # Skip batches whose targets are already translated
 WRITE_TO_NEXT_COLUMN = False  # Write to column after target instead of overwriting
 PARSE_NAME_TAGS = False  # Parse :name[] tags in text
 PARSE_M_MARKERS = False  # Parse \M markers in text
@@ -256,9 +256,10 @@ def _collect_process_indices(data):
     """Row indices to translate.
 
     When SKIP_IF_TARGET_TRANSLATED is on, candidates are checked in groups of
-    BATCHSIZE (same as the translation batch size). A group is skipped only if
-    every target in it is already translated; if any row still needs work, the
-    whole group runs.
+    BATCHSIZE (same as the translation batch size):
+    - If every target in the group is already translated, skip the group.
+    - If any row still needs work, keep the group but only queue the
+      untranslated rows so finished targets are left alone.
     """
     candidates = [i for i in range(len(data)) if _is_candidate_row(data, i)]
     if not SKIP_IF_TARGET_TRANSLATED:
@@ -270,7 +271,7 @@ def _collect_process_indices(data):
         batch = candidates[start:start + batch_size]
         if all(_target_is_translated(data[i]) for i in batch):
             continue
-        process.extend(batch)
+        process.extend(i for i in batch if not _target_is_translated(data[i]))
     return process
 
 
