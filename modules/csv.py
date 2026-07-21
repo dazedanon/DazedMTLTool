@@ -48,6 +48,7 @@ TARGET_COLUMN = 3  # Which column to write translations to
 SPEAKER_COLUMN = 1  # Which column has speaker names (-1 = none)
 SKIP_HEADER_ROW = False  # Skip the first row (header)
 USE_TARGET_IF_NOT_EMPTY = False  # Use target column text if not empty (T++ style)
+SKIP_IF_TARGET_TRANSLATED = False  # Skip batches whose targets are already translated
 WRITE_TO_NEXT_COLUMN = False  # Write to column after target instead of overwriting
 PARSE_NAME_TAGS = False  # Parse :name[] tags in text
 PARSE_M_MARKERS = False  # Parse \M markers in text
@@ -215,6 +216,64 @@ def flush_progress_csv(writeFile, writer, rows):
         traceback.print_exc()
 
 
+def _actual_target_column():
+    """Column index translations are written to."""
+    return TARGET_COLUMN + 1 if WRITE_TO_NEXT_COLUMN else TARGET_COLUMN
+
+
+def _target_is_translated(row):
+    """True when the write-target cell is non-empty and has no Japanese left."""
+    actual_target = _actual_target_column()
+    if len(row) <= actual_target:
+        return False
+    target = row[actual_target]
+    if not isinstance(target, str) or not target.strip():
+        return False
+    return not re.search(LANGREGEX, target)
+
+
+def _row_source_text(row):
+    """Source text for a row, honoring USE_TARGET_IF_NOT_EMPTY."""
+    if USE_TARGET_IF_NOT_EMPTY and len(row) > TARGET_COLUMN and row[TARGET_COLUMN]:
+        return row[TARGET_COLUMN]
+    if len(row) > SOURCE_COLUMN and row[SOURCE_COLUMN]:
+        return row[SOURCE_COLUMN]
+    return ""
+
+
+def _is_candidate_row(data, i):
+    """True when this row would normally be collected for translation."""
+    if SKIP_HEADER_ROW and i == 0:
+        return False
+    if SKIP_COMMENT_ROWS and len(data[i]) > 0 and "comment" in str(data[i][0]).lower():
+        return False
+    if len(data[i]) <= SOURCE_COLUMN:
+        return False
+    return bool(_row_source_text(data[i]))
+
+
+def _collect_process_indices(data):
+    """Row indices to translate.
+
+    When SKIP_IF_TARGET_TRANSLATED is on, candidates are checked in groups of
+    BATCHSIZE (same as the translation batch size). A group is skipped only if
+    every target in it is already translated; if any row still needs work, the
+    whole group runs.
+    """
+    candidates = [i for i in range(len(data)) if _is_candidate_row(data, i)]
+    if not SKIP_IF_TARGET_TRANSLATED:
+        return candidates
+
+    process = []
+    batch_size = max(1, int(BATCHSIZE))
+    for start in range(0, len(candidates), batch_size):
+        batch = candidates[start:start + batch_size]
+        if all(_target_is_translated(data[i]) for i in batch):
+            continue
+        process.extend(batch)
+    return process
+
+
 def translateCSV(data, pbar, writeFile, writer, filename, translatedList):
     """
     Unified CSV translation function using configurable settings.
@@ -225,6 +284,7 @@ def translateCSV(data, pbar, writeFile, writer, filename, translatedList):
     - SPEAKER_COLUMN: column index for speaker names (-1 = none)
     - SKIP_HEADER_ROW: whether to skip first row
     - USE_TARGET_IF_NOT_EMPTY: use existing target text if present (T++ style)
+    - SKIP_IF_TARGET_TRANSLATED: skip fully-translated candidate batches
     - WRITE_TO_NEXT_COLUMN: write to column after target
     - PARSE_NAME_TAGS: parse :name[] tags
     - PARSE_M_MARKERS: parse \\M markers
@@ -235,41 +295,15 @@ def translateCSV(data, pbar, writeFile, writer, filename, translatedList):
     PBAR = pbar
     translatedText = ""
     totalTokens = [0, 0]
-    i = 0
     stringList = []
+    process_indices = _collect_process_indices(data)
 
     try:
         # Translate
-        while i < len(data):
-            # Skip header row if configured
-            if SKIP_HEADER_ROW and i == 0:
-                i += 1
-                continue
-            
-            # Skip comment rows if configured
-            if SKIP_COMMENT_ROWS and len(data[i]) > 0 and 'comment' in str(data[i][0]).lower():
-                i += 1
-                continue
-            
-            # Check if row has enough columns
-            if len(data[i]) <= SOURCE_COLUMN:
-                i += 1
-                continue
-            
+        for i in process_indices:
             # Get source text
-            jaString = ""
+            jaString = _row_source_text(data[i])
             speaker = ""
-            
-            # If USE_TARGET_IF_NOT_EMPTY is enabled (T++ style), check target column first
-            if USE_TARGET_IF_NOT_EMPTY and len(data[i]) > TARGET_COLUMN and data[i][TARGET_COLUMN]:
-                jaString = data[i][TARGET_COLUMN]
-            else:
-                jaString = data[i][SOURCE_COLUMN] if data[i][SOURCE_COLUMN] else ""
-            
-            # Skip empty strings
-            if not jaString:
-                i += 1
-                continue
             
             # Handle speaker column if configured
             if SPEAKER_COLUMN >= 0 and len(data[i]) > SPEAKER_COLUMN and data[i][SPEAKER_COLUMN]:
@@ -338,7 +372,7 @@ def translateCSV(data, pbar, writeFile, writer, filename, translatedList):
                 translatedText = translatedText.replace("\n", "\\n")
                 
                 # Determine target column
-                actual_target = TARGET_COLUMN + 1 if WRITE_TO_NEXT_COLUMN else TARGET_COLUMN
+                actual_target = _actual_target_column()
                 
                 # Ensure row has enough columns
                 while len(data[i]) <= actual_target:
@@ -352,9 +386,6 @@ def translateCSV(data, pbar, writeFile, writer, filename, translatedList):
                     data[i][actual_target] = translatedText
                 
                 flush_progress_csv(writeFile, writer, data)
-            
-            # Iterate
-            i += 1
 
         # EOF - Process collected strings
         if len(stringList) > 0:

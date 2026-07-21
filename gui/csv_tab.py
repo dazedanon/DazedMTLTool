@@ -55,6 +55,7 @@ class CSVTab(QWidget):
         # Row settings
         "SKIP_HEADER_ROW": True,
         "USE_TARGET_IF_NOT_EMPTY": False,
+        "SKIP_IF_TARGET_TRANSLATED": False,
         
         # Output settings
         "WRITE_TO_NEXT_COLUMN": False,
@@ -188,6 +189,14 @@ class CSVTab(QWidget):
         self.use_target_if_not_empty_cb = QCheckBox("Use Target if Not Empty")
         self.use_target_if_not_empty_cb.setToolTip("If target column already has text, use that instead of source (T++ style)")
         left_column.addWidget(self.use_target_if_not_empty_cb)
+
+        self.skip_if_target_translated_cb = QCheckBox("Skip if Target Translated")
+        self.skip_if_target_translated_cb.setToolTip(
+            "Check candidate rows in batches matching the global Batch Size setting. "
+            "Skip a batch only if every target is already translated (non-empty, no Japanese). "
+            "If any row still needs work, the whole batch is translated."
+        )
+        left_column.addWidget(self.skip_if_target_translated_cb)
         
         left_column.addStretch()
         
@@ -269,6 +278,7 @@ class CSVTab(QWidget):
         self.speaker_column_spin.setValue(0)  # 0 = None
         self.skip_header_cb.setChecked(True)
         self.use_target_if_not_empty_cb.setChecked(True)
+        self.skip_if_target_translated_cb.setChecked(False)
         self.write_next_column_cb.setChecked(False)
         self.parse_name_tags_cb.setChecked(False)
         self.parse_m_markers_cb.setChecked(False)
@@ -285,6 +295,7 @@ class CSVTab(QWidget):
         self.speaker_column_spin.setValue(0)  # 0 = None
         self.skip_header_cb.setChecked(False)
         self.use_target_if_not_empty_cb.setChecked(False)
+        self.skip_if_target_translated_cb.setChecked(False)
         self.write_next_column_cb.setChecked(False)
         self.parse_name_tags_cb.setChecked(False)
         self.parse_m_markers_cb.setChecked(False)
@@ -301,6 +312,7 @@ class CSVTab(QWidget):
         self.speaker_column_spin.setValue(3)  # Display as 1-based (was 2, 0=None so 3=col2)
         self.skip_header_cb.setChecked(False)
         self.use_target_if_not_empty_cb.setChecked(False)
+        self.skip_if_target_translated_cb.setChecked(False)
         self.write_next_column_cb.setChecked(False)
         self.parse_name_tags_cb.setChecked(False)
         self.parse_m_markers_cb.setChecked(False)
@@ -334,6 +346,7 @@ class CSVTab(QWidget):
             self.csv_delimiter_combo.currentIndexChanged.disconnect()
             self.skip_header_cb.stateChanged.disconnect()
             self.use_target_if_not_empty_cb.stateChanged.disconnect()
+            self.skip_if_target_translated_cb.stateChanged.disconnect()
             self.write_next_column_cb.stateChanged.disconnect()
             self.parse_name_tags_cb.stateChanged.disconnect()
             self.parse_m_markers_cb.stateChanged.disconnect()
@@ -350,6 +363,7 @@ class CSVTab(QWidget):
         self.csv_delimiter_combo.currentIndexChanged.connect(lambda: self.apply_to_module(show_messages=False))
         self.skip_header_cb.stateChanged.connect(lambda: self.apply_to_module(show_messages=False))
         self.use_target_if_not_empty_cb.stateChanged.connect(lambda: self.apply_to_module(show_messages=False))
+        self.skip_if_target_translated_cb.stateChanged.connect(lambda: self.apply_to_module(show_messages=False))
         self.write_next_column_cb.stateChanged.connect(lambda: self.apply_to_module(show_messages=False))
         self.parse_name_tags_cb.stateChanged.connect(lambda: self.apply_to_module(show_messages=False))
         self.parse_m_markers_cb.stateChanged.connect(lambda: self.apply_to_module(show_messages=False))
@@ -376,6 +390,7 @@ class CSVTab(QWidget):
             "CSV_DELIMITER": delimiter,
             "SKIP_HEADER_ROW": self.skip_header_cb.isChecked(),
             "USE_TARGET_IF_NOT_EMPTY": self.use_target_if_not_empty_cb.isChecked(),
+            "SKIP_IF_TARGET_TRANSLATED": self.skip_if_target_translated_cb.isChecked(),
             "WRITE_TO_NEXT_COLUMN": self.write_next_column_cb.isChecked(),
             "PARSE_NAME_TAGS": self.parse_name_tags_cb.isChecked(),
             "PARSE_M_MARKERS": self.parse_m_markers_cb.isChecked(),
@@ -406,6 +421,7 @@ class CSVTab(QWidget):
         
         self.skip_header_cb.setChecked(config.get("SKIP_HEADER_ROW", True))
         self.use_target_if_not_empty_cb.setChecked(config.get("USE_TARGET_IF_NOT_EMPTY", False))
+        self.skip_if_target_translated_cb.setChecked(config.get("SKIP_IF_TARGET_TRANSLATED", False))
         self.write_next_column_cb.setChecked(config.get("WRITE_TO_NEXT_COLUMN", False))
         self.parse_name_tags_cb.setChecked(config.get("PARSE_NAME_TAGS", False))
         self.parse_m_markers_cb.setChecked(config.get("PARSE_M_MARKERS", False))
@@ -441,6 +457,7 @@ class CSVTab(QWidget):
             bool_patterns = {
                 "SKIP_HEADER_ROW": r'^SKIP_HEADER_ROW\s*=\s*(True|False)',
                 "USE_TARGET_IF_NOT_EMPTY": r'^USE_TARGET_IF_NOT_EMPTY\s*=\s*(True|False)',
+                "SKIP_IF_TARGET_TRANSLATED": r'^SKIP_IF_TARGET_TRANSLATED\s*=\s*(True|False)',
                 "WRITE_TO_NEXT_COLUMN": r'^WRITE_TO_NEXT_COLUMN\s*=\s*(True|False)',
                 "PARSE_NAME_TAGS": r'^PARSE_NAME_TAGS\s*=\s*(True|False)',
                 "PARSE_M_MARKERS": r'^PARSE_M_MARKERS\s*=\s*(True|False)',
