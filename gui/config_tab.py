@@ -66,7 +66,9 @@ class ModelFetchThread(QThread):
 
     def _fetch_openai(self):
         import openai
-        kwargs = {"api_key": self.api_key}
+        # The SDK requires a non-empty value even when a local server ignores
+        # authentication entirely.
+        kwargs = {"api_key": self.api_key or "not-needed"}
         if self.api_url:
             kwargs["base_url"] = self.api_url
         client = openai.OpenAI(**kwargs)
@@ -128,6 +130,7 @@ class ApiKeyEditDialog(QDialog):
         initial_endpoint: str = "",
         *,
         allow_blank_secret: bool = False,
+        initial_keyless: bool = False,
     ):
         super().__init__(parent)
         self.setWindowTitle("API Key")
@@ -152,6 +155,14 @@ class ApiKeyEditDialog(QDialog):
         else:
             self.secret_edit.setPlaceholderText("Paste API key secret")
         form.addRow("Secret:", self.secret_edit)
+
+        self.keyless_cb = QCheckBox("No API key required (local model)")
+        self.keyless_cb.setChecked(initial_keyless)
+        self.keyless_cb.setToolTip(
+            "Use this for a local OpenAI-compatible server that does not require authentication."
+        )
+        self.keyless_cb.toggled.connect(self._on_keyless_toggled)
+        form.addRow("", self.keyless_cb)
 
         endpoint_wrap = QWidget()
         endpoint_row = QHBoxLayout(endpoint_wrap)
@@ -202,27 +213,47 @@ class ApiKeyEditDialog(QDialog):
         self._name = ""
         self._secret = ""
         self._endpoint = ""
+        self._keyless = False
+        self._on_keyless_toggled(initial_keyless)
         self.secret_edit.setFocus()
+
+    def _on_keyless_toggled(self, checked: bool):
+        self.secret_edit.setEnabled(not checked)
+        if checked:
+            self.secret_edit.clear()
+            self.secret_edit.setPlaceholderText("Not used for this local endpoint")
+        elif self._allow_blank_secret:
+            self.secret_edit.setPlaceholderText("Leave blank to keep the existing secret")
+        else:
+            self.secret_edit.setPlaceholderText("Paste API key secret")
 
     def _accept_if_valid(self):
         name = self.name_edit.text().strip()
         secret = self.secret_edit.text().strip()
         endpoint = self.endpoint_edit.text().strip()
+        keyless = self.keyless_cb.isChecked()
         if not name:
             QMessageBox.warning(self, "API Key", "Enter a name for this key.")
             self.name_edit.setFocus()
             return
-        if not secret and not self._allow_blank_secret:
+        if not secret and not keyless and not self._allow_blank_secret:
             QMessageBox.warning(self, "API Key", "Enter the API key secret.")
             self.secret_edit.setFocus()
+            return
+        if keyless and not endpoint:
+            QMessageBox.warning(
+                self, "API Key", "Enter the local model server's API endpoint."
+            )
+            self.endpoint_edit.setFocus()
             return
         self._name = name
         self._secret = secret
         self._endpoint = endpoint
+        self._keyless = keyless
         self.accept()
 
-    def result_values(self) -> tuple[str, str, str]:
-        return self._name, self._secret, self._endpoint
+    def result_values(self) -> tuple[str, str, str, bool]:
+        return self._name, self._secret, self._endpoint, self._keyless
 
 
 class ConfigTab(QWidget):
@@ -792,6 +823,11 @@ class ConfigTab(QWidget):
         secret = api_key_vault.get_secret(name)
         return secret if secret is not None else ""
 
+    def _active_api_key_is_optional(self) -> bool:
+        """Return whether the selected vault entry is explicitly keyless."""
+        name = self.api_key_combo.currentText().strip()
+        return api_key_vault.is_keyless(name) if name else False
+
     def _apply_key_endpoint(self, name: str | None = None):
         """If the named key has an endpoint, apply it to the API URL field."""
         key_name = (name or self.api_key_combo.currentText()).strip()
@@ -846,10 +882,11 @@ class ConfigTab(QWidget):
             initial_name=current,
             initial_endpoint=existing_endpoint or self.api_url_edit.text().strip(),
             allow_blank_secret=bool(current and api_key_vault.get_secret(current)),
+            initial_keyless=bool(current and api_key_vault.is_keyless(current)),
         )
         if dialog.exec_() != QDialog.Accepted:
             return
-        name, secret, endpoint = dialog.result_values()
+        name, secret, endpoint, keyless = dialog.result_values()
         try:
             api_key_vault.upsert_key(
                 name,
@@ -857,6 +894,7 @@ class ConfigTab(QWidget):
                 endpoint=endpoint,
                 make_active=True,
                 keep_secret_if_blank=True,
+                keyless=keyless,
             )
             self._apply_key_endpoint(name)
             api_key_vault.sync_active_to_env(env_path=self.env_file_path)
@@ -890,7 +928,7 @@ class ConfigTab(QWidget):
         api_key = self._active_api_key_secret()
         api_url = self.api_url_edit.text().strip()
 
-        if not api_key:
+        if not api_key and not self._active_api_key_is_optional():
             if not silent:
                 QMessageBox.warning(
                     self, "No API Key",
@@ -1107,6 +1145,9 @@ class ConfigTab(QWidget):
             config = {
                 "api": self.api_url_edit.text().strip(),
                 "key": self._active_api_key_secret(),
+                "API_KEY_OPTIONAL": (
+                    "true" if self._active_api_key_is_optional() else "false"
+                ),
                 "model": self.model_combo.currentText(),
                 "language": self.language_combo.currentText(),
                 "timeout": str(self.timeout_spin.value()),
@@ -1241,7 +1282,7 @@ class ConfigTab(QWidget):
         errors = []
         
         # Check required fields
-        if not self._active_api_key_secret():
+        if not self._active_api_key_secret() and not self._active_api_key_is_optional():
             errors.append("API Key is required")
             
         if not self.model_combo.currentText().strip():

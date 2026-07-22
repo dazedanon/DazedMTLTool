@@ -91,6 +91,7 @@ class ApiKeyVaultTests(unittest.TestCase):
             )
             self.assertEqual(secret, "sk-work")
             self.assertEqual(os.environ.get("key"), "sk-work")
+            self.assertEqual(os.environ.get("API_KEY_OPTIONAL"), "false")
             self.assertEqual(os.environ.get("api"), "https://api.work.test/v1")
             text = self.env_path.read_text(encoding="utf-8")
             self.assertIn("sk-work", text)
@@ -161,6 +162,36 @@ class ApiKeyVaultTests(unittest.TestCase):
             api_keys.upsert_key("", "sk", path=self.vault_path)
         with self.assertRaises(ValueError):
             api_keys.upsert_key("Name", "  ", path=self.vault_path)
+
+    def test_keyless_local_endpoint_roundtrip_and_sync(self):
+        api_keys.upsert_key(
+            "Local",
+            "",
+            endpoint="http://127.0.0.1:1234/v1",
+            keyless=True,
+            path=self.vault_path,
+        )
+
+        self.assertEqual(api_keys.list_names(self.vault_path), ["Local"])
+        self.assertEqual(api_keys.get_active_secret(self.vault_path), "")
+        self.assertTrue(api_keys.is_keyless("Local", self.vault_path))
+        self.assertTrue(api_keys.is_active_keyless(self.vault_path))
+
+        with patch.dict(os.environ, {}, clear=False):
+            api_keys.sync_active_to_env(
+                vault_path=self.vault_path,
+                env_path=self.env_path,
+            )
+            self.assertEqual(os.environ.get("key"), "")
+            self.assertEqual(os.environ.get("API_KEY_OPTIONAL"), "true")
+            text = self.env_path.read_text(encoding="utf-8")
+            self.assertIn("API_KEY_OPTIONAL='true'", text)
+
+    def test_keyless_entry_requires_endpoint(self):
+        with self.assertRaises(ValueError):
+            api_keys.upsert_key(
+                "Local", "", keyless=True, path=self.vault_path
+            )
 
 
 if __name__ == "__main__":

@@ -3,8 +3,10 @@
 Secrets live in ``data/api_keys.json`` (user-local). The active secret is also
 mirrored to ``.env`` ``key=`` so translation and subprocesses keep working.
 
-Each named entry may optionally include an ``endpoint`` (API base URL). When the
-active key has one, it is mirrored to ``.env`` ``api=`` as well.
+Each named entry may optionally include an ``endpoint`` (API base URL), and may
+be marked ``keyless`` for a local server that does not authenticate requests.
+When the active entry has an endpoint, it is mirrored to ``.env`` ``api=`` as
+well.
 """
 
 from __future__ import annotations
@@ -25,18 +27,19 @@ def _empty_vault() -> dict[str, Any]:
     return {"active": "", "keys": {}}
 
 
-def _normalize_entry(raw: Any) -> dict[str, str]:
+def _normalize_entry(raw: Any) -> dict[str, Any]:
     """Accept legacy plain-string secrets or ``{secret, endpoint}`` objects."""
     if isinstance(raw, str):
-        return {"secret": raw, "endpoint": ""}
+        return {"secret": raw, "endpoint": "", "keyless": False}
     if isinstance(raw, dict):
         secret = raw.get("secret", raw.get("key", ""))
         endpoint = raw.get("endpoint", raw.get("api", ""))
         return {
             "secret": "" if secret is None else str(secret),
             "endpoint": ("" if endpoint is None else str(endpoint)).strip(),
+            "keyless": bool(raw.get("keyless", False)),
         }
-    return {"secret": "", "endpoint": ""}
+    return {"secret": "", "endpoint": "", "keyless": False}
 
 
 def load_vault(path: Path | None = None) -> dict[str, Any]:
@@ -53,12 +56,12 @@ def load_vault(path: Path | None = None) -> dict[str, Any]:
     keys = data.get("keys")
     if not isinstance(keys, dict):
         keys = {}
-    cleaned: dict[str, dict[str, str]] = {}
+    cleaned: dict[str, dict[str, Any]] = {}
     for name, raw in keys.items():
         if not isinstance(name, str) or not name.strip():
             continue
         entry = _normalize_entry(raw)
-        if not entry["secret"]:
+        if not entry["secret"] and not entry["keyless"]:
             continue
         cleaned[name.strip()] = entry
     active = data.get("active") or ""
@@ -76,14 +79,15 @@ def save_vault(vault: dict[str, Any], path: Path | None = None) -> None:
     """Write vault JSON with restrictive permissions when the OS allows."""
     vault_path = path or API_KEYS_PATH
     vault_path.parent.mkdir(parents=True, exist_ok=True)
-    keys_out: dict[str, dict[str, str]] = {}
+    keys_out: dict[str, dict[str, Any]] = {}
     for name, raw in dict(vault.get("keys") or {}).items():
         entry = _normalize_entry(raw)
-        if not entry["secret"]:
+        if not entry["secret"] and not entry["keyless"]:
             continue
         keys_out[str(name)] = {
             "secret": entry["secret"],
             "endpoint": entry["endpoint"],
+            "keyless": entry["keyless"],
         }
     payload = {
         "active": str(vault.get("active") or ""),
@@ -112,7 +116,7 @@ def get_active_name(path: Path | None = None) -> str:
     return str(load_vault(path).get("active") or "")
 
 
-def get_entry(name: str, path: Path | None = None) -> dict[str, str] | None:
+def get_entry(name: str, path: Path | None = None) -> dict[str, Any] | None:
     keys = load_vault(path).get("keys") or {}
     entry = keys.get(name)
     if entry is None:
@@ -144,6 +148,18 @@ def get_endpoint(name: str, path: Path | None = None) -> str | None:
     return entry["endpoint"]
 
 
+def is_keyless(name: str, path: Path | None = None) -> bool:
+    """Return whether *name* explicitly represents a keyless local endpoint."""
+    entry = get_entry(name, path)
+    return bool(entry and entry["keyless"])
+
+
+def is_active_keyless(path: Path | None = None) -> bool:
+    vault = load_vault(path)
+    active = str(vault.get("active") or "")
+    return is_keyless(active, path) if active else False
+
+
 def get_active_endpoint(path: Path | None = None) -> str:
     vault = load_vault(path)
     active = vault.get("active") or ""
@@ -160,11 +176,13 @@ def upsert_key(
     make_active: bool = True,
     path: Path | None = None,
     keep_secret_if_blank: bool = False,
+    keyless: bool = False,
 ) -> dict[str, Any]:
     """Create or replace a named key. Optionally make it active.
 
     When *keep_secret_if_blank* is true and *secret* is empty, an existing
-    entry's secret is preserved (useful for editing endpoint only).
+    entry's secret is preserved (useful for editing endpoint only). A keyless
+    entry deliberately stores no secret and must provide a local endpoint.
     """
     name = (name or "").strip()
     if not name:
@@ -173,12 +191,21 @@ def upsert_key(
     endpoint = (endpoint or "").strip()
     vault = load_vault(path)
     existing = vault["keys"].get(name)
-    if not secret:
+    keyless = bool(keyless)
+    if keyless:
+        secret = ""
+        if not endpoint:
+            raise ValueError("A local API endpoint is required when no API key is used")
+    elif not secret:
         if keep_secret_if_blank and existing:
             secret = _normalize_entry(existing)["secret"]
         else:
             raise ValueError("API key secret is required")
-    vault["keys"][name] = {"secret": secret, "endpoint": endpoint}
+    vault["keys"][name] = {
+        "secret": secret,
+        "endpoint": endpoint,
+        "keyless": keyless,
+    }
     if make_active or not vault.get("active"):
         vault["active"] = name
     save_vault(vault, path)
@@ -214,7 +241,9 @@ def sync_active_to_env(
 ) -> str:
     """Write the active vault secret to ``.env`` ``key=`` and ``os.environ``.
 
-    When the active key has an endpoint, also write ``api=``.
+    When the active key has an endpoint, also write ``api=``. The explicit
+    ``API_KEY_OPTIONAL`` flag lets OpenAI-compatible clients use a harmless
+    placeholder internally for local servers whose HTTP API needs no key.
     Returns the secret that was written (may be empty).
     """
     from dotenv import set_key
@@ -226,6 +255,9 @@ def sync_active_to_env(
         target.touch()
     set_key(target, "key", secret)
     os.environ["key"] = secret
+    key_optional = "true" if is_active_keyless(vault_path) else "false"
+    set_key(target, "API_KEY_OPTIONAL", key_optional)
+    os.environ["API_KEY_OPTIONAL"] = key_optional
     if endpoint:
         set_key(target, "api", endpoint)
         os.environ["api"] = endpoint

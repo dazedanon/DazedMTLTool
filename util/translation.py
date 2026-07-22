@@ -392,8 +392,12 @@ else:
     if org:
         openai.organization = org.strip()
 
-# Always set API key from 'key' env var (trim whitespace)
-openai.api_key = os.getenv("key", "").strip()
+# The SDK itself requires a non-empty value even when a local compatible server
+# does not authenticate requests. Only use the placeholder for an explicitly
+# keyless vault entry so missing cloud credentials still fail normally.
+_env_key = os.getenv("key", "").strip()
+_key_optional = os.getenv("API_KEY_OPTIONAL", "").strip().lower() in ("1", "true", "yes")
+openai.api_key = _env_key or ("not-needed" if _key_optional else "")
 
 # Translation cache management
 CACHE_FILE = Path("log/translation_cache.json")
@@ -2166,8 +2170,8 @@ def translateText(system, user, history, penalty, formatType, model, numLines=No
         openai.base_url = "https://api.mistral.ai/v1/"
     elif _live_api:
         openai.base_url = _normalize_openai_base_url(_live_api)
-    if _live_key:
-        openai.api_key = _live_key
+    _live_key_optional = os.getenv("API_KEY_OPTIONAL", "").strip().lower() in ("1", "true", "yes")
+    openai.api_key = _live_key or ("not-needed" if _live_key_optional else "")
 
     api_provider = _live_provider
 
