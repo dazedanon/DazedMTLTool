@@ -78,7 +78,9 @@ class UpdateThread(QThread):
     REPO_OWNER = "dazed"
     REPO_SLUG = "dazed-mtl-tool"
     REPO_BRANCH = "main"
-    ARCHIVE_ROOT = "dazed-mtl-tool"
+    # Gitea names the archive top folder after the repo display name (currently
+    # "dazedtl"). Resolve dynamically so a rename cannot silently no-op again.
+    ARCHIVE_ROOT = "dazedtl"
     SHA_FILE = str(LAST_UPDATE_SHA_PATH)
 
     # Top-level paths that should never be touched during update
@@ -116,6 +118,25 @@ class UpdateThread(QThread):
         if rel.as_posix() in cls.PROTECTED_DATA_FILES:
             return False
         return True
+
+    @classmethod
+    def resolve_archive_root(cls, extract_dir: Path) -> Path:
+        """Locate the single top-level folder inside an extracted archive.
+
+        Prefers ``ARCHIVE_ROOT`` when present; otherwise accepts exactly one
+        subdirectory (Gitea zip layout). Raises if the layout is unexpected.
+        """
+        preferred = extract_dir / cls.ARCHIVE_ROOT
+        if preferred.is_dir():
+            return preferred
+        dirs = sorted(p for p in extract_dir.iterdir() if p.is_dir())
+        if len(dirs) == 1:
+            return dirs[0]
+        found = [p.name for p in dirs]
+        raise FileNotFoundError(
+            f"Could not find update archive root under {extract_dir} "
+            f"(expected {cls.ARCHIVE_ROOT!r}; found {found})"
+        )
 
     @staticmethod
     def _fmt_bytes(num: int) -> str:
@@ -211,16 +232,21 @@ class UpdateThread(QThread):
             with zipfile.ZipFile(zip_path, "r") as zf:
                 zf.extractall(tmp)
 
-            extracted = tmp / self.ARCHIVE_ROOT
-            root = Path(".").resolve()
+            extracted = self.resolve_archive_root(tmp)
+            root = PROJECT_ROOT.resolve()
 
             install_files = [
                 src
                 for src in extracted.rglob("*")
                 if src.is_file() and self.should_install(src.relative_to(extracted))
             ]
-            total_files = max(len(install_files), 1)
+            if not install_files:
+                raise RuntimeError(
+                    "Update archive contained no installable files "
+                    f"(root={extracted.name!r})"
+                )
 
+            total_files = len(install_files)
             self.progress.emit("Applying", 85, "Installing updated files…")
             for index, src in enumerate(install_files, start=1):
                 rel = src.relative_to(extracted)

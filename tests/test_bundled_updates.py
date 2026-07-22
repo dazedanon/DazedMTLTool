@@ -62,6 +62,67 @@ class UpdateThreadInstallFilterTests(unittest.TestCase):
                 self.assertFalse(UpdateThread.should_install(Path(rel)))
 
 
+class UpdateThreadArchiveRootTests(unittest.TestCase):
+    """Gitea zips nest files under a single top folder (repo display name)."""
+
+    def test_prefers_configured_archive_root(self):
+        from gui.main import UpdateThread
+
+        with tempfile.TemporaryDirectory() as raw:
+            base = Path(raw)
+            preferred = base / UpdateThread.ARCHIVE_ROOT
+            preferred.mkdir()
+            (base / "other").mkdir()
+            self.assertEqual(UpdateThread.resolve_archive_root(base), preferred)
+
+    def test_falls_back_to_single_subdirectory(self):
+        from gui.main import UpdateThread
+
+        with tempfile.TemporaryDirectory() as raw:
+            base = Path(raw)
+            only = base / "renamed-repo-folder"
+            only.mkdir()
+            (only / "gui").mkdir()
+            (only / "gui" / "main.py").write_text("# ok", encoding="utf-8")
+            self.assertEqual(UpdateThread.resolve_archive_root(base), only)
+
+    def test_raises_when_archive_root_missing(self):
+        from gui.main import UpdateThread
+
+        with tempfile.TemporaryDirectory() as raw:
+            base = Path(raw)
+            (base / "a").mkdir()
+            (base / "b").mkdir()
+            with self.assertRaises(FileNotFoundError):
+                UpdateThread.resolve_archive_root(base)
+
+    def test_stale_archive_root_name_would_have_installed_nothing(self):
+        """Regression: wrong ARCHIVE_ROOT used to report success with 0 files."""
+        from gui.main import UpdateThread
+
+        with tempfile.TemporaryDirectory() as raw:
+            base = Path(raw)
+            real = base / "dazedtl"
+            real.mkdir()
+            (real / "gui").mkdir()
+            (real / "gui" / "main.py").write_text("print('hi')\n", encoding="utf-8")
+            (real / "data").mkdir()
+            (real / "data" / "help").mkdir()
+            (real / "data" / "help" / "00-welcome.md").write_text("# hi\n", encoding="utf-8")
+
+            # Old hardcoded slug before the DazedTL rebrand.
+            stale = base / "dazed-mtl-tool"
+            self.assertFalse(stale.exists())
+            self.assertEqual(list(stale.rglob("*")), [])
+
+            extracted = UpdateThread.resolve_archive_root(base)
+            install_files = [
+                src
+                for src in extracted.rglob("*")
+                if src.is_file() and UpdateThread.should_install(src.relative_to(extracted))
+            ]
+            self.assertGreaterEqual(len(install_files), 2)
+
 class ShippedDataTrackingTests(unittest.TestCase):
     """Guide/help and other shipped data/ files must be git-trackable.
 
@@ -417,8 +478,11 @@ class MaintainerRefreshTests(unittest.TestCase):
                     with patch.object(forge, "_fetch_plugins", return_value=plugin):
                         self.assertTrue(forge.refresh_forge_plugins(log_fn=None))
 
-            self.assertEqual((base / "Forge_MV.js").read_bytes(), plugin)
+            # Maintainer refresh updates MZ modern only; MV stays on the legacy bundle.
+            self.assertEqual((base / "Forge_MZ.js").read_bytes(), plugin)
             self.assertEqual((upstream / "Forge_MZ.js").read_bytes(), plugin)
+            self.assertFalse((base / "Forge_MV.js").exists())
+            self.assertFalse((upstream / "Forge_MV.js").exists())
 
 
 if __name__ == "__main__":
