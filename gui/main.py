@@ -94,6 +94,7 @@ class UpdateThread(QThread):
         "data/last_update_sha.txt",
         "data/wolf_speakers.json",
         "data/wolf_safe_notes.json",
+        "data/api_keys.json",
     })
 
     # GitLab zip archives do not preserve Unix execute bits; restore after apply.

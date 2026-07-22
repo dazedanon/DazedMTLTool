@@ -5,11 +5,11 @@ Configuration Tab - Handles environment variables, global settings, and engine c
 import os
 from pathlib import Path
 from PyQt5.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QFormLayout, QLineEdit, 
+    QWidget, QVBoxLayout, QHBoxLayout, QFormLayout, QLineEdit,
     QSpinBox, QDoubleSpinBox, QComboBox, QPushButton, QGroupBox,
     QLabel, QFileDialog, QMessageBox, QScrollArea, QTextEdit,
     QCheckBox, QApplication, QTabWidget, QFrame, QStackedWidget, QToolButton,
-    QMenu
+    QMenu, QDialog, QDialogButtonBox, QSizePolicy,
 )
 from PyQt5.QtCore import Qt, pyqtSignal, QTimer, QThread
 from PyQt5.QtGui import QIcon
@@ -19,6 +19,7 @@ from gui.rpgmaker_tab import RPGMakerTab
 from gui.wolf_tab import WolfTab
 from gui.csv_tab import CSVTab
 from gui.srpg_tab import SRPGTab
+from util import api_keys as api_key_vault
 
 
 class ModelFetchThread(QThread):
@@ -115,6 +116,68 @@ def create_horizontal_line():
     line.setFrameShadow(QFrame.Sunken)
     line.setStyleSheet("QFrame { color: #555555; margin: 5px 0px; }")
     return line
+
+
+class ApiKeyEditDialog(QDialog):
+    """Dialog to create or overwrite a named API key (secret entered once)."""
+
+    def __init__(self, parent=None, initial_name: str = ""):
+        super().__init__(parent)
+        self.setWindowTitle("API Key")
+        self.setModal(True)
+        self.setMinimumWidth(420)
+
+        layout = QVBoxLayout(self)
+        layout.setSpacing(10)
+
+        form = QFormLayout()
+        form.setLabelAlignment(Qt.AlignRight | Qt.AlignVCenter)
+
+        self.name_edit = QLineEdit(initial_name)
+        self.name_edit.setPlaceholderText("e.g. OpenAI, DeepSeek, Work")
+        form.addRow("Name:", self.name_edit)
+
+        self.secret_edit = QLineEdit()
+        self.secret_edit.setEchoMode(QLineEdit.Password)
+        self.secret_edit.setPlaceholderText("Paste API key secret")
+        form.addRow("Secret:", self.secret_edit)
+
+        layout.addLayout(form)
+
+        hint = QLabel(
+            "The name appears in the dropdown. The secret is stored locally "
+            "and is never shown again in the main Config page."
+        )
+        hint.setWordWrap(True)
+        hint.setStyleSheet("color: #888888; font-size: 11px;")
+        layout.addWidget(hint)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(self._accept_if_valid)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+        self._name = ""
+        self._secret = ""
+        self.secret_edit.setFocus()
+
+    def _accept_if_valid(self):
+        name = self.name_edit.text().strip()
+        secret = self.secret_edit.text().strip()
+        if not name:
+            QMessageBox.warning(self, "API Key", "Enter a name for this key.")
+            self.name_edit.setFocus()
+            return
+        if not secret:
+            QMessageBox.warning(self, "API Key", "Enter the API key secret.")
+            self.secret_edit.setFocus()
+            return
+        self._name = name
+        self._secret = secret
+        self.accept()
+
+    def result_values(self) -> tuple[str, str]:
+        return self._name, self._secret
 
 
 class ConfigTab(QWidget):
@@ -306,6 +369,19 @@ class ConfigTab(QWidget):
         api_url_label.setFixedWidth(150)
         api_url_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
 
+        _api_field_width = 364
+        _api_btn_style = """
+            QToolButton {
+                background-color: #3e3e42;
+                color: #cccccc;
+                border: 1px solid #555555;
+                border-radius: 3px;
+                padding: 3px 6px;
+            }
+            QToolButton:hover { background-color: #505050; }
+            QToolButton::menu-indicator { image: none; }
+        """
+
         api_url_widget = QWidget()
         api_url_layout = QHBoxLayout(api_url_widget)
         api_url_layout.setContentsMargins(0, 0, 0, 0)
@@ -313,15 +389,13 @@ class ConfigTab(QWidget):
 
         self.api_url_edit = QLineEdit()
         self.api_url_edit.setPlaceholderText("Leave blank for OpenAI API")
+        self.api_url_edit.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
 
         api_url_preset_btn = QToolButton()
         api_url_preset_btn.setText("Presets ▾")
         api_url_preset_btn.setFixedWidth(75)
         api_url_preset_btn.setPopupMode(QToolButton.InstantPopup)
-        api_url_preset_btn.setStyleSheet("""
-            QToolButton { padding: 3px 6px; }
-            QToolButton::menu-indicator { image: none; }
-        """)
+        api_url_preset_btn.setStyleSheet(_api_btn_style)
 
         api_url_menu = QMenu(api_url_preset_btn)
         _url_presets = [
@@ -338,20 +412,48 @@ class ConfigTab(QWidget):
         api_url_preset_btn.setMenu(api_url_menu)
         self.api_url_edit.textChanged.connect(self._update_model_placeholder)
 
-        api_url_layout.addWidget(self.api_url_edit)
+        api_url_layout.addWidget(self.api_url_edit, 1)
         api_url_layout.addWidget(api_url_preset_btn)
-        api_url_widget.setFixedWidth(364)
+        api_url_widget.setFixedWidth(_api_field_width)
 
         api_form.addRow(api_url_label, api_url_widget)
         
         api_key_label = QLabel("API Key:")
         api_key_label.setFixedWidth(150)
         api_key_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        self.api_key_edit = QLineEdit()
-        self.api_key_edit.setEchoMode(QLineEdit.Password)
-        self.api_key_edit.setPlaceholderText("Enter your API key")
-        self.api_key_edit.setFixedWidth(350)  # Large
-        api_form.addRow(api_key_label, self.api_key_edit)
+
+        api_key_widget = QWidget()
+        api_key_layout = QHBoxLayout(api_key_widget)
+        api_key_layout.setContentsMargins(0, 0, 0, 0)
+        api_key_layout.setSpacing(4)
+
+        self.api_key_combo = QComboBox()
+        self.api_key_combo.setEditable(False)
+        self.api_key_combo.setToolTip(
+            "Select a saved API key by name. Secrets stay hidden after you add them."
+        )
+        self.api_key_combo.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+
+        self.api_key_new_btn = QToolButton()
+        self.api_key_new_btn.setText("New")
+        self.api_key_new_btn.setToolTip("Add or update a named API key")
+        self.api_key_new_btn.setFixedWidth(48)
+        self.api_key_new_btn.clicked.connect(self._on_api_key_new)
+
+        self.api_key_delete_btn = QToolButton()
+        self.api_key_delete_btn.setText("Delete")
+        self.api_key_delete_btn.setToolTip("Remove the selected API key")
+        self.api_key_delete_btn.setFixedWidth(56)
+        self.api_key_delete_btn.clicked.connect(self._on_api_key_delete)
+
+        for btn in (self.api_key_new_btn, self.api_key_delete_btn):
+            btn.setStyleSheet(_api_btn_style)
+
+        api_key_layout.addWidget(self.api_key_combo, 1)
+        api_key_layout.addWidget(self.api_key_new_btn)
+        api_key_layout.addWidget(self.api_key_delete_btn)
+        api_key_widget.setFixedWidth(_api_field_width)
+        api_form.addRow(api_key_label, api_key_widget)
         
         model_label = QLabel("Model:")
         model_label.setFixedWidth(150)
@@ -365,17 +467,18 @@ class ConfigTab(QWidget):
         self.model_combo = QComboBox()
         self.model_combo.setEditable(True)
         self.model_combo.addItems(ModelFetchThread.DEFAULTS)
-        self.model_combo.setFixedWidth(270)
+        self.model_combo.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
 
         self.model_refresh_btn = QToolButton()
         self.model_refresh_btn.setText("⟳")
         self.model_refresh_btn.setToolTip("Fetch latest models from the configured API")
         self.model_refresh_btn.setFixedWidth(28)
+        self.model_refresh_btn.setStyleSheet(_api_btn_style)
         self.model_refresh_btn.clicked.connect(lambda: self.fetch_models(silent=False))
 
-        model_layout.addWidget(self.model_combo)
+        model_layout.addWidget(self.model_combo, 1)
         model_layout.addWidget(self.model_refresh_btn)
-        model_widget.setFixedWidth(306)
+        model_widget.setFixedWidth(_api_field_width)
 
         api_form.addRow(model_label, model_widget)
         
@@ -701,16 +804,89 @@ class ConfigTab(QWidget):
     # Model fetching
     # ------------------------------------------------------------------
 
+    def _active_api_key_secret(self) -> str:
+        """Return the secret for the currently selected named key."""
+        name = self.api_key_combo.currentText().strip()
+        if not name:
+            return api_key_vault.get_active_secret()
+        secret = api_key_vault.get_secret(name)
+        return secret if secret is not None else ""
+
+    def _refresh_api_key_combo(self, preferred: str | None = None):
+        """Reload named keys into the dropdown without firing autosave."""
+        api_key_vault.ensure_vault(env_path=self.env_file_path)
+        names = api_key_vault.list_names()
+        active = preferred or api_key_vault.get_active_name()
+        self.api_key_combo.blockSignals(True)
+        self.api_key_combo.clear()
+        if names:
+            self.api_key_combo.addItems(names)
+            if active and active in names:
+                self.api_key_combo.setCurrentText(active)
+            else:
+                self.api_key_combo.setCurrentIndex(0)
+        else:
+            self.api_key_combo.setPlaceholderText("No keys saved - click New")
+        self.api_key_combo.blockSignals(False)
+        self.api_key_delete_btn.setEnabled(bool(names))
+
+    def _on_api_key_selected(self, _name: str = ""):
+        """Persist dropdown selection as the active vault key and mirror to .env."""
+        name = self.api_key_combo.currentText().strip()
+        if not name:
+            return
+        try:
+            api_key_vault.set_active(name)
+            api_key_vault.sync_active_to_env(env_path=self.env_file_path)
+        except KeyError:
+            return
+        self.auto_save()
+
+    def _on_api_key_new(self):
+        """Open dialog to create or overwrite a named API key."""
+        current = self.api_key_combo.currentText().strip()
+        dialog = ApiKeyEditDialog(self, initial_name=current)
+        if dialog.exec_() != QDialog.Accepted:
+            return
+        name, secret = dialog.result_values()
+        try:
+            api_key_vault.upsert_key(name, secret, make_active=True)
+            api_key_vault.sync_active_to_env(env_path=self.env_file_path)
+        except ValueError as exc:
+            QMessageBox.warning(self, "API Key", str(exc))
+            return
+        self._refresh_api_key_combo(preferred=name)
+        self.auto_save()
+
+    def _on_api_key_delete(self):
+        """Delete the selected named key after confirmation."""
+        name = self.api_key_combo.currentText().strip()
+        if not name:
+            return
+        reply = QMessageBox.question(
+            self,
+            "Delete API Key",
+            f'Remove saved key "{name}"?\nThe secret will be deleted from this machine.',
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if reply != QMessageBox.Yes:
+            return
+        api_key_vault.delete_key(name)
+        api_key_vault.sync_active_to_env(env_path=self.env_file_path)
+        self._refresh_api_key_combo()
+        self.auto_save()
+
     def fetch_models(self, silent=False):
         """Kick off background fetch of models from the configured API."""
-        api_key = self.api_key_edit.text().strip()
+        api_key = self._active_api_key_secret()
         api_url = self.api_url_edit.text().strip()
 
         if not api_key:
             if not silent:
                 QMessageBox.warning(
                     self, "No API Key",
-                    "Please enter an API key before fetching models."
+                    "Please add or select an API key before fetching models."
                 )
             return
 
@@ -771,7 +947,7 @@ class ConfigTab(QWidget):
 
         # API settings
         self.api_url_edit.setText(_get("api", "").strip())
-        self.api_key_edit.setText(_get("key", "").strip())
+        self._refresh_api_key_combo()
         self.model_combo.setCurrentText(_get("model", "gpt-4.1"))
 
         # Translation settings
@@ -835,7 +1011,7 @@ class ConfigTab(QWidget):
         """Connect all widgets to auto-save on change."""
         # Text fields - use editingFinished to avoid saving on every keystroke
         self.api_url_edit.editingFinished.connect(self.auto_save)
-        self.api_key_edit.editingFinished.connect(self.auto_save)
+        self.api_key_combo.currentTextChanged.connect(self._on_api_key_selected)
 
         
         # Combo boxes
@@ -865,7 +1041,7 @@ class ConfigTab(QWidget):
         """Disconnect all widgets from auto-save."""
         try:
             self.api_url_edit.editingFinished.disconnect(self.auto_save)
-            self.api_key_edit.editingFinished.disconnect(self.auto_save)
+            self.api_key_combo.currentTextChanged.disconnect(self._on_api_key_selected)
 
             self.model_combo.currentTextChanged.disconnect(self.auto_save)
             self.language_combo.currentTextChanged.disconnect(self.auto_save)
@@ -922,7 +1098,7 @@ class ConfigTab(QWidget):
             # Build config dict for both file and os.environ updates
             config = {
                 "api": self.api_url_edit.text().strip(),
-                "key": self.api_key_edit.text().strip(),
+                "key": self._active_api_key_secret(),
                 "model": self.model_combo.currentText(),
                 "language": self.language_combo.currentText(),
                 "timeout": str(self.timeout_spin.value()),
@@ -980,7 +1156,7 @@ class ConfigTab(QWidget):
         
         # API settings
         self.api_url_edit.clear()
-        self.api_key_edit.clear()
+        self._refresh_api_key_combo()
         self.model_combo.setCurrentText("gpt-4.1")
         
         # Translation settings
@@ -1031,7 +1207,7 @@ class ConfigTab(QWidget):
         """Get current configuration as dictionary."""
         return {
             "api": self.api_url_edit.text(),
-            "key": self.api_key_edit.text(),
+            "key": self._active_api_key_secret(),
             "model": self.model_combo.currentText(),
             "language": self.language_combo.currentText(),
             "timeout": self.timeout_spin.value(),
@@ -1057,7 +1233,7 @@ class ConfigTab(QWidget):
         errors = []
         
         # Check required fields
-        if not self.api_key_edit.text().strip():
+        if not self._active_api_key_secret():
             errors.append("API Key is required")
             
         if not self.model_combo.currentText().strip():

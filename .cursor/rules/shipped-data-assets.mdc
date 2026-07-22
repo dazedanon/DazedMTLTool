@@ -18,7 +18,7 @@ Anything matched by `.gitignore` is omitted from that archive and never reaches 
   - `!data/translation_contexts.json`
 - Do **not** rely on `UpdateThread.should_install` alone - ignored files never appear in the zip.
 - Extend `_SHIPPED_DATA_FILES` / `ShippedDataTrackingTests` in `tests/test_bundled_updates.py` when adding a new shipped path.
-- User-local files stay ignored/protected: `data/vocab.txt`, `data/last_update_sha.txt`, `data/wolf_*.json`.
+- User-local files stay ignored/protected: `data/vocab.txt`, `data/last_update_sha.txt`, `data/wolf_*.json`, `data/api_keys.json`.
 
 ## Quick check
 

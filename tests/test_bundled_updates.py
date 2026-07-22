@@ -52,6 +52,7 @@ class UpdateThreadInstallFilterTests(unittest.TestCase):
             "data/last_update_sha.txt",
             "data/wolf_speakers.json",
             "data/wolf_safe_notes.json",
+            "data/api_keys.json",
             ".env",
             "venv/pyvenv.cfg",
             "log/translations.txt",
