@@ -804,6 +804,15 @@ class DazedMTLGUI(QMainWindow):
             font.setPointSize(max(6, int(9 * scale_factor)))
             app.setFont(font)
 
+            # Keep line edits / combos tall enough for the scaled font.
+            from PyQt5.QtGui import QFontMetrics
+            from PyQt5.QtWidgets import QComboBox, QDoubleSpinBox, QLineEdit, QSpinBox
+
+            control_h = max(30, QFontMetrics(font).height() + 14)
+            for widget in app.allWidgets():
+                if isinstance(widget, (QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox)):
+                    widget.setMinimumHeight(control_h)
+
             # Scale inline font-size values in every widget's individual stylesheet.
             # We store the *original* stylesheet on each widget (using a Qt property)
             # so that re-scaling always starts from the unmodified values.
@@ -1309,6 +1318,7 @@ def main():
         migrate_app_settings()
         
         app = QApplication(sys.argv)
+        app.setStyle("Fusion")
 
         # Windows taskbar groups by executable (python.exe) unless we set an explicit
         # AppUserModelID; combine with QApplication window icon so the pinned icon
@@ -1437,7 +1447,8 @@ def main():
             background-color: #404040;
             color: #ffffff;
             border: 1px solid #555555;
-            padding: 5px 8px;
+            padding: 1px 10px;
+            min-height: 30px;
             border-radius: 2px;
             selection-background-color: #007acc;
         }
@@ -1448,7 +1459,8 @@ def main():
             background-color: #404040;
             color: #ffffff;
             border: 1px solid #555555;
-            padding: 5px 8px;
+            padding: 1px 10px;
+            min-height: 30px;
             border-radius: 2px;
         }
         QSpinBox:focus, QDoubleSpinBox:focus {
@@ -1468,29 +1480,23 @@ def main():
             background-color: #404040;
             color: #ffffff;
             border: 1px solid #555555;
-            padding: 5px;
-            padding-right: 30px;
+            padding: 1px 8px;
+            min-height: 30px;
             border-radius: 2px;
         }
         QComboBox:focus {
             border: 1px solid #007acc;
         }
         QComboBox::drop-down {
-            subcontrol-origin: padding;
-            subcontrol-position: center right;
-            width: 25px;
+            subcontrol-origin: border;
+            subcontrol-position: top right;
+            width: 20px;
+            border: none;
             border-left: 1px solid #555555;
-            background-color: #555555;
+            background-color: #4a4a4a;
         }
         QComboBox::drop-down:hover {
             background-color: #007acc;
-        }
-        QComboBox::down-arrow {
-            width: 0;
-            height: 0;
-            border-left: 5px solid transparent;
-            border-right: 5px solid transparent;
-            border-top: 6px solid #ffffff;
         }
         QComboBox QAbstractItemView {
             background-color: #404040;

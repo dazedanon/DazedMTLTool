@@ -121,11 +121,19 @@ def create_horizontal_line():
 class ApiKeyEditDialog(QDialog):
     """Dialog to create or overwrite a named API key (secret entered once)."""
 
-    def __init__(self, parent=None, initial_name: str = ""):
+    def __init__(
+        self,
+        parent=None,
+        initial_name: str = "",
+        initial_endpoint: str = "",
+        *,
+        allow_blank_secret: bool = False,
+    ):
         super().__init__(parent)
         self.setWindowTitle("API Key")
         self.setModal(True)
-        self.setMinimumWidth(420)
+        self.setMinimumWidth(460)
+        self._allow_blank_secret = allow_blank_secret
 
         layout = QVBoxLayout(self)
         layout.setSpacing(10)
@@ -139,14 +147,48 @@ class ApiKeyEditDialog(QDialog):
 
         self.secret_edit = QLineEdit()
         self.secret_edit.setEchoMode(QLineEdit.Password)
-        self.secret_edit.setPlaceholderText("Paste API key secret")
+        if allow_blank_secret:
+            self.secret_edit.setPlaceholderText("Leave blank to keep the existing secret")
+        else:
+            self.secret_edit.setPlaceholderText("Paste API key secret")
         form.addRow("Secret:", self.secret_edit)
+
+        endpoint_wrap = QWidget()
+        endpoint_row = QHBoxLayout(endpoint_wrap)
+        endpoint_row.setContentsMargins(0, 0, 0, 0)
+        endpoint_row.setSpacing(6)
+
+        self.endpoint_edit = QLineEdit(initial_endpoint)
+        self.endpoint_edit.setPlaceholderText("Optional - leave blank to keep the global API URL")
+        endpoint_row.addWidget(self.endpoint_edit, 1)
+
+        endpoint_preset_btn = QToolButton()
+        endpoint_preset_btn.setText("Presets ▾")
+        endpoint_preset_btn.setPopupMode(QToolButton.InstantPopup)
+        endpoint_menu = QMenu(endpoint_preset_btn)
+        for label, url in (
+            ("OpenAI", "https://api.openai.com/v1"),
+            ("Claude (Anthropic)", "https://api.anthropic.com/v1"),
+            ("Gemini", "https://generativelanguage.googleapis.com/v1beta/openai/"),
+            ("DeepSeek", "https://api.deepseek.com/v1/"),
+            ("Mistral", "https://api.mistral.ai/v1/"),
+            ("Nvidia", "https://integrate.api.nvidia.com/v1/"),
+            ("Clear", ""),
+        ):
+            action = endpoint_menu.addAction(label)
+            action.triggered.connect(
+                lambda checked=False, u=url: self.endpoint_edit.setText(u)
+            )
+        endpoint_preset_btn.setMenu(endpoint_menu)
+        endpoint_row.addWidget(endpoint_preset_btn)
+        form.addRow("Endpoint:", endpoint_wrap)
 
         layout.addLayout(form)
 
         hint = QLabel(
             "The name appears in the dropdown. The secret is stored locally "
-            "and is never shown again in the main Config page."
+            "and is never shown again on the main Config page. "
+            "If you set an endpoint, selecting this key always applies that API URL."
         )
         hint.setWordWrap(True)
         hint.setStyleSheet("color: #888888; font-size: 11px;")
@@ -159,25 +201,28 @@ class ApiKeyEditDialog(QDialog):
 
         self._name = ""
         self._secret = ""
+        self._endpoint = ""
         self.secret_edit.setFocus()
 
     def _accept_if_valid(self):
         name = self.name_edit.text().strip()
         secret = self.secret_edit.text().strip()
+        endpoint = self.endpoint_edit.text().strip()
         if not name:
             QMessageBox.warning(self, "API Key", "Enter a name for this key.")
             self.name_edit.setFocus()
             return
-        if not secret:
+        if not secret and not self._allow_blank_secret:
             QMessageBox.warning(self, "API Key", "Enter the API key secret.")
             self.secret_edit.setFocus()
             return
         self._name = name
         self._secret = secret
+        self._endpoint = endpoint
         self.accept()
 
-    def result_values(self) -> tuple[str, str]:
-        return self._name, self._secret
+    def result_values(self) -> tuple[str, str, str]:
+        return self._name, self._secret, self._endpoint
 
 
 class ConfigTab(QWidget):
@@ -343,281 +388,244 @@ class ConfigTab(QWidget):
     def create_general_settings_tab(self):
         """Create combined general settings tab with API, Translation, Performance, and UI settings."""
         widget = QWidget()
-        
+
         content = QWidget()
         layout = QVBoxLayout()
         layout.setSpacing(8)
         layout.setContentsMargins(15, 15, 15, 15)
-        
-        # Create a two-column layout for better space utilization
+
+        # Shared geometry: one label column + one field edge across both columns.
+        label_w = 160
+        field_w = 360
+        row_gap = 12
+        btn_style = (
+            "QToolButton {"
+            "background-color: #3e3e42; color: #cccccc;"
+            "border: 1px solid #555555; border-radius: 3px; padding: 4px 8px;"
+            "}"
+            "QToolButton:hover { background-color: #505050; }"
+            "QToolButton::menu-indicator { image: none; }"
+        )
+
+        def form_label(text: str) -> QLabel:
+            lbl = QLabel(text)
+            lbl.setFixedWidth(label_w)
+            lbl.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            lbl.setStyleSheet("padding: 0px; background: transparent;")
+            return lbl
+
+        def size_field(w: QWidget) -> QWidget:
+            w.setFixedWidth(field_w)
+            w.setMinimumWidth(field_w)
+            w.setMaximumWidth(field_w)
+            w.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Preferred)
+            if isinstance(w, (QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox)):
+                w.setMinimumHeight(32)
+            return w
+
+        def row_box(*widgets: QWidget, stretch_index: int = 0) -> QWidget:
+            """Fixed-width control cluster; stretch one child, never overflow buttons."""
+            box = QWidget()
+            row = QHBoxLayout(box)
+            row.setContentsMargins(0, 0, 0, 0)
+            row.setSpacing(8)
+            for i, child in enumerate(widgets):
+                if i == stretch_index:
+                    child.setMinimumWidth(0)
+                    child.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+                    row.addWidget(child, 1)
+                else:
+                    child.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Preferred)
+                    row.addWidget(child, 0)
+            box.setFixedWidth(field_w)
+            box.setMinimumHeight(32)
+            box.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Preferred)
+            return box
+
+        def make_section() -> QVBoxLayout:
+            section = QVBoxLayout()
+            section.setContentsMargins(0, 0, 0, 12)
+            section.setSpacing(row_gap)
+            return section
+
+        def add_row(section: QVBoxLayout, label: str, field: QWidget) -> None:
+            row = QHBoxLayout()
+            row.setContentsMargins(0, 0, 0, 0)
+            row.setSpacing(20)
+            row.addWidget(form_label(label), 0, Qt.AlignVCenter)
+            row.addWidget(field, 0, Qt.AlignVCenter)
+            row.addStretch(1)
+            section.addLayout(row)
+
         columns_layout = QHBoxLayout()
-        columns_layout.setSpacing(30)
-        
-        # LEFT COLUMN
+        columns_layout.setSpacing(40)
+
+        # ── LEFT COLUMN ──────────────────────────────────────────────
         left_column = QVBoxLayout()
         left_column.setSpacing(8)
-        
-        # API Configuration Section
+
         left_column.addWidget(create_section_header("🔑 API Configuration"))
-        api_form = QFormLayout()
-        api_form.setSpacing(6)
-        api_form.setContentsMargins(0, 0, 0, 12)
-        api_form.setFieldGrowthPolicy(QFormLayout.FieldsStayAtSizeHint)
-        api_form.setLabelAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        
-        api_url_label = QLabel("API URL:")
-        api_url_label.setFixedWidth(150)
-        api_url_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-
-        _api_field_width = 364
-        _api_btn_style = """
-            QToolButton {
-                background-color: #3e3e42;
-                color: #cccccc;
-                border: 1px solid #555555;
-                border-radius: 3px;
-                padding: 3px 6px;
-            }
-            QToolButton:hover { background-color: #505050; }
-            QToolButton::menu-indicator { image: none; }
-        """
-
-        api_url_widget = QWidget()
-        api_url_layout = QHBoxLayout(api_url_widget)
-        api_url_layout.setContentsMargins(0, 0, 0, 0)
-        api_url_layout.setSpacing(4)
+        api_section = make_section()
 
         self.api_url_edit = QLineEdit()
         self.api_url_edit.setPlaceholderText("Leave blank for OpenAI API")
-        self.api_url_edit.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
 
         api_url_preset_btn = QToolButton()
         api_url_preset_btn.setText("Presets ▾")
-        api_url_preset_btn.setFixedWidth(75)
+        api_url_preset_btn.setFixedWidth(84)
         api_url_preset_btn.setPopupMode(QToolButton.InstantPopup)
-        api_url_preset_btn.setStyleSheet(_api_btn_style)
+        api_url_preset_btn.setStyleSheet(btn_style)
 
         api_url_menu = QMenu(api_url_preset_btn)
-        _url_presets = [
+        for name, url in (
             ("OpenAI", "https://api.openai.com/v1"),
             ("Claude (Anthropic)", "https://api.anthropic.com/v1"),
             ("Gemini", "https://generativelanguage.googleapis.com/v1beta/openai/"),
             ("DeepSeek", "https://api.deepseek.com/v1/"),
             ("Mistral", "https://api.mistral.ai/v1/"),
             ("Nvidia", "https://integrate.api.nvidia.com/v1/"),
-        ]
-        for _name, _url in _url_presets:
-            _action = api_url_menu.addAction(_name)
-            _action.triggered.connect(lambda checked, u=_url: self.api_url_edit.setText(u))
+        ):
+            action = api_url_menu.addAction(name)
+            action.triggered.connect(lambda checked, u=url: self.api_url_edit.setText(u))
         api_url_preset_btn.setMenu(api_url_menu)
         self.api_url_edit.textChanged.connect(self._update_model_placeholder)
 
-        api_url_layout.addWidget(self.api_url_edit, 1)
-        api_url_layout.addWidget(api_url_preset_btn)
-        api_url_widget.setFixedWidth(_api_field_width)
-
-        api_form.addRow(api_url_label, api_url_widget)
-        
-        api_key_label = QLabel("API Key:")
-        api_key_label.setFixedWidth(150)
-        api_key_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-
-        api_key_widget = QWidget()
-        api_key_layout = QHBoxLayout(api_key_widget)
-        api_key_layout.setContentsMargins(0, 0, 0, 0)
-        api_key_layout.setSpacing(4)
+        add_row(
+            api_section,
+            "API URL:",
+            row_box(self.api_url_edit, api_url_preset_btn),
+        )
 
         self.api_key_combo = QComboBox()
         self.api_key_combo.setEditable(False)
         self.api_key_combo.setToolTip(
-            "Select a saved API key by name. Secrets stay hidden after you add them."
+            "Select a saved API key by name. Optional per-key endpoints are "
+            "applied to API URL automatically. Secrets stay hidden after you add them."
         )
-        self.api_key_combo.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
 
         self.api_key_new_btn = QToolButton()
         self.api_key_new_btn.setText("New")
         self.api_key_new_btn.setToolTip("Add or update a named API key")
-        self.api_key_new_btn.setFixedWidth(48)
+        self.api_key_new_btn.setFixedWidth(52)
+        self.api_key_new_btn.setStyleSheet(btn_style)
         self.api_key_new_btn.clicked.connect(self._on_api_key_new)
 
         self.api_key_delete_btn = QToolButton()
         self.api_key_delete_btn.setText("Delete")
         self.api_key_delete_btn.setToolTip("Remove the selected API key")
-        self.api_key_delete_btn.setFixedWidth(56)
+        self.api_key_delete_btn.setFixedWidth(64)
+        self.api_key_delete_btn.setStyleSheet(btn_style)
         self.api_key_delete_btn.clicked.connect(self._on_api_key_delete)
 
-        for btn in (self.api_key_new_btn, self.api_key_delete_btn):
-            btn.setStyleSheet(_api_btn_style)
-
-        api_key_layout.addWidget(self.api_key_combo, 1)
-        api_key_layout.addWidget(self.api_key_new_btn)
-        api_key_layout.addWidget(self.api_key_delete_btn)
-        api_key_widget.setFixedWidth(_api_field_width)
-        api_form.addRow(api_key_label, api_key_widget)
-        
-        model_label = QLabel("Model:")
-        model_label.setFixedWidth(150)
-        model_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-
-        model_widget = QWidget()
-        model_layout = QHBoxLayout(model_widget)
-        model_layout.setContentsMargins(0, 0, 0, 0)
-        model_layout.setSpacing(4)
+        add_row(
+            api_section,
+            "API Key:",
+            row_box(self.api_key_combo, self.api_key_new_btn, self.api_key_delete_btn),
+        )
 
         self.model_combo = QComboBox()
         self.model_combo.setEditable(True)
         self.model_combo.addItems(ModelFetchThread.DEFAULTS)
-        self.model_combo.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
 
         self.model_refresh_btn = QToolButton()
         self.model_refresh_btn.setText("⟳")
         self.model_refresh_btn.setToolTip("Fetch latest models from the configured API")
-        self.model_refresh_btn.setFixedWidth(28)
-        self.model_refresh_btn.setStyleSheet(_api_btn_style)
+        self.model_refresh_btn.setFixedWidth(32)
+        self.model_refresh_btn.setStyleSheet(btn_style)
         self.model_refresh_btn.clicked.connect(lambda: self.fetch_models(silent=False))
 
-        model_layout.addWidget(self.model_combo, 1)
-        model_layout.addWidget(self.model_refresh_btn)
-        model_widget.setFixedWidth(_api_field_width)
+        add_row(
+            api_section,
+            "Model:",
+            row_box(self.model_combo, self.model_refresh_btn),
+        )
 
-        api_form.addRow(model_label, model_widget)
-        
-        left_column.addLayout(api_form)
+        left_column.addLayout(api_section)
         left_column.addWidget(create_horizontal_line())
-        
-        # Translation Settings Section
+
         left_column.addWidget(create_section_header("🌐 Translation Settings"))
-        trans_form = QFormLayout()
-        trans_form.setSpacing(6)
-        trans_form.setContentsMargins(0, 0, 0, 12)
-        trans_form.setFieldGrowthPolicy(QFormLayout.FieldsStayAtSizeHint)
-        trans_form.setLabelAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        
-        lang_label = QLabel("Target Language:")
-        lang_label.setFixedWidth(150)
-        lang_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        trans_section = make_section()
+
         self.language_combo = QComboBox()
         self.language_combo.addItems([
             "English", "Spanish", "French", "German", "Italian",
-            "Portuguese", "Russian", "Chinese", "Korean", "Japanese"
+            "Portuguese", "Russian", "Chinese", "Korean", "Japanese",
         ])
-        self.language_combo.setFixedWidth(200)  # Medium
-        trans_form.addRow(lang_label, self.language_combo)
-        
-        timeout_label = QLabel("Timeout:")
-        timeout_label.setFixedWidth(150)
-        timeout_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        add_row(trans_section, "Target Language:", size_field(self.language_combo))
+
         self.timeout_spin = QSpinBox()
         self.timeout_spin.setButtonSymbols(QSpinBox.NoButtons)
         self.timeout_spin.setRange(30, 300)
         self.timeout_spin.setValue(90)
         self.timeout_spin.setSuffix(" sec")
-        self.timeout_spin.setFixedWidth(120)  # Small
-        trans_form.addRow(timeout_label, self.timeout_spin)
-        
-        left_column.addLayout(trans_form)
+        add_row(trans_section, "Timeout:", size_field(self.timeout_spin))
+
+        left_column.addLayout(trans_section)
         left_column.addWidget(create_horizontal_line())
-        
-        # Performance Settings Section
+
         left_column.addWidget(create_section_header("⚡ Performance Settings"))
-        perf_form = QFormLayout()
-        perf_form.setSpacing(6)
-        perf_form.setContentsMargins(0, 0, 0, 12)
-        perf_form.setFieldGrowthPolicy(QFormLayout.FieldsStayAtSizeHint)
-        perf_form.setLabelAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        
-        file_threads_label = QLabel("File Threads:")
-        file_threads_label.setFixedWidth(150)
-        file_threads_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        perf_section = make_section()
+
         self.file_threads_spin = QSpinBox()
         self.file_threads_spin.setButtonSymbols(QSpinBox.NoButtons)
         self.file_threads_spin.setRange(1, 10)
         self.file_threads_spin.setValue(1)
-        self.file_threads_spin.setFixedWidth(120)  # Small
-        perf_form.addRow(file_threads_label, self.file_threads_spin)
-        
-        threads_label = QLabel("Threads per File:")
-        threads_label.setFixedWidth(150)
-        threads_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        add_row(perf_section, "File Threads:", size_field(self.file_threads_spin))
+
         self.threads_spin = QSpinBox()
         self.threads_spin.setButtonSymbols(QSpinBox.NoButtons)
         self.threads_spin.setRange(1, 20)
         self.threads_spin.setValue(1)
-        self.threads_spin.setFixedWidth(120)  # Small
-        perf_form.addRow(threads_label, self.threads_spin)
-        
-        batch_label = QLabel("Batch Size:")
-        batch_label.setFixedWidth(150)
-        batch_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        add_row(perf_section, "Threads per File:", size_field(self.threads_spin))
+
         self.batch_size_spin = QSpinBox()
         self.batch_size_spin.setButtonSymbols(QSpinBox.NoButtons)
         self.batch_size_spin.setRange(1, 100)
         self.batch_size_spin.setValue(30)
-        self.batch_size_spin.setFixedWidth(120)  # Small
-        perf_form.addRow(batch_label, self.batch_size_spin)
-        
-        freq_label = QLabel("Frequency Penalty:")
-        freq_label.setFixedWidth(150)
-        freq_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        add_row(perf_section, "Batch Size:", size_field(self.batch_size_spin))
+
         self.frequency_penalty_spin = QDoubleSpinBox()
         self.frequency_penalty_spin.setButtonSymbols(QDoubleSpinBox.NoButtons)
         self.frequency_penalty_spin.setRange(0.0, 2.0)
         self.frequency_penalty_spin.setSingleStep(0.05)
         self.frequency_penalty_spin.setValue(0.05)
-        self.frequency_penalty_spin.setFixedWidth(120)  # Small
-        perf_form.addRow(freq_label, self.frequency_penalty_spin)
-        
-        left_column.addLayout(perf_form)
+        add_row(
+            perf_section,
+            "Frequency Penalty:",
+            size_field(self.frequency_penalty_spin),
+        )
+
+        left_column.addLayout(perf_section)
         left_column.addStretch()
-        
-        # RIGHT COLUMN
+
+        # ── RIGHT COLUMN ─────────────────────────────────────────────
         right_column = QVBoxLayout()
         right_column.setSpacing(8)
-        
-        # Text Formatting Section
+
         right_column.addWidget(create_section_header("📝 Text Formatting"))
-        format_form = QFormLayout()
-        format_form.setSpacing(6)
-        format_form.setContentsMargins(0, 0, 0, 12)
-        format_form.setFieldGrowthPolicy(QFormLayout.FieldsStayAtSizeHint)
-        format_form.setLabelAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        
-        dialogue_label = QLabel("Dialogue Width:")
-        dialogue_label.setFixedWidth(150)
-        dialogue_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        format_section = make_section()
+
         self.width_spin = QSpinBox()
         self.width_spin.setButtonSymbols(QSpinBox.NoButtons)
         self.width_spin.setRange(20, 200)
         self.width_spin.setValue(60)
         self.width_spin.setSuffix(" chars")
-        self.width_spin.setFixedWidth(120)  # Small
-        format_form.addRow(dialogue_label, self.width_spin)
-        
-        list_label = QLabel("List Width:")
-        list_label.setFixedWidth(150)
-        list_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        add_row(format_section, "Dialogue Width:", size_field(self.width_spin))
+
         self.list_width_spin = QSpinBox()
         self.list_width_spin.setButtonSymbols(QSpinBox.NoButtons)
         self.list_width_spin.setRange(20, 200)
         self.list_width_spin.setValue(100)
         self.list_width_spin.setSuffix(" chars")
-        self.list_width_spin.setFixedWidth(120)  # Small
-        format_form.addRow(list_label, self.list_width_spin)
-        
-        note_label = QLabel("Note Width:")
-        note_label.setFixedWidth(150)
-        note_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        add_row(format_section, "List Width:", size_field(self.list_width_spin))
+
         self.note_width_spin = QSpinBox()
         self.note_width_spin.setButtonSymbols(QSpinBox.NoButtons)
         self.note_width_spin.setRange(20, 200)
         self.note_width_spin.setValue(75)
         self.note_width_spin.setSuffix(" chars")
-        self.note_width_spin.setFixedWidth(120)  # Small
-        format_form.addRow(note_label, self.note_width_spin)
+        add_row(format_section, "Note Width:", size_field(self.note_width_spin))
 
-        quotes_label = QLabel("Convert Quotes:")
-        quotes_label.setFixedWidth(150)
-        quotes_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         self.convert_quotes_cb = QCheckBox('Convert 「」 / 『』 to ""')
         self.convert_quotes_cb.setChecked(True)
         self.convert_quotes_cb.setToolTip(
@@ -627,65 +635,53 @@ class ConfigTab(QWidget):
             "Leaving this on is recommended - the AI often fails to keep 「」 "
             "consistent across lines."
         )
-        format_form.addRow(quotes_label, self.convert_quotes_cb)
-        
-        right_column.addLayout(format_form)
+        quotes_wrap = QWidget()
+        quotes_wrap.setFixedWidth(field_w)
+        quotes_row = QHBoxLayout(quotes_wrap)
+        quotes_row.setContentsMargins(0, 0, 0, 0)
+        quotes_row.setSpacing(0)
+        quotes_row.addWidget(self.convert_quotes_cb)
+        quotes_row.addStretch()
+        add_row(format_section, "Convert Quotes:", quotes_wrap)
+
+        right_column.addLayout(format_section)
         right_column.addWidget(create_horizontal_line())
-        
-        # Custom API Pricing Section
+
         right_column.addWidget(create_section_header("💰 Custom API Pricing"))
-        
         pricing_note = QLabel("Only used if model isn't in built-in pricing list")
-        pricing_note.setStyleSheet("color: #888888; font-style: italic; font-size: 9px;")
+        pricing_note.setStyleSheet(
+            f"color: #888888; font-style: italic; font-size: 11px; "
+            f"padding-left: {label_w + 20}px;"
+        )
         pricing_note.setWordWrap(True)
         right_column.addWidget(pricing_note)
-        
-        price_form = QFormLayout()
-        price_form.setSpacing(6)
-        price_form.setContentsMargins(0, 3, 0, 12)
-        price_form.setFieldGrowthPolicy(QFormLayout.FieldsStayAtSizeHint)
-        price_form.setLabelAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        
-        input_label = QLabel("Input Cost:")
-        input_label.setFixedWidth(150)
-        input_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+
+        price_section = make_section()
+
         self.input_cost_spin = QDoubleSpinBox()
         self.input_cost_spin.setButtonSymbols(QDoubleSpinBox.NoButtons)
         self.input_cost_spin.setRange(0.0, 100.0)
         self.input_cost_spin.setDecimals(4)
         self.input_cost_spin.setSingleStep(0.1)
         self.input_cost_spin.setValue(2.0)
-        self.input_cost_spin.setSuffix(" per 1M tokens")
-        self.input_cost_spin.setFixedWidth(200)  # Medium
-        price_form.addRow(input_label, self.input_cost_spin)
-        
-        output_label = QLabel("Output Cost:")
-        output_label.setFixedWidth(150)
-        output_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        self.input_cost_spin.setSuffix(" / 1M tokens")
+        add_row(price_section, "Input Cost:", size_field(self.input_cost_spin))
+
         self.output_cost_spin = QDoubleSpinBox()
         self.output_cost_spin.setButtonSymbols(QDoubleSpinBox.NoButtons)
         self.output_cost_spin.setRange(0.0, 100.0)
         self.output_cost_spin.setDecimals(4)
         self.output_cost_spin.setSingleStep(0.1)
         self.output_cost_spin.setValue(8.0)
-        self.output_cost_spin.setSuffix(" per 1M tokens")
-        self.output_cost_spin.setFixedWidth(200)  # Medium
-        price_form.addRow(output_label, self.output_cost_spin)
+        self.output_cost_spin.setSuffix(" / 1M tokens")
+        add_row(price_section, "Output Cost:", size_field(self.output_cost_spin))
 
-        right_column.addLayout(price_form)
+        right_column.addLayout(price_section)
         right_column.addWidget(create_horizontal_line())
 
-        # UI Settings Section
         right_column.addWidget(create_section_header("🖥️ UI Settings"))
-        ui_form = QFormLayout()
-        ui_form.setSpacing(6)
-        ui_form.setContentsMargins(0, 0, 0, 12)
-        ui_form.setFieldGrowthPolicy(QFormLayout.FieldsStayAtSizeHint)
-        ui_form.setLabelAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        ui_section = make_section()
 
-        font_scale_label = QLabel("Font Scale:")
-        font_scale_label.setFixedWidth(150)
-        font_scale_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         self.font_scale_spin = QDoubleSpinBox()
         self.font_scale_spin.setButtonSymbols(QDoubleSpinBox.NoButtons)
         self.font_scale_spin.setRange(0.5, 3.0)
@@ -693,84 +689,68 @@ class ConfigTab(QWidget):
         self.font_scale_spin.setDecimals(1)
         self.font_scale_spin.setValue(1.0)
         self.font_scale_spin.setSuffix("x")
-        self.font_scale_spin.setFixedWidth(120)
         self.font_scale_spin.setToolTip(
             "Scale the application font size.\n"
             "1.0 = default, 1.5 = 50% larger, 2.0 = double size.\n"
             "Takes effect immediately on save."
         )
-        ui_form.addRow(font_scale_label, self.font_scale_spin)
+        add_row(ui_section, "Font Scale:", size_field(self.font_scale_spin))
 
-        right_column.addLayout(ui_form)
+        right_column.addLayout(ui_section)
+        right_column.addWidget(create_horizontal_line())
 
-        # Game Update defaults (written into gameupdate/patch-config.txt on copy)
         right_column.addWidget(create_section_header("📦 Game Update Defaults"))
-        gu_form = QFormLayout()
-        gu_form.setSpacing(6)
-        gu_form.setContentsMargins(0, 0, 0, 12)
-        gu_form.setFieldGrowthPolicy(QFormLayout.FieldsStayAtSizeHint)
-        gu_form.setLabelAlignment(Qt.AlignRight | Qt.AlignVCenter)
-
-        def _gu_label(text: str) -> QLabel:
-            lbl = QLabel(text)
-            lbl.setFixedWidth(150)
-            lbl.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-            return lbl
+        gu_section = make_section()
 
         self.gu_forge_combo = QComboBox()
         self.gu_forge_combo.addItem("GitLab / gitgud", "gitlab")
         self.gu_forge_combo.addItem("GitHub", "github")
         self.gu_forge_combo.addItem("Forgejo / Gitea", "forgejo")
-        self.gu_forge_combo.setFixedWidth(220)
         self.gu_forge_combo.setToolTip(
             "Where your patch repos live. Used when Step 1 writes patch-config.txt."
         )
         self.gu_forge_combo.currentIndexChanged.connect(self._on_gu_forge_changed)
-        gu_form.addRow(_gu_label("Forge:"), self.gu_forge_combo)
+        add_row(gu_section, "Forge:", size_field(self.gu_forge_combo))
 
         self.gu_host_edit = QLineEdit()
-        self.gu_host_edit.setFixedWidth(220)
         self.gu_host_edit.setPlaceholderText("gitgud.io")
         self.gu_host_edit.setToolTip(
             "Hostname only (no https://). Leave blank to use the forge default."
         )
-        gu_form.addRow(_gu_label("Host:"), self.gu_host_edit)
+        add_row(gu_section, "Host:", size_field(self.gu_host_edit))
 
         self.gu_username_edit = QLineEdit()
-        self.gu_username_edit.setFixedWidth(220)
         self.gu_username_edit.setPlaceholderText("your-org-or-user")
         self.gu_username_edit.setToolTip(
             "Owner / org / group for all patch repos. Set once; rarely changes."
         )
-        gu_form.addRow(_gu_label("Org / username:"), self.gu_username_edit)
+        add_row(gu_section, "Username:", size_field(self.gu_username_edit))
 
         self.gu_branch_edit = QLineEdit()
-        self.gu_branch_edit.setFixedWidth(220)
         self.gu_branch_edit.setPlaceholderText("main")
         self.gu_branch_edit.setToolTip("Default branch to track (usually main or master).")
-        gu_form.addRow(_gu_label("Branch:"), self.gu_branch_edit)
+        add_row(gu_section, "Branch:", size_field(self.gu_branch_edit))
 
         gu_hint = QLabel(
             "Copied into each game's gameupdate/patch-config.txt when you run "
             "Copy gameupdate/ (repo= is still per-game)."
         )
         gu_hint.setWordWrap(True)
-        gu_hint.setStyleSheet("color:#7a7a7a;font-size:11px;")
-        right_column.addLayout(gu_form)
+        gu_hint.setStyleSheet(
+            f"color:#7a7a7a;font-size:11px;padding-left: {label_w + 20}px;"
+        )
+        right_column.addLayout(gu_section)
         right_column.addWidget(gu_hint)
         right_column.addStretch()
-        
-        # Add columns to layout
+
         columns_layout.addLayout(left_column, 1)
         columns_layout.addLayout(right_column, 1)
-        
         layout.addLayout(columns_layout)
-        
-        # Add buttons at the bottom of General Settings tab
+
         layout.addSpacing(15)
         button_layout = QHBoxLayout()
         button_layout.setSpacing(10)
-        
+
         from gui import qt_icons
 
         reset_button = QPushButton()
@@ -791,9 +771,9 @@ class ConfigTab(QWidget):
         button_layout.addSpacing(10)
         button_layout.addWidget(self.autosave_label)
         button_layout.addStretch()
-        
+
         layout.addLayout(button_layout)
-        
+
         content.setLayout(layout)
         widget.setLayout(QVBoxLayout())
         widget.layout().setContentsMargins(0, 0, 0, 0)
@@ -812,6 +792,19 @@ class ConfigTab(QWidget):
         secret = api_key_vault.get_secret(name)
         return secret if secret is not None else ""
 
+    def _apply_key_endpoint(self, name: str | None = None):
+        """If the named key has an endpoint, apply it to the API URL field."""
+        key_name = (name or self.api_key_combo.currentText()).strip()
+        if not key_name:
+            return
+        endpoint = api_key_vault.get_endpoint(key_name)
+        if not endpoint:
+            return
+        self.api_url_edit.blockSignals(True)
+        self.api_url_edit.setText(endpoint)
+        self.api_url_edit.blockSignals(False)
+        self._update_model_placeholder()
+
     def _refresh_api_key_combo(self, preferred: str | None = None):
         """Reload named keys into the dropdown without firing autosave."""
         api_key_vault.ensure_vault(env_path=self.env_file_path)
@@ -829,6 +822,7 @@ class ConfigTab(QWidget):
             self.api_key_combo.setPlaceholderText("No keys saved - click New")
         self.api_key_combo.blockSignals(False)
         self.api_key_delete_btn.setEnabled(bool(names))
+        self._apply_key_endpoint()
 
     def _on_api_key_selected(self, _name: str = ""):
         """Persist dropdown selection as the active vault key and mirror to .env."""
@@ -837,6 +831,7 @@ class ConfigTab(QWidget):
             return
         try:
             api_key_vault.set_active(name)
+            self._apply_key_endpoint(name)
             api_key_vault.sync_active_to_env(env_path=self.env_file_path)
         except KeyError:
             return
@@ -845,12 +840,25 @@ class ConfigTab(QWidget):
     def _on_api_key_new(self):
         """Open dialog to create or overwrite a named API key."""
         current = self.api_key_combo.currentText().strip()
-        dialog = ApiKeyEditDialog(self, initial_name=current)
+        existing_endpoint = api_key_vault.get_endpoint(current) or "" if current else ""
+        dialog = ApiKeyEditDialog(
+            self,
+            initial_name=current,
+            initial_endpoint=existing_endpoint or self.api_url_edit.text().strip(),
+            allow_blank_secret=bool(current and api_key_vault.get_secret(current)),
+        )
         if dialog.exec_() != QDialog.Accepted:
             return
-        name, secret = dialog.result_values()
+        name, secret, endpoint = dialog.result_values()
         try:
-            api_key_vault.upsert_key(name, secret, make_active=True)
+            api_key_vault.upsert_key(
+                name,
+                secret,
+                endpoint=endpoint,
+                make_active=True,
+                keep_secret_if_blank=True,
+            )
+            self._apply_key_endpoint(name)
             api_key_vault.sync_active_to_env(env_path=self.env_file_path)
         except ValueError as exc:
             QMessageBox.warning(self, "API Key", str(exc))
