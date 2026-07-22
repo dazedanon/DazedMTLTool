@@ -2320,11 +2320,14 @@ class WolfWorkflowTab(QWidget):
         except Exception:
             pass
 
-        if pw and hasattr(pw, "content_stack"):
-            pw.content_stack.setCurrentIndex(0)
+        if pw and hasattr(pw, "switch_page"):
+            page = getattr(pw, "PAGE_TRANSLATION", 2)
+            pw.switch_page(page)
+        elif pw and hasattr(pw, "content_stack"):
+            pw.content_stack.setCurrentIndex(2)
             if hasattr(pw, "nav_buttons"):
                 for i, btn in enumerate(pw.nav_buttons):
-                    btn.setChecked(i == 0)
+                    btn.setChecked(i == 2)
 
         if auto_start:
             QTimer.singleShot(

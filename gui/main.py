@@ -612,6 +612,7 @@ class UpdateDialog(QDialog):
 
 # Import configuration widgets
 from gui.config_tab import ConfigTab
+from gui.guide_tab import GuideTab
 from gui.translation_tab import TranslationTab
 from gui.workflow_tab import WorkflowTab
 from gui.wolf_workflow_tab import WolfWorkflowTab
@@ -620,7 +621,14 @@ from gui.batch_tab import BatchTab
 
 class DazedMTLGUI(QMainWindow):
     """Main GUI window for the DazedMTLTool."""
-    
+
+    PAGE_GUIDE = 0
+    PAGE_WORKFLOW = 1
+    PAGE_TRANSLATION = 2
+    PAGE_BATCHES = 3
+    PAGE_SKILLS = 4
+    PAGE_CONFIG = 5
+
     def __init__(self):
         super().__init__()
         self.settings = QSettings("DazedTranslations", "DazedMTLTool")
@@ -838,37 +846,44 @@ class DazedMTLGUI(QMainWindow):
         
         # Create navigation buttons
         self.nav_buttons = []
-        
-        # Translation button (first)
-        btn_translation = self.create_nav_button("🌐", "Translation")
-        btn_translation.clicked.connect(lambda: self.switch_page(0))
-        sidebar_layout.addWidget(btn_translation)
-        self.nav_buttons.append(btn_translation)
 
-        # Workflow / Automation button (second)
+        # Guide / Quickstart (first - default on open)
+        btn_guide = self.create_nav_button("📖", "Guide")
+        btn_guide.setToolTip("Guide - quickstart, requirements, and examples")
+        btn_guide.clicked.connect(lambda: self.switch_page(self.PAGE_GUIDE))
+        sidebar_layout.addWidget(btn_guide)
+        self.nav_buttons.append(btn_guide)
+
+        # Workflow / Automation
         btn_workflow = self.create_nav_button("⚡", "Workflow")
-        btn_workflow.setToolTip("Workflow — automated translation pipeline")
-        btn_workflow.clicked.connect(lambda: self.switch_page(1))
+        btn_workflow.setToolTip("Workflow - automated translation pipeline")
+        btn_workflow.clicked.connect(lambda: self.switch_page(self.PAGE_WORKFLOW))
         sidebar_layout.addWidget(btn_workflow)
         self.nav_buttons.append(btn_workflow)
 
-        # Batch history button (third)
+        # Translation
+        btn_translation = self.create_nav_button("🌐", "Translation")
+        btn_translation.clicked.connect(lambda: self.switch_page(self.PAGE_TRANSLATION))
+        sidebar_layout.addWidget(btn_translation)
+        self.nav_buttons.append(btn_translation)
+
+        # Batch history
         btn_batches = self.create_nav_button("📦", "Batches")
-        btn_batches.setToolTip("Batches — Anthropic Message Batch history")
-        btn_batches.clicked.connect(lambda: self.switch_page(2))
+        btn_batches.setToolTip("Batches - Anthropic Message Batch history")
+        btn_batches.clicked.connect(lambda: self.switch_page(self.PAGE_BATCHES))
         sidebar_layout.addWidget(btn_batches)
         self.nav_buttons.append(btn_batches)
 
-        # Skills button (fourth)
+        # Skills
         btn_skills = self.create_nav_button("📚", "Skills")
-        btn_skills.setToolTip("Skills — edit system prompt, Project Setup, and translation contexts")
-        btn_skills.clicked.connect(lambda: self.switch_page(3))
+        btn_skills.setToolTip("Skills - edit system prompt, Project Setup, and translation contexts")
+        btn_skills.clicked.connect(lambda: self.switch_page(self.PAGE_SKILLS))
         sidebar_layout.addWidget(btn_skills)
         self.nav_buttons.append(btn_skills)
 
-        # Configuration button (fifth)
+        # Configuration
         btn_config = self.create_nav_button("⚙️", "Configuration")
-        btn_config.clicked.connect(lambda: self.switch_page(4))
+        btn_config.clicked.connect(lambda: self.switch_page(self.PAGE_CONFIG))
         sidebar_layout.addWidget(btn_config)
         self.nav_buttons.append(btn_config)
         
@@ -896,8 +911,8 @@ class DazedMTLGUI(QMainWindow):
         # Create menu bar
         self.create_menu_bar()
         
-        # Select first page by default
-        self.switch_page(0)
+        # Select Guide page by default
+        self.switch_page(self.PAGE_GUIDE)
     
     def create_nav_button(self, icon_text, tooltip):
         """Create a navigation button for the sidebar."""
@@ -922,23 +937,27 @@ class DazedMTLGUI(QMainWindow):
         """Set up all the tabs in the interface."""
         self.project_root = PROJECT_ROOT
 
-        # Translation Execution Tab (index 0)
-        self.translation_tab = TranslationTab(self)
-        self.content_stack.addWidget(self.translation_tab)
+        # Guide / Quickstart (index 0)
+        self.guide_tab = GuideTab(self)
+        self.content_stack.addWidget(self.guide_tab)
 
-        # Workflow / Automation Tab (index 1) — engine selector swaps between the
+        # Workflow / Automation (index 1) - engine selector swaps between the
         # RPGMaker and Wolf guided panels while keeping a single sidebar button.
         self.content_stack.addWidget(self._create_workflow_container())
 
-        # Batch History Tab (index 2)
+        # Translation Execution Tab (index 2)
+        self.translation_tab = TranslationTab(self)
+        self.content_stack.addWidget(self.translation_tab)
+
+        # Batch History Tab (index 3)
         self.batch_tab = BatchTab(self)
         self.content_stack.addWidget(self.batch_tab)
 
-        # Skills Tab (index 3)
+        # Skills Tab (index 4)
         self.skills_tab = SkillsTab(self)
         self.content_stack.addWidget(self.skills_tab)
 
-        # Configuration Tab (index 4)
+        # Configuration Tab (index 5)
         self.config_tab = ConfigTab()
         self.config_tab.config_changed.connect(self.on_config_changed)
         self.content_stack.addWidget(self.config_tab)
@@ -1117,7 +1136,14 @@ class DazedMTLGUI(QMainWindow):
         
         # Help menu
         help_menu = menubar.addMenu('Help')
-        
+
+        getting_started_action = help_menu.addAction('Getting Started')
+        getting_started_action.triggered.connect(
+            lambda: self.switch_page(self.PAGE_GUIDE)
+        )
+
+        help_menu.addSeparator()
+
         # About action
         about_action = help_menu.addAction('About')
         about_action.triggered.connect(self.show_about)

@@ -452,9 +452,10 @@ class BatchTab(QWidget):
         file_set = entry.get("file_set") or []
         if file_set and hasattr(tt, "select_files_by_name"):
             tt.select_files_by_name(file_set)
-        # Switch to Translation page (index 0).
+        # Switch to Translation page.
         if hasattr(parent, "switch_page"):
-            parent.switch_page(0)
+            page = getattr(parent, "PAGE_TRANSLATION", 2)
+            parent.switch_page(page)
         reply = QMessageBox.question(
             self,
             "Start Resume?",

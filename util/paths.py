@@ -9,6 +9,7 @@ DATA_DIR = PROJECT_ROOT / "data"
 VOCAB_PATH = DATA_DIR / "vocab.txt"
 VOCAB_BASE_PATH = DATA_DIR / "vocab_base.txt"
 SKILLS_DIR = DATA_DIR / "skills"
+HELP_DIR = DATA_DIR / "help"
 # Runtime translation system skill (formerly data/prompt.txt).
 PROMPT_PATH = SKILLS_DIR / "system.md"
 LEGACY_PROMPT_PATH = DATA_DIR / "prompt.txt"

@@ -25,6 +25,8 @@ class UpdateThreadInstallFilterTests(unittest.TestCase):
             "data/translation_contexts.json",
             "data/skills/system.md",
             "data/skills/project_setup.md",
+            "data/help/index.json",
+            "data/help/00-welcome.md",
             "data/vocab_base.txt",
             "gui/main.py",
             "gameupdate/GameUpdate.bat",
