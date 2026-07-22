@@ -1,0 +1,27 @@
+---
+description: Shipped data/ assets must be git-trackable so tool updates include them
+globs: "{.gitignore,data/**,gui/guide_tab.py,gui/main.py,tests/test_bundled_updates.py}"
+alwaysApply: false
+---
+
+# Shipped data/ and tool updates
+
+Tool auto-update downloads a **git branch archive**.
+Anything matched by `.gitignore` is omitted from that archive and never reaches users.
+
+## When adding or changing shipped defaults under `data/`
+
+- Add a negation under `.gitignore` (same pattern as skills/help):
+  - `!data/skills/**`
+  - `!data/help/**`
+  - `!data/vocab_base.txt`
+  - `!data/translation_contexts.json`
+- Do **not** rely on `UpdateThread.should_install` alone - ignored files never appear in the zip.
+- Extend `_SHIPPED_DATA_FILES` / `ShippedDataTrackingTests` in `tests/test_bundled_updates.py` when adding a new shipped path.
+- User-local files stay ignored/protected: `data/vocab.txt`, `data/last_update_sha.txt`, `data/wolf_*.json`.
+
+## Quick check
+
+```bash
+git check-ignore -- data/help/index.json   # must exit 1 (not ignored)
+```

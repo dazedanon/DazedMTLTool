@@ -20,6 +20,7 @@ __pycache__
 !assets/engine_icons/**
 !.pre-commit-config.yaml
 !data/skills/**
+!data/help/**
 !data/vocab_base.txt
 !data/translation_contexts.json
 !requirements.txt

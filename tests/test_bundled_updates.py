@@ -7,12 +7,26 @@ a maintainer explicitly uses --force / --refresh-offline / --refresh-all.
 
 from __future__ import annotations
 
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
 
 from util.wolfdawn import WolfDawnError, bundled_binary_path, ensure_wolf_binary
+
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+
+# Shipped with tool updates from the git archive. Keep in sync with .gitignore
+# exceptions under data/ — ignored files never appear in update zips.
+_SHIPPED_DATA_FILES = (
+    "data/translation_contexts.json",
+    "data/skills/system.md",
+    "data/skills/project_setup.md",
+    "data/help/index.json",
+    "data/help/00-welcome.md",
+    "data/vocab_base.txt",
+)
 
 
 class UpdateThreadInstallFilterTests(unittest.TestCase):
@@ -22,12 +36,7 @@ class UpdateThreadInstallFilterTests(unittest.TestCase):
         from gui.main import UpdateThread
 
         for rel in (
-            "data/translation_contexts.json",
-            "data/skills/system.md",
-            "data/skills/project_setup.md",
-            "data/help/index.json",
-            "data/help/00-welcome.md",
-            "data/vocab_base.txt",
+            *_SHIPPED_DATA_FILES,
             "gui/main.py",
             "gameupdate/GameUpdate.bat",
             "gameupdate/gameupdate/patch.ps1",
@@ -51,6 +60,62 @@ class UpdateThreadInstallFilterTests(unittest.TestCase):
         ):
             with self.subTest(rel=rel):
                 self.assertFalse(UpdateThread.should_install(Path(rel)))
+
+
+class ShippedDataTrackingTests(unittest.TestCase):
+    """Guide/help and other shipped data/ files must be git-trackable.
+
+    Tool updates download a branch archive from git. Anything matched by
+    .gitignore is omitted from that archive, so Guide markdown and index.json
+    would never reach end users.
+    """
+
+    def test_shipped_data_files_exist(self):
+        for rel in _SHIPPED_DATA_FILES:
+            with self.subTest(rel=rel):
+                self.assertTrue(
+                    (_REPO_ROOT / rel).is_file(),
+                    f"missing shipped asset {rel}",
+                )
+
+    def test_help_dir_markdown_matches_index(self):
+        import json
+
+        help_dir = _REPO_ROOT / "data" / "help"
+        index = json.loads((help_dir / "index.json").read_text(encoding="utf-8"))
+        for entry in index:
+            rel = entry["file"]
+            with self.subTest(file=rel):
+                self.assertTrue(
+                    (help_dir / rel).is_file(),
+                    f"data/help/index.json references missing {rel}",
+                )
+
+    def test_shipped_data_files_are_not_gitignored(self):
+        help_dir = _REPO_ROOT / "data" / "help"
+        rels = list(_SHIPPED_DATA_FILES)
+        for path in sorted(help_dir.glob("*.md")):
+            rel = path.relative_to(_REPO_ROOT).as_posix()
+            if rel not in rels:
+                rels.append(rel)
+
+        for rel in rels:
+            with self.subTest(rel=rel):
+                # Plain check-ignore (no -v): exit 0 = ignored, 1 = not ignored.
+                # -v also reports negation rules with exit 0, which is a false positive.
+                result = subprocess.run(
+                    ["git", "check-ignore", "--", rel],
+                    cwd=_REPO_ROOT,
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                self.assertNotEqual(
+                    result.returncode,
+                    0,
+                    f"{rel} is gitignored; "
+                    "add a !.gitignore exception under data/ so tool updates include it",
+                )
 
 
 class CheckToolUpdateTests(unittest.TestCase):

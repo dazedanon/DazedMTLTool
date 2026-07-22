@@ -1,0 +1,37 @@
+[
+  {
+    "id": "welcome",
+    "title": "Welcome",
+    "file": "00-welcome.md"
+  },
+  {
+    "id": "requirements",
+    "title": "Requirements",
+    "file": "01-requirements.md"
+  },
+  {
+    "id": "quickstart",
+    "title": "Quick Start",
+    "file": "02-quickstart.md"
+  },
+  {
+    "id": "workflow-rpg",
+    "title": "Workflow: RPG Maker",
+    "file": "03-workflow-rpg.md"
+  },
+  {
+    "id": "workflow-wolf",
+    "title": "Workflow: WolfDawn",
+    "file": "04-workflow-wolf.md"
+  },
+  {
+    "id": "other-tabs",
+    "title": "Other Tabs",
+    "file": "05-other-tabs.md"
+  },
+  {
+    "id": "examples",
+    "title": "Example Walkthrough",
+    "file": "06-examples.md"
+  }
+]
