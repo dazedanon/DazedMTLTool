@@ -320,7 +320,7 @@ class WolfBundledOnlyTests(unittest.TestCase):
         with patch("util.wolfdawn.bundled_binary_path", return_value=missing):
             with self.assertRaises(WolfDawnError) as ctx:
                 ensure_wolf_binary()
-        self.assertIn("Update DazedMTLTool", str(ctx.exception))
+        self.assertIn("Update DazedTL", str(ctx.exception))
 
     def test_ensure_wolf_binary_never_downloads(self):
         missing = Path("/nonexistent/wolf/missing")

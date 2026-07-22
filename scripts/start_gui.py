@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Launch script for DazedMTLTool GUI."""
+"""Launch script for DazedTL GUI."""
 
 import sys
 from pathlib import Path
@@ -40,7 +40,7 @@ def check_dependencies():
 
 def main():
     """Main entry point."""
-    print("DazedMTLTool GUI Launcher")
+    print("DazedTL GUI Launcher")
     print("=" * 40)
 
     from util.paths import ensure_vocab_file, migrate_root_data_files

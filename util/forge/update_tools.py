@@ -10,7 +10,7 @@ Svelte Forge bundle. MV therefore keeps the pre-rewrite legacy plugin
 Offline copies: util/forge/upstream/
 Active plugins: util/forge/Forge_MZ.js (modern), util/forge/Forge_MV.js (legacy)
 
-End users receive curated copies shipped with DazedMTLTool updates.
+End users receive curated copies shipped with DazedTL updates.
 Upstream fetches are maintainer-only (``--refresh-offline`` or ``--force``)
 and only refresh the MZ modern plugin.
 """
@@ -36,7 +36,7 @@ FORGE_PROJECT = "zero64801/forge-mvmz"
 FORGE_BRANCH = "master"
 GITGUD_API = "https://gitgud.io/api/v4"
 VERSION_FILE = _PKG_ROOT / ".forge_version.json"
-USER_AGENT = "DazedMTLTool"
+USER_AGENT = "DazedTL"
 
 
 def bundled_plugin_path(engine: str) -> Path:
@@ -187,7 +187,7 @@ def ensure_forge_plugins(force: bool = False, log_fn=print) -> bool:
         names = ", ".join(PLUGIN_BY_ENGINE[e] + ".js" for e in missing)
         _log(
             f"ERROR: Forge plugin(s) missing ({names}). "
-            "Update DazedMTLTool or ask the maintainer to refresh util/forge/upstream/.",
+            "Update DazedTL or ask the maintainer to refresh util/forge/upstream/.",
             log_fn,
         )
         return False

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Simple Translation Tab for DazedMTLTool GUI
+Simple Translation Tab for DazedTL GUI
 
 Simple file management and translation execution with console log display.
 """
@@ -33,6 +33,7 @@ from PyQt5.QtCore import Qt, QTimer, pyqtSignal, QThread, QMutex, QProcess, QEve
 from PyQt5.QtGui import QFont, QColor, QBrush
 from gui.log_viewer import LogViewer
 from gui import qt_icons
+from util.paths import APP_NAME, ORG_NAME
 
 
 def _strip_ansi(text):
@@ -843,7 +844,7 @@ class TranslationTab(QWidget):
         self.parent_window = parent
         # Persistent settings (remember last directory used in file dialogs)
         try:
-            self.settings = QSettings("DazedTranslations", "DazedMTLTool")
+            self.settings = QSettings(ORG_NAME, APP_NAME)
         except Exception:
             self.settings = None
         # If the worker signals finished before all file progress updates

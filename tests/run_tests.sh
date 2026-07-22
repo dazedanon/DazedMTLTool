@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Run DazedMTLTool unit tests using the project venv (cwd = project root).
+# Run DazedTL unit tests using the project venv (cwd = project root).
 
 set -euo pipefail
 

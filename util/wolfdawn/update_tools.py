@@ -1,7 +1,7 @@
 """Check for and apply WolfDawn ``wolf`` binary updates (maintainer-only upstream fetch).
 
 End users receive prebuilt binaries under ``util/wolfdawn/bin/<platform>/`` via
-DazedMTLTool updates. Maintainers refresh them with ``--refresh-all`` or ``--force``.
+DazedTL updates. Maintainers refresh them with ``--refresh-all`` or ``--force``.
 """
 
 from __future__ import annotations
@@ -150,7 +150,7 @@ def ensure_wolfdawn_binary(force: bool = False, log_fn=print) -> bool:
         return True
     _log(
         f"ERROR: no bundled WolfDawn binary for '{platform}' at {bundled}. "
-        "Update DazedMTLTool to receive a prebuilt wolf binary.",
+        "Update DazedTL to receive a prebuilt wolf binary.",
         log_fn,
     )
     return False

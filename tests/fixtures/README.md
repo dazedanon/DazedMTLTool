@@ -35,7 +35,7 @@ Or explicitly:
 Manual equivalent (must run from project root, with venv activated):
 
 ```bash
-cd /path/to/DazedMTLTool
+cd /path/to/DazedTL
 source .venv/bin/activate   # or: source venv/bin/activate
 python -m unittest tests.test_mvmz_source_original -v
 ```

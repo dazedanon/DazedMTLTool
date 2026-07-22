@@ -12,7 +12,7 @@
 
 **On an installed game (what gets copied over):** Put **`GameUpdate.bat`** in the **game root**, next to the game exe. Put **`patch.ps1`** and friends inside **`gameupdate\`** under that same root (mirror names—still **`gameupdate\`**). **`GameUpdate.bat`** finds **`gameupdate\patch.ps1`** from its own folder, so **`GameRoot`** is correct even if the console cwd is somewhere else.
 
-**Copy checklist:** From **`DazedMTLTool/gameupdate/`**, copy **`GameUpdate.bat`** to `<game>\`; copy everything inside **`gameupdate/gameupdate/`** into `<game>\gameupdate\`.
+**Copy checklist:** From the tool repo's **`gameupdate/`**, copy **`GameUpdate.bat`** to `<game>\`; copy everything inside **`gameupdate/gameupdate/`** into `<game>\gameupdate\`.
 
 2. Optional: set `GAMEUPDATE_PROMPT_PWSH=1` before running `GameUpdate.bat` if you want users to be prompted to install PowerShell 7 via winget.
 3. Optional: set `GAMEUPDATE_DL_ATTEMPTS` (default `2`) to control retries for API checks/downloads. Lower values fail faster; higher values tolerate flaky networks.
@@ -21,7 +21,7 @@
 
 Create `gameupdate/patch-config.txt` next to `patch.ps1` (see `patch-config.example.txt`).
 
-In DazedMTLTool, set **Config → Game Update Defaults** (forge, host, org/username, branch) once. Step 1 **Copy gameupdate/** writes those into each game's `patch-config.txt`. You still set `repo=` per game.
+In DazedTL, set **Config → Game Update Defaults** (forge, host, org/username, branch) once. Step 1 **Copy gameupdate/** writes those into each game's `patch-config.txt`. You still set `repo=` per game.
 
 ```txt
 forge=gitlab

@@ -4,7 +4,7 @@ RV2JSON.exe     — https://github.com/Sinflower/RV2JSON (bin/RV2JSON.exe)
 Decrypter CLI   — https://github.com/uuksu/RPGMakerDecrypter (release asset)
 
 End users receive curated copies via the offline bundle (``util/ace/offline/``)
-shipped with DazedMTLTool updates. Upstream fetches are maintainer-only
+shipped with DazedTL updates. Upstream fetches are maintainer-only
 (``--refresh-offline`` or ``--force``).
 """
 
@@ -31,7 +31,7 @@ DECRYPTER_LOCAL = ACE_DIR / "RPGMakerDecrypter-cli.exe"
 # Legacy name shipped in older DazedMTLTool commits (local only, not in git).
 DECRYPTER_LEGACY = ACE_DIR / "RPGMakerDecrypter.exe"
 
-USER_AGENT = "DazedMTLTool"
+USER_AGENT = "DazedTL"
 
 
 def _load_versions() -> dict:
@@ -184,7 +184,7 @@ def ensure_rv2json(force: bool = False, log_fn=print) -> bool:
     if RV2JSON_LOCAL.is_file():
         return True
     _log(
-        f"ERROR: RV2JSON.exe not found. Update DazedMTLTool or ask the maintainer "
+        f"ERROR: RV2JSON.exe not found. Update DazedTL or ask the maintainer "
         f"to refresh util/ace/offline/RV2JSON.exe.",
         log_fn,
     )
@@ -207,7 +207,7 @@ def ensure_decrypter(force: bool = False, log_fn=print) -> bool:
     if DECRYPTER_LOCAL.is_file() or DECRYPTER_LEGACY.is_file():
         return True
     _log(
-        f"ERROR: {DECRYPTER_ASSET} not found. Update DazedMTLTool or ask the maintainer "
+        f"ERROR: {DECRYPTER_ASSET} not found. Update DazedTL or ask the maintainer "
         f"to refresh util/ace/offline/{DECRYPTER_ASSET}.",
         log_fn,
     )

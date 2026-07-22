@@ -4,6 +4,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
+# Product identity (QSettings / desktop / window titles).
+ORG_NAME = "DazedTranslations"
+APP_NAME = "DazedTL"
+LEGACY_APP_NAME = "DazedMTLTool"
+
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = PROJECT_ROOT / "data"
 VOCAB_PATH = DATA_DIR / "vocab.txt"
@@ -53,6 +58,26 @@ def migrate_prompt_to_skills() -> None:
         if legacy.is_file():
             legacy.rename(PROMPT_PATH)
             return
+
+
+def migrate_app_settings() -> None:
+    """Copy QSettings from the legacy app name into DazedTL once."""
+    try:
+        from PyQt5.QtCore import QSettings
+    except ImportError:
+        return
+
+    new = QSettings(ORG_NAME, APP_NAME)
+    if str(new.value("_migrated_from_legacy_app", "")) == "1":
+        return
+
+    old = QSettings(ORG_NAME, LEGACY_APP_NAME)
+    old_keys = list(old.allKeys())
+    new_keys = [k for k in new.allKeys() if k != "_migrated_from_legacy_app"]
+    if old_keys and not new_keys:
+        for key in old_keys:
+            new.setValue(key, old.value(key))
+    new.setValue("_migrated_from_legacy_app", "1")
 
 
 migrate_root_data_files()

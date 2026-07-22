@@ -101,7 +101,7 @@ from util.wolfdawn import wrap_search as wolf_ws
 import util.dazedwrap as dazedwrap
 
 from gui.setup_skills_editors import SetupSkillsEditors
-from util.paths import PROJECT_ROOT, VOCAB_PATH
+from util.paths import PROJECT_ROOT, VOCAB_PATH, APP_NAME, ORG_NAME
 from util.project_scanner import (
     detect_wolf_layout,
     find_wolf_text_archives,
@@ -208,7 +208,7 @@ class WolfWorkflowTab(QWidget):
         super().__init__(parent)
         self.parent_window = parent
         try:
-            self.settings = QSettings("DazedTranslations", "DazedMTLTool")
+            self.settings = QSettings(ORG_NAME, APP_NAME)
         except Exception:
             self.settings = None
 
@@ -3670,7 +3670,7 @@ class WolfWorkflowTab(QWidget):
         self._run_task(task, on_done=_after)
 
     def _tool_root(self) -> Path:
-        """DazedMTLTool project root (``files/``, ``translated/``, etc.)."""
+        """DazedTL project root (``files/``, ``translated/``, etc.)."""
         return Path(__file__).resolve().parent.parent
 
     def _translated_path(self, json_name: str) -> Path | None:

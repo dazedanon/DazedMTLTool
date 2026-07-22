@@ -1,5 +1,5 @@
 """
-Shared translation utilities for DazedMTLTool.
+Shared translation utilities for DazedTL.
 Centralized translation function used across all modules.
 """
 

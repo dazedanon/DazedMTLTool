@@ -1,10 +1,10 @@
 """WolfDawn CLI bootstrap and thin subprocess wrappers.
 
 WolfDawn is the Rust toolchain (https://gitgud.io/zero64801/wolfdawn) that
-unpacks, extracts, injects, and repacks WOLF RPG Editor game data. DazedMTLTool
+unpacks, extracts, injects, and repacks WOLF RPG Editor game data. DazedTL
 ships prebuilt ``wolf`` binaries offline under ``util/wolfdawn/bin/<platform>/``
 so end users never need a Rust toolchain or a live upstream fetch. Binaries are
-updated when DazedMTLTool itself is updated. Everything the Wolf workflow needs
+updated when DazedTL itself is updated. Everything the Wolf workflow needs
 goes through the helpers here so command syntax and exit-code handling live in
 one place.
 
@@ -215,7 +215,7 @@ _RELEASE_ASSET_MATCH = {
 }
 _DOWNLOAD_UA = (
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) "
-    "DazedMTLTool WolfDawn-fetch"
+    "DazedTL WolfDawn-fetch"
 )
 
 PathLike = Union[str, Path]
@@ -394,7 +394,7 @@ def ensure_wolf_binary(log_fn=print) -> Path:
         return bundled
     raise WolfDawnError(
         f"No bundled WolfDawn binary for '{_platform_dir()}' at {bundled}. "
-        "Update DazedMTLTool to receive a prebuilt wolf binary."
+        "Update DazedTL to receive a prebuilt wolf binary."
     )
 
 

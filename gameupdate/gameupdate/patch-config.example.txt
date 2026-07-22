@@ -1,7 +1,7 @@
 # GameUpdate patch source (copy to patch-config.txt and edit).
 # Lines starting with # are comments. Keys are case-insensitive.
 #
-# Tip: set forge / host / username / branch once in DazedMTLTool
+# Tip: set forge / host / username / branch once in DazedTL
 # Config → Game Update Defaults. Step 1 "Copy gameupdate/" writes
 # those into this file automatically (you still set repo= per game).
 

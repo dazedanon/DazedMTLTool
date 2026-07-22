@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# DazedMTLTool startup script for Linux/macOS
+# DazedTL startup script for Linux/macOS
 
 set -o pipefail
 
@@ -150,7 +150,7 @@ ensure_vocab_file() {
 }
 
 echo "=========================================="
-echo "   DazedMTLTool Startup Script"
+echo "   DazedTL Startup Script"
 echo "=========================================="
 echo
 
@@ -222,7 +222,7 @@ fi
 echo
 
 echo "=========================================="
-echo "   Launching DazedMTLTool GUI..."
+echo "   Launching DazedTL GUI..."
 echo "=========================================="
 echo
 

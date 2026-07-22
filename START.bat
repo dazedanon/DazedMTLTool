@@ -2,7 +2,7 @@
 setlocal EnableDelayedExpansion
 
 echo ==========================================
-echo    DazedMTLTool Startup Script
+echo    DazedTL Startup Script
 echo ==========================================
 echo.
 
@@ -180,7 +180,7 @@ echo.
 
 :: Launch the GUI
 echo ==========================================
-echo    Launching DazedMTLTool GUI...
+echo    Launching DazedTL GUI...
 echo ==========================================
 echo.
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Launcher for DazedMTLTool.desktop (finds venv, then starts the GUI).
+# Launcher for DazedTL.desktop (finds venv, then starts the GUI).
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT" || exit 1
 

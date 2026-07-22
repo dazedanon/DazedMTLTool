@@ -20,7 +20,7 @@ import sys
 import threading
 from pathlib import Path
 
-from util.paths import VOCAB_PATH
+from util.paths import VOCAB_PATH, APP_NAME, ORG_NAME
 from util.skills import load_project_setup
 from util.vocab import BASE_SEPARATOR as _SHARED_BASE_SEPARATOR
 
@@ -638,7 +638,7 @@ class WorkflowTab(QWidget):
         super().__init__(parent)
         self.parent_window = parent
         try:
-            self.settings = QSettings("DazedTranslations", "DazedMTLTool")
+            self.settings = QSettings(ORG_NAME, APP_NAME)
         except Exception:
             self.settings = None
 

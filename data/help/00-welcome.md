@@ -1,6 +1,6 @@
-# Welcome to DazedMTLTool
+# Welcome to DazedTL
 
-DazedMTLTool translates Japanese games into English with an AI API.
+DazedTL translates Japanese games into English with an AI API.
 It has the strongest support for **RPG Maker** (MV / MZ / Ace) and **Wolf RPG** (WolfDawn),
 plus modules for Ren'Py, Tyrano, Kirikiri, CSV, and more.
 

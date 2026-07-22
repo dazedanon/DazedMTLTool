@@ -1,10 +1,10 @@
-# DazedMTLTool
+# DazedTL
 
 An AI-powered game translation tool with a GUI. Translate RPG Maker, Ren'Py, Tyrano, Wolf RPG, Kirikiri, and other game engines from Japanese to English using GPT, Gemini, [Mistral](https://docs.mistral.ai/api), or other compatible AI models.
 
 ## Credits
 
-- **[Sinflower](https://github.com/Sinflower)** — [RV2JSON](https://github.com/Sinflower/RV2JSON) — enables RPGMaker Ace games to be translated the same way as MV/MZ by converting rvdata2 files to JSON and back. A curated copy is bundled offline in `util/ace/offline/` and updates with DazedMTLTool.
+- **[Sinflower](https://github.com/Sinflower)** — [RV2JSON](https://github.com/Sinflower/RV2JSON) — enables RPGMaker Ace games to be translated the same way as MV/MZ by converting rvdata2 files to JSON and back. A curated copy is bundled offline in `util/ace/offline/` and updates with DazedTL.
 - **Sakura & Kao_SSS** — TL Inspector (`util/tl_inspector/`) — in-game translation source inspector and live-edit plugin for RPG Maker MV/MZ playtesting.
 - **Len** — [Forge](https://gitgud.io/zero64801/forge-mvmz) MV/MZ playtest plugin (`util/forge/`), Mistral API support (provider integration and adaptive rate limiting), and batch translation mode (Anthropic Message Batches API).
 
@@ -108,7 +108,7 @@ This means Python wasn't added to your PATH. You have two options:
 ### 1. Download the Tool
 
 1. Click the green **Code** button at the top of this page and select **Download ZIP**.
-2. Extract the ZIP to a folder of your choice (e.g., `C:\DazedMTLTool`).
+2. Extract the ZIP to a folder of your choice (e.g., `C:\DazedTL`).
 
 ### 2. Set Up Your API Key
 
@@ -127,7 +127,7 @@ This means Python wasn't added to your PATH. You have two options:
 
 **Windows:** Double-click `START.bat`. It will create a virtual environment, install dependencies, and open the GUI.
 
-**Linux/macOS:** Run `./START.sh`, or double-click `DazedMTLTool.desktop` (choose **Allow Launching** when your file manager asks). From then on, either method works.
+**Linux/macOS:** Run `./START.sh`, or double-click `DazedTL.desktop` (choose **Allow Launching** when your file manager asks). From then on, either method works.
 
 That's it! Use the same launcher each time you want to open the tool.
 
@@ -350,7 +350,7 @@ After Step 0 extract, the **Database** tab discovery report classifies your game
 | **Classic RPG** (most dialogue in maps/common events) | Names → foundation DB → maps/events (skip narrative DB if none) |
 | **Hybrid** | Names → foundation DB → narrative DB → maps/events |
 
-> **`wolf` binary:** Prebuilt `wolf` CLIs for Windows and Linux are bundled offline under `util/wolfdawn/bin/<platform>/`, so no toolchain or build step is needed. They update when you update DazedMTLTool. If your platform's binary is missing, update the tool or ask the maintainer to refresh the bundled copy.
+> **`wolf` binary:** Prebuilt `wolf` CLIs for Windows and Linux are bundled offline under `util/wolfdawn/bin/<platform>/`, so no toolchain or build step is needed. They update when you update DazedTL. If your platform's binary is missing, update the tool or ask the maintainer to refresh the bundled copy.
 
 > **Legacy modules:** The older `Wolf RPG` / `Wolf RPG 2` modules (configured in the Engine Config tab) still exist for edge cases, but the WolfDawn workflow above is the recommended path.
 
@@ -378,7 +378,7 @@ You can also select a block of text, right-click, and choose **Copilot → Fix /
 
 ### Modifying Tool Modules
 
-Open the DazedMTLTool folder in VSCode and ask Copilot to make changes to the translation modules. Examples:
+Open the DazedTL folder in VSCode and ask Copilot to make changes to the translation modules. Examples:
 
 - *"Add a new regex pattern to skip lines that start with //"*
 - *"Change the wordwrap logic to break on full-width punctuation"*

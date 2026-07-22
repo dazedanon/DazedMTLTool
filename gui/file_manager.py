@@ -11,6 +11,8 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt, QThread, pyqtSignal, QSettings
 import json
 
+from util.paths import APP_NAME, ORG_NAME
+
 
 class FileManager(QWidget):
     """Widget for managing input and output files."""
@@ -21,7 +23,7 @@ class FileManager(QWidget):
         super().__init__()
         # Persistent settings for remembering last-open directory
         try:
-            self.settings = QSettings("DazedTranslations", "DazedMTLTool")
+            self.settings = QSettings(ORG_NAME, APP_NAME)
         except Exception:
             self.settings = None
         self.input_files = []

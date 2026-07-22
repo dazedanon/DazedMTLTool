@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-DazedMTLTool GUI - Main Application
-A PyQt-based graphical user interface for the DazedMTLTool translation system.
+DazedTL GUI - Main Application
+A PyQt-based graphical user interface for the DazedTL translation system.
 """
 
 import re
@@ -29,7 +29,14 @@ from PyQt5.QtCore import Qt, QThread, pyqtSignal, QTimer, QSettings, QCoreApplic
 from PyQt5.QtGui import QIcon, QFont, QPixmap, QScreen, QGuiApplication
 
 
-from util.paths import PROJECT_ROOT, ICON_PATH, LAST_UPDATE_SHA_PATH
+from util.paths import (
+    APP_NAME,
+    ICON_PATH,
+    LAST_UPDATE_SHA_PATH,
+    ORG_NAME,
+    PROJECT_ROOT,
+    migrate_app_settings,
+)
 
 
 def load_application_icon() -> QIcon:
@@ -56,7 +63,7 @@ def check_tool_update() -> str | None:
 
 
 class BackgroundUpdateCheckThread(QThread):
-    """Checks for DazedMTLTool updates without blocking the UI."""
+    """Checks for DazedTL updates without blocking the UI."""
 
     finished = pyqtSignal(object)  # str | None — pending tool SHA when available
 
@@ -151,7 +158,7 @@ class UpdateThread(QThread):
     @classmethod
     def fetch_latest_sha(cls) -> str:
         req = urllib.request.Request(
-            cls.branch_api_url(), headers={"User-Agent": "DazedMTLTool"}
+            cls.branch_api_url(), headers={"User-Agent": APP_NAME}
         )
         with urllib.request.urlopen(req, timeout=15) as resp:
             return json.loads(resp.read())["commit"]["id"]
@@ -167,7 +174,7 @@ class UpdateThread(QThread):
 
     def _download_archive(self, zip_path: Path):
         req = urllib.request.Request(
-            self.archive_zip_url(), headers={"User-Agent": "DazedMTLTool"}
+            self.archive_zip_url(), headers={"User-Agent": APP_NAME}
         )
         with urllib.request.urlopen(req, timeout=120) as resp, open(zip_path, "wb") as fh:
             total = int(resp.headers.get("Content-Length", 0) or 0)
@@ -367,7 +374,7 @@ class UpdateDialog(QDialog):
 
         title_col = QVBoxLayout()
         title_col.setSpacing(2)
-        self.title_label = QLabel("DazedMTLTool Update")
+        self.title_label = QLabel(f"{APP_NAME} Update")
         self.title_label.setObjectName("updateTitle")
         self.subtitle_label = QLabel("Stay current with the latest fixes and features.")
         self.subtitle_label.setObjectName("updateDetail")
@@ -577,7 +584,7 @@ class UpdateDialog(QDialog):
             self.current_version_label.setText(sha)
             self.headline_label.setText("Update installed successfully")
             self.detail_label.setText(
-                "Restart DazedMTLTool to load the new version."
+                f"Restart {APP_NAME} to load the new version."
             )
             self.subtitle_label.setText("Update complete.")
             if isinstance(self.parent(), DazedMTLGUI):
@@ -620,7 +627,7 @@ from gui.skills_tab import SkillsTab
 from gui.batch_tab import BatchTab
 
 class DazedMTLGUI(QMainWindow):
-    """Main GUI window for the DazedMTLTool."""
+    """Main GUI window for DazedTL."""
 
     PAGE_GUIDE = 0
     PAGE_WORKFLOW = 1
@@ -631,7 +638,7 @@ class DazedMTLGUI(QMainWindow):
 
     def __init__(self):
         super().__init__()
-        self.settings = QSettings("DazedTranslations", "DazedMTLTool")
+        self.settings = QSettings(ORG_NAME, APP_NAME)
         self._pending_tool_sha: str | None = None
         self._update_check_thread = None
         self._shutdown_started = False
@@ -791,16 +798,16 @@ class DazedMTLGUI(QMainWindow):
 
             # Update window title only when non-default scale is active
             if scale_factor != 1.0:
-                self.setWindowTitle(f"DazedMTLTool - Visual Translation Interface (Font: {scale_factor:.1f}x)")
+                self.setWindowTitle(f"{APP_NAME} - Visual Translation Interface (Font: {scale_factor:.1f}x)")
             else:
-                self.setWindowTitle("DazedMTLTool - Visual Translation Interface")
+                self.setWindowTitle(f"{APP_NAME} - Visual Translation Interface")
 
         except Exception as e:
             print(f"Warning: Could not apply font scaling: {e}")
         
     def init_ui(self):
         """Initialize the user interface."""
-        self.setWindowTitle("DazedMTLTool - Visual Translation Interface")
+        self.setWindowTitle(f"{APP_NAME} - Visual Translation Interface")
         
         # Get screen geometry and set window size more responsively
         screen = QApplication.primaryScreen()
@@ -1012,7 +1019,7 @@ class DazedMTLGUI(QMainWindow):
         return container
 
     def start_background_update_check(self):
-        """Check for DazedMTLTool updates after the GUI is visible."""
+        """Check for DazedTL updates after the GUI is visible."""
         if self._update_check_thread and self._update_check_thread.isRunning():
             return
         self._update_check_thread = BackgroundUpdateCheckThread(self)
@@ -1221,15 +1228,14 @@ class DazedMTLGUI(QMainWindow):
         """Show the about dialog."""
         QMessageBox.about(
             self, 
-            "About DazedMTLTool GUI",
-            """
-            <h3>DazedMTLTool GUI</h3>
-            <p>A visual interface for the DazedMTLTool translation system.</p>
-            <p>This tool helps translate visual novels, RPG games, and other text-based content using AI translation services.</p>
+            f"About {APP_NAME}",
+            f"""
+            <h3>{APP_NAME}</h3>
+            <p>An AI translation tool for visual novels, RPG games, and other text-based content.</p>
             <p><b>Features:</b></p>
             <ul>
+                <li>Guided Workflow for RPG Maker and WolfDawn</li>
                 <li>Visual configuration management</li>
-                <li>Module-specific settings</li>
                 <li>Real-time translation monitoring</li>
                 <li>File management and organization</li>
             </ul>
@@ -1269,10 +1275,11 @@ def main():
 
             install_qt_message_filter()
             ensure_linux_desktop_entry()
-            QGuiApplication.setDesktopFileName("DazedMTLTool")
+            QGuiApplication.setDesktopFileName(APP_NAME)
 
-        QCoreApplication.setOrganizationName("DazedTranslations")
-        QCoreApplication.setApplicationName("DazedMTLTool")
+        QCoreApplication.setOrganizationName(ORG_NAME)
+        QCoreApplication.setApplicationName(APP_NAME)
+        migrate_app_settings()
         
         app = QApplication(sys.argv)
 
@@ -1283,7 +1290,7 @@ def main():
             try:
                 import ctypes
                 ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
-                    "DazedTranslations.DazedMTLTool.1"
+                    f"{ORG_NAME}.{APP_NAME}.1"
                 )
             except Exception:
                 pass

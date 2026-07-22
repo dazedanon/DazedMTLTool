@@ -14,7 +14,7 @@ You just downloaded a small MV game. You want English dialogue, menus that make 
 
 ### 1. Get the tool ready
 
-1. Launch DazedMTLTool (opens on this Guide).
+1. Launch DazedTL (opens on this Guide).
 2. Open **Configuration**, set your API key and model, save.
 3. Open the game folder in Cursor so the agent can read JSON later.
 

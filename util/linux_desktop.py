@@ -7,9 +7,9 @@ import subprocess
 import sys
 from pathlib import Path
 
-from util.paths import ICON_PATH, PROJECT_ROOT
+from util.paths import APP_NAME, ICON_PATH, LEGACY_APP_NAME, PROJECT_ROOT
 
-DESKTOP_ID = "DazedMTLTool"
+DESKTOP_ID = APP_NAME
 LAUNCH_SCRIPT = PROJECT_ROOT / "scripts" / "launch.sh"
 
 # Qt logs this on Wayland whenever a dialog tries to steal focus (harmless noise).
@@ -63,7 +63,7 @@ def _desktop_content(root: Path, icon: Path, launch: Path) -> str:
         "[Desktop Entry]\n"
         "Type=Application\n"
         f"Name={DESKTOP_ID}\n"
-        "GenericName=Translation Tool\n"
+        "GenericName=AI Translation Tool\n"
         "Comment=AI translation tool for visual novels and RPG games\n"
         f"Exec={launch}\n"
         f"Icon={icon}\n"
@@ -75,7 +75,7 @@ def _desktop_content(root: Path, icon: Path, launch: Path) -> str:
 
 
 def ensure_linux_desktop_entry() -> None:
-    """Write ~/.local/share/applications/DazedMTLTool.desktop with absolute paths."""
+    """Write ~/.local/share/applications/DazedTL.desktop with absolute paths."""
     if not sys.platform.startswith("linux"):
         return
     if not LAUNCH_SCRIPT.is_file() or not ICON_PATH.is_file():
@@ -85,6 +85,13 @@ def ensure_linux_desktop_entry() -> None:
     content = _desktop_content(PROJECT_ROOT, ICON_PATH, LAUNCH_SCRIPT)
 
     try:
+        legacy = desktop_path.parent / f"{LEGACY_APP_NAME}.desktop"
+        if legacy.is_file() and legacy.resolve() != desktop_path.resolve():
+            try:
+                legacy.unlink()
+            except OSError:
+                pass
+
         if desktop_path.is_file() and desktop_path.read_text(encoding="utf-8") == content:
             return
         desktop_path.parent.mkdir(parents=True, exist_ok=True)

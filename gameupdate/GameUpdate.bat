@@ -2,7 +2,7 @@
 setlocal EnableExtensions EnableDelayedExpansion
 
 REM When deployed on a game: this file sits in the game root; patch scripts live in .\gameupdate\
-REM In this repo the same layout is kept for neatness: this bat is under DazedMTLTool\gameupdate\ next to a nested gameupdate\ folder with patch.ps1.
+REM In this repo the same layout is kept for neatness: this bat is under gameupdate\ next to a nested gameupdate\ folder with patch.ps1.
 set "GU_ROOT=%~dp0"
 REM Game root is this batch file's folder (not %%CD%%, so full-path launches still work).
 set "GAME_ROOT=!GU_ROOT!"

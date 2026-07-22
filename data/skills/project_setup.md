@@ -1,6 +1,6 @@
-# DazedMTLTool — Project Setup
+# DazedTL — Project Setup
 
-You are analysing a Japanese game project to produce configuration artifacts for DazedMTLTool.
+You are analysing a Japanese game project to produce configuration artifacts for DazedTL.
 Work in the game repository. Scan files; do not invent content you did not see.
 
 ---
@@ -99,7 +99,7 @@ Output as short imperative bullets suitable to paste into `skills/quirks.md`.
 ### Game skill rules (for `game_skill` block)
 
 Produce the per-game translation skill saved at `skills/game.md`.
-DazedMTLTool **merges this file into the translation system prompt** (before quirks).
+DazedTL **merges this file into the translation system prompt** (before quirks).
 
 **Translation Frame only** (one compact line per field; evidence-based):
 - `世界観 (Theme / setting)` - genre, world type, core atmosphere
@@ -195,7 +195,7 @@ Output as short imperative bullets suitable to paste into `skills/quirks.md`.
 ### Game skill rules (for `game_skill` block)
 
 Produce the per-game translation skill saved at `skills/game.md`.
-DazedMTLTool **merges this file into the translation system prompt** (before quirks).
+DazedTL **merges this file into the translation system prompt** (before quirks).
 
 **Translation Frame only** (one compact line per field; evidence-based):
 - `世界観 (Theme / setting)` - genre, world type, core atmosphere
