@@ -534,10 +534,6 @@ class UpdateDialog(QDialog):
         return sha[:8]
 
     @classmethod
-    def _available_sha_display(cls, sha: str | None) -> str:
-        return cls._short_sha(sha) if sha else "Current"
-
-    @classmethod
     def _installed_sha_display(cls) -> str:
         return cls._short_sha(UpdateThread.read_installed_sha())
 
@@ -592,7 +588,7 @@ class UpdateDialog(QDialog):
         self.cancel_btn.setText("Close")
 
         tool_sha = self._pending_tool_sha
-        self.new_version_label.setText(self._available_sha_display(tool_sha))
+        self.new_version_label.setText(self._short_sha(tool_sha))
 
         if not tool_sha:
             self.headline_label.setText("You're up to date")
@@ -646,7 +642,7 @@ class UpdateDialog(QDialog):
                 f"No newer build found on {UpdateThread.REPO_BRANCH}."
             )
             self.subtitle_label.setText("You're running the latest version.")
-            self.new_version_label.setText("Current")
+            self.new_version_label.setText(self._installed_sha_display())
         elif message.startswith("updated:"):
             sha = message.split(":", 1)[1]
             self._pending_tool_sha = None
