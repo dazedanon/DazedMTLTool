@@ -37,6 +37,7 @@ class UpdateThreadInstallFilterTests(unittest.TestCase):
 
         for rel in (
             *_SHIPPED_DATA_FILES,
+            ".git_archival.txt",
             "gui/main.py",
             "gameupdate/GameUpdate.bat",
             "gameupdate/gameupdate/patch.ps1",
@@ -58,6 +59,11 @@ class UpdateThreadInstallFilterTests(unittest.TestCase):
             "log/translations.txt",
             "files/Map001.json",
             "translated/Map001.json",
+            ".agents/skills/shipped-data-assets/SKILL.md",
+            ".codex/config.toml",
+            ".cursor/rules/project.mdc",
+            ".github/workflows/tests.yml",
+            ".vscode/settings.json",
         ):
             with self.subTest(rel=rel):
                 self.assertFalse(UpdateThread.should_install(Path(rel)))
@@ -180,8 +186,49 @@ class ShippedDataTrackingTests(unittest.TestCase):
                 )
 
 
+class SourceArchiveMetadataTests(unittest.TestCase):
+    """Source archives identify their commit and omit development metadata."""
+
+    def test_archival_info_is_configured_for_sha_expansion(self):
+        archival_info = _REPO_ROOT / ".git_archival.txt"
+        self.assertTrue(archival_info.is_file())
+        self.assertIn("$Format:%H$", archival_info.read_text(encoding="utf-8"))
+
+        ignored = subprocess.run(
+            ["git", "check-ignore", "--", ".git_archival.txt"],
+            cwd=_REPO_ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertNotEqual(ignored.returncode, 0)
+
+        result = subprocess.run(
+            ["git", "check-attr", "export-subst", "--", ".git_archival.txt"],
+            cwd=_REPO_ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0)
+        self.assertIn("export-subst: set", result.stdout)
+
+    def test_development_directories_are_export_ignored(self):
+        for rel in (".agents", ".codex", ".cursor", ".github", ".vscode"):
+            with self.subTest(rel=rel):
+                result = subprocess.run(
+                    ["git", "check-attr", "export-ignore", "--", rel],
+                    cwd=_REPO_ROOT,
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                self.assertEqual(result.returncode, 0)
+                self.assertIn("export-ignore: set", result.stdout)
+
+
 class CheckToolUpdateTests(unittest.TestCase):
-    """Tool update check compares remote SHA to data/last_update_sha.txt only."""
+    """Tool update checks runtime state, then source-archive commit metadata."""
 
     def test_returns_sha_when_remote_differs(self):
         with tempfile.TemporaryDirectory() as raw:
@@ -206,6 +253,43 @@ class CheckToolUpdateTests(unittest.TestCase):
                     UpdateThread, "fetch_latest_sha", return_value="same1234"
                 ):
                     self.assertIsNone(check_tool_update())
+
+    def test_archive_sha_prevents_false_update_on_first_launch(self):
+        archived_sha = "a" * 40
+        with tempfile.TemporaryDirectory() as raw:
+            base = Path(raw)
+            sha_file = base / "missing-last-update-sha.txt"
+            archive_file = base / ".git_archival.txt"
+            archive_file.write_text(f"node: {archived_sha}\n", encoding="utf-8")
+            from gui.main import UpdateThread, check_tool_update
+
+            with patch.multiple(
+                UpdateThread,
+                SHA_FILE=str(sha_file),
+                ARCHIVE_SHA_FILE=str(archive_file),
+            ):
+                with patch.object(
+                    UpdateThread, "fetch_latest_sha", return_value=archived_sha
+                ):
+                    self.assertIsNone(check_tool_update())
+
+    def test_unexpanded_archive_sha_is_ignored(self):
+        latest_sha = "b" * 40
+        with tempfile.TemporaryDirectory() as raw:
+            base = Path(raw)
+            archive_file = base / ".git_archival.txt"
+            archive_file.write_text("node: $Format:%H$\n", encoding="utf-8")
+            from gui.main import UpdateThread, check_tool_update
+
+            with patch.multiple(
+                UpdateThread,
+                SHA_FILE=str(base / "missing-last-update-sha.txt"),
+                ARCHIVE_SHA_FILE=str(archive_file),
+            ):
+                with patch.object(
+                    UpdateThread, "fetch_latest_sha", return_value=latest_sha
+                ):
+                    self.assertEqual(check_tool_update(), latest_sha)
 
     def test_returns_none_on_fetch_failure(self):
         from gui.main import UpdateThread, check_tool_update

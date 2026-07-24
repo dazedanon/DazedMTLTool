@@ -53,8 +53,7 @@ def check_tool_update() -> str | None:
     """Return latest commit SHA when a tool update is available, else None."""
     try:
         latest_sha = UpdateThread.fetch_latest_sha()
-        sha_path = Path(UpdateThread.SHA_FILE)
-        current_sha = sha_path.read_text().strip() if sha_path.is_file() else ""
+        current_sha = UpdateThread.read_installed_sha()
         if latest_sha != current_sha:
             return latest_sha
     except Exception:
@@ -82,9 +81,21 @@ class UpdateThread(QThread):
     # "dazedtl"). Resolve dynamically so a rename cannot silently no-op again.
     ARCHIVE_ROOT = "dazedtl"
     SHA_FILE = str(LAST_UPDATE_SHA_PATH)
+    ARCHIVE_SHA_FILE = str(PROJECT_ROOT / ".git_archival.txt")
 
     # Top-level paths that should never be touched during update
-    PROTECTED_TOP = {".env", "venv", "log", "files", "translated"}
+    PROTECTED_TOP = {
+        ".agents",
+        ".codex",
+        ".cursor",
+        ".env",
+        ".github",
+        ".vscode",
+        "venv",
+        "log",
+        "files",
+        "translated",
+    }
 
     # User-local files under data/ that must not be overwritten.
     # Shipped defaults (translation_contexts.json, skills/*.md, help/*, vocab_base.txt, …)
@@ -185,14 +196,45 @@ class UpdateThread(QThread):
         with urllib.request.urlopen(req, timeout=15) as resp:
             return json.loads(resp.read())["commit"]["id"]
 
+    @staticmethod
+    def _read_archive_sha(path: Path) -> str:
+        """Read an expanded git-archive commit ID, or return an empty string."""
+        if not path.is_file():
+            return ""
+        try:
+            for line in path.read_text(encoding="utf-8").splitlines():
+                key, separator, value = line.partition(":")
+                candidate = value.strip()
+                if (
+                    separator
+                    and key.strip() == "node"
+                    and re.fullmatch(r"[0-9a-fA-F]{40,64}", candidate)
+                ):
+                    return candidate
+        except OSError:
+            pass
+        return ""
+
+    @classmethod
+    def read_installed_sha(cls) -> str:
+        """Return the updated SHA, falling back to source-archive metadata."""
+        runtime_path = Path(cls.SHA_FILE)
+        if runtime_path.is_file():
+            try:
+                runtime_sha = runtime_path.read_text(encoding="utf-8").strip()
+                if runtime_sha:
+                    return runtime_sha
+            except OSError:
+                pass
+        return cls._read_archive_sha(Path(cls.ARCHIVE_SHA_FILE))
+
     # ------------------------------------------------------------------ #
 
     def _fetch_latest_sha(self):
         return self.fetch_latest_sha()
 
     def _read_stored_sha(self):
-        p = Path(self.SHA_FILE)
-        return p.read_text().strip() if p.exists() else ""
+        return self.read_installed_sha()
 
     def _download_archive(self, zip_path: Path):
         req = urllib.request.Request(
@@ -493,10 +535,7 @@ class UpdateDialog(QDialog):
 
     @classmethod
     def _installed_sha_display(cls) -> str:
-        sha_path = Path(UpdateThread.SHA_FILE)
-        if sha_path.is_file():
-            return cls._short_sha(sha_path.read_text().strip())
-        return "Not recorded"
+        return cls._short_sha(UpdateThread.read_installed_sha())
 
     def _set_stage_pills(self, active_stage: str | None = None):
         stage_order = list(UpdateThread.STAGES)

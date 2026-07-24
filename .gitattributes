@@ -1,2 +1,14 @@
 # Cmd.exe parses LF-only .bat files incorrectly on Windows (joined tokens / mangled commands).
 *.bat text eol=crlf
+
+# Keep development-only agent/editor metadata out of user-facing source and
+# update archives.
+.agents export-ignore
+.codex export-ignore
+.cursor export-ignore
+.github export-ignore
+.vscode export-ignore
+
+# Expand the exact archived commit so a fresh source download can identify the
+# version it already contains without committing a self-referential literal SHA.
+.git_archival.txt export-subst

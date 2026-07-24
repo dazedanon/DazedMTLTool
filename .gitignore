@@ -19,6 +19,7 @@ __pycache__
 !assets/*.png
 !assets/engine_icons/**
 !.pre-commit-config.yaml
+!.git_archival.txt
 !data/skills/**
 !data/help/**
 !data/vocab_base.txt
