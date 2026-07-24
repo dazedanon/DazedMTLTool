@@ -300,6 +300,21 @@ class CheckToolUpdateTests(unittest.TestCase):
             self.assertIsNone(check_tool_update())
 
 
+class UpdateDialogDisplayTests(unittest.TestCase):
+    def test_available_version_says_current_when_up_to_date(self):
+        from gui.main import UpdateDialog
+
+        self.assertEqual(UpdateDialog._available_sha_display(None), "Current")
+
+    def test_available_version_shows_pending_sha(self):
+        from gui.main import UpdateDialog
+
+        self.assertEqual(
+            UpdateDialog._available_sha_display("1234567890abcdef"),
+            "12345678",
+        )
+
+
 class AceBundledOnlyTests(unittest.TestCase):
     def _ace_paths(self, base: Path) -> dict:
         offline = base / "offline"
