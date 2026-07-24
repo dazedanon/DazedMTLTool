@@ -19,6 +19,7 @@ import traceback
 import signal
 import multiprocessing
 import re
+from importlib import import_module
 from colorama import Fore
 from tqdm import tqdm
 from dotenv import load_dotenv
@@ -73,6 +74,39 @@ BATCH_COLLECT_LIVE_CHARGE_NOTE = (
     "API rates right away (not batched). Dialogue is queued for the batch and billed "
     "only after you confirm the estimate."
 )
+
+
+TRANSLATION_MODULE_SPECS = (
+    ("RPG Maker MV/MZ", (".json",), "modules.rpgmakermvmz", "handleMVMZ"),
+    ("CSV", (".csv",), "modules.csv", "handleCSV"),
+    ("Tyrano", (".ks",), "modules.tyrano", "handleTyrano"),
+    ("Kirikiri", (".ks",), "modules.kirikiri", "handleKirikiri"),
+    ("JSON", (".json",), "modules.json", "handleJSON"),
+    ("Lune", (".l",), "modules.lune", "handleLune"),
+    ("Yuris", (".json",), "modules.yuris", "handleYuris"),
+    ("NScript", (".nscript",), "modules.nscript", "handleOnscripter"),
+    ("Wolf RPG (WolfDawn)", (".json",), "modules.wolfdawn", "handleWolfDawn"),
+    ("Wolf RPG", (".json",), "modules.wolf", "handleWOLF"),
+    ("Wolf RPG 2", (".txt",), "modules.wolf2", "handleWOLF2"),
+    ("Regex", (".txt", ".json", ".script", ".csv"), "modules.regex", "handleRegex"),
+    ("Text", (".txt", ".srt"), "modules.text", "handleText"),
+    ("RenPy", (".rpy",), "modules.renpy", "handleRenpy"),
+    ("Unity", (".unity",), "modules.unity", "handleUnity"),
+    ("Images", (".png", ".jpg", ".jpeg"), "modules.images", "handleImages"),
+    ("RPG Maker Plugin", (".js",), "modules.rpgmakerplugin", "handlePlugin"),
+    ("Aquedi4 Prepared JSON", (".json",), "modules.aquedi4", "handleAquedi4"),
+    ("SRPG Studio", (".json",), "modules.srpg", "handleSRPG"),
+)
+
+
+def _lazy_module_handler(module_name, handler_name):
+    """Return a handler that imports its engine only when translation starts."""
+
+    def run(*args, **kwargs):
+        module = import_module(module_name)
+        return getattr(module, handler_name)(*args, **kwargs)
+
+    return run
 
 
 class _ShimLabel:
@@ -1647,63 +1681,25 @@ class TranslationTab(QWidget):
         
     def setup_module_list(self):
         """Set up the module selection list."""
-        # Import modules to get the list
-        try:
-            sys.path.append(str(self.project_root))
-            from modules.rpgmakermvmz import handleMVMZ
-            from modules.csv import handleCSV
-            from modules.tyrano import handleTyrano
-            from modules.kirikiri import handleKirikiri
-            from modules.json import handleJSON
-            from modules.lune import handleLune
-            from modules.yuris import handleYuris
-            from modules.nscript import handleOnscripter
-            from modules.wolf import handleWOLF
-            from modules.wolf2 import handleWOLF2
-            from modules.wolfdawn import handleWolfDawn
-            from modules.regex import handleRegex
-            from modules.text import handleText
-            from modules.renpy import handleRenpy
-            from modules.unity import handleUnity
-            from modules.images import handleImages
-            from modules.rpgmakerplugin import handlePlugin
-            from modules.aquedi4 import handleAquedi4
-            from modules.srpg import handleSRPG
-            
-            self.modules = [
-                ["RPG Maker MV/MZ", [".json"], handleMVMZ],
-                ["CSV", [".csv"], handleCSV],
-                ["Tyrano", [".ks"], handleTyrano],
-                ["Kirikiri", [".ks"], handleKirikiri],
-                ["JSON", [".json"], handleJSON],
-                ["Lune", [".l"], handleLune],
-                ["Yuris", [".json"], handleYuris],
-                ["NScript", [".nscript"], handleOnscripter],
-                ["Wolf RPG (WolfDawn)", [".json"], handleWolfDawn],
-                ["Wolf RPG", [".json"], handleWOLF],
-                ["Wolf RPG 2", [".txt"], handleWOLF2],
-                ["Regex", [".txt", ".json", ".script", ".csv"], handleRegex],
-                ["Text", [".txt", ".srt"], handleText],
-                ["RenPy", [".rpy"], handleRenpy],
-                ["Unity", [".unity"], handleUnity],
-                ["Images", [".png", ".jpg", ".jpeg"], handleImages],
-                ["RPG Maker Plugin", [".js"], handlePlugin],
-                ["Aquedi4 Prepared JSON", [".json"], handleAquedi4],
-                ["SRPG Studio", [".json"], handleSRPG],
+        # Engine modules read translation settings during import. A downloaded
+        # source archive intentionally has no .env yet, so importing every
+        # engine here used to abort discovery and leave only the fallback item.
+        # Keep the UI registry independent and defer imports until a handler is
+        # actually used.
+        self.modules = [
+            [
+                display_name,
+                list(extensions),
+                _lazy_module_handler(module_name, handler_name),
             ]
-            
-            for module in self.modules:
-                extensions = ", ".join(module[1])
-                self.module_combo.addItem(f"{module[0]} ({extensions})")
-            if self.module_combo.count():
-                self._on_module_changed(self.module_combo.currentText())
-                
-        except Exception as e:
-            # Store error for later logging since log_display might not exist yet
-            self.module_load_error = f"Warning: Could not load modules: {str(e)}"
-            # Add a default option
-            self.module_combo.addItem("RPG Maker MV/MZ (.json)")
-            self.modules = [["RPG Maker MV/MZ", [".json"], None]]
+            for display_name, extensions, module_name, handler_name
+            in TRANSLATION_MODULE_SPECS
+        ]
+
+        for module in self.modules:
+            extensions = ", ".join(module[1])
+            self.module_combo.addItem(f"{module[0]} ({extensions})")
+        if self.module_combo.count():
             self._on_module_changed(self.module_combo.currentText())
 
     def _on_module_changed(self, text: str):
