@@ -5,14 +5,14 @@ Configuration Tab - Handles environment variables, global settings, and engine c
 import os
 from pathlib import Path
 from PyQt5.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QFormLayout, QLineEdit,
+    QWidget, QVBoxLayout, QHBoxLayout, QFormLayout, QGridLayout, QLineEdit,
     QSpinBox, QDoubleSpinBox, QComboBox, QPushButton, QGroupBox,
-    QLabel, QFileDialog, QMessageBox, QScrollArea, QTextEdit,
+    QLabel, QFileDialog, QMessageBox, QTextEdit,
     QCheckBox, QApplication, QTabWidget, QFrame, QStackedWidget, QToolButton,
-    QMenu, QDialog, QDialogButtonBox, QSizePolicy,
+    QMenu, QDialog, QDialogButtonBox, QListView, QSizePolicy,
 )
-from PyQt5.QtCore import Qt, pyqtSignal, QTimer, QThread
-from PyQt5.QtGui import QIcon
+from PyQt5.QtCore import Qt, QPoint, pyqtSignal, QTimer, QThread
+from PyQt5.QtGui import QColor, QIcon, QPainter, QPalette, QPolygon
 from dotenv import load_dotenv, set_key, dotenv_values
 
 from gui.rpgmaker_tab import RPGMakerTab
@@ -118,6 +118,86 @@ def create_horizontal_line():
     line.setFrameShadow(QFrame.Sunken)
     line.setStyleSheet("QFrame { color: #555555; margin: 5px 0px; }")
     return line
+
+
+class ConfigComboBox(QComboBox):
+    """Combo box with a platform-independent visible dropdown indicator."""
+
+    _POPUP_COLOR = QColor("#353539")
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        view = QListView()
+        view.setObjectName("configComboPopup")
+        view.setAutoFillBackground(True)
+        view.setAttribute(Qt.WA_StyledBackground, True)
+        view.viewport().setAutoFillBackground(True)
+        view.viewport().setAttribute(Qt.WA_StyledBackground, True)
+        view.setStyleSheet("""
+            QListView#configComboPopup {
+                background-color: #353539;
+                color: #f2f2f2;
+                border: 1px solid #56565b;
+                outline: none;
+                padding: 2px;
+            }
+            QListView#configComboPopup::item {
+                background-color: #353539;
+                color: #f2f2f2;
+                min-height: 26px;
+                padding: 3px 8px;
+            }
+            QListView#configComboPopup::item:selected {
+                background-color: #007acc;
+                color: #ffffff;
+            }
+            QListView#configComboPopup::item:hover:!selected {
+                background-color: #45454a;
+            }
+        """)
+        self.setView(view)
+        self._apply_popup_palette()
+
+    def _apply_popup_palette(self):
+        for widget in (self.view(), self.view().viewport()):
+            widget.setAutoFillBackground(True)
+            widget.setAttribute(Qt.WA_StyledBackground, True)
+            widget.setAttribute(Qt.WA_OpaquePaintEvent, True)
+            palette = widget.palette()
+            palette.setColor(QPalette.Base, self._POPUP_COLOR)
+            palette.setColor(QPalette.Window, self._POPUP_COLOR)
+            palette.setColor(QPalette.AlternateBase, self._POPUP_COLOR)
+            palette.setColor(QPalette.Text, QColor("#f2f2f2"))
+            palette.setColor(QPalette.Highlight, QColor("#007acc"))
+            palette.setColor(QPalette.HighlightedText, QColor("#ffffff"))
+            widget.setPalette(palette)
+
+    def showPopup(self):
+        self._apply_popup_palette()
+        super().showPopup()
+        self._apply_popup_palette()
+        popup = self.view().window()
+        popup.setWindowOpacity(1.0)
+        popup.setAttribute(Qt.WA_TranslucentBackground, False)
+        popup.setAutoFillBackground(True)
+        palette = popup.palette()
+        palette.setColor(QPalette.Window, self._POPUP_COLOR)
+        palette.setColor(QPalette.Base, self._POPUP_COLOR)
+        popup.setPalette(palette)
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(QColor("#d8d8d8" if self.isEnabled() else "#858585"))
+        center_x = self.width() - 13
+        center_y = self.height() // 2 + 1
+        painter.drawPolygon(QPolygon([
+            QPoint(center_x - 4, center_y - 2),
+            QPoint(center_x + 4, center_y - 2),
+            QPoint(center_x, center_y + 3),
+        ]))
 
 
 class ApiKeyEditDialog(QDialog):
@@ -417,97 +497,173 @@ class ConfigTab(QWidget):
             page.refresh_from_module()
     
     def create_general_settings_tab(self):
-        """Create combined general settings tab with API, Translation, Performance, and UI settings."""
+        """Create a compact general-settings dashboard without nested scrolling."""
         widget = QWidget()
+        widget.setObjectName("generalSettingsPage")
+        widget.setStyleSheet("""
+            QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox {
+                background-color: #3e3e42;
+                color: #f2f2f2;
+                border: 1px solid #56565b;
+                border-radius: 4px;
+                padding: 1px 9px;
+                min-height: 30px;
+                selection-background-color: #007acc;
+            }
+            QLineEdit:hover, QComboBox:hover,
+            QSpinBox:hover, QDoubleSpinBox:hover {
+                border-color: #68686e;
+            }
+            QLineEdit:focus, QComboBox:focus,
+            QSpinBox:focus, QDoubleSpinBox:focus {
+                border-color: #007acc;
+                background-color: #424247;
+            }
+            QComboBox::drop-down {
+                subcontrol-origin: border;
+                subcontrol-position: top right;
+                width: 26px;
+                border: none;
+                border-left: 1px solid #56565b;
+                border-top-right-radius: 4px;
+                border-bottom-right-radius: 4px;
+                background-color: #4a4a50;
+            }
+            QComboBox::drop-down:hover {
+                background-color: #007acc;
+            }
+            QComboBox QLineEdit {
+                background-color: #3e3e42;
+                border: none;
+                border-radius: 0;
+                padding: 0 4px;
+            }
+            QComboBox QAbstractItemView, QMenu {
+                background-color: #353539;
+                color: #f2f2f2;
+                border: 1px solid #56565b;
+                selection-background-color: #007acc;
+                selection-color: #ffffff;
+                outline: none;
+            }
+            QComboBox QAbstractItemView::item, QMenu::item {
+                min-height: 26px;
+                padding: 3px 9px;
+            }
+            QMenu::item:selected {
+                background-color: #007acc;
+            }
+            QLineEdit:disabled, QComboBox:disabled,
+            QSpinBox:disabled, QDoubleSpinBox:disabled {
+                background-color: #343438;
+                color: #858585;
+                border-color: #47474b;
+            }
+        """)
+        page_layout = QVBoxLayout(widget)
+        page_layout.setContentsMargins(0, 0, 0, 0)
+        page_layout.setSpacing(0)
+        self._general_form_labels = []
+        self._general_cards_by_title = {}
+        self._general_label_width = None
 
-        content = QWidget()
-        layout = QVBoxLayout()
-        layout.setSpacing(8)
-        layout.setContentsMargins(15, 15, 15, 15)
-
-        # Shared geometry: one label column + one field edge across both columns.
-        label_w = 160
-        field_w = 360
-        row_gap = 12
         btn_style = (
             "QToolButton {"
             "background-color: #3e3e42; color: #cccccc;"
-            "border: 1px solid #555555; border-radius: 3px; padding: 4px 8px;"
+            "border: 1px solid #555555; border-radius: 4px; padding: 4px 8px;"
             "}"
             "QToolButton:hover { background-color: #505050; }"
             "QToolButton::menu-indicator { image: none; }"
         )
 
-        def form_label(text: str) -> QLabel:
-            lbl = QLabel(text)
-            lbl.setFixedWidth(label_w)
-            lbl.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-            lbl.setStyleSheet("padding: 0px; background: transparent;")
-            return lbl
-
-        def size_field(w: QWidget) -> QWidget:
-            w.setFixedWidth(field_w)
-            w.setMinimumWidth(field_w)
-            w.setMaximumWidth(field_w)
-            w.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Preferred)
+        def size_field(w: QWidget, minimum_width: int = 120) -> QWidget:
+            """Give controls room to breathe while allowing them to resize."""
+            w.setMinimumWidth(minimum_width)
+            w.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
             if isinstance(w, (QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox)):
                 w.setMinimumHeight(32)
             return w
 
-        def row_box(*widgets: QWidget, stretch_index: int = 0) -> QWidget:
-            """Fixed-width control cluster; stretch one child, never overflow buttons."""
+        def row_box(field: QWidget, *actions: QWidget) -> QWidget:
+            """API row with equal field width and no visible filler widget."""
             box = QWidget()
+            box.setStyleSheet("background: transparent;")
             row = QHBoxLayout(box)
             row.setContentsMargins(0, 0, 0, 0)
             row.setSpacing(8)
-            for i, child in enumerate(widgets):
-                if i == stretch_index:
-                    child.setMinimumWidth(0)
-                    child.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
-                    row.addWidget(child, 1)
-                else:
-                    child.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Preferred)
-                    row.addWidget(child, 0)
-            box.setFixedWidth(field_w)
+
+            field.setMinimumWidth(0)
+            field.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+            row.addWidget(field, 1)
+
+            used_action_width = 0
+            for action in actions:
+                action.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Preferred)
+                row.addWidget(action)
+                used_action_width += action.width()
+            used_action_width += max(0, len(actions) - 1) * row.spacing()
+            row.addSpacing(max(0, 200 - used_action_width))
+
             box.setMinimumHeight(32)
-            box.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Preferred)
+            box.setMinimumWidth(120)
+            box.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
             return box
 
-        def make_section() -> QVBoxLayout:
-            section = QVBoxLayout()
-            section.setContentsMargins(0, 0, 0, 12)
-            section.setSpacing(row_gap)
-            return section
+        def create_card(title: str) -> tuple[QFrame, QFormLayout]:
+            card = QFrame()
+            card.setObjectName("settingsCard")
+            self._general_cards_by_title[title] = card
+            card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+            card.setStyleSheet(
+                "QFrame#settingsCard {"
+                "background-color: #303033;"
+                "border: 1px solid #444448;"
+                "border-radius: 7px;"
+                "}"
+                "QFrame#settingsCard:hover { border-color: #505055; }"
+            )
 
-        def add_row(section: QVBoxLayout, label: str, field: QWidget) -> None:
-            row = QHBoxLayout()
-            row.setContentsMargins(0, 0, 0, 0)
-            row.setSpacing(20)
-            row.addWidget(form_label(label), 0, Qt.AlignVCenter)
-            row.addWidget(field, 0, Qt.AlignVCenter)
-            row.addStretch(1)
-            section.addLayout(row)
+            card_layout = QVBoxLayout(card)
+            card_layout.setContentsMargins(14, 10, 14, 12)
+            card_layout.setSpacing(6)
+            header = create_section_header(title)
+            if not isinstance(header, QLabel):
+                header.setStyleSheet("background: transparent;")
+            card_layout.addWidget(header)
 
-        columns_layout = QHBoxLayout()
-        columns_layout.setSpacing(40)
+            form = QFormLayout()
+            form.setContentsMargins(0, 0, 0, 0)
+            form.setHorizontalSpacing(12)
+            form.setVerticalSpacing(7)
+            form.setLabelAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+            form.setFormAlignment(Qt.AlignLeft | Qt.AlignTop)
+            form.setFieldGrowthPolicy(QFormLayout.AllNonFixedFieldsGrow)
+            form.setRowWrapPolicy(QFormLayout.WrapLongRows)
+            card_layout.addLayout(form)
+            card_layout.addStretch()
+            return card, form
 
-        # ── LEFT COLUMN ──────────────────────────────────────────────
-        left_column = QVBoxLayout()
-        left_column.setSpacing(8)
+        def add_row(form: QFormLayout, label: str, field: QWidget) -> None:
+            label_widget = QLabel(label)
+            label_widget.setFixedWidth(180)
+            label_widget.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+            label_widget.setStyleSheet("background: transparent;")
+            self._general_form_labels.append(label_widget)
+            form.addRow(label_widget, field)
 
-        left_column.addWidget(create_section_header("🔑 API Configuration"))
-        api_section = make_section()
+        # ── API ──────────────────────────────────────────────────────
+        api_card, api_section = create_card("🔑 API Configuration")
 
         self.api_url_edit = QLineEdit()
         self.api_url_edit.setPlaceholderText("Leave blank for OpenAI API")
 
-        api_url_preset_btn = QToolButton()
-        api_url_preset_btn.setText("Presets ▾")
-        api_url_preset_btn.setFixedWidth(84)
-        api_url_preset_btn.setPopupMode(QToolButton.InstantPopup)
-        api_url_preset_btn.setStyleSheet(btn_style)
+        self.api_url_preset_btn = QToolButton()
+        self.api_url_preset_btn.setText("Presets ▾")
+        self.api_url_preset_btn.setFixedWidth(96)
+        self.api_url_preset_btn.setPopupMode(QToolButton.InstantPopup)
+        self.api_url_preset_btn.setStyleSheet(btn_style)
 
-        api_url_menu = QMenu(api_url_preset_btn)
+        api_url_menu = QMenu(self.api_url_preset_btn)
         for name, url in (
             ("OpenAI", "https://api.openai.com/v1"),
             ("Claude (Anthropic)", "https://api.anthropic.com/v1"),
@@ -518,16 +674,16 @@ class ConfigTab(QWidget):
         ):
             action = api_url_menu.addAction(name)
             action.triggered.connect(lambda checked, u=url: self.api_url_edit.setText(u))
-        api_url_preset_btn.setMenu(api_url_menu)
+        self.api_url_preset_btn.setMenu(api_url_menu)
         self.api_url_edit.textChanged.connect(self._update_model_placeholder)
 
         add_row(
             api_section,
             "API URL:",
-            row_box(self.api_url_edit, api_url_preset_btn),
+            row_box(self.api_url_edit, self.api_url_preset_btn),
         )
 
-        self.api_key_combo = QComboBox()
+        self.api_key_combo = ConfigComboBox()
         self.api_key_combo.setEditable(False)
         self.api_key_combo.setToolTip(
             "Select a saved API key by name. Optional per-key endpoints are "
@@ -537,14 +693,14 @@ class ConfigTab(QWidget):
         self.api_key_new_btn = QToolButton()
         self.api_key_new_btn.setText("New")
         self.api_key_new_btn.setToolTip("Add or update a named API key")
-        self.api_key_new_btn.setFixedWidth(52)
+        self.api_key_new_btn.setFixedWidth(96)
         self.api_key_new_btn.setStyleSheet(btn_style)
         self.api_key_new_btn.clicked.connect(self._on_api_key_new)
 
         self.api_key_delete_btn = QToolButton()
         self.api_key_delete_btn.setText("Delete")
         self.api_key_delete_btn.setToolTip("Remove the selected API key")
-        self.api_key_delete_btn.setFixedWidth(64)
+        self.api_key_delete_btn.setFixedWidth(96)
         self.api_key_delete_btn.setStyleSheet(btn_style)
         self.api_key_delete_btn.clicked.connect(self._on_api_key_delete)
 
@@ -554,14 +710,14 @@ class ConfigTab(QWidget):
             row_box(self.api_key_combo, self.api_key_new_btn, self.api_key_delete_btn),
         )
 
-        self.model_combo = QComboBox()
+        self.model_combo = ConfigComboBox()
         self.model_combo.setEditable(True)
         self.model_combo.addItems(ModelFetchThread.DEFAULTS)
 
         self.model_refresh_btn = QToolButton()
         self.model_refresh_btn.setText("⟳")
         self.model_refresh_btn.setToolTip("Fetch latest models from the configured API")
-        self.model_refresh_btn.setFixedWidth(32)
+        self.model_refresh_btn.setFixedWidth(96)
         self.model_refresh_btn.setStyleSheet(btn_style)
         self.model_refresh_btn.clicked.connect(lambda: self.fetch_models(silent=False))
 
@@ -571,13 +727,10 @@ class ConfigTab(QWidget):
             row_box(self.model_combo, self.model_refresh_btn),
         )
 
-        left_column.addLayout(api_section)
-        left_column.addWidget(create_horizontal_line())
+        # ── TRANSLATION + FORMATTING ─────────────────────────────────
+        translation_card, trans_section = create_card("🌐 Translation & Text")
 
-        left_column.addWidget(create_section_header("🌐 Translation Settings"))
-        trans_section = make_section()
-
-        self.language_combo = QComboBox()
+        self.language_combo = ConfigComboBox()
         self.language_combo.addItems([
             "English", "Spanish", "French", "German", "Italian",
             "Portuguese", "Russian", "Chinese", "Korean", "Japanese",
@@ -591,11 +744,40 @@ class ConfigTab(QWidget):
         self.timeout_spin.setSuffix(" sec")
         add_row(trans_section, "Timeout:", size_field(self.timeout_spin))
 
-        left_column.addLayout(trans_section)
-        left_column.addWidget(create_horizontal_line())
+        self.width_spin = QSpinBox()
+        self.width_spin.setButtonSymbols(QSpinBox.NoButtons)
+        self.width_spin.setRange(20, 200)
+        self.width_spin.setValue(60)
+        self.width_spin.setSuffix(" chars")
+        add_row(trans_section, "Dialogue Width:", size_field(self.width_spin))
 
-        left_column.addWidget(create_section_header("⚡ Performance Settings"))
-        perf_section = make_section()
+        self.list_width_spin = QSpinBox()
+        self.list_width_spin.setButtonSymbols(QSpinBox.NoButtons)
+        self.list_width_spin.setRange(20, 200)
+        self.list_width_spin.setValue(100)
+        self.list_width_spin.setSuffix(" chars")
+        add_row(trans_section, "List Width:", size_field(self.list_width_spin))
+
+        self.note_width_spin = QSpinBox()
+        self.note_width_spin.setButtonSymbols(QSpinBox.NoButtons)
+        self.note_width_spin.setRange(20, 200)
+        self.note_width_spin.setValue(75)
+        self.note_width_spin.setSuffix(" chars")
+        add_row(trans_section, "Note Width:", size_field(self.note_width_spin))
+
+        self.convert_quotes_cb = QCheckBox('Convert 「」 / 『』 to ""')
+        self.convert_quotes_cb.setChecked(True)
+        self.convert_quotes_cb.setToolTip(
+            "When enabled, Japanese corner brackets 「」 and 『』 are replaced "
+            'with ASCII double quotes "" in translated output (and on RPG Maker '
+            "source text before translation).\n\n"
+            "Leaving this on is recommended - the AI often fails to keep 「」 "
+            "consistent across lines."
+        )
+        add_row(trans_section, "Convert Quotes:", self.convert_quotes_cb)
+
+        # ── PERFORMANCE + PRICING ────────────────────────────────────
+        performance_card, perf_section = create_card("⚡ Performance & Pricing")
 
         self.file_threads_spin = QSpinBox()
         self.file_threads_spin.setButtonSymbols(QSpinBox.NoButtons)
@@ -626,69 +808,6 @@ class ConfigTab(QWidget):
             size_field(self.frequency_penalty_spin),
         )
 
-        left_column.addLayout(perf_section)
-        left_column.addStretch()
-
-        # ── RIGHT COLUMN ─────────────────────────────────────────────
-        right_column = QVBoxLayout()
-        right_column.setSpacing(8)
-
-        right_column.addWidget(create_section_header("📝 Text Formatting"))
-        format_section = make_section()
-
-        self.width_spin = QSpinBox()
-        self.width_spin.setButtonSymbols(QSpinBox.NoButtons)
-        self.width_spin.setRange(20, 200)
-        self.width_spin.setValue(60)
-        self.width_spin.setSuffix(" chars")
-        add_row(format_section, "Dialogue Width:", size_field(self.width_spin))
-
-        self.list_width_spin = QSpinBox()
-        self.list_width_spin.setButtonSymbols(QSpinBox.NoButtons)
-        self.list_width_spin.setRange(20, 200)
-        self.list_width_spin.setValue(100)
-        self.list_width_spin.setSuffix(" chars")
-        add_row(format_section, "List Width:", size_field(self.list_width_spin))
-
-        self.note_width_spin = QSpinBox()
-        self.note_width_spin.setButtonSymbols(QSpinBox.NoButtons)
-        self.note_width_spin.setRange(20, 200)
-        self.note_width_spin.setValue(75)
-        self.note_width_spin.setSuffix(" chars")
-        add_row(format_section, "Note Width:", size_field(self.note_width_spin))
-
-        self.convert_quotes_cb = QCheckBox('Convert 「」 / 『』 to ""')
-        self.convert_quotes_cb.setChecked(True)
-        self.convert_quotes_cb.setToolTip(
-            "When enabled, Japanese corner brackets 「」 and 『』 are replaced "
-            'with ASCII double quotes "" in translated output (and on RPG Maker '
-            "source text before translation).\n\n"
-            "Leaving this on is recommended - the AI often fails to keep 「」 "
-            "consistent across lines."
-        )
-        quotes_wrap = QWidget()
-        quotes_wrap.setFixedWidth(field_w)
-        quotes_row = QHBoxLayout(quotes_wrap)
-        quotes_row.setContentsMargins(0, 0, 0, 0)
-        quotes_row.setSpacing(0)
-        quotes_row.addWidget(self.convert_quotes_cb)
-        quotes_row.addStretch()
-        add_row(format_section, "Convert Quotes:", quotes_wrap)
-
-        right_column.addLayout(format_section)
-        right_column.addWidget(create_horizontal_line())
-
-        right_column.addWidget(create_section_header("💰 Custom API Pricing"))
-        pricing_note = QLabel("Only used if model isn't in built-in pricing list")
-        pricing_note.setStyleSheet(
-            f"color: #888888; font-style: italic; font-size: 11px; "
-            f"padding-left: {label_w + 20}px;"
-        )
-        pricing_note.setWordWrap(True)
-        right_column.addWidget(pricing_note)
-
-        price_section = make_section()
-
         self.input_cost_spin = QDoubleSpinBox()
         self.input_cost_spin.setButtonSymbols(QDoubleSpinBox.NoButtons)
         self.input_cost_spin.setRange(0.0, 100.0)
@@ -696,7 +815,7 @@ class ConfigTab(QWidget):
         self.input_cost_spin.setSingleStep(0.1)
         self.input_cost_spin.setValue(2.0)
         self.input_cost_spin.setSuffix(" / 1M tokens")
-        add_row(price_section, "Input Cost:", size_field(self.input_cost_spin))
+        add_row(perf_section, "Input Cost:", size_field(self.input_cost_spin))
 
         self.output_cost_spin = QDoubleSpinBox()
         self.output_cost_spin.setButtonSymbols(QDoubleSpinBox.NoButtons)
@@ -705,13 +824,10 @@ class ConfigTab(QWidget):
         self.output_cost_spin.setSingleStep(0.1)
         self.output_cost_spin.setValue(8.0)
         self.output_cost_spin.setSuffix(" / 1M tokens")
-        add_row(price_section, "Output Cost:", size_field(self.output_cost_spin))
+        add_row(perf_section, "Output Cost:", size_field(self.output_cost_spin))
 
-        right_column.addLayout(price_section)
-        right_column.addWidget(create_horizontal_line())
-
-        right_column.addWidget(create_section_header("🖥️ UI Settings"))
-        ui_section = make_section()
+        # ── INTERFACE ────────────────────────────────────────────────
+        interface_card, ui_section = create_card("🖥️ Interface")
 
         self.font_scale_spin = QDoubleSpinBox()
         self.font_scale_spin.setButtonSymbols(QDoubleSpinBox.NoButtons)
@@ -727,13 +843,10 @@ class ConfigTab(QWidget):
         )
         add_row(ui_section, "Font Scale:", size_field(self.font_scale_spin))
 
-        right_column.addLayout(ui_section)
-        right_column.addWidget(create_horizontal_line())
+        # ── GAME UPDATE ──────────────────────────────────────────────
+        updates_card, gu_section = create_card("📦 Game Update Defaults")
 
-        right_column.addWidget(create_section_header("📦 Game Update Defaults"))
-        gu_section = make_section()
-
-        self.gu_forge_combo = QComboBox()
+        self.gu_forge_combo = ConfigComboBox()
         self.gu_forge_combo.addItem("GitLab / gitgud", "gitlab")
         self.gu_forge_combo.addItem("GitHub", "github")
         self.gu_forge_combo.addItem("Forgejo / Gitea", "forgejo")
@@ -762,24 +875,42 @@ class ConfigTab(QWidget):
         self.gu_branch_edit.setToolTip("Default branch to track (usually main or master).")
         add_row(gu_section, "Branch:", size_field(self.gu_branch_edit))
 
-        gu_hint = QLabel(
-            "Copied into each game's gameupdate/patch-config.txt when you run "
-            "Copy gameupdate/ (repo= is still per-game)."
-        )
-        gu_hint.setWordWrap(True)
-        gu_hint.setStyleSheet(
-            f"color:#7a7a7a;font-size:11px;padding-left: {label_w + 20}px;"
-        )
-        right_column.addLayout(gu_section)
-        right_column.addWidget(gu_hint)
-        right_column.addStretch()
+        content = QWidget()
+        content.setObjectName("generalSettingsContent")
+        content_layout = QVBoxLayout(content)
+        content_layout.setContentsMargins(12, 10, 12, 10)
+        content_layout.setSpacing(0)
 
-        columns_layout.addLayout(left_column, 1)
-        columns_layout.addLayout(right_column, 1)
-        layout.addLayout(columns_layout)
+        dashboard = QGridLayout()
+        dashboard.setContentsMargins(0, 4, 0, 0)
+        dashboard.setHorizontalSpacing(12)
+        dashboard.setVerticalSpacing(12)
+        dashboard.setColumnStretch(0, 1)
+        dashboard.setColumnStretch(1, 1)
+        dashboard.setColumnStretch(2, 1)
 
-        layout.addSpacing(15)
-        button_layout = QHBoxLayout()
+        # The wider API card keeps its button clusters readable. The three
+        # denser sections share the second row so the whole page fits without
+        # its own scroll bar.
+        dashboard.addWidget(api_card, 0, 0, 1, 2)
+        dashboard.addWidget(interface_card, 0, 2, 1, 1)
+        dashboard.addWidget(translation_card, 1, 0, 1, 1)
+        dashboard.addWidget(performance_card, 1, 1, 1, 1)
+        dashboard.addWidget(updates_card, 1, 2, 1, 1)
+        content_layout.addLayout(dashboard)
+        content_layout.addStretch()
+        page_layout.addWidget(content, 1)
+
+        # Persistent action bar keeps save/reset in the same predictable place.
+        action_bar = QFrame()
+        action_bar.setObjectName("settingsActionBar")
+        action_bar.setStyleSheet(
+            "QFrame#settingsActionBar {"
+            "background-color: #252526; border-top: 1px solid #414141;"
+            "}"
+        )
+        button_layout = QHBoxLayout(action_bar)
+        button_layout.setContentsMargins(20, 9, 20, 9)
         button_layout.setSpacing(10)
 
         from gui import qt_icons
@@ -788,6 +919,11 @@ class ConfigTab(QWidget):
         qt_icons.apply_button_icon(reset_button, "🔄 Reset to Defaults", color="#cccccc")
         reset_button.clicked.connect(self.reset_to_defaults_with_save)
         reset_button.setMinimumHeight(32)
+        reset_button.setStyleSheet(
+            "QPushButton { background: #3e3e42; color: #dddddd; "
+            "border: 1px solid #555555; }"
+            "QPushButton:hover { background: #505050; }"
+        )
 
         save_button = QPushButton()
         qt_icons.apply_button_icon(save_button, "💾 Save Changes", color="#cccccc")
@@ -797,19 +933,30 @@ class ConfigTab(QWidget):
         self.autosave_label = QLabel("")
         self.autosave_label.setStyleSheet("color: #4ec9b0; font-weight: bold;")
 
-        button_layout.addWidget(reset_button)
-        button_layout.addWidget(save_button)
-        button_layout.addSpacing(10)
         button_layout.addWidget(self.autosave_label)
         button_layout.addStretch()
+        button_layout.addWidget(reset_button)
+        button_layout.addWidget(save_button)
+        page_layout.addWidget(action_bar)
 
-        layout.addLayout(button_layout)
-
-        content.setLayout(layout)
-        widget.setLayout(QVBoxLayout())
-        widget.layout().setContentsMargins(0, 0, 0, 0)
-        widget.layout().addWidget(content)
+        QTimer.singleShot(0, self._update_general_label_width)
         return widget
+
+    def _update_general_label_width(self):
+        """Keep every form aligned without crowding the minimum-width layout."""
+        if not hasattr(self, "_general_form_labels"):
+            return
+        label_width = 150 if self.width() < 1150 else 180
+        if label_width == self._general_label_width:
+            return
+        for label in self._general_form_labels:
+            label.setFixedWidth(label_width)
+        self._general_label_width = label_width
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        if hasattr(self, "_general_form_labels"):
+            QTimer.singleShot(0, self._update_general_label_width)
 
     # ------------------------------------------------------------------
     # Model fetching
@@ -1224,6 +1371,10 @@ class ConfigTab(QWidget):
         self.note_width_spin.setValue(75)
         self.convert_quotes_cb.setChecked(True)
 
+        # Custom API pricing
+        self.input_cost_spin.setValue(2.0)
+        self.output_cost_spin.setValue(8.0)
+
         # UI settings
         self.font_scale_spin.setValue(1.0)
 
@@ -1242,15 +1393,12 @@ class ConfigTab(QWidget):
         """Reset to defaults, save, and show confirmation."""
         self.reset_to_defaults()
         self.save_to_env(show_message=False)
-        
-        # Custom API settings
-        self.input_cost_spin.setValue(2.0)
-        self.output_cost_spin.setValue(8.0)
-        
+
         # Reset engine tabs
         self.mvmz_tab.reset_to_defaults()
         self.wolf_tab.reset_to_defaults()
         self.csv_tab.reset_to_defaults()
+        self.srpg_tab.reset_to_defaults()
         
     def get_config(self):
         """Get current configuration as dictionary."""
