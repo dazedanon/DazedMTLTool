@@ -279,6 +279,33 @@ class ConfigTabRegressionTests(unittest.TestCase):
         self.assertFalse(popup.testAttribute(Qt.WA_TranslucentBackground))
         tab.model_combo.hidePopup()
 
+    def test_presets_menu_is_opaque(self) -> None:
+        tab = self.make_tab()
+        window = QMainWindow()
+        self._windows.append(window)
+        window.setCentralWidget(tab)
+        window.resize(1280, 760)
+        window.show()
+        for _ in range(3):
+            self._app.processEvents()
+
+        menu = tab.api_url_preset_btn.menu()
+        menu.popup(
+            tab.api_url_preset_btn.mapToGlobal(
+                tab.api_url_preset_btn.rect().bottomLeft()
+            )
+        )
+        for _ in range(3):
+            self._app.processEvents()
+
+        self.assertTrue(menu.autoFillBackground())
+        self.assertEqual(menu.palette().color(QPalette.Window).name(), "#353539")
+        self.assertEqual(menu.palette().color(QPalette.Base).name(), "#353539")
+        self.assertEqual(menu.windowOpacity(), 1.0)
+        self.assertFalse(menu.testAttribute(Qt.WA_TranslucentBackground))
+        self.assertTrue(menu.testAttribute(Qt.WA_OpaquePaintEvent))
+        menu.hide()
+
     def test_save_and_reload_round_trip_for_every_option(self) -> None:
         tab = self.make_tab()
         tab.disconnect_auto_save()

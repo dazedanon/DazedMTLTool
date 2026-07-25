@@ -200,6 +200,61 @@ class ConfigComboBox(QComboBox):
         ]))
 
 
+class ConfigMenu(QMenu):
+    """Popup menu with the same fully opaque surface as config dropdowns."""
+
+    _BACKGROUND = QColor("#353539")
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setStyleSheet("""
+            QMenu {
+                background-color: #353539;
+                color: #f2f2f2;
+                border: 1px solid #56565b;
+                padding: 2px;
+            }
+            QMenu::item {
+                background-color: #353539;
+                color: #f2f2f2;
+                min-height: 26px;
+                padding: 3px 9px;
+            }
+            QMenu::item:selected {
+                background-color: #007acc;
+                color: #ffffff;
+            }
+        """)
+        self._apply_opaque_background()
+
+    def _apply_opaque_background(self):
+        self.setWindowOpacity(1.0)
+        self.setAttribute(Qt.WA_TranslucentBackground, False)
+        self.setAttribute(Qt.WA_StyledBackground, True)
+        self.setAttribute(Qt.WA_OpaquePaintEvent, True)
+        self.setAutoFillBackground(True)
+        palette = self.palette()
+        palette.setColor(QPalette.Window, self._BACKGROUND)
+        palette.setColor(QPalette.Base, self._BACKGROUND)
+        palette.setColor(QPalette.Button, self._BACKGROUND)
+        palette.setColor(QPalette.Text, QColor("#f2f2f2"))
+        palette.setColor(QPalette.ButtonText, QColor("#f2f2f2"))
+        palette.setColor(QPalette.Highlight, QColor("#007acc"))
+        palette.setColor(QPalette.HighlightedText, QColor("#ffffff"))
+        self.setPalette(palette)
+
+    def showEvent(self, event):
+        self._apply_opaque_background()
+        super().showEvent(event)
+        self._apply_opaque_background()
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.fillRect(self.rect(), self._BACKGROUND)
+        painter.end()
+        super().paintEvent(event)
+
+
 class ApiKeyEditDialog(QDialog):
     """Dialog to create or overwrite a named API key (secret entered once)."""
 
@@ -256,7 +311,7 @@ class ApiKeyEditDialog(QDialog):
         endpoint_preset_btn = QToolButton()
         endpoint_preset_btn.setText("Presets ▾")
         endpoint_preset_btn.setPopupMode(QToolButton.InstantPopup)
-        endpoint_menu = QMenu(endpoint_preset_btn)
+        endpoint_menu = ConfigMenu(endpoint_preset_btn)
         for label, url in (
             ("OpenAI", "https://api.openai.com/v1"),
             ("Claude (Anthropic)", "https://api.anthropic.com/v1"),
@@ -663,7 +718,7 @@ class ConfigTab(QWidget):
         self.api_url_preset_btn.setPopupMode(QToolButton.InstantPopup)
         self.api_url_preset_btn.setStyleSheet(btn_style)
 
-        api_url_menu = QMenu(self.api_url_preset_btn)
+        api_url_menu = ConfigMenu(self.api_url_preset_btn)
         for name, url in (
             ("OpenAI", "https://api.openai.com/v1"),
             ("Claude (Anthropic)", "https://api.anthropic.com/v1"),
