@@ -1187,7 +1187,7 @@ def fetchTranslationBatches(batches=None):
                 errored.append((r.custom_id, detail))
                 continue
             msg = res.message
-            text = "".join(getattr(b, "text", "") or "" for b in msg.content)
+            text = _anthropic_content_text(msg.content)
             u = msg.usage
             cr = getattr(u, "cache_read_input_tokens", 0) or 0
             cw = getattr(u, "cache_creation_input_tokens", 0) or 0
@@ -1998,6 +1998,17 @@ def createTranslationSchema(numLines):
     }
 
 
+def _anthropic_content_text(content) -> str:
+    """Join text from Anthropic message content blocks.
+
+    Newer Claude models often return a ThinkingBlock (no ``.text``) before the
+    TextBlock. Only blocks that expose ``.text`` contribute to the result.
+    """
+    if not content:
+        return ""
+    return "".join(getattr(b, "text", "") or "" for b in content)
+
+
 class _AnthropicCompat:
     """OpenAI-shaped wrapper around an Anthropic response (text + usage)."""
     class _Usage:
@@ -2232,7 +2243,7 @@ def translateText(system, user, history, penalty, formatType, model, numLines=No
         except Exception as e:
             raise Exception(f"Anthropic API error: {e}")
 
-        _ant_text = ant_resp.content[0].text if ant_resp.content else ""
+        _ant_text = _anthropic_content_text(ant_resp.content)
         _u = ant_resp.usage
         _cr  = getattr(_u, "cache_read_input_tokens",     0) or 0
         _cw  = getattr(_u, "cache_creation_input_tokens", 0) or 0
