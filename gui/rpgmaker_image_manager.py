@@ -4,8 +4,15 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PyQt5.QtCore import Qt, QSize, QThread, pyqtSignal, QSettings
-from PyQt5.QtGui import QColor, QIcon, QPixmap
+from PyQt5.QtCore import (
+    Qt,
+    QSize,
+    QThread,
+    pyqtSignal,
+    QSettings,
+    QUrl,
+)
+from PyQt5.QtGui import QColor, QDesktopServices, QIcon, QPixmap
 from PyQt5.QtWidgets import (
     QComboBox,
     QAbstractItemView,
@@ -17,6 +24,7 @@ from PyQt5.QtWidgets import (
     QListWidgetItem,
     QMessageBox,
     QPushButton,
+    QSizePolicy,
     QSplitter,
     QVBoxLayout,
     QWidget,
@@ -26,18 +34,45 @@ from util.paths import APP_NAME, ORG_NAME
 
 from util.rpgmaker_images import (
     ImageAsset,
+    clean_runtime_image_duplicates,
     decrypt_assets,
-    encrypt_assets,
+    editable_workspace_root,
+    ensure_editable_workspace,
+    migrate_legacy_editable_workspace,
     prepare_assets_for_patch,
     preview_png_bytes,
     read_encryption_key,
+    remove_editable_assets,
     scan_image_assets,
     thumbnail_png_bytes,
 )
 
 
 _ASSET_ID_ROLE = Qt.UserRole + 1
-_PAGE_SIZE = 80
+_PAGE_SIZE = 1000
+
+
+class _UserSelectionList(QListWidget):
+    """Report user selection changes without reacting to list rebuilding."""
+
+    userSelectionChanged = pyqtSignal()
+    deleteRequested = pyqtSignal()
+
+    def mousePressEvent(self, event) -> None:
+        super().mousePressEvent(event)
+        self.userSelectionChanged.emit()
+
+    def mouseReleaseEvent(self, event) -> None:
+        super().mouseReleaseEvent(event)
+        self.userSelectionChanged.emit()
+
+    def keyPressEvent(self, event) -> None:
+        if event.key() == Qt.Key_Delete:
+            self.deleteRequested.emit()
+            event.accept()
+            return
+        super().keyPressEvent(event)
+        self.userSelectionChanged.emit()
 
 
 class _ImageScanWorker(QThread):
@@ -100,11 +135,15 @@ class _ImageActionWorker(QThread):
         try:
             if self.action == "decrypt":
                 result = decrypt_assets(
-                    self.assets, self.key, overwrite=False, progress=self.status.emit
+                    self.assets,
+                    self.key,
+                    game_root=self.game_root,
+                    overwrite=False,
+                    progress=self.status.emit,
                 )
-            elif self.action == "encrypt":
-                result = encrypt_assets(
-                    self.game_root, self.assets, self.key, progress=self.status.emit
+            elif self.action == "remove":
+                result = remove_editable_assets(
+                    self.game_root, self.assets, progress=self.status.emit
                 )
             else:
                 result = prepare_assets_for_patch(
@@ -158,8 +197,9 @@ class RPGMakerImageManager(QWidget):
         title.setStyleSheet("font-size:18px;font-weight:bold;color:#e0e0e0;")
         root.addWidget(title)
         intro = QLabel(
-            "Browse encrypted images visually, create editable PNG copies, then select only "
-            "the translated images you want in the patch. Pages keep very large games responsive."
+            "Select images while browsing, decrypt them into .dazedtl/images, edit the PNGs, "
+            "then encrypt the editable images when they are ready. "
+            "Pages keep very large games responsive."
         )
         intro.setWordWrap(True)
         intro.setStyleSheet("color:#b8b8b8;font-size:13px;padding:2px 0 6px 0;")
@@ -190,15 +230,13 @@ class RPGMakerImageManager(QWidget):
         filters.addWidget(self.folder_combo, 1)
         self.state_combo = QComboBox()
         self.state_combo.addItem("All images", "all")
-        self.state_combo.addItem("Encrypted", "encrypted")
-        self.state_combo.addItem("Editable PNG ready", "plain")
-        self.state_combo.addItem("Unencrypted PNG", "plain_only")
+        self.state_combo.addItem("Editable images", "editable")
         self.state_combo.currentIndexChanged.connect(self._apply_filters)
         filters.addWidget(self.state_combo)
         root.addLayout(filters)
 
         splitter = QSplitter(Qt.Horizontal)
-        self.image_list = QListWidget()
+        self.image_list = _UserSelectionList()
         self.image_list.setViewMode(QListWidget.IconMode)
         self.image_list.setResizeMode(QListWidget.Adjust)
         self.image_list.setMovement(QListWidget.Static)
@@ -219,11 +257,12 @@ class RPGMakerImageManager(QWidget):
             "QListWidget#rpgImageList::item:hover:!selected{background:#333;"
             "border-color:#555;}"
         )
-        self.image_list.itemSelectionChanged.connect(self._selection_changed)
+        self.image_list.userSelectionChanged.connect(self._selection_changed)
+        self.image_list.deleteRequested.connect(self._remove_highlighted)
         self.image_list.currentItemChanged.connect(self._show_preview)
         self.image_list.setToolTip(
-            "Select images normally. Ctrl-click toggles individual images, Shift-click selects "
-            "a range, and Ctrl+A selects the current page."
+            "Click highlights one image. Ctrl-click toggles individual images, Shift-click "
+            "selects a range, and Ctrl+A highlights the current page."
         )
         splitter.addWidget(self.image_list)
 
@@ -245,14 +284,50 @@ class RPGMakerImageManager(QWidget):
         splitter.setSizes([850, 350])
         root.addWidget(splitter, 1)
 
+        controls_row = QHBoxLayout()
+        controls_row.setSpacing(12)
+
+        action_row = QHBoxLayout()
+        action_row.setSpacing(8)
+        self.open_workspace_button = QPushButton("Open folder")
+        self.open_workspace_button.setToolTip(
+            "Open the game-local .dazedtl/images folder in your file manager."
+        )
+        self.open_workspace_button.clicked.connect(self._open_editable_folder)
+        self.decrypt_selected_button = QPushButton("Decrypt highlighted")
+        self.decrypt_selected_button.clicked.connect(self._decrypt_checked)
+        self.decrypt_all_button = QPushButton("Decrypt all")
+        self.decrypt_all_button.clicked.connect(self._decrypt_all)
+        self.remove_button = QPushButton("Remove highlighted")
+        self.remove_button.setToolTip(
+            "Delete highlighted PNG copies from the editable folder. Runtime images remain "
+            "untouched and can be decrypted again. The Delete key does the same thing."
+        )
+        self.remove_button.clicked.connect(self._remove_highlighted)
+        self.prepare_button = QPushButton("Encrypt + patch")
+        self.prepare_button.setStyleSheet(
+            "QPushButton{border:1px solid #4ec9b0;color:#4ec9b0;font-weight:bold;padding:6px 14px;}"
+            "QPushButton:hover{background:#18352f;}"
+        )
+        self.prepare_button.setToolTip(
+            "Re-encrypt every PNG in the editable folder, preserve original encrypted files in "
+            ".dazedtl/image_backups, and add exact .gitignore allow-rules."
+        )
+        self.prepare_button.clicked.connect(self._prepare_checked)
+        action_buttons = (
+            self.open_workspace_button,
+            self.decrypt_selected_button,
+            self.decrypt_all_button,
+            self.remove_button,
+            self.prepare_button,
+        )
+        for button in action_buttons:
+            button.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Fixed)
+            action_row.addWidget(button, 1)
+        controls_row.addLayout(action_row, 1)
+
         page_row = QHBoxLayout()
-        select_page = QPushButton("Select page")
-        select_page.clicked.connect(self._select_page)
-        page_row.addWidget(select_page)
-        clear_selection = QPushButton("Clear selection")
-        clear_selection.clicked.connect(self._clear_selection)
-        page_row.addWidget(clear_selection)
-        page_row.addStretch()
+        page_row.setSpacing(8)
         self.previous_button = QPushButton("← Previous")
         self.previous_button.clicked.connect(lambda: self._change_page(-1))
         page_row.addWidget(self.previous_button)
@@ -263,34 +338,17 @@ class RPGMakerImageManager(QWidget):
         self.next_button = QPushButton("Next →")
         self.next_button.clicked.connect(lambda: self._change_page(1))
         page_row.addWidget(self.next_button)
-        root.addLayout(page_row)
-
-        action_row = QHBoxLayout()
-        self.decrypt_selected_button = QPushButton("Decrypt selected")
-        self.decrypt_selected_button.clicked.connect(self._decrypt_checked)
-        action_row.addWidget(self.decrypt_selected_button)
-        self.decrypt_all_button = QPushButton("Decrypt all encrypted")
-        self.decrypt_all_button.clicked.connect(self._decrypt_all)
-        action_row.addWidget(self.decrypt_all_button)
-        self.encrypt_button = QPushButton("Encrypt selected")
-        self.encrypt_button.setToolTip(
-            "Rebuild selected encrypted runtime files from their editable PNG copies."
+        nav_width = max(self.previous_button.sizeHint().width(), self.next_button.sizeHint().width())
+        self.previous_button.setFixedWidth(nav_width)
+        self.next_button.setFixedWidth(nav_width)
+        common_height = max(
+            40,
+            *(button.sizeHint().height() for button in (*action_buttons, self.previous_button, self.next_button)),
         )
-        self.encrypt_button.clicked.connect(self._encrypt_checked)
-        action_row.addWidget(self.encrypt_button)
-        self.prepare_button = QPushButton("Encrypt + patch selected")
-        self.prepare_button.setStyleSheet(
-            "QPushButton{border:1px solid #4ec9b0;color:#4ec9b0;font-weight:bold;padding:6px 14px;}"
-            "QPushButton:hover{background:#18352f;}"
-        )
-        self.prepare_button.setToolTip(
-            "Re-encrypt selected edited PNGs, preserve original encrypted files in "
-            ".dazedtl/image_backups, and add exact .gitignore allow-rules."
-        )
-        self.prepare_button.clicked.connect(self._prepare_checked)
-        action_row.addWidget(self.prepare_button)
-        action_row.addStretch()
-        root.addLayout(action_row)
+        for button in (*action_buttons, self.previous_button, self.next_button):
+            button.setFixedHeight(common_height)
+        controls_row.addLayout(page_row)
+        root.addLayout(controls_row)
 
         self.status_label = QLabel("Scanning image folders…")
         self.status_label.setWordWrap(True)
@@ -314,6 +372,15 @@ class RPGMakerImageManager(QWidget):
             return
         self.game_root = root
         self.settings.setValue("workflow/last_game_folder", str(root))
+        try:
+            migrate_legacy_editable_workspace(root)
+            clean_runtime_image_duplicates(root)
+        except Exception as exc:
+            QMessageBox.warning(
+                self,
+                "Editable Image Cleanup",
+                f"Could not consolidate editable images under .dazedtl:\n{exc}",
+            )
         self.selected_ids.clear()
         self._load_key()
         self._start_scan()
@@ -373,10 +440,10 @@ class RPGMakerImageManager(QWidget):
         self.folder_combo.setCurrentIndex(max(0, index))
         self.folder_combo.blockSignals(False)
         encrypted = sum(asset.has_encrypted for asset in assets)
-        editable = sum(asset.has_plain and asset.has_encrypted for asset in assets)
+        editable = sum(asset.has_plain for asset in assets)
         self.status_label.setText(
             f"Found {len(assets):,} images · {encrypted:,} encrypted · "
-            f"{editable:,} editable PNG copies · {len(self.selected_ids):,} selected"
+            f"{editable:,} editable PNG copies · {len(self.selected_ids):,} highlighted"
         )
         self._apply_filters()
 
@@ -397,11 +464,7 @@ class RPGMakerImageManager(QWidget):
                 continue
             if folder and asset.relative_png.parent.as_posix() != folder:
                 continue
-            if state == "encrypted" and not asset.has_encrypted:
-                continue
-            if state == "plain" and not (asset.has_plain and asset.has_encrypted):
-                continue
-            if state == "plain_only" and not (asset.has_plain and not asset.has_encrypted):
+            if state == "editable" and not asset.has_plain:
                 continue
             filtered.append(asset)
         self.filtered_assets = filtered
@@ -427,8 +490,8 @@ class RPGMakerImageManager(QWidget):
             label = asset.relative_png.name
             item = QListWidgetItem(placeholder_icon, label)
             item.setData(_ASSET_ID_ROLE, asset.asset_id)
-            kind = "encrypted + PNG" if asset.has_encrypted and asset.has_plain else (
-                "encrypted" if asset.has_encrypted else "PNG"
+            kind = "encrypted + editable" if asset.has_encrypted and asset.has_plain else (
+                "encrypted" if asset.has_encrypted else "runtime PNG"
             )
             item.setToolTip(f"{asset.asset_id}\n{kind}")
             self.image_list.addItem(item)
@@ -485,23 +548,11 @@ class RPGMakerImageManager(QWidget):
         self.selected_ids.update(selected_on_page)
         self._update_selection_status()
 
-    def _select_page(self) -> None:
-        self.image_list.blockSignals(True)
-        for index in range(self.image_list.count()):
-            item = self.image_list.item(index)
-            item.setSelected(True)
-            self.selected_ids.add(item.data(_ASSET_ID_ROLE))
-        self.image_list.blockSignals(False)
-        self._update_selection_status()
-
-    def _clear_selection(self) -> None:
-        self.selected_ids.clear()
-        self.image_list.clearSelection()
-        self._update_selection_status()
-
     def _update_selection_status(self) -> None:
         self.status_label.setText(
-            f"{len(self.filtered_assets):,} matching images · {len(self.selected_ids):,} selected"
+            f"{len(self.filtered_assets):,} matching images · "
+            f"{len(self.selected_ids):,} highlighted · "
+            f"{sum(asset.has_plain for asset in self.assets):,} editable"
         )
 
     def _show_preview(self, current: QListWidgetItem | None, _previous=None) -> None:
@@ -525,12 +576,36 @@ class RPGMakerImageManager(QWidget):
             self.preview_label.setText(f"Preview unavailable\n{exc}")
         details = [asset.asset_id]
         if asset.has_encrypted:
-            details.append(f"Encrypted: {asset.encrypted_path.name}")
-        details.append("Editable PNG: ready" if asset.has_plain else "Editable PNG: not decrypted")
+            details.append(f"Runtime encrypted: {asset.encrypted_path}")
+        elif asset.has_runtime_plain:
+            details.append(f"Runtime PNG: {asset.runtime_plain_path}")
+        details.append(
+            f"Editable PNG: {asset.plain_path}"
+            if asset.has_plain
+            else f"Editable folder target: {asset.plain_path} (not created)"
+        )
+        details.append(
+            "Highlighted: yes" if asset.asset_id in self.selected_ids
+            else "Highlighted: no"
+        )
         self.path_label.setText("\n".join(details))
+
+    def _open_editable_folder(self) -> None:
+        if self.game_root is None:
+            return
+        try:
+            workspace = ensure_editable_workspace(self.game_root)
+            if not QDesktopServices.openUrl(QUrl.fromLocalFile(str(workspace))):
+                raise RuntimeError("The system file manager could not open the folder.")
+            self.status_label.setText(f"Editable images: {workspace}")
+        except Exception as exc:
+            QMessageBox.warning(self, "Editable Image Folder", str(exc))
 
     def _selected_assets(self) -> list[ImageAsset]:
         return [self.assets_by_id[key] for key in self.selected_ids if key in self.assets_by_id]
+
+    def _editable_assets(self) -> list[ImageAsset]:
+        return [asset for asset in self.assets if asset.has_plain]
 
     def _ensure_key(self) -> bool:
         if self.key is not None:
@@ -546,7 +621,9 @@ class RPGMakerImageManager(QWidget):
         assets = [asset for asset in self._selected_assets() if asset.has_encrypted]
         if not assets:
             QMessageBox.information(
-                self, "Nothing Selected", "Select one or more encrypted images first."
+                self,
+                "Nothing Selected",
+                "Select one or more encrypted images first.",
             )
             return
         if self._ensure_key():
@@ -557,14 +634,45 @@ class RPGMakerImageManager(QWidget):
         if not assets:
             QMessageBox.information(self, "Nothing to Decrypt", "All encrypted images already have PNG copies.")
             return
-        if self._ensure_key():
+        answer = QMessageBox.question(
+            self,
+            "Decrypt Every Image",
+            f"Decrypt all {len(assets):,} encrypted image(s) into .dazedtl/images?\n\n"
+            "Existing editable copies will not be overwritten.",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if answer == QMessageBox.Yes and self._ensure_key():
             self._start_action("decrypt", assets)
 
-    def _prepare_checked(self) -> None:
-        assets = self._selected_assets()
+    def _remove_highlighted(self) -> None:
+        assets = [asset for asset in self._selected_assets() if asset.has_plain]
         if not assets:
             QMessageBox.information(
-                self, "Nothing Selected", "Select the translated images to include first."
+                self,
+                "No Editable Images Highlighted",
+                "Highlight one or more images from the Editable images filter first.",
+            )
+            return
+        answer = QMessageBox.question(
+            self,
+            "Remove Editable Images",
+            f"Remove {len(assets):,} highlighted image(s) from the editable folder?\n\n"
+            "Their editable PNG copies will be deleted. The original game images will not "
+            "be changed, and encrypted images can be decrypted again later.",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if answer == QMessageBox.Yes:
+            self._start_action("remove", assets)
+
+    def _prepare_checked(self) -> None:
+        assets = self._editable_assets()
+        if not assets:
+            QMessageBox.information(
+                self,
+                "No Editable Images",
+                "Decrypt images into the editable folder first.",
             )
             return
         if any(asset.has_encrypted for asset in assets) and not self._ensure_key():
@@ -572,8 +680,9 @@ class RPGMakerImageManager(QWidget):
         answer = QMessageBox.question(
             self,
             "Prepare Images for Patch",
-            f"Prepare exactly {len(assets):,} selected image(s)?\n\n"
-            "Encrypted images will be rebuilt from their editable PNG. Their original encrypted "
+            f"Encrypt and add all {len(assets):,} editable image(s) to the patch?\n\n"
+            "Encrypted images will be rebuilt from their editable PNG in .dazedtl/images. "
+            "Their original encrypted "
             "files are backed up once under .dazedtl/image_backups. Exact allow-rules are then "
             "added to the applicable .gitignore files.",
             QMessageBox.Yes | QMessageBox.No,
@@ -581,29 +690,6 @@ class RPGMakerImageManager(QWidget):
         )
         if answer == QMessageBox.Yes:
             self._start_action("prepare", assets)
-
-    def _encrypt_checked(self) -> None:
-        assets = [
-            asset for asset in self._selected_assets()
-            if asset.has_encrypted and asset.has_plain
-        ]
-        if not assets:
-            QMessageBox.information(
-                self, "Nothing Ready", "Select images with editable PNG copies first."
-            )
-            return
-        if not self._ensure_key():
-            return
-        answer = QMessageBox.question(
-            self,
-            "Encrypt Images",
-            f"Rebuild {len(assets):,} selected encrypted image(s) from their PNG copies?\n\n"
-            "Original encrypted files are backed up once under .dazedtl/image_backups.",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No,
-        )
-        if answer == QMessageBox.Yes:
-            self._start_action("encrypt", assets)
 
     def _start_action(self, action: str, assets: list[ImageAsset]) -> None:
         self._set_actions_enabled(False)
@@ -616,9 +702,22 @@ class RPGMakerImageManager(QWidget):
 
     def _action_done(self, action: str, result) -> None:
         if action == "decrypt":
-            summary = f"Decrypted {result.completed:,} image(s); skipped {result.skipped:,}."
-        elif action == "encrypt":
-            summary = f"Encrypted {result.completed:,} image(s)."
+            workspace = editable_workspace_root(self.game_root)
+            summary = (
+                f"Created {result.completed:,} editable image(s) in {workspace}; "
+                f"skipped {result.skipped:,}."
+            )
+        elif action == "remove":
+            self.selected_ids = {
+                asset_id
+                for asset_id in self.selected_ids
+                if self.assets_by_id.get(asset_id) is not None
+                and self.assets_by_id[asset_id].has_plain
+            }
+            summary = (
+                f"Removed {result.completed:,} editable image(s); "
+                f"skipped {result.skipped:,}. Runtime images were left unchanged."
+            )
         else:
             summary = (
                 f"Prepared {result.completed:,} image(s) for the patch and updated "
@@ -641,9 +740,10 @@ class RPGMakerImageManager(QWidget):
 
     def _set_actions_enabled(self, enabled: bool) -> None:
         for button in (
+            self.open_workspace_button,
             self.decrypt_selected_button,
             self.decrypt_all_button,
-            self.encrypt_button,
+            self.remove_button,
             self.prepare_button,
         ):
             button.setEnabled(enabled)
@@ -658,7 +758,7 @@ class RPGMakerImageManager(QWidget):
         action_running = self._action_worker is not None and self._action_worker.isRunning()
         if action_running:
             QMessageBox.information(
-                self, "Image Action Running", "Wait for the current decrypt/encrypt action to finish."
+                self, "Image Action Running", "Wait for the current image action to finish."
             )
             event.ignore()
             return

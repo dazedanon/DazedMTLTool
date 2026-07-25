@@ -25,6 +25,8 @@ RPGMV_HEADER = bytes(
 )
 KEY_LEN = 16
 ENCRYPTED_IMAGE_EXTENSIONS = (".rpgmvp", ".png_")
+EDITABLE_WORKSPACE_NAME = "images"
+LEGACY_EDITABLE_WORKSPACE_NAME = "DazedTL_Images"
 
 
 @dataclass(frozen=True)
@@ -35,6 +37,7 @@ class ImageAsset:
     relative_png: Path
     plain_path: Path
     encrypted_path: Path | None = None
+    runtime_plain_path: Path | None = None
 
     @property
     def has_plain(self) -> bool:
@@ -43,6 +46,10 @@ class ImageAsset:
     @property
     def has_encrypted(self) -> bool:
         return self.encrypted_path is not None and self.encrypted_path.is_file()
+
+    @property
+    def has_runtime_plain(self) -> bool:
+        return self.runtime_plain_path is not None and self.runtime_plain_path.is_file()
 
 
 @dataclass
@@ -95,6 +102,16 @@ def read_encryption_key(game_root: str | Path) -> bytes:
     return bytes.fromhex(normalized)
 
 
+def editable_workspace_root(game_root: str | Path) -> Path:
+    """Return the DazedTL working folder used for editable image copies."""
+
+    return (
+        Path(game_root).expanduser().resolve()
+        / ".dazedtl"
+        / EDITABLE_WORKSPACE_NAME
+    )
+
+
 def _logical_png(path: Path) -> Path:
     lower = path.name.casefold()
     if lower.endswith(".rpgmvp"):
@@ -107,7 +124,8 @@ def _logical_png(path: Path) -> Path:
 def scan_image_assets(game_root: str | Path) -> list[ImageAsset]:
     """Scan ``img/`` and combine matching PNG/encrypted files into records."""
 
-    content_root = resolve_content_root(game_root)
+    root = Path(game_root).expanduser().resolve()
+    content_root = resolve_content_root(root)
     image_root = content_root / "img"
     by_id: dict[str, dict[str, Path]] = {}
     for path in image_root.rglob("*"):
@@ -119,18 +137,25 @@ def scan_image_assets(game_root: str | Path) -> list[ImageAsset]:
         logical = _logical_png(path)
         relative = logical.relative_to(content_root)
         asset_id = relative.as_posix()
-        entry = by_id.setdefault(asset_id, {"relative": relative, "plain": logical})
+        entry = by_id.setdefault(
+            asset_id,
+            {
+                "relative": relative,
+                "workspace_relative": logical.relative_to(root),
+            },
+        )
         if name.endswith(ENCRYPTED_IMAGE_EXTENSIONS):
             entry["encrypted"] = path
         else:
-            entry["plain"] = path
+            entry["runtime_plain"] = path
 
     assets = [
         ImageAsset(
             asset_id=asset_id,
             relative_png=entry["relative"],
-            plain_path=entry["plain"],
+            plain_path=editable_workspace_root(root) / entry["workspace_relative"],
             encrypted_path=entry.get("encrypted"),
+            runtime_plain_path=entry.get("runtime_plain"),
         )
         for asset_id, entry in by_id.items()
     ]
@@ -163,8 +188,10 @@ def preview_png_bytes(asset: ImageAsset, key: bytes | None) -> bytes:
 
     if asset.has_plain:
         return asset.plain_path.read_bytes()
+    if asset.has_runtime_plain:
+        return asset.runtime_plain_path.read_bytes()
     if not asset.has_encrypted:
-        raise FileNotFoundError(asset.plain_path)
+        raise FileNotFoundError(asset.runtime_plain_path or asset.plain_path)
     if key is None:
         raise ValueError("The encryption key is required to preview this image.")
     return decrypt_image_bytes(asset.encrypted_path.read_bytes(), key)
@@ -200,16 +227,127 @@ def _atomic_write(path: Path, data: bytes) -> None:
         raise
 
 
+def _ensure_image_manager_ignores(game_root: str | Path) -> None:
+    root = Path(game_root).expanduser().resolve()
+    ignore_path = root / ".gitignore"
+    existing = (
+        ignore_path.read_text(encoding="utf-8", errors="surrogateescape")
+        if ignore_path.exists()
+        else ""
+    )
+    rules = ("/.dazedtl/",)
+    additions = [rule for rule in rules if rule not in existing.splitlines()]
+    if additions:
+        text = existing
+        if text and not text.endswith("\n"):
+            text += "\n"
+        if "# DazedTL image manager working files" not in text:
+            text += "\n# DazedTL image manager working files\n"
+        text += "\n".join(additions) + "\n"
+        _atomic_write(ignore_path, text.encode("utf-8", errors="surrogateescape"))
+
+
+def ensure_editable_workspace(game_root: str | Path) -> Path:
+    """Create the editable folder and keep working files out of patches."""
+
+    root = Path(game_root).expanduser().resolve()
+    workspace = editable_workspace_root(root)
+    workspace.mkdir(parents=True, exist_ok=True)
+    migrate_legacy_editable_workspace(root)
+    _ensure_image_manager_ignores(root)
+    return workspace
+
+
+def migrate_legacy_editable_workspace(game_root: str | Path) -> int:
+    """Move editable PNGs from the former top-level workspace into .dazedtl."""
+
+    root = Path(game_root).expanduser().resolve()
+    legacy = root / LEGACY_EDITABLE_WORKSPACE_NAME
+    if not legacy.is_dir():
+        return 0
+    destination_root = editable_workspace_root(root)
+    conflict_root = root / ".dazedtl" / "legacy_image_conflicts"
+    moved = 0
+    for source in sorted(path for path in legacy.rglob("*") if path.is_file()):
+        relative = source.relative_to(legacy)
+        destination = destination_root / relative
+        if destination.exists():
+            destination = conflict_root / relative
+            counter = 2
+            while destination.exists():
+                destination = conflict_root / relative.with_name(
+                    f"{relative.stem}_{counter}{relative.suffix}"
+                )
+                counter += 1
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(source), str(destination))
+        moved += 1
+
+    directories = sorted(
+        (path for path in legacy.rglob("*") if path.is_dir()),
+        key=lambda path: len(path.parts),
+        reverse=True,
+    )
+    for directory in directories:
+        try:
+            directory.rmdir()
+        except OSError:
+            pass
+    try:
+        legacy.rmdir()
+    except OSError:
+        pass
+    _ensure_image_manager_ignores(root)
+    return moved
+
+
+def clean_runtime_image_duplicates(game_root: str | Path) -> int:
+    """Move PNGs that duplicate encrypted assets out of the runtime image tree."""
+
+    root = Path(game_root).expanduser().resolve()
+    cleaned = 0
+    for asset in scan_image_assets(root):
+        if not (asset.has_encrypted and asset.has_runtime_plain):
+            continue
+        source = asset.runtime_plain_path
+        destination = asset.plain_path
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        if not destination.exists():
+            shutil.move(str(source), str(destination))
+        elif source.read_bytes() == destination.read_bytes():
+            source.unlink()
+        else:
+            relative = source.relative_to(root)
+            conflict_root = root / ".dazedtl" / "runtime_plain_conflicts"
+            conflict = conflict_root / relative
+            counter = 2
+            while conflict.exists():
+                conflict = (conflict_root / relative).with_name(
+                    f"{relative.stem}_{counter}{relative.suffix}"
+                )
+                counter += 1
+            conflict.parent.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(source), str(conflict))
+        cleaned += 1
+    if cleaned:
+        _ensure_image_manager_ignores(root)
+    return cleaned
+
+
 def decrypt_assets(
     assets: Iterable[ImageAsset],
     key: bytes,
     *,
+    game_root: str | Path | None = None,
     overwrite: bool = False,
     progress: Callable[[str], None] | None = None,
 ) -> ImageActionResult:
-    """Create editable PNG copies beside encrypted images."""
+    """Decrypt images into the game-local editable image workspace."""
 
     result = ImageActionResult()
+    assets = list(assets)
+    if game_root is not None:
+        ensure_editable_workspace(game_root)
     for asset in assets:
         if not asset.has_encrypted:
             result.skipped += 1
@@ -218,6 +356,16 @@ def decrypt_assets(
             result.skipped += 1
             continue
         try:
+            # Older versions of the image manager placed the editable PNG
+            # beside its encrypted runtime file.  Preserve any work done in
+            # that layout by migrating it instead of decrypting over it.
+            if asset.has_runtime_plain and not asset.has_plain and not overwrite:
+                if progress:
+                    progress(f"Moving editable copy for {asset.asset_id}")
+                _atomic_write(asset.plain_path, asset.runtime_plain_path.read_bytes())
+                asset.runtime_plain_path.unlink()
+                result.completed += 1
+                continue
             if progress:
                 progress(f"Decrypting {asset.asset_id}")
             raw = decrypt_image_bytes(asset.encrypted_path.read_bytes(), key)
@@ -225,6 +373,11 @@ def decrypt_assets(
             result.completed += 1
         except Exception as exc:  # continue a large batch and report all failures
             result.errors.append(f"{asset.asset_id}: {exc}")
+    if game_root is not None:
+        try:
+            clean_runtime_image_duplicates(game_root)
+        except Exception as exc:
+            result.errors.append(f"Runtime image cleanup: {exc}")
     return result
 
 
@@ -233,6 +386,40 @@ def _path_inside(root: Path, path: Path) -> Path:
         return path.resolve().relative_to(root.resolve())
     except ValueError as exc:
         raise ValueError(f"Image is outside the selected game folder: {path}") from exc
+
+
+def remove_editable_assets(
+    game_root: str | Path,
+    assets: Iterable[ImageAsset],
+    *,
+    progress: Callable[[str], None] | None = None,
+) -> ImageActionResult:
+    """Delete editable copies while leaving their runtime assets untouched."""
+
+    root = Path(game_root).expanduser().resolve()
+    workspace = editable_workspace_root(root)
+    result = ImageActionResult()
+    for asset in assets:
+        try:
+            if not asset.has_plain:
+                result.skipped += 1
+                continue
+            _path_inside(workspace, asset.plain_path)
+            if progress:
+                progress(f"Removing {asset.asset_id} from editable images")
+            asset.plain_path.unlink()
+            result.completed += 1
+
+            parent = asset.plain_path.parent
+            while parent != workspace:
+                try:
+                    parent.rmdir()
+                except OSError:
+                    break
+                parent = parent.parent
+        except Exception as exc:
+            result.errors.append(f"{asset.asset_id}: {exc}")
+    return result
 
 
 def _escape_gitignore_component(value: str) -> str:
@@ -341,8 +528,22 @@ def prepare_assets_for_patch(
                 encrypted = encrypt_image_bytes(asset.plain_path.read_bytes(), key)
                 _atomic_write(asset.encrypted_path, encrypted)
                 targets.append(asset.encrypted_path)
-            elif asset.has_plain:
-                targets.append(asset.plain_path)
+            elif asset.has_runtime_plain:
+                # Unencrypted games load the PNG from the runtime image tree.
+                # If the user made a workspace copy, publish it back there and
+                # preserve the original once, just like encrypted assets.
+                if asset.has_plain:
+                    relative_plain = _path_inside(root, asset.runtime_plain_path)
+                    backup = root / ".dazedtl" / "image_backups" / relative_plain
+                    if not backup.exists():
+                        backup.parent.mkdir(parents=True, exist_ok=True)
+                        shutil.copy2(asset.runtime_plain_path, backup)
+                    if progress:
+                        progress(f"Publishing {asset.asset_id}")
+                    _atomic_write(
+                        asset.runtime_plain_path, asset.plain_path.read_bytes()
+                    )
+                targets.append(asset.runtime_plain_path)
             else:
                 raise FileNotFoundError("image file no longer exists")
             result.completed += 1
@@ -357,6 +558,10 @@ def prepare_assets_for_patch(
             result.gitignore_files = add_patch_exceptions(root, targets)
         except Exception as exc:
             result.errors.append(f".gitignore: {exc}")
+    try:
+        clean_runtime_image_duplicates(root)
+    except Exception as exc:
+        result.errors.append(f"Runtime image cleanup: {exc}")
     return result
 
 
@@ -367,7 +572,7 @@ def encrypt_assets(
     *,
     progress: Callable[[str], None] | None = None,
 ) -> ImageActionResult:
-    """Re-encrypt editable PNGs in place without changing gitignore files."""
+    """Re-encrypt workspace PNGs without changing gitignore files."""
 
     root = Path(game_root).expanduser().resolve()
     result = ImageActionResult()
@@ -390,4 +595,8 @@ def encrypt_assets(
             result.completed += 1
         except Exception as exc:
             result.errors.append(f"{asset.asset_id}: {exc}")
+    try:
+        clean_runtime_image_duplicates(root)
+    except Exception as exc:
+        result.errors.append(f"Runtime image cleanup: {exc}")
     return result

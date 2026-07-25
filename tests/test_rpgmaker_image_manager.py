@@ -2,15 +2,16 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PIL import Image
-from PyQt5.QtCore import QItemSelectionModel, QSettings, Qt
+from PyQt5.QtCore import QSettings, Qt
 from PyQt5.QtTest import QTest
-from PyQt5.QtWidgets import QApplication, QAbstractItemView
+from PyQt5.QtWidgets import QApplication, QAbstractItemView, QMessageBox
 
-from gui.rpgmaker_image_manager import RPGMakerImageManager
+from gui.rpgmaker_image_manager import RPGMakerImageManager, _PAGE_SIZE
 
 
 class RPGMakerImageManagerSelectionTests(unittest.TestCase):
@@ -34,7 +35,8 @@ class RPGMakerImageManagerSelectionTests(unittest.TestCase):
             Image.new("RGBA", (24, 24), (index * 40, 10, 20, 255)).save(
                 image_dir / f"image{index}.png"
             )
-        settings = QSettings(str(root / "settings.ini"), QSettings.IniFormat)
+        self.settings_path = root / "settings.ini"
+        settings = QSettings(str(self.settings_path), QSettings.IniFormat)
         self.manager = RPGMakerImageManager(self.game_root, settings=settings)
         self.manager.resize(1100, 760)
         self.manager.show()
@@ -82,17 +84,56 @@ class RPGMakerImageManagerSelectionTests(unittest.TestCase):
         self.assertEqual(len(image_list.selectedItems()), 4)
         self.assertEqual(len(self.manager.selected_ids), 4)
 
-    def test_selected_tiles_are_restored_after_filtering(self):
-        selection = self.manager.image_list.selectionModel()
-        selection.select(
-            self.manager.image_list.model().index(1, 0),
-            QItemSelectionModel.Select,
-        )
-        selection.select(
-            self.manager.image_list.model().index(3, 0),
-            QItemSelectionModel.Select,
-        )
+    def test_plain_click_replaces_selection_and_ctrl_click_adds(self):
+        self._click(0)
+        self._click(1)
+        self.assertEqual(len(self.manager.image_list.selectedItems()), 1)
+        self.assertEqual(len(self.manager.selected_ids), 1)
+
+        self._click(2, Qt.ControlModifier)
+        self.assertEqual(len(self.manager.image_list.selectedItems()), 2)
+        self.assertEqual(len(self.manager.selected_ids), 2)
+
+    def test_workspace_images_are_selected_after_manager_reopens(self):
+        self._click(0)
+        self._click(2, Qt.ControlModifier)
+        expected = set(self.manager.selected_ids)
+        for asset_id in expected:
+            asset = self.manager.assets_by_id[asset_id]
+            asset.plain_path.parent.mkdir(parents=True, exist_ok=True)
+            asset.plain_path.write_bytes(asset.runtime_plain_path.read_bytes())
+        manifest = self.game_root / ".dazedtl" / "image_selection.json"
+        manifest.write_text("not used", encoding="utf-8")
+
+        settings = QSettings(str(self.settings_path), QSettings.IniFormat)
+        reopened = RPGMakerImageManager(self.game_root, settings=settings)
+        reopened.resize(1100, 760)
+        reopened.show()
+        reopened._scan_worker.wait(5000)
         self.app.processEvents()
+        try:
+            self.assertEqual(reopened.selected_ids, set())
+            self.assertEqual(reopened.image_list.selectedItems(), [])
+            self.assertEqual(manifest.read_text(encoding="utf-8"), "not used")
+
+            reopened.folder_combo.setCurrentIndex(
+                reopened.folder_combo.findData("img/pictures")
+            )
+            reopened.state_combo.setCurrentIndex(
+                reopened.state_combo.findData("editable")
+            )
+            self.app.processEvents()
+            self.assertEqual(reopened.image_list.count(), len(expected))
+            self.assertEqual(reopened.image_list.selectedItems(), [])
+        finally:
+            for worker in list(reopened._thumbnail_workers):
+                worker.wait(5000)
+            reopened.close()
+            self.app.processEvents()
+
+    def test_highlights_survive_filters_without_refreshing_editable_view(self):
+        self._click(1)
+        self._click(3, Qt.ControlModifier)
         selected_before = set(self.manager.selected_ids)
         self.assertEqual(len(selected_before), 2)
 
@@ -102,7 +143,74 @@ class RPGMakerImageManagerSelectionTests(unittest.TestCase):
         self.app.processEvents()
 
         self.assertEqual(self.manager.selected_ids, selected_before)
-        self.assertEqual(len(self.manager.image_list.selectedItems()), 2)
+        selected_ids = {
+            item.data(Qt.UserRole + 1)
+            for item in self.manager.image_list.selectedItems()
+        }
+        self.assertEqual(selected_ids, selected_before)
+
+        for asset_id in selected_before:
+            asset = self.manager.assets_by_id[asset_id]
+            asset.plain_path.parent.mkdir(parents=True, exist_ok=True)
+            asset.plain_path.write_bytes(asset.runtime_plain_path.read_bytes())
+        editable_filter = self.manager.state_combo.findData("editable")
+        self.manager.state_combo.setCurrentIndex(editable_filter)
+        QTest.qWait(20)
+        self.app.processEvents()
+        self.assertEqual(self.manager.image_list.count(), 2)
+        self.assertEqual(self.manager.selected_ids, selected_before)
+
+        removed_id = self.manager.image_list.item(0).data(Qt.UserRole + 1)
+        self._click(0, Qt.ControlModifier)
+        self.app.processEvents()
+        self.assertNotIn(removed_id, self.manager.selected_ids)
+        self.assertEqual(self.manager.image_list.count(), 2)
+
+    def test_delete_key_removes_only_highlighted_workspace_copy(self):
+        asset = self.manager.assets[0]
+        asset.plain_path.parent.mkdir(parents=True, exist_ok=True)
+        edited = asset.runtime_plain_path.read_bytes()
+        asset.plain_path.write_bytes(edited)
+        self.manager.state_combo.setCurrentIndex(
+            self.manager.state_combo.findData("editable")
+        )
+        self.app.processEvents()
+        self.assertEqual(self.manager.image_list.count(), 1)
+        self._click(0)
+
+        with (
+            patch.object(QMessageBox, "question", return_value=QMessageBox.Yes),
+            patch.object(QMessageBox, "information"),
+        ):
+            QTest.keyClick(self.manager.image_list, Qt.Key_Delete)
+            action_worker = self.manager._action_worker
+            self.assertIsNotNone(action_worker)
+            action_worker.wait(5000)
+            self.app.processEvents()
+            self.manager._scan_worker.wait(5000)
+            self.app.processEvents()
+
+        self.assertFalse(asset.plain_path.exists())
+        self.assertTrue(asset.runtime_plain_path.exists())
+        self.assertEqual(self.manager.image_list.count(), 0)
+        self.assertEqual(self.manager.remove_button.text(), "Remove highlighted")
+
+    def test_bottom_controls_share_one_row_and_action_width(self):
+        action_buttons = (
+            self.manager.open_workspace_button,
+            self.manager.decrypt_selected_button,
+            self.manager.decrypt_all_button,
+            self.manager.remove_button,
+            self.manager.prepare_button,
+        )
+        widths = [button.width() for button in action_buttons]
+        tops = [button.geometry().top() for button in action_buttons]
+        self.assertLessEqual(max(widths) - min(widths), 1)
+        self.assertEqual(len(set(tops)), 1)
+        self.assertEqual(
+            self.manager.previous_button.geometry().top(),
+            self.manager.open_workspace_button.geometry().top(),
+        )
 
     def test_thumbnail_batch_keeps_one_stable_tile_per_asset(self):
         for worker in list(self.manager._thumbnail_workers):
@@ -121,6 +229,9 @@ class RPGMakerImageManagerSelectionTests(unittest.TestCase):
 
 
 class RPGMakerImageManagerNavigationTests(unittest.TestCase):
+    def test_page_size_supports_large_image_sets(self):
+        self.assertEqual(_PAGE_SIZE, 1000)
+
     def test_image_manager_is_a_dedicated_sidebar_page(self):
         root = Path(__file__).resolve().parents[1]
         main_source = (root / "gui" / "main.py").read_text(encoding="utf-8")
