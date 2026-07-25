@@ -3700,13 +3700,13 @@ class WorkflowTab(QWidget):
 
             # 5. Navigate to Translation tab
             if hasattr(pw, "switch_page"):
-                page = getattr(pw, "PAGE_TRANSLATION", 2)
+                page = getattr(pw, "PAGE_TRANSLATION", 3)
                 pw.switch_page(page)
             elif hasattr(pw, "content_stack"):
-                pw.content_stack.setCurrentIndex(2)
+                pw.content_stack.setCurrentIndex(3)
                 if hasattr(pw, "nav_buttons"):
                     for i, btn in enumerate(pw.nav_buttons):
-                        btn.setChecked(i == 2)
+                        btn.setChecked(i == 3)
 
             # 6. Auto-start translation so the user doesn't need an extra click
             if auto_start:

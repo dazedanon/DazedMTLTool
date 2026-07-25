@@ -707,6 +707,7 @@ from gui.guide_tab import GuideTab
 from gui.translation_tab import TranslationTab
 from gui.workflow_tab import WorkflowTab
 from gui.wolf_workflow_tab import WolfWorkflowTab
+from gui.rpgmaker_image_manager import RPGMakerImageManager
 from gui.skills_tab import SkillsTab
 from gui.batch_tab import BatchTab
 
@@ -715,10 +716,11 @@ class DazedMTLGUI(QMainWindow):
 
     PAGE_GUIDE = 0
     PAGE_WORKFLOW = 1
-    PAGE_TRANSLATION = 2
-    PAGE_BATCHES = 3
-    PAGE_SKILLS = 4
-    PAGE_CONFIG = 5
+    PAGE_IMAGES = 2
+    PAGE_TRANSLATION = 3
+    PAGE_BATCHES = 4
+    PAGE_SKILLS = 5
+    PAGE_CONFIG = 6
 
     def __init__(self):
         super().__init__()
@@ -961,6 +963,13 @@ class DazedMTLGUI(QMainWindow):
         sidebar_layout.addWidget(btn_workflow)
         self.nav_buttons.append(btn_workflow)
 
+        # RPG Maker image decryption / patch selection
+        btn_images = self.create_nav_button("🖼", "Images")
+        btn_images.setToolTip("Images - decrypt, preview, encrypt, and add MV/MZ images to patches")
+        btn_images.clicked.connect(lambda: self.switch_page(self.PAGE_IMAGES))
+        sidebar_layout.addWidget(btn_images)
+        self.nav_buttons.append(btn_images)
+
         # Translation
         btn_translation = self.create_nav_button("🌐", "Translation")
         btn_translation.clicked.connect(lambda: self.switch_page(self.PAGE_TRANSLATION))
@@ -1027,6 +1036,8 @@ class DazedMTLGUI(QMainWindow):
     
     def switch_page(self, index):
         """Switch to the specified page and update button states."""
+        if index == self.PAGE_IMAGES and hasattr(self, "image_manager_tab"):
+            self.image_manager_tab.refresh_game_root_from_settings()
         self.content_stack.setCurrentIndex(index)
         
         # Update button checked states
@@ -1045,19 +1056,23 @@ class DazedMTLGUI(QMainWindow):
         # RPGMaker and Wolf guided panels while keeping a single sidebar button.
         self.content_stack.addWidget(self._create_workflow_container())
 
-        # Translation Execution Tab (index 2)
+        # RPG Maker MV/MZ Image Manager (index 2)
+        self.image_manager_tab = RPGMakerImageManager(parent=self)
+        self.content_stack.addWidget(self.image_manager_tab)
+
+        # Translation Execution Tab (index 3)
         self.translation_tab = TranslationTab(self)
         self.content_stack.addWidget(self.translation_tab)
 
-        # Batch History Tab (index 3)
+        # Batch History Tab (index 4)
         self.batch_tab = BatchTab(self)
         self.content_stack.addWidget(self.batch_tab)
 
-        # Skills Tab (index 4)
+        # Skills Tab (index 5)
         self.skills_tab = SkillsTab(self)
         self.content_stack.addWidget(self.skills_tab)
 
-        # Configuration Tab (index 5)
+        # Configuration Tab (index 6)
         self.config_tab = ConfigTab()
         self.config_tab.config_changed.connect(self.on_config_changed)
         self.content_stack.addWidget(self.config_tab)
