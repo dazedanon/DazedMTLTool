@@ -68,6 +68,51 @@ class UpdateThreadInstallFilterTests(unittest.TestCase):
             with self.subTest(rel=rel):
                 self.assertFalse(UpdateThread.should_install(Path(rel)))
 
+    def test_preserves_archive_metadata_in_git_checkout(self):
+        from gui.main import UpdateThread
+
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            (root / ".git").mkdir()
+
+            self.assertFalse(
+                UpdateThread.should_install_to_root(
+                    Path(".git_archival.txt"),
+                    root,
+                )
+            )
+            self.assertTrue(
+                UpdateThread.should_install_to_root(Path("gui/main.py"), root)
+            )
+
+    def test_preserves_archive_metadata_with_git_file(self):
+        """Linked worktrees and submodules use a .git file, not a directory."""
+        from gui.main import UpdateThread
+
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            (root / ".git").write_text("gitdir: elsewhere\n", encoding="utf-8")
+
+            self.assertFalse(
+                UpdateThread.should_install_to_root(
+                    Path(".git_archival.txt"),
+                    root,
+                )
+            )
+
+    def test_installs_archive_metadata_outside_git_checkout(self):
+        from gui.main import UpdateThread
+
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+
+            self.assertTrue(
+                UpdateThread.should_install_to_root(
+                    Path(".git_archival.txt"),
+                    root,
+                )
+            )
+
 
 class UpdateThreadArchiveRootTests(unittest.TestCase):
     """Gitea zips nest files under a single top folder (repo display name)."""

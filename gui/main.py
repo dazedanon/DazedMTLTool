@@ -132,6 +132,20 @@ class UpdateThread(QThread):
         return True
 
     @classmethod
+    def should_install_to_root(cls, rel: Path, root: Path) -> bool:
+        """Return True when *rel* may be copied into the selected install root.
+
+        Git expands ``.git_archival.txt`` while creating a source archive. Keep
+        that expanded file in archive-only installs, but do not copy it back
+        into a live checkout where it would dirty the worktree on every update.
+        """
+        if not cls.should_install(rel):
+            return False
+        if rel.as_posix() == ".git_archival.txt" and (root / ".git").exists():
+            return False
+        return True
+
+    @classmethod
     def resolve_archive_root(cls, extract_dir: Path) -> Path:
         """Locate the single top-level folder inside an extracted archive.
 
@@ -281,7 +295,11 @@ class UpdateThread(QThread):
             install_files = [
                 src
                 for src in extracted.rglob("*")
-                if src.is_file() and self.should_install(src.relative_to(extracted))
+                if src.is_file()
+                and self.should_install_to_root(
+                    src.relative_to(extracted),
+                    root,
+                )
             ]
             if not install_files:
                 raise RuntimeError(
