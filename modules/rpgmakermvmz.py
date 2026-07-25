@@ -163,14 +163,14 @@ CODE122_VAR_MAX = 2000
 
 # Plugins / Scripts
 CODE355655 = False
-CODE357 = False
+CODE357 = True
 CODE657 = False
 CODE356 = False
 CODE320 = False
 CODE324 = False
 CODE325 = False
-CODE111 = True
-CODE108 = False
+CODE111 = False
+CODE108 = True
 
 # ─── Plugin Manager ──────────────────────────────────────────────────────────
 # All known code-357 headerMapping entries. Enable entries via ENABLED_PLUGINS_357.
@@ -201,7 +201,7 @@ HEADER_MAPPINGS_357 = {
     "SceneGlossary": (["category"], None),
 }
 # Subset of HEADER_MAPPINGS_357 keys that should be processed (empty = none).
-ENABLED_PLUGINS_357: set = set()
+ENABLED_PLUGINS_357: set = {"DTextPicture"}
 
 # All known code-355/655 script patterns. Enable entries via ENABLED_PATTERNS_355655.
 PATTERNS_355655 = {
@@ -236,7 +236,7 @@ PATTERNS_355655 = {
     "AddAddress": (r'AddAddress\(\d+,\s*\\?"(.+?)\\?"', False),
 }
 # Subset of PATTERNS_355655 keys that should be processed (empty = none).
-ENABLED_PATTERNS_355655: set = {"BattleManager._logWindow.addText"}
+ENABLED_PATTERNS_355655: set = set()
 
 
 def _pat355655_captured_text(match):

@@ -113,7 +113,7 @@ from util.project_scanner import (
     wolf_repair_nested_data_dir,
     wolf_unpack_out_dir,
 )
-from util.skills import load_project_setup
+from util.skills import load_clipboard_skill, load_project_setup
 
 # Workflow-level label for the non-batch (live) translation path. The Translation
 # tab's own mode is called "Translate"; _workflow_mode_text() maps to that.
@@ -129,47 +129,7 @@ WORK_DIR_NAME = "wolf_json"
 PHASE_NAMES_KINDS = {"names"}
 PHASE_DB_KINDS = {"db"}
 PHASE_MAPS_EVENTS_KINDS = {"map", "common", "gamedat", "txt", "txt-dir"}
-
-# Speaker-format prompt for a repo-aware AI. WolfDawn already detects and tags who
-# speaks on each line, so the only decision left is whether its LOW-confidence
-# first-line guesses are really speaker names for this game. The AI inspects the
-# extracted text and returns a single ENABLE/DISABLE recommendation.
-_WOLF_SPEAKER_PROMPT = (
-    "You are an expert Japanese WOLF RPG Editor translator helping configure a translation tool.\n"
-    "\n"
-    "<background>\n"
-    "WolfDawn extracts each line with a 'speaker' and a 'speaker_src' tag describing how it "
-    "detected the speaker. Two tags carry the speaker name baked into the FIRST line of the "
-    "'source' text (the rest is the dialogue body):\n"
-    "  - literal_line1          : HIGH confidence - a face/name window precedes the line, so the "
-    "first line really is a nameplate. The tool always reshapes these; nothing to decide.\n"
-    "  - literal_line1_lowconf  : LOW confidence - a short first line with NO preceding face "
-    "window. WolfDawn guesses it is a speaker name, but it might actually be the start of the "
-    "dialogue or narration.\n"
-    "When a first-line format is trusted, the tool reshapes 'Name\\nbody' into '[Name]: body' for "
-    "translation, then restores 'Name\\nbody' on inject (byte-safe either way).\n"
-    "</background>\n"
-    "\n"
-    "--- attach the extracted JSON in files/ here (maps / CommonEvent) before continuing ---\n"
-    "\n"
-    "<task>\n"
-    "Decide whether the LOW-confidence first-line guesses (speaker_src = literal_line1_lowconf) "
-    "should be treated as speaker names for THIS game. Inspect a good sample of those entries in "
-    "files/: look at the first line of each such 'source' and judge whether it is genuinely a "
-    "character/speaker label as opposed to real dialogue or narration.\n"
-    "  - ENABLE  if the low-confidence first lines are overwhelmingly real speaker names.\n"
-    "  - DISABLE if many are actually dialogue/narration (reshaping them would mislabel lines).\n"
-    "(The high-confidence nameplates are always handled; you are only ruling on the guesses.)\n"
-    "</task>\n"
-    "\n"
-    "<output_format>\n"
-    "Return ONLY a fenced code block containing the recommendation and a one-line reason, e.g.\n"
-    "```\n"
-    "LOWCONF_FIRSTLINE: ENABLE - low-confidence first lines are short character names (市民, 兵士...).\n"
-    "```\n"
-    "Use exactly ENABLE or DISABLE after the colon.\n"
-    "</output_format>\n"
-)
+# The speaker-format prompt is loaded from editable data/skills/wolf_speakers.md.
 
 
 class _WolfTaskWorker(QThread):
@@ -2160,7 +2120,7 @@ class WolfWorkflowTab(QWidget):
 
     def _copy_wolf_speaker_prompt(self):
         try:
-            QApplication.clipboard().setText(_WOLF_SPEAKER_PROMPT)
+            QApplication.clipboard().setText(load_clipboard_skill("wolf_speakers.md"))
             self._log(
                 "📋 Speaker-format prompt copied. Paste it into Cursor/Copilot with files/ open; "
                 "set the low-confidence box to match its recommendation."

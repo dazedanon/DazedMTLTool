@@ -225,6 +225,17 @@ wolf_loose_data_ready() {
     return 1
 }
 
+is_wolf_game() {
+    local name data_dir
+    for name in Data.wolf data.wolf; do
+        [ -f "$ROOT_DIR/$name" ] && return 0
+    done
+    for data_dir in "$ROOT_DIR/Data" "$ROOT_DIR/data"; do
+        wolf_loose_data_ready "$data_dir" && return 0
+    done
+    return 1
+}
+
 find_uberwolf_cli() {
     if [ -f "$ROOT_DIR/UberWolfCli.exe" ]; then
         echo "$ROOT_DIR/UberWolfCli.exe"
@@ -389,17 +400,35 @@ download_extract() {
         return 1
     fi
 
-    # Stage UberWolfCli before unpack so Data.wolf -> Data/ happens before
-    # English patch files are copied on top.
-    for cli_name in UberWolfCli.exe UberWolfCli.LICENSE.txt; do
-        if [ -f "$inner/$cli_name" ] && [ ! -f "$ROOT_DIR/$cli_name" ]; then
-            cp -f "$inner/$cli_name" "$ROOT_DIR/$cli_name"
-        fi
-    done
-    invoke_wolf_pre_setup
+    wolf_patch=0
+    if is_wolf_game; then
+        wolf_patch=1
+        # Stage UberWolfCli before unpack so Data.wolf -> Data/ happens before
+        # English patch files are copied on top.
+        for cli_name in UberWolfCli.exe UberWolfCli.LICENSE.txt; do
+            if [ -f "$inner/$cli_name" ] && [ ! -f "$ROOT_DIR/$cli_name" ]; then
+                cp -f "$inner/$cli_name" "$ROOT_DIR/$cli_name"
+            fi
+        done
+        invoke_wolf_pre_setup
+    fi
 
     echo "Applying patch..."
-    if ! cp -rf "$inner"/* "$ROOT_DIR/"; then
+    copy_failed=0
+    while IFS= read -r -d '' patch_file; do
+        relative_path="${patch_file#"$inner"/}"
+        file_name="${patch_file##*/}"
+        if [ "$wolf_patch" -ne 1 ] && \
+           { [ "$file_name" = "UberWolfCli.exe" ] || [ "$file_name" = "UberWolfCli.LICENSE.txt" ]; }; then
+            continue
+        fi
+        target_path="$ROOT_DIR/$relative_path"
+        if ! mkdir -p "$(dirname "$target_path")" || ! cp -f "$patch_file" "$target_path"; then
+            copy_failed=1
+            break
+        fi
+    done < <(find "$inner" -type f -print0)
+    if [ "$copy_failed" -ne 0 ]; then
         echo "Patch application failed!"
         rm -rf "$TMP_EX"
         rm -f "$ROOT_DIR/repo.zip"

@@ -58,5 +58,18 @@ def load_project_setup(engine: str = "rpgmaker", *, prepend: str = "") -> str:
     return body
 
 
+def load_clipboard_skill(name: str) -> str:
+    """Load a static clipboard prompt from ``data/skills``.
+
+    Read on every copy so edits made in the Skills tab take effect immediately.
+    Only a plain Markdown filename is accepted to keep callers inside the shipped
+    skills directory.
+    """
+    path_name = Path(name)
+    if path_name.name != name or path_name.suffix.casefold() != ".md":
+        raise ValueError(f"Invalid clipboard skill filename: {name!r}")
+    return _read_skill_file(name).strip() + "\n"
+
+
 def skills_dir() -> Path:
     return SKILLS_DIR

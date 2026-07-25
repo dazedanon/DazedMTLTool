@@ -376,6 +376,21 @@ function Test-WolfLooseDataReady {
     return $false
 }
 
+function Test-WolfGameRoot {
+    param([Parameter(Mandatory = $true)][string]$Root)
+    foreach ($name in @('Data.wolf', 'data.wolf')) {
+        if (Test-Path -LiteralPath (Join-Path $Root $name) -PathType Leaf) {
+            return $true
+        }
+    }
+    foreach ($name in @('Data', 'data')) {
+        if (Test-WolfLooseDataReady -DataDir (Join-Path $Root $name)) {
+            return $true
+        }
+    }
+    return $false
+}
+
 function Find-UberWolfCli {
     param([Parameter(Mandatory = $true)][string]$Root)
     $candidates = @(
@@ -849,20 +864,41 @@ function Invoke-PatchDownloadExtract {
                 throw ('PATCH_ERR:ZIP:Expected one root folder in archive, found {0}.' -f $dirs.Count)
             }
             $stagedRoot = $dirs[0].FullName
+            $isWolfGame = Test-WolfGameRoot -Root $Root
+            $wolfOnlyNames = @('UberWolfCli.exe', 'UberWolfCli.LICENSE.txt')
 
-            # Stage UberWolfCli into the game root before unpack so first-time
-            # players can convert Data.wolf -> Data/ before English files land.
-            foreach ($cliName in @('UberWolfCli.exe', 'UberWolfCli.LICENSE.txt')) {
-                $stagedCli = Join-Path $stagedRoot $cliName
-                $destCli = Join-Path $Root $cliName
-                if ((Test-Path -LiteralPath $stagedCli -PathType Leaf) -and
-                    -not (Test-Path -LiteralPath $destCli -PathType Leaf)) {
-                    Copy-Item -LiteralPath $stagedCli -Destination $destCli -Force
+            if ($isWolfGame) {
+                # Stage UberWolfCli before unpack so packed WOLF games can
+                # convert Data.wolf -> Data/ before English files land.
+                foreach ($cliName in $wolfOnlyNames) {
+                    $stagedCli = Join-Path $stagedRoot $cliName
+                    $destCli = Join-Path $Root $cliName
+                    if ((Test-Path -LiteralPath $stagedCli -PathType Leaf) -and
+                        -not (Test-Path -LiteralPath $destCli -PathType Leaf)) {
+                        Copy-Item -LiteralPath $stagedCli -Destination $destCli -Force
+                    }
                 }
+                Invoke-WolfPreSetup -Root $Root
             }
-            Invoke-WolfPreSetup -Root $Root
 
-            Copy-Item -Path (Join-Path $stagedRoot '*') -Destination $PWD.Path -Recurse -Force
+            # Copy file-by-file so WOLF-only tools never leak into RPG Maker,
+            # SRPG, or other game roots through a downloaded patch archive.
+            $sourcePrefix = $stagedRoot.TrimEnd(
+                [IO.Path]::DirectorySeparatorChar,
+                [IO.Path]::AltDirectorySeparatorChar
+            ) + [IO.Path]::DirectorySeparatorChar
+            foreach ($file in Get-ChildItem -LiteralPath $stagedRoot -Recurse -File -Force) {
+                if ((-not $isWolfGame) -and ($file.Name -in $wolfOnlyNames)) {
+                    continue
+                }
+                $relative = $file.FullName.Substring($sourcePrefix.Length)
+                $destination = Join-Path $Root $relative
+                $destinationDir = Split-Path -Parent $destination
+                if (-not (Test-Path -LiteralPath $destinationDir -PathType Container)) {
+                    New-Item -ItemType Directory -Path $destinationDir -Force | Out-Null
+                }
+                Copy-Item -LiteralPath $file.FullName -Destination $destination -Force
+            }
         }
         finally {
             if (Test-Path -LiteralPath $zipPath) {

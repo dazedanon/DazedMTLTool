@@ -29,6 +29,11 @@ Edit tool-level markdown:
 
 - `data/skills/system.md` - base translation system prompt
 - `data/skills/project_setup.md` - clipboard skill for IDE setup
+- `data/skills/wrap_config.md` - RPG Maker wrap-width analysis prompt
+- `data/skills/plugin_translation.md` - MV/MZ plugin translation prompt
+- `data/skills/ace_script_translation.md` - VX Ace Ruby script translation prompt
+- `data/skills/risky_codes.md` - RPG Maker optional event-code audit prompt
+- `data/skills/wolf_speakers.md` - WOLF speaker-format audit prompt
 - `data/translation_contexts.json` - per-call history templates
 
 Per-game quirks / Translation Frame live under `<game>/skills/` and are edited in Workflow Step 2, not here.

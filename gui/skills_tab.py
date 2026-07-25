@@ -98,6 +98,41 @@ class SkillsTab(QWidget):
             is_json=False,
         )
         self._add_file_page(
+            key="wrap_config",
+            tab_title="Wrap Config",
+            path=SKILLS_DIR / "wrap_config.md",
+            hint="Clipboard prompt that asks the IDE to calculate RPG Maker wrap widths.",
+            is_json=False,
+        )
+        self._add_file_page(
+            key="plugin_translation",
+            tab_title="Plugin TL",
+            path=SKILLS_DIR / "plugin_translation.md",
+            hint="MV/MZ plugin localisation audit and approved in-place translation prompt.",
+            is_json=False,
+        )
+        self._add_file_page(
+            key="ace_script_translation",
+            tab_title="Ace Script TL",
+            path=SKILLS_DIR / "ace_script_translation.md",
+            hint="VX Ace Ruby script localisation audit and approved in-place translation prompt.",
+            is_json=False,
+        )
+        self._add_file_page(
+            key="risky_codes",
+            tab_title="Risky Codes",
+            path=SKILLS_DIR / "risky_codes.md",
+            hint="Clipboard prompt for auditing optional RPG Maker event-code translation settings.",
+            is_json=False,
+        )
+        self._add_file_page(
+            key="wolf_speakers",
+            tab_title="WOLF Speakers",
+            path=SKILLS_DIR / "wolf_speakers.md",
+            hint="Clipboard prompt for reviewing WOLF low-confidence first-line speakers.",
+            is_json=False,
+        )
+        self._add_file_page(
             key="contexts",
             tab_title="Contexts",
             path=TRANSLATION_CONTEXTS_PATH,

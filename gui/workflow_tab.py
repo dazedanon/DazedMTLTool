@@ -21,7 +21,7 @@ import threading
 from pathlib import Path
 
 from util.paths import VOCAB_PATH, APP_NAME, ORG_NAME
-from util.skills import load_project_setup
+from util.skills import load_clipboard_skill, load_project_setup
 from util.vocab import BASE_SEPARATOR as _SHARED_BASE_SEPARATOR
 
 import jsbeautifier
@@ -317,6 +317,17 @@ class _JsonFormatWorker(QThread):
 _GAMEUPDATE_COPY_SKIP_NAMES = frozenset({
     "previous_patch_sha.txt",
 })
+
+# UberWolf is only useful for WOLF RPG Editor archives. The generic workflow
+# handles RPG Maker MV/MZ/Ace and must never install these files; the dedicated
+# WOLF workflow intentionally continues using the smaller shared skip set.
+_WOLF_ONLY_GAMEUPDATE_NAMES = frozenset({
+    "UberWolfCli.exe",
+    "UberWolfCli.LICENSE.txt",
+})
+_RPG_GAMEUPDATE_COPY_SKIP_NAMES = (
+    _GAMEUPDATE_COPY_SKIP_NAMES | _WOLF_ONLY_GAMEUPDATE_NAMES
+)
 
 
 class _FileCopyWorker(QThread):
@@ -1155,345 +1166,7 @@ class WorkflowTab(QWidget):
 
     # ── Step 3: Vocab / Glossary ────────────────────────────────────────────
 
-    # ── Copilot prompt templates ────────────────────────────────────────────
-
-    _WRAP_PROMPT = (
-        "You are an expert RPGMaker MV/MZ configuration analyst.\n"
-        "\n"
-        "<task>\n"
-        "Calculate the correct text-wrap width settings for a Japanese-to-English RPGMaker MV/MZ "
-        "translation tool. The tool wraps translated English using character-count limits (not pixels). "
-        "I need three values: width, listWidth, and noteWidth.\n"
-        "</task>\n"
-        "\n"
-        "--- attach System.json and js/plugins.js here before continuing ---\n"
-        "\n"
-        "<instructions>\n"
-        "1. Read screenWidth and fontSize from System.json.\n"
-        "   Check js/plugins.js for any MessageCore or Window plugin that overrides these values.\n"
-        "2. For each window type, estimate its pixel width, subtract ~48px padding, then calculate:\n"
-        "   chars = floor(content_px / (font_size × 0.58))\n"
-        "   - width:      main dialogue/message box (Show Text) — typically full screen width\n"
-        "   - listWidth:  item/skill/help description windows — typically full or half screen width\n"
-        "   - noteWidth:  database note fields — typically the narrowest pane (~40–50% screen width)\n"
-        "3. If font size is above 26px and reducing it would meaningfully increase characters per line, "
-        "note where to change it (System.json or the relevant plugin parameter).\n"
-        "</instructions>\n"
-        "\n"
-        "<output_format>\n"
-        "Output only the final values — do not show calculations:\n"
-        "\n"
-        "```\n"
-        "width=<N>\n"
-        "listWidth=<N>\n"
-        "noteWidth=<N>\n"
-        "fontSize=<N>   # or: no change needed\n"
-        "```\n"
-        "\n"
-        "Followed by one sentence of assumptions if anything was estimated.\n"
-        "</output_format>\n"
-    )
-
-    _PLUGINS_JS_TRANSLATE_PROMPT = (
-        "You are an expert RPGMaker MV/MZ localisation engineer.\n"
-        "\n"
-        "<task>\n"
-        "Translate visible Japanese strings inside js/plugins.js without breaking any game logic "
-        "or plugin functionality. A vocab.txt glossary is attached — use it as your primary reference. "
-        "Any name or term that appears in the glossary must be translated exactly as shown there.\n"
-        "</task>\n"
-        "\n"
-        "--- attach js/plugins.js and vocab.txt here before continuing ---\n"
-        "\n"
-        "\n"
-        "<translate>\n"
-        "Only translate string values directly shown to the player at runtime:\n"
-        "- Menu/button labels in-game UI (e.g. 決定, キャンセル)\n"
-        "- Scene/window title text (e.g. アイテム, スキル, 装備)\n"
-        "- In-game popup, tooltip, or notification messages\n"
-        "- Default NPC names or pronouns used in UI display\n"
-        "- Help or description text shown in help windows\n"
-        "- Battle log messages or status effect messages\n"
-        "</translate>\n"
-        "\n"
-        "<do_not_translate>\n"
-        "Translating the following WILL BREAK THE GAME:\n"
-        "\n"
-        "1. Plugin parameter keys (object property names).\n"
-        "   { \"CommandName\": \"セーブ\" } → translate セーブ but NOT CommandName\n"
-        "\n"
-        "2. Strings used as internal identifiers or lookup keys:\n"
-        "   - Switch/variable names matching System.json entries\n"
-        "   - Actor, skill, item, weapon, armour names used as keys inside other plugin parameters\n"
-        "   - Strings passed as plugin command arguments that the engine looks up\n"
-        "\n"
-        "3. File paths, filenames, URLs, colour codes, font names, icon indices.\n"
-        "   (e.g. img/faces/Actor1 or #ffffff)\n"
-        "\n"
-        "4. Plugin names and script identifiers:\n"
-        "   - The \"name\" property at the top of each plugin block (e.g. { \"name\": \"YEP_CoreEngine\" })\n"
-        "   - Function identifiers, class names, JS event names\n"
-        "\n"
-        "5. Any string in the game data files (Actors.json, Skills.json, Items.json, etc.) that is "
-        "also used as a lookup key in the plugin — changing it here would desync it from the data file.\n"
-        "\n"
-        "6. Boolean strings, numeric strings, regex patterns.\n"
-        "</do_not_translate>\n"
-        "\n"
-        "<safety_check>\n"
-        "Before translating any string, confirm all three are true:\n"
-        "- It is displayed directly to the player as visible text\n"
-        "- It is purely a UI label, not used as a key anywhere else\n"
-        "- Nothing in the codebase compares this exact string to another value\n"
-        "When in doubt, skip it — untranslated Japanese is better than a broken game.\n"
-        "</safety_check>\n"
-        "\n"
-        "<output_format>\n"
-        "Provide the translated file as a complete replacement of js/plugins.js, inside a single "
-        "fenced code block (```js ... ```) so it can be copied in one click. Only change the "
-        "string values identified above. Preserve all original formatting, indentation, comments, and structure.\n"
-        "\n"
-        "After the code block, output a summary:\n"
-        "\n"
-        "### Translations Made\n"
-        "  Plugin: <plugin name>\n"
-        "  Parameter: <parameter key>\n"
-        "  Before: <original Japanese>\n"
-        "  After:  <English translation>\n"
-        "\n"
-        "### Skipped (Ambiguous or Internal)\n"
-        "List any Japanese strings you detected but did not translate, with a one-line reason.\n"
-        "</output_format>\n"
-    )
-
-    _ACE_SCRIPTS_TRANSLATE_PROMPT = (
-        "You are an expert RPGMaker VX Ace (Ruby) localisation engineer.\n"
-        "\n"
-        "<task>\n"
-        "Translate visible Japanese strings inside the game's Ruby scripts (ace_json/scripts/*.rb) "
-        "without breaking any game logic or script functionality. A vocab.txt glossary is attached - "
-        "use it as your primary reference. Any name or term in the glossary must be translated exactly as shown.\n"
-        "</task>\n"
-        "\n"
-        "--- attach the .rb script files and vocab.txt here before continuing ---\n"
-        "\n"
-        "\n"
-        "========================================\n"
-        "## WHAT TO TRANSLATE\n"
-        "========================================\n"
-        "\n"
-        "Only translate string literals that are directly shown to the player at runtime.\n"
-        "These typically appear as:\n"
-        "  - Strings passed to msgbox, msgbox_p, print, p\n"
-        "  - Labels and text in Window or Scene classes rendered to screen\n"
-        "  - draw_text / draw_item calls with a Japanese string literal\n"
-        "  - Default UI label text (menu names, button labels, status window text)\n"
-        "  - Battle log messages, notifications, popup strings\n"
-        "  - Help or description text shown in help windows\n"
-        "\n"
-        "========================================\n"
-        "## WHAT MUST NOT BE TRANSLATED\n"
-        "========================================\n"
-        "\n"
-        "CRITICAL - translating the following will break the game:\n"
-        "\n"
-        "  1. Strings used as hash keys, method names, or symbol equivalents.\n"
-        "     Example: vocab[\"HP\"] = \"体力\"  ->  translate \"体力\" but NOT the key \"HP\"\n"
-        "\n"
-        "  2. Strings used as internal identifiers compared with == or used in case/when:\n"
-        "     - Actor/class/skill/item names used as lookup strings\n"
-        "     - Script-internal state names or flag strings\n"
-        "     Example: if type == \"スキル\"  ->  do NOT translate \"スキル\"\n"
-        "\n"
-        "  3. File paths, filenames, font names, colour strings, URLs.\n"
-        "\n"
-        "  4. Regular expressions, format strings used with sprintf or % operator\n"
-        "     where the placeholders must stay in the same position.\n"
-        "     (You may translate the human-readable parts but keep %s / %d / %1 etc intact.)\n"
-        "\n"
-        "  5. Script class names, module names, method names, constants.\n"
-        "\n"
-        "  6. Any string that is read back elsewhere in the scripts with an exact match.\n"
-        "\n"
-        "<safety_check>\n"
-        "Before translating any string, confirm all three are true:\n"
-        "- It is displayed directly to the player as visible text\n"
-        "- It is purely a display string, not compared or looked up anywhere\n"
-        "- Changing it would break no conditional logic or data lookup\n"
-        "When in doubt, skip it - untranslated Japanese is better than a broken game.\n"
-        "</safety_check>\n"
-        "\n"
-        "<output_format>\n"
-        "For each .rb file that needed changes, provide the full translated file content inside its "
-        "own fenced code block (```ruby ... ```), preceded by the filename, so each file can be "
-        "copied in one click. Only change string values identified as safe. "
-        "Preserve all Ruby syntax, indentation, comments, and structure exactly.\n"
-        "\n"
-        "After all files, output a summary:\n"
-        "\n"
-        "### Translations Made\n"
-        "  File:   <script filename.rb>\n"
-        "  Before: <original Japanese>\n"
-        "  After:  <English translation>\n"
-        "\n"
-        "### Skipped (Ambiguous or Internal)\n"
-        "List any Japanese strings you detected but did not translate, with a one-line reason.\n"
-        "</output_format>\n"
-    )
-
-    _PLUGIN_PROMPT = (
-        "You are an expert RPGMaker MV/MZ event system analyst.\n"
-        "\n"
-        "<task>\n"
-        "Audit several optional event code types and report: (a) which contain player-visible "
-        "Japanese text that needs translation, and (b) for code 122, exactly which variable ID "
-        "ranges carry display text versus internal keys.\n"
-        "</task>\n"
-        "\n"
-        "--- attach Actors.json, CommonEvents.json, Troops.json, Map*.json, and js/plugins.js here ---\n"
-        "\n"
-        "<actor_context>\n"
-        "Read Actors.json in full before auditing event commands. Use it to resolve actor IDs, "
-        "\\N[n] references, and code 320/324/325 targets. If you see an event reference to a "
-        "major actor whose full character vocab is missing or only appears as a placeholder "
-        "mapping like \\N[3] (Keimi), report that Actors.json should be included in the glossary "
-        "build and that a full # Game Characters entry is needed.\n"
-        "</actor_context>\n"
-        "\n"
-        "<audit_1 code=\"122\">\n"
-        "Code 122 — Control Variables — which variable IDs carry display text\n"
-        "\n"
-        "A code 122 entry looks like:\n"
-        "  { \"code\": 122, \"parameters\": [startVarId, endVarId, 0, 4, \"\\\"some string\\\"\"] }\n"
-        "parameters[0] is the variable ID being set; parameters[4] is the string value\n"
-        "(only present when parameters[3] == 4, direct string assignment).\n"
-        "\n"
-        "Collect every code 122 where parameters[3] == 4. For each variable ID found:\n"
-        "  1. Is the string also tested in a code 111 $gameVariables comparison?\n"
-        "     → DO NOT TRANSLATE (would break game logic)\n"
-        "  2. Is the string used as an internal ID / plugin key / script argument?\n"
-        "     → DO NOT TRANSLATE\n"
-        "  3. Is the string purely player-visible display text?\n"
-        "     → SAFE TO TRANSLATE\n"
-        "\n"
-        "Summarise translatable variable IDs as compact numeric ranges,\n"
-        "e.g. 'Translate IDs: 5, 10-18, 42'. Separately list any DO NOT TRANSLATE IDs\n"
-        "with the reason. The ranges will be entered as min/max in the translation tool.\n"
-        "</audit_1>\n"
-        "\n"
-        "<audit_2>\n"
-        "Plugin codes with visible text — 357 / 356 / 355-655 / 657 / 320 / 324 / 325 / 108\n"
-        "For each code type below, scan all events and report whether any instance contains "
-        "Japanese text visible to the player at runtime.\n"
-        "\n"
-        "--- Code 357 (MZ Plugin Commands) ---\n"
-        "parameters[0] = plugin header; parameters[3] = data dict.\n"
-        "Look up each unique header in js/plugins.js.\n"
-        "Does any key in parameters[3] hold Japanese text shown on screen?\n"
-        "The module already handles: AdvExtentionllk, VisuMZ_4_ProximityMessages, LL_GalgeChoiceWindow\n"
-        "For other headers with visible text, check the commented-out headerMappings list:\n"
-        "  \"LL_InfoPopupWIndow\": ([\"messageText\"], None),\n"
-        "  \"QuestSystem\": ([\"DetailNote\"], None),\n"
-        "  \"BalloonInBattle\": ([\"text\"], None),\n"
-        "  \"MNKR_CommonPopupCoreMZ\": ([\"text\"], None),\n"
-        "  \"DestinationWindow\": ([\"destination\"], None),\n"
-        "  \"_TMLogWindowMZ\": ([\"text\"], None),\n"
-        "  \"TorigoyaMZ_NotifyMessage\": ([\"message\"], None),\n"
-        "  \"SoR_GabWindow\": ([\"arg1\"], None),\n"
-        "  \"DarkPlasma_CharacterText\": ([\"text\"], None),\n"
-        "  \"DTextPicture\": ([\"text\"], None),\n"
-        "  \"TextPicture\": ([\"text\"], None),\n"
-        "  \"TRP_SkitMZ\": ([\"name\"], None),\n"
-        "  \"LogWindow\": ([\"text\"], None),\n"
-        "  \"BattleLogOutput\": ([\"message\"], None),\n"
-        "  \"TorigoyaMZ_NotifyMessage_CommandMessage\": ([\"message\"], None),\n"
-        "  \"NUUN_SaveScreen\": ([\"AnyName\"], None),\n"
-        "  \"build/ARPG_Core\": ([\"Text\", \"SkillByName\"], None),\n"
-        "Output: EXACT uncomment line, or describe parameters[3] if header is new.\n"
-        "\n"
-        "--- Code 356 (MV Plugin Commands) ---\n"
-        "parameters[0] is a space-delimited string, e.g. 'D_TEXT テキスト 24'.\n"
-        "The module already handles: D_TEXT, ShowInfo, PushGab, addLog, DW_*, CommonPopup, AddCustomChoice.\n"
-        "Does any 356 line have Japanese that is shown on screen?\n"
-        "If yes: ENABLE CODE356 and list the command keywords found.\n"
-        "If no:  SKIP CODE356.\n"
-        "\n"
-        "--- Code 355/655 (Inline Scripts) ---\n"
-        "Code 355 starts a script block; code 655 continues it.\n"
-        "parameters[0] is the raw JS/script text.\n"
-        "For each block with Japanese in a string passed to a message/popup/log function:\n"
-        "  • The leading keyword/pattern that identifies the block\n"
-        "  • A regex capturing only the display substring, e.g. テキスト-(.+)\n"
-        "  • Whether it is single-line (355 only) or multi-line (355 + 655)\n"
-        "  • The exact entry to add to the patterns dict:\n"
-        "      \"<keyword>\": (r\"<regex>\", <True|False>),\n"
-        "\n"
-        "--- Code 657 (Picture Text) ---\n"
-        "parameters[0] is a plain string drawn onto a picture.\n"
-        "Does any 657 entry contain Japanese text visible on screen (not a filename)?\n"
-        "If yes: ENABLE CODE657. If no: SKIP CODE657.\n"
-        "\n"
-        "--- Codes 320 / 324 / 325 (Actor Name / Nickname / Profile) ---\n"
-        "parameters[1] is the new name/nickname/profile string.\n"
-        "Do any of these codes set Japanese strings visible to the player\n"
-        "(not just internal IDs or filenames)?\n"
-        "If yes: ENABLE the respective code. If no: SKIP.\n"
-        "\n"
-        "--- Code 108 (Comment / Notetag) ---\n"
-        "parameters[0] is a comment string used as a plugin notetag.\n"
-        "The module only translates 108 lines that match specific patterns:\n"
-        "  info:, ActiveMessage:, event_text, Menu Name, text_indicator, NW名前指定\n"
-        "Do any 108 entries matching those patterns have Japanese visible to the player?\n"
-        "If yes: ENABLE CODE108 and list the patterns found. If no: SKIP CODE108.\n"
-        "</audit_2>\n"
-        "\n"
-        "<output_format>\n"
-        "Reply with these exact sections:\n"
-        "\n"
-        "### Code 122 — Variable Translation Ranges\n"
-        "  Translate IDs  : <compact ranges, e.g. 5, 10-18, 42>\n"
-        "  Do NOT translate: <ID — reason>\n"
-        "If none: 'No display-text string assignments found.'\n"
-        "\n"
-        "### Code 357 — Plugin Handlers to Enable\n"
-        "  • Already handled  : <header> — no action needed\n"
-        "  • Enable in module : uncomment → \"<header>\": ([\"<key>\"], None),\n"
-        "  • New entry needed : <header> — parameters[3] structure: <description>\n"
-        "  • No visible text  : <header> — internal only, skip\n"
-        "If none: 'No code 357 visible text found.'\n"
-        "\n"
-        "### Code 356 — Enable or Skip\n"
-        "  ENABLE / SKIP — keywords found: <list>\n"
-        "\n"
-        "### Code 355/655 — Script Patterns to Add\n"
-        "  • Pattern key : <keyword>\n"
-        "  • Regex       : <capture regex>\n"
-        "  • Multiline   : <true/false>\n"
-        "  • Module line : \"<keyword>\": (r\"<regex>\", <True|False>),\n"
-        "If none: 'No translatable 355/655 scripts found.'\n"
-        "\n"
-        "### Code 657 — Enable or Skip\n"
-        "  ENABLE / SKIP — <brief reason>\n"
-        "\n"
-        "### Codes 320 / 324 / 325 — Enable or Skip\n"
-        "  320: ENABLE / SKIP   324: ENABLE / SKIP   325: ENABLE / SKIP\n"
-        "\n"
-        "### Code 108 — Enable or Skip\n"
-        "  ENABLE / SKIP — patterns found: <list>\n"
-        "\n"
-        "### GUI Action Summary\n"
-        "\n"
-        "After all audit sections above, output this final block to configure the GUI:\n"
-        "\n"
-        "ENABLE CODES     : <comma-separated CODE* keys to check, e.g. CODE357, CODE356>\n"
-        "SKIP CODES       : <codes that have no visible text>\n"
-        "357 PLUGINS      : <comma-separated HEADER_MAPPINGS_357 keys to enable>\n"
-        "355/655 PATTERNS : <comma-separated PATTERNS_355655 keys to enable>\n"
-        "122 VAR RANGE    : min=<N>, max=<M>\n"
-        "\n"
-        "If a field has nothing to fill in, write NONE.\n"
-        "</output_format>\n"
-    )
+    # Static clipboard prompts are loaded from editable data/skills/*.md files.
 
     # ── Step 1 (Optional): Pre-process ────────────────────────────────
 
@@ -1622,6 +1295,7 @@ class WorkflowTab(QWidget):
         tc_desc = QLabel(
             "Copies everything from the <code>gameupdate/</code> folder "
             "into the game\'s root folder, overwriting existing files. "
+            "WOLF-only UberWolf files are omitted for RPG Maker games. "
             "Writes <code>patch-config.txt</code> from Config → Game Update defaults "
             "(set your org once there; edit <code>repo=</code> per game)."
         )
@@ -2411,8 +2085,8 @@ class WorkflowTab(QWidget):
 
         self._step6_copy_btn = _make_btn("📋  Copy Prompt for Copilot", "#555")
         self._step6_copy_btn.setToolTip(
-            "Copy a prompt that instructs Copilot/Cursor to translate only "
-            "visible player-facing strings in plugins.js, using vocab.txt as a glossary."
+            "Copy a prompt that audits plugins.js and enabled plugin sources, asks what "
+            "needs translation, then edits approved player-visible strings in place."
         )
         self._step6_copy_btn.clicked.connect(self._copy_plugins_js_translate_prompt)
 
@@ -3129,13 +2803,13 @@ class WorkflowTab(QWidget):
             if is_ace:
                 btn.setToolTip(
                     "Copy a prompt that instructs Copilot/Cursor to translate only "
-                    "visible player-facing strings in the Ace .rb script files "
-                    "(ace_json/scripts/*.rb)."
+                    "visible player-facing strings in the Ace .rb script files. "
+                    "It audits first, asks what to translate, then edits approved files in place."
                 )
             else:
                 btn.setToolTip(
-                    "Copy a prompt that instructs Copilot/Cursor to translate only "
-                    "visible player-facing strings in plugins.js, using vocab.txt as a glossary."
+                    "Copy a prompt that audits plugins.js and enabled plugin sources, asks what "
+                    "needs translation, then edits approved player-visible strings in place."
                 )
         # Step 6 - TL Inspector (MV/MZ only; hidden for Ace)
         show_playtest = not is_ace
@@ -3567,8 +3241,10 @@ class WorkflowTab(QWidget):
         self._copy_project_setup_prompt()
 
     def _copy_wrap_prompt(self):
-        QApplication.clipboard().setText(self._WRAP_PROMPT)
-        self._log("Text-wrap analysis prompt copied to clipboard.")
+        self._copy_clipboard_skill(
+            "wrap_config.md",
+            "Text-wrap analysis prompt copied to clipboard.",
+        )
 
     def _apply_var_range(self):
         """Write CODE122_VAR_MIN / CODE122_VAR_MAX to the module file."""
@@ -3736,15 +3412,29 @@ class WorkflowTab(QWidget):
             getattr(self, "_ace_rvdata_dir", "") or getattr(self, "_ace_json_dir", "")
         )
         if is_ace:
-            QApplication.clipboard().setText(self._ACE_SCRIPTS_TRANSLATE_PROMPT)
-            self._log("Ace scripts translation prompt copied to clipboard.")
+            self._copy_clipboard_skill(
+                "ace_script_translation.md",
+                "Ace scripts translation prompt copied to clipboard.",
+            )
         else:
-            QApplication.clipboard().setText(self._PLUGINS_JS_TRANSLATE_PROMPT)
-            self._log("plugins.js translation prompt copied to clipboard.")
+            self._copy_clipboard_skill(
+                "plugin_translation.md",
+                "plugins.js translation prompt copied to clipboard.",
+            )
 
     def _copy_plugin_prompt(self):
-        QApplication.clipboard().setText(self._PLUGIN_PROMPT)
-        self._log("Risky codes analysis prompt copied to clipboard.")
+        self._copy_clipboard_skill(
+            "risky_codes.md",
+            "Risky codes analysis prompt copied to clipboard.",
+        )
+
+    def _copy_clipboard_skill(self, filename: str, success_message: str):
+        try:
+            prompt = load_clipboard_skill(filename)
+            QApplication.clipboard().setText(prompt)
+            self._log(success_message)
+        except Exception as exc:
+            self._log(f"❌ Could not copy {filename}: {exc}")
 
     def _apply_wrap_config(self):
         """Write width / listWidth / noteWidth back into .env."""
@@ -4414,7 +4104,7 @@ class WorkflowTab(QWidget):
         if not Path(src).is_dir():
             self._log(f"⚠  gameupdate folder not found: {src}")
             return
-        w = _FileCopyWorker(src, dst, skip_names=_GAMEUPDATE_COPY_SKIP_NAMES)
+        w = _FileCopyWorker(src, dst, skip_names=_RPG_GAMEUPDATE_COPY_SKIP_NAMES)
         w.log.connect(self._log)
         w.done.connect(self._on_gameupdate_done)
         self._worker = w
@@ -4454,7 +4144,7 @@ class WorkflowTab(QWidget):
                 _FileCopyWorker(
                     gameupdate_src,
                     game_root_dst,
-                    skip_names=_GAMEUPDATE_COPY_SKIP_NAMES,
+                    skip_names=_RPG_GAMEUPDATE_COPY_SKIP_NAMES,
                 ),
             ))
         else:
