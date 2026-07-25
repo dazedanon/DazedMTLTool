@@ -1917,6 +1917,24 @@ def buildMatchedVocabText(vocabPairs, subbedText, history=None):
     """Build formatted vocabulary text for terms found in the current batch."""
     matchedCategories = {}
 
+    # Generated # Speakers entries can overlap hand-curated character entries.
+    # Keep only the highest-authority spelling for each character source.
+    character_authority = {}
+    for candidate_term, candidate_line, candidate_category in vocabPairs:
+        if not isinstance(candidate_term, tuple) or len(candidate_term) != 2:
+            continue
+        candidate_name = str(candidate_category or "").lstrip("#").strip().casefold()
+        candidate_primary = re.split(
+            r"\s*[·・|/]\s*", candidate_name, maxsplit=1
+        )[0]
+        priority = {"game characters": 2, "speakers": 1}.get(candidate_primary, 0)
+        if not priority:
+            continue
+        source = candidate_term[0]
+        previous = character_authority.get(source)
+        if previous is None or priority > previous[0]:
+            character_authority[source] = (priority, candidate_line)
+
     # Only match against the current request text. History is deliberately not
     # searched so stale terms are not resent in unrelated batches.
     textToSearch = _text_for_vocab_search(subbedText)
@@ -1928,7 +1946,24 @@ def buildMatchedVocabText(vocabPairs, subbedText, history=None):
         if isinstance(term, tuple):
             # Check both Japanese and English terms
             japanese_term, english_term = term
-            if _vocab_term_in_text(japanese_term, textToSearch) or _vocab_term_in_text(english_term, textToSearch):
+            category_name = str(category or "").lstrip("#").strip().casefold()
+            category_primary = re.split(
+                r"\s*[·・|/]\s*", category_name, maxsplit=1
+            )[0]
+            authoritative = character_authority.get(japanese_term)
+            if authoritative is not None and authoritative[1] != line:
+                continue
+            japanese_match = _vocab_term_in_text(japanese_term, textToSearch)
+            # Character names often appear inside compound event/map labels,
+            # e.g. ユウイベント. For character sections only, a substring is
+            # intentional and should still attach the authoritative spelling.
+            if (
+                not japanese_match
+                and category_primary in {"game characters", "speakers"}
+                and japanese_term in textToSearch
+            ):
+                japanese_match = True
+            if japanese_match or _vocab_term_in_text(english_term, textToSearch):
                 term_found = True
         else:
             # Single term check

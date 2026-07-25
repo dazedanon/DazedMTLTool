@@ -13,7 +13,7 @@ from colorama import Fore
 from dotenv import load_dotenv
 from retry import retry
 from tqdm import tqdm
-from util.translation import TranslationConfig, translateAI as sharedtranslateAI, getPricingConfig, calculateCost, getPricingConfig, calculateCost, get_var_translation, set_var_translations_batch, convert_corner_brackets
+from util.translation import TranslationConfig, translateAI as sharedtranslateAI, getPricingConfig, calculateCost, getPricingConfig, calculateCost, get_var_translation, set_var_translations_batch, convert_corner_brackets, parseVocabWithCategories
 from util.speakers import SPEAKER_BRACKET_INNER, strip_speaker_prefix
 from util.skills import ctx, load_system_prompt
 from util.paths import VOCAB_PATH
@@ -46,6 +46,10 @@ SPEAKER_PARSE_MODE = False
 _speakerCache = {}
 _speakerCacheLock = threading.Lock()
 SPEAKER_COLLECTED = []  # Original speaker names collected during parse mode (untranslated)
+_speakerVocabLock = threading.Lock()
+_speakerVocabSource = None
+_speakerVocabExact = {}
+_speakerVocabCharacterPairs = []
 
 # Actor variable substitution (\n[X] -> name before AI, name -> \n[X] after)
 _ACTOR_MAP_CACHE: dict | None = None
@@ -144,13 +148,13 @@ TLSYSTEMSWITCHES = False
 JOIN408 = False
 
 # Dialogue / Scroll / Choices (Main Codes)
-CODE101 = True
-CODE401 = True
-CODE405 = True
-CODE102 = True
+CODE101 = False
+CODE401 = False
+CODE405 = False
+CODE102 = False
 
 # Optional
-CODE408 = True
+CODE408 = False
 
 # Variables
 CODE122 = False
@@ -165,7 +169,7 @@ CODE356 = False
 CODE320 = False
 CODE324 = False
 CODE325 = False
-CODE111 = False
+CODE111 = True
 CODE108 = False
 
 # ─── Plugin Manager ──────────────────────────────────────────────────────────
@@ -240,6 +244,16 @@ def _pat355655_captured_text(match):
     return match.group(match.lastindex)
 
 
+def _reload_vocab():
+    """Reload vocab.txt so edits made after module import take effect."""
+    global VOCAB
+    try:
+        VOCAB = VOCAB_PATH.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        VOCAB = ""
+    TRANSLATION_CONFIG.vocab = VOCAB
+
+
 def handleMVMZ(filename, estimate):
     global ESTIMATE, TOKENS, FILENAME, MISMATCH, PROMPT
     ESTIMATE = estimate
@@ -254,6 +268,7 @@ def handleMVMZ(filename, estimate):
     # Reload system.md + per-game overlays (game.md / quirks / custom) via DAZED_GAME_ROOT.
     PROMPT = load_system_prompt()
     TRANSLATION_CONFIG.prompt = PROMPT
+    _reload_vocab()
 
     # Translate
     start = time.time()
@@ -4791,6 +4806,75 @@ def _normalize_speaker_nameplate(translated: str) -> str:
     return out
 
 
+def _is_character_vocab_category(category) -> bool:
+    """True for glossary sections that define character/speaker names."""
+    name = str(category or "").lstrip("#").strip().casefold()
+    primary = re.split(r"\s*[·・|/]\s*", name, maxsplit=1)[0]
+    return primary in {"game characters", "speakers"}
+
+
+def _vocab_category_priority(category) -> int:
+    """Prefer curated character entries over generated speaker entries."""
+    name = str(category or "").lstrip("#").strip().casefold()
+    primary = re.split(r"\s*[·・|/]\s*", name, maxsplit=1)[0]
+    if primary == "game characters":
+        return 3
+    if primary == "speakers":
+        return 2
+    return 1
+
+
+def _speaker_vocab_indexes():
+    """Return cached exact and character-only mappings from the current vocab."""
+    global _speakerVocabSource, _speakerVocabExact, _speakerVocabCharacterPairs
+    vocab_text = VOCAB or ""
+    with _speakerVocabLock:
+        if _speakerVocabSource == vocab_text:
+            return _speakerVocabExact, _speakerVocabCharacterPairs
+
+        exact = {}
+        exact_priorities = {}
+        characters = {}
+        for term, _line, category in parseVocabWithCategories(vocab_text):
+            if not isinstance(term, tuple) or len(term) != 2:
+                continue
+            source, translated = (str(part).strip() for part in term)
+            if not source or not translated or re.search(LANGREGEX, translated):
+                continue
+            priority = _vocab_category_priority(category)
+            if priority > exact_priorities.get(source, 0):
+                exact[source] = translated
+                exact_priorities[source] = priority
+            if _is_character_vocab_category(category):
+                previous = characters.get(source)
+                if previous is None or priority > previous[0]:
+                    characters[source] = (priority, translated)
+
+        _speakerVocabSource = vocab_text
+        _speakerVocabExact = exact
+        _speakerVocabCharacterPairs = sorted(
+            ((source, value[1]) for source, value in characters.items()),
+            key=lambda pair: len(pair[0]),
+            reverse=True,
+        )
+        return _speakerVocabExact, _speakerVocabCharacterPairs
+
+
+def _vocab_speaker_lookup(speaker: str):
+    """Resolve an exact speaker/label from vocab without asking the model."""
+    exact, _characters = _speaker_vocab_indexes()
+    return exact.get(speaker)
+
+
+def _substitute_vocab_character_names(text: str) -> str:
+    """Enforce known character spellings inside compound labels."""
+    _exact, characters = _speaker_vocab_indexes()
+    for source, translated in characters:
+        if source in text:
+            text = text.replace(source, translated)
+    return text
+
+
 # Save some money and enter the character before translation
 def getSpeaker(speaker: str):
     """Return (and possibly collect) speaker name.
@@ -4816,18 +4900,38 @@ def getSpeaker(speaker: str):
                 SPEAKER_COLLECTED.append(speaker)
         return [speaker, [0, 0]]
 
+    # vocab.txt is authoritative. Check it before either cache so an old model
+    # romanization can never override a newly curated spelling.
+    vocab_hit = _vocab_speaker_lookup(speaker)
+    if vocab_hit is not None:
+        with _speakerCacheLock:
+            _speakerCache[speaker] = vocab_hit
+            for item in NAMESLIST:
+                if item[0] == speaker:
+                    item[1] = vocab_hit
+                    break
+            else:
+                NAMESLIST.append([speaker, vocab_hit])
+        return [vocab_hit, [0, 0]]
+
     # Normal mode translation path
     with _speakerCacheLock:
         cached = _speakerCache.get(speaker)
         if cached is not None:
             return [cached, [0, 0]]
 
+    # A few RPG Maker fields routed through getSpeaker are compound labels
+    # (for example, "ユウイベント5"). Replace curated character names before
+    # translation so the model cannot choose a different romanization. This
+    # also avoids reusing a stale cache entry keyed to the all-Japanese label.
+    translation_source = _substitute_vocab_character_names(speaker)
+
     try:
         THREAD_CTX.in_speaker = True
     except Exception:
         pass
     response = translateAI(
-        speaker,
+        translation_source,
         ctx("names.speaker"),
         False,
     )
@@ -4843,7 +4947,7 @@ def getSpeaker(speaker: str):
         except Exception:
             pass
         response = translateAI(
-            speaker,
+            translation_source,
             ctx("names.speaker"),
             False,
         )
@@ -5052,12 +5156,31 @@ def finalizeSpeakerParse():
     if not SPEAKER_PARSE_MODE:
         return
     try:
-        # Step 1: batch translate any collected speakers not already translated
+        # Step 1: seed curated vocab hits, then batch translate only unresolved
+        # speakers. This avoids generating a contradictory # Speakers spelling
+        # for a name already defined under # Game Characters.
+        _reload_vocab()
         to_translate = []
+        vocab_resolved = []
+        for s in SPEAKER_COLLECTED:
+            if not s:
+                continue
+            vocab_hit = _vocab_speaker_lookup(s)
+            if vocab_hit is not None:
+                vocab_resolved.append((s, vocab_hit))
+            else:
+                to_translate.append(s)
+
         with _speakerCacheLock:
-            for s in SPEAKER_COLLECTED:
-                if s not in _speakerCache and s != "":
-                    to_translate.append(s)
+            for source, translated in vocab_resolved:
+                _speakerCache[source] = translated
+                for item in NAMESLIST:
+                    if item[0] == source:
+                        item[1] = translated
+                        break
+                else:
+                    NAMESLIST.append([source, translated])
+            to_translate = [s for s in to_translate if s not in _speakerCache]
         if to_translate:
             try:
                 THREAD_CTX.in_speaker = True
