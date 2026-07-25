@@ -4762,6 +4762,35 @@ def _is_plausible_speaker(name: str) -> bool:
     return True
 
 
+def _normalize_speaker_nameplate(translated: str) -> str:
+    """Normalize a model TL into a short dialogue nameplate."""
+    out = (translated or "").strip()
+    out = re.sub(r"^(speaker:\s*)", "", out, flags=re.IGNORECASE)
+    out = out.strip("'\"“”‘’「」")
+    # If the model ignored instructions and wrote a sentence, keep the lead clause.
+    if re.search(r"[.!?]", out):
+        out = re.split(r"[.!?]", out, maxsplit=1)[0].strip()
+    # Drop trailing commas / "the kind you'd..." style appositives.
+    if "," in out:
+        out = out.split(",", 1)[0].strip()
+    out = re.sub(r"\s+", " ", out).strip()
+    words = out.split()
+    # Descriptive expansions often start with filler; keep the trailing role words.
+    if len(words) > 3 and re.match(
+        r"^(JUST|ONLY|THE|A|AN|YOUR|SOME|ANY|THIS|THAT)\b", words[0], re.I
+    ):
+        words = words[-2:]
+    elif len(words) > 4:
+        words = words[:3]
+    out = " ".join(words).title().replace("'S", "'s")
+    out = re.sub(
+        r"(\d)(St|Nd|Rd|Th)\b",
+        lambda m: m.group(1) + m.group(2).lower(),
+        out,
+    )
+    return out
+
+
 # Save some money and enter the character before translation
 def getSpeaker(speaker: str):
     """Return (and possibly collect) speaker name.
@@ -4799,15 +4828,14 @@ def getSpeaker(speaker: str):
         pass
     response = translateAI(
         speaker,
-        ctx("names.npc"),
+        ctx("names.speaker"),
         False,
     )
     try:
         THREAD_CTX.in_speaker = False
     except Exception:
         pass
-    translated = response[0].strip().title().replace("'S", "'s").replace("Speaker: ", "")
-    translated = re.sub(r'(\d)(St|Nd|Rd|Th)\b', lambda m: m.group(1) + m.group(2).lower(), translated)
+    translated = _normalize_speaker_nameplate(response[0])
 
     if re.search(r"([a-zA-Z？?])", translated) is None:
         try:
@@ -4816,15 +4844,14 @@ def getSpeaker(speaker: str):
             pass
         response = translateAI(
             speaker,
-            ctx("names.npc"),
+            ctx("names.speaker"),
             False,
         )
         try:
             THREAD_CTX.in_speaker = False
         except Exception:
             pass
-        translated = response[0].strip().title().replace("'S", "'s")
-        translated = re.sub(r'(\d)(St|Nd|Rd|Th)\b', lambda m: m.group(1) + m.group(2).lower(), translated)
+        translated = _normalize_speaker_nameplate(response[0])
 
     with _speakerCacheLock:
         if speaker not in _speakerCache:
@@ -4889,6 +4916,11 @@ def translateAI(text, history, history_ctx=None):
     
     # Update config estimate mode based on global ESTIMATE
     TRANSLATION_CONFIG.estimateMode = bool(ESTIMATE)
+    # Keep batch size in sync with Settings / .env (module import can be stale).
+    try:
+        TRANSLATION_CONFIG.batchSize = getPricingConfig(MODEL)["batchSize"]
+    except Exception:
+        pass
     
     # Call the new shared translation function
     # Prefer thread-local filename for logging; fall back to global
@@ -5009,6 +5041,12 @@ def setSpeakerParseMode(flag: bool):
     global SPEAKER_PARSE_MODE
     SPEAKER_PARSE_MODE = bool(flag)
 
+def collectedSpeakerCount() -> int:
+    """Unique speaker names waiting for (or already in) the parse-mode glossary."""
+    with _speakerCacheLock:
+        return len(SPEAKER_COLLECTED)
+
+
 def finalizeSpeakerParse():
     """Batch translate collected speakers and write fresh # Speakers section."""
     if not SPEAKER_PARSE_MODE:
@@ -5025,9 +5063,10 @@ def finalizeSpeakerParse():
                 THREAD_CTX.in_speaker = True
             except Exception:
                 pass
+            # Full list; translateAI chunks with the Settings batch size.
             resp = translateAI(
                 to_translate,
-                ctx("names.npc"),
+                ctx("names.speaker"),
                 True,
             )
             try:
@@ -5057,9 +5096,9 @@ def finalizeSpeakerParse():
             tl_list = resp[0]
             with _speakerCacheLock:
                 for orig, tl in zip(to_translate, tl_list):
-                    norm = tl.title().replace("'S", "'s").replace("Speaker: ", "")
+                    norm = _normalize_speaker_nameplate(tl)
                     if re.search(r"([a-zA-Z？?])", norm) is None:
-                        norm = tl  # keep raw if heuristic fails
+                        norm = (tl or "").strip() or orig
                     if orig not in _speakerCache:
                         _speakerCache[orig] = norm
                         NAMESLIST.append([orig, norm])

@@ -199,6 +199,7 @@ class TranslationWorker(QThread):
     progress_signal = pyqtSignal(int, int, str)  # current_file, total_files, filename
     item_progress_signal = pyqtSignal(str, int, int)  # filename, current_item, total_items (for tqdm within file)
     file_error_signal = pyqtSignal(str, str)  # filename, error_message
+    status_signal = pyqtSignal(str)  # updates the top translating_label from the worker
     finished_signal = pyqtSignal(bool, str)
     batch_phase_signal = pyqtSignal(str, object)  # phase name, optional payload
     
@@ -519,7 +520,7 @@ class TranslationWorker(QThread):
             try:
                 from modules.rpgmakermvmz import (
                     handleMVMZ as handler, setSpeakerParseMode, finalizeSpeakerParse,
-                    resetSpeakerState, TOKENS, calculateCost, MODEL,
+                    resetSpeakerState, collectedSpeakerCount, TOKENS, calculateCost, MODEL,
                 )
             except Exception as e:
                 self.emit_log(f"❌ Could not import rpgmakermvmz for speaker-parse: {e}")
@@ -551,12 +552,32 @@ class TranslationWorker(QThread):
                     self.emit_progress(completed_count, total_files, filename)
 
             try:
+                speaker_n = collectedSpeakerCount()
+            except Exception:
+                speaker_n = 0
+            if self.should_stop:
+                self.emit_log("⏹ Parse Speakers stopped before translating collected names.")
+            elif speaker_n:
+                self.status_signal.emit(f"Translating {speaker_n} speakers…")
+                self.emit_log(
+                    f"🔤 File scan complete ({completed_count}/{total_files}). "
+                    f"Translating {speaker_n} unique speakers into vocab.txt…"
+                )
+            else:
+                self.status_signal.emit("No speakers found")
+                self.emit_log(
+                    f"🔤 File scan complete ({completed_count}/{total_files}). "
+                    "No speaker names collected."
+                )
+
+            try:
                 before_in, before_out = (0, 0)
                 try:
                     before_in, before_out = (int(TOKENS[0]), int(TOKENS[1]))
                 except Exception:
                     pass
-                finalizeSpeakerParse()
+                if not self.should_stop:
+                    finalizeSpeakerParse()
                 after_in, after_out = (0, 0)
                 try:
                     after_in, after_out = (int(TOKENS[0]), int(TOKENS[1]))
@@ -2486,7 +2507,7 @@ class TranslationTab(QWidget):
             counts[st] = counts.get(st, 0) + 1
         parts = [f"{total} file(s)"]
         for key in (
-            "Done", "Collected", "Writing", "Scanning", "Translating",
+            "Done", "Scanned", "Collected", "Writing", "Scanning", "Translating",
             "Failed", "Skipped", "Unsupported", "Waiting",
         ):
             if counts.get(key):
@@ -2581,10 +2602,15 @@ class TranslationTab(QWidget):
         except Exception:
             pass
         phase = getattr(self, "_batch_ui_phase", None)
+        parse_speakers = bool(
+            getattr(getattr(self, "translation_worker", None), "parse_speakers", False)
+        )
         if getattr(self, "_batch_active", False) and phase == "collect":
             status, color = "Scanning", "#007acc"
         elif getattr(self, "_batch_active", False) and phase == "consume":
             status, color = "Writing", "#007acc"
+        elif parse_speakers:
+            status, color = "Scanning", "#007acc"
         else:
             status, color = "Translating", "#007acc"
         self._set_progress_row(
@@ -2967,6 +2993,7 @@ class TranslationTab(QWidget):
             self.translation_worker.log_signal.connect(self.append_log)
             self.translation_worker.progress_signal.connect(self.update_file_progress)
             self.translation_worker.item_progress_signal.connect(self.update_item_progress)
+            self.translation_worker.status_signal.connect(self.translating_label.setText)
             self.translation_worker.file_error_signal.connect(self.on_file_error)
             self.translation_worker.finished_signal.connect(self.on_translation_finished)
             self.translation_worker.batch_phase_signal.connect(self._on_batch_phase)
@@ -3192,6 +3219,9 @@ class TranslationTab(QWidget):
         """Update the file-level progress."""
         batch_active = getattr(self, "_batch_active", False)
         phase = getattr(self, "_batch_ui_phase", None) if batch_active else None
+        parse_speakers = bool(
+            getattr(getattr(self, "translation_worker", None), "parse_speakers", False)
+        )
 
         if batch_active:
             if phase == "collect":
@@ -3208,14 +3238,32 @@ class TranslationTab(QWidget):
                 return
 
         self.files_completed = current_file
-        self.files_translated_label.setText(f"{current_file}/{total_files}")
+        if parse_speakers:
+            self.files_translated_label.setText(f"{current_file}/{total_files} scanned")
+        else:
+            self.files_translated_label.setText(f"{current_file}/{total_files}")
 
         # Row details (tokens/cost) come from parsed stdout via append_log. If that
         # did not run (older modules / parse miss), finalize so the row is not stuck.
         if filename in self.file_progress_items:
-            sl = self.file_progress_items[filename].get("status_label")
-            if not sl or not sl.text():
-                self.mark_file_complete(filename, success=True)
+            if parse_speakers:
+                # Harvest only - translation of nameplates happens after all files.
+                self.mark_file_queued(filename)
+                meta = self.file_progress_items[filename]
+                try:
+                    meta["label"].setText("Scanned")
+                except Exception:
+                    pass
+                self._set_progress_row(
+                    filename,
+                    status="Scanned",
+                    status_color="#d4a017",
+                    progress="names",
+                )
+            else:
+                sl = self.file_progress_items[filename].get("status_label")
+                if not sl or not sl.text():
+                    self.mark_file_complete(filename, success=True)
 
         # Clear current_translating_file if it was the same file
         if self.current_translating_file == filename:
@@ -3232,10 +3280,15 @@ class TranslationTab(QWidget):
             )
             self.batch_live_status.setText(f"Current file: {filename}")
         if current_file < total_files:
-            self.translating_label.setText("Translating...")
+            self.translating_label.setText(
+                "Scanning speakers..." if parse_speakers else "Translating..."
+            )
         else:
             if batch_active and phase == "consume":
                 self.translating_label.setText("Finishing batch…")
+            elif parse_speakers:
+                # Keep a clear post-scan state until status_signal / finished.
+                self.translating_label.setText("Translating speakers…")
             else:
                 self.translating_label.setText("—")
     
@@ -3322,6 +3375,15 @@ class TranslationTab(QWidget):
         """Apply UI changes for a finished translation run."""
         if getattr(self, "_batch_active", False):
             self._on_batch_phase("done", None)
+        # Parse Speakers: promote Scanned rows to Done only after vocab write finishes.
+        try:
+            worker = getattr(self, "translation_worker", None)
+            if success and worker and getattr(worker, "parse_speakers", False):
+                for fname, meta in (getattr(self, "file_progress_items", {}) or {}).items():
+                    if (meta.get("status_text") or "") == "Scanned":
+                        self.mark_file_complete(fname, success=True)
+        except Exception:
+            pass
         # Hide the stop button and show the reset/back button
         try:
             self.stop_button.setVisible(False)
