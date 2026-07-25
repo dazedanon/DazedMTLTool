@@ -43,6 +43,7 @@ from util.rpgmaker_images import (
     preview_png_bytes,
     read_encryption_key,
     remove_editable_assets,
+    resolve_content_root,
     scan_image_assets,
     thumbnail_png_bytes,
 )
@@ -198,7 +199,8 @@ class RPGMakerImageManager(QWidget):
         root.addWidget(title)
         intro = QLabel(
             "Select images while browsing, decrypt them into .dazedtl/images, edit the PNGs, "
-            "then encrypt the editable images when they are ready. "
+            "then highlight the finished images to patch only those, or clear highlights to "
+            "patch every editable image. "
             "Pages keep very large games responsive."
         )
         intro.setWordWrap(True)
@@ -291,7 +293,8 @@ class RPGMakerImageManager(QWidget):
         action_row.setSpacing(8)
         self.open_workspace_button = QPushButton("Open folder")
         self.open_workspace_button.setToolTip(
-            "Open the game-local .dazedtl/images folder in your file manager."
+            "Open the highlighted image's editable folder, the chosen folder filter, or the "
+            "editable img root."
         )
         self.open_workspace_button.clicked.connect(self._open_editable_folder)
         self.decrypt_selected_button = QPushButton("Decrypt highlighted")
@@ -304,14 +307,14 @@ class RPGMakerImageManager(QWidget):
             "untouched and can be decrypted again. The Delete key does the same thing."
         )
         self.remove_button.clicked.connect(self._remove_highlighted)
-        self.prepare_button = QPushButton("Encrypt + patch")
+        self.prepare_button = QPushButton("Encrypt all + patch")
         self.prepare_button.setStyleSheet(
             "QPushButton{border:1px solid #4ec9b0;color:#4ec9b0;font-weight:bold;padding:6px 14px;}"
             "QPushButton:hover{background:#18352f;}"
         )
         self.prepare_button.setToolTip(
-            "Re-encrypt every PNG in the editable folder, preserve original encrypted files in "
-            ".dazedtl/image_backups, and add exact .gitignore allow-rules."
+            "With highlighted images, patch only their editable PNGs. With no highlights, patch "
+            "every editable PNG. Editable copies remain in .dazedtl/images until removed."
         )
         self.prepare_button.clicked.connect(self._prepare_checked)
         action_buttons = (
@@ -445,6 +448,7 @@ class RPGMakerImageManager(QWidget):
             f"Found {len(assets):,} images · {encrypted:,} encrypted · "
             f"{editable:,} editable PNG copies · {len(self.selected_ids):,} highlighted"
         )
+        self._update_prepare_scope()
         self._apply_filters()
 
     def _scan_error(self, generation: int, message: str) -> None:
@@ -549,11 +553,18 @@ class RPGMakerImageManager(QWidget):
         self._update_selection_status()
 
     def _update_selection_status(self) -> None:
+        self._update_prepare_scope()
         self.status_label.setText(
             f"{len(self.filtered_assets):,} matching images · "
             f"{len(self.selected_ids):,} highlighted · "
             f"{sum(asset.has_plain for asset in self.assets):,} editable"
         )
+
+    def _update_prepare_scope(self) -> None:
+        if self.selected_ids:
+            self.prepare_button.setText("Encrypt highlighted + patch")
+        else:
+            self.prepare_button.setText("Encrypt all + patch")
 
     def _show_preview(self, current: QListWidgetItem | None, _previous=None) -> None:
         if current is None:
@@ -595,9 +606,27 @@ class RPGMakerImageManager(QWidget):
             return
         try:
             workspace = ensure_editable_workspace(self.game_root)
-            if not QDesktopServices.openUrl(QUrl.fromLocalFile(str(workspace))):
+            current = self.image_list.currentItem()
+            asset = (
+                self.assets_by_id.get(current.data(_ASSET_ID_ROLE))
+                if current is not None
+                else None
+            )
+            if asset is not None:
+                target = asset.plain_path.parent
+            else:
+                root = Path(self.game_root).expanduser().resolve()
+                content_relative = resolve_content_root(root).relative_to(root)
+                folder = self.folder_combo.currentData() or "img"
+                relative_folder = Path(folder)
+                if relative_folder.is_absolute() or ".." in relative_folder.parts:
+                    raise ValueError(f"Invalid editable image folder: {folder}")
+                target = workspace / content_relative / relative_folder
+            target.resolve().relative_to(workspace.resolve())
+            target.mkdir(parents=True, exist_ok=True)
+            if not QDesktopServices.openUrl(QUrl.fromLocalFile(str(target))):
                 raise RuntimeError("The system file manager could not open the folder.")
-            self.status_label.setText(f"Editable images: {workspace}")
+            self.status_label.setText(f"Editable images: {target}")
         except Exception as exc:
             QMessageBox.warning(self, "Editable Image Folder", str(exc))
 
@@ -618,12 +647,16 @@ class RPGMakerImageManager(QWidget):
             return False
 
     def _decrypt_checked(self) -> None:
-        assets = [asset for asset in self._selected_assets() if asset.has_encrypted]
+        assets = [
+            asset
+            for asset in self._selected_assets()
+            if asset.has_encrypted and not asset.has_plain
+        ]
         if not assets:
             QMessageBox.information(
                 self,
-                "Nothing Selected",
-                "Select one or more encrypted images first.",
+                "Nothing to Decrypt",
+                "Highlight one or more encrypted images that are not already editable.",
             )
             return
         if self._ensure_key():
@@ -667,24 +700,41 @@ class RPGMakerImageManager(QWidget):
             self._start_action("remove", assets)
 
     def _prepare_checked(self) -> None:
-        assets = self._editable_assets()
+        highlighted = bool(self.selected_ids)
+        assets = (
+            [asset for asset in self._selected_assets() if asset.has_plain]
+            if highlighted
+            else self._editable_assets()
+        )
         if not assets:
+            message = (
+                "None of the highlighted images are in the editable folder. Decrypt them first "
+                "or clear the highlights to patch every editable image."
+                if highlighted
+                else "Decrypt images into the editable folder first."
+            )
             QMessageBox.information(
                 self,
                 "No Editable Images",
-                "Decrypt images into the editable folder first.",
+                message,
             )
             return
         if any(asset.has_encrypted for asset in assets) and not self._ensure_key():
             return
+        scope = (
+            f"the {len(assets):,} highlighted editable image(s)"
+            if highlighted
+            else f"all {len(assets):,} editable image(s)"
+        )
         answer = QMessageBox.question(
             self,
             "Prepare Images for Patch",
-            f"Encrypt and add all {len(assets):,} editable image(s) to the patch?\n\n"
-            "Encrypted images will be rebuilt from their editable PNG in .dazedtl/images. "
-            "Their original encrypted "
+            f"Check {scope} and add changed images to the patch?\n\n"
+            "Unchanged editable copies will be skipped. Changed encrypted images will be rebuilt "
+            "from .dazedtl/images. Their original encrypted "
             "files are backed up once under .dazedtl/image_backups. Exact allow-rules are then "
-            "added to the applicable .gitignore files.",
+            "added to the applicable .gitignore files. Editable PNG copies will remain available "
+            "for further changes until you remove them.",
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.No,
         )
@@ -721,7 +771,8 @@ class RPGMakerImageManager(QWidget):
         else:
             summary = (
                 f"Prepared {result.completed:,} image(s) for the patch and updated "
-                f"{len(result.gitignore_files):,} .gitignore file(s)."
+                f"{len(result.gitignore_files):,} .gitignore file(s); "
+                f"skipped {result.skipped:,} unchanged image(s)."
             )
         if result.errors:
             shown = "\n".join(result.errors[:12])

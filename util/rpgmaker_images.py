@@ -518,6 +518,13 @@ def prepare_assets_for_patch(
                     raise FileNotFoundError("decrypt this image before preparing it")
                 if key is None:
                     raise ValueError("the encryption key is required")
+                if progress:
+                    progress(f"Checking {asset.asset_id}")
+                plain_bytes = asset.plain_path.read_bytes()
+                runtime_bytes = asset.encrypted_path.read_bytes()
+                if decrypt_image_bytes(runtime_bytes, key) == plain_bytes:
+                    result.skipped += 1
+                    continue
                 relative_encrypted = _path_inside(root, asset.encrypted_path)
                 backup = root / ".dazedtl" / "image_backups" / relative_encrypted
                 if not backup.exists():
@@ -525,7 +532,7 @@ def prepare_assets_for_patch(
                     shutil.copy2(asset.encrypted_path, backup)
                 if progress:
                     progress(f"Encrypting {asset.asset_id}")
-                encrypted = encrypt_image_bytes(asset.plain_path.read_bytes(), key)
+                encrypted = encrypt_image_bytes(plain_bytes, key)
                 _atomic_write(asset.encrypted_path, encrypted)
                 targets.append(asset.encrypted_path)
             elif asset.has_runtime_plain:
@@ -533,6 +540,12 @@ def prepare_assets_for_patch(
                 # If the user made a workspace copy, publish it back there and
                 # preserve the original once, just like encrypted assets.
                 if asset.has_plain:
+                    if progress:
+                        progress(f"Checking {asset.asset_id}")
+                    plain_bytes = asset.plain_path.read_bytes()
+                    if asset.runtime_plain_path.read_bytes() == plain_bytes:
+                        result.skipped += 1
+                        continue
                     relative_plain = _path_inside(root, asset.runtime_plain_path)
                     backup = root / ".dazedtl" / "image_backups" / relative_plain
                     if not backup.exists():
@@ -540,9 +553,7 @@ def prepare_assets_for_patch(
                         shutil.copy2(asset.runtime_plain_path, backup)
                     if progress:
                         progress(f"Publishing {asset.asset_id}")
-                    _atomic_write(
-                        asset.runtime_plain_path, asset.plain_path.read_bytes()
-                    )
+                    _atomic_write(asset.runtime_plain_path, plain_bytes)
                 targets.append(asset.runtime_plain_path)
             else:
                 raise FileNotFoundError("image file no longer exists")

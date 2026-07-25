@@ -195,6 +195,46 @@ class RPGMakerImageManagerSelectionTests(unittest.TestCase):
         self.assertEqual(self.manager.image_list.count(), 0)
         self.assertEqual(self.manager.remove_button.text(), "Remove highlighted")
 
+    def test_prepare_uses_only_highlighted_editable_images(self):
+        highlighted = self.manager.assets[0]
+        not_highlighted = self.manager.assets[1]
+        for asset in (highlighted, not_highlighted):
+            asset.plain_path.parent.mkdir(parents=True, exist_ok=True)
+            asset.plain_path.write_bytes(asset.runtime_plain_path.read_bytes())
+        self._click(0)
+
+        with (
+            patch.object(QMessageBox, "question", return_value=QMessageBox.Yes),
+            patch.object(self.manager, "_start_action") as start_action,
+        ):
+            self.manager._prepare_checked()
+
+        action, assets = start_action.call_args.args
+        self.assertEqual(action, "prepare")
+        self.assertEqual(assets, [highlighted])
+        self.assertTrue(highlighted.plain_path.exists())
+        self.assertTrue(not_highlighted.plain_path.exists())
+        self.assertEqual(
+            self.manager.prepare_button.text(), "Encrypt highlighted + patch"
+        )
+
+    def test_prepare_uses_all_editable_images_without_highlights(self):
+        editable = self.manager.assets[:2]
+        for asset in editable:
+            asset.plain_path.parent.mkdir(parents=True, exist_ok=True)
+            asset.plain_path.write_bytes(asset.runtime_plain_path.read_bytes())
+
+        with (
+            patch.object(QMessageBox, "question", return_value=QMessageBox.Yes),
+            patch.object(self.manager, "_start_action") as start_action,
+        ):
+            self.manager._prepare_checked()
+
+        action, assets = start_action.call_args.args
+        self.assertEqual(action, "prepare")
+        self.assertEqual(assets, editable)
+        self.assertEqual(self.manager.prepare_button.text(), "Encrypt all + patch")
+
     def test_bottom_controls_share_one_row_and_action_width(self):
         action_buttons = (
             self.manager.open_workspace_button,
@@ -211,6 +251,21 @@ class RPGMakerImageManagerSelectionTests(unittest.TestCase):
             self.manager.previous_button.geometry().top(),
             self.manager.open_workspace_button.geometry().top(),
         )
+
+    def test_open_folder_uses_highlighted_images_editable_parent(self):
+        self._click(0)
+        asset_id = self.manager.image_list.currentItem().data(Qt.UserRole + 1)
+        expected = self.manager.assets_by_id[asset_id].plain_path.parent
+
+        with patch(
+            "gui.rpgmaker_image_manager.QDesktopServices.openUrl",
+            return_value=True,
+        ) as open_url:
+            self.manager._open_editable_folder()
+
+        opened_url = open_url.call_args.args[0]
+        self.assertEqual(Path(opened_url.toLocalFile()), expected)
+        self.assertTrue(expected.is_dir())
 
     def test_thumbnail_batch_keeps_one_stable_tile_per_asset(self):
         for worker in list(self.manager._thumbnail_workers):

@@ -116,6 +116,7 @@ class RPGMakerImageTests(unittest.TestCase):
         self.assertEqual(result.completed, 1)
         self.assertEqual(result.errors, [])
         self.assertEqual(decrypt_image_bytes(encrypted.read_bytes(), KEY), translated)
+        self.assertEqual(asset.plain_path.read_bytes(), translated)
         backup = self.root / ".dazedtl" / "image_backups" / "www/img/pictures/001.rpgmvp"
         self.assertEqual(backup.read_bytes(), original)
         ignore = self.root.joinpath(".gitignore").read_text(encoding="utf-8")
@@ -123,10 +124,46 @@ class RPGMakerImageTests(unittest.TestCase):
         self.assertIn("!/www/img/pictures/001.rpgmvp", ignore)
         self.assertNotIn("!/www/img/pictures/001.png", ignore)
 
-        prepare_assets_for_patch(self.root, [asset], KEY)
+        second = prepare_assets_for_patch(self.root, [asset], KEY)
         again = self.root.joinpath(".gitignore").read_text(encoding="utf-8")
+        self.assertEqual(second.completed, 0)
+        self.assertEqual(second.skipped, 1)
         self.assertEqual(again.count("!/www/img/pictures/001.rpgmvp"), 1)
         self.assertEqual(backup.read_bytes(), original)
+
+    def test_prepare_skips_unchanged_decrypted_image(self):
+        encrypted = self._encrypted_asset()
+        original = encrypted.read_bytes()
+        asset = scan_image_assets(self.root)[0]
+        decrypt_assets([asset], KEY, game_root=self.root)
+
+        result = prepare_assets_for_patch(self.root, [asset], KEY)
+
+        self.assertEqual(result.completed, 0)
+        self.assertEqual(result.skipped, 1)
+        self.assertEqual(result.patch_files, [])
+        self.assertEqual(encrypted.read_bytes(), original)
+        self.assertFalse(
+            (self.root / ".dazedtl" / "image_backups" / "www/img/pictures/001.rpgmvp").exists()
+        )
+        ignore = self.root.joinpath(".gitignore").read_text(encoding="utf-8")
+        self.assertNotIn("!/www/img/pictures/001.rpgmvp", ignore)
+
+    def test_prepare_skips_unchanged_unencrypted_workspace_copy(self):
+        runtime = self.content / "img" / "pictures" / "menu.png"
+        original = png_bytes("yellow")
+        runtime.write_bytes(original)
+        asset = scan_image_assets(self.root)[0]
+        asset.plain_path.parent.mkdir(parents=True, exist_ok=True)
+        asset.plain_path.write_bytes(original)
+
+        result = prepare_assets_for_patch(self.root, [asset], None)
+
+        self.assertEqual(result.completed, 0)
+        self.assertEqual(result.skipped, 1)
+        self.assertEqual(result.patch_files, [])
+        self.assertEqual(runtime.read_bytes(), original)
+        self.assertFalse((self.root / ".dazedtl" / "image_backups").exists())
 
     def test_mz_png_uses_same_crypto_and_logical_png_name(self):
         encrypted = self._encrypted_asset("title.png_", "green")
