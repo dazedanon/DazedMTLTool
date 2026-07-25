@@ -122,11 +122,13 @@ def _logical_png(path: Path) -> Path:
 
 
 def scan_image_assets(game_root: str | Path) -> list[ImageAsset]:
-    """Scan ``img/`` and combine matching PNG/encrypted files into records."""
+    """Scan runtime and editable image trees and combine matching files."""
 
     root = Path(game_root).expanduser().resolve()
     content_root = resolve_content_root(root)
     image_root = content_root / "img"
+    workspace_root = editable_workspace_root(root)
+    workspace_content_root = workspace_root / content_root.relative_to(root)
     by_id: dict[str, dict[str, Path]] = {}
     for path in image_root.rglob("*"):
         if not path.is_file():
@@ -149,11 +151,29 @@ def scan_image_assets(game_root: str | Path) -> list[ImageAsset]:
         else:
             entry["runtime_plain"] = path
 
+    editable_image_root = workspace_content_root / "img"
+    if editable_image_root.is_dir():
+        for path in editable_image_root.rglob("*"):
+            if not path.is_file() or path.suffix.casefold() != ".png":
+                continue
+            relative = path.relative_to(workspace_content_root)
+            asset_id = relative.as_posix()
+            entry = by_id.setdefault(
+                asset_id,
+                {
+                    "relative": relative,
+                    "workspace_relative": path.relative_to(workspace_root),
+                },
+            )
+            entry["plain"] = path
+
     assets = [
         ImageAsset(
             asset_id=asset_id,
             relative_png=entry["relative"],
-            plain_path=editable_workspace_root(root) / entry["workspace_relative"],
+            plain_path=entry.get(
+                "plain", workspace_root / entry["workspace_relative"]
+            ),
             encrypted_path=entry.get("encrypted"),
             runtime_plain_path=entry.get("runtime_plain"),
         )

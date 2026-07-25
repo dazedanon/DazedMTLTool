@@ -88,6 +88,46 @@ class RPGMakerImageTests(unittest.TestCase):
         self.assertEqual(result.skipped, 1)
         self.assertEqual(plain.read_bytes(), translated)
 
+    def test_separate_decrypt_batches_accumulate_without_overwriting(self):
+        self._encrypted_asset("001.rpgmvp", "red")
+        self._encrypted_asset("002.rpgmvp", "green")
+        first, second = scan_image_assets(self.root)
+
+        first_result = decrypt_assets([first], KEY, game_root=self.root)
+        edited = png_bytes("blue")
+        first.plain_path.write_bytes(edited)
+        refreshed = {asset.asset_id: asset for asset in scan_image_assets(self.root)}
+        second_result = decrypt_assets(
+            [refreshed[second.asset_id]], KEY, game_root=self.root
+        )
+
+        editable = {
+            asset.asset_id: asset
+            for asset in scan_image_assets(self.root)
+            if asset.has_plain
+        }
+        self.assertEqual(first_result.completed, 1)
+        self.assertEqual(second_result.completed, 1)
+        self.assertEqual(set(editable), {first.asset_id, second.asset_id})
+        self.assertEqual(editable[first.asset_id].plain_path.read_bytes(), edited)
+        self.assertEqual(
+            editable[second.asset_id].plain_path.read_bytes(), png_bytes("green")
+        )
+
+    def test_workspace_image_remains_scannable_until_removed(self):
+        encrypted = self._encrypted_asset()
+        asset = scan_image_assets(self.root)[0]
+        decrypt_assets([asset], KEY, game_root=self.root)
+        encrypted.unlink()
+
+        editable_only = scan_image_assets(self.root)
+
+        self.assertEqual([item.asset_id for item in editable_only], [asset.asset_id])
+        self.assertTrue(editable_only[0].has_plain)
+        self.assertFalse(editable_only[0].has_encrypted)
+        remove_editable_assets(self.root, editable_only)
+        self.assertEqual(scan_image_assets(self.root), [])
+
     def test_remove_editable_image_deletes_only_workspace_copy(self):
         self._encrypted_asset()
         asset = scan_image_assets(self.root)[0]

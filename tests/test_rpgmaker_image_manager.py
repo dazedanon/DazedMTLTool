@@ -193,7 +193,7 @@ class RPGMakerImageManagerSelectionTests(unittest.TestCase):
         self.assertFalse(asset.plain_path.exists())
         self.assertTrue(asset.runtime_plain_path.exists())
         self.assertEqual(self.manager.image_list.count(), 0)
-        self.assertEqual(self.manager.remove_button.text(), "Remove highlighted")
+        self.assertEqual(self.manager.remove_button.text(), "Remove")
 
     def test_prepare_uses_only_highlighted_editable_images(self):
         highlighted = self.manager.assets[0]
@@ -214,9 +214,7 @@ class RPGMakerImageManagerSelectionTests(unittest.TestCase):
         self.assertEqual(assets, [highlighted])
         self.assertTrue(highlighted.plain_path.exists())
         self.assertTrue(not_highlighted.plain_path.exists())
-        self.assertEqual(
-            self.manager.prepare_button.text(), "Encrypt highlighted + patch"
-        )
+        self.assertEqual(self.manager.prepare_button.text(), "Patch selected")
 
     def test_prepare_uses_all_editable_images_without_highlights(self):
         editable = self.manager.assets[:2]
@@ -233,7 +231,7 @@ class RPGMakerImageManagerSelectionTests(unittest.TestCase):
         action, assets = start_action.call_args.args
         self.assertEqual(action, "prepare")
         self.assertEqual(assets, editable)
-        self.assertEqual(self.manager.prepare_button.text(), "Encrypt all + patch")
+        self.assertEqual(self.manager.prepare_button.text(), "Patch all")
 
     def test_bottom_controls_share_one_row_and_action_width(self):
         action_buttons = (
@@ -256,6 +254,22 @@ class RPGMakerImageManagerSelectionTests(unittest.TestCase):
         self._click(0)
         asset_id = self.manager.image_list.currentItem().data(Qt.UserRole + 1)
         expected = self.manager.assets_by_id[asset_id].plain_path.parent
+        self.manager.image_list.setCurrentItem(None)
+
+        with patch(
+            "gui.rpgmaker_image_manager.QDesktopServices.openUrl",
+            return_value=True,
+        ) as open_url:
+            self.manager._open_editable_folder()
+
+        opened_url = open_url.call_args.args[0]
+        self.assertEqual(Path(opened_url.toLocalFile()), expected)
+        self.assertTrue(expected.is_dir())
+
+    def test_open_folder_ignores_current_item_without_highlights(self):
+        self.manager.image_list.setCurrentRow(0)
+        self.manager.selected_ids.clear()
+        expected = self.game_root / ".dazedtl" / "images" / "img"
 
         with patch(
             "gui.rpgmaker_image_manager.QDesktopServices.openUrl",

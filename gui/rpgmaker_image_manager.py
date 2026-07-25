@@ -291,23 +291,23 @@ class RPGMakerImageManager(QWidget):
 
         action_row = QHBoxLayout()
         action_row.setSpacing(8)
-        self.open_workspace_button = QPushButton("Open folder")
+        self.open_workspace_button = QPushButton("Open")
         self.open_workspace_button.setToolTip(
             "Open the highlighted image's editable folder, the chosen folder filter, or the "
             "editable img root."
         )
         self.open_workspace_button.clicked.connect(self._open_editable_folder)
-        self.decrypt_selected_button = QPushButton("Decrypt highlighted")
+        self.decrypt_selected_button = QPushButton("Decrypt")
         self.decrypt_selected_button.clicked.connect(self._decrypt_checked)
         self.decrypt_all_button = QPushButton("Decrypt all")
         self.decrypt_all_button.clicked.connect(self._decrypt_all)
-        self.remove_button = QPushButton("Remove highlighted")
+        self.remove_button = QPushButton("Remove")
         self.remove_button.setToolTip(
             "Delete highlighted PNG copies from the editable folder. Runtime images remain "
             "untouched and can be decrypted again. The Delete key does the same thing."
         )
         self.remove_button.clicked.connect(self._remove_highlighted)
-        self.prepare_button = QPushButton("Encrypt all + patch")
+        self.prepare_button = QPushButton("Patch all")
         self.prepare_button.setStyleSheet(
             "QPushButton{border:1px solid #4ec9b0;color:#4ec9b0;font-weight:bold;padding:6px 14px;}"
             "QPushButton:hover{background:#18352f;}"
@@ -494,9 +494,14 @@ class RPGMakerImageManager(QWidget):
             label = asset.relative_png.name
             item = QListWidgetItem(placeholder_icon, label)
             item.setData(_ASSET_ID_ROLE, asset.asset_id)
-            kind = "encrypted + editable" if asset.has_encrypted and asset.has_plain else (
-                "encrypted" if asset.has_encrypted else "runtime PNG"
-            )
+            if asset.has_encrypted and asset.has_plain:
+                kind = "encrypted + editable"
+            elif asset.has_encrypted:
+                kind = "encrypted"
+            elif asset.has_runtime_plain:
+                kind = "runtime PNG"
+            else:
+                kind = "editable PNG"
             item.setToolTip(f"{asset.asset_id}\n{kind}")
             self.image_list.addItem(item)
             item.setSelected(asset.asset_id in self.selected_ids)
@@ -562,9 +567,9 @@ class RPGMakerImageManager(QWidget):
 
     def _update_prepare_scope(self) -> None:
         if self.selected_ids:
-            self.prepare_button.setText("Encrypt highlighted + patch")
+            self.prepare_button.setText("Patch selected")
         else:
-            self.prepare_button.setText("Encrypt all + patch")
+            self.prepare_button.setText("Patch all")
 
     def _show_preview(self, current: QListWidgetItem | None, _previous=None) -> None:
         if current is None:
@@ -606,14 +611,11 @@ class RPGMakerImageManager(QWidget):
             return
         try:
             workspace = ensure_editable_workspace(self.game_root)
-            current = self.image_list.currentItem()
-            asset = (
-                self.assets_by_id.get(current.data(_ASSET_ID_ROLE))
-                if current is not None
-                else None
-            )
-            if asset is not None:
-                target = asset.plain_path.parent
+            highlighted_parents = {
+                asset.plain_path.parent for asset in self._selected_assets()
+            }
+            if len(highlighted_parents) == 1:
+                target = highlighted_parents.pop()
             else:
                 root = Path(self.game_root).expanduser().resolve()
                 content_relative = resolve_content_root(root).relative_to(root)
