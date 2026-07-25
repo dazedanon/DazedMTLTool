@@ -588,6 +588,22 @@ def _101_name_source(cmd, is_var: bool) -> str:
     return ""
 
 
+def _101_speaker_name(raw_name: str) -> str:
+    """Return the translatable name inside a code-101 display wrapper.
+
+    Parameter 4 may use ``【Name】`` as its visible name-window styling.  Those
+    brackets belong in the 101 field, not in the ``[Speaker]:`` transport prefix
+    temporarily attached to the following 401 dialogue.
+    """
+    name = str(raw_name or "").strip()
+    name = re.sub(r"^(?:[\\]+[cC]\[\d+\]\s*)+", "", name)
+    bracketed = re.match(r"^【\s*([^】]+?)\s*】", name)
+    if bracketed:
+        return bracketed.group(1).strip()
+    plain = re.match(r"^([^\\]+)", name)
+    return plain.group(1).strip() if plain else ""
+
+
 def _entry_orig(entry) -> dict:
     """Return _original dict on a database entry, or empty dict if absent."""
     orig = entry.get("_original") if isinstance(entry, dict) else None
@@ -3136,9 +3152,8 @@ def searchCodes(page, pbar, jobList, filename):
 
                 # Get Speaker
                 rawName = _101_name_source(codeList[i], isVar)
-                match = re.search(r"^(?:[\\]+[cC]\[\d+?\])?([^\\]+)", rawName)
-                if match:
-                    sourceName = match.group(1)
+                sourceName = _101_speaker_name(rawName)
+                if sourceName:
                     response = getSpeaker(sourceName)
                     totalTokens[0] += response[1][0]
                     totalTokens[1] += response[1][1]

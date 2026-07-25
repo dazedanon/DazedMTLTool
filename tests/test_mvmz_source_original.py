@@ -112,7 +112,7 @@ def _resolve_case_command(page_list, entry, marked_cases=None):
     return cmd
 
 
-def _run_search_codes(page, *, preserve_original=True):
+def _run_search_codes(page, *, preserve_original=True, speaker_fn=None):
     """Full Pass 1 -> mock translate -> Pass 2 cycle."""
     captured = []
 
@@ -121,7 +121,7 @@ def _run_search_codes(page, *, preserve_original=True):
         return _mock_translate(text, history, batch)
 
     def speaker(name):
-        return _mock_speaker(name)
+        return speaker_fn(name) if speaker_fn is not None else _mock_speaker(name)
 
     orig_t = mvmz.translateAI
     orig_s = mvmz.getSpeaker
@@ -193,6 +193,45 @@ class TestMVMZSourceOriginal(unittest.TestCase):
         c122 = _find_commands(page, 122)[0]
         self.assertEqual(c122["_original"], "変数テスト")
         self.assertIn("EN_TRANSLATED", c122["parameters"][4])
+
+    def test_101_display_brackets_do_not_leak_into_401_dialogue(self):
+        speakers_seen = []
+
+        def speaker(name):
+            speakers_seen.append(name)
+            return ["Game Description", [0, 0]]
+
+        page = {
+            "list": [
+                {
+                    "code": 101,
+                    "indent": 0,
+                    "parameters": ["", 0, 0, 2, "【[Game Description]】"],
+                    "_original": "【ゲーム説明】",
+                },
+                {
+                    "code": 401,
+                    "indent": 0,
+                    "parameters": ["ここから本編スタートとなります。"],
+                },
+            ]
+        }
+
+        translated, captured = _run_search_codes(page, speaker_fn=speaker)
+        cmd101, cmd401 = translated["list"]
+
+        self.assertTrue(speakers_seen)
+        self.assertEqual(set(speakers_seen), {"ゲーム説明"})
+        self.assertEqual(cmd101["parameters"][4], "【Game Description】")
+        self.assertEqual(cmd401["parameters"][0], "EN_TRANSLATED")
+        self.assertNotIn("Game Description", cmd401["parameters"][0])
+        self.assertTrue(
+            any(
+                isinstance(item, str) and item.startswith("[Game Description]: ")
+                for payload in captured
+                for item in (payload if isinstance(payload, list) else [payload])
+            )
+        )
 
     def test_rerun_uses_original_not_display_text(self):
         page1, captured1 = _run_search_codes(_load_map_excerpt())
