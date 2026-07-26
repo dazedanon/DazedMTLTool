@@ -18,15 +18,24 @@ Workflow jumps here when you start a phase.
 
 ## Images
 
-MV/MZ bitmap UI workflow. Workflow Step 6 checks the project setup and opens this page.
+Engine-aware bitmap UI workflow. Choose **Auto-detect**, **RPG Maker MV/MZ**, or
+**Generic / Loose Images** after selecting the game folder. Auto-detect uses RPG Maker project,
+`System.json`, and encrypted-image markers; otherwise it falls back to Generic and asks for the
+folder containing loose PNGs.
 
-1. Decrypt selected images (or all images) into `.dazedtl/images/.../img/`.
+1. Use **Decrypt** for RPG Maker assets or **Make editable** for ordinary PNGs. Editable copies
+   mirror their game-relative paths under `.dazedtl/images/`.
 2. Click **Copy skill** and paste the scoped bitmap-localization instructions into your coding
    agent.
 3. Review the edited PNGs here.
 4. Patch highlighted images, or clear highlights to patch every editable PNG.
 
-The runtime game images remain untouched until you deliberately patch the reviewed copies.
+Scanning is read-only. Runtime images remain untouched until you deliberately patch reviewed
+copies. Patching checks for external source changes, stages the selected batch, keeps originals
+under `.dazedtl/image_backups/`, and adds exact Git/GameUpdate allow-rules.
+
+The Generic profile supports loose PNG files. Packed engine archives require a dedicated engine
+profile and are not silently unpacked or rebuilt.
 
 ## Batches
 

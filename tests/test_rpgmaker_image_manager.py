@@ -13,6 +13,7 @@ from PyQt5.QtWidgets import QApplication, QAbstractItemView, QMainWindow, QMessa
 
 from gui.rpgmaker_image_manager import RPGMakerImageManager, _PAGE_SIZE
 from gui.workflow_tab import _inspect_image_workflow
+from util.image_manager import PROFILE_AUTO, PROFILE_GENERIC, PROFILE_RPGMAKER_MVMZ
 
 
 class RPGMakerImageManagerSelectionTests(unittest.TestCase):
@@ -295,6 +296,12 @@ class RPGMakerImageManagerSelectionTests(unittest.TestCase):
 
         self.assertTrue(self.manager.copy_translation_button.isEnabled())
 
+    def test_loading_and_scanning_project_is_read_only(self):
+        self.assertEqual(self.manager.engine_combo.currentData(), PROFILE_AUTO)
+        self.assertEqual(self.manager.engine_id, PROFILE_RPGMAKER_MVMZ)
+        self.assertFalse((self.game_root / ".dazedtl").exists())
+        self.assertFalse((self.game_root / ".gitignore").exists())
+
     def test_translation_skill_copies_project_specific_editable_folder(self):
         asset = self.manager.assets[0]
         asset.plain_path.parent.mkdir(parents=True, exist_ok=True)
@@ -400,10 +407,44 @@ class RPGMakerImageManagerNavigationTests(unittest.TestCase):
         main_source = (root / "gui" / "main.py").read_text(encoding="utf-8")
         workflow_source = (root / "gui" / "workflow_tab.py").read_text(encoding="utf-8")
         self.assertIn("PAGE_IMAGES = 2", main_source)
-        self.assertIn("self.image_manager_tab = RPGMakerImageManager", main_source)
+        self.assertIn("from gui.image_manager import ImageManager", main_source)
+        self.assertIn("self.image_manager_tab = ImageManager", main_source)
         self.assertIn('create_nav_button("🖼", "Images")', main_source)
         self.assertIn('(\"6  Images\",       self._build_step6_images)', workflow_source)
         self.assertIn('self._open_images_btn = _make_btn("🖼  Open Images"', workflow_source)
+
+
+class GenericImageManagerUITests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.app = QApplication.instance() or QApplication([])
+
+    def test_auto_detects_generic_root_and_uses_make_editable_actions(self):
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            game_root = root / "Game"
+            image_root = game_root / "assets" / "images" / "ui"
+            image_root.mkdir(parents=True)
+            Image.new("RGBA", (20, 12), "green").save(image_root / "menu.png")
+            settings = QSettings(str(root / "settings.ini"), QSettings.IniFormat)
+            manager = RPGMakerImageManager(game_root, settings=settings)
+            manager.resize(1000, 700)
+            manager.show()
+            manager._scan_worker.wait(5000)
+            self.app.processEvents()
+            try:
+                self.assertEqual(manager.engine_combo.currentData(), PROFILE_AUTO)
+                self.assertEqual(manager.engine_id, PROFILE_GENERIC)
+                self.assertTrue(manager.generic_root_host.isVisible())
+                self.assertEqual(manager.decrypt_selected_button.text(), "Make editable")
+                self.assertEqual(manager.image_list.count(), 1)
+                self.assertEqual(manager.assets[0].asset_id, "assets/images/ui/menu.png")
+                self.assertFalse((game_root / ".dazedtl").exists())
+            finally:
+                for worker in list(manager._thumbnail_workers):
+                    worker.wait(5000)
+                manager.close()
+                self.app.processEvents()
 
 
 class RPGMakerWorkflowImageStepTests(unittest.TestCase):

@@ -707,7 +707,7 @@ from gui.guide_tab import GuideTab
 from gui.translation_tab import TranslationTab
 from gui.workflow_tab import WorkflowTab
 from gui.wolf_workflow_tab import WolfWorkflowTab
-from gui.rpgmaker_image_manager import RPGMakerImageManager
+from gui.image_manager import ImageManager
 from gui.skills_tab import SkillsTab
 from gui.batch_tab import BatchTab
 
@@ -965,7 +965,7 @@ class DazedMTLGUI(QMainWindow):
 
         # RPG Maker image decryption / patch selection
         btn_images = self.create_nav_button("🖼", "Images")
-        btn_images.setToolTip("Images - decrypt, preview, encrypt, and add MV/MZ images to patches")
+        btn_images.setToolTip("Images - prepare, preview, and patch engine image assets")
         btn_images.clicked.connect(lambda: self.switch_page(self.PAGE_IMAGES))
         sidebar_layout.addWidget(btn_images)
         self.nav_buttons.append(btn_images)
@@ -1056,8 +1056,8 @@ class DazedMTLGUI(QMainWindow):
         # RPGMaker and Wolf guided panels while keeping a single sidebar button.
         self.content_stack.addWidget(self._create_workflow_container())
 
-        # RPG Maker MV/MZ Image Manager (index 2)
-        self.image_manager_tab = RPGMakerImageManager(parent=self)
+        # Engine-aware Image Manager (index 2)
+        self.image_manager_tab = ImageManager(parent=self)
         self.content_stack.addWidget(self.image_manager_tab)
 
         # Translation Execution Tab (index 3)

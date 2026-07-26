@@ -8,7 +8,6 @@ image-translation workflow.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Iterable
 import io
@@ -17,6 +16,8 @@ import os
 import re
 import shutil
 import tempfile
+
+from util.image_manager import ImageActionResult, ImageAsset
 
 
 RPGMV_HEADER = bytes(
@@ -27,46 +28,6 @@ KEY_LEN = 16
 ENCRYPTED_IMAGE_EXTENSIONS = (".rpgmvp", ".png_")
 EDITABLE_WORKSPACE_NAME = "images"
 LEGACY_EDITABLE_WORKSPACE_NAME = "DazedTL_Images"
-
-
-@dataclass(frozen=True)
-class ImageAsset:
-    """One logical image and its editable/encrypted representations."""
-
-    asset_id: str
-    relative_png: Path
-    plain_path: Path
-    encrypted_path: Path | None = None
-    runtime_plain_path: Path | None = None
-
-    @property
-    def has_plain(self) -> bool:
-        return self.plain_path.is_file()
-
-    @property
-    def has_encrypted(self) -> bool:
-        return self.encrypted_path is not None and self.encrypted_path.is_file()
-
-    @property
-    def has_runtime_plain(self) -> bool:
-        return self.runtime_plain_path is not None and self.runtime_plain_path.is_file()
-
-
-@dataclass
-class ImageActionResult:
-    completed: int = 0
-    skipped: int = 0
-    errors: list[str] | None = None
-    patch_files: list[Path] | None = None
-    gitignore_files: list[Path] | None = None
-
-    def __post_init__(self) -> None:
-        if self.errors is None:
-            self.errors = []
-        if self.patch_files is None:
-            self.patch_files = []
-        if self.gitignore_files is None:
-            self.gitignore_files = []
 
 
 def resolve_content_root(game_root: str | Path) -> Path:

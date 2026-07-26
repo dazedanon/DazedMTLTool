@@ -45,8 +45,8 @@ Project Setup's `speakers` block recommends ENABLE / SKIP with evidence.
 
 ## Images (Step 6, MV/MZ)
 
-Step 6 keeps the Image Manager on the separate **Images** page, but verifies that you are ready
-to use it:
+Step 6 keeps the engine-aware Image Manager on the separate **Images** page, selects the RPG Maker
+workflow through auto-detection, and verifies that you are ready to use it:
 
 - Step 0 points to the actual game root containing `img/` or `www/img/`.
 - Encrypted projects have a valid key in `System.json`.

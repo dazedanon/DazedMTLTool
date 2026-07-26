@@ -2522,8 +2522,9 @@ class WorkflowTab(QWidget):
             return
         if self._ace_encrypted or self._ace_rvdata_dir or self._ace_json_dir:
             label.setText(
-                "<span style='color:#e9a12a'>⚠ Image Manager supports RPG Maker MV/MZ "
-                "projects only; this project is RPG Maker Ace.</span>"
+                "<span style='color:#e9a12a'>⚠ This guided image step is configured for RPG "
+                "Maker MV/MZ. The standalone Images page also supports Generic loose PNGs, "
+                "but no Ace archive profile is available yet.</span>"
             )
             if button is not None:
                 button.setEnabled(False)
@@ -3082,7 +3083,8 @@ class WorkflowTab(QWidget):
                     "Copy a prompt that audits plugins.js and enabled plugin sources, asks what "
                     "needs translation, then edits approved player-visible strings in place."
                 )
-        # Steps 6–7 - Image Manager and playtest tools are MV/MZ only.
+        # Steps 6–7 in this RPG workflow are MV/MZ only. The standalone Images
+        # page also supports Generic loose PNG projects.
         show_mvmz_tools = not is_ace
         tool_indices = (6, 7)
         for tool_idx in tool_indices:

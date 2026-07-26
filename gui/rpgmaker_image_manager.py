@@ -1,8 +1,9 @@
-"""Visual RPG Maker MV/MZ image decrypt/encrypt and patch manager."""
+"""Engine-aware visual image workspace and patch manager."""
 
 from __future__ import annotations
 
 from pathlib import Path
+import hashlib
 
 from PyQt5.QtCore import (
     QPoint,
@@ -36,20 +37,28 @@ from PyQt5.QtWidgets import (
 from util.paths import APP_NAME, ORG_NAME
 from util.skills import load_clipboard_skill
 
-from util.rpgmaker_images import (
+from util.image_manager import (
     ImageAsset,
-    clean_runtime_image_duplicates,
-    decrypt_assets,
+    PROFILE_AUTO,
+    PROFILE_GENERIC,
+    PROFILE_RPGMAKER_MVMZ,
+    detect_image_engine,
     editable_workspace_root,
     ensure_editable_workspace,
+    make_profile_assets_editable,
+    normalize_generic_image_root,
+    prepare_profile_assets_for_patch,
+    preview_profile_png_bytes,
+    profile_label,
+    registered_image_profiles,
+    scan_profile_assets,
+    thumbnail_profile_png_bytes,
+)
+from util.rpgmaker_images import (
     migrate_legacy_editable_workspace,
-    prepare_assets_for_patch,
-    preview_png_bytes,
     read_encryption_key,
     remove_editable_assets,
     resolve_content_root,
-    scan_image_assets,
-    thumbnail_png_bytes,
 )
 
 
@@ -165,14 +174,25 @@ class _ImageScanWorker(QThread):
     done = pyqtSignal(int, object)
     error = pyqtSignal(int, str)
 
-    def __init__(self, generation: int, game_root: Path):
+    def __init__(
+        self,
+        generation: int,
+        game_root: Path,
+        engine_id: str,
+        image_root: Path | None,
+    ):
         super().__init__()
         self.generation = generation
         self.game_root = game_root
+        self.engine_id = engine_id
+        self.image_root = image_root
 
     def run(self) -> None:
         try:
-            self.done.emit(self.generation, scan_image_assets(self.game_root))
+            self.done.emit(
+                self.generation,
+                scan_profile_assets(self.engine_id, self.game_root, self.image_root),
+            )
         except Exception as exc:
             self.error.emit(self.generation, str(exc))
 
@@ -180,11 +200,18 @@ class _ImageScanWorker(QThread):
 class _ThumbnailWorker(QThread):
     done = pyqtSignal(int, object)
 
-    def __init__(self, generation: int, assets: list[ImageAsset], key: bytes | None):
+    def __init__(
+        self,
+        generation: int,
+        assets: list[ImageAsset],
+        key: bytes | None,
+        engine_id: str = PROFILE_RPGMAKER_MVMZ,
+    ):
         super().__init__()
         self.generation = generation
         self.assets = assets
         self.key = key
+        self.engine_id = engine_id
 
     def run(self) -> None:
         thumbnails: dict[str, bytes] = {}
@@ -192,7 +219,9 @@ class _ThumbnailWorker(QThread):
             if self.isInterruptionRequested():
                 return
             try:
-                data = thumbnail_png_bytes(asset, self.key, size=112)
+                data = thumbnail_profile_png_bytes(
+                    self.engine_id, asset, self.key, size=112
+                )
             except Exception:
                 data = b""
             thumbnails[asset.asset_id] = data
@@ -210,21 +239,23 @@ class _ImageActionWorker(QThread):
         game_root: Path,
         assets: list[ImageAsset],
         key: bytes | None,
+        engine_id: str = PROFILE_RPGMAKER_MVMZ,
     ):
         super().__init__()
         self.action = action
         self.game_root = game_root
         self.assets = assets
         self.key = key
+        self.engine_id = engine_id
 
     def run(self) -> None:
         try:
-            if self.action == "decrypt":
-                result = decrypt_assets(
+            if self.action in {"decrypt", "make_editable"}:
+                result = make_profile_assets_editable(
+                    self.engine_id,
+                    self.game_root,
                     self.assets,
                     self.key,
-                    game_root=self.game_root,
-                    overwrite=False,
                     progress=self.status.emit,
                 )
             elif self.action == "remove":
@@ -232,15 +263,19 @@ class _ImageActionWorker(QThread):
                     self.game_root, self.assets, progress=self.status.emit
                 )
             else:
-                result = prepare_assets_for_patch(
-                    self.game_root, self.assets, self.key, progress=self.status.emit
+                result = prepare_profile_assets_for_patch(
+                    self.engine_id,
+                    self.game_root,
+                    self.assets,
+                    self.key,
+                    progress=self.status.emit,
                 )
             self.done.emit(self.action, result)
         except Exception as exc:
             self.error.emit(str(exc))
 
 
-class RPGMakerImageManager(QWidget):
+class ImageManager(QWidget):
     """Paginated contact sheet for projects containing thousands of images."""
 
     def __init__(
@@ -260,6 +295,10 @@ class RPGMakerImageManager(QWidget):
         self.selected_ids: set[str] = set()
         self.page = 0
         self.key: bytes | None = None
+        self.engine_id = PROFILE_RPGMAKER_MVMZ
+        self.engine_detection = None
+        self.generic_image_root: Path | None = None
+        self._loading_engine_ui = False
         self._scan_worker: _ImageScanWorker | None = None
         self._scan_workers: list[_ImageScanWorker] = []
         self._scan_generation = 0
@@ -273,19 +312,18 @@ class RPGMakerImageManager(QWidget):
             self.folder_edit.setText(str(self.game_root))
             self._load_project()
         else:
-            self.status_label.setText("Select an RPG Maker MV/MZ game folder to begin.")
+            self.status_label.setText("Select a game folder to begin.")
             self._set_actions_enabled(False)
 
     def _build_ui(self) -> None:
         root = QVBoxLayout(self)
         root.setContentsMargins(18, 14, 18, 12)
-        title = QLabel("RPG Maker MV/MZ Image Manager")
+        title = QLabel("Image Manager")
         title.setStyleSheet("font-size:18px;font-weight:bold;color:#e0e0e0;")
         root.addWidget(title)
         intro = QLabel(
-            "Select images while browsing, decrypt them into .dazedtl/images, edit the PNGs, "
-            "then highlight the finished images to patch only those, or clear highlights to "
-            "patch every editable image. "
+            "Choose an engine profile, make images editable under .dazedtl/images, edit the "
+            "PNG copies, then patch highlighted images or every editable image. "
             "Pages keep very large games responsive."
         )
         intro.setWordWrap(True)
@@ -295,7 +333,7 @@ class RPGMakerImageManager(QWidget):
         folder_row = QHBoxLayout()
         folder_row.addWidget(QLabel("Game folder:"))
         self.folder_edit = QLineEdit()
-        self.folder_edit.setPlaceholderText("Select an RPG Maker MV/MZ game folder…")
+        self.folder_edit.setPlaceholderText("Select a game folder…")
         self.folder_edit.returnPressed.connect(self._load_project)
         folder_row.addWidget(self.folder_edit, 1)
         browse_button = QPushButton("Browse…")
@@ -305,6 +343,43 @@ class RPGMakerImageManager(QWidget):
         load_button.clicked.connect(self._load_project)
         folder_row.addWidget(load_button)
         root.addLayout(folder_row)
+
+        engine_row = QHBoxLayout()
+        engine_row.addWidget(QLabel("Engine:"))
+        self.engine_combo = QComboBox()
+        self.engine_combo.addItem("Auto-detect", PROFILE_AUTO)
+        for profile in registered_image_profiles():
+            self.engine_combo.addItem(profile.label, profile.engine_id)
+        self.engine_combo.currentIndexChanged.connect(self._engine_changed)
+        engine_row.addWidget(self.engine_combo)
+        self.engine_detection_label = QLabel("Select a game folder to detect its image layout.")
+        self.engine_detection_label.setWordWrap(True)
+        self.engine_detection_label.setStyleSheet("color:#9d9d9d;font-size:12px;")
+        engine_row.addWidget(self.engine_detection_label, 1)
+        self.migrate_legacy_button = QPushButton("Migrate old workspace")
+        self.migrate_legacy_button.setToolTip(
+            "Move images from the former DazedTL_Images folder into .dazedtl/images."
+        )
+        self.migrate_legacy_button.clicked.connect(self._migrate_legacy_workspace)
+        self.migrate_legacy_button.hide()
+        engine_row.addWidget(self.migrate_legacy_button)
+        root.addLayout(engine_row)
+
+        self.generic_root_host = QWidget()
+        generic_root_row = QHBoxLayout(self.generic_root_host)
+        generic_root_row.setContentsMargins(0, 0, 0, 0)
+        generic_root_row.addWidget(QLabel("Image folder:"))
+        self.generic_root_edit = QLineEdit()
+        self.generic_root_edit.setPlaceholderText(
+            "Choose the folder containing loose PNG images…"
+        )
+        self.generic_root_edit.returnPressed.connect(self._generic_root_changed)
+        generic_root_row.addWidget(self.generic_root_edit, 1)
+        self.generic_root_button = QPushButton("Browse…")
+        self.generic_root_button.clicked.connect(self._browse_generic_root)
+        generic_root_row.addWidget(self.generic_root_button)
+        root.addWidget(self.generic_root_host)
+        self.generic_root_host.hide()
 
         filters = QHBoxLayout()
         self.search_edit = QLineEdit()
@@ -452,10 +527,195 @@ class RPGMakerImageManager(QWidget):
 
     def _browse_game_root(self) -> None:
         start = self.folder_edit.text().strip() or str(Path.home())
-        folder = QFileDialog.getExistingDirectory(self, "Select RPG Maker Game Folder", start)
+        folder = QFileDialog.getExistingDirectory(self, "Select Game Folder", start)
         if folder:
             self.folder_edit.setText(folder)
             self._load_project()
+
+    def _project_settings_prefix(self) -> str:
+        if self.game_root is None:
+            return "images/projects/none"
+        digest = hashlib.sha256(str(self.game_root).encode("utf-8")).hexdigest()[:16]
+        return f"images/projects/{digest}"
+
+    def _load_project_preferences(self) -> None:
+        prefix = self._project_settings_prefix()
+        selected = str(self.settings.value(f"{prefix}/engine", PROFILE_AUTO) or PROFILE_AUTO)
+        if self.engine_combo.findData(selected) < 0:
+            selected = PROFILE_AUTO
+        saved_image_root = str(
+            self.settings.value(f"{prefix}/generic_image_root", "") or ""
+        ).strip()
+        self._loading_engine_ui = True
+        try:
+            self.engine_combo.setCurrentIndex(self.engine_combo.findData(selected))
+            self.generic_root_edit.setText(saved_image_root)
+        finally:
+            self._loading_engine_ui = False
+
+    def _save_project_preferences(self) -> None:
+        if self.game_root is None:
+            return
+        prefix = self._project_settings_prefix()
+        self.settings.setValue(f"{prefix}/engine", self.engine_combo.currentData())
+        self.settings.setValue(
+            f"{prefix}/generic_image_root", self.generic_root_edit.text().strip()
+        )
+
+    def _engine_changed(self) -> None:
+        if self._loading_engine_ui or self.game_root is None:
+            return
+        self._save_project_preferences()
+        self.selected_ids.clear()
+        self._configure_engine_and_scan()
+
+    def _browse_generic_root(self) -> None:
+        if self.game_root is None:
+            QMessageBox.information(self, "Image Folder", "Select a game folder first.")
+            return
+        start = self.generic_root_edit.text().strip() or str(self.game_root)
+        folder = QFileDialog.getExistingDirectory(
+            self, "Select Loose Image Folder", start
+        )
+        if folder:
+            self.generic_root_edit.setText(folder)
+            self._generic_root_changed()
+
+    def _migrate_legacy_workspace(self) -> None:
+        if self.game_root is None:
+            return
+        legacy = self.game_root / "DazedTL_Images"
+        if not legacy.is_dir():
+            self.migrate_legacy_button.hide()
+            return
+        answer = QMessageBox.question(
+            self,
+            "Migrate Old Editable Images",
+            "Move editable images from DazedTL_Images into .dazedtl/images?\n\n"
+            "Conflicting files are preserved under .dazedtl/legacy_image_conflicts. "
+            "Runtime game images are not changed.",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if answer != QMessageBox.Yes:
+            return
+        try:
+            moved = migrate_legacy_editable_workspace(self.game_root)
+        except Exception as exc:
+            QMessageBox.warning(self, "Editable Image Migration", str(exc))
+            return
+        self.migrate_legacy_button.hide()
+        self.status_label.setText(f"Migrated {moved:,} legacy editable image(s).")
+        self._start_scan()
+
+    def _generic_root_changed(self) -> None:
+        if self.game_root is None:
+            return
+        try:
+            chosen = normalize_generic_image_root(
+                self.game_root, self.generic_root_edit.text().strip()
+            )
+        except Exception as exc:
+            QMessageBox.warning(self, "Image Folder", str(exc))
+            return
+        self.generic_root_edit.setText(str(chosen))
+        self.generic_image_root = chosen
+        self._save_project_preferences()
+        self.selected_ids.clear()
+        self._start_scan()
+
+    def _configure_engine_and_scan(self) -> None:
+        if self.game_root is None:
+            return
+        # Invalidate any scan started for the previous profile before returning
+        # early for an incomplete Generic configuration.
+        self._scan_generation += 1
+        selected = self.engine_combo.currentData() or PROFILE_AUTO
+        try:
+            self.engine_detection = detect_image_engine(self.game_root)
+        except Exception as exc:
+            self.engine_detection = None
+            self.status_label.setText(f"Engine detection failed: {exc}")
+            self._set_actions_enabled(False)
+            return
+        self.engine_id = (
+            self.engine_detection.engine_id if selected == PROFILE_AUTO else selected
+        )
+        if selected == PROFILE_AUTO:
+            detected = profile_label(self.engine_id)
+            self.engine_detection_label.setText(
+                f"Auto: {detected} ({self.engine_detection.confidence}) — "
+                f"{self.engine_detection.reason}"
+            )
+        else:
+            self.engine_detection_label.setText(
+                f"Manual: {profile_label(self.engine_id)} — "
+                f"auto-detection reported {profile_label(self.engine_detection.engine_id)}"
+            )
+
+        is_generic = self.engine_id == PROFILE_GENERIC
+        self.generic_root_host.setVisible(is_generic)
+        self.migrate_legacy_button.setVisible(
+            self.engine_id == PROFILE_RPGMAKER_MVMZ
+            and (self.game_root / "DazedTL_Images").is_dir()
+        )
+        self.generic_image_root = None
+        if is_generic:
+            raw_root = self.generic_root_edit.text().strip()
+            if not raw_root and self.engine_detection.suggested_image_root is not None:
+                raw_root = str(self.engine_detection.suggested_image_root)
+                self.generic_root_edit.setText(raw_root)
+            if raw_root:
+                try:
+                    self.generic_image_root = normalize_generic_image_root(
+                        self.game_root, raw_root
+                    )
+                    self.generic_root_edit.setText(str(self.generic_image_root))
+                except Exception as exc:
+                    self.status_label.setText(str(exc))
+                    self.assets = []
+                    self.assets_by_id = {}
+                    self.filtered_assets = []
+                    self._render_page()
+                    self._set_actions_enabled(False)
+                    return
+            else:
+                self.status_label.setText(
+                    "Choose the folder containing loose PNG images. Scanning is read-only."
+                )
+                self.assets = []
+                self.assets_by_id = {}
+                self.filtered_assets = []
+                self._render_page()
+                self._set_actions_enabled(False)
+                return
+        self._load_key()
+        self._update_profile_actions()
+        self._save_project_preferences()
+        self._start_scan()
+
+    def _update_profile_actions(self) -> None:
+        if self.engine_id == PROFILE_RPGMAKER_MVMZ:
+            self.decrypt_selected_button.setText("Decrypt")
+            self.decrypt_all_button.setText("Decrypt all")
+            self.decrypt_selected_button.setToolTip(
+                "Decrypt encrypted images or copy ordinary RPG Maker PNGs into the "
+                "editable workspace."
+            )
+            self.decrypt_all_button.setToolTip(
+                "Make every encrypted or ordinary RPG Maker PNG editable without "
+                "overwriting existing work."
+            )
+        else:
+            self.decrypt_selected_button.setText("Make editable")
+            self.decrypt_all_button.setText("Make all editable")
+            self.decrypt_selected_button.setToolTip(
+                "Copy highlighted loose PNGs into the editable workspace without changing the game."
+            )
+            self.decrypt_all_button.setToolTip(
+                "Copy every loose PNG into the editable workspace without overwriting "
+                "existing work."
+            )
 
     def _load_project(self) -> None:
         raw_path = self.folder_edit.text().strip()
@@ -467,18 +727,9 @@ class RPGMakerImageManager(QWidget):
             return
         self.game_root = root
         self.settings.setValue("workflow/last_game_folder", str(root))
-        try:
-            migrate_legacy_editable_workspace(root)
-            clean_runtime_image_duplicates(root)
-        except Exception as exc:
-            QMessageBox.warning(
-                self,
-                "Editable Image Cleanup",
-                f"Could not consolidate editable images under .dazedtl:\n{exc}",
-            )
         self.selected_ids.clear()
-        self._load_key()
-        self._start_scan()
+        self._load_project_preferences()
+        self._configure_engine_and_scan()
 
     def refresh_game_root_from_settings(self) -> None:
         """Load a game newly selected in the RPG Maker Workflow tab."""
@@ -492,6 +743,9 @@ class RPGMakerImageManager(QWidget):
         self._load_project()
 
     def _load_key(self) -> None:
+        if self.engine_id != PROFILE_RPGMAKER_MVMZ:
+            self.key = None
+            return
         try:
             self.key = read_encryption_key(self.game_root)
         except Exception:
@@ -503,7 +757,12 @@ class RPGMakerImageManager(QWidget):
         self._set_actions_enabled(False)
         self.status_label.setText("Scanning image folders…")
         self._scan_generation += 1
-        worker = _ImageScanWorker(self._scan_generation, self.game_root)
+        worker = _ImageScanWorker(
+            self._scan_generation,
+            self.game_root,
+            self.engine_id,
+            self.generic_image_root,
+        )
         worker.done.connect(self._scan_done)
         worker.error.connect(self._scan_error)
         worker.finished.connect(lambda w=worker: self._forget_scan_worker(w))
@@ -537,7 +796,8 @@ class RPGMakerImageManager(QWidget):
         encrypted = sum(asset.has_encrypted for asset in assets)
         editable = sum(asset.has_plain for asset in assets)
         self.status_label.setText(
-            f"Found {len(assets):,} images · {encrypted:,} encrypted · "
+            f"{profile_label(self.engine_id)} · found {len(assets):,} images · "
+            f"{encrypted:,} encrypted · "
             f"{editable:,} editable PNG copies · {len(self.selected_ids):,} highlighted"
         )
         self._update_prepare_scope()
@@ -604,7 +864,12 @@ class RPGMakerImageManager(QWidget):
         self.previous_button.setEnabled(self.page > 0)
         self.next_button.setEnabled(self.page + 1 < page_count)
         self._thumbnail_generation += 1
-        worker = _ThumbnailWorker(self._thumbnail_generation, page_assets, self.key)
+        worker = _ThumbnailWorker(
+            self._thumbnail_generation,
+            page_assets,
+            self.key,
+            self.engine_id,
+        )
         worker.done.connect(self._thumbnails_ready)
         worker.finished.connect(lambda w=worker: self._forget_thumbnail_worker(w))
         self._thumbnail_workers.append(worker)
@@ -670,7 +935,7 @@ class RPGMakerImageManager(QWidget):
         if asset is None:
             return
         try:
-            raw = preview_png_bytes(asset, self.key)
+            raw = preview_profile_png_bytes(self.engine_id, asset, self.key)
             pixmap = QPixmap()
             if not pixmap.loadFromData(raw, "PNG"):
                 raise ValueError("Qt could not decode this PNG")
@@ -683,6 +948,7 @@ class RPGMakerImageManager(QWidget):
             self.preview_label.setPixmap(QPixmap())
             self.preview_label.setText(f"Preview unavailable\n{exc}")
         details = [asset.asset_id]
+        details.append(f"Engine: {profile_label(self.engine_id)}")
         if asset.has_encrypted:
             details.append(f"Runtime encrypted: {asset.encrypted_path}")
         elif asset.has_runtime_plain:
@@ -710,12 +976,23 @@ class RPGMakerImageManager(QWidget):
                 target = highlighted_parents.pop()
             else:
                 root = Path(self.game_root).expanduser().resolve()
-                content_relative = resolve_content_root(root).relative_to(root)
-                folder = self.folder_combo.currentData() or "img"
-                relative_folder = Path(folder)
-                if relative_folder.is_absolute() or ".." in relative_folder.parts:
-                    raise ValueError(f"Invalid editable image folder: {folder}")
-                target = workspace / content_relative / relative_folder
+                if self.engine_id == PROFILE_GENERIC:
+                    source_root = normalize_generic_image_root(
+                        root, self.generic_image_root
+                    )
+                    source_relative = source_root.relative_to(root)
+                    folder = self.folder_combo.currentData() or source_relative.as_posix()
+                    relative_folder = Path(folder)
+                    if relative_folder.is_absolute() or ".." in relative_folder.parts:
+                        raise ValueError(f"Invalid editable image folder: {folder}")
+                    target = workspace / relative_folder
+                else:
+                    content_relative = resolve_content_root(root).relative_to(root)
+                    folder = self.folder_combo.currentData() or "img"
+                    relative_folder = Path(folder)
+                    if relative_folder.is_absolute() or ".." in relative_folder.parts:
+                        raise ValueError(f"Invalid editable image folder: {folder}")
+                    target = workspace / content_relative / relative_folder
             target.resolve().relative_to(workspace.resolve())
             target.mkdir(parents=True, exist_ok=True)
             if not QDesktopServices.openUrl(QUrl.fromLocalFile(str(target))):
@@ -728,6 +1005,9 @@ class RPGMakerImageManager(QWidget):
         if self.game_root is None:
             raise ValueError("Select a game folder first.")
         root = Path(self.game_root).expanduser().resolve()
+        if self.engine_id == PROFILE_GENERIC:
+            source_root = normalize_generic_image_root(root, self.generic_image_root)
+            return editable_workspace_root(root) / source_root.relative_to(root)
         content_relative = resolve_content_root(root).relative_to(root)
         return editable_workspace_root(root) / content_relative / "img"
 
@@ -738,7 +1018,7 @@ class RPGMakerImageManager(QWidget):
             QMessageBox.information(
                 self,
                 "No Editable Images",
-                "Decrypt one or more images before copying the translation skill.",
+                "Make one or more images editable before copying the translation skill.",
             )
             return
         try:
@@ -774,6 +1054,8 @@ class RPGMakerImageManager(QWidget):
         return [asset for asset in self.assets if asset.has_plain]
 
     def _ensure_key(self) -> bool:
+        if self.engine_id != PROFILE_RPGMAKER_MVMZ:
+            return True
         if self.key is not None:
             return True
         try:
@@ -787,33 +1069,46 @@ class RPGMakerImageManager(QWidget):
         assets = [
             asset
             for asset in self._selected_assets()
-            if asset.has_encrypted and not asset.has_plain
+            if (asset.has_encrypted or asset.has_runtime_plain) and not asset.has_plain
         ]
         if not assets:
             QMessageBox.information(
                 self,
-                "Nothing to Decrypt",
-                "Highlight one or more encrypted images that are not already editable.",
+                "Nothing to Make Editable",
+                "Highlight one or more runtime images that are not already editable.",
             )
             return
-        if self._ensure_key():
-            self._start_action("decrypt", assets)
+        needs_key = any(asset.has_encrypted for asset in assets)
+        if not needs_key or self._ensure_key():
+            action = "decrypt" if self.engine_id == PROFILE_RPGMAKER_MVMZ else "make_editable"
+            self._start_action(action, assets)
 
     def _decrypt_all(self) -> None:
-        assets = [asset for asset in self.assets if asset.has_encrypted and not asset.has_plain]
+        assets = [
+            asset
+            for asset in self.assets
+            if (asset.has_encrypted or asset.has_runtime_plain) and not asset.has_plain
+        ]
         if not assets:
-            QMessageBox.information(self, "Nothing to Decrypt", "All encrypted images already have PNG copies.")
+            QMessageBox.information(
+                self,
+                "Nothing to Make Editable",
+                "All runtime images already have editable PNG copies.",
+            )
             return
+        verb = "Decrypt" if self.engine_id == PROFILE_RPGMAKER_MVMZ else "Make Editable"
         answer = QMessageBox.question(
             self,
-            "Decrypt Every Image",
-            f"Decrypt all {len(assets):,} encrypted image(s) into .dazedtl/images?\n\n"
+            f"{verb} Every Image",
+            f"Make all {len(assets):,} image(s) editable under .dazedtl/images?\n\n"
             "Existing editable copies will not be overwritten.",
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.No,
         )
-        if answer == QMessageBox.Yes and self._ensure_key():
-            self._start_action("decrypt", assets)
+        needs_key = any(asset.has_encrypted for asset in assets)
+        if answer == QMessageBox.Yes and (not needs_key or self._ensure_key()):
+            action = "decrypt" if self.engine_id == PROFILE_RPGMAKER_MVMZ else "make_editable"
+            self._start_action(action, assets)
 
     def _remove_highlighted(self) -> None:
         assets = [asset for asset in self._selected_assets() if asset.has_plain]
@@ -845,10 +1140,11 @@ class RPGMakerImageManager(QWidget):
         )
         if not assets:
             message = (
-                "None of the highlighted images are in the editable folder. Decrypt them first "
+                "None of the highlighted images are in the editable folder. Make them "
+                "editable first "
                 "or clear the highlights to patch every editable image."
                 if highlighted
-                else "Decrypt images into the editable folder first."
+                else "Make images editable first."
             )
             QMessageBox.information(
                 self,
@@ -867,11 +1163,12 @@ class RPGMakerImageManager(QWidget):
             self,
             "Prepare Images for Patch",
             f"Check {scope} and add changed images to the patch?\n\n"
-            "Unchanged editable copies will be skipped. Changed encrypted images will be rebuilt "
-            "from .dazedtl/images. Their original encrypted "
-            "files are backed up once under .dazedtl/image_backups. Exact allow-rules are then "
+            "Unchanged editable copies will be skipped. Changed images will be staged and rebuilt "
+            "for the active engine from .dazedtl/images. Current runtime files are backed up once "
+            "under .dazedtl/image_backups. Exact allow-rules are then "
             "added to the applicable .gitignore files. Editable PNG copies will remain available "
-            "for further changes until you remove them.",
+            "for further changes until you remove them. If a runtime image changed externally, "
+            "the selected batch is stopped without partially publishing it.",
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.No,
         )
@@ -880,7 +1177,9 @@ class RPGMakerImageManager(QWidget):
 
     def _start_action(self, action: str, assets: list[ImageAsset]) -> None:
         self._set_actions_enabled(False)
-        worker = _ImageActionWorker(action, self.game_root, assets, self.key)
+        worker = _ImageActionWorker(
+            action, self.game_root, assets, self.key, self.engine_id
+        )
         worker.status.connect(self.status_label.setText)
         worker.done.connect(self._action_done)
         worker.error.connect(self._action_error)
@@ -888,7 +1187,7 @@ class RPGMakerImageManager(QWidget):
         worker.start()
 
     def _action_done(self, action: str, result) -> None:
-        if action == "decrypt":
+        if action in {"decrypt", "make_editable"}:
             workspace = editable_workspace_root(self.game_root)
             summary = (
                 f"Created {result.completed:,} editable image(s) in {workspace}; "
@@ -960,3 +1259,7 @@ class RPGMakerImageManager(QWidget):
             event.ignore()
             return
         super().closeEvent(event)
+
+
+# Backward-compatible import for callers and third-party scripts using the old name.
+RPGMakerImageManager = ImageManager
