@@ -38,7 +38,9 @@ attempting to recover artwork from a flattened text-bearing PNG.
 
 Translate embedded bitmap text by reconstructing the smallest safe UI regions and rendering
 approved target text. Treat each bitmap as a structured interface asset, not merely an OCR
-surface. Do not use generative image editing or inpainting.
+surface. Do not use generative editing or inpainting on a complete asset. A narrow exception for
+generating an isolated stylized title wordmark is defined below; all background reconstruction,
+placement, and final compositing must remain deterministic.
 
 ## Required outcome
 
@@ -248,6 +250,38 @@ Reproduce outlines, shadows, glows, gradients, and translucency consistent with 
 asset. Preserve character-name colors and other meaningful visual distinctions. When the exact
 font is unavailable, choose the closest font by shape and weight, but still match the original
 effect stack and visual prominence.
+
+### 10a. Handle stylized title wordmarks
+
+Use ordinary deterministic typography by default. When a title or logo depends on hand-shaped,
+dimensional lettering that available fonts cannot reproduce faithfully, image generation may be
+used only for the isolated replacement wordmark and only when the user has authorized generative
+output.
+
+1. Load the original title image as a style reference, not as a generative edit target.
+2. Request one isolated wordmark containing the exact translated text on a perfectly flat,
+   removable chroma-key background. Require generous padding and prohibit characters, scenery,
+   taglines, badges, watermarks, extra words, and every other source-image element.
+3. State the target text verbatim and reject the output if any letter, punctuation mark, or word
+   differs. Do not repair a misspelling by hiding or painting over part of the generated logo.
+4. Match the source logo's letter-face colors, gradient, highlights, outline stack, dimensional
+   shadow, energy, and overall silhouette. Do not ask the generator to reproduce covered artwork.
+5. Remove the flat key to alpha with a deterministic chroma-key tool. Validate transparent
+   corners, plausible subject coverage, crisp antialiased edges, and absence of key-color fringe.
+6. Crop to the alpha bounds, scale with a high-quality deterministic filter, and position it from
+   the source logo's measured bounds and runtime layout. Keep every protected artwork region and
+   separate label outside the generated step.
+7. Remove the source wordmark independently using a clean source layer or another already-approved
+   deterministic reconstruction. Never rely on the new logo to conceal old glyphs; inspect for
+   source-text fragments above, below, and between the replacement letters at original resolution.
+8. Composite the extracted wordmark deterministically onto a candidate rendered from the verified
+   original or backup. Reuse the same accepted wordmark for every title variant instead of
+   regenerating inconsistent copies. Translate taglines, demo labels, and other simple text
+   deterministically.
+9. Compare the candidate with the source and a deterministic typography candidate at original and
+   runtime scale. Reject it if it alters the background, obscures meaningful art, introduces a
+   backing panel, looks less faithful, or leaves source-glyph ghosts. Do not install a generated
+   candidate until the user has visually approved it.
 
 ### 11. Protect dynamic values
 
