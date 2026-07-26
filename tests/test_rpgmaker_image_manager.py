@@ -317,6 +317,9 @@ class RPGMakerImageManagerSelectionTests(unittest.TestCase):
         self.assertIn(str(self.game_root), prompt)
         self.assertIn(str(self.game_root / ".dazedtl" / "images" / "img"), prompt)
         self.assertIn(str(self.game_root / "vocab.txt"), prompt)
+        self.assertIn("RPG Maker MV/MZ image profile", prompt)
+        self.assertIn("This is an RPG Maker MV/MZ project", prompt)
+        self.assertIn("`.rpgmvp` or `.png_`", prompt)
         self.assertIn("authoritative glossary for every translation", prompt)
         self.assertIn("deterministic raster backend", prompt)
         self.assertIn("runtime value locations as protected keepout regions", prompt)
@@ -329,6 +332,8 @@ class RPGMakerImageManagerSelectionTests(unittest.TestCase):
         self.assertNotIn("{{GAME_ROOT}}", prompt)
         self.assertNotIn("{{EDITABLE_IMAGES_FOLDER}}", prompt)
         self.assertNotIn("{{VOCAB_FILE}}", prompt)
+        self.assertNotIn("{{ENGINE_NAME}}", prompt)
+        self.assertNotIn("{{ENGINE_CONTEXT}}", prompt)
         self.assertIn(
             "Copied image translation skill for 1 editable PNG",
             self.manager.status_label.text(),
@@ -440,6 +445,24 @@ class GenericImageManagerUITests(unittest.TestCase):
                 self.assertEqual(manager.image_list.count(), 1)
                 self.assertEqual(manager.assets[0].asset_id, "assets/images/ui/menu.png")
                 self.assertFalse((game_root / ".dazedtl").exists())
+
+                asset = manager.assets[0]
+                asset.plain_path.parent.mkdir(parents=True)
+                asset.plain_path.write_bytes(asset.runtime_plain_path.read_bytes())
+                manager._start_scan()
+                manager._scan_worker.wait(5000)
+                self.app.processEvents()
+                QApplication.clipboard().clear()
+                manager.copy_translation_button.click()
+                prompt = QApplication.clipboard().text()
+
+                self.assertIn("Generic / Loose Images image profile", prompt)
+                self.assertIn("manages loose PNG assets", prompt)
+                self.assertIn("without assuming a particular game engine", prompt)
+                self.assertNotIn("RPG Maker", prompt)
+                self.assertNotIn(".rpgmvp", prompt)
+                self.assertNotIn("{{ENGINE_NAME}}", prompt)
+                self.assertNotIn("{{ENGINE_CONTEXT}}", prompt)
             finally:
                 for worker in list(manager._thumbnail_workers):
                     worker.wait(5000)

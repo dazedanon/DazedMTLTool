@@ -26,7 +26,8 @@ folder containing loose PNGs.
 1. Use **Decrypt** for RPG Maker assets or **Make editable** for ordinary PNGs. Editable copies
    mirror their game-relative paths under `.dazedtl/images/`.
 2. Click **Copy skill** and paste the scoped bitmap-localization instructions into your coding
-   agent.
+   agent. The shared workflow automatically receives RPG Maker or Generic-specific guidance from
+   the active image profile.
 3. Review the edited PNGs here.
 4. Patch highlighted images, or clear highlights to patch every editable PNG.
 

@@ -37,6 +37,7 @@ An image profile exposes:
 5. Creation of editable copies.
 6. Runtime-file generation for patching.
 7. Capabilities and actionable unsupported-operation errors.
+8. A concise context block injected into the shared bitmap-localization skill.
 
 Patch delivery is separate from engine encoding. The initial Git/GameUpdate
 backend publishes engine-built files at their game-relative paths and adds exact
@@ -62,6 +63,8 @@ later apply-only and export-folder backends.
 - Generic mode exposes an image-folder selector constrained to the game root.
 - Action wording follows capability: RPG Maker uses Decrypt for encrypted
   assets; generic assets use Make editable.
+- Copy skill injects the active engine name and profile guidance into one shared,
+  engine-neutral bitmap-localization workflow.
 - The first release keeps the existing All/Editable filters. Baseline metadata
   provides the foundation for later Modified/Conflict filters without making
   every ordinary filter operation hash thousands of images on the UI thread.

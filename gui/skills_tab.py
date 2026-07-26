@@ -124,8 +124,8 @@ class SkillsTab(QWidget):
             path=SKILLS_DIR / "image_translation.md",
             hint=(
                 "Clipboard skill copied from the Image Manager for deterministic bitmap UI "
-                "localisation. Keep the {{GAME_ROOT}}, {{EDITABLE_IMAGES_FOLDER}}, and "
-                "{{VOCAB_FILE}} placeholders."
+                "localisation. Keep the {{ENGINE_NAME}}, {{ENGINE_CONTEXT}}, {{GAME_ROOT}}, "
+                "{{EDITABLE_IMAGES_FOLDER}}, and {{VOCAB_FILE}} placeholders."
             ),
             is_json=False,
         )

@@ -169,6 +169,8 @@ class ImageEngineDetectionTests(unittest.TestCase):
         self.assertTrue(profiles[PROFILE_RPGMAKER_MVMZ].supports_encryption)
         self.assertFalse(profiles[PROFILE_GENERIC].supports_encryption)
         self.assertTrue(profiles[PROFILE_GENERIC].configurable_image_root)
+        self.assertIn("RPG Maker MV/MZ", profiles[PROFILE_RPGMAKER_MVMZ].translation_skill_context)
+        self.assertNotIn("RPG Maker", profiles[PROFILE_GENERIC].translation_skill_context)
 
     def test_detects_rpgmaker_from_system_json_and_img(self):
         with tempfile.TemporaryDirectory() as raw:

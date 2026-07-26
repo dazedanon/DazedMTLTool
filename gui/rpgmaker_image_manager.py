@@ -45,6 +45,7 @@ from util.image_manager import (
     detect_image_engine,
     editable_workspace_root,
     ensure_editable_workspace,
+    get_image_profile,
     make_profile_assets_editable,
     normalize_generic_image_root,
     prepare_profile_assets_for_patch,
@@ -1025,7 +1026,10 @@ class ImageManager(QWidget):
             if self.game_root is None:
                 raise ValueError("Select a game folder first.")
             game_root = Path(self.game_root).expanduser().resolve()
+            profile = get_image_profile(self.engine_id)
             replacements = {
+                "{{ENGINE_NAME}}": profile.label,
+                "{{ENGINE_CONTEXT}}": profile.translation_skill_context,
                 "{{GAME_ROOT}}": str(game_root),
                 "{{EDITABLE_IMAGES_FOLDER}}": str(self._editable_image_root().resolve()),
                 "{{VOCAB_FILE}}": str(game_root / "vocab.txt"),

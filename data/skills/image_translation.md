@@ -1,15 +1,19 @@
 # Localize Editable Bitmap UI
 
 <task_context>
-Translate player-visible source-language text embedded in the editable RPG Maker bitmap UI
-assets under this folder, recursively:
+Translate player-visible source-language text embedded in the editable bitmap UI assets for the
+{{ENGINE_NAME}} image profile under this folder, recursively:
 
 `{{EDITABLE_IMAGES_FOLDER}}`
 
-Use this game project as read-only context for vocabulary, image usages, event data, plugins,
-scripts, runtime coordinates, scaling, opacity, and dynamic values:
+Use this game or project folder as read-only context for vocabulary, image usages, scripts, data,
+runtime coordinates, scaling, opacity, and dynamic values:
 
 `{{GAME_ROOT}}`
+
+Apply this engine-profile guidance:
+
+{{ENGINE_CONTEXT}}
 
 Use this file as the authoritative glossary for every translation:
 
@@ -26,10 +30,10 @@ backups and temporary candidates outside the editable image folder so they canno
 patchable assets. Work through all editable PNGs without asking for confirmation unless a hard
 safety rule below requires review.
 
-Runtime assets may be read, decoded, or decrypted in memory or into an isolated temporary
-directory when needed to reconstruct an editable image. This does not authorize modifying those
-runtime assets. Prefer the project's own clean source layers over attempting to recover artwork
-from a flattened text-bearing PNG.
+Runtime assets may be read or decoded in memory or into an isolated temporary directory when
+needed to reconstruct an editable image, when permitted by the engine-profile guidance. This does
+not authorize modifying those runtime assets. Prefer the project's own clean source layers over
+attempting to recover artwork from a flattened text-bearing PNG.
 </task_context>
 
 Translate embedded bitmap text by reconstructing the smallest safe UI regions and rendering
@@ -110,9 +114,8 @@ clean version of every covered visual element. Check:
 - Runtime images with matching prefixes, encounter numbers, abbreviations, or character names.
 - Enemy battlers, recollections, cut-ins, gallery images, portraits, and layered battle sprites.
 - Alternate pages or variants that reveal how the same composition is assembled.
-- Event and script references that map an editable filename to a runtime encounter or asset.
-- RPG Maker encrypted image files. Read the project encryption key and decode a copy in memory
-  or a temporary directory when required; never alter the encrypted original.
+- Code, data, scene, or script references that map an editable filename to a runtime use.
+- Additional runtime variants or source layers made accessible by the engine-profile guidance.
 
 Build an explicit mapping from each editable variant to its clean source art. Preserve semantic
 and progression differences: for example, use the enemy icon on introductory pages and the
@@ -125,8 +128,8 @@ clone over, or cover the flattened artwork first.
 
 ### 5. Inspect runtime drawing logic
 
-Search the read-only game project for every image filename and the code or event data that
-displays it. Determine:
+Search the read-only game or project folder for every image filename and any code, data, scene,
+or script definition that displays it. Determine:
 
 - Image position, scale, and runtime opacity.
 - Runtime-drawn counters, percentages, names, or other values.
@@ -248,7 +251,7 @@ effect stack and visual prominence.
 
 ### 11. Protect dynamic values
 
-Reserve the exact runtime-drawn areas discovered from source code or event data. Test likely
+Reserve the exact runtime-drawn areas discovered from available project or runtime data. Test likely
 maximum values such as `0`, `99`, `100`, `999`, and any known project-specific maximum. Ensure
 translated labels and suffixes cannot collide with right-aligned or centered runtime values.
 

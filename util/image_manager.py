@@ -84,6 +84,7 @@ class ImageEngineProfile:
     label: str
     configurable_image_root: bool
     supports_encryption: bool
+    translation_skill_context: str
     supported_extensions: tuple[str, ...] = SUPPORTED_PLAIN_EXTENSIONS
 
 
@@ -93,12 +94,26 @@ IMAGE_ENGINE_PROFILES = (
         "RPG Maker MV/MZ",
         configurable_image_root=False,
         supports_encryption=True,
+        translation_skill_context=(
+            "This is an RPG Maker MV/MZ project. Runtime images normally live under `img/` or "
+            "`www/img/`. Inspect event commands, plugins, and scripts for image placement, "
+            "scaling, opacity, dynamic values, and filename-dependent behavior. Encrypted "
+            "`.rpgmvp` or `.png_` assets may be decoded read-only with the encryption key from "
+            "`System.json`; never modify an encrypted runtime original."
+        ),
     ),
     ImageEngineProfile(
         PROFILE_GENERIC,
         "Generic / Loose Images",
         configurable_image_root=True,
         supports_encryption=False,
+        translation_skill_context=(
+            "This profile manages loose PNG assets without assuming a particular game engine. "
+            "Search available code, data, scenes, and asset references for runtime usage when "
+            "they exist. If placement, scaling, opacity, or dynamic-value behavior cannot be "
+            "established, preserve suspicious blank regions and report the uncertainty. Do not "
+            "attempt archive extraction, bundle rebuilding, or format conversion."
+        ),
     ),
 )
 
