@@ -9,9 +9,10 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PIL import Image
 from PyQt5.QtCore import QSettings, Qt
 from PyQt5.QtTest import QTest
-from PyQt5.QtWidgets import QApplication, QAbstractItemView, QMessageBox
+from PyQt5.QtWidgets import QApplication, QAbstractItemView, QMainWindow, QMessageBox
 
 from gui.rpgmaker_image_manager import RPGMakerImageManager, _PAGE_SIZE
+from gui.workflow_tab import _inspect_image_workflow
 
 
 class RPGMakerImageManagerSelectionTests(unittest.TestCase):
@@ -251,6 +252,37 @@ class RPGMakerImageManagerSelectionTests(unittest.TestCase):
             self.manager.open_workspace_button.geometry().top(),
         )
 
+    def test_folder_popup_is_bounded_and_scrolls_long_lists(self):
+        combo = self.manager.folder_combo
+        combo.blockSignals(True)
+        combo.clear()
+        combo.addItem("All folders", "")
+        for index in range(80):
+            combo.addItem(f"img/pictures/group_{index:03d}/nested_folder", str(index))
+        combo.setCurrentIndex(combo.count() - 1)
+        combo.blockSignals(False)
+
+        combo.showPopup()
+        self.app.processEvents()
+        try:
+            view = combo.view()
+            popup = view.window()
+            screen = QApplication.screenAt(combo.mapToGlobal(combo.rect().center()))
+            screen = screen or QApplication.primaryScreen()
+            available = screen.availableGeometry()
+
+            self.assertLessEqual(popup.height(), int(available.height() * 0.6))
+            self.assertGreater(view.verticalScrollBar().maximum(), 0)
+            self.assertTrue(view.verticalScrollBar().isVisible())
+            self.assertGreaterEqual(popup.geometry().top(), available.top())
+            self.assertLessEqual(popup.geometry().bottom(), available.bottom())
+            current = combo.model().index(combo.currentIndex(), combo.modelColumn())
+            current_rect = view.visualRect(current)
+            self.assertLess(current_rect.top(), view.viewport().height())
+            self.assertGreaterEqual(current_rect.bottom(), 0)
+        finally:
+            combo.hidePopup()
+
     def test_translation_skill_is_enabled_only_for_editable_images(self):
         self.assertFalse(self.manager.copy_translation_button.isEnabled())
 
@@ -291,6 +323,23 @@ class RPGMakerImageManagerSelectionTests(unittest.TestCase):
             "Copied image translation skill for 1 editable PNG",
             self.manager.status_label.text(),
         )
+
+    def test_workflow_readiness_detects_editable_and_misplaced_pngs(self):
+        asset = self.manager.assets[0]
+        asset.plain_path.parent.mkdir(parents=True, exist_ok=True)
+        asset.plain_path.write_bytes(asset.runtime_plain_path.read_bytes())
+        self.game_root.joinpath("vocab.txt").write_text("Menu (Menu)\n", encoding="utf-8")
+        misplaced = self.game_root / ".dazedtl" / "images" / "img (2)" / "pictures"
+        misplaced.mkdir(parents=True)
+        misplaced.joinpath("menu.png").write_bytes(asset.runtime_plain_path.read_bytes())
+
+        report = _inspect_image_workflow(self.game_root)
+
+        self.assertTrue(report["ok"])
+        self.assertEqual(report["runtime"], 4)
+        self.assertEqual(report["editable"], 1)
+        self.assertEqual(report["misplaced"], 1)
+        self.assertTrue(report["vocab"].is_file())
 
     def test_open_folder_uses_highlighted_images_editable_parent(self):
         self._click(0)
@@ -350,7 +399,63 @@ class RPGMakerImageManagerNavigationTests(unittest.TestCase):
         self.assertIn("PAGE_IMAGES = 2", main_source)
         self.assertIn("self.image_manager_tab = RPGMakerImageManager", main_source)
         self.assertIn('create_nav_button("🖼", "Images")', main_source)
-        self.assertNotIn("Open Image Manager", workflow_source)
+        self.assertIn('(\"6  Images\",       self._build_step6_images)', workflow_source)
+        self.assertIn('self._open_images_btn = _make_btn("🖼  Open Images"', workflow_source)
+
+
+class RPGMakerWorkflowImageStepTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.app = QApplication.instance() or QApplication([])
+
+    def test_images_step_checks_setup_and_opens_existing_manager(self):
+        from gui.workflow_tab import WorkflowTab
+
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            game_root = root / "Game"
+            image_root = game_root / "img" / "pictures"
+            data_root = game_root / "data"
+            image_root.mkdir(parents=True)
+            data_root.mkdir(parents=True)
+            Image.new("RGBA", (12, 12), "purple").save(image_root / "menu.png")
+            data_root.joinpath("System.json").write_text("{}", encoding="utf-8")
+            game_root.joinpath("vocab.txt").write_text("Menu (Menu)\n", encoding="utf-8")
+
+            settings = QSettings(str(root / "settings.ini"), QSettings.IniFormat)
+
+            class Host(QMainWindow):
+                PAGE_IMAGES = 2
+
+                def __init__(self):
+                    super().__init__()
+                    self.switched_to = None
+
+                def switch_page(self, index):
+                    self.switched_to = index
+
+            host = Host()
+            with patch("gui.workflow_tab.QSettings", return_value=settings):
+                workflow = WorkflowTab(host)
+            try:
+                workflow.folder_edit.setText(str(game_root))
+                workflow._goto_step(6)
+                workflow._refresh_image_workflow_status()
+
+                self.assertEqual(workflow._step_tabs.count(), 8)
+                self.assertEqual(workflow._step_tabs.currentIndex(), 6)
+                self.assertIn("Runtime images:</span> 1", workflow._image_workflow_status.text())
+                self.assertIn("Glossary:</span>", workflow._image_workflow_status.text())
+
+                workflow._open_image_manager()
+
+                self.assertEqual(host.switched_to, host.PAGE_IMAGES)
+                self.assertEqual(
+                    settings.value("workflow/last_game_folder"), str(game_root.resolve())
+                )
+            finally:
+                workflow.close()
+                host.close()
 
 
 if __name__ == "__main__":

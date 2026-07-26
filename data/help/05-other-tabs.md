@@ -16,6 +16,18 @@ Workflow jumps here when you start a phase.
 
 **Example:** check only `Map003.json`, module = RPG Maker MV/MZ, click Translate, then export from Workflow Step 5 (or copy from `translated/` yourself).
 
+## Images
+
+MV/MZ bitmap UI workflow. Workflow Step 6 checks the project setup and opens this page.
+
+1. Decrypt selected images (or all images) into `.dazedtl/images/.../img/`.
+2. Click **Copy skill** and paste the scoped bitmap-localization instructions into your coding
+   agent.
+3. Review the edited PNGs here.
+4. Patch highlighted images, or clear highlights to patch every editable PNG.
+
+The runtime game images remain untouched until you deliberately patch the reviewed copies.
+
 ## Batches
 
 History for Anthropic Message Batch jobs.
@@ -32,6 +44,7 @@ Edit tool-level markdown:
 - `data/skills/wrap_config.md` - RPG Maker wrap-width analysis prompt
 - `data/skills/plugin_translation.md` - MV/MZ plugin translation prompt
 - `data/skills/ace_script_translation.md` - VX Ace Ruby script translation prompt
+- `data/skills/image_translation.md` - scoped bitmap UI translation skill copied from Images
 - `data/skills/risky_codes.md` - RPG Maker optional event-code audit prompt
 - `data/skills/wolf_speakers.md` - WOLF speaker-format audit prompt
 - `data/translation_contexts.json` - per-call history templates

@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from PyQt5.QtCore import (
+    QPoint,
     Qt,
     QSize,
     QThread,
@@ -23,6 +24,7 @@ from PyQt5.QtWidgets import (
     QLineEdit,
     QListWidget,
     QListWidgetItem,
+    QListView,
     QMessageBox,
     QPushButton,
     QSizePolicy,
@@ -53,6 +55,87 @@ from util.rpgmaker_images import (
 
 _ASSET_ID_ROLE = Qt.UserRole + 1
 _PAGE_SIZE = 1000
+
+
+class _BoundedComboBox(QComboBox):
+    """Keep large combo popups on-screen and scrollable."""
+
+    _MAX_VISIBLE_ROWS = 14
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        view = QListView(self)
+        view.setVerticalScrollMode(QAbstractItemView.ScrollPerItem)
+        view.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        view.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        view.setTextElideMode(Qt.ElideMiddle)
+        view.setUniformItemSizes(True)
+        view.setStyleSheet(
+            "QListView {"
+            "  background: #404040; color: #f2f2f2;"
+            "  border: 1px solid #5a5a5a; outline: none; padding: 3px;"
+            "}"
+            "QListView::item { min-height: 30px; padding: 3px 8px; }"
+            "QListView::item:selected { background: #087dcc; color: white; }"
+            "QScrollBar:vertical { background: #303030; width: 12px; margin: 0; }"
+            "QScrollBar::handle:vertical {"
+            "  background: #777; min-height: 28px; border-radius: 5px;"
+            "}"
+            "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {"
+            "  height: 0;"
+            "}"
+        )
+        self.setView(view)
+        self.setMaxVisibleItems(self._MAX_VISIBLE_ROWS)
+
+    def showPopup(self) -> None:
+        self.view().setVerticalScrollBarPolicy(
+            Qt.ScrollBarAlwaysOn
+            if self.count() > self._MAX_VISIBLE_ROWS
+            else Qt.ScrollBarAsNeeded
+        )
+        super().showPopup()
+        view = self.view()
+        popup = view.window()
+        screen = QApplication.screenAt(self.mapToGlobal(self.rect().center()))
+        screen = screen or QApplication.primaryScreen()
+        if screen is None:
+            return
+
+        available = screen.availableGeometry()
+        row_height = view.sizeHintForRow(0)
+        if row_height <= 0:
+            row_height = self.fontMetrics().height() + 10
+        visible_rows = min(max(1, self.count()), self._MAX_VISIBLE_ROWS)
+        height_cap = min(
+            row_height * visible_rows + view.frameWidth() * 2 + 8,
+            max(row_height * 4, int(available.height() * 0.6)),
+        )
+        popup_height = min(popup.height(), height_cap)
+        popup_width = min(max(popup.width(), self.width()), available.width())
+
+        combo_top_left = self.mapToGlobal(QPoint(0, 0))
+        below_y = combo_top_left.y() + self.height()
+        above_y = combo_top_left.y() - popup_height
+        if below_y + popup_height <= available.bottom() + 1:
+            popup_y = below_y
+        elif above_y >= available.top():
+            popup_y = above_y
+        else:
+            popup_y = max(
+                available.top(),
+                min(popup.y(), available.bottom() - popup_height + 1),
+            )
+        popup_x = max(
+            available.left(),
+            min(combo_top_left.x(), available.right() - popup_width + 1),
+        )
+        popup.setGeometry(popup_x, popup_y, popup_width, popup_height)
+        if self.currentIndex() >= 0:
+            view.scrollTo(
+                self.model().index(self.currentIndex(), self.modelColumn()),
+                QAbstractItemView.PositionAtCenter,
+            )
 
 
 class _UserSelectionList(QListWidget):
@@ -228,7 +311,7 @@ class RPGMakerImageManager(QWidget):
         self.search_edit.setPlaceholderText("Filter by any part of the folder or filename…")
         self.search_edit.textChanged.connect(self._apply_filters)
         filters.addWidget(self.search_edit, 2)
-        self.folder_combo = QComboBox()
+        self.folder_combo = _BoundedComboBox()
         self.folder_combo.addItem("All folders", "")
         self.folder_combo.currentIndexChanged.connect(self._apply_filters)
         filters.addWidget(self.folder_combo, 1)

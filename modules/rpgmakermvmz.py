@@ -163,14 +163,14 @@ CODE122_VAR_MAX = 2000
 
 # Plugins / Scripts
 CODE355655 = False
-CODE357 = True
+CODE357 = False
 CODE657 = False
 CODE356 = False
 CODE320 = False
 CODE324 = False
 CODE325 = False
 CODE111 = False
-CODE108 = True
+CODE108 = False
 
 # ─── Plugin Manager ──────────────────────────────────────────────────────────
 # All known code-357 headerMapping entries. Enable entries via ENABLED_PLUGINS_357.

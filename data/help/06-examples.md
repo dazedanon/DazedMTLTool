@@ -63,7 +63,8 @@ When the sample map looks good:
 
 1. Step 4 - copy the Plugin / risky-codes prompt, audit the game in your IDE, enable only codes that hold player-visible text, then run Phase 2 carefully.
 2. Step 5 - for MV/MZ, copy vocab + the plugins.js prompt and edit `plugins.js` in the IDE (player-facing strings only). For **Ace**, edit `ace_json/scripts/*.rb` the same way, then Export so **RV2JSON** packs `Scripts.rvdata2`.
-3. Step 6 (MV/MZ) - install TL Inspector / Forge if you want in-game inspection helpers.
+3. Step 6 (MV/MZ) - check image setup, then decrypt / translate / patch any bitmap UI text.
+4. Step 7 (MV/MZ) - install TL Inspector / Forge if you want in-game inspection helpers.
 
 ### What “done enough” looks like
 

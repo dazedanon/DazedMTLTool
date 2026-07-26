@@ -14,7 +14,8 @@ This page is the overview.
 | **3 TL Phase 1** | Phase 0 DB → Phase 1 dialogue → Phase 1b code 111 cache |
 | **4 TL Phase 2** | Risky codes (122, plugins, etc.) after you audit |
 | **5 Export** | MV/MZ: `plugins.js` helpers. Ace: Ruby `.rb` scripts. Then export / pack |
-| **6 Playtest** | TL Inspector / Forge (MV/MZ; hidden for Ace) |
+| **6 Images** | Check image setup, then decrypt → AI translate → review → patch (MV/MZ) |
+| **7 Playtest** | TL Inspector / Forge (MV/MZ; hidden for Ace) |
 
 ## Example: first RPG Maker run
 
@@ -41,6 +42,24 @@ Project Setup's `speakers` block recommends ENABLE / SKIP with evidence.
 - On **Mistral** (free), stay on **Normal** mode - Batch is Claude-only.
 - Use **Normal** mode when you want live iteration on a handful of files.
 - Phase 2 can break games if you translate logic keys - audit with the Plugin Prompt first.
+
+## Images (Step 6, MV/MZ)
+
+Step 6 keeps the Image Manager on the separate **Images** page, but verifies that you are ready
+to use it:
+
+- Step 0 points to the actual game root containing `img/` or `www/img/`.
+- Encrypted projects have a valid key in `System.json`.
+- `<game>/vocab.txt` exists for the copied AI skill.
+- Editable PNGs are under `.dazedtl/images/<game-relative>/img/...`.
+- No PNGs were accidentally placed beside that expected `img/` tree.
+
+Click **Open Images**, decrypt the images you want to translate, then click **Copy skill** in the
+Image Manager and paste it into Codex, Cursor, Copilot, or a similar coding agent. Review the
+resulting PNGs before using **Patch selected** or **Patch all**.
+
+Do not edit the runtime images directly. The Image Manager maintains editable copies and patches
+the reviewed results back into the game.
 
 ## Ace note (Ruby scripts, not plugins.js)
 

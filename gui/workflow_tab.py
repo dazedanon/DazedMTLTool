@@ -9,7 +9,8 @@ Provides a guided, step-by-step interface:
   Step 3  – Translation: Phase 0 (DB), Phase 1 (dialogue), Phase 1b (111 cache)
   Step 4  – Translation Phase 2 (risky codes)
   Step 5  – Plugins.js prompt helpers + export translated/ to the game
-  Step 6  – Install TL Inspector and/or Forge playtest plugins
+  Step 6  – Prepare and translate editable bitmap UI images
+  Step 7  – Install TL Inspector and/or Forge playtest plugins
 """
 
 from __future__ import annotations
@@ -497,7 +498,19 @@ _STEP_HELP: dict[int, str] = {
         "• <b>Export ALL</b> - everything under <code>translated/</code>"
     ),
     6: (
-        "<b>Step 6 - Playtest</b><br><br>"
+        "<b>Step 6 - Images (MV/MZ)</b><br><br>"
+        "Use the existing <b>Images</b> page for bitmap UI translation:<br>"
+        "• Confirm this step reports the correct game root, image tree, encryption key, and "
+        "<code>vocab.txt</code><br>"
+        "• Open Images and decrypt the images you want to edit<br>"
+        "• Click <b>Copy skill</b>, paste it into Codex/Cursor/Copilot, and let the agent edit "
+        "only the generated <code>.dazedtl/images/.../img</code> copies<br>"
+        "• Review the results, then use <b>Patch selected</b> or <b>Patch all</b><br><br>"
+        "Editable PNGs must preserve the same <code>img/...</code> hierarchy as the game. "
+        "This step warns when PNGs were placed elsewhere in the workspace."
+    ),
+    7: (
+        "<b>Step 7 - Playtest</b><br><br>"
         "Install playtest plugins into the MV/MZ game:<br>"
         "• <b>TL Inspector</b> - inspect translated text in-game<br>"
         "• <b>Forge</b> - additional playtest helpers<br><br>"
@@ -634,6 +647,67 @@ def _make_icon_btn(icon_text: str, tooltip: str = "") -> QPushButton:
     return btn
 
 
+def _inspect_image_workflow(game_root: str | Path) -> dict:
+    """Return lightweight MV/MZ image-workflow readiness details."""
+    root = Path(game_root).expanduser().resolve()
+    report = {
+        "root": root,
+        "ok": False,
+        "error": "",
+        "runtime": 0,
+        "encrypted": 0,
+        "editable": 0,
+        "misplaced": 0,
+        "vocab": root / "vocab.txt",
+        "editable_root": None,
+        "key_ok": None,
+    }
+    try:
+        from util.rpgmaker_images import (
+            editable_workspace_root,
+            read_encryption_key,
+            resolve_content_root,
+            scan_image_assets,
+        )
+
+        content_root = resolve_content_root(root)
+        workspace = editable_workspace_root(root)
+        expected_root = workspace / content_root.relative_to(root) / "img"
+        assets = scan_image_assets(root)
+        encrypted = sum(asset.has_encrypted for asset in assets)
+        report.update(
+            {
+                "ok": True,
+                "runtime": sum(
+                    asset.has_encrypted or asset.has_runtime_plain for asset in assets
+                ),
+                "encrypted": encrypted,
+                "editable": sum(asset.has_plain for asset in assets),
+                "editable_root": expected_root,
+            }
+        )
+        if encrypted:
+            try:
+                read_encryption_key(root)
+                report["key_ok"] = True
+            except Exception:
+                report["key_ok"] = False
+
+        if workspace.is_dir():
+            misplaced = 0
+            for path in workspace.rglob("*"):
+                if not path.is_file() or path.suffix.casefold() != ".png":
+                    continue
+                try:
+                    path.relative_to(expected_root)
+                except ValueError:
+                    misplaced += 1
+            report["misplaced"] = misplaced
+    except Exception as exc:
+        report["error"] = str(exc)
+    return report
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Helpers
 # ─────────────────────────────────────────────────────────────────────────────
@@ -752,7 +826,8 @@ class WorkflowTab(QWidget):
             ("3  TL Phase 1",   self._build_step4_translation),
             ("4  TL Phase 2",   self._build_step5_tl_phase2),
             ("5  Export",       self._build_step5_finish),
-            ("6  Playtest",     self._build_step8_playtest),
+            ("6  Images",       self._build_step6_images),
+            ("7  Playtest",     self._build_step8_playtest),
         ]
         self._step_labels = [label for label, _ in _tab_defs]
 
@@ -924,6 +999,7 @@ class WorkflowTab(QWidget):
             "Phase1",
             "Phase2",
             "Export",
+            "Images",
             "Playtest",
         )
         name = short_names[idx] if 0 <= idx < len(short_names) else str(idx)
@@ -988,6 +1064,8 @@ class WorkflowTab(QWidget):
         if index == 4:
             self._populate_p2_checkboxes()
         if index == 6:
+            self._refresh_image_workflow_status()
+        if index == 7:
             self._refresh_playtest_status()
             self._load_playtest_settings()
 
@@ -2083,7 +2161,7 @@ class WorkflowTab(QWidget):
         )
         self._step6_vocab_btn.clicked.connect(self._copy_vocab_to_game)
 
-        self._step6_copy_btn = _make_btn("📋  Copy Prompt for Copilot", "#555")
+        self._step6_copy_btn = _make_btn("TL Plugins Skill", "#555")
         self._step6_copy_btn.setToolTip(
             "Copy a prompt that audits plugins.js and enabled plugin sources, asks what "
             "needs translation, then edits approved player-visible strings in place."
@@ -2115,11 +2193,93 @@ class WorkflowTab(QWidget):
         inner.addLayout(_labeled_row(export_lbl, export_active_btn, export_all_btn))
         layout.addWidget(box, 0, Qt.AlignLeft)
 
-    # ── Step 6: Playtest (TL Inspector) ─────────────────────────────────────
+    # ── Step 6: Editable images ─────────────────────────────────────────────
+
+    def _build_step6_images(self, layout: QVBoxLayout):
+        self._add_step_header(layout, "Step 6 — Images", 6)
+
+        intro = QLabel(
+            "Translate text embedded in RPG Maker MV/MZ images without moving the Image Manager. "
+            "This step verifies the project setup, then sends you to the Images page."
+        )
+        intro.setWordWrap(True)
+        intro.setStyleSheet("color:#b8b8b8;font-size:13px;padding-bottom:4px;")
+        layout.addWidget(intro)
+
+        status_box = QWidget()
+        status_box.setObjectName("tbox")
+        status_box.setStyleSheet(self._task_box_style())
+        status_layout = QVBoxLayout(status_box)
+        status_layout.setContentsMargins(14, 12, 14, 12)
+        status_layout.setSpacing(8)
+
+        status_title = QLabel("Setup check")
+        status_title.setStyleSheet("color:#4ec9b0;font-size:12px;font-weight:bold;")
+        status_layout.addWidget(status_title)
+
+        self._image_workflow_status = QLabel("Open this step to check image readiness.")
+        self._image_workflow_status.setWordWrap(True)
+        self._image_workflow_status.setTextFormat(Qt.RichText)
+        self._image_workflow_status.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        self._image_workflow_status.setStyleSheet(
+            "color:#c8c8c8;font-size:12px;line-height:1.4;"
+        )
+        status_layout.addWidget(self._image_workflow_status)
+
+        refresh_btn = _make_btn("↻  Refresh check", "#555")
+        refresh_btn.clicked.connect(self._refresh_image_workflow_status)
+        status_layout.addWidget(refresh_btn, 0, Qt.AlignLeft)
+        layout.addWidget(status_box)
+
+        flow_box = QWidget()
+        flow_box.setObjectName("tbox")
+        flow_box.setStyleSheet(self._task_box_style())
+        flow_layout = QVBoxLayout(flow_box)
+        flow_layout.setContentsMargins(14, 12, 14, 12)
+        flow_layout.setSpacing(8)
+
+        flow_title = QLabel("Image translation flow")
+        flow_title.setStyleSheet("color:#4ec9b0;font-size:12px;font-weight:bold;")
+        flow_layout.addWidget(flow_title)
+
+        flow_text = QLabel(
+            "1. Open Images and decrypt the source images into editable PNG copies.<br>"
+            "2. Click <b>Copy skill</b> in the Image Manager and paste it into your coding "
+            "agent.<br>"
+            "3. Review the translated PNGs in the Image Manager.<br>"
+            "4. Highlight finished images and click <b>Patch selected</b>, or clear highlights "
+            "and click <b>Patch all</b>."
+        )
+        flow_text.setWordWrap(True)
+        flow_text.setTextFormat(Qt.RichText)
+        flow_text.setStyleSheet("color:#c8c8c8;font-size:12px;")
+        flow_layout.addWidget(flow_text)
+
+        actions = QHBoxLayout()
+        actions.setSpacing(8)
+        copy_vocab_btn = _make_btn("📄  Copy vocab.txt → Game", "#555")
+        copy_vocab_btn.setToolTip(
+            "Copy the current glossary to <game root>/vocab.txt for the image translation skill."
+        )
+        copy_vocab_btn.clicked.connect(self._copy_vocab_to_game)
+        actions.addWidget(copy_vocab_btn)
+
+        self._open_images_btn = _make_btn("🖼  Open Images", "#3a5a7a")
+        self._open_images_btn.setToolTip(
+            "Open the existing Image Manager using the Step 0 game folder."
+        )
+        self._open_images_btn.clicked.connect(self._open_image_manager)
+        actions.addWidget(self._open_images_btn)
+        actions.addStretch()
+        flow_layout.addLayout(actions)
+        layout.addWidget(flow_box)
+        layout.addStretch()
+
+    # ── Step 7: Playtest (TL Inspector) ─────────────────────────────────────
 
     def _build_step8_playtest(self, layout: QVBoxLayout):
         self._step8_section_label = self._add_step_header(
-            layout, "Step 6 — Playtest Tools", 6
+            layout, "Step 7 — Playtest Tools", 7
         )
 
         settings_box = QWidget()
@@ -2353,6 +2513,117 @@ class WorkflowTab(QWidget):
 
         self._populate_tli_editor_combo()
         self._load_playtest_settings()
+
+    def _refresh_image_workflow_status(self):
+        """Check that Step 0 points at an MV/MZ root ready for image work."""
+        label = getattr(self, "_image_workflow_status", None)
+        button = getattr(self, "_open_images_btn", None)
+        if label is None:
+            return
+        if self._ace_encrypted or self._ace_rvdata_dir or self._ace_json_dir:
+            label.setText(
+                "<span style='color:#e9a12a'>⚠ Image Manager supports RPG Maker MV/MZ "
+                "projects only; this project is RPG Maker Ace.</span>"
+            )
+            if button is not None:
+                button.setEnabled(False)
+            return
+
+        game_root = self.folder_edit.text().strip()
+        if not game_root:
+            label.setText(
+                "<span style='color:#e9a12a'>⚠ Complete Step 0 and select the actual game "
+                "root first.</span>"
+            )
+            if button is not None:
+                button.setEnabled(False)
+            return
+
+        import html
+
+        report = _inspect_image_workflow(game_root)
+        if not report["ok"]:
+            label.setText(
+                "<span style='color:#f48771'>✗ The Step 0 folder is not ready for image "
+                f"management: {html.escape(report['error'])}</span><br>"
+                "Select the folder that directly contains <code>img/</code>, or contains "
+                "<code>www/img/</code>."
+            )
+            if button is not None:
+                button.setEnabled(False)
+            return
+
+        root = html.escape(str(report["root"]))
+        editable_root = html.escape(str(report["editable_root"]))
+        vocab = html.escape(str(report["vocab"]))
+        lines = [
+            f"<span style='color:#8fbc8f'>✓ Project root:</span> <code>{root}</code>",
+            f"<span style='color:#8fbc8f'>✓ Runtime images:</span> "
+            f"{report['runtime']:,} ({report['encrypted']:,} encrypted)",
+        ]
+        if report["key_ok"] is False:
+            lines.append(
+                "<span style='color:#f48771'>✗ Encryption key:</span> missing or invalid in "
+                "<code>System.json</code>; encrypted images cannot be decrypted."
+            )
+        elif report["key_ok"] is True:
+            lines.append("<span style='color:#8fbc8f'>✓ Encryption key:</span> ready")
+        else:
+            lines.append("<span style='color:#8fbc8f'>✓ Encryption key:</span> not required")
+
+        if Path(report["vocab"]).is_file():
+            lines.append(
+                f"<span style='color:#8fbc8f'>✓ Glossary:</span> <code>{vocab}</code>"
+            )
+        else:
+            lines.append(
+                "<span style='color:#e9a12a'>⚠ Glossary:</span> "
+                f"<code>{vocab}</code> is missing. Copy it before using the AI skill."
+            )
+
+        if report["editable"]:
+            lines.append(
+                f"<span style='color:#8fbc8f'>✓ Editable PNGs:</span> "
+                f"{report['editable']:,} under <code>{editable_root}</code>"
+            )
+        else:
+            lines.append(
+                "<span style='color:#9d9d9d'>• Editable PNGs:</span> none yet. Open Images "
+                "and decrypt the images you want to translate."
+            )
+
+        if report["misplaced"]:
+            lines.append(
+                f"<span style='color:#e9a12a'>⚠ Workspace layout:</span> "
+                f"{report['misplaced']:,} PNG(s) are outside <code>{editable_root}</code> and "
+                "will not appear in the Image Manager."
+            )
+        else:
+            lines.append(
+                "<span style='color:#8fbc8f'>✓ Workspace layout:</span> editable PNGs use "
+                "the expected game-relative hierarchy."
+            )
+        label.setText("<br>".join(lines))
+        if button is not None:
+            button.setEnabled(True)
+
+    def _open_image_manager(self):
+        """Open the Images page with the current Step 0 project root."""
+        game_root = self.folder_edit.text().strip()
+        report = _inspect_image_workflow(game_root) if game_root else {"ok": False}
+        if not report.get("ok"):
+            QMessageBox.warning(
+                self,
+                "Images Setup",
+                "Select a valid RPG Maker MV/MZ game root in Step 0 first.",
+            )
+            return
+        self._save_setting("last_game_folder", str(report["root"]))
+        parent = self.parent_window
+        if hasattr(parent, "switch_page"):
+            parent.switch_page(getattr(parent, "PAGE_IMAGES", 2))
+            return
+        self._log("⚠  Could not open the Images page from this window.")
 
     def _populate_tli_editor_combo(self, select: str | None = None):
         """Fill editor dropdown with auto-detect, found editors, and custom."""
@@ -2811,28 +3082,29 @@ class WorkflowTab(QWidget):
                     "Copy a prompt that audits plugins.js and enabled plugin sources, asks what "
                     "needs translation, then edits approved player-visible strings in place."
                 )
-        # Step 6 - TL Inspector (MV/MZ only; hidden for Ace)
-        show_playtest = not is_ace
-        playtest_idx = 6
-        if hasattr(self, "_step_tabs") and self._step_tabs.count() > playtest_idx:
-            if hasattr(self._step_tabs, "setTabVisible"):
-                self._step_tabs.setTabVisible(playtest_idx, show_playtest)
-            else:
-                self._step_tabs.setTabEnabled(playtest_idx, show_playtest)
-            if is_ace and self._step_tabs.currentIndex() == playtest_idx:
-                self._goto_step(5)
-        if hasattr(self, "_step_buttons") and len(self._step_buttons) > playtest_idx:
-            self._step_buttons[playtest_idx].setVisible(show_playtest)
-            self._step_buttons[playtest_idx].setEnabled(show_playtest)
+        # Steps 6–7 - Image Manager and playtest tools are MV/MZ only.
+        show_mvmz_tools = not is_ace
+        tool_indices = (6, 7)
+        for tool_idx in tool_indices:
+            if hasattr(self, "_step_tabs") and self._step_tabs.count() > tool_idx:
+                if hasattr(self._step_tabs, "setTabVisible"):
+                    self._step_tabs.setTabVisible(tool_idx, show_mvmz_tools)
+                else:
+                    self._step_tabs.setTabEnabled(tool_idx, show_mvmz_tools)
+            if hasattr(self, "_step_buttons") and len(self._step_buttons) > tool_idx:
+                self._step_buttons[tool_idx].setVisible(show_mvmz_tools)
+                self._step_buttons[tool_idx].setEnabled(show_mvmz_tools)
+        if is_ace and self._step_tabs.currentIndex() in tool_indices:
+            self._goto_step(5)
         self._refresh_step_strip()
         box = getattr(self, "_step8_playtest_box", None)
         install_both_btn = getattr(self, "_install_both_btn", None)
         if box is not None:
-            box.setVisible(not is_ace)
-            box.setEnabled(not is_ace)
+            box.setVisible(show_mvmz_tools)
+            box.setEnabled(show_mvmz_tools)
         if install_both_btn is not None:
-            install_both_btn.setVisible(not is_ace)
-        if not is_ace:
+            install_both_btn.setVisible(show_mvmz_tools)
+        if show_mvmz_tools:
             self._refresh_playtest_status()
 
     def _detect_folder(self):
@@ -3396,7 +3668,7 @@ class WorkflowTab(QWidget):
 
         src = VOCAB_PATH
         if not src.exists():
-            self._log("⚠  vocab.txt not found — save it in Step 3 first.")
+            self._log("⚠  vocab.txt not found — save it in Step 2 first.")
             return
 
         import shutil
@@ -3404,6 +3676,7 @@ class WorkflowTab(QWidget):
         try:
             shutil.copy2(src, dst)
             self._log(f"✅ vocab.txt copied to {dst}")
+            self._refresh_image_workflow_status()
         except Exception as exc:
             self._log(f"❌ Could not copy vocab.txt: {exc}")
 
