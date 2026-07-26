@@ -39,6 +39,7 @@ Produce localized images that:
 - Leave portraits and protected artwork pixel-identical when feasible.
 - Preserve empty spaces used for runtime-drawn values.
 - Fit translated text without clipping or collisions.
+- Preserve the distinct visual language and emphasis of every text role.
 - Retain recoverable originals.
 - Include a concise validation report.
 
@@ -76,9 +77,14 @@ Record:
 - Visible source-language text.
 - Repeated panel geometry.
 - Character art and other protected regions.
+- The visual treatment of each text role: font character, weight, fill or gradient, outline,
+  shadow, inner or outer glow, bloom, blur, opacity, offset, and antialiasing.
+- Whether each label is freestanding over the artwork or contained by an existing panel.
 
 Create a contact sheet when multiple variants share a layout. View each target at original
-resolution before choosing coordinates.
+resolution before choosing coordinates. Treat distinctive effects as required design constraints,
+not optional decoration. A luminous pink title, for example, must remain luminous and pink; flat
+white text or a newly invented dark pill is not an equivalent treatment.
 
 ### 4. Inspect runtime drawing logic
 
@@ -138,7 +144,9 @@ For each reconstructed panel, record its bounds, corner radius, fill color, opac
 border, and shadow.
 
 For each translated string, record its text, anchor or baseline, maximum permitted bounds,
-font file and size, fill, outline, shadow, alignment, and minimum padding.
+font file and size, fill or gradient, outline, shadow, inner and outer glow layers, blur radius,
+spread, opacity, offset, blend behavior, alignment, and minimum padding. Sample effect colors
+from the source and reproduce multi-layer effects in separate deterministic passes.
 
 For each protected region, record its bounds and required policy: pixel-identical, no text, or
 no overlap.
@@ -159,6 +167,11 @@ Replace enough of the panel to remove every source glyph. Avoid semi-transparent
 leave source text visible beneath them. Do not cover frame borders, portraits, or unrelated
 decoration.
 
+Preserve the original relationship between text and background. Do not add a backing rectangle,
+pill, card, or heavy shadow when the source text was freestanding. Reconstruct the background
+behind the old glyphs, then render the translation with an equivalent outline, glow, bloom, and
+layering. Only rebuild a panel when that panel was already part of the source design.
+
 ### 9. Fit typography
 
 Use real font metrics. Fit text in this order:
@@ -171,8 +184,10 @@ Use real font metrics. Fit text in this order:
 6. Shorten wording only when meaning remains accurate.
 7. Skip or request review if no safe fit exists.
 
-Use outlines or shadows consistent with the original asset. Preserve character-name colors and
-other meaningful visual distinctions.
+Reproduce outlines, shadows, glows, gradients, and translucency consistent with the original
+asset. Preserve character-name colors and other meaningful visual distinctions. When the exact
+font is unavailable, choose the closest font by shape and weight, but still match the original
+effect stack and visual prominence.
 
 ### 10. Protect dynamic values
 
@@ -200,6 +215,11 @@ Perform all applicable checks:
 - Inspect important images at original resolution.
 - Simulate dynamic values at their runtime coordinates.
 - Check for clipping, ghosted source glyphs, bad baselines, and collisions.
+- Compare source and candidate side by side at original resolution and at the intended runtime
+  scale. Confirm that glow color, halo footprint, contrast, translucency, and hierarchy retain
+  the same visual role and emphasis.
+- Reject generic replacement styling that makes a distinctive title or label look flatter,
+  darker, brighter, heavier, or more panel-bound than the source.
 - Verify the candidate came from the original, not another modified output.
 
 Do not install a candidate that fails a hard check.
@@ -233,6 +253,9 @@ Do not paste full image files, large encoded data, or unrelated source code.
 - Never use a translucent cover that leaves readable source glyphs beneath it.
 - Never assume blank space is unused when project source can be inspected.
 - Never substitute a font silently when exact layout depends on it.
+- Never discard a distinctive glow, gradient, outline, shadow, or transparency merely because
+  plain text is easier to render.
+- Never introduce a generic pill, panel, or badge behind freestanding source text.
 - Never install before reviewing the actual rendered candidate.
 - Never overwrite the only original.
 - Never claim pixel preservation without running a pixel comparison.
@@ -263,4 +286,5 @@ Consider the task complete only when:
 - Protected regions pass their required pixel checks.
 - Dynamic values have adequate space.
 - Visual inspection finds no clipping or source-text ghosts.
+- Every translated text role retains the source asset's visual identity and relative emphasis.
 - Originals remain recoverable.
