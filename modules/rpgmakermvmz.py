@@ -169,7 +169,7 @@ CODE356 = False
 CODE320 = False
 CODE324 = False
 CODE325 = False
-CODE111 = True
+CODE111 = False
 CODE108 = False
 
 # ─── Plugin Manager ──────────────────────────────────────────────────────────
@@ -217,6 +217,10 @@ PATTERNS_355655 = {
     "gameVariables.setValue": (r'\$gameVariables\.setValue\(\d+,\s*"([^"]*)"\)', False),
     "$gameVariables._data": (r"\$gameVariables\._data(?:\[[^\]]+\])+\s*=\s*['\"]((?:\\.|[^'\"\\])*)['\"]", False),
     "$gameMessage.add": (r"\$gameMessage\.add\(.+?\)(.+?)", True),
+    "if (BattleManager.canEscape())": (
+        r'\$gameMessage\.add\(\s*"((?:\\.|[^"\\])*)"\s*\)',
+        True,
+    ),
     "BattleManager._logWindow.push('addText'": (r"BattleManager._logWindow.push\('addText',\s'(.+)'\)", False),
     # Supports addText('msg'), addText("msg"), and addText(expr+'msg') where expr contains () e.g. .members()
     "BattleManager._logWindow.addText": (
@@ -236,7 +240,7 @@ PATTERNS_355655 = {
     "AddAddress": (r'AddAddress\(\d+,\s*\\?"(.+?)\\?"', False),
 }
 # Subset of PATTERNS_355655 keys that should be processed (empty = none).
-ENABLED_PATTERNS_355655: set = set()
+ENABLED_PATTERNS_355655: set = {"if (BattleManager.canEscape())"}
 
 
 def _pat355655_captured_text(match):
