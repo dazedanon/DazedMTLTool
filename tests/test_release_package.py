@@ -79,7 +79,8 @@ class ReleasePackageTests(unittest.TestCase):
             prefix = "Translated Game/"
             with zipfile.ZipFile(output) as archive:
                 names = set(archive.namelist())
-                archived_plugins = archive.read(prefix + "js/plugins.js").decode("utf-8")
+                archived_plugin_bytes = archive.read(prefix + "js/plugins.js")
+                archived_plugins = archived_plugin_bytes.decode("utf-8")
 
             for relative in (
                 "Game.exe",
@@ -92,6 +93,8 @@ class ReleasePackageTests(unittest.TestCase):
                 "gameupdate/patch.ps1",
                 "gameupdate/patch-config.txt",
                 "js/plugins/CorePlugin.js",
+                "js/plugins/TLInspector.js",
+                "js/plugins/Forge_MZ.js",
             ):
                 self.assertIn(prefix + relative, names)
 
@@ -111,17 +114,15 @@ class ReleasePackageTests(unittest.TestCase):
                 ".gitignore",
                 ".env",
                 "gameupdate/previous_patch_sha.txt",
-                "js/plugins/TLInspector.js",
-                "js/plugins/Forge_MZ.js",
             ):
                 self.assertNotIn(prefix + relative, names)
 
             self.assertIn('"name":"CorePlugin"', archived_plugins)
-            self.assertNotIn("TLInspector", archived_plugins)
-            self.assertNotIn("Forge_MZ", archived_plugins)
+            self.assertIn("TLInspector", archived_plugins)
+            self.assertIn("Forge_MZ", archived_plugins)
+            self.assertEqual(archived_plugin_bytes, plugins_js)
             self.assertEqual(source_plugins.read_bytes(), plugins_js)
             self.assertEqual(result.output_path, output.resolve())
-            self.assertEqual(result.sanitized_plugin_lists, 1)
             self.assertEqual(progress[-1][:2], (result.files_added, result.files_added))
 
     def test_release_path_must_be_outside_game_folder(self):

@@ -4397,8 +4397,6 @@ class WolfWorkflowTab(QWidget):
                 f"  Added {result.files_added} file(s), omitted "
                 f"{result.excluded_entries} tool/private item(s)."
             )
-            if result.sanitized_plugin_lists:
-                log("  Removed playtest plugins from the archived plugins.js.")
             return True, (
                 f"Created {result.output_path.name} ({size_mb:.1f} MB) at "
                 f"{result.output_path}."

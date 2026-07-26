@@ -526,7 +526,7 @@ _STEP_HELP: dict[int, str] = {
         "• <b>Export ALL</b> - everything under <code>translated/</code><br><br>"
         "<b>Create Public Release ZIP</b> packages the complete game beside its folder while "
         "omitting translator workspaces, VCS metadata, documentation, backups, saves, and "
-        "playtest plugins. GameUpdate files are kept."
+        "other tool artifacts. GameUpdate files and all installed plugins are kept."
     ),
     6: (
         "<b>Step 6 - Images (MV/MZ)</b><br><br>"
@@ -2228,7 +2228,7 @@ class WorkflowTab(QWidget):
         self._release_zip_btn = _make_btn("📦  Create Public Release ZIP", "#007acc")
         self._release_zip_btn.setToolTip(
             "Archive the detected game folder for players. Excludes DazedTL workspaces, "
-            "version-control files, documentation, backups, saves, and playtest plugins; "
+            "version-control files, documentation, backups, and saves; "
             "keeps GameUpdate files. The source game folder is not changed."
         )
         self._release_zip_btn.clicked.connect(self._create_public_release)
@@ -4211,8 +4211,6 @@ class WorkflowTab(QWidget):
             f"{result.files_added} file(s); omitted {result.excluded_entries} "
             "tool/private item(s)."
         )
-        if result.sanitized_plugin_lists:
-            message += " Removed playtest plugins from the archived plugins.js."
         self._log(f"✅ {message}")
         QMessageBox.information(
             self,

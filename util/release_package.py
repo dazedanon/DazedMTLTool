@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import codecs
 import os
-import re
 import tempfile
 import zipfile
 from dataclasses import dataclass
@@ -25,7 +23,6 @@ class ReleasePackageResult:
     files_added: int
     bytes_added: int
     excluded_entries: int
-    sanitized_plugin_lists: int
 
 
 # These are never game payloads and should be ignored wherever they occur.
@@ -91,16 +88,10 @@ _EXCLUDED_FILE_NAMES = frozenset(
         ".gitattributes",
         ".gitignore",
         "desktop.ini",
-        "forge_mv.bat",
-        "forge_mv.js",
-        "forge_mz.bat",
-        "forge_mz.js",
         "patch2.ps1",
         "patch2.sh",
         "previous_patch_sha.txt",
         "thumbs.db",
-        "tlinspector.bat",
-        "tlinspector.js",
     }
 )
 
@@ -115,8 +106,6 @@ _UPDATER_ROOT_FILE_NAMES = frozenset(
 
 _ROOT_DOCUMENT_SUFFIXES = frozenset({".doc", ".docx", ".markdown", ".md", ".pdf", ".rst"})
 _BACKUP_SUFFIXES = (".bak", ".backup", ".orig", ".tmp")
-_PLUGIN_LIST_PATHS = frozenset({"js/plugins.js", "www/js/plugins.js"})
-_PLAYTEST_PLUGIN_NAMES = ("TLInspector", "Forge_MV", "Forge_MZ")
 
 
 def default_release_zip_path(game_root: str | Path) -> Path:
@@ -205,67 +194,6 @@ def _iter_release_files(root: Path) -> tuple[list[tuple[Path, Path]], int]:
     return files, excluded
 
 
-def _remove_plugin_object(content: str, plugin_name: str) -> str:
-    """Remove one object from RPG Maker's JavaScript plugin-array syntax."""
-    marker = re.search(rf'"name"\s*:\s*"{re.escape(plugin_name)}"', content)
-    while marker:
-        start = content.rfind("{", 0, marker.start())
-        if start < 0:
-            raise ReleasePackageError(f"Could not remove {plugin_name} from plugins.js")
-        depth = 0
-        end = None
-        in_string = False
-        escaped = False
-        for index in range(start, len(content)):
-            char = content[index]
-            if in_string:
-                if escaped:
-                    escaped = False
-                elif char == "\\":
-                    escaped = True
-                elif char == '"':
-                    in_string = False
-                continue
-            if char == '"':
-                in_string = True
-            elif char == "{":
-                depth += 1
-            elif char == "}":
-                depth -= 1
-                if depth == 0:
-                    end = index + 1
-                    break
-        if end is None:
-            raise ReleasePackageError(f"Could not parse {plugin_name} in plugins.js")
-
-        before = content[:start].rstrip()
-        after = content[end:].lstrip()
-        if after.startswith(","):
-            after = after[1:].lstrip()
-        elif before.endswith(","):
-            before = before[:-1].rstrip()
-        separator = "\n" if before and after and not before.endswith("\n") else ""
-        content = before + separator + after
-        marker = re.search(rf'"name"\s*:\s*"{re.escape(plugin_name)}"', content)
-    return re.sub(r",(\s*)\];", r"\1];", content)
-
-
-def sanitize_plugins_js(raw: bytes) -> tuple[bytes, bool]:
-    """Remove DazedTL playtest entries while preserving the source file's BOM."""
-    had_bom = raw.startswith(codecs.BOM_UTF8)
-    try:
-        content = raw.decode("utf-8-sig")
-    except UnicodeDecodeError as exc:
-        raise ReleasePackageError(f"plugins.js is not valid UTF-8: {exc}") from exc
-    original = content
-    for plugin_name in _PLAYTEST_PLUGIN_NAMES:
-        content = _remove_plugin_object(content, plugin_name)
-    if content == original:
-        return raw, False
-    encoded = content.encode("utf-8")
-    return (codecs.BOM_UTF8 + encoded if had_bom else encoded), True
-
-
 def _archive_name(root: Path, relative: Path) -> str:
     return (Path(root.name or "game") / relative).as_posix()
 
@@ -306,7 +234,6 @@ def create_release_zip(
     temporary = Path(temporary_name)
     files_added = 0
     bytes_added = 0
-    sanitized = 0
     try:
         with zipfile.ZipFile(
             temporary,
@@ -319,16 +246,8 @@ def create_release_zip(
                 if progress:
                     progress(index, total, relative.as_posix())
                 arcname = _archive_name(root, relative)
-                if relative.as_posix().casefold() in _PLUGIN_LIST_PATHS:
-                    raw = source.read_bytes()
-                    payload, changed = sanitize_plugins_js(raw)
-                    info = zipfile.ZipInfo.from_file(source, arcname=arcname)
-                    archive.writestr(info, payload, compress_type=zipfile.ZIP_DEFLATED)
-                    sanitized += int(changed)
-                    bytes_added += len(payload)
-                else:
-                    archive.write(source, arcname=arcname)
-                    bytes_added += source.stat().st_size
+                archive.write(source, arcname=arcname)
+                bytes_added += source.stat().st_size
                 files_added += 1
         os.replace(temporary, output)
     except Exception:
@@ -340,5 +259,4 @@ def create_release_zip(
         files_added=files_added,
         bytes_added=bytes_added,
         excluded_entries=excluded,
-        sanitized_plugin_lists=sanitized,
     )
