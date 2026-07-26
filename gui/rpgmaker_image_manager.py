@@ -14,6 +14,7 @@ from PyQt5.QtCore import (
 )
 from PyQt5.QtGui import QColor, QDesktopServices, QIcon, QPixmap
 from PyQt5.QtWidgets import (
+    QApplication,
     QComboBox,
     QAbstractItemView,
     QFileDialog,
@@ -31,6 +32,7 @@ from PyQt5.QtWidgets import (
 )
 
 from util.paths import APP_NAME, ORG_NAME
+from util.skills import load_clipboard_skill
 
 from util.rpgmaker_images import (
     ImageAsset,
@@ -297,6 +299,12 @@ class RPGMakerImageManager(QWidget):
             "editable img root."
         )
         self.open_workspace_button.clicked.connect(self._open_editable_folder)
+        self.copy_translation_button = QPushButton("Copy skill")
+        self.copy_translation_button.setToolTip(
+            "Copy an agent-ready bitmap translation skill scoped to every PNG in the editable "
+            "image folder. Paste it into Codex, Cursor, Copilot, or a similar coding agent."
+        )
+        self.copy_translation_button.clicked.connect(self._copy_translation_skill)
         self.decrypt_selected_button = QPushButton("Decrypt")
         self.decrypt_selected_button.clicked.connect(self._decrypt_checked)
         self.decrypt_all_button = QPushButton("Decrypt all")
@@ -319,6 +327,7 @@ class RPGMakerImageManager(QWidget):
         self.prepare_button.clicked.connect(self._prepare_checked)
         action_buttons = (
             self.open_workspace_button,
+            self.copy_translation_button,
             self.decrypt_selected_button,
             self.decrypt_all_button,
             self.remove_button,
@@ -426,9 +435,9 @@ class RPGMakerImageManager(QWidget):
     def _scan_done(self, generation: int, assets: list[ImageAsset]) -> None:
         if generation != self._scan_generation:
             return
-        self._set_actions_enabled(True)
         self.assets = assets
         self.assets_by_id = {asset.asset_id: asset for asset in assets}
+        self._set_actions_enabled(True)
         self.selected_ids.intersection_update(self.assets_by_id)
         self.folder_combo.blockSignals(True)
         current_folder = self.folder_combo.currentData() or ""
@@ -632,6 +641,49 @@ class RPGMakerImageManager(QWidget):
         except Exception as exc:
             QMessageBox.warning(self, "Editable Image Folder", str(exc))
 
+    def _editable_image_root(self) -> Path:
+        if self.game_root is None:
+            raise ValueError("Select a game folder first.")
+        root = Path(self.game_root).expanduser().resolve()
+        content_relative = resolve_content_root(root).relative_to(root)
+        return editable_workspace_root(root) / content_relative / "img"
+
+    def _copy_translation_skill(self) -> None:
+        """Copy the bitmap-localization skill with paths for this project."""
+        editable_assets = self._editable_assets()
+        if not editable_assets:
+            QMessageBox.information(
+                self,
+                "No Editable Images",
+                "Decrypt one or more images before copying the translation skill.",
+            )
+            return
+        try:
+            if self.game_root is None:
+                raise ValueError("Select a game folder first.")
+            game_root = Path(self.game_root).expanduser().resolve()
+            replacements = {
+                "{{GAME_ROOT}}": str(game_root),
+                "{{EDITABLE_IMAGES_FOLDER}}": str(self._editable_image_root().resolve()),
+                "{{VOCAB_FILE}}": str(game_root / "vocab.txt"),
+            }
+            prompt = load_clipboard_skill("image_translation.md")
+            missing = [token for token in replacements if token not in prompt]
+            if missing:
+                raise ValueError(
+                    "Image translation skill is missing required placeholder(s): "
+                    + ", ".join(missing)
+                )
+            for token, value in replacements.items():
+                prompt = prompt.replace(token, value)
+            QApplication.clipboard().setText(prompt)
+            self.status_label.setText(
+                f"Copied image translation skill for {len(editable_assets):,} editable PNG(s): "
+                f"{self._editable_image_root()}"
+            )
+        except Exception as exc:
+            QMessageBox.warning(self, "Copy Image Translation Skill", str(exc))
+
     def _selected_assets(self) -> list[ImageAsset]:
         return [self.assets_by_id[key] for key in self.selected_ids if key in self.assets_by_id]
 
@@ -794,12 +846,14 @@ class RPGMakerImageManager(QWidget):
     def _set_actions_enabled(self, enabled: bool) -> None:
         for button in (
             self.open_workspace_button,
+            self.copy_translation_button,
             self.decrypt_selected_button,
             self.decrypt_all_button,
             self.remove_button,
             self.prepare_button,
         ):
             button.setEnabled(enabled)
+        self.copy_translation_button.setEnabled(enabled and bool(self._editable_assets()))
 
     def closeEvent(self, event) -> None:
         running = [

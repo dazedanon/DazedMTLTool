@@ -26,6 +26,7 @@ _SHIPPED_DATA_FILES = (
     "data/skills/wrap_config.md",
     "data/skills/plugin_translation.md",
     "data/skills/ace_script_translation.md",
+    "data/skills/image_translation.md",
     "data/skills/risky_codes.md",
     "data/skills/wolf_speakers.md",
     "data/help/index.json",

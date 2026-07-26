@@ -236,6 +236,7 @@ class RPGMakerImageManagerSelectionTests(unittest.TestCase):
     def test_bottom_controls_share_one_row_and_action_width(self):
         action_buttons = (
             self.manager.open_workspace_button,
+            self.manager.copy_translation_button,
             self.manager.decrypt_selected_button,
             self.manager.decrypt_all_button,
             self.manager.remove_button,
@@ -248,6 +249,44 @@ class RPGMakerImageManagerSelectionTests(unittest.TestCase):
         self.assertEqual(
             self.manager.previous_button.geometry().top(),
             self.manager.open_workspace_button.geometry().top(),
+        )
+
+    def test_translation_skill_is_enabled_only_for_editable_images(self):
+        self.assertFalse(self.manager.copy_translation_button.isEnabled())
+
+        asset = self.manager.assets[0]
+        asset.plain_path.parent.mkdir(parents=True, exist_ok=True)
+        asset.plain_path.write_bytes(asset.runtime_plain_path.read_bytes())
+        self.manager._start_scan()
+        self.manager._scan_worker.wait(5000)
+        self.app.processEvents()
+
+        self.assertTrue(self.manager.copy_translation_button.isEnabled())
+
+    def test_translation_skill_copies_project_specific_editable_folder(self):
+        asset = self.manager.assets[0]
+        asset.plain_path.parent.mkdir(parents=True, exist_ok=True)
+        asset.plain_path.write_bytes(asset.runtime_plain_path.read_bytes())
+        self.manager._start_scan()
+        self.manager._scan_worker.wait(5000)
+        self.app.processEvents()
+
+        QApplication.clipboard().clear()
+        self.manager.copy_translation_button.click()
+        prompt = QApplication.clipboard().text()
+
+        self.assertIn(str(self.game_root), prompt)
+        self.assertIn(str(self.game_root / ".dazedtl" / "images" / "img"), prompt)
+        self.assertIn(str(self.game_root / "vocab.txt"), prompt)
+        self.assertIn("authoritative glossary for every translation", prompt)
+        self.assertIn("deterministic raster backend", prompt)
+        self.assertIn("runtime value locations as protected keepout regions", prompt)
+        self.assertNotIn("{{GAME_ROOT}}", prompt)
+        self.assertNotIn("{{EDITABLE_IMAGES_FOLDER}}", prompt)
+        self.assertNotIn("{{VOCAB_FILE}}", prompt)
+        self.assertIn(
+            "Copied image translation skill for 1 editable PNG",
+            self.manager.status_label.text(),
         )
 
     def test_open_folder_uses_highlighted_images_editable_parent(self):

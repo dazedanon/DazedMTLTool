@@ -119,6 +119,17 @@ class SkillsTab(QWidget):
             is_json=False,
         )
         self._add_file_page(
+            key="image_translation",
+            tab_title="Image TL",
+            path=SKILLS_DIR / "image_translation.md",
+            hint=(
+                "Clipboard skill copied from the Image Manager for deterministic bitmap UI "
+                "localisation. Keep the {{GAME_ROOT}}, {{EDITABLE_IMAGES_FOLDER}}, and "
+                "{{VOCAB_FILE}} placeholders."
+            ),
+            is_json=False,
+        )
+        self._add_file_page(
             key="risky_codes",
             tab_title="Risky Codes",
             path=SKILLS_DIR / "risky_codes.md",

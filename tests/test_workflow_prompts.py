@@ -40,6 +40,7 @@ class WorkflowTranslationPromptTests(unittest.TestCase):
             "wrap_config.md",
             "plugin_translation.md",
             "ace_script_translation.md",
+            "image_translation.md",
             "risky_codes.md",
             "wolf_speakers.md",
         )
