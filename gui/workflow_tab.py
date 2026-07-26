@@ -371,6 +371,34 @@ class _FileCopyWorker(QThread):
         self.done.emit(copied, errors)
 
 
+class _ReleaseZipWorker(QThread):
+    """Build a sanitized public-release ZIP without blocking the GUI."""
+
+    done = pyqtSignal(object)
+    error = pyqtSignal(str)
+    progress = pyqtSignal(int, int, str)
+
+    def __init__(self, game_root: str, output_path: str):
+        super().__init__()
+        self.game_root = game_root
+        self.output_path = output_path
+
+    def run(self):
+        try:
+            from util.release_package import create_release_zip
+
+            result = create_release_zip(
+                self.game_root,
+                self.output_path,
+                progress=lambda current, total, label: self.progress.emit(
+                    current, total, label
+                ),
+            )
+            self.done.emit(result)
+        except Exception as exc:
+            self.error.emit(str(exc))
+
+
 class _JsFormatWorker(QThread):
     """Format a JavaScript file using jsbeautifier (pure Python, no Node required)."""
     done = pyqtSignal(bool, str)
@@ -495,7 +523,10 @@ _STEP_HELP: dict[int, str] = {
         "<b>Export</b> - copy finished translations from <code>translated/</code> back "
         "into the game's data folder:<br>"
         "• <b>Export Active Files</b> - only names currently in <code>files/</code><br>"
-        "• <b>Export ALL</b> - everything under <code>translated/</code>"
+        "• <b>Export ALL</b> - everything under <code>translated/</code><br><br>"
+        "<b>Create Public Release ZIP</b> packages the complete game beside its folder while "
+        "omitting translator workspaces, VCS metadata, documentation, backups, saves, and "
+        "playtest plugins. GameUpdate files are kept."
     ),
     6: (
         "<b>Step 6 - Images (MV/MZ)</b><br><br>"
@@ -746,6 +777,7 @@ class WorkflowTab(QWidget):
         self._current_step_index: int = 0
         self._last_import_signature: tuple[str, ...] | None = None
         self._pending_import_signature: tuple[str, ...] | None = None
+        self._release_zip_btn: QPushButton | None = None
 
         self._init_ui()
 
@@ -2191,6 +2223,16 @@ class WorkflowTab(QWidget):
         export_all_btn.clicked.connect(self._export_to_game)
 
         inner.addLayout(_labeled_row(export_lbl, export_active_btn, export_all_btn))
+
+        release_lbl = QLabel("Release")
+        self._release_zip_btn = _make_btn("📦  Create Public Release ZIP", "#007acc")
+        self._release_zip_btn.setToolTip(
+            "Archive the detected game folder for players. Excludes DazedTL workspaces, "
+            "version-control files, documentation, backups, saves, and playtest plugins; "
+            "keeps GameUpdate files. The source game folder is not changed."
+        )
+        self._release_zip_btn.clicked.connect(self._create_public_release)
+        inner.addLayout(_labeled_row(release_lbl, self._release_zip_btn))
         layout.addWidget(box, 0, Qt.AlignLeft)
 
     # ── Step 6: Editable images ─────────────────────────────────────────────
@@ -4114,6 +4156,69 @@ class WorkflowTab(QWidget):
         w.done.connect(self._on_export_done)
         self._worker = w
         w.start()
+
+    def _create_public_release(self):
+        game_root = self.folder_edit.text().strip()
+        if not game_root or not Path(game_root).is_dir():
+            QMessageBox.warning(
+                self,
+                "No game folder",
+                "Select and detect a game folder in Step 0 first.",
+            )
+            return
+        if self._worker is not None and self._worker.isRunning():
+            QMessageBox.information(self, "Busy", "A task is already running. Please wait.")
+            return
+
+        from util.release_package import default_release_zip_path
+
+        suggested = str(default_release_zip_path(game_root))
+        output, _ = QFileDialog.getSaveFileName(
+            self,
+            "Create Public Release ZIP",
+            suggested,
+            "ZIP archives (*.zip)",
+        )
+        if not output:
+            return
+
+        self._log(f"Creating public release ZIP from {game_root} …")
+        worker = _ReleaseZipWorker(game_root, output)
+        self._worker = worker
+        if self._release_zip_btn is not None:
+            self._release_zip_btn.setEnabled(False)
+
+        def finished():
+            if self._worker is worker:
+                self._worker = None
+            if self._release_zip_btn is not None:
+                self._release_zip_btn.setEnabled(True)
+
+        def failed(message: str):
+            self._log(f"❌ Public release ZIP: {message}")
+            QMessageBox.warning(self, "Release ZIP failed", message)
+
+        worker.done.connect(self._on_public_release_done)
+        worker.error.connect(failed)
+        worker.finished.connect(finished)
+        worker.finished.connect(worker.deleteLater)
+        worker.start()
+
+    def _on_public_release_done(self, result):
+        size_mb = result.output_path.stat().st_size / (1024 * 1024)
+        message = (
+            f"Created {result.output_path.name} ({size_mb:.1f} MB) with "
+            f"{result.files_added} file(s); omitted {result.excluded_entries} "
+            "tool/private item(s)."
+        )
+        if result.sanitized_plugin_lists:
+            message += " Removed playtest plugins from the archived plugins.js."
+        self._log(f"✅ {message}")
+        QMessageBox.information(
+            self,
+            "Public Release ZIP created",
+            f"{message}\n\nSaved to:\n{result.output_path}",
+        )
 
     def _resolve_export_path(self) -> str | None:
         """Return the game data path, prompting if not yet set."""

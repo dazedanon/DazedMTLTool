@@ -4284,6 +4284,19 @@ class WolfWorkflowTab(QWidget):
         ))
 
         layout.addWidget(_make_hr())
+        layout.addWidget(self._subheading("Public release"))
+        layout.addWidget(self._desc(
+            "Create a player-ready ZIP of the complete game. Translator workspaces, version "
+            "control, documentation, backups, saves, and other tool artifacts are omitted; "
+            "GameUpdate files remain available to players. The game folder is not modified."
+        ))
+        self._release_zip_btn = self._register(
+            _make_btn("📦  Create Public Release ZIP", "#007acc")
+        )
+        self._release_zip_btn.clicked.connect(self._create_public_release)
+        layout.addWidget(self._release_zip_btn)
+
+        layout.addWidget(_make_hr())
         layout.addWidget(self._subheading("Update existing saves (optional)"))
         layout.addWidget(self._desc(
             "WOLF .sav files bake in the game title and some strings at save time. Rewrite "
@@ -4353,6 +4366,43 @@ class WolfWorkflowTab(QWidget):
             if not res.ok:
                 return False, f"pack exited {res.returncode}"
             return True, f"Wrote {output.name}."
+
+        self._run_task(task)
+
+    def _create_public_release(self):
+        if not self._require_root():
+            return
+
+        from util.release_package import default_release_zip_path
+
+        suggested = str(default_release_zip_path(self._game_root))
+        output, _ = QFileDialog.getSaveFileName(
+            self,
+            "Create Public Release ZIP",
+            suggested,
+            "ZIP archives (*.zip)",
+        )
+        if not output:
+            return
+
+        game_root = self._game_root
+
+        def task(log, progress=None):
+            from util.release_package import create_release_zip
+
+            log(f"Creating public release ZIP from {game_root} …")
+            result = create_release_zip(game_root, output, progress=progress)
+            size_mb = result.output_path.stat().st_size / (1024 * 1024)
+            log(
+                f"  Added {result.files_added} file(s), omitted "
+                f"{result.excluded_entries} tool/private item(s)."
+            )
+            if result.sanitized_plugin_lists:
+                log("  Removed playtest plugins from the archived plugins.js.")
+            return True, (
+                f"Created {result.output_path.name} ({size_mb:.1f} MB) at "
+                f"{result.output_path}."
+            )
 
         self._run_task(task)
 
