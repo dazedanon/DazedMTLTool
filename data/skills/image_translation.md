@@ -20,10 +20,11 @@ capitalization, and style consistently. If it is missing or does not cover a ter
 gap and follow the remaining translation precedence below.
 
 The user approves deterministic edits to the PNGs already present under the editable image
-folder. Do not modify runtime game images or any other project files; the Image Manager will
-patch validated edits later. Store backups and temporary candidates outside the editable image
-folder so they cannot be mistaken for patchable assets. Work through all editable PNGs without
-asking for confirmation unless a hard safety rule below requires review.
+folder and creation or update of the single work log required below. Do not modify runtime game
+images or any other project files; the Image Manager will patch validated edits later. Store
+backups and temporary candidates outside the editable image folder so they cannot be mistaken for
+patchable assets. Work through all editable PNGs without asking for confirmation unless a hard
+safety rule below requires review.
 
 Runtime assets may be read, decoded, or decrypted in memory or into an isolated temporary
 directory when needed to reconstruct an editable image. This does not authorize modifying those
@@ -48,6 +49,7 @@ Produce localized images that:
 - Preserve meaningful background illustrations, including faint watermarks and art visible only
   through a translucent reading surface.
 - Retain recoverable originals.
+- Maintain one concise Markdown work log covering every image and text region reviewed.
 - Include a concise validation report.
 
 ## Workflow
@@ -61,8 +63,8 @@ Recursively enumerate the PNGs in the editable image folder. Identify:
 - Related image variants that share a layout.
 - Images without player-visible text, which must remain untouched.
 
-The task context grants editing authority only for existing PNGs inside the editable image
-folder.
+The task context grants editing authority only for existing PNGs inside the editable image folder
+and its single required `image_translation_log.md` file.
 
 ### 2. Preserve originals
 
@@ -306,7 +308,31 @@ After validation:
 - Re-run structural checks on the installed file.
 - Hash the installed result when reproducibility matters.
 
-### 15. Report concisely
+### 15. Write the image work log
+
+Create or update exactly one UTF-8 Markdown log at:
+
+`{{EDITABLE_IMAGES_FOLDER}}/image_translation_log.md`
+
+Keep the log lightweight and reviewable. Do not create per-image logs or embed images, binary
+data, or long command output. Include a short run summary with the backup location and validation
+status, followed by one table row per text region with these columns:
+
+| Image | Region / role | Coordinates `(x, y, width, height)` | Original text | Translated text | Disposition | Notes |
+| --- | --- | --- | --- | --- | --- | --- |
+
+Use image paths relative to the editable image folder and source-image pixel coordinates. Use a
+disposition such as `translated`, `preserved`, `skipped`, or `review`. Keep notes brief, recording
+only useful context such as a dynamic-value keepout, glossary gap, reconstruction method, or
+validation concern. Add one image-level row with `none` coordinates for a reviewed image that has
+no player-visible text, so the log accounts for every PNG in scope.
+
+If the log already exists, update or replace stale rows for images processed in the current run
+instead of duplicating them. Preserve still-relevant rows for images outside the current run.
+Escape Markdown table separators and represent intentional line breaks with `<br>` so the table
+remains readable.
+
+### 16. Report concisely
 
 Report:
 
@@ -316,6 +342,7 @@ Report:
 - Preserved dynamic or ambiguous elements.
 - Backup location.
 - Validation performed.
+- Work-log location.
 
 Do not paste full image files, large encoded data, or unrelated source code.
 
@@ -337,7 +364,8 @@ Do not paste full image files, large encoded data, or unrelated source code.
 - Never overwrite the only original.
 - Never claim pixel preservation without running a pixel comparison.
 - Never modify files outside the editable image folder except for isolated backup and temporary
-  validation artifacts.
+  validation artifacts. Inside the editable image folder, create no new non-image artifact except
+  the single required `image_translation_log.md` work log.
 
 ## Decision rules
 
@@ -375,3 +403,5 @@ Consider the task complete only when:
   correct progression state.
 - Every translated text role retains the source asset's visual identity and relative emphasis.
 - Originals remain recoverable.
+- `image_translation_log.md` accounts for every reviewed image and text region without duplicate
+  current-run entries.
