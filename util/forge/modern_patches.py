@@ -22,6 +22,9 @@ _MODIFIER_ALIASES = {
 _TOGGLE_UI_KEYSTR_RE = re.compile(
     r"(id:`toggle_ui`,name:`Toggle Cheat UI`,desc:`Show/Hide the cheat panel`,keyStr:`)[^`]+(`)"
 )
+_SHOW_LAUNCHER_DEFAULT_RE = re.compile(
+    r"(favorites:\{\},showLauncher:)![01](,quickSaveSlot:1)"
+)
 
 
 def forge_key_str(hotkey: str) -> str:
@@ -80,6 +83,13 @@ def _bootstrap_js(hotkey: str, ui_scale: str) -> str:
     saved.toggle_ui = Object.assign({{}}, saved.toggle_ui, {{ keyStr: toggleKey, enabled: true }});
     localStorage.setItem("forge:shortcuts", JSON.stringify(saved));
   }} catch (e) {{}}
+  // The keyboard shortcut is always available, so keep the floating launcher
+  // hidden even when an older Forge install saved it as enabled.
+  try {{
+    var config = JSON.parse(localStorage.getItem("forge:config") || "{{}}");
+    config.showLauncher = false;
+    localStorage.setItem("forge:config", JSON.stringify(config));
+  }} catch (e) {{}}
   function resolveUiScale(v) {{
     if (v !== "auto" && v != null && String(v).trim() !== "") {{
       var n = parseFloat(v);
@@ -133,6 +143,14 @@ def _patch_toggle_ui_default(text: str, hotkey: str) -> str:
     return text
 
 
+def _disable_launcher_default(text: str) -> str:
+    """Hide modern Forge's floating launcher; the toggle shortcut remains active."""
+    text, n = _SHOW_LAUNCHER_DEFAULT_RE.subn(r"\g<1>!1\2", text, count=1)
+    if n == 0:
+        raise ValueError("Could not disable modern Forge launcher default")
+    return text
+
+
 def _patch_keycode_reads(text: str) -> str:
     """Route Forge shortcut key reads through the keyCode polyfill."""
     replacements = [
@@ -162,6 +180,7 @@ def apply_modern_forge_patches(text: str, hotkey: str, ui_scale: str) -> str:
     """Inject Dazed hotkey / UI-scale bootstrap and harden shortcut handling."""
     text = _strip_existing_bootstrap(text)
     text = _patch_toggle_ui_default(text, hotkey)
+    text = _disable_launcher_default(text)
     text = _patch_keycode_reads(text)
     bootstrap = _bootstrap_js(hotkey, ui_scale)
     match = re.search(r"\*/\s*\n", text)

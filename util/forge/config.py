@@ -150,6 +150,18 @@ def _patch_forge_runtime(forge_text: str, hotkey: str, ui_scale: str, engine: st
     return forge_text
 
 
+def _remove_legacy_launcher(forge_text: str) -> str:
+    """Keep legacy Forge shortcut-only by leaving its launcher detached."""
+    marker = "    rootEl.appendChild(launcher);"
+    if forge_text.count(marker) != 1:
+        raise ValueError("Could not disable legacy Forge launcher")
+    return forge_text.replace(
+        marker,
+        "    // Floating launcher disabled; use the configured Forge shortcut.",
+        1,
+    )
+
+
 def is_legacy_forge_plugin(text: str) -> bool:
     """True for pre-rewrite Forge_MV/MZ plugins with RPG Maker @param blocks."""
     return "@param Hotkey" in text or "@param hotkey" in text
@@ -171,6 +183,7 @@ def prepare_forge_js(engine: str, source: Path | None = None, cfg: dict | None =
     text = _patch_forge_ui_scale_default(text, str(ui_scale), engine)
     text = _patch_forge_mtc_defaults(text, hotkey, str(ui_scale))
     text = _patch_forge_runtime(text, hotkey, str(ui_scale), engine)
+    text = _remove_legacy_launcher(text)
     return text
 
 
