@@ -14,9 +14,11 @@ from util.image_manager import (
     make_profile_assets_editable,
     prepare_plain_assets_for_patch,
     prepare_profile_assets_for_patch,
+    preview_profile_png_bytes,
     registered_image_profiles,
     scan_generic_image_assets,
     scan_profile_assets,
+    thumbnail_profile_png_bytes,
 )
 from util.rpgmaker_images import decrypt_image_bytes, encrypt_image_bytes
 
@@ -160,6 +162,31 @@ class GenericImageManagerTests(unittest.TestCase):
 
         self.assertFalse((self.root / ".dazedtl").exists())
         self.assertFalse((self.root / ".gitignore").exists())
+
+    def test_preview_strips_icc_profile_without_changing_source(self):
+        output = BytesIO()
+        Image.new("RGBA", (10, 8), "red").save(
+            output, format="PNG", icc_profile=b"outdated sRGB profile"
+        )
+        source = output.getvalue()
+        self.source.write_bytes(source)
+        asset = scan_generic_image_assets(self.root, self.root / "assets")[0]
+
+        preview = preview_profile_png_bytes(PROFILE_GENERIC, asset, None)
+        thumbnail = thumbnail_profile_png_bytes(PROFILE_GENERIC, asset, None)
+
+        self.assertIn(b"iCCP", source)
+        self.assertNotIn(b"iCCP", preview)
+        self.assertNotIn(b"iCCP", thumbnail)
+        self.assertEqual(self.source.read_bytes(), source)
+        with Image.open(BytesIO(preview)) as image:
+            self.assertEqual(image.getpixel((0, 0)), (255, 0, 0, 255))
+
+    def test_preview_leaves_png_without_icc_profile_byte_identical(self):
+        source = self.source.read_bytes()
+        asset = scan_generic_image_assets(self.root, self.root / "assets")[0]
+
+        self.assertEqual(preview_profile_png_bytes(PROFILE_GENERIC, asset, None), source)
 
 
 class ImageEngineDetectionTests(unittest.TestCase):

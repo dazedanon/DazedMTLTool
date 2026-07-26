@@ -19,6 +19,7 @@ PROFILE_RPGMAKER_MVMZ = "rpgmaker_mvmz"
 PROFILE_GENERIC = "generic"
 SUPPORTED_PLAIN_EXTENSIONS = (".png",)
 _EXCLUDED_SCAN_DIRS = {".dazedtl", ".git", "__pycache__"}
+_PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 
 
 @dataclass(frozen=True)
@@ -659,18 +660,47 @@ def prepare_profile_assets_for_patch(
     raise ValueError(f"Unsupported image engine profile: {engine_id}")
 
 
+def _strip_png_iccp_for_display(data: bytes) -> bytes:
+    """Remove embedded ICC metadata from display bytes without touching the source PNG."""
+
+    if not data.startswith(_PNG_SIGNATURE):
+        return data
+
+    offset = len(_PNG_SIGNATURE)
+    output = bytearray(_PNG_SIGNATURE)
+    removed = False
+    while offset + 12 <= len(data):
+        length = int.from_bytes(data[offset : offset + 4], "big")
+        chunk_end = offset + 12 + length
+        if chunk_end > len(data):
+            return data
+        chunk_type = data[offset + 4 : offset + 8]
+        if chunk_type == b"iCCP":
+            removed = True
+        else:
+            output.extend(data[offset:chunk_end])
+        offset = chunk_end
+        if chunk_type == b"IEND":
+            output.extend(data[offset:])
+            return bytes(output) if removed else data
+
+    return data
+
+
 def preview_profile_png_bytes(
     engine_id: str, asset: ImageAsset, key: bytes | None
 ) -> bytes:
     if engine_id == PROFILE_RPGMAKER_MVMZ:
         from util.rpgmaker_images import preview_png_bytes
 
-        return preview_png_bytes(asset, key)
-    if asset.has_plain:
-        return asset.plain_path.read_bytes()
-    if asset.has_runtime_plain:
-        return asset.runtime_plain_path.read_bytes()
-    raise FileNotFoundError(asset.runtime_plain_path or asset.plain_path)
+        raw = preview_png_bytes(asset, key)
+    elif asset.has_plain:
+        raw = asset.plain_path.read_bytes()
+    elif asset.has_runtime_plain:
+        raw = asset.runtime_plain_path.read_bytes()
+    else:
+        raise FileNotFoundError(asset.runtime_plain_path or asset.plain_path)
+    return _strip_png_iccp_for_display(raw)
 
 
 def thumbnail_profile_png_bytes(
