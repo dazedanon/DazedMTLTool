@@ -85,50 +85,44 @@ LEAVE = False
 
 # Config (Default)
 # FIRSTLINESPEAKERS: Guess speaker from first line.
-FIRSTLINESPEAKERS = True
+FIRSTLINESPEAKERS = False
 # INLINE401SPEAKERS: Extract speaker from "Name「dialogue」" inline format on 401 lines.
 INLINE401SPEAKERS = False
 # FACENAME101: Map face name -> speaker.
-FACENAME101 = False
+FACENAME101 = True
 # Face name -> speaker mapping for FACENAME101.
 # Matching: if face string contains "_talk", split on it and look up the prefix;
 # otherwise try startswith against each key (longest key first).
 FACENAME101_MAP = {
-    "aglo": "Agro",
-    "Ai": "AI",
-    "cron": "Cron",
-    "diado": "Diad",
-    "doctor": "Doctor",
-    "dragon": "Dragon",
-    "dragonpeaple": "Dragonpeople",
-    "Eno": "Eno",
-    "fight": "Fight",
-    "kajua": "Kajua",
-    "last_boss": "Last Boss",
-    "MC": "MC",
-    "mizel": "Mizel",
-    "peaple": "People",
-    "professor": "Professor",
-    "ReceptionWoman": "ReceptionWoman",
-    "risa": "Risalue",
-    "roma": "Romasha",
-    "romasha": "Romasha",
-    "spina_dragonewt": "Spina Dragonewt",
-    "spina": "Spina",
-    "supi": "Supi",
-    "TMob": "TMob",
-    "TMobBlue": "TMobBlue",
-    "TMobGreen": "TMobGreen",
-    "TMobOrange": "TMobOrange",
-    "TMobPink": "TMobPink",
-    "TMobsyota": "TMobsyota",
-    "TMobYellow": "TMobYellow",
-    "TMobZERO": "TMobZERO",
-    "Trash": "Trash",
-    "underpeaple": "Underpeople",
-    "vanila": "Vanilla",
-    "Yudo": "Yudonge",
-    "zizi": "Zizi",
+    "_Daijin": "Minister",
+    "__HA": "Count Bampton",
+    "__Labyrinth": "Labyrinth",
+    "___Nimurda": "Nimurda",
+    "___Ren": "Ren",
+    "___prince": "Prince Elliot",
+    "___princess1": "Lilifa",
+    "___princess2": "Lilifa",
+    "___princess2_2": "Lilifa",
+    "___princess3": "Lilifa",
+    "___princess4": "Lilifa",
+    "___princess5": "Lilifa",
+    "__opHA": "Count Bampton",
+    "__opRen": "Ren",
+    "__opλ": "Lambda",
+    "__λ": "Lambda",
+    "_girl": "Receptionist",
+    "_guard_F": "Female Guard",
+    "_guard_M": "Guard",
+    "_guard_M1": "Guard 1",
+    "_guard_M10": "Guard 2",
+    "_king": "King",
+    "_knight": "Guard 3",
+    "_made1": "Maid 3",
+    "_made2": "Maid 2",
+    "_made3": "Maid 1",
+    "_queen": "Queen",
+    "_toy": "Toy Store Manager",
+    "made2": "Maid 2",
 }
 # Pre-sorted by key length descending so longer prefixes match first.
 FACENAME101_MAP_SORTED = sorted(FACENAME101_MAP.items(), key=lambda x: len(x[0]), reverse=True)
@@ -682,6 +676,33 @@ def _101_speaker_name(raw_name: str) -> str:
         return bracketed.group(1).strip()
     plain = re.match(r"^([^\\]+)", name)
     return plain.group(1).strip() if plain else ""
+
+
+def _facename101_speaker(cmd) -> str | None:
+    """Resolve an unnamed code-101 speaker from its face filename."""
+    params = cmd.get("parameters") or []
+    if len(params) == 0:
+        return None
+
+    # The face is only a fallback. An explicit name-window value is more
+    # authoritative, even when the face filename also has a known prefix.
+    if len(params) > 4 and _101_speaker_name(params[4]):
+        return None
+
+    face_name = params[0]
+    if not isinstance(face_name, str) or not face_name:
+        return None
+
+    if "_talk" in face_name:
+        prefix = face_name.split("_talk", 1)[0]
+        matched = FACENAME101_MAP.get(prefix)
+        if matched is not None:
+            return matched
+
+    for prefix, name in FACENAME101_MAP_SORTED:
+        if face_name.startswith(prefix):
+            return name
+    return None
 
 
 def _entry_orig(entry) -> dict:
@@ -3139,27 +3160,12 @@ def searchCodes(page, pbar, jobList, filename):
                 isVar = False
 
                 # Check for face name mappings first (before other processing)
-                if FACENAME101 and len(codeList[i]["parameters"]) > 0:
-                    faceName = codeList[i]["parameters"][0]
-                    if isinstance(faceName, str) and faceName:
-                        matchedSpeaker = None
-
-                        # 1) _talk_ pattern: split on "_talk" and exact-match the prefix
-                        if "_talk" in faceName:
-                            prefix = faceName.split("_talk")[0]
-                            matchedSpeaker = FACENAME101_MAP.get(prefix)
-
-                        # 2) Longest-prefix startswith match
-                        if matchedSpeaker is None:
-                            for prefix, name in FACENAME101_MAP_SORTED:
-                                if faceName.startswith(prefix):
-                                    matchedSpeaker = name
-                                    break
-
-                        if matchedSpeaker is not None:
-                            speaker = matchedSpeaker
-                            i += 1
-                            continue
+                if FACENAME101:
+                    matchedSpeaker = _facename101_speaker(codeList[i])
+                    if matchedSpeaker is not None:
+                        speaker = matchedSpeaker
+                        i += 1
+                        continue
 
                 # Grab String
                 jaString = ""
