@@ -112,7 +112,13 @@ def _resolve_case_command(page_list, entry, marked_cases=None):
     return cmd
 
 
-def _run_search_codes(page, *, preserve_original=True, speaker_fn=None):
+def _run_search_codes(
+    page,
+    *,
+    preserve_original=True,
+    speaker_fn=None,
+    ignore_tl_text=False,
+):
     """Full Pass 1 -> mock translate -> Pass 2 cycle."""
     captured = []
 
@@ -132,6 +138,7 @@ def _run_search_codes(page, *, preserve_original=True, speaker_fn=None):
     orig_405 = mvmz.CODE405
     orig_102 = mvmz.CODE102
     orig_preserve = mvmz.PRESERVEORIGINAL
+    orig_ignore = mvmz.IGNORETLTEXT
     mvmz.translateAI = translate
     mvmz.getSpeaker = speaker
     mvmz.CODE122 = True
@@ -141,6 +148,7 @@ def _run_search_codes(page, *, preserve_original=True, speaker_fn=None):
     mvmz.CODE405 = True
     mvmz.CODE102 = True
     mvmz.PRESERVEORIGINAL = preserve_original
+    mvmz.IGNORETLTEXT = ignore_tl_text
     try:
         page_copy = copy.deepcopy(page)
         mvmz.searchCodes(page_copy, None, [], "TestMap.json")
@@ -155,6 +163,7 @@ def _run_search_codes(page, *, preserve_original=True, speaker_fn=None):
         mvmz.CODE405 = orig_405
         mvmz.CODE102 = orig_102
         mvmz.PRESERVEORIGINAL = orig_preserve
+        mvmz.IGNORETLTEXT = orig_ignore
 
 
 def _find_commands(page, code):
@@ -193,6 +202,28 @@ class TestMVMZSourceOriginal(unittest.TestCase):
         c122 = _find_commands(page, 122)[0]
         self.assertEqual(c122["_original"], "変数テスト")
         self.assertIn("EN_TRANSLATED", c122["parameters"][4])
+
+    def test_skip_translated_uses_current_commands_not_original(self):
+        translated, _ = _run_search_codes(
+            _load_map_excerpt(),
+            speaker_fn=lambda _name: ["Alice", [0, 0]],
+        )
+        visible_before = copy.deepcopy(translated)
+        speakers_seen = []
+
+        def speaker(name):
+            speakers_seen.append(name)
+            return _mock_speaker(name)
+
+        result, captured = _run_search_codes(
+            translated,
+            ignore_tl_text=True,
+            speaker_fn=speaker,
+        )
+
+        self.assertEqual(captured, [])
+        self.assertEqual(speakers_seen, [])
+        self.assertEqual(result, visible_before)
 
     def test_101_display_brackets_do_not_leak_into_401_dialogue(self):
         speakers_seen = []
