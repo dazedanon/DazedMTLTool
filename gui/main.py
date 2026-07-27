@@ -1180,6 +1180,10 @@ class DazedMTLGUI(QMainWindow):
             config = self.config_tab.get_config()
             font_scale = config.get("font_scale", 1.0)
             self.apply_font_scaling(font_scale)
+            for tab in (self.translation_tab, self.workflow_tab, self.wolf_workflow_tab):
+                refresh_mode = getattr(tab, "refresh_default_translation_mode", None)
+                if callable(refresh_mode):
+                    refresh_mode()
         except Exception as e:
             print(f"Warning: Could not apply configuration changes: {e}")
             

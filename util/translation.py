@@ -102,7 +102,7 @@ def isClaudeModel(model):
     return bool(model) and any(x in model.lower() for x in ("claude", "sonnet", "haiku", "opus"))
 
 
-def isClaudeNative(model):
+def isClaudeNative(model, api_url=None):
     """True when this model routes to the native Anthropic SDK.
 
     Mirrors the routing check in translateText: the model must look like Claude
@@ -110,7 +110,7 @@ def isClaudeNative(model):
     other custom URL (e.g. DeepSeek, OpenAI proxy) uses the OpenAI-compatible
     path even for Claude-named models.
     """
-    live_api = os.getenv("api", "").strip()
+    live_api = os.getenv("api", "").strip() if api_url is None else str(api_url).strip()
     return isClaudeModel(model) and (not live_api or "anthropic" in live_api.lower())
 
 

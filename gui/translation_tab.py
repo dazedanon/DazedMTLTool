@@ -22,7 +22,7 @@ import re
 from importlib import import_module
 from colorama import Fore
 from tqdm import tqdm
-from dotenv import load_dotenv
+from dotenv import dotenv_values, load_dotenv
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QGroupBox,
     QTextEdit, QMessageBox, QListWidget, QListWidgetItem,
@@ -34,7 +34,7 @@ from PyQt5.QtCore import Qt, QTimer, pyqtSignal, QThread, QMutex, QProcess, QEve
 from PyQt5.QtGui import QFont, QColor, QBrush
 from gui.log_viewer import LogViewer
 from gui import qt_icons
-from util.paths import APP_NAME, ORG_NAME
+from util.paths import APP_NAME, ORG_NAME, PROJECT_ROOT
 
 
 def _strip_ansi(text):
@@ -74,6 +74,22 @@ BATCH_COLLECT_LIVE_CHARGE_NOTE = (
     "API rates right away (not batched). Dialogue is queued for the batch and billed "
     "only after you confirm the estimate."
 )
+
+_CONFIG_UNSET = object()
+
+
+def default_translation_mode(model=_CONFIG_UNSET, api_url=_CONFIG_UNSET) -> str:
+    """Choose Batch only when the configured model supports native Claude batches."""
+    if model is _CONFIG_UNSET or api_url is _CONFIG_UNSET:
+        env = dotenv_values(PROJECT_ROOT / ".env") if (PROJECT_ROOT / ".env").exists() else {}
+        if model is _CONFIG_UNSET:
+            model = env.get("model", os.getenv("model", ""))
+        if api_url is _CONFIG_UNSET:
+            api_url = env.get("api", os.getenv("api", ""))
+
+    from util.translation import isClaudeNative
+
+    return BATCH_MODE_LABEL if isClaudeNative(str(model or ""), api_url) else "Translate"
 
 
 TRANSLATION_MODULE_SPECS = (
@@ -940,6 +956,8 @@ class TranslationTab(QWidget):
         self._batch_ui_phase = None
         self._batch_consume_started = False
         self._batch_tab_index = -1
+        self._mode_user_selected = False
+        self._last_default_translation_mode = None
         
         self.setup_ui()
         self.setup_module_list()
@@ -1627,6 +1645,7 @@ class TranslationTab(QWidget):
         self.mode_combo.addItem(BATCH_MODE_LABEL)
         self.mode_combo.setFixedWidth(300)
         self.mode_combo.currentTextChanged.connect(self._on_mode_changed)
+        self.mode_combo.activated.connect(self._mark_mode_user_selected)
         trans_form.addRow(mode_label, self.mode_combo)
 
         self.batch_mode_note = QLabel(
@@ -1662,7 +1681,7 @@ class TranslationTab(QWidget):
         button_layout.addStretch()
         layout.addLayout(button_layout)
 
-        self.mode_combo.setCurrentIndex(self.mode_combo.findText(BATCH_MODE_LABEL))
+        self.refresh_default_translation_mode(force=True)
         left_widget.setLayout(layout)
         
         # Right side - translation history log viewer
@@ -1748,8 +1767,8 @@ class TranslationTab(QWidget):
         if index >= 0:
             self.mode_combo.setCurrentIndex(index)
         else:
-            batch_idx = self.mode_combo.findText(BATCH_MODE_LABEL)
-            self.mode_combo.setCurrentIndex(batch_idx if batch_idx >= 0 else 0)
+            default_idx = self.mode_combo.findText(default_translation_mode())
+            self.mode_combo.setCurrentIndex(default_idx if default_idx >= 0 else 0)
         
         # Refresh file list to show only files matching the selected module's extensions
         self.refresh_file_lists()
@@ -1842,6 +1861,20 @@ class TranslationTab(QWidget):
             self.translate_button.setText("Start Batch Translation")
         elif mode_text == "Parse Speakers":
             self.translate_button.setText("Parse Speakers")
+
+    def _mark_mode_user_selected(self, _index: int):
+        self._mode_user_selected = True
+
+    def refresh_default_translation_mode(self, force=False):
+        """Refresh the provider-aware default without overriding an active choice."""
+        default_mode = default_translation_mode()
+        if not force and default_mode == self._last_default_translation_mode:
+            return
+        self._last_default_translation_mode = default_mode
+        if default_mode == "Translate" or force or not self._mode_user_selected:
+            index = self.mode_combo.findText(default_mode)
+            if index >= 0:
+                self.mode_combo.setCurrentIndex(index)
 
     def _switch_progress_tab(self, index):
         """Switch Batch/Files views; index 0 = batch overview, 1 = per-file list."""

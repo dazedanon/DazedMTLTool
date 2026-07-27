@@ -63,6 +63,7 @@ from gui.translation_tab import (
     BATCH_MODE_LABEL,
     BATCH_MODE_BENEFIT_NOTE,
     BATCH_COLLECT_LIVE_CHARGE_NOTE,
+    default_translation_mode,
 )
 
 WORKFLOW_TL_NORMAL_LABEL = "Normal Translate"
@@ -778,6 +779,8 @@ class WorkflowTab(QWidget):
         self._last_import_signature: tuple[str, ...] | None = None
         self._pending_import_signature: tuple[str, ...] | None = None
         self._release_zip_btn: QPushButton | None = None
+        self._tl_mode_user_selected = False
+        self._last_default_translation_mode = None
 
         self._init_ui()
 
@@ -1654,6 +1657,7 @@ class WorkflowTab(QWidget):
             "Batch uses the Anthropic Batches API (50% off, Claude only)."
         )
         self._tl_mode_combo.currentTextChanged.connect(self._on_workflow_tl_mode_changed)
+        self._tl_mode_combo.activated.connect(self._mark_workflow_tl_mode_selected)
         mode_row.addWidget(mode_lbl)
         mode_row.addWidget(self._tl_mode_combo)
         mode_row.addStretch()
@@ -1672,9 +1676,7 @@ class WorkflowTab(QWidget):
         mode_inner.addWidget(self._batch_mode_warning)
 
         layout.addWidget(mode_box)
-        batch_idx = self._tl_mode_combo.findText(BATCH_MODE_LABEL)
-        if batch_idx >= 0:
-            self._tl_mode_combo.setCurrentIndex(batch_idx)
+        self.refresh_default_translation_mode(force=True)
         self._on_workflow_tl_mode_changed(self._tl_mode_combo.currentText())
 
     def _on_workflow_tl_mode_changed(self, mode_text: str):
@@ -1693,6 +1695,23 @@ class WorkflowTab(QWidget):
     def _workflow_batch_mode(self) -> bool:
         combo = getattr(self, "_tl_mode_combo", None)
         return combo is not None and combo.currentText() == BATCH_MODE_LABEL
+
+    def _mark_workflow_tl_mode_selected(self, _index: int):
+        self._tl_mode_user_selected = True
+
+    def refresh_default_translation_mode(self, force=False):
+        """Refresh the workflow mode when the configured provider changes."""
+        default_mode = default_translation_mode()
+        if not force and default_mode == self._last_default_translation_mode:
+            return
+        self._last_default_translation_mode = default_mode
+        workflow_mode = (
+            BATCH_MODE_LABEL if default_mode == BATCH_MODE_LABEL else WORKFLOW_TL_NORMAL_LABEL
+        )
+        if default_mode == "Translate" or force or not self._tl_mode_user_selected:
+            index = self._tl_mode_combo.findText(workflow_mode)
+            if index >= 0:
+                self._tl_mode_combo.setCurrentIndex(index)
 
     def _workflow_mode_text(self) -> str:
         return BATCH_MODE_LABEL if self._workflow_batch_mode() else "Translate"
@@ -1853,7 +1872,9 @@ class WorkflowTab(QWidget):
 
         self._add_step_header(layout, "Step 4 — TL Phase 2", 4)
 
-        self._step5_mode_hint = QLabel(f"Translation mode: {BATCH_MODE_LABEL}")
+        initial_mode = getattr(self, "_tl_mode_combo", None)
+        initial_mode_text = initial_mode.currentText() if initial_mode is not None else WORKFLOW_TL_NORMAL_LABEL
+        self._step5_mode_hint = QLabel(f"Translation mode: {initial_mode_text}")
         self._step5_mode_hint.setStyleSheet("color:#8fbc8f;font-size:12px;margin-bottom:4px;")
         layout.addWidget(self._step5_mode_hint)
         if hasattr(self, "_tl_mode_combo"):

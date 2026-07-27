@@ -83,6 +83,7 @@ from gui.translation_tab import (
     BATCH_COLLECT_LIVE_CHARGE_NOTE,
     BATCH_MODE_BENEFIT_NOTE,
     BATCH_MODE_LABEL,
+    default_translation_mode,
 )
 from gui.workflow_tab import (
     _GAMEUPDATE_COPY_SKIP_NAMES,
@@ -186,6 +187,9 @@ class WolfWorkflowTab(QWidget):
         self._pending_import_signature: tuple[str, ...] | None = None
         self._syncing_file_checks: bool = False
         self._gameupdate_path: str = ""
+        self._tl_mode_user_selected = False
+        self._last_default_translation_mode = None
+        self._tl_mode_combos = []
 
         self._init_ui()
 
@@ -2182,17 +2186,28 @@ class WolfWorkflowTab(QWidget):
         lbl = QLabel("Translation mode:")
         lbl.setStyleSheet("color:#cccccc;font-size:12px;font-weight:bold;background:transparent;")
         self._tl_mode_combo = QComboBox()
+        self._tl_mode_combos.append(self._tl_mode_combo)
         self._tl_mode_combo.addItem(_TL_NORMAL_LABEL)
         self._tl_mode_combo.addItem(BATCH_MODE_LABEL)
         self._tl_mode_combo.setFixedWidth(220)
         self._tl_mode_combo.setToolTip(
             "Normal translates live; Batch uses the Anthropic Batches API (~50% cheaper, Claude only)."
         )
-        saved = self._setting("tl_mode", BATCH_MODE_LABEL) or BATCH_MODE_LABEL
+        default_mode = default_translation_mode()
+        self._last_default_translation_mode = default_mode
+        automatic = BATCH_MODE_LABEL if default_mode == BATCH_MODE_LABEL else _TL_NORMAL_LABEL
+        saved = self._setting("tl_mode", None)
+        self._tl_mode_user_selected = saved in (_TL_NORMAL_LABEL, BATCH_MODE_LABEL)
+        if saved not in (_TL_NORMAL_LABEL, BATCH_MODE_LABEL):
+            saved = automatic
+        elif saved == BATCH_MODE_LABEL and automatic != BATCH_MODE_LABEL:
+            saved = automatic
+            self._tl_mode_user_selected = False
         idx = self._tl_mode_combo.findText(str(saved))
         if idx >= 0:
             self._tl_mode_combo.setCurrentIndex(idx)
         self._tl_mode_combo.currentTextChanged.connect(self._on_tl_mode_changed)
+        self._tl_mode_combo.activated.connect(self._mark_tl_mode_selected)
         row.addWidget(lbl)
         row.addWidget(self._tl_mode_combo)
         row.addStretch()
@@ -2202,20 +2217,39 @@ class WolfWorkflowTab(QWidget):
         self._batch_note.setWordWrap(True)
         self._batch_note.setStyleSheet("color:#8fbc8f;font-size:11px;background:transparent;")
         layout.addWidget(self._batch_note)
-        self._on_tl_mode_changed(self._tl_mode_combo.currentText())
+        self._on_tl_mode_changed(self._tl_mode_combo.currentText(), save=False)
 
-    def _on_tl_mode_changed(self, mode_text: str):
+    def _on_tl_mode_changed(self, mode_text: str, save=True):
         is_batch = mode_text == BATCH_MODE_LABEL
         if hasattr(self, "_batch_note"):
             self._batch_note.setVisible(is_batch)
-        self._save_setting("tl_mode", mode_text)
+        if save:
+            self._save_setting("tl_mode", mode_text)
 
     def _workflow_mode_text(self) -> str:
         """Map the selector to the Translation tab's own mode label."""
-        saved = self._setting("tl_mode", BATCH_MODE_LABEL) or BATCH_MODE_LABEL
-        if saved == BATCH_MODE_LABEL:
+        automatic = BATCH_MODE_LABEL if default_translation_mode() == BATCH_MODE_LABEL else _TL_NORMAL_LABEL
+        selected = self._setting("tl_mode", automatic) or automatic
+        if selected == BATCH_MODE_LABEL and automatic == BATCH_MODE_LABEL:
             return BATCH_MODE_LABEL
         return "Translate"
+
+    def _mark_tl_mode_selected(self, _index: int):
+        self._tl_mode_user_selected = True
+
+    def refresh_default_translation_mode(self, force=False):
+        """Apply the provider-aware mode after configuration changes."""
+        default_mode = default_translation_mode()
+        if not force and default_mode == self._last_default_translation_mode:
+            return
+        self._last_default_translation_mode = default_mode
+        mode = BATCH_MODE_LABEL if default_mode == BATCH_MODE_LABEL else _TL_NORMAL_LABEL
+        if default_mode == "Translate" or force or not self._tl_mode_user_selected:
+            for combo in self._tl_mode_combos:
+                index = combo.findText(mode)
+                if index >= 0:
+                    combo.setCurrentIndex(index)
+            self._save_setting("tl_mode", mode)
 
     def _navigate_to_translation(
         self,
