@@ -8,7 +8,7 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
-from PyQt5.QtCore import Qt, QThread, pyqtSignal
+from PyQt5.QtCore import Qt, QThread, QTimer, pyqtSignal
 from PyQt5.QtGui import QColor, QBrush
 from PyQt5.QtWidgets import (
     QAbstractItemView,
@@ -50,98 +50,48 @@ from util.version_update.service import (
     PROFILE_GENERIC,
     PROFILE_RPGMAKER_MVMZ,
 )
+from gui.theme import COLORS, Spacing
 
 
-_PAGE_STYLE = """
-QWidget#versionUpdatePage, QWidget#versionUpdateContent {
-    background-color:#2b2b2b; color:#d4d4d4;
-}
-QLabel { background-color:transparent; color:#d4d4d4; }
-QRadioButton { background-color:transparent; color:#d4d4d4; spacing:7px; }
-QRadioButton::indicator {
-    width:14px; height:14px; border:1px solid #808080;
-    border-radius:7px; background-color:#303033;
-}
-QRadioButton::indicator:checked {
-    border-color:#61b7f3; background-color:#007acc;
-}
-QScrollArea#versionUpdateScroll { background-color:#2b2b2b; border:none; }
-QGroupBox#versionUpdateCard {
-    background-color:#252526;
-    border:1px solid #444444;
-    border-radius:7px;
-    margin-top:14px;
-    padding-top:10px;
-    font-weight:normal;
-    color:#dcdcdc;
-}
-QGroupBox#versionUpdateCard::title {
-    subcontrol-origin:margin;
-    subcontrol-position:top left;
-    left:14px;
-    padding:2px 7px;
-    background-color:#252526;
-    color:#4daafc;
-    font-weight:bold;
-}
-QLineEdit, QComboBox, QTextEdit, QTreeWidget {
-    background-color:#303033; color:#e2e2e2; border:1px solid #505050;
-    border-radius:4px; padding:5px 8px;
-}
-QLineEdit, QComboBox { min-height:24px; }
-QLineEdit:focus, QComboBox:focus, QTextEdit:focus, QTreeWidget:focus {
-    border-color:#007acc;
-}
-QComboBox::drop-down {
-    width:28px; border:none; border-left:1px solid #505050;
-    background-color:#3a3a3d;
-}
-QComboBox QAbstractItemView {
-    background-color:#303033; color:#e2e2e2;
-    selection-background-color:#007acc;
-}
-QTreeWidget::item:selected { background-color:#264f78; color:#ffffff; }
-QTreeWidget { alternate-background-color:#29292c; }
-QHeaderView::section {
-    background-color:#3a3a3d; color:#e5e5e5; padding:7px 8px;
-    border:none; border-right:1px solid #505050;
-}
-QPushButton {
-    background-color:#333337; color:#e8e8e8; border:1px solid #555555;
-    border-radius:4px; padding:7px 12px; min-height:20px; font-weight:bold;
-}
-QPushButton:hover { background-color:#3e3e42; border-color:#007acc; }
-QPushButton:pressed { background-color:#264f78; }
-QPushButton:disabled { color:#707070; background-color:#2b2b2e; border-color:#414141; }
-QWidget#versionUpdateActionBar, QWidget#versionUpdateResolutionBar {
-    background-color:#252526; border:1px solid #414141; border-radius:6px;
-}
-QLabel#versionUpdateStatus {
-    color:#b8b8b8; padding:0 4px;
-}
-QProgressBar {
-    background-color:#303033; border:1px solid #505050;
-    border-radius:4px; text-align:center; min-height:20px; color:#d4d4d4;
-}
-QProgressBar::chunk { background-color:#007acc; }
-QSplitter::handle { background-color:#414141; }
-QSplitter::handle:hover { background-color:#007acc; }
-QScrollBar:vertical {
-    background-color:#2b2b2b; width:12px; border:none;
-}
-QScrollBar::handle:vertical {
-    background-color:#555555; border-radius:5px; min-height:24px; margin:2px;
-}
-QScrollBar::handle:vertical:hover { background-color:#007acc; }
-QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height:0; }
-QScrollBar:horizontal {
-    background-color:#2b2b2b; height:12px; border:none;
-}
-QScrollBar::handle:horizontal {
-    background-color:#555555; border-radius:5px; min-width:24px; margin:2px;
-}
-QScrollBar::handle:horizontal:hover { background-color:#007acc; }
-QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal { width:0; }
+_PAGE_STYLE = f"""
+QWidget#versionUpdatePage, QWidget#versionUpdateContent,
+QScrollArea#versionUpdateScroll {{
+    background-color: {COLORS.canvas};
+}}
+QScrollArea#versionUpdateScroll {{ border: none; }}
+QWidget#versionUpdateActionBar,
+QWidget#versionUpdateResolutionBar,
+QWidget#versionUpdateOptions,
+QWidget#versionUpdateSourceStatus {{
+    background-color: transparent;
+    border: none;
+}}
+QRadioButton {{
+    background-color: transparent;
+    color: {COLORS.text_secondary};
+    spacing: {Spacing.SM}px;
+}}
+QRadioButton::indicator {{
+    width: 16px;
+    height: 16px;
+    border: 1px solid {COLORS.border_strong};
+    border-radius: 8px;
+    background-color: {COLORS.surface_2};
+}}
+QRadioButton::indicator:checked {{
+    border-color: {COLORS.accent_text};
+    background-color: {COLORS.accent};
+}}
+QLabel#versionUpdateStatus {{
+    color: {COLORS.text_muted};
+    padding: 0 {Spacing.XS}px;
+}}
+QSplitter#versionUpdateReviewSplitter::handle {{
+    background-color: {COLORS.border};
+}}
+QSplitter#versionUpdateReviewSplitter::handle:hover {{
+    background-color: {COLORS.accent_text};
+}}
 """
 
 
@@ -656,6 +606,8 @@ class VersionUpdateTab(QWidget):
         self._build_ui()
 
     def _build_ui(self):
+        from gui.ui_components import PageHeader, SectionCard, configure_action_button
+
         root_layout = QVBoxLayout(self)
         root_layout.setContentsMargins(0, 0, 0, 0)
         root_layout.setSpacing(0)
@@ -664,56 +616,69 @@ class VersionUpdateTab(QWidget):
         scroll.setObjectName("versionUpdateScroll")
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QScrollArea.NoFrame)
-        scroll.viewport().setStyleSheet("background-color:#2b2b2b;")
+        scroll.viewport().setObjectName("appPage")
 
         content = QWidget()
         content.setObjectName("versionUpdateContent")
         layout = QVBoxLayout(content)
-        layout.setContentsMargins(24, 20, 24, 22)
-        layout.setSpacing(14)
+        layout.setContentsMargins(
+            Spacing.XL, Spacing.LG, Spacing.XL, Spacing.XL
+        )
+        layout.setSpacing(Spacing.LG)
         scroll.setWidget(content)
         root_layout.addWidget(scroll)
+        self.page_scroll = scroll
 
-        title = QLabel("Version Update")
-        title.setStyleSheet(
-            "font-size:24px;font-weight:bold;color:#f2f2f2;padding:0 0 2px 2px;"
+        page_header = PageHeader(
+            "Version Update",
+            "Migrate a translation to a newer official game version while preserving reviewed local changes."
         )
-        layout.addWidget(title)
-        subtitle = QLabel(
-            "Migrate a translated game to a newer official version. Scanning is read-only; "
-            "create a separate copy or transactionally replace the translation with a backup."
-        )
-        subtitle.setWordWrap(True)
-        subtitle.setStyleSheet(
-            "color:#a8a8a8;font-size:13px;padding:0 2px 2px 2px;"
-        )
-        layout.addWidget(subtitle)
+        page_header.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
+        layout.addWidget(page_header)
 
-        select_group = QGroupBox("1 — Select old, translated, and new game states")
-        select_group.setObjectName("versionUpdateCard")
-        form = QFormLayout(select_group)
-        form.setContentsMargins(18, 22, 18, 16)
+        select_group = SectionCard(
+            "Prepare the update",
+            "Choose the translated game and the newer official release. Add the old official release when no saved baseline is available.",
+        )
+        select_group.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
+        form = QFormLayout()
+        form.setContentsMargins(0, 0, 0, 0)
         form.setHorizontalSpacing(16)
-        form.setVerticalSpacing(10)
+        form.setVerticalSpacing(Spacing.SM)
         form.setFieldGrowthPolicy(QFormLayout.AllNonFixedFieldsGrow)
         form.setRowWrapPolicy(QFormLayout.WrapLongRows)
         form.setLabelAlignment(Qt.AlignRight)
         self.current_edit = self._folder_row(
-            form, "Current translated:", "Folder containing the working translation"
+            form, "Translated game:", "Folder containing the working translation"
         )
         self.current_edit.editingFinished.connect(self._refresh_detection)
         self.current_edit.textChanged.connect(self._update_in_place_target)
         self.new_edit = self._folder_row(
-            form, "New official:", "Clean folder for the newer official game version"
+            form, "New official game:", "Clean folder for the newer official game version"
         )
         self.new_edit.editingFinished.connect(self._refresh_detection)
         self.old_edit = self._folder_row(
             form,
-            "Old official (optional):",
+            "Old official game (optional):",
             "Clean old version; otherwise a baseline or Git original branch is used",
         )
         self.old_edit.editingFinished.connect(self._refresh_detection)
+        select_group.add_layout(form)
 
+        self.options_toggle = QPushButton("Show update options")
+        configure_action_button(self.options_toggle, variant="quiet")
+        self.options_toggle.setCheckable(True)
+        self.options_toggle.toggled.connect(self._toggle_update_options)
+        select_group.add_widget(self.options_toggle)
+
+        options_widget = QWidget()
+        options_widget.setObjectName("versionUpdateOptions")
+        options_form = QFormLayout(options_widget)
+        options_form.setContentsMargins(Spacing.MD, 0, 0, 0)
+        options_form.setHorizontalSpacing(Spacing.MD)
+        options_form.setVerticalSpacing(Spacing.SM)
+        options_form.setFieldGrowthPolicy(QFormLayout.AllNonFixedFieldsGrow)
+        options_form.setLabelAlignment(Qt.AlignRight)
         version_row = QHBoxLayout()
         self.old_version_edit = QLineEdit()
         self.old_version_edit.setPlaceholderText("v1.00")
@@ -726,73 +691,90 @@ class VersionUpdateTab(QWidget):
         version_row.addWidget(QLabel("to"))
         version_row.addWidget(self.new_version_edit)
         version_row.addStretch()
-        form.addRow("Version labels:", version_row)
+        options_form.addRow("Version labels:", version_row)
 
         self.profile_combo = QComboBox()
         self.profile_combo.addItem("Auto-detect", PROFILE_AUTO)
         self.profile_combo.addItem("RPG Maker MV/MZ", PROFILE_RPGMAKER_MVMZ)
         self.profile_combo.addItem("Generic / Files Only", PROFILE_GENERIC)
         self.profile_combo.setMaximumWidth(360)
-        form.addRow("Update profile:", self.profile_combo)
+        options_form.addRow("Update profile:", self.profile_combo)
+        options_widget.setVisible(False)
+        self.options_widget = options_widget
+        select_group.add_widget(options_widget)
+
+        source_status = QWidget()
+        source_status.setObjectName("versionUpdateSourceStatus")
+        source_status_layout = QGridLayout(source_status)
+        source_status_layout.setContentsMargins(Spacing.MD, Spacing.SM, Spacing.MD, 0)
+        source_status_layout.setHorizontalSpacing(Spacing.MD)
+        source_status_layout.setVerticalSpacing(Spacing.XS)
+        detection_heading = QLabel("Detection")
+        detection_heading.setStyleSheet(f"color:{COLORS.text_muted};font-weight:600;")
+        source_status_layout.addWidget(detection_heading, 0, 0, Qt.AlignTop)
         self.detection_label = QLabel("Select current and new game folders.")
         self.detection_label.setWordWrap(True)
-        self.detection_label.setStyleSheet("color:#9cdcfe;")
-        form.addRow("Detection:", self.detection_label)
+        self.detection_label.setStyleSheet(f"color:{COLORS.accent_text};")
+        source_status_layout.addWidget(self.detection_label, 0, 1)
+        baseline_heading = QLabel("Baseline")
+        baseline_heading.setStyleSheet(f"color:{COLORS.text_muted};font-weight:600;")
+        source_status_layout.addWidget(baseline_heading, 1, 0, Qt.AlignTop)
         self.baseline_label = QLabel("")
         self.baseline_label.setWordWrap(True)
-        form.addRow("Baseline:", self.baseline_label)
-        layout.addWidget(select_group)
+        source_status_layout.addWidget(self.baseline_label, 1, 1)
+        source_status_layout.setColumnStretch(1, 1)
+        select_group.add_widget(source_status)
 
         action_bar = QWidget()
         action_bar.setObjectName("versionUpdateActionBar")
         action_row = QHBoxLayout(action_bar)
-        action_row.setContentsMargins(12, 9, 12, 9)
-        action_row.setSpacing(10)
-        self.scan_btn = QPushButton("Scan Update")
-        self.scan_btn.setStyleSheet(
-            "QPushButton{background-color:#0e639c;border-color:#168bd0;color:white;}"
-            "QPushButton:hover{background-color:#1177b5;}"
-            "QPushButton:disabled{background-color:#2b2b2e;color:#707070;"
-            "border-color:#414141;}"
+        action_row.setContentsMargins(
+            0, Spacing.SM, 0, 0
         )
+        action_row.setSpacing(Spacing.SM)
+        self.scan_btn = QPushButton("Preview update")
+        configure_action_button(self.scan_btn, variant="primary")
         self.scan_btn.clicked.connect(self._scan)
-        action_row.addWidget(self.scan_btn)
-        self.cancel_scan_btn = QPushButton("Cancel Scan")
+        self.cancel_scan_btn = QPushButton("Cancel preview")
+        configure_action_button(self.cancel_scan_btn, variant="quiet")
         self.cancel_scan_btn.setEnabled(False)
+        self.cancel_scan_btn.setVisible(False)
         self.cancel_scan_btn.clicked.connect(self._cancel_scan)
-        action_row.addWidget(self.cancel_scan_btn)
         self.progress = QProgressBar()
         self.progress.setRange(0, 100)
         self.progress.setValue(0)
+        self.progress.setVisible(False)
         action_row.addWidget(self.progress, 1)
         self.progress_label = QLabel("Ready")
         self.progress_label.setObjectName("versionUpdateStatus")
         self.progress_label.setMinimumWidth(150)
         self.progress_label.setMaximumWidth(320)
+        self.progress_label.setVisible(False)
         action_row.addWidget(self.progress_label)
-        layout.addWidget(action_bar)
+        action_row.addStretch()
+        action_row.addWidget(self.cancel_scan_btn)
+        action_row.addWidget(self.scan_btn)
+        select_group.add_widget(action_bar)
+        layout.addWidget(select_group)
 
-        review_group = QGroupBox("3 — Optional: Review or override local-file decisions")
-        review_group.setObjectName("versionUpdateCard")
+        review_group = SectionCard(
+            "Review proposed changes",
+            "Inspect files that need attention and override a recommendation only when necessary.",
+        )
         review_group.setMinimumHeight(410)
         review_group.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        review_layout = QVBoxLayout(review_group)
-        review_layout.setContentsMargins(18, 22, 18, 16)
-        review_layout.setSpacing(10)
+        self.review_card = review_group
+        review_layout = review_group.content_layout
         self.summary_label = QLabel("Run a scan to build the update plan.")
         self.summary_label.setWordWrap(True)
         review_layout.addWidget(self.summary_label)
 
         policy_label = QLabel(
-            "Upstream-first mode includes every new official change. Safe translation and "
-            "plugin edits are layered on automatically; uncertain files default to the new "
-            "official version and remain in the review queue below."
+            "Recommendations preserve safe local translations while keeping the newer official "
+            "game authoritative. Uncertain files remain in this review queue."
         )
         policy_label.setWordWrap(True)
-        policy_label.setStyleSheet(
-            "color:#c8e6c9;background-color:#26382d;border:1px solid #3f684b;"
-            "border-radius:5px;padding:8px 10px;"
-        )
+        policy_label.setStyleSheet(f"color:{COLORS.text_muted};")
         review_layout.addWidget(policy_label)
 
         filter_row = QHBoxLayout()
@@ -812,7 +794,8 @@ class VersionUpdateTab(QWidget):
         self.review_search.setPlaceholderText("Filter by relative path…")
         self.review_search.textChanged.connect(self._apply_filters)
         filter_row.addWidget(self.review_search, 1)
-        self.apply_recommended_btn = QPushButton("Restore Recommended Choices")
+        self.apply_recommended_btn = QPushButton("Restore recommended choices")
+        configure_action_button(self.apply_recommended_btn, variant="quiet")
         self.apply_recommended_btn.setToolTip(
             "Use a three-way merge where available; otherwise let the new official file win."
         )
@@ -822,7 +805,8 @@ class VersionUpdateTab(QWidget):
         review_layout.addLayout(filter_row)
 
         splitter = QSplitter(Qt.Horizontal)
-        splitter.setHandleWidth(5)
+        splitter.setObjectName("versionUpdateReviewSplitter")
+        splitter.setHandleWidth(Spacing.XS)
         splitter.setChildrenCollapsible(False)
         self.tree = QTreeWidget()
         self.tree.setHeaderLabels(["Action", "Relative path", "Kind", "Status"])
@@ -844,13 +828,14 @@ class VersionUpdateTab(QWidget):
         details_panel = QWidget()
         details_layout = QVBoxLayout(details_panel)
         details_layout.setContentsMargins(0, 0, 0, 0)
-        details_layout.setSpacing(7)
+        details_layout.setSpacing(Spacing.SM)
         self.details = QTextEdit()
         self.details.setReadOnly(True)
         self.details.setMinimumWidth(280)
         self.details.setPlaceholderText("Select a file to see what the update will do.")
         details_layout.addWidget(self.details, 1)
         self.technical_toggle = QPushButton("Show technical merge log")
+        configure_action_button(self.technical_toggle, variant="quiet")
         self.technical_toggle.setCheckable(True)
         self.technical_toggle.setVisible(False)
         self.technical_toggle.toggled.connect(self._toggle_technical_details)
@@ -868,31 +853,38 @@ class VersionUpdateTab(QWidget):
 
         resolution_bar = QWidget()
         resolution_bar.setObjectName("versionUpdateResolutionBar")
+        self.resolution_bar = resolution_bar
         resolve_row = QGridLayout(resolution_bar)
-        resolve_row.setContentsMargins(12, 9, 12, 9)
+        resolve_row.setContentsMargins(
+            Spacing.MD, Spacing.SM, Spacing.MD, Spacing.SM
+        )
         resolve_row.setHorizontalSpacing(8)
-        resolve_row.setVerticalSpacing(7)
+        resolve_row.setVerticalSpacing(Spacing.SM)
         self.resolution_label = QLabel(
             "Select one or more review items. Recommended choices are already applied."
         )
         self.resolution_label.setStyleSheet("color:#a8a8a8;font-size:12px;")
         resolve_row.addWidget(self.resolution_label, 0, 0, 1, 2)
-        self.use_new_btn = QPushButton("Use New (drop local file changes)")
+        self.use_new_btn = QPushButton("Use new official file")
+        configure_action_button(self.use_new_btn, variant="secondary")
         self.use_new_btn.clicked.connect(
             lambda: self._resolve_selected(ConflictResolution.USE_NEW)
         )
         resolve_row.addWidget(self.use_new_btn, 1, 0)
-        self.use_proposed_btn = QPushButton("Merge New + Local Changes")
+        self.use_proposed_btn = QPushButton("Merge new and local changes")
+        configure_action_button(self.use_proposed_btn, variant="secondary")
         self.use_proposed_btn.clicked.connect(
             lambda: self._resolve_selected(ConflictResolution.USE_PROPOSED)
         )
         resolve_row.addWidget(self.use_proposed_btn, 1, 1)
-        self.keep_current_btn = QPushButton("Keep Current (skip this new file)")
+        self.keep_current_btn = QPushButton("Keep current file")
+        configure_action_button(self.keep_current_btn, variant="secondary")
         self.keep_current_btn.clicked.connect(
             lambda: self._resolve_selected(ConflictResolution.KEEP_CURRENT)
         )
         resolve_row.addWidget(self.keep_current_btn, 2, 0)
-        self.provide_merge_btn = QPushButton("Choose Manually Merged File…")
+        self.provide_merge_btn = QPushButton("Choose merged file…")
+        configure_action_button(self.provide_merge_btn, variant="secondary")
         self.provide_merge_btn.clicked.connect(self._provide_merged_file)
         resolve_row.addWidget(self.provide_merge_btn, 2, 1)
         for column in range(2):
@@ -900,27 +892,32 @@ class VersionUpdateTab(QWidget):
         review_layout.addWidget(resolution_bar)
         self._set_resolution_buttons(None)
 
-        apply_group = QGroupBox("2 — Create the recommended updated copy")
-        apply_group.setObjectName("versionUpdateCard")
-        apply_layout = QVBoxLayout(apply_group)
-        apply_layout.setContentsMargins(18, 22, 18, 16)
-        apply_layout.setSpacing(10)
-        mode_row = QHBoxLayout()
-        mode_row.setSpacing(18)
-        mode_row.addWidget(QLabel("Destination:"))
+        apply_group = SectionCard(
+            "Create the updated game",
+            "Choose a safe destination, then build the recommended result or apply reviewed overrides.",
+        )
+        apply_group.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
+        apply_layout = apply_group.content_layout
+        self.create_card = apply_group
+        mode_row = QGridLayout()
+        mode_row.setHorizontalSpacing(Spacing.MD)
+        mode_row.setVerticalSpacing(Spacing.XS)
+        mode_row.addWidget(QLabel("Destination:"), 0, 0, 2, 1, Qt.AlignTop)
         self.copy_mode_radio = QRadioButton("Create a separate updated folder")
         self.copy_mode_radio.setChecked(True)
+        self.copy_mode_radio.setMinimumHeight(Spacing.XXL)
         self.copy_mode_radio.toggled.connect(self._update_output_mode)
-        mode_row.addWidget(self.copy_mode_radio)
+        mode_row.addWidget(self.copy_mode_radio, 0, 1)
         self.in_place_mode_radio = QRadioButton(
             "Update the current translated folder (keep rollback backup)"
         )
+        self.in_place_mode_radio.setMinimumHeight(Spacing.XXL)
         self.in_place_mode_radio.toggled.connect(self._update_output_mode)
-        mode_row.addWidget(self.in_place_mode_radio)
-        mode_row.addStretch(1)
+        mode_row.addWidget(self.in_place_mode_radio, 1, 1)
+        mode_row.setColumnStretch(2, 1)
         apply_layout.addLayout(mode_row)
         output_row = QHBoxLayout()
-        output_row.setSpacing(10)
+        output_row.setSpacing(Spacing.MD)
         self.output_label = QLabel("Separate output folder:")
         output_row.addWidget(self.output_label)
         self.output_edit = QLineEdit()
@@ -930,7 +927,8 @@ class VersionUpdateTab(QWidget):
         self.in_place_target_label.setStyleSheet("color:#e2e2e2;padding:5px 8px;")
         self.in_place_target_label.setVisible(False)
         output_row.addWidget(self.in_place_target_label, 1)
-        self.output_browse_btn = QPushButton("Browse…")
+        self.output_browse_btn = QPushButton("Choose…")
+        configure_action_button(self.output_browse_btn, variant="quiet")
         self.output_browse_btn.clicked.connect(lambda: self._browse(self.output_edit))
         output_row.addWidget(self.output_browse_btn)
         apply_layout.addLayout(output_row)
@@ -941,47 +939,67 @@ class VersionUpdateTab(QWidget):
             "the original folders are never modified."
         )
         self.safety_label.setWordWrap(True)
-        self.safety_label.setStyleSheet("color:#d7ba7d;")
-        apply_layout.addWidget(self.safety_label)
-        apply_row = QHBoxLayout()
-        self.apply_btn = QPushButton("Create Recommended Update")
-        self.apply_btn.setStyleSheet(
-            "QPushButton{background-color:#246b3c;border-color:#3b9658;color:white;}"
-            "QPushButton:hover{background-color:#2d7d46;}"
-            "QPushButton:disabled{background-color:#2b2b2e;color:#707070;"
-            "border-color:#414141;}"
+        self.safety_label.setStyleSheet(
+            f"color:{COLORS.warning};background-color:{COLORS.surface_2};"
+            f"border:1px solid {COLORS.border};border-radius:4px;"
+            f"padding:{Spacing.SM}px {Spacing.MD}px;"
         )
+        apply_layout.addWidget(self.safety_label)
+        apply_row = QGridLayout()
+        apply_row.setHorizontalSpacing(Spacing.SM)
+        apply_row.setVerticalSpacing(Spacing.SM)
+        self.apply_btn = QPushButton("Create recommended update")
+        configure_action_button(self.apply_btn, variant="primary")
         self.apply_btn.setEnabled(False)
         self.apply_btn.setToolTip(
             "Restore every recommended upstream-first choice and create the updated copy."
         )
         self.apply_btn.clicked.connect(self._apply_recommended)
-        apply_row.addWidget(self.apply_btn)
-        self.custom_apply_btn = QPushButton("Create with Review Choices")
+        apply_row.addWidget(self.apply_btn, 0, 0)
+        self.custom_apply_btn = QPushButton("Create with review choices")
+        configure_action_button(self.custom_apply_btn, variant="secondary")
         self.custom_apply_btn.setToolTip(
             "Create the copy using any manual overrides selected in the review queue."
         )
         self.custom_apply_btn.setEnabled(False)
         self.custom_apply_btn.clicked.connect(self._apply)
-        apply_row.addWidget(self.custom_apply_btn)
+        apply_row.addWidget(self.custom_apply_btn, 0, 1)
         self.finish_label = QLabel("")
         self.finish_label.setWordWrap(True)
-        apply_row.addStretch(1)
         self.continue_workflow_btn = QPushButton("Continue in Workflow")
+        configure_action_button(self.continue_workflow_btn, variant="quiet")
         self.continue_workflow_btn.setEnabled(False)
+        self.continue_workflow_btn.setVisible(False)
         self.continue_workflow_btn.clicked.connect(self._continue_in_workflow)
-        apply_row.addWidget(self.continue_workflow_btn)
-        self.open_images_btn = QPushButton("Open Output Images")
+        apply_row.addWidget(self.continue_workflow_btn, 1, 0)
+        self.open_images_btn = QPushButton("Open output images")
+        configure_action_button(self.open_images_btn, variant="quiet")
         self.open_images_btn.setEnabled(False)
+        self.open_images_btn.setVisible(False)
         self.open_images_btn.clicked.connect(self._open_output_images)
-        apply_row.addWidget(self.open_images_btn)
+        apply_row.addWidget(self.open_images_btn, 1, 1)
+        apply_row.setColumnStretch(0, 1)
+        apply_row.setColumnStretch(1, 1)
         apply_layout.addLayout(apply_row)
         apply_layout.addWidget(self.finish_label)
-        layout.addWidget(apply_group)
         layout.addWidget(review_group, 1)
+        layout.addWidget(apply_group)
+        empty_state_spacer = QWidget()
+        empty_state_spacer.setObjectName("versionUpdateEmptySpacer")
+        empty_state_spacer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.empty_state_spacer = empty_state_spacer
+        layout.addWidget(empty_state_spacer, 1)
+        review_group.setVisible(False)
+        apply_group.setVisible(False)
         self._last_output = None
         self._update_output_mode()
         self._refresh_detection()
+
+    def _toggle_update_options(self, visible: bool):
+        self.options_widget.setVisible(visible)
+        self.options_toggle.setText(
+            "Hide update options" if visible else "Show update options"
+        )
 
     def _update_in_place_target(self):
         current = (
@@ -1006,8 +1024,8 @@ class VersionUpdateTab(QWidget):
         self.in_place_target_label.setVisible(in_place)
         self._update_in_place_target()
         if recovery:
-            self.apply_btn.setText("Reapply Recovered Changes")
-            self.custom_apply_btn.setText("Reapply with Review Choices")
+            self.apply_btn.setText("Reapply recovered changes")
+            self.custom_apply_btn.setText("Reapply with review choices")
             self.apply_btn.setToolTip(
                 "Deliberately reapply every recommended change found by the recovery audit."
             )
@@ -1031,12 +1049,12 @@ class VersionUpdateTab(QWidget):
                 self.safety_label.setStyleSheet("color:#d7ba7d;")
             return
         self.apply_btn.setText(
-            "Update Translated Game" if in_place else "Create Recommended Update"
+            "Update translated game" if in_place else "Create recommended update"
         )
         self.custom_apply_btn.setText(
-            "Update with Review Choices"
+            "Update with review choices"
             if in_place
-            else "Create with Review Choices"
+            else "Create with review choices"
         )
         self.apply_btn.setToolTip(
             "Restore every recommended upstream-first choice and create the updated copy."
@@ -1068,8 +1086,10 @@ class VersionUpdateTab(QWidget):
         edit = QLineEdit()
         edit.setPlaceholderText(placeholder)
         row.addWidget(edit, 1)
-        button = QPushButton("Browse…")
-        button.setFixedWidth(100)
+        button = QPushButton("Choose…")
+        from gui.ui_components import configure_action_button
+        configure_action_button(button, variant="quiet")
+        button.setMinimumWidth(112)
         button.clicked.connect(lambda _checked=False, target=edit: self._browse(target))
         row.addWidget(button)
         form.addRow(label, row)
@@ -1162,11 +1182,19 @@ class VersionUpdateTab(QWidget):
         self.finish_label.clear()
         self._last_output = None
         self.continue_workflow_btn.setEnabled(False)
+        self.continue_workflow_btn.setVisible(False)
         self.open_images_btn.setEnabled(False)
+        self.open_images_btn.setVisible(False)
         self.apply_btn.setEnabled(False)
         self.custom_apply_btn.setEnabled(False)
+        self.review_card.setVisible(False)
+        self.create_card.setVisible(False)
+        self.empty_state_spacer.setVisible(True)
         self.scan_btn.setEnabled(False)
         self.cancel_scan_btn.setEnabled(True)
+        self.cancel_scan_btn.setVisible(True)
+        self.progress.setVisible(True)
+        self.progress_label.setVisible(True)
         self.progress.setRange(0, 0)
         self.progress_label.setText("Starting scan…")
         worker = _ScanWorker(kwargs)
@@ -1192,6 +1220,9 @@ class VersionUpdateTab(QWidget):
 
     def _on_scan_done(self, plan):
         self._plan = plan
+        self.review_card.setVisible(True)
+        self.create_card.setVisible(True)
+        self.empty_state_spacer.setVisible(False)
         self._update_output_mode()
         self.review_filter.blockSignals(True)
         target_filter = "recovery" if plan.audit_reapply else "review"
@@ -1211,6 +1242,10 @@ class VersionUpdateTab(QWidget):
             version = plan.new_version.strip().replace("/", "-").replace("\\", "-")
             suffix = f" {version}" if version and version != "new version" else " Updated"
             self.output_edit.setText(str(current.with_name(current.name + suffix)))
+        QTimer.singleShot(
+            0,
+            lambda: self.page_scroll.ensureWidgetVisible(self.review_card, 0, 16),
+        )
 
     def _on_scan_failed(self, message: str):
         self.progress.setRange(0, 100)
@@ -1224,6 +1259,7 @@ class VersionUpdateTab(QWidget):
     def _release_scan_worker(self):
         self.scan_btn.setEnabled(True)
         self.cancel_scan_btn.setEnabled(False)
+        self.cancel_scan_btn.setVisible(False)
         worker = self._scan_worker
         self._scan_worker = None
         if worker:
@@ -1431,6 +1467,7 @@ class VersionUpdateTab(QWidget):
     def _set_resolution_buttons(self, decision):
         conflicts = self._selected_conflict_items()
         count = len(conflicts)
+        self.resolution_bar.setVisible(bool(count))
         self.resolution_label.setText(
             f"{count} selected review item{'s' if count != 1 else ''}. "
             "These buttons override the recommended result."
@@ -1577,6 +1614,8 @@ class VersionUpdateTab(QWidget):
         self.apply_btn.setEnabled(False)
         self.custom_apply_btn.setEnabled(False)
         self.scan_btn.setEnabled(False)
+        self.progress.setVisible(True)
+        self.progress_label.setVisible(True)
         self.progress.setRange(0, 0)
         self.progress_label.setText(
             "Reapplying recovered changes…"
@@ -1619,7 +1658,13 @@ class VersionUpdateTab(QWidget):
         )
         self._last_output = Path(result.output_root)
         self.continue_workflow_btn.setEnabled(True)
+        self.continue_workflow_btn.setVisible(True)
         self.open_images_btn.setEnabled(True)
+        self.open_images_btn.setVisible(True)
+        QTimer.singleShot(
+            0,
+            lambda: self.page_scroll.ensureWidgetVisible(self.create_card, 0, 16),
+        )
 
     def _on_apply_failed(self, message: str):
         self.progress.setRange(0, 100)

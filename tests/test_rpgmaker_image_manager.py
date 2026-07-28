@@ -9,9 +9,17 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PIL import Image
 from PyQt5.QtCore import QSettings, Qt
 from PyQt5.QtTest import QTest
-from PyQt5.QtWidgets import QApplication, QAbstractItemView, QMainWindow, QMessageBox
+from PyQt5.QtWidgets import (
+    QApplication,
+    QAbstractItemView,
+    QMainWindow,
+    QMessageBox,
+    QScrollArea,
+    QWidget,
+)
 
 from gui.rpgmaker_image_manager import RPGMakerImageManager, _PAGE_SIZE
+from gui.theme import Geometry, Spacing
 from gui.workflow_tab import _inspect_image_workflow
 from util.image_manager import PROFILE_AUTO, PROFILE_GENERIC, PROFILE_RPGMAKER_MVMZ
 
@@ -195,7 +203,7 @@ class RPGMakerImageManagerSelectionTests(unittest.TestCase):
         self.assertFalse(asset.plain_path.exists())
         self.assertTrue(asset.runtime_plain_path.exists())
         self.assertEqual(self.manager.image_list.count(), 0)
-        self.assertEqual(self.manager.remove_button.text(), "Remove")
+        self.assertEqual(self.manager.remove_button.text(), "Remove copies")
 
     def test_prepare_uses_only_highlighted_editable_images(self):
         highlighted = self.manager.assets[0]
@@ -235,7 +243,7 @@ class RPGMakerImageManagerSelectionTests(unittest.TestCase):
         self.assertEqual(assets, editable)
         self.assertEqual(self.manager.prepare_button.text(), "Patch all")
 
-    def test_bottom_controls_share_one_row_and_action_width(self):
+    def test_actions_are_compact_and_pagination_belongs_to_browser(self):
         action_buttons = (
             self.manager.open_workspace_button,
             self.manager.copy_translation_button,
@@ -244,14 +252,147 @@ class RPGMakerImageManagerSelectionTests(unittest.TestCase):
             self.manager.remove_button,
             self.manager.prepare_button,
         )
-        widths = [button.width() for button in action_buttons]
-        tops = [button.geometry().top() for button in action_buttons]
-        self.assertLessEqual(max(widths) - min(widths), 1)
-        self.assertEqual(len(set(tops)), 1)
-        self.assertEqual(
-            self.manager.previous_button.geometry().top(),
-            self.manager.open_workspace_button.geometry().top(),
+        self.assertTrue(
+            all(self.manager.action_host.isAncestorOf(button) for button in action_buttons)
         )
+        self.assertTrue(
+            self.manager.browser_host.isAncestorOf(self.manager.previous_button)
+        )
+        self.assertTrue(self.manager.browser_host.isAncestorOf(self.manager.next_button))
+        self.assertLess(
+            max(button.width() for button in action_buttons),
+            self.manager.workspace_card.width() // 2,
+        )
+        action_rows = {
+            self.manager.action_layout.getItemPosition(
+                self.manager.action_layout.indexOf(button)
+            )[0]
+            for button in action_buttons
+        }
+        self.assertEqual(action_rows, {0})
+        self.assertEqual({button.width() for button in action_buttons}, {
+            action_buttons[0].width()
+        })
+        self.assertEqual(
+            self.manager.previous_button.size(), self.manager.next_button.size()
+        )
+        for button in (self.manager.previous_button, self.manager.next_button):
+            button_bottom = button.mapTo(
+                self.manager.browser_host, button.rect().bottomLeft()
+            ).y()
+            self.assertGreaterEqual(
+                self.manager.browser_host.contentsRect().bottom() - button_bottom,
+                Spacing.SM,
+            )
+        action_right = max(
+            button.mapTo(self.manager.action_host, button.rect().topRight()).x()
+            for button in action_buttons
+        )
+        self.assertLessEqual(
+            action_right, self.manager.action_host.contentsRect().right()
+        )
+
+    def test_action_bar_reflows_when_only_the_page_viewport_changes(self):
+        for button in self.manager.action_buttons:
+            button.setFixedWidth(260)
+        self.manager.page_scroll.viewport().resize(720, 600)
+        QTest.qWait(1)
+        self.app.processEvents()
+
+        action_right = max(
+            button.mapTo(self.manager.action_host, button.rect().topRight()).x()
+            for button in self.manager.action_buttons
+        )
+        self.assertLessEqual(
+            action_right, self.manager.action_host.contentsRect().right()
+        )
+        self.assertEqual(
+            {button.width() for button in self.manager.action_buttons},
+            {self.manager.action_buttons[0].width()},
+        )
+
+    def test_browser_is_the_single_dominant_workspace(self):
+        cards = self.manager.findChildren(QWidget, "appSectionCard")
+        self.assertEqual(len(cards), 1)
+        workspace = cards[0]
+        self.assertIsNone(self.manager.workspace_card.title_label)
+        for widget in (
+            self.manager.folder_edit,
+            self.manager.image_list,
+            self.manager.preview_host,
+            self.manager.prepare_button,
+        ):
+            self.assertTrue(workspace.isAncestorOf(widget))
+        self.assertGreater(self.manager.image_list.height(), 240)
+        self.assertGreaterEqual(self.manager.preview_host.width(), 400)
+        self.assertGreaterEqual(
+            self.manager.preview_host.width(),
+            int(self.manager.browser_splitter.width() * 0.38),
+        )
+
+    def test_preview_summary_is_compact_and_full_paths_are_in_tooltip(self):
+        self.manager.image_list.setCurrentRow(0)
+        self.app.processEvents()
+        self.assertTrue(self.manager.path_label.isVisible())
+        asset = self.manager.assets[0]
+        self.assertIn(asset.asset_id, self.manager.path_label.text())
+        self.assertIn("PNG source", self.manager.path_label.text())
+        self.assertNotIn(str(self.game_root), self.manager.path_label.text())
+        self.assertIn(str(self.game_root), self.manager.path_label.toolTip())
+
+        self.assertLess(
+            self.manager.preview_label.geometry().bottom(),
+            self.manager.path_label.geometry().top(),
+        )
+        self.assertLessEqual(
+            self.manager.path_label.geometry().bottom(),
+            self.manager.preview_host.contentsRect().bottom(),
+        )
+        self.assertLessEqual(
+            self.manager.path_label.height(), Geometry.CONTROL * 3
+        )
+
+    def test_thumbnail_labels_are_single_line_and_middle_elided(self):
+        self.assertFalse(self.manager.image_list.wordWrap())
+        self.assertEqual(self.manager.image_list.textElideMode(), Qt.ElideMiddle)
+        self.assertGreater(
+            self.manager.image_list.gridSize().height(),
+            self.manager.image_list.iconSize().height()
+            + self.manager.image_list.fontMetrics().height(),
+        )
+
+    def test_engine_detection_shares_engine_row_above_filters(self):
+        engine_top = self.manager.engine_combo.mapTo(
+            self.manager, self.manager.engine_combo.rect().topLeft()
+        ).y()
+        engine_bottom = engine_top + self.manager.engine_combo.height()
+        detection_top = self.manager.engine_detection_label.mapTo(
+            self.manager, self.manager.engine_detection_label.rect().topLeft()
+        ).y()
+        detection_bottom = detection_top + self.manager.engine_detection_label.height()
+        filter_top = self.manager.search_edit.mapTo(
+            self.manager, self.manager.search_edit.rect().topLeft()
+        ).y()
+
+        self.assertLess(max(engine_top, detection_top), min(engine_bottom, detection_bottom))
+        self.assertLess(max(engine_bottom, detection_bottom), filter_top)
+        self.assertLessEqual(self.manager.folder_combo.maximumWidth(), 360)
+        self.assertLessEqual(self.manager.state_combo.maximumWidth(), 220)
+
+    def test_page_uses_outer_vertical_scroll_only_when_content_needs_it(self):
+        scroll = self.manager.findChild(QScrollArea, "imageManagerScroll")
+        self.assertIsNotNone(scroll)
+        self.assertTrue(scroll.widgetResizable())
+        self.manager._update_page_scroll_extent()
+        self.app.processEvents()
+        self.assertEqual(
+            self.manager.page_content.minimumHeight(),
+            self.manager.page_layout.sizeHint().height(),
+        )
+        if self.manager.page_content.minimumHeight() > scroll.viewport().height():
+            self.assertGreater(scroll.verticalScrollBar().maximum(), 0)
+        else:
+            self.assertEqual(scroll.verticalScrollBar().maximum(), 0)
 
     def test_folder_popup_is_bounded_and_scrolls_long_lists(self):
         combo = self.manager.folder_combo
@@ -441,7 +582,7 @@ class GenericImageManagerUITests(unittest.TestCase):
                 self.assertEqual(manager.engine_combo.currentData(), PROFILE_AUTO)
                 self.assertEqual(manager.engine_id, PROFILE_GENERIC)
                 self.assertTrue(manager.generic_root_host.isVisible())
-                self.assertEqual(manager.decrypt_selected_button.text(), "Make editable")
+                self.assertEqual(manager.decrypt_selected_button.text(), "Make")
                 self.assertEqual(manager.image_list.count(), 1)
                 self.assertEqual(manager.assets[0].asset_id, "assets/images/ui/menu.png")
                 self.assertFalse((game_root / ".dazedtl").exists())

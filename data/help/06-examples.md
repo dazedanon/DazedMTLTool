@@ -81,10 +81,10 @@ You can play through without walls of Japanese, menus are readable, and you know
 1. Workflow → **Wolf RPG (WolfDawn)** → Step 0 extract + import.
 2. Step 2 - build vocab in Cursor from the extracted files (skip `names.json` value names).
 3. Step 3 - translate **safe** names only.
-4. Step 4 - foundation DB first; add narrative DB if the discovery report says the game is DB-heavy.
-5. Step 5 - maps / events (Batch for huge CommonEvent files on Claude).
-6. Step 6 Precheck → Step 7 **Inject all** → Step 8 Package → play.
-7. Step 9 - fix wrap on overflowing lines → Inject → Package again.
+4. Step 4 - **Translate foundation database** first; add the narrative database if discovery says the game is DB-heavy.
+5. Step 5 - **Translate maps & events** (Batch for huge CommonEvent files on Claude).
+6. Step 6 **Preview all injection** → Step 7 **Apply all translations** → Step 8 build the playable game → play.
+7. Step 9 - fix overflowing lines → apply all translations → build again.
 
 Same philosophy as RPG Maker: prove quality on a small slice of content, then scale; pack/inject before you judge overflow in-game.
 

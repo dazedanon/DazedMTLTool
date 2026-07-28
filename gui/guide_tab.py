@@ -12,12 +12,21 @@ from PyQt5.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QPushButton,
+    QSizePolicy,
     QTextBrowser,
     QVBoxLayout,
     QWidget,
 )
 
 from util.paths import HELP_DIR
+from gui.theme import COLORS
+from gui.ui_components import (
+    PageHeader,
+    SectionCard,
+    equalize_button_widths,
+    make_action_button,
+    make_page_layout,
+)
 
 try:
     import markdown as _markdown
@@ -25,44 +34,50 @@ except ImportError:  # pragma: no cover - dependency should be installed via req
     _markdown = None
 
 
-_BROWSER_CSS = """
+def _theme_css(source: str) -> str:
+    for name, value in sorted(vars(COLORS).items(), key=lambda item: -len(item[0])):
+        source = source.replace(f"${name}", value)
+    return source
+
+
+_BROWSER_CSS = _theme_css("""
 body {
-    color: #d4d4d4;
-    background-color: #1e1e1e;
+    color: $text_secondary;
+    background-color: $canvas;
     font-family: Segoe UI, sans-serif;
     font-size: 14px;
     line-height: 1.45;
     margin: 12px 16px;
 }
 h1, h2, h3, h4 {
-    color: #ffffff;
+    color: $text_primary;
     font-weight: 600;
     margin-top: 1.1em;
     margin-bottom: 0.4em;
 }
 h1 { font-size: 22px; }
-h2 { font-size: 18px; border-bottom: 1px solid #3c3c3c; padding-bottom: 4px; }
-h3 { font-size: 15px; color: #e0e0e0; }
-p, li { color: #d4d4d4; }
-a { color: #569cd6; }
+h2 { font-size: 18px; border-bottom: 1px solid $border; padding-bottom: 4px; }
+h3 { font-size: 15px; color: $text_primary; }
+p, li { color: $text_secondary; }
+a { color: $accent_text; }
 code {
-    background-color: #2d2d30;
-    color: #ce9178;
+    background-color: $surface_1;
+    color: $warning;
     padding: 1px 5px;
     border-radius: 3px;
     font-family: Consolas, monospace;
     font-size: 13px;
 }
 pre {
-    background-color: #252526;
-    border: 1px solid #3c3c3c;
+    background-color: $chrome;
+    border: 1px solid $border;
     border-radius: 4px;
     padding: 10px 12px;
     overflow-x: auto;
 }
 pre code {
     background: transparent;
-    color: #d4d4d4;
+    color: $text_secondary;
     padding: 0;
 }
 table {
@@ -71,28 +86,28 @@ table {
     width: 100%;
 }
 th, td {
-    border: 1px solid #3c3c3c;
+    border: 1px solid $border;
     padding: 6px 10px;
     text-align: left;
     vertical-align: top;
 }
-th { background-color: #2d2d30; color: #ffffff; }
-strong { color: #ffffff; }
-hr { border: none; border-top: 1px solid #3c3c3c; margin: 16px 0; }
+th { background-color: $surface_1; color: $text_primary; }
+strong { color: $text_primary; }
+hr { border: none; border-top: 1px solid $border; margin: 16px 0; }
 blockquote {
-    border-left: 3px solid #007acc;
+    border-left: 3px solid $accent;
     margin: 10px 0;
     padding: 4px 12px;
-    color: #9d9d9d;
-    background-color: #252526;
+    color: $text_muted;
+    background-color: $chrome;
 }
-"""
+""")
 
-_LIST_STYLE = """
+_LIST_STYLE = _theme_css("""
 QListWidget {
-    background-color: #252526;
-    color: #cccccc;
-    border: 1px solid #3c3c3c;
+    background-color: $chrome;
+    color: $text_secondary;
+    border: 1px solid $border;
     border-radius: 4px;
     outline: none;
     font-size: 13px;
@@ -103,49 +118,23 @@ QListWidget::item {
     border-radius: 3px;
 }
 QListWidget::item:selected {
-    background-color: #094771;
-    color: #ffffff;
+    background-color: $selection;
+    color: $on_accent;
 }
 QListWidget::item:hover:!selected {
-    background-color: #2a2d2e;
+    background-color: $surface_hover;
 }
-"""
+""")
 
-_BROWSER_STYLE = """
+_BROWSER_STYLE = _theme_css("""
 QTextBrowser {
-    background-color: #1e1e1e;
-    color: #d4d4d4;
-    border: 1px solid #3c3c3c;
+    background-color: $canvas;
+    color: $text_secondary;
+    border: 1px solid $border;
     border-radius: 4px;
     padding: 0;
 }
-"""
-
-_BTN_STYLE = """
-QPushButton {
-    background-color: #0e639c;
-    color: #ffffff;
-    border: none;
-    border-radius: 4px;
-    padding: 8px 14px;
-    font-size: 13px;
-}
-QPushButton:hover { background-color: #1177bb; }
-QPushButton:pressed { background-color: #0a4d78; }
-"""
-
-_SECONDARY_BTN_STYLE = """
-QPushButton {
-    background-color: #3c3c3c;
-    color: #d4d4d4;
-    border: 1px solid #555555;
-    border-radius: 4px;
-    padding: 8px 14px;
-    font-size: 13px;
-}
-QPushButton:hover { background-color: #4a4a4a; }
-"""
-
+""")
 
 def _md_to_html(source: str) -> str:
     if _markdown is not None:
@@ -179,61 +168,63 @@ class GuideTab(QWidget):
         self.reload()
 
     def _build_ui(self) -> None:
-        root = QVBoxLayout(self)
-        root.setContentsMargins(20, 16, 20, 16)
-        root.setSpacing(10)
-
-        title = QLabel("Guide / Quickstart")
-        title.setStyleSheet("color:#ffffff;font-size:18px;font-weight:bold;")
-        root.addWidget(title)
-
-        intro = QLabel(
-            "In-app docs for requirements, Workflow, and copy-paste examples. "
-            "Edit markdown under data/help/ to keep this up to date."
-        )
-        intro.setWordWrap(True)
-        intro.setStyleSheet("color:#9d9d9d;font-size:13px;")
-        root.addWidget(intro)
+        root = make_page_layout(self)
+        root.addWidget(PageHeader(
+            "Guide & Quickstart",
+            "Learn the requirements, follow the translation workflow, and use practical examples."
+        ))
 
         body = QHBoxLayout()
         body.setSpacing(12)
 
+        topics_card = SectionCard(
+            "Browse topics",
+            "Choose a guide section for requirements, workflows, examples, and troubleshooting.",
+        )
+        topics_card.setMinimumWidth(260)
+        topics_card.setMaximumWidth(360)
+
         self.section_list = QListWidget()
-        self.section_list.setFixedWidth(200)
         self.section_list.setStyleSheet(_LIST_STYLE)
         self.section_list.currentRowChanged.connect(self._on_section_changed)
-        body.addWidget(self.section_list)
+        topics_card.add_widget(self.section_list, 1)
+        body.addWidget(topics_card)
+
+        article_card = SectionCard(
+            "Read the guide",
+            "Follow the documented path, then open the relevant tool when you are ready.",
+        )
+        article_card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
         self.browser = QTextBrowser()
         self.browser.setOpenExternalLinks(True)
         self.browser.setStyleSheet(_BROWSER_STYLE)
-        body.addWidget(self.browser, 1)
+        article_card.add_widget(self.browser, 1)
+        body.addWidget(article_card, 1)
 
         root.addLayout(body, 1)
 
         footer = QHBoxLayout()
         footer.setSpacing(8)
 
-        self.btn_workflow = QPushButton("Open Workflow")
-        self.btn_workflow.setStyleSheet(_BTN_STYLE)
-        self.btn_workflow.setCursor(Qt.PointingHandCursor)
+        self.btn_workflow = make_action_button("Open Workflow", variant="primary")
         self.btn_workflow.clicked.connect(self._open_workflow)
         footer.addWidget(self.btn_workflow)
 
-        self.btn_config = QPushButton("Open Configuration")
-        self.btn_config.setStyleSheet(_SECONDARY_BTN_STYLE)
-        self.btn_config.setCursor(Qt.PointingHandCursor)
+        self.btn_config = make_action_button("Open Configuration")
         self.btn_config.clicked.connect(self._open_config)
         footer.addWidget(self.btn_config)
 
         footer.addStretch()
 
-        reload_btn = QPushButton("Reload")
-        reload_btn.setFixedWidth(90)
-        reload_btn.setStyleSheet(_SECONDARY_BTN_STYLE)
-        reload_btn.setToolTip("Reload data/help/index.json and the current section")
+        reload_btn = make_action_button("Reload guide", variant="quiet")
+        reload_btn.setToolTip(
+            "Reload data/help/index.json and the current section after editing the guide files"
+        )
         reload_btn.clicked.connect(self.reload)
         footer.addWidget(reload_btn)
+
+        equalize_button_widths((self.btn_workflow, self.btn_config), minimum=176)
 
         root.addLayout(footer)
 

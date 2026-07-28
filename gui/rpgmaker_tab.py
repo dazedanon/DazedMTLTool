@@ -10,6 +10,8 @@ from PyQt5.QtWidgets import (
     QTextEdit, QSpinBox, QFrame, QGridLayout
 )
 from PyQt5.QtCore import Qt, pyqtSignal
+from gui.theme import COLORS
+from gui.ui_components import SectionCard, configure_action_button
 try:
     from .config_integration import ConfigIntegration
 except ImportError:
@@ -211,7 +213,6 @@ class RPGMakerTab(QWidget):
         checkbox = QCheckBox(label_text)
         checkbox.setStyleSheet("QCheckBox { font-size: 11px; }")
         checkbox.setMinimumWidth(175)
-        checkbox.setMaximumWidth(180)
         if tooltip_text:
             checkbox.setToolTip(tooltip_text)
         container.addWidget(checkbox)
@@ -219,7 +220,7 @@ class RPGMakerTab(QWidget):
         if description_text:
             desc_label = QLabel(f"— {description_text}")
             desc_label.setStyleSheet("color: #888888; font-size: 10px;")
-            desc_label.setWordWrap(False)
+            desc_label.setWordWrap(True)
             container.addWidget(desc_label, 1)
         
         return checkbox, container
@@ -227,13 +228,8 @@ class RPGMakerTab(QWidget):
     def init_ui(self):
         """Initialize the user interface with three-column layout."""
         main_layout = QVBoxLayout()
-        main_layout.setContentsMargins(15, 15, 15, 15)
+        main_layout.setContentsMargins(16, 16, 16, 16)
         main_layout.setSpacing(12)
-        
-        # Title
-        title_label = QLabel("RPG Maker MV/MZ Translation Settings")
-        title_label.setStyleSheet("font-size: 16px; font-weight: bold; color: #007acc;")
-        main_layout.addWidget(title_label)
         
         # Three-column layout
         columns_layout = QHBoxLayout()
@@ -242,8 +238,6 @@ class RPGMakerTab(QWidget):
         # ==================== COLUMN 1: PROCESSING ====================
         col1 = QVBoxLayout()
         col1.setSpacing(4)
-        
-        col1.addWidget(create_section_label("⚙️ Processing Options"))
         
         self.first_line_speakers_cb, layout = self._create_checkbox_with_description(
             "First Line = Speaker", "Treats first line as speaker name", "First line of text is treated as speaker."
@@ -296,8 +290,6 @@ class RPGMakerTab(QWidget):
         col2 = QVBoxLayout()
         col2.setSpacing(4)
         
-        col2.addWidget(create_section_label("💬 Dialogue Content"))
-        
         self.code401_cb, layout = self._create_checkbox_with_description(
             "Show Text (401)", "Standard dialogue text boxes", "Translates standard message window text."
         )
@@ -339,7 +331,7 @@ class RPGMakerTab(QWidget):
         # Variable Range
         var_layout = QHBoxLayout()
         var_layout.setContentsMargins(20, 4, 0, 0)
-        var_layout.setSpacing(6)
+        var_layout.setSpacing(8)
         lbl = QLabel("Variables ID Range:")
         lbl.setStyleSheet("color: #888; font-size: 10px;")
         var_layout.addWidget(lbl)
@@ -371,8 +363,6 @@ class RPGMakerTab(QWidget):
         # ==================== COLUMN 3: ACTORS & SCRIPTS ====================
         col3 = QVBoxLayout()
         col3.setSpacing(4)
-        
-        col3.addWidget(create_section_label("👤 Actor Changes"))
         
         self.code320_cb, layout = self._create_checkbox_with_description(
             "Change Name (320)", "Actor name change commands", "Dynamic character name changes."
@@ -425,15 +415,32 @@ class RPGMakerTab(QWidget):
         
         col3.addStretch()
         
-        # Add all three columns
-        columns_layout.addLayout(col1, 1)
-        columns_layout.addLayout(col2, 1)
-        columns_layout.addLayout(col3, 1)
+        processing_card = SectionCard(
+            "Processing and speaker detection",
+            "Choose how RPG Maker text is identified, attributed, wrapped, and skipped.",
+        )
+        processing_card.add_layout(col1)
+        dialogue_card = SectionCard(
+            "Dialogue and extended content",
+            "Select player-visible event text and optional variable or comment sources.",
+        )
+        dialogue_card.add_layout(col2)
+        script_card = SectionCard(
+            "Actors, scripts, and plugins",
+            "Enable advanced command text only when the game displays it to players.",
+        )
+        script_card.add_layout(col3)
+        columns_layout.addWidget(processing_card, 1)
+        columns_layout.addWidget(dialogue_card, 1)
+        columns_layout.addWidget(script_card, 1)
         main_layout.addLayout(columns_layout, 1)
         
         # ==================== WORKFLOW GUIDE ====================
-        workflow_label = create_section_label("📋 Translation Workflow")
-        main_layout.addWidget(workflow_label)
+        workflow_card = SectionCard(
+            "Recommended translation order",
+            "Use this sequence when working outside the guided RPG Maker workflow.",
+        )
+        main_layout.addWidget(workflow_card)
         
         workflow_text = QLabel(
             "<table style='font-size: 11px; color: #aaa;' cellspacing='4'>"
@@ -453,17 +460,20 @@ class RPGMakerTab(QWidget):
         workflow_text.setWordWrap(True)
         workflow_text.setTextFormat(Qt.RichText)
         workflow_text.setStyleSheet("background-color: #252525; padding: 12px; border-radius: 5px;")
-        main_layout.addWidget(workflow_text)
+        workflow_card.add_widget(workflow_text)
         
         # Reset button
         button_layout = QHBoxLayout()
         from gui.qt_icons import apply_button_icon
 
         self.reset_button = QPushButton()
-        apply_button_icon(self.reset_button, "🔄 Reset to Defaults", color="#cccccc")
+        configure_action_button(self.reset_button, variant="quiet")
+        apply_button_icon(
+            self.reset_button, "🔄 Reset to defaults", color=COLORS.text_secondary
+        )
         self.reset_button.clicked.connect(self.reset_to_defaults_with_message)
         self.reset_button.setMinimumHeight(32)
-        self.reset_button.setMaximumWidth(160)
+        self.reset_button.setMinimumWidth(160)
         self.reset_button.setStyleSheet("font-size: 11px;")
         button_layout.addWidget(self.reset_button)
         button_layout.addStretch()

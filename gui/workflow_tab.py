@@ -28,7 +28,7 @@ from util.vocab import BASE_SEPARATOR as _SHARED_BASE_SEPARATOR
 
 import jsbeautifier
 
-from PyQt5.QtCore import Qt, QEvent, QSettings, QSize, QThread, QTimer, pyqtSignal
+from PyQt5.QtCore import Qt, QSettings, QSize, QThread, QTimer, pyqtSignal
 from PyQt5.QtGui import QFont
 from PyQt5.QtWidgets import (
     QApplication,
@@ -75,6 +75,7 @@ from gui.translation_tab import (
     BATCH_COLLECT_LIVE_CHARGE_NOTE,
     default_translation_mode,
 )
+from gui.ui_components import CheckableFileList
 
 WORKFLOW_TL_NORMAL_LABEL = "Normal Translate"
 
@@ -577,7 +578,7 @@ _STEP_HELP: dict[int, str] = {
         "Use the existing <b>Images</b> page for bitmap UI translation:<br>"
         "• Confirm this step reports the correct game root, image tree, encryption key, and "
         "<code>vocab.txt</code><br>"
-        "• Open the Image Manager and decrypt the images you want to edit<br>"
+        "• Open the Image Manager and make the images you want to translate editable<br>"
         "• Click <b>Copy skill</b>, paste it into Codex/Cursor/Copilot, and let the agent edit "
         "only the generated <code>.dazedtl/images/.../img</code> copies<br>"
         "• Review the results, then use <b>Patch selected</b> or <b>Patch all</b><br><br>"
@@ -997,7 +998,9 @@ class WorkflowTab(QWidget):
     def _update_responsive_shell(self):
         rail = getattr(self, "_step_rail", None)
         if rail is not None:
-            rail.set_compact(self.width() < 1320)
+            rail.set_compact(
+                self.width() < 1320 or rail.labels_require_compact_mode()
+            )
             self._refresh_activity_badge()
         rewrap_layout = getattr(self, "_rewrap_workspace_layout", None)
         if rewrap_layout is not None:
@@ -1071,31 +1074,6 @@ class WorkflowTab(QWidget):
                 "Show or hide workflow activity and detailed log"
             )
             rail.activity_button.setStyleSheet("")
-
-    def eventFilter(self, obj, event):
-        """Toggle workflow file checks when clicking a row outside the checkbox."""
-        try:
-            if (
-                obj is self.file_list.viewport()
-                and event.type() == QEvent.MouseButtonRelease
-                and event.button() == Qt.LeftButton
-            ):
-                item = self.file_list.itemAt(event.pos())
-                if item is None:
-                    return False
-
-                # Let native checkbox clicks handle their own checked state.
-                item_rect = self.file_list.visualItemRect(item)
-                if event.pos().x() <= item_rect.left() + 26:
-                    return False
-
-                item.setCheckState(
-                    Qt.Unchecked if item.checkState() == Qt.Checked else Qt.Checked
-                )
-                return False
-        except Exception:
-            pass
-        return super().eventFilter(obj, event)
 
     def _step_strip_label(self, idx: int, *, done: bool) -> str:
         """Compact strip text: number + short name, optional checkmark for done."""
@@ -1297,18 +1275,15 @@ class WorkflowTab(QWidget):
         selection_row.addStretch()
         files_stage.add_layout(selection_row)
 
-        self.file_list = QListWidget()
+        self.file_list = CheckableFileList()
         self.file_list.setMinimumHeight(320)
         self.file_list.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        self.file_list.setSelectionMode(QAbstractItemView.ExtendedSelection)
-        self.file_list.itemChanged.connect(self._sync_selected_file_checks)
-        self.file_list.viewport().installEventFilter(self)
         self.file_list.setStyleSheet(
             "QListWidget{outline:none;border:1px solid #45454a;"
             "background-color:#252526;border-radius:4px;}"
             "QListWidget::item{border:none;outline:none;padding:2px 6px;"
             "color:#c8c8c8;}"
-            "QListWidget::item:selected{background-color:#252526;color:#c8c8c8;}"
+            f"QListWidget::item:selected{{background-color:{COLORS.selection};color:#ffffff;}}"
             "QListWidget::item:hover{background-color:#2d2d30;"
             "border-left:2px solid #0e639c;}"
         )
@@ -2312,7 +2287,7 @@ class WorkflowTab(QWidget):
         filter_row.addWidget(refresh_files_btn)
         scope_stage.add_layout(filter_row)
 
-        self.rewrap_file_list = QListWidget()
+        self.rewrap_file_list = CheckableFileList()
         self.rewrap_file_list.setMinimumHeight(280)
         self.rewrap_file_list.setStyleSheet(
             f"QListWidget{{background:{COLORS.chrome};border:1px solid {COLORS.border};"
@@ -2575,7 +2550,7 @@ class WorkflowTab(QWidget):
         )
         self._step6_vocab_btn.clicked.connect(self._copy_vocab_to_game)
 
-        self._step6_copy_btn = _make_btn("Copy plugin translation skill", "#555")
+        self._step6_copy_btn = _make_btn("Copy plugin skill", "#555")
         self._step6_copy_btn.setToolTip(
             "Copy a prompt that audits plugins.js and enabled plugin sources, asks what "
             "needs translation, then edits approved player-visible strings in place."
@@ -3083,7 +3058,7 @@ class WorkflowTab(QWidget):
         else:
             lines.append(
                 "<span style='color:#a6a6a6'>• Editable PNGs:</span> none yet. Open the Image Manager "
-                "and decrypt the images you want to translate."
+                "and make the images you want to translate editable."
             )
 
         if report["misplaced"]:
@@ -3573,7 +3548,7 @@ class WorkflowTab(QWidget):
                     "It audits first, asks what to translate, then edits approved files in place."
                 )
             else:
-                btn.setText("Copy plugin translation skill")
+                btn.setText("Copy plugin skill")
                 btn.setToolTip(
                     "Copy a prompt that audits plugins.js and enabled plugin sources, asks what "
                     "needs translation, then edits approved player-visible strings in place."
@@ -3812,23 +3787,6 @@ class WorkflowTab(QWidget):
             self._syncing_file_checks = False
         if self.file_list.count():
             self._log(f"✔  Selected {core} core file(s); deselected {other} other(s).")
-
-    def _sync_selected_file_checks(self, changed_item: QListWidgetItem):
-        """Apply a checkbox change to the current Ctrl/Shift-selected file rows."""
-        if self._syncing_file_checks:
-            return
-        selected = self.file_list.selectedItems()
-        if len(selected) <= 1 or changed_item not in selected:
-            return
-
-        self._syncing_file_checks = True
-        try:
-            new_state = changed_item.checkState()
-            for item in selected:
-                if item is not changed_item:
-                    item.setCheckState(new_state)
-        finally:
-            self._syncing_file_checks = False
 
     def _selected_import_items(self) -> list[dict]:
         selected = []

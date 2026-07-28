@@ -11,7 +11,7 @@ from PyQt5.QtCore import Qt, QThread, pyqtSignal, QTimer
 from PyQt5.QtWidgets import (
     QWidget,
     QVBoxLayout,
-    QHBoxLayout,
+    QGridLayout,
     QPushButton,
     QLabel,
     QTableWidget,
@@ -21,9 +21,17 @@ from PyQt5.QtWidgets import (
     QMessageBox,
     QAbstractItemView,
     QSplitter,
+    QSizePolicy,
 )
 
 from dotenv import load_dotenv
+from gui.theme import COLORS
+from gui.ui_components import (
+    PageHeader,
+    SectionCard,
+    configure_action_button,
+    make_page_layout,
+)
 
 
 class _BatchOpsWorker(QThread):
@@ -90,61 +98,62 @@ class BatchTab(QWidget):
         QTimer.singleShot(0, lambda: self.refresh_list(live=True))
 
     def _init_ui(self):
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(16, 16, 16, 16)
-        layout.setSpacing(10)
+        layout = make_page_layout(self)
+        layout.addWidget(PageHeader(
+            "Batch History",
+            "Review and manage local Anthropic Message Batch runs. These actions never submit a new batch."
+        ))
 
-        title = QLabel("Batch History")
-        title.setStyleSheet("color:#ffffff;font-size:18px;font-weight:bold;")
-        layout.addWidget(title)
-
-        hint = QLabel(
-            "Local Anthropic Message Batch runs for this project. "
-            "Cancel / redownload / usage never submit a new batch."
+        actions_card = SectionCard(
+            "Manage selected batches",
+            "Refresh history, then select a batch to cancel it, inspect usage, download results, or resume it.",
         )
-        hint.setWordWrap(True)
-        hint.setStyleSheet("color:#9d9d9d;font-size:12px;")
-        layout.addWidget(hint)
-
-        toolbar = QHBoxLayout()
+        layout.addWidget(actions_card)
+        toolbar = QGridLayout()
         toolbar.setSpacing(8)
 
-        self.refresh_btn = QPushButton("Refresh")
+        self.refresh_btn = QPushButton("Refresh batches")
         self.refresh_btn.setToolTip("Reload local history and refresh live status for active batches")
         self.refresh_btn.clicked.connect(lambda: self.refresh_list(live=True))
 
-        self.cancel_btn = QPushButton("Cancel")
+        self.cancel_btn = QPushButton("Cancel selected")
         self.cancel_btn.setToolTip("Cancel selected in-progress batch(es)")
         self.cancel_btn.clicked.connect(self.cancel_selected)
 
-        self.usage_btn = QPushButton("Usage")
+        self.usage_btn = QPushButton("Calculate usage")
         self.usage_btn.setToolTip("Sum real billed tokens for the selected ended batch")
         self.usage_btn.clicked.connect(self.usage_selected)
 
-        self.redownload_btn = QPushButton("Redownload")
+        self.redownload_btn = QPushButton("Download results")
         self.redownload_btn.setToolTip("Re-fetch results into log/batch_results.json (no re-submit)")
         self.redownload_btn.clicked.connect(self.redownload_selected)
 
-        self.resume_btn = QPushButton("Resume")
+        self.resume_btn = QPushButton("Resume in Translation")
         self.resume_btn.setToolTip("Activate this batch and continue poll/consume on the Translation tab")
         self.resume_btn.clicked.connect(self.resume_selected)
 
-        for btn in (
+        buttons = (
             self.refresh_btn,
             self.cancel_btn,
             self.usage_btn,
             self.redownload_btn,
             self.resume_btn,
-        ):
-            btn.setStyleSheet(
-                "QPushButton{background-color:#3c3c3c;color:#cccccc;border:1px solid #555555;"
-                "border-radius:4px;padding:6px 12px;}"
-                "QPushButton:hover{border-color:#007acc;}"
-                "QPushButton:disabled{color:#666666;border-color:#444444;}"
-            )
-            toolbar.addWidget(btn)
-        toolbar.addStretch()
-        layout.addLayout(toolbar)
+        )
+        for index, btn in enumerate(buttons):
+            configure_action_button(btn, variant="secondary")
+            btn.setMinimumWidth(176)
+            btn.setMaximumWidth(360)
+            toolbar.addWidget(btn, index // 3, index % 3)
+        for column in range(3):
+            toolbar.setColumnStretch(column, 1)
+        actions_card.add_layout(toolbar)
+
+        results_card = SectionCard(
+            "Batch runs",
+            "Review local batch status and operation details. No action here submits a new batch.",
+        )
+        results_card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        layout.addWidget(results_card, 1)
 
         splitter = QSplitter(Qt.Vertical)
 
@@ -156,10 +165,10 @@ class BatchTab(QWidget):
         self.table.setAlternatingRowColors(True)
         self.table.verticalHeader().setVisible(False)
         self.table.setStyleSheet(
-            "QTableWidget{background-color:#1e1e1e;color:#cccccc;gridline-color:#3a3a3a;"
-            "alternate-background-color:#252526;}"
-            "QHeaderView::section{background-color:#2d2d30;color:#cccccc;padding:4px;"
-            "border:1px solid #3a3a3a;}"
+            f"QTableWidget{{background-color:{COLORS.canvas};color:{COLORS.text_secondary};"
+            f"gridline-color:{COLORS.border};alternate-background-color:{COLORS.chrome};}}"
+            f"QHeaderView::section{{background-color:{COLORS.surface_1};"
+            f"color:{COLORS.text_secondary};padding:4px;border:1px solid {COLORS.border};}}"
         )
         header = self.table.horizontalHeader()
         header.setSectionResizeMode(0, QHeaderView.Stretch)
@@ -172,13 +181,13 @@ class BatchTab(QWidget):
         self.log.setReadOnly(True)
         self.log.setPlaceholderText("Operation log…")
         self.log.setStyleSheet(
-            "QTextEdit{background-color:#1e1e1e;color:#cccccc;border:1px solid #3a3a3a;"
-            "font-family:monospace;font-size:12px;}"
+            f"QTextEdit{{background-color:{COLORS.canvas};color:{COLORS.text_secondary};"
+            f"border:1px solid {COLORS.border};font-family:monospace;font-size:12px;}}"
         )
         splitter.addWidget(self.log)
         splitter.setStretchFactor(0, 3)
         splitter.setStretchFactor(1, 1)
-        layout.addWidget(splitter, 1)
+        results_card.add_widget(splitter, 1)
 
         self._update_button_states()
 

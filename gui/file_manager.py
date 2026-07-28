@@ -6,7 +6,7 @@ from pathlib import Path
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QTreeWidget, QTreeWidgetItem,
     QPushButton, QLabel, QFileDialog, QMessageBox, QGroupBox,
-    QSplitter, QTextEdit, QProgressBar, QCheckBox
+    QSplitter, QTextEdit, QProgressBar, QCheckBox, QAbstractItemView
 )
 from PyQt5.QtCore import Qt, QThread, pyqtSignal, QSettings
 import json
@@ -84,6 +84,7 @@ class FileManager(QWidget):
         
         # File tree
         self.input_tree = QTreeWidget()
+        self.input_tree.setSelectionMode(QAbstractItemView.ExtendedSelection)
         self.input_tree.setHeaderLabels(["File", "Size", "Type"])
         self.input_tree.itemSelectionChanged.connect(self.on_input_selection_changed)
         layout.addWidget(self.input_tree)
@@ -119,6 +120,7 @@ class FileManager(QWidget):
         
         # Output file tree
         self.output_tree = QTreeWidget()
+        self.output_tree.setSelectionMode(QAbstractItemView.ExtendedSelection)
         self.output_tree.setHeaderLabels(["File", "Size", "Modified"])
         self.output_tree.itemSelectionChanged.connect(self.on_output_selection_changed)
         layout.addWidget(self.output_tree)

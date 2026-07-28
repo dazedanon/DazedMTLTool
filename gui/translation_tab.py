@@ -24,17 +24,27 @@ from colorama import Fore
 from tqdm import tqdm
 from dotenv import dotenv_values, load_dotenv
 from PyQt5.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QGroupBox,
+    QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QLabel, QPushButton, QGroupBox,
     QTextEdit, QMessageBox, QListWidget, QListWidgetItem,
     QSplitter, QFileDialog, QComboBox, QCheckBox, QProgressBar, QFrame, QFormLayout, QStackedWidget,
     QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView,
+    QScrollArea, QMenu,
 )
 from PyQt5.QtWidgets import QSizePolicy
-from PyQt5.QtCore import Qt, QTimer, pyqtSignal, QThread, QMutex, QProcess, QEvent, QRect, QSettings, QSize
+from PyQt5.QtCore import Qt, QTimer, pyqtSignal, QThread, QMutex, QProcess, QSettings, QSize
 from PyQt5.QtGui import QFont, QColor, QBrush
 from gui.log_viewer import LogViewer
 from gui import qt_icons
 from util.paths import APP_NAME, ORG_NAME, PROJECT_ROOT
+from gui.theme import COLORS, Geometry, Spacing
+from gui.ui_components import (
+    CheckableFileList,
+    PageHeader,
+    SectionCard,
+    action_button_width_hint,
+    configure_action_button,
+    equalize_button_widths,
+)
 
 
 def _strip_ansi(text):
@@ -50,7 +60,7 @@ def create_section_header(title):
         "QLabel {"
         "font-size: 13px;"
         "font-weight: bold;"
-        "color: #007acc;"
+        f"color: {COLORS.accent_text};"
         "padding: 8px 0px 5px 0px;"
         "background-color: transparent;"
         "}",
@@ -61,7 +71,7 @@ def create_horizontal_line():
     line = QFrame()
     line.setFrameShape(QFrame.HLine)
     line.setFrameShadow(QFrame.Sunken)
-    line.setStyleSheet("QFrame { color: #555555; margin: 5px 0px; }")
+    line.setStyleSheet(f"QFrame {{ color: {COLORS.border}; margin: 4px 0px; }}")
     return line
 
 
@@ -970,49 +980,54 @@ class TranslationTab(QWidget):
         main_container = QWidget()
         main_hbox = QHBoxLayout()
         # Match left side padding so headers align at the top of the boxes
-        main_hbox.setContentsMargins(15, 15, 15, 15)
-        main_hbox.setSpacing(8)
+        main_hbox.setContentsMargins(0, 0, 0, 0)
+        main_hbox.setSpacing(Spacing.LG)
     # Align child widgets individually when needed; avoid setting a
     # global AlignTop on the HBox so children with Expanding size
     # policies can grow vertically to fill available space.
 
         # Left side - translation controls
         left_widget = QWidget()
-        layout = QVBoxLayout()
-        layout.setSpacing(8)
-        # Remove the top internal margin so the left header lines up with the
-        # right header (main_hbox already provides top padding).
-        layout.setContentsMargins(15, 0, 15, 15)
+        left_layout = QVBoxLayout(left_widget)
+        left_layout.setContentsMargins(0, 0, 0, 0)
+        left_layout.setSpacing(Spacing.LG)
+        setup_card = SectionCard("Translation settings")
+        self.setup_card = setup_card
+        setup_card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        left_layout.addWidget(setup_card)
 
-        # Files Section (at the top)
-        layout.addWidget(create_section_header("📁 Input Files"))
-        
+        file_card = SectionCard("Files to translate")
+        self.file_card = file_card
+        file_card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        left_layout.addWidget(file_card, 1)
+        layout = file_card.content_layout
+
         # Create stacked widget to switch between file list and progress view
         self.file_stack = QStackedWidget()
+        self.file_stack.setObjectName("translationWorkStack")
+        self.file_stack.setStyleSheet(
+            "QStackedWidget#translationWorkStack { background-color: transparent; }"
+        )
         
         # Page 0: Normal file list with buttons
         file_list_page = QWidget()
+        file_list_page.setObjectName("translationFilePage")
+        file_list_page.setStyleSheet(
+            "#translationFilePage { background-color: transparent; }"
+        )
         file_list_layout = QVBoxLayout()
         file_list_layout.setContentsMargins(0, 0, 0, 0)
         
         # Files Section with side buttons
         files_container = QHBoxLayout()
-        files_container.setSpacing(5)  # Add spacing between list and buttons
+        files_container.setSpacing(Spacing.SM)
         
         # File list with checkboxes
-        self.file_list = QListWidget()
+        self.file_list = CheckableFileList()
         # Allow the file list to expand vertically to fill available space
         # (remove fixed minimum height so it can stretch).
         self.file_list.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         # No max height - let it expand
-        self.file_list.setSelectionMode(QListWidget.NoSelection)  # Disable selection highlighting
-        # Use an event filter installed on the viewport so we reliably
-        # intercept mouse events that occur over the item rows and
-        # checkbox indicator. Installing on the viewport is more
-        # reliable cross-platform than installing on the list itself.
-        self.file_list.viewport().installEventFilter(self)
-        self._file_list_filter_installed = True
-        self.file_list.setFocusPolicy(Qt.NoFocus)  # Remove focus outline
         self.file_list.setStyleSheet("""
             QListWidget {
                 outline: none;
@@ -1025,90 +1040,74 @@ class TranslationTab(QWidget):
             QListWidget::item:hover {
                 background-color: #3e3e42;
             }
+            QListWidget::item:selected {
+                background-color: #264f78;
+                color: #ffffff;
+            }
         """)
-        # Place the two main file buttons on the left and totals on the right
-        # File management buttons (icon-based, vertical on the side)
-        file_buttons = QVBoxLayout()
-        file_buttons.setSpacing(0)
-        file_buttons.setContentsMargins(0, 0, 0, 0)
-        
-        # Button style for all icon buttons - all same size
-        icon_button_style = """
-            QPushButton {
-                font-size: 13px;
-                padding: 0px;
-                min-width: 32px;
-                max-width: 32px;
-                min-height: 32px;
-                max-height: 32px;
-                border: 1px solid #555555;
-                border-top: none;
-                border-radius: 0px;
-                background-color: #2d2d30;
-            }
-            QPushButton:hover {
-                background-color: #3e3e42;
-                border-left-color: #007acc;
-            }
-            QPushButton:pressed {
-                background-color: #007acc;
-            }
-        """
-        
-        # First button style - same size but with top border
-        first_button_style = """
-            QPushButton {
-                font-size: 13px;
-                padding: 0px;
-                min-width: 32px;
-                max-width: 32px;
-                min-height: 32px;
-                max-height: 32px;
-                border: 1px solid #555555;
-                border-radius: 0px;
-                background-color: #2d2d30;
-            }
-            QPushButton:hover {
-                background-color: #3e3e42;
-                border-left-color: #007acc;
-            }
-            QPushButton:pressed {
-                background-color: #007acc;
-            }
-        """
-        
+        self.file_list.itemChanged.connect(self._update_selection_summary)
+
+        # File actions use readable labels; icons supplement rather than replace meaning.
         _icon_size = QSize(18, 18)
 
-        def _icon_button(glyph, tooltip, slot, style):
-            btn = QPushButton()
-            qt_icons.apply_button_icon(btn, glyph, color="#dddddd")
+        def _file_button(text, glyph, tooltip, slot, *, variant="secondary"):
+            btn = QPushButton(text)
+            qt_icons.apply_button_icon(btn, f"{glyph} {text}", color="#dddddd")
             btn.setIconSize(_icon_size)
-            btn.setToolTip(tooltip)
+            configure_action_button(btn, variant=variant, tooltip=tooltip)
             btn.clicked.connect(slot)
-            btn.setStyleSheet(style)
-            file_buttons.addWidget(btn)
             return btn
 
-        select_all_btn = _icon_button("✓", "Select all files", self.select_all_files, first_button_style)
-        deselect_all_btn = _icon_button("✗", "Deselect all files", self.deselect_all_files, icon_button_style)
-        add_files_btn = _icon_button("➕", "Add files to translate", self.add_input_files, icon_button_style)
-        remove_files_btn = _icon_button("🗑️", "Remove selected files", self.remove_selected_files, icon_button_style)
-        open_folder_btn = _icon_button("📁", "Open files folder in explorer", self.open_input_folder, icon_button_style)
-        refresh_btn = _icon_button("🔄", "Refresh file list", self.refresh_file_lists, icon_button_style)
-        self.sidebar_export_btn = _icon_button(
-            "📤",
-            "Export selected files → Game Folder\nCopy translated files for the checked items into your game's data directory",
-            self._export_selected_files,
-            icon_button_style,
-        )
-        pricing_test_btn = _icon_button("💰", "Check live pricing for the current model", self._check_model_pricing, icon_button_style)
-        
-        # Add stretch to push buttons to top
-        file_buttons.addStretch()
+        self.selection_summary_label = QLabel("No files available")
+        self.selection_summary_label.setObjectName("appStatusText")
+        self.selection_summary_label.setWordWrap(True)
 
-        # Add button column to the container on the LEFT
-        files_container.addLayout(file_buttons)
-        # Then add the file list (center)
+        self.select_all_button = _file_button(
+            "Select all", "✓", "Select every visible file", self.select_all_files
+        )
+        self.clear_selection_button = _file_button(
+            "Clear", "✗", "Clear the current file selection", self.deselect_all_files,
+            variant="quiet",
+        )
+        self.add_files_button = _file_button(
+            "Add files…", "➕", "Copy files into the translation workspace", self.add_input_files
+        )
+        self.remove_files_button = _file_button(
+            "Remove selected", "🗑", "Delete selected files from the workspace",
+            self.remove_selected_files, variant="danger",
+        )
+        more_menu = QMenu(self)
+        self.open_files_action = more_menu.addAction(
+            "Open workspace folder", self.open_input_folder
+        )
+        more_menu.addAction("Refresh file list", self.refresh_file_lists)
+        self.sidebar_export_action = more_menu.addAction(
+            "Export selected translations to game", self._export_selected_files
+        )
+        more_menu.addAction("Check model pricing", self._check_model_pricing)
+        self.more_file_actions_button = QPushButton("More…")
+        configure_action_button(
+            self.more_file_actions_button,
+            variant="quiet",
+            tooltip="Refresh files, export selected translations, or check model pricing",
+        )
+        self.more_file_actions_button.setMenu(more_menu)
+
+        file_toolbar = QWidget()
+        file_toolbar.setObjectName("translationFileToolbar")
+        file_toolbar.setStyleSheet(
+            "#translationFileToolbar { background-color: transparent; }"
+        )
+        file_toolbar.setMinimumHeight(Geometry.CONTROL)
+        self.file_toolbar = file_toolbar
+        file_controls_layout = QGridLayout(file_toolbar)
+        file_controls_layout.setContentsMargins(0, 0, 0, 0)
+        file_controls_layout.setHorizontalSpacing(Spacing.SM)
+        file_controls_layout.setVerticalSpacing(Spacing.SM)
+        self.file_controls_layout = file_controls_layout
+        self._file_controls_layout_mode = None
+        file_list_layout.addWidget(file_toolbar)
+        self._arrange_translation_file_controls()
         files_container.addWidget(self.file_list)
 
         # (Totals footer will be created below and shown only when translation starts)
@@ -1123,6 +1122,10 @@ class TranslationTab(QWidget):
         
         # Page 1: Progress view (shown during translation)
         progress_view_page = QWidget()
+        progress_view_page.setObjectName("translationProgressPage")
+        progress_view_page.setStyleSheet(
+            "#translationProgressPage { background-color: transparent; }"
+        )
         progress_view_layout = QVBoxLayout()
         progress_view_layout.setContentsMargins(0, 0, 0, 0)
         progress_view_layout.setSpacing(8)
@@ -1132,7 +1135,7 @@ class TranslationTab(QWidget):
         self.batch_pipeline_widget.setVisible(False)
         batch_pipe_layout = QVBoxLayout()
         batch_pipe_layout.setContentsMargins(12, 12, 12, 12)
-        batch_pipe_layout.setSpacing(10)
+        batch_pipe_layout.setSpacing(Spacing.MD)
 
         self.batch_phase_title = QLabel("Batch Translate")
         self.batch_phase_title.setStyleSheet("color:#4ec9b0;font-weight:bold;font-size:13px;")
@@ -1140,7 +1143,7 @@ class TranslationTab(QWidget):
 
         # Step strip: Collect → Submit → Process → Write
         self.batch_steps_row = QHBoxLayout()
-        self.batch_steps_row.setSpacing(6)
+        self.batch_steps_row.setSpacing(Spacing.SM)
         self._batch_step_labels = []
         for i, name in enumerate(("1. Collect", "2. Submit", "3. Process", "4. Write")):
             lab = QLabel(name)
@@ -1249,7 +1252,7 @@ class TranslationTab(QWidget):
         poll_layout.addWidget(self.batch_poll_status)
         # Request count chips
         self.batch_count_row = QHBoxLayout()
-        self.batch_count_row.setSpacing(6)
+        self.batch_count_row.setSpacing(Spacing.SM)
         self._batch_count_labels = {}
         for key, color in (
             ("succeeded", "#4ec9b0"),
@@ -1317,7 +1320,7 @@ class TranslationTab(QWidget):
         """)
         self.batch_pipeline_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.batch_pipeline_stack.setStyleSheet("background: transparent;")
-        self.batch_pipeline_stack.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.batch_pipeline_stack.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Expanding)
 
         # Prefer a Batch-history-style table for per-file status. Keep a hidden,
         # parented list as a compatibility shim so clear()/legacy refs stay safe
@@ -1364,41 +1367,26 @@ class TranslationTab(QWidget):
         files_page_layout.addWidget(self.progress_files_summary)
         files_page_layout.addWidget(self.progress_table, 1)
 
-        progress_tab_btn_style = """
-            QPushButton {
-                background: #2d2d30;
-                color: #aaa;
-                border: 1px solid #3e3e42;
-                border-radius: 4px;
-                padding: 0px;
-            }
-            QPushButton:hover {
-                background: #353538;
-                color: #ddd;
-            }
-        """
-        progress_tab_btn_active_style = """
-            QPushButton {
-                background: #252526;
-                color: #4ec9b0;
-                border: 1px solid #4a4a4f;
-                border-radius: 4px;
-                padding: 0px;
-            }
-        """
-        self._progress_tab_btn_style = progress_tab_btn_style
-        self._progress_tab_btn_active_style = progress_tab_btn_active_style
-
         self.progress_tab_row = QWidget()
+        self.progress_tab_row.setObjectName("translationProgressTabs")
+        self.progress_tab_row.setStyleSheet(
+            "#translationProgressTabs { background-color: transparent; }"
+        )
         progress_tab_row_layout = QHBoxLayout(self.progress_tab_row)
         progress_tab_row_layout.setContentsMargins(0, 0, 0, 0)
-        progress_tab_row_layout.setSpacing(6)
+        progress_tab_row_layout.setSpacing(Spacing.SM)
         self.batch_tab_btn = QPushButton("Batch")
-        self.batch_tab_btn.setFixedSize(118, 34)
+        self.batch_tab_btn.setObjectName("appSubnavButton")
+        self.batch_tab_btn.setCheckable(True)
+        self.batch_tab_btn.setAutoExclusive(True)
+        self.batch_tab_btn.setMinimumSize(144, Geometry.CONTROL)
         self.batch_tab_btn.setCursor(Qt.PointingHandCursor)
         self.batch_tab_btn.clicked.connect(lambda: self._switch_progress_tab(0))
         self.files_tab_btn = QPushButton("Files")
-        self.files_tab_btn.setFixedSize(118, 34)
+        self.files_tab_btn.setObjectName("appSubnavButton")
+        self.files_tab_btn.setCheckable(True)
+        self.files_tab_btn.setAutoExclusive(True)
+        self.files_tab_btn.setMinimumSize(144, Geometry.CONTROL)
         self.files_tab_btn.setCursor(Qt.PointingHandCursor)
         self.files_tab_btn.clicked.connect(lambda: self._switch_progress_tab(1))
         progress_tab_row_layout.addWidget(self.batch_tab_btn)
@@ -1410,145 +1398,136 @@ class TranslationTab(QWidget):
         self.progress_content_stack.addWidget(self.progress_overview_page)
         self.progress_content_stack.addWidget(self.progress_files_page)
         self.progress_content_stack.setCurrentIndex(1)
+        self.progress_content_stack.setSizePolicy(
+            QSizePolicy.Ignored, QSizePolicy.Expanding
+        )
 
         progress_view_layout.addWidget(self.progress_tab_row)
         progress_view_layout.addWidget(self.progress_content_stack, 1)
 
-        # Summary button (shown after completion) - icon-only
-        # Use a simple left-arrow for the back action and place it on the left
-        self.reset_view_button = QPushButton()
-        qt_icons.apply_button_icon(self.reset_view_button, "←", color="#dddddd")
-        self.reset_view_button.setToolTip("Back to File Selection")
+        # Run actions remain readable in every state. Icons reinforce the labels
+        # but never carry the meaning on their own.
+        self.reset_view_button = QPushButton("Back to files")
+        qt_icons.apply_button_icon(
+            self.reset_view_button, "← Back to files", color="#dddddd"
+        )
+        self.reset_view_button.setToolTip("Return to the file selection")
         self.reset_view_button.clicked.connect(self.reset_to_file_view)
         self.reset_view_button.setVisible(False)
-        # Button to open the translations (translated) folder - icon-only
-        self.open_translations_button = QPushButton()
-        qt_icons.apply_button_icon(self.open_translations_button, "📂", color="#dddddd")
+        configure_action_button(self.reset_view_button, variant="quiet")
+
+        self.open_translations_button = QPushButton("Open output folder")
+        qt_icons.apply_button_icon(
+            self.open_translations_button, "📂 Open output folder", color="#dddddd"
+        )
         self.open_translations_button.setToolTip("Open the translated files folder")
         self.open_translations_button.clicked.connect(self.open_output_folder)
         self.open_translations_button.setVisible(False)
+        configure_action_button(self.open_translations_button, variant="secondary")
+
         # Sync translated/ → files/ (RPG Maker only)
-        self.sync_translated_button = QPushButton()
-        qt_icons.apply_button_icon(self.sync_translated_button, "🔄", color="#dddddd")
+        self.sync_translated_button = QPushButton("Sync to workspace")
+        qt_icons.apply_button_icon(
+            self.sync_translated_button, "🔄 Sync to workspace", color="#dddddd"
+        )
         self.sync_translated_button.setToolTip("Sync translated/ → files/\nCopy translated files back into files/ so the next phase starts from the latest state")
         self.sync_translated_button.clicked.connect(self._sync_translated_to_files)
         self.sync_translated_button.setVisible(False)
+        configure_action_button(self.sync_translated_button, variant="secondary")
+
         # Export active files → game folder (RPG Maker only)
-        self.export_active_button = QPushButton()
-        qt_icons.apply_button_icon(self.export_active_button, "📤", color="#dddddd")
+        self.export_active_button = QPushButton("Export run to game")
+        qt_icons.apply_button_icon(
+            self.export_active_button, "📤 Export run to game", color="#dddddd"
+        )
         self.export_active_button.setToolTip("Export translated files → Game Folder\nCopy the files from this translation run into your game's data directory")
         self.export_active_button.clicked.connect(self._export_last_run_files)
         self.export_active_button.setVisible(False)
+        configure_action_button(self.export_active_button, variant="primary")
 
-        # Make both buttons the same fixed size and style (icon-only)
-        icon_btn_style = """
-            QPushButton {
-                background-color: #2d2d30;
-                color: white;
-                font-weight: bold;
-                font-size: 16px;
-                border: 1px solid #555555;
-                border-radius: 4px;
-                min-width: 40px;
-                max-width: 40px;
-                min-height: 36px;
-                max-height: 36px;
-            }
-            QPushButton:hover {
-                background-color: #3e3e42;
-                border-left-color: #007acc;
-            }
-            QPushButton:pressed {
-                background-color: #007acc;
-            }
-        """
-
-        self.reset_view_button.setStyleSheet(icon_btn_style)
-        self.open_translations_button.setStyleSheet(icon_btn_style)
-        self.sync_translated_button.setStyleSheet(icon_btn_style)
-        self.export_active_button.setStyleSheet(icon_btn_style)
-        # Size the icons to fill the compact buttons.
-        for _b in (self.reset_view_button, self.open_translations_button,
-                   self.sync_translated_button, self.export_active_button):
-            _b.setIconSize(QSize(20, 20))
-
-        # Create the stop button here so it sits in the same row as the
-        # back/open buttons. Use a compact icon style to match them but
-        # make it visually distinct (red) to indicate a destructive action.
-        stop_button_style = """
-            QPushButton {
-                background-color: #c0392b; /* red */
-                color: white;
-                font-weight: bold;
-                font-size: 16px;
-                border: 1px solid #7f2e28;
-                border-radius: 4px;
-                min-width: 40px;
-                max-width: 40px;
-                min-height: 36px;
-                max-height: 36px;
-            }
-            QPushButton:hover {
-                background-color: #e04b43;
-                border-left-color: #ff6b60;
-            }
-            QPushButton:pressed {
-                background-color: #a82a20;
-            }
-        """
-
-        # Use a clear stop-sign emoji so the glyph is rendered as a stop icon
-        # and not as a colored square on some platforms.
-        self.stop_button = QPushButton()
-        qt_icons.apply_button_icon(self.stop_button, "🛑", color="#ffffff")
-        self.stop_button.setToolTip("Stop Translation")
+        # Stop is the only destructive run action, so it keeps the danger role.
+        self.stop_button = QPushButton("Stop run")
+        qt_icons.apply_button_icon(self.stop_button, "🛑 Stop run", color="#ffffff")
+        self.stop_button.setToolTip("Stop the current translation run")
         self.stop_button.clicked.connect(self.stop_translation)
-        self.stop_button.setStyleSheet(stop_button_style)
+        configure_action_button(self.stop_button, variant="danger")
         self.stop_button.setIconSize(QSize(20, 20))
         self.stop_button.setVisible(False)
 
-        # Place both buttons on the left and totals on the right
+        # Keep run metrics in their own full-width strip so they never compete
+        # with result actions for horizontal space.
         buttons_container = QWidget()
-        # Prevent the buttons row from changing the file list box size when
-        # buttons/totals are shown — use minimum height that can grow if needed.
-        buttons_container.setMinimumHeight(64)
-        buttons_container.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        buttons_container.setObjectName("translationRunFooter")
+        buttons_container.setStyleSheet(
+            "QWidget#translationRunFooter { background: transparent; border: none; }"
+        )
+        self.run_footer = buttons_container
+        buttons_container.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        footer_layout = QVBoxLayout(buttons_container)
+        footer_layout.setContentsMargins(0, 0, 0, 0)
+        footer_layout.setSpacing(Spacing.SM)
+
+        actions_host = QWidget()
+        actions_host.setObjectName("translationRunActions")
+        actions_host.setStyleSheet(
+            "QWidget#translationRunActions { background: transparent; border: none; }"
+        )
+        self.run_actions_host = actions_host
         buttons_hbox = QHBoxLayout()
         buttons_hbox.setContentsMargins(0, 0, 0, 0)
-        buttons_hbox.setSpacing(8)
+        buttons_hbox.setSpacing(Spacing.SM)
         # Back/Open/Stop buttons on the left (stop shown while running)
         buttons_hbox.addWidget(self.stop_button)
         buttons_hbox.addWidget(self.reset_view_button)
         buttons_hbox.addWidget(self.open_translations_button)
         buttons_hbox.addWidget(self.sync_translated_button)
         buttons_hbox.addWidget(self.export_active_button)
-        # Spacer between buttons and totals
         buttons_hbox.addStretch()
-        # Totals widget on the right (hidden until start)
+        actions_host.setLayout(buttons_hbox)
+
+        # Run summary strip (hidden until a run starts)
         self.totals_widget = QWidget()
-        # Let the totals widget size naturally; the mismatch label starts hidden
-        # so it won't take extra space until a mismatch occurs.
-        self.totals_widget.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Preferred)
-        totals_layout = QVBoxLayout()
-        totals_layout.setContentsMargins(6, 2, 6, 2)
-        totals_layout.setSpacing(2)
+        self.totals_widget.setObjectName("translationRunSummary")
+        self.totals_widget.setStyleSheet(
+            f"QWidget#translationRunSummary {{ background:{COLORS.surface_2};"
+            f"border:1px solid {COLORS.border};"
+            f"border-radius:{Geometry.RADIUS_CONTROL}px; }}"
+        )
+        self.totals_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        totals_layout = QVBoxLayout(self.totals_widget)
+        totals_layout.setContentsMargins(
+            Spacing.MD, Spacing.SM, Spacing.MD, Spacing.SM
+        )
+        totals_layout.setSpacing(Spacing.XS)
+        metrics_row = QHBoxLayout()
+        metrics_row.setContentsMargins(0, 0, 0, 0)
+        metrics_row.setSpacing(Spacing.XL)
         self.totals_tokens_label = QLabel("Tokens: 0 in / 0 out")
         self.totals_tokens_label.setStyleSheet("color: #f1c40f; font-weight: bold;")
-        totals_layout.addWidget(self.totals_tokens_label)
+        self.totals_tokens_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        self.totals_tokens_label.setWordWrap(True)
+        metrics_row.addWidget(self.totals_tokens_label)
         self.totals_cost_label = QLabel("Cost: $0.0000")
         self.totals_cost_label.setStyleSheet("color: #4ec9b0; font-weight: bold;")
-        totals_layout.addWidget(self.totals_cost_label)
+        self.totals_cost_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        self.totals_cost_label.setWordWrap(True)
+        metrics_row.addWidget(self.totals_cost_label)
         self.totals_time_label = QLabel("Time: 0.0s")
         self.totals_time_label.setStyleSheet("color: #4da6ff; font-weight: bold;")
-        totals_layout.addWidget(self.totals_time_label)
+        self.totals_time_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        self.totals_time_label.setWordWrap(False)
+        metrics_row.addWidget(self.totals_time_label)
+        metrics_row.addStretch()
+        totals_layout.addLayout(metrics_row)
         self.totals_mismatch_label = QLabel("")
         self.totals_mismatch_label.setStyleSheet("color: #ff4444; font-weight: bold;")
+        self.totals_mismatch_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        self.totals_mismatch_label.setWordWrap(True)
         self.totals_mismatch_label.setVisible(False)
         totals_layout.addWidget(self.totals_mismatch_label)
-        self.totals_widget.setLayout(totals_layout)
         self.totals_widget.setVisible(False)
-        buttons_hbox.addWidget(self.totals_widget)
-        buttons_container.setLayout(buttons_hbox)
+        footer_layout.addWidget(self.totals_widget)
+        footer_layout.addWidget(actions_host)
         progress_view_layout.addWidget(buttons_container)
         
         progress_view_page.setLayout(progress_view_layout)
@@ -1614,98 +1593,121 @@ class TranslationTab(QWidget):
         
         # NOTE: Do not add progress_layout to the UI. Kept in memory only.
 
-        # Ensure any remaining space is consumed above the settings so
-        # the Translation Settings block stays anchored to the bottom.
-        layout.addStretch()
+        settings_host = QWidget()
+        settings_host.setObjectName("translationSettingsBar")
+        settings_host.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
+        settings_host.setStyleSheet(
+            "#translationSettingsBar { background-color: transparent; }"
+        )
+        settings_grid = QGridLayout(settings_host)
+        self.settings_grid = settings_grid
+        settings_grid.setContentsMargins(0, 0, 0, 0)
+        settings_grid.setHorizontalSpacing(Spacing.MD)
+        settings_grid.setVerticalSpacing(Spacing.XS)
 
-        # Translation Settings Section (moved to bottom)
-        layout.addWidget(create_horizontal_line())
-        layout.addWidget(create_section_header("🌐 Translation Settings"))
-
-        trans_form = QFormLayout()
-        trans_form.setSpacing(6)
-        trans_form.setContentsMargins(0, 0, 0, 12)
-        trans_form.setFieldGrowthPolicy(QFormLayout.FieldsStayAtSizeHint)
-        trans_form.setLabelAlignment(Qt.AlignRight | Qt.AlignVCenter)
-
-        engine_label = QLabel("Game Engine:")
-        engine_label.setFixedWidth(100)
-        engine_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        engine_label = QLabel("Engine")
+        self.engine_label = engine_label
+        engine_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         self.module_combo = QComboBox()
         self.module_combo.currentTextChanged.connect(self._on_module_changed)
-        self.module_combo.setFixedWidth(300)
-        trans_form.addRow(engine_label, self.module_combo)
+        self.module_combo.setMinimumWidth(180)
+        self.module_combo.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        settings_grid.addWidget(engine_label, 0, 0)
+        settings_grid.addWidget(self.module_combo, 0, 1)
 
-        mode_label = QLabel("Mode:")
-        mode_label.setFixedWidth(100)
-        mode_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        mode_label = QLabel("Run mode")
+        self.mode_label = mode_label
+        mode_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         self.mode_combo = QComboBox()
         self.mode_combo.addItem("Translate")
         self.mode_combo.addItem("Estimate")
         self.mode_combo.addItem(BATCH_MODE_LABEL)
-        self.mode_combo.setFixedWidth(300)
+        self.mode_combo.setMinimumWidth(180)
+        self.mode_combo.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.mode_combo.currentTextChanged.connect(self._on_mode_changed)
         self.mode_combo.activated.connect(self._mark_mode_user_selected)
-        trans_form.addRow(mode_label, self.mode_combo)
+        settings_grid.addWidget(mode_label, 1, 0)
+        settings_grid.addWidget(self.mode_combo, 1, 1)
 
         self.batch_mode_note = QLabel(
             BATCH_MODE_BENEFIT_NOTE + "\n" + BATCH_COLLECT_LIVE_CHARGE_NOTE
         )
         self.batch_mode_note.setWordWrap(True)
-        self.batch_mode_note.setStyleSheet("color:#8fbc8f;font-size:12px;padding-left:4px;")
+        self.batch_mode_note.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
+        self.batch_mode_note.setStyleSheet(
+            f"color:{COLORS.success};background-color:{COLORS.surface_2};"
+            f"border:1px solid {COLORS.border};border-radius:{Geometry.RADIUS_CONTROL}px;"
+            f"padding:{Spacing.SM}px {Spacing.MD}px;font-size:12px;"
+        )
         self.batch_mode_note.setVisible(False)
-        trans_form.addRow("", self.batch_mode_note)
+        settings_grid.addWidget(self.batch_mode_note, 2, 0, 1, 2)
 
-        layout.addLayout(trans_form)
-        layout.addWidget(create_horizontal_line())
+        action_host = QWidget()
+        action_host.setObjectName("translationSettingsActions")
+        action_host.setAttribute(Qt.WA_TranslucentBackground, True)
+        action_host.setStyleSheet(
+            "QWidget#translationSettingsActions { background: transparent; border: none; }"
+        )
+        action_row = QHBoxLayout(action_host)
+        action_row.setContentsMargins(0, 0, 0, 0)
+        action_row.setSpacing(Spacing.SM)
+        action_row.addStretch()
 
-        # Buttons (right below progress section)
-        button_layout = QHBoxLayout()
-        button_layout.addStretch()
-        self.translate_button = QPushButton("Start Translation")
+        self.translate_button = QPushButton("Translate selected files")
         self.translate_button.clicked.connect(self.start_translation)
-        self.translate_button.setStyleSheet("""
-            QPushButton {
-                background-color: #007acc;
-                color: white;
-                font-weight: bold;
-                padding: 10px 20px;
-                font-size: 14px;
-                border-radius: 5px;
-            }
-            QPushButton:hover {
-                background-color: #106ebe;
-            }
-        """)
-        button_layout.addWidget(self.translate_button)
-        button_layout.addStretch()
-        layout.addLayout(button_layout)
+        configure_action_button(self.translate_button, variant="primary")
+        self.translate_button.setEnabled(False)
+        action_row.addWidget(self.translate_button)
+        self.settings_action_host = action_host
+        settings_grid.addWidget(action_host, 3, 0, 1, 2)
+        settings_grid.setColumnStretch(1, 1)
+        setup_card.add_widget(settings_host)
+        self._settings_layout_is_wide = None
 
         self.refresh_default_translation_mode(force=True)
-        left_widget.setLayout(layout)
         
         # Right side - translation history log viewer
-        self.translation_log_viewer = LogViewer()
+        self.translation_log_viewer = LogViewer(show_header=False)
         # Mismatch counting is driven by MISMATCH_EVENT stdout markers
         # detected in append_log. The log_viewer signal is kept as a
         # fallback for in-process mode (e.g. speaker-parse).
         self.translation_log_viewer.mismatch_detected.connect(self.on_mismatch_detected)
 
-        # Allow both left and right widgets to expand vertically so the
-        # log viewer fills the full height to the bottom of the tab.
+        # The log is a primary feedback surface for Translation, so it remains
+        # visible beside the setup/files/progress workspace in every state.
         left_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.translation_log_viewer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        log_card = SectionCard(
+            "Translation log",
+            "Watch live output from the current run. Errors are collected in a separate view.",
+        )
+        self.log_card = log_card
+        log_card.setMinimumWidth(360)
+        log_card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        log_card.add_widget(self.translation_log_viewer, 1)
 
-        # Add both widgets to the fixed HBox with stretch factors (left 40%, right 60%).
-        # Keep the left column top-aligned so its header stays at the top,
-        # but allow the right-hand log viewer to expand vertically to the
-        # bottom of the tab so it fills available space.
-        # Let the left widget expand vertically (do not force AlignTop)
-        # so its internal stretch can push the settings block to the bottom.
-        main_hbox.addWidget(left_widget, 2)
-        # Do NOT force AlignTop on the log viewer; with an Expanding
-        # vertical size policy it will grow to fill the available height.
-        main_hbox.addWidget(self.translation_log_viewer, 3)
+        left_widget.setMinimumWidth(600)
+        workspace_splitter = QSplitter(Qt.Horizontal)
+        workspace_splitter.setObjectName("translationWorkspaceSplitter")
+        workspace_splitter.setChildrenCollapsible(False)
+        workspace_splitter.setHandleWidth(Spacing.LG)
+        workspace_splitter.setStyleSheet(
+            "QSplitter#translationWorkspaceSplitter::handle {"
+            "background: transparent; border: none; }"
+            f"QSplitter#translationWorkspaceSplitter::handle:hover {{"
+            f"background: {COLORS.surface_hover}; }}"
+        )
+        workspace_splitter.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        workspace_splitter.addWidget(left_widget)
+        workspace_splitter.addWidget(log_card)
+        workspace_splitter.setSizes([760, 520])
+        workspace_splitter.setStretchFactor(0, 3)
+        workspace_splitter.setStretchFactor(1, 2)
+        self.workspace_splitter = workspace_splitter
+        workspace_splitter.splitterMoved.connect(
+            lambda *_args: self._arrange_translation_workspace()
+        )
+        main_hbox.addWidget(workspace_splitter, 1)
 
         main_container.setLayout(main_hbox)
 
@@ -1713,12 +1715,218 @@ class TranslationTab(QWidget):
         main_container.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
         # Set main layout for this tab
-        tab_layout = QVBoxLayout()
+        page_content = QWidget()
+        page_content.setObjectName("appPage")
+        page_content.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
+        tab_layout = QVBoxLayout(page_content)
+        tab_layout.setContentsMargins(
+            Spacing.XL, Spacing.LG, Spacing.XL, Spacing.LG
+        )
+        tab_layout.setSpacing(Spacing.LG)
+        tab_layout.addWidget(PageHeader(
+            "Translation",
+            "Configure the run, choose its files, and follow live translation output."
+        ))
         # Add with stretch so the container expands to fill available space
         tab_layout.addWidget(main_container, 1)
-        tab_layout.setContentsMargins(0, 0, 0, 0)
-        self.setLayout(tab_layout)
-        
+
+        page_scroll = QScrollArea()
+        page_scroll.setObjectName("translationPageScroll")
+        page_scroll.setWidgetResizable(True)
+        page_scroll.setFrameShape(QFrame.NoFrame)
+        page_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        page_scroll.setWidget(page_content)
+        self.page_scroll = page_scroll
+
+        outer_layout = QVBoxLayout(self)
+        outer_layout.setContentsMargins(0, 0, 0, 0)
+        outer_layout.setSpacing(0)
+        outer_layout.addWidget(page_scroll)
+        QTimer.singleShot(0, self._arrange_translation_workspace)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        QTimer.singleShot(0, self._arrange_translation_workspace)
+
+    def _arrange_translation_workspace(self) -> None:
+        self._arrange_translation_settings()
+        self._arrange_translation_file_controls()
+
+    def _arrange_translation_file_controls(self) -> None:
+        """Use one toolbar row whenever the file card has enough room."""
+        if not all(
+            hasattr(self, name)
+            for name in (
+                "file_card",
+                "file_controls_layout",
+                "selection_summary_label",
+                "add_files_button",
+                "remove_files_button",
+                "more_file_actions_button",
+                "select_all_button",
+                "clear_selection_button",
+            )
+        ):
+            return
+
+        buttons = (
+            self.add_files_button,
+            self.remove_files_button,
+            self.more_file_actions_button,
+            self.select_all_button,
+            self.clear_selection_button,
+        )
+        for button in buttons:
+            button.setMinimumWidth(0)
+            button.setMaximumWidth(16777215)
+        self.add_files_button.setText("Add files…")
+        self.remove_files_button.setText("Remove selected")
+        self.more_file_actions_button.setText("More…")
+        self.select_all_button.setText("Select all")
+        self.clear_selection_button.setText("Clear")
+        summary_width = max(
+            self.selection_summary_label.sizeHint().width(),
+            self.fontMetrics().horizontalAdvance("000 of 000 selected"),
+        )
+        file_action_width = max(
+            action_button_width_hint(button)
+            for button in (
+                self.add_files_button,
+                self.remove_files_button,
+                self.more_file_actions_button,
+            )
+        )
+        scope_action_width = max(
+            action_button_width_hint(button)
+            for button in (self.select_all_button, self.clear_selection_button)
+        )
+        buttons_width = (
+            file_action_width * 3
+            + scope_action_width * 2
+            + Spacing.SM * (len(buttons) - 1)
+        )
+        integrated_width = buttons_width + summary_width + Spacing.SM
+        available_width = self.file_card.width()
+        if available_width >= integrated_width:
+            mode = "integrated"
+        elif available_width >= buttons_width:
+            mode = "buttons"
+        else:
+            mode = "compact"
+        self._file_controls_layout_mode = mode
+
+        if mode == "compact":
+            self.add_files_button.setText("Add")
+            self.remove_files_button.setText("Remove")
+            self.more_file_actions_button.setText("More")
+            self.select_all_button.setText("All")
+            self.clear_selection_button.setText("Clear")
+        equalize_button_widths(
+            (
+                self.add_files_button,
+                self.remove_files_button,
+                self.more_file_actions_button,
+            ),
+            minimum=0,
+        )
+        equalize_button_widths(
+            (self.select_all_button, self.clear_selection_button),
+            minimum=0,
+        )
+
+        grid = self.file_controls_layout
+        controls = (self.selection_summary_label, *buttons)
+        for control in controls:
+            grid.removeWidget(control)
+        for column in range(6):
+            grid.setColumnStretch(column, 0)
+
+        left = Qt.AlignLeft | Qt.AlignVCenter
+        right = Qt.AlignRight | Qt.AlignVCenter
+        if mode == "integrated":
+            grid.addWidget(self.add_files_button, 0, 0, 1, 1, left)
+            grid.addWidget(self.remove_files_button, 0, 1, 1, 1, left)
+            grid.addWidget(self.more_file_actions_button, 0, 2, 1, 1, left)
+            grid.addWidget(self.selection_summary_label, 0, 3, 1, 1, right)
+            grid.addWidget(self.select_all_button, 0, 4, 1, 1, right)
+            grid.addWidget(self.clear_selection_button, 0, 5, 1, 1, right)
+            grid.setColumnStretch(3, 1)
+        elif mode == "buttons":
+            grid.addWidget(self.selection_summary_label, 0, 0, 1, 6)
+            grid.addWidget(self.add_files_button, 1, 0, 1, 1, left)
+            grid.addWidget(self.remove_files_button, 1, 1, 1, 1, left)
+            grid.addWidget(self.more_file_actions_button, 1, 2, 1, 1, left)
+            grid.addWidget(self.select_all_button, 1, 4, 1, 1, right)
+            grid.addWidget(self.clear_selection_button, 1, 5, 1, 1, right)
+            grid.setColumnStretch(3, 1)
+        else:
+            grid.addWidget(self.selection_summary_label, 0, 0, 1, 3)
+            grid.addWidget(self.select_all_button, 1, 0, 1, 1, left)
+            grid.addWidget(self.clear_selection_button, 1, 1, 1, 1, left)
+            grid.addWidget(self.add_files_button, 2, 0, 1, 1, left)
+            grid.addWidget(self.remove_files_button, 2, 1, 1, 1, left)
+            grid.addWidget(self.more_file_actions_button, 2, 2, 1, 1, left)
+            grid.setColumnStretch(3, 1)
+        self.file_toolbar.updateGeometry()
+
+    def _arrange_translation_settings(self) -> None:
+        """Keep run choices compact without crushing them at narrow widths."""
+        if not all(
+            hasattr(self, name)
+            for name in (
+                "settings_grid",
+                "setup_card",
+                "engine_label",
+                "module_combo",
+                "mode_label",
+                "mode_combo",
+                "batch_mode_note",
+                "settings_action_host",
+            )
+        ):
+            return
+
+        wide = self.setup_card.width() >= 900
+        if self._settings_layout_is_wide is wide:
+            return
+        self._settings_layout_is_wide = wide
+
+        grid = self.settings_grid
+        widgets = (
+            self.engine_label,
+            self.module_combo,
+            self.mode_label,
+            self.mode_combo,
+            self.batch_mode_note,
+            self.settings_action_host,
+        )
+        for widget in widgets:
+            grid.removeWidget(widget)
+        for column in range(4):
+            grid.setColumnStretch(column, 0)
+
+        if wide:
+            self.engine_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+            self.mode_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+            grid.addWidget(self.engine_label, 0, 0)
+            grid.addWidget(self.mode_label, 0, 1)
+            grid.addWidget(self.module_combo, 1, 0)
+            grid.addWidget(self.mode_combo, 1, 1)
+            grid.addWidget(self.settings_action_host, 1, 2)
+            grid.addWidget(self.batch_mode_note, 2, 0, 1, 3)
+            grid.setColumnStretch(0, 3)
+            grid.setColumnStretch(1, 2)
+        else:
+            self.engine_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            self.mode_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            grid.addWidget(self.engine_label, 0, 0)
+            grid.addWidget(self.module_combo, 0, 1)
+            grid.addWidget(self.mode_label, 1, 0)
+            grid.addWidget(self.mode_combo, 1, 1)
+            grid.addWidget(self.batch_mode_note, 2, 0, 1, 2)
+            grid.addWidget(self.settings_action_host, 3, 0, 1, 2)
+            grid.setColumnStretch(1, 1)
+
     def setup_module_list(self):
         """Set up the module selection list."""
         # Engine modules read translation settings during import. A downloaded
@@ -1773,80 +1981,6 @@ class TranslationTab(QWidget):
         # Refresh file list to show only files matching the selected module's extensions
         self.refresh_file_lists()
     
-    def _toggle_file_checkbox(self, item):
-        """Toggle checkbox when clicking anywhere on the item."""
-        # Toggle the built-in QListWidgetItem checkbox state
-        try:
-            if item.checkState() == Qt.Checked:
-                item.setCheckState(Qt.Unchecked)
-            else:
-                item.setCheckState(Qt.Checked)
-        except Exception:
-            pass
-
-    def _remove_file_list_event_filter(self):
-        if not getattr(self, "_file_list_filter_installed", False):
-            return
-        try:
-            self.file_list.viewport().removeEventFilter(self)
-        except RuntimeError:
-            pass
-        self._file_list_filter_installed = False
-
-    def eventFilter(self, obj, event):
-        """Intercept mouse presses on the file list.
-
-        If the click is inside the checkbox indicator area, allow the
-        default Qt handling to toggle the checkbox. If the click is
-        on the rest of the row, manually toggle the item's check state
-        and consume the event to prevent further handling (avoids
-        double toggles).
-        """
-        try:
-            file_list = self.file_list
-            viewport = file_list.viewport()
-        except RuntimeError:
-            return False
-
-        # We install the filter on the QListWidget viewport, so the
-        # obj will be the viewport widget when mouse events arrive.
-        if (obj is viewport or obj is file_list) and event.type() == QEvent.MouseButtonPress:
-            pos = event.pos()
-            index = file_list.indexAt(pos)
-            if not index.isValid():
-                return False
-
-            rect = file_list.visualRect(index)
-            # Approximate checkbox indicator rectangle (style may vary).
-            # Use a small left inset and a ~20x20 indicator area vertically centered.
-            indicator_w = 20
-            indicator_h = 20
-            indicator_x = rect.left() + 4
-            indicator_y = rect.top() + (rect.height() - indicator_h) // 2
-            indicator_rect = QRect(indicator_x, indicator_y, indicator_w, indicator_h)
-
-            # If the click is inside the indicator area, let Qt handle it
-            # (it will toggle the check state). Otherwise toggle manually
-            # and consume the event.
-            if indicator_rect.contains(pos):
-                return False
-
-            # Toggle the item and consume the event
-            item = file_list.item(index.row())
-            try:
-                if item.checkState() == Qt.Checked:
-                    item.setCheckState(Qt.Unchecked)
-                else:
-                    item.setCheckState(Qt.Checked)
-            except Exception:
-                pass
-            return True
-
-        try:
-            return super().eventFilter(obj, event)
-        except RuntimeError:
-            return False
-    
     def _on_mode_changed(self, mode_text):
         """Update the translate button text based on selected mode."""
         if hasattr(self, "batch_mode_note"):
@@ -1861,6 +1995,23 @@ class TranslationTab(QWidget):
             self.translate_button.setText("Start Batch Translation")
         elif mode_text == "Parse Speakers":
             self.translate_button.setText("Parse Speakers")
+
+    def _set_activity_visible(self, visible: bool) -> None:
+        """Keep the Translation Log visible; it is core run feedback."""
+        if not hasattr(self, "translation_log_viewer"):
+            return
+        self.translation_log_viewer.show()
+
+    def _set_run_controls_enabled(self, enabled: bool) -> None:
+        """Lock run-defining choices while a worker or completed result is active."""
+        for widget in (
+            getattr(self, "module_combo", None),
+            getattr(self, "mode_combo", None),
+        ):
+            if widget is not None:
+                widget.setEnabled(enabled)
+        if hasattr(self, "translate_button"):
+            self.translate_button.setEnabled(enabled and bool(self.get_selected_files()))
 
     def _mark_mode_user_selected(self, _index: int):
         self._mode_user_selected = True
@@ -1880,12 +2031,8 @@ class TranslationTab(QWidget):
         """Switch Batch/Files views; index 0 = batch overview, 1 = per-file list."""
         self._batch_tab_index = index if self.progress_tab_row.isVisible() else -1
         self.progress_content_stack.setCurrentIndex(index)
-        self.batch_tab_btn.setStyleSheet(
-            self._progress_tab_btn_active_style if index == 0 else self._progress_tab_btn_style
-        )
-        self.files_tab_btn.setStyleSheet(
-            self._progress_tab_btn_active_style if index == 1 else self._progress_tab_btn_style
-        )
+        self.batch_tab_btn.setChecked(index == 0)
+        self.files_tab_btn.setChecked(index == 1)
 
     def _set_progress_view_mode(self, batch_mode, file_count=0):
         """Batch runs use a Batch tab for the pipeline; Files tab holds the per-file list."""
@@ -2272,6 +2419,23 @@ class TranslationTab(QWidget):
                     else:
                         item.setCheckState(Qt.Unchecked)
                     self.file_list.addItem(item)
+        self._update_selection_summary()
+
+    def _update_selection_summary(self, *_args) -> None:
+        """Keep the run scope explicit and prevent empty starts."""
+        if not hasattr(self, "file_list") or not hasattr(self, "selection_summary_label"):
+            return
+        total = self.file_list.count()
+        selected = len(self.get_selected_files())
+        if total == 0:
+            text = "No matching files · add files or choose another engine"
+        else:
+            text = f"{selected} of {total} selected"
+        self.selection_summary_label.setText(text)
+        worker = getattr(self, "translation_worker", None)
+        running = bool(worker and worker.isRunning())
+        if hasattr(self, "translate_button") and self.file_stack.currentIndex() == 0:
+            self.translate_button.setEnabled(selected > 0 and not running)
     
     def select_all_files(self):
         """Select all files in the list."""
@@ -2281,6 +2445,7 @@ class TranslationTab(QWidget):
                 item.setCheckState(Qt.Checked)
             except Exception:
                 pass
+        self._update_selection_summary()
     
     def deselect_all_files(self):
         """Deselect all files in the list."""
@@ -2290,6 +2455,7 @@ class TranslationTab(QWidget):
                 item.setCheckState(Qt.Unchecked)
             except Exception:
                 pass
+        self._update_selection_summary()
     
     def get_selected_files(self):
         """Get list of checked files."""
@@ -2777,6 +2943,8 @@ class TranslationTab(QWidget):
         """Reset back to file selection view."""
         self._reset_batch_pipeline_ui()
         self.file_stack.setCurrentIndex(0)
+        if self.file_card.title_label is not None:
+            self.file_card.title_label.setText("Files to translate")
         self.reset_view_button.setVisible(False)
         # Also hide the open translations button when returning to file view
         try:
@@ -2800,6 +2968,8 @@ class TranslationTab(QWidget):
         self.translate_button.setVisible(True)
         self.stop_button.setVisible(False)
         self.refresh_file_lists()
+        self._on_mode_changed(self.mode_combo.currentText())
+        self._set_run_controls_enabled(True)
             
     def start_translation(self, skip_confirm: bool = False, forced_resume_state: str | None = None):
         """Start the translation process.
@@ -2924,6 +3094,10 @@ class TranslationTab(QWidget):
         if True:
             # Switch to progress view
             self.file_stack.setCurrentIndex(1)
+            if self.file_card.title_label is not None:
+                self.file_card.title_label.setText("Translation progress")
+            self._set_activity_visible(True)
+            self._set_run_controls_enabled(False)
             
             # Initialize Files-tab table with all selected files
             self.progress_list.clear()
@@ -2937,7 +3111,9 @@ class TranslationTab(QWidget):
                 self.create_progress_item(filename)
             
             # Toggle button visibility
-            self.translate_button.setVisible(False)
+            self.translate_button.setVisible(True)
+            self.translate_button.setEnabled(False)
+            self.translate_button.setText("Run in progress…")
             if batch_mode:
                 # Shown during collect; hidden once collection finishes (see _on_batch_phase)
                 self.stop_button.setVisible(batch_resume_state is None)
@@ -3406,6 +3582,8 @@ class TranslationTab(QWidget):
 
     def _apply_finish_ui(self, success, message):
         """Apply UI changes for a finished translation run."""
+        if self.file_card.title_label is not None:
+            self.file_card.title_label.setText("Translation results")
         if getattr(self, "_batch_active", False):
             self._on_batch_phase("done", None)
         # Parse Speakers: promote Scanned rows to Done only after vocab write finishes.
@@ -3446,8 +3624,11 @@ class TranslationTab(QWidget):
         try:
             if success:
                 self.translating_label.setText("Completed!")
+                self.translate_button.setText("Run complete")
             else:
                 self.translating_label.setText(f"Failed: {message}")
+                self.translate_button.setText("Run failed")
+            self.translate_button.setEnabled(False)
         except Exception:
             pass
 
@@ -3477,6 +3658,7 @@ class TranslationTab(QWidget):
         
         # Toggle button visibility
         self.translate_button.setVisible(True)
+        self.translate_button.setEnabled(False)
         self.stop_button.setVisible(False)
         # If a finish was pending (worker signaled finished before
         # file progress completed), clear it and finalize UI now since
@@ -3493,10 +3675,10 @@ class TranslationTab(QWidget):
         except Exception:
             pass
         self.translating_label.setText("Stopped")
+        self.translate_button.setText("Run stopped")
         
     def closeEvent(self, event):
         """Handle widget close event."""
-        self._remove_file_list_event_filter()
         if hasattr(self, 'log_timer'):
             self.log_timer.stop()
         if hasattr(self, 'translation_log_viewer') and self.translation_log_viewer:

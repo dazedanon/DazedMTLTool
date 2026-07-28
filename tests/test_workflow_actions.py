@@ -74,7 +74,7 @@ class WorkflowActionWiringTests(unittest.TestCase):
             (4, "apply_var_range", {"text": "Save range"}),
             (4, "run_phase", {"text": "Translate selected text"}),
             (5, "copy_vocab_to_game", {"text": "Copy glossary to game"}),
-            (5, "copy_plugins_js_translate_prompt", {"text": "Copy plugin translation skill"}),
+            (5, "copy_plugins_js_translate_prompt", {"text": "Copy plugin skill"}),
             (5, "export_active_files", {"text": "Export selected files"}),
             (5, "export_to_game", {"text": "Export all translated files"}),
             (6, "select_rewrap_files", {"text": "Select all"}),

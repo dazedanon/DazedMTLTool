@@ -19,12 +19,13 @@ class LogViewer(QWidget):
     log_updated = pyqtSignal(str)
     mismatch_detected = pyqtSignal()  # Emitted each time a [MISMATCH] header line is seen
     
-    def __init__(self):
+    def __init__(self, *, show_header: bool = True):
         super().__init__()
         # Lightweight append-only log viewer. Logs are provided by the
         # translation worker via signals so we don't poll files or provide
         # controls here. This keeps the UI responsive.
         self._error_count = 0
+        self._show_header = show_header
         self.init_ui()
         
     def init_ui(self):
@@ -36,17 +37,18 @@ class LogViewer(QWidget):
         # Simple header to match left-side styling (use same look as create_section_header)
         from gui.qt_icons import make_section_header
 
-        header = make_section_header(
-            "📝 Translation Log",
-            "QLabel {"
-            "font-size: 13px;"
-            "font-weight: bold;"
-            "color: #007acc;"
-            "padding: 8px 0px 5px 0px;"
-            "background-color: transparent;"
-            "}",
-        )
-        layout.addWidget(header, 0)
+        if self._show_header:
+            header = make_section_header(
+                "📝 Translation Log",
+                "QLabel {"
+                "font-size: 13px;"
+                "font-weight: bold;"
+                "color: #007acc;"
+                "padding: 8px 0px 5px 0px;"
+                "background-color: transparent;"
+                "}",
+            )
+            layout.addWidget(header, 0)
 
         # Match spacing used in left column so the gap between header and
         # content lines up visually.
@@ -90,6 +92,7 @@ class LogViewer(QWidget):
         self.log_display.setReadOnly(True)
         self.log_display.setFont(_log_font)
         self.log_display.setStyleSheet(_text_edit_style)
+        self.log_display.document().setDocumentMargin(8.0)
         self.log_display.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self._tab_widget.addTab(self.log_display, "All")
 
@@ -98,6 +101,7 @@ class LogViewer(QWidget):
         self.error_display.setReadOnly(True)
         self.error_display.setFont(_log_font)
         self.error_display.setStyleSheet(_text_edit_style)
+        self.error_display.document().setDocumentMargin(8.0)
         self.error_display.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self._tab_widget.addTab(self.error_display, "Errors")
 
@@ -105,7 +109,7 @@ class LogViewer(QWidget):
 
         # Lightweight status label
         self.status_label = QLabel("Ready")
-        self.status_label.setStyleSheet("color: #cccccc; padding: 5px;")
+        self.status_label.setStyleSheet("color: #cccccc; padding: 8px;")
         layout.addWidget(self.status_label, 0)
 
         self.setLayout(layout)

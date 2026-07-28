@@ -97,7 +97,7 @@ workflow through auto-detection, and verifies that you are ready to use it:
 - Editable PNGs are under `.dazedtl/images/<game-relative>/img/...`.
 - No PNGs were accidentally placed beside that expected `img/` tree.
 
-Click **Open Image Manager**, decrypt the images you want to translate, then click **Copy skill** in the
+Click **Open Image Manager**, make the images you want to translate editable, then click **Copy skill** in the
 Image Manager and paste it into Codex, Cursor, Copilot, or a similar coding agent. Review the
 resulting PNGs before using **Patch selected** or **Patch all**.
 

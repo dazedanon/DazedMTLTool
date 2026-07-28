@@ -114,7 +114,9 @@ class WorkflowShellTests(unittest.TestCase):
     def test_step_rail_compacts_at_constrained_width(self):
         self.workflow.resize(1000, 600)
         self.app.processEvents()
-        self.assertEqual(self.workflow._step_rail.width(), 56)
+        self.assertEqual(
+            self.workflow._step_rail.width(), Geometry.STEP_RAIL_COMPACT_WIDTH
+        )
         self.workflow.resize(1400, 760)
         self.app.processEvents()
         self.assertEqual(self.workflow._step_rail.width(), 176)
@@ -270,7 +272,7 @@ class WorkflowShellTests(unittest.TestCase):
                 ("Collect names", "Copy setup skill"),
             ),
             5: (
-                ("Copy glossary to game", "Copy plugin translation skill"),
+                ("Copy glossary to game", "Copy plugin skill"),
                 ("Export selected files", "Export all translated files"),
             ),
             6: (

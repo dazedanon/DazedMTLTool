@@ -100,10 +100,12 @@ def _linux_nav_icon(icon_text: str, *, size: int, font_px: int, normal_color: QC
 
 
 def _nav_toolbutton_stylesheet(*, horizontal: bool, icon_only: bool, update_available: bool = False) -> str:
+    from gui.theme import COLORS
+
     border_prop = "border-bottom" if horizontal else "border-left"
-    accent = "#ff5252" if update_available else "#007acc"
-    text_color = "#ff5252" if update_available else "#cccccc"
-    checked_color = "#ff8a80" if update_available else "#ffffff"
+    accent = COLORS.danger if update_available else COLORS.accent_text
+    text_color = COLORS.danger if update_available else COLORS.text_secondary
+    checked_color = COLORS.danger_hover if update_available else COLORS.text_primary
     if icon_only:
         return f"""
             QToolButton {{
@@ -115,10 +117,10 @@ def _nav_toolbutton_stylesheet(*, horizontal: bool, icon_only: bool, update_avai
                 margin: 0px;
             }}
             QToolButton:hover {{
-                background-color: #3e3e42;
+                background-color: {COLORS.surface_hover};
             }}
             QToolButton:checked {{
-                background-color: #37373d;
+                background-color: {COLORS.surface_2};
                 {border_prop}: 3px solid {accent};
                 color: {checked_color};
             }}
@@ -137,10 +139,10 @@ def _nav_toolbutton_stylesheet(*, horizontal: bool, icon_only: bool, update_avai
             margin: 0px;
         }}
         QToolButton:hover {{
-            background-color: #3e3e42;
+            background-color: {COLORS.surface_hover};
         }}
         QToolButton:checked {{
-            background-color: #37373d;
+            background-color: {COLORS.surface_2};
             {border_prop}: 3px solid {accent};
             color: {checked_color};
         }}
@@ -178,11 +180,13 @@ def configure_nav_toolbutton(
 
     icon_name = qt_icons.icon_for_emoji(icon_text)
     if qt_icons.HAS_QTA and icon_name:
-        off_color = "#ff8a80" if update_available else "#cccccc"
-        on_color = "#ff5252" if update_available else "#ffffff"
+        from gui.theme import COLORS
+
+        off_color = COLORS.danger_hover if update_available else COLORS.text_secondary
+        on_color = COLORS.danger if update_available else COLORS.text_primary
         btn.setIcon(qt_icons.two_state_icon(
             icon_name, icon_dim, off_color=off_color, on_color=on_color,
-            disabled_color="#666666",
+            disabled_color=COLORS.text_disabled,
         ))
         btn.setIconSize(QSize(icon_dim, icon_dim))
         btn.setText("")
@@ -196,7 +200,9 @@ def configure_nav_toolbutton(
         # Scale to the button cell (leave room for the 3px active border).
         icon_dim = max(28, min(btn.width(), btn.height()) - 8)
         font_px = max(22, int(icon_dim * 0.78))
-        normal_color = QColor("#ff5252") if update_available else None
+        from gui.theme import COLORS
+
+        normal_color = QColor(COLORS.danger) if update_available else None
         btn.setIcon(_linux_nav_icon(icon_text, size=icon_dim, font_px=font_px, normal_color=normal_color))
         btn.setIconSize(QSize(icon_dim, icon_dim))
         btn.setText("")

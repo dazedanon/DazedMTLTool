@@ -1161,19 +1161,28 @@ class VersionUpdateUITests(unittest.TestCase):
 
         tab = VersionUpdateTab()
         try:
-            self.assertEqual(tab.scan_btn.text(), "Scan Update")
-            self.assertEqual(tab.apply_btn.text(), "Create Recommended Update")
+            self.assertEqual(tab.scan_btn.text(), "Preview update")
+            self.assertEqual(tab.apply_btn.text(), "Create recommended update")
             self.assertEqual(
-                tab.custom_apply_btn.text(), "Create with Review Choices"
+                tab.custom_apply_btn.text(), "Create with review choices"
             )
             self.assertFalse(tab.apply_btn.isEnabled())
             self.assertFalse(tab.custom_apply_btn.isEnabled())
+            self.assertTrue(tab.review_card.isHidden())
+            self.assertTrue(tab.create_card.isHidden())
+            self.assertTrue(tab.progress.isHidden())
+            self.assertTrue(tab.progress_label.isHidden())
+            self.assertTrue(tab.cancel_scan_btn.isHidden())
+            self.assertTrue(tab.options_widget.isHidden())
+            tab.options_toggle.setChecked(True)
+            self.assertFalse(tab.options_widget.isHidden())
+            self.assertEqual(tab.options_toggle.text(), "Hide update options")
             self.assertIn("original folders are never modified", tab.safety_label.text())
             self.assertTrue(tab.copy_mode_radio.isChecked())
             tab.in_place_mode_radio.setChecked(True)
-            self.assertEqual(tab.apply_btn.text(), "Update Translated Game")
+            self.assertEqual(tab.apply_btn.text(), "Update translated game")
             self.assertEqual(
-                tab.custom_apply_btn.text(), "Update with Review Choices"
+                tab.custom_apply_btn.text(), "Update with review choices"
             )
             self.assertTrue(tab.output_edit.isHidden())
             self.assertIn("rollback backup", tab.safety_label.text())
@@ -1190,7 +1199,7 @@ class VersionUpdateUITests(unittest.TestCase):
                 tab.tree.selectionMode(), QAbstractItemView.ExtendedSelection
             )
             self.assertEqual(tab.review_filter.currentData(), "review")
-            self.assertEqual(tab.use_proposed_btn.text(), "Merge New + Local Changes")
+            self.assertEqual(tab.use_proposed_btn.text(), "Merge new and local changes")
             self.assertFalse(hasattr(tab, "audit_reapply_check"))
         finally:
             tab.close()
@@ -1225,16 +1234,18 @@ class VersionUpdateUITests(unittest.TestCase):
                 tab._refresh_detection()
                 self.assertIn("runs automatically", tab.baseline_label.text())
                 tab._on_scan_done(repeated)
+                self.assertFalse(tab.review_card.isHidden())
+                self.assertFalse(tab.create_card.isHidden())
                 self.assertIn("Recovery audit", tab.summary_label.text())
                 self.assertEqual(tab.review_filter.currentData(), "recovery")
                 self.assertEqual(
                     sum(not item.isHidden() for item in tab._items.values()), 0
                 )
                 self.assertEqual(
-                    tab.apply_btn.text(), "Reapply Recovered Changes"
+                    tab.apply_btn.text(), "Reapply recovered changes"
                 )
                 self.assertEqual(
-                    tab.custom_apply_btn.text(), "Reapply with Review Choices"
+                    tab.custom_apply_btn.text(), "Reapply with review choices"
                 )
                 self.assertTrue(tab.apply_btn.isEnabled())
                 self.assertTrue(tab.custom_apply_btn.isEnabled())

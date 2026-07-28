@@ -68,9 +68,17 @@ class Geometry:
     RADIUS_CONTROL = 4
     RADIUS_CARD = 6
     STEP_RAIL_WIDTH = 176
-    STEP_RAIL_COMPACT_WIDTH = 56
+    STEP_RAIL_COMPACT_WIDTH = 72
     ACTIVITY_WIDTH = 300
     CONTENT_MAX_WIDTH = 1040
+    APP_RAIL_WIDTH = 64
+
+
+class Typography:
+    PAGE_TITLE = 18
+    SECTION_TITLE = 14
+    BODY = 12
+    META = 11
 
 
 def application_stylesheet() -> str:
@@ -328,6 +336,188 @@ def application_stylesheet() -> str:
             color: {c.text_primary};
             font-size: 14px;
             font-weight: 600;
+        }}
+
+        QWidget#appPage, QWidget#appPageHeader {{
+            background-color: {c.canvas};
+        }}
+        QWidget#appSidebar {{
+            background-color: {c.chrome};
+            border-right: 1px solid {c.border};
+        }}
+        QWidget#appSubnavBar {{
+            background-color: {c.chrome};
+            border-bottom: 1px solid {c.border};
+        }}
+        QPushButton#appSubnavButton {{
+            background-color: transparent;
+            color: {c.text_muted};
+            border: none;
+            border-bottom: 3px solid transparent;
+            border-radius: 0;
+            padding: 8px 14px;
+            min-height: 22px;
+            font-weight: 600;
+        }}
+        QPushButton#appSubnavButton:hover {{
+            background-color: {c.surface_hover};
+            color: {c.text_primary};
+        }}
+        QPushButton#appSubnavButton:checked {{
+            background-color: {c.surface_1};
+            color: {c.text_primary};
+            border-bottom-color: {c.accent_text};
+        }}
+        QLabel#appPageEyebrow {{
+            color: {c.accent_text};
+            font-size: {Typography.META}px;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+        }}
+        QLabel#appPageTitle {{
+            color: {c.text_primary};
+            font-size: {Typography.PAGE_TITLE}px;
+            font-weight: 600;
+        }}
+        QLabel#appPagePurpose {{
+            color: {c.text_muted};
+            font-size: {Typography.BODY}px;
+        }}
+        QFrame#appSectionCard {{
+            background-color: {c.surface_1};
+            border: 1px solid {c.border};
+            border-radius: {Geometry.RADIUS_CARD}px;
+        }}
+        QLabel#appSectionTitle {{
+            color: {c.text_primary};
+            font-size: {Typography.SECTION_TITLE}px;
+            font-weight: 600;
+        }}
+        QLabel#appSectionDescription {{
+            color: {c.text_muted};
+            font-size: {Typography.BODY}px;
+        }}
+        QLabel#appStatusText {{
+            color: {c.text_muted};
+            font-size: {Typography.BODY}px;
+        }}
+        QLabel#appStatusText[state="info"] {{ color: {c.accent_text}; }}
+        QLabel#appStatusText[state="success"] {{ color: {c.success}; }}
+        QLabel#appStatusText[state="warning"] {{ color: {c.warning}; }}
+        QLabel#appStatusText[state="error"] {{ color: {c.danger}; }}
+        QPushButton#appActionButton {{
+            background-color: {c.surface_1};
+            color: {c.text_secondary};
+            border: 1px solid {c.border_strong};
+            border-radius: {Geometry.RADIUS_CONTROL}px;
+            padding: 6px 14px;
+            min-height: 22px;
+            font-weight: 600;
+        }}
+        QPushButton#appActionButton:hover {{
+            background-color: {c.surface_hover};
+            color: {c.text_primary};
+            border-color: {c.accent_text};
+        }}
+        QPushButton#appActionButton:focus {{ border-color: {c.focus}; }}
+        QPushButton#appActionButton:pressed {{ background-color: {c.canvas}; }}
+        QPushButton#appActionButton[variant="primary"] {{
+            background-color: {c.accent};
+            color: {c.on_accent};
+            border-color: {c.accent};
+        }}
+        QPushButton#appActionButton[variant="primary"]:hover {{
+            background-color: {c.accent_hover};
+            border-color: {c.accent_text};
+        }}
+        QPushButton#appActionButton[variant="quiet"] {{
+            background-color: transparent;
+            color: {c.text_muted};
+            border-color: transparent;
+        }}
+        QPushButton#appActionButton[variant="quiet"]:hover {{
+            background-color: {c.surface_hover};
+            color: {c.text_primary};
+        }}
+        QPushButton#appActionButton[variant="danger"] {{
+            background-color: {c.surface_1};
+            color: {c.danger};
+            border-color: {c.danger};
+        }}
+        QPushButton#appActionButton[variant="danger"]:hover {{
+            background-color: {c.danger_surface};
+            color: {c.danger_hover};
+        }}
+        QPushButton#appActionButton:disabled {{
+            background-color: {c.surface_1};
+            color: {c.text_disabled};
+            border-color: {c.border};
+        }}
+        QPushButton#appIconButton {{
+            background-color: {c.surface_1};
+            color: {c.text_secondary};
+            border: 1px solid {c.border_strong};
+            border-radius: {Geometry.RADIUS_CONTROL}px;
+            padding: 0;
+        }}
+        QPushButton#appIconButton:hover {{
+            background-color: {c.surface_hover};
+            border-color: {c.accent_text};
+        }}
+        QPushButton#appIconButton:focus {{ border-color: {c.focus}; }}
+        QPushButton#appIconButton:pressed {{ background-color: {c.accent_pressed}; }}
+        QPushButton#appIconButton[variant="danger"] {{
+            background-color: {c.danger_surface};
+            color: {c.danger};
+            border-color: {c.danger};
+        }}
+        QPushButton#appIconButton:disabled {{
+            background-color: {c.surface_1};
+            color: {c.text_disabled};
+            border-color: {c.border};
+        }}
+        QLabel#updateHeadline {{
+            color: {c.text_primary};
+            font-size: {Typography.SECTION_TITLE}px;
+            font-weight: 600;
+        }}
+        QLabel#updateDetail, QLabel#updateVersionKey {{
+            color: {c.text_muted};
+            font-size: {Typography.META}px;
+        }}
+        QLabel#updateVersionValue {{
+            color: {c.text_primary};
+            font-size: {Typography.BODY}px;
+            font-weight: 600;
+            font-family: Consolas, "Courier New", monospace;
+        }}
+        QLabel#updateVersionArrow {{
+            color: {c.accent_text};
+            font-size: {Typography.SECTION_TITLE}px;
+            padding: 0 8px;
+        }}
+        QFrame#updateVersionFrame {{
+            background-color: {c.surface_1};
+            border: 1px solid {c.border};
+            border-radius: {Geometry.RADIUS_CARD}px;
+        }}
+        QLabel#updateStep, QLabel#updateStepActive, QLabel#updateStepDone {{
+            color: {c.text_muted};
+            background-color: {c.surface_2};
+            border: 1px solid {c.border};
+            border-radius: 10px;
+            padding: 4px 10px;
+            font-size: {Typography.META}px;
+        }}
+        QLabel#updateStepActive {{
+            color: {c.on_accent};
+            background-color: {c.accent};
+            border-color: {c.accent_text};
+        }}
+        QLabel#updateStepDone {{
+            color: {c.text_primary};
+            background-color: {c.surface_1};
+            border-color: {c.success};
         }}
     """
 

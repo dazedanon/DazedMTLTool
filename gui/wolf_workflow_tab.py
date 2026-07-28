@@ -27,7 +27,7 @@ Mirrors the RPGMaker WorkflowTab, driven by the vendored WolfDawn ``wolf`` CLI
                         optional save rewrite for existing .sav files
   Step 9  Fix wrap    - search translated JSON by in-game text; Relayout
                         (names-wrap / cell geometry) or Manual (width + font);
-                        then Inject all from Step 7 and re-package to verify
+                        then Apply all translations in Step 7 and re-package
 
 names.json is staged into files/ but is NOT translated in the bulk phases - WolfDawn
 tags each name safe / refs / verify and Phase 0 translates only safe entries
@@ -50,7 +50,7 @@ import shutil
 import tempfile
 from pathlib import Path
 
-from PyQt5.QtCore import Qt, QSettings, QSize, QThread, QTimer, pyqtSignal, QEvent
+from PyQt5.QtCore import Qt, QSettings, QSize, QThread, QTimer, pyqtSignal
 from PyQt5.QtGui import QColor, QFont
 from PyQt5.QtWidgets import (
     QApplication,
@@ -85,6 +85,7 @@ from gui.translation_tab import (
     BATCH_MODE_LABEL,
     default_translation_mode,
 )
+from gui.ui_components import CheckableFileList, equalize_button_widths
 from gui.workflow_tab import (
     _GAMEUPDATE_COPY_SKIP_NAMES,
     _FileCopyWorker,
@@ -102,6 +103,12 @@ from util.wolfdawn import wrap_search as wolf_ws
 import util.dazedwrap as dazedwrap
 
 from gui.setup_skills_editors import SetupSkillsEditors
+from gui.theme import COLORS, Geometry, Spacing
+from gui.workflow_components import (
+    WorkflowActivityPanel,
+    WorkflowPageHeader,
+    WorkflowStepRail,
+)
 from util.paths import PROJECT_ROOT, VOCAB_PATH, APP_NAME, ORG_NAME
 from util.project_scanner import (
     detect_wolf_layout,
@@ -196,33 +203,23 @@ class WolfWorkflowTab(QWidget):
     def showEvent(self, event):
         """Auto-detect the saved game folder when the tab is first shown."""
         super().showEvent(event)
+        if hasattr(self, "_step_rail"):
+            self._step_rail.set_compact(
+                self.width() < 1320
+                or self._step_rail.labels_require_compact_mode()
+            )
         if not self._detected_on_show and self._setting("last_game_folder", ""):
             self._detected_on_show = True
             if self.folder_edit.text().strip():
                 QTimer.singleShot(100, self._detect_folder)
 
-    def eventFilter(self, obj, event):
-        """Toggle workflow file checks when clicking a row outside the checkbox."""
-        try:
-            if (
-                hasattr(self, "file_list")
-                and obj is self.file_list.viewport()
-                and event.type() == QEvent.MouseButtonRelease
-                and event.button() == Qt.LeftButton
-            ):
-                item = self.file_list.itemAt(event.pos())
-                if item is None:
-                    return False
-                item_rect = self.file_list.visualItemRect(item)
-                if event.pos().x() <= item_rect.left() + 26:
-                    return False
-                item.setCheckState(
-                    Qt.Unchecked if item.checkState() == Qt.Checked else Qt.Checked
-                )
-                return False
-        except Exception:
-            pass
-        return super().eventFilter(obj, event)
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        if hasattr(self, "_step_rail"):
+            self._step_rail.set_compact(
+                self.width() < 1320
+                or self._step_rail.labels_require_compact_mode()
+            )
 
     # ───────────────────────────────── paths ─────────────────────────────────
 
@@ -434,10 +431,6 @@ class WolfWorkflowTab(QWidget):
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
 
-        splitter = QSplitter(Qt.Horizontal)
-        splitter.setHandleWidth(1)
-        splitter.setStyleSheet("QSplitter::handle{background:#3a3a3a;}")
-
         _SCROLL_STYLE = (
             "QScrollArea{border:none;background-color:transparent;}"
             "QScrollBar:vertical{background:#252526;width:10px;border:none;}"
@@ -454,46 +447,9 @@ class WolfWorkflowTab(QWidget):
             QTabBar { height: 0; max-height: 0; }
         """)
 
-        # Compact always-visible strip - avoids the finicky overflow scroll arrows.
         self._step_labels: list[str] = []
         self._step_done: set[int] = set()
         self._step_buttons: list[QToolButton] = []
-        self._step_strip = QWidget()
-        self._step_strip.setObjectName("wolfStepStrip")
-        self._step_strip.setStyleSheet("""
-            QWidget#wolfStepStrip {
-                background-color: #252526;
-                border-bottom: 1px solid #3a3a3a;
-            }
-            QToolButton {
-                background-color: transparent;
-                color: #8a8a8a;
-                border: none;
-                border-right: 1px solid #333333;
-                padding: 6px 2px;
-                font-size: 11px;
-                font-weight: 600;
-            }
-            QToolButton:hover {
-                background-color: #2d2d30;
-                color: #d0d0d0;
-            }
-            QToolButton:checked {
-                background-color: #1e1e1e;
-                color: #ffffff;
-                border-top: 2px solid #007acc;
-                padding-top: 6px;
-            }
-            QToolButton[done="true"] {
-                color: #6a9955;
-            }
-            QToolButton[done="true"]:checked {
-                color: #ffffff;
-            }
-        """)
-        strip_layout = QHBoxLayout(self._step_strip)
-        strip_layout.setContentsMargins(0, 0, 0, 0)
-        strip_layout.setSpacing(0)
 
         # Names curation comes before Translate so Phase 0 can seed vocab.txt.
         _tab_defs = [
@@ -508,7 +464,14 @@ class WolfWorkflowTab(QWidget):
             ("8  Package", self._build_step8_package),
             ("9  Fix wrap", self._build_step9_relayout),
         ]
+        rail_labels = [
+            "Project", "Prepare", "Setup", "Names", "Database",
+            "Maps & events", "Precheck", "Inject", "Package", "Fix wrap",
+        ]
         self._step_labels = [label for label, _ in _tab_defs]
+        self._step_rail = WorkflowStepRail(rail_labels)
+        self._step_rail.title_label.setText("WOLF RPG")
+        self._step_rail.step_requested.connect(self._goto_step)
 
         for tab_label, builder in _tab_defs:
             page = QWidget()
@@ -522,8 +485,10 @@ class WolfWorkflowTab(QWidget):
 
             inner = QWidget()
             vbox = QVBoxLayout(inner)
-            vbox.setContentsMargins(24, 18, 24, 12)
-            vbox.setSpacing(10)
+            vbox.setContentsMargins(
+                Spacing.XL, Spacing.LG, Spacing.XL, Spacing.MD
+            )
+            vbox.setSpacing(Spacing.MD)
             builder(vbox)
             vbox.addStretch()
 
@@ -532,15 +497,17 @@ class WolfWorkflowTab(QWidget):
 
             # Navigation footer
             nav = QWidget()
-            nav.setStyleSheet("QWidget{background-color:#252526;border-top:1px solid #3a3a3a;}")
+            nav.setObjectName("workflowFooter")
             nav_layout = QHBoxLayout(nav)
-            nav_layout.setContentsMargins(16, 6, 16, 6)
-            nav_layout.setSpacing(8)
+            nav_layout.setContentsMargins(
+                Spacing.LG, Spacing.SM, Spacing.LG, Spacing.SM
+            )
+            nav_layout.setSpacing(Spacing.SM)
 
             tab_idx = len(self._step_tabs)
             if tab_idx > 0:
                 back_btn = _make_btn("← Back", "#3a3a3a")
-                back_btn.setFixedWidth(100)
+                back_btn.setMinimumWidth(112)
                 back_btn.clicked.connect(
                     lambda _c, i=tab_idx: self._goto_step(i - 1)
                 )
@@ -548,7 +515,7 @@ class WolfWorkflowTab(QWidget):
             nav_layout.addStretch()
             if tab_idx < len(_tab_defs) - 1:
                 next_btn = _make_btn("Next →", "#007acc")
-                next_btn.setFixedWidth(100)
+                next_btn.setMinimumWidth(112)
                 next_btn.clicked.connect(
                     lambda _c, i=tab_idx: self._advance_step(i)
                 )
@@ -557,47 +524,20 @@ class WolfWorkflowTab(QWidget):
             page_layout.addWidget(nav)
             self._step_tabs.addTab(page, tab_label)
 
-            btn = QToolButton()
-            btn.setText(self._step_strip_label(tab_idx, done=False))
-            btn.setCheckable(True)
-            btn.setAutoExclusive(True)
-            btn.setToolButtonStyle(Qt.ToolButtonTextOnly)
-            btn.setToolTip(tab_label)
-            btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-            btn.setMinimumHeight(40)
-            btn.clicked.connect(lambda _c=False, i=tab_idx: self._goto_step(i))
-            strip_layout.addWidget(btn, 1)
-            self._step_buttons.append(btn)
-
         self._step_tabs.currentChanged.connect(self._on_step_changed)
-        if self._step_buttons:
-            self._step_buttons[0].setChecked(True)
 
         steps_host = QWidget()
         steps_host_layout = QVBoxLayout(steps_host)
         steps_host_layout.setContentsMargins(0, 0, 0, 0)
         steps_host_layout.setSpacing(0)
-        steps_host_layout.addWidget(self._step_strip)
         steps_host_layout.addWidget(self._step_tabs, 1)
-        splitter.addWidget(steps_host)
-
-        # Right: log panel
-        log_panel = QWidget()
-        lp_layout = QVBoxLayout(log_panel)
-        lp_layout.setContentsMargins(0, 0, 0, 0)
-        lp_layout.setSpacing(0)
-
-        log_header = QLabel("  ▸  Wolf Workflow Log")
-        log_header.setStyleSheet(
-            "background-color:#252526;color:#9d9d9d;font-size:11px;font-weight:bold;"
-            "padding:7px 10px;border-bottom:1px solid #3a3a3a;letter-spacing:0.5px;"
-        )
-        lp_layout.addWidget(log_header)
 
         self.task_progress_row = QWidget()
         progress_layout = QVBoxLayout(self.task_progress_row)
-        progress_layout.setContentsMargins(10, 8, 10, 4)
-        progress_layout.setSpacing(4)
+        progress_layout.setContentsMargins(
+            Spacing.MD, Spacing.SM, Spacing.MD, Spacing.XS
+        )
+        progress_layout.setSpacing(Spacing.XS)
         self.task_progress_label = QLabel("")
         self.task_progress_label.setStyleSheet("color:#9d9d9d;font-size:11px;background:transparent;")
         progress_layout.addWidget(self.task_progress_label)
@@ -620,32 +560,33 @@ class WolfWorkflowTab(QWidget):
         """)
         progress_layout.addWidget(self.task_progress_bar)
         self.task_progress_row.setVisible(False)
-        lp_layout.addWidget(self.task_progress_row)
-
         self.log_area = QTextEdit()
         self.log_area.setReadOnly(True)
         self.log_area.setFont(QFont("Consolas", 9))
-        self.log_area.setStyleSheet(
-            "QTextEdit{background-color:#1e1e1e;color:#c8c8c8;border:none;padding:10px;"
-            "selection-background-color:#264f78;}"
+        self._activity_panel = WorkflowActivityPanel(self.log_area)
+        self._activity_panel.layout().insertWidget(1, self.task_progress_row)
+        self._activity_panel.clear_requested.connect(self.log_area.clear)
+        self._activity_panel.collapse_requested.connect(
+            lambda: self._set_activity_visible(False)
         )
-        lp_layout.addWidget(self.log_area)
-
-        clear_btn = _make_btn("Clear Log", "#3a3a3a")
-        clear_btn.setStyleSheet(
-            "QPushButton{background-color:#252526;color:#6a6a6a;border:none;"
-            "border-top:1px solid #3a3a3a;padding:5px 12px;font-size:11px;font-weight:normal;}"
-            "QPushButton:hover{background-color:#2d2d30;color:#9d9d9d;}"
+        self._step_rail.activity_requested.connect(
+            lambda: self._set_activity_visible(not self._activity_panel.isVisible())
         )
-        clear_btn.clicked.connect(self.log_area.clear)
-        lp_layout.addWidget(clear_btn)
+        self._activity_panel.setVisible(False)
 
-        splitter.addWidget(log_panel)
-        splitter.setSizes([900, 240])
-
-        root.addWidget(splitter)
+        shell = QHBoxLayout()
+        shell.setContentsMargins(0, 0, 0, 0)
+        shell.setSpacing(0)
+        shell.addWidget(self._step_rail)
+        shell.addWidget(steps_host, 1)
+        shell.addWidget(self._activity_panel)
+        root.addLayout(shell, 1)
         self.setLayout(root)
         self._apply_theme()
+
+    def _set_activity_visible(self, visible: bool) -> None:
+        self._activity_panel.setVisible(bool(visible))
+        self._step_rail.activity_button.setChecked(bool(visible))
 
     def _apply_theme(self):
         self.setStyleSheet("""
@@ -672,6 +613,18 @@ class WolfWorkflowTab(QWidget):
         lbl.setWordWrap(True)
         lbl.setStyleSheet("color:#9d9d9d;font-size:12px;background:transparent;")
         return lbl
+
+    def _page_header(
+        self, step: int, title: str, purpose: str, *, optional: bool = False
+    ) -> WorkflowPageHeader:
+        return WorkflowPageHeader(
+            step,
+            title,
+            purpose,
+            optional=optional,
+            total_steps=10,
+            show_help=False,
+        )
 
     def _subheading(self, text: str) -> QLabel:
         lbl = QLabel(text)
@@ -766,7 +719,9 @@ class WolfWorkflowTab(QWidget):
     # ── Step 0: Project ───────────────────────────────────────────────────────
 
     def _build_step0(self, layout: QVBoxLayout):
-        layout.addWidget(_make_section_label("Step 0 — Project Folder"))
+        layout.addWidget(self._page_header(
+            0, "Project & Files", "Select the WOLF game and import extracted text files."
+        ))
         layout.addWidget(self._desc(
             "Pick the WOLF game root folder (Game.exe plus Data.wolf or a loose Data/ folder). "
             "Detection runs when you browse, press Enter, or reopen this tab. If wolf_json/ does "
@@ -795,12 +750,9 @@ class WolfWorkflowTab(QWidget):
         )
         layout.addWidget(self.detected_label)
 
-        self.file_list = QListWidget()
+        self.file_list = CheckableFileList()
         self.file_list.setMinimumHeight(320)
         self.file_list.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        self.file_list.setSelectionMode(QAbstractItemView.ExtendedSelection)
-        self.file_list.itemChanged.connect(self._sync_selected_file_checks)
-        self.file_list.viewport().installEventFilter(self)
         self.file_list.setStyleSheet(
             "QListWidget{outline:none;border:1px solid #3c3c3c;"
             "background-color:#252526;border-radius:4px;}"
@@ -814,17 +766,20 @@ class WolfWorkflowTab(QWidget):
 
         row1 = QHBoxLayout()
         row1.setSpacing(6)
-        select_all_btn = _make_text_btn("All", "Select all importable files", min_width=44)
+        select_all_btn = _make_text_btn("Select all", "Select all importable files", min_width=96)
         select_all_btn.clicked.connect(self._select_all_files)
         row1.addWidget(select_all_btn)
-        deselect_all_btn = _make_text_btn("None", "Deselect all files", min_width=52)
+        deselect_all_btn = _make_text_btn("Clear selection", "Deselect all files", min_width=120)
         deselect_all_btn.clicked.connect(self._deselect_all_files)
         row1.addWidget(deselect_all_btn)
-        sel_core = _make_text_btn("Core", "Core only: databases, common events, names", min_width=52)
+        sel_core = _make_text_btn("Core files", "Select databases, common events, and names", min_width=96)
         sel_core.setToolTip("Select core JSON files; deselect map scripts")
         sel_core.clicked.connect(self._select_core_only)
         row1.addWidget(sel_core)
-        import_btn = _make_text_btn("Import", "Import selected files into files/", min_width=64)
+        equalize_button_widths(
+            (select_all_btn, deselect_all_btn, sel_core), minimum=120
+        )
+        import_btn = _make_text_btn("Import selected files", "Import selected files into files/", min_width=176)
         import_btn.setEnabled(False)
         import_btn.setToolTip("Replace files/ with exactly the checked files above")
         import_btn.clicked.connect(lambda _checked=False: self._import_files())
@@ -843,7 +798,10 @@ class WolfWorkflowTab(QWidget):
         )
 
     def _build_step1_preprocess(self, layout: QVBoxLayout):
-        layout.addWidget(_make_section_label("Step 1 — Pre-process (optional)"))
+        layout.addWidget(self._page_header(
+            1, "Prepare Project", "Optionally format extracted data and install GameUpdate.",
+            optional=True,
+        ))
 
         header_row = QHBoxLayout()
         header_row.addWidget(self._desc(
@@ -890,7 +848,7 @@ class WolfWorkflowTab(QWidget):
         ta_path_row.addWidget(self.pp_wolf_json_label, 1)
         ta_inner.addLayout(ta_path_row)
         ta_btn_row = QHBoxLayout()
-        run_dazed = _make_btn("►  Run dazedformat", "#555")
+        run_dazed = _make_btn("Format extracted data", "#555")
         run_dazed.setFixedWidth(180)
         run_dazed.clicked.connect(self._run_dazedformat)
         ta_btn_row.addWidget(run_dazed)
@@ -935,11 +893,11 @@ class WolfWorkflowTab(QWidget):
         tc_inner.addLayout(tc_dst_row)
         tc_btn_row = QHBoxLayout()
         tc_btn_row.setSpacing(8)
-        run_gu = _make_btn("►  Copy gameupdate/", "#555")
+        run_gu = _make_btn("Install GameUpdate", "#555")
         run_gu.setFixedWidth(180)
         run_gu.clicked.connect(self._run_gameupdate)
         tc_btn_row.addWidget(run_gu)
-        run_all_btn = _make_btn("►►  Run Both Tasks", "#007acc")
+        run_all_btn = _make_btn("Run available tasks", "#007acc")
         run_all_btn.setFixedWidth(180)
         run_all_btn.setToolTip("Run dazedformat, then copy gameupdate/")
         run_all_btn.clicked.connect(self._run_all_preprocess)
@@ -1191,21 +1149,6 @@ class WolfWorkflowTab(QWidget):
                 data = item.data(Qt.UserRole)
                 is_core = bool(data and data.get("category") == "core")
                 item.setCheckState(Qt.Checked if is_core else Qt.Unchecked)
-        finally:
-            self._syncing_file_checks = False
-
-    def _sync_selected_file_checks(self, changed_item: QListWidgetItem):
-        if self._syncing_file_checks:
-            return
-        selected = self.file_list.selectedItems()
-        if len(selected) <= 1 or changed_item not in selected:
-            return
-        self._syncing_file_checks = True
-        try:
-            new_state = changed_item.checkState()
-            for item in selected:
-                if item is not changed_item:
-                    item.setCheckState(new_state)
         finally:
             self._syncing_file_checks = False
 
@@ -1654,7 +1597,9 @@ class WolfWorkflowTab(QWidget):
     # ── Step 2: Setup ──────────────────────────────────────────────────────────
 
     def _build_step2_setup(self, layout: QVBoxLayout):
-        layout.addWidget(_make_section_label("Step 2 · Setup (Project Setup + Skills)"))
+        layout.addWidget(self._page_header(
+            2, "Speakers & Guidance", "Configure speaker handling and maintain project guidance."
+        ))
         layout.addWidget(self._desc(
             "Copy Project Setup into Cursor/Copilot with files/ open. Paste glossary into Vocab, "
             "quirks into Quirks, game_skill into Game skills. Speakers advice (LOWCONF_FIRSTLINE) "
@@ -1663,7 +1608,7 @@ class WolfWorkflowTab(QWidget):
 
         actions = QHBoxLayout()
         actions.setSpacing(8)
-        copy_btn = _make_btn("📋  Copy Project Setup", "#555")
+        copy_btn = _make_btn("Copy setup skill", "#555")
         copy_btn.setFixedWidth(190)
         copy_btn.setFixedHeight(32)
         copy_btn.setToolTip(
@@ -1747,7 +1692,9 @@ class WolfWorkflowTab(QWidget):
 
     def _build_step4_database(self, layout: QVBoxLayout):
         layout.setSpacing(6)
-        title = _make_section_label("Step 4 · Database")
+        title = self._page_header(
+            4, "Translate Database", "Translate foundation data before narrative database sheets."
+        )
         title.setToolTip(
             "WOLF database files (DataBase, CDataBase, SysDatabase) hold item/skill "
             "descriptions in classic RPG games, but many games store most dialogue in "
@@ -1771,13 +1718,13 @@ class WolfWorkflowTab(QWidget):
 
         disc_row = QHBoxLayout()
         disc_row.setSpacing(6)
-        refresh_disc_btn = _make_btn("↻ Refresh", "#555")
+        refresh_disc_btn = _make_btn("Refresh analysis", "#555")
         refresh_disc_btn.setToolTip("Re-scan files/ for database / map / CommonEvent line counts.")
         refresh_disc_btn.clicked.connect(self._refresh_db_discovery)
-        audit_btn = _make_btn("📋 Copy AI audit prompt", "#5a3a7a")
+        audit_btn = _make_btn("Copy database audit", "#5a3a7a")
         audit_btn.setToolTip("Copy a DB structure prompt for Cursor/Copilot to audit sheet roles.")
         audit_btn.clicked.connect(self._copy_db_audit_prompt)
-        import_btn = _make_btn("Import AI profile", "#3a3a3a")
+        import_btn = _make_btn("Import database profile", "#3a3a3a")
         import_btn.setToolTip("Paste JSON returned by the AI audit into db_profile.json.")
         import_btn.clicked.connect(self._import_db_profile_dialog)
         disc_row.addWidget(refresh_disc_btn)
@@ -1786,7 +1733,7 @@ class WolfWorkflowTab(QWidget):
         disc_row.addStretch()
         layout.addLayout(disc_row)
 
-        self._db_groups_list = QListWidget()
+        self._db_groups_list = CheckableFileList()
         self._db_groups_list.setMinimumHeight(160)
         self._db_groups_list.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self._db_groups_list.setStyleSheet(
@@ -1824,7 +1771,7 @@ class WolfWorkflowTab(QWidget):
 
         tl_row = QHBoxLayout()
         tl_row.setSpacing(6)
-        found_btn = self._register(_make_btn("▶ Foundation DB", "#00a86b"))
+        found_btn = self._register(_make_btn("Translate foundation database", "#00a86b"))
         found_btn.setToolTip(
             "Translate foundation/system sheets (items, skills, system text). "
             "Run after Step 3 (names). Re-running skips lines already translated."
@@ -1832,7 +1779,7 @@ class WolfWorkflowTab(QWidget):
         found_btn.clicked.connect(
             lambda: self._translate_db_tiers(wolf_db.FOUNDATION_TIERS, auto_start=True)
         )
-        narr_btn = self._register(_make_btn("▶ Narrative DB", "#00a86b"))
+        narr_btn = self._register(_make_btn("Translate narrative database", "#00a86b"))
         narr_btn.setToolTip(
             "Translate narrative custom sheets after foundation is done. "
             "Short foundation labels are merged into vocab.txt."
@@ -1840,7 +1787,7 @@ class WolfWorkflowTab(QWidget):
         narr_btn.clicked.connect(
             lambda: self._translate_db_tiers(wolf_db.NARRATIVE_TIERS, auto_start=True)
         )
-        checked_btn = self._register(_make_btn("▶ Checked sheets", "#3a3a3a"))
+        checked_btn = self._register(_make_btn("Translate selected sheets", "#3a3a3a"))
         checked_btn.setToolTip("Translate only the sheets currently ticked above.")
         checked_btn.clicked.connect(
             lambda: self._translate_db_checked(auto_start=True)
@@ -1898,7 +1845,9 @@ class WolfWorkflowTab(QWidget):
             item = QListWidgetItem(label)
             item.setData(Qt.UserRole, g.key)
             item.setData(Qt.UserRole + 1, g.tier)
-            item.setFlags(Qt.ItemIsUserCheckable | Qt.ItemIsEnabled)
+            item.setFlags(
+                Qt.ItemIsUserCheckable | Qt.ItemIsEnabled | Qt.ItemIsSelectable
+            )
             checked = checks.get(g.key, g.default_checked)
             item.setCheckState(Qt.Checked if checked else Qt.Unchecked)
             self._db_groups_list.addItem(item)
@@ -2064,7 +2013,9 @@ class WolfWorkflowTab(QWidget):
     # ── Step 5: Maps / Events ──────────────────────────────────────────────────
 
     def _build_step5_maps_events(self, layout: QVBoxLayout):
-        layout.addWidget(_make_section_label("Step 5 · Maps / Events"))
+        layout.addWidget(self._page_header(
+            5, "Translate Maps & Events", "Translate map dialogue, common events, and event text."
+        ))
         layout.addWidget(self._desc(
             "Map scripts (.mps), common events (CommonEvent.dat), Game.dat, and Evtext - "
             "story dialogue, UI/objective strings, and other event text. Run after Steps "
@@ -2073,7 +2024,7 @@ class WolfWorkflowTab(QWidget):
         ))
         self._add_speaker_options(layout)
         self._add_tl_mode_selector(layout)
-        p2 = self._register(_make_btn("▶ Translate maps / events", "#00a86b"))
+        p2 = self._register(_make_btn("Translate maps & events", "#00a86b"))
         p2.clicked.connect(
             lambda: self._navigate_to_translation(
                 kinds=PHASE_MAPS_EVENTS_KINDS, auto_start=True, db_filter_active=False
@@ -2082,7 +2033,7 @@ class WolfWorkflowTab(QWidget):
         layout.addWidget(p2)
 
         layout.addWidget(_make_hr())
-        open_btn = self._register(_make_btn("Open Translation tab (no auto-start)", "#3a3a3a"))
+        open_btn = self._register(_make_btn("Open Translation without starting", "#3a3a3a"))
         open_btn.clicked.connect(
             lambda: self._navigate_to_translation(db_filter_active=False)
         )
@@ -2110,7 +2061,7 @@ class WolfWorkflowTab(QWidget):
             "reshaped for this game. Then set the box below to match."
         ))
 
-        prompt_btn = _make_btn("📋 Copy speaker-format prompt for Copilot / Cursor", "#5a3a7a")
+        prompt_btn = _make_btn("Copy speaker-format audit", "#5a3a7a")
         prompt_btn.clicked.connect(self._copy_wolf_speaker_prompt)
         layout.addWidget(prompt_btn)
 
@@ -2332,7 +2283,9 @@ class WolfWorkflowTab(QWidget):
     # ── Step 3: Names ──────────────────────────────────────────────────────────
 
     def _build_step3_names(self, layout: QVBoxLayout):
-        layout.addWidget(_make_section_label("Step 3 · Translate Name Values (names.json)"))
+        layout.addWidget(self._page_header(
+            3, "Translate Names", "Translate safe character and location names, then update the glossary."
+        ))
         layout.addWidget(self._desc(
             "names.json is WolfDawn's project-wide name glossary. Each entry has a safety badge: "
             "safe (display-only), refs (referenced by name - skipped), or verify "
@@ -2348,7 +2301,7 @@ class WolfWorkflowTab(QWidget):
         )
         layout.addWidget(self.names_summary_label)
 
-        refresh_btn = _make_btn("↻ Refresh name counts", "#555")
+        refresh_btn = _make_btn("Refresh name counts", "#555")
         refresh_btn.clicked.connect(self._refresh_names_summary)
         layout.addWidget(refresh_btn)
 
@@ -2359,7 +2312,7 @@ class WolfWorkflowTab(QWidget):
             "the model; refs and verify names stay identical to source so inject skips them."
         ))
         self._add_tl_mode_selector(layout)
-        tl_btn = self._register(_make_btn("Translate safe names now (Phase 0)", "#00a86b"))
+        tl_btn = self._register(_make_btn("Translate safe names", "#00a86b"))
         tl_btn.clicked.connect(
             lambda: self._navigate_to_translation(
                 kinds=PHASE_NAMES_KINDS, auto_start=True, db_filter_active=False
@@ -2409,7 +2362,9 @@ class WolfWorkflowTab(QWidget):
 
     def _build_step6_precheck(self, layout: QVBoxLayout):
         layout.setSpacing(6)
-        title = _make_section_label("Step 6 · Inject Precheck")
+        title = self._page_header(
+            6, "Validate Injection", "Preview injection and resolve unsafe or inconsistent text first."
+        )
         title.setToolTip(
             "Reconcile names.json → glossary spellings, report name inconsistencies, "
             "then dry-run selected JSON for safety skips (control-code mismatch, or "
@@ -2420,7 +2375,7 @@ class WolfWorkflowTab(QWidget):
             "Pick files → Precheck → fix safety skips below → Step 7 Inject."
         ))
 
-        self.precheck_list = QListWidget()
+        self.precheck_list = CheckableFileList()
         self.precheck_list.setMinimumHeight(72)
         self.precheck_list.setMaximumHeight(120)
         self.precheck_list.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
@@ -2434,21 +2389,21 @@ class WolfWorkflowTab(QWidget):
 
         list_row = QHBoxLayout()
         list_row.setSpacing(6)
-        refresh_btn = self._register(_make_btn("↻ Refresh", "#3a3a3a"))
+        refresh_btn = self._register(_make_btn("Refresh files", "#3a3a3a"))
         refresh_btn.clicked.connect(self._refresh_precheck_list)
         sel_all_btn = self._register(_make_btn("Select all", "#3a3a3a"))
         sel_all_btn.clicked.connect(lambda: self._set_checklist_checks(self.precheck_list, True))
-        sel_none_btn = self._register(_make_btn("Select none", "#3a3a3a"))
+        sel_none_btn = self._register(_make_btn("Clear selection", "#3a3a3a"))
         sel_none_btn.clicked.connect(lambda: self._set_checklist_checks(self.precheck_list, False))
-        precheck_btn = self._register(_make_btn("Precheck selected", "#007acc"))
+        precheck_btn = self._register(_make_btn("Preview selected injection", "#007acc"))
         precheck_btn.setToolTip(
             "Reconcile names → glossary, run names-check, then dry-run inject "
             "safety guards on the ticked files."
         )
         precheck_btn.clicked.connect(self._precheck_inject_selected)
-        precheck_all_btn = self._register(_make_btn("Precheck all", "#007acc"))
+        precheck_all_btn = self._register(_make_btn("Preview all injection", "#007acc"))
         precheck_all_btn.setToolTip(
-            "Same as Precheck selected, for every injectable file in translated/."
+            "Same as Preview selected injection, for every injectable file in translated/."
         )
         precheck_all_btn.clicked.connect(self._precheck_inject_all)
         list_row.addWidget(refresh_btn)
@@ -2459,7 +2414,9 @@ class WolfWorkflowTab(QWidget):
         list_row.addWidget(precheck_all_btn)
         layout.addLayout(list_row)
 
-        self._inject_precheck_label = QLabel("Run precheck to list safety-guard skips.")
+        self._inject_precheck_label = QLabel(
+            "Preview injection to list safety-guard skips."
+        )
         self._inject_precheck_label.setWordWrap(True)
         self._inject_precheck_label.setStyleSheet(
             "color:#9cdcfe;font-size:11px;background:transparent;padding:0;"
@@ -2491,7 +2448,7 @@ class WolfWorkflowTab(QWidget):
 
         self._inject_issue_edit = QTextEdit()
         self._inject_issue_edit.setPlaceholderText(
-            "Select a precheck row to edit its translated text, then Save line."
+            "Select a preview result to edit its translated text, then save the line."
         )
         self._inject_issue_edit.setMinimumHeight(100)
         self._inject_issue_edit.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
@@ -2503,7 +2460,7 @@ class WolfWorkflowTab(QWidget):
 
         edit_row = QHBoxLayout()
         edit_row.setSpacing(6)
-        save_line_btn = self._register(_make_btn("Save line", "#00a86b"))
+        save_line_btn = self._register(_make_btn("Save corrected line", "#00a86b"))
         save_line_btn.clicked.connect(self._save_inject_issue_line)
         edit_row.addWidget(save_line_btn)
         edit_row.addStretch()
@@ -2515,14 +2472,16 @@ class WolfWorkflowTab(QWidget):
     # ── Step 7: Inject ─────────────────────────────────────────────────────────
 
     def _build_step7_inject(self, layout: QVBoxLayout):
-        layout.addWidget(_make_section_label("Step 7 · Inject Translations"))
+        layout.addWidget(self._page_header(
+            7, "Apply Translations", "Write reviewed JSON translations into the live game data."
+        ))
         layout.addWidget(self._desc(
-            "Inject every JSON into the game's Data/ binaries in one pass. "
-            "Inject all uses translated/; Inject from wolf_json uses the game's "
+            "Apply every JSON translation to the game's Data/ binaries in one pass. "
+            "Apply all translations uses translated/; Apply from wolf_json uses the game's "
             "wolf_json/ when that folder is the source of truth (and can copy those "
             "JSON into files/ and translated/ so tool progress is not left behind). "
             "A full inject keeps names.json and DB/map files in sync (partial injects "
-            "can wipe name-only fields like rumor boards). Run Step 6 (Precheck) first "
+            "can wipe name-only fields like rumor boards). Preview in Step 6 first "
             "if you want to catch safety-guard skips before writing."
         ))
 
@@ -2555,21 +2514,21 @@ class WolfWorkflowTab(QWidget):
         layout.addWidget(self._inject_count_label)
 
         list_row = QHBoxLayout()
-        refresh_btn = self._register(_make_btn("↻ Refresh", "#3a3a3a"))
+        refresh_btn = self._register(_make_btn("Refresh files", "#3a3a3a"))
         refresh_btn.clicked.connect(self._refresh_inject_list)
         list_row.addWidget(refresh_btn)
         list_row.addStretch()
         layout.addLayout(list_row)
 
         btn_row = QHBoxLayout()
-        inject_all_btn = self._register(_make_btn("Inject all", "#00a86b"))
+        inject_all_btn = self._register(_make_btn("Apply all translations", "#00a86b"))
         inject_all_btn.setToolTip(
             "Always injects every file in translated/ that the manifest knows about. "
             "names.json runs first; DB/map injects keep name-only fields. "
             "After inject, copies those JSON files into the game's wolf_json/."
         )
         inject_all_btn.clicked.connect(self._inject_all)
-        inject_wolf_btn = self._register(_make_btn("Inject from wolf_json", "#007acc"))
+        inject_wolf_btn = self._register(_make_btn("Apply from wolf_json", "#007acc"))
         inject_wolf_btn.setToolTip(
             "Inject every injectable JSON from the game's wolf_json/ folder instead "
             "of translated/. Use when wolf_json/ is the source of truth (e.g. after "
@@ -2577,7 +2536,7 @@ class WolfWorkflowTab(QWidget):
             "those JSON into files/ and translated/ so tool progress is not left behind."
         )
         inject_wolf_btn.clicked.connect(self._inject_all_from_wolf_json)
-        layout_restore_btn = self._register(_make_btn("Layout-restore", "#3a3a3a"))
+        layout_restore_btn = self._register(_make_btn("Restore source layout", "#3a3a3a"))
         layout_restore_btn.setToolTip(
             "Re-run wolf layout-restore on every injectable translated JSON. "
             "Copies unambiguous positional whitespace pads from source onto text "
@@ -2593,23 +2552,25 @@ class WolfWorkflowTab(QWidget):
         layout.addWidget(_make_hr())
         layout.addWidget(self._desc(
             "Next: Step 8 (Package) so you can playtest, then Step 9 (Fix wrapping) "
-            "to paste overflowing in-game text, wrap, and Inject all again."
+            "to paste overflowing in-game text, wrap, and apply all translations again."
         ))
         self._refresh_inject_list()
 
     def _build_step9_relayout(self, layout: QVBoxLayout):
-        """Search-first fix wrapping: find sheet by in-game text, wrap, Inject all."""
+        """Search-first fix wrapping: find a sheet, wrap, then reapply translations."""
         layout.setSpacing(6)
-        title = _make_section_label("Step 9 · Fix wrapping")
+        title = self._page_header(
+            9, "Fix Text Layout", "Find overflow and correct wrapping or cell geometry after playtesting."
+        )
         title.setToolTip(
             "Paste overflowing in-game text to find it in translated JSON. "
             "Relayout: cell width + max lines (names.json → wolf names-wrap). "
             "Manual: wrap width + body font; emphasis \\f[N] scales with the body. "
-            "Then Inject all (Step 7) and re-package."
+            "Then apply all translations (Step 7) and re-package."
         )
         layout.addWidget(title)
         layout.addWidget(self._desc(
-            "Paste overflowing text → pick a hit → Relayout or Manual → Wrap → Inject all."
+            "Paste overflowing text → choose a result → relayout or wrap → apply again."
         ))
 
         search_row = QHBoxLayout()
@@ -2618,7 +2579,7 @@ class WolfWorkflowTab(QWidget):
         self._wrap_search_edit.setPlaceholderText(
             'Paste in-game text, e.g. "there\'s a pure" or "gatekeeper just randomly"'
         )
-        search_btn = _make_btn("Search", "#007acc")
+        search_btn = _make_btn("Find text", "#007acc")
         search_btn.clicked.connect(self._run_wrap_search)
         self._wrap_search_edit.returnPressed.connect(self._run_wrap_search)
         search_row.addWidget(self._wrap_search_edit, 1)
@@ -2784,11 +2745,11 @@ class WolfWorkflowTab(QWidget):
 
         btn_row = QHBoxLayout()
         btn_row.setSpacing(6)
-        wrap_row_btn = _make_btn("Wrap this line", "#00a86b")
+        wrap_row_btn = _make_btn("Rewrap this line", "#00a86b")
         wrap_row_btn.clicked.connect(self._wrap_current_row)
-        wrap_group_btn = _make_btn("Wrap all in group", "#00a86b")
+        wrap_group_btn = _make_btn("Rewrap matching group", "#00a86b")
         wrap_group_btn.clicked.connect(self._wrap_current_group)
-        inject_btn = _make_btn("Inject all", "#007acc")
+        inject_btn = _make_btn("Apply all translations", "#007acc")
         inject_btn.setToolTip(
             "Always injects every translated file (same as Step 7). "
             "Partial injects can wipe name-only DB fields."
@@ -3414,7 +3375,7 @@ class WolfWorkflowTab(QWidget):
                     else "Already matches Manual wrap (width + font)."
                 )
             self._wrap_status_label.setText(
-                msg + " Inject all from Step 7 when ready."
+                msg + " Apply all translations from Step 7 when ready."
             )
             self._log(f"{'✅' if changed else 'ℹ'}  {msg}")
             self._update_wrap_preview()
@@ -3469,7 +3430,9 @@ class WolfWorkflowTab(QWidget):
                 f"Already fits width {width}"
                 + (f" / {max_lines} line(s)." if max_lines > 0 else ".")
             )
-        self._wrap_status_label.setText(msg + " Inject all from Step 7 when ready.")
+        self._wrap_status_label.setText(
+            msg + " Apply all translations from Step 7 when ready."
+        )
         self._log(f"{'✅' if changed else 'ℹ'}  {msg}")
         self._update_wrap_preview()
 
@@ -3512,7 +3475,9 @@ class WolfWorkflowTab(QWidget):
                 f"Manual-wrapped {count} line(s) in {scope} "
                 f"(width {width}, {font_note})."
             )
-            self._wrap_status_label.setText(msg + " Inject all from Step 7 when ready.")
+            self._wrap_status_label.setText(
+                msg + " Apply all translations from Step 7 when ready."
+            )
             self._log(f"✅ {msg}")
             self._reload_wrap_hit_editor(hit, width)
             return
@@ -3563,7 +3528,9 @@ class WolfWorkflowTab(QWidget):
             )
         else:
             msg = f"Wrapped {count} line(s) in {scope} at width {width}."
-        self._wrap_status_label.setText(msg + " Inject all from Step 7 when ready.")
+        self._wrap_status_label.setText(
+            msg + " Apply all translations from Step 7 when ready."
+        )
         self._log(f"✅ {msg}")
         self._reload_wrap_hit_editor(hit, width)
 
@@ -3658,7 +3625,7 @@ class WolfWorkflowTab(QWidget):
                 self._reload_wrap_hit_editor(hit, self._active_wrap_width())
             if not quiet and hasattr(self, "_wrap_status_label"):
                 self._wrap_status_label.setText(
-                    summary + " Inject all from Step 7 when ready."
+                    summary + " Apply all translations from Step 7 when ready."
                 )
 
         self._run_task(task, on_done=_after)
@@ -3862,6 +3829,10 @@ class WolfWorkflowTab(QWidget):
     def _refresh_step_strip(self, current: int | None = None):
         if current is None:
             current = self._step_tabs.currentIndex() if hasattr(self, "_step_tabs") else 0
+        if hasattr(self, "_step_rail"):
+            self._step_rail.set_done(set(self._step_done))
+            self._step_rail.set_current(current)
+            return
         for i, btn in enumerate(getattr(self, "_step_buttons", [])):
             done = i in self._step_done
             btn.setText(self._step_strip_label(i, done=done))
@@ -3933,7 +3904,9 @@ class WolfWorkflowTab(QWidget):
         for json_name in files:
             item = QListWidgetItem(json_name)
             item.setData(Qt.UserRole, json_name)
-            item.setFlags(Qt.ItemIsUserCheckable | Qt.ItemIsEnabled)
+            item.setFlags(
+                Qt.ItemIsUserCheckable | Qt.ItemIsEnabled | Qt.ItemIsSelectable
+            )
             item.setCheckState(Qt.Unchecked)
             list_widget.addItem(item)
 
@@ -3997,7 +3970,7 @@ class WolfWorkflowTab(QWidget):
             QMessageBox.information(
                 self,
                 "Nothing selected",
-                "Tick one or more files, then click Precheck selected.",
+                "Select one or more files, then click Preview selected injection.",
             )
             return
         self._run_inject_precheck(selected)
@@ -4192,7 +4165,7 @@ class WolfWorkflowTab(QWidget):
         if not self._game_root:
             QMessageBox.information(
                 self,
-                "Inject from wolf_json",
+                "Apply from wolf_json",
                 "No game folder selected. Detect a project in Step 0 first.",
             )
             return
@@ -4200,7 +4173,7 @@ class WolfWorkflowTab(QWidget):
         if not work.is_dir():
             QMessageBox.information(
                 self,
-                "Inject from wolf_json",
+                "Apply from wolf_json",
                 f"No wolf_json/ folder at {work}.",
             )
             return
@@ -4214,7 +4187,7 @@ class WolfWorkflowTab(QWidget):
             return
         reply = QMessageBox.question(
             self,
-            "Inject from wolf_json",
+            "Apply from wolf_json",
             f"About to inject {len(files)} file(s) from wolf_json/.\n\n"
             "Also copy those JSON into files/ and translated/ so the tool "
             "keeps the same progress (overwrites matching names)?\n\n"
@@ -4225,7 +4198,7 @@ class WolfWorkflowTab(QWidget):
             QMessageBox.Yes,
         )
         if reply == QMessageBox.Cancel:
-            self._log("Inject from wolf_json cancelled.")
+            self._log("Apply from wolf_json cancelled.")
             return
         sync_tool_dirs = reply == QMessageBox.Yes
         if sync_tool_dirs:
@@ -4292,14 +4265,16 @@ class WolfWorkflowTab(QWidget):
     # ── Step 8: Package (+ optional saves) ─────────────────────────────────────
 
     def _build_step8_package(self, layout: QVBoxLayout):
-        layout.addWidget(_make_section_label("Step 8 · Package the Translated Game"))
+        layout.addWidget(self._page_header(
+            8, "Build Playable Game", "Package translated data and apply optional save compatibility fixes."
+        ))
         layout.addWidget(self._desc(
             "Make the injected build playable so you can spot overflow in-game, then "
             "fix wrapping in Step 9. A loose Data/ folder is simplest for playtesting; "
             "repacking rebuilds a single Data.wolf archive for distribution."
         ))
 
-        loose_btn = self._register(_make_btn("Use loose Data/ folder (back up archives)", "#007acc"))
+        loose_btn = self._register(_make_btn("Use loose Data folder", "#007acc"))
         loose_btn.clicked.connect(self._package_loose)
         layout.addWidget(loose_btn)
         layout.addWidget(self._desc(
@@ -4309,7 +4284,7 @@ class WolfWorkflowTab(QWidget):
 
         layout.addWidget(_make_hr())
 
-        repack_btn = self._register(_make_btn("Repack Data.wolf", "#00a86b"))
+        repack_btn = self._register(_make_btn("Build Data.wolf", "#00a86b"))
         repack_btn.clicked.connect(self._package_repack)
         layout.addWidget(repack_btn)
         layout.addWidget(self._desc(
@@ -4325,7 +4300,7 @@ class WolfWorkflowTab(QWidget):
             "GameUpdate files remain available to players. The game folder is not modified."
         ))
         self._release_zip_btn = self._register(
-            _make_btn("📦  Create Public Release ZIP", "#007acc")
+            _make_btn("Build public release ZIP", "#007acc")
         )
         self._release_zip_btn.clicked.connect(self._create_public_release)
         layout.addWidget(self._release_zip_btn)
@@ -4343,12 +4318,12 @@ class WolfWorkflowTab(QWidget):
         self.save_edit = QLineEdit()
         self.save_edit.setPlaceholderText("Save folder or .sav file…")
         row.addWidget(self.save_edit, 1)
-        browse_btn = self._register(_make_btn("Browse…", "#3a3a3a"))
+        browse_btn = self._register(_make_btn("Choose…", "#3a3a3a"))
         browse_btn.clicked.connect(self._browse_saves)
         row.addWidget(browse_btn)
         layout.addLayout(row)
 
-        run_btn = self._register(_make_btn("Update saves", "#007acc"))
+        run_btn = self._register(_make_btn("Update existing saves", "#007acc"))
         run_btn.clicked.connect(self._update_saves)
         layout.addWidget(run_btn)
 

@@ -8,15 +8,15 @@ The bundled `wolf` CLI unpacks archives, extracts strings to JSON, translates wi
 | Step | What it does |
 |------|----------------|
 | **0 Project** | Select game root, unpack/extract to `wolf_json/`, import into `files/` |
-| **1 Pre-process** | Optional format + copy `gameupdate/` |
-| **2 Glossary** | Build vocab with your IDE agent (not item/skill names from `names.json`) |
-| **3 Names** | Translate safe `names.json` entries (Phase 0) |
-| **4 Database** | Foundation DB then narrative DB sheets |
-| **5 Maps/Events** | Maps, CommonEvent, Game.dat, Evtext |
-| **6 Precheck** | Safety dry-run before writing binaries |
-| **7 Inject** | Inject all translated JSON |
-| **8 Package** | Loose Data/ or repack `Data.wolf`, optional save rewrite |
-| **9 Fix wrap** | Find overflowing lines, wrap, reinject |
+| **1 Prepare** | Optionally format extracted data and install GameUpdate |
+| **2 Setup** | Configure speakers and build project guidance with your IDE agent |
+| **3 Names** | Translate safe `names.json` entries |
+| **4 Database** | Translate foundation data, then narrative database sheets |
+| **5 Maps & events** | Translate maps, CommonEvent, Game.dat, and Evtext |
+| **6 Precheck** | Preview injection before writing binaries |
+| **7 Inject** | Apply all reviewed JSON translations |
+| **8 Package** | Use loose Data or build `Data.wolf`, with optional save updates |
+| **9 Fix wrap** | Find overflowing lines, rewrap them, and apply again |
 
 ## Example: first WolfDawn run
 
@@ -24,8 +24,8 @@ The bundled `wolf` CLI unpacks archives, extracts strings to JSON, translates wi
 2. Let extract finish; import the listed JSON (or leave the step with files checked).
 3. Step 2 - copy the Wolf glossary prompt into Cursor with extracted files available; paste vocab back.
 4. Step 3 - translate **safe** names only.
-5. Step 4 - read the discovery summary. For a classic RPG layout: foundation DB → maps/events.
-6. Step 6–8 - Precheck → Inject all → Package → playtest.
+5. Step 4 - read the discovery summary. For a classic RPG layout, translate the foundation database before maps and events.
+6. Steps 6–8 - **Preview all injection** → **Apply all translations** → build the playable game → playtest.
 
 ## Layout order
 

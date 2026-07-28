@@ -174,7 +174,7 @@ class ReleaseWorkflowButtonTests(unittest.TestCase):
                 )
                 self.assertEqual(
                     wolf._release_zip_btn.text().removeprefix("📦 "),
-                    "Create Public Release ZIP",
+                    "Build public release ZIP",
                 )
                 self.assertIn("GameUpdate", rpg._release_zip_btn.toolTip())
             finally:

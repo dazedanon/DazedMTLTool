@@ -50,7 +50,7 @@ Each action configures the Translation tab and can start a run for you.
 ## 7. Export / inject and playtest
 
 - RPG Maker: Export from `translated/` back into the game, then install TL Inspector / Forge if you want.
-- Wolf: Precheck → Inject all → Package → playtest → Fix wrap.
+- Wolf: Preview injection → apply all translations → build the game → playtest → fix text layout.
 
 ## 8. Fix leftovers
 

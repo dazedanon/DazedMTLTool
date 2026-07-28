@@ -9,6 +9,7 @@ from unittest.mock import patch
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 try:
+    from PyQt5.QtCore import Qt
     from PyQt5.QtWidgets import QApplication
 
     from gui.translation_tab import (
@@ -88,6 +89,22 @@ class TranslationEngineDropdownTests(unittest.TestCase):
         ):
             claude_tab = TranslationTab()
         self.assertEqual(claude_tab.mode_combo.currentText(), BATCH_MODE_LABEL)
+
+    def test_log_is_persistent_beside_the_file_workspace(self) -> None:
+        tab = TranslationTab()
+        tab.resize(1400, 900)
+        tab.show()
+        self._app.processEvents()
+        try:
+            self.assertEqual(tab.workspace_splitter.orientation(), Qt.Horizontal)
+            self.assertGreater(
+                tab.file_stack.width(), tab.translation_log_viewer.width()
+            )
+            self.assertEqual(tab.file_card.objectName(), "appSectionCard")
+            self.assertEqual(tab.log_card.objectName(), "appSectionCard")
+            self.assertTrue(tab.translation_log_viewer.isVisible())
+        finally:
+            tab.close()
 
 
 if __name__ == "__main__":

@@ -8,6 +8,8 @@ from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QCheckBox, QPushButton, QMessageBox, QLabel, QHBoxLayout, QGridLayout
 )
 from PyQt5.QtCore import pyqtSignal
+from gui.theme import COLORS
+from gui.ui_components import SectionCard, configure_action_button
 import re
 try:
     from util.defaults import DEFAULTS as CANONICAL_DEFAULTS
@@ -67,22 +69,9 @@ class WolfTab(QWidget):
     def init_ui(self):
         """Initialize the user interface with compact two-column layout."""
         main_layout = QVBoxLayout()
-        main_layout.setContentsMargins(15, 15, 15, 15)
-        main_layout.setSpacing(10)
+        main_layout.setContentsMargins(16, 16, 16, 16)
+        main_layout.setSpacing(12)
         
-        # Title and description
-        title = QLabel("Wolf RPG Editor Translation Settings (Legacy)")
-        title.setStyleSheet("font-size: 15px; font-weight: bold; color: #007acc;")
-        main_layout.addWidget(title)
-
-        description = QLabel(
-            "These toggles configure the legacy 'Wolf RPG' / 'Wolf RPG 2' modules (event-code "
-            "based extraction). Only enable what you need."
-        )
-        description.setWordWrap(True)
-        description.setStyleSheet("color: #888888; font-size: 10px; margin-bottom: 5px;")
-        main_layout.addWidget(description)
-
         recommend = QLabel(
             "Recommended: use the Workflow tab and pick \"Wolf RPG (WolfDawn)\" for a guided, "
             "end-to-end pipeline (unpack \u2192 extract \u2192 translate \u2192 inject \u2192 package). "
@@ -93,7 +82,12 @@ class WolfTab(QWidget):
             "color:#c8c8c8;font-size:11px;background-color:#26333a;"
             "border-left:3px solid #007acc;padding:6px 8px;margin-bottom:6px;"
         )
-        main_layout.addWidget(recommend)
+        recommendation_card = SectionCard(
+            "Use the guided WOLF workflow when possible",
+            "The legacy event-code settings below are only for the older WOLF translation modules.",
+        )
+        recommendation_card.add_widget(recommend)
+        main_layout.addWidget(recommendation_card)
         
         # Two-column layout for checkboxes
         columns_layout = QHBoxLayout()
@@ -101,10 +95,9 @@ class WolfTab(QWidget):
         
         # LEFT COLUMN
         left_column = QVBoxLayout()
-        left_column.setSpacing(5)
+        left_column.setSpacing(8)
         
         # Dialogue & Choices
-        left_column.addWidget(create_section_label("💬 Dialogue & Choices"))
         self.code101_cb = QCheckBox("CODE101 - Show Text")
         self.code101_cb.setToolTip("Enable translation of dialogue text")
         left_column.addWidget(self.code101_cb)
@@ -142,14 +135,12 @@ class WolfTab(QWidget):
         
         # RIGHT COLUMN
         right_column = QVBoxLayout()
-        right_column.setSpacing(5)
+        right_column.setSpacing(8)
         
         # Database Sections
-        right_column.addWidget(create_section_label("📚 Database Sections"))
-        
         # Database flags in compact 2-column grid
         db_grid = QGridLayout()
-        db_grid.setSpacing(5)
+        db_grid.setSpacing(8)
         db_grid.setHorizontalSpacing(25)
         db_grid.setVerticalSpacing(6)
         
@@ -176,22 +167,34 @@ class WolfTab(QWidget):
         right_column.addLayout(db_grid)
         right_column.addStretch()
         
-        # Add both columns
-        columns_layout.addLayout(left_column, 1)
-        columns_layout.addLayout(right_column, 1)
+        events_card = SectionCard(
+            "Legacy event text",
+            "Choose dialogue, choices, pictures, variables, and other event codes for the legacy extractor.",
+        )
+        events_card.add_layout(left_column)
+        database_card = SectionCard(
+            "Legacy database text",
+            "Choose the WOLF database sections included by the legacy extractor.",
+        )
+        database_card.add_layout(right_column)
+        columns_layout.addWidget(events_card, 1)
+        columns_layout.addWidget(database_card, 1)
         main_layout.addLayout(columns_layout)
         
         # Bottom buttons
         main_layout.addSpacing(12)
         button_layout = QHBoxLayout()
-        button_layout.setSpacing(10)
+        button_layout.setSpacing(8)
         
         from gui.qt_icons import apply_button_icon
 
         self.reset_btn = QPushButton()
-        apply_button_icon(self.reset_btn, "🔄 Reset to Defaults", color="#cccccc")
+        configure_action_button(self.reset_btn, variant="quiet")
+        apply_button_icon(
+            self.reset_btn, "🔄 Reset to defaults", color=COLORS.text_secondary
+        )
         self.reset_btn.clicked.connect(self.reset_to_defaults_with_message)
-        self.reset_btn.setMaximumWidth(180)
+        self.reset_btn.setMinimumWidth(180)
         self.reset_btn.setMinimumHeight(32)
         
         button_layout.addWidget(self.reset_btn)

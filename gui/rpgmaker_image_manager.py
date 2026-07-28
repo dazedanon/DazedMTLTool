@@ -6,12 +6,14 @@ from pathlib import Path
 import hashlib
 
 from PyQt5.QtCore import (
+    QEvent,
     QPoint,
     Qt,
     QSize,
     QThread,
     pyqtSignal,
     QSettings,
+    QTimer,
     QUrl,
 )
 from PyQt5.QtGui import QColor, QDesktopServices, QIcon, QPixmap
@@ -21,6 +23,7 @@ from PyQt5.QtWidgets import (
     QAbstractItemView,
     QFileDialog,
     QHBoxLayout,
+    QGridLayout,
     QLabel,
     QLineEdit,
     QListWidget,
@@ -28,6 +31,8 @@ from PyQt5.QtWidgets import (
     QListView,
     QMessageBox,
     QPushButton,
+    QFrame,
+    QScrollArea,
     QSizePolicy,
     QSplitter,
     QVBoxLayout,
@@ -60,6 +65,16 @@ from util.rpgmaker_images import (
     read_encryption_key,
     remove_editable_assets,
     resolve_content_root,
+)
+from gui.theme import COLORS, Geometry, Spacing
+from gui.ui_components import (
+    PageHeader,
+    SectionCard,
+    action_button_width_hint,
+    configure_action_button,
+    equalize_button_widths,
+    make_page_layout,
+    set_status_text,
 )
 
 
@@ -307,118 +322,187 @@ class ImageManager(QWidget):
         self._thumbnail_workers: list[_ThumbnailWorker] = []
         self._action_worker: _ImageActionWorker | None = None
         self._thumbnail_generation = 0
+        self._preview_pixmap: QPixmap | None = None
 
         self._build_ui()
         if self.game_root:
             self.folder_edit.setText(str(self.game_root))
             self._load_project()
         else:
-            self.status_label.setText("Select a game folder to begin.")
+            set_status_text(self.status_label, "Select a game folder to begin.")
             self._set_actions_enabled(False)
 
     def _build_ui(self) -> None:
-        root = QVBoxLayout(self)
-        root.setContentsMargins(18, 14, 18, 12)
-        title = QLabel("Image Manager")
-        title.setStyleSheet("font-size:18px;font-weight:bold;color:#e0e0e0;")
-        root.addWidget(title)
-        intro = QLabel(
-            "Choose an engine profile, make images editable under .dazedtl/images, edit the "
-            "PNG copies, then patch highlighted images or every editable image. "
-            "Pages keep very large games responsive."
-        )
-        intro.setWordWrap(True)
-        intro.setStyleSheet("color:#b8b8b8;font-size:13px;padding:2px 0 6px 0;")
-        root.addWidget(intro)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+        self.page_scroll = QScrollArea()
+        self.page_scroll.setObjectName("imageManagerScroll")
+        self.page_scroll.setWidgetResizable(True)
+        self.page_scroll.setFrameShape(QFrame.NoFrame)
+        self.page_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.page_scroll.viewport().installEventFilter(self)
+        self.page_content = QWidget()
+        self.page_content.setObjectName("appPage")
+        root = make_page_layout(self.page_content)
+        self.page_layout = root
+        self.page_scroll.setWidget(self.page_content)
+        outer.addWidget(self.page_scroll)
+        root.addWidget(PageHeader(
+            "Image Manager",
+            "Make game images editable, translate the working copies, and patch reviewed images back into the game."
+        ))
+
+        # The page header already names this single, dominant workspace. Keep
+        # the card surface and padding without spending vertical space on a
+        # redundant second heading.
+        workspace_card = SectionCard()
+        self.workspace_card = workspace_card
+        workspace_card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        root.addWidget(workspace_card, 1)
 
         folder_row = QHBoxLayout()
-        folder_row.addWidget(QLabel("Game folder:"))
+        folder_row.setSpacing(Spacing.SM)
+        folder_label = QLabel("Game folder")
+        folder_row.addWidget(folder_label)
         self.folder_edit = QLineEdit()
+        self.folder_edit.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Fixed)
         self.folder_edit.setPlaceholderText("Select a game folder…")
         self.folder_edit.returnPressed.connect(self._load_project)
         folder_row.addWidget(self.folder_edit, 1)
-        browse_button = QPushButton("Browse…")
+        browse_button = QPushButton("Choose…")
+        configure_action_button(browse_button, variant="secondary")
         browse_button.clicked.connect(self._browse_game_root)
         folder_row.addWidget(browse_button)
-        load_button = QPushButton("Load")
+        load_button = QPushButton("Load images")
+        configure_action_button(load_button, variant="primary")
         load_button.clicked.connect(self._load_project)
         folder_row.addWidget(load_button)
-        root.addLayout(folder_row)
+        workspace_card.add_layout(folder_row)
 
         engine_row = QHBoxLayout()
-        engine_row.addWidget(QLabel("Engine:"))
+        engine_row.setSpacing(Spacing.SM)
+        engine_label = QLabel("Engine")
+        engine_row.addWidget(engine_label)
+        source_label_width = max(
+            Geometry.FORM_LABEL,
+            folder_label.sizeHint().width(),
+            engine_label.sizeHint().width(),
+        )
+        folder_label.setMinimumWidth(source_label_width)
+        engine_label.setMinimumWidth(source_label_width)
         self.engine_combo = QComboBox()
+        self.engine_combo.setMinimumWidth(220)
+        self.engine_combo.setMaximumWidth(320)
         self.engine_combo.addItem("Auto-detect", PROFILE_AUTO)
         for profile in registered_image_profiles():
             self.engine_combo.addItem(profile.label, profile.engine_id)
         self.engine_combo.currentIndexChanged.connect(self._engine_changed)
         engine_row.addWidget(self.engine_combo)
-        self.engine_detection_label = QLabel("Select a game folder to detect its image layout.")
+        self.engine_detection_label = QLabel(
+            "Select a game folder to detect its image layout."
+        )
         self.engine_detection_label.setWordWrap(True)
-        self.engine_detection_label.setStyleSheet("color:#9d9d9d;font-size:12px;")
+        self.engine_detection_label.setObjectName("appSectionDescription")
+        self.engine_detection_label.setSizePolicy(
+            QSizePolicy.Ignored, QSizePolicy.Preferred
+        )
         engine_row.addWidget(self.engine_detection_label, 1)
         self.migrate_legacy_button = QPushButton("Migrate old workspace")
+        configure_action_button(self.migrate_legacy_button, variant="secondary")
         self.migrate_legacy_button.setToolTip(
             "Move images from the former DazedTL_Images folder into .dazedtl/images."
         )
         self.migrate_legacy_button.clicked.connect(self._migrate_legacy_workspace)
         self.migrate_legacy_button.hide()
         engine_row.addWidget(self.migrate_legacy_button)
-        root.addLayout(engine_row)
+        workspace_card.add_layout(engine_row)
 
         self.generic_root_host = QWidget()
         generic_root_row = QHBoxLayout(self.generic_root_host)
         generic_root_row.setContentsMargins(0, 0, 0, 0)
         generic_root_row.addWidget(QLabel("Image folder:"))
         self.generic_root_edit = QLineEdit()
+        self.generic_root_edit.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Fixed)
         self.generic_root_edit.setPlaceholderText(
             "Choose the folder containing loose PNG images…"
         )
         self.generic_root_edit.returnPressed.connect(self._generic_root_changed)
         generic_root_row.addWidget(self.generic_root_edit, 1)
-        self.generic_root_button = QPushButton("Browse…")
+        self.generic_root_button = QPushButton("Choose…")
+        configure_action_button(self.generic_root_button, variant="secondary")
         self.generic_root_button.clicked.connect(self._browse_generic_root)
         generic_root_row.addWidget(self.generic_root_button)
-        root.addWidget(self.generic_root_host)
+        workspace_card.add_widget(self.generic_root_host)
         self.generic_root_host.hide()
 
         filters = QHBoxLayout()
+        filters.setSpacing(Spacing.SM)
         self.search_edit = QLineEdit()
+        self.search_edit.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Fixed)
         self.search_edit.setPlaceholderText("Filter by any part of the folder or filename…")
         self.search_edit.textChanged.connect(self._apply_filters)
         filters.addWidget(self.search_edit, 2)
         self.folder_combo = _BoundedComboBox()
+        self.folder_combo.setMinimumWidth(220)
+        self.folder_combo.setMaximumWidth(360)
         self.folder_combo.addItem("All folders", "")
         self.folder_combo.currentIndexChanged.connect(self._apply_filters)
         filters.addWidget(self.folder_combo, 1)
         self.state_combo = QComboBox()
+        self.state_combo.setMinimumWidth(150)
+        self.state_combo.setMaximumWidth(220)
         self.state_combo.addItem("All images", "all")
         self.state_combo.addItem("Editable images", "editable")
         self.state_combo.currentIndexChanged.connect(self._apply_filters)
         filters.addWidget(self.state_combo)
-        root.addLayout(filters)
+        workspace_card.add_layout(filters)
 
         splitter = QSplitter(Qt.Horizontal)
+        splitter.setObjectName("imageBrowserSplitter")
+        splitter.setChildrenCollapsible(False)
+        splitter.setHandleWidth(Spacing.LG)
+        splitter.setStyleSheet(
+            "QSplitter#imageBrowserSplitter::handle {"
+            "background: transparent; border: none; }"
+            f"QSplitter#imageBrowserSplitter::handle:hover {{"
+            f"background: {COLORS.surface_hover}; }}"
+        )
+        self.browser_splitter = splitter
+
+        self.browser_host = QWidget()
+        self.browser_host.setObjectName("imageBrowserPane")
+        self.browser_host.setStyleSheet(
+            "QWidget#imageBrowserPane { background: transparent; border: none; }"
+        )
+        self.browser_host.setMinimumWidth(420)
+        browser_layout = QVBoxLayout(self.browser_host)
+        browser_layout.setContentsMargins(0, 0, 0, 0)
+        browser_layout.setSpacing(Spacing.SM)
         self.image_list = _UserSelectionList()
         self.image_list.setViewMode(QListWidget.IconMode)
         self.image_list.setResizeMode(QListWidget.Adjust)
         self.image_list.setMovement(QListWidget.Static)
         self.image_list.setSelectionMode(QAbstractItemView.ExtendedSelection)
         self.image_list.setIconSize(QSize(112, 112))
-        self.image_list.setGridSize(QSize(160, 160))
+        thumbnail_text_height = self.image_list.fontMetrics().height()
+        self.image_list.setGridSize(
+            QSize(168, max(160, 112 + thumbnail_text_height + Spacing.XL))
+        )
         self.image_list.setUniformItemSizes(True)
-        self.image_list.setWordWrap(True)
-        self.image_list.setSpacing(4)
+        self.image_list.setWordWrap(False)
+        self.image_list.setTextElideMode(Qt.ElideMiddle)
+        self.image_list.setSpacing(Spacing.SM)
         self.image_list.setObjectName("rpgImageList")
         self.image_list.setStyleSheet(
-            "QListWidget#rpgImageList{background:#1e1e1e;color:#fff;"
-            "border:1px solid #555;padding:3px;outline:none;}"
+            f"QListWidget#rpgImageList{{background:{COLORS.canvas};color:{COLORS.text_primary};"
+            f"border:1px solid {COLORS.border};padding:4px;outline:none;}}"
             "QListWidget#rpgImageList::item{border:1px solid transparent;"
-            "padding:3px;background:transparent;}"
-            "QListWidget#rpgImageList::item:selected{background:#264f78;"
-            "border-color:#4b8dc0;color:#fff;}"
-            "QListWidget#rpgImageList::item:hover:!selected{background:#333;"
-            "border-color:#555;}"
+            "padding:4px;background:transparent;}"
+            f"QListWidget#rpgImageList::item:selected{{background:{COLORS.selection};"
+            f"border-color:{COLORS.accent_text};color:{COLORS.on_accent};}}"
+            f"QListWidget#rpgImageList::item:hover:!selected{{background:{COLORS.surface_hover};"
+            f"border-color:{COLORS.border_strong};}}"
         )
         self.image_list.userSelectionChanged.connect(self._selection_changed)
         self.image_list.deleteRequested.connect(self._remove_highlighted)
@@ -427,32 +511,88 @@ class ImageManager(QWidget):
             "Click highlights one image. Ctrl-click toggles individual images, Shift-click "
             "selects a range, and Ctrl+A highlights the current page."
         )
-        splitter.addWidget(self.image_list)
+        browser_layout.addWidget(self.image_list, 1)
 
-        preview_host = QWidget()
-        preview_layout = QVBoxLayout(preview_host)
+        page_row = QHBoxLayout()
+        # Pagination belongs to the browser, but it must not visually merge
+        # with the browser's lower edge at large application font scales.
+        page_row.setContentsMargins(0, 0, 0, Spacing.SM)
+        page_row.setSpacing(Spacing.SM)
+        page_row.addStretch()
+        self.previous_button = QPushButton("← Previous")
+        configure_action_button(self.previous_button, variant="quiet")
+        self.previous_button.clicked.connect(lambda: self._change_page(-1))
+        page_row.addWidget(self.previous_button)
+        self.page_label = QLabel("Page 0 / 0")
+        self.page_label.setAlignment(Qt.AlignCenter)
+        page_row.addWidget(self.page_label)
+        self.next_button = QPushButton("Next →")
+        configure_action_button(self.next_button, variant="quiet")
+        self.next_button.clicked.connect(lambda: self._change_page(1))
+        page_row.addWidget(self.next_button)
+        page_row.addStretch()
+        for button in (self.previous_button, self.next_button):
+            button.setProperty("appRequiredParentInset", Spacing.SM)
+        equalize_button_widths(
+            (self.previous_button, self.next_button), minimum=0
+        )
+        browser_layout.addLayout(page_row)
+        splitter.addWidget(self.browser_host)
+
+        self.preview_host = QWidget()
+        self.preview_host.setObjectName("imagePreviewPane")
+        self.preview_host.setMinimumWidth(400)
+        preview_layout = QVBoxLayout(self.preview_host)
+        preview_layout.setContentsMargins(
+            Spacing.SM, Spacing.SM, Spacing.SM, Spacing.SM
+        )
+        preview_layout.setSpacing(Spacing.SM)
         self.preview_label = QLabel("Select an image to preview it")
         self.preview_label.setAlignment(Qt.AlignCenter)
-        self.preview_label.setMinimumSize(300, 300)
+        self.preview_label.setWordWrap(True)
+        self.preview_label.setMinimumSize(360, 240)
+        self.preview_label.setSizePolicy(
+            QSizePolicy.Expanding, QSizePolicy.Expanding
+        )
         self.preview_label.setStyleSheet(
-            "background:#171717;border:1px solid #3c3c3c;color:#777;"
+            f"background:{COLORS.canvas};border:1px solid {COLORS.border};"
+            f"color:{COLORS.text_disabled};"
         )
         preview_layout.addWidget(self.preview_label, 1)
         self.path_label = QLabel()
-        self.path_label.setWordWrap(True)
+        self.path_label.setObjectName("imagePreviewDetails")
+        self.path_label.setAccessibleName("Selected image details")
         self.path_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
-        self.path_label.setStyleSheet("color:#c8c8c8;font-size:12px;padding:5px;")
+        self.path_label.setWordWrap(True)
+        self.path_label.setMargin(Spacing.MD)
+        self.path_label.setMaximumHeight(Geometry.CONTROL * 3)
+        self.path_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        self.path_label.setStyleSheet(
+            f"QLabel#imagePreviewDetails{{background:{COLORS.surface_1};"
+            f"border:1px solid {COLORS.border};color:{COLORS.text_secondary};"
+            f"border-radius:{Geometry.RADIUS_CONTROL}px;}}"
+        )
+        self.path_label.hide()
         preview_layout.addWidget(self.path_label)
-        splitter.addWidget(preview_host)
-        splitter.setSizes([850, 350])
-        root.addWidget(splitter, 1)
+        splitter.addWidget(self.preview_host)
+        splitter.setSizes([700, 540])
+        splitter.setStretchFactor(0, 3)
+        splitter.setStretchFactor(1, 2)
+        splitter.splitterMoved.connect(lambda *_args: self._render_preview_pixmap())
+        workspace_card.add_widget(splitter, 1)
 
-        controls_row = QHBoxLayout()
-        controls_row.setSpacing(12)
-
-        action_row = QHBoxLayout()
-        action_row.setSpacing(8)
-        self.open_workspace_button = QPushButton("Open")
+        action_host = QWidget()
+        action_host.setObjectName("imageActionBar")
+        action_host.setStyleSheet(
+            "QWidget#imageActionBar { background: transparent; border: none; }"
+        )
+        action_row = QGridLayout(action_host)
+        action_row.setContentsMargins(0, 0, 0, 0)
+        action_row.setHorizontalSpacing(Spacing.SM)
+        action_row.setVerticalSpacing(Spacing.SM)
+        self.action_host = action_host
+        self.action_layout = action_row
+        self.open_workspace_button = QPushButton("Open folder")
         self.open_workspace_button.setToolTip(
             "Open the highlighted image's editable folder, the chosen folder filter, or the "
             "editable img root."
@@ -464,21 +604,17 @@ class ImageManager(QWidget):
             "image folder. Paste it into Codex, Cursor, Copilot, or a similar coding agent."
         )
         self.copy_translation_button.clicked.connect(self._copy_translation_skill)
-        self.decrypt_selected_button = QPushButton("Decrypt")
+        self.decrypt_selected_button = QPushButton("Make selected")
         self.decrypt_selected_button.clicked.connect(self._decrypt_checked)
-        self.decrypt_all_button = QPushButton("Decrypt all")
+        self.decrypt_all_button = QPushButton("Make all")
         self.decrypt_all_button.clicked.connect(self._decrypt_all)
-        self.remove_button = QPushButton("Remove")
+        self.remove_button = QPushButton("Remove copies")
         self.remove_button.setToolTip(
             "Delete highlighted PNG copies from the editable folder. Runtime images remain "
             "untouched and can be decrypted again. The Delete key does the same thing."
         )
         self.remove_button.clicked.connect(self._remove_highlighted)
         self.prepare_button = QPushButton("Patch all")
-        self.prepare_button.setStyleSheet(
-            "QPushButton{border:1px solid #4ec9b0;color:#4ec9b0;font-weight:bold;padding:6px 14px;}"
-            "QPushButton:hover{background:#18352f;}"
-        )
         self.prepare_button.setToolTip(
             "With highlighted images, patch only their editable PNGs. With no highlights, patch "
             "every editable PNG. Editable copies remain in .dazedtl/images until removed."
@@ -492,39 +628,24 @@ class ImageManager(QWidget):
             self.remove_button,
             self.prepare_button,
         )
+        self.action_buttons = action_buttons
         for button in action_buttons:
-            button.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Fixed)
-            action_row.addWidget(button, 1)
-        controls_row.addLayout(action_row, 1)
-
-        page_row = QHBoxLayout()
-        page_row.setSpacing(8)
-        self.previous_button = QPushButton("← Previous")
-        self.previous_button.clicked.connect(lambda: self._change_page(-1))
-        page_row.addWidget(self.previous_button)
-        self.page_label = QLabel("Page 0 / 0")
-        self.page_label.setAlignment(Qt.AlignCenter)
-        self.page_label.setMinimumWidth(210)
-        page_row.addWidget(self.page_label)
-        self.next_button = QPushButton("Next →")
-        self.next_button.clicked.connect(lambda: self._change_page(1))
-        page_row.addWidget(self.next_button)
-        nav_width = max(self.previous_button.sizeHint().width(), self.next_button.sizeHint().width())
-        self.previous_button.setFixedWidth(nav_width)
-        self.next_button.setFixedWidth(nav_width)
-        common_height = max(
-            40,
-            *(button.sizeHint().height() for button in (*action_buttons, self.previous_button, self.next_button)),
-        )
-        for button in (*action_buttons, self.previous_button, self.next_button):
-            button.setFixedHeight(common_height)
-        controls_row.addLayout(page_row)
-        root.addLayout(controls_row)
+            if button is self.prepare_button:
+                variant = "primary"
+            elif button is self.remove_button:
+                variant = "danger"
+            else:
+                variant = "secondary"
+            configure_action_button(button, variant=variant)
+            button.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
+        self._action_layout_mode = None
+        workspace_card.add_widget(action_host)
+        self._arrange_action_bar()
 
         self.status_label = QLabel("Scanning image folders…")
         self.status_label.setWordWrap(True)
-        self.status_label.setStyleSheet("color:#8fbc8f;padding:4px 0;")
-        root.addWidget(self.status_label)
+        set_status_text(self.status_label, "Scanning image folders…", "info")
+        workspace_card.add_widget(self.status_label)
 
     def _browse_game_root(self) -> None:
         start = self.folder_edit.text().strip() or str(Path.home())
@@ -606,7 +727,9 @@ class ImageManager(QWidget):
             QMessageBox.warning(self, "Editable Image Migration", str(exc))
             return
         self.migrate_legacy_button.hide()
-        self.status_label.setText(f"Migrated {moved:,} legacy editable image(s).")
+        set_status_text(
+            self.status_label, f"Migrated {moved:,} legacy editable image(s).", "success"
+        )
         self._start_scan()
 
     def _generic_root_changed(self) -> None:
@@ -636,23 +759,37 @@ class ImageManager(QWidget):
             self.engine_detection = detect_image_engine(self.game_root)
         except Exception as exc:
             self.engine_detection = None
-            self.status_label.setText(f"Engine detection failed: {exc}")
+            set_status_text(self.status_label, f"Engine detection failed: {exc}", "error")
             self._set_actions_enabled(False)
             return
         self.engine_id = (
             self.engine_detection.engine_id if selected == PROFILE_AUTO else selected
         )
+        image_location = ""
+        if self.engine_detection.suggested_image_root is not None:
+            try:
+                relative_root = self.engine_detection.suggested_image_root.relative_to(
+                    self.game_root
+                )
+                image_location = f" · Images: {relative_root.as_posix()}"
+            except ValueError:
+                image_location = ""
         if selected == PROFILE_AUTO:
             detected = profile_label(self.engine_id)
+            confidence = (
+                "fallback detection"
+                if self.engine_detection.confidence == "fallback"
+                else f"{self.engine_detection.confidence} confidence"
+            )
             self.engine_detection_label.setText(
-                f"Auto: {detected} ({self.engine_detection.confidence}) — "
-                f"{self.engine_detection.reason}"
+                f"Auto-detected {detected} · {confidence}{image_location}"
             )
         else:
             self.engine_detection_label.setText(
-                f"Manual: {profile_label(self.engine_id)} — "
-                f"auto-detection reported {profile_label(self.engine_detection.engine_id)}"
+                f"Using {profile_label(self.engine_id)} · auto-detected "
+                f"{profile_label(self.engine_detection.engine_id)}{image_location}"
             )
+        self.engine_detection_label.setToolTip(self.engine_detection.reason)
 
         is_generic = self.engine_id == PROFILE_GENERIC
         self.generic_root_host.setVisible(is_generic)
@@ -673,7 +810,7 @@ class ImageManager(QWidget):
                     )
                     self.generic_root_edit.setText(str(self.generic_image_root))
                 except Exception as exc:
-                    self.status_label.setText(str(exc))
+                    set_status_text(self.status_label, str(exc), "error")
                     self.assets = []
                     self.assets_by_id = {}
                     self.filtered_assets = []
@@ -681,8 +818,10 @@ class ImageManager(QWidget):
                     self._set_actions_enabled(False)
                     return
             else:
-                self.status_label.setText(
-                    "Choose the folder containing loose PNG images. Scanning is read-only."
+                set_status_text(
+                    self.status_label,
+                    "Choose the folder containing loose PNG images. Scanning is read-only.",
+                    "warning",
                 )
                 self.assets = []
                 self.assets_by_id = {}
@@ -697,8 +836,8 @@ class ImageManager(QWidget):
 
     def _update_profile_actions(self) -> None:
         if self.engine_id == PROFILE_RPGMAKER_MVMZ:
-            self.decrypt_selected_button.setText("Decrypt")
-            self.decrypt_all_button.setText("Decrypt all")
+            self.decrypt_selected_button.setText("Make selected")
+            self.decrypt_all_button.setText("Make all")
             self.decrypt_selected_button.setToolTip(
                 "Decrypt encrypted images or copy ordinary RPG Maker PNGs into the "
                 "editable workspace."
@@ -708,8 +847,8 @@ class ImageManager(QWidget):
                 "overwriting existing work."
             )
         else:
-            self.decrypt_selected_button.setText("Make editable")
-            self.decrypt_all_button.setText("Make all editable")
+            self.decrypt_selected_button.setText("Make selected")
+            self.decrypt_all_button.setText("Make all")
             self.decrypt_selected_button.setToolTip(
                 "Copy highlighted loose PNGs into the editable workspace without changing the game."
             )
@@ -756,7 +895,7 @@ class ImageManager(QWidget):
         if self.game_root is None:
             return
         self._set_actions_enabled(False)
-        self.status_label.setText("Scanning image folders…")
+        set_status_text(self.status_label, "Scanning image folders…", "info")
         self._scan_generation += 1
         worker = _ImageScanWorker(
             self._scan_generation,
@@ -796,19 +935,21 @@ class ImageManager(QWidget):
         self.folder_combo.blockSignals(False)
         encrypted = sum(asset.has_encrypted for asset in assets)
         editable = sum(asset.has_plain for asset in assets)
-        self.status_label.setText(
+        set_status_text(self.status_label,
             f"{profile_label(self.engine_id)} · found {len(assets):,} images · "
             f"{encrypted:,} encrypted · "
-            f"{editable:,} editable PNG copies · {len(self.selected_ids):,} highlighted"
+            f"{editable:,} editable PNG copies · {len(self.selected_ids):,} highlighted",
+            "success",
         )
         self._update_prepare_scope()
         self._apply_filters()
+        self._update_page_scroll_extent()
 
     def _scan_error(self, generation: int, message: str) -> None:
         if generation != self._scan_generation:
             return
         self._set_actions_enabled(False)
-        self.status_label.setText(f"Image scan failed: {message}")
+        set_status_text(self.status_label, f"Image scan failed: {message}", "error")
         QMessageBox.critical(self, "Image Scan Failed", message)
 
     def _apply_filters(self) -> None:
@@ -860,8 +1001,9 @@ class ImageManager(QWidget):
             item.setSelected(asset.asset_id in self.selected_ids)
         self.image_list.blockSignals(False)
         self.page_label.setText(
-            f"Page {self.page + 1} / {page_count} · {len(self.filtered_assets):,} matches"
+            f"Page {self.page + 1} of {page_count} · {len(self.filtered_assets):,} images"
         )
+        self._page_count = page_count
         self.previous_button.setEnabled(self.page > 0)
         self.next_button.setEnabled(self.page + 1 < page_count)
         self._thumbnail_generation += 1
@@ -917,17 +1059,20 @@ class ImageManager(QWidget):
 
     def _update_selection_status(self) -> None:
         self._update_prepare_scope()
-        self.status_label.setText(
+        set_status_text(self.status_label,
             f"{len(self.filtered_assets):,} matching images · "
             f"{len(self.selected_ids):,} highlighted · "
             f"{sum(asset.has_plain for asset in self.assets):,} editable"
         )
 
     def _update_prepare_scope(self) -> None:
+        compact = getattr(self, "_action_labels_compact", False)
         if self.selected_ids:
-            self.prepare_button.setText("Patch selected")
+            self.prepare_button.setText("Patch" if compact else "Patch selected")
         else:
             self.prepare_button.setText("Patch all")
+        if hasattr(self, "action_host"):
+            self._arrange_action_bar()
 
     def _show_preview(self, current: QListWidgetItem | None, _previous=None) -> None:
         if current is None:
@@ -940,30 +1085,174 @@ class ImageManager(QWidget):
             pixmap = QPixmap()
             if not pixmap.loadFromData(raw, "PNG"):
                 raise ValueError("Qt could not decode this PNG")
-            self.preview_label.setPixmap(
-                pixmap.scaled(
-                    self.preview_label.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation
-                )
-            )
+            self._preview_pixmap = pixmap
+            self._render_preview_pixmap()
         except Exception as exc:
+            self._preview_pixmap = None
             self.preview_label.setPixmap(QPixmap())
             self.preview_label.setText(f"Preview unavailable\n{exc}")
-        details = [asset.asset_id]
-        details.append(f"Engine: {profile_label(self.engine_id)}")
+        details = [asset.asset_id, f"Engine: {profile_label(self.engine_id)}"]
         if asset.has_encrypted:
             details.append(f"Runtime encrypted: {asset.encrypted_path}")
+            runtime_state = "Encrypted source"
         elif asset.has_runtime_plain:
             details.append(f"Runtime PNG: {asset.runtime_plain_path}")
+            runtime_state = "PNG source"
+        else:
+            runtime_state = "Editable only"
         details.append(
             f"Editable PNG: {asset.plain_path}"
             if asset.has_plain
             else f"Editable folder target: {asset.plain_path} (not created)"
         )
-        details.append(
-            "Highlighted: yes" if asset.asset_id in self.selected_ids
-            else "Highlighted: no"
+        editable_state = (
+            "Editable copy ready" if asset.has_plain else "No editable copy"
         )
-        self.path_label.setText("\n".join(details))
+        detail_text = "\n".join(details)
+        self.path_label.setText(
+            f"{asset.asset_id}\n"
+            f"{runtime_state} · {editable_state}"
+        )
+        self.path_label.setToolTip(detail_text)
+        self.path_label.show()
+
+    def _render_preview_pixmap(self) -> None:
+        pixmap = getattr(self, "_preview_pixmap", None)
+        if pixmap is None or pixmap.isNull():
+            return
+        target = self.preview_label.contentsRect().size()
+        if target.width() <= 0 or target.height() <= 0:
+            return
+        self.preview_label.setPixmap(
+            pixmap.scaled(target, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        )
+
+    def _update_page_scroll_extent(self) -> None:
+        """Let the page scroll instead of compressing text and preview rows."""
+        if not hasattr(self, "page_content"):
+            return
+        self.page_content.setMinimumHeight(0)
+        self.page_layout.activate()
+        self.page_content.setMinimumHeight(self.page_layout.sizeHint().height())
+
+    def _arrange_action_bar(self) -> None:
+        """Keep all image actions on one compact, clearly grouped row."""
+        if not all(
+            hasattr(self, name)
+            for name in ("workspace_card", "action_layout", "action_buttons")
+        ):
+            return
+        self._action_layout_mode = "single"
+
+        full_labels = (
+            "Open folder",
+            "Copy skill",
+            "Make selected",
+            "Make all",
+            "Remove copies",
+        )
+        compact_labels = ("Open", "Copy", "Make", "Make all", "Remove")
+        for button in self.action_buttons:
+            button.setMinimumWidth(0)
+            button.setMaximumWidth(16777215)
+        for button, label in zip(self.action_buttons[:-1], full_labels):
+            button.setText(label)
+        self._action_labels_compact = False
+        self.prepare_button.setText(
+            "Patch selected" if self.selected_ids else "Patch all"
+        )
+
+        button_count = len(self.action_buttons)
+        page_margins = self.page_layout.contentsMargins()
+        card_margins = self.workspace_card.content_layout.contentsMargins()
+        viewport_available = (
+            self.page_scroll.viewport().contentsRect().width()
+            - page_margins.left()
+            - page_margins.right()
+            - card_margins.left()
+            - card_margins.right()
+        )
+        available = max(
+            0,
+            min(self.action_host.contentsRect().width(), viewport_available)
+            - self.action_layout.horizontalSpacing() * (button_count - 1),
+        )
+        widest = max(action_button_width_hint(button) for button in self.action_buttons)
+        if widest * button_count > available:
+            for button, label in zip(self.action_buttons[:-1], compact_labels):
+                button.setText(label)
+            self._action_labels_compact = True
+            self.prepare_button.setText("Patch all" if not self.selected_ids else "Patch")
+            widest = max(
+                action_button_width_hint(button) for button in self.action_buttons
+            )
+        per_button = max(Geometry.CONTROL_COMPACT, available // button_count)
+        equalize_button_widths(
+            self.action_buttons,
+            minimum=0,
+            maximum=per_button,
+        )
+
+        for button in (self.previous_button, self.next_button):
+            button.setMinimumWidth(0)
+            button.setMaximumWidth(16777215)
+        equalize_button_widths(
+            (self.previous_button, self.next_button), minimum=0
+        )
+        full_page_text = (
+            f"Page {self.page + 1} of {getattr(self, '_page_count', 1)} · "
+            f"{len(self.filtered_assets):,} images"
+        )
+        self.page_label.setText(full_page_text)
+        pagination_width = (
+            self.previous_button.width()
+            + self.next_button.width()
+            + self.page_label.sizeHint().width()
+            + Spacing.SM * 2
+        )
+        if pagination_width > self.browser_host.contentsRect().width():
+            self.page_label.setText(
+                f"{self.page + 1}/{getattr(self, '_page_count', 1)} · "
+                f"{len(self.filtered_assets):,}"
+            )
+
+        grid = self.action_layout
+        for button in self.action_buttons:
+            grid.removeWidget(button)
+        for column in range(7):
+            grid.setColumnStretch(column, 0)
+        left = Qt.AlignLeft | Qt.AlignVCenter
+        for column, button in enumerate(self.action_buttons):
+            grid.addWidget(button, 0, column, 1, 1, left)
+        grid.setColumnStretch(6, 1)
+        self.action_host.updateGeometry()
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        if hasattr(self, "preview_label"):
+            self._render_preview_pixmap()
+        self._arrange_action_bar()
+
+    def eventFilter(self, watched, event) -> bool:
+        if (
+            hasattr(self, "page_scroll")
+            and watched is self.page_scroll.viewport()
+            and event.type() == QEvent.Resize
+        ):
+            # The viewport may change without ImageManager receiving a resize
+            # (notably after font scaling changes the page's size hint).
+            QTimer.singleShot(0, self._refresh_responsive_layout)
+        return super().eventFilter(watched, event)
+
+    def _refresh_responsive_layout(self) -> None:
+        self._arrange_action_bar()
+        self._update_page_scroll_extent()
+
+    def showEvent(self, event) -> None:
+        super().showEvent(event)
+        self._arrange_action_bar()
+        self._update_page_scroll_extent()
+        QTimer.singleShot(0, self._arrange_action_bar)
 
     def _open_editable_folder(self) -> None:
         if self.game_root is None:
@@ -998,7 +1287,7 @@ class ImageManager(QWidget):
             target.mkdir(parents=True, exist_ok=True)
             if not QDesktopServices.openUrl(QUrl.fromLocalFile(str(target))):
                 raise RuntimeError("The system file manager could not open the folder.")
-            self.status_label.setText(f"Editable images: {target}")
+            set_status_text(self.status_label, f"Editable images: {target}", "success")
         except Exception as exc:
             QMessageBox.warning(self, "Editable Image Folder", str(exc))
 
@@ -1044,9 +1333,10 @@ class ImageManager(QWidget):
             for token, value in replacements.items():
                 prompt = prompt.replace(token, value)
             QApplication.clipboard().setText(prompt)
-            self.status_label.setText(
+            set_status_text(self.status_label,
                 f"Copied image translation skill for {len(editable_assets):,} editable PNG(s): "
-                f"{self._editable_image_root()}"
+                f"{self._editable_image_root()}",
+                "success",
             )
         except Exception as exc:
             QMessageBox.warning(self, "Copy Image Translation Skill", str(exc))
@@ -1184,7 +1474,9 @@ class ImageManager(QWidget):
         worker = _ImageActionWorker(
             action, self.game_root, assets, self.key, self.engine_id
         )
-        worker.status.connect(self.status_label.setText)
+        worker.status.connect(
+            lambda message: set_status_text(self.status_label, message, "info")
+        )
         worker.done.connect(self._action_done)
         worker.error.connect(self._action_error)
         self._action_worker = worker
@@ -1221,11 +1513,15 @@ class ImageManager(QWidget):
             QMessageBox.warning(self, "Image Action Completed with Errors", f"{summary}\n\n{shown}")
         else:
             QMessageBox.information(self, "Image Action Complete", summary)
-        self.status_label.setText(summary)
+        set_status_text(
+            self.status_label,
+            summary,
+            "warning" if result.errors else "success",
+        )
         self._start_scan()
 
     def _action_error(self, message: str) -> None:
-        self.status_label.setText(f"Image action failed: {message}")
+        set_status_text(self.status_label, f"Image action failed: {message}", "error")
         self._set_actions_enabled(True)
         QMessageBox.critical(self, "Image Action Failed", message)
 
@@ -1259,7 +1555,9 @@ class ImageManager(QWidget):
             worker.requestInterruption()
             worker.wait(1000)
         if any(worker.isRunning() for worker in running):
-            self.status_label.setText("Finishing image scan/preview before closing…")
+            set_status_text(
+                self.status_label, "Finishing image scan/preview before closing…", "info"
+            )
             event.ignore()
             return
         super().closeEvent(event)

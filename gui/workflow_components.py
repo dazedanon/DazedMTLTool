@@ -116,6 +116,7 @@ class WorkflowStepRail(QWidget):
         root = QVBoxLayout(self)
         root.setContentsMargins(Spacing.SM, Spacing.MD, Spacing.SM, Spacing.SM)
         root.setSpacing(Spacing.XS)
+        self._root_layout = root
 
         title = QLabel("RPG MAKER")
         title.setObjectName("workflowRailTitle")
@@ -229,6 +230,15 @@ class WorkflowStepRail(QWidget):
             )
         self._refresh_labels()
 
+    def labels_require_compact_mode(self) -> bool:
+        """Return whether the expanded label column would clip at this font."""
+
+        available = Geometry.STEP_RAIL_WIDTH - 72
+        return any(
+            text_label.fontMetrics().horizontalAdvance(label) > available
+            for label, text_label in zip(self._labels, self._text_labels)
+        )
+
     def set_step_visible(self, index: int, visible: bool) -> None:
         if 0 <= index < len(self.buttons):
             self.buttons[index].setVisible(visible)
@@ -239,6 +249,12 @@ class WorkflowStepRail(QWidget):
         self._compact = compact
         self.setFixedWidth(
             Geometry.STEP_RAIL_COMPACT_WIDTH if compact else Geometry.STEP_RAIL_WIDTH
+        )
+        self._root_layout.setContentsMargins(
+            Spacing.XS if compact else Spacing.SM,
+            Spacing.MD,
+            Spacing.XS if compact else Spacing.SM,
+            Spacing.SM,
         )
         self.title_label.setVisible(not compact)
         self.activity_button.setText("Log" if compact else "Activity")
@@ -308,6 +324,8 @@ class WorkflowPageHeader(QWidget):
         purpose: str,
         *,
         optional: bool = False,
+        total_steps: int = 9,
+        show_help: bool = True,
         parent: QWidget | None = None,
     ):
         super().__init__(parent)
@@ -316,7 +334,7 @@ class WorkflowPageHeader(QWidget):
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(Spacing.XS)
 
-        eyebrow = QLabel(f"STEP {step + 1} OF 9")
+        eyebrow = QLabel(f"STEP {step + 1} OF {total_steps}")
         eyebrow.setObjectName("workflowEyebrow")
         root.addWidget(eyebrow)
 
@@ -335,11 +353,13 @@ class WorkflowPageHeader(QWidget):
                 "font-size:10px;font-weight:600;"
             )
             title_row.addWidget(badge, 0, Qt.AlignVCenter)
-        help_button = make_workflow_button("?  Help", variant="quiet")
-        help_button.setObjectName("workflowHelpButton")
-        help_button.setMinimumWidth(72)
-        help_button.clicked.connect(self.help_requested)
-        title_row.addWidget(help_button)
+        help_button = None
+        if show_help:
+            help_button = make_workflow_button("?  Help", variant="quiet")
+            help_button.setObjectName("workflowHelpButton")
+            help_button.setMinimumWidth(72)
+            help_button.clicked.connect(self.help_requested)
+            title_row.addWidget(help_button)
         root.addLayout(title_row)
 
         purpose_label = QLabel(purpose)
@@ -355,7 +375,7 @@ class WorkflowPageHeader(QWidget):
     def add_trailing_widget(self, widget: QWidget) -> None:
         """Insert a page-specific control immediately before Help."""
 
-        index = max(0, self.title_row.count() - 1)
+        index = max(0, self.title_row.count() - (1 if self.help_button else 0))
         self.title_row.insertWidget(index, widget, 0, Qt.AlignVCenter)
 
 

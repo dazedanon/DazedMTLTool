@@ -16,10 +16,20 @@ from PyQt5.QtWidgets import (
     QTextEdit,
     QVBoxLayout,
     QWidget,
+    QSizePolicy,
 )
 
 from util.paths import PROMPT_PATH, SKILLS_DIR, TRANSLATION_CONTEXTS_PATH
 from util.skills.contexts import reload_contexts
+from gui.theme import COLORS
+from gui.ui_components import (
+    PageHeader,
+    SectionCard,
+    equalize_button_widths,
+    make_action_button,
+    make_page_layout,
+    set_status_text,
+)
 
 
 class _PlainPasteTextEdit(QTextEdit):
@@ -30,13 +40,13 @@ class _PlainPasteTextEdit(QTextEdit):
 
 
 _EDITOR_STYLE = (
-    "QTextEdit{background-color:#1e1e1e;color:#d4d4d4;"
-    "border:1px solid #3c3c3c;border-radius:4px;padding:10px;"
-    "selection-background-color:#264f78;}"
+    f"QTextEdit{{background-color:{COLORS.canvas};color:{COLORS.text_secondary};"
+    f"border:1px solid {COLORS.border};border-radius:4px;padding:10px;"
+    f"selection-background-color:{COLORS.selection};}}"
 )
 
-_HINT_STYLE = "color:#9d9d9d;font-size:13px;"
-_PATH_STYLE = "color:#569cd6;font-size:12px;font-family:Consolas,monospace;"
+_HINT_STYLE = f"color:{COLORS.text_muted};font-size:12px;"
+_PATH_STYLE = f"color:{COLORS.accent_text};font-size:12px;font-family:Consolas,monospace;"
 
 
 class SkillsTab(QWidget):
@@ -49,32 +59,21 @@ class SkillsTab(QWidget):
         self.reload_all()
 
     def _build_ui(self):
-        root = QVBoxLayout(self)
-        root.setContentsMargins(20, 16, 20, 16)
-        root.setSpacing(10)
+        root = make_page_layout(self)
+        root.addWidget(PageHeader(
+            "Skills & Prompts",
+            "Edit shared AI instructions and translation contexts used across projects. "
+            "Game-specific guidance remains in Workflow Step 2."
+        ))
 
-        title = QLabel("Skills")
-        title.setStyleSheet("color:#ffffff;font-size:18px;font-weight:bold;")
-        root.addWidget(title)
-
-        intro = QLabel(
-            "Tool-level AI instructions live here. "
-            "Per-game quirks, Translation Frame (game skill), and optional custom skills are edited "
-            "in Workflow Step 2 (they travel with the game folder and merge into the API prompt)."
+        editor_card = SectionCard(
+            "Edit shared instructions",
+            "Choose an instruction set, review its scope and file path, then save only intentional changes.",
         )
-        intro.setWordWrap(True)
-        intro.setStyleSheet(_HINT_STYLE)
-        root.addWidget(intro)
-
+        editor_card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        root.addWidget(editor_card, 1)
         self.tabs = QTabWidget()
-        self.tabs.setStyleSheet(
-            "QTabWidget::pane{border:1px solid #3c3c3c;border-radius:4px;top:-1px;}"
-            "QTabBar::tab{background:#2d2d30;color:#cccccc;padding:8px 14px;"
-            "border:1px solid #3c3c3c;border-bottom:none;margin-right:2px;}"
-            "QTabBar::tab:selected{background:#1e1e1e;color:#ffffff;"
-            "border-top:2px solid #007acc;}"
-        )
-        root.addWidget(self.tabs, 1)
+        editor_card.add_widget(self.tabs, 1)
 
         self._add_file_page(
             key="system",
@@ -166,16 +165,15 @@ class SkillsTab(QWidget):
         )
 
         btn_row = QHBoxLayout()
-        reload_btn = QPushButton("↺  Reload All")
-        reload_btn.setFixedWidth(140)
+        reload_btn = make_action_button("Reload all files", variant="quiet")
         reload_btn.clicked.connect(self.reload_all)
         btn_row.addWidget(reload_btn)
         btn_row.addStretch()
-        open_btn = QPushButton("Open skills folder")
-        open_btn.setFixedWidth(160)
+        open_btn = make_action_button("Open skills folder")
         open_btn.clicked.connect(self._open_skills_folder)
         btn_row.addWidget(open_btn)
-        root.addLayout(btn_row)
+        equalize_button_widths((reload_btn, open_btn), minimum=176)
+        editor_card.add_layout(btn_row)
 
     def _add_file_page(
         self,
@@ -207,21 +205,20 @@ class SkillsTab(QWidget):
         layout.addWidget(editor, 1)
 
         row = QHBoxLayout()
-        save_btn = QPushButton("💾  Save")
-        save_btn.setFixedWidth(120)
+        save_btn = make_action_button("Save changes", variant="primary")
         save_btn.clicked.connect(lambda _=False, k=key: self._save_page(k))
         row.addWidget(save_btn)
 
-        reload_btn = QPushButton("↺  Reload")
-        reload_btn.setFixedWidth(120)
+        reload_btn = make_action_button("Reload file", variant="quiet")
         reload_btn.clicked.connect(lambda _=False, k=key: self._reload_page(k))
         row.addWidget(reload_btn)
 
         status = QLabel("")
-        status.setStyleSheet("color:#6a9955;font-size:12px;")
+        status.setObjectName("appStatusText")
         row.addWidget(status)
         row.addStretch()
         layout.addLayout(row)
+        equalize_button_widths((save_btn, reload_btn), minimum=160)
 
         self.tabs.addTab(page, tab_title)
         self._pages[key] = {
@@ -243,15 +240,12 @@ class SkillsTab(QWidget):
         try:
             if not path.is_file():
                 editor.setPlainText("")
-                status.setText(f"Missing: {path.name}")
-                status.setStyleSheet("color:#f0ad4e;font-size:12px;")
+                set_status_text(status, f"Missing: {path.name}", "warning")
                 return
             editor.setPlainText(path.read_text(encoding="utf-8"))
-            status.setText("Loaded")
-            status.setStyleSheet("color:#6a9955;font-size:12px;")
+            set_status_text(status, "Loaded", "success")
         except Exception as exc:
-            status.setText(f"Load failed: {exc}")
-            status.setStyleSheet("color:#f44747;font-size:12px;")
+            set_status_text(status, f"Load failed: {exc}", "error")
 
     def _save_page(self, key: str):
         page = self._pages[key]
@@ -270,20 +264,17 @@ class SkillsTab(QWidget):
                     "Invalid JSON",
                     f"Cannot save {path.name}:\n{exc}",
                 )
-                status.setText("Invalid JSON")
-                status.setStyleSheet("color:#f44747;font-size:12px;")
+                set_status_text(status, "Invalid JSON", "error")
                 return
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(text if text.endswith("\n") else text + "\n", encoding="utf-8")
             if key == "contexts":
                 reload_contexts()
-            status.setText(f"Saved {path.name}")
-            status.setStyleSheet("color:#6a9955;font-size:12px;")
+            set_status_text(status, f"Saved {path.name}", "success")
         except Exception as exc:
             QMessageBox.warning(self, "Save failed", str(exc))
-            status.setText(f"Save failed: {exc}")
-            status.setStyleSheet("color:#f44747;font-size:12px;")
+            set_status_text(status, f"Save failed: {exc}", "error")
 
     def _open_skills_folder(self):
         folder = SKILLS_DIR

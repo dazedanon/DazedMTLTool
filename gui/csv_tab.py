@@ -8,6 +8,8 @@ from PyQt5.QtWidgets import (
     QPushButton, QLabel, QMessageBox, QSpinBox, QFrame, QComboBox
 )
 from PyQt5.QtCore import Qt, pyqtSignal
+from gui.theme import COLORS
+from gui.ui_components import SectionCard, configure_action_button
 try:
     from .config_integration import ConfigIntegration
 except ImportError:
@@ -94,44 +96,37 @@ class CSVTab(QWidget):
     def init_ui(self):
         """Initialize the user interface."""
         main_layout = QVBoxLayout()
-        main_layout.setContentsMargins(15, 15, 15, 15)
-        main_layout.setSpacing(10)
+        main_layout.setContentsMargins(16, 16, 16, 16)
+        main_layout.setSpacing(12)
         
-        # Title and description
-        title_label = QLabel("CSV Translation Settings")
-        title_label.setStyleSheet("font-size: 15px; font-weight: bold; color: #007acc;")
-        main_layout.addWidget(title_label)
-        
-        description_label = QLabel(
-            "Configure how CSV files are parsed and translated. These settings replace the old format presets."
+        presets_card = SectionCard(
+            "Choose a starting preset",
+            "Apply a common CSV layout, then refine the column, row, output, and parsing settings below.",
         )
-        description_label.setWordWrap(True)
-        description_label.setStyleSheet("color: #888888; font-size: 10px; margin-bottom: 5px;")
-        main_layout.addWidget(description_label)
-        
-        # Quick Presets at the top, spaced equally
-        main_layout.addWidget(create_section_label("⚡ Quick Presets"))
+        main_layout.addWidget(presets_card)
         
         preset_layout = QHBoxLayout()
         preset_layout.setSpacing(15)
         
         preset_tpp = QPushButton("Translator++")
+        configure_action_button(preset_tpp, variant="secondary")
         preset_tpp.setToolTip("Source col 1, Target col 2, skip header, use target if not empty")
         preset_tpp.clicked.connect(self.apply_preset_tpp)
         preset_layout.addWidget(preset_tpp, 1)  # stretch factor 1 for equal spacing
         
         preset_simple = QPushButton("Simple")
+        configure_action_button(preset_simple, variant="secondary")
         preset_simple.setToolTip("Source col 1, Target col 2, no special processing")
         preset_simple.clicked.connect(self.apply_preset_simple)
         preset_layout.addWidget(preset_simple, 1)
         
         preset_speaker = QPushButton("Speaker & Text")
+        configure_action_button(preset_speaker, variant="secondary")
         preset_speaker.setToolTip("Speaker col 3, Text col 10, with furigana removal")
         preset_speaker.clicked.connect(self.apply_preset_speaker)
         preset_layout.addWidget(preset_speaker, 1)
         
-        main_layout.addLayout(preset_layout)
-        main_layout.addWidget(create_horizontal_line())
+        presets_card.add_layout(preset_layout)
         
         # Two-column layout
         columns_layout = QHBoxLayout()
@@ -139,7 +134,7 @@ class CSVTab(QWidget):
         
         # LEFT COLUMN
         left_column = QVBoxLayout()
-        left_column.setSpacing(5)
+        left_column.setSpacing(8)
         
         # Column Settings
         left_column.addWidget(create_section_label("📊 Column Settings"))
@@ -202,7 +197,7 @@ class CSVTab(QWidget):
         
         # RIGHT COLUMN
         right_column = QVBoxLayout()
-        right_column.setSpacing(5)
+        right_column.setSpacing(8)
         
         # Output Settings
         right_column.addWidget(create_section_label("📤 Output Settings"))
@@ -246,22 +241,34 @@ class CSVTab(QWidget):
         
         right_column.addStretch()
         
-        # Add columns
-        columns_layout.addLayout(left_column, 1)
-        columns_layout.addLayout(right_column, 1)
+        rows_card = SectionCard(
+            "Columns and rows",
+            "Map source, target, and speaker columns, then choose which rows are reused or skipped.",
+        )
+        rows_card.add_layout(left_column)
+        output_card = SectionCard(
+            "Output and special parsing",
+            "Choose where translations are written and enable only the markers used by this CSV format.",
+        )
+        output_card.add_layout(right_column)
+        columns_layout.addWidget(rows_card, 1)
+        columns_layout.addWidget(output_card, 1)
         main_layout.addLayout(columns_layout)
         
         # Bottom buttons
         main_layout.addSpacing(12)
         button_layout = QHBoxLayout()
-        button_layout.setSpacing(10)
+        button_layout.setSpacing(8)
         
         from gui.qt_icons import apply_button_icon
 
         self.reset_button = QPushButton()
-        apply_button_icon(self.reset_button, "🔄 Reset to Defaults", color="#cccccc")
+        configure_action_button(self.reset_button, variant="quiet")
+        apply_button_icon(
+            self.reset_button, "🔄 Reset to defaults", color=COLORS.text_secondary
+        )
         self.reset_button.clicked.connect(self.reset_to_defaults_with_message)
-        self.reset_button.setMaximumWidth(180)
+        self.reset_button.setMinimumWidth(180)
         self.reset_button.setMinimumHeight(32)
         
         button_layout.addWidget(self.reset_button)

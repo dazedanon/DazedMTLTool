@@ -437,7 +437,7 @@ class UpdateDialog(QDialog):
         self.setWindowTitle("Tool Update")
         self.setMinimumWidth(480)
         self.setModal(True)
-        self.setStyleSheet(self._DIALOG_STYLE)
+        self.setObjectName("appUpdateDialog")
 
         self._thread = None
         self._pending_tool_sha = pending_tool_sha
@@ -445,8 +445,8 @@ class UpdateDialog(QDialog):
         self._step_labels: dict[str, QLabel] = {}
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(24, 20, 24, 20)
-        layout.setSpacing(14)
+        layout.setContentsMargins(24, 16, 24, 16)
+        layout.setSpacing(16)
 
         header = QHBoxLayout()
         header.setSpacing(12)
@@ -460,9 +460,9 @@ class UpdateDialog(QDialog):
         header.addWidget(icon)
 
         title_col = QVBoxLayout()
-        title_col.setSpacing(2)
+        title_col.setSpacing(4)
         self.title_label = QLabel(f"{APP_NAME} Update")
-        self.title_label.setObjectName("updateTitle")
+        self.title_label.setObjectName("appPageTitle")
         self.subtitle_label = QLabel("Stay current with the latest fixes and features.")
         self.subtitle_label.setObjectName("updateDetail")
         title_col.addWidget(self.title_label)
@@ -477,7 +477,7 @@ class UpdateDialog(QDialog):
         version_layout.setSpacing(0)
 
         current_col = QVBoxLayout()
-        current_col.setSpacing(2)
+        current_col.setSpacing(4)
         current_key = QLabel("Installed")
         current_key.setObjectName("updateVersionKey")
         self.current_version_label = QLabel(self._installed_sha_display())
@@ -490,7 +490,7 @@ class UpdateDialog(QDialog):
         arrow.setAlignment(Qt.AlignCenter)
 
         new_col = QVBoxLayout()
-        new_col.setSpacing(2)
+        new_col.setSpacing(4)
         new_key = QLabel("Available")
         new_key.setObjectName("updateVersionKey")
         self.new_version_label = QLabel("Checking…")
@@ -535,10 +535,11 @@ class UpdateDialog(QDialog):
         button_row = QHBoxLayout()
         button_row.addStretch()
         self.cancel_btn = QPushButton("Cancel")
-        self.cancel_btn.setObjectName("updateSecondaryBtn")
+        from gui.ui_components import configure_action_button
+        configure_action_button(self.cancel_btn, variant="quiet")
         self.cancel_btn.clicked.connect(self.reject)
-        self.action_btn = QPushButton("Update Now")
-        self.action_btn.setObjectName("updatePrimaryBtn")
+        self.action_btn = QPushButton("Install update")
+        configure_action_button(self.action_btn, variant="primary")
         self.action_btn.clicked.connect(self._do_update)
         self.action_btn.hide()
         button_row.addWidget(self.cancel_btn)
@@ -624,7 +625,7 @@ class UpdateDialog(QDialog):
         )
         self.subtitle_label.setText("A newer build is ready to install.")
         self.action_btn.show()
-        self.cancel_btn.setText("Not Now")
+        self.cancel_btn.setText("Not now")
 
     def _on_check_finished(self, tool_sha: str | None):
         self._pending_tool_sha = tool_sha
@@ -876,8 +877,9 @@ class DazedMTLGUI(QMainWindow):
             # Keep line edits / combos tall enough for the scaled font.
             from PyQt5.QtGui import QFontMetrics
             from PyQt5.QtWidgets import QComboBox, QDoubleSpinBox, QLineEdit, QSpinBox
+            from gui.ui_components import normalize_default_layout_tokens
 
-            control_h = max(30, QFontMetrics(font).height() + 14)
+            control_h = max(32, QFontMetrics(font).height() + 14)
             for widget in app.allWidgets():
                 if isinstance(widget, (QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox)):
                     widget.setMinimumHeight(control_h)
@@ -900,6 +902,41 @@ class DazedMTLGUI(QMainWindow):
                     original
                 )
                 widget.setStyleSheet(scaled)
+
+            normalize_default_layout_tokens(app.allWidgets())
+
+            # Font changes can make an otherwise wide workflow rail clip even
+            # when the window geometry itself did not change. Re-evaluate the
+            # responsive shell immediately instead of waiting for a resize.
+            for workflow in (
+                getattr(self, "workflow_tab", None),
+                getattr(self, "wolf_workflow_tab", None),
+            ):
+                update_shell = getattr(workflow, "_update_responsive_shell", None)
+                if callable(update_shell):
+                    update_shell()
+                    continue
+                rail = getattr(workflow, "_step_rail", None)
+                if rail is not None:
+                    rail.set_compact(
+                        workflow.width() < 1320
+                        or rail.labels_require_compact_mode()
+                    )
+            config_tab = getattr(self, "config_tab", None)
+            update_labels = getattr(config_tab, "_update_general_label_width", None)
+            if callable(update_labels):
+                update_labels()
+            image_manager = getattr(self, "image_manager_tab", None)
+            arrange_image_actions = getattr(
+                image_manager, "_arrange_action_bar", None
+            )
+            if callable(arrange_image_actions):
+                arrange_image_actions()
+            update_image_layout = getattr(
+                image_manager, "_update_page_scroll_extent", None
+            )
+            if callable(update_image_layout):
+                update_image_layout()
 
             # Update window title only when non-default scale is active
             if scale_factor != 1.0:
@@ -945,16 +982,14 @@ class DazedMTLGUI(QMainWindow):
         main_layout.setSpacing(0)
         
         # Create sidebar for navigation
+        from gui.theme import Geometry
+
         sidebar = QWidget()
-        sidebar.setFixedWidth(60)
-        sidebar.setStyleSheet("""
-            QWidget {
-                background-color: #2d2d30;
-            }
-        """)
+        sidebar.setObjectName("appSidebar")
+        sidebar.setFixedWidth(Geometry.APP_RAIL_WIDTH)
         sidebar_layout = QVBoxLayout()
-        sidebar_layout.setContentsMargins(0, 10, 0, 10)
-        sidebar_layout.setSpacing(2)
+        sidebar_layout.setContentsMargins(0, 8, 0, 8)
+        sidebar_layout.setSpacing(4)
         
         # Create navigation buttons
         self.nav_buttons = []
@@ -1050,7 +1085,11 @@ class DazedMTLGUI(QMainWindow):
 
         btn = QToolButton()
         btn.setToolTip(tooltip)
-        btn.setFixedSize(60, 50)
+        from gui.theme import Geometry
+
+        btn.setObjectName("appNavButton")
+        btn.setAccessibleName(tooltip)
+        btn.setFixedSize(Geometry.APP_RAIL_WIDTH, 52)
         btn.setCheckable(True)
         configure_nav_toolbutton(btn, icon_text, horizontal=False)
         return btn

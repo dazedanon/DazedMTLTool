@@ -31,10 +31,11 @@ checks with targeted semantic review.
 
 - Mechanically check 100% of resolvable source/translation pairs.
 - Deduplicate identical source/translation pairs and repeated issue signatures.
-- Risk-score the remaining pairs and semantically review the highest-risk clusters first.
+- Put mechanically flagged and glossary-bearing clusters in the mandatory semantic-review queue.
 - Add deterministic stratified semantic-review waves across every file, event code or database
   field, speaker, and short/medium/long text band. Treat 500 unique pairs per wave as the routine
-  target, not as the limit for the whole audit.
+  target, not as the limit for the whole audit. Construct the waves from the canonical frozen
+  manifest described below; do not hand-pick or reshuffle samples between runs.
 - Review nearby event commands together when meaning, speaker, referent, or control-code placement
   depends on context.
 - State exact coverage. Never imply that sampled semantic review covered every line.
@@ -42,35 +43,87 @@ checks with targeted semantic review.
 Use a temporary script or compact index when useful. Do not leave generated QA artifacts in the
 game data folder or elsewhere in the game folder.
 
+Before checking terminology, load `{{VOCAB_FILE}}`, confirm that it is readable, and build a
+deduplicated source-term to approved-English index. Treat it as authoritative for applicable
+names and gameplay terms, while rejecting substring collisions and contextually different senses.
+Report the glossary path, whether it loaded, its usable entry count, and the number of confirmed
+violations. If the user approves a deliberate style or terminology exception, record it in the
+temporary manifest and do not raise it again unless its context or spelling materially changes.
+
+## Actionability threshold
+
+Preserve the current live text unless there is concrete evidence that it is wrong. Treat a finding
+as actionable only when the source, glossary, runtime behavior, repeated context, or display rules
+demonstrate a specific defect and support a specific correction. Actionable defects include changed
+or missing meaning, wrong names or gameplay terms, accidental source residue, broken structure or
+runtime tokens, clear speaker/referent/polarity/number errors, and demonstrable display damage.
+
+Do not report or edit preference-only differences. In particular, ignore:
+
+- Translator credits, patch/mod labels, version notes, cheat/debug hotkeys, and similar deliberate
+  metadata added outside the source when they are coherent and do not break runtime behavior.
+- Valid transliterations, loanwords, interjections, honorific choices, dialect, stretched vowels,
+  punctuation style, or other deliberate voice choices.
+- Alternative natural phrasings, literal-versus-localized wording, or optional fluency polish when
+  the current text preserves the meaning and works in context.
+
+Do not infer that source-absent text is accidental merely because it is absent from `_original`.
+Require evidence such as model commentary, corruption, irrelevant content, contradictory context,
+or runtime harm. When intent remains genuinely uncertain, leave the value unchanged and omit it
+from actionable findings; mention it only as a concise non-actionable limitation if it could hide a
+material defect. Never let stylistic or intentional differences reset semantic convergence.
+
 ## Iterative semantic convergence
 
 Keep a temporary review manifest outside the game folder. Identify reviewed locations by stable
 `relative file + JSON path + source hash`, independent of the current English, so an edited value
-does not re-enter a later discovery wave. Track deduplicated source/translation pairs separately
-for cluster coverage and propagate each reviewed judgment to every equivalent locator.
+does not re-enter a later discovery wave. Canonicalize those components as relative POSIX path,
+canonical JSON path, and SHA-256 of the exact UTF-8 source. Track deduplicated source/translation
+pairs separately for cluster coverage and propagate each reviewed judgment to every equivalent
+locator.
+
+Freeze the complete cluster universe before Wave 1. For each cluster, choose the lexicographically
+lowest stable identity as its representative and compute its selection key as
+`SHA-256("rpgmaker-qa-v2\0" + representative identity)`. Assign the representative a primary
+stratum tuple of `file, event-code-or-database-field, speaker-or-empty, length-band`. Group by that
+tuple, sort tuple names lexicographically, sort each group by mandatory-review status first and
+selection key second, then interleave the groups round-robin while skipping exhausted groups.
+Split that one frozen order into consecutive waves. Save and report a SHA-256 checksum of the
+ordered representative-identity list. Reuse the manifest on resumed QA; never regenerate it merely
+because English values were edited. This fixed construction is the release-readiness sampling
+order; additional contextual leads may be reviewed, but they do not replace its wave entries.
 
 Before presenting the first findings report, run non-overlapping discovery waves until the audit
-converges or reaches the safety cap:
+converges, exhausts the frozen manifest, or encounters an actual runtime/tool limit:
 
 - Review all unique pairs when there are 750 or fewer.
-- For larger projects, run at least two 500-pair waves; run at least three when there are more than
-  2,500 unique pairs.
-- After the minimum, continue until two consecutive waves find no new actionable Critical, High,
-  or Medium defect. Low-only polish does not reset the clean-wave count.
-- Stop after five routine waves or 2,500 unique reviewed pairs unless the user explicitly asks for
-  deeper semantic coverage. If this cap is reached before two clean waves, report that QA has not
-  converged and do not describe the game as release-ready.
+- For projects with 751–2,500 unique pairs, run at least two 500-pair waves. For projects with more
+  than 2,500, always complete five 500-pair waves before convergence is possible, even if earlier
+  waves appear clean.
+- Close each wave only after corpus-wide propagation reaches closure. A wave is clean only when it
+  produces both zero new actionable Critical/High/Medium signatures and zero newly confirmed live
+  values for any actionable signature. A new affected value of an existing signature resets the
+  clean-wave count. Dismissed stylistic or intentional differences do not reset it.
+- After the required minimum, require the final two consecutive waves to be clean. If either of the
+  last two required waves is not clean, continue with non-overlapping 250-pair extension waves
+  from the frozen order until two consecutive waves are clean or every unique pair is reviewed.
+  Treat 2,500 pairs as a routine reporting checkpoint, not permission to make a false readiness
+  claim. If an actual runtime or tool limit prevents extension, report non-convergence and the
+  exact remaining count.
 - Never reuse a reviewed stable identity in a discovery wave. Put edited identities in a separate
   regression queue instead.
 
-Each wave must retain stratification while favoring unseen high-risk pairs. Record its unique-pair
-count, overlap with earlier waves, represented strata, new issue signatures, and new affected live
-values. A wave is not clean merely because it repeats findings already known from an earlier wave.
+Each wave must retain the frozen stratification. Record its unique-pair count, overlap with earlier
+waves, represented strata, new issue signatures, new affected live values, clean-wave count, and
+manifest checksum. A wave is not clean merely because its newly confirmed values share a finding
+signature already known from an earlier wave.
 
 ## Corpus-wide issue propagation
 
 When a defect is confirmed, immediately search all resolvable pairs for the broader issue
-signature before continuing sampling. Do not limit propagation to an identical Japanese sentence.
+signature before continuing sampling. Repeat propagation until a full search adds no affected live
+values, then mark the closure set reviewed before judging whether the wave is clean. Do not limit
+propagation to an identical Japanese sentence.
 Inspect, as applicable:
 
 - Every occurrence and inflection of the implicated source and English gameplay term.
@@ -148,12 +201,13 @@ Compare Japanese and English for fidelity, fluency, tone, and context. Prioritiz
 - Mechanical warnings, inconsistent translation clusters, or context-dependent control codes.
 
 Use the source and surrounding event context as evidence. Do not call a translation wrong solely
-because another valid wording is possible. Separate definite defects from subjective polish.
+because another valid wording is possible. Exclude subjective polish and plausible intentional
+localization choices from findings rather than assigning them a severity.
 
 ## Converged audit output and approval gate
 
-Do not edit during discovery. Complete the convergence loop or declare the safety cap before
-returning these sections:
+Do not edit during discovery. Complete the convergence loop, exhaust the manifest, or report the
+actual runtime/tool limit before returning these sections:
 
 ### QA coverage
 
@@ -172,20 +226,24 @@ Count findings by severity and category:
 - **Critical**: invalid JSON/structure or runtime-breaking token corruption.
 - **High**: clear mistranslation, missing content, wrong control-code scope, source residue, or
   glossary/name failure.
-- **Medium**: likely context, consistency, fluency, tone, or overflow problem needing judgment.
-- **Low**: optional polish only.
+- **Medium**: clear, evidence-backed context, consistency, fluency, tone, or overflow defect that
+  does not rise to High severity.
+
+Do not count or report optional polish as Low findings. The QA target is incorrect text, not a list
+of stylistic alternatives.
 
 ### Findings requiring action
 
 Show a compact table with stable IDs, severity, file + JSON path, event code/field, short original,
-current translation, issue, and proposed correction. Include every Critical and High finding when
-practical. If many share one cause, group them, show representative locators and the total affected
-count. Limit Medium/Low examples to the most useful representatives. Never dump whole JSON files.
+current translation, concrete evidence, issue, and proposed correction. Include every Critical and
+High finding when practical. If many share one cause, group them, show representative locators and
+the total affected count. Include Medium findings only when they meet the actionability threshold.
+Never dump whole JSON files or add preference-only examples.
 
 ### Recommendation
 
 Say whether playtesting/release should be blocked, conditionally allowed after listed fixes, or
-allowed with only optional polish remaining. End with one focused approval question offering:
+allowed because no actionable defects remain. End with one focused approval question offering:
 
 - Continuous remediation: apply all current and subsequently discovered high-confidence fixes in
   the same game-data scope, then continue regression and fresh discovery waves until convergence.
@@ -210,8 +268,9 @@ Edit only the approved live translated values under `{{GAME_DATA_FOLDER}}`.
 - Run another non-overlapping discovery wave after fixes. If it finds a new actionable defect,
   propagate that signature corpus-wide and reset the clean-wave count.
 - Under continuous-remediation approval, apply new high-confidence fixes that remain within the
-  approved game-data scope and repeat. Pause for judgment on subjective rewrites or anything
-  outside that scope. Without continuous approval, report new findings and ask before editing.
+  approved game-data scope and repeat. Leave non-actionable or uncertain text unchanged and pause
+  for anything outside that scope. Without continuous approval, report new findings and ask before
+  editing.
 - Report files and finding IDs fixed, remaining risks, total unique semantic coverage, wave
   history, convergence status, and final game-data QA readiness. Never claim readiness without
   meeting the convergence criteria.

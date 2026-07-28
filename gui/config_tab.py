@@ -9,7 +9,7 @@ from PyQt5.QtWidgets import (
     QSpinBox, QDoubleSpinBox, QComboBox, QPushButton, QGroupBox,
     QLabel, QFileDialog, QMessageBox, QTextEdit,
     QCheckBox, QApplication, QTabWidget, QFrame, QStackedWidget, QToolButton,
-    QMenu, QDialog, QDialogButtonBox, QListView, QSizePolicy,
+    QMenu, QDialog, QDialogButtonBox, QListView, QSizePolicy, QScrollArea,
 )
 from PyQt5.QtCore import Qt, QPoint, pyqtSignal, QTimer, QThread
 from PyQt5.QtGui import QColor, QIcon, QPainter, QPalette, QPolygon
@@ -20,6 +20,8 @@ from gui.wolf_tab import WolfTab
 from gui.csv_tab import CSVTab
 from gui.srpg_tab import SRPGTab
 from util import api_keys as api_key_vault
+from gui.theme import COLORS, Geometry, Spacing
+from gui.ui_components import PageHeader, configure_action_button, set_status_text
 
 
 class ModelFetchThread(QThread):
@@ -302,7 +304,7 @@ class ApiKeyEditDialog(QDialog):
         endpoint_wrap = QWidget()
         endpoint_row = QHBoxLayout(endpoint_wrap)
         endpoint_row.setContentsMargins(0, 0, 0, 0)
-        endpoint_row.setSpacing(6)
+        endpoint_row.setSpacing(8)
 
         self.endpoint_edit = QLineEdit(initial_endpoint)
         self.endpoint_edit.setPlaceholderText("Optional - leave blank to keep the global API URL")
@@ -441,17 +443,24 @@ class ConfigTab(QWidget):
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
         
+        header_host = QWidget()
+        header_layout = QVBoxLayout(header_host)
+        header_layout.setContentsMargins(
+            Spacing.XL, Spacing.LG, Spacing.XL, Spacing.SM
+        )
+        header_layout.addWidget(PageHeader(
+            "Configuration",
+            "Set shared translation defaults and engine-specific behavior."
+        ))
+        main_layout.addWidget(header_host)
+
         # Create top navigation bar
         nav_bar = QWidget()
-        nav_bar.setFixedHeight(50)
-        nav_bar.setStyleSheet("""
-            QWidget {
-                background-color: #2d2d30;
-            }
-        """)
+        nav_bar.setObjectName("appSubnavBar")
+        nav_bar.setFixedHeight(52)
         nav_layout = QHBoxLayout()
-        nav_layout.setContentsMargins(10, 0, 10, 0)
-        nav_layout.setSpacing(5)
+        nav_layout.setContentsMargins(Spacing.XL, 0, Spacing.XL, 0)
+        nav_layout.setSpacing(Spacing.XS)
         
         # Create navigation buttons
         self.nav_buttons = []
@@ -494,23 +503,23 @@ class ConfigTab(QWidget):
         
         # Page 1: General Settings
         general_tab = self.create_general_settings_tab()
-        self.content_stack.addWidget(general_tab)
+        self.content_stack.addWidget(self._scrollable_config_page(general_tab))
         
         # Page 2: RPG Maker MV/MZ Engine
         self.mvmz_tab = RPGMakerTab("MVMZ")
-        self.content_stack.addWidget(self.mvmz_tab)
+        self.content_stack.addWidget(self._scrollable_config_page(self.mvmz_tab))
         
         # Page 3: Wolf RPG Engine
         self.wolf_tab = WolfTab()
-        self.content_stack.addWidget(self.wolf_tab)
+        self.content_stack.addWidget(self._scrollable_config_page(self.wolf_tab))
         
         # Page 4: CSV Settings
         self.csv_tab = CSVTab()
-        self.content_stack.addWidget(self.csv_tab)
+        self.content_stack.addWidget(self._scrollable_config_page(self.csv_tab))
 
         # Page 5: SRPG Studio Engine
         self.srpg_tab = SRPGTab()
-        self.content_stack.addWidget(self.srpg_tab)
+        self.content_stack.addWidget(self._scrollable_config_page(self.srpg_tab))
         
         # Add navigation bar and content to main layout
         main_layout.addWidget(nav_bar)
@@ -521,17 +530,26 @@ class ConfigTab(QWidget):
         self.switch_page(0)
     
     def create_nav_button(self, icon_text, tooltip, engine_key=None):
-        """Create a navigation button for the top bar."""
-        from gui.platform_glyph import configure_nav_toolbutton
-
-        btn = QToolButton()
+        """Create a labeled secondary-navigation button."""
+        btn = QPushButton(tooltip)
+        btn.setObjectName("appSubnavButton")
         btn.setToolTip(tooltip)
-        btn.setFixedSize(50, 50)
+        btn.setAccessibleName(tooltip)
+        btn.setMinimumWidth(144)
+        btn.setMinimumHeight(Geometry.CONTROL_PROMINENT)
         btn.setCheckable(True)
-        configure_nav_toolbutton(
-            btn, icon_text, horizontal=True, engine_key=engine_key,
-        )
         return btn
+
+    @staticmethod
+    def _scrollable_config_page(page: QWidget) -> QScrollArea:
+        """Keep every configuration category operable at large font scales."""
+
+        scroll = QScrollArea()
+        scroll.setObjectName("configPageScroll")
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QScrollArea.NoFrame)
+        scroll.setWidget(page)
+        return scroll
     
     def switch_page(self, index):
         """Switch to the specified page and update button states."""
@@ -639,6 +657,9 @@ class ConfigTab(QWidget):
                 w.setMinimumHeight(32)
             return w
 
+        action_width = 144
+        action_lane_width = action_width * 2 + 8
+
         def row_box(field: QWidget, *actions: QWidget) -> QWidget:
             """API row with equal field width and no visible filler widget."""
             box = QWidget()
@@ -651,13 +672,15 @@ class ConfigTab(QWidget):
             field.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
             row.addWidget(field, 1)
 
-            used_action_width = 0
             for action in actions:
+                action.setFixedWidth(action_width)
                 action.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Preferred)
                 row.addWidget(action)
-                used_action_width += action.width()
-            used_action_width += max(0, len(actions) - 1) * row.spacing()
-            row.addSpacing(max(0, 200 - used_action_width))
+            used_action_width = (
+                len(actions) * action_width
+                + max(0, len(actions) - 1) * row.spacing()
+            )
+            row.addSpacing(max(0, action_lane_width - used_action_width))
 
             box.setMinimumHeight(32)
             box.setMinimumWidth(120)
@@ -679,8 +702,8 @@ class ConfigTab(QWidget):
             )
 
             card_layout = QVBoxLayout(card)
-            card_layout.setContentsMargins(14, 10, 14, 12)
-            card_layout.setSpacing(6)
+            card_layout.setContentsMargins(16, 12, 16, 16)
+            card_layout.setSpacing(8)
             header = create_section_header(title)
             if not isinstance(header, QLabel):
                 header.setStyleSheet("background: transparent;")
@@ -700,7 +723,7 @@ class ConfigTab(QWidget):
 
         def add_row(form: QFormLayout, label: str, field: QWidget) -> None:
             label_widget = QLabel(label)
-            label_widget.setFixedWidth(180)
+            label_widget.setMinimumWidth(180)
             label_widget.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
             label_widget.setStyleSheet("background: transparent;")
             self._general_form_labels.append(label_widget)
@@ -714,7 +737,7 @@ class ConfigTab(QWidget):
 
         self.api_url_preset_btn = QToolButton()
         self.api_url_preset_btn.setText("Presets ▾")
-        self.api_url_preset_btn.setFixedWidth(96)
+        self.api_url_preset_btn.setMinimumWidth(144)
         self.api_url_preset_btn.setPopupMode(QToolButton.InstantPopup)
         self.api_url_preset_btn.setStyleSheet(btn_style)
 
@@ -748,14 +771,14 @@ class ConfigTab(QWidget):
         self.api_key_new_btn = QToolButton()
         self.api_key_new_btn.setText("New")
         self.api_key_new_btn.setToolTip("Add or update a named API key")
-        self.api_key_new_btn.setFixedWidth(96)
+        self.api_key_new_btn.setMinimumWidth(144)
         self.api_key_new_btn.setStyleSheet(btn_style)
         self.api_key_new_btn.clicked.connect(self._on_api_key_new)
 
         self.api_key_delete_btn = QToolButton()
         self.api_key_delete_btn.setText("Delete")
         self.api_key_delete_btn.setToolTip("Remove the selected API key")
-        self.api_key_delete_btn.setFixedWidth(96)
+        self.api_key_delete_btn.setMinimumWidth(144)
         self.api_key_delete_btn.setStyleSheet(btn_style)
         self.api_key_delete_btn.clicked.connect(self._on_api_key_delete)
 
@@ -772,7 +795,7 @@ class ConfigTab(QWidget):
         self.model_refresh_btn = QToolButton()
         self.model_refresh_btn.setText("⟳")
         self.model_refresh_btn.setToolTip("Fetch latest models from the configured API")
-        self.model_refresh_btn.setFixedWidth(96)
+        self.model_refresh_btn.setMinimumWidth(144)
         self.model_refresh_btn.setStyleSheet(btn_style)
         self.model_refresh_btn.clicked.connect(lambda: self.fetch_models(silent=False))
 
@@ -945,7 +968,7 @@ class ConfigTab(QWidget):
         content = QWidget()
         content.setObjectName("generalSettingsContent")
         content_layout = QVBoxLayout(content)
-        content_layout.setContentsMargins(12, 10, 12, 10)
+        content_layout.setContentsMargins(12, 8, 12, 8)
         content_layout.setSpacing(0)
 
         dashboard = QGridLayout()
@@ -977,28 +1000,29 @@ class ConfigTab(QWidget):
             "}"
         )
         button_layout = QHBoxLayout(action_bar)
-        button_layout.setContentsMargins(20, 9, 20, 9)
-        button_layout.setSpacing(10)
+        button_layout.setContentsMargins(24, 8, 24, 8)
+        button_layout.setSpacing(8)
 
         from gui import qt_icons
 
         reset_button = QPushButton()
-        qt_icons.apply_button_icon(reset_button, "🔄 Reset to Defaults", color="#cccccc")
+        qt_icons.apply_button_icon(
+            reset_button, "🔄 Reset to defaults", color=COLORS.text_secondary
+        )
+        configure_action_button(reset_button, variant="quiet")
         reset_button.clicked.connect(self.reset_to_defaults_with_save)
         reset_button.setMinimumHeight(32)
-        reset_button.setStyleSheet(
-            "QPushButton { background: #3e3e42; color: #dddddd; "
-            "border: 1px solid #555555; }"
-            "QPushButton:hover { background: #505050; }"
-        )
 
         save_button = QPushButton()
-        qt_icons.apply_button_icon(save_button, "💾 Save Changes", color="#cccccc")
+        qt_icons.apply_button_icon(
+            save_button, "💾 Save changes", color=COLORS.text_secondary
+        )
+        configure_action_button(save_button, variant="primary")
         save_button.clicked.connect(lambda: self.save_to_env(show_message=True))
         save_button.setMinimumHeight(32)
 
         self.autosave_label = QLabel("")
-        self.autosave_label.setStyleSheet("color: #4ec9b0; font-weight: bold;")
+        self.autosave_label.setObjectName("appStatusText")
 
         button_layout.addWidget(self.autosave_label)
         button_layout.addStretch()
@@ -1013,7 +1037,17 @@ class ConfigTab(QWidget):
         """Keep every form aligned without crowding the minimum-width layout."""
         if not hasattr(self, "_general_form_labels"):
             return
-        label_width = 150 if self.width() < 1150 else 180
+        natural_width = max(
+            (
+                label.fontMetrics().horizontalAdvance(label.text()) + 8
+                for label in self._general_form_labels
+            ),
+            default=180,
+        )
+        label_width = min(
+            320,
+            max(150 if self.width() < 1150 else 180, natural_width),
+        )
         if label_width == self._general_label_width:
             return
         for label in self._general_form_labels:

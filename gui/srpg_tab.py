@@ -8,6 +8,8 @@ from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QCheckBox, QPushButton, QMessageBox, QLabel, QHBoxLayout
 )
 from PyQt5.QtCore import pyqtSignal
+from gui.theme import COLORS
+from gui.ui_components import SectionCard, configure_action_button
 import re
 try:
     from util.defaults import DEFAULTS as CANONICAL_DEFAULTS
@@ -44,52 +46,42 @@ class SRPGTab(QWidget):
     def init_ui(self):
         """Initialize the user interface."""
         main_layout = QVBoxLayout()
-        main_layout.setContentsMargins(15, 15, 15, 15)
-        main_layout.setSpacing(10)
+        main_layout.setContentsMargins(16, 16, 16, 16)
+        main_layout.setSpacing(12)
 
-        # Title
-        title = QLabel("SRPG Studio Translation Settings")
-        title.setStyleSheet("font-size: 15px; font-weight: bold; color: #007acc;")
-        main_layout.addWidget(title)
-
-        description = QLabel(
-            "Configure translation options for SRPG Studio projects. "
-            "Changes are applied directly to modules/srpg.py."
+        behavior_card = SectionCard(
+            "Text handling",
+            "Choose how SRPG Studio text is wrapped and whether existing translations are skipped.",
         )
-        description.setWordWrap(True)
-        description.setStyleSheet("color: #888888; font-size: 10px; margin-bottom: 8px;")
-        main_layout.addWidget(description)
-
-        # --- Text Formatting ---
-        main_layout.addWidget(create_section_label("📝 Text Formatting"))
+        main_layout.addWidget(behavior_card)
 
         self.fixtextwrap_cb = QCheckBox("Fix Text Wrap")
         self.fixtextwrap_cb.setToolTip(
             "Re-wrap translated text to fit the configured dialogue width (WIDTH setting)"
         )
-        main_layout.addWidget(self.fixtextwrap_cb)
-
-        # --- Translation Behaviour ---
-        main_layout.addWidget(create_section_label("🔄 Translation Behaviour"))
+        behavior_card.add_widget(self.fixtextwrap_cb)
 
         self.ignoretltext_cb = QCheckBox("Ignore Already-Translated Text")
         self.ignoretltext_cb.setToolTip(
             "Skip lines that appear to have already been translated"
         )
-        main_layout.addWidget(self.ignoretltext_cb)
+        behavior_card.add_widget(self.ignoretltext_cb)
 
         main_layout.addStretch()
 
         # Bottom buttons
         button_layout = QHBoxLayout()
-        button_layout.setSpacing(10)
+        button_layout.setSpacing(8)
 
         from gui.qt_icons import apply_button_icon
 
         self.reset_btn = QPushButton()
-        apply_button_icon(self.reset_btn, "🔄 Reset to Defaults", color="#cccccc")
+        configure_action_button(self.reset_btn, variant="quiet")
+        apply_button_icon(
+            self.reset_btn, "🔄 Reset to defaults", color=COLORS.text_secondary
+        )
         self.reset_btn.clicked.connect(self.reset_to_defaults_with_message)
-        self.reset_btn.setMaximumWidth(180)
+        self.reset_btn.setMinimumWidth(180)
         self.reset_btn.setMinimumHeight(32)
 
         button_layout.addWidget(self.reset_btn)
