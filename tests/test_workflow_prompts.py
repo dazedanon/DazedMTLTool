@@ -110,6 +110,10 @@ class WorkflowTranslationPromptTests(unittest.TestCase):
         self.assertIn("non-empty parameter 0", prompt)
         self.assertIn("plugin portraits", prompt)
         self.assertIn("pagination/manual reflow", prompt)
+        self.assertIn("rendered line count", prompt)
+        self.assertIn("visible-row limit", prompt)
+        self.assertIn("simultaneous constraints", prompt)
+        self.assertIn("narrower wrapping usually creates more lines", prompt)
 
     def test_image_translation_prompt_ends_skips_with_recovery_options(self):
         prompt = load_clipboard_skill("image_translation.md")

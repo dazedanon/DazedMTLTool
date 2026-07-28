@@ -161,11 +161,15 @@ geometry rather than generic RPG Maker defaults whenever project code is availab
 4. Convert usable pixels to DazedTL's character-count wrap setting by measuring representative
    English glyphs in the real font when possible. Otherwise use a conservative documented average
    glyph width. Never copy a pixel width directly into `width`, `listWidth`, or `noteWidth`.
-5. Test representative short, median, long, control-code-heavy, icon-heavy, and font-changed values.
-   Use the largest effective font when one shared setting must cover several variants.
-6. For dialogue, verify the recommendation against the actual message-row limit, commonly four.
-   If a long message cannot fit without unreadable font reduction or horizontal overflow, flag it
-   for pagination/manual reflow instead of forcing an unsafe four-line wrap.
+5. Simulate final wrapping for representative short, median, long, control-code-heavy, icon-heavy,
+   font-changed, and explicitly line-broken values. Use the largest effective font when one shared
+   setting must cover several variants. Accept a recommendation only when each rendered line fits
+   horizontally and the rendered line count stays within the actual visible-row limit.
+6. Treat horizontal capacity and visible rows as simultaneous constraints. Distinguish fixed or
+   clipped windows from scrolling, paging, and auto-sizing windows. If no readable font and wrap
+   width satisfies both constraints, flag the value for pagination/manual reflow or a game-side
+   window change; do not reduce wrap width as a supposed fix for vertical overflow because that
+   usually creates more lines.
 7. Detect standard message faces from non-empty code-101 parameter 0 values. Calculate both the
    full dialogue width and the reduced `faceWidth`; DazedTL selects `faceWidth` automatically for
    those message groups. For plugin portraits outside code 101, document the detection gap and use
@@ -188,7 +192,7 @@ List/Help: listWidth=<DazedTL width> ; font=<px or keep current (measured px)> ;
 Notes    : noteWidth=<DazedTL width> ; font=<px or keep current (measured px)> ; rows=<count or varies>
 
 Evidence:
-- <resolution/window/font/plugin locator and calculation>
+- <resolution/window/font/plugin locator, horizontal capacity, visible-row limit, and tested fit>
 
 Exceptions / playtests:
 - <variant windows, uncertain plugin behavior, or messages requiring pagination>
