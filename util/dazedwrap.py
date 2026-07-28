@@ -2,7 +2,7 @@ import re
 
 # Wolf / RPG Maker inline codes that do not occupy visible box width.
 _WOLF_INLINE_VISIBLE_STRIP = re.compile(
-    r"\\(?:"
+    r"[\\]+(?:"
     r"r\[[^\]]*\]|"
     r"c(?:self)?\[[^\]]*\]|"
     r"f\[[^\]]*\]|"
