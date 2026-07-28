@@ -68,7 +68,7 @@ later apply-only and export-folder backends.
 - The first release keeps the existing All/Editable filters. Baseline metadata
   provides the foundation for later Modified/Conflict filters without making
   every ordinary filter operation hash thousands of images on the UI thread.
-- RPG Maker Workflow Step 6 continues to open the shared Images page.
+- RPG Maker Workflow Step 7 continues to open the shared Images page.
 
 ## Delivery phases
 

@@ -8,9 +8,10 @@ Provides a guided, step-by-step interface:
   Step 2  – Setup: speaker flags, Project Setup skill, vocab / quirks / game skill
   Step 3  – Translation: Phase 0 (DB), Phase 1 (dialogue), Phase 1b (111 cache)
   Step 4  – Translation Phase 2 (risky codes)
-  Step 5  – Plugins.js prompt helpers + translation QA + export translated/ to the game
-  Step 6  – Prepare and translate editable bitmap UI images
-  Step 7  – Install TL Inspector and/or Forge playtest plugins
+  Step 5  – Plugins.js prompt helpers and export translated/ to the game
+  Step 6  – Deterministically rewrap and QA the exported game data
+  Step 7  – Prepare and translate editable bitmap UI images
+  Step 8  – Install TL Inspector and/or Forge playtest plugins
 """
 
 from __future__ import annotations
@@ -244,6 +245,34 @@ class _ExportWorker(QThread):
             self.done.emit(count, errors)
         except Exception as exc:
             self.done.emit(0, [str(exc)])
+
+
+class _RpgMakerRewrapWorker(QThread):
+    """Scan or rewrite exported RPG Maker game JSON without invoking AI."""
+
+    done = pyqtSignal(object, bool)  # RewrapReport, apply
+    failed = pyqtSignal(str)
+
+    def __init__(self, directory: str, options, file_names: list[str], *, apply: bool):
+        super().__init__()
+        self.directory = directory
+        self.options = options
+        self.file_names = list(file_names)
+        self.apply = bool(apply)
+
+    def run(self):
+        try:
+            from util.rpgmaker_rewrap import rewrap_directory
+
+            report = rewrap_directory(
+                self.directory,
+                self.options,
+                file_names=self.file_names,
+                apply=self.apply,
+            )
+            self.done.emit(report, self.apply)
+        except Exception as exc:  # noqa: BLE001 - surface worker errors in the UI
+            self.failed.emit(str(exc))
 
 
 class _SubprocessWorker(QThread):
@@ -531,15 +560,26 @@ _STEP_HELP: dict[int, str] = {
         "into the game's data folder:<br>"
         "• <b>Export Active Files</b> - only names currently in <code>files/</code><br>"
         "• <b>Export ALL</b> - everything under <code>translated/</code><br>"
-        "• Then run <b>QA Game Data</b> against the exported files. It compares every preserved "
-        "<code>_original</code> source with its translation, reports prioritized findings, and "
-        "waits for approval before editing the game data<br><br>"
-        "<b>Create Public Release ZIP</b> packages the complete game beside its folder while "
-        "omitting translator workspaces, VCS metadata, documentation, backups, saves, and "
-        "other tool artifacts. GameUpdate files and all installed plugins are kept."
+        "• Continue to Step 6 to rewrap and QA the exported game data"
     ),
     6: (
-        "<b>Step 6 - Images (MV/MZ)</b><br><br>"
+        "<b>Step 6 - Rewrap Exported Game Data</b><br><br>"
+        "Reflow English directly in the game data folder detected by Step 0 without calling "
+        "the translation model or changing <code>_original</code>.<br><br>"
+        "Export in Step 5 first. Then choose any combination of Dialogue, Dialogue + Face, "
+        "List/Help, and Notes. Select individual maps/database files or use the scope presets, "
+        "and optionally restrict recognized event fields by code.<br><br>"
+        "Run <b>Scan selected</b> first. Optional row protection applies to rewrapped fields "
+        "other than code 401. Code-401 commands are never row-blocked; "
+        "they are preserved and wrapping uses newlines inside their existing text values. "
+        "Standard code-101 faces automatically use the face width. Run QA after applying the "
+        "reviewed changes.<br><br>"
+        "<b>Create Public Release ZIP</b> packages the complete reviewed game beside its folder "
+        "while omitting translator workspaces, VCS metadata, documentation, backups, saves, "
+        "and other tool artifacts. GameUpdate files and all installed plugins are kept."
+    ),
+    7: (
+        "<b>Step 7 - Images (MV/MZ)</b><br><br>"
         "Use the existing <b>Images</b> page for bitmap UI translation:<br>"
         "• Confirm this step reports the correct game root, image tree, encryption key, and "
         "<code>vocab.txt</code><br>"
@@ -550,8 +590,8 @@ _STEP_HELP: dict[int, str] = {
         "Editable PNGs must preserve the same <code>img/...</code> hierarchy as the game. "
         "This step warns when PNGs were placed elsewhere in the workspace."
     ),
-    7: (
-        "<b>Step 7 - Playtest</b><br><br>"
+    8: (
+        "<b>Step 8 - Playtest</b><br><br>"
         "Install playtest plugins into the MV/MZ game:<br>"
         "• <b>TL Inspector</b> - inspect translated text in-game<br>"
         "• <b>Forge</b> - additional playtest helpers<br><br>"
@@ -773,6 +813,7 @@ class WorkflowTab(QWidget):
         self._engine: str = "MVMZ"
         self._file_items: list[dict] = []
         self._worker = None  # active background QThread
+        self._rewrap_worker = None
         # Pre-process paths (auto-populated after folder detection)
         self._plugins_js_path: str = ""
         self._gameupdate_path: str = ""
@@ -870,8 +911,9 @@ class WorkflowTab(QWidget):
             ("3  TL Phase 1",   self._build_step4_translation),
             ("4  TL Phase 2",   self._build_step5_tl_phase2),
             ("5  Export",       self._build_step5_finish),
-            ("6  Images",       self._build_step6_images),
-            ("7  Playtest",     self._build_step8_playtest),
+            ("6  Rewrap",       self._build_step5_rewrap),
+            ("7  Images",       self._build_step6_images),
+            ("8  Playtest",     self._build_step8_playtest),
         ]
         self._step_labels = [label for label, _ in _tab_defs]
 
@@ -1043,6 +1085,7 @@ class WorkflowTab(QWidget):
             "Phase1",
             "Phase2",
             "Export",
+            "Rewrap",
             "Images",
             "Playtest",
         )
@@ -1108,8 +1151,10 @@ class WorkflowTab(QWidget):
         if index == 4:
             self._populate_p2_checkboxes()
         if index == 6:
-            self._refresh_image_workflow_status()
+            self._refresh_rewrap_files()
         if index == 7:
+            self._refresh_image_workflow_status()
+        if index == 8:
             self._refresh_playtest_status()
             self._load_playtest_settings()
 
@@ -2208,6 +2253,251 @@ class WorkflowTab(QWidget):
         # Pre-populate all Phase 2 checkboxes from current module state
         self._populate_p2_checkboxes()
 
+    # ── Step 6: Rewrap exported game data ─────────────────────────────────
+
+    def _build_step5_rewrap(self, layout: QVBoxLayout):
+        self._add_step_header(layout, "Step 6 — Rewrap Exported Game Data", 6)
+
+        intro = QLabel(
+            "Reflow existing English directly in the game data folder detected by Step 0. "
+            "Export translations in Step 5 first. "
+            "Choose categories, files, and optional event codes; scan first, then apply. "
+            "_original values are never modified."
+        )
+        intro.setWordWrap(True)
+        intro.setStyleSheet("color:#b8b8b8;font-size:13px;padding-bottom:4px;")
+        layout.addWidget(intro)
+
+        config_box = QWidget()
+        config_box.setObjectName("tbox")
+        config_box.setStyleSheet(self._task_box_style())
+        config_layout = QVBoxLayout(config_box)
+        config_layout.setContentsMargins(12, 10, 12, 10)
+        config_layout.setSpacing(8)
+
+        category_row = QHBoxLayout()
+        category_row.setSpacing(14)
+        category_label = QLabel("Categories:")
+        category_label.setStyleSheet("color:#4ec9b0;font-size:12px;font-weight:bold;")
+        category_row.addWidget(category_label)
+        self.rewrap_dialogue_cb = QCheckBox("Dialogue")
+        self.rewrap_face_cb = QCheckBox("Dialogue + Face")
+        self.rewrap_list_cb = QCheckBox("List / Help")
+        self.rewrap_notes_cb = QCheckBox("Notes")
+        self.rewrap_notes_cb.setToolTip(
+            "Rewrap only recognized player-facing prose bodies inside note tags; "
+            "plugin syntax and other note metadata remain unchanged."
+        )
+        for checkbox in (
+            self.rewrap_dialogue_cb,
+            self.rewrap_face_cb,
+            self.rewrap_list_cb,
+            self.rewrap_notes_cb,
+        ):
+            checkbox.setChecked(True)
+            category_row.addWidget(checkbox)
+        category_row.addStretch()
+        config_layout.addLayout(category_row)
+
+        width_row = QHBoxLayout()
+        width_row.setSpacing(10)
+        width_label = QLabel("Widths:")
+        width_label.setStyleSheet("color:#4ec9b0;font-size:12px;font-weight:bold;")
+        width_row.addWidget(width_label)
+
+        def _rewrap_width(label_text: str, value: int):
+            label = QLabel(label_text)
+            label.setStyleSheet("color:#b8b8b8;font-size:12px;")
+            spin = QSpinBox()
+            spin.setRange(10, 300)
+            spin.setValue(value)
+            spin.setSuffix(" chars")
+            spin.setFixedWidth(92)
+            width_row.addWidget(label)
+            width_row.addWidget(spin)
+            return spin
+
+        self.rewrap_dialogue_width = _rewrap_width(
+            "Dialogue", self.wrap_width_spin.value()
+        )
+        self.rewrap_face_width = _rewrap_width(
+            "Face", self.wrap_face_spin.value()
+        )
+        self.rewrap_face_width.setMaximum(self.rewrap_dialogue_width.value())
+        self.rewrap_dialogue_width.valueChanged.connect(
+            self.rewrap_face_width.setMaximum
+        )
+        self.rewrap_list_width = _rewrap_width("List", self.wrap_list_spin.value())
+        self.rewrap_note_width = _rewrap_width("Notes", self.wrap_note_spin.value())
+        load_widths_btn = _make_text_btn(
+            "Load .env", "Reload width / faceWidth / listWidth / noteWidth", min_width=82
+        )
+        load_widths_btn.clicked.connect(self._load_rewrap_widths)
+        width_row.addWidget(load_widths_btn)
+        width_row.addStretch()
+        config_layout.addLayout(width_row)
+
+        code_row = QHBoxLayout()
+        code_row.setSpacing(8)
+        code_label = QLabel("Event codes:")
+        code_label.setStyleSheet("color:#4ec9b0;font-size:12px;font-weight:bold;")
+        code_row.addWidget(code_label)
+        self.rewrap_codes_edit = QLineEdit("401,405")
+        self.rewrap_codes_edit.setPlaceholderText("Blank = every supported code")
+        self.rewrap_codes_edit.setToolTip(
+            "Restricts recognized event display fields only. Supported: 401/405 messages, "
+            "122 stored list text, 324 list text, 325 profile/dialogue, and known 357 text keys. "
+            "Database list/help and note fields are controlled by their category checkboxes."
+        )
+        self.rewrap_codes_edit.setFixedWidth(260)
+        code_row.addWidget(self.rewrap_codes_edit)
+        standard_codes_btn = _make_text_btn(
+            "Messages", "Use standard Show Text / Scroll Text only", min_width=80
+        )
+        standard_codes_btn.clicked.connect(
+            lambda: self.rewrap_codes_edit.setText("401,405")
+        )
+        code_row.addWidget(standard_codes_btn)
+        all_codes_btn = _make_text_btn(
+            "All supported", "Include every recognized display-code field", min_width=104
+        )
+        all_codes_btn.clicked.connect(self.rewrap_codes_edit.clear)
+        code_row.addWidget(all_codes_btn)
+        code_row.addSpacing(12)
+        self.rewrap_skip_overflow_cb = QCheckBox("Protect non-401 rows")
+        self.rewrap_skip_overflow_cb.setChecked(True)
+        self.rewrap_skip_overflow_cb.setToolTip(
+            "When enabled, skip non-401 fields that exceed this row limit, including scrolling "
+            "text, list/help, notes, and supported plugin fields. Code 401 and face-401 dialogue "
+            "are never blocked."
+        )
+        code_row.addWidget(self.rewrap_skip_overflow_cb)
+        self.rewrap_max_rows_spin = QSpinBox()
+        self.rewrap_max_rows_spin.setRange(1, 20)
+        self.rewrap_max_rows_spin.setValue(4)
+        self.rewrap_max_rows_spin.setSuffix(" rows")
+        self.rewrap_max_rows_spin.setFixedWidth(82)
+        self.rewrap_max_rows_spin.setEnabled(True)
+        self.rewrap_skip_overflow_cb.toggled.connect(
+            self.rewrap_max_rows_spin.setEnabled
+        )
+        code_row.addWidget(self.rewrap_max_rows_spin)
+        code_row.addStretch()
+        config_layout.addLayout(code_row)
+        layout.addWidget(config_box)
+
+        scope_box = QWidget()
+        scope_box.setObjectName("tbox")
+        scope_box.setStyleSheet(self._task_box_style())
+        scope_layout = QVBoxLayout(scope_box)
+        scope_layout.setContentsMargins(12, 10, 12, 10)
+        scope_layout.setSpacing(6)
+
+        scope_header = QHBoxLayout()
+        self.rewrap_scope_title = QLabel("Game data file scope — complete Step 0 first")
+        scope_title = self.rewrap_scope_title
+        scope_title.setMaximumWidth(460)
+        scope_title.setStyleSheet("color:#4ec9b0;font-size:12px;font-weight:bold;")
+        scope_header.addWidget(scope_title)
+        self.rewrap_file_filter = QLineEdit()
+        self.rewrap_file_filter.setPlaceholderText("Filter filenames…")
+        self.rewrap_file_filter.setClearButtonEnabled(True)
+        self.rewrap_file_filter.textChanged.connect(self._filter_rewrap_files)
+        scope_header.addWidget(self.rewrap_file_filter, 1)
+        refresh_files_btn = _make_text_btn(
+            "Refresh", "Reload JSON filenames from the detected game data folder", min_width=72
+        )
+        refresh_files_btn.clicked.connect(self._refresh_rewrap_files)
+        scope_header.addWidget(refresh_files_btn)
+        scope_layout.addLayout(scope_header)
+
+        self.rewrap_file_list = QListWidget()
+        self.rewrap_file_list.setMinimumHeight(150)
+        self.rewrap_file_list.setMaximumHeight(230)
+        self.rewrap_file_list.setStyleSheet(
+            "QListWidget{background:#252526;border:1px solid #3a3a3a;border-radius:4px;"
+            "color:#cccccc;font-size:12px;padding:1px;}"
+            "QListWidget::item{padding:2px 5px;}"
+        )
+        scope_layout.addWidget(self.rewrap_file_list)
+
+        scope_buttons = QHBoxLayout()
+        for label_text, mode, tooltip in (
+            ("All", "all", "Select every JSON file in the detected game data folder"),
+            ("Maps / Events", "events", "Select maps, CommonEvents, and Troops"),
+            ("DB files", "db", "Select core database files"),
+            ("None", "none", "Clear the file selection"),
+        ):
+            button = _make_text_btn(label_text, tooltip, min_width=70)
+            button.clicked.connect(
+                lambda _checked=False, selected_mode=mode: self._select_rewrap_files(
+                    selected_mode
+                )
+            )
+            scope_buttons.addWidget(button)
+        scope_buttons.addStretch()
+        scope_layout.addLayout(scope_buttons)
+        layout.addWidget(scope_box)
+
+        action_row = QHBoxLayout()
+        action_row.setSpacing(8)
+        self.rewrap_scan_btn = _make_btn("🔎  Scan selected", "#3a5a7a")
+        self.rewrap_scan_btn.setToolTip("Preview deterministic changes without writing files")
+        self.rewrap_scan_btn.clicked.connect(lambda: self._run_rewrap(False))
+        action_row.addWidget(self.rewrap_scan_btn)
+        self.rewrap_apply_btn = _make_btn("✔  Rewrap selected", "#3a7a3a")
+        self.rewrap_apply_btn.setToolTip(
+            "Apply the selected widths and scope to the selected game data JSON"
+        )
+        self.rewrap_apply_btn.clicked.connect(lambda: self._run_rewrap(True))
+        action_row.addWidget(self.rewrap_apply_btn)
+        self.rewrap_status_label = QLabel("Select a scope and scan before applying.")
+        self.rewrap_status_label.setWordWrap(True)
+        self.rewrap_status_label.setStyleSheet("color:#9cdcfe;font-size:12px;padding-left:6px;")
+        action_row.addWidget(self.rewrap_status_label, 1)
+        layout.addLayout(action_row)
+
+        self.rewrap_results = QListWidget()
+        self.rewrap_results.setMinimumHeight(170)
+        self.rewrap_results.setWordWrap(True)
+        self.rewrap_results.setTextElideMode(Qt.ElideNone)
+        self.rewrap_results.setStyleSheet(
+            "QListWidget{background:#1f1f1f;border:1px solid #333;border-radius:4px;"
+            "color:#c8c8c8;font-size:11px;padding:2px;}"
+            "QListWidget::item{padding:4px 6px;border-bottom:1px solid #2d2d2d;}"
+        )
+        layout.addWidget(self.rewrap_results)
+
+        qa_row = QHBoxLayout()
+        qa_label = QLabel("Final QA:")
+        qa_label.setStyleSheet("color:#4ec9b0;font-size:12px;font-weight:bold;")
+        qa_row.addWidget(qa_label)
+        qa_btn = _make_btn("🔎  QA Game Data Skill", "#8a6d3b")
+        qa_btn.setToolTip(
+            "After export and rewrap, copy the scalable QA skill for the detected game data folder."
+        )
+        qa_btn.clicked.connect(self._copy_translation_qa_prompt)
+        qa_row.addWidget(qa_btn)
+        qa_row.addStretch()
+        layout.addLayout(qa_row)
+
+        release_row = QHBoxLayout()
+        release_label = QLabel("Release:")
+        release_label.setStyleSheet("color:#4ec9b0;font-size:12px;font-weight:bold;")
+        release_row.addWidget(release_label)
+        self._release_zip_btn = _make_btn("📦  Create Public Release ZIP", "#007acc")
+        self._release_zip_btn.setToolTip(
+            "Archive the detected game folder after rewrap and final QA. Excludes DazedTL "
+            "workspaces, version-control files, documentation, backups, and saves; keeps "
+            "GameUpdate files. The source game folder is not changed."
+        )
+        self._release_zip_btn.clicked.connect(self._create_public_release)
+        release_row.addWidget(self._release_zip_btn)
+        release_row.addStretch()
+        layout.addLayout(release_row)
+        QTimer.singleShot(0, self._refresh_rewrap_files)
+        QTimer.singleShot(0, self._load_rewrap_widths)
+
     # ── Step 5: Plugins.js + Export ────────────────────────────────────────
 
     def _build_step5_finish(self, layout: QVBoxLayout):
@@ -2278,30 +2568,12 @@ class WorkflowTab(QWidget):
 
         inner.addLayout(_labeled_row(export_lbl, export_active_btn, export_all_btn))
 
-        qa_lbl = QLabel("QA")
-        qa_btn = _make_btn("🔎  QA Game Data Skill", "#8a6d3b")
-        qa_btn.setToolTip(
-            "After export, copy a scalable QA skill for the detected game data folder. "
-            "It checks every _original pair, reviews prioritized samples, and asks before fixes."
-        )
-        qa_btn.clicked.connect(self._copy_translation_qa_prompt)
-        inner.addLayout(_labeled_row(qa_lbl, qa_btn))
-
-        release_lbl = QLabel("Release")
-        self._release_zip_btn = _make_btn("📦  Create Public Release ZIP", "#007acc")
-        self._release_zip_btn.setToolTip(
-            "Archive the detected game folder for players. Excludes DazedTL workspaces, "
-            "version-control files, documentation, backups, and saves; "
-            "keeps GameUpdate files. The source game folder is not changed."
-        )
-        self._release_zip_btn.clicked.connect(self._create_public_release)
-        inner.addLayout(_labeled_row(release_lbl, self._release_zip_btn))
         layout.addWidget(box, 0, Qt.AlignLeft)
 
-    # ── Step 6: Editable images ─────────────────────────────────────────────
+    # ── Step 7: Editable images ─────────────────────────────────────────────
 
     def _build_step6_images(self, layout: QVBoxLayout):
-        self._add_step_header(layout, "Step 6 — Images", 6)
+        self._add_step_header(layout, "Step 7 — Images", 7)
 
         intro = QLabel(
             "Translate text embedded in RPG Maker MV/MZ images without moving the Image Manager. "
@@ -2380,11 +2652,11 @@ class WorkflowTab(QWidget):
         layout.addWidget(flow_box)
         layout.addStretch()
 
-    # ── Step 7: Playtest (TL Inspector) ─────────────────────────────────────
+    # ── Step 8: Playtest (TL Inspector) ─────────────────────────────────────
 
     def _build_step8_playtest(self, layout: QVBoxLayout):
         self._step8_section_label = self._add_step_header(
-            layout, "Step 7 — Playtest Tools", 7
+            layout, "Step 8 — Playtest Tools", 8
         )
 
         settings_box = QWidget()
@@ -3188,10 +3460,10 @@ class WorkflowTab(QWidget):
                     "Copy a prompt that audits plugins.js and enabled plugin sources, asks what "
                     "needs translation, then edits approved player-visible strings in place."
                 )
-        # Steps 6–7 in this RPG workflow are MV/MZ only. The standalone Images
+        # Steps 7–8 in this RPG workflow are MV/MZ only. The standalone Images
         # page also supports Generic loose PNG projects.
         show_mvmz_tools = not is_ace
-        tool_indices = (6, 7)
+        tool_indices = (7, 8)
         for tool_idx in tool_indices:
             if hasattr(self, "_step_tabs") and self._step_tabs.count() > tool_idx:
                 if hasattr(self._step_tabs, "setTabVisible"):
@@ -3202,7 +3474,7 @@ class WorkflowTab(QWidget):
                 self._step_buttons[tool_idx].setVisible(show_mvmz_tools)
                 self._step_buttons[tool_idx].setEnabled(show_mvmz_tools)
         if is_ace and self._step_tabs.currentIndex() in tool_indices:
-            self._goto_step(5)
+            self._goto_step(6)
         self._refresh_step_strip()
         box = getattr(self, "_step8_playtest_box", None)
         install_both_btn = getattr(self, "_install_both_btn", None)
@@ -3846,6 +4118,271 @@ class WorkflowTab(QWidget):
         except Exception as exc:
             self._log(f"❌ Could not copy {filename}: {exc}")
 
+    def _load_rewrap_widths(self):
+        """Load the four current wrap widths directly from .env."""
+        try:
+            from dotenv import dotenv_values
+
+            values = dotenv_values(Path(".env")) if Path(".env").is_file() else {}
+
+            def _value(key: str, fallback: int) -> int:
+                raw = values.get(key)
+                return int(raw) if raw not in (None, "") else fallback
+
+            dialogue = _value("width", self.wrap_width_spin.value())
+            face = _value("faceWidth", max(1, dialogue - 10))
+            self.rewrap_dialogue_width.setValue(dialogue)
+            self.rewrap_face_width.setValue(min(dialogue, face))
+            self.rewrap_list_width.setValue(
+                _value("listWidth", self.wrap_list_spin.value())
+            )
+            self.rewrap_note_width.setValue(
+                _value("noteWidth", self.wrap_note_spin.value())
+            )
+            if self.rewrap_file_list.count():
+                self.rewrap_status_label.setText("Loaded current widths from .env.")
+            else:
+                self.rewrap_status_label.setText(
+                    "Loaded .env widths; no game data JSON files are available yet."
+                )
+        except Exception as exc:
+            self.rewrap_status_label.setText(f"Could not load .env widths: {exc}")
+
+    def _rewrap_data_directory(self) -> Path | None:
+        """Return the Step-0 game data directory used by direct rewrapping."""
+        candidates: list[Path] = []
+        if self._data_path:
+            candidates.append(Path(self._data_path))
+        game_root = self.folder_edit.text().strip() if hasattr(self, "folder_edit") else ""
+        if game_root:
+            root = Path(game_root)
+            candidates.extend(
+                (root / "data", root / "www" / "data", root / "ace_json", root / "JSON")
+            )
+        for candidate in candidates:
+            if candidate.is_dir():
+                return candidate.expanduser().resolve()
+        return None
+
+    def _refresh_rewrap_files(self):
+        """Refresh the checkable game-data JSON scope without losing choices."""
+        if not hasattr(self, "rewrap_file_list"):
+            return
+        previous = {
+            self.rewrap_file_list.item(i).data(Qt.UserRole):
+            self.rewrap_file_list.item(i).checkState() == Qt.Checked
+            for i in range(self.rewrap_file_list.count())
+        }
+        data_directory = self._rewrap_data_directory()
+        paths = (
+            sorted(data_directory.glob("*.json"), key=lambda p: p.name.casefold())
+            if data_directory is not None
+            else []
+        )
+        first_load = not previous
+        self.rewrap_file_list.clear()
+        for path in paths:
+            item = QListWidgetItem(path.name)
+            item.setData(Qt.UserRole, path.name)
+            item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
+            item.setCheckState(
+                Qt.Checked if previous.get(path.name, first_load) else Qt.Unchecked
+            )
+            self.rewrap_file_list.addItem(item)
+        self._filter_rewrap_files(self.rewrap_file_filter.text())
+        if data_directory is not None:
+            self.rewrap_scope_title.setText(f"Game data file scope — {data_directory}")
+            self.rewrap_scope_title.setToolTip(str(data_directory))
+        else:
+            self.rewrap_scope_title.setText("Game data file scope — complete Step 0 first")
+            self.rewrap_scope_title.setToolTip("")
+        if paths:
+            self.rewrap_status_label.setText(
+                f"Loaded {len(paths)} game data JSON file(s). Scan before applying."
+            )
+        else:
+            self.rewrap_status_label.setText(
+                "No game data JSON files found. Complete Step 0 and export translations first."
+            )
+
+    def _filter_rewrap_files(self, text: str):
+        needle = str(text or "").strip().casefold()
+        if not hasattr(self, "rewrap_file_list"):
+            return
+        for i in range(self.rewrap_file_list.count()):
+            item = self.rewrap_file_list.item(i)
+            item.setHidden(bool(needle and needle not in item.text().casefold()))
+
+    def _select_rewrap_files(self, mode: str):
+        if not hasattr(self, "rewrap_file_list"):
+            return
+        for i in range(self.rewrap_file_list.count()):
+            item = self.rewrap_file_list.item(i)
+            name = str(item.data(Qt.UserRole) or item.text())
+            if mode == "all":
+                checked = True
+            elif mode == "none":
+                checked = False
+            elif mode == "db":
+                checked = name in _DB_FILES
+            elif mode == "events":
+                checked = (
+                    name.startswith("Map") and name != "MapInfos.json"
+                ) or name in _EVENT_FILES_EXACT
+            else:
+                checked = False
+            item.setCheckState(Qt.Checked if checked else Qt.Unchecked)
+
+    def _selected_rewrap_files(self) -> list[str]:
+        return [
+            str(self.rewrap_file_list.item(i).data(Qt.UserRole))
+            for i in range(self.rewrap_file_list.count())
+            if self.rewrap_file_list.item(i).checkState() == Qt.Checked
+        ]
+
+    def _rewrap_options(self):
+        from util.rpgmaker_rewrap import (
+            DIALOGUE,
+            FACE_DIALOGUE,
+            LIST_HELP,
+            NOTES,
+            RewrapOptions,
+            parse_event_codes,
+        )
+
+        categories = set()
+        if self.rewrap_dialogue_cb.isChecked():
+            categories.add(DIALOGUE)
+        if self.rewrap_face_cb.isChecked():
+            categories.add(FACE_DIALOGUE)
+        if self.rewrap_list_cb.isChecked():
+            categories.add(LIST_HELP)
+        if self.rewrap_notes_cb.isChecked():
+            categories.add(NOTES)
+        if not categories:
+            raise ValueError("Select at least one text category")
+        return RewrapOptions(
+            dialogue_width=self.rewrap_dialogue_width.value(),
+            face_dialogue_width=min(
+                self.rewrap_dialogue_width.value(), self.rewrap_face_width.value()
+            ),
+            list_width=self.rewrap_list_width.value(),
+            note_width=self.rewrap_note_width.value(),
+            categories=frozenset(categories),
+            event_codes=parse_event_codes(self.rewrap_codes_edit.text()),
+            max_protected_rows=(
+                self.rewrap_max_rows_spin.value()
+                if self.rewrap_skip_overflow_cb.isChecked()
+                else 0
+            ),
+            skip_protected_overflow=self.rewrap_skip_overflow_cb.isChecked(),
+        )
+
+    def _run_rewrap(self, apply: bool):
+        if getattr(self, "_rewrap_worker", None) is not None:
+            self._log("⚠  A rewrap scan is already running.")
+            return
+        if self._worker is not None and self._worker.isRunning():
+            QMessageBox.information(
+                self, "Busy", "Wait for the current workflow task to finish before rewrapping."
+            )
+            return
+        data_directory = self._rewrap_data_directory()
+        if data_directory is None:
+            QMessageBox.warning(
+                self,
+                "Rewrap",
+                "No game data folder is available. Complete Step 0 and export first.",
+            )
+            return
+        file_names = self._selected_rewrap_files()
+        if not file_names:
+            QMessageBox.warning(self, "Rewrap", "Select at least one game data JSON file.")
+            return
+        try:
+            options = self._rewrap_options()
+        except ValueError as exc:
+            QMessageBox.warning(self, "Rewrap", str(exc))
+            return
+
+        if apply:
+            categories = ", ".join(sorted(options.categories))
+            codes = (
+                "all supported"
+                if options.event_codes is None
+                else ", ".join(str(code) for code in sorted(options.event_codes))
+            )
+            row_protection = (
+                f"skip non-401 fields over {options.max_protected_rows} rows"
+                if options.skip_protected_overflow
+                else "off"
+            )
+            answer = QMessageBox.question(
+                self,
+                "Rewrap Exported Game Data",
+                f"Deterministically rewrap {len(file_names)} file(s) directly in:\n"
+                f"{data_directory}\n\n"
+                f"Categories: {categories}\n"
+                f"Event codes: {codes}\n"
+                f"Widths: dialogue {options.dialogue_width}, face {options.face_dialogue_width}, "
+                f"list {options.list_width}, notes {options.note_width}\n"
+                f"Non-401 row protection: {row_protection}\n\n"
+                "This edits the game data in place, does not call the translation model, "
+                "and never edits _original. Keep a game backup before continuing.",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No,
+            )
+            if answer != QMessageBox.Yes:
+                return
+
+        self.rewrap_scan_btn.setEnabled(False)
+        self.rewrap_apply_btn.setEnabled(False)
+        self.rewrap_results.clear()
+        self.rewrap_status_label.setText(
+            "Rewrapping selected files…" if apply else "Scanning selected files…"
+        )
+        worker = _RpgMakerRewrapWorker(
+            str(data_directory), options, file_names, apply=apply
+        )
+        self._rewrap_worker = worker
+        worker.done.connect(self._on_rewrap_done)
+        worker.failed.connect(self._on_rewrap_failed)
+        worker.finished.connect(self._release_rewrap_worker)
+        worker.start()
+
+    def _on_rewrap_done(self, report, apply: bool):
+        self.rewrap_status_label.setText(report.headline(apply=apply))
+        for preview in report.previews:
+            item = QListWidgetItem(preview.summary())
+            item.setToolTip(f"Before:\n{preview.before}\n\nAfter:\n{preview.after}")
+            self.rewrap_results.addItem(item)
+        if report.changes_found > len(report.previews):
+            self.rewrap_results.addItem(
+                f"… {report.changes_found - len(report.previews)} additional change(s) not shown"
+            )
+        for error in report.errors:
+            self.rewrap_results.addItem(f"⚠ {error}")
+        self._log(("✅  " if not report.errors else "⚠  ") + report.headline(apply=apply))
+        if apply and report.files_written:
+            data_directory = self._rewrap_data_directory()
+            self._log(
+                f"   Rewrapped {data_directory or 'game data'} in place; "
+                "_original values were preserved."
+            )
+
+    def _on_rewrap_failed(self, message: str):
+        self.rewrap_status_label.setText(f"Rewrap failed: {message}")
+        self.rewrap_results.addItem(f"❌ {message}")
+        self._log(f"❌ Rewrap failed: {message}")
+
+    def _release_rewrap_worker(self):
+        self.rewrap_scan_btn.setEnabled(True)
+        self.rewrap_apply_btn.setEnabled(True)
+        worker = getattr(self, "_rewrap_worker", None)
+        if worker is not None:
+            worker.deleteLater()
+        self._rewrap_worker = None
+
     def _apply_wrap_config(self):
         """Write dialogue, face-dialogue, list, and note widths back into .env."""
         import re as _re
@@ -4196,6 +4733,11 @@ class WorkflowTab(QWidget):
 
     def _export_active_files(self):
         """Export only translated files whose names match what is in files/."""
+        if self._rewrap_worker is not None and self._rewrap_worker.isRunning():
+            QMessageBox.information(
+                self, "Busy", "Wait for the rewrap scan/write to finish before exporting."
+            )
+            return
         files_dir = Path("files")
         active = sorted(
             fp.name for fp in files_dir.glob("*.json") if fp.name != ".gitkeep"
@@ -4234,6 +4776,11 @@ class WorkflowTab(QWidget):
         w.start()
 
     def _export_to_game(self):
+        if self._rewrap_worker is not None and self._rewrap_worker.isRunning():
+            QMessageBox.information(
+                self, "Busy", "Wait for the rewrap scan/write to finish before exporting."
+            )
+            return
         game_data = self._resolve_export_path()
         if not game_data:
             return

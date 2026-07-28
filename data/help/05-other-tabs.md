@@ -14,7 +14,7 @@ Workflow jumps here when you start a phase.
 - Engines without a full Workflow (Ren'Py, Tyrano, CSV, …)
 - Resuming a batch from the Batches tab
 
-**Example:** check only `Map003.json`, module = RPG Maker MV/MZ, click Translate, then export from Workflow Step 5 (or copy from `translated/` yourself).
+**Example:** check only `Map003.json`, module = RPG Maker MV/MZ, click Translate, export it from Workflow Step 5, then optionally rewrap the exported game data in Step 6.
 
 ## Images
 

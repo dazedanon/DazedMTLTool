@@ -415,7 +415,7 @@ class RPGMakerImageManagerNavigationTests(unittest.TestCase):
         self.assertIn("from gui.image_manager import ImageManager", main_source)
         self.assertIn("self.image_manager_tab = ImageManager", main_source)
         self.assertIn('create_nav_button("🖼", "Images")', main_source)
-        self.assertIn('(\"6  Images\",       self._build_step6_images)', workflow_source)
+        self.assertIn('(\"7  Images\",       self._build_step6_images)', workflow_source)
         self.assertIn('self._open_images_btn = _make_btn("🖼  Open Images"', workflow_source)
 
 
@@ -506,11 +506,11 @@ class RPGMakerWorkflowImageStepTests(unittest.TestCase):
                 workflow = WorkflowTab(host)
             try:
                 workflow.folder_edit.setText(str(game_root))
-                workflow._goto_step(6)
+                workflow._goto_step(7)
                 workflow._refresh_image_workflow_status()
 
-                self.assertEqual(workflow._step_tabs.count(), 8)
-                self.assertEqual(workflow._step_tabs.currentIndex(), 6)
+                self.assertEqual(workflow._step_tabs.count(), 9)
+                self.assertEqual(workflow._step_tabs.currentIndex(), 7)
                 self.assertIn("Runtime images:</span> 1", workflow._image_workflow_status.text())
                 self.assertIn("Glossary:</span>", workflow._image_workflow_status.text())
 
@@ -523,6 +523,38 @@ class RPGMakerWorkflowImageStepTests(unittest.TestCase):
             finally:
                 workflow.close()
                 host.close()
+
+
+class RPGMakerWorkflowRewrapStepTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.app = QApplication.instance() or QApplication([])
+
+    def test_rewrap_scope_reads_detected_game_data_not_tool_workspace(self):
+        from gui.workflow_tab import WorkflowTab
+
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            game_data = root / "Game" / "data"
+            game_data.mkdir(parents=True)
+            game_data.joinpath("Map123.json").write_text("{}", encoding="utf-8")
+            game_data.joinpath("Items.json").write_text("[]", encoding="utf-8")
+            settings = QSettings(str(root / "settings.ini"), QSettings.IniFormat)
+
+            with patch("gui.workflow_tab.QSettings", return_value=settings):
+                workflow = WorkflowTab()
+            try:
+                workflow._data_path = str(game_data)
+                workflow.folder_edit.setText(str(game_data.parent))
+                workflow._refresh_rewrap_files()
+                names = {
+                    workflow.rewrap_file_list.item(index).text()
+                    for index in range(workflow.rewrap_file_list.count())
+                }
+                self.assertEqual(names, {"Items.json", "Map123.json"})
+                self.assertIn(str(game_data.resolve()), workflow.rewrap_scope_title.text())
+            finally:
+                workflow.close()
 
 
 if __name__ == "__main__":

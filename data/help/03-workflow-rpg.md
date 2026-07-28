@@ -14,8 +14,9 @@ This page is the overview.
 | **3 TL Phase 1** | Phase 0 DB → Phase 1 dialogue → Phase 1b code 111 cache |
 | **4 TL Phase 2** | Risky codes (122, plugins, etc.) after you audit |
 | **5 Export** | MV/MZ: `plugins.js` helpers. Ace: Ruby `.rb` scripts. Then export / pack |
-| **6 Images** | Check image setup, then decrypt → AI translate → review → patch (MV/MZ) |
-| **7 Playtest** | TL Inspector / Forge (MV/MZ; hidden for Ace) |
+| **6 Rewrap** | Reflow exported game data by category, selected files/maps, and event codes |
+| **7 Images** | Check image setup, then decrypt → AI translate → review → patch (MV/MZ) |
+| **8 Playtest** | TL Inspector / Forge (MV/MZ; hidden for Ace) |
 
 ## Example: first RPG Maker run
 
@@ -43,9 +44,27 @@ Project Setup's `speakers` block recommends ENABLE / SKIP with evidence.
 - Use **Normal** mode when you want live iteration on a handful of files.
 - Phase 2 can break games if you translate logic keys - audit with the Plugin Prompt first.
 
-## Images (Step 6, MV/MZ)
+## Rewrap exported game data (Step 6)
 
-Step 6 keeps the engine-aware Image Manager on the separate **Images** page, selects the RPG Maker
+Export translations in Step 5 first. Rewrap then edits the JSON in the game data folder detected
+by Step 0 when the English is correct but its line breaks need to change. It does not call the
+model and never changes `_original`.
+
+- Select Dialogue, Dialogue + Face, List/Help, Notes, or any combination.
+- Select individual maps/database files, all maps/events, all DB files, or everything.
+- Keep event codes at `401,405` for standard messages, or explicitly include other recognized
+  display-code fields.
+- Scan before applying. Row protection applies by default to rewrapped fields other than code 401,
+  including scrolling text, list/help, notes, and supported plugin fields; it can be disabled.
+- Code-401 dialogue, including face dialogue, is never blocked by the row limit because it can
+  continue into another message window.
+- Dialogue wrapping never adds, removes, or repurposes code-401 commands. It inserts `\n` inside
+  each existing code-401 text value while preserving that command's other data and `_original`.
+- Run final QA after applying approved changes, then create the public release ZIP from this step.
+
+## Images (Step 7, MV/MZ)
+
+Step 7 keeps the engine-aware Image Manager on the separate **Images** page, selects the RPG Maker
 workflow through auto-detection, and verifies that you are ready to use it:
 
 - Step 0 points to the actual game root containing `img/` or `www/img/`.

@@ -46,8 +46,10 @@ If something is wrong, fix vocab / quirks *now* before you translate fifty maps.
 ### 5. Put it in the game and play
 
 1. Step 5 - **Export Active Files** (only what you imported).
-2. Launch the game and walk that first map.
-3. Note leftovers: overflow, wrong names, Japanese in a menu.
+2. Step 6 - optionally scan/reapply wrapping directly to the exported game data, then run final
+   QA and create the public release ZIP.
+3. Launch the game and walk that first map.
+4. Note leftovers: overflow, wrong names, Japanese in a menu.
 
 Fix leftovers next (re-translate a file, tweak wrap width in Config, or OCR → search in the IDE). Do not jump to Phase 2 yet.
 
@@ -62,9 +64,11 @@ When the sample map looks good:
 ### 7. Risky codes and UI (only when needed)
 
 1. Step 4 - copy the Plugin / risky-codes prompt, audit the game in your IDE, enable only codes that hold player-visible text, then run Phase 2 carefully.
-2. Step 5 - for MV/MZ, copy vocab + the plugins.js prompt and edit `plugins.js` in the IDE (player-facing strings only). For **Ace**, edit `ace_json/scripts/*.rb` the same way, then Export so **RV2JSON** packs `Scripts.rvdata2`.
-3. Step 6 (MV/MZ) - check image setup, then decrypt / translate / patch any bitmap UI text.
-4. Step 7 (MV/MZ) - install TL Inspector / Forge if you want in-game inspection helpers.
+2. Step 5 - for MV/MZ, copy vocab + the plugins.js prompt and edit `plugins.js` in the IDE (player-facing strings only), then export. For **Ace**, edit `ace_json/scripts/*.rb` the same way, then Export so **RV2JSON** packs `Scripts.rvdata2`.
+3. Step 6 - scan/reapply widths directly to exported dialogue, face dialogue, list/help, or note
+   fields that need reflowing, then run final QA and package the release.
+4. Step 7 (MV/MZ) - check image setup, then decrypt / translate / patch any bitmap UI text.
+5. Step 8 (MV/MZ) - install TL Inspector / Forge if you want in-game inspection helpers.
 
 ### What “done enough” looks like
 

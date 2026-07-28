@@ -115,6 +115,18 @@ class WorkflowTranslationPromptTests(unittest.TestCase):
         self.assertIn("simultaneous constraints", prompt)
         self.assertIn("narrower wrapping usually creates more lines", prompt)
 
+    def test_rpgmaker_workflow_has_selective_rewrap_step(self):
+        workflow_source = (ROOT / "gui/workflow_tab.py").read_text(encoding="utf-8")
+        self.assertIn('("6  Rewrap",       self._build_step5_rewrap)', workflow_source)
+        self.assertIn("Dialogue + Face", workflow_source)
+        self.assertIn("Maps / Events", workflow_source)
+        self.assertIn("Event codes:", workflow_source)
+        self.assertIn("Scan selected", workflow_source)
+        self.assertIn("Rewrap selected", workflow_source)
+        self.assertIn("never edits _original", workflow_source)
+        self.assertIn("self.directory", workflow_source)
+        self.assertIn("_rewrap_data_directory", workflow_source)
+
     def test_image_translation_prompt_ends_skips_with_recovery_options(self):
         prompt = load_clipboard_skill("image_translation.md")
 
