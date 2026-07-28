@@ -444,7 +444,7 @@ class RPGMakerTab(QWidget):
         
         workflow_text = QLabel(
             "<table style='font-size: 11px; color: #aaa;' cellspacing='4'>"
-            "<tr><td><b style='color:#007acc'>1.</b></td><td>Parse Speakers → vocab.txt</td>"
+            "<tr><td><b style='color:#007acc'>1.</b></td><td>Parse Speakers → Glossary</td>"
             "<td width='30'></td><td><b style='color:#007acc'>6.</b></td><td>Replace any \\\\n[0-999] variables with actor names</td></tr>"
             "<tr><td><b style='color:#007acc'>2.</b></td><td>Identify speaker genders (use Copilot with map files)</td>"
             "<td></td><td><b style='color:#007acc'>7.</b></td><td>Translate Maps & CommonEvents</td></tr>"

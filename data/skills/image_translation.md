@@ -6,7 +6,7 @@ Translate player-visible source-language text embedded in the editable bitmap UI
 
 `{{EDITABLE_IMAGES_FOLDER}}`
 
-Use this game or project folder as read-only context for vocabulary, image usages, scripts, data,
+Use this game or project folder as read-only context for glossary entries, image usages, scripts, data,
 runtime coordinates, scaling, opacity, and dynamic values:
 
 `{{GAME_ROOT}}`
@@ -19,7 +19,7 @@ Use this file as the authoritative glossary for every translation:
 
 `{{VOCAB_FILE}}`
 
-Read `vocab.txt` before translating any image. Reuse its established names, terms, spelling,
+Read the glossary file (`vocab.txt`) before translating any image. Reuse its established names, terms, spelling,
 capitalization, and style consistently. If it is missing or does not cover a term, report that
 gap and follow the remaining translation precedence below.
 
@@ -65,7 +65,7 @@ Produce localized images that:
 Recursively enumerate the PNGs in the editable image folder. Identify:
 
 - Visible source-language text and intended in-place output paths.
-- Authoritative glossary or vocabulary files.
+- Authoritative glossary files.
 - Related image variants that share a layout.
 - Images without player-visible text, which must remain untouched.
 
@@ -147,7 +147,7 @@ uncertainty.
 
 List each visible source string with its role and location. Use this precedence:
 
-1. Authoritative project vocabulary.
+1. Authoritative project glossary.
 2. Existing approved translations.
 3. Contextual translation based on the surrounding UI.
 4. A conservative literal translation when context is limited.

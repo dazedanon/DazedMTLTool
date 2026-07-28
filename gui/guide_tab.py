@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 
 from PyQt5.QtCore import Qt
+from PyQt5.QtGui import QColor
 from PyQt5.QtWidgets import (
     QHBoxLayout,
     QLabel,
@@ -170,7 +171,7 @@ class GuideTab(QWidget):
         root = make_page_layout(self)
         root.addWidget(PageHeader(
             "Beginner's Guide",
-            "New here? Start with Before You Start, then follow First Translation."
+            "Read the first group in order. Use Extra Information only when you need it."
         ))
 
         body = QHBoxLayout()
@@ -219,23 +220,37 @@ class GuideTab(QWidget):
         """Reload the section index and re-select the current (or first) section."""
         previous_id = None
         row = self.section_list.currentRow()
-        if 0 <= row < len(self._sections):
+        if 0 <= row < len(self._sections) and self._sections[row].get("file"):
             previous_id = self._sections[row].get("id")
 
         self._sections = self._load_index()
         self.section_list.blockSignals(True)
         self.section_list.clear()
-        select_row = 0
+        select_row = next(
+            (i for i, section in enumerate(self._sections) if section.get("file")),
+            -1,
+        )
         for i, section in enumerate(self._sections):
             title = section.get("title") or section.get("id") or f"Section {i + 1}"
+            if section.get("type") == "group":
+                title = title.upper()
             item = QListWidgetItem(title)
             item.setData(Qt.UserRole, section)
+            if section.get("type") == "group":
+                # Keep group headings as labels, but leave them enabled so Qt does
+                # not dim their foreground color like disabled list items.
+                item.setFlags(Qt.ItemIsEnabled)
+                font = item.font()
+                font.setBold(True)
+                font.setPointSize(font.pointSize() + 1)
+                item.setFont(font)
+                item.setForeground(QColor(COLORS.text_primary))
             self.section_list.addItem(item)
-            if previous_id and section.get("id") == previous_id:
+            if previous_id and section.get("file") and section.get("id") == previous_id:
                 select_row = i
         self.section_list.blockSignals(False)
 
-        if self._sections:
+        if select_row >= 0:
             self.section_list.setCurrentRow(select_row)
         else:
             self.browser.setHtml(
@@ -256,12 +271,19 @@ class GuideTab(QWidget):
             return []
         if not isinstance(data, list):
             return []
-        return [s for s in data if isinstance(s, dict) and s.get("file")]
+        return [
+            section
+            for section in data
+            if isinstance(section, dict)
+            and (section.get("file") or section.get("type") == "group")
+        ]
 
     def _on_section_changed(self, row: int) -> None:
         if row < 0 or row >= len(self._sections):
             return
         section = self._sections[row]
+        if not section.get("file"):
+            return
         rel = section.get("file", "")
         path = self.help_dir / rel
         if not path.is_file():

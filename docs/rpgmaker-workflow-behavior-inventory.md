@@ -45,7 +45,7 @@ boundaries, or destinations.
 | Collect names | Applies speaker flags, selects event files, and starts the existing Parse Speakers translation mode. |
 | Copy setup skill | Copies the existing project-setup skill with game context. |
 | Speaker flags | Persist and apply through the existing config integration. |
-| Vocab Save / Reload | Reads or writes the game vocabulary through shared vocabulary utilities. |
+| Glossary Save / Reload | Reads or writes the game Glossary through shared Glossary utilities. |
 | Quirks/Game Skills Save / Reload | Reads or writes the selected game's skill files. |
 
 ## Step 3: Translation Phase 1
@@ -73,7 +73,7 @@ boundaries, or destinations.
 
 | Action | Effect |
 |---|---|
-| Copy glossary to game | Copies the current vocabulary to the selected game root. |
+| Copy glossary to game | Copies the current Glossary to the selected game root. |
 | Copy plugin/Ruby translation skill | Copies the engine-specific audit-and-edit prompt. |
 | Export selected files | Confirms, then exports translated JSON matching names currently in `files/`. |
 | Export all translated files | Confirms, then exports every translated result. |
@@ -94,8 +94,8 @@ boundaries, or destinations.
 
 | Action | Effect |
 |---|---|
-| Refresh readiness | Reads image readiness, encryption-key availability, vocabulary, and workspace placement. |
-| Copy glossary to game | Uses the same vocabulary copy action as Export. |
+| Refresh readiness | Reads image readiness, encryption-key availability, Glossary, and workspace placement. |
+| Copy glossary to game | Uses the same Glossary copy action as Export. |
 | Open Image Manager | Saves the current game folder and switches the host window to the shared Images page. |
 
 ## Step 8: Playtest

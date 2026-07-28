@@ -379,7 +379,7 @@ repeated visual or behavioral contract.
 - Card 2: speaker-detection flags, with human labels and technical config names
   as secondary text or tooltips.
 - Card 3: Project Setup handoff and copy action.
-- Card 4: Vocab, Quirks, and Game Skills editor tabs.
+- Card 4: Glossary, Quirks, and Game Skills editor tabs.
 - Give editor Save/Reload actions a stable footer within the editor card.
 - Do not let the editor consume navigation or hide its unsaved state.
 
@@ -426,7 +426,7 @@ repeated visual or behavioral contract.
 
 - Card 1: readiness checklist with status per prerequisite.
 - Card 2: the four-stage image flow represented compactly.
-- Primary action: Open Images. Secondary action: Copy vocab.
+- Primary action: Open Images. Secondary action: Copy glossary.
 - Use the available vertical space intentionally without stretching short copy
   into a large empty panel.
 

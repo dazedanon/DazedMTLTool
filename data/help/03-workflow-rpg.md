@@ -71,6 +71,10 @@ Some menus and signs are pictures rather than normal text. Click **Open Image Ma
 editable copy of the pictures you want, then click **Copy skill**. Give those instructions to your
 AI helper and review every edited picture before clicking **Patch selected** or **Patch all**.
 
+For difficult image work, DazedTL recommends Codex with **GPT-5.6 Sol** when it is available.
+Smaller models may be fine for plain signs or buttons, but can struggle with small text, stylized
+fonts, and crowded layouts.
+
 DazedTL keeps backups, but you should still keep your own untouched copy of the game.
 
 ## Note for RPG Maker Ace

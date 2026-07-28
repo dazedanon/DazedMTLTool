@@ -1,11 +1,16 @@
+import json
 import os
+import tempfile
 import unittest
 from pathlib import Path
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
+from PyQt5.QtCore import Qt
+from PyQt5.QtGui import QColor
 from PyQt5.QtWidgets import QApplication, QAbstractItemView, QLabel, QPushButton, QWidget
 
+from gui.guide_tab import GuideTab
 from gui.theme import COLORS, Geometry, Spacing, contrast_ratio
 from gui.ui_components import (
     UX_CONTRACT_VERSION,
@@ -121,6 +126,34 @@ class GUIUXContractTests(unittest.TestCase):
         self.assertIn('sidebar.setObjectName("appSidebar")', main)
         self.assertIn("PageHeader(", guide)
         self.assertIn("PageHeader(", skills)
+
+    def test_guide_group_headings_are_labels_not_selectable_pages(self):
+        with tempfile.TemporaryDirectory() as raw:
+            help_dir = Path(raw)
+            (help_dir / "index.json").write_text(
+                json.dumps([
+                    {"type": "group", "title": "Definitely Read These"},
+                    {"id": "start", "title": "Start Here", "file": "start.md"},
+                    {"type": "group", "title": "Extra Information"},
+                    {"id": "extra", "title": "Extra", "file": "extra.md"},
+                ]),
+                encoding="utf-8",
+            )
+            (help_dir / "start.md").write_text("# Start\n", encoding="utf-8")
+            (help_dir / "extra.md").write_text("# Extra\n", encoding="utf-8")
+
+            guide = GuideTab(help_dir=help_dir)
+
+            self.assertEqual(guide.section_list.count(), 4)
+            for row in (0, 2):
+                heading = guide.section_list.item(row)
+                self.assertTrue(heading.flags() & Qt.ItemIsEnabled)
+                self.assertFalse(heading.flags() & Qt.ItemIsSelectable)
+                self.assertEqual(heading.foreground().color(), QColor(COLORS.text_primary))
+                self.assertTrue(heading.font().bold())
+            self.assertEqual(guide.section_list.currentRow(), 1)
+            self.assertTrue(guide.show_section("extra"))
+            self.assertEqual(guide.section_list.currentRow(), 3)
 
     def test_every_active_destination_declares_the_shared_page_hierarchy(self):
         ordinary_pages = (

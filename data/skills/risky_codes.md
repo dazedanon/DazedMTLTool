@@ -7,7 +7,7 @@ Audit several optional event code types and report: (a) which contain player-vis
 --- attach Actors.json, CommonEvents.json, Troops.json, Map*.json, and js/plugins.js here ---
 
 <actor_context>
-Read Actors.json in full before auditing event commands. Use it to resolve actor IDs, \N[n] references, and code 320/324/325 targets. If you see an event reference to a major actor whose full character vocab is missing or only appears as a placeholder mapping like \N[3] (Keimi), report that Actors.json should be included in the glossary build and that a full # Game Characters entry is needed.
+Read Actors.json in full before auditing event commands. Use it to resolve actor IDs, \N[n] references, and code 320/324/325 targets. If you see an event reference to a major actor whose full character glossary entry is missing or only appears as a placeholder mapping like \N[3] (Keimi), report that Actors.json should be included in the glossary build and that a full # Game Characters entry is needed.
 </actor_context>
 
 <audit_1 code="122">
@@ -142,4 +142,3 @@ SKIP CODES       : <codes that have no visible text>
 
 If a field has nothing to fill in, write NONE.
 </output_format>
-

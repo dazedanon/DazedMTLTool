@@ -120,7 +120,7 @@ class SetupSkillsEditors(QWidget):
 
         editors.addTab(
             self._editor_page(
-                "data/vocab.txt  (game section)",
+                "Glossary file: data/vocab.txt  (game section)",
                 "Paste the glossary code block. Format: Japanese (English) - notes",
                 self._save_vocab,
                 self._reload_vocab,
@@ -278,16 +278,16 @@ class SetupSkillsEditors(QWidget):
         try:
             self.vocab_editor.setPlainText(read_game_vocab())
         except Exception as exc:
-            self._log(f"❌ Could not load vocab.txt: {exc}")
+            self._log(f"❌ Could not load the glossary file (data/vocab.txt): {exc}")
 
     def _save_vocab(self) -> None:
         if self.vocab_editor is None:
             return
         try:
             write_game_vocab(self.vocab_editor.toPlainText())
-            self._log("✅ vocab.txt saved (base terms from vocab_base.txt appended).")
+            self._log("✅ Glossary saved to data/vocab.txt (shared terms appended).")
         except Exception as exc:
-            self._log(f"❌ Could not save vocab.txt: {exc}")
+            self._log(f"❌ Could not save the glossary file (data/vocab.txt): {exc}")
 
     def _reload_quirks(self) -> None:
         if self.quirks_editor is None:

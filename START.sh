@@ -133,18 +133,18 @@ ensure_vocab_file() {
     fi
 
     if [[ -f "data/vocab_base.txt" ]]; then
-        echo "data/vocab.txt not found - creating from data/vocab_base.txt..."
+        echo "Glossary file data/vocab.txt not found - creating it from data/vocab_base.txt..."
         if cp "data/vocab_base.txt" "data/vocab.txt"; then
-            echo "Created data/vocab.txt from data/vocab_base.txt"
+            echo "Created glossary file data/vocab.txt from data/vocab_base.txt"
         else
-            echo "ERROR: Failed to copy data/vocab_base.txt to data/vocab.txt."
+            echo "ERROR: Failed to create glossary file data/vocab.txt from data/vocab_base.txt."
         fi
     else
-        echo "data/vocab.txt not found - creating empty file to avoid import errors..."
+        echo "Glossary file data/vocab.txt not found - creating an empty one..."
         if : > "data/vocab.txt"; then
-            echo "Created empty data/vocab.txt"
+            echo "Created empty glossary file data/vocab.txt"
         else
-            echo "ERROR: Failed to create empty data/vocab.txt."
+            echo "ERROR: Failed to create empty glossary file data/vocab.txt."
         fi
     fi
 }

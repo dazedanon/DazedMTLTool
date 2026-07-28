@@ -32,6 +32,12 @@ _SHIPPED_DATA_FILES = (
     "data/skills/wolf_speakers.md",
     "data/help/index.json",
     "data/help/00-welcome.md",
+    "data/help/01-git-setup.md",
+    "data/help/02-ai-helper.md",
+    "data/help/07-common-words.md",
+    "data/help/08-problems-resuming.md",
+    "data/help/09-backups-recovery.md",
+    "data/help/10-playtest-checklist.md",
     "data/vocab_base.txt",
 )
 
@@ -204,12 +210,49 @@ class ShippedDataTrackingTests(unittest.TestCase):
         help_dir = _REPO_ROOT / "data" / "help"
         index = json.loads((help_dir / "index.json").read_text(encoding="utf-8"))
         for entry in index:
-            rel = entry["file"]
+            if entry.get("type") == "group":
+                self.assertTrue(entry.get("title"))
+                self.assertNotIn("file", entry)
+                continue
+            rel = entry.get("file")
+            self.assertTrue(rel, f"help page entry has no file: {entry!r}")
             with self.subTest(file=rel):
                 self.assertTrue(
                     (help_dir / rel).is_file(),
                     f"data/help/index.json references missing {rel}",
                 )
+
+    def test_beginner_guide_keeps_the_required_path_short(self):
+        import json
+
+        help_dir = _REPO_ROOT / "data" / "help"
+        index = json.loads((help_dir / "index.json").read_text(encoding="utf-8"))
+        group_rows = [i for i, entry in enumerate(index) if entry.get("type") == "group"]
+        self.assertEqual(len(group_rows), 2)
+
+        first_group, extra_group = group_rows
+        self.assertEqual(index[first_group]["title"], "Definitely Read These")
+        self.assertEqual(index[extra_group]["title"], "Extra Information")
+        self.assertEqual(
+            [entry["id"] for entry in index[first_group + 1:extra_group]],
+            ["welcome", "ai-helper", "git-setup", "examples"],
+        )
+        self.assertEqual(
+            [entry["id"] for entry in index[extra_group + 1:extra_group + 3]],
+            ["workflow-rpg", "workflow-wolf"],
+        )
+
+    def test_git_guide_uses_editor_source_control_for_daily_work(self):
+        source = (_REPO_ROOT / "data/help/01-git-setup.md").read_text(
+            encoding="utf-8"
+        )
+        normalized = " ".join(source.split())
+        self.assertIn("Use that screen for normal Git work", normalized)
+        self.assertIn("Ctrl+Shift+G", normalized)
+        self.assertIn(
+            "For everyday reviewing, committing, and syncing, use Source Control",
+            normalized,
+        )
 
     def test_shipped_data_files_are_not_gitignored(self):
         help_dir = _REPO_ROOT / "data" / "help"

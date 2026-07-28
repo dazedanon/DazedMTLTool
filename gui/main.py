@@ -996,7 +996,7 @@ class DazedMTLGUI(QMainWindow):
 
         # Guide / Quickstart (first - default on open)
         btn_guide = self.create_nav_button("📖", "Guide")
-        btn_guide.setToolTip("Guide - quickstart, requirements, and examples")
+        btn_guide.setToolTip("Guide - beginner setup, full walkthrough, and reference help")
         btn_guide.clicked.connect(lambda: self.switch_page(self.PAGE_GUIDE))
         sidebar_layout.addWidget(btn_guide)
         self.nav_buttons.append(btn_guide)

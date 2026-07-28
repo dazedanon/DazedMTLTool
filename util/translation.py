@@ -1851,7 +1851,11 @@ def parseVocabWithCategories(vocabText):
     
     for line in vocabText.splitlines():
         line = line.strip()
-        if not line or line.startswith('```') or line.startswith('Here are some vocabulary'):
+        if (
+            not line
+            or line.startswith('```')
+            or line.startswith(('Here are some vocabulary', 'Here are glossary entries'))
+        ):
             continue
         
         # Check if this is a category header
@@ -2034,7 +2038,9 @@ def buildMatchedVocabText(vocabPairs, subbedText, history=None):
 
     # Format matched vocabulary with categories
     if matchedCategories:
-        formattedLines = ["Here are some vocabulary and terms so that you know the proper spelling and translation.\n"]
+        formattedLines = [
+            "Here are glossary entries with the approved spelling and translation.\n"
+        ]
         for category, lines in matchedCategories.items():
             if category:  # Only add category header if it exists
                 formattedLines.append(category)

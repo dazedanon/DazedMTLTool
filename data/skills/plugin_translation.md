@@ -5,10 +5,10 @@ Audit enabled plugins for player-visible Japanese, tell me which plugins need lo
 </goal>
 
 <inputs>
-- Read js/plugins.js and vocab.txt.
+- Read js/plugins.js and the glossary file (`vocab.txt`).
 - For every enabled entry in js/plugins.js, inspect its parameter values.
 - If available, also inspect the matching js/plugins/<PluginName>.js source file for visible Japanese literals. If a required source file is missing, list it and ask me to provide it.
-- Treat vocab.txt as authoritative for names and terminology.
+- Treat the glossary file as authoritative for names and terminology.
 </inputs>
 
 <phase_1_audit_only>
@@ -41,4 +41,3 @@ If direct file editing is unavailable, provide only a minimal unified diff or ta
 </response_rules>
 
 Start with the audit and approval question. Do not translate yet.
-

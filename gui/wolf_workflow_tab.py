@@ -1545,13 +1545,13 @@ class WolfWorkflowTab(QWidget):
                     if res.ok and out.is_file():
                         manifest_entries.append({"json": "Evtext.json", "base": str(evtext), "kind": "txt-dir"})
 
-                log("Extracting name glossary …")
+                log("Extracting name list …")
                 names_out = work_dir / NAMES_JSON
                 res = wolfdawn.names_extract(str(data_dir), str(names_out), log_fn=log)
                 if res.ok and names_out.is_file():
                     manifest_entries.append({"json": NAMES_JSON, "base": str(data_dir), "kind": "names"})
             elif any(e.get("kind") == "map" for e in manifest_entries):
-                log("Refreshing name glossary (maps were added) …")
+                log("Refreshing name list (maps were added) …")
                 names_out = work_dir / NAMES_JSON
                 res = wolfdawn.names_extract(str(data_dir), str(names_out), log_fn=log)
                 if res.ok and names_out.is_file():
@@ -1601,7 +1601,7 @@ class WolfWorkflowTab(QWidget):
             2, "Speakers & Guidance", "Configure speaker handling and maintain project guidance."
         ))
         layout.addWidget(self._desc(
-            "Copy Project Setup into Cursor/Copilot with files/ open. Paste glossary into Vocab, "
+            "Copy Project Setup into Cursor/Copilot with files/ open. Paste the glossary block into the Glossary tab, "
             "quirks into Quirks, game_skill into Game skills. Speakers advice (LOWCONF_FIRSTLINE) "
             "is applied via the Step 5 checkbox - keep that step self-contained."
         ))
@@ -1621,8 +1621,8 @@ class WolfWorkflowTab(QWidget):
         layout.addLayout(actions)
 
         note = self._desc(
-            "Do not list names.json item/skill/enemy values in the glossary - Phase 0 "
-            "(Step 3) harvests those. Focus Vocab on characters and worldbuilding."
+            "Do not list names.json item/skill/enemy values in the Glossary - Phase 0 "
+            "(Step 3) harvests those. Focus the Glossary on characters and worldbuilding."
         )
         layout.addWidget(note)
 
@@ -1643,7 +1643,7 @@ class WolfWorkflowTab(QWidget):
                 speaker_lines = "\n".join(f"  {orig} ({tl})" for orig, tl in speakers)
                 prepend = (
                     "<known_speakers>\n"
-                    "These character names were already listed in vocab.txt.\n"
+                    "These character names were already listed in the Glossary (vocab.txt).\n"
                     "For the glossary block '# Game Characters', prefer entries for these names, "
                     "then cross-check DataBase*.project.json and dialogue for other major names.\n"
                     "\n"
@@ -1782,7 +1782,7 @@ class WolfWorkflowTab(QWidget):
         narr_btn = self._register(_make_btn("Translate narrative database", "#00a86b"))
         narr_btn.setToolTip(
             "Translate narrative custom sheets after foundation is done. "
-            "Short foundation labels are merged into vocab.txt."
+            "Short foundation labels are merged into the Glossary."
         )
         narr_btn.clicked.connect(
             lambda: self._translate_db_tiers(wolf_db.NARRATIVE_TIERS, auto_start=True)
@@ -2019,7 +2019,7 @@ class WolfWorkflowTab(QWidget):
         layout.addWidget(self._desc(
             "Map scripts (.mps), common events (CommonEvent.dat), Game.dat, and Evtext - "
             "story dialogue, UI/objective strings, and other event text. Run after Steps "
-            "3-4 so vocab.txt and database terms are already consistent. CommonEvent.dat "
+            "3-4 so the Glossary and database terms are already consistent. CommonEvent.dat "
             "can be very large; Batch mode is recommended for big files."
         ))
         self._add_speaker_options(layout)
@@ -2284,13 +2284,13 @@ class WolfWorkflowTab(QWidget):
 
     def _build_step3_names(self, layout: QVBoxLayout):
         layout.addWidget(self._page_header(
-            3, "Translate Names", "Translate safe character and location names, then update the glossary."
+            3, "Translate Names", "Translate safe character and location names, then update the Glossary."
         ))
         layout.addWidget(self._desc(
-            "names.json is WolfDawn's project-wide name glossary. Each entry has a safety badge: "
+            "names.json is WolfDawn's project-wide name list. Each entry has a safety badge: "
             "safe (display-only), refs (referenced by name - skipped), or verify "
             "(also in indirect literals - skipped). Phase 0 translates every safe entry "
-            "individually, regardless of category, and harvests them into vocab.txt."
+            "individually, regardless of category, and adds them to the Glossary."
         ))
 
         self.names_summary_label = QLabel("Open this step after extraction to see name counts.")
@@ -2366,7 +2366,7 @@ class WolfWorkflowTab(QWidget):
             6, "Validate Injection", "Preview injection and resolve unsafe or inconsistent text first."
         )
         title.setToolTip(
-            "Reconcile names.json → glossary spellings, report name inconsistencies, "
+            "Reconcile names.json → Glossary spellings, report name inconsistencies, "
             "then dry-run selected JSON for safety skips (control-code mismatch, or "
             "text not Shift-JIS encodable). Fix safety rows here, then Step 7 (Inject)."
         )
@@ -2397,7 +2397,7 @@ class WolfWorkflowTab(QWidget):
         sel_none_btn.clicked.connect(lambda: self._set_checklist_checks(self.precheck_list, False))
         precheck_btn = self._register(_make_btn("Preview selected injection", "#007acc"))
         precheck_btn.setToolTip(
-            "Reconcile names → glossary, run names-check, then dry-run inject "
+            "Reconcile names → Glossary, run names-check, then dry-run inject "
             "safety guards on the ticked files."
         )
         precheck_btn.clicked.connect(self._precheck_inject_selected)

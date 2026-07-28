@@ -504,8 +504,8 @@ _STEP_HELP: dict[int, str] = {
         "<b>1. Speaker flags</b> - enable the formats this game uses "
         "(INLINE401 / FIRSTLINE / FACENAME). Tooltips explain each flag. "
         "Project Setup's speakers block can recommend ENABLE/SKIP.<br><br>"
-        "<b>2. Collect names</b> - scan event files for speaker names and write them to "
-        "<code>vocab.txt</code> (# Speakers). Does not translate dialogue.<br><br>"
+        "<b>2. Collect names</b> - scan event files for speaker names and add them to the "
+        "Glossary (<code>vocab.txt</code>, # Speakers). Does not translate dialogue.<br><br>"
         "<b>3. Copy setup skill</b> - paste it into Cursor/Copilot with the game repo open. "
         "The AI returns labeled code blocks:<br>"
         "• <code>glossary</code> → Glossary tab<br>"
@@ -541,13 +541,14 @@ _STEP_HELP: dict[int, str] = {
     ),
     5: (
         "<b>Step 5 - Export to Game</b><br><br>"
-        "<b>MV/MZ - Plugins</b> (optional before shipping): copy <code>vocab.txt</code> into "
+        "<b>MV/MZ - Plugins</b> (optional before shipping): copy the Glossary "
+        "(<code>vocab.txt</code>) into "
         "the game folder, then copy the plugins.js prompt and run it in your IDE with "
         "<code>plugins.js</code> attached. Only translate player-visible UI strings - never "
         "plugin parameter keys or internal identifiers.<br><br>"
         "<b>Ace - Ruby scripts</b> (instead of plugins.js): RV2JSON unpacks "
         "<code>Data/Scripts.rvdata2</code> into <code>ace_json/scripts/*.rb</code>. "
-        "Copy vocab + the Ace scripts prompt, edit those <code>.rb</code> files in Cursor/VS Code "
+        "Copy the Glossary + the Ace scripts prompt, edit those <code>.rb</code> files in Cursor/VS Code "
         "the same way you would edit plugins.js (player-visible strings only). "
         "Then use <b>Export</b> - the tool runs <code>RV2JSON -u</code> and packs "
         "<code>ace_json/</code> (including scripts) back into <code>Data/*.rvdata2</code>.<br><br>"
@@ -577,7 +578,7 @@ _STEP_HELP: dict[int, str] = {
         "<b>Step 7 - Translate Images (MV/MZ)</b><br><br>"
         "Use the existing <b>Images</b> page for bitmap UI translation:<br>"
         "• Confirm this step reports the correct game root, image tree, encryption key, and "
-        "<code>vocab.txt</code><br>"
+        "Glossary (<code>vocab.txt</code>)<br>"
         "• Open the Image Manager and make the images you want to translate editable<br>"
         "• Click <b>Copy skill</b>, paste it into Codex/Cursor/Copilot, and let the agent edit "
         "only the generated <code>.dazedtl/images/.../img</code> copies<br>"
@@ -1559,7 +1560,7 @@ class WorkflowTab(QWidget):
 
         parse_btn = _make_btn("🔍  Collect names", "#0e639c")
         parse_btn.setToolTip(
-            "Collect speaker names from event files into vocab.txt # Speakers "
+            "Collect speaker names from event files into the Glossary's # Speakers section "
             "(no dialogue translation)."
         )
         parse_btn.clicked.connect(self._run_parse_speakers)
@@ -1586,7 +1587,7 @@ class WorkflowTab(QWidget):
         guidance_stage = WorkflowStageCard(
             3,
             "Edit glossary and project guidance",
-            "Keep the glossary concise, record translation rules, and review the generated game guidance.",
+            "Keep the Glossary concise, record translation rules, and review the generated game guidance.",
         )
         self.setup_editors = SetupSkillsEditors(
             self,
@@ -1634,7 +1635,7 @@ class WorkflowTab(QWidget):
             self._log("─" * 54)
             self._log("🔍  Switching to Parse Speakers mode…")
             self._log("   Event files selected. Speaker names will be")
-            self._log("   collected and written to vocab.txt # Speakers.")
+            self._log("   collected and added to the Glossary (# Speakers).")
             self._log("─" * 54)
 
         except Exception as exc:
@@ -2533,7 +2534,7 @@ class WorkflowTab(QWidget):
         preparation = WorkflowStageCard(
             1,
             "Prepare plugin or script translations",
-            "Copy the glossary and engine-specific translation skill before editing player-visible strings.",
+            "Copy the Glossary and engine-specific translation skill before editing player-visible strings.",
         )
         prep_layout = preparation.body
         self._step6_section_label = QLabel("Plugins")
@@ -2545,7 +2546,7 @@ class WorkflowTab(QWidget):
 
         self._step6_vocab_btn = _make_btn("📄  Copy glossary to game", "#555")
         self._step6_vocab_btn.setToolTip(
-            "Copy vocab.txt to <game root>/vocab.txt so you can attach it "
+            "Copy the Glossary to <game root>/vocab.txt so you can attach it "
             "alongside plugins.js (or Ace .rb scripts) when running the AI prompt."
         )
         self._step6_vocab_btn.clicked.connect(self._copy_vocab_to_game)
@@ -2615,7 +2616,7 @@ class WorkflowTab(QWidget):
         status_box = WorkflowStageCard(
             1,
             "Check image readiness",
-            "Verify the game folder, encryption key, glossary, and editable-image workspace.",
+            "Verify the game folder, encryption key, Glossary, and editable-image workspace.",
         )
         status_layout = status_box.body
 
@@ -2629,7 +2630,7 @@ class WorkflowTab(QWidget):
         status_layout.addWidget(self._image_workflow_status)
 
         refresh_btn = _make_btn("↻  Refresh readiness", "#555")
-        refresh_btn.setToolTip("Recheck the game folder, images, encryption key, and glossary")
+        refresh_btn.setToolTip("Recheck the game folder, images, encryption key, and Glossary")
         _size_action_button(refresh_btn)
         refresh_btn.clicked.connect(self._refresh_image_workflow_status)
         status_layout.addWidget(refresh_btn, 0, Qt.AlignLeft)
@@ -2638,7 +2639,7 @@ class WorkflowTab(QWidget):
         flow_box = WorkflowStageCard(
             2,
             "Prepare images for translation",
-            "Create editable PNG copies, provide the glossary, and run the image skill with your coding agent.",
+            "Create editable PNG copies, provide the Glossary, and run the image skill with your coding agent.",
         )
         flow_layout = flow_box.body
 
@@ -2655,7 +2656,7 @@ class WorkflowTab(QWidget):
         actions.setSpacing(Spacing.SM)
         copy_vocab_btn = _make_btn("📄  Copy glossary to game", "#555")
         copy_vocab_btn.setToolTip(
-            "Copy the current glossary to <game root>/vocab.txt for the image translation skill."
+            "Copy the current Glossary to <game root>/vocab.txt for the image translation skill."
         )
         copy_vocab_btn.clicked.connect(self._copy_vocab_to_game)
         _size_action_button(copy_vocab_btn, Geometry.ACTION_WIDE)
@@ -3530,12 +3531,12 @@ class WorkflowTab(QWidget):
         if vocab_btn is not None:
             if is_ace:
                 vocab_btn.setToolTip(
-                    "Copy vocab.txt to <game root>/vocab.txt so you can attach it "
+                    "Copy the Glossary to <game root>/vocab.txt so you can attach it "
                     "alongside ace_json/scripts/*.rb when running the AI prompt."
                 )
             else:
                 vocab_btn.setToolTip(
-                    "Copy vocab.txt to <game root>/vocab.txt so you can attach it "
+                    "Copy the Glossary to <game root>/vocab.txt so you can attach it "
                     "alongside plugins.js when running the AI prompt."
                 )
         btn = getattr(self, "_step6_copy_btn", None)
@@ -4130,17 +4131,17 @@ class WorkflowTab(QWidget):
 
         src = VOCAB_PATH
         if not src.exists():
-            self._log("⚠  vocab.txt not found — save it in Step 2 first.")
+            self._log("⚠  Glossary file (data/vocab.txt) not found — save it in Step 2 first.")
             return
 
         import shutil
         dst = Path(game_root) / "vocab.txt"
         try:
             shutil.copy2(src, dst)
-            self._log(f"✅ vocab.txt copied to {dst}")
+            self._log(f"✅ Glossary copied to {dst}")
             self._refresh_image_workflow_status()
         except Exception as exc:
-            self._log(f"❌ Could not copy vocab.txt: {exc}")
+            self._log(f"❌ Could not copy the Glossary: {exc}")
 
     def _copy_plugins_js_translate_prompt(self):
         is_ace = bool(

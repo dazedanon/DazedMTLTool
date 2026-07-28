@@ -109,6 +109,8 @@ class CharacterCompoundMatchingTests(unittest.TestCase):
         pairs = parseVocabWithCategories(VOCAB)
         matched = buildMatchedVocabText(pairs, "ユウイベント5")
 
+        self.assertIn("Here are glossary entries", matched)
+        self.assertNotIn("Here are some vocabulary", matched)
         self.assertIn("ユウ (Yuu)", matched)
 
     def test_non_character_short_term_keeps_script_boundaries(self):

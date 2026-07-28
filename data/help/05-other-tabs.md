@@ -25,6 +25,13 @@ Some changes cannot be chosen safely by the tool. Review anything marked **Needs
 
 Packed RPG Maker Ace and WOLF game updates are not supported here yet.
 
+### Do not confuse the two update buttons
+
+- **Check for Updates** updates the DazedTL program itself.
+- **Version Update** moves your translation to a newer release of a game.
+
+They do not update each other.
+
 ## Translation
 
 This is the manual translation screen. Workflow opens it for you at the correct time.
@@ -41,6 +48,10 @@ Use this for Japanese words that are part of a picture, such as a title, button,
 3. Click **Copy skill** and paste the instructions into your AI helper.
 4. Review the edited pictures.
 5. Use **Patch selected** to put only the pictures you chose back into the game.
+
+For difficult image work, DazedTL recommends Codex with **GPT-5.6 Sol** when available. Smaller
+models can handle simple images, but may struggle with small writing, unusual fonts, or fitting the
+English neatly into the original design.
 
 The original game pictures are not changed until you click a Patch button. DazedTL also keeps
 backups, but you should keep your own untouched copy of the game.

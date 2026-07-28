@@ -587,7 +587,7 @@ class TranslationWorker(QThread):
                 self.status_signal.emit(f"Translating {speaker_n} speakers…")
                 self.emit_log(
                     f"🔤 File scan complete ({completed_count}/{total_files}). "
-                    f"Translating {speaker_n} unique speakers into vocab.txt…"
+                    f"Adding {speaker_n} unique speakers to the glossary…"
                 )
             else:
                 self.status_signal.emit("No speakers found")

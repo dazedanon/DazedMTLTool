@@ -220,7 +220,7 @@ Text must remain legible at 100%, 150%, and 200% application font scale.
   Modifier gestures update the affected checkmarks as well as the visible
   gesture range, so Ctrl/Shift never creates a highlight-only action scope.
 
-## 6. Copy vocabulary
+## 6. Copy glossary
 
 Prefer these verbs consistently:
 
