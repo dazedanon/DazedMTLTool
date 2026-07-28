@@ -35,6 +35,7 @@ class TranslationEngineDropdownTests(unittest.TestCase):
             "language",
             "timeout",
             "width",
+            "faceWidth",
             "listWidth",
             "noteWidth",
         )

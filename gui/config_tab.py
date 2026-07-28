@@ -806,6 +806,18 @@ class ConfigTab(QWidget):
         self.width_spin.setSuffix(" chars")
         add_row(trans_section, "Dialogue Width:", size_field(self.width_spin))
 
+        self.face_width_spin = QSpinBox()
+        self.face_width_spin.setButtonSymbols(QSpinBox.NoButtons)
+        self.face_width_spin.setRange(10, 200)
+        self.face_width_spin.setValue(50)
+        self.face_width_spin.setSuffix(" chars")
+        self.face_width_spin.setToolTip(
+            "Dialogue wrap width when a standard code-101 face graphic reserves window space."
+        )
+        self.face_width_spin.setMaximum(self.width_spin.value())
+        self.width_spin.valueChanged.connect(self.face_width_spin.setMaximum)
+        add_row(trans_section, "Dialogue + Face:", size_field(self.face_width_spin))
+
         self.list_width_spin = QSpinBox()
         self.list_width_spin.setButtonSymbols(QSpinBox.NoButtons)
         self.list_width_spin.setRange(20, 200)
@@ -1210,6 +1222,7 @@ class ConfigTab(QWidget):
 
         # Formatting settings
         self.width_spin.setValue(int(_get("width", "60")))
+        self.face_width_spin.setValue(int(_get("faceWidth", "50")))
         self.list_width_spin.setValue(int(_get("listWidth", "100")))
         self.note_width_spin.setValue(int(_get("noteWidth", "75")))
         self.convert_quotes_cb.setChecked(
@@ -1274,6 +1287,7 @@ class ConfigTab(QWidget):
         self.batch_size_spin.editingFinished.connect(self.auto_save)
         self.frequency_penalty_spin.editingFinished.connect(self.auto_save)
         self.width_spin.editingFinished.connect(self.auto_save)
+        self.face_width_spin.editingFinished.connect(self.auto_save)
         self.list_width_spin.editingFinished.connect(self.auto_save)
         self.note_width_spin.editingFinished.connect(self.auto_save)
         self.convert_quotes_cb.stateChanged.connect(self._on_convert_quotes_changed)
@@ -1299,6 +1313,7 @@ class ConfigTab(QWidget):
             self.batch_size_spin.editingFinished.disconnect(self.auto_save)
             self.frequency_penalty_spin.editingFinished.disconnect(self.auto_save)
             self.width_spin.editingFinished.disconnect(self.auto_save)
+            self.face_width_spin.editingFinished.disconnect(self.auto_save)
             self.list_width_spin.editingFinished.disconnect(self.auto_save)
             self.note_width_spin.editingFinished.disconnect(self.auto_save)
             self.convert_quotes_cb.stateChanged.disconnect(self._on_convert_quotes_changed)
@@ -1358,6 +1373,7 @@ class ConfigTab(QWidget):
                 "batchsize": str(self.batch_size_spin.value()),
                 "frequency_penalty": str(self.frequency_penalty_spin.value()),
                 "width": str(self.width_spin.value()),
+                "faceWidth": str(min(self.width_spin.value(), self.face_width_spin.value())),
                 "listWidth": str(self.list_width_spin.value()),
                 "noteWidth": str(self.note_width_spin.value()),
                 "convertQuotes": "true" if self.convert_quotes_cb.isChecked() else "false",
@@ -1422,6 +1438,7 @@ class ConfigTab(QWidget):
         
         # Formatting settings
         self.width_spin.setValue(60)
+        self.face_width_spin.setValue(50)
         self.list_width_spin.setValue(100)
         self.note_width_spin.setValue(75)
         self.convert_quotes_cb.setChecked(True)
@@ -1468,6 +1485,7 @@ class ConfigTab(QWidget):
             "batchsize": self.batch_size_spin.value(),
             "frequency_penalty": self.frequency_penalty_spin.value(),
             "width": self.width_spin.value(),
+            "faceWidth": min(self.width_spin.value(), self.face_width_spin.value()),
             "listWidth": self.list_width_spin.value(),
             "noteWidth": self.note_width_spin.value(),
             "convertQuotes": self.convert_quotes_cb.isChecked(),

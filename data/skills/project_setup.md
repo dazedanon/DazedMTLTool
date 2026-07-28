@@ -166,7 +166,11 @@ geometry rather than generic RPG Maker defaults whenever project code is availab
 6. For dialogue, verify the recommendation against the actual message-row limit, commonly four.
    If a long message cannot fit without unreadable font reduction or horizontal overflow, flag it
    for pagination/manual reflow instead of forcing an unsafe four-line wrap.
-7. Recommend one conservative shared width and one readable font size for each category. If the
+7. Detect standard message faces from non-empty code-101 parameter 0 values. Calculate both the
+   full dialogue width and the reduced `faceWidth`; DazedTL selects `faceWidth` automatically for
+   those message groups. For plugin portraits outside code 101, document the detection gap and use
+   a conservative global width or recommend custom handling.
+8. Recommend one conservative shared width and one readable font size for each category. If the
    current font should remain unchanged, say `keep current` and report its measured size. Cite the
    files/functions/plugin parameters supporting every recommendation and give a confidence level.
 
@@ -179,7 +183,7 @@ Label the fence language as `rpgmaker_config`. Inside:
 ```text
 CODE408 : ENABLE|SKIP - <runtime evidence, affected count, and confidence>
 
-Dialogue : width=<DazedTL width> ; font=<px or keep current (measured px)> ; rows=<count>
+Dialogue : width=<full width> ; faceWidth=<code-101 face width> ; font=<px or keep current (measured px)> ; rows=<count>
 List/Help: listWidth=<DazedTL width> ; font=<px or keep current (measured px)> ; rows=<count or varies>
 Notes    : noteWidth=<DazedTL width> ; font=<px or keep current (measured px)> ; rows=<count or varies>
 

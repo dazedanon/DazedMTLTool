@@ -28,6 +28,10 @@ VOCAB = VOCAB_PATH.read_text(encoding="utf-8")
 LOCK = threading.Lock()
 THREAD_CTX = threading.local()
 WIDTH = int(os.getenv("width"))
+FACEWIDTH = max(
+    1,
+    min(WIDTH, int(os.getenv("faceWidth", str(max(1, WIDTH - 10))))),
+)
 LISTWIDTH = int(os.getenv("listWidth"))
 NOTEWIDTH = int(os.getenv("noteWidth"))
 MAXHISTORY = 10
@@ -726,6 +730,16 @@ def _facename101_speaker(cmd) -> str | None:
         if face_name.startswith(prefix):
             return name
     return None
+
+
+def _101_has_face_graphic(cmd) -> bool:
+    """Return whether a standard code-101 command reserves face-image space."""
+    params = cmd.get("parameters") or []
+    return (
+        len(params) >= 4
+        and isinstance(params[0], str)
+        and bool(params[0].strip())
+    )
 
 
 def _entry_orig(entry) -> dict:
@@ -2332,7 +2346,7 @@ def searchCodes(page, pbar, jobList, filename):
     syncIndex = 0
     maxHistory = MAXHISTORY
     VNameValue = None
-    reduceWidthFlag = False  # Track if 101 code has non-empty first parameter
+    reduceWidthFlag = False  # Track whether the active 101 reserves face space
     global LOCK
     global NAMESLIST
     global MISMATCH
@@ -2365,6 +2379,17 @@ def searchCodes(page, pbar, jobList, filename):
             sourceGroup = []
             currentSourceGroup = []
             nametag = ""
+
+            # Face layout affects the following message even when code-101 name
+            # translation is disabled or face-to-speaker resolution exits early.
+            if "code" in codeList[i] and codeList[i]["code"] == 101:
+                reduceWidthFlag = _101_has_face_graphic(codeList[i])
+            elif (
+                reduceWidthFlag
+                and "code" in codeList[i]
+                and codeList[i]["code"] not in (401, -1)
+            ):
+                reduceWidthFlag = False
 
             ## Event Code: 401 Show Text
             if "code" in codeList[i] and codeList[i]["code"] in [401, 405, -1] and ((codeList[i]["code"] in [401, -1] and CODE401) or (codeList[i]["code"] == 405 and CODE405)):
@@ -2756,7 +2781,7 @@ def searchCodes(page, pbar, jobList, filename):
                                 finalJAString = finalJAString.replace("<br>", " ")
 
                             # Determine width based on reduceWidthFlag
-                            currentWidth = WIDTH - 15 if reduceWidthFlag else WIDTH
+                            currentWidth = FACEWIDTH if reduceWidthFlag else WIDTH
 
                             if FIXTEXTWRAP is True and "_ABL" in nametag:
                                 translatedText = dazedwrap.wrapText(translatedText, width=100)
@@ -3205,9 +3230,6 @@ def searchCodes(page, pbar, jobList, filename):
                 # Grab String
                 jaString = ""
                 if len(codeList[i]["parameters"]) > 4:
-                    # Set flag if first parameter has a non-empty string
-                    if isinstance(codeList[i]["parameters"][0], str) and codeList[i]["parameters"][0].strip():
-                        reduceWidthFlag = True
                     jaString = codeList[i]["parameters"][4]
                 # Check for Var (only when parameters[0] is not a face file,
                 # i.e. fewer than 4 params — standard code 101 always has 4:

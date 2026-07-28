@@ -10,6 +10,7 @@ import re
 import sys
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 os.chdir(ROOT)
@@ -192,6 +193,80 @@ def _has_japanese(s: str) -> bool:
 
 
 class TestMVMZSourceOriginal(unittest.TestCase):
+    def test_code101_face_detection_supports_mv_and_mz_shapes(self):
+        self.assertTrue(
+            mvmz._101_has_face_graphic(
+                {"parameters": ["Actor1", 0, 0, 2]}
+            )
+        )
+        self.assertTrue(
+            mvmz._101_has_face_graphic(
+                {"parameters": ["Actor1", 0, 0, 2, "Alice"]}
+            )
+        )
+        self.assertFalse(
+            mvmz._101_has_face_graphic(
+                {"parameters": ["", 0, 0, 2, "Alice"]}
+            )
+        )
+
+    def test_code101_face_uses_configured_face_width_after_speaker_resolution(self):
+        page = {
+            "list": [
+                {
+                    "code": 101,
+                    "indent": 0,
+                    "parameters": ["___princess1", 0, 0, 2, ""],
+                },
+                {
+                    "code": 401,
+                    "indent": 0,
+                    "parameters": ["これは顔付きの長い台詞です。"],
+                },
+            ]
+        }
+        widths = []
+
+        def capture_wrap(text, width):
+            widths.append(width)
+            return text
+
+        with (
+            patch.object(mvmz, "WIDTH", 60),
+            patch.object(mvmz, "FACEWIDTH", 50),
+            patch.object(mvmz, "FACENAME101", True),
+            patch.object(mvmz.dazedwrap, "wrapText", side_effect=capture_wrap),
+        ):
+            _run_search_codes(page)
+
+        self.assertEqual(widths, [50])
+
+    def test_code101_without_face_uses_full_dialogue_width(self):
+        page = {
+            "list": [
+                {"code": 101, "indent": 0, "parameters": ["", 0, 0, 2, ""]},
+                {
+                    "code": 401,
+                    "indent": 0,
+                    "parameters": ["これは通常幅の台詞です。"],
+                },
+            ]
+        }
+        widths = []
+
+        def capture_wrap(text, width):
+            widths.append(width)
+            return text
+
+        with (
+            patch.object(mvmz, "WIDTH", 60),
+            patch.object(mvmz, "FACEWIDTH", 50),
+            patch.object(mvmz.dazedwrap, "wrapText", side_effect=capture_wrap),
+        ):
+            _run_search_codes(page)
+
+        self.assertEqual(widths, [60])
+
     def test_choice_condition_prefix_parser_handles_nested_calls(self):
         prefix, label = mvmz._split_choice_condition_prefix(
             "if($gameSwitches.value(1) && v[31]>=4)迷宮四階"

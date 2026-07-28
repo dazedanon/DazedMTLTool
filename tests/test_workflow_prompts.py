@@ -59,6 +59,7 @@ class WorkflowTranslationPromptTests(unittest.TestCase):
         self.assertIn("code408 : enable|skip", lowered)
         self.assertIn("translate code 408 plugin/comment text", lowered)
         self.assertIn("dialogue : width=", lowered)
+        self.assertIn("facewidth=<code-101 face width>", lowered)
         self.assertIn("list/help: listwidth=", lowered)
         self.assertIn("notes    : notewidth=", lowered)
         self.assertIn("face/portrait reservation", lowered)
@@ -102,6 +103,13 @@ class WorkflowTranslationPromptTests(unittest.TestCase):
         self.assertNotIn("_WOLF_SPEAKER_PROMPT", wolf_source)
         self.assertIn("QA Game Data Skill", workflow_source)
         self.assertIn('load_clipboard_skill("rpgmaker_translation_qa.md")', workflow_source)
+
+    def test_wrap_prompt_accounts_for_code101_faces_and_font_changes(self):
+        prompt = load_clipboard_skill("wrap_config.md").casefold()
+        self.assertIn("facewidth", prompt)
+        self.assertIn("non-empty parameter 0", prompt)
+        self.assertIn("plugin portraits", prompt)
+        self.assertIn("pagination/manual reflow", prompt)
 
     def test_image_translation_prompt_ends_skips_with_recovery_options(self):
         prompt = load_clipboard_skill("image_translation.md")

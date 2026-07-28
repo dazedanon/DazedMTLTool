@@ -1744,13 +1744,14 @@ class WorkflowTab(QWidget):
 
         wrap_hint = QLabel(
             "Use Project Setup's measured rpgmaker_config recommendations, then apply the three "
-            "wrap widths to .env. Font recommendations describe the game UI and are not applied here."
+            "category widths plus the dialogue-face variant to .env. Font recommendations "
+            "describe the game UI and are not applied here."
         )
         wrap_hint.setWordWrap(True)
         wrap_hint.setStyleSheet("color:#9d9d9d;font-size:13px;")
         wrap_inner.addWidget(wrap_hint)
 
-        # All three spinboxes on one row
+        # Wrap settings on one row, including the narrower code-101 face variant.
         spins_row = QHBoxLayout()
         spins_row.setSpacing(16)
 
@@ -1764,10 +1765,14 @@ class WorkflowTab(QWidget):
             return lbl, sp
 
         lbl_w,  self.wrap_width_spin = _spin_pair("Dialogue", 60)
+        lbl_fw, self.wrap_face_spin  = _spin_pair("Dialogue+Face", 50)
+        self.wrap_face_spin.setMaximum(self.wrap_width_spin.value())
+        self.wrap_width_spin.valueChanged.connect(self.wrap_face_spin.setMaximum)
         lbl_lw, self.wrap_list_spin  = _spin_pair("List/Help", 70)
         lbl_nw, self.wrap_note_spin  = _spin_pair("Notes", 60)
 
         for lbl, sp in [(lbl_w, self.wrap_width_spin),
+                        (lbl_fw, self.wrap_face_spin),
                         (lbl_lw, self.wrap_list_spin),
                         (lbl_nw, self.wrap_note_spin)]:
             spins_row.addWidget(lbl)
@@ -1776,7 +1781,9 @@ class WorkflowTab(QWidget):
 
         apply_wrap_btn = _make_btn("✔  Apply to .env", "#3a7a3a")
         apply_wrap_btn.setFixedWidth(140)
-        apply_wrap_btn.setToolTip("Write width / listWidth / noteWidth into .env")
+        apply_wrap_btn.setToolTip(
+            "Write width / faceWidth / listWidth / noteWidth into .env"
+        )
         apply_wrap_btn.clicked.connect(self._apply_wrap_config)
         spins_row.addWidget(apply_wrap_btn)
 
@@ -3840,10 +3847,11 @@ class WorkflowTab(QWidget):
             self._log(f"❌ Could not copy {filename}: {exc}")
 
     def _apply_wrap_config(self):
-        """Write width / listWidth / noteWidth back into .env."""
+        """Write dialogue, face-dialogue, list, and note widths back into .env."""
         import re as _re
         updates = {
             "width":     str(self.wrap_width_spin.value()),
+            "faceWidth": str(min(self.wrap_width_spin.value(), self.wrap_face_spin.value())),
             "listWidth": str(self.wrap_list_spin.value()),
             "noteWidth": str(self.wrap_note_spin.value()),
         }

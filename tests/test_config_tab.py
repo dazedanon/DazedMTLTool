@@ -38,6 +38,7 @@ class ConfigTabRegressionTests(unittest.TestCase):
         "batchsize",
         "frequency_penalty",
         "width",
+        "faceWidth",
         "listWidth",
         "noteWidth",
         "convertQuotes",
@@ -89,6 +90,7 @@ class ConfigTabRegressionTests(unittest.TestCase):
                 "batchsize=42",
                 "frequency_penalty=0.75",
                 "width=88",
+                "faceWidth=77",
                 "listWidth=99",
                 "noteWidth=111",
                 "convertQuotes=false",
@@ -142,6 +144,7 @@ class ConfigTabRegressionTests(unittest.TestCase):
         self.assertEqual(tab.batch_size_spin.value(), 42)
         self.assertAlmostEqual(tab.frequency_penalty_spin.value(), 0.75)
         self.assertEqual(tab.width_spin.value(), 88)
+        self.assertEqual(tab.face_width_spin.value(), 77)
         self.assertEqual(tab.list_width_spin.value(), 99)
         self.assertEqual(tab.note_width_spin.value(), 111)
         self.assertFalse(tab.convert_quotes_cb.isChecked())
@@ -206,6 +209,7 @@ class ConfigTabRegressionTests(unittest.TestCase):
                 tab.language_combo,
                 tab.timeout_spin,
                 tab.width_spin,
+                tab.face_width_spin,
                 tab.list_width_spin,
                 tab.note_width_spin,
             ),
@@ -319,6 +323,7 @@ class ConfigTabRegressionTests(unittest.TestCase):
         tab.batch_size_spin.setValue(64)
         tab.frequency_penalty_spin.setValue(1.25)
         tab.width_spin.setValue(72)
+        tab.face_width_spin.setValue(62)
         tab.list_width_spin.setValue(84)
         tab.note_width_spin.setValue(96)
         tab.convert_quotes_cb.setChecked(True)
@@ -350,6 +355,7 @@ class ConfigTabRegressionTests(unittest.TestCase):
             "batchsize": "64",
             "frequency_penalty": "1.25",
             "width": "72",
+            "faceWidth": "62",
             "listWidth": "84",
             "noteWidth": "96",
             "convertQuotes": "true",
@@ -374,6 +380,7 @@ class ConfigTabRegressionTests(unittest.TestCase):
         self.assertEqual(reloaded.batch_size_spin.value(), 64)
         self.assertAlmostEqual(reloaded.frequency_penalty_spin.value(), 1.25)
         self.assertEqual(reloaded.width_spin.value(), 72)
+        self.assertEqual(reloaded.face_width_spin.value(), 62)
         self.assertEqual(reloaded.list_width_spin.value(), 84)
         self.assertEqual(reloaded.note_width_spin.value(), 96)
         self.assertTrue(reloaded.convert_quotes_cb.isChecked())
@@ -409,6 +416,7 @@ class ConfigTabRegressionTests(unittest.TestCase):
         self.assertEqual(tab.batch_size_spin.value(), 30)
         self.assertAlmostEqual(tab.frequency_penalty_spin.value(), 0.05)
         self.assertEqual(tab.width_spin.value(), 60)
+        self.assertEqual(tab.face_width_spin.value(), 50)
         self.assertEqual(tab.list_width_spin.value(), 100)
         self.assertEqual(tab.note_width_spin.value(), 75)
         self.assertTrue(tab.convert_quotes_cb.isChecked())
@@ -431,6 +439,7 @@ class ConfigTabRegressionTests(unittest.TestCase):
             "batchsize": "30",
             "frequency_penalty": "0.05",
             "width": "60",
+            "faceWidth": "50",
             "listWidth": "100",
             "noteWidth": "75",
             "convertQuotes": "true",

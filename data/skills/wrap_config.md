@@ -1,32 +1,48 @@
 You are an expert RPGMaker MV/MZ configuration analyst.
 
 <task>
-Calculate the correct text-wrap width settings for a Japanese-to-English RPGMaker MV/MZ translation tool. The tool wraps translated English using character-count limits (not pixels). I need three values: width, listWidth, and noteWidth.
+Calculate the correct text-wrap and font recommendations for a Japanese-to-English RPGMaker
+MV/MZ translation tool. The tool wraps translated English using character-count limits, not pixels.
+I need `width`, `faceWidth`, `listWidth`, and `noteWidth`, plus a font recommendation for dialogue,
+list/help text, and notes.
 </task>
 
---- attach System.json and js/plugins.js here before continuing ---
+--- open the game repository and inspect its data/ and js/ folders before continuing ---
 
 <instructions>
-1. Read screenWidth and fontSize from System.json.
-   Check js/plugins.js for any MessageCore or Window plugin that overrides these values.
-2. For each window type, estimate its pixel width, subtract ~48px padding, then calculate:
-   chars = floor(content_px / (font_size × 0.58))
-   - width:      main dialogue/message box (Show Text) — typically full screen width
-   - listWidth:  item/skill/help description windows — typically full or half screen width
-   - noteWidth:  database note fields — typically the narrowest pane (~40–50% screen width)
-3. If font size is above 26px and reducing it would meaningfully increase characters per line, note where to change it (System.json or the relevant plugin parameter).
+1. Read the resolution and base fonts from `System.json` and engine code. Inspect enabled entries in
+   `js/plugins.js` and their plugin sources for message, help, list, note, portrait, font, padding,
+   line-height, column, and window-size overrides.
+2. For dialogue, inspect code-101 commands. A non-empty parameter 0 is a standard face graphic and
+   reserves horizontal space. Calculate both the full `width` and reduced `faceWidth`; DazedTL
+   selects `faceWidth` automatically for those message groups. Identify plugin portraits that do
+   not use code 101 as exceptions requiring a conservative width or custom handling.
+3. For Dialogue, List/Help, and Notes, calculate usable pixels from the actual window geometry:
+   subtract padding, text inset, faces/portraits, icons, columns, and plugin margins. Calculate row
+   capacity from usable height and line height.
+4. Account for the real font face and base size plus `\\{`, `\\}`, `\\FS[n]`, custom font codes,
+   inline icons/images, and plugin scaling. Measure representative English glyphs in the real font
+   when possible; otherwise state the conservative average used. Never copy pixels directly into a
+   character-count setting.
+5. Test representative short, long, icon-heavy, control-code-heavy, and font-changed values. Check
+   dialogue against its real row limit, commonly four. Recommend pagination/manual reflow when a
+   message cannot fit without unreadable font reduction or horizontal overflow.
+6. Recommend a readable font for each category. Use `keep current (<N>px)` when no game-side font
+   change is needed; otherwise cite the exact plugin parameter or function that would change it.
 </instructions>
 
 <output_format>
-Output only the final values — do not show calculations:
+Output the recommendations followed by compact evidence and exceptions:
 
 ```
-width=<N>
-listWidth=<N>
-noteWidth=<N>
-fontSize=<N>   # or: no change needed
-```
+Dialogue : width=<N> ; faceWidth=<N> ; font=<Npx or keep current (Npx)> ; rows=<N>
+List/Help: listWidth=<N> ; font=<Npx or keep current (Npx)> ; rows=<N or varies>
+Notes    : noteWidth=<N> ; font=<Npx or keep current (Npx)> ; rows=<N or varies>
 
-Followed by one sentence of assumptions if anything was estimated.
+Evidence:
+- <window/font/plugin locator and calculation>
+
+Exceptions / playtests:
+- <plugin portraits, variant windows, or messages requiring pagination>
+```
 </output_format>
-
