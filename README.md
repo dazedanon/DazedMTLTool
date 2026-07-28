@@ -148,6 +148,39 @@ The main tab for translating files.
 3. **Click Translate** — The tool will process each file and output translated versions to the `translated` folder.
 4. **Copy the results** — Move the translated files from `translated` back into your game's data folder.
 
+### Version Update Tab
+
+Use this tab when an official game update needs to be applied to an existing
+translation. Select the current translated game, the new official version, and
+the old official version. If no saved baseline exists and Old official is left
+blank, the updater can read a local Git `original` or `origin/original` branch
+without checking it out. Scan the sources, then use **Create Recommended Update**
+to produce a separate updated copy without resolving anything first. Safe local edits
+are merged automatically; uncertain files use the new official version by default and
+are listed as translation risks that can be reconciled afterward or overridden in bulk.
+When the same official build was already applied, the tab automatically runs a read-only recovery
+audit using retained source history or a fingerprint-verified `original` branch. Restoring changes
+later reverted in Git still requires an explicit **Reapply Recovered Changes** action. Recovery
+labels definite versus possible reverts, verifies staged files and RPG Maker JSON before publish,
+and retains a bounded eight-run history with the baselines those reports require.
+Alternatively, choose **Update the current translated folder**. The updater builds a
+complete sibling staging copy before replacing the working folder and retains the prior
+translation beside it as a rollback backup.
+
+The updater compares the entire game folder, including plugins, images, audio,
+fonts, executables, and other assets. RPG Maker MV/MZ data receives a semantic
+three-way merge, including a plugin-name-aware merge for `js/plugins.js`; other
+unpacked games use a conservative engine-agnostic file
+merge. Packed RPG Maker VX Ace and WOLF projects are detected and held for a
+future normalization adapter rather than updated unsafely.
+JSON formatting differences are normalized in memory and do not require
+rewriting any input game folder.
+
+Repository metadata is excluded from update decisions. Audio and unmodified
+runtime images follow the new official version. Images patched through the
+Images tab use their stored pre-translation backups, allowing the updater to
+preserve a translated image unless its official source changed or was removed.
+
 ### Engine Config Tab
 Engine-specific settings. RPG Maker has the most mature support — you can toggle exactly which event codes to translate (dialogue, choices, variables, plugin commands, etc.). The defaults cover ~95% of a game's text out of the box. See the [RPG Maker Translation Workflow](#rpg-maker-translation-workflow) section for a detailed step-by-step guide.
 

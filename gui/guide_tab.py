@@ -316,5 +316,5 @@ class GuideTab(QWidget):
     def _open_config(self) -> None:
         pw = self.parent_window
         if pw is not None and hasattr(pw, "switch_page"):
-            page = getattr(pw, "PAGE_CONFIG", 6)
+            page = getattr(pw, "PAGE_CONFIG", 7)
             pw.switch_page(page)

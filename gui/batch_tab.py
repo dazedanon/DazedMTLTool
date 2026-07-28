@@ -454,7 +454,7 @@ class BatchTab(QWidget):
             tt.select_files_by_name(file_set)
         # Switch to Translation page.
         if hasattr(parent, "switch_page"):
-            page = getattr(parent, "PAGE_TRANSLATION", 3)
+            page = getattr(parent, "PAGE_TRANSLATION", 4)
             parent.switch_page(page)
         reply = QMessageBox.question(
             self,

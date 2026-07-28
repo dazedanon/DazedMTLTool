@@ -2315,13 +2315,13 @@ class WolfWorkflowTab(QWidget):
             pass
 
         if pw and hasattr(pw, "switch_page"):
-            page = getattr(pw, "PAGE_TRANSLATION", 3)
+            page = getattr(pw, "PAGE_TRANSLATION", 4)
             pw.switch_page(page)
         elif pw and hasattr(pw, "content_stack"):
-            pw.content_stack.setCurrentIndex(3)
+            pw.content_stack.setCurrentIndex(4)
             if hasattr(pw, "nav_buttons"):
                 for i, btn in enumerate(pw.nav_buttons):
-                    btn.setChecked(i == 3)
+                    btn.setChecked(i == 4)
 
         if auto_start:
             QTimer.singleShot(

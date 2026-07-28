@@ -63,6 +63,7 @@ EMOJI_ICON: dict[str, str] = {
     "🔄": "mdi6.refresh",
     "↺": "mdi6.refresh",
     "↻": "mdi6.refresh",
+    "⇄": "mdi6.swap-horizontal",
     "🔍": "mdi6.magnify",
     "💾": "mdi6.content-save",
     "🗑️": "mdi6.delete-outline",

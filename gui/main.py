@@ -708,6 +708,7 @@ from gui.translation_tab import TranslationTab
 from gui.workflow_tab import WorkflowTab
 from gui.wolf_workflow_tab import WolfWorkflowTab
 from gui.image_manager import ImageManager
+from gui.version_update_tab import VersionUpdateTab
 from gui.skills_tab import SkillsTab
 from gui.batch_tab import BatchTab
 
@@ -717,10 +718,11 @@ class DazedMTLGUI(QMainWindow):
     PAGE_GUIDE = 0
     PAGE_WORKFLOW = 1
     PAGE_IMAGES = 2
-    PAGE_TRANSLATION = 3
-    PAGE_BATCHES = 4
-    PAGE_SKILLS = 5
-    PAGE_CONFIG = 6
+    PAGE_VERSION_UPDATE = 3
+    PAGE_TRANSLATION = 4
+    PAGE_BATCHES = 5
+    PAGE_SKILLS = 6
+    PAGE_CONFIG = 7
 
     def __init__(self):
         super().__init__()
@@ -970,6 +972,17 @@ class DazedMTLGUI(QMainWindow):
         sidebar_layout.addWidget(btn_images)
         self.nav_buttons.append(btn_images)
 
+        # Translation-aware game version migration
+        btn_version_update = self.create_nav_button("⇄", "Version Update")
+        btn_version_update.setToolTip(
+            "Version Update - migrate a translated game to a newer official version"
+        )
+        btn_version_update.clicked.connect(
+            lambda: self.switch_page(self.PAGE_VERSION_UPDATE)
+        )
+        sidebar_layout.addWidget(btn_version_update)
+        self.nav_buttons.append(btn_version_update)
+
         # Translation
         btn_translation = self.create_nav_button("🌐", "Translation")
         btn_translation.clicked.connect(lambda: self.switch_page(self.PAGE_TRANSLATION))
@@ -1060,7 +1073,11 @@ class DazedMTLGUI(QMainWindow):
         self.image_manager_tab = ImageManager(parent=self)
         self.content_stack.addWidget(self.image_manager_tab)
 
-        # Translation Execution Tab (index 3)
+        # Version Update (index 3)
+        self.version_update_tab = VersionUpdateTab(parent=self)
+        self.content_stack.addWidget(self.version_update_tab)
+
+        # Translation Execution Tab (index 4)
         self.translation_tab = TranslationTab(self)
         self.content_stack.addWidget(self.translation_tab)
 
