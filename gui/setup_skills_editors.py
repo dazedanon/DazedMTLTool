@@ -125,8 +125,9 @@ class SetupSkillsEditors(QWidget):
                 self._save_vocab,
                 self._reload_vocab,
                 "vocab_editor",
+                "glossary",
             ),
-            "Vocab",
+            "Glossary",
         )
         editors.addTab(
             self._editor_page(
@@ -135,8 +136,9 @@ class SetupSkillsEditors(QWidget):
                 self._save_quirks,
                 self._reload_quirks,
                 "quirks_editor",
+                "rules",
             ),
-            "Quirks",
+            "Translation rules",
         )
 
         game_skills_page = QWidget()
@@ -168,7 +170,7 @@ class SetupSkillsEditors(QWidget):
         strip_l.setSpacing(Spacing.SM)
         strip_l.addWidget(self._game_skills_bar, 0, Qt.AlignBottom)
 
-        add_btn = QPushButton("+ Add custom")
+        add_btn = QPushButton("+ Add custom guidance")
         add_btn.setCursor(Qt.PointingHandCursor)
         add_btn.setMinimumHeight(Geometry.CONTROL)
         add_btn.setToolTip(
@@ -199,9 +201,10 @@ class SetupSkillsEditors(QWidget):
                 self._save_game_skill,
                 self._reload_game_skill,
                 "game_skill_editor",
+                "guidance",
             ),
         )
-        editors.addTab(game_skills_page, "Game skills")
+        editors.addTab(game_skills_page, "Game guidance")
         root.addWidget(editors, 1)
 
     def _editor_page(
@@ -211,6 +214,7 @@ class SetupSkillsEditors(QWidget):
         save_slot,
         reload_slot,
         attr: str,
+        action_name: str,
     ) -> QWidget:
         page = QWidget()
         vl = QVBoxLayout(page)
@@ -237,12 +241,14 @@ class SetupSkillsEditors(QWidget):
         vl.addWidget(ed, 1)
         row = QHBoxLayout()
         row.setSpacing(Spacing.SM)
-        save_btn = _make_btn("💾  Save", "#0e639c")
-        save_btn.setFixedWidth(128)
+        save_btn = _make_btn("💾  Save changes", "#0e639c")
+        save_btn.setFixedWidth(220)
+        save_btn.setToolTip(f"Save {action_name} changes")
         save_btn.clicked.connect(save_slot)
         row.addWidget(save_btn)
-        reload_btn = _make_btn("↺  Reload", "#555")
-        reload_btn.setFixedWidth(128)
+        reload_btn = _make_btn("↺  Reload file", "#555")
+        reload_btn.setFixedWidth(220)
+        reload_btn.setToolTip(f"Reload {action_name} from disk")
         reload_btn.clicked.connect(reload_slot)
         row.addWidget(reload_btn)
         row.addStretch()
@@ -386,20 +392,20 @@ class SetupSkillsEditors(QWidget):
 
         row = QHBoxLayout()
         row.setSpacing(Spacing.SM)
-        save_btn = _make_btn("💾  Save", "#0e639c")
-        save_btn.setFixedWidth(128)
+        save_btn = _make_btn("💾  Save custom", "#0e639c")
+        save_btn.setFixedWidth(220)
         save_btn.clicked.connect(lambda _=False, s=stem: self._save_custom_skill(s))
         row.addWidget(save_btn)
 
-        reload_btn = _make_btn("↺  Reload", "#555")
-        reload_btn.setFixedWidth(128)
+        reload_btn = _make_btn("↺  Reload custom", "#555")
+        reload_btn.setFixedWidth(220)
         reload_btn.clicked.connect(
             lambda _=False, s=stem: self._reload_one_custom_skill(s)
         )
         row.addWidget(reload_btn)
 
-        delete_btn = _make_btn("🗑  Delete", "#8b0000")
-        delete_btn.setFixedWidth(128)
+        delete_btn = _make_btn("🗑  Delete custom", "#8b0000")
+        delete_btn.setFixedWidth(220)
         delete_btn.setToolTip("Delete this custom skill file from the game folder")
         delete_btn.clicked.connect(lambda _=False, s=stem: self._delete_custom_skill(s))
         row.addWidget(delete_btn)

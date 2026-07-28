@@ -186,10 +186,10 @@ class WorkflowShellTests(unittest.TestCase):
         self.assertEqual(
             [stage.title_label.text() for stage in stages],
             [
-                "Choose the files to rewrap",
-                "Set the wrapping rules",
-                "Scan, review, then apply",
-                "Finish QA and package the game",
+                "Select game-data files",
+                "Set line-wrapping rules",
+                "Preview and apply rewrap",
+                "Run final QA and build the release",
             ],
         )
         self.assertFalse(self.workflow._rewrap_advanced.toggle.isChecked())
@@ -210,50 +210,50 @@ class WorkflowShellTests(unittest.TestCase):
     def test_every_page_uses_a_numbered_task_sequence(self):
         expected = {
             0: [
-                "Choose the RPG Maker project",
-                "Choose the data files for this translation run",
-                "Import the checked files into the workspace",
+                "Select the RPG Maker project",
+                "Select files to translate",
+                "Import selected files",
             ],
             1: [
-                "Normalize the project JSON",
-                "Format plugins.js for review",
+                "Format game data",
+                "Format plugin configuration",
                 "Install the GameUpdate helper",
             ],
             2: [
-                "Prepare the working files",
-                "Build speaker and project context",
-                "Review and save project guidance",
+                "Prepare the translation workspace",
+                "Configure speakers and generate project context",
+                "Edit glossary and project guidance",
             ],
             3: [
-                "Choose the translation mode and text widths",
-                "Translate the core database",
+                "Set run mode and line widths",
+                "Translate database text",
                 "Translate dialogue and choices",
-                "Build the variable cache",
+                "Build the variable translation cache",
             ],
             4: [
-                "Audit the game before enabling risky text",
-                "Choose only code families with visible text",
-                "Review the selection and run Phase 2",
+                "Audit advanced text sources",
+                "Select audited text sources",
+                "Start advanced translation",
             ],
             5: [
-                "Prepare player-visible plugin or script text",
-                "Choose the export scope and write reviewed translations",
+                "Prepare plugin or script translations",
+                "Export reviewed translations",
             ],
             6: [
-                "Choose the files to rewrap",
-                "Set the wrapping rules",
-                "Scan, review, then apply",
-                "Finish QA and package the game",
+                "Select game-data files",
+                "Set line-wrapping rules",
+                "Preview and apply rewrap",
+                "Run final QA and build the release",
             ],
             7: [
-                "Verify that the image workspace is ready",
-                "Prepare editable images and translation context",
-                "Review finished images and patch the game",
+                "Check image readiness",
+                "Prepare images for translation",
+                "Review and patch translated images",
             ],
             8: [
-                "Configure the in-game tools",
-                "Install or update the playtest tools",
-                "Verify the tools in game",
+                "Configure playtest tools",
+                "Install playtest plugins",
+                "Verify plugins in game",
             ],
         }
         for page_index, titles in expected.items():
@@ -263,25 +263,25 @@ class WorkflowShellTests(unittest.TestCase):
 
     def test_related_action_groups_share_width_and_control_height(self):
         groups = {
-            0: (("All", "None", "Core database"),),
-            1: (("Copy gameupdate/", "Run All 3 Tasks"),),
+            0: (("Select all", "Clear selection", "Database only"),),
+            1: (("Install GameUpdate", "Run available tasks"),),
             2: (
-                ("Import → files/", "Clear TL"),
-                ("Parse Speakers", "Copy Project Setup"),
+                ("Import files", "Clear translated"),
+                ("Collect names", "Copy setup skill"),
             ),
             5: (
-                ("Copy vocab.txt → Game", "TL Plugins Skill"),
-                ("Export Active Files", "Export ALL translated/"),
+                ("Copy glossary to game", "Copy plugin translation skill"),
+                ("Export selected files", "Export all translated files"),
             ),
             6: (
-                ("All files", "Maps / Events", "Database", "Clear"),
-                ("Scan selected", "Rewrap selected"),
-                ("QA Game Data Skill", "Create Public Release ZIP"),
+                ("Select all", "Maps & events", "Database only", "Clear selection"),
+                ("Preview rewrap", "Apply rewrap"),
+                ("Copy final QA skill", "Build public release ZIP"),
             ),
             8: (
-                ("Save settings", "Apply to game"),
-                ("Install TL Inspector", "Uninstall TL Inspector"),
-                ("Install Forge", "Uninstall Forge"),
+                ("Save defaults", "Apply settings to game"),
+                ("Install TL Inspector", "Remove TL Inspector"),
+                ("Install Forge", "Remove Forge"),
             ),
         }
 

@@ -27,16 +27,16 @@ Import the listed data files into the tool's `files/` folder (Workflow does this
 
 **Example:** for RPG Maker MV, you typically import `Actors.json`, `Items.json`, maps, `CommonEvents.json`, and so on into `files/`.
 
-## 4. Step 1 - Pre-process (optional)
+## 4. Step 1 - Prepare Project (optional)
 
 Run formatters / copy `gameupdate/` only if you want cleaner diffs or the updater scripts.
 Skip if you just want to translate.
 
 ## 5. Step 2 - Setup with your IDE agent
 
-1. Parse speakers into vocab when available.
-2. Copy the **Project Setup** skill into Cursor / VS Code with the game open.
-3. Paste the returned `glossary`, `speakers`, `translation_quirks`, and `game_skill` blocks into the Workflow editors and save.
+1. Use **Collect names** when the game exposes useful speaker formats.
+2. Copy the **project setup skill** into Cursor / VS Code with the game open.
+3. Paste the returned blocks into **Glossary**, **Translation rules**, and **Game guidance**, then save.
 
 See **Examples** for paste-ready prompts.
 
@@ -45,7 +45,7 @@ See **Examples** for paste-ready prompts.
 Follow the Workflow steps (Phase 0 / 1 / 2 for RPG Maker, or Names → Database → Maps for Wolf).
 Each action configures the Translation tab and can start a run for you.
 
-**Example (RPG Maker):** Phase 0 = database names → Phase 1 = dialogue → Phase 2 = risky plugin / variable codes.
+**Example (RPG Maker):** Translate database → Translate dialogue → Build variable cache → translate audited Phase 2 text.
 
 ## 7. Export / inject and playtest
 

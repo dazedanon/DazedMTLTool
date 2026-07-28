@@ -51,55 +51,55 @@ class WorkflowActionWiringTests(unittest.TestCase):
 
     def test_all_step_action_buttons_route_to_their_contract_endpoints(self):
         cases = (
-            (0, "browse_folder", {"tooltip": "Browse for a game project folder"}),
-            (0, "select_all_files", {"text": "All"}),
-            (0, "deselect_all_files", {"text": "None"}),
-            (0, "select_core_only", {"text": "Core database"}),
-            (0, "import_files", {"text": "Import checked files"}),
-            (1, "run_dazedformat", {"text": "Run dazedformat"}),
-            (1, "browse_plugins_js", {"tooltip": "Browse for plugins.js"}),
+            (0, "browse_folder", {"tooltip": "Choose an RPG Maker game folder"}),
+            (0, "select_all_files", {"text": "Select all"}),
+            (0, "deselect_all_files", {"text": "Clear selection"}),
+            (0, "select_core_only", {"text": "Database only"}),
+            (0, "import_files", {"text": "Import selected files"}),
+            (1, "run_dazedformat", {"text": "Format game data"}),
+            (1, "browse_plugins_js", {"tooltip": "Choose the plugins.js file"}),
             (1, "run_prettier", {"text": "Format plugins.js"}),
-            (1, "browse_gameupdate", {"tooltip": "Browse for the GameUpdate source folder"}),
-            (1, "run_gameupdate", {"text": "Copy gameupdate/"}),
-            (1, "run_all_preprocess", {"text": "Run All 3 Tasks"}),
-            (2, "import_files", {"text": "Import → files/"}),
-            (2, "clear_translated", {"text": "Clear TL"}),
-            (2, "run_parse_speakers", {"text": "Parse Speakers"}),
-            (2, "copy_project_setup_prompt", {"text": "Copy Project Setup"}),
-            (3, "apply_wrap_config", {"text": "Apply to .env"}),
-            (3, "run_phase", {"text": "Run Phase 0"}),
-            (3, "run_phase", {"text": "Run Phase 1"}),
-            (3, "run_phase", {"text": "Run Phase 1b"}),
-            (4, "copy_plugin_prompt", {"text": "Copy Plugin Prompt"}),
-            (4, "apply_var_range", {"text": "Apply"}),
-            (4, "run_phase", {"text": "Run Phase 2"}),
-            (5, "copy_vocab_to_game", {"text": "Copy vocab.txt → Game"}),
-            (5, "copy_plugins_js_translate_prompt", {"text": "TL Plugins Skill"}),
-            (5, "export_active_files", {"text": "Export Active Files"}),
-            (5, "export_to_game", {"text": "Export ALL translated/"}),
-            (6, "select_rewrap_files", {"text": "All files"}),
-            (6, "select_rewrap_files", {"text": "Maps / Events"}),
-            (6, "select_rewrap_files", {"text": "Database"}),
-            (6, "select_rewrap_files", {"text": "Clear"}),
-            (6, "refresh_rewrap_files", {"text": "Refresh"}),
-            (6, "load_rewrap_widths", {"text": "Reload widths from .env"}),
-            (6, "run_rewrap", {"text": "Scan selected"}),
-            (6, "run_rewrap", {"text": "Rewrap selected"}),
-            (6, "copy_translation_qa_prompt", {"text": "QA Game Data Skill"}),
-            (6, "create_public_release", {"text": "Create Public Release ZIP"}),
-            (7, "refresh_image_workflow_status", {"text": "Refresh check"}),
-            (7, "copy_vocab_to_game", {"text": "Copy vocab.txt → Game"}),
-            (7, "open_image_manager", {"text": "Open Images"}),
-            (8, "detect_tli_editors", {"text": "Detect"}),
-            (8, "browse_tli_editor", {"text": "Browse…"}),
-            (8, "save_playtest_settings", {"text": "Save settings"}),
-            (8, "apply_playtest_settings", {"text": "Apply to game"}),
+            (1, "browse_gameupdate", {"tooltip": "Choose the GameUpdate source folder"}),
+            (1, "run_gameupdate", {"text": "Install GameUpdate"}),
+            (1, "run_all_preprocess", {"text": "Run available tasks"}),
+            (2, "import_files", {"text": "Import files"}),
+            (2, "clear_translated", {"text": "Clear translated"}),
+            (2, "run_parse_speakers", {"text": "Collect names"}),
+            (2, "copy_project_setup_prompt", {"text": "Copy setup skill"}),
+            (3, "apply_wrap_config", {"text": "Save line widths"}),
+            (3, "run_phase", {"text": "Translate database"}),
+            (3, "run_phase", {"text": "Translate dialogue"}),
+            (3, "run_phase", {"text": "Build variable cache"}),
+            (4, "copy_plugin_prompt", {"text": "Copy advanced-text audit"}),
+            (4, "apply_var_range", {"text": "Save range"}),
+            (4, "run_phase", {"text": "Translate selected text"}),
+            (5, "copy_vocab_to_game", {"text": "Copy glossary to game"}),
+            (5, "copy_plugins_js_translate_prompt", {"text": "Copy plugin translation skill"}),
+            (5, "export_active_files", {"text": "Export selected files"}),
+            (5, "export_to_game", {"text": "Export all translated files"}),
+            (6, "select_rewrap_files", {"text": "Select all"}),
+            (6, "select_rewrap_files", {"text": "Maps & events"}),
+            (6, "select_rewrap_files", {"text": "Database only"}),
+            (6, "select_rewrap_files", {"text": "Clear selection"}),
+            (6, "refresh_rewrap_files", {"text": "Refresh files"}),
+            (6, "load_rewrap_widths", {"text": "Load saved line widths"}),
+            (6, "run_rewrap", {"text": "Preview rewrap"}),
+            (6, "run_rewrap", {"text": "Apply rewrap"}),
+            (6, "copy_translation_qa_prompt", {"text": "Copy final QA skill"}),
+            (6, "create_public_release", {"text": "Build public release ZIP"}),
+            (7, "refresh_image_workflow_status", {"text": "Refresh readiness"}),
+            (7, "copy_vocab_to_game", {"text": "Copy glossary to game"}),
+            (7, "open_image_manager", {"text": "Open Image Manager"}),
+            (8, "detect_tli_editors", {"text": "Find editors"}),
+            (8, "browse_tli_editor", {"text": "Choose…"}),
+            (8, "save_playtest_settings", {"text": "Save defaults"}),
+            (8, "apply_playtest_settings", {"text": "Apply settings to game"}),
             (8, "install_tl_inspector", {"text": "Install TL Inspector"}),
-            (8, "uninstall_tl_inspector", {"text": "Uninstall TL Inspector"}),
+            (8, "uninstall_tl_inspector", {"text": "Remove TL Inspector"}),
             (8, "install_forge", {"text": "Install Forge"}),
-            (8, "uninstall_forge", {"text": "Uninstall Forge"}),
-            (8, "install_both_playtest", {"text": "Install Both"}),
-            (8, "refresh_playtest_status", {"text": "Refresh status"}),
+            (8, "uninstall_forge", {"text": "Remove Forge"}),
+            (8, "install_both_playtest", {"text": "Install both plugins"}),
+            (8, "refresh_playtest_status", {"text": "Refresh plugin status"}),
         )
         self.assertEqual(len(cases), 49)
         for step, endpoint, locator in cases:
@@ -124,31 +124,31 @@ class WorkflowActionWiringTests(unittest.TestCase):
 
         editors = self.workflow.setup_editors
         expected = (
-            ("Save", 0, "save_game_skill"),
-            ("Reload", 0, "reload_game_skill"),
-            ("Save", 1, "save_quirks"),
-            ("Reload", 1, "reload_quirks"),
-            ("Save", 2, "save_vocab"),
-            ("Reload", 2, "reload_vocab"),
-            ("+ Add custom", 0, "add_custom_skill"),
+            ({"tooltip": "Save guidance changes"}, "save_game_skill"),
+            ({"tooltip": "Reload guidance from disk"}, "reload_game_skill"),
+            ({"tooltip": "Save rules changes"}, "save_quirks"),
+            ({"tooltip": "Reload rules from disk"}, "reload_quirks"),
+            ({"tooltip": "Save glossary changes"}, "save_vocab"),
+            ({"tooltip": "Reload glossary from disk"}, "reload_vocab"),
+            ({"text": "+ Add custom guidance"}, "add_custom_skill"),
         )
-        for text, occurrence, endpoint in expected:
+        for locator, endpoint in expected:
             editors.actions.clear()
-            self.harness.click(2, text=text, occurrence=occurrence)
+            self.harness.click(2, **locator)
             self.assertIn(endpoint, [call.name for call in editors.actions])
 
     def test_local_disclosures_and_rewrap_presets_change_only_ui_state(self):
         self.workflow._goto_step(1)
         self.harness.app.processEvents()
-        toggle = self.harness.button(1, text="Hide")
+        toggle = self.harness.button(1, text="Hide optional")
         self.assertTrue(self.workflow._pp_dazedformat_box.isVisible())
         toggle.click()
         self.assertFalse(self.workflow._pp_dazedformat_box.isVisible())
-        self.assertEqual(toggle.text(), "Show")
+        self.assertEqual(toggle.text(), "Show optional")
 
-        self.harness.click(6, text="Messages")
+        self.harness.click(6, text="Messages only")
         self.assertEqual(self.workflow.rewrap_codes_edit.text(), "401,405")
-        self.harness.click(6, text="All supported")
+        self.harness.click(6, text="All supported fields")
         self.assertEqual(self.workflow.rewrap_codes_edit.text(), "")
 
     def test_help_and_navigation_controls_remain_connected(self):

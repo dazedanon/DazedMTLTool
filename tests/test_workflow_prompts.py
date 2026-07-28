@@ -81,7 +81,7 @@ class WorkflowTranslationPromptTests(unittest.TestCase):
 
         self.assertFalse(PHASE1_CONFIG["CODE408"])
         workflow_source = (ROOT / "gui/workflow_tab.py").read_text(encoding="utf-8")
-        self.assertIn("Translate code 408 plugin/comment text", workflow_source)
+        self.assertIn("Include displayed comment text (code 408)", workflow_source)
         self.assertIn('config["CODE408"] = bool(', workflow_source)
 
     def test_static_clipboard_prompts_live_under_data_skills(self):
@@ -108,7 +108,7 @@ class WorkflowTranslationPromptTests(unittest.TestCase):
         ):
             self.assertNotIn(constant, workflow_source)
         self.assertNotIn("_WOLF_SPEAKER_PROMPT", wolf_source)
-        self.assertIn("QA Game Data Skill", workflow_source)
+        self.assertIn("Copy final QA skill", workflow_source)
         self.assertIn('load_clipboard_skill("rpgmaker_translation_qa.md")', workflow_source)
 
     def test_wrap_prompt_accounts_for_code101_faces_and_font_changes(self):
@@ -126,10 +126,10 @@ class WorkflowTranslationPromptTests(unittest.TestCase):
         workflow_source = (ROOT / "gui/workflow_tab.py").read_text(encoding="utf-8")
         self.assertIn('("6  Rewrap",       self._build_step5_rewrap)', workflow_source)
         self.assertIn("Dialogue + Face", workflow_source)
-        self.assertIn("Maps / Events", workflow_source)
+        self.assertIn("Maps & events", workflow_source)
         self.assertIn("Event codes:", workflow_source)
-        self.assertIn("Scan selected", workflow_source)
-        self.assertIn("Rewrap selected", workflow_source)
+        self.assertIn("Preview rewrap", workflow_source)
+        self.assertIn("Apply rewrap", workflow_source)
         self.assertIn("never edits _original", workflow_source)
         self.assertIn("self.directory", workflow_source)
         self.assertIn("_rewrap_data_directory", workflow_source)

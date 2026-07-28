@@ -28,8 +28,8 @@ You are not importing the whole game yet. A tiny slice proves the pipeline befor
 
 ### 3. Set up names and voice (Step 2)
 
-1. Run **Parse Speakers** if the game uses nameplates the tool can harvest.
-2. **Copy Project Setup**, paste into Cursor with the game open, let the agent return glossary / speakers / quirks / game skill.
+1. Use **Collect names** if the game uses nameplates the tool can harvest.
+2. Click **Copy setup skill**, paste it into Cursor with the game open, and let the agent return the project guidance.
 3. Paste each block into the Workflow editors and save.
 
 Now the translation API has character genders, terms, and a short Translation Frame instead of guessing blind.
@@ -37,17 +37,17 @@ Now the translation API has character genders, terms, and a short Translation Fr
 ### 4. Translate a slice (Step 3)
 
 1. Prefer **Normal** mode while you are learning.
-2. Run **Phase 0** (database names/descriptions).
-3. Run **Phase 1** on the checked map only.
+2. Click **Translate database** for names and descriptions.
+3. Click **Translate dialogue** for the selected map.
 4. Skim `translated/` and `log/` - do names look consistent? Does dialogue sound okay?
 
 If something is wrong, fix vocab / quirks *now* before you translate fifty maps.
 
 ### 5. Put it in the game and play
 
-1. Step 5 - **Export Active Files** (only what you imported).
-2. Step 6 - optionally scan/reapply wrapping directly to the exported game data, then run final
-   QA and create the public release ZIP.
+1. Step 5 - **Export selected files** (only what you imported).
+2. Step 6 - optionally **Preview rewrap** and **Apply rewrap**, then copy the final QA skill and
+   build the public release ZIP.
 3. Launch the game and walk that first map.
 4. Note leftovers: overflow, wrong names, Japanese in a menu.
 

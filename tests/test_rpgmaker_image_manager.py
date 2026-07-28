@@ -416,7 +416,7 @@ class RPGMakerImageManagerNavigationTests(unittest.TestCase):
         self.assertIn("self.image_manager_tab = ImageManager", main_source)
         self.assertIn('create_nav_button("🖼", "Images")', main_source)
         self.assertIn('(\"7  Images\",       self._build_step6_images)', workflow_source)
-        self.assertIn('self._open_images_btn = _make_btn("🖼  Open Images"', workflow_source)
+        self.assertIn('self._open_images_btn = _make_btn("🖼  Open Image Manager"', workflow_source)
 
 
 class GenericImageManagerUITests(unittest.TestCase):

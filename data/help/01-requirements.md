@@ -69,7 +69,7 @@ Use either:
 ### Example: open the game in Cursor
 
 1. In Cursor: **File → Open Folder** and select the game root (where `Game.exe` or Wolf `Data` lives).
-2. In DazedTL Workflow Step 2, click **Copy Project Setup**.
+2. In DazedTL Workflow Step 2, click **Copy setup skill**.
 3. Paste into Cursor chat with the game files available (or `@`-mention key JSON files).
 4. Paste the agent's labeled blocks back into the Workflow editors.
 

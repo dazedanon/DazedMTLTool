@@ -22,28 +22,28 @@ boundaries, or destinations.
 |---|---|
 | Browse / Enter | Saves the selected folder and detects MV, MZ, or Ace. May start a read-only scan worker. |
 | Encrypted Ace detection | Offers the existing explicit decrypter action; it does not decrypt merely by detecting. |
-| Select All / None / Core | Changes only checklist state and writes a log entry. |
-| Import | Confirms replacement when required, clears `files/` except `.gitkeep`, and copies exactly the checked files through `_ImportWorker`. |
+| Select all / Clear selection / Database only | Changes only checklist state and writes a log entry. |
+| Import selected files | Confirms replacement when required, clears `files/` except `.gitkeep`, and copies exactly the checked files through `_ImportWorker`. |
 | Multi-row checkbox change | Applies the changed checked state to the current Ctrl/Shift row selection. |
 
 ## Step 1: Prepare
 
 | Action | Effect |
 |---|---|
-| Format JSON | Runs the existing `dazedformat` worker against the detected game data. |
+| Format game data | Runs the existing `dazedformat` worker against the detected game data. |
 | Format plugins.js | Runs `jsbeautifier` against the explicitly shown plugin file. |
-| Copy GameUpdate | Copies the bundled folder using RPG Maker exclusions and writes patch configuration when applicable. |
-| Run all preparation tasks | Runs the eligible existing tasks sequentially and logs skipped prerequisites. |
+| Install GameUpdate | Copies the bundled folder using RPG Maker exclusions and writes patch configuration when applicable. |
+| Run available tasks | Runs the eligible existing tasks sequentially and logs skipped prerequisites. |
 | Collapse | Changes visibility only; paths and task state remain unchanged. |
 
 ## Step 2: Setup
 
 | Action | Effect |
 |---|---|
-| Import | Invokes the same Step 0 import path. |
-| Clear TL | Confirms and deletes contents of `translated/` while preserving `.gitkeep`. |
-| Parse Speakers | Applies speaker flags, selects event files, and starts the existing speaker-collection translation mode. |
-| Copy Project Setup | Copies the existing project-setup skill with game context. |
+| Import selected files | Invokes the same Step 0 import path. |
+| Clear translated | Confirms and deletes contents of `translated/` while preserving `.gitkeep`. |
+| Collect names | Applies speaker flags, selects event files, and starts the existing Parse Speakers translation mode. |
+| Copy setup skill | Copies the existing project-setup skill with game context. |
 | Speaker flags | Persist and apply through the existing config integration. |
 | Vocab Save / Reload | Reads or writes the game vocabulary through shared vocabulary utilities. |
 | Quirks/Game Skills Save / Reload | Reads or writes the selected game's skill files. |
@@ -53,61 +53,61 @@ boundaries, or destinations.
 | Action | Effect |
 |---|---|
 | Translation mode | Selects Normal or Batch for all workflow phase launch actions. |
-| Apply wrap widths | Writes the four measured width values to `.env`. |
+| Save line widths | Writes the four measured width values to `.env`. |
 | Code 408 checkbox | Persists the user decision and adds code 408 only to the Phase 1 profile when enabled. |
-| Run Phase 0 | Applies the database profile, selects database files in Translation, and starts the existing translation action. |
-| Run Phase 1 | Applies safe dialogue/choice codes, selects event files, and starts translation. |
-| Run Phase 1b | Applies code 111 only, selects event files, and starts cache-building translation. |
+| Translate database | Applies the Phase 0 database profile, selects database files, and starts translation. |
+| Translate dialogue | Applies the Phase 1 dialogue/choice profile, selects event files, and starts translation. |
+| Build variable cache | Applies the Phase 1b code-111 profile, selects event files, and starts cache-building translation. |
 
 ## Step 4: Translation Phase 2
 
 | Action | Effect |
 |---|---|
-| Copy Plugin Prompt | Copies the existing risky-code audit skill without changing configuration. |
-| Variable range Apply | Writes `CODE122_VAR_MIN/MAX` through config integration. |
+| Copy advanced-text audit | Copies the existing risky-code audit skill without changing configuration. |
+| Save range | Writes `CODE122_VAR_MIN/MAX` through config integration. |
 | Code/plugin/pattern checks | Preserve current auto-apply behavior and exact config keys. |
 | Advanced disclosure | Changes visibility only; checked state is retained. |
-| Run Phase 2 | Applies the selected risky-code configuration, selects event files, and starts translation. |
+| Translate selected text | Applies the selected Phase 2 configuration, selects event files, and starts translation. |
 
 ## Step 5: Export
 
 | Action | Effect |
 |---|---|
-| Copy vocab to game | Copies the current vocabulary to the selected game root. |
-| TL Plugins/Ruby Skill | Copies the engine-specific audit-and-edit prompt. |
-| Export Active Files | Confirms, then exports translated JSON matching names currently in `files/`. |
-| Export All | Confirms, then exports every translated result. |
+| Copy glossary to game | Copies the current vocabulary to the selected game root. |
+| Copy plugin/Ruby translation skill | Copies the engine-specific audit-and-edit prompt. |
+| Export selected files | Confirms, then exports translated JSON matching names currently in `files/`. |
+| Export all translated files | Confirms, then exports every translated result. |
 | Ace export | Preserves the existing RV2JSON update/packing path. |
 
 ## Step 6: Rewrap
 
 | Action | Effect |
 |---|---|
-| Load `.env` | Loads current width defaults without editing game data. |
+| Load saved line widths | Loads current `.env` width defaults without editing game data. |
 | Scope/filter/presets | Change only the in-memory file selection. |
-| Scan selected | Runs deterministic rewrap analysis with `apply=False`. |
-| Rewrap selected | Runs the same options with `apply=True` against the resolved game data folder. `_original` remains protected. |
-| QA skill | Copies the existing RPG Maker QA skill. |
-| Public release ZIP | Confirms destination and runs the existing sanitized release worker. |
+| Preview rewrap | Runs deterministic rewrap analysis with `apply=False`. |
+| Apply rewrap | Runs the same options with `apply=True` against the resolved game data folder. `_original` remains protected. |
+| Copy final QA skill | Copies the existing RPG Maker QA skill. |
+| Build public release ZIP | Confirms destination and runs the existing sanitized release worker. |
 
 ## Step 7: Images
 
 | Action | Effect |
 |---|---|
-| Refresh check | Reads image readiness, encryption-key availability, vocabulary, and workspace placement. |
-| Copy vocab | Uses the same vocabulary copy action as Export. |
-| Open Images | Saves the current game folder and switches the host window to the shared Images page. |
+| Refresh readiness | Reads image readiness, encryption-key availability, vocabulary, and workspace placement. |
+| Copy glossary to game | Uses the same vocabulary copy action as Export. |
+| Open Image Manager | Saves the current game folder and switches the host window to the shared Images page. |
 
 ## Step 8: Playtest
 
 | Action | Effect |
 |---|---|
-| Save settings | Writes the selected hotkeys, scale, and editor settings through existing configuration logic. |
-| Apply to game | Updates already installed playtest plugins with the selected settings. |
-| Detect/Browse editor | Changes editor configuration only. |
-| Install/Uninstall TL Inspector | Uses the existing installer and confirmation behavior. |
-| Install/Uninstall Forge | Uses the existing engine-specific Forge installer and confirmation behavior. |
-| Install both | Invokes the existing combined installation sequence. |
+| Save defaults | Writes the selected hotkeys, scale, and editor settings through existing configuration logic. |
+| Apply settings to game | Updates already installed playtest plugins with the selected settings. |
+| Find editors / Choose… | Changes editor configuration only. |
+| Install/Remove TL Inspector | Uses the existing installer and confirmation behavior. |
+| Install/Remove Forge | Uses the existing engine-specific Forge installer and confirmation behavior. |
+| Install both plugins | Invokes the existing combined installation sequence. |
 
 ## Worker and mutation invariants
 
