@@ -18,6 +18,71 @@ import modules.rpgmakermvmz as mvmz  # noqa: E402
 
 
 class TestMVMZScriptPatterns(unittest.TestCase):
+    def test_cbr_erotic_status_pattern_definition(self):
+        regex, multiline = mvmz.PATTERNS_355655["CBR-エロステータス"]
+
+        self.assertEqual(regex, r"テキスト-(.+)")
+        self.assertTrue(multiline)
+
+    def test_cbr_erotic_status_multiline_integration(self):
+        source_statuses = ["回", "人"]
+        translated_statuses = ["times", "people"]
+        page = {
+            "list": [
+                {
+                    "code": 355,
+                    "indent": 0,
+                    "parameters": ["CBR-エロステータス"],
+                },
+                {
+                    "code": 655,
+                    "indent": 0,
+                    "parameters": ["コマンド-表示"],
+                },
+                *[
+                    {
+                        "code": 655,
+                        "indent": 0,
+                        "parameters": [f"テキスト-{status}"],
+                    }
+                    for status in source_statuses
+                ],
+                {
+                    "code": 655,
+                    "indent": 0,
+                    "parameters": ["テキスト-％"],
+                },
+            ]
+        }
+        captured = []
+
+        def translate(text, history, batch=False):
+            captured.append(copy.deepcopy(text))
+            return [copy.deepcopy(translated_statuses), [0, 0]]
+
+        original_translate = mvmz.translateAI
+        original_code355655 = mvmz.CODE355655
+        original_enabled = mvmz.ENABLED_PATTERNS_355655
+        mvmz.translateAI = translate
+        mvmz.CODE355655 = True
+        mvmz.ENABLED_PATTERNS_355655 = {"CBR-エロステータス"}
+        try:
+            translated_page = copy.deepcopy(page)
+            mvmz.searchCodes(translated_page, None, [], "TestMap.json")
+        finally:
+            mvmz.translateAI = original_translate
+            mvmz.CODE355655 = original_code355655
+            mvmz.ENABLED_PATTERNS_355655 = original_enabled
+
+        self.assertEqual(captured, [source_statuses])
+        self.assertEqual(translated_page["list"][0], page["list"][0])
+        self.assertEqual(translated_page["list"][1], page["list"][1])
+        self.assertEqual(
+            [entry["parameters"][0] for entry in translated_page["list"][2:4]],
+            [f"テキスト-{status}" for status in translated_statuses],
+        )
+        self.assertEqual(translated_page["list"][4], page["list"][4])
+
     def test_battle_manager_can_escape_pattern_definition(self):
         regex, multiline = mvmz.PATTERNS_355655["if (BattleManager.canEscape())"]
 

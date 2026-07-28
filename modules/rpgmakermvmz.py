@@ -157,13 +157,13 @@ CODE122_VAR_MAX = 2000
 
 # Plugins / Scripts
 CODE355655 = False
-CODE357 = False
+CODE357 = True
 CODE657 = False
 CODE356 = False
 CODE320 = False
 CODE324 = False
 CODE325 = False
-CODE111 = True
+CODE111 = False
 CODE108 = False
 
 # ─── Plugin Manager ──────────────────────────────────────────────────────────
@@ -195,11 +195,12 @@ HEADER_MAPPINGS_357 = {
     "SceneGlossary": (["category"], None),
 }
 # Subset of HEADER_MAPPINGS_357 keys that should be processed (empty = none).
-ENABLED_PLUGINS_357: set = {"BattleLogOutput"}
+ENABLED_PLUGINS_357: set = {"DTextPicture", "TorigoyaMZ_NotifyMessage"}
 
 # All known code-355/655 script patterns. Enable entries via ENABLED_PATTERNS_355655.
 PATTERNS_355655 = {
     "テキスト-": (r"テキスト-(.+)", False),
+    "CBR-エロステータス": (r"テキスト-(.+)", True),
     "=": (r'=\s?(.*)",', False),
     "var text": (r'var\stext\d+\s=\s\"(.+)\"', False),
     "logtxt = ": (r"logtxt\s=\s'(.+)'", False),
@@ -234,7 +235,7 @@ PATTERNS_355655 = {
     "AddAddress": (r'AddAddress\(\d+,\s*\\?"(.+?)\\?"', False),
 }
 # Subset of PATTERNS_355655 keys that should be processed (empty = none).
-ENABLED_PATTERNS_355655: set = {"if (BattleManager.canEscape())"}
+ENABLED_PATTERNS_355655: set = set()
 
 
 def _pat355655_captured_text(match):

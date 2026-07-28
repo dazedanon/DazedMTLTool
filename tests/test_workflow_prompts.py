@@ -59,6 +59,17 @@ class WorkflowTranslationPromptTests(unittest.TestCase):
             self.assertNotIn(constant, workflow_source)
         self.assertNotIn("_WOLF_SPEAKER_PROMPT", wolf_source)
 
+    def test_image_translation_prompt_ends_skips_with_recovery_options(self):
+        prompt = load_clipboard_skill("image_translation.md")
+
+        self.assertIn("### Skipped / review items", prompt)
+        self.assertIn("literal final section of the user-facing response", prompt)
+        self.assertIn("Try it anyway", prompt)
+        self.assertIn("Use generative AI", prompt)
+        self.assertIn("Provide clean source art or layers", prompt)
+        self.assertIn("Manual artist review", prompt)
+        self.assertIn("If nothing was skipped or marked for review, omit", prompt)
+
     def test_clipboard_skill_loader_rejects_paths(self):
         with self.assertRaises(ValueError):
             load_clipboard_skill("../system.md")

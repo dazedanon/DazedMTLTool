@@ -381,6 +381,32 @@ Report:
 - Validation performed.
 - Work-log location.
 
+If any image or text region has a `skipped` or `review` disposition, append a
+`### Skipped / review items` section as the literal final section of the user-facing response.
+Do not put a closing sentence, follow-up offer, or any other content after it.
+
+In that final section:
+
+1. Group entries by image and list every skipped or review region, the reason it was not changed,
+   and what was preserved. Keep the list concise, but do not hide or summarize away individual
+   skipped images.
+2. End with `Possible next steps:` and list only relevant options the user can explicitly choose:
+   - **Try it anyway** — attempt a best-effort deterministic edit despite the stated risk. Explain
+     what artwork, alpha, layout, or runtime behavior might be affected, and obtain permission
+     before proceeding.
+   - **Use generative AI** — try an isolated generated wordmark or label first, or a broader
+     generative edit only when the user explicitly authorizes it. State that model safety rules
+     may reject some inputs and that generated output still requires deterministic compositing
+     and validation.
+   - **Provide clean source art or layers** — request a title-free background, layered source,
+     alternate asset, or other clean reconstruction input.
+   - **Manual artist review** — recommend a human paint-over or source-file edit when neither
+     deterministic nor permitted generative methods can preserve the artwork safely.
+3. Never imply that an option is guaranteed to succeed, and never perform a newly suggested
+   higher-risk or generative method without the required authorization.
+
+If nothing was skipped or marked for review, omit this section entirely.
+
 Do not paste full image files, large encoded data, or unrelated source code.
 
 ## Hard safety rules
@@ -442,3 +468,5 @@ Consider the task complete only when:
 - Originals remain recoverable.
 - `image_translation_log.md` accounts for every reviewed image and text region without duplicate
   current-run entries.
+- When any disposition is `skipped` or `review`, the user-facing response ends with the complete
+  skipped/review list and relevant recovery options; when none exist, that section is omitted.
