@@ -1,43 +1,42 @@
-# Workflow: WolfDawn
+# WOLF RPG Steps
 
-Open **Workflow** and select **Wolf RPG (WolfDawn)**.
-The bundled `wolf` CLI unpacks archives, extracts strings to JSON, translates with the same AI pipeline, then injects byte-exact results.
+Open **Workflow** and choose **Wolf RPG (WolfDawn)**. DazedTL will copy the game's packed text into
+files it can work with. Later, it puts your reviewed English back into a playable copy of the game.
 
-## Steps at a glance
+## What each step does
 
-| Step | What it does |
-|------|----------------|
-| **0 Project** | Select game root, unpack/extract to `wolf_json/`, import into `files/` |
-| **1 Prepare** | Optionally format extracted data and install GameUpdate |
-| **2 Setup** | Configure speakers and build project guidance with your IDE agent |
-| **3 Names** | Translate safe `names.json` entries |
-| **4 Database** | Translate foundation data, then narrative database sheets |
-| **5 Maps & events** | Translate maps, CommonEvent, Game.dat, and Evtext |
-| **6 Precheck** | Preview injection before writing binaries |
-| **7 Inject** | Apply all reviewed JSON translations |
-| **8 Package** | Use loose Data or build `Data.wolf`, with optional save updates |
-| **9 Fix wrap** | Find overflowing lines, rewrap them, and apply again |
+| Step | In plain language |
+|---|---|
+| **0 Project** | Choose the game, unpack its text, and bring that text into DazedTL |
+| **1 Prepare** | Optional cleanup tools; beginners can usually skip this |
+| **2 Setup** | Save character names and instructions for the translator |
+| **3 Names** | Translate names that DazedTL has marked as safe |
+| **4 Database** | Translate items, skills, descriptions, and other main game information |
+| **5 Maps & events** | Translate dialogue and event text |
+| **6 Precheck** | Show what will change without changing the game yet |
+| **7 Inject** | Put the reviewed translation into the game |
+| **8 Package** | Build the version you can start and play |
+| **9 Fix wrap** | Fix English lines that do not fit in their boxes |
 
-## Example: first WolfDawn run
+## A safe first run
 
-1. Step 0 - point at the folder with `Game.exe` / `Data.wolf`.
-2. Let extract finish; import the listed JSON (or leave the step with files checked).
-3. Step 2 - copy the Wolf glossary prompt into Cursor with extracted files available; paste vocab back.
-4. Step 3 - translate **safe** names only.
-5. Step 4 - read the discovery summary. For a classic RPG layout, translate the foundation database before maps and events.
-6. Steps 6–8 - **Preview all injection** → **Apply all translations** → build the playable game → playtest.
+1. In Step 0, choose the folder containing `Game.exe` or `Data.wolf`.
+2. Wait while DazedTL unpacks the text, then bring the listed files into its work area.
+3. In Step 2, use **Copy setup skill** with your AI helper and save its answers in DazedTL.
+4. In Step 3, translate only names marked **safe**.
+5. In Steps 4 and 5, translate the main game information and a small amount of dialogue.
+6. In Step 6, click **Preview all injection**. This is a safety check and does not change the game.
+7. If the preview succeeds, continue to **Apply all translations**, then build the playable game.
+8. Start the game and test it before translating more.
 
-## Layout order
+## Which game information should go first?
 
-After extract, the Database discovery report classifies the game:
+After unpacking, DazedTL examines how the game is arranged and recommends an order. Follow the
+order shown on screen. In most games, names and basic information should be translated before maps
+and dialogue so the same terms are used everywhere.
 
-| Layout | Order |
-|--------|--------|
-| **DB-heavy** | Names → foundation DB → narrative DB → maps/events |
-| **Classic RPG** | Names → foundation DB → maps/events |
-| **Hybrid** | Names → foundation DB → narrative DB → maps/events |
+## Labels beside names
 
-## Safety badges on names
-
-- `safe` - Phase 0 will translate
-- `refs` / `verify` - stay Japanese so inject skips them until you handle them carefully
+- **safe** means DazedTL believes the name can be translated normally.
+- **refs** or **verify** means the name may also be used internally by the game. Leave it Japanese
+  until you or your AI helper checks it carefully.

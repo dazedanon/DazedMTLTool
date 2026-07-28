@@ -1,115 +1,80 @@
-# Workflow: RPG Maker
+# RPG Maker Steps
 
-Open **Workflow** and select **RPG Maker** in the engine selector.
-Use each step's **?** button for short in-context help.
-This page is the overview.
+Open **Workflow** and choose **RPG Maker**. Work from the top step to the bottom step. The **?**
+button on each page explains the controls on that page.
 
-The workflow uses a step rail on the left and keeps one task page visible at a time. At narrower
-window sizes the rail collapses to step numbers so the task area stays usable. Use **Back** and
-**Continue** at the bottom, or select a step directly in the rail.
+Use **Back** and **Continue** at the bottom. The **Activity** button shows progress messages and
+errors.
 
-Every page is organized as numbered tasks rather than one large control surface. Work through
-the numbered cards in order; wide layouts place closely related cards side by side, while narrow
-layouts stack them without changing their meaning or state.
+## What each step does
 
-Related buttons share a consistent size and alignment. Primary blue actions advance or apply work;
-neutral actions inspect, copy, reload, or configure; red-outline actions remove existing data or
-installed tools. Form fields and checkbox groups use stable columns so values remain easy to scan.
+| Step | In plain language |
+|---|---|
+| **0 Project** | Choose the game and the text you want to work on |
+| **1 Prepare** | Optional cleanup tools; beginners can usually skip this |
+| **2 Setup** | Save character names and instructions for the translator |
+| **3 Phase 1** | Translate normal game information and dialogue |
+| **4 Phase 2** | Translate harder text hidden in events and add-ons; leave this until later |
+| **5 Export** | Put reviewed translations back into the game |
+| **6 Rewrap** | Fix lines that are too wide, check for problems, and make a ZIP to share |
+| **7 Images** | Translate words that are part of pictures (MV/MZ only) |
+| **8 Playtest** | Install optional tools that help find text while playing (MV/MZ only) |
 
-Routine output is collected behind the **Activity** button instead of permanently taking page
-space. The badge shows unread entries; open the panel for details or to clear the display. Errors
-remain indicated after the panel is closed so they are not easy to miss.
+## A safe first test
 
-## Steps at a glance
+1. In Step 0, choose the folder containing `Game.exe`.
+2. Select the main game information and one early map, such as `Map001.json`.
+3. In Step 2, click **Collect names**, then use **Copy setup skill** with your AI helper.
+4. In Step 3, translate the main game information and dialogue.
+5. In Step 5, use **Export selected files**.
+6. Start the game and test that map.
 
-| Step | What it does |
-|------|----------------|
-| **0 Project** | Detect MV/MZ/Ace and select the JSON files to translate |
-| **1 Prepare** | Optionally format data and `plugins.js`, then install GameUpdate |
-| **2 Setup** | Configure speakers, collect names, and maintain project guidance |
-| **3 Phase 1** | Translate database and dialogue text, then build the variable cache |
-| **4 Phase 2** | Translate audited variable, plugin, and script text |
-| **5 Export** | Prepare plugin/Ruby text and export reviewed translations to the game |
-| **6 Rewrap** | Rewrap exported text, run final QA, and build the release ZIP |
-| **7 Images** | Check readiness, translate editable images, review, and patch (MV/MZ) |
-| **8 Playtest** | TL Inspector / Forge (MV/MZ; hidden for Ace) |
+Only select the rest of the maps after this test looks good.
 
-## Example: first RPG Maker run
+## Name options in Step 2
 
-1. Step 0 - select the game root that contains `www/` (MV) or `data/` (MZ).
-2. Choose **Database only** plus one small map (for example `Map001.json`), then import the selection.
-3. Step 2 - **Collect names**, then use **Copy setup skill** and paste the result into Cursor.
-4. Step 3 - **Translate database**, skim `translated/` and `log/`, then **Translate dialogue** on the small map.
-5. Play in-game. If it looks good, import the rest of the maps and continue.
+DazedTL may show options named **INLINE401**, **FIRSTLINE**, and **FACENAME**. These are simply
+different places where RPG Maker games store a speaker's name. You do not need to guess. Use the
+choice recommended by the setup helper, and only turn on choices that it found in your game.
 
-## Speaker flags (Step 2)
+## Normal mode or Batch mode?
 
-Step 2 is split into preparing working files, building speaker/project context, and reviewing the
-saved guidance. Enable only the speaker detection methods the game uses:
+- Use **Normal** for your first test or a few files. You see the result sooner.
+- Use **Batch** for a large amount of text when your selected AI service supports it. It may be
+  cheaper, but it takes longer and is not available with every service.
 
-- **INLINE401** - name stuck to dialogue on the same line
-- **FIRSTLINE** - first dialogue line is the speaker name
-- **FACENAME** - last resort from face filenames
+## Step 4: harder text
 
-Project Setup's `speakers` block recommends ENABLE / SKIP with evidence.
+Leave **Phase 2** alone until the normal dialogue works. This step can contain words the game uses
+as instructions rather than words shown to the player. Translating the wrong one can break the
+game.
 
-## Phase tips
+When you are ready, click **Copy advanced-text audit** and paste those instructions into your AI
+helper. Turn on only the items it confirms are player-visible text.
 
-- Keep **vocab.txt** focused - huge glossaries raise cost and can hurt quality.
-- Use **Batch** mode with **Claude Sonnet 4.6** for large map / CommonEvents runs (Anthropic Message Batches, ~50% off).
-- On **Mistral** (free), stay on **Normal** mode - Batch is Claude-only.
-- Use **Normal** mode when you want live iteration on a handful of files.
-- Phase 2 can break games if you translate logic keys - use **Copy advanced-text audit** first.
-- Phase 2's long plugin/script and pattern lists are under **Advanced code controls**. Collapsing
-  that section never changes its checked options.
+## Step 6: text that does not fit
 
-## Rewrap exported game data (Step 6)
+English often takes more space than Japanese. **Rewrap** changes where a line breaks so it fits in
+the message box.
 
-Export translations in Step 5 first. Rewrap then edits the JSON in the game data folder detected
-by Step 0 when the English is correct but its line breaks need to change. It does not call the
-model and never changes `_original`.
+1. Export the translation in Step 5 first.
+2. In Step 6, choose the kind of text and the files you want to check.
+3. Scan and preview the changes.
+4. Apply only the changes that look correct.
+5. Start the game and test again.
 
-The page follows four stages: choose files, set wrapping rules, scan/review/apply, then finish QA
-and package the game. At wide window sizes file selection and wrapping rules appear side by side.
-Event codes and non-401 row protection are under **Advanced event handling**, and scan results
-remain collapsed until a scan begins.
+The extra settings are for unusual games. Leave their default values alone on your first pass.
 
-- Select Dialogue, Dialogue + Face, List/Help, Notes, or any combination.
-- Select individual maps/database files, all maps/events, all DB files, or everything.
-- Keep event codes at `401,405` for standard messages, or explicitly include other recognized
-  display-code fields.
-- Scan before applying. Row protection applies by default to rewrapped fields other than code 401,
-  including scrolling text, list/help, notes, and supported plugin fields; it can be disabled.
-- Code-401 dialogue, including face dialogue, is never blocked by the row limit because it can
-  continue into another message window.
-- Dialogue wrapping never adds, removes, or repurposes code-401 commands. It inserts `\n` inside
-  each existing code-401 text value while preserving that command's other data and `_original`.
-- Run final QA after applying approved changes, then create the public release ZIP from this step.
+## Step 7: words inside pictures
 
-## Images (Step 7, MV/MZ)
+Some menus and signs are pictures rather than normal text. Click **Open Image Manager**, make an
+editable copy of the pictures you want, then click **Copy skill**. Give those instructions to your
+AI helper and review every edited picture before clicking **Patch selected** or **Patch all**.
 
-Step 7 keeps the engine-aware Image Manager on the separate **Images** page, selects the RPG Maker
-workflow through auto-detection, and verifies that you are ready to use it:
+DazedTL keeps backups, but you should still keep your own untouched copy of the game.
 
-- Step 0 points to the actual game root containing `img/` or `www/img/`.
-- Encrypted projects have a valid key in `System.json`.
-- `<game>/vocab.txt` exists for the copied AI skill.
-- Editable PNGs are under `.dazedtl/images/<game-relative>/img/...`.
-- No PNGs were accidentally placed beside that expected `img/` tree.
+## Note for RPG Maker Ace
 
-Click **Open Image Manager**, make the images you want to translate editable, then click **Copy skill** in the
-Image Manager and paste it into Codex, Cursor, Copilot, or a similar coding agent. Review the
-resulting PNGs before using **Patch selected** or **Patch all**.
-
-Do not edit the runtime images directly. The Image Manager maintains editable copies and patches
-the reviewed results back into the game.
-
-## Ace note (Ruby scripts, not plugins.js)
-
-Ace has no `plugins.js`. UI / menu strings often live in **Ruby scripts** packed inside `Data/Scripts.rvdata2`.
-
-1. **Unpack** - Step 0 runs **RV2JSON `-c`**, which writes `ace_json/` (JSON data + `ace_json/scripts/*.rb`).
-2. **Edit like plugins.js** - In Step 5 the **Plugins** row becomes **Scripts**. Copy the glossary to the game, copy the Ruby translation skill, open `ace_json/scripts/` in Cursor/VS Code, and translate only player-visible string literals (same safety rules as plugins.js: never keys, method names, or logic comparisons).
-3. **Pack** - Click **Export selected files** or **Export all translated files**. The tool writes translated JSON into `ace_json/`, then runs **RV2JSON `-u`**, which packs `ace_json/` (including the edited `.rb` scripts) back into `Data/*.rvdata2` (including `Scripts.rvdata2`).
-
-Dialogue/DB files still go through the normal translate pipeline; script UI text is an IDE pass on the `.rb` files, then Export packs them.
+Ace stores some menu text differently from MV and MZ. DazedTL handles the unpacking and packing
+from Steps 0 and 5. If you need to edit menu or script text, follow the instructions shown in Step
+5 and use your AI helper. Normal dialogue still uses the same translation steps above.

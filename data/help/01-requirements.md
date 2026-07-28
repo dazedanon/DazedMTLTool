@@ -1,81 +1,61 @@
-# Requirements
+# Before You Start
 
-You need three things working together: this tool, an AI translation API, and an IDE with an agent.
+You need the game, an AI translation key, and enough room on your computer for another copy of the
+game. An AI helper program is also strongly recommended for setup and cleanup.
 
-## 1. Python
+## 1. Keep a safe copy of the game
 
-Python **3.12 – 3.14**.
-Launch with `START.bat` (Windows) or `START.sh` / the desktop launcher (Linux/macOS).
-Those scripts create a venv and install dependencies for you.
+Make a copy of the entire game folder and leave that copy untouched. On Windows, right-click the
+folder, choose **Copy**, right-click an empty area, and choose **Paste**. If anything goes wrong,
+you can return to that safe copy.
 
-## 2. AI API key
+If you are not sure what the **game folder** is, it is usually the folder containing `Game.exe`.
 
-In **Configuration → General**, set:
+## 2. Start DazedTL
 
-- Provider / API base URL
-- API key
-- Model name
+On Windows, double-click `START.bat`. On Linux or macOS, use `START.sh` or the desktop shortcut. If
+you are reading this inside DazedTL, this part is already done.
 
-You can also edit the `.env` file next to the tool.
-OpenAI-compatible endpoints and Gemini work too; pick a model based on budget:
+The first start may take a while because DazedTL prepares the extra files it needs. You do not
+need to set up Python yourself when these launchers work.
 
-| Goal | Recommendation |
-|------|----------------|
-| **Best cheap high-quality TLs + Batch mode** | **Claude Sonnet 4.6** (`claude-sonnet-4-6`) via Anthropic - Batch is ~50% off live price |
-| **Free** | **Mistral** (`mistral-medium-3.5`) - free tier, no credit card; live only (no Batch discount) |
+## 3. Add an AI translation key
 
-### Recommended: Claude Sonnet 4.6
+An **API key** is a private password that lets DazedTL use an online AI service. You get one from
+the AI company you choose. Keep it secret and do not share screenshots that show it.
 
-Use this for most games when you can pay for API usage.
-Strong translation quality at a good price, and it unlocks **Batch** mode for large maps / CommonEvents.
+In DazedTL, open **Configuration → General**, then choose the company and enter:
 
-```plaintext
-api=https://api.anthropic.com/v1
-key=YOUR_ANTHROPIC_KEY_HERE
-model=claude-sonnet-4-6
-```
+- your API key;
+- the model name;
+- the service address, if DazedTL asks for it.
 
-In Configuration, pick **Claude (Anthropic)** as the provider if you prefer the UI over `.env`.
+The recommended choices shown in this version of DazedTL are:
 
-### Free: Mistral
+| Choice | Good for |
+|---|---|
+| **Claude Sonnet 4.6** | Strong quality; paid; can use cheaper Batch jobs for large amounts of text |
+| **Mistral Medium 3.5** | Free option; use Normal translation mode |
 
-```plaintext
-API_PROVIDER=mistral
-api=https://api.mistral.ai/v1/
-key=YOUR_MISTRAL_KEY_HERE
-model=mistral-medium-3.5
-```
+If you use Claude, choose **Claude (Anthropic)** as the provider. If you use Mistral, choose
+**Mistral**. The company that gives you the key may charge for each translation, so begin with one
+small map instead of the whole game.
 
-Avoid `mistral-medium-latest` - it still points at an older release.
-Mistral runs live translation with built-in rate limiting; use **Normal** mode (Batch is Anthropic/Claude only).
+## 4. Install an AI helper for the harder cleanup
 
-## 3. AI agent + IDE (required for a good workflow)
+Some game text is hidden in places DazedTL cannot safely change by itself. An AI helper can read
+the game folder and help find that text. You can use:
 
-The Workflow tab expects you to use an AI coding agent for setup work that the translation API does not do alone:
+- **[Cursor](https://cursor.com/)**; or
+- **[VS Code](https://code.visualstudio.com/)** with GitHub Copilot or a similar helper.
 
-- Building glossary / vocab from the game
-- Choosing speaker flags
-- Writing quirks and a Translation Frame
-- Editing `plugins.js` UI strings (MV/MZ) or Ace `ace_json/scripts/*.rb`
-- Searching for leftover Japanese after playtest
+In either program, choose **File → Open Folder**, then select the game folder. Later, DazedTL gives
+you text to copy into the helper's chat. You do not need to write code yourself.
 
-Use either:
+You can translate without this helper, but names, menus, and leftover Japanese text may take more
+work to fix.
 
-| Tool | Notes |
-|------|--------|
-| **[Cursor](https://cursor.com/)** | Agent chat with the game folder open - preferred for Project Setup |
-| **[VS Code](https://code.visualstudio.com/)** + Copilot (or another agent) | Same idea: open the game repo, paste Workflow prompts |
+## Helpful extra tool
 
-### Example: open the game in Cursor
-
-1. In Cursor: **File → Open Folder** and select the game root (where `Game.exe` or Wolf `Data` lives).
-2. In DazedTL Workflow Step 2, click **Copy setup skill**.
-3. Paste into Cursor chat with the game files available (or `@`-mention key JSON files).
-4. Paste the agent's labeled blocks back into the Workflow editors.
-
-Without an IDE agent, you can still run raw Translation tab jobs, but glossary quality and plugin/UI cleanup will be much harder.
-
-## Optional but strongly recommended
-
-- **Git** in the game folder so you can diff and roll back bad edits
-- **Windows Snipping Tool OCR** (or ShareX) for grabbing leftover Japanese while playtesting
+The Windows Snipping Tool can copy Japanese words from a screenshot. This is useful when you see
+Japanese in the game but do not know which file contains it.

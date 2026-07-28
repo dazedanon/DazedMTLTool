@@ -169,8 +169,8 @@ class GuideTab(QWidget):
     def _build_ui(self) -> None:
         root = make_page_layout(self)
         root.addWidget(PageHeader(
-            "Guide & Quickstart",
-            "Learn the requirements, follow the translation workflow, and use practical examples."
+            "Beginner's Guide",
+            "New here? Start with Before You Start, then follow First Translation."
         ))
 
         body = QHBoxLayout()
@@ -204,9 +204,9 @@ class GuideTab(QWidget):
 
         footer.addStretch()
 
-        reload_btn = make_action_button("Reload guide", variant="quiet")
+        reload_btn = make_action_button("Refresh this page", variant="quiet")
         reload_btn.setToolTip(
-            "Reload data/help/index.json and the current section after editing the guide files"
+            "Reload the Guide if its text was changed while DazedTL was open"
         )
         reload_btn.clicked.connect(self.reload)
         footer.addWidget(reload_btn)

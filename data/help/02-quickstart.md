@@ -1,59 +1,68 @@
-# Quick Start
+# Your First Translation
 
-This is the happy path for a new game.
+Do these steps in order. Start with a small part of the game so mistakes are cheap and easy to fix.
 
-## 1. Configure the API
+## 1. Save your AI settings
 
-Open **Configuration** (sidebar gear).
-Enter your key and model, then save.
+Open **Configuration** using the gear button on the left. Enter your AI key and model, then click
+Save. If the key is wrong, DazedTL will tell you when the first translation starts.
 
-- **Recommended:** `claude-sonnet-4-6` (cheap high-quality TLs; enables Batch at ~50% off).
-- **Free:** `mistral-medium-3.5` (live only).
+## 2. Choose the type of game
 
-A wrong key shows up immediately when you try the first translate.
+Click **Open Workflow** at the bottom of this Guide. At the top of the Workflow page, choose:
 
-## 2. Open Workflow
+- **RPG Maker MV / MZ / Ace**; or
+- **WOLF RPG (WolfDawn)**.
 
-Use the Workflow sidebar button (or **Open Workflow** on this Guide).
-Choose the engine at the top:
+Not sure which one you have? RPG Maker games often contain a `www` or `data` folder. WOLF games
+often contain `Data.wolf`. DazedTL will also try to recognize the game after you choose its folder.
 
-- **RPG Maker MV / MZ / Ace**
-- **Wolf RPG (WolfDawn)**
+## 3. Choose the game folder
 
-## 3. Step 0 - Project
+In Step 0, click the Browse button and choose the folder containing `Game.exe`.
 
-Browse to the game folder.
-Import the listed data files into the tool's `files/` folder (Workflow does this for you when you import or leave the step with files checked).
+DazedTL will show the text files it found. For your first test, select the main game information
+and **one small map**. DazedTL copies their text into its work area; it does not translate them yet.
 
-**Example:** for RPG Maker MV, you typically import `Actors.json`, `Items.json`, maps, `CommonEvents.json`, and so on into `files/`.
+## 4. Skip Prepare unless you know you need it
 
-## 4. Step 1 - Prepare Project (optional)
+Step 1 contains optional tools. A first-time user can usually click **Continue** and come back
+later.
 
-Run formatters / copy `gameupdate/` only if you want cleaner diffs or the updater scripts.
-Skip if you just want to translate.
+## 5. Help the AI understand the game
 
-## 5. Step 2 - Setup with your IDE agent
+In Step 2:
 
-1. Use **Collect names** when the game exposes useful speaker formats.
-2. Copy the **project setup skill** into Cursor / VS Code with the game open.
-3. Paste the returned blocks into **Glossary**, **Translation rules**, and **Game guidance**, then save.
+1. Click **Collect names** if it is available.
+2. Click **Copy setup skill**.
+3. Paste the copied instructions into Cursor, VS Code, or another AI helper while the game folder
+   is open there.
+4. Copy the helper's answers back into the matching boxes in DazedTL, then save.
 
-See **Examples** for paste-ready prompts.
+This gives the translator a list of names and a few rules about the game's writing style.
 
-## 6. Translate in phases
+## 6. Translate the small test
 
-Follow the Workflow steps (Phase 0 / 1 / 2 for RPG Maker, or Names → Database → Maps for Wolf).
-Each action configures the Translation tab and can start a run for you.
+Continue through the Workflow and use **Normal** mode for the first try. Translate the main game
+information, then the dialogue on your selected map.
 
-**Example (RPG Maker):** Translate database → Translate dialogue → Build variable cache → translate audited Phase 2 text.
+Wait for DazedTL to say the job finished. If it shows an error, open **Activity** to read what went
+wrong.
 
-## 7. Export / inject and playtest
+## 7. Put the translation into the game
 
-- RPG Maker: Export from `translated/` back into the game, then install TL Inspector / Forge if you want.
-- Wolf: Preview injection → apply all translations → build the game → playtest → fix text layout.
+Continue to the Export or Inject step:
 
-## 8. Fix leftovers
+- In RPG Maker, use **Export selected files**.
+- In WOLF RPG, use **Preview all injection** first. If the preview looks safe, use
+  **Apply all translations**, then build the playable game.
 
-Screenshot Japanese text → OCR → search in the IDE across the game / `translated/` → re-translate or hand-edit → export/inject again.
+Now start the game and play the part you translated.
 
-See **Example Walkthrough** for a full first-game process story.
+## 8. Fix problems, then do more
+
+Check that names are consistent, dialogue fits on screen, and the game still works. Fix your setup
+before translating the rest of the game. When the small test looks good, return to Step 0, select
+more maps, and repeat.
+
+See **Full Example** if you want to watch these steps play out as one complete story.

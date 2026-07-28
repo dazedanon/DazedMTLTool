@@ -1,99 +1,94 @@
-# Example walkthrough
+# Full Example: Your First RPG Maker Game
 
-This page is a concrete story of translating one game, step by step.
-Use it to see the *order* of work. Details for each Workflow step live in the other Guide sections and in each step's **?** button.
+This example shows the whole process in order. The goal is to translate one small part, test it,
+and only then work on the rest of the game.
 
-Assume: Claude Sonnet 4.6 for paid quality + Batch, or Mistral if you are on the free tier.
-Also assume Cursor (or VS Code) has the **game folder** open for glossary / UI script work.
+## 1. Make a safe copy
 
----
+Copy the entire game folder. Keep one copy untouched and work on the other one.
 
-## Example A - First RPG Maker MV/MZ game
+Start DazedTL. Open **Configuration**, enter your AI key and model, then save.
 
-You just downloaded a small MV game. You want English dialogue, menus that make sense, and a playable build - without boiling the ocean on day one.
+Open the working game folder in Cursor or VS Code too. This lets its AI helper read the game when
+DazedTL later gives you setup instructions to copy.
 
-### 1. Get the tool ready
+## 2. Choose a small test
 
-1. Launch DazedTL (opens on this Guide).
-2. Open **Configuration**, set your API key and model, save.
-3. Open the game folder in Cursor so the agent can read JSON later.
+Open **Workflow**, choose **RPG Maker**, and go to Step 0.
 
-### 2. Point Workflow at the game
+Choose the folder containing `Game.exe`. When the file list appears, select the main game
+information and one early map, such as `Map001.json`. Bring those files into DazedTL.
 
-1. Open **Workflow** → engine **RPG Maker**.
-2. Step 0 - browse to the folder with `Game.exe` / `www/` (MV) or `data/` (MZ).
-3. When the file list appears, start small: check core DB files (`Actors`, `Items`, `System`, …) plus **one** early map (`Map001.json`). Import those into `files/`.
+Starting small matters because online AI translation may cost money, and a setup mistake is much
+easier to correct before fifty maps have been translated.
 
-You are not importing the whole game yet. A tiny slice proves the pipeline before you burn tokens on every map.
+## 3. Set up names and writing style
 
-### 3. Set up names and voice (Step 2)
+Go to Step 2 and click **Collect names** if it is available. Click **Copy setup skill**, paste the
+copied instructions into your AI helper, and wait for its answer.
 
-1. Use **Collect names** if the game uses nameplates the tool can harvest.
-2. Click **Copy setup skill**, paste it into Cursor with the game open, and let the agent return the project guidance.
-3. Paste each block into the Workflow editors and save.
+The answer will be divided into labeled parts. Copy each part into the matching box in DazedTL,
+then save. This helps the translator keep character names and important words consistent.
 
-Now the translation API has character genders, terms, and a short Translation Frame instead of guessing blind.
+## 4. Translate the test
 
-### 4. Translate a slice (Step 3)
+Go to Step 3 and use **Normal** mode. Translate the main game information first, then the dialogue
+for the map you selected.
 
-1. Prefer **Normal** mode while you are learning.
-2. Click **Translate database** for names and descriptions.
-3. Click **Translate dialogue** for the selected map.
-4. Skim `translated/` and `log/` - do names look consistent? Does dialogue sound okay?
+Wait for each job to finish. If there is an error, open **Activity** and read the newest message.
+Common problems are an incorrect AI key, no internet connection, or a temporary limit from the AI
+company.
 
-If something is wrong, fix vocab / quirks *now* before you translate fifty maps.
+## 5. Put the English into the game
 
-### 5. Put it in the game and play
+Go to Step 5 and click **Export selected files**. This puts only the files from your small test back
+into the game.
 
-1. Step 5 - **Export selected files** (only what you imported).
-2. Step 6 - optionally **Preview rewrap** and **Apply rewrap**, then copy the final QA skill and
-   build the public release ZIP.
-3. Launch the game and walk that first map.
-4. Note leftovers: overflow, wrong names, Japanese in a menu.
+Start the game and play that map. Look for:
 
-Fix leftovers next (re-translate a file, tweak wrap width in Config, or OCR → search in the IDE). Do not jump to Phase 2 yet.
+- names that change spelling;
+- sentences that sound wrong;
+- text cut off by the edge of a box;
+- Japanese words that were missed;
+- anything in the game that stopped working.
 
-### 6. Scale up
+Fix your setup now if names or writing style are wrong. Use Step 6 Rewrap if good English text is
+simply too wide for its box.
 
-When the sample map looks good:
+## 6. Translate the rest a little at a time
 
-1. Step 0 - import the rest of the maps / CommonEvents (or the next chunk).
-2. Step 3 Phase 1 again - use **Batch** with Claude if the set is large; stay on **Normal** with Mistral.
-3. Export again and play further.
+When the test looks good, return to Step 0 and select more maps. Translate, export, and play again.
+Small groups are easier to check than the entire game at once.
 
-### 7. Risky codes and UI (only when needed)
+You can use **Batch** mode for a large job if your AI service supports it. Keep using **Normal**
+mode when you want a result quickly or are fixing only a few files.
 
-1. Step 4 - copy the Plugin / risky-codes prompt, audit the game in your IDE, enable only codes that hold player-visible text, then run Phase 2 carefully.
-2. Step 5 - for MV/MZ, copy vocab + the plugins.js prompt and edit `plugins.js` in the IDE (player-facing strings only), then export. For **Ace**, edit `ace_json/scripts/*.rb` the same way, then Export so **RV2JSON** packs `Scripts.rvdata2`.
-3. Step 6 - scan/reapply widths directly to exported dialogue, face dialogue, list/help, or note
-   fields that need reflowing, then run final QA and package the release.
-4. Step 7 (MV/MZ) - check image setup, then decrypt / translate / patch any bitmap UI text.
-5. Step 8 (MV/MZ) - install TL Inspector / Forge if you want in-game inspection helpers.
+## 7. Clean up what was missed
 
-### What “done enough” looks like
+Only after normal dialogue works should you use Step 4 for harder text, Step 7 for words inside
+pictures, or Step 8 for optional testing tools.
 
-You can play through without walls of Japanese, menus are readable, and you know how to OCR → search → re-export when something slips through. Perfect first pass is rare; the loop is translate → play → fix → expand.
+When you see leftover Japanese while playing:
 
----
+1. Take a screenshot.
+2. Use the Windows Snipping Tool to copy the Japanese words from the picture.
+3. Search for those words with your AI helper.
+4. Translate or edit the matching text.
+5. Export it and test again.
 
-## Example B - Same idea on WolfDawn (short)
+## When is it finished?
 
-1. Workflow → **Wolf RPG (WolfDawn)** → Step 0 extract + import.
-2. Step 2 - build vocab in Cursor from the extracted files (skip `names.json` value names).
-3. Step 3 - translate **safe** names only.
-4. Step 4 - **Translate foundation database** first; add the narrative database if discovery says the game is DB-heavy.
-5. Step 5 - **Translate maps & events** (Batch for huge CommonEvent files on Claude).
-6. Step 6 **Preview all injection** → Step 7 **Apply all translations** → Step 8 build the playable game → play.
-7. Step 9 - fix overflowing lines → apply all translations → build again.
+The game is ready when you can play from beginning to end, the menus make sense, text fits on
+screen, and no important Japanese remains. The normal cycle is **translate → play → fix → repeat**.
 
-Same philosophy as RPG Maker: prove quality on a small slice of content, then scale; pack/inject before you judge overflow in-game.
+## Short WOLF RPG version
 
----
+The same idea applies to WOLF RPG:
 
-## Habits that save time
-
-- **Git** the game folder before big Export / Inject passes so you can roll back.
-- Start with **one map** (or one DB sheet), not the whole project.
-- Fix glossary and speaker flags early - they multiply across every later file.
-- Use Batch for bulk overnight work; Normal for quick iteration.
-- Leftover Japanese: screenshot → OCR → search in the IDE → re-translate or hand-edit → export/inject again.
+1. In Step 0, choose the game, unpack its text, and bring the listed files into DazedTL.
+2. In Step 2, use your AI helper to prepare the names and writing rules.
+3. Translate only names marked **safe**, then the main game information and a small amount of
+   dialogue.
+4. Use **Preview all injection** before **Apply all translations**.
+5. Build the playable game and test it.
+6. Fix problems before translating more.
