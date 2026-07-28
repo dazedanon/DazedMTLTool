@@ -106,16 +106,17 @@ def application_stylesheet() -> str:
             padding: 4px 6px;
         }}
         QPushButton, QToolButton {{
-            background-color: {c.accent};
-            color: {c.on_accent};
-            border: 1px solid {c.accent};
+            background-color: {c.surface_1};
+            color: {c.text_secondary};
+            border: 1px solid {c.border_strong};
             border-radius: 4px;
             padding: 6px 14px;
             min-height: 22px;
             font-weight: 600;
         }}
         QPushButton:hover, QToolButton:hover {{
-            background-color: {c.accent_hover};
+            background-color: {c.surface_hover};
+            color: {c.text_primary};
             border-color: {c.accent_text};
         }}
         QPushButton:pressed, QToolButton:pressed {{
@@ -127,7 +128,7 @@ def application_stylesheet() -> str:
         QPushButton:disabled, QToolButton:disabled {{
             background-color: {c.surface_1};
             color: {c.text_disabled};
-            border-color: {c.border};
+            border-color: {c.border_strong};
         }}
         QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox {{
             background-color: {c.surface_2};
@@ -433,7 +434,7 @@ def application_stylesheet() -> str:
         QPushButton#appActionButton[variant="quiet"] {{
             background-color: transparent;
             color: {c.text_muted};
-            border-color: transparent;
+            border-color: {c.border_strong};
         }}
         QPushButton#appActionButton[variant="quiet"]:hover {{
             background-color: {c.surface_hover};
@@ -451,7 +452,7 @@ def application_stylesheet() -> str:
         QPushButton#appActionButton:disabled {{
             background-color: {c.surface_1};
             color: {c.text_disabled};
-            border-color: {c.border};
+            border-color: {c.border_strong};
         }}
         QPushButton#appIconButton {{
             background-color: {c.surface_1};

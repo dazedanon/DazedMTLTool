@@ -22,7 +22,7 @@ from PyQt5.QtWidgets import (
 from gui.theme import Geometry, Spacing
 
 
-UX_CONTRACT_VERSION = "1.4"
+UX_CONTRACT_VERSION = "1.5"
 ButtonVariant = Literal["primary", "secondary", "quiet", "danger"]
 
 
@@ -306,6 +306,7 @@ class SectionCard(QFrame):
         title: str = "",
         description: str = "",
         *,
+        compact: bool = False,
         parent: QWidget | None = None,
     ):
         super().__init__(parent)
@@ -313,10 +314,10 @@ class SectionCard(QFrame):
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
 
         self.content_layout = QVBoxLayout(self)
-        self.content_layout.setContentsMargins(
-            Spacing.LG, Spacing.LG, Spacing.LG, Spacing.LG
-        )
-        self.content_layout.setSpacing(Spacing.MD)
+        inset = Spacing.MD if compact else Spacing.LG
+        self.content_layout.setContentsMargins(inset, inset, inset, inset)
+        self.content_layout.setSpacing(Spacing.SM if compact else Spacing.MD)
+        self.setProperty("density", "compact" if compact else "standard")
 
         self.title_label = None
         if title:

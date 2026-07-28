@@ -60,6 +60,16 @@ class GUIUXContractTests(unittest.TestCase):
         self.assertEqual(primary.property("variant"), "primary")
         self.assertGreaterEqual(primary.minimumHeight(), Geometry.CONTROL)
 
+    def test_compact_cards_reclaim_space_without_losing_structure(self):
+        card = SectionCard("Task", compact=True)
+        margins = card.content_layout.contentsMargins()
+        self.assertEqual(
+            (margins.left(), margins.top(), margins.right(), margins.bottom()),
+            (Spacing.MD, Spacing.MD, Spacing.MD, Spacing.MD),
+        )
+        self.assertEqual(card.content_layout.spacing(), Spacing.SM)
+        self.assertEqual(card.property("density"), "compact")
+
     def test_declared_peer_buttons_have_identical_rendered_widths(self):
         host = QWidget()
         short = QPushButton("Open")

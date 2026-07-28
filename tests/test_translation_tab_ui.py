@@ -53,7 +53,7 @@ class TranslationTabUITests(unittest.TestCase):
         self.assertEqual(self.tab.remove_files_button.text(), "Remove")
         self.assertEqual(self.tab.more_file_actions_button.text(), "More")
         self.assertEqual(self.tab.setup_card.title_label.text(), "Translation settings")
-        self.assertEqual(self.tab.workspace_splitter.handleWidth(), Spacing.LG)
+        self.assertEqual(self.tab.workspace_splitter.handleWidth(), Spacing.MD)
         self.assertEqual(
             [action.text() for action in self.tab.more_file_actions_button.menu().actions()],
             [
@@ -82,9 +82,7 @@ class TranslationTabUITests(unittest.TestCase):
         self.assertEqual(module_position[:2], (1, 0))
         self.assertEqual(mode_position[:2], (1, 1))
         button_rows = {
-            self.tab.file_controls_layout.getItemPosition(
-                self.tab.file_controls_layout.indexOf(button)
-            )[0]
+            button.parentWidget()
             for button in (
                 self.tab.add_files_button,
                 self.tab.remove_files_button,
@@ -93,31 +91,43 @@ class TranslationTabUITests(unittest.TestCase):
                 self.tab.clear_selection_button,
             )
         }
-        self.assertEqual(button_rows, {0})
+        self.assertEqual(len(button_rows), 1)
 
-    def test_narrow_file_toolbar_uses_equal_compact_peer_groups(self) -> None:
+    def test_narrow_file_toolbar_uses_two_aligned_equal_width_rows(self) -> None:
         self.tab.file_card.resize(620, self.tab.file_card.height())
         self.tab._arrange_translation_file_controls()
         self.assertEqual(self.tab.add_files_button.text(), "Add")
         self.assertEqual(self.tab.remove_files_button.text(), "Remove")
-        self.assertEqual(
-            len({
-                self.tab.add_files_button.width(),
-                self.tab.remove_files_button.width(),
-                self.tab.more_file_actions_button.width(),
-            }),
-            1,
+        buttons = (
+            self.tab.add_files_button,
+            self.tab.remove_files_button,
+            self.tab.more_file_actions_button,
+            self.tab.select_all_button,
+            self.tab.clear_selection_button,
         )
-        self.assertEqual(
-            self.tab.select_all_button.width(), self.tab.clear_selection_button.width()
+        self.assertEqual(len({button.width() for button in buttons}), 1)
+        self.assertIs(
+            self.tab.selection_summary_label.parentWidget(),
+            self.tab.file_controls_top_host,
         )
+        self.assertIs(
+            self.tab.select_all_button.parentWidget(), self.tab.file_controls_top_host
+        )
+        self.assertIs(
+            self.tab.clear_selection_button.parentWidget(), self.tab.file_controls_top_host
+        )
+        for button in (
+            self.tab.add_files_button,
+            self.tab.remove_files_button,
+            self.tab.more_file_actions_button,
+        ):
+            self.assertIs(button.parentWidget(), self.tab.file_controls_bottom_host)
 
     def test_log_remains_visible_beside_active_progress(self) -> None:
         self.assertEqual(self.tab.workspace_splitter.orientation(), Qt.Horizontal)
         self.assertTrue(self.tab.translation_log_viewer.isVisible())
-        self.assertGreater(
-            self.tab.file_stack.width(), self.tab.translation_log_viewer.width()
-        )
+        left_width, log_width = self.tab.workspace_splitter.sizes()
+        self.assertLessEqual(abs(left_width - log_width), Spacing.XL)
 
         self.tab.file_stack.setCurrentIndex(1)
         self.tab._set_progress_view_mode(True, 2)

@@ -69,7 +69,7 @@ def make_workflow_button(
         }}
         QPushButton#workflowButton[variant="quiet"] {{
             background-color: transparent;
-            border-color: transparent;
+            border-color: {c.border_strong};
             color: {c.text_muted};
         }}
         QPushButton#workflowButton[variant="quiet"]:hover {{
@@ -88,7 +88,7 @@ def make_workflow_button(
         QPushButton#workflowButton:disabled {{
             background-color: {c.surface_1};
             color: {c.text_disabled};
-            border-color: {c.border};
+            border-color: {c.border_strong};
         }}
     """)
     return button
@@ -114,7 +114,7 @@ class WorkflowStepRail(QWidget):
         self._compact = False
 
         root = QVBoxLayout(self)
-        root.setContentsMargins(Spacing.SM, Spacing.MD, Spacing.SM, Spacing.SM)
+        root.setContentsMargins(Spacing.SM, Spacing.MD, Spacing.SM, 0)
         root.setSpacing(Spacing.XS)
         self._root_layout = root
 
@@ -161,14 +161,21 @@ class WorkflowStepRail(QWidget):
             self._button_layouts.append(button_row)
 
         root.addStretch(1)
-        self.activity_button = QToolButton()
+        self.activity_host = QWidget()
+        self.activity_host.setObjectName("workflowActivityHost")
+        self.activity_host.setFixedHeight(Geometry.CONTROL + (Spacing.SM * 2))
+        activity_layout = QVBoxLayout(self.activity_host)
+        activity_layout.setContentsMargins(0, 0, 0, 0)
+        activity_layout.setSpacing(0)
+        self.activity_button = QToolButton(self.activity_host)
         self.activity_button.setObjectName("workflowActivityToggle")
         self.activity_button.setText("Activity")
         self.activity_button.setToolTip("Show or hide workflow activity and detailed log")
-        self.activity_button.setMinimumHeight(Geometry.CONTROL)
+        self.activity_button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.activity_button.setCursor(Qt.PointingHandCursor)
         self.activity_button.clicked.connect(self.activity_requested)
-        root.addWidget(self.activity_button)
+        activity_layout.addWidget(self.activity_button)
+        root.addWidget(self.activity_host)
 
         self.setStyleSheet(self._stylesheet())
         self.set_current(0)
@@ -199,8 +206,9 @@ class WorkflowStepRail(QWidget):
             QToolButton#workflowActivityToggle {{
                 background-color: transparent;
                 color: {c.text_muted};
-                border: 1px solid {c.border};
-                border-radius: 4px;
+                border: none;
+                border-top: 1px solid {c.border};
+                border-radius: 0;
                 padding: 6px 10px;
                 text-align: left;
             }}
@@ -208,7 +216,7 @@ class WorkflowStepRail(QWidget):
             QToolButton#workflowActivityToggle:checked {{
                 background-color: {c.surface_hover};
                 color: {c.text_primary};
-                border-color: {c.accent_text};
+                border-top-color: {c.accent_text};
             }}
         """
 
@@ -254,7 +262,7 @@ class WorkflowStepRail(QWidget):
             Spacing.XS if compact else Spacing.SM,
             Spacing.MD,
             Spacing.XS if compact else Spacing.SM,
-            Spacing.SM,
+            0,
         )
         self.title_label.setVisible(not compact)
         self.activity_button.setText("Log" if compact else "Activity")
@@ -424,16 +432,16 @@ class WorkflowStageCard(QFrame):
         super().__init__(parent)
         self.setObjectName("workflowStageCard")
         root = QVBoxLayout(self)
-        root.setContentsMargins(Spacing.LG, Spacing.LG, Spacing.LG, Spacing.LG)
-        root.setSpacing(Spacing.MD)
+        root.setContentsMargins(Spacing.MD, Spacing.MD, Spacing.MD, Spacing.MD)
+        root.setSpacing(Spacing.SM)
 
         header = QHBoxLayout()
         header.setContentsMargins(0, 0, 0, 0)
-        header.setSpacing(Spacing.MD)
+        header.setSpacing(Spacing.SM)
         number_label = QLabel(str(number))
         number_label.setObjectName("workflowStageNumber")
         number_label.setAlignment(Qt.AlignCenter)
-        number_label.setFixedSize(32, 32)
+        number_label.setFixedSize(24, 24)
         header.addWidget(number_label, 0, Qt.AlignTop)
 
         copy = QVBoxLayout()
@@ -453,6 +461,7 @@ class WorkflowStageCard(QFrame):
         root.addLayout(header)
 
         self.body = QVBoxLayout()
+        # Align controls with the title copy, not with the numbered badge.
         self.body.setContentsMargins(Spacing.XXL, 0, 0, 0)
         self.body.setSpacing(Spacing.SM)
         # Let the contents decide whether the body should grow. Editors and
@@ -468,8 +477,8 @@ class WorkflowStageCard(QFrame):
             f"QFrame#workflowStageCard{{background:{COLORS.surface_1};"
             f"border:1px solid {COLORS.border};border-radius:6px;}}"
             f"QLabel#workflowStageNumber{{background:{COLORS.accent};"
-            f"color:{COLORS.on_accent};border:none;border-radius:16px;"
-            "font-size:13px;font-weight:700;}"
+            f"color:{COLORS.on_accent};border:none;border-radius:12px;"
+            "font-size:12px;font-weight:700;}"
             f"QLabel#workflowStageTitle{{color:{COLORS.text_primary};border:none;"
             "font-size:14px;font-weight:650;}"
             f"QLabel#workflowStageDescription{{color:{COLORS.text_muted};border:none;"

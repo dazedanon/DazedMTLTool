@@ -981,7 +981,7 @@ class TranslationTab(QWidget):
         main_hbox = QHBoxLayout()
         # Match left side padding so headers align at the top of the boxes
         main_hbox.setContentsMargins(0, 0, 0, 0)
-        main_hbox.setSpacing(Spacing.LG)
+        main_hbox.setSpacing(Spacing.MD)
     # Align child widgets individually when needed; avoid setting a
     # global AlignTop on the HBox so children with Expanding size
     # policies can grow vertically to fill available space.
@@ -990,13 +990,13 @@ class TranslationTab(QWidget):
         left_widget = QWidget()
         left_layout = QVBoxLayout(left_widget)
         left_layout.setContentsMargins(0, 0, 0, 0)
-        left_layout.setSpacing(Spacing.LG)
-        setup_card = SectionCard("Translation settings")
+        left_layout.setSpacing(Spacing.MD)
+        setup_card = SectionCard("Translation settings", compact=True)
         self.setup_card = setup_card
         setup_card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         left_layout.addWidget(setup_card)
 
-        file_card = SectionCard("Files to translate")
+        file_card = SectionCard("Files to translate", compact=True)
         self.file_card = file_card
         file_card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         left_layout.addWidget(file_card, 1)
@@ -1096,15 +1096,29 @@ class TranslationTab(QWidget):
         file_toolbar = QWidget()
         file_toolbar.setObjectName("translationFileToolbar")
         file_toolbar.setStyleSheet(
-            "#translationFileToolbar { background-color: transparent; }"
+            "#translationFileToolbar, #translationFileToolbarTop, "
+            "#translationFileToolbarBottom { background: transparent; border: none; }"
         )
         file_toolbar.setMinimumHeight(Geometry.CONTROL)
         self.file_toolbar = file_toolbar
-        file_controls_layout = QGridLayout(file_toolbar)
+        file_controls_layout = QVBoxLayout(file_toolbar)
         file_controls_layout.setContentsMargins(0, 0, 0, 0)
-        file_controls_layout.setHorizontalSpacing(Spacing.SM)
-        file_controls_layout.setVerticalSpacing(Spacing.SM)
+        file_controls_layout.setSpacing(Spacing.SM)
         self.file_controls_layout = file_controls_layout
+
+        self.file_controls_top_host = QWidget(file_toolbar)
+        self.file_controls_top_host.setObjectName("translationFileToolbarTop")
+        self.file_controls_top_layout = QHBoxLayout(self.file_controls_top_host)
+        self.file_controls_top_layout.setContentsMargins(0, 0, 0, 0)
+        self.file_controls_top_layout.setSpacing(Spacing.SM)
+        file_controls_layout.addWidget(self.file_controls_top_host)
+
+        self.file_controls_bottom_host = QWidget(file_toolbar)
+        self.file_controls_bottom_host.setObjectName("translationFileToolbarBottom")
+        self.file_controls_bottom_layout = QHBoxLayout(self.file_controls_bottom_host)
+        self.file_controls_bottom_layout.setContentsMargins(0, 0, 0, 0)
+        self.file_controls_bottom_layout.setSpacing(Spacing.SM)
+        file_controls_layout.addWidget(self.file_controls_bottom_host)
         self._file_controls_layout_mode = None
         file_list_layout.addWidget(file_toolbar)
         self._arrange_translation_file_controls()
@@ -1677,20 +1691,17 @@ class TranslationTab(QWidget):
         # visible beside the setup/files/progress workspace in every state.
         left_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.translation_log_viewer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        log_card = SectionCard(
-            "Translation log",
-            "Watch live output from the current run. Errors are collected in a separate view.",
-        )
+        log_card = SectionCard("Translation log", compact=True)
         self.log_card = log_card
         log_card.setMinimumWidth(360)
         log_card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         log_card.add_widget(self.translation_log_viewer, 1)
 
-        left_widget.setMinimumWidth(600)
+        left_widget.setMinimumWidth(520)
         workspace_splitter = QSplitter(Qt.Horizontal)
         workspace_splitter.setObjectName("translationWorkspaceSplitter")
         workspace_splitter.setChildrenCollapsible(False)
-        workspace_splitter.setHandleWidth(Spacing.LG)
+        workspace_splitter.setHandleWidth(Spacing.MD)
         workspace_splitter.setStyleSheet(
             "QSplitter#translationWorkspaceSplitter::handle {"
             "background: transparent; border: none; }"
@@ -1700,9 +1711,9 @@ class TranslationTab(QWidget):
         workspace_splitter.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         workspace_splitter.addWidget(left_widget)
         workspace_splitter.addWidget(log_card)
-        workspace_splitter.setSizes([760, 520])
-        workspace_splitter.setStretchFactor(0, 3)
-        workspace_splitter.setStretchFactor(1, 2)
+        workspace_splitter.setSizes([640, 640])
+        workspace_splitter.setStretchFactor(0, 1)
+        workspace_splitter.setStretchFactor(1, 1)
         self.workspace_splitter = workspace_splitter
         workspace_splitter.splitterMoved.connect(
             lambda *_args: self._arrange_translation_workspace()
@@ -1788,85 +1799,81 @@ class TranslationTab(QWidget):
             self.selection_summary_label.sizeHint().width(),
             self.fontMetrics().horizontalAdvance("000 of 000 selected"),
         )
-        file_action_width = max(
-            action_button_width_hint(button)
-            for button in (
-                self.add_files_button,
-                self.remove_files_button,
-                self.more_file_actions_button,
-            )
-        )
-        scope_action_width = max(
-            action_button_width_hint(button)
-            for button in (self.select_all_button, self.clear_selection_button)
-        )
-        buttons_width = (
-            file_action_width * 3
-            + scope_action_width * 2
-            + Spacing.SM * (len(buttons) - 1)
-        )
+        button_width = max(action_button_width_hint(button) for button in buttons)
+        buttons_width = button_width * len(buttons) + Spacing.SM * (len(buttons) - 1)
         integrated_width = buttons_width + summary_width + Spacing.SM
-        available_width = self.file_card.width()
+        card_margins = self.file_card.content_layout.contentsMargins()
+        available_width = max(
+            0,
+            self.file_card.width() - card_margins.left() - card_margins.right(),
+        )
         if available_width >= integrated_width:
             mode = "integrated"
         elif available_width >= buttons_width:
             mode = "buttons"
         else:
-            mode = "compact"
-        self._file_controls_layout_mode = mode
-
-        if mode == "compact":
             self.add_files_button.setText("Add")
             self.remove_files_button.setText("Remove")
             self.more_file_actions_button.setText("More")
             self.select_all_button.setText("All")
             self.clear_selection_button.setText("Clear")
-        equalize_button_widths(
-            (
-                self.add_files_button,
-                self.remove_files_button,
-                self.more_file_actions_button,
-            ),
-            minimum=0,
-        )
-        equalize_button_widths(
-            (self.select_all_button, self.clear_selection_button),
-            minimum=0,
-        )
+            compact_button_width = max(
+                action_button_width_hint(button) for button in buttons
+            )
+            compact_buttons_width = (
+                compact_button_width * len(buttons)
+                + Spacing.SM * (len(buttons) - 1)
+            )
+            if available_width >= compact_buttons_width + summary_width + Spacing.SM:
+                mode = "compact-integrated"
+            elif available_width >= compact_buttons_width:
+                mode = "compact-row"
+            else:
+                mode = "compact-wrap"
+        self._file_controls_layout_mode = mode
 
-        grid = self.file_controls_layout
-        controls = (self.selection_summary_label, *buttons)
-        for control in controls:
-            grid.removeWidget(control)
-        for column in range(6):
-            grid.setColumnStretch(column, 0)
+        # These controls form one toolbar. Keeping a single peer width avoids
+        # the ragged two-group appearance when the toolbar wraps.
+        equalize_button_widths(buttons, minimum=0)
 
-        left = Qt.AlignLeft | Qt.AlignVCenter
-        right = Qt.AlignRight | Qt.AlignVCenter
-        if mode == "integrated":
-            grid.addWidget(self.add_files_button, 0, 0, 1, 1, left)
-            grid.addWidget(self.remove_files_button, 0, 1, 1, 1, left)
-            grid.addWidget(self.more_file_actions_button, 0, 2, 1, 1, left)
-            grid.addWidget(self.selection_summary_label, 0, 3, 1, 1, right)
-            grid.addWidget(self.select_all_button, 0, 4, 1, 1, right)
-            grid.addWidget(self.clear_selection_button, 0, 5, 1, 1, right)
-            grid.setColumnStretch(3, 1)
-        elif mode == "buttons":
-            grid.addWidget(self.selection_summary_label, 0, 0, 1, 6)
-            grid.addWidget(self.add_files_button, 1, 0, 1, 1, left)
-            grid.addWidget(self.remove_files_button, 1, 1, 1, 1, left)
-            grid.addWidget(self.more_file_actions_button, 1, 2, 1, 1, left)
-            grid.addWidget(self.select_all_button, 1, 4, 1, 1, right)
-            grid.addWidget(self.clear_selection_button, 1, 5, 1, 1, right)
-            grid.setColumnStretch(3, 1)
+        top = self.file_controls_top_layout
+        bottom = self.file_controls_bottom_layout
+        for row in (top, bottom):
+            while row.count():
+                row.takeAt(0)
+
+        if mode in {"integrated", "compact-integrated"}:
+            top.addWidget(self.add_files_button)
+            top.addWidget(self.remove_files_button)
+            top.addWidget(self.more_file_actions_button)
+            top.addStretch(1)
+            top.addWidget(self.selection_summary_label)
+            top.addWidget(self.select_all_button)
+            top.addWidget(self.clear_selection_button)
+            self.file_controls_bottom_host.hide()
+        elif mode in {"buttons", "compact-row"}:
+            top.addWidget(self.selection_summary_label)
+            top.addStretch(1)
+            bottom.addWidget(self.add_files_button)
+            bottom.addWidget(self.remove_files_button)
+            bottom.addWidget(self.more_file_actions_button)
+            bottom.addStretch(1)
+            bottom.addWidget(self.select_all_button)
+            bottom.addWidget(self.clear_selection_button)
+            self.file_controls_bottom_host.show()
         else:
-            grid.addWidget(self.selection_summary_label, 0, 0, 1, 3)
-            grid.addWidget(self.select_all_button, 1, 0, 1, 1, left)
-            grid.addWidget(self.clear_selection_button, 1, 1, 1, 1, left)
-            grid.addWidget(self.add_files_button, 2, 0, 1, 1, left)
-            grid.addWidget(self.remove_files_button, 2, 1, 1, 1, left)
-            grid.addWidget(self.more_file_actions_button, 2, 2, 1, 1, left)
-            grid.setColumnStretch(3, 1)
+            # Keep the selection summary and its scope controls together, then
+            # place the three file actions on one aligned row beneath them.
+            top.addWidget(self.selection_summary_label)
+            top.addStretch(1)
+            top.addWidget(self.select_all_button)
+            top.addWidget(self.clear_selection_button)
+            bottom.addWidget(self.add_files_button)
+            bottom.addWidget(self.remove_files_button)
+            bottom.addWidget(self.more_file_actions_button)
+            bottom.addStretch(1)
+            self.file_controls_bottom_host.show()
+        self.file_controls_top_host.show()
         self.file_toolbar.updateGeometry()
 
     def _arrange_translation_settings(self) -> None:

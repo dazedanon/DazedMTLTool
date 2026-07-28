@@ -356,7 +356,7 @@ class ImageManager(QWidget):
         # The page header already names this single, dominant workspace. Keep
         # the card surface and padding without spending vertical space on a
         # redundant second heading.
-        workspace_card = SectionCard()
+        workspace_card = SectionCard(compact=True)
         self.workspace_card = workspace_card
         workspace_card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         root.addWidget(workspace_card, 1)
@@ -461,7 +461,7 @@ class ImageManager(QWidget):
         splitter = QSplitter(Qt.Horizontal)
         splitter.setObjectName("imageBrowserSplitter")
         splitter.setChildrenCollapsible(False)
-        splitter.setHandleWidth(Spacing.LG)
+        splitter.setHandleWidth(Spacing.MD)
         splitter.setStyleSheet(
             "QSplitter#imageBrowserSplitter::handle {"
             "background: transparent; border: none; }"
@@ -543,9 +543,7 @@ class ImageManager(QWidget):
         self.preview_host.setObjectName("imagePreviewPane")
         self.preview_host.setMinimumWidth(400)
         preview_layout = QVBoxLayout(self.preview_host)
-        preview_layout.setContentsMargins(
-            Spacing.SM, Spacing.SM, Spacing.SM, Spacing.SM
-        )
+        preview_layout.setContentsMargins(0, 0, 0, 0)
         preview_layout.setSpacing(Spacing.SM)
         self.preview_label = QLabel("Select an image to preview it")
         self.preview_label.setAlignment(Qt.AlignCenter)

@@ -486,7 +486,7 @@ class WolfWorkflowTab(QWidget):
             inner = QWidget()
             vbox = QVBoxLayout(inner)
             vbox.setContentsMargins(
-                Spacing.XL, Spacing.LG, Spacing.XL, Spacing.MD
+                Spacing.LG, Spacing.LG, Spacing.LG, Spacing.MD
             )
             vbox.setSpacing(Spacing.MD)
             builder(vbox)

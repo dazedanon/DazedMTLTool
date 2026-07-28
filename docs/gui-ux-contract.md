@@ -1,6 +1,6 @@
 # DazedTL GUI/UX Contract
 
-**Contract version:** 1.4  
+**Contract version:** 1.5
 **Supported theme:** dark  
 **Source of truth:** `gui/theme.py` and `gui/ui_components.py`
 
@@ -104,7 +104,7 @@ unless an exception is approved.
 Use the 4 px grid exposed by `Spacing`: 4, 8, 12, 16, 24, and 32 px.
 
 - Page margin: 24 px at normal width; 16 px at constrained width.
-- Card padding: 16 px.
+- Card padding: 16 px, or 12 px for compact workspaces and dense forms.
 - Related fields/actions: 8 px apart.
 - Related groups inside a card: 12 px apart.
 - Separate cards or major sections: 16 px apart.
@@ -161,6 +161,8 @@ Text must remain legible at 100%, 150%, and 200% application font scale.
 - The primary action is placed at the end of the task's natural reading order.
 - Avoid nested bordered cards. Use spacing, a subheading, or a disclosure for
   hierarchy inside a card.
+- Do not wrap a single list or editor in a titled card when the page header and
+  the control itself already establish its purpose.
 
 ## 5. Controls and actions
 
@@ -182,6 +184,8 @@ Text must remain legible at 100%, 150%, and 200% application font scale.
 - Related peer buttons have identical rendered width and height. Declare the
   group with `equalize_button_widths`; unrelated actions continue to size to
   content.
+- Secondary and quiet buttons retain a visible one-pixel boundary in every
+  state. Filled accent styling is reserved for an explicit primary action.
 - A single-row action group must fit inside its container at every supported
   scale. Use shorter responsive labels or a deliberate overflow/disclosure
   pattern when necessary; never allow the final action to be clipped offscreen.

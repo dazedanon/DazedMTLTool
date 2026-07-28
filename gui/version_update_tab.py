@@ -639,6 +639,7 @@ class VersionUpdateTab(QWidget):
         select_group = SectionCard(
             "Prepare the update",
             "Choose the translated game and the newer official release. Add the old official release when no saved baseline is available.",
+            compact=True,
         )
         select_group.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
         form = QFormLayout()

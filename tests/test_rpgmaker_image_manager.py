@@ -330,6 +330,26 @@ class RPGMakerImageManagerSelectionTests(unittest.TestCase):
             int(self.manager.browser_splitter.width() * 0.38),
         )
 
+    def test_browser_and_preview_panes_share_outer_edges(self):
+        browser_top = self.manager.browser_host.mapTo(
+            self.manager.browser_splitter,
+            self.manager.browser_host.rect().topLeft(),
+        ).y()
+        preview_top = self.manager.preview_host.mapTo(
+            self.manager.browser_splitter,
+            self.manager.preview_host.rect().topLeft(),
+        ).y()
+        browser_bottom = self.manager.browser_host.mapTo(
+            self.manager.browser_splitter,
+            self.manager.browser_host.rect().bottomLeft(),
+        ).y()
+        preview_bottom = self.manager.preview_host.mapTo(
+            self.manager.browser_splitter,
+            self.manager.preview_host.rect().bottomLeft(),
+        ).y()
+        self.assertEqual(browser_top, preview_top)
+        self.assertEqual(browser_bottom, preview_bottom)
+
     def test_preview_summary_is_compact_and_full_paths_are_in_tooltip(self):
         self.manager.image_list.setCurrentRow(0)
         self.app.processEvents()

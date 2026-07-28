@@ -903,8 +903,8 @@ class WorkflowTab(QWidget):
             inner = QWidget()
             inner.setObjectName("workflowPageContent")
             vbox = QVBoxLayout(inner)
-            vbox.setContentsMargins(Spacing.XL, Spacing.XL, Spacing.XL, Spacing.LG)
-            vbox.setSpacing(Spacing.LG)
+            vbox.setContentsMargins(Spacing.LG, Spacing.LG, Spacing.LG, Spacing.MD)
+            vbox.setSpacing(Spacing.MD)
 
             builder(vbox)
             vbox.addStretch()
@@ -920,7 +920,7 @@ class WorkflowTab(QWidget):
                 f"border-top:1px solid {COLORS.border};}}"
             )
             nav_layout = QHBoxLayout(nav)
-            nav_layout.setContentsMargins(Spacing.XL, Spacing.SM, Spacing.XL, Spacing.SM)
+            nav_layout.setContentsMargins(Spacing.LG, Spacing.SM, Spacing.LG, Spacing.SM)
             nav_layout.setSpacing(Spacing.SM)
 
             tab_idx = len(self._step_tabs)  # current tab index (before addTab)

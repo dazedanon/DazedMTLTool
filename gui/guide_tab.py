@@ -22,7 +22,6 @@ from util.paths import HELP_DIR
 from gui.theme import COLORS
 from gui.ui_components import (
     PageHeader,
-    SectionCard,
     equalize_button_widths,
     make_action_button,
     make_page_layout,
@@ -177,30 +176,18 @@ class GuideTab(QWidget):
         body = QHBoxLayout()
         body.setSpacing(12)
 
-        topics_card = SectionCard(
-            "Browse topics",
-            "Choose a guide section for requirements, workflows, examples, and troubleshooting.",
-        )
-        topics_card.setMinimumWidth(260)
-        topics_card.setMaximumWidth(360)
-
         self.section_list = QListWidget()
         self.section_list.setStyleSheet(_LIST_STYLE)
+        self.section_list.setMinimumWidth(260)
+        self.section_list.setMaximumWidth(360)
         self.section_list.currentRowChanged.connect(self._on_section_changed)
-        topics_card.add_widget(self.section_list, 1)
-        body.addWidget(topics_card)
-
-        article_card = SectionCard(
-            "Read the guide",
-            "Follow the documented path, then open the relevant tool when you are ready.",
-        )
-        article_card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        body.addWidget(self.section_list)
 
         self.browser = QTextBrowser()
         self.browser.setOpenExternalLinks(True)
         self.browser.setStyleSheet(_BROWSER_STYLE)
-        article_card.add_widget(self.browser, 1)
-        body.addWidget(article_card, 1)
+        self.browser.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        body.addWidget(self.browser, 1)
 
         root.addLayout(body, 1)
 

@@ -12,6 +12,7 @@ try:
     from PyQt5.QtCore import Qt
     from PyQt5.QtWidgets import QApplication
 
+    from gui.theme import Spacing
     from gui.translation_tab import (
         BATCH_MODE_LABEL,
         TRANSLATION_MODULE_SPECS,
@@ -97,9 +98,8 @@ class TranslationEngineDropdownTests(unittest.TestCase):
         self._app.processEvents()
         try:
             self.assertEqual(tab.workspace_splitter.orientation(), Qt.Horizontal)
-            self.assertGreater(
-                tab.file_stack.width(), tab.translation_log_viewer.width()
-            )
+            left_width, log_width = tab.workspace_splitter.sizes()
+            self.assertLessEqual(abs(left_width - log_width), Spacing.XL)
             self.assertEqual(tab.file_card.objectName(), "appSectionCard")
             self.assertEqual(tab.log_card.objectName(), "appSectionCard")
             self.assertTrue(tab.translation_log_viewer.isVisible())

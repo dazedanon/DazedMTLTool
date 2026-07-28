@@ -111,6 +111,16 @@ class WorkflowShellTests(unittest.TestCase):
         self.workflow._set_activity_visible(False)
         self.assertEqual(self.settings.value("workflow/activity_panel_visible"), "false")
 
+    def test_activity_utility_is_flush_with_the_navigation_footer(self):
+        page = self.workflow._step_tabs.currentWidget()
+        footer = page.findChild(QWidget, "workflowFooter")
+        activity = self.workflow._step_rail.activity_button
+        self.assertEqual(activity.height(), footer.height())
+        self.assertEqual(
+            activity.mapTo(self.workflow, activity.rect().bottomLeft()).y(),
+            footer.mapTo(self.workflow, footer.rect().bottomLeft()).y(),
+        )
+
     def test_step_rail_compacts_at_constrained_width(self):
         self.workflow.resize(1000, 600)
         self.app.processEvents()
