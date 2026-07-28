@@ -865,6 +865,14 @@ class DazedMTLGUI(QMainWindow):
             font.setPointSize(max(6, int(9 * scale_factor)))
             app.setFont(font)
 
+            # Scale the canonical application QSS from its immutable source so
+            # app-level semantic font roles (page titles, metadata, controls)
+            # follow the same setting as per-widget legacy styles.
+            from gui.theme import application_stylesheet, scaled_stylesheet
+            app.setStyleSheet(
+                scaled_stylesheet(application_stylesheet(), scale_factor)
+            )
+
             # Keep line edits / combos tall enough for the scaled font.
             from PyQt5.QtGui import QFontMetrics
             from PyQt5.QtWidgets import QComboBox, QDoubleSpinBox, QLineEdit, QSpinBox
@@ -1103,29 +1111,19 @@ class DazedMTLGUI(QMainWindow):
 
         # ── Engine selector bar ──
         bar = QWidget()
-        bar.setStyleSheet(
-            "QWidget{background-color:#252526;border-bottom:1px solid #3a3a3a;}"
-        )
+        bar.setObjectName("workflowEngineBar")
         bar_layout = QHBoxLayout(bar)
-        bar_layout.setContentsMargins(16, 6, 16, 6)
+        bar_layout.setContentsMargins(16, 8, 16, 8)
         bar_layout.setSpacing(8)
 
         engine_label = QLabel("Engine:")
-        engine_label.setStyleSheet(
-            "color:#9d9d9d;font-size:12px;font-weight:bold;background:transparent;border:none;"
-        )
+        engine_label.setObjectName("workflowEngineLabel")
         bar_layout.addWidget(engine_label)
 
         self.workflow_engine_combo = QComboBox()
+        self.workflow_engine_combo.setObjectName("workflowEngineSelector")
         self.workflow_engine_combo.addItem("RPG Maker (MV/MZ/Ace)")
         self.workflow_engine_combo.addItem("Wolf RPG (WolfDawn)")
-        self.workflow_engine_combo.setStyleSheet(
-            "QComboBox{background-color:#3c3c3c;color:#cccccc;border:1px solid #555555;"
-            "border-radius:4px;padding:3px 8px;font-size:12px;min-width:220px;}"
-            "QComboBox:hover{border-color:#007acc;}"
-            "QComboBox QAbstractItemView{background-color:#2d2d30;color:#cccccc;"
-            "selection-background-color:#007acc;}"
-        )
         bar_layout.addWidget(self.workflow_engine_combo)
         bar_layout.addStretch()
         layout.addWidget(bar)
@@ -1444,283 +1442,10 @@ def main():
     # Set application properties
     app.setApplicationVersion("1.0")
     
-    # Apply dark theme with cleaner, more compact styling
-    app.setStyleSheet("""
-        QMainWindow {
-            background-color: #2b2b2b;
-            color: #ffffff;
-        }
-        QWidget {
-            background-color: #2b2b2b;
-            color: #ffffff;
-        }
-        QTabWidget::pane {
-            border: 1px solid #555555;
-            background-color: #3c3c3c;
-            padding: 5px;
-        }
-        QTabBar::tab {
-            background-color: #555555;
-            color: #ffffff;
-            padding: 8px 16px;
-            margin-right: 2px;
-            border: 1px solid #666666;
-            border-bottom: none;
-        }
-        QTabBar::tab:selected {
-            background-color: #007acc;
-            color: #ffffff;
-        }
-        QTabBar::tab:hover {
-            background-color: #666666;
-            color: #ffffff;
-        }
-        QGroupBox {
-            font-weight: normal;
-            border: 1px solid #444444;
-            border-radius: 3px;
-            margin-top: 8px;
-            padding: 8px;
-            color: #ffffff;
-            background-color: transparent;
-        }
-        QGroupBox::title {
-            subcontrol-origin: margin;
-            subcontrol-position: top left;
-            left: 8px;
-            padding: 2px 5px;
-            color: #007acc;
-            background-color: #2b2b2b;
-            font-weight: bold;
-        }
-        QPushButton {
-            background-color: #0078d4;
-            color: white;
-            border: none;
-            padding: 7px 14px;
-            border-radius: 3px;
-            font-weight: bold;
-        }
-        QPushButton:hover {
-            background-color: #106ebe;
-        }
-        QPushButton:pressed {
-            background-color: #005a9e;
-        }
-        QPushButton:disabled {
-            background-color: #404040;
-            color: #888888;
-        }
-        QCheckBox {
-            color: #ffffff;
-            spacing: 6px;
-            background-color: transparent;
-            padding: 2px;
-        }
-        QCheckBox::indicator {
-            width: 16px;
-            height: 16px;
-        }
-        QCheckBox::indicator:unchecked {
-            background-color: #404040;
-            border: 1px solid #555555;
-            border-radius: 2px;
-        }
-        QCheckBox::indicator:checked {
-            background-color: #0078d4;
-            border: 1px solid #0078d4;
-            border-radius: 2px;
-        }
-        QLabel {
-            color: #ffffff;
-            background-color: transparent;
-            padding: 2px;
-        }
-        QLineEdit {
-            background-color: #404040;
-            color: #ffffff;
-            border: 1px solid #555555;
-            padding: 1px 10px;
-            min-height: 30px;
-            border-radius: 2px;
-            selection-background-color: #007acc;
-        }
-        QLineEdit:focus {
-            border: 1px solid #007acc;
-        }
-        QSpinBox, QDoubleSpinBox {
-            background-color: #404040;
-            color: #ffffff;
-            border: 1px solid #555555;
-            padding: 1px 10px;
-            min-height: 30px;
-            border-radius: 2px;
-        }
-        QSpinBox:focus, QDoubleSpinBox:focus {
-            border: 1px solid #007acc;
-        }
-        QSpinBox::up-button, QDoubleSpinBox::up-button {
-            background-color: #555555;
-            border: none;
-            border-radius: 0;
-        }
-        QSpinBox::down-button, QDoubleSpinBox::down-button {
-            background-color: #555555;
-            border: none;
-            border-radius: 0;
-        }
-        QComboBox {
-            background-color: #404040;
-            color: #ffffff;
-            border: 1px solid #555555;
-            padding: 1px 8px;
-            min-height: 30px;
-            border-radius: 2px;
-        }
-        QComboBox:focus {
-            border: 1px solid #007acc;
-        }
-        QComboBox::drop-down {
-            subcontrol-origin: border;
-            subcontrol-position: top right;
-            width: 20px;
-            border: none;
-            border-left: 1px solid #555555;
-            background-color: #4a4a4a;
-        }
-        QComboBox::drop-down:hover {
-            background-color: #007acc;
-        }
-        QComboBox QAbstractItemView {
-            background-color: #404040;
-            color: #ffffff;
-            selection-background-color: #007acc;
-            border: 1px solid #555555;
-            padding: 3px;
-        }
-        QTextEdit {
-            background-color: #1e1e1e;
-            color: #ffffff;
-            border: 1px solid #555555;
-            selection-background-color: #007acc;
-            padding: 5px;
-        }
-        QTextEdit:focus {
-            border: 1px solid #007acc;
-        }
-        QScrollArea {
-            background-color: transparent;
-            border: none;
-        }
-        QScrollBar:vertical {
-            background-color: #2b2b2b;
-            width: 12px;
-            border: none;
-        }
-        QScrollBar::handle:vertical {
-            background-color: #555555;
-            border-radius: 6px;
-            min-height: 20px;
-            margin: 2px;
-        }
-        QScrollBar::handle:vertical:hover {
-            background-color: #007acc;
-        }
-        QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
-            height: 0px;
-        }
-        QScrollBar:horizontal {
-            background-color: #2b2b2b;
-            height: 12px;
-            border: none;
-        }
-        QScrollBar::handle:horizontal {
-            background-color: #555555;
-            border-radius: 6px;
-            min-width: 20px;
-            margin: 2px;
-        }
-        QScrollBar::handle:horizontal:hover {
-            background-color: #007acc;
-        }
-        QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
-            width: 0px;
-        }
-        QListWidget {
-            background-color: #1e1e1e;
-            color: #ffffff;
-            border: 1px solid #555555;
-            selection-background-color: #007acc;
-            padding: 3px;
-        }
-        QListWidget::item {
-            padding: 5px;
-            border-bottom: 1px solid #333333;
-        }
-        QListWidget::item:selected {
-            background-color: #007acc;
-            color: #ffffff;
-        }
-        QListWidget::item:hover {
-            background-color: #404040;
-        }
-        QHeaderView::section {
-            background-color: #555555;
-            color: #ffffff;
-            padding: 6px;
-            border: 1px solid #666666;
-        }
-        QStatusBar {
-            background-color: #2b2b2b;
-            color: #ffffff;
-            border-top: 1px solid #555555;
-        }
-        QProgressBar {
-            background-color: #404040;
-            border: 1px solid #555555;
-            border-radius: 3px;
-            text-align: center;
-            color: #ffffff;
-            height: 20px;
-        }
-        QProgressBar::chunk {
-            background-color: #007acc;
-            border-radius: 2px;
-        }
-        QMenuBar {
-            background-color: #2b2b2b;
-            color: #ffffff;
-            border-bottom: 1px solid #555555;
-        }
-        QMenuBar::item {
-            padding: 6px 12px;
-            background-color: transparent;
-        }
-        QMenuBar::item:selected {
-            background-color: #007acc;
-        }
-        QMenu {
-            background-color: #404040;
-            color: #ffffff;
-            border: 1px solid #555555;
-        }
-        QMenu::item {
-            padding: 6px 20px;
-        }
-        QMenu::item:selected {
-            background-color: #007acc;
-        }
-        QFrame[frameShape="4"], QFrame[frameShape="5"] {
-            color: #555555;
-        }
-        QSplitter::handle {
-            background-color: #555555;
-        }
-        QSplitter::handle:hover {
-            background-color: #007acc;
-        }
-    """)
-    
+    # Apply the canonical dark palette and QSS after QApplication exists.
+    from gui.theme import apply_application_theme
+    apply_application_theme(app)
+
     try:
         # Create and show the main window
         window = DazedMTLGUI()

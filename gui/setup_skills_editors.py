@@ -29,6 +29,7 @@ from util.skills import (
     sanitize_custom_skill_stem,
 )
 from util.vocab import read_game_vocab, write_game_vocab
+from gui.theme import Geometry, Spacing
 
 
 class _PlainPasteTextEdit(QTextEdit):
@@ -38,55 +39,27 @@ class _PlainPasteTextEdit(QTextEdit):
         self.insertPlainText(source.text())
 
 
-def _make_btn(text: str, color: str = "#007acc") -> QPushButton:
-    """Match workflow_tab button styling (flat dark + coloured outline)."""
-    btn = QPushButton()
-    try:
-        c = color.lstrip("#")
-        if len(c) == 3:
-            c = c[0] * 2 + c[1] * 2 + c[2] * 2
-        r, g, b = int(c[0:2], 16), int(c[2:4], 16), int(c[4:6], 16)
-        is_flat = max(r, g, b) < 115
-    except Exception:
-        r = g = b = 0
-        is_flat = False
-    _PAD = "padding:6px 14px;"
-    _icon_color = "#cccccc"
-    if is_flat:
-        btn.setStyleSheet(
-            f"QPushButton{{background-color:#2d2d30;color:#cccccc;"
-            f"border:1px solid #555555;{_PAD}"
-            f"border-radius:4px;font-size:12px;font-weight:bold;"
-            f"font-family:'Segoe UI','Segoe UI Emoji','Apple Color Emoji',sans-serif;}}"
-            f"QPushButton:hover{{background-color:#3e3e42;}}"
-            f"QPushButton:pressed{{background-color:#007acc;color:white;}}"
-            f"QPushButton:disabled{{background-color:#404040;color:#666666;border-color:#444444;}}"
-        )
+def _make_btn(text: str, color: str = "#0e639c") -> QPushButton:
+    """Match the shared semantic workflow button hierarchy."""
+    from gui.theme import COLORS
+    from gui.workflow_components import make_workflow_button
+
+    normalized = color.lower().strip()
+    if normalized in {"#7a3a3a", "#8b0000", "#cc2222", "#cc4444"}:
+        variant = "danger"
+    elif normalized in {
+        "#45454a", "#555", "#5a5a60", "#444", "#444444",
+        COLORS.border.lower(), COLORS.border_strong.lower(), COLORS.surface_1.lower(),
+    }:
+        variant = "secondary"
     else:
-        rt = min(255, r + 80)
-        gt = min(255, g + 80)
-        bt = min(255, b + 80)
-        text_color = f"#{rt:02x}{gt:02x}{bt:02x}"
-        _icon_color = text_color
-        base = 0x2d
-        rh = min(255, int(base + (r - base) * 0.18))
-        gh = min(255, int(base + (g - base) * 0.18))
-        bh = min(255, int(base + (b - base) * 0.18))
-        hover_bg = f"#{rh:02x}{gh:02x}{bh:02x}"
-        rb = min(255, r + 35)
-        gb = min(255, g + 35)
-        bb = min(255, b + 35)
-        hover_accent = f"#{rb:02x}{gb:02x}{bb:02x}"
-        btn.setStyleSheet(
-            f"QPushButton{{background-color:#2d2d30;color:{text_color};"
-            f"border:1px solid {color};{_PAD}"
-            f"border-radius:4px;font-size:12px;font-weight:bold;"
-            f"font-family:'Segoe UI','Segoe UI Emoji','Apple Color Emoji',sans-serif;}}"
-            f"QPushButton:hover{{background-color:{hover_bg};border-color:{hover_accent};"
-            f"color:{hover_accent};}}"
-            f"QPushButton:pressed{{background-color:#1a1a1a;}}"
-            f"QPushButton:disabled{{background-color:#2d2d30;color:#555555;border-color:#444444;}}"
-        )
+        variant = "primary"
+    btn = make_workflow_button(text, variant=variant)
+    _icon_color = {
+        "primary": "#ffffff",
+        "danger": COLORS.danger,
+        "secondary": COLORS.text_secondary,
+    }[variant]
     from gui import qt_icons
 
     qt_icons.apply_button_icon(btn, text, color=_icon_color)
@@ -135,14 +108,14 @@ class SetupSkillsEditors(QWidget):
         tab_bar.setMinimumHeight(34)
         tab_bar.setStyleSheet(
             "QTabBar::tab{background:#333337;color:#c0c0c0;min-width:90px;min-height:28px;"
-            "padding:6px 16px;border:1px solid #3c3c3c;border-bottom:none;"
+            "padding:6px 16px;border:1px solid #45454a;border-bottom:none;"
             "margin-right:3px;font-size:12px;font-weight:bold;}"
-            "QTabBar::tab:selected{background:#1e1e1e;color:#4ec9b0;"
-            "border-top:2px solid #4ec9b0;}"
+            "QTabBar::tab:selected{background:#1e1e1e;color:#f2f2f2;"
+            "border-top:2px solid #f2f2f2;}"
             "QTabBar::tab:hover{color:#ffffff;}"
         )
         editors.setStyleSheet(
-            "QTabWidget::pane{border:1px solid #3c3c3c;background:#1e1e1e;}"
+            "QTabWidget::pane{border:1px solid #45454a;background:#1e1e1e;}"
         )
 
         editors.addTab(
@@ -177,9 +150,9 @@ class SetupSkillsEditors(QWidget):
         self._game_skills_bar.setDrawBase(False)
         self._game_skills_bar.setMinimumHeight(30)
         self._game_skills_bar.setStyleSheet(
-            "QTabBar::tab{background:#2d2d30;color:#9d9d9d;padding:6px 12px;"
-            "border:1px solid #3c3c3c;border-bottom:none;margin-right:2px;}"
-            "QTabBar::tab:selected{background:#1e1e1e;color:#e0e0e0;}"
+            "QTabBar::tab{background:#2d2d30;color:#a6a6a6;padding:6px 12px;"
+            "border:1px solid #45454a;border-bottom:none;margin-right:2px;}"
+            "QTabBar::tab:selected{background:#1e1e1e;color:#f2f2f2;}"
             "QTabBar::tab:hover{color:#ffffff;}"
         )
         self._game_skills_stack = QStackedWidget()
@@ -191,24 +164,24 @@ class SetupSkillsEditors(QWidget):
         strip = QWidget()
         strip.setStyleSheet("background-color:#252526;")
         strip_l = QHBoxLayout(strip)
-        strip_l.setContentsMargins(8, 6, 10, 0)
-        strip_l.setSpacing(6)
+        strip_l.setContentsMargins(Spacing.SM, Spacing.SM, Spacing.MD, 0)
+        strip_l.setSpacing(Spacing.SM)
         strip_l.addWidget(self._game_skills_bar, 0, Qt.AlignBottom)
 
         add_btn = QPushButton("+ Add custom")
         add_btn.setCursor(Qt.PointingHandCursor)
-        add_btn.setFixedHeight(30)
+        add_btn.setMinimumHeight(Geometry.CONTROL)
         add_btn.setToolTip(
             "Create a custom skills/*.md overlay.\n"
             "Merged into the translation system prompt - can hurt quality."
         )
         add_btn.setStyleSheet(
-            "QPushButton{background-color:#2d2d30;color:#4ec9b0;"
-            "border:1px solid #3c3c3c;border-bottom:none;"
+            "QPushButton{background-color:#2d2d30;color:#f2f2f2;"
+            "border:1px solid #45454a;border-bottom:none;"
             "border-top-left-radius:3px;border-top-right-radius:3px;"
             "padding:0 12px;font-size:12px;font-weight:bold;}"
-            "QPushButton:hover{background-color:#3a3a3a;color:#7ee0c8;"
-            "border-color:#4ec9b0;}"
+            "QPushButton:hover{background-color:#45454a;color:#ffffff;"
+            "border-color:#f2f2f2;}"
             "QPushButton:pressed{background-color:#1e1e1e;}"
         )
         add_btn.clicked.connect(self._add_custom_skill)
@@ -241,35 +214,35 @@ class SetupSkillsEditors(QWidget):
     ) -> QWidget:
         page = QWidget()
         vl = QVBoxLayout(page)
-        vl.setContentsMargins(8, 8, 8, 8)
-        vl.setSpacing(6)
+        vl.setContentsMargins(Spacing.SM, Spacing.SM, Spacing.SM, Spacing.SM)
+        vl.setSpacing(Spacing.SM)
         tip_lbl = QLabel(tip)
         tip_lbl.setWordWrap(True)
-        tip_lbl.setStyleSheet("color:#9d9d9d;font-size:12px;")
+        tip_lbl.setStyleSheet("color:#a6a6a6;font-size:12px;")
         vl.addWidget(tip_lbl)
         path_lbl = QLabel(path_hint)
         path_lbl.setStyleSheet(
-            "color:#569cd6;font-size:11px;font-family:Consolas,monospace;"
+            "color:#75beff;font-size:11px;font-family:Consolas,monospace;"
         )
         vl.addWidget(path_lbl)
         ed = _PlainPasteTextEdit()
         ed.setMinimumHeight(160)
         ed.setFont(QFont("Consolas", 9))
         ed.setStyleSheet(
-            "QTextEdit{background-color:#1e1e1e;color:#d4d4d4;"
+            "QTextEdit{background-color:#1e1e1e;color:#c8c8c8;"
             "border:none;padding:8px;"
             "selection-background-color:#264f78;}"
         )
         setattr(self, attr, ed)
         vl.addWidget(ed, 1)
         row = QHBoxLayout()
-        row.setSpacing(8)
-        save_btn = _make_btn("💾  Save", "#3a7a3a")
-        save_btn.setFixedWidth(110)
+        row.setSpacing(Spacing.SM)
+        save_btn = _make_btn("💾  Save", "#0e639c")
+        save_btn.setFixedWidth(128)
         save_btn.clicked.connect(save_slot)
         row.addWidget(save_btn)
         reload_btn = _make_btn("↺  Reload", "#555")
-        reload_btn.setFixedWidth(110)
+        reload_btn.setFixedWidth(128)
         reload_btn.clicked.connect(reload_slot)
         row.addWidget(reload_btn)
         row.addStretch()
@@ -383,8 +356,8 @@ class SetupSkillsEditors(QWidget):
     def _custom_skill_editor_page(self, stem: str) -> QWidget:
         page = QWidget()
         vl = QVBoxLayout(page)
-        vl.setContentsMargins(8, 8, 8, 8)
-        vl.setSpacing(6)
+        vl.setContentsMargins(Spacing.SM, Spacing.SM, Spacing.SM, Spacing.SM)
+        vl.setSpacing(Spacing.SM)
 
         tip = QLabel(
             "Custom skill - merged into the translation system prompt. "
@@ -396,7 +369,7 @@ class SetupSkillsEditors(QWidget):
 
         path_lbl = QLabel(f"<game>/skills/{stem}.md")
         path_lbl.setStyleSheet(
-            "color:#569cd6;font-size:11px;font-family:Consolas,monospace;"
+            "color:#75beff;font-size:11px;font-family:Consolas,monospace;"
         )
         vl.addWidget(path_lbl)
 
@@ -404,7 +377,7 @@ class SetupSkillsEditors(QWidget):
         ed.setMinimumHeight(160)
         ed.setFont(QFont("Consolas", 9))
         ed.setStyleSheet(
-            "QTextEdit{background-color:#1e1e1e;color:#d4d4d4;"
+            "QTextEdit{background-color:#1e1e1e;color:#c8c8c8;"
             "border:none;padding:8px;"
             "selection-background-color:#264f78;}"
         )
@@ -412,21 +385,21 @@ class SetupSkillsEditors(QWidget):
         vl.addWidget(ed, 1)
 
         row = QHBoxLayout()
-        row.setSpacing(8)
-        save_btn = _make_btn("💾  Save", "#3a7a3a")
-        save_btn.setFixedWidth(110)
+        row.setSpacing(Spacing.SM)
+        save_btn = _make_btn("💾  Save", "#0e639c")
+        save_btn.setFixedWidth(128)
         save_btn.clicked.connect(lambda _=False, s=stem: self._save_custom_skill(s))
         row.addWidget(save_btn)
 
         reload_btn = _make_btn("↺  Reload", "#555")
-        reload_btn.setFixedWidth(110)
+        reload_btn.setFixedWidth(128)
         reload_btn.clicked.connect(
             lambda _=False, s=stem: self._reload_one_custom_skill(s)
         )
         row.addWidget(reload_btn)
 
         delete_btn = _make_btn("🗑  Delete", "#8b0000")
-        delete_btn.setFixedWidth(110)
+        delete_btn.setFixedWidth(128)
         delete_btn.setToolTip("Delete this custom skill file from the game folder")
         delete_btn.clicked.connect(lambda _=False, s=stem: self._delete_custom_skill(s))
         row.addWidget(delete_btn)
@@ -510,7 +483,7 @@ class SetupSkillsEditors(QWidget):
         warn.button(QMessageBox.Ok).setText("I understand - continue")
         warn.setStyleSheet(
             "QMessageBox{background-color:#252526;}"
-            "QLabel{color:#d4d4d4;font-size:13px;min-width:420px;}"
+            "QLabel{color:#c8c8c8;font-size:13px;min-width:420px;}"
         )
         if warn.exec_() != QMessageBox.Ok:
             return

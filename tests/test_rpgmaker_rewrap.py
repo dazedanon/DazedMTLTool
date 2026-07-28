@@ -411,6 +411,74 @@ class RpgMakerRewrapTests(unittest.TestCase):
             changed["events"]["1"]["pages"][0]["list"][1]["parameters"][0],
         )
 
+    def test_dtextpicture_rewrap_preserves_centering_on_every_line(self):
+        path = self.root / "MapDTextPicture.json"
+        original = "\\ac This centered picture text was already\n\\ac wrapped at another width."
+        command = {
+            "code": 357,
+            "indent": 0,
+            "parameters": [
+                "DTextPicture",
+                "dText",
+                "String Picture Preparation",
+                {"text": original, "fontSize": "0"},
+            ],
+            "_original": "中央揃えの原文",
+        }
+        _write(path, _map_with([command]))
+
+        result = rewrap_directory(
+            self.root,
+            self._options(
+                categories=frozenset({DIALOGUE}),
+                event_codes=frozenset({357}),
+                dialogue_width=16,
+            ),
+            apply=True,
+        )
+
+        self.assertEqual(result.by_code[357], 1)
+        self.assertEqual(result.changes_applied, 1)
+        updated = json.loads(path.read_text(encoding="utf-8"))["events"]["1"]["pages"][0]["list"][0]
+        wrapped = updated["parameters"][3]["text"]
+        self.assertGreater(len(wrapped.splitlines()), 1)
+        self.assertTrue(all(line.startswith(r"\ac ") for line in wrapped.splitlines()))
+        self.assertEqual(
+            " ".join(line.removeprefix(r"\ac ") for line in wrapped.splitlines()),
+            "This centered picture text was already wrapped at another width.",
+        )
+        self.assertEqual(updated["parameters"][3]["fontSize"], "0")
+        self.assertEqual(updated["_original"], "中央揃えの原文")
+
+    def test_dtextpicture_ignores_non_text_plugin_commands(self):
+        path = self.root / "MapDTextSetting.json"
+        text = "This field is not a dText display argument and must stay unchanged."
+        command = {
+            "code": 357,
+            "indent": 0,
+            "parameters": [
+                "DTextPicture",
+                "dTextSetting",
+                "String Picture Settings",
+                {"text": text},
+            ],
+        }
+        _write(path, _map_with([command]))
+
+        result = rewrap_directory(
+            self.root,
+            self._options(
+                categories=frozenset({DIALOGUE}),
+                event_codes=frozenset({357}),
+                dialogue_width=12,
+            ),
+            apply=True,
+        )
+
+        self.assertEqual(result.changes_found, 0)
+        updated = json.loads(path.read_text(encoding="utf-8"))["events"]["1"]["pages"][0]["list"][0]
+        self.assertEqual(updated["parameters"][3]["text"], text)
+
     def test_code122_rewraps_only_the_backtick_string(self):
         path = self.root / "CommonEvents.json"
         expression = "`A stored help string that should be rewrapped without changing syntax.`;"

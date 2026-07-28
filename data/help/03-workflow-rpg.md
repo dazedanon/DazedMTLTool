@@ -4,6 +4,22 @@ Open **Workflow** and select **RPG Maker** in the engine selector.
 Use each step's **?** button for short in-context help.
 This page is the overview.
 
+The workflow uses a step rail on the left and keeps one task page visible at a time. At narrower
+window sizes the rail collapses to step numbers so the task area stays usable. Use **Back** and
+**Continue** at the bottom, or select a step directly in the rail.
+
+Every page is organized as numbered tasks rather than one large control surface. Work through
+the numbered cards in order; wide layouts place closely related cards side by side, while narrow
+layouts stack them without changing their meaning or state.
+
+Related buttons share a consistent size and alignment. Primary blue actions advance or apply work;
+neutral actions inspect, copy, reload, or configure; red-outline actions remove existing data or
+installed tools. Form fields and checkbox groups use stable columns so values remain easy to scan.
+
+Routine output is collected behind the **Activity** button instead of permanently taking page
+space. The badge shows unread entries; open the panel for details or to clear the display. Errors
+remain indicated after the panel is closed so they are not easy to miss.
+
 ## Steps at a glance
 
 | Step | What it does |
@@ -28,7 +44,8 @@ This page is the overview.
 
 ## Speaker flags (Step 2)
 
-Enable only what the game uses:
+Step 2 is split into preparing working files, building speaker/project context, and reviewing the
+saved guidance. Enable only the speaker detection methods the game uses:
 
 - **INLINE401** - name stuck to dialogue on the same line
 - **FIRSTLINE** - first dialogue line is the speaker name
@@ -43,12 +60,19 @@ Project Setup's `speakers` block recommends ENABLE / SKIP with evidence.
 - On **Mistral** (free), stay on **Normal** mode - Batch is Claude-only.
 - Use **Normal** mode when you want live iteration on a handful of files.
 - Phase 2 can break games if you translate logic keys - audit with the Plugin Prompt first.
+- Phase 2's long plugin/script and pattern lists are under **Advanced code controls**. Collapsing
+  that section never changes its checked options.
 
 ## Rewrap exported game data (Step 6)
 
 Export translations in Step 5 first. Rewrap then edits the JSON in the game data folder detected
 by Step 0 when the English is correct but its line breaks need to change. It does not call the
 model and never changes `_original`.
+
+The page follows four stages: choose files, set wrapping rules, scan/review/apply, then finish QA
+and package the game. At wide window sizes file selection and wrapping rules appear side by side.
+Event codes and non-401 row protection are under **Advanced event handling**, and scan results
+remain collapsed until a scan begins.
 
 - Select Dialogue, Dialogue + Face, List/Help, Notes, or any combination.
 - Select individual maps/database files, all maps/events, all DB files, or everything.

@@ -58,6 +58,10 @@ _SPEAKER_LINE = re.compile(
     r"(?:[\\]+[kKnN][wWcCrReE]?[\[<][^\]>\n]+[\]>]))\n)"
 )
 
+_DTEXT_PICTURE_PLUGIN = "DTextPicture"
+_DTEXT_PICTURE_COMMAND = "dText"
+_DTEXT_CENTER_CODE = re.compile(r"(?P<code>\\+ac)\s*")
+
 
 @dataclass(frozen=True)
 class RewrapOptions:
@@ -545,11 +549,18 @@ def _rewrap_code357(
     if not isinstance(params, list) or len(params) <= 3 or not isinstance(params[3], dict):
         return
     payload = params[3]
+    is_dtext_picture = params[0] == _DTEXT_PICTURE_PLUGIN
+    if is_dtext_picture and (len(params) <= 1 or params[1] != _DTEXT_PICTURE_COMMAND):
+        return
     for key in ("comment", "text", "messageText"):
         before = payload.get(key)
         if not isinstance(before, str) or not before.strip():
             continue
-        after = _rewrap_text(before, options.dialogue_width)
+        after = (
+            _rewrap_dtext_picture(before, options.dialogue_width)
+            if is_dtext_picture and key == "text"
+            else _rewrap_text(before, options.dialogue_width)
+        )
         if collector.offer(
             category=DIALOGUE,
             locator=f"{locator}/parameters/3/{_pointer_part(key)}",
@@ -559,6 +570,20 @@ def _rewrap_code357(
             row_limited=True,
         ):
             payload[key] = after
+
+
+def _rewrap_dtext_picture(text: str, width: int) -> str:
+    """Rewrap a DTextPicture payload while retaining per-line centering."""
+    center_match = _DTEXT_CENTER_CODE.search(text)
+    if center_match is None:
+        return _rewrap_text(text, width)
+    body = _DTEXT_CENTER_CODE.sub("", text)
+    wrapped = _rewrap_text(body, width)
+    center_code = center_match.group("code")
+    return "\n".join(
+        f"{center_code} {line}" if line else center_code
+        for line in wrapped.split("\n")
+    )
 
 
 def _rewrap_note_bodies(document, options: RewrapOptions, collector: _Collector) -> None:
