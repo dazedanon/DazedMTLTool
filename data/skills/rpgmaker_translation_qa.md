@@ -32,15 +32,55 @@ checks with targeted semantic review.
 - Mechanically check 100% of resolvable source/translation pairs.
 - Deduplicate identical source/translation pairs and repeated issue signatures.
 - Risk-score the remaining pairs and semantically review the highest-risk clusters first.
-- Add a deterministic stratified sample across every file, event code or database field, speaker,
-  and short/medium/long text band. Prefer at least one representative from every stratum; cap a
-  routine first-pass semantic sample near 500 unique pairs unless severe problems justify more.
+- Add deterministic stratified semantic-review waves across every file, event code or database
+  field, speaker, and short/medium/long text band. Treat 500 unique pairs per wave as the routine
+  target, not as the limit for the whole audit.
 - Review nearby event commands together when meaning, speaker, referent, or control-code placement
   depends on context.
 - State exact coverage. Never imply that sampled semantic review covered every line.
 
 Use a temporary script or compact index when useful. Do not leave generated QA artifacts in the
 game data folder or elsewhere in the game folder.
+
+## Iterative semantic convergence
+
+Keep a temporary review manifest outside the game folder. Identify reviewed locations by stable
+`relative file + JSON path + source hash`, independent of the current English, so an edited value
+does not re-enter a later discovery wave. Track deduplicated source/translation pairs separately
+for cluster coverage and propagate each reviewed judgment to every equivalent locator.
+
+Before presenting the first findings report, run non-overlapping discovery waves until the audit
+converges or reaches the safety cap:
+
+- Review all unique pairs when there are 750 or fewer.
+- For larger projects, run at least two 500-pair waves; run at least three when there are more than
+  2,500 unique pairs.
+- After the minimum, continue until two consecutive waves find no new actionable Critical, High,
+  or Medium defect. Low-only polish does not reset the clean-wave count.
+- Stop after five routine waves or 2,500 unique reviewed pairs unless the user explicitly asks for
+  deeper semantic coverage. If this cap is reached before two clean waves, report that QA has not
+  converged and do not describe the game as release-ready.
+- Never reuse a reviewed stable identity in a discovery wave. Put edited identities in a separate
+  regression queue instead.
+
+Each wave must retain stratification while favoring unseen high-risk pairs. Record its unique-pair
+count, overlap with earlier waves, represented strata, new issue signatures, and new affected live
+values. A wave is not clean merely because it repeats findings already known from an earlier wave.
+
+## Corpus-wide issue propagation
+
+When a defect is confirmed, immediately search all resolvable pairs for the broader issue
+signature before continuing sampling. Do not limit propagation to an identical Japanese sentence.
+Inspect, as applicable:
+
+- Every occurrence and inflection of the implicated source and English gameplay term.
+- The authoritative database entity, glossary entry, state, item, skill, location, or character.
+- Identical-source clusters, neighboring levels/variants, tutorial copies, repeated maps, and
+  related choice text.
+- The same pronoun/subject pattern, polarity, number, control-code scope, or formatting defect.
+
+Group confirmed matches under one finding ID and mark their stable identities reviewed. Do not
+automatically treat lexical matches as defects; verify their source meaning and runtime context.
 
 ## Pair extraction
 
@@ -110,9 +150,10 @@ Compare Japanese and English for fidelity, fluency, tone, and context. Prioritiz
 Use the source and surrounding event context as evidence. Do not call a translation wrong solely
 because another valid wording is possible. Separate definite defects from subjective polish.
 
-## First-pass output and approval gate
+## Converged audit output and approval gate
 
-Do not edit during the first pass. Return these sections:
+Do not edit during discovery. Complete the convergence loop or declare the safety cap before
+returning these sections:
 
 ### QA coverage
 
@@ -121,6 +162,7 @@ Do not edit during the first pass. Return these sections:
 - Pairs mechanically checked and unresolved pairs
 - Unique pairs/clusters
 - Pairs semantically reviewed, sampling method, and strata represented
+- Per-wave coverage, overlap, new actionable findings, clean-wave count, and convergence status
 - Any blind spots
 
 ### Findings summary
@@ -143,8 +185,12 @@ count. Limit Medium/Low examples to the most useful representatives. Never dump 
 ### Recommendation
 
 Say whether playtesting/release should be blocked, conditionally allowed after listed fixes, or
-allowed with only optional polish remaining. End with one focused approval question offering to
-apply all Critical/High-confidence fixes, selected finding IDs, or no edits.
+allowed with only optional polish remaining. End with one focused approval question offering:
+
+- Continuous remediation: apply all current and subsequently discovered high-confidence fixes in
+  the same game-data scope, then continue regression and fresh discovery waves until convergence.
+- Selected finding IDs only.
+- No edits.
 
 Stop and wait for approval.
 
@@ -157,8 +203,17 @@ Edit only the approved live translated values under `{{GAME_DATA_FOLDER}}`.
   and encoding. Make the smallest possible changes.
 - Follow the glossary and nearby context. Do not rewrite acceptable lines outside the approved
   scope.
-- Reparse every touched JSON file, rerun all mechanical checks on touched records, and check that
-  no new Japanese residue or token mismatch was introduced.
-- Report files and finding IDs fixed, remaining risks, and final game-data QA readiness.
+- Reparse every JSON file, rerun all mechanical checks, rescan every approved issue signature, and
+  check that no Japanese residue, token mismatch, or display regression was introduced.
+- Move edited stable identities through the regression queue; do not count regression review as
+  fresh semantic coverage.
+- Run another non-overlapping discovery wave after fixes. If it finds a new actionable defect,
+  propagate that signature corpus-wide and reset the clean-wave count.
+- Under continuous-remediation approval, apply new high-confidence fixes that remain within the
+  approved game-data scope and repeat. Pause for judgment on subjective rewrites or anything
+  outside that scope. Without continuous approval, report new findings and ask before editing.
+- Report files and finding IDs fixed, remaining risks, total unique semantic coverage, wave
+  history, convergence status, and final game-data QA readiness. Never claim readiness without
+  meeting the convergence criteria.
 - Do not modify anything outside the detected game data folder. The rest of the game is context
   only.

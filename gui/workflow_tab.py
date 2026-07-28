@@ -79,14 +79,14 @@ from gui.translation_tab import (
 WORKFLOW_TL_NORMAL_LABEL = "Normal Translate"
 
 _STEP_PURPOSES = {
-    0: "Choose the game project and select the data files that enter this translation run.",
-    1: "Optionally normalize project data and install update helpers before translation.",
-    2: "Configure speaker detection and prepare the glossary and game-specific guidance.",
-    3: "Translate database text and safe dialogue in a controlled sequence.",
-    4: "Audit and translate risky variable, plugin, and script text only when required.",
-    5: "Prepare script or plugin text, then export reviewed translations into the game.",
-    6: "Reflow exported English, review the result, and prepare the release package.",
-    7: "Verify image readiness and continue into the dedicated image workflow.",
+    0: "Detect the game and choose which data files enter this translation run.",
+    1: "Optionally format project files and install the GameUpdate helper.",
+    2: "Configure speaker detection, collect names, and maintain project guidance.",
+    3: "Translate database and dialogue text, then build the variable cache.",
+    4: "Translate audited variable, plugin, and script text only when required.",
+    5: "Prepare plugin or script text and export reviewed translations to the game.",
+    6: "Rewrap exported text, run final QA, and build a public release.",
+    7: "Check image readiness, then continue in the Image Manager.",
     8: "Configure and install the tools used to inspect the translation in-game.",
 }
 
@@ -1231,24 +1231,24 @@ class WorkflowTab(QWidget):
         return header.title_label
 
     def _build_step0(self, layout: QVBoxLayout):
-        self._add_step_header(layout, "Step 0 — Project Folder", 0)
+        self._add_step_header(layout, "Step 0 — Project & Files", 0)
 
         project_stage = WorkflowStageCard(
             1,
-            "Choose the RPG Maker project",
-            "Select the game root. Detection identifies MV, MZ, or Ace and locates its data.",
+            "Select the RPG Maker project",
+            "Choose the game folder. Detection identifies MV, MZ, or Ace and locates its data.",
         )
         row0 = QHBoxLayout()
         row0.setSpacing(Spacing.SM)
         self.folder_edit = QLineEdit()
-        self.folder_edit.setPlaceholderText("Path to game root folder…")
+        self.folder_edit.setPlaceholderText("Game folder path…")
         saved = self._setting("last_game_folder", "")
         if saved:
             self.folder_edit.setText(saved)
         row0.addWidget(self.folder_edit, 1)
         self.folder_edit.returnPressed.connect(self._detect_folder)
 
-        browse_btn = _make_icon_btn("📁", "Browse for a game project folder")
+        browse_btn = _make_icon_btn("📁", "Choose an RPG Maker game folder")
         browse_btn.clicked.connect(self._browse_folder)
         row0.addWidget(browse_btn)
         project_stage.add_layout(row0)
@@ -1265,22 +1265,22 @@ class WorkflowTab(QWidget):
 
         files_stage = WorkflowStageCard(
             2,
-            "Choose the data files for this translation run",
-            "Start with Core for a small database pass, or include the maps and events you want to translate.",
+            "Select files to translate",
+            "Start with the core database, then add the maps and events needed for this run.",
         )
         selection_row = QHBoxLayout()
         selection_row.setSpacing(Spacing.SM)
-        select_all_btn = _make_text_btn("All", "Select all importable files", min_width=128)
+        select_all_btn = _make_text_btn("Select all", "Select every importable file", min_width=128)
         select_all_btn.clicked.connect(self._select_all_files)
         selection_row.addWidget(select_all_btn)
 
-        deselect_all_btn = _make_text_btn("None", "Deselect all files", min_width=128)
+        deselect_all_btn = _make_text_btn("Clear selection", "Deselect every file", min_width=128)
         deselect_all_btn.clicked.connect(self._deselect_all_files)
         selection_row.addWidget(deselect_all_btn)
 
         sel_core = _make_text_btn(
-            "Core database",
-            "Core only: select database files and deselect maps",
+            "Database only",
+            "Select core database files and deselect maps and events",
             min_width=128,
         )
         sel_core.clicked.connect(self._select_core_only)
@@ -1317,15 +1317,15 @@ class WorkflowTab(QWidget):
 
         import_stage = WorkflowStageCard(
             3,
-            "Import the checked files into the workspace",
-            "Import replaces files/ with exactly this checked selection. Existing translated output is left alone.",
+            "Import selected files",
+            "Replace files/ with this selection. Existing translated output is not changed.",
         )
         import_row = QHBoxLayout()
         import_row.setSpacing(Spacing.SM)
-        import_btn = _make_btn("↓  Import checked files", "#0e639c")
+        import_btn = _make_btn("↓  Import selected files", "#0e639c")
         _size_action_button(import_btn, Geometry.ACTION_WIDE)
         import_btn.setEnabled(False)
-        import_btn.setToolTip("Replace files/ with exactly the checked files above")
+        import_btn.setToolTip("Replace files/ with exactly the selected files above")
         import_btn.clicked.connect(lambda _checked=False: self._import_files())
         self._register_import_button(import_btn)
         import_row.addWidget(import_btn)
@@ -1347,14 +1347,14 @@ class WorkflowTab(QWidget):
             "background-color:#252526;"
         )
         # Collapse/expand toggle
-        toggle_btn = make_workflow_button("Hide", variant="quiet")
+        toggle_btn = make_workflow_button("Hide tasks", variant="quiet")
         toggle_btn.setCheckable(True)
         toggle_btn.setChecked(True)
-        toggle_btn.setFixedSize(72, Geometry.CONTROL)
-        toggle_btn.setToolTip("Show or hide optional preparation tasks")
+        toggle_btn.setFixedSize(104, Geometry.CONTROL)
+        toggle_btn.setToolTip("Show or hide the optional preparation tasks")
         self._add_step_header(
             layout,
-            "Step 1 (Optional) — Pre-process",
+            "Step 1 (Optional) — Prepare Project",
             1,
             extra_widgets=[opt_badge, toggle_btn],
         )
@@ -1375,19 +1375,20 @@ class WorkflowTab(QWidget):
         # ---- Task A: dazedformat -----------------------------------------
         ta = WorkflowStageCard(
             1,
-            "Normalize the project JSON",
-            "Round-trip every JSON file through the bundled formatter so the project is predictable and readable.",
+            "Format game data",
+            "Normalize every JSON file with the bundled formatter before review or translation.",
         )
         ta_inner = ta.body
         self._pp_dazedformat_title = ta.title_label
         ta_path_row = QHBoxLayout()
-        ta_path_row.addWidget(_make_form_label("Data folder:"))
+        ta_path_row.addWidget(_make_form_label("Game data:"))
         self.pp_data_path_label = QLabel("(detect a project folder first)")
         self.pp_data_path_label.setStyleSheet("color:#77777a;font-size:13px;")
         ta_path_row.addWidget(self.pp_data_path_label, 1)
         ta_inner.addLayout(ta_path_row)
         ta_btn_row = QHBoxLayout()
-        run_dazed = _make_btn("►  Run dazedformat", "#555")
+        run_dazed = _make_btn("►  Format game data", "#555")
+        run_dazed.setToolTip("Normalize the detected game-data JSON with dazedformat")
         _size_action_button(run_dazed, Geometry.ACTION_WIDE)
         run_dazed.clicked.connect(self._run_dazedformat)
         ta_btn_row.addWidget(run_dazed)
@@ -1399,23 +1400,24 @@ class WorkflowTab(QWidget):
         # ---- Task B: prettier on plugins.js
         tb_box = WorkflowStageCard(
             2,
-            "Format plugins.js for review",
-            "Use the bundled Python formatter to make plugin configuration readable before auditing or editing it.",
+            "Format plugin configuration",
+            "Make plugins.js easier to audit and edit without changing its behavior.",
         )
         tb_inner = tb_box.body
         self._pp_plugins_js_title = tb_box.title_label
         tb_path_row = QHBoxLayout()
-        tb_path_lbl = _make_form_label("plugins.js:")
+        tb_path_lbl = _make_form_label("Plugin file:" )
         tb_path_row.addWidget(tb_path_lbl)
         self.pp_plugins_edit = QLineEdit()
-        self.pp_plugins_edit.setPlaceholderText("Path to plugins.js…")
+        self.pp_plugins_edit.setPlaceholderText("plugins.js path…")
         tb_path_row.addWidget(self.pp_plugins_edit, 1)
-        browse_plugins = _make_icon_btn("📁", "Browse for plugins.js")
+        browse_plugins = _make_icon_btn("📁", "Choose the plugins.js file")
         browse_plugins.clicked.connect(self._browse_plugins_js)
         tb_path_row.addWidget(browse_plugins)
         tb_inner.addLayout(tb_path_row)
         tb_btn_row = QHBoxLayout()
         run_prettier = _make_btn("►  Format plugins.js", "#555")
+        run_prettier.setToolTip("Format the selected plugins.js file for review")
         _size_action_button(run_prettier, Geometry.ACTION_WIDE)
         run_prettier.clicked.connect(self._run_prettier)
         tb_btn_row.addWidget(run_prettier)
@@ -1428,22 +1430,22 @@ class WorkflowTab(QWidget):
         tc = WorkflowStageCard(
             3,
             "Install the GameUpdate helper",
-            "Copy the RPG Maker update helper into the game and write its patch configuration from your saved defaults.",
+            "Copy GameUpdate into the game and write its patch configuration from your saved defaults.",
         )
         tc_inner = tc.body
 
         tc_src_row = QHBoxLayout()
-        tc_src_row.addWidget(_make_form_label("Source:"))
+        tc_src_row.addWidget(_make_form_label("GameUpdate:"))
         self.pp_gameupdate_edit = QLineEdit()
-        self.pp_gameupdate_edit.setPlaceholderText("Path to gameupdate/ folder…")
+        self.pp_gameupdate_edit.setPlaceholderText("GameUpdate source folder…")
         tc_src_row.addWidget(self.pp_gameupdate_edit, 1)
-        browse_gu = _make_icon_btn("📁", "Browse for the GameUpdate source folder")
+        browse_gu = _make_icon_btn("📁", "Choose the GameUpdate source folder")
         browse_gu.clicked.connect(self._browse_gameupdate)
         tc_src_row.addWidget(browse_gu)
         tc_inner.addLayout(tc_src_row)
 
         tc_dst_row = QHBoxLayout()
-        tc_dst_row.addWidget(_make_form_label("Destination:"))
+        tc_dst_row.addWidget(_make_form_label("Game folder:"))
         self.pp_gameupdate_dst_label = QLabel("(game root folder auto-filled from project)")
         self.pp_gameupdate_dst_label.setStyleSheet("color:#77777a;font-size:13px;")
         tc_dst_row.addWidget(self.pp_gameupdate_dst_label, 1)
@@ -1451,13 +1453,14 @@ class WorkflowTab(QWidget):
 
         tc_btn_row = QHBoxLayout()
         tc_btn_row.setSpacing(Spacing.SM)
-        run_gu = _make_btn("►  Copy gameupdate/", "#555")
+        run_gu = _make_btn("►  Install GameUpdate", "#555")
+        run_gu.setToolTip("Copy GameUpdate into the selected game folder")
         _size_action_button(run_gu, Geometry.ACTION_WIDE)
         run_gu.clicked.connect(self._run_gameupdate)
         tc_btn_row.addWidget(run_gu)
-        run_all_btn = _make_btn("►►  Run All 3 Tasks", "#0e639c")
+        run_all_btn = _make_btn("►►  Run available tasks", "#0e639c")
         _size_action_button(run_all_btn, Geometry.ACTION_WIDE)
-        run_all_btn.setToolTip("Run dazedformat, prettier, and gameupdate copy in sequence")
+        run_all_btn.setToolTip("Run each preparation task whose required path is available")
         run_all_btn.clicked.connect(self._run_all_preprocess)
         _equalize_action_buttons(
             run_gu,
@@ -1474,7 +1477,7 @@ class WorkflowTab(QWidget):
         layout.addWidget(collapse_widget)
 
         def _toggle_preprocess(expanded: bool):
-            toggle_btn.setText("Hide" if expanded else "Show")
+            toggle_btn.setText("Hide tasks" if expanded else "Show tasks")
             collapse_widget.setVisible(expanded)
         toggle_btn.toggled.connect(_toggle_preprocess)
 
@@ -1504,7 +1507,7 @@ class WorkflowTab(QWidget):
 
     def _build_step2_setup(self, layout: QVBoxLayout):
         """Combined speaker flags + Project Setup + vocab/quirks/game-skill editors."""
-        self._add_step_header(layout, "Step 2 — Setup (Speakers + Glossary)", 2)
+        self._add_step_header(layout, "Step 2 — Speakers & Guidance", 2)
 
         setup_workspace = QWidget()
         setup_workspace.setObjectName("setupWorkspace")
@@ -1516,20 +1519,21 @@ class WorkflowTab(QWidget):
 
         prepare_stage = WorkflowStageCard(
             1,
-            "Prepare the working files",
-            "Import the current selection, or clear previous translated output before restarting.",
+            "Prepare the translation workspace",
+            "Import the Step 0 selection or remove translated output before restarting.",
         )
         prepare_actions = QHBoxLayout()
         prepare_actions.setSpacing(Spacing.SM)
 
-        import_btn = _make_btn("↓  Import → files/", "#5a5a60")
+        import_btn = _make_btn("↓  Import selected files", "#5a5a60")
+        import_btn.setToolTip("Import the files currently selected in Step 0")
         import_btn.setEnabled(False)
         import_btn.clicked.connect(lambda _checked=False: self._import_files())
         self._register_import_button(import_btn)
         prepare_actions.addWidget(import_btn)
 
-        clear_translated_btn = _make_btn("✕  Clear TL", "#cc4444")
-        clear_translated_btn.setToolTip("Delete all files inside the translated/ folder")
+        clear_translated_btn = _make_btn("✕  Clear translated output", "#cc4444")
+        clear_translated_btn.setToolTip("Delete translated/ contents after confirmation")
         clear_translated_btn.clicked.connect(self._clear_translated)
         _equalize_action_buttons(
             import_btn,
@@ -1545,8 +1549,8 @@ class WorkflowTab(QWidget):
 
         speaker_stage = WorkflowStageCard(
             2,
-            "Build speaker and project context",
-            "Choose only the speaker conventions used by this game, then collect and audit context.",
+            "Configure speakers and generate project context",
+            "Enable only the speaker formats used by this game, then collect names and generate guidance.",
         )
 
         flags_label = QLabel("SPEAKER DETECTION")
@@ -1557,17 +1561,17 @@ class WorkflowTab(QWidget):
         flags_grid.setHorizontalSpacing(Spacing.LG)
         flags_grid.setVerticalSpacing(Spacing.SM)
 
-        self.spk_inline_cb = QCheckBox("Inline dialogue name")
+        self.spk_inline_cb = QCheckBox("Name embedded in dialogue")
         self.spk_inline_cb.setToolTip("INLINE401SPEAKERS · speaker name inline before 「 in 401 text")
         self.spk_inline_cb.stateChanged.connect(self._apply_speaker_flags)
         flags_grid.addWidget(self.spk_inline_cb, 0, 0)
 
-        self.spk_firstline_cb = QCheckBox("First-line speaker name")
+        self.spk_firstline_cb = QCheckBox("Name on first dialogue line")
         self.spk_firstline_cb.setToolTip("FIRSTLINESPEAKERS · first 401 line is a short speaker name")
         self.spk_firstline_cb.stateChanged.connect(self._apply_speaker_flags)
         flags_grid.addWidget(self.spk_firstline_cb, 0, 1)
 
-        self.spk_face_cb = QCheckBox("Face filename fallback")
+        self.spk_face_cb = QCheckBox("Infer name from face filename")
         self.spk_face_cb.setToolTip("FACENAME101 · speaker inferred from 101 face-image filename")
         self.spk_face_cb.stateChanged.connect(self._apply_speaker_flags)
         flags_grid.addWidget(self.spk_face_cb, 0, 2)
@@ -1578,7 +1582,7 @@ class WorkflowTab(QWidget):
         context_actions = QHBoxLayout()
         context_actions.setSpacing(Spacing.SM)
 
-        parse_btn = _make_btn("🔍  Parse Speakers", "#0e639c")
+        parse_btn = _make_btn("🔍  Collect speaker names", "#0e639c")
         parse_btn.setToolTip(
             "Collect speaker names from event files into vocab.txt # Speakers "
             "(no dialogue translation)."
@@ -1586,7 +1590,7 @@ class WorkflowTab(QWidget):
         parse_btn.clicked.connect(self._run_parse_speakers)
         context_actions.addWidget(parse_btn, 1)
 
-        copy_btn = _make_btn("📋  Copy Project Setup", "#555")
+        copy_btn = _make_btn("📋  Copy project setup skill", "#555")
         copy_btn.setToolTip(
             "Clipboard skill for the game repo IDE. Returns glossary, speakers, "
             "translation_quirks, game_skill, and RPG Maker configuration recommendations."
@@ -1606,8 +1610,8 @@ class WorkflowTab(QWidget):
 
         guidance_stage = WorkflowStageCard(
             3,
-            "Review and save project guidance",
-            "Keep the glossary concise, record game-specific quirks, and review the generated game skill.",
+            "Edit glossary and project guidance",
+            "Keep the glossary concise, record translation rules, and review the generated game guidance.",
         )
         self.setup_editors = SetupSkillsEditors(
             self,

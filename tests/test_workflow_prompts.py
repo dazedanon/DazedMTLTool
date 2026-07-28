@@ -39,12 +39,19 @@ class WorkflowTranslationPromptTests(unittest.TestCase):
         prompt = load_clipboard_skill("rpgmaker_translation_qa.md")
         lowered = prompt.casefold()
         self.assertIn("mechanically check 100%", lowered)
-        self.assertIn("deterministic stratified sample", lowered)
+        self.assertIn("deterministic stratified semantic-review waves", lowered)
         self.assertIn("control-code scope and placement", lowered)
         self.assertIn("enabled plugin code consumes a 108/408 comment block", lowered)
-        self.assertIn("do not edit during the first pass", lowered)
+        self.assertIn("do not edit during discovery", lowered)
         self.assertIn("stop and wait for approval", lowered)
         self.assertIn("never modify or remove `_original`", lowered)
+        self.assertIn("500 unique pairs per wave", lowered)
+        self.assertIn("`relative file + json path + source hash`", lowered)
+        self.assertIn("two consecutive waves", lowered)
+        self.assertIn("corpus-wide issue propagation", lowered)
+        self.assertIn("continuous remediation", lowered)
+        self.assertIn("non-overlapping discovery wave after fixes", lowered)
+        self.assertIn("never claim readiness without", lowered)
         for placeholder in (
             "{{GAME_DATA_FOLDER}}",
             "{{GAME_ROOT}}",
