@@ -611,6 +611,28 @@ def _apply_choice_original(cmd, index: int, raw_source: str) -> None:
         orig_list[index] = raw_source
 
 
+def _split_choice_condition_prefix(text: str) -> tuple[str, str]:
+    """Split a leading lowercase ``if(...)``/``en(...)`` plugin condition safely.
+
+    Conditions can contain nested calls such as ``if($gameSwitches.value(1))``.
+    Return the input untouched when the prefix is absent or unbalanced.
+    """
+    if not isinstance(text, str) or not text.startswith(("if(", "en(")):
+        return "", text
+
+    depth = 0
+    for index, char in enumerate(text[2:], start=2):
+        if char == "(":
+            depth += 1
+        elif char == ")":
+            depth -= 1
+            if depth == 0:
+                return text[: index + 1], text[index + 1 :]
+            if depth < 0:
+                break
+    return "", text
+
+
 def _122_inner_source(cmd) -> str | None:
     """Inner quoted value for code 122: _original or extract from parameters[4]."""
     orig = _scalar_original(cmd)
@@ -4052,13 +4074,8 @@ def searchCodes(page, pbar, jobList, filename):
                     if not _text_needs_translation(currentChoice):
                         continue
 
-                    # If and En Statements
-                    ifVar = ""
-                    ifList = re.findall(r"([ei][nf]\(.+?\)\)?\)?)", jaString)
-                    if len(ifList) != 0:
-                        for var in ifList:
-                            jaString = jaString.replace(var, "")
-                            ifVar += var
+                    # Preserve plugin condition prefixes outside the model.
+                    ifVar, jaString = _split_choice_condition_prefix(jaString)
                     
                     # Store the formatting and cleaned string
                     varList.append(ifVar)

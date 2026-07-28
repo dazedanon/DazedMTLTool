@@ -192,6 +192,35 @@ def _has_japanese(s: str) -> bool:
 
 
 class TestMVMZSourceOriginal(unittest.TestCase):
+    def test_choice_condition_prefix_parser_handles_nested_calls(self):
+        prefix, label = mvmz._split_choice_condition_prefix(
+            "if($gameSwitches.value(1) && v[31]>=4)迷宮四階"
+        )
+
+        self.assertEqual(prefix, "if($gameSwitches.value(1) && v[31]>=4)")
+        self.assertEqual(label, "迷宮四階")
+
+    def test_choice_condition_prefix_parser_leaves_malformed_input_untouched(self):
+        source = "if(v[31]>=4迷宮四階"
+        self.assertEqual(mvmz._split_choice_condition_prefix(source), ("", source))
+
+    def test_choice_translation_restores_condition_prefix_byte_for_byte(self):
+        source = "if(v[31]>=4)迷宮四階：図書館"
+        page = {
+            "list": [
+                {"code": 102, "indent": 0, "parameters": [[source], -1, 0, 2, 0]},
+            ]
+        }
+
+        def translate(text, _history, _batch=False):
+            self.assertEqual(text, ["迷宮四階：図書館"])
+            return [["labyrinth floor 4: library"], [0, 0]]
+
+        translated, _ = _run_search_codes(page, translate_fn=translate)
+
+        choice = _find_commands(translated, 102)[0]["parameters"][0][0]
+        self.assertEqual(choice, "if(v[31]>=4)Labyrinth floor 4: library")
+
     def test_first_pass_writes_original(self):
         page, _ = _run_search_codes(_load_map_excerpt())
 

@@ -16,6 +16,7 @@ import urllib.request
 from openai import APIError, APIConnectionError, RateLimitError, APIStatusError
 import hashlib
 import threading
+from collections import Counter
 from contextlib import contextmanager
 from dotenv import load_dotenv
 from pathlib import Path
@@ -177,7 +178,48 @@ PROTECTED_PATTERNS = [
     r'\\BGS\[[^\]]+\]',     # \BGS[background_sound_name]
     r'_pum\[[^\]]+\]',      # _pum[name]
     r'\\VS\[[^\]]+\]',      # \VS[name]
+    # General RPG Maker/plugin controls. Preserve the full spelling, parameter,
+    # slash count, and order rather than asking the model to reproduce them.
+    r'[\\]+(?:[A-Za-z_][A-Za-z0-9_]*(?:\[(?:[^\[\]]|\[[^\]]*\])*\])?|[{}.!|^><#$@,\-])',
 ]
+
+_CONTROL_CODE_RE = re.compile(PROTECTED_PATTERNS[-1])
+
+
+def extract_control_codes(text):
+    """Return runtime control tokens in source order."""
+    if not isinstance(text, str) or not text:
+        return []
+    return _CONTROL_CODE_RE.findall(text)
+
+
+def validate_control_codes(original_items, translated_items):
+    """Require each translated line to preserve the exact source control-token sequence."""
+    originals = original_items if isinstance(original_items, list) else [original_items]
+    translations = translated_items if isinstance(translated_items, list) else [translated_items]
+    if len(originals) != len(translations):
+        return False, [f"line count differs ({len(originals)} source, {len(translations)} translated)"]
+
+    errors = []
+    for index, (original, translated) in enumerate(zip(originals, translations), start=1):
+        source_sequence = extract_control_codes(str(original))
+        target_sequence = extract_control_codes(str(translated))
+        if source_sequence != target_sequence:
+            source_codes = Counter(source_sequence)
+            target_codes = Counter(target_sequence)
+            missing = list((source_codes - target_codes).elements())
+            extra = list((target_codes - source_codes).elements())
+            details = []
+            if missing:
+                details.append(f"missing {missing}")
+            if extra:
+                details.append(f"extra/altered {extra}")
+            if not missing and not extra:
+                details.append(
+                    f"order changed from {source_sequence} to {target_sequence}"
+                )
+            errors.append(f"Line{index}: " + "; ".join(details))
+    return not errors, errors
 
 def protect_script_codes(text):
     """
@@ -367,6 +409,21 @@ def validate_translation_content(original_items, translated_items, langRegex):
             if re.search(r"(.)\1{44,}", trans_str):
                 invalid_indices.append(i)
                 reasons.append(f"Line{i+1}: Excessive character repetition (possible model glitch) in translation")
+                continue
+
+            # Check 6: Source-language residue must not survive in player text.
+            # Japanese inside protected runtime-code parameters is absent here
+            # and is restored only after validation.
+            if re.search(langRegex, trans_str):
+                invalid_indices.append(i)
+                reasons.append(f"Line{i+1}: Source-language text remains in translation")
+                continue
+
+            # Check 7: Reject leaked structured-response scaffolding such as
+            # `}Line1:` that can otherwise become a speaker label.
+            if re.search(r"(?:^|[}\]])\s*Line\d+\s*:", trans_str, re.IGNORECASE):
+                invalid_indices.append(i)
+                reasons.append(f"Line{i+1}: Structured response marker leaked into translation")
                 continue
 
     is_valid = len(invalid_indices) == 0
@@ -2850,6 +2907,18 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None, mism
         else:
             cached_result = get_cached_translation(subbedT, config.language)
         if cached_result is not None:
+            cached_values = cached_result if isinstance(cached_result, list) else [cached_result]
+            source_values = clean_tItem if isinstance(clean_tItem, list) else [clean_tItem]
+            controls_ok, _control_errors = validate_control_codes(source_values, cached_values)
+            content_ok, _invalid_indices, _content_reasons = validate_translation_content(
+                source_values, cached_values, config.langRegex
+            )
+            if len(source_values) != len(cached_values) or not controls_ok or not content_ok:
+                # Ignore stale/corrupt cache entries. A successful live result
+                # below overwrites the same key.
+                cached_result = None
+
+        if cached_result is not None:
             # Estimate mode: keep original tList[index]; cached length may differ.
             if not config.estimateMode:
                 if isinstance(tItem, list):
@@ -3116,29 +3185,43 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None, mism
                                 if extra:
                                     pbar.write(f"Extra placeholders: {', '.join(extra)}")
                         else:
-                            # Check 3: Validate that translations are not empty or nearly empty
-                            content_valid, invalid_indices, content_reasons = validate_translation_content(
-                                clean_tItem, extracted, config.langRegex
+                            restored_for_validation = [
+                                restore_script_codes(line, all_replacements.get(j, {}))
+                                for j, line in enumerate(extracted)
+                            ]
+                            control_valid, control_reasons = validate_control_codes(
+                                clean_tItem, restored_for_validation
                             )
-                            
-                            if not content_valid:
+                            if not control_valid:
                                 is_valid = False
                                 if pbar:
-                                    pbar.write(f"Invalid translation content detected:")
-                                    for reason in content_reasons[:5]:  # Show first 5 issues
+                                    pbar.write("Control-code mismatch detected:")
+                                    for reason in control_reasons[:5]:
                                         pbar.write(f"  - {reason}")
-                                    if len(content_reasons) > 5:
-                                        pbar.write(f"  ... and {len(content_reasons) - 5} more issues")
                             else:
-                                # Set translations (line count matches, placeholders valid, and content is good)
-                                # Strip "Placeholder Text" from individual lines (AI placeholder for untranslatable input)
-                                # Also apply the 「→" / 」→" replacements here per-line (safe now that JSON is parsed)
-                                def _clean_extracted_line(line):
-                                    if not isinstance(line, str):
-                                        return line
-                                    line = line.replace("Placeholder Text", "").strip()
-                                    return convert_corner_brackets(line, config.convertQuotes)
-                                final_translations = [_clean_extracted_line(line) for line in extracted]
+                                # Check 3: Validate that translations are not empty or nearly empty
+                                content_valid, invalid_indices, content_reasons = validate_translation_content(
+                                    clean_tItem, extracted, config.langRegex
+                                )
+
+                                if not content_valid:
+                                    is_valid = False
+                                    if pbar:
+                                        pbar.write(f"Invalid translation content detected:")
+                                        for reason in content_reasons[:5]:  # Show first 5 issues
+                                            pbar.write(f"  - {reason}")
+                                        if len(content_reasons) > 5:
+                                            pbar.write(f"  ... and {len(content_reasons) - 5} more issues")
+                                else:
+                                    # Set translations (line count matches, placeholders valid, and content is good)
+                                    # Strip "Placeholder Text" from individual lines (AI placeholder for untranslatable input)
+                                    # Also apply the 「→" / 」→" replacements here per-line (safe now that JSON is parsed)
+                                    def _clean_extracted_line(line):
+                                        if not isinstance(line, str):
+                                            return line
+                                        line = line.replace("Placeholder Text", "").strip()
+                                        return convert_corner_brackets(line, config.convertQuotes)
+                                    final_translations = [_clean_extracted_line(line) for line in extracted]
                 else:
                     # Single string: extract from JSON schema response
                     extracted = extractTranslation(cleaned_text, False, pbar)
@@ -3158,24 +3241,37 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None, mism
                                 if extra:
                                     pbar.write(f"Extra placeholders: {', '.join(extra)}")
                         else:
-                            # Validate content for single string
-                            final_cleaned = extracted.replace("Placeholder Text", "")
-                            content_valid, _, content_reasons = validate_translation_content(
-                                tItem, final_cleaned, config.langRegex
+                            restored_for_validation = restore_script_codes(
+                                extracted, all_replacements[0]
                             )
-                            
-                            if not content_valid:
+                            control_valid, control_reasons = validate_control_codes(
+                                tItem, restored_for_validation
+                            )
+                            if not control_valid:
                                 is_valid = False
                                 if pbar:
-                                    pbar.write(f"Invalid translation content:")
-                                    for reason in content_reasons:
+                                    pbar.write("Control-code mismatch detected:")
+                                    for reason in control_reasons:
                                         pbar.write(f"  - {reason}")
                             else:
-                                # Accept output - all validations passed
-                                final_cleaned = convert_corner_brackets(
-                                    final_cleaned, config.convertQuotes
+                                # Validate content for single string
+                                final_cleaned = extracted.replace("Placeholder Text", "")
+                                content_valid, _, content_reasons = validate_translation_content(
+                                    tItem, final_cleaned, config.langRegex
                                 )
-                                final_translations = final_cleaned
+
+                                if not content_valid:
+                                    is_valid = False
+                                    if pbar:
+                                        pbar.write(f"Invalid translation content:")
+                                        for reason in content_reasons:
+                                            pbar.write(f"  - {reason}")
+                                else:
+                                    # Accept output - all validations passed
+                                    final_cleaned = convert_corner_brackets(
+                                        final_cleaned, config.convertQuotes
+                                    )
+                                    final_translations = final_cleaned
             else:
                 is_valid = False
                 if pbar: pbar.write(f"AI Refused: {tItem}\n")
