@@ -8,7 +8,7 @@ Provides a guided, step-by-step interface:
   Step 2  – Setup: speaker flags, Project Setup skill, vocab / quirks / game skill
   Step 3  – Translation: Phase 0 (DB), Phase 1 (dialogue), Phase 1b (111 cache)
   Step 4  – Translation Phase 2 (risky codes)
-  Step 5  – Plugins.js prompt helpers + export translated/ to the game
+  Step 5  – Plugins.js prompt helpers + translation QA + export translated/ to the game
   Step 6  – Prepare and translate editable bitmap UI images
   Step 7  – Install TL Inspector and/or Forge playtest plugins
 """
@@ -524,7 +524,10 @@ _STEP_HELP: dict[int, str] = {
         "<b>Export</b> - copy finished translations from <code>translated/</code> back "
         "into the game's data folder:<br>"
         "• <b>Export Active Files</b> - only names currently in <code>files/</code><br>"
-        "• <b>Export ALL</b> - everything under <code>translated/</code><br><br>"
+        "• <b>Export ALL</b> - everything under <code>translated/</code><br>"
+        "• Then run <b>QA Game Data</b> against the exported files. It compares every preserved "
+        "<code>_original</code> source with its translation, reports prioritized findings, and "
+        "waits for approval before editing the game data<br><br>"
         "<b>Create Public Release ZIP</b> packages the complete game beside its folder while "
         "omitting translator workspaces, VCS metadata, documentation, backups, saves, and "
         "other tool artifacts. GameUpdate files and all installed plugins are kept."
@@ -2245,6 +2248,15 @@ class WorkflowTab(QWidget):
 
         inner.addLayout(_labeled_row(export_lbl, export_active_btn, export_all_btn))
 
+        qa_lbl = QLabel("QA")
+        qa_btn = _make_btn("🔎  QA Game Data Skill", "#8a6d3b")
+        qa_btn.setToolTip(
+            "After export, copy a scalable QA skill for the detected game data folder. "
+            "It checks every _original pair, reviews prioritized samples, and asks before fixes."
+        )
+        qa_btn.clicked.connect(self._copy_translation_qa_prompt)
+        inner.addLayout(_labeled_row(qa_lbl, qa_btn))
+
         release_lbl = QLabel("Release")
         self._release_zip_btn = _make_btn("📦  Create Public Release ZIP", "#007acc")
         self._release_zip_btn.setToolTip(
@@ -3765,6 +3777,36 @@ class WorkflowTab(QWidget):
             "risky_codes.md",
             "Risky codes analysis prompt copied to clipboard.",
         )
+
+    def _copy_translation_qa_prompt(self):
+        """Copy the post-export RPG Maker QA skill with this game's paths."""
+        try:
+            game_root = self.folder_edit.text().strip()
+            if not game_root or not Path(game_root).is_dir():
+                self._log("⚠  Select and detect a game folder in Step 0 first.")
+                return
+            game_data = self._data_path
+            if not game_data or not Path(game_data).is_dir():
+                self._log("⚠  No game data folder detected. Complete Step 0 first.")
+                return
+            replacements = {
+                "{{GAME_DATA_FOLDER}}": str(Path(game_data).expanduser().resolve()),
+                "{{GAME_ROOT}}": str(Path(game_root).expanduser().resolve()),
+                "{{VOCAB_FILE}}": str((Path(game_root) / "vocab.txt").expanduser().resolve()),
+            }
+            prompt = load_clipboard_skill("rpgmaker_translation_qa.md")
+            missing = [token for token in replacements if token not in prompt]
+            if missing:
+                raise ValueError(
+                    "Translation QA skill is missing required placeholder(s): "
+                    + ", ".join(missing)
+                )
+            for token, value in replacements.items():
+                prompt = prompt.replace(token, value)
+            QApplication.clipboard().setText(prompt)
+            self._log(f"RPG Maker game-data QA skill copied for {game_data}.")
+        except Exception as exc:
+            self._log(f"❌ Could not copy translation QA skill: {exc}")
 
     def _copy_clipboard_skill(self, filename: str, success_message: str):
         try:

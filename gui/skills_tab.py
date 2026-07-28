@@ -119,6 +119,16 @@ class SkillsTab(QWidget):
             is_json=False,
         )
         self._add_file_page(
+            key="rpgmaker_translation_qa",
+            tab_title="Translation QA",
+            path=SKILLS_DIR / "rpgmaker_translation_qa.md",
+            hint=(
+                "Post-export RPG Maker game-data audit. Keep the {{GAME_DATA_FOLDER}}, "
+                "{{GAME_ROOT}}, and {{VOCAB_FILE}} placeholders."
+            ),
+            is_json=False,
+        )
+        self._add_file_page(
             key="image_translation",
             tab_title="Image TL",
             path=SKILLS_DIR / "image_translation.md",

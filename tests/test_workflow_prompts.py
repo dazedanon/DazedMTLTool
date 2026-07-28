@@ -35,11 +35,28 @@ class WorkflowTranslationPromptTests(unittest.TestCase):
         self.assertIn("which listed scripts should you translate", prompt)
         self.assertIn("Ruby interpolation (#{...})", prompt)
 
+    def test_rpgmaker_qa_prompt_scales_and_requires_approval(self):
+        prompt = load_clipboard_skill("rpgmaker_translation_qa.md")
+        lowered = prompt.casefold()
+        self.assertIn("mechanically check 100%", lowered)
+        self.assertIn("deterministic stratified sample", lowered)
+        self.assertIn("control-code scope and placement", lowered)
+        self.assertIn("do not edit during the first pass", lowered)
+        self.assertIn("stop and wait for approval", lowered)
+        self.assertIn("never modify or remove `_original`", lowered)
+        for placeholder in (
+            "{{GAME_DATA_FOLDER}}",
+            "{{GAME_ROOT}}",
+            "{{VOCAB_FILE}}",
+        ):
+            self.assertIn(placeholder, prompt)
+
     def test_static_clipboard_prompts_live_under_data_skills(self):
         expected = (
             "wrap_config.md",
             "plugin_translation.md",
             "ace_script_translation.md",
+            "rpgmaker_translation_qa.md",
             "image_translation.md",
             "risky_codes.md",
             "wolf_speakers.md",
@@ -58,6 +75,8 @@ class WorkflowTranslationPromptTests(unittest.TestCase):
         ):
             self.assertNotIn(constant, workflow_source)
         self.assertNotIn("_WOLF_SPEAKER_PROMPT", wolf_source)
+        self.assertIn("QA Game Data Skill", workflow_source)
+        self.assertIn('load_clipboard_skill("rpgmaker_translation_qa.md")', workflow_source)
 
     def test_image_translation_prompt_ends_skips_with_recovery_options(self):
         prompt = load_clipboard_skill("image_translation.md")
