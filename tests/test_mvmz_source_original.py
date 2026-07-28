@@ -118,12 +118,15 @@ def _run_search_codes(
     preserve_original=True,
     speaker_fn=None,
     ignore_tl_text=False,
+    translate_fn=None,
 ):
     """Full Pass 1 -> mock translate -> Pass 2 cycle."""
     captured = []
 
     def translate(text, history, batch=False):
         captured.append(copy.deepcopy(text))
+        if translate_fn is not None:
+            return translate_fn(text, history, batch)
         return _mock_translate(text, history, batch)
 
     def speaker(name):
@@ -139,6 +142,12 @@ def _run_search_codes(
     orig_102 = mvmz.CODE102
     orig_preserve = mvmz.PRESERVEORIGINAL
     orig_ignore = mvmz.IGNORETLTEXT
+    missing_marker = object()
+    orig_mismatch_marker = getattr(
+        mvmz.THREAD_CTX,
+        "last_translation_had_mismatch",
+        missing_marker,
+    )
     mvmz.translateAI = translate
     mvmz.getSpeaker = speaker
     mvmz.CODE122 = True
@@ -150,6 +159,7 @@ def _run_search_codes(
     mvmz.PRESERVEORIGINAL = preserve_original
     mvmz.IGNORETLTEXT = ignore_tl_text
     try:
+        mvmz.THREAD_CTX.last_translation_had_mismatch = False
         page_copy = copy.deepcopy(page)
         mvmz.searchCodes(page_copy, None, [], "TestMap.json")
         return page_copy, captured
@@ -164,6 +174,13 @@ def _run_search_codes(
         mvmz.CODE102 = orig_102
         mvmz.PRESERVEORIGINAL = orig_preserve
         mvmz.IGNORETLTEXT = orig_ignore
+        if orig_mismatch_marker is missing_marker:
+            try:
+                del mvmz.THREAD_CTX.last_translation_had_mismatch
+            except AttributeError:
+                pass
+        else:
+            mvmz.THREAD_CTX.last_translation_had_mismatch = orig_mismatch_marker
 
 
 def _find_commands(page, code):
@@ -424,6 +441,76 @@ class TestMVMZSourceOriginal(unittest.TestCase):
                 if not isinstance(item, str) or item == "EN_TRANSLATED":
                     continue
                 self.assertTrue(_has_japanese(item), f"408 re-run sent non-Japanese: {item!r}")
+
+    def test_first_408_after_empty_108_is_translated_and_preserved(self):
+        page = {
+            "list": [
+                {"code": 108, "indent": 0, "parameters": [""]},
+                {"code": 408, "indent": 0, "parameters": ["テレポート。"]},
+                {"code": 408, "indent": 0, "parameters": ["条件スイッチ。"]},
+            ]
+        }
+
+        page, _ = _run_search_codes(page)
+        comments = _find_commands(page, 408)
+
+        self.assertEqual(comments[0].get("_original"), "テレポート。")
+        self.assertEqual(comments[1].get("_original"), "条件スイッチ。")
+        self.assertEqual(comments[0]["parameters"][0], "EN_TRANSLATED")
+        self.assertEqual(comments[1]["parameters"][0], "EN_TRANSLATED")
+
+    def test_failed_408_fallback_does_not_write_originals(self):
+        page = {
+            "list": [
+                {"code": 108, "indent": 0, "parameters": [""]},
+                {"code": 408, "indent": 0, "parameters": ["第一行"]},
+                {"code": 408, "indent": 0, "parameters": ["第二行"]},
+            ]
+        }
+
+        def failed_translation(text, _history, _batch=False):
+            if isinstance(text, list) and text == ["第一行", "第二行"]:
+                if "TestMap.json" not in mvmz.MISMATCH:
+                    mvmz.MISMATCH.append("TestMap.json")
+                mvmz.THREAD_CTX.last_translation_had_mismatch = True
+                # Simulate one successful internal chunk and one chunk that
+                # exhausted retries and fell back to its source text.
+                return [["First line", text[1]], [0, 0]]
+            return _mock_translate(text, _history, _batch)
+
+        original_mismatches = mvmz.MISMATCH[:]
+        try:
+            page, _ = _run_search_codes(page, translate_fn=failed_translation)
+        finally:
+            mvmz.MISMATCH[:] = original_mismatches
+
+        comments = _find_commands(page, 408)
+        self.assertEqual([cmd["parameters"][0] for cmd in comments], ["第一行", "第二行"])
+        self.assertTrue(all("_original" not in cmd for cmd in comments))
+
+    def test_short_408_batch_is_not_partially_applied(self):
+        page = {
+            "list": [
+                {"code": 108, "indent": 0, "parameters": [""]},
+                {"code": 408, "indent": 0, "parameters": ["第一行"]},
+                {"code": 408, "indent": 0, "parameters": ["第二行"]},
+            ]
+        }
+
+        def short_translation(text, _history, _batch=False):
+            if isinstance(text, list) and text == ["第一行", "第二行"]:
+                return [["First line"], [0, 0]]
+            return _mock_translate(text, _history, _batch)
+
+        original_mismatches = mvmz.MISMATCH[:]
+        try:
+            page, _ = _run_search_codes(page, translate_fn=short_translation)
+        finally:
+            mvmz.MISMATCH[:] = original_mismatches
+
+        comments = _find_commands(page, 408)
+        self.assertEqual([cmd["parameters"][0] for cmd in comments], ["第一行", "第二行"])
+        self.assertTrue(all("_original" not in cmd for cmd in comments))
 
 
 class TestFixtureMapOriginal(unittest.TestCase):

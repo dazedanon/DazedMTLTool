@@ -13,7 +13,7 @@ from colorama import Fore
 from dotenv import load_dotenv
 from retry import retry
 from tqdm import tqdm
-from util.translation import TranslationConfig, translateAI as sharedtranslateAI, getPricingConfig, calculateCost, getPricingConfig, calculateCost, get_var_translation, set_var_translations_batch, convert_corner_brackets, parseVocabWithCategories
+from util.translation import TranslationConfig, translateAI as sharedtranslateAI, getPricingConfig, calculateCost, getPricingConfig, calculateCost, get_var_translation, set_var_translations_batch, convert_corner_brackets, parseVocabWithCategories, last_translation_had_mismatch
 from util.speakers import SPEAKER_BRACKET_INNER, strip_speaker_prefix
 from util.skills import ctx, load_system_prompt
 from util.paths import VOCAB_PATH
@@ -142,13 +142,13 @@ TLSYSTEMSWITCHES = False
 JOIN408 = False
 
 # Dialogue / Scroll / Choices (Main Codes)
-CODE101 = True
-CODE401 = True
-CODE405 = True
-CODE102 = True
+CODE101 = False
+CODE401 = False
+CODE405 = False
+CODE102 = False
 
 # Optional
-CODE408 = True
+CODE408 = False
 
 # Variables
 CODE122 = False
@@ -163,7 +163,7 @@ CODE356 = False
 CODE320 = False
 CODE324 = False
 CODE325 = False
-CODE111 = False
+CODE111 = True
 CODE108 = False
 
 # ─── Plugin Manager ──────────────────────────────────────────────────────────
@@ -3677,14 +3677,12 @@ def searchCodes(page, pbar, jobList, filename):
 
             ## Event Code: 408 (Script)
             if "code" in codeList[i] and (codeList[i]["code"] == 408) and CODE408 is True:
-                # Only translate if preceded by a 108 with "選択肢ヘルプ" or another 408
+                # A 108 starts an RPG Maker comment and each following 408
+                # continues it. Accept the first continuation regardless of the
+                # 108 text so the entire comment block is handled consistently.
                 if i > 0:
                     prevCode = codeList[i - 1].get("code", None)
-                    if prevCode == 408:
-                        pass  # Consecutive 408s are allowed
-                    elif prevCode == 108 and len(codeList[i - 1].get("parameters", [])) > 0 and codeList[i - 1]["parameters"][0] == "選択肢ヘルプ":
-                        pass  # 108 with 選択肢ヘルプ is allowed
-                    else:
+                    if prevCode not in [108, 408]:
                         i += 1
                         continue
 
@@ -4339,10 +4337,15 @@ def searchCodes(page, pbar, jobList, filename):
             list408TL = response[0]
             totalTokens[0] += response[1][0]
             totalTokens[1] += response[1][1]
-            if len(list408TL) != len(list408):
+            failed408Batch = bool(getattr(THREAD_CTX, "last_translation_had_mismatch", False))
+            if failed408Batch or len(list408TL) != len(list408):
                 with LOCK:
                     if filename not in MISMATCH:
                         MISMATCH.append(filename)
+                # A failed internal chunk or short result would make this pass
+                # partially apply or misalign later entries. Keep the entire
+                # 408 batch untouched so it can be retried safely.
+                list408TL = []
 
         # 324
         if len(list324) > 0:
@@ -5204,6 +5207,7 @@ def translateAI(text, history, history_ctx=None):
         lock=LOCK,
         mismatchList=MISMATCH
     )
+    THREAD_CTX.last_translation_had_mismatch = last_translation_had_mismatch()
 
     # ── Restore \n[X] codes in translated output ───────────────────────────
     def _restore(s: str, reverse_map: dict[str, str]) -> str:

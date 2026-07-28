@@ -2637,6 +2637,11 @@ def countTokens(system, user, history):
     return [inputTotalTokens, outputTotalTokens]
 
 
+def last_translation_had_mismatch() -> bool:
+    """Return whether the latest translateAI call on this thread fell back."""
+    return bool(getattr(_thread_local, "last_translation_had_mismatch", False))
+
+
 @retry(exceptions=Exception, tries=5, delay=5)
 def translateAI(text, history, config, filename=None, pbar=None, lock=None, mismatchList=None):
     """
@@ -2644,6 +2649,7 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None, mism
 
     Returns [translatedText, [inputTokens, outputTokens]].
     """
+    _thread_local.last_translation_had_mismatch = False
     if not text:
         return [text, [0, 0]]
 
@@ -3237,6 +3243,7 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None, mism
                     pbar.update(len(tItem) if isinstance(tItem, list) else 1)
 
         else: # Failure case after all retries
+            _thread_local.last_translation_had_mismatch = True
             if pbar: pbar.write(f"Translation failed after {max_retries + 1} attempts. Check mismatch log.")
 
             # Emit a machine-readable marker on stdout so the GUI worker
