@@ -279,6 +279,32 @@ class TestStatesOriginal(unittest.TestCase):
 
 
 class TestSystemOriginal(unittest.TestCase):
+    def test_normalizes_english_escape_failure(self):
+        original_language = mvmz.LANGUAGE
+        mvmz.LANGUAGE = "English"
+        try:
+            self.assertEqual(
+                mvmz._normalize_system_message_translation(
+                    "escapeFailure", "But couldn't escape!"
+                ),
+                "But escape failed!",
+            )
+        finally:
+            mvmz.LANGUAGE = original_language
+
+    def test_does_not_rewrite_custom_escape_failure(self):
+        original_language = mvmz.LANGUAGE
+        mvmz.LANGUAGE = "English"
+        try:
+            self.assertEqual(
+                mvmz._normalize_system_message_translation(
+                    "escapeFailure", "However, escape was impossible!"
+                ),
+                "However, escape was impossible!",
+            )
+        finally:
+            mvmz.LANGUAGE = original_language
+
     def test_first_pass_writes_original(self):
         data = json.loads((FIXTURES / "System_original_fixture.json").read_text(encoding="utf-8"))
         result, _ = _run_search_system(data)

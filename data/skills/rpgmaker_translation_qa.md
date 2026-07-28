@@ -51,8 +51,9 @@ present.
   same path on the owning object. Numeric string keys in `_original` usually address list indexes
   in the live object, as in `System.json` lists and `terms` arrays.
 - For event code 102, pair each `_original[index]` choice with `parameters[0][index]`.
-- For scalar event-command `_original` values, resolve the live display value by command shape:
-  - 401, 405, 408, 657, 356, 108: visible text in `parameters[0]`.
+- For scalar event-command `_original` values, resolve the live value by command shape:
+  - 401, 405, 657, 356, 108: visible text in `parameters[0]`.
+  - 408: internal editor comment in `parameters[0]`; it is not player-facing text.
   - 101: visible name field in `parameters[4]`, or `parameters[0]` for the variable-name form.
   - 122: translated inner quoted/backticked string in `parameters[4]`, excluding its script
     wrapper and trailing semicolon.
@@ -71,6 +72,8 @@ Check every resolvable pair for:
    counts, empty output, or accidental type changes.
 2. Japanese or other source-language residue, unchanged source copied as translation, truncation,
    mojibake, model commentary, refusal text, Markdown fences, or JSON fragments inside player text.
+   Do not count unchanged code-408 editor comments as player-facing residue or actionable findings.
+   Report their coverage separately only when the user requests editor-facing localization.
 3. Lost, added, duplicated, reordered, malformed, or altered runtime tokens. Include RPG Maker
    control codes such as `\C[n]`, `\N[n]`, `\V[n]`, `\I[n]`, `\{`, `\}`, `\.`, `\|`, `\!`,
    `\>`, `\<`, and `\^`; custom backslash codes; `__PROTECTED_n__`; printf-style placeholders;

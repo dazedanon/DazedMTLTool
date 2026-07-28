@@ -24,6 +24,9 @@ class SpeakerNameplateNormalizeTests(unittest.TestCase):
             "Electrician Guy From",
         )
 
+    def test_preserves_maam_casing(self):
+        self.assertEqual(_normalize_speaker_nameplate("ma'am"), "Ma'am")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -928,6 +928,18 @@ def _apply_system_terms_message_original(data, key: str, raw: str) -> None:
     msg[key] = raw
 
 
+def _normalize_system_message_translation(key: str, translated: str) -> str:
+    """Repair narrowly known English RPG Maker system-message failures."""
+    text = str(translated or "").strip()
+    target = str(LANGUAGE or "").strip().casefold().replace("_", "-")
+    is_english = target in {"en", "eng", "english"} or target.startswith("en-")
+    if key == "escapeFailure" and is_english and re.fullmatch(
+        r"but\s+couldn['’]t\s+escape!?", text, flags=re.IGNORECASE
+    ):
+        return "But escape failed!"
+    return text
+
+
 _COLOR_SPEAKER_RE = re.compile(
     r"^[\\]+[cC]\[\d+\]【?(.+?)】?[\\]+[cC]\[\d+\](?:[\\]+[A-Za-z]+(?:\[[^\]]*\])?)*[\\]*$"
 )
@@ -4851,7 +4863,7 @@ def searchSystem(data, pbar):
             
             # Assign back translations to corresponding keys
             for n, key in enumerate(msg_keys[: len(tl_list)]):
-                translatedText = tl_list[n]
+                translatedText = _normalize_system_message_translation(key, tl_list[n])
                 for char in charList:
                     translatedText = translatedText.replace(char, "")
                 messages[key] = translatedText
@@ -4914,6 +4926,8 @@ def _normalize_speaker_nameplate(translated: str) -> str:
     elif len(words) > 4:
         words = words[:3]
     out = " ".join(words).title().replace("'S", "'s")
+    # str.title() capitalizes after apostrophes ("Ma'am" -> "Ma'Am").
+    out = re.sub(r"\bMa['’]Am\b", "Ma'am", out, flags=re.IGNORECASE)
     out = re.sub(
         r"(\d)(St|Nd|Rd|Th)\b",
         lambda m: m.group(1) + m.group(2).lower(),

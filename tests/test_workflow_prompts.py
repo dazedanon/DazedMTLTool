@@ -41,6 +41,7 @@ class WorkflowTranslationPromptTests(unittest.TestCase):
         self.assertIn("mechanically check 100%", lowered)
         self.assertIn("deterministic stratified sample", lowered)
         self.assertIn("control-code scope and placement", lowered)
+        self.assertIn("do not count unchanged code-408 editor comments", lowered)
         self.assertIn("do not edit during the first pass", lowered)
         self.assertIn("stop and wait for approval", lowered)
         self.assertIn("never modify or remove `_original`", lowered)
