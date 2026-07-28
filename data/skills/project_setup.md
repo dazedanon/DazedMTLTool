@@ -8,10 +8,12 @@ Work in the game repository. Scan files; do not invent content you did not see.
 ## Task
 
 In **one pass**, discover everything needed for translation setup and emit the labeled output blocks below.
-Do **not** translate the game. Do **not** rewrite formatting codes, wrap widths, or tool pipeline settings.
+Do **not** translate the game or edit its files. Recommend formatting and pipeline settings only in
+the designated configuration block.
 
-Default: emit **all four** blocks.
-Regenerate mode: if the user asks for only one block (`glossary`, `speakers`, `translation_quirks`, or `game_skill`), emit **only** that block using the same schema and exclusivity rules.
+Default: emit every block specified for the selected engine.
+Regenerate mode: if the user asks for only one block, emit **only** that block using the same
+schema and exclusivity rules.
 
 ---
 
@@ -23,6 +25,7 @@ Regenerate mode: if the user asks for only one block (`glossary`, `speakers`, `t
 | `speakers` | Tool flag ENABLE/SKIP + short evidence | Character bios; quirks; full glossary |
 | `translation_quirks` | Cross-cutting voice rules (battle-log person, global dialect, item-description style, **unusual** honorific habits) | Per-character register; "always keep -san" (tool base prompt already does); codes/wrap/line counts; speaker flags |
 | `game_skill` | **Translation Frame** for the API (theme / era / register / naming / optional myth) saved at `skills/game.md` | File inventories; quirks bullets; glossary; per-character register; IDE scaffolding; restating base honorific/formatting policy |
+| `rpgmaker_config` (RPG Maker only) | Code-408 Phase 1 decision + measured wrap/font recommendations | Translation prose; glossary; voice rules; speculative settings without evidence |
 
 Hard rules:
 1. Per-character voice → `glossary` only.
@@ -30,6 +33,7 @@ Hard rules:
 3. Default honorifics policy is owned by the tool base prompt - only note **unusual** honorific habits in quirks.
 4. `game_skill` is the title's Translation Frame for the translation API - keep it compact; do not reprint quirks or glossary.
 5. `speakers` is config, not lore.
+6. `rpgmaker_config` is measured setup advice, not content to merge into the translation prompt.
 
 ---
 
@@ -39,7 +43,7 @@ Map / event files can be huge. Do **not** read them sequentially end-to-end.
 
 1. Read small DB files in full first (richest, always small).
 2. For large event/map files: **search/grep**; sample early story maps; stop when patterns stabilize.
-3. One scan feeds all four blocks - do not rescan from scratch per block.
+3. One scan feeds every output block - do not rescan from scratch per block.
 
 <!-- engine:rpgmaker -->
 
@@ -53,6 +57,11 @@ Map / event files can be huge. Do **not** read them sequentially end-to-end.
 - `CommonEvents.json`, `Troops.json`, `Map001.json`–`Map010.json` (early maps first)
 - Prefer code `401` dialogue + nearby `101` speaker/name params; `405` scrolling text when present
 - Speaker markup evidence: `【Name】`, `[Name]`, `Name：`, `\\n<Name>`, `\\k<Name>`, colour-wrapped name lines
+
+**Runtime/UI evidence:**
+- `js/plugins.js` plus source for enabled plugins in `js/plugins/`
+- `js/rpg_windows.js`, `js/rpg_scenes.js`, `js/rpg_managers.js`, or MZ equivalents
+- `System.json` resolution/font fields, custom fonts, window skins, and relevant image dimensions
 
 --- attach your game data files / open the game repo before continuing ---
 
@@ -118,6 +127,68 @@ Do **not** include:
 - Game skill (API): ``skills/game.md``
 - Quirks (API): ``skills/quirks.md`` (never ``translation_quirks.txt``)
 - Optional custom API overlays: other ``skills/*.md`` except those two
+
+### Phase 1 and layout analysis (for `rpgmaker_config` block)
+
+#### Code 408
+
+Code `408` is a continuation of an editor comment. It is normally internal, but plugins can parse
+`108`/`408` comment blocks and display their contents to players.
+
+1. Inventory code-408 values and group them with their preceding code-108 command.
+2. Search enabled plugin sources and event-handling code for the discovered comment tags,
+   prefixes, or parsing APIs. Do not infer runtime visibility from Japanese text alone.
+3. Choose `ENABLE` only when evidence shows that code-408 content is rendered or otherwise shown
+   to players. Show representative plugin + event locators and an affected count.
+4. Choose `SKIP` when values are editor notes, disabled-plugin metadata, or have no runtime
+   consumer. If evidence is inconclusive, choose `SKIP` and state what must be playtested.
+5. Tell the user to set the **Translate code 408 plugin/comment text** checkbox in Phase 1 to the
+   recommended state. This is a user choice; do not edit tool configuration yourself.
+
+#### Window geometry, wrapping, and fonts
+
+Calculate recommendations separately for `Dialogue`, `List/Help`, and `Notes`. Use actual game
+geometry rather than generic RPG Maker defaults whenever project code is available.
+
+1. Resolve the game resolution and each relevant window's outer width/height, padding, text inset,
+   line height, columns, face/portrait reservation, icons, and plugin-added margins.
+2. Resolve the actual font face and base size plus runtime changes such as `\\{`, `\\}`,
+   `\\FS[n]`, custom font codes, bold/outline changes, and plugin-specific scaling. Treat icons and
+   inline images as pixel width, not zero-width text.
+3. Calculate usable pixels: inner window size minus padding, portraits/faces, columns, icons, and
+   other fixed reservations. Derive visible row capacity from usable height and the largest
+   applicable line height.
+4. Convert usable pixels to DazedTL's character-count wrap setting by measuring representative
+   English glyphs in the real font when possible. Otherwise use a conservative documented average
+   glyph width. Never copy a pixel width directly into `width`, `listWidth`, or `noteWidth`.
+5. Test representative short, median, long, control-code-heavy, icon-heavy, and font-changed values.
+   Use the largest effective font when one shared setting must cover several variants.
+6. For dialogue, verify the recommendation against the actual message-row limit, commonly four.
+   If a long message cannot fit without unreadable font reduction or horizontal overflow, flag it
+   for pagination/manual reflow instead of forcing an unsafe four-line wrap.
+7. Recommend one conservative shared width and one readable font size for each category. If the
+   current font should remain unchanged, say `keep current` and report its measured size. Cite the
+   files/functions/plugin parameters supporting every recommendation and give a confidence level.
+
+Emit this additional RPG Maker-only block:
+
+### Block `rpgmaker_config`
+
+Label the fence language as `rpgmaker_config`. Inside:
+
+```text
+CODE408 : ENABLE|SKIP - <runtime evidence, affected count, and confidence>
+
+Dialogue : width=<DazedTL width> ; font=<px or keep current (measured px)> ; rows=<count>
+List/Help: listWidth=<DazedTL width> ; font=<px or keep current (measured px)> ; rows=<count or varies>
+Notes    : noteWidth=<DazedTL width> ; font=<px or keep current (measured px)> ; rows=<count or varies>
+
+Evidence:
+- <resolution/window/font/plugin locator and calculation>
+
+Exceptions / playtests:
+- <variant windows, uncertain plugin behavior, or messages requiring pagination>
+```
 
 <!-- /engine:rpgmaker -->
 

@@ -53,7 +53,8 @@ present.
 - For event code 102, pair each `_original[index]` choice with `parameters[0][index]`.
 - For scalar event-command `_original` values, resolve the live value by command shape:
   - 401, 405, 657, 356, 108: visible text in `parameters[0]`.
-  - 408: internal editor comment in `parameters[0]`; it is not player-facing text.
+  - 408: comment continuation in `parameters[0]`; classify its runtime visibility from the
+    preceding 108 block and enabled plugin code before treating it as internal or player-facing.
   - 101: visible name field in `parameters[4]`, or `parameters[0]` for the variable-name form.
   - 122: translated inner quoted/backticked string in `parameters[4]`, excluding its script
     wrapper and trailing semicolon.
@@ -72,8 +73,9 @@ Check every resolvable pair for:
    counts, empty output, or accidental type changes.
 2. Japanese or other source-language residue, unchanged source copied as translation, truncation,
    mojibake, model commentary, refusal text, Markdown fences, or JSON fragments inside player text.
-   Do not count unchanged code-408 editor comments as player-facing residue or actionable findings.
-   Report their coverage separately only when the user requests editor-facing localization.
+   Do not count unchanged code-408 values as player-facing residue when they are editor-only.
+   When enabled plugin code consumes a 108/408 comment block and displays its content, audit that
+   content as player-facing text. Report uncertain code-408 groups separately instead of guessing.
 3. Lost, added, duplicated, reordered, malformed, or altered runtime tokens. Include RPG Maker
    control codes such as `\C[n]`, `\N[n]`, `\V[n]`, `\I[n]`, `\{`, `\}`, `\.`, `\|`, `\!`,
    `\>`, `\<`, and `\^`; custom backslash codes; `__PROTECTED_n__`; printf-style placeholders;

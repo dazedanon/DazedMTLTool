@@ -99,7 +99,9 @@ PHASE1_CONFIG = {
     "CODE401": True,
     "CODE405": True,
     "CODE102": True,
-    "CODE408": True,
+    # Comment continuations are project-dependent: plugins sometimes display
+    # them, but most games use them only as internal editor notes.
+    "CODE408": False,
     # Risky codes OFF
     "CODE122": False,
     "CODE355655": False,
@@ -488,6 +490,9 @@ _STEP_HELP: dict[int, str] = {
         "(<code>skills/quirks.md</code>)<br>"
         "• <code>game_skill</code> → Game skills → translation tab "
         "(<code>skills/game.md</code> - Translation Frame, merged into the API prompt)<br><br>"
+        "• <code>rpgmaker_config</code> → apply the code-408 checkbox recommendation in "
+        "Phase 1 and the measured wrap widths in Step 3; review its font recommendations "
+        "against the game UI<br><br>"
         "Optional: <b>+</b> on Game skills adds custom <code>skills/*.md</code> "
         "overlays (also merged into the API prompt - can hurt quality; use sparingly).<br><br>"
         "Use one game folder per translation run so frame/quirks stay in the prompt cache."
@@ -495,7 +500,8 @@ _STEP_HELP: dict[int, str] = {
     3: (
         "<b>Step 3 - TL Phase 1</b><br><br>"
         "Safe dialogue / database translation.<br><br>"
-        "• Set text-wrap widths if needed (or copy the wrap analysis prompt)<br>"
+        "• Apply Project Setup's measured dialogue, list/help, and note wrap widths<br>"
+        "• Set the code-408 checkbox from Project Setup's runtime/plugin evidence<br>"
         "• Phase 0 - database names/descriptions<br>"
         "• Phase 1 - dialogue / choices<br>"
         "• Phase 1b - build the code 111 variable-translation cache<br><br>"
@@ -1546,7 +1552,7 @@ class WorkflowTab(QWidget):
         copy_btn.setFixedHeight(32)
         copy_btn.setToolTip(
             "Clipboard skill for the game repo IDE. Returns glossary, speakers, "
-            "translation_quirks, and game_skill code blocks."
+            "translation_quirks, game_skill, and RPG Maker configuration recommendations."
         )
         copy_btn.clicked.connect(self._copy_project_setup_prompt)
         actions.addWidget(copy_btn)
@@ -1737,7 +1743,8 @@ class WorkflowTab(QWidget):
         wrap_inner.setSpacing(4)
 
         wrap_hint = QLabel(
-            "Adjust if lines overflow or wrap too early in-game, then click Apply to write to .env."
+            "Use Project Setup's measured rpgmaker_config recommendations, then apply the three "
+            "wrap widths to .env. Font recommendations describe the game UI and are not applied here."
         )
         wrap_hint.setWordWrap(True)
         wrap_hint.setStyleSheet("color:#9d9d9d;font-size:13px;")
@@ -1820,12 +1827,28 @@ class WorkflowTab(QWidget):
         p1_inner.setContentsMargins(10, 8, 10, 8)
         p1_inner.setSpacing(4)
         p1_desc = QLabel(
-            "Codes ON: 101 (Name), 401 (Show Text), 405 (continued), 102 (Choices), 408 (extra lines). "
-            "Speaker lines in the log should look like  [Speaker]: Dialogue."
+            "Codes ON: 101 (Name), 401 (Show Text), 405 (Scrolling Text), 102 (Choices). "
+            "Code 408 is optional because it may be internal comments or plugin-displayed text. "
+            "Speaker lines in the log should look like [Speaker]: Dialogue."
         )
         p1_desc.setStyleSheet("color:#9d9d9d;font-size:13px;")
         p1_desc.setWordWrap(True)
         p1_inner.addWidget(p1_desc)
+        self._phase1_code408_cb = QCheckBox(
+            "Translate code 408 plugin/comment text"
+        )
+        saved_408 = self._setting("phase1_code408", False)
+        if isinstance(saved_408, str):
+            saved_408 = saved_408.strip().casefold() in {"1", "true", "yes", "on"}
+        self._phase1_code408_cb.setChecked(bool(saved_408))
+        self._phase1_code408_cb.setToolTip(
+            "Enable only when Project Setup finds an enabled plugin that displays text from "
+            "108/408 comment blocks. Leave off for ordinary editor comments."
+        )
+        self._phase1_code408_cb.stateChanged.connect(
+            lambda state: self._save_setting("phase1_code408", bool(state))
+        )
+        p1_inner.addWidget(self._phase1_code408_cb)
         p1_row = QHBoxLayout()
         p1_row.setSpacing(10)
         self._run_p1_btn = _make_btn("►  Run Phase 1", "#007acc")
@@ -3916,7 +3939,11 @@ class WorkflowTab(QWidget):
             label = "Phase 0 (core DB files)" + (" — batch" if batch else "")
             file_preset = "db"
         elif phase == 1:
-            config = PHASE1_CONFIG
+            config = dict(PHASE1_CONFIG)
+            config["CODE408"] = bool(
+                getattr(self, "_phase1_code408_cb", None)
+                and self._phase1_code408_cb.isChecked()
+            )
             label = "Phase 1 (safe codes)" + (" — batch" if batch else "")
             file_preset = "events"
         elif phase == "1b":

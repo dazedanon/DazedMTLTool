@@ -3,7 +3,7 @@
 import unittest
 from pathlib import Path
 
-from util.skills import load_clipboard_skill
+from util.skills import load_clipboard_skill, load_project_setup
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -41,7 +41,7 @@ class WorkflowTranslationPromptTests(unittest.TestCase):
         self.assertIn("mechanically check 100%", lowered)
         self.assertIn("deterministic stratified sample", lowered)
         self.assertIn("control-code scope and placement", lowered)
-        self.assertIn("do not count unchanged code-408 editor comments", lowered)
+        self.assertIn("enabled plugin code consumes a 108/408 comment block", lowered)
         self.assertIn("do not edit during the first pass", lowered)
         self.assertIn("stop and wait for approval", lowered)
         self.assertIn("never modify or remove `_original`", lowered)
@@ -51,6 +51,30 @@ class WorkflowTranslationPromptTests(unittest.TestCase):
             "{{VOCAB_FILE}}",
         ):
             self.assertIn(placeholder, prompt)
+
+    def test_rpgmaker_project_setup_recommends_408_and_layout_geometry(self):
+        prompt = load_project_setup("rpgmaker")
+        lowered = prompt.casefold()
+
+        self.assertIn("code408 : enable|skip", lowered)
+        self.assertIn("translate code 408 plugin/comment text", lowered)
+        self.assertIn("dialogue : width=", lowered)
+        self.assertIn("list/help: listwidth=", lowered)
+        self.assertIn("notes    : notewidth=", lowered)
+        self.assertIn("face/portrait reservation", lowered)
+        self.assertIn("applicable line height", lowered)
+        self.assertIn("pagination/manual reflow", lowered)
+
+        wolf_prompt = load_project_setup("wolf")
+        self.assertNotIn("code408 : enable|skip", wolf_prompt.casefold())
+
+    def test_phase1_code408_is_user_controlled(self):
+        from gui.workflow_tab import PHASE1_CONFIG
+
+        self.assertFalse(PHASE1_CONFIG["CODE408"])
+        workflow_source = (ROOT / "gui/workflow_tab.py").read_text(encoding="utf-8")
+        self.assertIn("Translate code 408 plugin/comment text", workflow_source)
+        self.assertIn('config["CODE408"] = bool(', workflow_source)
 
     def test_static_clipboard_prompts_live_under_data_skills(self):
         expected = (

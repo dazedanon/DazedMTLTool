@@ -324,7 +324,9 @@ class RPGMakerTab(QWidget):
         col2.addWidget(create_section_label("📝 Extended Content"))
         
         self.code408_cb, layout = self._create_checkbox_with_description(
-            "Comments (408)", "⚠️ Plugin text in comments (costly!)", "Plugin dialogue in comment text."
+            "Comment Text (408)",
+            "⚠️ Enable only when a plugin displays it",
+            "Continuation lines from 108/408 comment blocks; usually internal, sometimes player-facing.",
         )
         self.code408_cb.setStyleSheet("QCheckBox { font-size: 11px; color: #ffaa66; }")
         col2.addLayout(layout)
@@ -679,7 +681,10 @@ class RPGMakerTab(QWidget):
             
         # Check for high-cost options
         if self.code408_cb.isChecked():
-            warnings.append("CODE 408 (Comments) is enabled. This can significantly increase translation costs!")
+            warnings.append(
+                "CODE 408 (comment continuation text) is enabled. Confirm an enabled plugin "
+                "shows it to players; otherwise this can significantly increase translation costs!"
+            )
             
         # Check for conflicting options
         if self.brflag_cb.isChecked() and self.fixtextwrap_cb.isChecked():
