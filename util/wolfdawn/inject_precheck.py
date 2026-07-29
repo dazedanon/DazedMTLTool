@@ -16,6 +16,7 @@ from __future__ import annotations
 import json
 import re
 import tempfile
+from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
@@ -36,6 +37,181 @@ _EVENT_LOC_RE = re.compile(
     re.IGNORECASE,
 )
 _GAMEDAT_LOC_RE = re.compile(r"^gamedat\s+(?P<key>.+)\s*$", re.IGNORECASE)
+_RUST_UNICODE_ESCAPE_RE = re.compile(r"\\u\{([0-9a-fA-F]+)\}")
+_UNCLOSED_BRACKET_CODE_RE = re.compile(
+    r"\\[A-Za-z]+\[[^\]\r\n]*(?=\r?$)", re.MULTILINE
+)
+
+
+def _guard_code_lists(message: str) -> tuple[list[str], list[str]] | None:
+    """Extract WolfDawn's source/translation token lists from a guard message."""
+    source_marker = "source has "
+    translation_marker = ", translation has "
+    source_at = message.find(source_marker)
+    translation_at = message.find(translation_marker, source_at + len(source_marker))
+    if source_at < 0 or translation_at < 0:
+        return None
+    source_raw = message[source_at + len(source_marker) : translation_at]
+    translation_raw = message[translation_at + len(translation_marker) :]
+    end = translation_raw.find("; edit the words")
+    if end >= 0:
+        translation_raw = translation_raw[:end]
+
+    def decode(raw: str) -> list[str] | None:
+        # Rust debug JSON uses ``\u{3000}``, which Python's JSON decoder does
+        # not accept. Replace those escapes with the represented character.
+        normalized = _RUST_UNICODE_ESCAPE_RE.sub(
+            lambda match: chr(int(match.group(1), 16)), raw.strip()
+        )
+        try:
+            value = json.loads(normalized)
+        except Exception:
+            return None
+        if not isinstance(value, list) or not all(
+            isinstance(item, str) for item in value
+        ):
+            return None
+        return value
+
+    source_codes = decode(source_raw)
+    translation_codes = decode(translation_raw)
+    if source_codes is None or translation_codes is None:
+        return None
+    return source_codes, translation_codes
+
+
+def _ordered_difference(left: list[str], right: list[str]) -> list[str]:
+    remaining = Counter(right)
+    difference: list[str] = []
+    for token in left:
+        if remaining[token] > 0:
+            remaining[token] -= 1
+        else:
+            difference.append(token)
+    return difference
+
+
+def _display_code(token: str) -> str:
+    if token and set(token) == {"\n"}:
+        count = len(token)
+        return "line break" if count == 1 else f"{count} consecutive line breaks"
+    visible = token.replace("\r", "\\r").replace("\n", "\\n").replace("\t", "\\t")
+    if len(visible) > 42:
+        visible = visible[:24] + "…" + visible[-14:]
+    return f"`{visible}`"
+
+
+def _format_code_difference(tokens: list[str]) -> str:
+    if not tokens:
+        return "none"
+    counts = Counter(tokens)
+    ordered = list(dict.fromkeys(tokens))
+    parts = []
+    for token in ordered[:6]:
+        count = counts[token]
+        label = _display_code(token)
+        parts.append(f"{label} ×{count}" if count > 1 else label)
+    if len(ordered) > 6:
+        parts.append(f"{len(ordered) - 6} more")
+    return ", ".join(parts)
+
+
+def explain_issue(
+    kind: str,
+    message: str,
+    source: str,
+    text: str,
+) -> tuple[str, str, str]:
+    """Return a concise ``(problem, difference, guidance)`` for Step 7."""
+    if kind == "unrepresentable":
+        unsupported: list[str] = []
+        for char in text:
+            try:
+                char.encode("cp932")
+            except UnicodeEncodeError:
+                if char not in unsupported:
+                    unsupported.append(char)
+        shown = ", ".join(
+            f"{char!r} (U+{ord(char):04X})" for char in unsupported[:6]
+        )
+        problem = "Translation contains characters the game cannot store"
+        difference = f"Unsupported: {shown}" if shown else "Unsupported Shift-JIS text"
+        return problem, difference, "Replace those characters with Japanese-game-safe text."
+
+    unclosed = _UNCLOSED_BRACKET_CODE_RE.search(source)
+    if unclosed:
+        code = unclosed.group(0)
+        return (
+            f"Source has an unclosed control code: {_display_code(code)}",
+            "The missing `]` makes WolfDawn protect the rest of that source line.",
+            "Keep the affected suffix identical to the source, or correct the original event code.",
+        )
+
+    prefix = re.match(r"^(@\d+)(?:\r?\n)", source)
+    if prefix and text.count(prefix.group(1)) > source.count(prefix.group(1)):
+        code = prefix.group(1)
+        return (
+            f"Duplicate window prefix: {_display_code(code)}",
+            f"The translation contains {_display_code(code)} more than once.",
+            "Keep the window prefix once, at the very start of the line.",
+        )
+
+    parsed = _guard_code_lists(message)
+    if parsed is None:
+        return (
+            "Translation control codes do not match the source",
+            "WolfDawn could not safely compare this line.",
+            "Edit words only; preserve every backslash code and required line break.",
+        )
+    source_codes, translation_codes = parsed
+    missing = _ordered_difference(source_codes, translation_codes)
+    extra = _ordered_difference(translation_codes, source_codes)
+
+    changed = missing + extra
+    font_only = bool(changed) and all(
+        wolf_codes.WOLF_FONT_SIZE_RE.fullmatch(token) for token in changed
+    )
+    literal_newline = any(token.startswith(r"\n") for token in extra)
+    escaped_quotes_only = bool(extra) and not missing and all(
+        token == r'\"' for token in extra
+    )
+
+    if font_only:
+        problem = "Font-size codes differ from the source"
+        guidance = (
+            "Keep this only if wrapping intentionally changed the font size; "
+            "otherwise restore the source font codes."
+        )
+    elif literal_newline:
+        problem = "Translation contains literal `\\n` text"
+        guidance = "Use a real line break where the source breaks, or remove the literal `\\n`."
+    elif escaped_quotes_only:
+        problem = "Translation adds backslashes before quote marks"
+        guidance = "Use normal quote characters without a literal backslash before them."
+    elif missing and extra:
+        problem = "Translation changed one or more control codes"
+        guidance = "Restore the missing codes and remove the extra codes without changing their order."
+    elif missing:
+        problem = "Translation is missing control codes"
+        guidance = "Copy the missing codes from the source into the translated text."
+    elif extra:
+        problem = "Translation has extra control codes"
+        guidance = "Remove the extra codes unless they are an intentional font-size change."
+    else:
+        problem = "Control-code order differs from the source"
+        guidance = "Keep the same control codes in the same order as the source."
+
+    if missing or extra:
+        difference = (
+            f"Missing: {_format_code_difference(missing)}\n"
+            f"Extra: {_format_code_difference(extra)}"
+        )
+    else:
+        difference = (
+            f"Expected order: {_format_code_difference(source_codes)}\n"
+            f"Found order: {_format_code_difference(translation_codes)}"
+        )
+    return problem, difference, guidance
 
 
 @dataclass
@@ -49,19 +225,27 @@ class InjectIssue:
     source: str = ""
     text: str = ""
     hit_id: dict[str, Any] = field(default_factory=dict)
+    problem: str = ""
+    difference: str = ""
+    guidance: str = ""
 
     def summary(self) -> str:
-        label = {
+        label = self.problem or {
             "code_mismatch": "control-code mismatch",
             "unrepresentable": "not Shift-JIS encodable",
         }.get(self.kind, self.kind)
-        preview = (self.text or self.source).replace("\n", " ").strip()
-        if len(preview) > 90:
-            preview = preview[:90] + "…"
         loc = self.locator or self.json_file
-        if preview:
-            return f"{label}\n{self.json_file} · {loc}\n{preview}"
         return f"{label}\n{self.json_file} · {loc}"
+
+    def detail(self) -> str:
+        parts = [f"{self.json_file} · {self.locator}".strip(" ·")]
+        if self.problem:
+            parts.append(f"Issue: {self.problem}")
+        if self.difference:
+            parts.append(self.difference)
+        if self.guidance:
+            parts.append(f"Fix: {self.guidance}")
+        return "\n".join(parts)
 
 
 @dataclass
@@ -187,46 +371,6 @@ def resolve_locator_line(
     return None, {}
 
 
-def apply_issue_text(
-    translated_dir: Path,
-    issue: InjectIssue,
-    new_text: str,
-) -> tuple[bool, str]:
-    """Write *new_text* onto the JSON line for *issue*. Returns (ok, error)."""
-    path = Path(translated_dir) / issue.json_file
-    if not path.is_file():
-        return False, f"{issue.json_file} not found"
-    doc = _load_doc(path)
-    if not doc:
-        return False, f"could not read {issue.json_file}"
-
-    line: dict[str, Any] | None = None
-    if issue.locator:
-        line, _ = resolve_locator_line(doc, issue.locator)
-    if line is None and issue.hit_id.get("kind") == "db":
-        line, _ = resolve_locator_line(
-            doc,
-            f"db type {issue.hit_id.get('type')} row {issue.hit_id.get('row')} "
-            f"field {issue.hit_id.get('field')}",
-        )
-
-    if line is None:
-        return False, f"could not locate {issue.locator or issue.json_file}"
-
-    line["text"] = new_text
-    src = line.get("source")
-    if isinstance(src, str) and isinstance(new_text, str):
-        repaired = wolf_codes.rebuild_text_preserving_source_codes(src, new_text)
-        if repaired != new_text:
-            line["text"] = repaired
-    path.write_text(
-        json.dumps(doc, ensure_ascii=False, indent=4) + "\n",
-        encoding="utf-8",
-    )
-    issue.text = str(line.get("text") or "")
-    return True, ""
-
-
 def _precheck_strings_file(
     json_name: str,
     entry: dict,
@@ -281,6 +425,7 @@ def _precheck_strings_file(
                 hit_id["sheet_name"] = json_name
             src = str(line.get("source") or "") if isinstance(line, dict) else ""
             txt = str(line.get("text") or "") if isinstance(line, dict) else ""
+            problem, difference, guidance = explain_issue(kind, full, src, txt)
             result.issues.append(
                 InjectIssue(
                     json_file=json_name,
@@ -290,6 +435,9 @@ def _precheck_strings_file(
                     source=src,
                     text=txt,
                     hit_id=hit_id,
+                    problem=problem,
+                    difference=difference,
+                    guidance=guidance,
                 )
             )
     return result
@@ -336,11 +484,11 @@ def precheck_selected(
             continue
 
         emit(f"Precheck {json_name}…")
-        inject_src, font_drift = repair_inject_json(src)
-        strings_drift = allow_code_drift or font_drift
-        if font_drift and not allow_code_drift:
+        inject_src, safe_code_drift = repair_inject_json(src)
+        strings_drift = allow_code_drift or safe_code_drift
+        if safe_code_drift and not allow_code_drift:
             emit(
-                f"  ℹ {json_name}: Fix-wrap / \\f[N] size changes — "
+                f"  ℹ {json_name}: safe font/source-code repair — "
                 "passing --allow-code-drift for dry-run"
             )
         fp = _precheck_strings_file(
@@ -372,19 +520,43 @@ def precheck_selected(
 
 
 def format_precheck_summary(report: PrecheckReport) -> str:
-    """One-line status for the Step 6 precheck label."""
+    """Plain-language status for the precheck label."""
     safety = len(report.safety_issues)
     errors = sum(1 for f in report.files if f.error)
-    parts = []
     if safety:
-        parts.append(f"{safety} safety skip(s)")
+        result = (
+            f"Check found {safety} line(s) that cannot be applied safely. "
+            "Copy the AI repair skill below to fix them."
+        )
+        if errors:
+            result += f" {errors} file(s) also could not be checked."
+        return result
     if errors:
-        parts.append(f"{errors} file error(s)")
-    if not parts:
-        return "Precheck clean - no safety-guard skips."
-    return "Precheck: " + ", ".join(parts)
+        return f"Check could not inspect {errors} file(s). See the activity log."
+    return "Check complete — every reviewed translation can be applied safely."
 
 
 def issues_for_ui(report: PrecheckReport) -> list[InjectIssue]:
     """Safety-guard issues only."""
     return list(report.safety_issues)
+
+
+def format_ai_repair_issues(issues: list[InjectIssue]) -> str:
+    """Return a complete, compact issue manifest for the AI repair skill."""
+    if not issues:
+        return "No issues were reported."
+    blocks: list[str] = []
+    for index, issue in enumerate(issues, start=1):
+        font_review = issue.problem.startswith("Font-size")
+        action = "REVIEW FONT-ONLY" if font_review else "FIX"
+        lines = [
+            f"{index}. [{action}] {issue.json_file} — {issue.locator}",
+            f"   Problem: {issue.problem or issue.kind}",
+        ]
+        for detail_line in (issue.difference or "").splitlines():
+            if detail_line:
+                lines.append(f"   {detail_line}")
+        if issue.guidance:
+            lines.append(f"   Guidance: {issue.guidance}")
+        blocks.append("\n".join(lines))
+    return "\n\n".join(blocks)

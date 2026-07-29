@@ -128,6 +128,7 @@ class WorkflowTranslationPromptTests(unittest.TestCase):
             "image_translation.md",
             "risky_codes.md",
             "wolf_speakers.md",
+            "wolf_precheck_repair.md",
         )
         for name in expected:
             with self.subTest(name=name):
@@ -143,6 +144,8 @@ class WorkflowTranslationPromptTests(unittest.TestCase):
         ):
             self.assertNotIn(constant, workflow_source)
         self.assertNotIn("_WOLF_SPEAKER_PROMPT", wolf_source)
+        self.assertIn("Copy AI repair skill", wolf_source)
+        self.assertIn('load_clipboard_skill("wolf_precheck_repair.md")', wolf_source)
         self.assertIn("Copy final QA skill", workflow_source)
         self.assertIn('load_clipboard_skill("rpgmaker_translation_qa.md")', workflow_source)
 
@@ -179,6 +182,19 @@ class WorkflowTranslationPromptTests(unittest.TestCase):
         self.assertIn("Provide clean source art or layers", prompt)
         self.assertIn("Manual artist review", prompt)
         self.assertIn("If nothing was skipped or marked for review, omit", prompt)
+
+    def test_wolf_precheck_repair_skill_is_scoped_and_actionable(self):
+        prompt = load_clipboard_skill("wolf_precheck_repair.md")
+        normalized = " ".join(prompt.split())
+
+        for placeholder in ("{{TRANSLATED_DIR}}", "{{GAME_ROOT}}", "{{ISSUES}}"):
+            self.assertIn(placeholder, prompt)
+        self.assertIn("Edit only the affected `text` value", prompt)
+        self.assertIn("Never edit `source`", prompt)
+        self.assertIn("Never convert literal `\\n` globally", prompt)
+        self.assertIn("Continue until every listed `FIX` item", normalized)
+        self.assertIn("edit those JSON files in place", prompt)
+        self.assertIn("does not need it pasted back", prompt)
 
     def test_clipboard_skill_loader_rejects_paths(self):
         with self.assertRaises(ValueError):

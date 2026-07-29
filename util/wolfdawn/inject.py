@@ -119,9 +119,9 @@ def restore_live_from_originals(
 def repair_inject_json(src: Path) -> tuple[Path, bool]:
     """Auto-repair WOLF inline codes in a translated JSON before inject.
 
-    Returns ``(path, safe_font_only_drift)``. Automatic ``--allow-code-drift`` is
-    enabled only when font drift exists and no non-font token mismatch could be
-    hidden by that file-wide WolfDawn flag.
+    Returns ``(path, safe_code_drift)``. Automatic ``--allow-code-drift`` is
+    enabled only when every difference is an intentional font change or the
+    translation safely closes a malformed source code.
     """
     data = json.loads(src.read_text(encoding="utf-8-sig"))
     data, repairs = wolf_codes.repair_document(data)
@@ -130,11 +130,14 @@ def repair_inject_json(src: Path) -> tuple[Path, bool]:
             json.dumps(data, ensure_ascii=False, indent=4) + "\n",
             encoding="utf-8",
         )
-    safe_font_only_drift = (
-        wolf_codes.document_has_font_size_drift(data)
+    safe_code_drift = (
+        (
+            wolf_codes.document_has_font_size_drift(data)
+            or wolf_codes.document_has_safe_unclosed_source_repairs(data)
+        )
         and not wolf_codes.document_has_non_font_code_drift(data)
     )
-    return src, safe_font_only_drift
+    return src, safe_code_drift
 
 
 def names_json_has_edits(path: Path) -> bool | None:
@@ -704,11 +707,11 @@ def inject_selected(
 
     for json_name in strings_todo:
         entry = by_json[json_name]
-        inject_src, font_drift = repair_inject_json(translated_dir / json_name)
-        strings_drift = allow_code_drift or font_drift
-        if font_drift and not allow_code_drift:
+        inject_src, safe_code_drift = repair_inject_json(translated_dir / json_name)
+        strings_drift = allow_code_drift or safe_code_drift
+        if safe_code_drift and not allow_code_drift:
             emit(
-                f"  ℹ {json_name}: Fix-wrap / \\f[N] size changes — "
+                f"  ℹ {json_name}: safe font/source-code repair — "
                 "passing --allow-code-drift for strings-inject"
             )
         emit(f"Injecting {json_name}…")

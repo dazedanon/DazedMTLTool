@@ -77,6 +77,111 @@ class InjectSafetyParserTests(unittest.TestCase):
 
 
 class InjectPrecheckLocalTests(unittest.TestCase):
+    def test_explain_issue_summarizes_extra_font_code(self):
+        message = (
+            "event 5 page 0 cmd 0 str 0: control-code mismatch - "
+            'source has ["\\n\\n", "\\\\f[10]"], translation has '
+            '["\\n\\n", "\\\\f[10]", "\\\\f[10]"]; edit the words'
+        )
+
+        problem, difference, guidance = pre.explain_issue(
+            "code_mismatch",
+            message,
+            "Japanese\n\n\\f[10]note",
+            "\\f[10]English\n\n\\f[10]note",
+        )
+
+        self.assertEqual(problem, "Font-size codes differ from the source")
+        self.assertEqual(difference, "Missing: none\nExtra: `\\f[10]`")
+        self.assertIn("intentionally changed", guidance)
+
+    def test_explain_issue_calls_out_unclosed_source_code(self):
+        source = "Japanese \\i[200\nrest of source"
+        text = "English \\i[200\nrest of source"
+
+        problem, difference, guidance = pre.explain_issue(
+            "code_mismatch", "raw diagnostic", source, text
+        )
+
+        self.assertEqual(problem, "Source has an unclosed control code: `\\i[200`")
+        self.assertIn("missing `]`", difference)
+        self.assertIn("affected suffix", guidance)
+
+    def test_explain_issue_calls_out_literal_newline(self):
+        message = (
+            "event 7 page 0 cmd 25 str 0: control-code mismatch - "
+            'source has ["@1"], translation has '
+            '["@1", "\\\\n", "\\\\nfreely"]; edit the words'
+        )
+
+        problem, difference, guidance = pre.explain_issue(
+            "code_mismatch", message, "@1\nJapanese", r"@1\nEnglish\nfreely"
+        )
+
+        self.assertEqual(problem, "Translation contains literal `\\n` text")
+        self.assertIn("`\\nfreely`", difference)
+        self.assertIn("real line break", guidance)
+
+    def test_explain_issue_lists_unencodable_characters(self):
+        problem, difference, guidance = pre.explain_issue(
+            "unrepresentable", "", "Japanese", "Heart 💖"
+        )
+
+        self.assertIn("cannot store", problem)
+        self.assertIn("U+1F496", difference)
+        self.assertIn("Replace", guidance)
+
+    def test_issue_summary_omits_raw_diagnostic_and_translation_dump(self):
+        issue = pre.InjectIssue(
+            json_file="Map001.mps.json",
+            kind="code_mismatch",
+            locator="event 2 page 0 cmd 4 str 0",
+            message="very long raw diagnostic",
+            text="very long translated line",
+            problem="Translation is missing control codes",
+            difference="Missing: `\\^`\nExtra: none",
+            guidance="Copy the missing code.",
+        )
+
+        self.assertEqual(
+            issue.summary(),
+            "Translation is missing control codes\n"
+            "Map001.mps.json · event 2 page 0 cmd 4 str 0",
+        )
+        self.assertNotIn("diagnostic", issue.detail())
+        self.assertIn("Missing: `\\^`", issue.detail())
+
+    def test_ai_repair_manifest_includes_every_issue_and_marks_font_review(self):
+        issues = [
+            pre.InjectIssue(
+                json_file="Map001.mps.json",
+                kind="code_mismatch",
+                locator="event 2 page 0 cmd 4 str 0",
+                message="raw",
+                problem="Translation is missing control codes",
+                difference="Missing: `\\^`\nExtra: none",
+                guidance="Copy the missing code.",
+            ),
+            pre.InjectIssue(
+                json_file="SampleMapA.mps.json",
+                kind="code_mismatch",
+                locator="event 5 page 0 cmd 0 str 0",
+                message="raw",
+                problem="Font-size codes differ from the source",
+                difference="Missing: none\nExtra: `\\f[10]`",
+                guidance="Keep intentional wrapping.",
+            ),
+        ]
+
+        manifest = pre.format_ai_repair_issues(issues)
+
+        self.assertIn("1. [FIX] Map001.mps.json", manifest)
+        self.assertIn("2. [REVIEW FONT-ONLY] SampleMapA.mps.json", manifest)
+        self.assertIn("event 2 page 0 cmd 4 str 0", manifest)
+        self.assertIn("event 5 page 0 cmd 0 str 0", manifest)
+        self.assertIn("Missing: `\\^`", manifest)
+        self.assertNotIn("raw", manifest)
+
     def test_repair_inject_json_does_not_rewrite_valid_moved_code(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "CommonEvent.dat.json"
@@ -103,6 +208,35 @@ class InjectPrecheckLocalTests(unittest.TestCase):
 
             self.assertEqual(repaired_path, path)
             self.assertFalse(font_drift)
+            self.assertEqual(path.read_text(encoding="utf-8"), original)
+
+    def test_repair_inject_json_allows_safe_unclosed_source_code_repair(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "Map001_1.mps.json"
+            doc = {
+                "kind": "map",
+                "scenes": [
+                    {
+                        "event": 12,
+                        "page": 2,
+                        "lines": [
+                            {
+                                "cmd": 172,
+                                "str": 0,
+                                "source": "A\\i[200\nB\\i[31]",
+                                "text": "English\\i[200]\nMore\\i[31]",
+                            }
+                        ],
+                    }
+                ],
+            }
+            original = json.dumps(doc, ensure_ascii=False, indent=2) + "\n"
+            path.write_text(original, encoding="utf-8")
+
+            repaired_path, safe_code_drift = wi.repair_inject_json(path)
+
+            self.assertEqual(repaired_path, path)
+            self.assertTrue(safe_code_drift)
             self.assertEqual(path.read_text(encoding="utf-8"), original)
 
     def test_repair_inject_json_does_not_hide_non_font_drift(self):
@@ -157,42 +291,6 @@ class InjectPrecheckLocalTests(unittest.TestCase):
         self.assertIsNotNone(line)
         self.assertEqual(line["text"], "txtblank")
         self.assertEqual(hit["sheet_name"], "Sheet")
-
-    def test_apply_issue_text_updates_json(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            path = Path(tmp) / "DataBase.project.json"
-            doc = {
-                "kind": "db",
-                "groups": [
-                    {
-                        "type": 1,
-                        "typeName": "T",
-                        "lines": [
-                            {
-                                "row": 0,
-                                "field": 2,
-                                "fieldName": "f",
-                                "source": "あ\\^",
-                                "text": "A",
-                            }
-                        ],
-                    }
-                ],
-            }
-            path.write_text(json.dumps(doc), encoding="utf-8")
-            issue = pre.InjectIssue(
-                json_file="DataBase.project.json",
-                kind="code_mismatch",
-                locator="db type 1 row 0 field 2",
-                message="mismatch",
-                source="あ\\^",
-                text="A",
-            )
-            ok, err = pre.apply_issue_text(Path(tmp), issue, "A\\^")
-            self.assertTrue(ok, err)
-            saved = json.loads(path.read_text(encoding="utf-8"))
-            self.assertEqual(saved["groups"][0]["lines"][0]["text"], "A\\^")
-
 
 if __name__ == "__main__":
     unittest.main()

@@ -30,6 +30,7 @@ _SHIPPED_DATA_FILES = (
     "data/skills/image_translation.md",
     "data/skills/risky_codes.md",
     "data/skills/wolf_speakers.md",
+    "data/skills/wolf_precheck_repair.md",
     "data/help/index.json",
     "data/help/00-welcome.md",
     "data/help/01-git-setup.md",

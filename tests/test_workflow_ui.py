@@ -607,6 +607,59 @@ class WolfWorkflowShellTests(unittest.TestCase):
         self.assertEqual(log_messages, [])
         self.assertEqual(completions, [(False, "RuntimeError: broken archive")])
 
+    def test_wolf_check_has_two_aligned_full_workflow_actions(self):
+        self.workflow._goto_step(6)
+        self.app.processEvents()
+
+        page = self.workflow._step_tabs.widget(6)
+        buttons = page.findChildren(QPushButton)
+        labels = [button.text() for button in buttons]
+        self.assertIn("Preview all files", labels)
+        self.assertIn("Copy AI repair skill", labels)
+        self.assertNotIn("Preview selected files", labels)
+        self.assertNotIn("Refresh files", labels)
+        self.assertNotIn("Select all", labels)
+        self.assertNotIn("Clear selection", labels)
+
+        preview = next(button for button in buttons if button.text() == "Preview all files")
+        repair = next(
+            button for button in buttons if button.text() == "Copy AI repair skill"
+        )
+        self.assertEqual(preview.width(), Geometry.ACTION_WIDE)
+        self.assertEqual(repair.width(), Geometry.ACTION_WIDE)
+        self.assertEqual(preview.height(), repair.height())
+        self.assertEqual(
+            preview.mapTo(page, preview.rect().topLeft()).x(),
+            repair.mapTo(page, repair.rect().topLeft()).x(),
+        )
+
+    def test_wolf_check_copies_scoped_ai_repair_skill(self):
+        from util.wolfdawn.inject_precheck import InjectIssue
+
+        self.workflow._game_root = self.temp.name
+        self.workflow._inject_precheck_issues = [
+            InjectIssue(
+                json_file="SampleMapA.mps.json",
+                kind="code_mismatch",
+                locator="event 7 page 0 cmd 55 str 0",
+                message="raw diagnostic",
+                problem="Translation changed one or more control codes",
+                difference="Missing: `\\.` ×5\nExtra: `\\\\` ×5",
+                guidance="Restore the missing codes.",
+            )
+        ]
+        QApplication.clipboard().clear()
+
+        self.workflow._copy_inject_precheck_repair_skill()
+
+        prompt = QApplication.clipboard().text()
+        self.assertIn(str((Path.cwd() / "translated").resolve()), prompt)
+        self.assertIn(str(Path(self.temp.name).resolve()), prompt)
+        self.assertIn("SampleMapA.mps.json", prompt)
+        self.assertIn("event 7 page 0 cmd 55 str 0", prompt)
+        self.assertIn("Missing: `\\.` ×5", prompt)
+        self.assertNotIn("raw diagnostic", prompt)
+
 
 class CaptureDiffTests(unittest.TestCase):
     def test_capture_diff_reports_changed_pixels(self):

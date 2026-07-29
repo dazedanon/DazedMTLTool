@@ -25,7 +25,7 @@ WOLF_INLINE_CODE_RE = re.compile(
     r"c(?:self)?\[[^\]]*\]|"  # \c[...] / \cself[...]
     r"[A-Za-z]+\[[^\]]*\]|"  # \font[0], \cdb[21:78:0], \wE[1], ...
     r"\^|"  # \^ (wait / beat — often mangled to "\ ^")
-    r"[ @<>\-]|"  # other single-char escapes Wolf uses
+    r'[!".\\ @<>\-]|'  # other single-char escapes Wolf uses
     r"[A-Za-z]"  # \n, \c, \f, ...
     r")"
 )
@@ -35,6 +35,9 @@ _PLACEHOLDER_PREFIX = "__WOLF_CODE_"
 
 # Wolf font-size codes: ``\f[18]``, ``\f[20]``, etc.
 WOLF_FONT_SIZE_RE = re.compile(r"\\f\[(\d+)\]")
+_UNCLOSED_BRACKET_CODE_RE = re.compile(
+    r"\\[A-Za-z]+\[[^\]\r\n]*(?=\r?$)", re.MULTILINE
+)
 
 
 def detect_font_sizes(text: str) -> list[int]:
@@ -145,6 +148,42 @@ def _control_code_tokens(text: str) -> list[str]:
     return [m.group(0) for m in WOLF_INLINE_CODE_RE.finditer(text)]
 
 
+def safely_closes_unclosed_source_codes(source: str, text: str) -> bool:
+    """True when *text* only repairs source codes missing a closing ``]``.
+
+    Some shipped WOLF events contain a bracketed code such as ``\\i[200`` at
+    the end of a physical line. WolfDawn then treats the rest of the source as
+    one protected malformed token. A translation that adds the obvious ``]``
+    is safe when the normalized source and translation have the exact same
+    control-code sequence.
+    """
+    if not isinstance(source, str) or not isinstance(text, str):
+        return False
+    if not _UNCLOSED_BRACKET_CODE_RE.search(source):
+        return False
+    normalized_source = _UNCLOSED_BRACKET_CODE_RE.sub(
+        lambda match: match.group(0) + "]", source
+    )
+    return _control_code_tokens(normalized_source) == _control_code_tokens(text)
+
+
+def document_has_safe_unclosed_source_repairs(doc: dict[str, Any]) -> bool:
+    """True when a document translation safely closes a malformed source code."""
+    if not isinstance(doc, dict):
+        return False
+    for entry in _walk_entries(doc):
+        if not isinstance(entry, dict):
+            continue
+        source, text = entry.get("source"), entry.get("text")
+        if (
+            isinstance(source, str)
+            and isinstance(text, str)
+            and safely_closes_unclosed_source_codes(source, text)
+        ):
+            return True
+    return False
+
+
 def _normalize_font_size_codes(text: str) -> str:
     """Replace every ``\\f[N]`` with a placeholder so size values are ignored."""
     if not isinstance(text, str) or not text:
@@ -198,6 +237,8 @@ def names_doc_has_font_size_drift(doc: dict[str, Any]) -> bool:
 def non_font_code_sequences_differ(source: str, text: str) -> bool:
     """True when non-font control tokens are missing, extra, or reordered."""
     if not isinstance(source, str) or not isinstance(text, str):
+        return False
+    if safely_closes_unclosed_source_codes(source, text):
         return False
     src_codes = [
         code

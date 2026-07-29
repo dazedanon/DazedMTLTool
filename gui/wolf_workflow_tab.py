@@ -15,8 +15,8 @@ Mirrors the RPGMaker WorkflowTab, driven by the vendored WolfDawn ``wolf`` CLI
                         (items, skills, descriptions) before narrative custom sheets;
                         harvests short label fields (map names, titles) into vocab.txt
   Step 5  Maps/Events - .mps maps, CommonEvent, Game.dat, Evtext; speaker handling
-  Step 6  Precheck    - name consistency + reconcile, then dry-run inject for
-                        safety-guard skips; edit those lines before writing binaries
+  Step 6  Precheck    - name consistency + reconcile, then dry-run every translated
+                        file and package safety issues for the AI repair helper
   Step 7  Inject      - inject every JSON into Data/ from translated/ (default)
                         or from the game's wolf_json/; translated inject also
                         refreshes wolf_json/ (full pass avoids name/DB wipe bugs);
@@ -2486,69 +2486,36 @@ class WolfWorkflowTab(QWidget):
         )
         title.setToolTip(
             "Reconcile names.json → Glossary spellings, report name inconsistencies, "
-            "then dry-run selected JSON for safety skips (control-code mismatch, or "
-            "text not Shift-JIS encodable). Fix any listed rows here, then continue to Step 8."
+            "then dry-run every translated JSON file for safety skips (control-code "
+            "mismatch, or text not Shift-JIS encodable). Send any issues to the AI "
+            "repair helper, rerun the check, then continue to Step 8."
         )
         layout.addWidget(title)
         preview_card = WorkflowStageCard(
             1,
-            "Choose files and preview the update",
-            "A preview checks for text that cannot be safely written back to the game. It does not change the game.",
+            "Preview the update",
+            "Check every translated file for text that cannot be safely written back to the game. This does not change the game.",
         )
 
-        self.precheck_list = CheckableFileList()
-        self.precheck_list.setMinimumHeight(72)
-        self.precheck_list.setMaximumHeight(120)
-        self.precheck_list.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
-        self.precheck_list.setStyleSheet(
-            "QListWidget{background-color:#252526;border:1px solid #3a3a3a;border-radius:4px;"
-            "color:#cccccc;font-size:12px;padding:1px;}"
-            "QListWidget::item{padding:2px 4px;}"
-            "QListWidget::item:selected{background:#264f78;color:#ffffff;}"
-        )
-        preview_card.add_widget(self.precheck_list)
-
-        list_row = QHBoxLayout()
-        list_row.setSpacing(6)
-        refresh_btn = self._register(_make_btn("Refresh files", "#3a3a3a"))
-        refresh_btn.clicked.connect(self._refresh_precheck_list)
-        sel_all_btn = self._register(_make_btn("Select all", "#3a3a3a"))
-        sel_all_btn.clicked.connect(lambda: self._set_checklist_checks(self.precheck_list, True))
-        sel_none_btn = self._register(_make_btn("Clear selection", "#3a3a3a"))
-        sel_none_btn.clicked.connect(lambda: self._set_checklist_checks(self.precheck_list, False))
-        precheck_btn = self._register(_make_btn("Preview selected files", "#007acc"))
-        precheck_btn.setToolTip(
-            "Check the selected translated files without changing the game."
-        )
-        precheck_btn.clicked.connect(self._precheck_inject_selected)
-        precheck_all_btn = self._register(_make_btn("Preview all files", "#007acc"))
-        precheck_all_btn.setToolTip(
-            "Check every translated file without changing the game."
-        )
-        precheck_all_btn.clicked.connect(self._precheck_inject_all)
-        list_row.addWidget(refresh_btn)
-        list_row.addWidget(sel_all_btn)
-        list_row.addWidget(sel_none_btn)
-        list_row.addStretch()
-        preview_card.add_layout(list_row)
         preview_actions = QHBoxLayout()
         preview_actions.setSpacing(6)
-        preview_actions.addWidget(precheck_btn)
-        preview_actions.addWidget(precheck_all_btn)
+        self._precheck_all_btn = self._register(
+            _make_btn("Preview all files", "#007acc")
+        )
+        self._precheck_all_btn.setToolTip(
+            "Check every translated file without changing the game."
+        )
+        self._precheck_all_btn.clicked.connect(self._precheck_inject_all)
+        self._precheck_all_btn.setFixedWidth(Geometry.ACTION_WIDE)
+        preview_actions.addWidget(self._precheck_all_btn)
         preview_actions.addStretch()
-        equalize_button_widths(
-            (refresh_btn, sel_all_btn, sel_none_btn), minimum=140
-        )
-        equalize_button_widths(
-            (precheck_btn, precheck_all_btn), minimum=Geometry.ACTION_WIDE
-        )
         preview_card.add_layout(preview_actions)
         layout.addWidget(preview_card)
 
         issues_card = WorkflowStageCard(
             2,
-            "Review anything that needs attention",
-            "If the preview finds a problem, select it, correct the translated line, and save your change.",
+            "Fix anything that needs attention",
+            "Send every current issue to your AI helper in one repair task.",
         )
 
         self._inject_precheck_label = QLabel(
@@ -2560,53 +2527,46 @@ class WolfWorkflowTab(QWidget):
         )
         issues_card.add_widget(self._inject_precheck_label)
 
-        self._inject_issue_list = QListWidget()
-        self._inject_issue_list.setMinimumHeight(80)
-        self._inject_issue_list.setMaximumHeight(140)
-        self._inject_issue_list.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
-        self._inject_issue_list.setWordWrap(True)
-        self._inject_issue_list.setTextElideMode(Qt.ElideNone)
-        self._inject_issue_list.setUniformItemSizes(False)
-        self._inject_issue_list.setStyleSheet(
-            "QListWidget{background-color:#252526;border:1px solid #3a3a3a;border-radius:4px;"
-            "color:#cccccc;font-size:12px;padding:1px;}"
-            "QListWidget::item{padding:3px 6px;}"
-            "QListWidget::item:selected{background:#264f78;color:#ffffff;}"
+        self._inject_ai_repair_status = QLabel(
+            "Run Check first. If anything needs attention, DazedTL will package every issue for your AI helper."
         )
-        self._inject_issue_list.currentItemChanged.connect(self._on_inject_issue_selected)
-        issues_card.add_widget(self._inject_issue_list)
+        self._inject_ai_repair_status.setWordWrap(True)
+        self._inject_ai_repair_status.setStyleSheet(
+            "color:#cccccc;font-size:12px;background:#252526;padding:9px;"
+            "border-left:3px solid #007acc;"
+        )
+        issues_card.add_widget(self._inject_ai_repair_status)
 
-        self._inject_issue_meta = QLabel("")
-        self._inject_issue_meta.setWordWrap(True)
-        self._inject_issue_meta.setStyleSheet(
-            "color:#808080;font-size:11px;background:transparent;padding:0;"
+        direct_edit_note = QLabel(
+            "The helper edits the tool's translated/ JSON files directly. "
+            "Do not paste its answer back into DazedTL; return here and run Check again."
         )
-        issues_card.add_widget(self._inject_issue_meta)
-
-        self._inject_issue_edit = QTextEdit()
-        self._inject_issue_edit.setPlaceholderText(
-            "Select a preview result to edit its translated text, then save the line."
+        direct_edit_note.setWordWrap(True)
+        direct_edit_note.setStyleSheet(
+            "color:#9d9d9d;font-size:11px;background:transparent;padding:0;"
         )
-        self._inject_issue_edit.setMinimumHeight(100)
-        self._inject_issue_edit.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        self._inject_issue_edit.setStyleSheet(
-            "QTextEdit{background-color:#1e1e1e;color:#d4d4d4;border:1px solid #3c3c3c;"
-            "border-left:3px solid #007acc;border-radius:0;padding:4px;font-size:12px;}"
-        )
-        issues_card.add_widget(self._inject_issue_edit, 1)
+        issues_card.add_widget(direct_edit_note)
 
         edit_row = QHBoxLayout()
         edit_row.setSpacing(6)
-        save_line_btn = self._register(_make_btn("Save corrected line", "#00a86b"))
-        save_line_btn.clicked.connect(self._save_inject_issue_line)
-        edit_row.addWidget(save_line_btn)
+        self._copy_precheck_repair_btn = self._register(
+            _make_btn("Copy AI repair skill", "#555")
+        )
+        self._copy_precheck_repair_btn.setToolTip(
+            "Copy every current issue and strict WOLF repair rules for your AI helper."
+        )
+        self._copy_precheck_repair_btn.setEnabled(False)
+        self._copy_precheck_repair_btn.clicked.connect(
+            self._copy_inject_precheck_repair_skill
+        )
+        edit_row.addWidget(self._copy_precheck_repair_btn)
         edit_row.addStretch()
-        save_line_btn.setFixedWidth(Geometry.ACTION_WIDE)
+        self._copy_precheck_repair_btn.setFixedWidth(Geometry.ACTION_WIDE)
         issues_card.add_layout(edit_row)
-        layout.addWidget(issues_card, 1)
+        layout.addWidget(issues_card)
+        layout.addStretch(1)
 
         self._inject_precheck_issues: list = []
-        self._refresh_precheck_list()
 
     # ── Step 7: Inject ─────────────────────────────────────────────────────────
 
@@ -4064,40 +4024,9 @@ class WolfWorkflowTab(QWidget):
         # Index 4 == Database: refresh discovery report and sheet list.
         elif idx == 4:
             self._refresh_db_discovery()
-        # Index 6 == Precheck: keep the file list in sync with translated/.
-        elif idx == 6:
-            self._refresh_precheck_list()
         # Index 7 == Inject: keep the file list in sync with translated/.
         elif idx == 7:
             self._refresh_inject_list()
-
-    def _fill_injectable_checklist(self, list_widget: QListWidget):
-        """Populate a checkable file list from translated/ + manifest (precheck)."""
-        list_widget.clear()
-        if not self._read_manifest():
-            item = QListWidgetItem("Choose and import a project in Step 1 first.")
-            item.setFlags(Qt.ItemIsEnabled)
-            list_widget.addItem(item)
-            return
-        files = self._injectable_filenames()
-        if not files:
-            item = QListWidgetItem("No injectable files in translated/ yet.")
-            item.setFlags(Qt.ItemIsEnabled)
-            list_widget.addItem(item)
-            return
-        for json_name in files:
-            item = QListWidgetItem(json_name)
-            item.setData(Qt.UserRole, json_name)
-            item.setFlags(
-                Qt.ItemIsUserCheckable | Qt.ItemIsEnabled | Qt.ItemIsSelectable
-            )
-            item.setCheckState(Qt.Unchecked)
-            list_widget.addItem(item)
-
-    def _refresh_precheck_list(self):
-        if not hasattr(self, "precheck_list"):
-            return
-        self._fill_injectable_checklist(self.precheck_list)
 
     def _refresh_inject_list(self):
         """Show every injectable file (read-only). Inject always uses the full set."""
@@ -4125,39 +4054,6 @@ class WolfWorkflowTab(QWidget):
             self._inject_count_label.setText(
                 f"{len(files)} file(s) will be injected together."
             )
-
-    def _selected_checklist_files(self, list_widget: QListWidget) -> set[str]:
-        selected: set[str] = set()
-        for i in range(list_widget.count()):
-            it = list_widget.item(i)
-            if (it.flags() & Qt.ItemIsUserCheckable) and it.checkState() == Qt.Checked:
-                name = it.data(Qt.UserRole)
-                if name:
-                    selected.add(name)
-        return selected
-
-    def _selected_precheck_files(self) -> set[str]:
-        return self._selected_checklist_files(self.precheck_list)
-
-    def _set_checklist_checks(self, list_widget: QListWidget, checked: bool):
-        state = Qt.Checked if checked else Qt.Unchecked
-        for i in range(list_widget.count()):
-            it = list_widget.item(i)
-            if it.flags() & Qt.ItemIsUserCheckable:
-                it.setCheckState(state)
-
-    def _precheck_inject_selected(self):
-        if not self._require_manifest():
-            return
-        selected = self._selected_precheck_files()
-        if not selected:
-            QMessageBox.information(
-                self,
-                "Nothing selected",
-                "Select one or more files, then click Preview selected injection.",
-            )
-            return
-        self._run_inject_precheck(selected)
 
     def _precheck_inject_all(self):
         if not self._require_manifest():
@@ -4280,7 +4176,7 @@ class WolfWorkflowTab(QWidget):
                     self,
                     "Inject precheck",
                     (msg or label)
-                    + "\n\nSelect a safety row below, fix the text, Save line, then re-run precheck.",
+                    + "\n\nClick Copy AI repair skill, paste it into your AI helper, then run Check again after it edits translated/.",
                 )
             else:
                 QMessageBox.information(self, "Inject precheck", msg)
@@ -4290,60 +4186,61 @@ class WolfWorkflowTab(QWidget):
     def _populate_inject_precheck(self, report):
         from util.wolfdawn import inject_precheck as wolf_pre
 
-        self._inject_issue_list.clear()
-        self._inject_issue_edit.clear()
-        self._inject_issue_meta.setText("")
         issues = wolf_pre.issues_for_ui(report)
         self._inject_precheck_issues = issues
-        for issue in issues:
-            item = QListWidgetItem(issue.summary())
-            item.setData(Qt.UserRole, issue)
-            item.setForeground(QColor("#f48771"))
-            self._inject_issue_list.addItem(item)
-            fm = self._inject_issue_list.fontMetrics()
-            item.setSizeHint(
-                QSize(
-                    self._inject_issue_list.viewport().width(),
-                    max(fm.height() * 3 + 10, 48),
-                )
+        self._copy_precheck_repair_btn.setEnabled(bool(issues))
+        if issues:
+            self._inject_ai_repair_status.setText(
+                f"{len(issues)} issue(s) are ready for the AI helper. "
+                "The copied skill includes every locator and correction rule."
+            )
+            self._inject_ai_repair_status.setStyleSheet(
+                "color:#dcdcaa;font-size:12px;background:#252526;padding:9px;"
+                "border-left:3px solid #d7ba7d;"
+            )
+        else:
+            self._inject_ai_repair_status.setText(
+                "Nothing needs repair. The reviewed translations are ready to apply."
+            )
+            self._inject_ai_repair_status.setStyleSheet(
+                "color:#89d185;font-size:12px;background:#252526;padding:9px;"
+                "border-left:3px solid #2ea043;"
             )
 
-    def _on_inject_issue_selected(self, current, _previous):
-        if current is None:
-            self._inject_issue_edit.clear()
-            self._inject_issue_meta.setText("")
-            return
-        issue = current.data(Qt.UserRole)
-        if issue is None:
-            return
-        meta_parts = [issue.json_file, issue.locator, issue.message]
-        self._inject_issue_meta.setText(" · ".join(p for p in meta_parts if p))
-        self._inject_issue_edit.setPlainText(issue.text or issue.source or "")
-
-    def _save_inject_issue_line(self):
-        item = self._inject_issue_list.currentItem()
-        if item is None:
-            QMessageBox.information(self, "Save line", "Select a precheck row first.")
-            return
-        issue = item.data(Qt.UserRole)
-        if issue is None:
-            return
+    def _copy_inject_precheck_repair_skill(self):
         from util.wolfdawn import inject_precheck as wolf_pre
 
-        new_text = self._inject_issue_edit.toPlainText()
-        ok, err = wolf_pre.apply_issue_text(
-            self._tool_root() / "translated", issue, new_text
-        )
-        if not ok:
-            QMessageBox.warning(self, "Save line", err or "Could not save.")
+        issues = list(getattr(self, "_inject_precheck_issues", []) or [])
+        if not issues:
+            QMessageBox.information(
+                self,
+                "AI repair skill",
+                "Run Check first. There are no current issues to send.",
+            )
             return
-        item.setText(issue.summary())
-        self._log(f"Saved precheck edit: {issue.json_file} · {issue.locator}")
-        QMessageBox.information(
-            self,
-            "Save line",
-            "Saved. Re-run Precheck to confirm the safety skip is gone.",
-        )
+        try:
+            prompt = load_clipboard_skill("wolf_precheck_repair.md")
+            replacements = {
+                "{{TRANSLATED_DIR}}": str(
+                    (self._tool_root() / "translated").resolve()
+                ),
+                "{{GAME_ROOT}}": str(Path(self._game_root).resolve()),
+                "{{ISSUES}}": wolf_pre.format_ai_repair_issues(issues),
+            }
+            missing = [token for token in replacements if token not in prompt]
+            if missing:
+                raise ValueError(
+                    "WOLF repair skill is missing placeholder(s): "
+                    + ", ".join(missing)
+                )
+            for token, value in replacements.items():
+                prompt = prompt.replace(token, value)
+            QApplication.clipboard().setText(prompt)
+            self._log(
+                f"Copied AI repair skill with {len(issues)} WOLF check issue(s)."
+            )
+        except Exception as exc:
+            self._log(f"❌ Could not copy WOLF repair skill: {exc}")
 
     def _inject_all(self):
         if not self._require_manifest():

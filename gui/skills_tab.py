@@ -153,6 +153,16 @@ class SkillsTab(QWidget):
             is_json=False,
         )
         self._add_file_page(
+            key="wolf_precheck_repair",
+            tab_title="WOLF Check Repair",
+            path=SKILLS_DIR / "wolf_precheck_repair.md",
+            hint=(
+                "Clipboard skill generated from WOLF Check issues. Keep the "
+                "{{TRANSLATED_DIR}}, {{GAME_ROOT}}, and {{ISSUES}} placeholders."
+            ),
+            is_json=False,
+        )
+        self._add_file_page(
             key="contexts",
             tab_title="Contexts",
             path=TRANSLATION_CONTEXTS_PATH,

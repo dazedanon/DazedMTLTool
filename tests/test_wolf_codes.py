@@ -291,6 +291,45 @@ class WolfCodesRepairTests(unittest.TestCase):
         self.assertTrue(wolf_codes.document_has_font_size_drift(doc))
         self.assertTrue(wolf_codes.document_has_non_font_code_drift(doc))
 
+    def test_translation_can_safely_close_unclosed_source_code(self):
+        source = (
+            "レイ\n「はい\\i[200] text\\i[200\n"
+            "　source suffix\\i[200]」"
+        )
+        text = (
+            'Rey\n"Okay \\i[200] text\\i[200]\n'
+            '　translated suffix\\i[200]"'
+        )
+        doc = {
+            "kind": "map",
+            "scenes": [{"lines": [{"source": source, "text": text}]}],
+        }
+
+        self.assertTrue(wolf_codes.safely_closes_unclosed_source_codes(source, text))
+        self.assertTrue(wolf_codes.document_has_safe_unclosed_source_repairs(doc))
+        self.assertFalse(wolf_codes.non_font_code_sequences_differ(source, text))
+        self.assertFalse(wolf_codes.document_has_non_font_code_drift(doc))
+
+    def test_unclosed_source_repair_rejects_other_code_changes(self):
+        source = "A\\i[200\nB\\i[31]"
+        missing_other_code = "A\\i[200]\nB"
+
+        self.assertFalse(
+            wolf_codes.safely_closes_unclosed_source_codes(
+                source, missing_other_code
+            )
+        )
+        self.assertTrue(
+            wolf_codes.non_font_code_sequences_differ(source, missing_other_code)
+        )
+
+    def test_escaped_quotes_are_non_font_code_drift(self):
+        self.assertTrue(
+            wolf_codes.non_font_code_sequences_differ(
+                "Japanese quotes", r'English \"quotes\"'
+            )
+        )
+
 
 class WolfFontScaleTests(unittest.TestCase):
     def test_scale_keeps_emphasis_ratio_and_leads_with_body(self):
