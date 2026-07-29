@@ -36,10 +36,11 @@ def _mock_translate(text, history, history_ctx=None):
 class _WolfTranslateHarness:
     """Run parseDocument with translateAI mocked and captured payloads recorded."""
 
-    def __init__(self):
+    def __init__(self, cdb_lookup=None):
         self.captured = []
         self.vocab_writes = []
         self.vocab_remove_writes = []
+        self.cdb_lookup = dict(cdb_lookup or {})
 
     def run(self, data, filename="doc.json", estimate=False, ignore_tl_text=True):
         def translate(text, history, history_ctx=None):
@@ -56,6 +57,7 @@ class _WolfTranslateHarness:
         orig_update = wd.wolf_vocab.update_vocab_section
         orig_labels = wd.wolf_names.derive_db_labels
         orig_db_filter = wd.wolf_db.load_db_filter_config
+        orig_cdb_lookup = wd.wolf_cdb_context.load_translation_lookup
         orig_names = list(wd.NAMESLIST)
         orig_cache = dict(wd._speakerCache)
         wd.translateAI = translate
@@ -68,6 +70,7 @@ class _WolfTranslateHarness:
         wd.wolf_vocab.update_vocab_section = capture_vocab
         wd.wolf_names.derive_db_labels = lambda _p: {}
         wd.wolf_db.load_db_filter_config = lambda: (frozenset(), frozenset())
+        wd.wolf_cdb_context.load_translation_lookup = lambda _p: self.cdb_lookup
         try:
             data_copy = copy.deepcopy(data)
             result = wd.parseDocument(data_copy, filename)
@@ -80,6 +83,7 @@ class _WolfTranslateHarness:
             wd.wolf_vocab.update_vocab_section = orig_update
             wd.wolf_names.derive_db_labels = orig_labels
             wd.wolf_db.load_db_filter_config = orig_db_filter
+            wd.wolf_cdb_context.load_translation_lookup = orig_cdb_lookup
             wd.NAMESLIST = orig_names
             wd._speakerCache.clear()
             wd._speakerCache.update(orig_cache)
@@ -188,6 +192,36 @@ class TestTranslationWriteback(unittest.TestCase):
         (data, _t, err), _c = _WolfTranslateHarness().run(GAMEDAT_DOC, "Game.dat.json")
         self.assertIsNone(err)
         self.assertEqual(data["lines"][0]["text"], "EN_ゲームタイトル")
+
+    def test_ruby_and_cdb_values_are_visible_in_model_payload(self):
+        source = r"\cdb[0:12:0]はたくさん\r[射精,だ]した。"
+        doc = {
+            "kind": "map",
+            "scenes": [
+                {
+                    "lines": [
+                        {
+                            "speaker": "Narration",
+                            "speaker_src": "narration",
+                            "source": source,
+                            "text": source,
+                        }
+                    ]
+                }
+            ],
+        }
+        harness = _WolfTranslateHarness({"0:12:0": "ウルファール"})
+
+        (data, _tokens, err), captured = harness.run(doc, "Map001.mps.json")
+
+        self.assertIsNone(err)
+        payload = captured[0][0]
+        self.assertIn("ウルファール", payload)
+        self.assertIn("射精", payload)
+        self.assertNotIn(r"\cdb[0:12:0]", payload)
+        self.assertNotIn(r"\r[射精,だ]", payload)
+        expected = r"EN_\cdb[0:12:0]はたくさん射精した。"
+        self.assertEqual(data["scenes"][0]["lines"][0]["text"], expected)
 
     def test_names_translate_only_safe(self):
         (data, _t, err), captured = _WolfTranslateHarness().run(

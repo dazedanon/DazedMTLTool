@@ -33,6 +33,10 @@ WOLF_INLINE_CODE_RE = re.compile(
 # Placeholder transport (same convention as util.translation.protect_script_codes).
 _PLACEHOLDER_PREFIX = "__WOLF_CODE_"
 
+# Furigana/ruby is source-language display markup. English output intentionally
+# removes it after exposing the base spelling to the translation model.
+WOLF_RUBY_RE = re.compile(r"\\r\[[^\]]*\]")
+
 # Wolf font-size codes: ``\f[18]``, ``\f[20]``, etc.
 WOLF_FONT_SIZE_RE = re.compile(r"\\f\[(\d+)\]")
 _UNCLOSED_BRACKET_CODE_RE = re.compile(
@@ -240,6 +244,8 @@ def non_font_code_sequences_differ(source: str, text: str) -> bool:
         return False
     if safely_closes_unclosed_source_codes(source, text):
         return False
+    if ruby_codes_removed_safely(source, text):
+        return False
     src_codes = [
         code
         for code in _control_code_tokens(source)
@@ -251,6 +257,29 @@ def non_font_code_sequences_differ(source: str, text: str) -> bool:
         if not WOLF_FONT_SIZE_RE.fullmatch(code)
     ]
     return src_codes != txt_codes
+
+
+def ruby_codes_removed_safely(source: str, text: str) -> bool:
+    """True when ruby was removed and every other non-font code matches."""
+    if not isinstance(source, str) or not isinstance(text, str):
+        return False
+    src_codes = _control_code_tokens(source)
+    txt_codes = _control_code_tokens(text)
+    source_ruby = [code for code in src_codes if WOLF_RUBY_RE.fullmatch(code)]
+    if not source_ruby:
+        return False
+    if any(WOLF_RUBY_RE.fullmatch(code) for code in txt_codes):
+        return False
+    src_other = [
+        code
+        for code in src_codes
+        if not WOLF_RUBY_RE.fullmatch(code)
+        and not WOLF_FONT_SIZE_RE.fullmatch(code)
+    ]
+    txt_other = [
+        code for code in txt_codes if not WOLF_FONT_SIZE_RE.fullmatch(code)
+    ]
+    return src_other == txt_other
 
 
 def names_doc_has_non_font_code_drift(doc: dict[str, Any]) -> bool:
@@ -268,6 +297,17 @@ def names_doc_has_non_font_code_drift(doc: dict[str, Any]) -> bool:
         ):
             return True
     return False
+
+
+def names_doc_has_ruby_removals(doc: dict[str, Any]) -> bool:
+    """True when a names translation intentionally removes WOLF ruby markup."""
+    if not isinstance(doc, dict) or doc.get("kind") != "names":
+        return False
+    return any(
+        isinstance(entry, dict)
+        and ruby_codes_removed_safely(entry.get("source"), entry.get("text"))
+        for entry in doc.get("names") or []
+    )
 
 
 def document_has_font_size_drift(doc: dict[str, Any]) -> bool:
@@ -306,6 +346,19 @@ def document_has_non_font_code_drift(doc: dict[str, Any]) -> bool:
         ):
             return True
     return False
+
+
+def document_has_ruby_removals(doc: dict[str, Any]) -> bool:
+    """True when any translated leaf intentionally removes WOLF ruby markup."""
+    if not isinstance(doc, dict):
+        return False
+    if doc.get("kind") == "names":
+        return names_doc_has_ruby_removals(doc)
+    return any(
+        isinstance(entry, dict)
+        and ruby_codes_removed_safely(entry.get("source"), entry.get("text"))
+        for entry in _walk_entries(doc)
+    )
 
 
 def _fix_spurious_spaces_in_codes(source: str, text: str) -> str:
@@ -444,8 +497,17 @@ def rebuild_text_preserving_source_codes(source: str, text: str) -> str:
     return out_prefix + txt_rest
 
 
-def protect_wolf_codes(text: str) -> tuple[str, dict[str, str]]:
-    """Replace inline WOLF codes with placeholders before sending text to the model."""
+def protect_wolf_codes(
+    text: str,
+    cdb_lookup: dict[str, str] | None = None,
+) -> tuple[str, dict[str, str]]:
+    """Protect inline codes while exposing ruby/CDB meaning to the model.
+
+    Ruby is replaced directly with its base spelling because English output does
+    not need furigana. Resolved ``\\cdb`` strings are placed between stable
+    context markers; those spans are restored to the original byte-exact lookup
+    code before WolfDawn injection.
+    """
     if not text or not isinstance(text, str):
         return text, {}
     replacements: dict[str, str] = {}
@@ -453,8 +515,24 @@ def protect_wolf_codes(text: str) -> tuple[str, dict[str, str]]:
 
     def _sub(m: re.Match) -> str:
         nonlocal counter
+        original = m.group(0)
+        visible = ""
+        if original.startswith(r"\r["):
+            ruby = original[3:-1]
+            # Keep the source-language spelling visible to the model and omit
+            # the ruby code from English writeback entirely.
+            return ruby.split(",", 1)[0].strip()
+        elif original.startswith(r"\cdb[") and cdb_lookup:
+            visible = cdb_lookup.get(original[5:-1], "").strip()
+
+        if visible:
+            key = f"__WOLF_CONTEXT_{counter}"
+            replacements[key] = original
+            counter += 1
+            return f"{key}_START__{visible}{key}_END__"
+
         key = f"{_PLACEHOLDER_PREFIX}{counter}__"
-        replacements[key] = m.group(0)
+        replacements[key] = original
         counter += 1
         return key
 
@@ -467,8 +545,36 @@ def restore_wolf_code_placeholders(text: str, replacements: dict[str, str]) -> s
         return text
     out = text
     for key, original in replacements.items():
-        out = out.replace(key, original)
+        if key.startswith("__WOLF_CONTEXT_"):
+            span = re.compile(
+                re.escape(f"{key}_START__")
+                + r".*?"
+                + re.escape(f"{key}_END__"),
+                re.DOTALL,
+            )
+            out = span.sub(lambda _match: original, out)
+        else:
+            out = out.replace(key, original)
     return out
+
+
+def wolf_code_placeholders_preserved(
+    text: str, replacements: dict[str, str]
+) -> bool:
+    """Return True when every protected code marker survived exactly once."""
+    if not replacements:
+        return True
+    if not isinstance(text, str):
+        return False
+    for key in replacements:
+        if key.startswith("__WOLF_CONTEXT_"):
+            if text.count(f"{key}_START__") != 1:
+                return False
+            if text.count(f"{key}_END__") != 1:
+                return False
+        elif text.count(key) != 1:
+            return False
+    return True
 
 
 def repair_entry(entry: dict[str, Any]) -> tuple[bool, str]:

@@ -37,6 +37,7 @@ __all__ = [
     "ensure_wolf_binary",
     "download_wolf_binary",
     "unpack_all",
+    "db_json",
     "strings_extract",
     "names_extract",
     "strings_inject",
@@ -646,6 +647,11 @@ def strings_extract(input_path: PathLike, out_json: PathLike, log_fn=None) -> Wo
     a single event-text ``.txt``, or a directory of ``.txt`` files.
     """
     return _run(["strings-extract", _str(input_path), "-o", _str(out_json)], log_fn=log_fn)
+
+
+def db_json(input_path: PathLike, out_json: PathLike, log_fn=None) -> WolfResult:
+    """``wolf db-json <X.project|data-dir> -o <out.json>``."""
+    return _run(["db-json", _str(input_path), "-o", _str(out_json)], log_fn=log_fn)
 
 
 def names_extract(data_dir: PathLike, out_json: PathLike, log_fn=None) -> WolfResult:

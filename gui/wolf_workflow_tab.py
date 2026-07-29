@@ -1564,6 +1564,19 @@ class WolfWorkflowTab(QWidget):
                     proj = basic / f"{stem}.project"
                     if proj.is_file():
                         _extract_one(proj, f"{stem}.project.json", "db")
+                        if stem == "CDataBase":
+                            from util.wolfdawn import cdb_context
+
+                            source_proj = wolf_originals.preferred_extract_path(
+                                proj, Path(data_dir), originals_dir
+                            )
+                            log("Indexing CDB lookup values for translation context …")
+                            if not cdb_context.write_sidecar(
+                                source_proj,
+                                work_dir / cdb_context.SIDECAR_NAME,
+                                log_fn=log,
+                            ):
+                                log("  ⚠ CDB context index could not be created")
                 gd = basic / "Game.dat"
                 if gd.is_file():
                     _extract_one(gd, "Game.dat.json", "gamedat")

@@ -71,6 +71,7 @@ from util import speakers as wolf_speakers
 from util import vocab as wolf_vocab
 from util import wolfdawn
 from util.wolfdawn import codes as wolf_codes
+from util.wolfdawn import cdb_context as wolf_cdb_context
 from util.wolfdawn import db_classify as wolf_db
 from util.wolfdawn import names as wolf_names
 
@@ -79,7 +80,24 @@ MODEL = os.getenv("model")
 TIMEOUT = int(os.getenv("timeout"))
 LANGUAGE = os.getenv("language").capitalize()
 
-PROMPT = load_system_prompt()
+_WOLF_CONTEXT_PROMPT = r"""
+
+WOLF RPG context markers:
+- Text between __WOLF_CONTEXT_N_START__ and __WOLF_CONTEXT_N_END__ is the
+  visible meaning of a protected database lookup at that exact point.
+- Use that enclosed text to translate the whole sentence naturally.
+- Preserve both marker tokens exactly. Translate the enclosed text normally;
+  the marked span is restored to the original runtime code after translation.
+- WOLF ruby/furigana codes have already been replaced with their base Japanese
+  spelling. Translate that spelling normally; do not recreate furigana markup.
+"""
+
+
+def _load_wolf_prompt() -> str:
+    return load_system_prompt() + _WOLF_CONTEXT_PROMPT
+
+
+PROMPT = _load_wolf_prompt()
 VOCAB = VOCAB_PATH.read_text(encoding="utf-8")
 LOCK = threading.Lock()
 MAXHISTORY = 10
@@ -155,7 +173,7 @@ def handleWolfDawn(filename, estimate):
     VOCAB = VOCAB_PATH.read_text(encoding="utf-8")
     TRANSLATION_CONFIG.vocab = VOCAB
     # Reload system.md + per-game overlays (game.md / quirks / custom) via DAZED_GAME_ROOT.
-    PROMPT = load_system_prompt()
+    PROMPT = _load_wolf_prompt()
     TRANSLATION_CONFIG.prompt = PROMPT
 
     start = time.time()
@@ -456,6 +474,7 @@ def parseDocument(data, filename):
 
     entries = collectEntries(data)
     is_names = data.get("kind") == "names"
+    cdb_lookup = wolf_cdb_context.load_translation_lookup("files")
 
     def _translatable(e):
         src = e.get("source")
@@ -498,7 +517,9 @@ def parseDocument(data, filename):
             plans = []  # (entry, prefix, has_speaker, is_firstline, code_map, speaker_en)
             for entry in translatable:
                 src = entry["source"]
-                protected_src, code_map = wolf_codes.protect_wolf_codes(src)
+                protected_src, code_map = wolf_codes.protect_wolf_codes(
+                    src, cdb_lookup=cdb_lookup
+                )
                 is_firstline = entry.get("speaker_src", "") in wolf_speakers.FIRSTLINE_SRCS
                 split = wolf_speakers.split_source(
                     protected_src, entry.get("speaker_src", ""), SPEAKER_CONFIG
@@ -538,6 +559,11 @@ def parseDocument(data, filename):
                         continue
                     # Model / collect echoed the sent payload — leave the entry alone.
                     if text == src:
+                        continue
+                    # Never write a translation that lost/duplicated a protected
+                    # runtime code. Leaving the Japanese entry untouched is safer
+                    # than creating a WolfDawn inject mismatch.
+                    if not wolf_codes.wolf_code_placeholders_preserved(text, code_map):
                         continue
                     text = wolf_codes.restore_wolf_code_placeholders(text, code_map)
                     if has_speaker:

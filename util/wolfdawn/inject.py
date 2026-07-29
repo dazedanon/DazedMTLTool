@@ -120,8 +120,8 @@ def repair_inject_json(src: Path) -> tuple[Path, bool]:
     """Auto-repair WOLF inline codes in a translated JSON before inject.
 
     Returns ``(path, safe_code_drift)``. Automatic ``--allow-code-drift`` is
-    enabled only when every difference is an intentional font change or the
-    translation safely closes a malformed source code.
+    enabled only when every difference is an intentional font change, ruby
+    removal, or the translation safely closes a malformed source code.
     """
     data = json.loads(src.read_text(encoding="utf-8-sig"))
     data, repairs = wolf_codes.repair_document(data)
@@ -133,6 +133,7 @@ def repair_inject_json(src: Path) -> tuple[Path, bool]:
     safe_code_drift = (
         (
             wolf_codes.document_has_font_size_drift(data)
+            or wolf_codes.document_has_ruby_removals(data)
             or wolf_codes.document_has_safe_unclosed_source_repairs(data)
         )
         and not wolf_codes.document_has_non_font_code_drift(data)
@@ -660,12 +661,15 @@ def inject_selected(
                 names_doc = None
             if (
                 isinstance(names_doc, dict)
-                and wolf_codes.names_doc_has_font_size_drift(names_doc)
+                and (
+                    wolf_codes.names_doc_has_font_size_drift(names_doc)
+                    or wolf_codes.names_doc_has_ruby_removals(names_doc)
+                )
                 and not wolf_codes.names_doc_has_non_font_code_drift(names_doc)
             ):
                 names_drift = True
                 emit(
-                    "  ℹ names-wrap changed \\f[N] sizes — "
+                    "  ℹ names use safe font/ruby code changes — "
                     "passing --allow-code-drift for names-inject"
                 )
         if names_edited is not False:
@@ -711,7 +715,7 @@ def inject_selected(
         strings_drift = allow_code_drift or safe_code_drift
         if safe_code_drift and not allow_code_drift:
             emit(
-                f"  ℹ {json_name}: safe font/source-code repair — "
+                f"  ℹ {json_name}: safe font/ruby/source-code change — "
                 "passing --allow-code-drift for strings-inject"
             )
         emit(f"Injecting {json_name}…")

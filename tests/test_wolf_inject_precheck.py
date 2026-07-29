@@ -239,6 +239,88 @@ class InjectPrecheckLocalTests(unittest.TestCase):
             self.assertTrue(safe_code_drift)
             self.assertEqual(path.read_text(encoding="utf-8"), original)
 
+    def test_repair_inject_json_allows_intentional_ruby_removal(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "Map001.mps.json"
+            doc = {
+                "kind": "map",
+                "scenes": [
+                    {
+                        "lines": [
+                            {
+                                "source": r"もう\r[射精,だ]してしまう\i[200]",
+                                "text": r"I'm going to ejaculate\i[200]",
+                            }
+                        ]
+                    }
+                ],
+            }
+            original = json.dumps(doc, ensure_ascii=False, indent=2) + "\n"
+            path.write_text(original, encoding="utf-8")
+
+            repaired_path, safe_code_drift = wi.repair_inject_json(path)
+
+            self.assertEqual(repaired_path, path)
+            self.assertTrue(safe_code_drift)
+            self.assertEqual(path.read_text(encoding="utf-8"), original)
+
+    def test_precheck_auto_allows_intentional_ruby_removal(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            data = root / "Data"
+            originals = root / "originals"
+            translated = root / "translated"
+            data.mkdir()
+            originals.mkdir()
+            translated.mkdir()
+            live = data / "Map001.mps"
+            pristine = originals / "Map001.mps"
+            live.write_bytes(b"live")
+            pristine.write_bytes(b"original")
+            doc = {
+                "kind": "map",
+                "scenes": [
+                    {
+                        "lines": [
+                            {
+                                "source": r"\r[彼女,イア]の目",
+                                "text": "Her eyes",
+                            }
+                        ]
+                    }
+                ],
+            }
+            (translated / "Map001.mps.json").write_text(
+                json.dumps(doc, ensure_ascii=False), encoding="utf-8"
+            )
+            result = mock.Mock(
+                ok=True,
+                returncode=0,
+                stdout="would apply 1 translation(s) (0 untranslated, 0 drifted)",
+                stderr="",
+            )
+
+            with mock.patch.object(
+                pre.wolfdawn, "strings_inject", return_value=result
+            ) as inject:
+                report = pre.precheck_selected(
+                    ["Map001.mps.json"],
+                    manifest_entries=[
+                        {
+                            "json": "Map001.mps.json",
+                            "kind": "map",
+                            "base": str(live),
+                        }
+                    ],
+                    data_dir=data,
+                    originals_dir=originals,
+                    translated_dir=translated,
+                )
+
+            self.assertTrue(report.ok)
+            self.assertEqual(report.issues, [])
+            self.assertTrue(inject.call_args.kwargs["allow_code_drift"])
+
     def test_repair_inject_json_does_not_hide_non_font_drift(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "DataBase.project.json"

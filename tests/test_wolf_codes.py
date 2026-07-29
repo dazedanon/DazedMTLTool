@@ -114,6 +114,65 @@ class WolfCodesRepairTests(unittest.TestCase):
         restored = wolf_codes.restore_wolf_code_placeholders(protected, mapping)
         self.assertEqual(restored, src)
 
+    def test_ruby_exposes_base_spelling_and_is_not_restored(self):
+        src = r"もう\r[射精,だ]してしまう"
+        protected, mapping = wolf_codes.protect_wolf_codes(src)
+
+        self.assertIn("射精", protected)
+        self.assertNotIn(r"\r[射精,だ]", protected)
+        self.assertEqual(mapping, {})
+        translated = protected.replace("射精", "ejaculate")
+        self.assertEqual(
+            wolf_codes.restore_wolf_code_placeholders(translated, mapping),
+            "もうejaculateしてしまう",
+        )
+
+    def test_ruby_removal_is_safe_only_when_other_codes_match(self):
+        source = r"\c[1]\r[彼女,イア]の目\i[200]"
+        self.assertTrue(
+            wolf_codes.ruby_codes_removed_safely(
+                source, r"\c[1]Her eyes\i[200]"
+            )
+        )
+        self.assertFalse(
+            wolf_codes.non_font_code_sequences_differ(
+                source, r"\c[1]Her eyes\i[200]"
+            )
+        )
+        self.assertFalse(
+            wolf_codes.ruby_codes_removed_safely(source, r"Her eyes\i[200]")
+        )
+
+    def test_cdb_exposes_resolved_value_then_restores_exact_code(self):
+        src = r"こんにちは、\cdb[0:12:0]さん"
+        protected, mapping = wolf_codes.protect_wolf_codes(
+            src, {"0:12:0": "ウルファール"}
+        )
+
+        self.assertIn("ウルファール", protected)
+        self.assertNotIn(r"\cdb[0:12:0]", protected)
+        translated = protected.replace("ウルファール", "Ulfar")
+        self.assertEqual(
+            wolf_codes.restore_wolf_code_placeholders(translated, mapping),
+            src,
+        )
+
+    def test_context_marker_validation_rejects_dropped_or_duplicated_markers(self):
+        protected, mapping = wolf_codes.protect_wolf_codes(
+            r"\cdb[0:12:0]の目", {"0:12:0": "ウルファール"}
+        )
+        self.assertTrue(
+            wolf_codes.wolf_code_placeholders_preserved(protected, mapping)
+        )
+        self.assertFalse(
+            wolf_codes.wolf_code_placeholders_preserved(
+                protected.replace("_END__", ""), mapping
+            )
+        )
+        self.assertFalse(
+            wolf_codes.wolf_code_placeholders_preserved(protected + protected, mapping)
+        )
+
     def test_repair_document_updates_leaf(self):
         doc = {
             "kind": "map",

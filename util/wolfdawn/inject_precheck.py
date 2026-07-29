@@ -488,7 +488,7 @@ def precheck_selected(
         strings_drift = allow_code_drift or safe_code_drift
         if safe_code_drift and not allow_code_drift:
             emit(
-                f"  ℹ {json_name}: safe font/source-code repair — "
+                f"  ℹ {json_name}: safe font/ruby/source-code change — "
                 "passing --allow-code-drift for dry-run"
             )
         fp = _precheck_strings_file(
