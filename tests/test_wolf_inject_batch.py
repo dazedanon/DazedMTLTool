@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import sys
 import tempfile
@@ -51,8 +52,9 @@ class InjectOrderTests(unittest.TestCase):
             )
 
         def fake_strings(edited_json, base, output, **_k):
-            calls.append("strings")
-            string_bases.append(str(base))
+            if not _k.get("dry_run"):
+                calls.append("strings")
+                string_bases.append(str(base))
             return mock.Mock(
                 ok=True,
                 returncode=0,
@@ -116,8 +118,9 @@ class InjectOrderTests(unittest.TestCase):
         string_drift: list[bool] = []
 
         def fake_strings(edited_json, base, output, **kwargs):
-            string_bases.append(str(base))
-            string_drift.append(bool(kwargs.get("allow_code_drift")))
+            if not kwargs.get("dry_run"):
+                string_bases.append(str(base))
+                string_drift.append(bool(kwargs.get("allow_code_drift")))
             return mock.Mock(
                 ok=True,
                 returncode=0,
@@ -160,7 +163,8 @@ class InjectOrderTests(unittest.TestCase):
         string_drift: list[bool] = []
 
         def fake_strings(edited_json, base, output, **kwargs):
-            string_drift.append(bool(kwargs.get("allow_code_drift")))
+            if not kwargs.get("dry_run"):
+                string_drift.append(bool(kwargs.get("allow_code_drift")))
             return mock.Mock(
                 ok=True,
                 returncode=0,
@@ -190,8 +194,6 @@ class InjectOrderTests(unittest.TestCase):
                     }
                 ],
             }
-            import json
-
             (translated / "DataBase.project.json").write_text(
                 json.dumps(doc, ensure_ascii=False), encoding="utf-8"
             )
@@ -220,6 +222,142 @@ class InjectOrderTests(unittest.TestCase):
                 )
             self.assertTrue(report.ok)
             self.assertEqual(string_drift, [True])
+
+    def test_unedited_names_are_a_successful_no_op(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            translated = root / "translated"
+            data = root / "Data"
+            originals = root / "originals"
+            translated.mkdir()
+            data.mkdir()
+            (translated / "names.json").write_text(
+                json.dumps(
+                    {
+                        "kind": "names",
+                        "names": [{"source": "Day", "text": "Day"}],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            entries = [
+                {"json": "names.json", "kind": "names", "base": str(data)}
+            ]
+            logs: list[str] = []
+
+            with mock.patch.object(
+                wi.wolf_originals,
+                "names_inject_would_apply",
+                side_effect=AssertionError("no-op names must not run WolfDawn"),
+            ):
+                report = wi.inject_selected(
+                    ["names.json"],
+                    manifest_entries=entries,
+                    data_dir=data,
+                    originals_dir=originals,
+                    translated_dir=translated,
+                    game_root=root,
+                    log_fn=logs.append,
+                )
+
+            self.assertTrue(report.ok)
+            self.assertEqual(report.files[0].summary, "no changes needed")
+            self.assertEqual(logs, ["  ✓ names.json: no changes needed"])
+
+    def test_stale_string_sources_are_rebased_before_injection(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            translated = root / "translated"
+            data = root / "Data"
+            originals = root / "originals"
+            translated.mkdir()
+            data.mkdir()
+            originals.mkdir()
+            edited_path = translated / "CommonEvent.dat.json"
+            edited_path.write_text(
+                json.dumps(
+                    {
+                        "kind": "common",
+                        "events": [
+                            {"lines": [{"source": "Day", "text": "Moved Day"}]}
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            live = data / "CommonEvent.dat"
+            pristine = originals / "CommonEvent.dat"
+            live.write_bytes(b"live")
+            pristine.write_bytes(b"pristine")
+            entries = [
+                {
+                    "json": edited_path.name,
+                    "kind": "common",
+                    "base": str(live),
+                }
+            ]
+            calls: list[tuple[bool, str]] = []
+
+            def fake_inject(edited_json, _base, _output, **kwargs):
+                source = json.loads(Path(edited_json).read_text(encoding="utf-8"))[
+                    "events"
+                ][0]["lines"][0]["source"]
+                dry_run = bool(kwargs.get("dry_run"))
+                calls.append((dry_run, source))
+                if source == "Day":
+                    output = "would apply 0 translation(s) (1 drifted)"
+                elif dry_run:
+                    output = "would apply 1 translation(s) (0 drifted)"
+                else:
+                    output = "applied 1 translation(s) (0 drifted)"
+                return mock.Mock(ok=True, returncode=0, stdout=output, stderr="")
+
+            def fake_extract(_base, output, **_kwargs):
+                Path(output).write_text(
+                    json.dumps(
+                        {
+                            "kind": "common",
+                            "events": [
+                                {
+                                    "lines": [
+                                        {"source": "日目", "text": "日目"}
+                                    ]
+                                }
+                            ],
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+                return mock.Mock(ok=True, returncode=0, stdout="", stderr="")
+
+            logs: list[str] = []
+            with (
+                mock.patch.object(
+                    wi.wolfdawn, "strings_inject", side_effect=fake_inject
+                ),
+                mock.patch.object(
+                    wi.wolfdawn, "strings_extract", side_effect=fake_extract
+                ),
+            ):
+                report = wi.inject_selected(
+                    [edited_path.name],
+                    manifest_entries=entries,
+                    data_dir=data,
+                    originals_dir=originals,
+                    translated_dir=translated,
+                    game_root=root,
+                    log_fn=logs.append,
+                )
+
+            self.assertTrue(report.ok)
+            self.assertEqual(
+                calls,
+                [(True, "Day"), (True, "日目"), (False, "日目")],
+            )
+            repaired = json.loads(edited_path.read_text(encoding="utf-8"))
+            line = repaired["events"][0]["lines"][0]
+            self.assertEqual(line, {"source": "日目", "text": "Moved Day"})
+            self.assertTrue(any("refreshed 1 stale source" in log for log in logs))
 
     def test_names_result_mentions_safety_skips(self):
         res = mock.Mock(

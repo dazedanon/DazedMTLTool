@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import shutil
+import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
@@ -126,6 +127,70 @@ def repair_inject_json(src: Path) -> tuple[Path, bool]:
     return src, safe_font_only_drift
 
 
+def names_json_has_edits(path: Path) -> bool | None:
+    """Return whether a recognized names document has any pending text edits."""
+    try:
+        data = json.loads(path.read_text(encoding="utf-8-sig"))
+    except Exception:
+        return None
+    names = data.get("names") if isinstance(data, dict) else None
+    if not isinstance(names, list):
+        return None
+    return any(
+        isinstance(entry, dict)
+        and isinstance(entry.get("source"), str)
+        and isinstance(entry.get("text"), str)
+        and entry["source"] != entry["text"]
+        for entry in names
+    )
+
+
+def _source_objects(document) -> dict[tuple[object, ...], dict]:
+    found: dict[tuple[object, ...], dict] = {}
+
+    def visit(value, path: tuple[object, ...]) -> None:
+        if isinstance(value, dict):
+            if isinstance(value.get("source"), str) and isinstance(
+                value.get("text"), str
+            ):
+                found[path] = value
+            for key, child in value.items():
+                visit(child, (*path, key))
+        elif isinstance(value, list):
+            for index, child in enumerate(value):
+                visit(child, (*path, index))
+
+    visit(document, ())
+    return found
+
+
+def rebase_json_sources(edited_path: Path, pristine_path: Path) -> tuple[int, str | None]:
+    """Refresh stale ``source`` fields by structural path, preserving translations."""
+    try:
+        edited = json.loads(edited_path.read_text(encoding="utf-8-sig"))
+        pristine = json.loads(pristine_path.read_text(encoding="utf-8-sig"))
+    except Exception as exc:
+        return 0, f"could not read extracted JSON ({exc})"
+
+    edited_objects = _source_objects(edited)
+    pristine_objects = _source_objects(pristine)
+    if not edited_objects or edited_objects.keys() != pristine_objects.keys():
+        return 0, "document structure differs from the pristine extraction"
+
+    changed = 0
+    for path, edited_entry in edited_objects.items():
+        pristine_source = pristine_objects[path]["source"]
+        if edited_entry["source"] != pristine_source:
+            edited_entry["source"] = pristine_source
+            changed += 1
+    if changed:
+        edited_path.write_text(
+            json.dumps(edited, ensure_ascii=False, indent=4) + "\n",
+            encoding="utf-8",
+        )
+    return changed, None
+
+
 def _wolf_output_snippet(stdout: str, stderr: str, *, limit: int = 400) -> str:
     text = (stdout or "").strip()
     if stderr and stderr.strip():
@@ -160,7 +225,10 @@ def _interpret_strings_result(json_name: str, res: wolfdawn.WolfResult) -> FileI
         return FileInjectResult(
             json_name,
             False,
-            f"0 applied, {drifted} drifted (live Data/ no longer matches Japanese sources)",
+            (
+                f"0 applied, {drifted} drifted "
+                "(JSON source was not found in the injection baseline)"
+            ),
             applied=0,
             detail=detail,
         )
@@ -202,7 +270,7 @@ def _interpret_names_result(json_name: str, res: wolfdawn.WolfResult) -> FileInj
             False,
             (
                 f"0 applied, {drifted} unmatched "
-                "(re-run Step 0 extract on the untranslated game)"
+                "(extract again from pristine data in Step 1)"
             ),
             applied=0,
             detail=detail,
@@ -218,10 +286,10 @@ def _interpret_names_result(json_name: str, res: wolfdawn.WolfResult) -> FileInj
 
 
 _STALE_NAMES_MSG = (
-    "0 name changes would apply. wolf_json/originals/ still holds old English "
-    "instead of Japanese sources (usually after a previous inject). Rebuilt from "
-    ".wolf archives automatically when possible; if this persists, re-run Step 0 "
-    "on the untranslated game."
+    "0 name changes would apply even though names.json contains edits. Its source "
+    "values or wolf_json/originals/ do not match the pristine game data. Rebuilt "
+    "from .wolf archives automatically when possible; if this persists, extract "
+    "again from pristine data in Step 1."
 )
 
 
@@ -335,6 +403,7 @@ def _inject_strings(
     allow_code_drift: bool,
     en_punct: bool,
     base_path: Path | None = None,
+    log_fn: Callable[[str], None] | None = None,
 ) -> FileInjectResult:
     """Inject one strings JSON.
 
@@ -348,21 +417,82 @@ def _inject_strings(
         return FileInjectResult(
             json_name,
             False,
-            f"no inject base at {base} (re-run Step 0 extract)",
+            f"no inject base at {base} (extract again in Step 1)",
         )
     if not orig.exists():
         return FileInjectResult(
             json_name,
             False,
-            f"no pristine original at {orig} (re-run Step 0 extract)",
+            f"no pristine original at {orig} (extract again in Step 1)",
         )
 
     if entry.get("kind") == "db" and not db_dat_sibling(base).is_file():
         return FileInjectResult(
             json_name,
             False,
-            "missing database .dat pair beside inject base (re-run Step 0 extract)",
+            "missing database .dat pair beside inject base (extract again in Step 1)",
         )
+
+    # A previous workflow could extract JSON from already-injected live Data/.
+    # Detect that before writing and safely refresh source fields from the
+    # pristine binary while preserving every translated ``text`` value.
+    probe = wolfdawn.strings_inject(
+        str(inject_src),
+        str(orig),
+        out,
+        allow_code_drift=allow_code_drift,
+        en_punct=en_punct,
+        dry_run=True,
+        log_fn=None,
+    )
+    _probe_applied, probe_drifted = wolfdawn.parse_strings_inject_counts(
+        probe.stdout, probe.stderr
+    )
+    if (probe_drifted or 0) > 0:
+        emit = log_fn or (lambda _message: None)
+        with tempfile.TemporaryDirectory() as raw:
+            pristine_json = Path(raw) / json_name
+            extracted = wolfdawn.strings_extract(
+                str(orig), str(pristine_json), log_fn=None
+            )
+            if not extracted.ok or not pristine_json.is_file():
+                return FileInjectResult(
+                    json_name,
+                    False,
+                    "stale JSON source detected, but pristine extraction failed",
+                )
+            rebased, error = rebase_json_sources(inject_src, pristine_json)
+        if error:
+            return FileInjectResult(
+                json_name,
+                False,
+                f"stale JSON source detected; automatic repair refused: {error}",
+            )
+        emit(
+            f"  ⚠ {json_name}: refreshed {rebased} stale source field(s) "
+            "from the pristine original"
+        )
+        probe = wolfdawn.strings_inject(
+            str(inject_src),
+            str(orig),
+            out,
+            allow_code_drift=allow_code_drift,
+            en_punct=en_punct,
+            dry_run=True,
+            log_fn=None,
+        )
+        _probe_applied, probe_drifted = wolfdawn.parse_strings_inject_counts(
+            probe.stdout, probe.stderr
+        )
+        if (probe_drifted or 0) > 0:
+            return FileInjectResult(
+                json_name,
+                False,
+                (
+                    f"stale JSON source repair left {probe_drifted} drifted line(s); "
+                    "re-extract from pristine data"
+                ),
+            )
 
     res = wolfdawn.strings_inject(
         str(inject_src),
@@ -422,7 +552,7 @@ def inject_selected(
     ]
     for name in missing_manifest:
         report.files.append(
-            FileInjectResult(name, False, "not listed in manifest (re-run Step 0 extract)")
+            FileInjectResult(name, False, "not listed in manifest (extract again in Step 1)")
         )
     for name in missing_translated:
         if name in by_json:
@@ -439,10 +569,17 @@ def inject_selected(
 
     names_applied = False
     if NAMES_JSON in todo:
-        emit("Preparing live Data/ for names.json…")
         names_src = translated_dir / NAMES_JSON
+        names_edited = names_json_has_edits(names_src)
+        if names_edited is False:
+            result = FileInjectResult(NAMES_JSON, True, "no changes needed", applied=0)
+            report.files.append(result)
+            emit(f"  ✓ {NAMES_JSON}: {result.summary}")
+            todo = [n for n in todo if n != NAMES_JSON]
+        else:
+            emit("Preparing live Data/ for names.json…")
         names_drift = allow_code_drift
-        if not names_drift:
+        if names_edited is not False and not names_drift:
             try:
                 names_doc = json.loads(names_src.read_text(encoding="utf-8-sig"))
             except Exception:
@@ -457,32 +594,36 @@ def inject_selected(
                     "  ℹ names-wrap changed \\f[N] sizes — "
                     "passing --allow-code-drift for names-inject"
                 )
-        prep_error = _prepare_for_names_inject(
-            names_src,
-            manifest_entries,
-            data_dir,
-            originals_dir,
-            game_root,
-            log_fn=log_fn,
-            allow_code_drift=names_drift,
-        )
-        if prep_error:
-            result = FileInjectResult(NAMES_JSON, False, prep_error)
-            report.files.append(result)
-            emit(f"  ✗ {NAMES_JSON}: {result.summary}")
-            todo = [n for n in todo if n != NAMES_JSON]
-        else:
-            emit(f"Injecting {NAMES_JSON}…")
-            result = _inject_names(
+        if names_edited is not False:
+            prep_error = _prepare_for_names_inject(
                 names_src,
+                manifest_entries,
                 data_dir,
-                allow_code_drift=names_drift,
-                en_punct=en_punct,
+                originals_dir,
+                game_root,
                 log_fn=log_fn,
+                allow_code_drift=names_drift,
             )
-            report.files.append(result)
-            emit(("  ✓ " if result.success else "  ✗ ") + f"{NAMES_JSON}: {result.summary}")
-            names_applied = result.success
+            if prep_error:
+                result = FileInjectResult(NAMES_JSON, False, prep_error)
+                report.files.append(result)
+                emit(f"  ✗ {NAMES_JSON}: {result.summary}")
+                todo = [n for n in todo if n != NAMES_JSON]
+            else:
+                emit(f"Injecting {NAMES_JSON}…")
+                result = _inject_names(
+                    names_src,
+                    data_dir,
+                    allow_code_drift=names_drift,
+                    en_punct=en_punct,
+                    log_fn=log_fn,
+                )
+                report.files.append(result)
+                emit(
+                    ("  ✓ " if result.success else "  ✗ ")
+                    + f"{NAMES_JSON}: {result.summary}"
+                )
+                names_applied = result.success
 
     strings_todo = [n for n in todo if n != NAMES_JSON]
     if strings_todo:
@@ -515,6 +656,7 @@ def inject_selected(
             allow_code_drift=strings_drift,
             en_punct=en_punct,
             base_path=live_base,
+            log_fn=log_fn,
         )
         report.files.append(result)
         emit(("  ✓ " if result.success else "  ✗ ") + f"{json_name}: {result.summary}")

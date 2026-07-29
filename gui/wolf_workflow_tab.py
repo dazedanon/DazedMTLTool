@@ -97,6 +97,7 @@ from gui.workflow_tab import (
 from util.wolfdawn import names as wolf_names
 from util.wolfdawn import codes as wolf_codes
 from util.wolfdawn import db_classify as wolf_db
+from util.wolfdawn import originals as wolf_originals
 from util.wolfdawn import wrap_search as wolf_ws
 import util.dazedwrap as dazedwrap
 
@@ -330,10 +331,7 @@ class WolfWorkflowTab(QWidget):
         """Make sure a pristine snapshot exists; if entries are missing it and the
         game still has its .wolf archives (packaging renames them to .wolf.bak),
         rebuild the snapshot by unpacking those archives into originals/."""
-        from util import wolfdawn
-
         emit = (lambda _msg: None) if quiet else log
-        wolf_log = None if quiet else log
 
         data_dir = Path(manifest["data_dir"])
         entries = manifest.get("entries", [])
@@ -344,44 +342,20 @@ class WolfWorkflowTab(QWidget):
         if not missing:
             return
 
-        root = Path(self._game_root)
-        # Only the binary archives (MapData / BasicData) are needed for inject.
-        archives: list[Path] = []
-        for base in (root, data_dir):
-            if base.is_dir():
-                for pat in ("*.wolf", "*.wolf.bak"):
-                    archives.extend(base.glob(pat))
-        wanted = [a for a in archives if a.name.lower().startswith(("mapdata", "basicdata"))]
-        if not wanted:
+        root = Path(manifest.get("root") or self._game_root)
+        rebuilt = wolf_originals.rebuild_originals_from_archives(
+            root,
+            self._originals_dir(),
+            force=False,
+            log_fn=None if quiet else log,
+            progress_fn=progress,
+        )
+        if not rebuilt:
             emit(
-                "  ⚠ No pristine originals and no .wolf archives to rebuild them from. "
-                "Start again from Step 1 with an untranslated copy of the game so the update "
-                "has an original to work from."
+                "  ⚠ No pristine originals and no usable .wolf archive baseline. "
+                "Extract from an untranslated copy of the game in Step 1."
             )
             return
-
-        originals = self._originals_dir()
-        originals.mkdir(parents=True, exist_ok=True)
-        emit("Rebuilding pristine originals from the game's .wolf archives …")
-        with tempfile.TemporaryDirectory() as tmp:
-            inputs: list[str] = []
-            for arc in wanted:
-                # unpack-all only accepts a .wolf extension; present .bak copies as .wolf.
-                if arc.suffix == ".bak":
-                    staged = Path(tmp) / arc.with_suffix("").name  # X.wolf.bak -> X.wolf
-                    shutil.copy2(arc, staged)
-                    inputs.append(str(staged))
-                else:
-                    inputs.append(str(arc))
-            res = wolfdawn.unpack_all(
-                inputs,
-                str(originals),
-                log_fn=wolf_log,
-                progress_fn=progress,
-                progress_total=len(inputs),
-            )
-            if not res.ok:
-                emit(f"  ⚠ could not rebuild originals (unpack exit {res.returncode}).")
         self._ensure_db_dat_snapshots(entries, data_dir, None if quiet else log)
 
     def _restore_live_from_originals(
@@ -1529,6 +1503,27 @@ class WolfWorkflowTab(QWidget):
             basic = Path(layout["basic_data"]) if layout.get("basic_data") else Path(data_dir)
             maps_dir = wolf_maps_dir(data_dir)
             work_dir.mkdir(parents=True, exist_ok=True)
+            originals_dir = self._originals_dir()
+
+            # If the project has an archive baseline, materialize it before
+            # extraction. A full re-extract refreshes an existing snapshot from
+            # the archive so previously injected live Data cannot become source.
+            archive_baseline = wolf_originals.find_data_archives(
+                Path(game_root), Path(data_dir)
+            )
+            refresh_existing = (
+                not supplement_maps
+                and bool(archive_baseline)
+                and any(work_dir.glob("*.json"))
+            )
+            if not originals_dir.is_dir() or refresh_existing:
+                wolf_originals.rebuild_originals_from_archives(
+                    Path(game_root),
+                    originals_dir,
+                    force=refresh_existing,
+                    log_fn=log,
+                    progress_fn=progress,
+                )
 
             existing_manifest = self._read_manifest() if supplement_maps else None
             existing_entries = list(existing_manifest.get("entries", [])) if existing_manifest else []
@@ -1542,8 +1537,16 @@ class WolfWorkflowTab(QWidget):
                 if supplement_maps and out_name in existing_json:
                     return
                 out = work_dir / out_name
-                log(f"Extracting {base.name} …")
-                res = wolfdawn.strings_extract(str(base), str(out), log_fn=log)
+                source_base = wolf_originals.preferred_extract_path(
+                    base, Path(data_dir), originals_dir
+                )
+                source_note = (
+                    " from pristine originals" if source_base != base else ""
+                )
+                log(f"Extracting {base.name}{source_note} …")
+                res = wolfdawn.strings_extract(
+                    str(source_base), str(out), log_fn=log
+                )
                 if res.ok and out.is_file():
                     manifest_entries.append({"json": out_name, "base": str(base), "kind": kind})
                 else:
@@ -1568,20 +1571,45 @@ class WolfWorkflowTab(QWidget):
                 evtext = Path(data_dir) / "Evtext"
                 if evtext.is_dir() and any(evtext.glob("*.txt")):
                     out = work_dir / "Evtext.json"
+                    source_evtext = wolf_originals.preferred_extract_path(
+                        evtext, Path(data_dir), originals_dir
+                    )
                     log("Extracting Evtext/ …")
-                    res = wolfdawn.strings_extract(str(evtext), str(out), log_fn=log)
+                    res = wolfdawn.strings_extract(
+                        str(source_evtext), str(out), log_fn=log
+                    )
                     if res.ok and out.is_file():
                         manifest_entries.append({"json": "Evtext.json", "base": str(evtext), "kind": "txt-dir"})
 
                 log("Extracting name list …")
                 names_out = work_dir / NAMES_JSON
-                res = wolfdawn.names_extract(str(data_dir), str(names_out), log_fn=log)
+                names_base = (
+                    originals_dir
+                    if any(
+                        (originals_dir / name).exists()
+                        for name in ("BasicData", "MapData")
+                    )
+                    else Path(data_dir)
+                )
+                res = wolfdawn.names_extract(
+                    str(names_base), str(names_out), log_fn=log
+                )
                 if res.ok and names_out.is_file():
                     manifest_entries.append({"json": NAMES_JSON, "base": str(data_dir), "kind": "names"})
             elif any(e.get("kind") == "map" for e in manifest_entries):
                 log("Refreshing name list (maps were added) …")
                 names_out = work_dir / NAMES_JSON
-                res = wolfdawn.names_extract(str(data_dir), str(names_out), log_fn=log)
+                names_base = (
+                    originals_dir
+                    if any(
+                        (originals_dir / name).exists()
+                        for name in ("BasicData", "MapData")
+                    )
+                    else Path(data_dir)
+                )
+                res = wolfdawn.names_extract(
+                    str(names_base), str(names_out), log_fn=log
+                )
                 if res.ok and names_out.is_file():
                     manifest_entries = [
                         e for e in manifest_entries if e.get("json") != NAMES_JSON
