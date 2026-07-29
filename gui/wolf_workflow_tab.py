@@ -51,7 +51,7 @@ import tempfile
 from pathlib import Path
 
 from PyQt5.QtCore import Qt, QSettings, QSize, QThread, QTimer, pyqtSignal
-from PyQt5.QtGui import QColor, QFont
+from PyQt5.QtGui import QColor
 from PyQt5.QtWidgets import (
     QApplication,
     QAbstractItemView,
@@ -164,10 +164,7 @@ class _WolfTaskWorker(QThread):
             )
             self.done.emit(bool(ok), str(msg))
         except Exception as exc:  # pragma: no cover - defensive
-            import traceback
-
-            self.log.emit(traceback.format_exc())
-            self.done.emit(False, f"Error: {exc}")
+            self.done.emit(False, f"{type(exc).__name__}: {exc}")
 
 
 class WolfWorkflowTab(QWidget):
@@ -198,6 +195,8 @@ class WolfWorkflowTab(QWidget):
         self._tl_mode_user_selected = False
         self._last_default_translation_mode = None
         self._tl_mode_combos = []
+        self._activity_unread = 0
+        self._activity_errors = 0
 
         self._init_ui()
 
@@ -221,6 +220,7 @@ class WolfWorkflowTab(QWidget):
                 self.width() < 1320
                 or self._step_rail.labels_require_compact_mode()
             )
+            self._refresh_activity_badge()
 
     # ───────────────────────────────── paths ─────────────────────────────────
 
@@ -428,9 +428,15 @@ class WolfWorkflowTab(QWidget):
     # ───────────────────────────────── UI setup ──────────────────────────────
 
     def _init_ui(self):
+        self.setObjectName("workflowRoot")
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
+
+        splitter = QSplitter(Qt.Horizontal)
+        splitter.setObjectName("workflowSplitter")
+        splitter.setHandleWidth(1)
+        self._workflow_splitter = splitter
 
         _SCROLL_STYLE = (
             "QScrollArea{border:none;background-color:transparent;}"
@@ -441,6 +447,7 @@ class WolfWorkflowTab(QWidget):
         )
 
         self._step_tabs = QTabWidget()
+        self._step_tabs.setObjectName("workflowStepStack")
         self._step_tabs.setDocumentMode(True)
         self._step_tabs.tabBar().setVisible(False)
         self._step_tabs.setStyleSheet("""
@@ -476,15 +483,18 @@ class WolfWorkflowTab(QWidget):
 
         for tab_label, builder in _tab_defs:
             page = QWidget()
+            page.setObjectName("workflowPage")
             page_layout = QVBoxLayout(page)
             page_layout.setContentsMargins(0, 0, 0, 0)
             page_layout.setSpacing(0)
 
             scroll = QScrollArea()
+            scroll.setObjectName("workflowPageScroll")
             scroll.setWidgetResizable(True)
             scroll.setStyleSheet(_SCROLL_STYLE)
 
             inner = QWidget()
+            inner.setObjectName("workflowPageContent")
             vbox = QVBoxLayout(inner)
             vbox.setContentsMargins(
                 Spacing.LG, Spacing.LG, Spacing.LG, Spacing.MD
@@ -528,10 +538,13 @@ class WolfWorkflowTab(QWidget):
         self._step_tabs.currentChanged.connect(self._on_step_changed)
 
         steps_host = QWidget()
-        steps_host_layout = QVBoxLayout(steps_host)
+        steps_host.setObjectName("workflowStepsHost")
+        steps_host_layout = QHBoxLayout(steps_host)
         steps_host_layout.setContentsMargins(0, 0, 0, 0)
         steps_host_layout.setSpacing(0)
+        steps_host_layout.addWidget(self._step_rail)
         steps_host_layout.addWidget(self._step_tabs, 1)
+        splitter.addWidget(steps_host)
 
         self.task_progress_row = QWidget()
         progress_layout = QVBoxLayout(self.task_progress_row)
@@ -561,33 +574,87 @@ class WolfWorkflowTab(QWidget):
         """)
         progress_layout.addWidget(self.task_progress_bar)
         self.task_progress_row.setVisible(False)
-        self.log_area = QTextEdit()
-        self.log_area.setReadOnly(True)
-        self.log_area.setFont(QFont("Consolas", 9))
-        self._activity_panel = WorkflowActivityPanel(self.log_area)
-        self._activity_panel.layout().insertWidget(1, self.task_progress_row)
-        self._activity_panel.clear_requested.connect(self.log_area.clear)
+        self._activity_panel = WorkflowActivityPanel()
+        self.log_area = self._activity_panel.log
+        self._activity_panel.add_status_widget(self.task_progress_row)
+        self._activity_panel.clear_requested.connect(self._clear_activity)
         self._activity_panel.collapse_requested.connect(
             lambda: self._set_activity_visible(False)
         )
-        self._step_rail.activity_requested.connect(
-            lambda: self._set_activity_visible(not self._activity_panel.isVisible())
-        )
-        self._activity_panel.setVisible(False)
+        self._step_rail.activity_requested.connect(self._toggle_activity)
+        splitter.addWidget(self._activity_panel)
+        splitter.setSizes([980, Geometry.ACTIVITY_WIDTH])
+        splitter.setStretchFactor(0, 1)
+        splitter.setStretchFactor(1, 0)
 
-        shell = QHBoxLayout()
-        shell.setContentsMargins(0, 0, 0, 0)
-        shell.setSpacing(0)
-        shell.addWidget(self._step_rail)
-        shell.addWidget(steps_host, 1)
-        shell.addWidget(self._activity_panel)
-        root.addLayout(shell, 1)
-        self.setLayout(root)
+        root.addWidget(splitter)
         self._apply_theme()
+        saved_activity = str(self._setting("activity_panel_visible", "false")).lower()
+        self._set_activity_visible(
+            saved_activity in {"1", "true", "yes", "on"}, persist=False
+        )
 
-    def _set_activity_visible(self, visible: bool) -> None:
-        self._activity_panel.setVisible(bool(visible))
-        self._step_rail.activity_button.setChecked(bool(visible))
+    def _set_activity_visible(self, visible: bool, *, persist: bool = True) -> None:
+        panel = getattr(self, "_activity_panel", None)
+        if panel is None:
+            return
+        panel.setVisible(bool(visible))
+        if visible:
+            self._activity_unread = 0
+            self._activity_errors = 0
+        rail = getattr(self, "_step_rail", None)
+        if rail is not None:
+            rail.activity_button.setCheckable(True)
+            rail.activity_button.setChecked(bool(visible))
+            self._refresh_activity_badge()
+        if visible and hasattr(self, "_workflow_splitter"):
+            available = max(1, self._workflow_splitter.width())
+            activity_width = min(Geometry.ACTIVITY_WIDTH, max(240, available // 3))
+            self._workflow_splitter.setSizes(
+                [available - activity_width, activity_width]
+            )
+        if persist:
+            self._save_setting(
+                "activity_panel_visible", "true" if visible else "false"
+            )
+
+    def _toggle_activity(self) -> None:
+        panel = getattr(self, "_activity_panel", None)
+        if panel is not None:
+            self._set_activity_visible(not panel.isVisible())
+
+    def _clear_activity(self) -> None:
+        self._activity_panel.clear_activity()
+        self._activity_unread = 0
+        self._activity_errors = 0
+        self._refresh_activity_badge()
+
+    def _refresh_activity_badge(self) -> None:
+        rail = getattr(self, "_step_rail", None)
+        panel = getattr(self, "_activity_panel", None)
+        if rail is None or panel is None:
+            return
+        if panel.isVisible():
+            text = "×" if rail._compact else "Hide"
+        else:
+            text = (
+                (str(min(self._activity_unread, 99)) if self._activity_unread else "⋯")
+                if rail._compact
+                else "Activity"
+            )
+            if self._activity_unread and not rail._compact:
+                text += f" {self._activity_unread}"
+        rail.activity_button.setText(text)
+        if self._activity_errors:
+            rail.activity_button.setToolTip(
+                f"{self._activity_errors} error message(s) in workflow activity"
+            )
+            rail.activity_button.setStyleSheet(f"color:{COLORS.danger};")
+        else:
+            rail.activity_button.setToolTip(
+                "Show or hide workflow activity and detailed log"
+            )
+            rail.activity_button.setStyleSheet("")
 
     def _apply_theme(self):
         self.setStyleSheet("""
@@ -631,13 +698,17 @@ class WolfWorkflowTab(QWidget):
         self._buttons.append(btn)
         return btn
 
-    def _log(self, message: str):
+    def _log(self, message: str, kind: str | None = None):
         # Tabs are built before the log panel, so guard against early calls.
-        if not hasattr(self, "log_area"):
+        panel = getattr(self, "_activity_panel", None)
+        if panel is None:
             return
-        self.log_area.append(message)
-        sb = self.log_area.verticalScrollBar()
-        sb.setValue(sb.maximum())
+        _clean, resolved_kind = panel.append_message(message, kind)
+        if not panel.isVisible():
+            self._activity_unread += 1
+            if resolved_kind == "error":
+                self._activity_errors += 1
+            self._refresh_activity_badge()
 
     def _setting(self, key: str, default=None):
         if self.settings:
@@ -689,7 +760,10 @@ class WolfWorkflowTab(QWidget):
             self._hide_task_progress()
             self._set_busy(False)
             if msg:
-                self._log(("✅ " if ok else "❌ ") + msg)
+                self._log(
+                    ("✅ " if ok else "❌ ") + msg,
+                    "success" if ok else "error",
+                )
             if on_done:
                 try:
                     on_done(ok, msg)
@@ -3869,7 +3943,6 @@ class WolfWorkflowTab(QWidget):
             inject_state["dialog"] = dialog
             inject_state["report"] = report
             inject_state["selected"] = set(selected)
-            log(status)
             return report.ok, status
 
         def _after_inject(ok: bool, msg: str):
@@ -4092,13 +4165,17 @@ class WolfWorkflowTab(QWidget):
                 )
                 reconcile_msg = wolf_names.format_reconcile_summary(report_names)
                 log(reconcile_msg)
-                for change in report_names.changes[:40]:
+                detail_limit = 6
+                for change in report_names.changes[:detail_limit]:
                     log(
                         f"  {change.json_file}: {change.source!r} "
                         f"{change.old_text!r} → {change.new_text!r} ({change.reason})"
                     )
-                if len(report_names.changes) > 40:
-                    log(f"  … and {len(report_names.changes) - 40} more")
+                if len(report_names.changes) > detail_limit:
+                    log(
+                        f"  … {len(report_names.changes) - detail_limit} more name "
+                        "change(s); see translated/names.json for details."
+                    )
                 name_notes.append(reconcile_msg)
             else:
                 log("Name reconcile skipped (no translated/names.json).")
@@ -4109,13 +4186,24 @@ class WolfWorkflowTab(QWidget):
                 if p:
                     json_files.append(str(p))
             if json_files:
-                check = wolfdawn.names_check(json_files, log_fn=log)
+                # The CLI can print thousands of individual references. Keep the
+                # activity panel useful and show only a short failure excerpt.
+                check = wolfdawn.names_check(json_files, log_fn=None)
                 if check.returncode == 0:
                     name_notes.append("Name usage is consistent across files.")
                 else:
-                    name_notes.append(
-                        "names-check reported inconsistencies (see log)."
-                    )
+                    note = "names-check reported inconsistencies."
+                    name_notes.append(note)
+                    log(f"⚠ {note}")
+                    details = [
+                        line.strip()
+                        for line in (check.stderr or check.stdout or "").splitlines()
+                        if line.strip()
+                    ]
+                    for line in details[:6]:
+                        log(f"  {line}")
+                    if len(details) > 6:
+                        log(f"  … {len(details) - 6} more detail line(s) hidden.")
             else:
                 name_notes.append("names-check skipped (no JSON found).")
 

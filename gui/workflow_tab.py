@@ -51,7 +51,6 @@ from PyQt5.QtWidgets import (
     QSpinBox,
     QSplitter,
     QTabWidget,
-    QTextEdit,
     QVBoxLayout,
     QWidget,
     QAbstractItemView,
@@ -975,10 +974,8 @@ class WorkflowTab(QWidget):
         splitter.addWidget(steps_host)
 
         # ---- Right: collapsible Activity panel ----
-        self.log_area = QTextEdit()
-        self.log_area.setReadOnly(True)
-        self.log_area.setFont(QFont("Consolas", 9))
-        self._activity_panel = WorkflowActivityPanel(self.log_area)
+        self._activity_panel = WorkflowActivityPanel()
+        self.log_area = self._activity_panel.log
         self._activity_panel.clear_requested.connect(self._clear_activity)
         self._activity_panel.collapse_requested.connect(
             lambda: self._set_activity_visible(False)
@@ -1057,10 +1054,9 @@ class WorkflowTab(QWidget):
             self._set_activity_visible(not panel.isVisible())
 
     def _clear_activity(self):
-        self.log_area.clear()
+        self._activity_panel.clear_activity()
         self._activity_unread = 0
         self._activity_errors = 0
-        self._activity_panel.set_summary("Idle", "info")
         self._refresh_activity_badge()
 
     def _refresh_activity_badge(self):
@@ -5614,30 +5610,15 @@ class WorkflowTab(QWidget):
             self._log(f"❌ Could not copy to clipboard: {exc}")
 
     def _log(self, message: str):
-        area = getattr(self, "log_area", None)
-        if area is None:
-            return
-        area.append(message)
-        sb = area.verticalScrollBar()
-        sb.setValue(sb.maximum())
-        lowered = message.casefold()
-        if "❌" in message or "error" in lowered or "failed" in lowered:
-            kind = "error"
-        elif "⚠" in message or "warning" in lowered:
-            kind = "warning"
-        elif "✅" in message or "finished" in lowered or "success" in lowered:
-            kind = "success"
-        else:
-            kind = "info"
         panel = getattr(self, "_activity_panel", None)
-        if panel is not None:
-            summary = message.strip().replace("\n", " ")
-            panel.set_summary(summary[:72] + ("…" if len(summary) > 72 else ""), kind)
-            if not panel.isVisible():
-                self._activity_unread += 1
-                if kind == "error":
-                    self._activity_errors += 1
-                self._refresh_activity_badge()
+        if panel is None:
+            return
+        _clean, kind = panel.append_message(message)
+        if not panel.isVisible():
+            self._activity_unread += 1
+            if kind == "error":
+                self._activity_errors += 1
+            self._refresh_activity_badge()
 
     def _setting(self, key: str, default=None):
         if self.settings:

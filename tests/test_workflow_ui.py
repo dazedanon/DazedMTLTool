@@ -26,6 +26,7 @@ from PyQt5.QtWidgets import (
 from gui.theme import COLORS, Geometry, Spacing, contrast_ratio, dark_palette
 from gui.workflow_components import (
     DisclosureSection,
+    WorkflowActivityPanel,
     WorkflowPageHeader,
     WorkflowStageCard,
 )
@@ -112,6 +113,31 @@ class WorkflowShellTests(unittest.TestCase):
         self.assertEqual(self.settings.value("workflow/activity_panel_visible"), "true")
         self.workflow._set_activity_visible(False)
         self.assertEqual(self.settings.value("workflow/activity_panel_visible"), "false")
+
+    def test_activity_log_uses_shared_semantic_colors_and_plain_text(self):
+        panel = self.workflow._activity_panel
+        panel.append_message("\x1b[31m❌ Injection failed\x1b[0m")
+        panel.append_message("⚠ Translation mismatch")
+        panel.append_message("✅ Injection completed")
+
+        self.assertEqual(
+            panel.log.toPlainText().splitlines(),
+            [
+                "❌ Injection failed",
+                "⚠ Translation mismatch",
+                "✅ Injection completed",
+            ],
+        )
+        html = panel.log.toHtml().casefold()
+        self.assertIn(COLORS.danger.casefold(), html)
+        self.assertIn(COLORS.warning.casefold(), html)
+        self.assertIn(COLORS.success.casefold(), html)
+        self.assertEqual(panel.message_kind("0 failed"), "info")
+        self.assertEqual(panel.message_kind("No errors found"), "info")
+
+        panel.clear_activity()
+        self.assertFalse(panel.log.toPlainText())
+        self.assertEqual(panel.summary_label.text(), "Activity · Idle")
 
     def test_activity_utility_is_flush_with_the_navigation_footer(self):
         page = self.workflow._step_tabs.currentWidget()
@@ -512,6 +538,74 @@ class WorkflowShellTests(unittest.TestCase):
         self.assertEqual(
             self.workflow._setup_workspace_layout.direction(), QBoxLayout.LeftToRight
         )
+
+
+class WolfWorkflowShellTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.app = QApplication.instance() or QApplication([])
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.settings = QSettings(
+            str(Path(self.temp.name) / "wolf-workflow.ini"), QSettings.IniFormat
+        )
+        with patch("gui.wolf_workflow_tab.QSettings", return_value=self.settings):
+            from gui.wolf_workflow_tab import WolfWorkflowTab
+
+            self.workflow = WolfWorkflowTab()
+        self.workflow._detected_on_show = True
+        self.workflow.resize(1400, 760)
+        self.workflow.show()
+        self.app.processEvents()
+
+    def tearDown(self):
+        self.workflow.close()
+        self.workflow.deleteLater()
+        self.app.processEvents()
+        self.temp.cleanup()
+
+    def test_wolf_uses_the_shared_activity_shell_and_state(self):
+        panel = self.workflow._activity_panel
+        self.assertIsInstance(panel, WorkflowActivityPanel)
+        self.assertIs(self.workflow.log_area, panel.log)
+        self.assertEqual(self.workflow._workflow_splitter.indexOf(panel), 1)
+        self.assertFalse(panel.isVisible())
+
+        self.workflow._log("❌ Injection failed")
+        self.assertEqual(self.workflow._activity_unread, 1)
+        self.assertEqual(self.workflow._activity_errors, 1)
+        self.assertIn("1 error", self.workflow._step_rail.activity_button.toolTip())
+
+        self.workflow._set_activity_visible(True)
+        self.app.processEvents()
+        self.assertTrue(panel.isVisible())
+        self.assertEqual(self.workflow._activity_unread, 0)
+        self.assertEqual(self.workflow._activity_errors, 0)
+        self.assertEqual(
+            self.settings.value("wolf_workflow/activity_panel_visible"), "true"
+        )
+
+        panel.clear_requested.emit()
+        self.assertFalse(panel.log.toPlainText())
+        self.assertEqual(panel.summary_label.text(), "Activity · Idle")
+
+    def test_wolf_worker_reports_one_concise_exception(self):
+        from gui.wolf_workflow_tab import _WolfTaskWorker
+
+        def fail(_log, _progress):
+            raise RuntimeError("broken archive")
+
+        log_messages = []
+        completions = []
+        worker = _WolfTaskWorker(fail)
+        worker.log.connect(log_messages.append)
+        worker.done.connect(lambda ok, message: completions.append((ok, message)))
+
+        worker.run()
+
+        self.assertEqual(log_messages, [])
+        self.assertEqual(completions, [(False, "RuntimeError: broken archive")])
 
 
 class CaptureDiffTests(unittest.TestCase):

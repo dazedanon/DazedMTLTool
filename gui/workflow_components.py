@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import re
+
 from PyQt5.QtCore import Qt, pyqtSignal
+from PyQt5.QtGui import QColor, QFont, QTextCharFormat, QTextCursor
 from PyQt5.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -540,7 +543,13 @@ class WorkflowActivityPanel(QWidget):
     collapse_requested = pyqtSignal()
     clear_requested = pyqtSignal()
 
-    def __init__(self, log: QTextEdit, parent: QWidget | None = None):
+    _ANSI_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
+
+    def __init__(
+        self,
+        log: QTextEdit | None = None,
+        parent: QWidget | None = None,
+    ):
         super().__init__(parent)
         self.setObjectName("workflowActivityPanel")
         self.setMinimumWidth(240)
@@ -571,11 +580,13 @@ class WorkflowActivityPanel(QWidget):
         header_row.addWidget(collapse)
         root.addWidget(header)
 
-        log.setParent(self)
-        log.setObjectName("workflowActivityLog")
-        log.setReadOnly(True)
-        log.setFrameShape(QFrame.NoFrame)
-        root.addWidget(log, 1)
+        self.log = log or QTextEdit()
+        self.log.setParent(self)
+        self.log.setObjectName("workflowActivityLog")
+        self.log.setReadOnly(True)
+        self.log.setFrameShape(QFrame.NoFrame)
+        self.log.setFont(QFont("Consolas", 9))
+        root.addWidget(self.log, 1)
 
         clear = make_workflow_button("Clear activity", variant="quiet")
         clear.setObjectName("workflowActivityClear")
@@ -593,6 +604,81 @@ class WorkflowActivityPanel(QWidget):
             f"QToolButton#workflowActivityClose:hover{{background:{COLORS.surface_hover};"
             f"color:{COLORS.text_primary};}}"
         )
+
+    @classmethod
+    def clean_message(cls, message: str) -> str:
+        """Strip terminal formatting that is unreadable in a Qt text widget."""
+        return cls._ANSI_RE.sub("", str(message or "")).replace("\r", "").rstrip("\n")
+
+    @staticmethod
+    def message_kind(message: str) -> str:
+        """Classify a log line for consistent workflow colors and summaries."""
+        text = str(message or "")
+        lowered = text.casefold()
+        error_text = re.sub(
+            r"\b(?:0|no)\s+(?:errors?|failures?|failed)\b", "", lowered
+        )
+        if (
+            any(mark in text for mark in ("❌", "✗"))
+            or "traceback" in error_text
+            or "exception" in error_text
+            or re.search(r"\b(error|fatal|failure)\b", error_text)
+            or re.search(r"\bfailed\b", error_text)
+        ):
+            return "error"
+        if (
+            "⚠" in text
+            or re.search(r"\b(warn(?:ing)?|mismatch(?:es)?|skipped)\b", lowered)
+        ):
+            return "warning"
+        if (
+            any(mark in text for mark in ("✅", "✔", "✓"))
+            or re.search(
+                r"\b(success(?:ful(?:ly)?)?|succeeded|complete(?:d)?|finished|ready)\b",
+                lowered,
+            )
+        ):
+            return "success"
+        return "info"
+
+    def add_status_widget(self, widget: QWidget) -> None:
+        """Insert a workflow-specific status row above the shared log widget."""
+        self.layout().insertWidget(self.layout().indexOf(self.log), widget)
+
+    def append_message(self, message: str, kind: str | None = None) -> tuple[str, str]:
+        """Append one plain-text message with shared severity-aware styling."""
+        clean = self.clean_message(message)
+        resolved_kind = kind or self.message_kind(clean)
+        color = {
+            "info": COLORS.text_secondary,
+            "success": COLORS.success,
+            "warning": COLORS.warning,
+            "error": COLORS.danger,
+        }.get(resolved_kind, COLORS.text_secondary)
+
+        cursor = self.log.textCursor()
+        cursor.movePosition(QTextCursor.End)
+        if not self.log.document().isEmpty():
+            cursor.insertBlock()
+        fmt = QTextCharFormat()
+        fmt.setForeground(QColor(color))
+        if resolved_kind in {"success", "warning", "error"}:
+            fmt.setFontWeight(QFont.DemiBold)
+        cursor.insertText(clean, fmt)
+        self.log.setTextCursor(cursor)
+        self.log.ensureCursorVisible()
+
+        summary = clean.strip().replace("\n", " ")
+        if summary:
+            self.set_summary(
+                summary[:72] + ("…" if len(summary) > 72 else ""),
+                resolved_kind,
+            )
+        return clean, resolved_kind
+
+    def clear_activity(self) -> None:
+        self.log.clear()
+        self.set_summary("Idle", "info")
 
     def set_summary(self, text: str, kind: str = "info") -> None:
         color = {
