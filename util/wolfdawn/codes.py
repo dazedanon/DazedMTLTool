@@ -195,6 +195,40 @@ def names_doc_has_font_size_drift(doc: dict[str, Any]) -> bool:
     return False
 
 
+def non_font_code_sequences_differ(source: str, text: str) -> bool:
+    """True when non-font control tokens are missing, extra, or reordered."""
+    if not isinstance(source, str) or not isinstance(text, str):
+        return False
+    src_codes = [
+        code
+        for code in _control_code_tokens(source)
+        if not WOLF_FONT_SIZE_RE.fullmatch(code)
+    ]
+    txt_codes = [
+        code
+        for code in _control_code_tokens(text)
+        if not WOLF_FONT_SIZE_RE.fullmatch(code)
+    ]
+    return src_codes != txt_codes
+
+
+def names_doc_has_non_font_code_drift(doc: dict[str, Any]) -> bool:
+    """True when a names entry has unsafe non-font control-code drift."""
+    if not isinstance(doc, dict) or doc.get("kind") != "names":
+        return False
+    for entry in doc.get("names") or []:
+        if not isinstance(entry, dict):
+            continue
+        src, txt = entry.get("source"), entry.get("text")
+        if (
+            isinstance(src, str)
+            and isinstance(txt, str)
+            and non_font_code_sequences_differ(src, txt)
+        ):
+            return True
+    return False
+
+
 def document_has_font_size_drift(doc: dict[str, Any]) -> bool:
     """True when any leaf in a WolfDawn document has font-size-only ``\\f`` drift.
 
@@ -214,20 +248,23 @@ def document_has_font_size_drift(doc: dict[str, Any]) -> bool:
     return False
 
 
-def _tokenize(rest: str) -> list[tuple[str, str]]:
-    """Split *rest* into ``('lit', ...)`` and ``('code', ...)`` tokens."""
-    if not rest:
-        return []
-    out: list[tuple[str, str]] = []
-    last = 0
-    for m in WOLF_INLINE_CODE_RE.finditer(rest):
-        if m.start() > last:
-            out.append(("lit", rest[last : m.start()]))
-        out.append(("code", m.group(0)))
-        last = m.end()
-    if last < len(rest):
-        out.append(("lit", rest[last:]))
-    return out
+def document_has_non_font_code_drift(doc: dict[str, Any]) -> bool:
+    """True when any leaf has unsafe non-font control-code drift."""
+    if not isinstance(doc, dict):
+        return False
+    if doc.get("kind") == "names":
+        return names_doc_has_non_font_code_drift(doc)
+    for entry in _walk_entries(doc):
+        if not isinstance(entry, dict):
+            continue
+        src, txt = entry.get("source"), entry.get("text")
+        if (
+            isinstance(src, str)
+            and isinstance(txt, str)
+            and non_font_code_sequences_differ(src, txt)
+        ):
+            return True
+    return False
 
 
 def _fix_spurious_spaces_in_codes(source: str, text: str) -> str:
@@ -242,19 +279,54 @@ def _fix_spurious_spaces_in_codes(source: str, text: str) -> str:
     return text
 
 
+def _fix_spurious_whitespace_in_bracketed_codes(source: str, text: str) -> str:
+    """Repair whitespace inside otherwise corresponding bracketed codes.
+
+    Only same-count, same-order tokens are considered. Any ambiguous missing,
+    extra, or reordered sequence is left untouched for WolfDawn's safety guard.
+    """
+    src_matches = list(WOLF_INLINE_CODE_RE.finditer(source))
+    txt_matches = list(WOLF_INLINE_CODE_RE.finditer(text))
+    if len(src_matches) != len(txt_matches):
+        return text
+
+    replacements: list[tuple[int, int, str]] = []
+    for src_match, txt_match in zip(src_matches, txt_matches):
+        src_code = src_match.group(0)
+        txt_code = txt_match.group(0)
+        if src_code == txt_code:
+            continue
+        txt_compact = re.sub(r"\s+", "", txt_code)
+        # Intentional translated font sizes are never normalized to source.
+        if (
+            WOLF_FONT_SIZE_RE.fullmatch(src_code)
+            and WOLF_FONT_SIZE_RE.fullmatch(txt_code)
+        ):
+            continue
+        if (
+            WOLF_FONT_SIZE_RE.fullmatch(src_code)
+            and WOLF_FONT_SIZE_RE.fullmatch(txt_compact)
+        ):
+            replacements.append((txt_match.start(), txt_match.end(), txt_compact))
+            continue
+        if txt_compact != src_code:
+            return text
+        replacements.append((txt_match.start(), txt_match.end(), src_code))
+
+    for start, end, replacement in reversed(replacements):
+        text = text[:start] + replacement + text[end:]
+    return text
+
+
 def rebuild_text_preserving_source_codes(source: str, text: str) -> str:
-    """Return *text* with *source*'s inline code tokens and translated literals.
+    """Return *text* after unambiguous inline control-code syntax repairs.
 
     Keeps any leading ``@<option>\\n`` window prefix from the translated line when
     present; otherwise preserves the source prefix byte-for-byte.
 
-    ``\\f[N]`` sizes are taken from *text* when present (manual wrap / names-wrap
-    shrink). Other control codes (``\\c``, ``\\^``, …) always come from *source*.
-    A leading body ``\\f[N]`` that *source* lacks is kept from *text*.
-
-    When *source* has no inline codes at all (typical spoken ``Name\\nbody``),
-    *text* is returned unchanged so a body ``\\f[N]`` after the nameplate cannot
-    be mis-read as a code slot and wipe the dialogue.
+    Valid translated code placement and intentional ``\\f[N]`` changes are kept.
+    Missing, extra, or reordered tokens are not guessed at; WolfDawn's injection
+    safety guard reports those ambiguous cases instead.
     """
     if not isinstance(source, str) or not isinstance(text, str):
         return text
@@ -266,72 +338,8 @@ def rebuild_text_preserving_source_codes(source: str, text: str) -> str:
     out_prefix = txt_prefix if txt_prefix else src_prefix
 
     txt_rest = _fix_spurious_spaces_in_codes(src_rest, txt_rest)
-
-    src_parts = _tokenize(src_rest)
-    txt_parts = _tokenize(txt_rest)
-    src_lit = [p[1] for p in src_parts if p[0] == "lit"]
-    txt_lit = [p[1] for p in txt_parts if p[0] == "lit"]
-    txt_font_sizes = _font_sizes_in_order(txt_rest)
-
-    if not src_parts:
-        return out_prefix + txt_rest
-
-    # Source has no inline codes to restore. Keep the translation intact -
-    # including Manual-wrap ``Name\\n\\f[N]body`` (body font after the nameplate).
-    # Slot-rebuilding would treat the mid-line ``\\f`` as a break, keep only
-    # ``Name\\n``, prepend ``\\f[N]``, and drop the body (``\\f[N]Name\\n``).
-    if not any(kind == "code" for kind, _ in src_parts):
-        return out_prefix + txt_rest
-
-    # Rebuild using source code skeleton + translated literal slots.
-    # Font sizes prefer the translation (intentional shrink / body \\f).
-    rebuilt: list[str] = []
-    lit_i = 0
-    font_i = 0
-
-    src_starts_with_f = bool(
-        src_parts
-        and src_parts[0][0] == "code"
-        and WOLF_FONT_SIZE_RE.fullmatch(src_parts[0][1])
-    )
-    if txt_font_sizes and not src_starts_with_f:
-        # Manual wrap / names-wrap often prepend a body \\f[N] source never had.
-        rebuilt.append(rf"\f[{txt_font_sizes[0]}]")
-        font_i = 1
-
-    for kind, val in src_parts:
-        if kind == "code":
-            if WOLF_FONT_SIZE_RE.fullmatch(val) and font_i < len(txt_font_sizes):
-                rebuilt.append(rf"\f[{txt_font_sizes[font_i]}]")
-                font_i += 1
-            else:
-                rebuilt.append(val)
-        else:
-            if lit_i < len(txt_lit):
-                # Last source literal: keep every remaining translated literal so
-                # extra mid-line ``\\f[N]`` in *text* cannot truncate the body.
-                if lit_i == len(src_lit) - 1 and len(txt_lit) > lit_i + 1:
-                    rebuilt.append("".join(txt_lit[lit_i:]))
-                    lit_i = len(txt_lit)
-                else:
-                    rebuilt.append(txt_lit[lit_i])
-                    lit_i += 1
-            else:
-                rebuilt.append(val)
-    return out_prefix + "".join(rebuilt)
-
-
-def _font_sizes_in_order(text: str) -> list[int]:
-    """Return every ``\\f[N]`` size in *text* in left-to-right order."""
-    if not isinstance(text, str) or not text:
-        return []
-    out: list[int] = []
-    for match in WOLF_FONT_SIZE_RE.finditer(text):
-        try:
-            out.append(int(match.group(1)))
-        except (TypeError, ValueError):
-            continue
-    return out
+    txt_rest = _fix_spurious_whitespace_in_bracketed_codes(src_rest, txt_rest)
+    return out_prefix + txt_rest
 
 
 def protect_wolf_codes(text: str) -> tuple[str, dict[str, str]]:

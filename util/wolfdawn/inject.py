@@ -108,9 +108,9 @@ def restore_live_from_originals(
 def repair_inject_json(src: Path) -> tuple[Path, bool]:
     """Auto-repair WOLF inline codes in a translated JSON before inject.
 
-    Returns ``(path, has_font_size_drift)``. Font-size drift is detected after
-    repair so intentional ``\\f[N]`` shrinks from Fix-wrap survive and inject
-    can auto-pass ``--allow-code-drift``.
+    Returns ``(path, safe_font_only_drift)``. Automatic ``--allow-code-drift`` is
+    enabled only when font drift exists and no non-font token mismatch could be
+    hidden by that file-wide WolfDawn flag.
     """
     data = json.loads(src.read_text(encoding="utf-8-sig"))
     data, repairs = wolf_codes.repair_document(data)
@@ -119,7 +119,11 @@ def repair_inject_json(src: Path) -> tuple[Path, bool]:
             json.dumps(data, ensure_ascii=False, indent=4) + "\n",
             encoding="utf-8",
         )
-    return src, wolf_codes.document_has_font_size_drift(data)
+    safe_font_only_drift = (
+        wolf_codes.document_has_font_size_drift(data)
+        and not wolf_codes.document_has_non_font_code_drift(data)
+    )
+    return src, safe_font_only_drift
 
 
 def _wolf_output_snippet(stdout: str, stderr: str, *, limit: int = 400) -> str:
@@ -443,8 +447,10 @@ def inject_selected(
                 names_doc = json.loads(names_src.read_text(encoding="utf-8-sig"))
             except Exception:
                 names_doc = None
-            if isinstance(names_doc, dict) and wolf_codes.names_doc_has_font_size_drift(
-                names_doc
+            if (
+                isinstance(names_doc, dict)
+                and wolf_codes.names_doc_has_font_size_drift(names_doc)
+                and not wolf_codes.names_doc_has_non_font_code_drift(names_doc)
             ):
                 names_drift = True
                 emit(

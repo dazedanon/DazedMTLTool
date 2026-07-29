@@ -72,6 +72,63 @@ class InjectSafetyParserTests(unittest.TestCase):
 
 
 class InjectPrecheckLocalTests(unittest.TestCase):
+    def test_repair_inject_json_does_not_rewrite_valid_moved_code(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "CommonEvent.dat.json"
+            doc = {
+                "kind": "common",
+                "scenes": [
+                    {
+                        "event": 24,
+                        "lines": [
+                            {
+                                "cmd": 101,
+                                "str": 0,
+                                "source": r"\v[24]Day        ",
+                                "text": "Day \\v[24]\n        ",
+                            }
+                        ],
+                    }
+                ],
+            }
+            original = json.dumps(doc, ensure_ascii=False, indent=2) + "\n"
+            path.write_text(original, encoding="utf-8")
+
+            repaired_path, font_drift = wi.repair_inject_json(path)
+
+            self.assertEqual(repaired_path, path)
+            self.assertFalse(font_drift)
+            self.assertEqual(path.read_text(encoding="utf-8"), original)
+
+    def test_repair_inject_json_does_not_hide_non_font_drift(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "DataBase.project.json"
+            doc = {
+                "kind": "db",
+                "groups": [
+                    {
+                        "typeName": "mixed",
+                        "lines": [
+                            {
+                                "source": r"\f[18]文字",
+                                "text": r"\f[14]Text",
+                            },
+                            {
+                                "source": r"\c[1]赤\c[0]",
+                                "text": r"Red \c[1]",
+                            },
+                        ],
+                    }
+                ],
+            }
+            original = json.dumps(doc, ensure_ascii=False, indent=2) + "\n"
+            path.write_text(original, encoding="utf-8")
+
+            _repaired_path, safe_font_only_drift = wi.repair_inject_json(path)
+
+            self.assertFalse(safe_font_only_drift)
+            self.assertEqual(path.read_text(encoding="utf-8"), original)
+
     def test_resolve_db_locator(self):
         doc = {
             "kind": "db",

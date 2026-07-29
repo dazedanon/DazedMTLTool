@@ -28,6 +28,58 @@ class WolfCodesRepairTests(unittest.TestCase):
         fixed = wolf_codes.rebuild_text_preserving_source_codes(source, text)
         self.assertEqual(fixed, "A\\c[1]B\\f[2]C")
 
+    def test_rebuild_repairs_whitespace_in_shrunken_font(self):
+        source = r"\f[18]文字"
+        text = r"\f[ 14]Text"
+        fixed = wolf_codes.rebuild_text_preserving_source_codes(source, text)
+        self.assertEqual(fixed, r"\f[14]Text")
+
+    def test_rebuild_does_not_duplicate_font_after_prefix_control_code(self):
+        source = r"\>\f[5]レベル\cself[30]"
+        text = r"\>\f[5]Level\cself[30]"
+        fixed = wolf_codes.rebuild_text_preserving_source_codes(source, text)
+        self.assertEqual(fixed, text)
+
+    def test_rebuild_preserves_valid_moved_variable_code(self):
+        source = r"\v[24]Day        "
+        text = "Day \\v[24]\n        "
+        fixed = wolf_codes.rebuild_text_preserving_source_codes(source, text)
+        self.assertEqual(fixed, text)
+
+    def test_rebuild_does_not_guess_reordered_variable_codes(self):
+        source = r"\v[1] vs \v[2]"
+        text = r"\v[2] versus \v[1]"
+        fixed = wolf_codes.rebuild_text_preserving_source_codes(source, text)
+        self.assertEqual(fixed, text)
+        self.assertTrue(wolf_codes.non_font_code_sequences_differ(source, text))
+
+    def test_rebuild_does_not_guess_missing_color_code(self):
+        source = r"\c[1]赤\c[0]"
+        text = r"Red \c[1]"
+        fixed = wolf_codes.rebuild_text_preserving_source_codes(source, text)
+        self.assertEqual(fixed, text)
+        self.assertTrue(wolf_codes.non_font_code_sequences_differ(source, text))
+
+    def test_rebuild_keeps_nameplate_body_font_with_other_inline_codes(self):
+        source = "市民\n赤い\\c[1]花"
+        text = "Citizen\n\\f[14]Red \\c[1]flower"
+        fixed = wolf_codes.rebuild_text_preserving_source_codes(source, text)
+        self.assertEqual(fixed, text)
+        self.assertFalse(wolf_codes.non_font_code_sequences_differ(source, text))
+
+    def test_rebuild_keeps_extra_midline_font(self):
+        source = r"\c[1]赤い花"
+        text = r"\c[1]Red \f[14]flower"
+        fixed = wolf_codes.rebuild_text_preserving_source_codes(source, text)
+        self.assertEqual(fixed, text)
+
+    def test_rebuild_does_not_strip_literal_backslash_n(self):
+        source = r"\c[1]一行"
+        text = r"\c[1]One\nline"
+        fixed = wolf_codes.rebuild_text_preserving_source_codes(source, text)
+        self.assertEqual(fixed, text)
+        self.assertTrue(wolf_codes.non_font_code_sequences_differ(source, text))
+
     def test_protect_and_restore_roundtrip(self):
         src = "Line with \\^ and \\cself[8]"
         protected, mapping = wolf_codes.protect_wolf_codes(src)
@@ -65,12 +117,34 @@ class WolfCodesRepairTests(unittest.TestCase):
         source = r"「\c[21]\f[20]富裕層\c[19]\f[18]の人手」"
         text = r'\f[12]"\c[21]\f[13]Wealthy\c[19]\f[12] staff"'
         fixed = wolf_codes.rebuild_text_preserving_source_codes(source, text)
-        self.assertTrue(fixed.startswith(r"\f[12]"))
-        self.assertIn(r"\f[13]", fixed)
-        self.assertIn(r"\c[21]", fixed)
-        self.assertIn(r"\c[19]", fixed)
+        self.assertEqual(
+            fixed,
+            r'\f[12]"\c[21]\f[13]Wealthy\c[19]\f[12] staff"',
+        )
         self.assertNotIn(r"\f[20]", fixed)
         self.assertNotIn(r"\f[18]", fixed)
+
+    def test_repair_document_leaves_common_event_font_sequence_unchanged(self):
+        text = r"\>\f[5]Level\cself[30]"
+        doc = {
+            "kind": "common",
+            "scenes": [
+                {
+                    "event": 30,
+                    "lines": [
+                        {
+                            "cmd": 101,
+                            "str": 0,
+                            "source": r"\>\f[5]レベル\cself[30]",
+                            "text": text,
+                        }
+                    ],
+                }
+            ],
+        }
+        _doc, notes = wolf_codes.repair_document(doc)
+        self.assertEqual(notes, [])
+        self.assertEqual(doc["scenes"][0]["lines"][0]["text"], text)
 
     def test_rebuild_keeps_leading_body_font_absent_from_source(self):
         source = "これは説明文です。"
@@ -126,6 +200,28 @@ class WolfCodesRepairTests(unittest.TestCase):
                 }
             )
         )
+
+    def test_non_font_drift_blocks_document_font_only_classification(self):
+        doc = {
+            "kind": "db",
+            "groups": [
+                {
+                    "typeName": "mixed",
+                    "lines": [
+                        {
+                            "source": r"\f[18]文字",
+                            "text": r"\f[14]Text",
+                        },
+                        {
+                            "source": r"\c[1]赤\c[0]",
+                            "text": r"Red \c[1]",
+                        },
+                    ],
+                }
+            ],
+        }
+        self.assertTrue(wolf_codes.document_has_font_size_drift(doc))
+        self.assertTrue(wolf_codes.document_has_non_font_code_drift(doc))
 
 
 class WolfFontScaleTests(unittest.TestCase):
