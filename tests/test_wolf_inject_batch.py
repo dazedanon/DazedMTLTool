@@ -359,6 +359,186 @@ class InjectOrderTests(unittest.TestCase):
             self.assertEqual(line, {"source": "日目", "text": "Moved Day"})
             self.assertTrue(any("refreshed 1 stale source" in log for log in logs))
 
+    def test_stale_identity_source_is_rebased_before_injection(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            stale_source = 'Resident\n"Hello, do you need something?"'
+            pristine_source = "住民\n「こんにちは、何か御用ですか？」"
+            translated = root / "translated"
+            data = root / "Data"
+            originals = root / "originals"
+            translated.mkdir()
+            data.mkdir()
+            originals.mkdir()
+            edited_path = translated / "Map006_8.mps.json"
+            edited_path.write_text(
+                json.dumps(
+                    {
+                        "kind": "map",
+                        "scenes": [
+                            {
+                                "lines": [
+                                    {"source": stale_source, "text": stale_source}
+                                ]
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            live = data / "Map006_8.mps"
+            pristine = originals / "Map006_8.mps"
+            live.write_bytes(b"live")
+            pristine.write_bytes(b"pristine")
+            entries = [
+                {"json": edited_path.name, "kind": "map", "base": str(live)}
+            ]
+            calls: list[tuple[bool, str, str]] = []
+
+            def fake_inject(edited_json, _base, _output, **kwargs):
+                line = json.loads(Path(edited_json).read_text(encoding="utf-8"))[
+                    "scenes"
+                ][0]["lines"][0]
+                dry_run = bool(kwargs.get("dry_run"))
+                calls.append((dry_run, line["source"], line["text"]))
+                if line["source"] == stale_source:
+                    output = (
+                        "would apply 0 translation(s) "
+                        "(1 untranslated, 0 drifted)"
+                    )
+                elif dry_run:
+                    output = (
+                        "would apply 1 translation(s) "
+                        "(0 untranslated, 0 drifted)"
+                    )
+                else:
+                    output = (
+                        "applied 1 translation(s) "
+                        "(0 untranslated, 0 drifted)"
+                    )
+                return mock.Mock(ok=True, returncode=0, stdout=output, stderr="")
+
+            def fake_extract(_base, output, **_kwargs):
+                Path(output).write_text(
+                    json.dumps(
+                        {
+                            "kind": "map",
+                            "scenes": [
+                                {
+                                    "lines": [
+                                        {
+                                            "source": pristine_source,
+                                            "text": pristine_source,
+                                        }
+                                    ]
+                                }
+                            ],
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+                return mock.Mock(ok=True, returncode=0, stdout="", stderr="")
+
+            logs: list[str] = []
+            with (
+                mock.patch.object(
+                    wi.wolfdawn, "strings_inject", side_effect=fake_inject
+                ),
+                mock.patch.object(
+                    wi.wolfdawn, "strings_extract", side_effect=fake_extract
+                ),
+            ):
+                report = wi.inject_selected(
+                    [edited_path.name],
+                    manifest_entries=entries,
+                    data_dir=data,
+                    originals_dir=originals,
+                    translated_dir=translated,
+                    game_root=root,
+                    log_fn=logs.append,
+                )
+
+            self.assertTrue(report.ok)
+            self.assertEqual(
+                calls,
+                [
+                    (True, stale_source, stale_source),
+                    (True, pristine_source, stale_source),
+                    (False, pristine_source, stale_source),
+                ],
+            )
+            repaired = json.loads(edited_path.read_text(encoding="utf-8"))
+            line = repaired["scenes"][0]["lines"][0]
+            self.assertEqual(
+                line,
+                {"source": pristine_source, "text": stale_source},
+            )
+            self.assertTrue(any("refreshed 1 stale source" in log for log in logs))
+
+    def test_legitimate_untranslated_source_remains_unchanged(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            translated = root / "translated"
+            data = root / "Data"
+            originals = root / "originals"
+            translated.mkdir()
+            data.mkdir()
+            originals.mkdir()
+            edited_path = translated / "Map006_8.mps.json"
+            document = {
+                "kind": "map",
+                "scenes": [
+                    {"lines": [{"source": "住民", "text": "住民"}]}
+                ],
+            }
+            edited_path.write_text(json.dumps(document), encoding="utf-8")
+            live = data / "Map006_8.mps"
+            pristine = originals / "Map006_8.mps"
+            live.write_bytes(b"live")
+            pristine.write_bytes(b"pristine")
+            entries = [
+                {"json": edited_path.name, "kind": "map", "base": str(live)}
+            ]
+
+            def fake_inject(_edited, _base, _output, **kwargs):
+                verb = "would apply" if kwargs.get("dry_run") else "applied"
+                output = (
+                    f"{verb} 0 translation(s) "
+                    "(1 untranslated, 0 drifted)"
+                )
+                return mock.Mock(ok=True, returncode=0, stdout=output, stderr="")
+
+            def fake_extract(_base, output, **_kwargs):
+                Path(output).write_text(json.dumps(document), encoding="utf-8")
+                return mock.Mock(ok=True, returncode=0, stdout="", stderr="")
+
+            logs: list[str] = []
+            with (
+                mock.patch.object(
+                    wi.wolfdawn, "strings_inject", side_effect=fake_inject
+                ),
+                mock.patch.object(
+                    wi.wolfdawn, "strings_extract", side_effect=fake_extract
+                ) as extract,
+            ):
+                report = wi.inject_selected(
+                    [edited_path.name],
+                    manifest_entries=entries,
+                    data_dir=data,
+                    originals_dir=originals,
+                    translated_dir=translated,
+                    game_root=root,
+                    log_fn=logs.append,
+                )
+
+            self.assertTrue(report.ok)
+            self.assertEqual(report.files[0].summary, "no changes needed")
+            self.assertEqual(
+                json.loads(edited_path.read_text(encoding="utf-8")), document
+            )
+            extract.assert_called_once()
+            self.assertFalse(any("refreshed" in log for log in logs))
+
     def test_names_result_mentions_safety_skips(self):
         res = mock.Mock(
             ok=True,

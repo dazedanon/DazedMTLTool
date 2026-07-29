@@ -484,9 +484,9 @@ def _inject_strings(
             "missing database .dat pair beside inject base (extract again in Step 1)",
         )
 
-    # A previous workflow could extract JSON from already-injected live Data/.
-    # Detect that before writing and safely refresh source fields from the
-    # pristine binary while preserving every translated ``text`` value.
+    # WolfDawn reports stale entries whose ``source == text`` as merely
+    # "untranslated" rather than drifted. Validate both classes directly
+    # against a fresh pristine extraction while preserving translated text.
     probe = wolfdawn.strings_inject(
         str(inject_src),
         str(orig),
@@ -499,7 +499,10 @@ def _inject_strings(
     _probe_applied, probe_drifted = wolfdawn.parse_strings_inject_counts(
         probe.stdout, probe.stderr
     )
-    if (probe_drifted or 0) > 0:
+    probe_untranslated = wolfdawn.parse_strings_inject_untranslated(
+        probe.stdout, probe.stderr
+    )
+    if (probe_drifted or 0) > 0 or (probe_untranslated or 0) > 0:
         emit = log_fn or (lambda _message: None)
         with tempfile.TemporaryDirectory() as raw:
             pristine_json = Path(raw) / json_name
@@ -510,40 +513,41 @@ def _inject_strings(
                 return FileInjectResult(
                     json_name,
                     False,
-                    "stale JSON source detected, but pristine extraction failed",
+                    "could not validate JSON sources against the pristine original",
                 )
             rebased, error = rebase_json_sources(inject_src, pristine_json)
         if error:
             return FileInjectResult(
                 json_name,
                 False,
-                f"stale JSON source detected; automatic repair refused: {error}",
+                f"automatic source refresh refused: {error}",
             )
-        emit(
-            f"  ⚠ {json_name}: refreshed {rebased} stale source field(s) "
-            "from the pristine original"
-        )
-        probe = wolfdawn.strings_inject(
-            str(inject_src),
-            str(orig),
-            out,
-            allow_code_drift=allow_code_drift,
-            en_punct=en_punct,
-            dry_run=True,
-            log_fn=None,
-        )
-        _probe_applied, probe_drifted = wolfdawn.parse_strings_inject_counts(
-            probe.stdout, probe.stderr
-        )
-        if (probe_drifted or 0) > 0:
-            return FileInjectResult(
-                json_name,
-                False,
-                (
-                    f"stale JSON source repair left {probe_drifted} drifted line(s); "
-                    "re-extract from pristine data"
-                ),
+        if rebased:
+            emit(
+                f"  ⚠ {json_name}: refreshed {rebased} stale source field(s) "
+                "from the pristine original"
             )
+            probe = wolfdawn.strings_inject(
+                str(inject_src),
+                str(orig),
+                out,
+                allow_code_drift=allow_code_drift,
+                en_punct=en_punct,
+                dry_run=True,
+                log_fn=None,
+            )
+            _probe_applied, probe_drifted = wolfdawn.parse_strings_inject_counts(
+                probe.stdout, probe.stderr
+            )
+    if (probe_drifted or 0) > 0:
+        return FileInjectResult(
+            json_name,
+            False,
+            (
+                f"source validation left {probe_drifted} drifted line(s); "
+                "re-extract from pristine data"
+            ),
+        )
 
     res = wolfdawn.strings_inject(
         str(inject_src),
