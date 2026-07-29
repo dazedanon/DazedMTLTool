@@ -64,8 +64,8 @@ class WorkflowActionWiringTests(unittest.TestCase):
             (1, "run_all_preprocess", {"text": "Run available tasks"}),
             (2, "import_files", {"text": "Import files"}),
             (2, "clear_translated", {"text": "Clear translated"}),
-            (2, "run_parse_speakers", {"text": "Collect names"}),
-            (2, "copy_project_setup_prompt", {"text": "Copy setup skill"}),
+            (2, "run_parse_speakers", {"text": "1  Collect names"}),
+            (2, "copy_project_setup_prompt", {"text": "2  Copy setup instructions"}),
             (3, "apply_wrap_config", {"text": "Save line widths"}),
             (3, "run_phase", {"text": "Translate database"}),
             (3, "run_phase", {"text": "Translate dialogue"}),
@@ -86,9 +86,7 @@ class WorkflowActionWiringTests(unittest.TestCase):
             (6, "run_rewrap", {"text": "Preview rewrap"}),
             (6, "run_rewrap", {"text": "Apply rewrap"}),
             (6, "copy_translation_qa_prompt", {"text": "Copy final QA skill"}),
-            (6, "create_public_release", {"text": "Build public release ZIP"}),
             (7, "refresh_image_workflow_status", {"text": "Refresh readiness"}),
-            (7, "copy_vocab_to_game", {"text": "Copy glossary to game"}),
             (7, "open_image_manager", {"text": "Open Image Manager"}),
             (8, "detect_tli_editors", {"text": "Find editors"}),
             (8, "browse_tli_editor", {"text": "Choose…"}),
@@ -98,12 +96,16 @@ class WorkflowActionWiringTests(unittest.TestCase):
             (8, "uninstall_tl_inspector", {"text": "Remove TL Inspector"}),
             (8, "install_forge", {"text": "Install Forge"}),
             (8, "uninstall_forge", {"text": "Remove Forge"}),
+            (8, "create_public_release", {"text": "Build public release ZIP"}),
             (8, "install_both_playtest", {"text": "Install both plugins"}),
             (8, "refresh_playtest_status", {"text": "Refresh plugin status"}),
         )
-        self.assertEqual(len(cases), 49)
+        self.assertEqual(len(cases), 48)
         for step, endpoint, locator in cases:
             with self.subTest(step=step, endpoint=endpoint, locator=locator):
+                if endpoint == "apply_var_range":
+                    self.workflow._p2_code_checks["CODE122"].setChecked(True)
+                    self.workflow._refresh_p2_control_dependencies()
                 self.assert_routes(step, endpoint, **locator)
 
     def test_line_edit_checkbox_and_editor_actions_are_wired(self):
@@ -124,13 +126,13 @@ class WorkflowActionWiringTests(unittest.TestCase):
 
         editors = self.workflow.setup_editors
         expected = (
-            ({"tooltip": "Save guidance changes"}, "save_game_skill"),
-            ({"tooltip": "Reload guidance from disk"}, "reload_game_skill"),
-            ({"tooltip": "Save rules changes"}, "save_quirks"),
-            ({"tooltip": "Reload rules from disk"}, "reload_quirks"),
+            ({"tooltip": "Save game skill changes"}, "save_game_skill"),
+            ({"tooltip": "Reload game skill from disk"}, "reload_game_skill"),
+            ({"tooltip": "Save quirks changes"}, "save_quirks"),
+            ({"tooltip": "Reload quirks from disk"}, "reload_quirks"),
             ({"tooltip": "Save glossary changes"}, "save_vocab"),
             ({"tooltip": "Reload glossary from disk"}, "reload_vocab"),
-            ({"text": "+ Add custom guidance"}, "add_custom_skill"),
+            ({"text": "+ Add custom skill"}, "add_custom_skill"),
         )
         for locator, endpoint in expected:
             editors.actions.clear()

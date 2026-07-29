@@ -457,6 +457,13 @@ class RPGMakerImageManagerSelectionTests(unittest.TestCase):
 
         self.assertTrue(self.manager.copy_translation_button.isEnabled())
 
+    def test_copy_skill_has_visible_beginner_instructions(self):
+        text = self.manager.copy_skill_help_banner.text_label.text()
+        self.assertIn("Copy skill", text)
+        self.assertIn("AI helper", text)
+        self.assertIn("paste", text.casefold())
+        self.assertIn("review every edited image", text)
+
     def test_loading_and_scanning_project_is_read_only(self):
         self.assertEqual(self.manager.engine_combo.currentData(), PROFILE_AUTO)
         self.assertEqual(self.manager.engine_id, PROFILE_RPGMAKER_MVMZ)

@@ -84,6 +84,41 @@ class WorkflowTranslationPromptTests(unittest.TestCase):
         self.assertIn("Include displayed comment text (code 408)", workflow_source)
         self.assertIn('config["CODE408"] = bool(', workflow_source)
 
+    def test_rpgmaker_step_help_is_complete_and_beginner_focused(self):
+        from gui.workflow_tab import _STEP_HELP
+
+        self.assertEqual(set(_STEP_HELP), set(range(9)))
+        required_actions = {
+            0: ("Choose game folder", "Import selected files"),
+            1: ("Run available tasks",),
+            2: ("Collect names", "Copy setup instructions"),
+            3: ("Translate database", "Translate dialogue", "Build variable cache"),
+            4: ("Copy advanced-text audit", "Translate selected text"),
+            5: ("Copy glossary to game", "Export selected files"),
+            6: ("Preview rewrap", "Apply rewrap", "Copy final QA skill"),
+            7: ("Open Image Manager", "Copy skill", "Patch selected"),
+            8: ("Save defaults", "Build public release ZIP"),
+        }
+        for step, actions in required_actions.items():
+            with self.subTest(step=step):
+                help_text = _STEP_HELP[step]
+                self.assertIn("What to do", help_text)
+                for action in actions:
+                    self.assertIn(action, help_text)
+
+        combined = " ".join(_STEP_HELP.values())
+        for internal_jargon in (
+            "phase profile",
+            "prompt cache",
+            "RV2JSON -u",
+            "code-101",
+            "code-401",
+            "VCS metadata",
+        ):
+            self.assertNotIn(internal_jargon, combined)
+        self.assertIn("directly inside the game folder", _STEP_HELP[5])
+        self.assertIn("final workflow action", _STEP_HELP[8])
+
     def test_static_clipboard_prompts_live_under_data_skills(self):
         expected = (
             "wrap_config.md",
@@ -125,7 +160,7 @@ class WorkflowTranslationPromptTests(unittest.TestCase):
     def test_rpgmaker_workflow_has_selective_rewrap_step(self):
         workflow_source = (ROOT / "gui/workflow_tab.py").read_text(encoding="utf-8")
         self.assertIn('("6  Rewrap",       self._build_step5_rewrap)', workflow_source)
-        self.assertIn("Dialogue + Face", workflow_source)
+        self.assertIn("Dialogue with faces", workflow_source)
         self.assertIn("Maps & events", workflow_source)
         self.assertIn("Event codes:", workflow_source)
         self.assertIn("Preview rewrap", workflow_source)

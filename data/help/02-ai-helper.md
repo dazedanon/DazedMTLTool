@@ -135,8 +135,8 @@ The Agent's answer may contain these labels. Put each part in the matching place
 |---|---|
 | `glossary` | The **Glossary** box |
 | `speakers` | Use it to set the speaker choices shown above the boxes |
-| `translation_quirks` | The **Translation rules** box |
-| `game_skill` | The **Game guidance** box |
+| `translation_quirks` | The **Translation quirks** box |
+| `game_skill` | The **Game skill** box |
 | `rpgmaker_config` | The RPG Maker choices for code 408, text width, and fonts |
 
 The labels are directions, so do not paste the Agent's entire answer into every box. If a label is

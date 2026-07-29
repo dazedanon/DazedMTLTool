@@ -24,7 +24,8 @@ errors.
 
 1. In Step 0, choose the folder containing `Game.exe`.
 2. Select the main game information and one early map, such as `Map001.json`.
-3. In Step 2, click **Collect names**, then use **Copy setup skill** with your AI helper.
+3. In Step 2, click **Collect names** first. Then copy the setup instructions into your AI helper.
+   If it marks an extra speaker option **ENABLE**, turn it on and collect names again.
 4. In Step 3, translate the main game information and dialogue.
 5. In Step 5, use **Export selected files**.
 6. Start the game and test that map.
@@ -33,9 +34,10 @@ Only select the rest of the maps after this test looks good.
 
 ## Name options in Step 2
 
-DazedTL may show options named **INLINE401**, **FIRSTLINE**, and **FACENAME**. These are simply
-different places where RPG Maker games store a speaker's name. You do not need to guess. Use the
-choice recommended by the setup helper, and only turn on choices that it found in your game.
+DazedTL shows options named **INLINE401**, **FIRSTLINE**, and **FACENAME**. These are extra places
+where RPG Maker games may store a speaker's name. Click **Collect names** before worrying about
+them. Then run the setup instructions with your AI helper. In its **speakers** result, turn on only
+the options marked **ENABLE** and click **Collect names** again. Many games do not need any of them.
 
 ## Normal mode or Batch mode?
 

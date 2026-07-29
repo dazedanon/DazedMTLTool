@@ -6,7 +6,7 @@ Mirrors the RPGMaker WorkflowTab, driven by the vendored WolfDawn ``wolf`` CLI
 
   Step 0  Project     - select game folder; import wolf_json/ into files/ (like RPGMaker)
   Step 1  Pre-process - optional dazedformat + gameupdate/ copy before translating
-  Step 2  Setup       - Project Setup skill + vocab / quirks / game skills editors
+  Step 2  Setup       - Project Setup skill + glossary / quirks / game skill editors
                         (build glossary and API overlays before translating)
   Step 3  Names       - translate names.json (Phase 0). WolfDawn safe entries
                         are translated per-name; refs and verify names are skipped.
@@ -105,6 +105,7 @@ import util.dazedwrap as dazedwrap
 from gui.setup_skills_editors import SetupSkillsEditors
 from gui.theme import COLORS, Geometry, Spacing
 from gui.workflow_components import (
+    StatusBanner,
     WorkflowActivityPanel,
     WorkflowPageHeader,
     WorkflowStepRail,
@@ -1602,7 +1603,8 @@ class WolfWorkflowTab(QWidget):
         ))
         layout.addWidget(self._desc(
             "Copy Project Setup into Cursor/Copilot with files/ open. Paste the glossary block into the Glossary tab, "
-            "quirks into Quirks, game_skill into Game skills. Speakers advice (LOWCONF_FIRSTLINE) "
+            "translation_quirks into Translation quirks, and game_skill into Game skill. "
+            "Speakers advice (LOWCONF_FIRSTLINE) "
             "is applied via the Step 5 checkbox - keep that step self-contained."
         ))
 
@@ -1619,6 +1621,14 @@ class WolfWorkflowTab(QWidget):
         actions.addWidget(copy_btn)
         actions.addStretch()
         layout.addLayout(actions)
+
+        self._setup_ai_help_banner = StatusBanner(
+            "How to use this: click Copy setup skill, paste the copied instructions into "
+            "your AI helper with the game folder open, then copy each labeled result into "
+            "the matching Glossary, Translation quirks, or Game skill tab below.",
+            "info",
+        )
+        layout.addWidget(self._setup_ai_help_banner)
 
         note = self._desc(
             "Do not list names.json item/skill/enemy values in the Glossary - Phase 0 "
@@ -1732,6 +1742,14 @@ class WolfWorkflowTab(QWidget):
         disc_row.addWidget(import_btn)
         disc_row.addStretch()
         layout.addLayout(disc_row)
+
+        self._database_ai_help_banner = StatusBanner(
+            "How to use this: click Copy database audit, paste the copied instructions into "
+            "your AI helper with the extracted game files open, then use Import database "
+            "profile to paste the JSON it returns.",
+            "info",
+        )
+        layout.addWidget(self._database_ai_help_banner)
 
         self._db_groups_list = CheckableFileList()
         self._db_groups_list.setMinimumHeight(160)
@@ -2064,6 +2082,14 @@ class WolfWorkflowTab(QWidget):
         prompt_btn = _make_btn("Copy speaker-format audit", "#5a3a7a")
         prompt_btn.clicked.connect(self._copy_wolf_speaker_prompt)
         layout.addWidget(prompt_btn)
+
+        self._speaker_ai_help_banner = StatusBanner(
+            "How to use this: click Copy speaker-format audit, paste the copied instructions "
+            "into your AI helper with the extracted game files open, then set the checkbox "
+            "below to match its recommendation.",
+            "info",
+        )
+        layout.addWidget(self._speaker_ai_help_banner)
 
         cfg = wolf_speakers.load_config()
         self._speaker_lo_cb = QCheckBox(
@@ -3824,7 +3850,7 @@ class WolfWorkflowTab(QWidget):
         )
         name = short_names[idx] if 0 <= idx < len(short_names) else str(idx)
         mark = "✓" if done else ""
-        return f"{mark}{idx}\n{name}"
+        return f"{mark}{idx + 1}\n{name}"
 
     def _refresh_step_strip(self, current: int | None = None):
         if current is None:

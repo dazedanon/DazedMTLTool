@@ -35,8 +35,10 @@ Beginners can normally skip the optional **Prepare** step.
 
 ## 4. Set up names and writing style
 
-Go to Step 2 and click **Collect names** if it is available. Click **Copy setup skill**, paste the
-copied instructions into your AI helper, and wait for its answer.
+Go to Step 2 and click **Collect names** first so DazedTL can add recognized speakers to the
+Glossary. Then click **Copy setup instructions**, paste them into your AI helper, and wait for its
+answer. If the **speakers** part marks an extra option **ENABLE**, turn it on and click **Collect
+names** again.
 
 The answer is divided into labeled parts. Copy each part into its matching place in DazedTL, then
 save. The **Set Up Your AI Helper** page has a table showing where every label goes.

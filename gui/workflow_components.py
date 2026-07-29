@@ -128,6 +128,7 @@ class WorkflowStepRail(QWidget):
         self.title_label = title
 
         for index, label in enumerate(labels):
+            display_step = index + 1
             button = QPushButton()
             button.setObjectName("workflowStepButton")
             button.setCheckable(True)
@@ -136,12 +137,12 @@ class WorkflowStepRail(QWidget):
             button.setMinimumHeight(44)
             button.setCursor(Qt.PointingHandCursor)
             button.setProperty("stepState", "pending")
-            button.setAccessibleName(f"Step {index}: {label}")
+            button.setAccessibleName(f"Step {display_step}: {label}")
 
             button_row = QHBoxLayout(button)
             button_row.setContentsMargins(Spacing.MD, 0, Spacing.MD, 0)
             button_row.setSpacing(Spacing.MD)
-            number_label = QLabel(str(index))
+            number_label = QLabel(str(display_step))
             number_label.setObjectName("workflowStepNumber")
             number_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
             number_label.setFixedWidth(20)
@@ -313,9 +314,10 @@ class WorkflowStepRail(QWidget):
             text_label.setStyleSheet(
                 f"color:{color};font-size:12px;font-weight:{weight};background:transparent;"
             )
-            number_label.setText("✓" if complete else str(index))
+            display_step = index + 1
+            number_label.setText("✓" if complete else str(display_step))
             text_label.setText(label)
-            button.setToolTip(f"Step {index}: {label}")
+            button.setToolTip(f"Step {display_step}: {label}")
             if self._compact:
                 text_label.hide()
             else:

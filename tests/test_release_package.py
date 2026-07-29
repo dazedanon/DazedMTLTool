@@ -177,6 +177,31 @@ class ReleaseWorkflowButtonTests(unittest.TestCase):
                     "Build public release ZIP",
                 )
                 self.assertIn("GameUpdate", rpg._release_zip_btn.toolTip())
+                self.assertEqual(
+                    [label.text() for label in wolf._step_rail._number_labels],
+                    [str(index) for index in range(1, 11)],
+                )
+                self.assertTrue(
+                    rpg._step_tabs.widget(8).isAncestorOf(rpg._release_zip_btn)
+                )
+                self.assertFalse(
+                    rpg._step_tabs.widget(6).isAncestorOf(rpg._release_zip_btn)
+                )
+                rpg_ai_banners = (
+                    rpg.speaker_setup_hint,
+                    rpg._p2_ai_help_banner,
+                    rpg._plugin_ai_help_banner,
+                    rpg._qa_ai_help_banner,
+                )
+                wolf_ai_banners = (
+                    wolf._setup_ai_help_banner,
+                    wolf._database_ai_help_banner,
+                    wolf._speaker_ai_help_banner,
+                )
+                for banner in (*rpg_ai_banners, *wolf_ai_banners):
+                    self.assertIn("AI helper", banner.text_label.text())
+                for banner in wolf_ai_banners:
+                    self.assertIn("paste", banner.text_label.text().casefold())
             finally:
                 rpg.close()
                 wolf.close()

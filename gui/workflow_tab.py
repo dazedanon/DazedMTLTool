@@ -75,7 +75,7 @@ from gui.translation_tab import (
     BATCH_COLLECT_LIVE_CHARGE_NOTE,
     default_translation_mode,
 )
-from gui.ui_components import CheckableFileList
+from gui.ui_components import CheckableFileList, equalize_button_widths
 
 WORKFLOW_TL_NORMAL_LABEL = "Normal Translate"
 
@@ -86,9 +86,9 @@ _STEP_PURPOSES = {
     3: "Translate database and dialogue text, then build the variable cache.",
     4: "Translate audited variable, plugin, and script text only when required.",
     5: "Prepare plugin or script text and export reviewed translations to the game.",
-    6: "Rewrap exported text, run final QA, and build a public release.",
+    6: "Rewrap exported text and run the final game-data audit.",
     7: "Check image readiness, then continue in the Image Manager.",
-    8: "Configure and install the tools used to inspect the translation in-game.",
+    8: "Configure playtest tools, inspect the finished game, and build the public release.",
 }
 
 # ---------------------------------------------------------------------------
@@ -483,116 +483,129 @@ class _JsFormatWorker(QThread):
 # Per-step help copy shown by the header ? button (keeps step UIs compact).
 _STEP_HELP: dict[int, str] = {
     0: (
-        "<b>Step 0 - Project & Files</b><br><br>"
-        "Select the game root folder (the folder that contains the game's data files).<br><br>"
-        "The tool detects MV/MZ/Ace layout, lists JSON files, and lets you import them into "
-        "<code>files/</code> for translation.<br><br>"
-        "Tip: when switching games, clear <code>files/</code> and <code>translated/</code> "
-        "so old project data does not mix in."
+        "<b>Step 0 - Choose the game and its files</b><br><br>"
+        "<b>What to do</b><br>"
+        "1. Click <b>Choose game folder</b> and select the folder you normally open to play "
+        "the game.<br>"
+        "2. Check that the detected RPG Maker version and data folder look correct.<br>"
+        "3. Choose the files you want to translate. The default selection is suitable for "
+        "most games.<br>"
+        "4. Click <b>Import selected files</b>.<br><br>"
+        "Importing creates working copies for DazedTL. It does not change the game. When "
+        "switching to a different game, clear the previous working files when prompted so "
+        "the two projects do not get mixed together."
     ),
     1: (
-        "<b>Step 1 - Prepare Project (optional)</b><br><br>"
-        "Optional prep against the game folder before importing:<br>"
-        "• Format data JSON (<code>dazedformat</code>)<br>"
-        "• Format <code>plugins.js</code> (MV/MZ) for easier editing<br>"
-        "• Copy a <code>gameupdate/</code> folder into the project<br><br>"
-        "Paths auto-fill when a project folder is detected. "
-        "Skip this step if you do not need those tasks."
+        "<b>Step 1 - Prepare the project (optional)</b><br><br>"
+        "Most beginners can leave the detected paths alone.<br><br>"
+        "<b>What to do</b><br>"
+        "• Use <b>Format game data</b> to make the game's data files easier to inspect.<br>"
+        "• Use <b>Format plugins.js</b> to make the MV/MZ plugin list easier to read.<br>"
+        "• Use <b>Install GameUpdate</b> only when you want that patch helper in the game.<br>"
+        "• Or click <b>Run available tasks</b> to run every task that is ready.<br><br>"
+        "Unavailable tasks are skipped. You can also skip this entire step and continue."
     ),
     2: (
-        "<b>Step 2 - Speakers & Guidance</b><br><br>"
-        "<b>1. Speaker flags</b> - enable the formats this game uses "
-        "(INLINE401 / FIRSTLINE / FACENAME). Tooltips explain each flag. "
-        "Project Setup's speakers block can recommend ENABLE/SKIP.<br><br>"
-        "<b>2. Collect names</b> - scan event files for speaker names and add them to the "
-        "Glossary (<code>vocab.txt</code>, # Speakers). Does not translate dialogue.<br><br>"
-        "<b>3. Copy setup skill</b> - paste it into Cursor/Copilot with the game repo open. "
-        "The AI returns labeled code blocks:<br>"
-        "• <code>glossary</code> → Glossary tab<br>"
-        "• <code>speakers</code> → apply flags above<br>"
-        "• <code>translation_quirks</code> → Translation rules tab "
-        "(<code>skills/quirks.md</code>)<br>"
-        "• <code>game_skill</code> → Game guidance tab "
-        "(<code>skills/game.md</code> - Translation Frame, merged into the API prompt)<br><br>"
-        "• <code>rpgmaker_config</code> → apply the code-408 checkbox recommendation in "
-        "Phase 1 and the measured wrap widths in Step 3; review its font recommendations "
-        "against the game UI<br><br>"
-        "Optional: <b>+</b> on Game skills adds custom <code>skills/*.md</code> "
-        "overlays (also merged into the API prompt - can hurt quality; use sparingly).<br><br>"
-        "Use one game folder per translation run so frame/quirks stay in the prompt cache."
+        "<b>Step 2 - Set up speakers and game guidance</b><br><br>"
+        "<b>What to do (in order)</b><br>"
+        "1. Click <b>Collect names</b>. This finds likely speaker names and adds them to the "
+        "Glossary; it does not translate dialogue.<br>"
+        "2. Click <b>Copy setup instructions</b>, paste them into your AI helper, and let it "
+        "inspect the game folder.<br>"
+        "3. Turn on a speaker option only when the helper marks it <b>ENABLE</b>. Many games "
+        "need no extra options.<br>"
+        "4. If you enabled an option, click <b>Collect names</b> again.<br>"
+        "5. Put each labeled result into its matching tab: <b>Glossary</b>, "
+        "<b>Translation quirks</b>, or <b>Game skill</b>, then save it.<br><br>"
+        "Keep the Glossary short and useful. Character names, places, and recurring terms "
+        "belong there; long general instructions do not."
     ),
     3: (
-        "<b>Step 3 - Translation · Phase 1</b><br><br>"
-        "Safe dialogue / database translation.<br><br>"
-        "• Apply Project Setup's measured dialogue, list/help, and note wrap widths<br>"
-        "• Set the code-408 checkbox from Project Setup's runtime/plugin evidence<br>"
-        "• <b>Translate database</b> - database names, descriptions, and notes<br>"
-        "• <b>Translate dialogue</b> - messages and choices<br>"
-        "• <b>Build variable cache</b> - code 111 comparisons used by Phase 2<br><br>"
-        "Choose Normal or Batch mode at the top. Run each phase from the Translation tab "
-        "after the workflow applies the phase profile."
+        "<b>Step 3 - Translate the main game text</b><br><br>"
+        "<b>What to do</b><br>"
+        "1. Leave <b>Normal Translate</b> selected unless you already know you want Batch "
+        "Translate.<br>"
+        "2. Enter the line widths recommended by the setup helper and click "
+        "<b>Save line widths</b>.<br>"
+        "3. Click <b>Translate database</b> for item names, descriptions, and other menu "
+        "text.<br>"
+        "4. Click <b>Translate dialogue</b> for conversations and choices.<br>"
+        "5. Click <b>Build variable cache</b> before continuing to Phase 2.<br><br>"
+        "Leave <b>Include displayed comment text</b> off unless the setup helper specifically "
+        "says this game displays that text. Each translation button opens the Translation "
+        "page and starts the matching work."
     ),
     4: (
-        "<b>Step 4 - Translation · Phase 2</b><br><br>"
-        "Risky / plugin-related codes (variables, plugin commands, etc.).<br><br>"
-        "Copy the advanced-text audit and inspect the game first, then enable only sources that "
-        "contain player-visible text. Set code 122 variable ID ranges carefully - "
-        "translating IDs used as logic keys will break the game."
+        "<b>Step 4 - Translate unusual text sources</b><br><br>"
+        "This step is optional. Most games do not need every choice shown here.<br><br>"
+        "<b>What to do</b><br>"
+        "1. Click <b>Copy advanced-text audit</b> and paste it into your AI helper with the "
+        "game folder open.<br>"
+        "2. Enable only the text sources the helper confirms are visible to players.<br>"
+        "3. If it recommends plugin or script text, open <b>Advanced plugin and script "
+        "filters</b> and select only the confirmed entries.<br>"
+        "4. Click <b>Translate selected text</b>.<br><br>"
+        "If the audit does not identify extra player-visible text, leave everything off and "
+        "continue. Guessing here can change text the game uses internally."
     ),
     5: (
-        "<b>Step 5 - Export to Game</b><br><br>"
-        "<b>MV/MZ - Plugins</b> (optional before shipping): copy the Glossary "
-        "(<code>vocab.txt</code>) into "
-        "the game folder, then copy the plugins.js prompt and run it in your IDE with "
-        "<code>plugins.js</code> attached. Only translate player-visible UI strings - never "
-        "plugin parameter keys or internal identifiers.<br><br>"
-        "<b>Ace - Ruby scripts</b> (instead of plugins.js): RV2JSON unpacks "
-        "<code>Data/Scripts.rvdata2</code> into <code>ace_json/scripts/*.rb</code>. "
-        "Copy the Glossary + the Ace scripts prompt, edit those <code>.rb</code> files in Cursor/VS Code "
-        "the same way you would edit plugins.js (player-visible strings only). "
-        "Then use <b>Export</b> - the tool runs <code>RV2JSON -u</code> and packs "
-        "<code>ace_json/</code> (including scripts) back into <code>Data/*.rvdata2</code>.<br><br>"
-        "<b>Export</b> - copy finished translations from <code>translated/</code> back "
-        "into the game's data folder:<br>"
-        "• <b>Export selected files</b> - only names currently in <code>files/</code><br>"
-        "• <b>Export all translated files</b> - everything under <code>translated/</code><br>"
-        "• Continue to Step 6 to rewrap and QA the exported game data"
+        "<b>Step 5 - Put translated text into the game</b><br><br>"
+        "<b>What to do</b><br>There are two different jobs on this page:<br><br>"
+        "<b>Plugin or script text</b><br>"
+        "1. Click <b>Copy glossary to game</b> once.<br>"
+        "2. Copy the plugin or Ruby translation skill and paste it into your AI helper.<br>"
+        "3. Review the proposed changes. The helper edits approved plugin or script files "
+        "directly inside the game folder, so these changes do not need the Export buttons.<br><br>"
+        "<b>Main translated game data</b><br>"
+        "• <b>Export selected files</b> writes only the files chosen in Step 0 into the game.<br>"
+        "• <b>Export all translated files</b> writes every completed translation into the "
+        "game.<br><br>"
+        "Use <b>Export selected files</b> unless you intentionally translated additional files. "
+        "Exporting is the first point where DazedTL replaces game data, so keep a backup or "
+        "use Git before continuing."
     ),
     6: (
-        "<b>Step 6 - Rewrap & Release</b><br><br>"
-        "Reflow English directly in the game data folder detected by Step 0 without calling "
-        "the translation model or changing <code>_original</code>.<br><br>"
-        "Export in Step 5 first. Then choose any combination of Dialogue, Dialogue + Face, "
-        "List/Help, and Notes. Select individual maps/database files or use the scope presets, "
-        "and optionally restrict recognized event fields by code.<br><br>"
-        "Run <b>Preview rewrap</b> first. Optional row protection applies to rewrapped fields "
-        "other than code 401. Code-401 commands are never row-blocked; "
-        "they are preserved and wrapping uses newlines inside their existing text values. "
-        "Standard code-101 faces automatically use the face width. Run QA after applying the "
-        "reviewed changes.<br><br>"
-        "<b>Build public release ZIP</b> packages the complete reviewed game beside its folder "
-        "while omitting translator workspaces, VCS metadata, documentation, backups, saves, "
-        "and other tool artifacts. GameUpdate files and all installed plugins are kept."
+        "<b>Step 6 - Fix line wrapping and run final text checks</b><br><br>"
+        "Complete Export in Step 5 before using this page.<br><br>"
+        "<b>What to do</b><br>"
+        "1. Choose which game-data files and kinds of text to check. The presets are enough "
+        "for most games.<br>"
+        "2. Confirm the saved line widths. Open the advanced choices only when you need a "
+        "special limit.<br>"
+        "3. Click <b>Preview rewrap</b>. This shows proposed line-break changes without saving "
+        "them.<br>"
+        "4. Review the results, then click <b>Apply rewrap</b>.<br>"
+        "5. Click <b>Copy final QA skill</b>, paste it into your AI helper, and fix the problems "
+        "it reports.<br><br>"
+        "Continue through Images and Playtest before building the public release."
     ),
     7: (
-        "<b>Step 7 - Translate Images (MV/MZ)</b><br><br>"
-        "Use the existing <b>Images</b> page for bitmap UI translation:<br>"
-        "• Confirm this step reports the correct game root, image tree, encryption key, and "
-        "Glossary (<code>vocab.txt</code>)<br>"
-        "• Open the Image Manager and make the images you want to translate editable<br>"
-        "• Click <b>Copy skill</b>, paste it into Codex/Cursor/Copilot, and let the agent edit "
-        "only the generated <code>.dazedtl/images/.../img</code> copies<br>"
-        "• Review the results, then use <b>Patch selected</b> or <b>Patch all</b><br><br>"
-        "Editable PNGs must preserve the same <code>img/...</code> hierarchy as the game. "
-        "This step warns when PNGs were placed elsewhere in the workspace."
+        "<b>Step 7 - Translate text inside images</b><br><br>"
+        "This guided image step is available for MV/MZ games.<br><br>"
+        "<b>What to do</b><br>"
+        "1. Click <b>Refresh readiness</b> and resolve any warning it shows.<br>"
+        "2. Click <b>Open Image Manager</b>.<br>"
+        "3. Make the images you want to translate editable.<br>"
+        "4. Click <b>Copy skill</b> in Image Manager and paste it into your AI helper.<br>"
+        "5. Review every edited image, then use <b>Patch selected</b> or <b>Patch all</b> to "
+        "put approved images back into the game.<br><br>"
+        "The image skill uses the Glossary already copied to the game in Step 5. It edits "
+        "working PNG copies first, not the game's original image files."
     ),
     8: (
-        "<b>Step 8 - Playtest</b><br><br>"
-        "Install playtest plugins into the MV/MZ game:<br>"
-        "• <b>TL Inspector</b> - inspect translated text in-game<br>"
-        "• <b>Forge</b> - additional playtest helpers<br><br>"
-        "Configure hotkeys and overlay scale, save defaults, then install or remove plugins as needed. "
-        "Not available for Ace projects."
+        "<b>Step 8 - Playtest and build the release</b><br><br>"
+        "This page is available for MV/MZ games.<br><br>"
+        "<b>What to do</b><br>"
+        "1. Choose the hotkeys and screen size for the playtest tools, then click "
+        "<b>Save defaults</b>.<br>"
+        "2. Install <b>TL Inspector</b>, <b>Forge</b>, or both.<br>"
+        "3. Launch the game and verify that the tools open with the chosen hotkeys.<br>"
+        "4. Play through the translated game. Check dialogue, menus, choices, images, and "
+        "important scenes.<br>"
+        "5. Fix anything you find and repeat the relevant checks.<br>"
+        "6. When the game is ready to share, click <b>Build public release ZIP</b>.<br><br>"
+        "Building the ZIP is the final workflow action. It leaves the game folder unchanged "
+        "and leaves translator workspaces, Git files, backups, and saves out of the ZIP."
     ),
 }
 
@@ -717,12 +730,12 @@ def _equalize_action_buttons(
 ) -> None:
     """Give related actions the same footprint and baseline."""
     for button in buttons:
-        _size_action_button(
-            button,
-            width,
-            expanding=True,
-            maximum=maximum,
-        )
+        button.setMinimumHeight(Geometry.CONTROL)
+    equalize_button_widths(
+        buttons,
+        minimum=width,
+        maximum=maximum if maximum is not None else Geometry.ACTION_MAX,
+    )
 
 
 def _make_form_label(text: str, width: int = Geometry.FORM_LABEL) -> QLabel:
@@ -1091,7 +1104,7 @@ class WorkflowTab(QWidget):
         )
         name = short_names[idx] if 0 <= idx < len(short_names) else str(idx)
         mark = "✓" if done else ""
-        return f"{mark}{idx}\n{name}"
+        return f"{mark}{idx + 1}\n{name}"
 
     def _refresh_step_strip(self, current: int | None = None):
         if current is None:
@@ -1365,7 +1378,6 @@ class WorkflowTab(QWidget):
         ta_btn_row = QHBoxLayout()
         run_dazed = _make_btn("►  Format game data", "#555")
         run_dazed.setToolTip("Normalize the detected game-data JSON with dazedformat")
-        _size_action_button(run_dazed, Geometry.ACTION_WIDE)
         run_dazed.clicked.connect(self._run_dazedformat)
         ta_btn_row.addWidget(run_dazed)
         ta_btn_row.addStretch()
@@ -1394,7 +1406,6 @@ class WorkflowTab(QWidget):
         tb_btn_row = QHBoxLayout()
         run_prettier = _make_btn("►  Format plugins.js", "#555")
         run_prettier.setToolTip("Format the selected plugins.js file for review")
-        _size_action_button(run_prettier, Geometry.ACTION_WIDE)
         run_prettier.clicked.connect(self._run_prettier)
         tb_btn_row.addWidget(run_prettier)
         tb_btn_row.addStretch()
@@ -1431,24 +1442,60 @@ class WorkflowTab(QWidget):
         tc_btn_row.setSpacing(Spacing.SM)
         run_gu = _make_btn("►  Install GameUpdate", "#555")
         run_gu.setToolTip("Copy GameUpdate into the selected game folder")
-        _size_action_button(run_gu, Geometry.ACTION_WIDE)
         run_gu.clicked.connect(self._run_gameupdate)
         tc_btn_row.addWidget(run_gu)
-        run_all_btn = _make_btn("►►  Run available tasks", "#0e639c")
-        _size_action_button(run_all_btn, Geometry.ACTION_WIDE)
-        run_all_btn.setToolTip("Run each preparation task whose required path is available")
-        run_all_btn.clicked.connect(self._run_all_preprocess)
-        _equalize_action_buttons(
-            run_gu,
-            run_all_btn,
-            width=Geometry.ACTION_WIDE,
-        )
-        tc_btn_row.addWidget(run_all_btn)
-        tc_btn_row.setStretch(0, 1)
-        tc_btn_row.setStretch(1, 1)
         tc_btn_row.addStretch()
         tc_inner.addLayout(tc_btn_row)
         tb.addWidget(tc)
+
+        # Keep the page-wide action separate from the final task. It applies to
+        # every card above, so placing it in the GameUpdate card made it look
+        # like part of that one task.
+        self.pp_run_all_bar = QFrame()
+        self.pp_run_all_bar.setObjectName("preprocessRunAllBar")
+        self.pp_run_all_bar.setStyleSheet(
+            f"QFrame#preprocessRunAllBar{{background:{COLORS.surface_1};"
+            f"border:1px solid {COLORS.border};border-radius:6px;}}"
+            f"QFrame#preprocessRunAllBar QLabel{{background:transparent;border:none;}}"
+        )
+        run_all_layout = QHBoxLayout(self.pp_run_all_bar)
+        run_all_layout.setContentsMargins(Spacing.MD, Spacing.SM, Spacing.MD, Spacing.SM)
+        run_all_layout.setSpacing(Spacing.MD)
+
+        run_all_copy = QVBoxLayout()
+        run_all_copy.setSpacing(Spacing.XS)
+        run_all_title = QLabel("Run all preparation tasks")
+        run_all_title.setStyleSheet(
+            f"color:{COLORS.text_primary};font-size:13px;font-weight:600;"
+        )
+        run_all_copy.addWidget(run_all_title)
+        run_all_hint = QLabel("Runs each task above when its required file or folder is available.")
+        run_all_hint.setStyleSheet(f"color:{COLORS.text_muted};font-size:12px;")
+        run_all_hint.setWordWrap(True)
+        run_all_copy.addWidget(run_all_hint)
+        run_all_layout.addLayout(run_all_copy, 1)
+
+        run_all_btn = _make_btn("►►  Run available tasks", "#0e639c")
+        run_all_btn.setToolTip("Run each preparation task whose required path is available")
+        run_all_btn.clicked.connect(self._run_all_preprocess)
+        equalize_button_widths(
+            (
+                run_dazed,
+                run_prettier,
+                run_gu,
+                run_all_btn,
+            ),
+            minimum=Geometry.ACTION_WIDE,
+            maximum=Geometry.ACTION_WIDE,
+        )
+        self.pp_preprocess_action_buttons = (
+            run_dazed,
+            run_prettier,
+            run_gu,
+            run_all_btn,
+        )
+        run_all_layout.addWidget(run_all_btn)
+        collapse_layout.addWidget(self.pp_run_all_bar)
 
         layout.addWidget(collapse_widget)
 
@@ -1526,58 +1573,94 @@ class WorkflowTab(QWidget):
         speaker_stage = WorkflowStageCard(
             2,
             "Configure speakers and generate project context",
-            "Enable only the speaker formats used by this game, then collect names and generate guidance.",
+            "Collect recognized names first, then ask your AI helper whether this game needs any extra speaker formats.",
         )
 
-        flags_label = QLabel("SPEAKER DETECTION")
+        self.speaker_setup_hint = StatusBanner(
+            "Always start with “1  Collect names” so recognized speakers are added to the "
+            "Glossary. Next, run the setup instructions with your AI helper. If it marks an "
+            "option ENABLE, turn that option on and collect names again. Many games need none.",
+            "info",
+        )
+        speaker_stage.add_widget(self.speaker_setup_hint)
+
+        flags_label = QLabel("SPEAKER NAME FORMATS")
         flags_label.setObjectName("workflowFieldCaption")
         speaker_stage.add_widget(flags_label)
         flags_grid = QGridLayout()
         flags_grid.setContentsMargins(0, 0, 0, 0)
-        flags_grid.setHorizontalSpacing(Spacing.LG)
+        flags_grid.setHorizontalSpacing(Spacing.MD)
         flags_grid.setVerticalSpacing(Spacing.SM)
 
-        self.spk_inline_cb = QCheckBox("Name embedded in dialogue")
-        self.spk_inline_cb.setToolTip("INLINE401SPEAKERS · speaker name inline before 「 in 401 text")
+        self.spk_inline_cb = QCheckBox("Name is attached to the dialogue")
+        self.spk_inline_cb.setToolTip(
+            "Turn this on only when the setup helper says INLINE401SPEAKERS: ENABLE. "
+            "Use it when the speaker's name touches the beginning of the dialogue."
+        )
         self.spk_inline_cb.stateChanged.connect(self._apply_speaker_flags)
         flags_grid.addWidget(self.spk_inline_cb, 0, 0)
+        inline_example = QLabel(
+            "Example: エレナ「…」  ·  Helper says INLINE401SPEAKERS: ENABLE"
+        )
+        inline_example.setWordWrap(True)
+        inline_example.setStyleSheet(f"color:{COLORS.text_muted};font-size:12px;")
+        flags_grid.addWidget(inline_example, 0, 1)
 
-        self.spk_firstline_cb = QCheckBox("Name on first dialogue line")
-        self.spk_firstline_cb.setToolTip("FIRSTLINESPEAKERS · first 401 line is a short speaker name")
+        self.spk_firstline_cb = QCheckBox("Name is alone on the first dialogue line")
+        self.spk_firstline_cb.setToolTip(
+            "Turn this on only when the setup helper says FIRSTLINESPEAKERS: ENABLE. "
+            "Use it when a short speaker name is on its own line above the dialogue."
+        )
         self.spk_firstline_cb.stateChanged.connect(self._apply_speaker_flags)
-        flags_grid.addWidget(self.spk_firstline_cb, 0, 1)
+        flags_grid.addWidget(self.spk_firstline_cb, 1, 0)
+        firstline_example = QLabel(
+            "Example: the first line contains only エレナ  ·  Helper says FIRSTLINESPEAKERS: ENABLE"
+        )
+        firstline_example.setWordWrap(True)
+        firstline_example.setStyleSheet(f"color:{COLORS.text_muted};font-size:12px;")
+        flags_grid.addWidget(firstline_example, 1, 1)
 
-        self.spk_face_cb = QCheckBox("Infer name from face filename")
-        self.spk_face_cb.setToolTip("FACENAME101 · speaker inferred from 101 face-image filename")
+        self.spk_face_cb = QCheckBox("Use the face image's filename")
+        self.spk_face_cb.setToolTip(
+            "Turn this on only when the setup helper says FACENAME101: ENABLE. "
+            "This last-resort option guesses the speaker from the face picture's filename."
+        )
         self.spk_face_cb.stateChanged.connect(self._apply_speaker_flags)
-        flags_grid.addWidget(self.spk_face_cb, 0, 2)
-        for column in range(3):
-            flags_grid.setColumnStretch(column, 1)
+        flags_grid.addWidget(self.spk_face_cb, 2, 0)
+        face_example = QLabel(
+            "Last resort only  ·  Helper says FACENAME101: ENABLE"
+        )
+        face_example.setWordWrap(True)
+        face_example.setStyleSheet(f"color:{COLORS.text_muted};font-size:12px;")
+        flags_grid.addWidget(face_example, 2, 1)
+        flags_grid.setColumnStretch(0, 2)
+        flags_grid.setColumnStretch(1, 3)
         speaker_stage.add_layout(flags_grid)
 
         context_actions = QHBoxLayout()
         context_actions.setSpacing(Spacing.SM)
 
-        parse_btn = _make_btn("🔍  Collect names", "#0e639c")
-        parse_btn.setToolTip(
-            "Collect speaker names from event files into the Glossary's # Speakers section "
-            "(no dialogue translation)."
+        self.speaker_collect_names_btn = _make_btn("🔍  1  Collect names", "#0e639c")
+        self.speaker_collect_names_btn.setToolTip(
+            "Start here. Collect recognized speaker names from event files into the "
+            "Glossary's # Speakers section. Run this again if you later enable an extra format."
         )
-        parse_btn.clicked.connect(self._run_parse_speakers)
-        context_actions.addWidget(parse_btn, 1)
+        self.speaker_collect_names_btn.clicked.connect(self._run_parse_speakers)
+        context_actions.addWidget(self.speaker_collect_names_btn, 1)
 
-        copy_btn = _make_btn("📋  Copy setup skill", "#555")
-        copy_btn.setToolTip(
-            "Clipboard skill for the game repo IDE. Returns glossary, speakers, "
+        self.speaker_copy_setup_btn = _make_btn("📋  2  Copy setup instructions", "#555")
+        self.speaker_copy_setup_btn.setToolTip(
+            "After collecting names, paste these instructions into the AI helper with the game "
+            "folder open. It will recommend any extra speaker options and return glossary, "
             "translation_quirks, game_skill, and RPG Maker configuration recommendations."
         )
-        copy_btn.clicked.connect(self._copy_project_setup_prompt)
+        self.speaker_copy_setup_btn.clicked.connect(self._copy_project_setup_prompt)
         _equalize_action_buttons(
-            parse_btn,
-            copy_btn,
+            self.speaker_collect_names_btn,
+            self.speaker_copy_setup_btn,
             width=Geometry.ACTION_WIDE,
         )
-        context_actions.addWidget(copy_btn, 1)
+        context_actions.addWidget(self.speaker_copy_setup_btn, 1)
         context_actions.addStretch()
         speaker_stage.add_layout(context_actions)
         setup_workspace_layout.addWidget(speaker_stage, 3, Qt.AlignTop)
@@ -1586,8 +1669,8 @@ class WorkflowTab(QWidget):
 
         guidance_stage = WorkflowStageCard(
             3,
-            "Edit glossary and project guidance",
-            "Keep the Glossary concise, record translation rules, and review the generated game guidance.",
+            "Edit glossary, translation quirks, and game skill",
+            "Keep the Glossary concise, record translation quirks, and review the generated game skill.",
         )
         self.setup_editors = SetupSkillsEditors(
             self,
@@ -1887,6 +1970,16 @@ class WorkflowTab(QWidget):
         p1b_row.addStretch()
         p1b_inner.addLayout(p1b_row)
         layout.addWidget(p1b_box)
+        equalize_button_widths(
+            (
+                apply_wrap_btn,
+                self._run_p0_btn,
+                self._run_p1_btn,
+                self._run_p1b_btn,
+            ),
+            minimum=Geometry.ACTION_WIDE,
+            maximum=Geometry.ACTION_WIDE,
+        )
 
     def _build_step5_tl_phase2(self, layout: QVBoxLayout):
 
@@ -1931,56 +2024,15 @@ class WorkflowTab(QWidget):
         copy_risky_btn.clicked.connect(self._copy_plugin_prompt)
         pre_top.addWidget(copy_risky_btn)
         pre_inner.addLayout(pre_top)
-
-        # Divider line
-        div = QFrame()
-        div.setFrameShape(QFrame.HLine)
-        div.setStyleSheet("QFrame{background-color:#45454a;border:none;max-height:1px;}")
-        pre_inner.addWidget(div)
-
-        # Code 122 var range row
-        var_row = QHBoxLayout()
-        var_row.setSpacing(Spacing.SM)
-        var_lbl = _make_form_label("Variable IDs:")
-        var_row.addWidget(var_lbl)
-        from PyQt5.QtGui import QIntValidator
-        self._p2_var_min = QLineEdit("0")
-        self._p2_var_min.setValidator(QIntValidator(0, 99999))
-        self._p2_var_min.setFixedWidth(88)
-        self._p2_var_min.setAlignment(Qt.AlignCenter)
-        self._p2_var_min.setToolTip("Minimum variable ID to translate (inclusive)")
-        var_row.addWidget(self._p2_var_min)
-        dash_lbl = QLabel("–")
-        dash_lbl.setStyleSheet("color:#a6a6a6;")
-        var_row.addWidget(dash_lbl)
-        self._p2_var_max = QLineEdit("2000")
-        self._p2_var_max.setValidator(QIntValidator(1, 99999))
-        self._p2_var_max.setFixedWidth(88)
-        self._p2_var_max.setAlignment(Qt.AlignCenter)
-        self._p2_var_max.setToolTip("Maximum variable ID to translate (exclusive)")
-        var_row.addWidget(self._p2_var_max)
-        apply_range_btn = _make_btn("Save range", "#45454a")
-        _size_action_button(apply_range_btn, Geometry.FIELD_COMPACT)
-        apply_range_btn.setToolTip("Write CODE122_VAR_MIN / CODE122_VAR_MAX to the module")
-        apply_range_btn.clicked.connect(self._apply_var_range)
-        var_row.addWidget(apply_range_btn)
-        self._p2_var_min.editingFinished.connect(self._schedule_p2_config_apply)
-        self._p2_var_max.editingFinished.connect(self._schedule_p2_config_apply)
-        var_row.addStretch()
-        pre_inner.addLayout(var_row)
+        self._p2_ai_help_banner = StatusBanner(
+            "How to use this: click Copy advanced-text audit, paste the copied instructions "
+            "into your AI helper with the game folder open, then return here and enable only "
+            "the text sources it confirms are used by players.",
+            "info",
+        )
+        pre_inner.addWidget(self._p2_ai_help_banner)
         audit_stage.add_widget(pre_box)
         layout.addWidget(audit_stage)
-
-        # Pre-populate range
-        try:
-            from gui.config_integration import ConfigIntegration
-            cur = ConfigIntegration().read_current_config()
-            if "CODE122_VAR_MIN" in cur:
-                self._p2_var_min.setText(str(cur["CODE122_VAR_MIN"]))
-            if "CODE122_VAR_MAX" in cur:
-                self._p2_var_max.setText(str(cur["CODE122_VAR_MAX"]))
-        except Exception:
-            pass
 
         # ── Code toggles ───────────────────────────────────────────────────
         codes_stage = WorkflowStageCard(
@@ -1993,18 +2045,14 @@ class WorkflowTab(QWidget):
         codes_title_lbl.setStyleSheet("color:#f2f2f2;font-size:13px;font-weight:bold;")
         codes_hdr.addWidget(codes_title_lbl)
         codes_hdr.addStretch()
-        codes_select_all_btn = QPushButton("☑")
-        codes_select_all_btn.setCheckable(True)
-        codes_select_all_btn.setFixedSize(32, 32)
-        codes_select_all_btn.setStyleSheet(
-            "QPushButton{background:transparent;color:#a6a6a6;border:none;"
-            "font-size:18px;padding:0 2px;min-width:32px;max-width:32px;"
-            "min-height:32px;max-height:32px;}"
-            "QPushButton:hover{color:#c8c8c8;}"
-            "QPushButton:checked{color:#0e639c;}"
+        clear_codes_btn = _make_btn("Clear selections", "#555")
+        _size_action_button(
+            clear_codes_btn,
+            Geometry.FIELD_COMPACT,
+            maximum=160,
         )
-        codes_select_all_btn.setToolTip("Toggle all event command types")
-        codes_hdr.addWidget(codes_select_all_btn)
+        clear_codes_btn.setToolTip("Turn off every advanced event command type")
+        codes_hdr.addWidget(clear_codes_btn)
         codes_stage.add_layout(codes_hdr)
 
         toggle_box = QWidget()
@@ -2035,7 +2083,10 @@ class WorkflowTab(QWidget):
         for idx, (code_key, label, tip) in enumerate(_P2_CODE_DEFS):
             cb = QCheckBox(label)
             cb.setToolTip(tip)
-            cb.setStyleSheet("color:#c8c8c8;font-size:13px;")
+            cb.setStyleSheet(
+                f"QCheckBox{{color:{COLORS.text_secondary};font-size:13px;}}"
+                f"QCheckBox:disabled{{color:{COLORS.text_disabled};}}"
+            )
             toggle_grid.addWidget(cb, idx // 3, idx % 3)
             cb.stateChanged.connect(self._schedule_p2_config_apply)
             self._p2_code_checks[code_key] = cb
@@ -2043,44 +2094,98 @@ class WorkflowTab(QWidget):
             toggle_grid.setColumnStretch(column, 1)
         toggle_box_layout.addWidget(toggle_grid_container)
 
-        def _toggle_codes(checked):
-            codes_select_all_btn.setText("☑" if checked else "☐")
+        def _clear_codes():
             for cb in self._p2_code_checks.values():
-                cb.setChecked(checked)
-        codes_select_all_btn.toggled.connect(_toggle_codes)
+                cb.setChecked(False)
+        clear_codes_btn.clicked.connect(_clear_codes)
         codes_stage.add_widget(toggle_box)
+
+        # Code 122 owns the variable range. Keeping this control beside its
+        # parent checkbox makes the dependency visible and allows the entire
+        # row to disable when Variables (122) is off.
+        self._p2_var_range_box = QFrame()
+        self._p2_var_range_box.setObjectName("phase2VariableRange")
+        self._p2_var_range_box.setStyleSheet(
+            f"QFrame#phase2VariableRange{{background:{COLORS.chrome};"
+            f"border:1px solid {COLORS.border};border-radius:4px;}}"
+            f"QFrame#phase2VariableRange QLabel{{background:transparent;border:none;}}"
+        )
+        var_row = QHBoxLayout(self._p2_var_range_box)
+        var_row.setContentsMargins(Spacing.MD, Spacing.SM, Spacing.MD, Spacing.SM)
+        var_row.setSpacing(Spacing.SM)
+        var_lbl = _make_form_label("Variable IDs:")
+        var_row.addWidget(var_lbl)
+        from PyQt5.QtGui import QIntValidator
+        self._p2_var_min = QLineEdit("0")
+        self._p2_var_min.setValidator(QIntValidator(0, 99999))
+        self._p2_var_min.setFixedWidth(88)
+        self._p2_var_min.setAlignment(Qt.AlignCenter)
+        self._p2_var_min.setToolTip("Minimum variable ID to translate (inclusive)")
+        var_row.addWidget(self._p2_var_min)
+        dash_lbl = QLabel("–")
+        dash_lbl.setStyleSheet("color:#a6a6a6;")
+        var_row.addWidget(dash_lbl)
+        self._p2_var_max = QLineEdit("2000")
+        self._p2_var_max.setValidator(QIntValidator(1, 99999))
+        self._p2_var_max.setFixedWidth(88)
+        self._p2_var_max.setAlignment(Qt.AlignCenter)
+        self._p2_var_max.setToolTip("Maximum variable ID to translate (exclusive)")
+        var_row.addWidget(self._p2_var_max)
+        apply_range_btn = _make_btn("Save range", "#45454a")
+        _size_action_button(apply_range_btn, Geometry.FIELD_COMPACT, maximum=160)
+        apply_range_btn.setToolTip("Save the variable range used by Variables (122)")
+        apply_range_btn.clicked.connect(self._apply_var_range)
+        var_row.addWidget(apply_range_btn)
+        self._p2_var_min.editingFinished.connect(self._schedule_p2_config_apply)
+        self._p2_var_max.editingFinished.connect(self._schedule_p2_config_apply)
+        var_hint = QLabel("Available only when Variables (122) is enabled.")
+        var_hint.setWordWrap(True)
+        var_hint.setStyleSheet(f"color:{COLORS.text_muted};font-size:12px;")
+        var_row.addWidget(var_hint, 1)
+        codes_stage.add_widget(self._p2_var_range_box)
 
         # ── 357 plugins + 355/655 patterns — side by side ──────────────────
         lists_container = QWidget()
         lists_container.setObjectName("phase2AdvancedLists")
+        lists_container.setStyleSheet(
+            "QWidget#phase2AdvancedLists{background:transparent;}"
+        )
         lists_row = QHBoxLayout(lists_container)
         lists_row.setContentsMargins(0, 0, 0, 0)
         lists_row.setSpacing(Spacing.SM)
 
-        _icon_btn_style = (
-            "QPushButton{background:transparent;color:#a6a6a6;border:none;"
-            "font-size:18px;padding:0 2px;min-width:32px;max-width:32px;"
-            "min-height:32px;max-height:32px;}"
-            "QPushButton:hover{color:#c8c8c8;}"
-            "QPushButton:checked{color:#0e639c;}"
-        )
-
         # Left column: header row + group box
-        left_col = QVBoxLayout()
+        self._p2_plugin_filter_group = QWidget()
+        self._p2_plugin_filter_group.setObjectName("phase2PluginFilters")
+        self._p2_plugin_filter_group.setStyleSheet(
+            "QWidget#phase2PluginFilters{background:transparent;}"
+        )
+        left_col = QVBoxLayout(self._p2_plugin_filter_group)
+        left_col.setContentsMargins(0, 0, 0, 0)
         left_col.setSpacing(Spacing.XS)
 
         plugin357_hdr = QHBoxLayout()
-        plugin357_title_lbl = QLabel("MZ plugin handlers (code 357)")
+        plugin357_title_lbl = QLabel("MZ plugin command filters")
         plugin357_title_lbl.setStyleSheet("color:#f2f2f2;font-size:13px;font-weight:bold;")
         plugin357_hdr.addWidget(plugin357_title_lbl)
         plugin357_hdr.addStretch()
-        plugin357_select_all_btn = QPushButton("☑")
-        plugin357_select_all_btn.setCheckable(True)
-        plugin357_select_all_btn.setFixedSize(32, 32)
-        plugin357_select_all_btn.setStyleSheet(_icon_btn_style)
-        plugin357_select_all_btn.setToolTip("Toggle all MZ plugin handlers")
-        plugin357_hdr.addWidget(plugin357_select_all_btn)
+        clear_plugins357_btn = _make_btn("Clear handlers", "#555")
+        _size_action_button(
+            clear_plugins357_btn,
+            Geometry.FIELD_COMPACT,
+            maximum=160,
+        )
+        clear_plugins357_btn.setToolTip("Turn off every MZ plugin handler")
+        plugin357_hdr.addWidget(clear_plugins357_btn)
         left_col.addLayout(plugin357_hdr)
+        plugin357_caption = QLabel(
+            "Used only when MZ plugin commands (357) is enabled above."
+        )
+        plugin357_caption.setWordWrap(True)
+        plugin357_caption.setStyleSheet(
+            f"color:{COLORS.text_muted};font-size:12px;background:transparent;"
+        )
+        left_col.addWidget(plugin357_caption)
 
         plugin357_box = QWidget()
         plugin357_box.setObjectName("cbbox")
@@ -2098,7 +2203,10 @@ class WorkflowTab(QWidget):
             from modules.rpgmakermvmz import HEADER_MAPPINGS_357 as _HM357
             for key in sorted(_HM357.keys(), key=str.casefold):
                 cb = QCheckBox(key)
-                cb.setStyleSheet("color:#c8c8c8;font-size:13px;")
+                cb.setStyleSheet(
+                    f"QCheckBox{{color:{COLORS.text_secondary};font-size:13px;}}"
+                    f"QCheckBox:disabled{{color:{COLORS.text_disabled};}}"
+                )
                 cb.stateChanged.connect(self._schedule_p2_config_apply)
                 plugin357_vbox.addWidget(cb)
                 self._p2_plugin_checks[key] = cb
@@ -2114,31 +2222,46 @@ class WorkflowTab(QWidget):
         plugin357_inner.addWidget(plugin357_scroll, 1)
         plugin357_box.setMaximumHeight(260)
 
-        def _toggle_plugins357(checked):
-            plugin357_select_all_btn.setText("☑" if checked else "☐")
+        def _clear_plugins357():
             for cb in self._p2_plugin_checks.values():
-                cb.setChecked(checked)
-        plugin357_select_all_btn.toggled.connect(_toggle_plugins357)
+                cb.setChecked(False)
+        clear_plugins357_btn.clicked.connect(_clear_plugins357)
 
         left_col.addWidget(plugin357_box, 1)
-        lists_row.addLayout(left_col, 1)
+        lists_row.addWidget(self._p2_plugin_filter_group, 1)
 
         # Right column: header row + group box
-        right_col = QVBoxLayout()
+        self._p2_pattern_filter_group = QWidget()
+        self._p2_pattern_filter_group.setObjectName("phase2ScriptFilters")
+        self._p2_pattern_filter_group.setStyleSheet(
+            "QWidget#phase2ScriptFilters{background:transparent;}"
+        )
+        right_col = QVBoxLayout(self._p2_pattern_filter_group)
+        right_col.setContentsMargins(0, 0, 0, 0)
         right_col.setSpacing(Spacing.XS)
 
         patterns_hdr = QHBoxLayout()
-        patterns_title_lbl = QLabel("Script patterns (codes 355/655)")
+        patterns_title_lbl = QLabel("Script text filters")
         patterns_title_lbl.setStyleSheet("color:#f2f2f2;font-size:13px;font-weight:bold;")
         patterns_hdr.addWidget(patterns_title_lbl)
         patterns_hdr.addStretch()
-        patterns_select_all_btn = QPushButton("☑")
-        patterns_select_all_btn.setCheckable(True)
-        patterns_select_all_btn.setFixedSize(32, 32)
-        patterns_select_all_btn.setStyleSheet(_icon_btn_style)
-        patterns_select_all_btn.setToolTip("Toggle all script patterns")
-        patterns_hdr.addWidget(patterns_select_all_btn)
+        clear_patterns_btn = _make_btn("Clear patterns", "#555")
+        _size_action_button(
+            clear_patterns_btn,
+            Geometry.FIELD_COMPACT,
+            maximum=160,
+        )
+        clear_patterns_btn.setToolTip("Turn off every script pattern")
+        patterns_hdr.addWidget(clear_patterns_btn)
         right_col.addLayout(patterns_hdr)
+        patterns_caption = QLabel(
+            "Used only when Scripts (355/655) is enabled above."
+        )
+        patterns_caption.setWordWrap(True)
+        patterns_caption.setStyleSheet(
+            f"color:{COLORS.text_muted};font-size:12px;background:transparent;"
+        )
+        right_col.addWidget(patterns_caption)
 
         patterns_box = QWidget()
         patterns_box.setObjectName("cbbox")
@@ -2156,7 +2279,10 @@ class WorkflowTab(QWidget):
             from modules.rpgmakermvmz import PATTERNS_355655 as _PAT
             for key in sorted(_PAT.keys(), key=str.casefold):
                 cb = QCheckBox(key)
-                cb.setStyleSheet("color:#c8c8c8;font-size:13px;")
+                cb.setStyleSheet(
+                    f"QCheckBox{{color:{COLORS.text_secondary};font-size:13px;}}"
+                    f"QCheckBox:disabled{{color:{COLORS.text_disabled};}}"
+                )
                 cb.stateChanged.connect(self._schedule_p2_config_apply)
                 patterns_vbox.addWidget(cb)
                 self._p2_pattern_checks[key] = cb
@@ -2172,21 +2298,46 @@ class WorkflowTab(QWidget):
         patterns_inner_layout.addWidget(patterns_scroll, 1)
         patterns_box.setMaximumHeight(260)
 
-        def _toggle_patterns(checked):
-            patterns_select_all_btn.setText("☑" if checked else "☐")
+        def _clear_patterns():
             for cb in self._p2_pattern_checks.values():
-                cb.setChecked(checked)
-        patterns_select_all_btn.toggled.connect(_toggle_patterns)
+                cb.setChecked(False)
+        clear_patterns_btn.clicked.connect(_clear_patterns)
+        equalize_button_widths(
+            (
+                clear_codes_btn,
+                apply_range_btn,
+                clear_plugins357_btn,
+                clear_patterns_btn,
+            ),
+            minimum=144,
+            maximum=144,
+        )
 
         right_col.addWidget(patterns_box, 1)
-        lists_row.addLayout(right_col, 1)
+        lists_row.addWidget(self._p2_pattern_filter_group, 1)
+
+        self._p2_advanced_hint = QLabel(
+            "Advanced filters stay locked until their matching text source is enabled above."
+        )
+        self._p2_advanced_hint.setWordWrap(True)
+        self._p2_advanced_hint.setStyleSheet(
+            f"color:{COLORS.text_muted};font-size:12px;"
+        )
+        codes_stage.add_widget(self._p2_advanced_hint)
 
         self._phase2_advanced = DisclosureSection(
             "Advanced plugin and script filters",
             lists_container,
             expanded=False,
         )
+        self._phase2_advanced.toggle.setToolTip(
+            "Opens after MZ plugin commands (357) or Scripts (355/655) is enabled"
+        )
         codes_stage.add_widget(self._phase2_advanced)
+        for key in ("CODE122", "CODE357", "CODE355655"):
+            self._p2_code_checks[key].toggled.connect(
+                self._refresh_p2_control_dependencies
+            )
         layout.addWidget(codes_stage)
 
         # ── Bottom row: Run ────────────────────────────────────────────────
@@ -2195,10 +2346,15 @@ class WorkflowTab(QWidget):
             "Start advanced translation",
             "Apply the selected sources, select event files, and begin translation.",
         )
+        self._p2_selection_banner = StatusBanner(
+            "Select at least one audited event command type above.",
+            "warning",
+        )
+        run_stage.add_widget(self._p2_selection_banner)
         bottom_row = QHBoxLayout()
         bottom_row.setSpacing(Spacing.MD)
         self._run_p2_btn = _make_btn("►  Translate selected text", "#7a4a00")
-        self._run_p2_btn.setMinimumSize(Geometry.ACTION_WIDE, Geometry.CONTROL)
+        _size_action_button(self._run_p2_btn, Geometry.ACTION_WIDE)
         self._run_p2_btn.setToolTip(
             "Applies Phase 2 code settings and starts translation with event files pre-selected."
         )
@@ -2215,6 +2371,12 @@ class WorkflowTab(QWidget):
         self._p2_auto_apply_timer = QTimer(self)
         self._p2_auto_apply_timer.setSingleShot(True)
         self._p2_auto_apply_timer.timeout.connect(self._apply_p2_config)
+
+        equalize_button_widths(
+            (copy_risky_btn, self._run_p2_btn),
+            minimum=Geometry.ACTION_WIDE,
+            maximum=Geometry.ACTION_WIDE,
+        )
 
         # Pre-populate all Phase 2 checkboxes from current module state
         self._populate_p2_checkboxes()
@@ -2492,12 +2654,22 @@ class WorkflowTab(QWidget):
         review_stage.add_widget(self._rewrap_results_disclosure)
         layout.addWidget(review_stage)
 
-        # Stage 4 — downstream release work is visibly separate from mutation.
+        # Stage 4 — final data QA. MV/MZ release packaging happens only after
+        # images and playtesting; Ace exposes an engine-specific release action
+        # here because its later MV/MZ-only steps are hidden.
         finish_stage = WorkflowStageCard(
             4,
-            "Run final QA and build the release",
-            "Copy the final game-data audit skill before creating a sanitized public archive.",
+            "Run final QA",
+            "Audit the rewrapped game data before continuing to images and playtesting.",
         )
+        self._rewrap_finish_stage = finish_stage
+        self._qa_ai_help_banner = StatusBanner(
+            "How to use this: click Copy final QA skill, paste the copied instructions into "
+            "your AI helper with the translated game folder open, and fix the problems it "
+            "finds before moving on.",
+            "info",
+        )
+        finish_stage.add_widget(self._qa_ai_help_banner)
         finish_actions = QHBoxLayout()
         finish_actions.setSpacing(Spacing.SM)
         qa_btn = _make_btn("🔎  Copy final QA skill", "#8a6d3b")
@@ -2505,20 +2677,26 @@ class WorkflowTab(QWidget):
             "After export and rewrap, copy the scalable QA skill for the detected game data folder."
         )
         qa_btn.clicked.connect(self._copy_translation_qa_prompt)
-        finish_actions.addWidget(qa_btn, 1)
-        self._release_zip_btn = _make_btn("📦  Build public release ZIP", "#0e639c")
-        self._release_zip_btn.setToolTip(
-            "Archive the detected game folder after rewrap and final QA. Excludes DazedTL "
+        _size_action_button(qa_btn, Geometry.ACTION_WIDE)
+        finish_actions.addWidget(qa_btn)
+
+        self._ace_release_zip_btn = _make_btn(
+            "📦  Build public release ZIP", "#0e639c"
+        )
+        self._ace_release_zip_btn.setToolTip(
+            "Archive the detected Ace game folder after rewrap and final QA. Excludes DazedTL "
             "workspaces, version-control files, documentation, backups, and saves; keeps "
             "GameUpdate files. The source game folder is not changed."
         )
-        self._release_zip_btn.clicked.connect(self._create_public_release)
+        self._ace_release_zip_btn.clicked.connect(self._create_public_release)
+        _size_action_button(self._ace_release_zip_btn, Geometry.ACTION_WIDE)
+        self._ace_release_zip_btn.hide()
+        finish_actions.addWidget(self._ace_release_zip_btn)
         _equalize_action_buttons(
             qa_btn,
-            self._release_zip_btn,
+            self._ace_release_zip_btn,
             width=Geometry.ACTION_WIDE,
         )
-        finish_actions.addWidget(self._release_zip_btn, 1)
         finish_actions.addStretch()
         finish_stage.add_layout(finish_actions)
         layout.addWidget(finish_stage)
@@ -2543,6 +2721,14 @@ class WorkflowTab(QWidget):
             f"color:{COLORS.text_muted};font-size:11px;font-weight:600;"
         )
         prep_layout.addWidget(self._step6_section_label)
+
+        self._plugin_ai_help_banner = StatusBanner(
+            "How to use this: first copy the Glossary to the game. Then copy the translation "
+            "skill, paste it into your AI helper with the game folder open, and review its "
+            "plugin or script changes before moving on.",
+            "info",
+        )
+        prep_layout.addWidget(self._plugin_ai_help_banner)
 
         self._step6_vocab_btn = _make_btn("📄  Copy glossary to game", "#555")
         self._step6_vocab_btn.setToolTip(
@@ -2639,31 +2825,20 @@ class WorkflowTab(QWidget):
         flow_box = WorkflowStageCard(
             2,
             "Prepare images for translation",
-            "Create editable PNG copies, provide the Glossary, and run the image skill with your coding agent.",
+            "Create editable PNG copies and run the image skill with your coding agent.",
         )
         flow_layout = flow_box.body
 
         flow_text = QLabel(
             "Open the Image Manager and decrypt source images into editable PNG copies. "
-            "Then use <b>Copy skill</b> there and give the generated instructions to your coding agent."
+            "It will use the Glossary already copied to the game in Step 5. Then use "
+            "<b>Copy skill</b> there and give the generated instructions to your coding agent."
         )
         flow_text.setWordWrap(True)
         flow_text.setTextFormat(Qt.RichText)
         flow_text.setStyleSheet("color:#c8c8c8;font-size:12px;")
         flow_layout.addWidget(flow_text)
 
-        actions = QHBoxLayout()
-        actions.setSpacing(Spacing.SM)
-        copy_vocab_btn = _make_btn("📄  Copy glossary to game", "#555")
-        copy_vocab_btn.setToolTip(
-            "Copy the current Glossary to <game root>/vocab.txt for the image translation skill."
-        )
-        copy_vocab_btn.clicked.connect(self._copy_vocab_to_game)
-        _size_action_button(copy_vocab_btn, Geometry.ACTION_WIDE)
-        actions.addWidget(copy_vocab_btn)
-
-        actions.addStretch()
-        flow_layout.addLayout(actions)
         layout.addWidget(flow_box)
 
         patch_stage = WorkflowStageCard(
@@ -2685,7 +2860,6 @@ class WorkflowTab(QWidget):
         layout.addWidget(patch_stage)
         _equalize_action_buttons(
             refresh_btn,
-            copy_vocab_btn,
             self._open_images_btn,
             width=320,
             maximum=360,
@@ -2819,6 +2993,11 @@ class WorkflowTab(QWidget):
         browse_editor_btn.setMinimumWidth(_PT_BTN_W)
         browse_editor_btn.clicked.connect(self._browse_tli_editor)
         editor_grid.addWidget(browse_editor_btn, 1, 2)
+        equalize_button_widths(
+            (detect_btn, browse_editor_btn),
+            minimum=_PT_BTN_W,
+            maximum=_PT_BTN_W,
+        )
 
         self._tli_detect_label = QLabel("")
         self._tli_detect_label.setWordWrap(True)
@@ -2953,7 +3132,17 @@ class WorkflowTab(QWidget):
             "Install or update TL Inspector and Forge in the selected MV/MZ game"
         )
         self._install_both_btn.clicked.connect(self._install_both_playtest)
-        _size_action_button(self._install_both_btn, Geometry.ACTION_WIDE)
+        equalize_button_widths(
+            (
+                self._tli_install_btn,
+                self._tli_uninstall_btn,
+                self._forge_install_btn,
+                self._forge_uninstall_btn,
+                self._install_both_btn,
+            ),
+            minimum=Geometry.ACTION_WIDE,
+            maximum=Geometry.ACTION_WIDE,
+        )
         plugins_inner.addWidget(self._install_both_btn)
 
         layout.addWidget(plugins_box)
@@ -2979,6 +3168,34 @@ class WorkflowTab(QWidget):
         verify_row.addWidget(refresh_playtest_btn)
         verify_stage.add_layout(verify_row)
         layout.addWidget(verify_stage)
+
+        release_stage = WorkflowStageCard(
+            4,
+            "Build the public release",
+            "After translated images are patched and the game has been fully playtested, create the ZIP you can share.",
+        )
+        release_hint = StatusBanner(
+            "This is the last workflow action. The ZIP leaves the game folder unchanged and "
+            "omits translation workspaces, version-control files, backups, and saves.",
+            "info",
+        )
+        release_stage.add_widget(release_hint)
+        release_row = QHBoxLayout()
+        release_row.setSpacing(Spacing.SM)
+        self._release_zip_btn = _make_btn(
+            "📦  Build public release ZIP", "#0e639c"
+        )
+        self._release_zip_btn.setToolTip(
+            "Archive the fully reviewed game folder after images and playtesting. Excludes "
+            "DazedTL workspaces, version-control files, documentation, backups, and saves; "
+            "keeps GameUpdate files and installed plugins. The game folder is not changed."
+        )
+        self._release_zip_btn.clicked.connect(self._create_public_release)
+        _size_action_button(self._release_zip_btn, Geometry.ACTION_WIDE)
+        release_row.addWidget(self._release_zip_btn)
+        release_row.addStretch()
+        release_stage.add_layout(release_row)
+        layout.addWidget(release_stage)
 
         self._populate_tli_editor_combo()
         self._load_playtest_settings()
@@ -3574,6 +3791,19 @@ class WorkflowTab(QWidget):
             if hasattr(self, "_step_buttons") and len(self._step_buttons) > tool_idx:
                 self._step_buttons[tool_idx].setVisible(show_mvmz_tools)
                 self._step_buttons[tool_idx].setEnabled(show_mvmz_tools)
+        ace_release_btn = getattr(self, "_ace_release_zip_btn", None)
+        if ace_release_btn is not None:
+            ace_release_btn.setVisible(is_ace)
+        finish_stage = getattr(self, "_rewrap_finish_stage", None)
+        if finish_stage is not None:
+            finish_stage.title_label.setText(
+                "Run final QA and build the release" if is_ace else "Run final QA"
+            )
+            finish_stage.description_label.setText(
+                "Audit the rewrapped game data, then build the Ace release."
+                if is_ace else
+                "Audit the rewrapped game data before continuing to images and playtesting."
+            )
         if is_ace and self._step_tabs.currentIndex() in tool_indices:
             self._goto_step(6)
         self._refresh_step_strip()
@@ -4036,9 +4266,81 @@ class WorkflowTab(QWidget):
             pass
         finally:
             self._p2_loading_config = False
+            self._refresh_p2_control_dependencies()
+
+    def _refresh_p2_control_dependencies(self, *_args) -> None:
+        """Gate Phase 2 child controls behind their audited command types."""
+        checks = getattr(self, "_p2_code_checks", {})
+        code122 = bool(checks.get("CODE122") and checks["CODE122"].isChecked())
+        code357 = bool(checks.get("CODE357") and checks["CODE357"].isChecked())
+        code355655 = bool(
+            checks.get("CODE355655") and checks["CODE355655"].isChecked()
+        )
+
+        range_box = getattr(self, "_p2_var_range_box", None)
+        if range_box is not None:
+            range_box.setEnabled(code122)
+
+        plugin_group = getattr(self, "_p2_plugin_filter_group", None)
+        if plugin_group is not None:
+            plugin_group.setEnabled(code357)
+        pattern_group = getattr(self, "_p2_pattern_filter_group", None)
+        if pattern_group is not None:
+            pattern_group.setEnabled(code355655)
+
+        advanced = getattr(self, "_phase2_advanced", None)
+        advanced_enabled = code357 or code355655
+        if advanced is not None:
+            if not advanced_enabled and advanced.toggle.isChecked():
+                advanced.toggle.setChecked(False)
+            advanced.toggle.setEnabled(advanced_enabled)
+
+        hint = getattr(self, "_p2_advanced_hint", None)
+        if hint is not None:
+            if code357 and code355655:
+                hint.setText(
+                    "Both advanced filter lists are unlocked. Choose only entries confirmed "
+                    "by the audit."
+                )
+            elif code357:
+                hint.setText(
+                    "MZ plugin command filters are unlocked. Script text filters stay locked "
+                    "until Scripts (355/655) is enabled."
+                )
+            elif code355655:
+                hint.setText(
+                    "Script text filters are unlocked. MZ plugin filters stay locked until "
+                    "MZ plugin commands (357) is enabled."
+                )
+            else:
+                hint.setText(
+                    "Advanced filters stay locked until their matching text source is "
+                    "enabled above."
+                )
+            hint.setStyleSheet(f"color:{COLORS.text_muted};font-size:12px;")
+
+        any_source = any(cb.isChecked() for cb in checks.values())
+        run_button = getattr(self, "_run_p2_btn", None)
+        if run_button is not None:
+            run_button.setEnabled(any_source)
+        banner = getattr(self, "_p2_selection_banner", None)
+        if banner is not None:
+            if any_source:
+                count = sum(cb.isChecked() for cb in checks.values())
+                banner.set_status(
+                    f"{count} audited source{'s' if count != 1 else ''} selected. "
+                    "Review the choices before starting.",
+                    "info",
+                )
+            else:
+                banner.set_status(
+                    "Select at least one audited event command type above.",
+                    "warning",
+                )
 
     def _schedule_p2_config_apply(self, *_args):
         """Debounce auto-saving Phase 2 settings while the user changes controls."""
+        self._refresh_p2_control_dependencies()
         if self._p2_loading_config:
             return
         timer = getattr(self, "_p2_auto_apply_timer", None)
@@ -4916,14 +5218,20 @@ class WorkflowTab(QWidget):
         self._log(f"Creating public release ZIP from {game_root} …")
         worker = _ReleaseZipWorker(game_root, output)
         self._worker = worker
-        if self._release_zip_btn is not None:
-            self._release_zip_btn.setEnabled(False)
+        release_buttons = (
+            getattr(self, "_release_zip_btn", None),
+            getattr(self, "_ace_release_zip_btn", None),
+        )
+        for button in release_buttons:
+            if button is not None:
+                button.setEnabled(False)
 
         def finished():
             if self._worker is worker:
                 self._worker = None
-            if self._release_zip_btn is not None:
-                self._release_zip_btn.setEnabled(True)
+            for button in release_buttons:
+                if button is not None:
+                    button.setEnabled(True)
 
         def failed(message: str):
             self._log(f"❌ Public release ZIP: {message}")

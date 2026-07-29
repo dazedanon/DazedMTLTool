@@ -92,7 +92,7 @@ class SkillsTab(QWidget):
             path=SKILLS_DIR / "project_setup.md",
             hint=(
                 "Clipboard skill copied from Workflow. "
-                "Instructs the IDE to emit glossary, speakers, quirks, and game_skill blocks."
+                "Instructs the IDE to emit glossary, speakers, translation_quirks, and game_skill blocks."
             ),
             is_json=False,
         )

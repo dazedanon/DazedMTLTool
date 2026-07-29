@@ -67,6 +67,7 @@ from util.rpgmaker_images import (
     resolve_content_root,
 )
 from gui.theme import COLORS, Geometry, Spacing
+from gui.workflow_components import StatusBanner
 from gui.ui_components import (
     PageHeader,
     SectionCard,
@@ -637,6 +638,13 @@ class ImageManager(QWidget):
             configure_action_button(button, variant=variant)
             button.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
         self._action_layout_mode = None
+        self.copy_skill_help_banner = StatusBanner(
+            "How to use Copy skill: first make one or more images editable. Then click Copy "
+            "skill, paste the copied instructions into your AI helper with the game folder "
+            "open, and review every edited image before patching it back into the game.",
+            "info",
+        )
+        workspace_card.add_widget(self.copy_skill_help_banner)
         workspace_card.add_widget(action_host)
         self._arrange_action_bar()
 

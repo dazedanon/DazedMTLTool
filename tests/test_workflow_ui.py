@@ -11,13 +11,15 @@ from unittest.mock import patch
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PIL import Image
-from PyQt5.QtCore import QSettings
+from PyQt5.QtCore import QSettings, Qt
 from PyQt5.QtGui import QPalette
 from PyQt5.QtWidgets import (
     QApplication,
     QBoxLayout,
     QCheckBox,
+    QLabel,
     QPushButton,
+    QTabWidget,
     QWidget,
 )
 
@@ -156,6 +158,13 @@ class WorkflowShellTests(unittest.TestCase):
                 "Playtest",
             ],
         )
+        self.assertEqual(
+            [label.text() for label in rail._number_labels],
+            [str(index) for index in range(1, 10)],
+        )
+        for display_step, button in enumerate(rail.buttons, start=1):
+            self.assertTrue(button.toolTip().startswith(f"Step {display_step}:"))
+            self.assertTrue(button.accessibleName().startswith(f"Step {display_step}:"))
 
     def test_every_page_has_standard_header_and_tokenized_page_margins(self):
         allowed = {0, Spacing.XS, Spacing.SM, Spacing.MD, Spacing.LG, Spacing.XL, Spacing.XXL}
@@ -180,9 +189,45 @@ class WorkflowShellTests(unittest.TestCase):
             )
             self.assertIn(layout.spacing(), allowed, index)
 
+    def test_phase_two_child_controls_require_their_parent_code(self):
+        checks = self.workflow._p2_code_checks
+        self.workflow._p2_loading_config = True
+        for checkbox in checks.values():
+            checkbox.setChecked(False)
+        self.workflow._p2_loading_config = False
+        self.workflow._refresh_p2_control_dependencies()
+
+        self.assertFalse(self.workflow._p2_var_range_box.isEnabled())
+        self.assertFalse(self.workflow._p2_plugin_filter_group.isEnabled())
+        self.assertFalse(self.workflow._p2_pattern_filter_group.isEnabled())
+        self.assertFalse(self.workflow._phase2_advanced.toggle.isEnabled())
+        self.assertFalse(self.workflow._run_p2_btn.isEnabled())
+
+        self.workflow._p2_loading_config = True
+        checks["CODE122"].setChecked(True)
+        checks["CODE357"].setChecked(True)
+        self.workflow._p2_loading_config = False
+        self.workflow._refresh_p2_control_dependencies()
+
+        self.assertTrue(self.workflow._p2_var_range_box.isEnabled())
+        self.assertTrue(self.workflow._p2_plugin_filter_group.isEnabled())
+        self.assertFalse(self.workflow._p2_pattern_filter_group.isEnabled())
+        self.assertTrue(self.workflow._phase2_advanced.toggle.isEnabled())
+        self.assertTrue(self.workflow._run_p2_btn.isEnabled())
+
+        self.workflow._p2_loading_config = True
+        checks["CODE355655"].setChecked(True)
+        self.workflow._p2_loading_config = False
+        self.workflow._refresh_p2_control_dependencies()
+        self.assertTrue(self.workflow._p2_pattern_filter_group.isEnabled())
+
     def test_phase_two_advanced_controls_preserve_state_when_collapsed(self):
         disclosure = self.workflow._phase2_advanced
         self.assertIsInstance(disclosure, DisclosureSection)
+        self.workflow._p2_loading_config = True
+        self.workflow._p2_code_checks["CODE357"].setChecked(True)
+        self.workflow._p2_loading_config = False
+        self.workflow._refresh_p2_control_dependencies()
         checkbox = next(iter(self.workflow._p2_plugin_checks.values()))
         self.workflow._p2_loading_config = True
         checkbox.setChecked(True)
@@ -190,6 +235,52 @@ class WorkflowShellTests(unittest.TestCase):
         disclosure.toggle.setChecked(True)
         disclosure.toggle.setChecked(False)
         self.assertTrue(checkbox.isChecked())
+
+    def test_phase_two_advanced_area_uses_plain_labels_and_neutral_surfaces(self):
+        page = self.workflow._step_tabs.widget(4)
+        labels = {label.text() for label in page.findChildren(QLabel)}
+        self.assertIn("MZ plugin command filters", labels)
+        self.assertIn("Script text filters", labels)
+        self.assertNotIn("MZ plugin handlers (code 357)", labels)
+        self.assertNotIn("Script patterns (codes 355/655)", labels)
+        self.assertNotIn("Available now:", self.workflow._p2_advanced_hint.text())
+        for widget in (
+            page.findChild(QWidget, "phase2AdvancedLists"),
+            self.workflow._p2_plugin_filter_group,
+            self.workflow._p2_pattern_filter_group,
+        ):
+            self.assertIsNotNone(widget)
+            self.assertIn("background:transparent", widget.styleSheet())
+
+    def test_ai_copy_actions_explain_the_next_step_on_the_page(self):
+        banners = (
+            self.workflow.speaker_setup_hint,
+            self.workflow._p2_ai_help_banner,
+            self.workflow._plugin_ai_help_banner,
+            self.workflow._qa_ai_help_banner,
+        )
+        for banner in banners:
+            text = banner.text_label.text()
+            self.assertIn("AI helper", text)
+        for banner in banners[1:]:
+            self.assertIn("paste", banner.text_label.text().casefold())
+
+    def test_glossary_is_copied_once_and_release_is_the_last_mvmz_stage(self):
+        glossary_buttons = [
+            button
+            for button in self.workflow.findChildren(QPushButton)
+            if "Copy glossary to game" in button.text()
+        ]
+        self.assertEqual(len(glossary_buttons), 1)
+        self.assertTrue(
+            self.workflow._step_tabs.widget(5).isAncestorOf(glossary_buttons[0])
+        )
+
+        playtest_stages = self.workflow._step_tabs.widget(8).findChildren(
+            WorkflowStageCard
+        )
+        self.assertEqual(playtest_stages[-1].title_label.text(), "Build the public release")
+        self.assertTrue(playtest_stages[-1].isAncestorOf(self.workflow._release_zip_btn))
 
     def test_rewrap_is_a_four_stage_progressive_workflow(self):
         page = self.workflow._step_tabs.widget(6)
@@ -201,7 +292,7 @@ class WorkflowShellTests(unittest.TestCase):
                 "Select game-data files",
                 "Set line-wrapping rules",
                 "Preview and apply rewrap",
-                "Run final QA and build the release",
+                "Run final QA",
             ],
         )
         self.assertFalse(self.workflow._rewrap_advanced.toggle.isChecked())
@@ -219,6 +310,38 @@ class WorkflowShellTests(unittest.TestCase):
             self.workflow._rewrap_workspace_layout.direction(), QBoxLayout.LeftToRight
         )
 
+    def test_speaker_setup_tells_beginners_what_to_enable_and_in_what_order(self):
+        hint = self.workflow.speaker_setup_hint.text_label.text()
+        self.assertIn("Always start with “1  Collect names”", hint)
+        self.assertIn("option ENABLE", hint)
+        self.assertIn("collect names again", hint)
+        self.assertIn("Many games need none", hint)
+
+        expected_labels = (
+            (self.workflow.spk_inline_cb, "attached to the dialogue", "INLINE401SPEAKERS"),
+            (self.workflow.spk_firstline_cb, "alone on the first dialogue line", "FIRSTLINESPEAKERS"),
+            (self.workflow.spk_face_cb, "face image's filename", "FACENAME101"),
+        )
+        for checkbox, explanation, flag in expected_labels:
+            self.assertIn(explanation, checkbox.text())
+            self.assertIn("only when the setup helper says", checkbox.toolTip())
+            self.assertIn(flag, checkbox.toolTip())
+
+        self.assertIn("1  Collect names", self.workflow.speaker_collect_names_btn.text())
+        self.assertIn("2  Copy setup instructions", self.workflow.speaker_copy_setup_btn.text())
+
+    def test_setup_editor_tabs_match_project_setup_block_names(self):
+        editors = self.workflow.setup_editors.findChild(QTabWidget, "setupEditors")
+        self.assertIsNotNone(editors)
+        self.assertEqual(
+            [editors.tabText(i) for i in range(editors.count())],
+            ["Glossary", "Translation quirks", "Game skill"],
+        )
+        tab_bar = editors.tabBar()
+        self.assertGreaterEqual(tab_bar.minimumHeight(), 44)
+        self.assertEqual(tab_bar.elideMode(), Qt.ElideNone)
+        self.assertTrue(tab_bar.usesScrollButtons())
+
     def test_every_page_uses_a_numbered_task_sequence(self):
         expected = {
             0: [
@@ -234,7 +357,7 @@ class WorkflowShellTests(unittest.TestCase):
             2: [
                 "Prepare the translation workspace",
                 "Configure speakers and generate project context",
-                "Edit glossary and project guidance",
+                "Edit glossary, translation quirks, and game skill",
             ],
             3: [
                 "Set run mode and line widths",
@@ -255,7 +378,7 @@ class WorkflowShellTests(unittest.TestCase):
                 "Select game-data files",
                 "Set line-wrapping rules",
                 "Preview and apply rewrap",
-                "Run final QA and build the release",
+                "Run final QA",
             ],
             7: [
                 "Check image readiness",
@@ -266,6 +389,7 @@ class WorkflowShellTests(unittest.TestCase):
                 "Configure playtest tools",
                 "Install playtest plugins",
                 "Verify plugins in game",
+                "Build the public release",
             ],
         }
         for page_index, titles in expected.items():
@@ -276,11 +400,23 @@ class WorkflowShellTests(unittest.TestCase):
     def test_related_action_groups_share_width_and_control_height(self):
         groups = {
             0: (("Select all", "Clear selection", "Database only"),),
-            1: (("Install GameUpdate", "Run available tasks"),),
+            1: ((
+                "Format game data",
+                "Format plugins.js",
+                "Install GameUpdate",
+                "Run available tasks",
+            ),),
             2: (
                 ("Import files", "Clear translated"),
-                ("Collect names", "Copy setup skill"),
+                ("Copy setup instructions", "Collect names"),
             ),
+            3: ((
+                "Save line widths",
+                "Translate database",
+                "Translate dialogue",
+                "Build variable cache",
+            ),),
+            4: (("Copy advanced-text audit", "Translate selected text"),),
             5: (
                 ("Copy glossary to game", "Copy plugin skill"),
                 ("Export selected files", "Export all translated files"),
@@ -288,12 +424,20 @@ class WorkflowShellTests(unittest.TestCase):
             6: (
                 ("Select all", "Maps & events", "Database only", "Clear selection"),
                 ("Preview rewrap", "Apply rewrap"),
-                ("Copy final QA skill", "Build public release ZIP"),
+                ("Copy final QA skill",),
             ),
+            7: (("Refresh readiness", "Open Image Manager"),),
             8: (
+                ("Find editors", "Choose…"),
                 ("Save defaults", "Apply settings to game"),
-                ("Install TL Inspector", "Remove TL Inspector"),
-                ("Install Forge", "Remove Forge"),
+                (
+                    "Install TL Inspector",
+                    "Remove TL Inspector",
+                    "Install Forge",
+                    "Remove Forge",
+                    "Install both plugins",
+                ),
+                ("Build public release ZIP",),
             ),
         }
 
@@ -318,7 +462,20 @@ class WorkflowShellTests(unittest.TestCase):
         for button in self.workflow.findChildren(QPushButton, "workflowButton"):
             self.assertGreaterEqual(button.minimumHeight(), Geometry.CONTROL)
 
-    def test_setup_checkbox_and_phase_one_width_grids_are_aligned(self):
+    def test_prepare_run_all_is_a_separate_bottom_action(self):
+        self.workflow._goto_step(1)
+        self.app.processEvents()
+
+        buttons = self.workflow.pp_preprocess_action_buttons
+        self.assertEqual(len({button.width() for button in buttons}), 1)
+        self.assertEqual(buttons[0].width(), Geometry.ACTION_WIDE)
+        self.assertGreater(
+            buttons[-1].mapTo(self.workflow, buttons[-1].rect().topLeft()).y(),
+            buttons[-2].mapTo(self.workflow, buttons[-2].rect().topLeft()).y(),
+        )
+        self.assertIs(buttons[-1].parentWidget(), self.workflow.pp_run_all_bar)
+
+    def test_setup_speaker_rows_and_phase_one_width_grid_are_aligned(self):
         self.workflow._goto_step(2)
         self.app.processEvents()
         setup_checks = (
@@ -326,11 +483,12 @@ class WorkflowShellTests(unittest.TestCase):
             self.workflow.spk_firstline_cb,
             self.workflow.spk_face_cb,
         )
-        self.assertEqual(len({checkbox.y() for checkbox in setup_checks}), 1)
+        self.assertEqual(len({checkbox.x() for checkbox in setup_checks}), 1)
         self.assertEqual(
-            [checkbox.x() for checkbox in setup_checks],
-            sorted(checkbox.x() for checkbox in setup_checks),
+            [checkbox.y() for checkbox in setup_checks],
+            sorted(checkbox.y() for checkbox in setup_checks),
         )
+        self.assertEqual(len({checkbox.y() for checkbox in setup_checks}), 3)
 
         self.workflow._goto_step(3)
         self.app.processEvents()

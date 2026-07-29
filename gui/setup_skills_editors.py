@@ -1,4 +1,4 @@
-"""Shared Vocab / Quirks / Game skills editors for Workflow Setup steps."""
+"""Shared Glossary / Translation quirks / Game skill editors."""
 
 from __future__ import annotations
 
@@ -69,7 +69,7 @@ def _make_btn(text: str, color: str = "#0e639c") -> QPushButton:
 
 
 class SetupSkillsEditors(QWidget):
-    """Tabbed Vocab / Quirks / Game skills editors for Workflow Setup.
+    """Tabbed Glossary / Translation quirks / Game skill editors.
 
     Parameters
     ----------
@@ -105,7 +105,9 @@ class SetupSkillsEditors(QWidget):
         editors.setDocumentMode(False)
         tab_bar = editors.tabBar()
         tab_bar.setExpanding(False)
-        tab_bar.setMinimumHeight(34)
+        tab_bar.setElideMode(Qt.ElideNone)
+        tab_bar.setUsesScrollButtons(True)
+        tab_bar.setMinimumHeight(44)
         tab_bar.setStyleSheet(
             "QTabBar::tab{background:#333337;color:#c0c0c0;min-width:90px;min-height:28px;"
             "padding:6px 16px;border:1px solid #45454a;border-bottom:none;"
@@ -136,9 +138,9 @@ class SetupSkillsEditors(QWidget):
                 self._save_quirks,
                 self._reload_quirks,
                 "quirks_editor",
-                "rules",
+                "quirks",
             ),
-            "Translation rules",
+            "Translation quirks",
         )
 
         game_skills_page = QWidget()
@@ -170,7 +172,7 @@ class SetupSkillsEditors(QWidget):
         strip_l.setSpacing(Spacing.SM)
         strip_l.addWidget(self._game_skills_bar, 0, Qt.AlignBottom)
 
-        add_btn = QPushButton("+ Add custom guidance")
+        add_btn = QPushButton("+ Add custom skill")
         add_btn.setCursor(Qt.PointingHandCursor)
         add_btn.setMinimumHeight(Geometry.CONTROL)
         add_btn.setToolTip(
@@ -201,10 +203,10 @@ class SetupSkillsEditors(QWidget):
                 self._save_game_skill,
                 self._reload_game_skill,
                 "game_skill_editor",
-                "guidance",
+                "game skill",
             ),
         )
-        editors.addTab(game_skills_page, "Game guidance")
+        editors.addTab(game_skills_page, "Game skill")
         root.addWidget(editors, 1)
 
     def _editor_page(
