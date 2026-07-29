@@ -187,6 +187,26 @@ class ReleaseWorkflowButtonTests(unittest.TestCase):
                 self.assertFalse(
                     rpg._step_tabs.widget(6).isAncestorOf(rpg._release_zip_btn)
                 )
+                self.assertTrue(
+                    wolf._step_tabs.widget(9).isAncestorOf(wolf._release_zip_btn)
+                )
+                self.assertFalse(
+                    wolf._step_tabs.widget(8).isAncestorOf(wolf._release_zip_btn)
+                )
+
+                from gui.workflow_components import WorkflowStageCard
+
+                expected_wolf_stages = [3, 3, 2, 2, 3, 2, 2, 2, 2, 4]
+                for page_index, expected_count in enumerate(expected_wolf_stages):
+                    stages = wolf._step_tabs.widget(page_index).findChildren(
+                        WorkflowStageCard
+                    )
+                    self.assertEqual(len(stages), expected_count, page_index)
+                    self.assertEqual(
+                        [stage.number_label.text() for stage in stages],
+                        [str(number) for number in range(1, expected_count + 1)],
+                        page_index,
+                    )
                 rpg_ai_banners = (
                     rpg.speaker_setup_hint,
                     rpg._p2_ai_help_banner,
