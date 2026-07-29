@@ -734,10 +734,14 @@ class WolfWorkflowTab(QWidget):
             self._hide_task_progress()
             self._set_busy(False)
             if msg:
-                self._log(
-                    ("✅ " if ok else "❌ ") + msg,
-                    "success" if ok else "error",
-                )
+                warning = ok and msg.lstrip().startswith("⚠")
+                if warning:
+                    self._log(msg, "warning")
+                else:
+                    self._log(
+                        ("✅ " if ok else "❌ ") + msg,
+                        "success" if ok else "error",
+                    )
             if on_done:
                 try:
                     on_done(ok, msg)

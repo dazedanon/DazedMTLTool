@@ -69,6 +69,11 @@ class InjectSafetyParserTests(unittest.TestCase):
         result = wi._interpret_strings_result("x.json", res)
         self.assertTrue(result.success)
         self.assertIn("skipped by safety guard", result.summary)
+        self.assertEqual(result.safety_skipped, 1)
+        self.assertEqual(
+            result.safety_details,
+            ["db type 1 row 0 field 0 — control-code mismatch"],
+        )
 
 
 class InjectPrecheckLocalTests(unittest.TestCase):

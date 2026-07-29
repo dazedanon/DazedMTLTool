@@ -379,6 +379,7 @@ class InjectOrderTests(unittest.TestCase):
         result = wi._interpret_names_result("names.json", res)
         self.assertTrue(result.success)
         self.assertIn("46 skipped by safety guard", result.summary)
+        self.assertEqual(result.safety_skipped, 46)
 
 
 class ReportDialogTests(unittest.TestCase):
@@ -411,6 +412,39 @@ class ReportDialogTests(unittest.TestCase):
         self.assertEqual(
             wi.format_report_status(report),
             "Inject: 1 ok, 2 failed (see dialog).",
+        )
+
+    def test_partial_safety_success_gets_warning_dialog_and_status(self):
+        report = wi.InjectReport(
+            files=[
+                wi.FileInjectResult(
+                    "CommonEvent.dat.json",
+                    True,
+                    "applied 1063 line(s) (2 skipped by safety guard)",
+                    applied=1063,
+                    safety_skipped=2,
+                    safety_details=[
+                        "event 74 cmd 200 str 0 — control-code mismatch",
+                        "event 245 cmd 31 str 0 — control-code mismatch",
+                    ],
+                )
+            ]
+        )
+
+        dialog = wi.format_report_dialog(report)
+
+        self.assertIsNotNone(dialog)
+        title, body = dialog
+        self.assertEqual(title, "Inject completed with warnings")
+        self.assertIn("event 74 cmd 200 str 0", body)
+        self.assertIn("event 245 cmd 31 str 0", body)
+        self.assertIn("Step 7 Check", body)
+        self.assertEqual(
+            wi.format_report_status(report),
+            (
+                "⚠ Inject completed with warnings: 1 file(s), "
+                "2 line(s) skipped (see dialog)."
+            ),
         )
 
 

@@ -31,6 +31,8 @@ class FileInjectResult:
     summary: str
     applied: int | None = None
     detail: str = ""
+    safety_skipped: int = 0
+    safety_details: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -49,6 +51,14 @@ class InjectReport:
     @property
     def failed(self) -> list[FileInjectResult]:
         return [r for r in self.files if not r.success]
+
+    @property
+    def warnings(self) -> list[FileInjectResult]:
+        return [r for r in self.files if r.success and r.safety_skipped > 0]
+
+    @property
+    def safety_skipped(self) -> int:
+        return sum(r.safety_skipped for r in self.files)
 
 
 def list_injectable(translated_dir: Path, manifest_entries: list[dict]) -> list[str]:
@@ -200,11 +210,25 @@ def _wolf_output_snippet(stdout: str, stderr: str, *, limit: int = 400) -> str:
     return text[: limit - 3] + "..."
 
 
+def _safety_details(stdout: str, stderr: str) -> list[str]:
+    labels = {
+        "code_mismatch": "control-code mismatch",
+        "unrepresentable": "text is not representable in the game encoding",
+    }
+    return [
+        f"{locator} — {labels.get(kind, 'safety guard')}"
+        for locator, kind, _full_line in wolfdawn.parse_strings_inject_safety_lines(
+            stdout, stderr
+        )
+    ]
+
+
 def _interpret_strings_result(json_name: str, res: wolfdawn.WolfResult) -> FileInjectResult:
     cli_err = wolfdawn.parse_inject_cli_error(res.stdout, res.stderr)
     applied, drifted = wolfdawn.parse_strings_inject_counts(res.stdout, res.stderr)
     safety = wolfdawn.parse_strings_inject_safety_count(res.stdout, res.stderr)
     mismatches = wolfdawn.parse_strings_inject_mismatches(res.stdout, res.stderr)
+    safety_details = _safety_details(res.stdout, res.stderr)
     detail = _wolf_output_snippet(res.stdout, res.stderr)
 
     # Exit 2 with a positive applied count still wrote the good lines; treat as success
@@ -215,7 +239,15 @@ def _interpret_strings_result(json_name: str, res: wolfdawn.WolfResult) -> FileI
             msg += f" ({drifted} drifted)"
         if safety:
             msg += f" ({safety} skipped by safety guard)"
-        return FileInjectResult(json_name, True, msg, applied=applied, detail=detail)
+        return FileInjectResult(
+            json_name,
+            True,
+            msg,
+            applied=applied,
+            detail=detail,
+            safety_skipped=safety or 0,
+            safety_details=safety_details,
+        )
 
     if not res.ok:
         reason = cli_err or f"wolf exited {res.returncode}"
@@ -240,7 +272,13 @@ def _interpret_strings_result(json_name: str, res: wolfdawn.WolfResult) -> FileI
         elif mismatches:
             parts.append(f"{len(mismatches)} control-code mismatch(es)")
         return FileInjectResult(
-            json_name, False, "; ".join(parts), applied=0, detail=detail
+            json_name,
+            False,
+            "; ".join(parts),
+            applied=0,
+            detail=detail,
+            safety_skipped=safety or 0,
+            safety_details=safety_details,
         )
 
     return FileInjectResult(json_name, True, "no changes needed", applied=0, detail=detail)
@@ -250,6 +288,7 @@ def _interpret_names_result(json_name: str, res: wolfdawn.WolfResult) -> FileInj
     cli_err = wolfdawn.parse_inject_cli_error(res.stdout, res.stderr)
     applied, drifted = wolfdawn.parse_names_inject_counts(res.stdout, res.stderr)
     safety = wolfdawn.parse_strings_inject_safety_count(res.stdout, res.stderr)
+    safety_details = _safety_details(res.stdout, res.stderr)
     detail = _wolf_output_snippet(res.stdout, res.stderr)
 
     if wolfdawn.inject_had_applied(applied):
@@ -258,7 +297,15 @@ def _interpret_names_result(json_name: str, res: wolfdawn.WolfResult) -> FileInj
             msg += f" ({drifted} unmatched)"
         if safety:
             msg += f" ({safety} skipped by safety guard)"
-        return FileInjectResult(json_name, True, msg, applied=applied, detail=detail)
+        return FileInjectResult(
+            json_name,
+            True,
+            msg,
+            applied=applied,
+            detail=detail,
+            safety_skipped=safety or 0,
+            safety_details=safety_details,
+        )
 
     if not res.ok:
         reason = cli_err or f"wolf exited {res.returncode}"
@@ -381,6 +428,8 @@ def _inject_names(
             ),
             applied=result.applied,
             detail=result.detail,
+            safety_skipped=result.safety_skipped,
+            safety_details=result.safety_details,
         )
     elif result.success and wolfdawn.inject_had_applied(result.applied):
         result = FileInjectResult(
@@ -389,6 +438,8 @@ def _inject_names(
             result.summary + " — restart Game.exe to see changes",
             applied=result.applied,
             detail=result.detail,
+            safety_skipped=result.safety_skipped,
+            safety_details=result.safety_details,
         )
     return result
 
@@ -567,6 +618,22 @@ def inject_selected(
     if not todo:
         return report
 
+    def emit_result(result: FileInjectResult) -> None:
+        if not result.success:
+            prefix = "  ✗ "
+        elif result.safety_skipped:
+            prefix = "  ⚠ "
+        else:
+            prefix = "  ✓ "
+        emit(prefix + f"{result.json_name}: {result.summary}")
+        for warning in result.safety_details[:10]:
+            emit(f"      ↳ {warning}")
+        hidden = len(result.safety_details) - 10
+        if hidden > 0:
+            emit(f"      … {hidden} more skipped line(s)")
+        if result.safety_skipped:
+            emit("      Open Step 7 Check to review and edit skipped lines.")
+
     names_applied = False
     if NAMES_JSON in todo:
         names_src = translated_dir / NAMES_JSON
@@ -574,7 +641,7 @@ def inject_selected(
         if names_edited is False:
             result = FileInjectResult(NAMES_JSON, True, "no changes needed", applied=0)
             report.files.append(result)
-            emit(f"  ✓ {NAMES_JSON}: {result.summary}")
+            emit_result(result)
             todo = [n for n in todo if n != NAMES_JSON]
         else:
             emit("Preparing live Data/ for names.json…")
@@ -607,7 +674,7 @@ def inject_selected(
             if prep_error:
                 result = FileInjectResult(NAMES_JSON, False, prep_error)
                 report.files.append(result)
-                emit(f"  ✗ {NAMES_JSON}: {result.summary}")
+                emit_result(result)
                 todo = [n for n in todo if n != NAMES_JSON]
             else:
                 emit(f"Injecting {NAMES_JSON}…")
@@ -619,10 +686,7 @@ def inject_selected(
                     log_fn=log_fn,
                 )
                 report.files.append(result)
-                emit(
-                    ("  ✓ " if result.success else "  ✗ ")
-                    + f"{NAMES_JSON}: {result.summary}"
-                )
+                emit_result(result)
                 names_applied = result.success
 
     strings_todo = [n for n in todo if n != NAMES_JSON]
@@ -659,29 +723,49 @@ def inject_selected(
             log_fn=log_fn,
         )
         report.files.append(result)
-        emit(("  ✓ " if result.success else "  ✗ ") + f"{json_name}: {result.summary}")
+        emit_result(result)
 
     return report
 
 
 def format_report_dialog(report: InjectReport) -> tuple[str, str] | None:
-    """Return ``(title, body)`` for a failure dialog, or ``None`` on full success.
+    """Return a concise problem dialog, or ``None`` on clean success.
 
     Success details already go to the workflow log; a per-file success popup
     overflows the screen on large games.
     """
-    if report.failed or report.sync_failures:
+    if report.failed or report.sync_failures or report.warnings:
         lines: list[str] = []
         ok_n = len(report.succeeded)
-        if ok_n:
-            lines.append(f"{ok_n} file(s) succeeded; failures:")
+        if report.failed or report.sync_failures:
+            if ok_n:
+                lines.append(f"{ok_n} file(s) succeeded; failures:")
+        else:
+            lines.append(
+                f"Translations were applied, but {report.safety_skipped} line(s) "
+                "were left unchanged by the safety guard:"
+            )
+        for result in report.warnings:
+            lines.append(f"⚠ {result.json_name}: {result.summary}")
+            for warning in result.safety_details[:20]:
+                lines.append(f"    {warning}")
+            hidden = len(result.safety_details) - 20
+            if hidden > 0:
+                lines.append(f"    … {hidden} more skipped line(s)")
+        if report.warnings:
+            lines.append("Open Step 7 Check to review and edit the skipped lines.")
         for r in report.failed:
             lines.append(f"✗ {r.json_name}: {r.summary}")
             if r.detail:
                 lines.append(f"    {r.detail}")
         for name, err in report.sync_failures:
             lines.append(f"✗ sync {name}: {err}")
-        return "Inject finished with errors", "\n".join(lines)
+        title = (
+            "Inject finished with errors"
+            if report.failed or report.sync_failures
+            else "Inject completed with warnings"
+        )
+        return title, "\n".join(lines)
     return None
 
 
@@ -690,7 +774,15 @@ def format_report_status(report: InjectReport) -> str:
     ok_n = len(report.succeeded)
     fail_n = len(report.failed) + len(report.sync_failures)
     if fail_n:
-        return f"Inject: {ok_n} ok, {fail_n} failed (see dialog)."
+        warning_note = (
+            f", {report.safety_skipped} skipped" if report.safety_skipped else ""
+        )
+        return f"Inject: {ok_n} ok, {fail_n} failed{warning_note} (see dialog)."
+    if report.safety_skipped:
+        return (
+            f"⚠ Inject completed with warnings: {ok_n} file(s), "
+            f"{report.safety_skipped} line(s) skipped (see dialog)."
+        )
     if ok_n:
         return f"Inject complete: {ok_n} file(s)."
     return "Inject: nothing was injected."

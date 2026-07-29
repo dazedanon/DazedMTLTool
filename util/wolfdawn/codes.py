@@ -318,6 +318,65 @@ def _fix_spurious_whitespace_in_bracketed_codes(source: str, text: str) -> str:
     return text
 
 
+def _remove_duplicate_font_before_leading_controls(source: str, text: str) -> str:
+    """Remove the old repair bug's ``\\f[N]<prefix>\\f[N]`` duplication.
+
+    This is deliberately narrower than general font repair: the source must
+    begin with a non-font control code before its first font, the translated
+    fonts on both sides of that prefix must be identical, and it must be the
+    translation's only additional font occurrence. Intentional Manual-wrap and
+    names-wrap body fonts with different sizes or positions remain untouched.
+    """
+    src_matches = list(WOLF_INLINE_CODE_RE.finditer(source))
+    txt_matches = list(WOLF_INLINE_CODE_RE.finditer(text))
+    if not src_matches or not txt_matches:
+        return text
+
+    src_leading: list[re.Match] = []
+    position = 0
+    for match in src_matches:
+        if match.start() != position:
+            break
+        src_leading.append(match)
+        position = match.end()
+    first_src_font = next(
+        (
+            index
+            for index, match in enumerate(src_leading)
+            if WOLF_FONT_SIZE_RE.fullmatch(match.group(0))
+        ),
+        None,
+    )
+    if first_src_font is None or first_src_font == 0:
+        return text
+
+    prefix = "".join(match.group(0) for match in src_leading[:first_src_font])
+    leading = WOLF_FONT_SIZE_RE.match(text)
+    if leading is None or not text.startswith(prefix, leading.end()):
+        return text
+    after_prefix = leading.end() + len(prefix)
+    translated_font = WOLF_FONT_SIZE_RE.match(text, after_prefix)
+    if translated_font is None or translated_font.group(0) != leading.group(0):
+        return text
+
+    src_fonts = WOLF_FONT_SIZE_RE.findall(source)
+    txt_fonts = WOLF_FONT_SIZE_RE.findall(text)
+    if len(txt_fonts) != len(src_fonts) + 1:
+        return text
+    return text[leading.end() :]
+
+
+def _restore_literal_source_newlines(source: str, text: str) -> str:
+    """Turn literal ``\\n`` into line breaks only when the source proves intent."""
+    literal_count = text.count(r"\n")
+    if literal_count == 0:
+        return text
+    missing_newlines = source.count("\n") - text.count("\n")
+    if missing_newlines != literal_count:
+        return text
+    return text.replace(r"\n", "\n")
+
+
 def rebuild_text_preserving_source_codes(source: str, text: str) -> str:
     """Return *text* after unambiguous inline control-code syntax repairs.
 
@@ -337,6 +396,8 @@ def rebuild_text_preserving_source_codes(source: str, text: str) -> str:
     txt_prefix, txt_rest = wolf_speakers.split_window_prefix(text)
     out_prefix = txt_prefix if txt_prefix else src_prefix
 
+    txt_rest = _remove_duplicate_font_before_leading_controls(src_rest, txt_rest)
+    txt_rest = _restore_literal_source_newlines(src_rest, txt_rest)
     txt_rest = _fix_spurious_spaces_in_codes(src_rest, txt_rest)
     txt_rest = _fix_spurious_whitespace_in_bracketed_codes(src_rest, txt_rest)
     return out_prefix + txt_rest

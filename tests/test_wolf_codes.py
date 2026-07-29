@@ -40,6 +40,18 @@ class WolfCodesRepairTests(unittest.TestCase):
         fixed = wolf_codes.rebuild_text_preserving_source_codes(source, text)
         self.assertEqual(fixed, text)
 
+    def test_rebuild_removes_old_duplicate_font_before_prefix_control_code(self):
+        source = r"\>\f[5]レベル\cself[30]"
+        text = r"\f[5]\>\f[5]Level\cself[30]"
+        fixed = wolf_codes.rebuild_text_preserving_source_codes(source, text)
+        self.assertEqual(fixed, r"\>\f[5]Level\cself[30]")
+
+    def test_rebuild_keeps_distinct_manual_body_font_before_prefix(self):
+        source = r"\>\f[5]レベル\cself[30]"
+        text = r"\f[14]\>\f[5]Level\cself[30]"
+        fixed = wolf_codes.rebuild_text_preserving_source_codes(source, text)
+        self.assertEqual(fixed, text)
+
     def test_rebuild_preserves_valid_moved_variable_code(self):
         source = r"\v[24]Day        "
         text = "Day \\v[24]\n        "
@@ -80,6 +92,21 @@ class WolfCodesRepairTests(unittest.TestCase):
         self.assertEqual(fixed, text)
         self.assertTrue(wolf_codes.non_font_code_sequences_differ(source, text))
 
+    def test_rebuild_restores_literal_newline_when_source_has_one(self):
+        source = "既に見たことのあるイベントです。\nスキップしますか？"
+        text = r"This is an event you've already seen.\nWould you like to skip it?"
+        fixed = wolf_codes.rebuild_text_preserving_source_codes(source, text)
+        self.assertEqual(
+            fixed,
+            "This is an event you've already seen.\nWould you like to skip it?",
+        )
+
+    def test_rebuild_does_not_guess_ambiguous_literal_newlines(self):
+        source = "一行だけ"
+        text = r"One\nline"
+        fixed = wolf_codes.rebuild_text_preserving_source_codes(source, text)
+        self.assertEqual(fixed, text)
+
     def test_protect_and_restore_roundtrip(self):
         src = "Line with \\^ and \\cself[8]"
         protected, mapping = wolf_codes.protect_wolf_codes(src)
@@ -109,6 +136,47 @@ class WolfCodesRepairTests(unittest.TestCase):
         self.assertEqual(
             doc["scenes"][0]["lines"][0]["text"],
             "Fortune-teller\nHa!\\^",
+        )
+
+    def test_repair_document_fixes_safe_duplicate_font_and_literal_newline(self):
+        doc = {
+            "kind": "common",
+            "scenes": [
+                {
+                    "event": 74,
+                    "lines": [
+                        {
+                            "cmd": 200,
+                            "str": 0,
+                            "source": r"\>\f[5]レベル\cself[30]",
+                            "text": r"\f[5]\>\f[5]Level\cself[30]",
+                        }
+                    ],
+                },
+                {
+                    "event": 245,
+                    "lines": [
+                        {
+                            "cmd": 31,
+                            "str": 0,
+                            "source": "既に見たイベントです。\nスキップしますか？",
+                            "text": r"This event was already seen.\nSkip it?",
+                        }
+                    ],
+                },
+            ],
+        }
+
+        _doc, notes = wolf_codes.repair_document(doc)
+
+        self.assertEqual(len(notes), 2)
+        self.assertEqual(
+            doc["scenes"][0]["lines"][0]["text"],
+            r"\>\f[5]Level\cself[30]",
+        )
+        self.assertEqual(
+            doc["scenes"][1]["lines"][0]["text"],
+            "This event was already seen.\nSkip it?",
         )
 
 
