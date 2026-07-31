@@ -82,6 +82,61 @@ class BatchRunStateTests(BatchHistoryTestBase):
         )
         self.assertEqual(T.batchRunState(), "fetched")
 
+    def test_queued_glossary_context_change_is_detected(self):
+        payload = '{"Line1": "カイン"}'
+        old_vocab = "# Game Characters\nカイン (Kain)\n"
+        old_context = T.buildMatchedVocabText(
+            T.parseVocabWithCategories(old_vocab), payload
+        )
+        T.queue_batch_request(
+            payload,
+            "English",
+            {},
+            cache_context=old_context,
+        )
+        T.flush_batch_queue()
+
+        stale, total = T.batchQueueStaleContextCount(
+            "# Game Characters\nカイン (Cain)\n"
+        )
+
+        self.assertEqual((stale, total), (1, 1))
+
+    def test_queued_unrelated_glossary_change_stays_current(self):
+        payload = '{"Line1": "カイン"}'
+        original_vocab = "# Game Characters\nカイン (Cain)\n"
+        context = T.buildMatchedVocabText(
+            T.parseVocabWithCategories(original_vocab), payload
+        )
+        T.queue_batch_request(
+            payload,
+            "English",
+            {},
+            cache_context=context,
+        )
+        T.flush_batch_queue()
+
+        stale, total = T.batchQueueStaleContextCount(
+            original_vocab + "アベル (Abel)\n"
+        )
+
+        self.assertEqual((stale, total), (0, 1))
+
+    def test_fetched_result_requires_same_glossary_context(self):
+        payload = '{"Line1": "カイン"}'
+        old_context = "カイン (Kain)"
+        result = {"text": '{"Line1":"Kain"}'}
+        old_key = T.get_cache_key(payload, "English", old_context)
+        T._write_batch_file(T.BATCH_RESULTS_FILE, {old_key: result})
+        T._batch_results = None
+
+        self.assertEqual(
+            T.take_batch_result(payload, "English", old_context), result
+        )
+        self.assertIsNone(
+            T.take_batch_result(payload, "English", "カイン (Cain)")
+        )
+
 
 class HistorySurvivalTests(BatchHistoryTestBase):
     def test_history_survives_fetch_marker_and_clear(self):

@@ -51,6 +51,35 @@ class CacheKeyTests(CacheTestBase):
             T.get_cache_key(payload, "English"),
         )
 
+    def test_matched_glossary_context_changes_the_key(self):
+        payload = '{"Line1": "カイン"}'
+        self.assertNotEqual(
+            T.get_cache_key(payload, "English", "カイン (Kain)"),
+            T.get_cache_key(payload, "English", "カイン (Cain)"),
+        )
+
+    def test_empty_matched_context_keeps_legacy_key(self):
+        payload = '{"Line1": "名前のない文章"}'
+        self.assertEqual(
+            T.get_cache_key(payload, "English"),
+            T.get_cache_key(payload, "English", ""),
+        )
+
+    def test_unrelated_full_glossary_changes_do_not_change_matched_key(self):
+        payload = '{"Line1": "カイン"}'
+        first_vocab = "# Game Characters\nカイン (Cain)\nアベル (Abel)\n"
+        second_vocab = "# Game Characters\nカイン (Cain)\nシア (Shia)\n"
+        first_matched = T.buildMatchedVocabText(
+            T.parseVocabWithCategories(first_vocab), payload
+        )
+        second_matched = T.buildMatchedVocabText(
+            T.parseVocabWithCategories(second_vocab), payload
+        )
+        self.assertEqual(
+            T.get_cache_key(payload, "English", first_matched),
+            T.get_cache_key(payload, "English", second_matched),
+        )
+
 
 class CacheRoundTripTests(CacheTestBase):
     def test_list_value_preserved_exactly(self):
@@ -74,6 +103,18 @@ class CacheRoundTripTests(CacheTestBase):
         # Drop the in-memory copy; a fresh read must come from disk.
         T._cache = {}
         self.assertEqual(T.peek_cached_translation(payload, "English"), ["Save"])
+
+    def test_glossary_change_does_not_reuse_cached_translation(self):
+        payload = '{"Line1": "カイン"}'
+        T.cache_translation(payload, ["Kain"], "English", "カイン (Kain)")
+
+        self.assertEqual(
+            T.peek_cached_translation(payload, "English", "カイン (Kain)"),
+            ["Kain"],
+        )
+        self.assertIsNone(
+            T.peek_cached_translation(payload, "English", "カイン (Cain)")
+        )
 
 
 class PendingMarkerTests(CacheTestBase):
