@@ -147,10 +147,10 @@ TLSYSTEMSWITCHES = False
 JOIN408 = False
 
 # Dialogue / Scroll / Choices (Main Codes)
-CODE101 = False
-CODE401 = False
-CODE405 = False
-CODE102 = False
+CODE101 = True
+CODE401 = True
+CODE405 = True
+CODE102 = True
 
 # Optional
 CODE408 = False
@@ -161,13 +161,13 @@ CODE122_VAR_MIN = 0
 CODE122_VAR_MAX = 2000
 
 # Plugins / Scripts
-CODE355655 = True
-CODE357 = True
+CODE355655 = False
+CODE357 = False
 CODE657 = False
 CODE356 = False
 CODE320 = False
-CODE324 = True
-CODE325 = True
+CODE324 = False
+CODE325 = False
 CODE111 = False
 CODE108 = False
 

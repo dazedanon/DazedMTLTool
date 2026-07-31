@@ -67,6 +67,16 @@ class ControlCodeProtectionTests(unittest.TestCase):
 
 
 class TranslationContentValidationTests(unittest.TestCase):
+    def test_allows_ideographic_space_used_as_choice_padding(self):
+        valid, indices, reasons = tr.validate_translation_content(
+            ["‣モラル崩壊　　　　　必要な欠片：10"],
+            ["‣Moral Collapse　　　　　Fragments Required: 10"],
+            r"[\u3000一-龠ぁ-ゔァ-ヴー]+",
+        )
+
+        self.assertTrue(valid, reasons)
+        self.assertEqual(indices, [])
+
     def test_rejects_source_language_residue(self):
         valid, indices, reasons = tr.validate_translation_content(
             ["そのとおり"], ["Exactly(そのとおり)!!"], r"[一-龠ぁ-ゔァ-ヴー]+"

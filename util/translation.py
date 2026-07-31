@@ -470,8 +470,11 @@ def validate_translation_content(original_items, translated_items, langRegex):
 
             # Check 6: Source-language residue must not survive in player text.
             # Japanese inside protected runtime-code parameters is absent here
-            # and is restored only after validation.
-            if re.search(langRegex, trans_str):
+            # and is restored only after validation. Ignore ideographic spaces:
+            # RPG Maker choice lists commonly use U+3000 as intentional visual
+            # padding, and preserving that layout is not untranslated content.
+            residue_text = trans_str.replace("\u3000", "")
+            if re.search(langRegex, residue_text):
                 invalid_indices.append(i)
                 reasons.append(f"Line{i+1}: Source-language text remains in translation")
                 continue
