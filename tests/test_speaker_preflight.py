@@ -7,11 +7,14 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from gui.translation_tab import TranslationWorker
+from PyQt5.QtWidgets import QMessageBox
+
+from gui.translation_tab import TranslationTab, TranslationWorker
 import modules.rpgmakermvmz as mvmz
 
 
@@ -40,8 +43,16 @@ class SpeakerPreflightWorkerTests(unittest.TestCase):
                 events.append(("translate",))
                 tokens[:] = [10, 2]
 
-            def approve(names):
-                events.append(("approve", list(names)))
+            estimate = {
+                "model": "test-model",
+                "request_count": 1,
+                "input_tokens": 100,
+                "output_tokens": 10,
+                "estimated_cost": 0.001,
+            }
+
+            def approve(payload):
+                events.append(("approve", payload))
                 worker.set_speaker_translation_response(True)
 
             worker.speaker_confirmation_signal.connect(approve)
@@ -53,6 +64,11 @@ class SpeakerPreflightWorkerTests(unittest.TestCase):
                 patch.object(mvmz, "pendingSpeakerNames", side_effect=pending),
                 patch.object(mvmz, "finalizeSpeakerParse", side_effect=finalize),
                 patch.object(mvmz, "calculateCost", return_value=0.01),
+                patch.object(
+                    worker,
+                    "_estimate_grouped_speakers",
+                    return_value=estimate,
+                ),
             ):
                 self.assertTrue(worker._prepare_mvmz_speakers(worker.selected_files))
 
@@ -62,16 +78,66 @@ class SpeakerPreflightWorkerTests(unittest.TestCase):
                     ("scan", "Map001.json", False),
                     ("scan", "Map002.json", False),
                     ("pending",),
-                    ("approve", ["騎士", "秘書官"]),
+                    ("approve", {**estimate, "speakers": ["騎士", "秘書官"]}),
                     ("translate",),
                 ],
             )
+
+    def test_grouped_estimate_reports_requests_tokens_and_cost_without_translation(self):
+        config = SimpleNamespace(batchSize=2, maxHistory=10, model="test-model")
+        with (
+            patch("util.translation.createContext", return_value=("system", "", "user")),
+            patch("util.translation.countTokens", return_value=[100, 20]),
+            patch(
+                "util.translation.getPricingConfig",
+                return_value={"inputAPICost": 2.0, "outputAPICost": 8.0},
+            ),
+            patch("util.translation.isClaudeNative", return_value=False),
+        ):
+            estimate = TranslationWorker._estimate_grouped_speakers(
+                ["騎士", "秘書官", "王"], "npc history", config, "test-model"
+            )
+
+        self.assertEqual(estimate["request_count"], 2)
+        self.assertEqual(estimate["input_tokens"], 200)
+        self.assertEqual(estimate["output_tokens"], 40)
+        self.assertAlmostEqual(estimate["estimated_cost"], 0.00072)
+        self.assertFalse(estimate["cold_cache"])
+
+    def test_confirmation_shows_estimate_before_approval(self):
+        responses = []
+        dummy = SimpleNamespace(
+            translation_worker=SimpleNamespace(
+                set_speaker_translation_response=responses.append
+            )
+        )
+        payload = {
+            "speakers": ["騎士", "秘書官"],
+            "model": "test-model",
+            "request_count": 1,
+            "input_tokens": 1234,
+            "output_tokens": 56,
+            "estimated_cost": 0.012345,
+            "cold_cache": False,
+        }
+        with patch.object(
+            QMessageBox, "question", return_value=QMessageBox.Yes
+        ) as question:
+            TranslationTab._on_speaker_confirmation(dummy, payload)
+
+        message = question.call_args.args[2]
+        self.assertIn("Model: test-model", message)
+        self.assertIn("Grouped requests: 1", message)
+        self.assertIn("1,234 input / 56 output", message)
+        self.assertIn("$0.012345", message)
+        self.assertIn("No speaker translation requests have been sent yet", message)
+        self.assertEqual(responses, [True])
 
     def test_cancel_sends_no_speaker_translation(self):
         with tempfile.TemporaryDirectory() as raw:
             worker = self._worker(Path(raw))
             worker.speaker_confirmation_signal.connect(
-                lambda _names: worker.set_speaker_translation_response(False)
+                lambda _payload: worker.set_speaker_translation_response(False)
             )
             with (
                 patch.object(mvmz, "resetSpeakerState"),
@@ -83,6 +149,16 @@ class SpeakerPreflightWorkerTests(unittest.TestCase):
                     return_value=["騎士", "秘書官"],
                 ),
                 patch.object(mvmz, "finalizeSpeakerParse") as finalize,
+                patch.object(
+                    worker,
+                    "_estimate_grouped_speakers",
+                    return_value={
+                        "request_count": 1,
+                        "input_tokens": 100,
+                        "output_tokens": 10,
+                        "estimated_cost": 0.001,
+                    },
+                ),
             ):
                 self.assertFalse(worker._prepare_mvmz_speakers(worker.selected_files))
             finalize.assert_not_called()

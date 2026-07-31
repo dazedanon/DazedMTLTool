@@ -7,6 +7,7 @@ Simple file management and translation execution with console log display.
 
 import os
 import datetime
+import json
 import subprocess
 import threading
 import sys
@@ -81,7 +82,8 @@ BATCH_MODE_BENEFIT_NOTE = (
 )
 BATCH_COLLECT_LIVE_CHARGE_NOTE = (
     "For RPG Maker and WolfDawn, unresolved speakers are scanned first without API "
-    "calls. You approve their grouped translation before DazedTL collects the main batch."
+    "calls. You review their grouped cost estimate and approve translation before DazedTL "
+    "collects the main batch."
 )
 
 _CONFIG_UNSET = object()
@@ -227,7 +229,7 @@ class TranslationWorker(QThread):
     status_signal = pyqtSignal(str)  # updates the top translating_label from the worker
     finished_signal = pyqtSignal(bool, str)
     batch_phase_signal = pyqtSignal(str, object)  # phase name, optional payload
-    speaker_confirmation_signal = pyqtSignal(object)  # unresolved speaker names
+    speaker_confirmation_signal = pyqtSignal(object)  # names plus local token/cost estimate
     
     def __init__(self, project_root, module_info, estimate_only=False, selected_files=None,
                  parse_speakers=False, batch_mode=False, batch_resume_state=None):
@@ -260,12 +262,85 @@ class TranslationWorker(QThread):
         self._speaker_translation_approved = bool(approved)
         self._speaker_confirm_event.set()
 
-    def _wait_speaker_translation(self, speakers):
+    def _wait_speaker_translation(self, speakers, estimate=None):
         self._speaker_translation_approved = False
         self._speaker_confirm_event.clear()
-        self.speaker_confirmation_signal.emit(list(speakers))
+        payload = dict(estimate or {})
+        payload["speakers"] = list(speakers)
+        self.speaker_confirmation_signal.emit(payload)
         self._speaker_confirm_event.wait()
         return self._speaker_translation_approved
+
+    @staticmethod
+    def _estimate_grouped_speakers(speakers, history, config, model):
+        """Estimate grouped speaker requests locally without calling a model API."""
+        from util.translation import (
+            countTokens,
+            createContext,
+            getPricingConfig,
+            isClaudeNative,
+        )
+
+        names = [str(name).strip() for name in speakers if str(name).strip()]
+        batch_size = max(1, int(getattr(config, "batchSize", 1) or 1))
+        max_history = max(1, int(getattr(config, "maxHistory", 10) or 10))
+        model_name = str(model or getattr(config, "model", "") or "Unknown")
+        pricing = getPricingConfig(model_name)
+        input_rate = float(pricing["inputAPICost"]) / 1_000_000
+        output_rate = float(pricing["outputAPICost"]) / 1_000_000
+        native_claude = isClaudeNative(model_name)
+
+        input_tokens = 0
+        output_tokens = 0
+        estimated_cost = 0.0
+        seen_batch_sizes = set()
+        current_history = history
+
+        for offset in range(0, len(names), batch_size):
+            name_batch = names[offset:offset + batch_size]
+            request_payload = json.dumps(
+                {f"Line{index + 1}": value for index, value in enumerate(name_batch)},
+                indent=4,
+                ensure_ascii=False,
+            )
+            static_system, vocab_text, user = createContext(
+                config, request_payload, "json", current_history
+            )
+            request_tokens = countTokens(
+                static_system + vocab_text, user, current_history
+            )
+            request_input = max(0, int(request_tokens[0]))
+            request_output = max(0, int(request_tokens[1]))
+            input_tokens += request_input
+            output_tokens += request_output
+
+            if native_claude:
+                static_tokens = countTokens(static_system, "", "")[0]
+                regular_tokens = max(0, request_input - static_tokens)
+                # Match the translator's conservative cold-cache estimate: the
+                # first request for each output-schema size writes the cached
+                # prompt; repeated sizes receive the cache-read discount.
+                cache_multiplier = 2.0 if len(name_batch) not in seen_batch_sizes else 0.10
+                estimated_cost += (
+                    static_tokens * input_rate * cache_multiplier
+                    + regular_tokens * input_rate
+                    + request_output * output_rate
+                )
+                seen_batch_sizes.add(len(name_batch))
+            else:
+                estimated_cost += (
+                    request_input * input_rate + request_output * output_rate
+                )
+            current_history = name_batch[-max_history:]
+
+        return {
+            "model": model_name,
+            "request_count": (len(names) + batch_size - 1) // batch_size,
+            "input_tokens": input_tokens,
+            "output_tokens": output_tokens,
+            "estimated_cost": estimated_cost,
+            "cold_cache": native_claude,
+        }
 
     def _wait_batch_submit(self, estimate):
         self._batch_pending_estimate = estimate
@@ -557,6 +632,7 @@ class TranslationWorker(QThread):
             from modules.rpgmakermvmz import (
                 MODEL,
                 TOKENS,
+                TRANSLATION_CONFIG,
                 calculateCost,
                 finalizeSpeakerParse,
                 handleMVMZ,
@@ -610,7 +686,17 @@ class TranslationWorker(QThread):
                 f"Found {len(pending)} unresolved unique speaker(s); no speaker API calls "
                 "have been made."
             )
-            if not self._wait_speaker_translation(pending):
+            from util.skills import ctx
+            estimate = self._estimate_grouped_speakers(
+                pending, ctx("names.speaker"), TRANSLATION_CONFIG, MODEL
+            )
+            self.emit_log(
+                f"📊 Speaker estimate: {int(estimate.get('request_count', 0))} grouped request(s), "
+                f"{int(estimate.get('input_tokens', 0)):,} input / "
+                f"{int(estimate.get('output_tokens', 0)):,} output tokens, approximately "
+                f"${float(estimate.get('estimated_cost', 0.0)):.6f}."
+            )
+            if not self._wait_speaker_translation(pending, estimate):
                 self.emit_log(
                     "⏹ Speaker translation canceled. No unresolved speakers were sent, "
                     "and the translation run did not start."
@@ -641,6 +727,7 @@ class TranslationWorker(QThread):
         try:
             from modules.wolfdawn import (
                 MODEL,
+                TRANSLATION_CONFIG,
                 calculateCost,
                 collectSpeakerNames,
                 pendingSpeakerNames,
@@ -687,7 +774,17 @@ class TranslationWorker(QThread):
             f"🔤 WOLF speaker scan complete. Found {len(pending)} unresolved unique "
             "speaker(s); no speaker API calls have been made."
         )
-        if not self._wait_speaker_translation(pending):
+        from util.skills import ctx
+        estimate = self._estimate_grouped_speakers(
+            pending, ctx("names.npc"), TRANSLATION_CONFIG, MODEL
+        )
+        self.emit_log(
+            f"📊 Speaker estimate: {int(estimate.get('request_count', 0))} grouped request(s), "
+            f"{int(estimate.get('input_tokens', 0)):,} input / "
+            f"{int(estimate.get('output_tokens', 0)):,} output tokens, approximately "
+            f"${float(estimate.get('estimated_cost', 0.0)):.6f}."
+        )
+        if not self._wait_speaker_translation(pending, estimate):
             self.emit_log(
                 "⏹ Speaker translation canceled. No unresolved speakers were sent, "
                 "and the translation run did not start."
@@ -2194,21 +2291,36 @@ class TranslationTab(QWidget):
         if hasattr(self, "translation_worker") and self.translation_worker:
             self.translation_worker.set_batch_submit_response(False)
 
-    def _on_speaker_confirmation(self, speakers):
+    def _on_speaker_confirmation(self, payload):
         """Approve one grouped speaker-translation phase after a no-API scan."""
         worker = getattr(self, "translation_worker", None)
         if worker is None:
             return
-        names = [str(name).strip() for name in (speakers or []) if str(name).strip()]
+        estimate = payload if isinstance(payload, dict) else {}
+        raw_names = estimate.get("speakers", []) if estimate else (payload or [])
+        names = [str(name).strip() for name in raw_names if str(name).strip()]
         preview_limit = 12
         preview = "\n".join(f"  • {name}" for name in names[:preview_limit])
         if len(names) > preview_limit:
             preview += f"\n  • …and {len(names) - preview_limit} more"
+        estimate_text = ""
+        if estimate:
+            cache_note = " (conservative cold-cache estimate)" if estimate.get("cold_cache") else ""
+            estimate_text = (
+                "Estimated speaker translation:\n"
+                f"  Model: {estimate.get('model', 'Unknown')}\n"
+                f"  Grouped requests: {int(estimate.get('request_count', 0)):,}\n"
+                f"  Tokens: {int(estimate.get('input_tokens', 0)):,} input / "
+                f"{int(estimate.get('output_tokens', 0)):,} output\n"
+                f"  Cost: approximately ${float(estimate.get('estimated_cost', 0.0)):.6f}"
+                f"{cache_note}\n\n"
+            )
         reply = QMessageBox.question(
             self,
             "Translate collected speakers?",
             f"DazedTL found {len(names)} unresolved unique speaker(s). No speaker "
             "translation requests have been sent yet.\n\n"
+            f"{estimate_text}"
             f"{preview}\n\n"
             "Translate these names together in grouped list batches, save them to "
             "this game's glossary, and then continue the translation run?",
