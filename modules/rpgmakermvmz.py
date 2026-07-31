@@ -187,6 +187,7 @@ HEADER_MAPPINGS_357 = {
     "DTextPicture": (["text"], None),
     "TextPicture": (["text"], None),
     "TRP_SkitMZ": (["name"], None),
+    "LogMessage": (["text"], None),
     "LogWindow": (["text"], None),
     "BattleLogOutput": (["message"], None),
     "TorigoyaMZ_NotifyMessage_CommandMessage": (["message"], None),
@@ -200,7 +201,7 @@ HEADER_MAPPINGS_357 = {
     "SceneGlossary": (["category"], None),
 }
 # Subset of HEADER_MAPPINGS_357 keys that should be processed (empty = none).
-ENABLED_PLUGINS_357: set = {"DTextPicture", "TorigoyaMZ_NotifyMessage"}
+ENABLED_PLUGINS_357: set = {"DTextPicture", "LogMessage", "TorigoyaMZ_NotifyMessage"}
 
 # All known code-355/655 script patterns. Enable entries via ENABLED_PATTERNS_355655.
 PATTERNS_355655 = {
