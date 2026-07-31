@@ -624,26 +624,70 @@ def _apply_choice_original(cmd, index: int, raw_source: str) -> None:
         orig_list[index] = raw_source
 
 
+def _choice_condition_end(text: str, start: int) -> int | None:
+    """Return the end of a balanced lowercase ``if(...)``/``en(...)`` clause."""
+    if not isinstance(text, str) or not text.startswith(("if(", "en("), start):
+        return None
+
+    depth = 0
+    for index in range(start + 2, len(text)):
+        char = text[index]
+        if char == "(":
+            depth += 1
+        elif char == ")":
+            depth -= 1
+            if depth == 0:
+                return index + 1
+            if depth < 0:
+                break
+    return None
+
+
 def _split_choice_condition_prefix(text: str) -> tuple[str, str]:
     """Split a leading lowercase ``if(...)``/``en(...)`` plugin condition safely.
 
     Conditions can contain nested calls such as ``if($gameSwitches.value(1))``.
     Return the input untouched when the prefix is absent or unbalanced.
     """
-    if not isinstance(text, str) or not text.startswith(("if(", "en(")):
+    if not isinstance(text, str):
         return "", text
 
-    depth = 0
-    for index, char in enumerate(text[2:], start=2):
-        if char == "(":
-            depth += 1
-        elif char == ")":
-            depth -= 1
-            if depth == 0:
-                return text[: index + 1], text[index + 1 :]
-            if depth < 0:
-                break
+    end = _choice_condition_end(text, 0)
+    if end is not None:
+        return text[:end], text[end:]
     return "", text
+
+
+def _split_choice_condition_suffix(text: str) -> tuple[str, str]:
+    """Split trailing plugin condition clauses while preserving their exact bytes.
+
+    A suffix can contain one or more whitespace-delimited ``if(...)``/``en(...)``
+    clauses, including nested calls. Unbalanced or mixed trailing text is left
+    untouched so visible choice text cannot be removed accidentally.
+    """
+    if not isinstance(text, str):
+        return text, ""
+
+    for match in re.finditer(r"\s+(?=(?:if|en)\()", text):
+        suffix_start = match.start()
+        cursor = match.end()
+
+        while True:
+            end = _choice_condition_end(text, cursor)
+            if end is None:
+                break
+            cursor = end
+
+            whitespace_start = cursor
+            while cursor < len(text) and text[cursor].isspace():
+                cursor += 1
+
+            if cursor == len(text):
+                return text[:suffix_start], text[suffix_start:]
+            if whitespace_start == cursor:
+                break
+
+    return text, ""
 
 
 def _122_inner_source(cmd) -> str | None:
@@ -4113,7 +4157,7 @@ def searchCodes(page, pbar, jobList, filename):
             ### Event Code: 102 Show Choice
             if "code" in codeList[i] and codeList[i]["code"] == 102 and CODE102 is True:
                 choiceList = []
-                varList = []
+                conditionList = []
                 choiceIndexMap = []  # Track which original indices we're processing
                 choiceSourceList = []
                 
@@ -4130,11 +4174,12 @@ def searchCodes(page, pbar, jobList, filename):
                     if not _text_needs_translation(currentChoice):
                         continue
 
-                    # Preserve plugin condition prefixes outside the model.
-                    ifVar, jaString = _split_choice_condition_prefix(jaString)
+                    # Preserve plugin condition clauses outside the model.
+                    conditionPrefix, jaString = _split_choice_condition_prefix(jaString)
+                    jaString, conditionSuffix = _split_choice_condition_suffix(jaString)
                     
                     # Store the formatting and cleaned string
-                    varList.append(ifVar)
+                    conditionList.append((conditionPrefix, conditionSuffix))
                     choiceList.append(jaString)
                     choiceIndexMap.append(choice)
                     choiceSourceList.append(rawSource)
@@ -4160,10 +4205,16 @@ def searchCodes(page, pbar, jobList, filename):
                             originalIndex = choiceIndexMap[idx]
                             
                             # Apply formatting
+                            conditionPrefix, conditionSuffix = conditionList[idx]
                             if translatedText != "":
-                                translatedText = varList[idx] + translatedText[0].upper() + translatedText[1:]
+                                translatedText = (
+                                    conditionPrefix
+                                    + translatedText[0].upper()
+                                    + translatedText[1:]
+                                    + conditionSuffix
+                                )
                             else:
-                                translatedText = varList[idx] + translatedText
+                                translatedText = conditionPrefix + translatedText + conditionSuffix
                             
                             # Set the translation back to the original position
                             codeList[i]["parameters"][0][originalIndex] = translatedText

@@ -279,6 +279,18 @@ class TestMVMZSourceOriginal(unittest.TestCase):
         source = "if(v[31]>=4迷宮四階"
         self.assertEqual(mvmz._split_choice_condition_prefix(source), ("", source))
 
+    def test_choice_condition_suffix_parser_handles_chained_nested_calls(self):
+        source = "？？？ 必要な欠片：30 en(foo(v[88])>99) if(s[278]&!s[276])"
+
+        label, suffix = mvmz._split_choice_condition_suffix(source)
+
+        self.assertEqual(label, "？？？ 必要な欠片：30")
+        self.assertEqual(suffix, " en(foo(v[88])>99) if(s[278]&!s[276])")
+
+    def test_choice_condition_suffix_parser_leaves_malformed_input_untouched(self):
+        source = "？？？ 必要な欠片：30 en(v[88]>99"
+        self.assertEqual(mvmz._split_choice_condition_suffix(source), (source, ""))
+
     def test_choice_translation_restores_condition_prefix_byte_for_byte(self):
         source = "if(v[31]>=4)迷宮四階：図書館"
         page = {
@@ -295,6 +307,26 @@ class TestMVMZSourceOriginal(unittest.TestCase):
 
         choice = _find_commands(translated, 102)[0]["parameters"][0][0]
         self.assertEqual(choice, "if(v[31]>=4)Labyrinth floor 4: library")
+
+    def test_choice_translation_hides_and_restores_condition_suffix_byte_for_byte(self):
+        source = "‣？？？ 必要な欠片：30 en(v[88]>99) if(s[278]&!s[276])"
+        page = {
+            "list": [
+                {"code": 102, "indent": 0, "parameters": [[source], -1, 0, 2, 0]},
+            ]
+        }
+
+        def translate(text, _history, _batch=False):
+            self.assertEqual(text, ["‣？？？ 必要な欠片：30"])
+            return [["‣??? fragments required: 30"], [0, 0]]
+
+        translated, _ = _run_search_codes(page, translate_fn=translate)
+
+        choice = _find_commands(translated, 102)[0]["parameters"][0][0]
+        self.assertEqual(
+            choice,
+            "‣??? fragments required: 30 en(v[88]>99) if(s[278]&!s[276])",
+        )
 
     def test_first_pass_writes_original(self):
         page, _ = _run_search_codes(_load_map_excerpt())
