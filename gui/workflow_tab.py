@@ -1643,7 +1643,8 @@ class WorkflowTab(QWidget):
         self.speaker_collect_names_btn = _make_btn("🔍  1  Collect names", "#0e639c")
         self.speaker_collect_names_btn.setToolTip(
             "Start here. Collect recognized speaker names from event files into the "
-            "Glossary's # Speakers section. Run this again if you later enable an extra format."
+            "Glossary's # Speakers section. Run this again if you later enable an extra format. "
+            "Normal translation does not create or rebuild this section."
         )
         self.speaker_collect_names_btn.clicked.connect(self._run_parse_speakers)
         context_actions.addWidget(self.speaker_collect_names_btn, 1)

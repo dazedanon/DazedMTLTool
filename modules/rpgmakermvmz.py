@@ -147,10 +147,10 @@ TLSYSTEMSWITCHES = False
 JOIN408 = False
 
 # Dialogue / Scroll / Choices (Main Codes)
-CODE101 = True
-CODE401 = True
-CODE405 = True
-CODE102 = True
+CODE101 = False
+CODE401 = False
+CODE405 = False
+CODE102 = False
 
 # Optional
 CODE408 = False
@@ -161,13 +161,13 @@ CODE122_VAR_MIN = 0
 CODE122_VAR_MAX = 2000
 
 # Plugins / Scripts
-CODE355655 = False
-CODE357 = False
+CODE355655 = True
+CODE357 = True
 CODE657 = False
 CODE356 = False
 CODE320 = False
-CODE324 = False
-CODE325 = False
+CODE324 = True
+CODE325 = True
 CODE111 = False
 CODE108 = False
 
@@ -201,7 +201,7 @@ HEADER_MAPPINGS_357 = {
     "SceneGlossary": (["category"], None),
 }
 # Subset of HEADER_MAPPINGS_357 keys that should be processed (empty = none).
-ENABLED_PLUGINS_357: set = {"DTextPicture", "LogMessage", "TorigoyaMZ_NotifyMessage"}
+ENABLED_PLUGINS_357: set = {"BattleLogOutput"}
 
 # All known code-355/655 script patterns. Enable entries via ENABLED_PATTERNS_355655.
 PATTERNS_355655 = {
@@ -241,7 +241,7 @@ PATTERNS_355655 = {
     "AddAddress": (r'AddAddress\(\d+,\s*\\?"(.+?)\\?"', False),
 }
 # Subset of PATTERNS_355655 keys that should be processed (empty = none).
-ENABLED_PATTERNS_355655: set = set()
+ENABLED_PATTERNS_355655: set = {"CBR-エロステータス"}
 
 
 def _pat355655_captured_text(match):

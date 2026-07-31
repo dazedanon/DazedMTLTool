@@ -18,6 +18,7 @@ from gui.translation_tab import (
     TranslationTab,
     TranslationWorker,
     _configured_game_root,
+    _should_prepare_speakers_automatically,
 )
 import modules.rpgmakermvmz as mvmz
 
@@ -176,6 +177,23 @@ class SpeakerPreflightWorkerTests(unittest.TestCase):
                 }.get(key, default)
 
         self.assertEqual(_configured_game_root(Settings()), "/current/game")
+
+    def test_rpgmaker_translation_does_not_repeat_workflow_speaker_collection(self):
+        self.assertFalse(
+            _should_prepare_speakers_automatically("RPG Maker MV/MZ")
+        )
+
+    def test_wolfdawn_keeps_automatic_speaker_preflight(self):
+        self.assertTrue(
+            _should_prepare_speakers_automatically("Wolf RPG (WolfDawn)")
+        )
+        self.assertFalse(
+            _should_prepare_speakers_automatically(
+                "Wolf RPG (WolfDawn)",
+                batch_mode=True,
+                batch_resume_state="fetched",
+            )
+        )
 
 
 if __name__ == "__main__":

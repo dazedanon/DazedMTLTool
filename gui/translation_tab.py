@@ -94,9 +94,8 @@ BATCH_MODE_BENEFIT_NOTE = (
     "Anthropic Batches API — 50% or more cheaper than live translate (Claude only)."
 )
 BATCH_COLLECT_LIVE_CHARGE_NOTE = (
-    "For RPG Maker and WolfDawn, unresolved speakers are scanned first without API "
-    "calls. You review their grouped cost estimate and approve translation before DazedTL "
-    "collects the main batch."
+    "For RPG Maker, collect speaker names from the Workflow before starting a batch. "
+    "WolfDawn scans unresolved speakers and asks for approval before collecting the main batch."
 )
 
 _CONFIG_UNSET = object()
@@ -114,6 +113,24 @@ def default_translation_mode(model=_CONFIG_UNSET, api_url=_CONFIG_UNSET) -> str:
     from util.translation import isClaudeNative
 
     return BATCH_MODE_LABEL if isClaudeNative(str(model or ""), api_url) else "Translate"
+
+
+def _should_prepare_speakers_automatically(
+    module_name,
+    *,
+    estimate_only=False,
+    parse_speakers=False,
+    batch_mode=False,
+    batch_resume_state=None,
+) -> bool:
+    """Only engines without an explicit workflow collection step use auto-preflight."""
+    name = str(module_name or "").casefold()
+    return bool(
+        "wolfdawn" in name
+        and not estimate_only
+        and not parse_speakers
+        and not (batch_mode and batch_resume_state)
+    )
 
 
 TRANSLATION_MODULE_SPECS = (
@@ -963,25 +980,15 @@ class TranslationWorker(QThread):
                     pass
 
             try:
-                module_name_lower = (
-                    self.module_info[0].lower()
-                    if isinstance(self.module_info[0], str)
-                    else ""
-                )
-                is_mvmz = "mv/mz" in module_name_lower
-                is_wolfdawn = "wolfdawn" in module_name_lower
-                should_prepare_speakers = (
-                    (is_mvmz or is_wolfdawn)
-                    and not self.estimate_only
-                    and not self.parse_speakers
-                    and not (self.batch_mode and self.batch_resume_state)
+                should_prepare_speakers = _should_prepare_speakers_automatically(
+                    self.module_info[0],
+                    estimate_only=self.estimate_only,
+                    parse_speakers=self.parse_speakers,
+                    batch_mode=self.batch_mode,
+                    batch_resume_state=self.batch_resume_state,
                 )
                 if should_prepare_speakers:
-                    prepared = (
-                        self._prepare_mvmz_speakers(matching_files)
-                        if is_mvmz
-                        else self._prepare_wolf_speakers(matching_files)
-                    )
+                    prepared = self._prepare_wolf_speakers(matching_files)
                     if not prepared:
                         self.finished_signal.emit(False, "Speaker translation canceled")
                         return
@@ -999,7 +1006,7 @@ class TranslationWorker(QThread):
                         self._emit_batch_phase("collect")
                         self.emit_log("[BATCH] Pass 1/2: collecting requests...")
                         self.emit_log(
-                            "[BATCH] Approved speaker names are already in the game glossary; "
+                            "[BATCH] Speaker names already in the game glossary are reused; "
                             "Pass 1 queues the main translation requests without per-speaker API calls."
                         )
                         total_cost = self._run_files(matching_files, False, batch_phase="collect")
