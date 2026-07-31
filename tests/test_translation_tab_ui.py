@@ -4,6 +4,7 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -164,6 +165,15 @@ class TranslationTabUITests(unittest.TestCase):
         self.assertEqual(self.tab.translate_button.text(), "Start Batch Translation")
         self.assertFalse(self.tab.batch_mode_note.isHidden())
         self.assertIn("50%", self.tab.batch_mode_note.text())
+
+    def test_completed_speaker_collection_resets_next_run_to_translate(self) -> None:
+        self.assertGreaterEqual(self.tab.mode_combo.findText("Parse Speakers"), 0)
+        self.tab.mode_combo.setCurrentText("Parse Speakers")
+        self.tab.translation_worker = SimpleNamespace(parse_speakers=True)
+
+        self.tab._apply_finish_ui(True, "Success")
+
+        self.assertEqual(self.tab.mode_combo.currentText(), "Translate")
 
 
 if __name__ == "__main__":

@@ -3877,13 +3877,18 @@ class TranslationTab(QWidget):
             self.file_card.title_label.setText("Translation results")
         if getattr(self, "_batch_active", False):
             self._on_batch_phase("done", None)
-        # Parse Speakers: promote Scanned rows to Done only after vocab write finishes.
+        # Parse Speakers: promote Scanned rows to Done only after vocab write finishes,
+        # then leave the next run in normal translation mode. Otherwise the mode
+        # remains sticky and pressing Start again silently repeats speaker collection.
         try:
             worker = getattr(self, "translation_worker", None)
             if success and worker and getattr(worker, "parse_speakers", False):
                 for fname, meta in (getattr(self, "file_progress_items", {}) or {}).items():
                     if (meta.get("status_text") or "") == "Scanned":
                         self.mark_file_complete(fname, success=True)
+                translate_index = self.mode_combo.findText("Translate")
+                if translate_index >= 0:
+                    self.mode_combo.setCurrentIndex(translate_index)
         except Exception:
             pass
         # Hide the stop button and show the reset/back button
