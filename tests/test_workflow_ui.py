@@ -524,6 +524,38 @@ class WorkflowShellTests(unittest.TestCase):
         self.assertEqual(len({field.y() for field in width_fields}), 1)
         self.assertEqual(len({field.height() for field in width_fields}), 1)
 
+    def test_phase_one_widths_reload_live_values_from_env(self):
+        live_values = {
+            "width": "82",
+            "faceWidth": "68",
+            "listWidth": "104",
+            "noteWidth": "91",
+        }
+        with (
+            patch("gui.workflow_tab.Path.is_file", return_value=True),
+            patch("gui.workflow_tab.dotenv_values", return_value=live_values),
+        ):
+            self.workflow._goto_step(3)
+            self.app.processEvents()
+
+        self.assertEqual(self.workflow.wrap_width_spin.value(), 82)
+        self.assertEqual(self.workflow.wrap_face_spin.value(), 68)
+        self.assertEqual(self.workflow.wrap_list_spin.value(), 104)
+        self.assertEqual(self.workflow.wrap_note_spin.value(), 91)
+
+    def test_phase_one_face_width_is_clamped_to_live_dialogue_width(self):
+        with (
+            patch("gui.workflow_tab.Path.is_file", return_value=True),
+            patch(
+                "gui.workflow_tab.dotenv_values",
+                return_value={"width": "48", "faceWidth": "70"},
+            ),
+        ):
+            self.workflow.refresh_wrap_widths_from_env()
+
+        self.assertEqual(self.workflow.wrap_width_spin.value(), 48)
+        self.assertEqual(self.workflow.wrap_face_spin.value(), 48)
+
     def test_setup_workspace_reflows_with_available_width(self):
         self.workflow.resize(1400, 760)
         self.app.processEvents()

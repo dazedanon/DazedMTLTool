@@ -1238,6 +1238,9 @@ class DazedMTLGUI(QMainWindow):
                 refresh_mode = getattr(tab, "refresh_default_translation_mode", None)
                 if callable(refresh_mode):
                     refresh_mode()
+                refresh_widths = getattr(tab, "refresh_wrap_widths_from_env", None)
+                if callable(refresh_widths):
+                    refresh_widths()
         except Exception as e:
             print(f"Warning: Could not apply configuration changes: {e}")
             

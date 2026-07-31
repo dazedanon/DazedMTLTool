@@ -27,6 +27,7 @@ from util.skills import load_clipboard_skill, load_project_setup
 from util.vocab import BASE_SEPARATOR as _SHARED_BASE_SEPARATOR
 
 import jsbeautifier
+from dotenv import dotenv_values
 
 from PyQt5.QtCore import Qt, QSettings, QSize, QThread, QTimer, pyqtSignal
 from PyQt5.QtGui import QFont
@@ -995,9 +996,10 @@ class WorkflowTab(QWidget):
     # ── Tab visibility ──────────────────────────────────────────────────────
 
     def showEvent(self, event):
-        """Trigger folder detection the first time this tab is shown (or after a new folder is set)."""
+        """Refresh live settings and detect the saved folder when first shown."""
         super().showEvent(event)
         self._update_responsive_shell()
+        self.refresh_wrap_widths_from_env()
         if not self._detected_on_show and self._setting("last_game_folder", ""):
             self._detected_on_show = True
             QTimer.singleShot(100, self._detect_folder)
@@ -1162,6 +1164,8 @@ class WorkflowTab(QWidget):
         if previous_index == 0 and index != 0:
             self._auto_import_if_needed()
 
+        if index == 3:
+            self.refresh_wrap_widths_from_env()
         if index == 4:
             self._populate_p2_checkboxes()
         if index == 6:
@@ -1834,8 +1838,9 @@ class WorkflowTab(QWidget):
         wrap_inner.addWidget(wrap_box_title)
 
         wrap_hint = QLabel(
-            "Use the measured widths from the project setup skill. Saving writes the dialogue, "
-            "face-dialogue, list/help, and note limits to .env; font recommendations are not applied here."
+            "These values reload directly from .env when this page is shown. Saving writes the "
+            "dialogue, face-dialogue, list/help, and note limits back to .env; font recommendations "
+            "are not applied here."
         )
         wrap_hint.setWordWrap(True)
         wrap_hint.setStyleSheet("color:#a6a6a6;font-size:13px;")
@@ -4459,8 +4464,6 @@ class WorkflowTab(QWidget):
     def _load_rewrap_widths(self):
         """Load the four current wrap widths directly from .env."""
         try:
-            from dotenv import dotenv_values
-
             values = dotenv_values(Path(".env")) if Path(".env").is_file() else {}
 
             def _value(key: str, fallback: int) -> int:
@@ -4485,6 +4488,29 @@ class WorkflowTab(QWidget):
                 )
         except Exception as exc:
             self.rewrap_status_label.setText(f"Could not load .env widths: {exc}")
+
+    def refresh_wrap_widths_from_env(self):
+        """Reload the Phase 1 width controls directly from the current .env file."""
+        if not hasattr(self, "wrap_width_spin"):
+            return
+        try:
+            values = dotenv_values(Path(".env")) if Path(".env").is_file() else {}
+
+            def _value(key: str, fallback: int) -> int:
+                raw = values.get(key)
+                try:
+                    return int(raw) if raw not in (None, "") else fallback
+                except (TypeError, ValueError):
+                    return fallback
+
+            dialogue = _value("width", 60)
+            face = _value("faceWidth", 50)
+            self.wrap_width_spin.setValue(dialogue)
+            self.wrap_face_spin.setValue(min(dialogue, face))
+            self.wrap_list_spin.setValue(_value("listWidth", 100))
+            self.wrap_note_spin.setValue(_value("noteWidth", 75))
+        except Exception as exc:
+            self._log(f"⚠  Could not load line widths from .env: {exc}")
 
     def _rewrap_data_directory(self) -> Path | None:
         """Return the Step-0 game data directory used by direct rewrapping."""
