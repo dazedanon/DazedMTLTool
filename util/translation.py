@@ -194,8 +194,40 @@ def extract_control_codes(text):
     return _CONTROL_CODE_RE.findall(text)
 
 
-def validate_control_codes(original_items, translated_items):
-    """Require each translated line to preserve the exact source control-token sequence."""
+def _mask_mapped_control_codes(text, replacements):
+    """Mask control codes restored from placeholders without reparsing their end."""
+    masked = str(text)
+    missing = []
+    search_from = 0
+
+    # Replacement dictionaries retain the source placeholder order. Match each
+    # exact restored code in that order, then hide it from the generic parser.
+    # This matters for unparameterized codes such as ``\vc``: once restored
+    # before English text, ``\vcThat's`` would otherwise be greedily parsed as
+    # the different code ``\vcThat``.
+    for original in replacements.values():
+        code = str(original)
+        if _CONTROL_CODE_RE.fullmatch(code) is None:
+            continue
+        index = masked.find(code, search_from)
+        if index < 0:
+            missing.append(code)
+            continue
+        end = index + len(code)
+        masked = masked[:index] + (" " * len(code)) + masked[end:]
+        search_from = end
+
+    return masked, missing
+
+
+def validate_control_codes(original_items, translated_items, replacements_by_line=None):
+    """Require each translated line to preserve the exact source control-token sequence.
+
+    ``replacements_by_line`` is the per-line placeholder mapping produced by
+    :func:`protect_script_codes`. Known restored codes are matched exactly and
+    masked before the generic control-code regex runs. This avoids treating
+    adjacent English letters as part of an unparameterized code name.
+    """
     originals = original_items if isinstance(original_items, list) else [original_items]
     translations = translated_items if isinstance(translated_items, list) else [translated_items]
     if len(originals) != len(translations):
@@ -203,8 +235,32 @@ def validate_control_codes(original_items, translated_items):
 
     errors = []
     for index, (original, translated) in enumerate(zip(originals, translations), start=1):
-        source_sequence = extract_control_codes(str(original))
-        target_sequence = extract_control_codes(str(translated))
+        replacements = (
+            replacements_by_line.get(index - 1, {})
+            if replacements_by_line
+            else {}
+        )
+        source_text, source_mapping_missing = _mask_mapped_control_codes(
+            original, replacements
+        )
+        target_text, target_mapping_missing = _mask_mapped_control_codes(
+            translated, replacements
+        )
+        source_sequence = extract_control_codes(source_text)
+        target_sequence = extract_control_codes(target_text)
+
+        if source_mapping_missing:
+            errors.append(
+                f"Line{index}: protected-code mapping absent from source "
+                f"{source_mapping_missing}"
+            )
+            continue
+        if target_mapping_missing:
+            errors.append(
+                f"Line{index}: missing protected codes {target_mapping_missing}"
+            )
+            continue
+
         if source_sequence != target_sequence:
             source_codes = Counter(source_sequence)
             target_codes = Counter(target_sequence)
@@ -2916,7 +2972,9 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None, mism
         if cached_result is not None:
             cached_values = cached_result if isinstance(cached_result, list) else [cached_result]
             source_values = clean_tItem if isinstance(clean_tItem, list) else [clean_tItem]
-            controls_ok, _control_errors = validate_control_codes(source_values, cached_values)
+            controls_ok, _control_errors = validate_control_codes(
+                source_values, cached_values, all_replacements
+            )
             content_ok, _invalid_indices, _content_reasons = validate_translation_content(
                 source_values, cached_values, config.langRegex
             )
@@ -3197,7 +3255,7 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None, mism
                                 for j, line in enumerate(extracted)
                             ]
                             control_valid, control_reasons = validate_control_codes(
-                                clean_tItem, restored_for_validation
+                                clean_tItem, restored_for_validation, all_replacements
                             )
                             if not control_valid:
                                 is_valid = False
@@ -3252,7 +3310,7 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None, mism
                                 extracted, all_replacements[0]
                             )
                             control_valid, control_reasons = validate_control_codes(
-                                tItem, restored_for_validation
+                                tItem, restored_for_validation, all_replacements
                             )
                             if not control_valid:
                                 is_valid = False

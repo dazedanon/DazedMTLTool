@@ -40,6 +40,31 @@ class ControlCodeProtectionTests(unittest.TestCase):
         self.assertFalse(valid)
         self.assertIn("order changed", reasons[0])
 
+    def test_restored_bare_code_does_not_consume_adjacent_english(self):
+        source = r"\vcそう…、あれは父さんが死んで間もない頃――"
+        protected, replacements = tr.protect_script_codes(source)
+        translated = tr.restore_script_codes(
+            protected.replace("そう…、あれは父さんが死んで間もない頃――", "That's right..."),
+            replacements,
+        )
+
+        valid, reasons = tr.validate_control_codes(
+            source, translated, {0: replacements}
+        )
+
+        self.assertTrue(valid, reasons)
+
+    def test_mapped_control_validation_still_rejects_missing_code(self):
+        source = r"\vcそう"
+        _, replacements = tr.protect_script_codes(source)
+
+        valid, reasons = tr.validate_control_codes(
+            source, "That's right...", {0: replacements}
+        )
+
+        self.assertFalse(valid)
+        self.assertIn("missing protected codes", reasons[0])
+
 
 class TranslationContentValidationTests(unittest.TestCase):
     def test_rejects_source_language_residue(self):
