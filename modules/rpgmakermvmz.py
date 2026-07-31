@@ -249,6 +249,12 @@ def _pat355655_captured_text(match):
     return match.group(match.lastindex)
 
 
+def _pat355655_replace_captured(source: str, match, replacement: str) -> str:
+    """Replace only the visible capture, even when it also occurs in plugin syntax."""
+    start, end = match.span(match.lastindex)
+    return source[:start] + replacement + source[end:]
+
+
 def _reload_vocab():
     """Reload the active game's glossary so recent edits take effect."""
     global VOCAB
@@ -3380,8 +3386,13 @@ def searchCodes(page, pbar, jobList, filename):
                                             origParam = codeList[lineIdx]["parameters"][0]
                                             origMatch = re.search(regex, origParam)
                                             if origMatch:
-                                                old = _pat355655_captured_text(origMatch)
-                                                codeList[lineIdx]["parameters"][0] = origParam.replace(old, translatedText)
+                                                codeList[lineIdx]["parameters"][0] = (
+                                                    _pat355655_replace_captured(
+                                                        origParam,
+                                                        origMatch,
+                                                        translatedText,
+                                                    )
+                                                )
                                 
                                 i = j - 1
                             break
@@ -3412,7 +3423,13 @@ def searchCodes(page, pbar, jobList, filename):
                                     if "BattleManager" in codeList[i]["parameters"][0]:
                                         translatedText = re.sub(r"(?<!\\)'", r"\\'", translatedText)
 
-                                    codeList[i]["parameters"][0] = jaString.replace(cap, translatedText)
+                                    codeList[i]["parameters"][0] = (
+                                        _pat355655_replace_captured(
+                                            jaString,
+                                            match,
+                                            translatedText,
+                                        )
+                                    )
                             break
 
                 # AddCmnt handler - extract strings from array and name parameter

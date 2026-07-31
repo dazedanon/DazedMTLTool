@@ -83,6 +83,45 @@ class TestMVMZScriptPatterns(unittest.TestCase):
         )
         self.assertEqual(translated_page["list"][4], page["list"][4])
 
+    def test_cbr_text_replacement_does_not_modify_matching_marker_text(self):
+        page = {
+            "list": [
+                {
+                    "code": 355,
+                    "indent": 0,
+                    "parameters": ["CBR-エロステータス"],
+                },
+                {
+                    "code": 655,
+                    "indent": 0,
+                    "parameters": ["テキスト-キス"],
+                },
+            ]
+        }
+
+        def translate(text, history, batch=False):
+            self.assertEqual(text, ["キス"])
+            return [["Kiss"], [0, 0]]
+
+        original_translate = mvmz.translateAI
+        original_code355655 = mvmz.CODE355655
+        original_enabled = mvmz.ENABLED_PATTERNS_355655
+        mvmz.translateAI = translate
+        mvmz.CODE355655 = True
+        mvmz.ENABLED_PATTERNS_355655 = {"CBR-エロステータス"}
+        try:
+            translated_page = copy.deepcopy(page)
+            mvmz.searchCodes(translated_page, None, [], "TestMap.json")
+        finally:
+            mvmz.translateAI = original_translate
+            mvmz.CODE355655 = original_code355655
+            mvmz.ENABLED_PATTERNS_355655 = original_enabled
+
+        self.assertEqual(
+            translated_page["list"][1]["parameters"][0],
+            "テキスト-Kiss",
+        )
+
     def test_battle_manager_can_escape_pattern_definition(self):
         regex, multiline = mvmz.PATTERNS_355655["if (BattleManager.canEscape())"]
 
