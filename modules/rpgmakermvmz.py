@@ -251,7 +251,7 @@ def _pat355655_captured_text(match):
 def _reload_vocab():
     """Reload the active game's glossary so recent edits take effect."""
     global VOCAB
-    vocab_path = VOCAB_PATH or active_glossary_path()
+    vocab_path = active_glossary_path() or VOCAB_PATH
     try:
         VOCAB = vocab_path.read_text(encoding="utf-8") if vocab_path else read_active_glossary()
     except (FileNotFoundError, OSError):
@@ -1001,7 +1001,7 @@ def update_vocab_section(category: str, pairs: list[tuple[str, str]]):
     The existing section is replaced entirely; other sections are preserved.
     """
     try:
-        vocab_path = VOCAB_PATH or active_glossary_path()
+        vocab_path = active_glossary_path() or VOCAB_PATH
         if vocab_path is None:
             raise RuntimeError("No active game folder is available for glossary updates.")
 
@@ -5076,10 +5076,13 @@ def getSpeaker(speaker: str):
         if cached is not None:
             return [cached, [0, 0]]
 
-    # Batch collection happens before submission approval. The GUI preflight
-    # normally resolves every name first; defer any dynamic miss instead of
-    # making an unapproved one-line live request.
-    if (os.getenv("BATCH_PHASE") or "").strip().lower() == "collect":
+    # Batch collection happens before submission approval, and consume must
+    # rebuild the exact same payload key to retrieve the paid batch result.
+    # The GUI preflight normally resolves every name first. If a speaker is
+    # still unresolved (notably when resuming a batch collected before speaker
+    # glossary persistence was fixed), preserve the source name in both phases
+    # instead of making a one-line live request or changing the payload key.
+    if (os.getenv("BATCH_PHASE") or "").strip().lower() in {"collect", "consume"}:
         return [speaker, [0, 0]]
 
     # A few RPG Maker fields routed through getSpeaker are compound labels
@@ -5333,8 +5336,15 @@ def pendingSpeakerNames() -> list[str]:
 def finalizeSpeakerParse():
     """Batch translate collected speakers and write fresh # Speakers section."""
     if not SPEAKER_PARSE_MODE:
-        return
+        return False
     try:
+        # The grouped results must be persisted for the per-file subprocesses.
+        # Without a glossary destination, translating them here would be wasted:
+        # each subprocess would have to resolve the same speakers again.
+        vocab_path = active_glossary_path() or VOCAB_PATH
+        if vocab_path is None or not vocab_path.exists():
+            return False
+
         # Step 1: seed curated vocab hits, then batch translate only unresolved
         # speakers. This avoids generating a contradictory # Speakers spelling
         # for a name already defined under # Game Characters.
@@ -5407,11 +5417,6 @@ def finalizeSpeakerParse():
                         _speakerCache[orig] = norm
                         NAMESLIST.append([orig, norm])
 
-        vocab_path = VOCAB_PATH or active_glossary_path()
-        if vocab_path is None:
-            return
-        if not vocab_path.exists():
-            return
         content = vocab_path.read_text(encoding="utf-8")
 
         seen = set()
@@ -5424,7 +5429,7 @@ def finalizeSpeakerParse():
             seen.add(orig)
             lines.append(f"{orig} ({tl})")
         if not lines:
-            return
+            return True
         section_block = "# Speakers\n" + "\n".join(lines) + "\n\n"
 
         speakers_pattern = re.compile(r"^[\t ]*#+\s*Speakers\s*$\r?\n.*?(?=^[\t ]*#|\Z)", re.MULTILINE | re.DOTALL)
@@ -5457,6 +5462,9 @@ def finalizeSpeakerParse():
             try:
                 shutil.move(str(tmp_path), str(vocab_path))
             except Exception:
-                pass
+                return False
+        _reload_vocab()
+        return True
     except Exception:
         traceback.print_exc()
+        return False

@@ -14,7 +14,11 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PyQt5.QtWidgets import QMessageBox
 
-from gui.translation_tab import TranslationTab, TranslationWorker
+from gui.translation_tab import (
+    TranslationTab,
+    TranslationWorker,
+    _configured_game_root,
+)
 import modules.rpgmakermvmz as mvmz
 
 
@@ -162,6 +166,16 @@ class SpeakerPreflightWorkerTests(unittest.TestCase):
             ):
                 self.assertFalse(worker._prepare_mvmz_speakers(worker.selected_files))
             finalize.assert_not_called()
+
+    def test_game_root_uses_workflow_settings_key(self):
+        class Settings:
+            def value(self, key, default=""):
+                return {
+                    "workflow/last_game_folder": "/current/game",
+                    "last_game_folder": "/legacy/game",
+                }.get(key, default)
+
+        self.assertEqual(_configured_game_root(Settings()), "/current/game")
 
 
 if __name__ == "__main__":

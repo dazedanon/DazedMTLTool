@@ -78,6 +78,16 @@ class MVMZSpeakerVocabTests(unittest.TestCase):
         self.assertEqual(result, ["騎士", [0, 0]])
         translate.assert_not_called()
 
+    def test_batch_consume_defers_unresolved_legacy_speaker(self):
+        with (
+            patch.dict(os.environ, {"BATCH_PHASE": "consume"}),
+            patch.object(mvmz, "translateAI") as translate,
+        ):
+            result = mvmz.getSpeaker("騎士")
+
+        self.assertEqual(result, ["騎士", [0, 0]])
+        translate.assert_not_called()
+
     def test_game_characters_override_generated_speaker_spelling(self):
         mvmz.VOCAB = (
             "# Game Characters\nユウ (Yuu) - Male protagonist.\n\n"
@@ -110,7 +120,7 @@ class MVMZSpeakerVocabTests(unittest.TestCase):
                 patch.object(mvmz, "VOCAB_PATH", vocab_path),
                 patch.object(mvmz, "translateAI") as translate,
             ):
-                mvmz.finalizeSpeakerParse()
+                self.assertTrue(mvmz.finalizeSpeakerParse())
             written = vocab_path.read_text(encoding="utf-8")
 
         translate.assert_not_called()
@@ -131,7 +141,7 @@ class MVMZSpeakerVocabTests(unittest.TestCase):
                 ) as translate,
             ):
                 self.assertEqual(mvmz.pendingSpeakerNames(), ["騎士", "秘書官"])
-                mvmz.finalizeSpeakerParse()
+                self.assertTrue(mvmz.finalizeSpeakerParse())
             written = glossary_path.read_text(encoding="utf-8")
 
         translate.assert_called_once_with(
@@ -141,6 +151,18 @@ class MVMZSpeakerVocabTests(unittest.TestCase):
         )
         self.assertIn("騎士 (Knight)", written)
         self.assertIn("秘書官 (Secretary)", written)
+
+    def test_finalize_without_glossary_does_not_spend_on_speakers(self):
+        mvmz.SPEAKER_PARSE_MODE = True
+        mvmz.SPEAKER_COLLECTED = ["騎士"]
+        with (
+            patch.object(mvmz, "VOCAB_PATH", None),
+            patch.object(mvmz, "active_glossary_path", return_value=None),
+            patch.object(mvmz, "translateAI") as translate,
+        ):
+            self.assertFalse(mvmz.finalizeSpeakerParse())
+
+        translate.assert_not_called()
 
 
 class CharacterCompoundMatchingTests(unittest.TestCase):

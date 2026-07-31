@@ -77,6 +77,19 @@ def create_horizontal_line():
 
 
 BATCH_MODE_LABEL = "Batch Translate"
+
+
+def _configured_game_root(settings) -> str:
+    """Return the workflow's active game root, with legacy-key fallback."""
+    if settings is None:
+        return ""
+    for key in ("workflow/last_game_folder", "last_game_folder"):
+        value = str(settings.value(key, "") or "").strip()
+        if value:
+            return value
+    return ""
+
+
 BATCH_MODE_BENEFIT_NOTE = (
     "Anthropic Batches API — 50% or more cheaper than live translate (Claude only)."
 )
@@ -708,7 +721,13 @@ class TranslationWorker(QThread):
                 f"🔤 Translating {len(pending)} speakers in grouped list batches…"
             )
             before_in, before_out = int(TOKENS[0]), int(TOKENS[1])
-            finalizeSpeakerParse()
+            speakers_saved = finalizeSpeakerParse()
+            if speakers_saved is False:
+                self.emit_log(
+                    "❌ Speaker translations could not be saved because the active "
+                    "game glossary was not available."
+                )
+                return False
             delta_in = max(0, int(TOKENS[0]) - before_in)
             delta_out = max(0, int(TOKENS[1]) - before_out)
             if delta_in or delta_out:
@@ -3450,6 +3469,19 @@ class TranslationTab(QWidget):
             # can export exactly those files rather than all active files.
             self._last_run_files = list(selected_files)
 
+            # Export the workflow's game root before the worker starts. Speaker
+            # preflight and every per-file subprocess use this to share the same
+            # persisted glossary. Keep this independent from run-log setup so a
+            # logging failure cannot silently disable glossary resolution.
+            try:
+                game_root = _configured_game_root(self.settings)
+                if game_root and Path(game_root).is_dir():
+                    os.environ["DAZED_GAME_ROOT"] = game_root
+                else:
+                    os.environ.pop("DAZED_GAME_ROOT", None)
+            except Exception:
+                os.environ.pop("DAZED_GAME_ROOT", None)
+
             # Create and start translation worker
             self.translation_worker = TranslationWorker(
                 self.project_root, 
@@ -3514,20 +3546,6 @@ class TranslationTab(QWidget):
                 # Export env var so subprocess workers inherit the path
                 try:
                     os.environ['TRANSLATION_RUN_LOG'] = str(run_log_path)
-                except Exception:
-                    pass
-
-                # Per-game overlays (game.md / quirks / custom): Workflow folder → DAZED_GAME_ROOT
-                try:
-                    game_root = ""
-                    if self.settings:
-                        game_root = str(
-                            self.settings.value("last_game_folder", "") or ""
-                        ).strip()
-                    if game_root and Path(game_root).is_dir():
-                        os.environ["DAZED_GAME_ROOT"] = game_root
-                    else:
-                        os.environ.pop("DAZED_GAME_ROOT", None)
                 except Exception:
                     pass
 
