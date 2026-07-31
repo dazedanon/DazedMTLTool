@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Regression tests for deterministic RPG Maker speaker glossary handling."""
 
+import os
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -27,6 +28,7 @@ class MVMZSpeakerVocabTests(unittest.TestCase):
         self.original_collected = mvmz.SPEAKER_COLLECTED
         self.original_parse_mode = mvmz.SPEAKER_PARSE_MODE
         self.original_preflight = mvmz.PREFLIGHT_COUNT_MODE
+        self.original_tokens = list(mvmz.TOKENS)
         mvmz.VOCAB = VOCAB
         mvmz.NAMESLIST = []
         mvmz.SPEAKER_COLLECTED = []
@@ -42,6 +44,7 @@ class MVMZSpeakerVocabTests(unittest.TestCase):
         mvmz.SPEAKER_COLLECTED = self.original_collected
         mvmz.SPEAKER_PARSE_MODE = self.original_parse_mode
         mvmz.PREFLIGHT_COUNT_MODE = self.original_preflight
+        mvmz.TOKENS[:] = self.original_tokens
         with mvmz._speakerCacheLock:
             mvmz._speakerCache.clear()
 
@@ -64,6 +67,16 @@ class MVMZSpeakerVocabTests(unittest.TestCase):
             result = mvmz.getSpeaker("ユウイベント5")
 
         self.assertEqual(result, ["Yuu Event 5", [3, 2]])
+
+    def test_batch_collect_defers_unexpected_speaker_without_live_call(self):
+        with (
+            patch.dict(os.environ, {"BATCH_PHASE": "collect"}),
+            patch.object(mvmz, "translateAI") as translate,
+        ):
+            result = mvmz.getSpeaker("騎士")
+
+        self.assertEqual(result, ["騎士", [0, 0]])
+        translate.assert_not_called()
 
     def test_game_characters_override_generated_speaker_spelling(self):
         mvmz.VOCAB = (
@@ -102,6 +115,32 @@ class MVMZSpeakerVocabTests(unittest.TestCase):
 
         translate.assert_not_called()
         self.assertIn("# Speakers\nユウ (Yuu)", written)
+
+    def test_parse_speakers_translates_unresolved_names_in_one_list_call(self):
+        mvmz.SPEAKER_PARSE_MODE = True
+        mvmz.SPEAKER_COLLECTED = ["騎士", "秘書官", "ユウ"]
+        with TemporaryDirectory() as tmp:
+            glossary_path = Path(tmp) / "glossary.txt"
+            glossary_path.write_text(VOCAB, encoding="utf-8")
+            with (
+                patch.object(mvmz, "VOCAB_PATH", glossary_path),
+                patch.object(
+                    mvmz,
+                    "translateAI",
+                    return_value=[["Knight", "Secretary"], [12, 3]],
+                ) as translate,
+            ):
+                self.assertEqual(mvmz.pendingSpeakerNames(), ["騎士", "秘書官"])
+                mvmz.finalizeSpeakerParse()
+            written = glossary_path.read_text(encoding="utf-8")
+
+        translate.assert_called_once_with(
+            ["騎士", "秘書官"],
+            mvmz.ctx("names.speaker"),
+            True,
+        )
+        self.assertIn("騎士 (Knight)", written)
+        self.assertIn("秘書官 (Secretary)", written)
 
 
 class CharacterCompoundMatchingTests(unittest.TestCase):

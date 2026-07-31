@@ -315,12 +315,13 @@ files to translate are in the /files folder and that you picked the right game e
         if resume_state is None:
             clearBatchFiles()
 
-            # Pass 1 — queue dialogue for the batch; speaker/variable strings still hit live API.
+            # Pass 1 — queue dialogue for the batch. Unresolved dynamic speakers
+            # are deferred until consume; some other short variables may still be live.
             tqdm.write(Fore.CYAN + "[BATCH] Pass 1/2: collecting requests..." + Fore.RESET)
             tqdm.write(
                 Fore.YELLOW
-                + "[BATCH] Note: speaker names and similar short strings translate at live "
-                "API rates during collect (dialogue is batched after you confirm)."
+                + "[BATCH] Note: unresolved dynamic speakers are deferred until after "
+                "submission approval; some other short variables may still translate live."
                 + Fore.RESET
             )
             set_batch_phase("collect")

@@ -15,6 +15,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from dotenv import load_dotenv
 
@@ -151,6 +152,55 @@ TXTDIR_DOC = {
          "lines": [{"i": 0, "source": "せりふ", "text": "せりふ"}]},
     ],
 }
+
+
+class TestSpeakerPreflight(unittest.TestCase):
+    def test_collects_and_translates_unique_speakers_as_one_list(self):
+        doc = {
+            "kind": "map",
+            "scenes": [
+                {
+                    "lines": [
+                        {
+                            "speaker_src": "literal_line1",
+                            "source": "騎士\nこんにちは",
+                            "text": "騎士\nこんにちは",
+                        },
+                        {
+                            "speaker_src": "literal_line1",
+                            "source": "秘書官\nさようなら",
+                            "text": "秘書官\nさようなら",
+                        },
+                        {
+                            "speaker_src": "literal_line1",
+                            "source": "騎士\nまた",
+                            "text": "騎士\nまた",
+                        },
+                    ]
+                }
+            ],
+        }
+        names = wd.collectSpeakerNames(doc)
+        self.assertEqual(names, ["騎士", "秘書官"])
+
+        with (
+            patch.object(wd, "read_active_glossary", return_value=""),
+            patch.object(
+                wd,
+                "translateAI",
+                return_value=[["Knight", "Secretary"], [11, 2]],
+            ) as translate,
+            patch.object(wd.wolf_vocab, "update_vocab_section") as update,
+        ):
+            tokens = wd.translateSpeakerNames(names)
+
+        translate.assert_called_once_with(["騎士", "秘書官"], wd.ctx("names.npc"))
+        update.assert_called_once_with(
+            "Speakers",
+            [("騎士", "Knight"), ("秘書官", "Secretary")],
+            merge=True,
+        )
+        self.assertEqual(tokens, [11, 2])
 
 
 class TestCollectEntries(unittest.TestCase):
@@ -504,8 +554,8 @@ class TestTranslationWriteback(unittest.TestCase):
         # Short-string speaker resolve, then the remaining dialogue batch.
         self.assertEqual(captured, ["司祭", ["まだだ"]])
 
-    def test_collect_resolves_japanese_nameplate_before_queueing(self):
-        """Pass 1 must live-translate skip-translated JP nameplates (not defer to Pass 2)."""
+    def test_collect_defers_unexpected_japanese_nameplate_without_live_call(self):
+        """Pass 1 must not spend tokens on a name missed by GUI preflight."""
         doc = {
             "kind": "map",
             "scenes": [
@@ -544,11 +594,9 @@ class TestTranslationWriteback(unittest.TestCase):
                 os.environ["BATCH_PHASE"] = orig_phase
 
         self.assertIsNone(err)
-        # Speaker resolved live during collect; dialogue list is also seen (queued).
-        self.assertEqual(captured[0], "客Ｆ")
-        self.assertEqual(captured[1], ["まだだ"])
-        # Collect does not persist translated/, but in-memory text is updated.
-        self.assertEqual(data["scenes"][0]["lines"][0]["text"], "En_客Ｆ\nNow, now.")
+        # Only the dialogue list is queued; no one-line speaker call is made.
+        self.assertEqual(captured, [["まだだ"]])
+        self.assertEqual(data["scenes"][0]["lines"][0]["text"], "客Ｆ\nNow, now.")
 
     def test_ignore_tl_text_false_retranslates(self):
         doc = {

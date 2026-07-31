@@ -80,9 +80,8 @@ BATCH_MODE_BENEFIT_NOTE = (
     "Anthropic Batches API — 50% or more cheaper than live translate (Claude only)."
 )
 BATCH_COLLECT_LIVE_CHARGE_NOTE = (
-    "During Pass 1, speaker names and similar short strings are translated at live "
-    "API rates right away (not batched). Dialogue is queued for the batch and billed "
-    "only after you confirm the estimate."
+    "For RPG Maker and WolfDawn, unresolved speakers are scanned first without API "
+    "calls. You approve their grouped translation before DazedTL collects the main batch."
 )
 
 _CONFIG_UNSET = object()
@@ -228,6 +227,7 @@ class TranslationWorker(QThread):
     status_signal = pyqtSignal(str)  # updates the top translating_label from the worker
     finished_signal = pyqtSignal(bool, str)
     batch_phase_signal = pyqtSignal(str, object)  # phase name, optional payload
+    speaker_confirmation_signal = pyqtSignal(object)  # unresolved speaker names
     
     def __init__(self, project_root, module_info, estimate_only=False, selected_files=None,
                  parse_speakers=False, batch_mode=False, batch_resume_state=None):
@@ -243,6 +243,8 @@ class TranslationWorker(QThread):
         self._batch_submit_event = threading.Event()
         self._batch_submit_approved = False
         self._batch_pending_estimate = None
+        self._speaker_confirm_event = threading.Event()
+        self._speaker_translation_approved = False
         self.should_stop = False
         self.mutex = QMutex()  # For thread safety
         self.executor = None  # Store reference to executor for proper shutdown
@@ -252,6 +254,18 @@ class TranslationWorker(QThread):
         """Called from the UI thread after the submit-batch confirmation dialog."""
         self._batch_submit_approved = approved
         self._batch_submit_event.set()
+
+    def set_speaker_translation_response(self, approved):
+        """Resume a speaker preflight after the UI confirms or cancels it."""
+        self._speaker_translation_approved = bool(approved)
+        self._speaker_confirm_event.set()
+
+    def _wait_speaker_translation(self, speakers):
+        self._speaker_translation_approved = False
+        self._speaker_confirm_event.clear()
+        self.speaker_confirmation_signal.emit(list(speakers))
+        self._speaker_confirm_event.wait()
+        return self._speaker_translation_approved
 
     def _wait_batch_submit(self, estimate):
         self._batch_pending_estimate = estimate
@@ -333,6 +347,8 @@ class TranslationWorker(QThread):
                 return
                 
             self.should_stop = True
+            self._speaker_translation_approved = False
+            self._speaker_confirm_event.set()
             self.emit_log("🛑 Stopping translation worker and canceling pending tasks...")
             
             # Shutdown the executor if it exists
@@ -535,6 +551,163 @@ class TranslationWorker(QThread):
             self.emit_log(f"❌ Failed to run module process: {str(e)}")
             return "Fail"
 
+    def _prepare_mvmz_speakers(self, matching_files, *, emit_progress=False):
+        """Scan selected RPG Maker files, then resolve all new speakers together."""
+        try:
+            from modules.rpgmakermvmz import (
+                MODEL,
+                TOKENS,
+                calculateCost,
+                finalizeSpeakerParse,
+                handleMVMZ,
+                pendingSpeakerNames,
+                resetSpeakerState,
+                setSpeakerParseMode,
+            )
+        except Exception as exc:
+            self.emit_log(f"❌ Could not start speaker preflight: {exc}")
+            return False
+
+        resetSpeakerState()
+        setSpeakerParseMode(True)
+        total_files = len(matching_files)
+        completed = 0
+        try:
+            self.status_signal.emit("Scanning speakers…")
+            self.emit_log(
+                f"🔎 Scanning {total_files} file(s) for unresolved speakers "
+                "without making API calls…"
+            )
+            for filename in matching_files:
+                if self.should_stop:
+                    return False
+                try:
+                    handleMVMZ(filename, False)
+                except Exception as exc:
+                    tb_line = str(traceback.extract_tb(sys.exc_info()[2])[-1].lineno)
+                    self.emit_log(
+                        f"❌ Error scanning speakers in {filename}: {exc} | Line: {tb_line}"
+                    )
+                    self.file_error_signal.emit(filename, str(exc))
+                completed += 1
+                self.status_signal.emit(
+                    f"Scanning speakers… {completed}/{total_files}"
+                )
+                if emit_progress:
+                    self.emit_progress(completed, total_files, filename)
+
+            pending = pendingSpeakerNames()
+            if not pending:
+                self.emit_log(
+                    f"🔤 Speaker scan complete ({completed}/{total_files}). "
+                    "Every detected speaker is already in the game glossary."
+                )
+                return True
+
+            self.status_signal.emit(f"Waiting to translate {len(pending)} speakers…")
+            self.emit_log(
+                f"🔤 Speaker scan complete ({completed}/{total_files}). "
+                f"Found {len(pending)} unresolved unique speaker(s); no speaker API calls "
+                "have been made."
+            )
+            if not self._wait_speaker_translation(pending):
+                self.emit_log(
+                    "⏹ Speaker translation canceled. No unresolved speakers were sent, "
+                    "and the translation run did not start."
+                )
+                return False
+
+            self.status_signal.emit(f"Translating {len(pending)} speakers together…")
+            self.emit_log(
+                f"🔤 Translating {len(pending)} speakers in grouped list batches…"
+            )
+            before_in, before_out = int(TOKENS[0]), int(TOKENS[1])
+            finalizeSpeakerParse()
+            delta_in = max(0, int(TOKENS[0]) - before_in)
+            delta_out = max(0, int(TOKENS[1]) - before_out)
+            if delta_in or delta_out:
+                cost = calculateCost(delta_in, delta_out, MODEL)
+                self.emit_log(
+                    f"Speakers: [Input: {delta_in}][Output: {delta_out}]"
+                    f"[Cost: ${cost:.4f}] ✓"
+                )
+            self.emit_log("✅ Speaker translations saved to the game glossary.")
+            return True
+        finally:
+            setSpeakerParseMode(False)
+
+    def _prepare_wolf_speakers(self, matching_files):
+        """Scan WolfDawn JSON nameplates, then resolve all new speakers together."""
+        try:
+            from modules.wolfdawn import (
+                MODEL,
+                calculateCost,
+                collectSpeakerNames,
+                pendingSpeakerNames,
+                translateSpeakerNames,
+            )
+        except Exception as exc:
+            self.emit_log(f"❌ Could not start WOLF speaker preflight: {exc}")
+            return False
+
+        collected = []
+        seen = set()
+        total_files = len(matching_files)
+        self.status_signal.emit("Scanning WOLF speakers…")
+        self.emit_log(
+            f"🔎 Scanning {total_files} WOLF JSON file(s) for unresolved speakers "
+            "without making API calls…"
+        )
+        for index, filename in enumerate(matching_files, 1):
+            if self.should_stop:
+                return False
+            try:
+                path = self.project_root / "files" / filename
+                data = json.loads(path.read_text(encoding="utf-8-sig"))
+                for speaker in collectSpeakerNames(data):
+                    if speaker not in seen:
+                        seen.add(speaker)
+                        collected.append(speaker)
+            except Exception as exc:
+                self.emit_log(f"⚠ Could not scan WOLF speakers in {filename}: {exc}")
+            self.status_signal.emit(
+                f"Scanning WOLF speakers… {index}/{total_files}"
+            )
+
+        pending = pendingSpeakerNames(collected)
+        if not pending:
+            self.emit_log(
+                f"🔤 WOLF speaker scan complete ({total_files}/{total_files}). "
+                "Every detected speaker is already in the game glossary."
+            )
+            return True
+
+        self.status_signal.emit(f"Waiting to translate {len(pending)} speakers…")
+        self.emit_log(
+            f"🔤 WOLF speaker scan complete. Found {len(pending)} unresolved unique "
+            "speaker(s); no speaker API calls have been made."
+        )
+        if not self._wait_speaker_translation(pending):
+            self.emit_log(
+                "⏹ Speaker translation canceled. No unresolved speakers were sent, "
+                "and the translation run did not start."
+            )
+            return False
+
+        self.status_signal.emit(f"Translating {len(pending)} speakers together…")
+        self.emit_log(
+            f"🔤 Translating {len(pending)} WOLF speakers in grouped list batches…"
+        )
+        tokens = translateSpeakerNames(pending)
+        if tokens[0] or tokens[1]:
+            cost = calculateCost(tokens[0], tokens[1], MODEL)
+            self.emit_log(
+                f"Speakers: [Input: {tokens[0]}][Output: {tokens[1]}]"
+                f"[Cost: ${cost:.4f}] ✓"
+            )
+        self.emit_log("✅ Speaker translations saved to the game glossary.")
+        return True
+
     def _run_files(self, matching_files, estimate_only, batch_phase=None):
         """Process matching files; return last cost string or 'Fail'."""
         threads = int(os.getenv("fileThreads", "1"))
@@ -543,87 +716,12 @@ class TranslationWorker(QThread):
         is_mvmz = "mv/mz" in module_name_lower
 
         if self.parse_speakers and is_mvmz:
-            try:
-                from modules.rpgmakermvmz import (
-                    handleMVMZ as handler, setSpeakerParseMode, finalizeSpeakerParse,
-                    resetSpeakerState, collectedSpeakerCount, TOKENS, calculateCost, MODEL,
-                )
-            except Exception as e:
-                self.emit_log(f"❌ Could not import rpgmakermvmz for speaker-parse: {e}")
-                return "Fail"
-
-            try:
-                resetSpeakerState()
-            except Exception:
-                pass
-            try:
-                setSpeakerParseMode(True)
-            except Exception:
-                pass
-
-            completed_count = 0
-            total_files = len(matching_files)
-            for filename in matching_files:
-                if self.should_stop:
-                    break
-                try:
-                    handler(filename, estimate_only)
-                    completed_count += 1
-                    self.emit_progress(completed_count, total_files, filename)
-                except Exception as e:
-                    tb_line = str(traceback.extract_tb(sys.exc_info()[2])[-1].lineno)
-                    self.emit_log(f"❌ Error processing {filename}: {str(e)} | Line: {tb_line}")
-                    self.file_error_signal.emit(filename, str(e))
-                    completed_count += 1
-                    self.emit_progress(completed_count, total_files, filename)
-
-            try:
-                speaker_n = collectedSpeakerCount()
-            except Exception:
-                speaker_n = 0
-            if self.should_stop:
-                self.emit_log("⏹ Parse Speakers stopped before translating collected names.")
-            elif speaker_n:
-                self.status_signal.emit(f"Translating {speaker_n} speakers…")
-                self.emit_log(
-                    f"🔤 File scan complete ({completed_count}/{total_files}). "
-                    f"Adding {speaker_n} unique speakers to the glossary…"
-                )
-            else:
-                self.status_signal.emit("No speakers found")
-                self.emit_log(
-                    f"🔤 File scan complete ({completed_count}/{total_files}). "
-                    "No speaker names collected."
-                )
-
-            try:
-                before_in, before_out = (0, 0)
-                try:
-                    before_in, before_out = (int(TOKENS[0]), int(TOKENS[1]))
-                except Exception:
-                    pass
-                if not self.should_stop:
-                    finalizeSpeakerParse()
-                after_in, after_out = (0, 0)
-                try:
-                    after_in, after_out = (int(TOKENS[0]), int(TOKENS[1]))
-                except Exception:
-                    pass
-                delta_in = max(0, after_in - before_in)
-                delta_out = max(0, after_out - before_out)
-                if delta_in or delta_out:
-                    try:
-                        cost = calculateCost(delta_in, delta_out, MODEL)
-                        self.emit_log(f"Speakers: [Input: {delta_in}][Output: {delta_out}][Cost: ${cost:.4f}] ✓")
-                    except Exception:
-                        pass
-            except Exception as e:
-                self.emit_log(f"❌ Failed to finalize speaker parse: {e}")
-
-            try:
-                setSpeakerParseMode(False)
-            except Exception:
-                pass
+            prepared = self._prepare_mvmz_speakers(
+                matching_files, emit_progress=True
+            )
+            if not prepared:
+                self.should_stop = True
+                return "Stopped"
             return "Success"
 
         max_workers = 1 if estimate_only else threads
@@ -749,6 +847,29 @@ class TranslationWorker(QThread):
                     pass
 
             try:
+                module_name_lower = (
+                    self.module_info[0].lower()
+                    if isinstance(self.module_info[0], str)
+                    else ""
+                )
+                is_mvmz = "mv/mz" in module_name_lower
+                is_wolfdawn = "wolfdawn" in module_name_lower
+                should_prepare_speakers = (
+                    (is_mvmz or is_wolfdawn)
+                    and not self.estimate_only
+                    and not self.parse_speakers
+                    and not (self.batch_mode and self.batch_resume_state)
+                )
+                if should_prepare_speakers:
+                    prepared = (
+                        self._prepare_mvmz_speakers(matching_files)
+                        if is_mvmz
+                        else self._prepare_wolf_speakers(matching_files)
+                    )
+                    if not prepared:
+                        self.finished_signal.emit(False, "Speaker translation canceled")
+                        return
+
                 if self.batch_mode:
                     from util.translation import (
                         clearBatchFiles,
@@ -762,8 +883,8 @@ class TranslationWorker(QThread):
                         self._emit_batch_phase("collect")
                         self.emit_log("[BATCH] Pass 1/2: collecting requests...")
                         self.emit_log(
-                            "[BATCH] Note: speaker names and similar short strings translate at "
-                            "live API rates during collect (dialogue is batched after you confirm)."
+                            "[BATCH] Approved speaker names are already in the game glossary; "
+                            "Pass 1 queues the main translation requests without per-speaker API calls."
                         )
                         total_cost = self._run_files(matching_files, False, batch_phase="collect")
                         if self.should_stop:
@@ -2073,6 +2194,29 @@ class TranslationTab(QWidget):
         if hasattr(self, "translation_worker") and self.translation_worker:
             self.translation_worker.set_batch_submit_response(False)
 
+    def _on_speaker_confirmation(self, speakers):
+        """Approve one grouped speaker-translation phase after a no-API scan."""
+        worker = getattr(self, "translation_worker", None)
+        if worker is None:
+            return
+        names = [str(name).strip() for name in (speakers or []) if str(name).strip()]
+        preview_limit = 12
+        preview = "\n".join(f"  • {name}" for name in names[:preview_limit])
+        if len(names) > preview_limit:
+            preview += f"\n  • …and {len(names) - preview_limit} more"
+        reply = QMessageBox.question(
+            self,
+            "Translate collected speakers?",
+            f"DazedTL found {len(names)} unresolved unique speaker(s). No speaker "
+            "translation requests have been sent yet.\n\n"
+            f"{preview}\n\n"
+            "Translate these names together in grouped list batches, save them to "
+            "this game's glossary, and then continue the translation run?",
+            QMessageBox.Yes | QMessageBox.Cancel,
+            QMessageBox.Yes,
+        )
+        worker.set_speaker_translation_response(reply == QMessageBox.Yes)
+
     def _update_batch_stop_button(self):
         """Show stop only while batch is collecting; hide after that."""
         if not getattr(self, "_batch_active", False):
@@ -3213,6 +3357,9 @@ class TranslationTab(QWidget):
             self.translation_worker.file_error_signal.connect(self.on_file_error)
             self.translation_worker.finished_signal.connect(self.on_translation_finished)
             self.translation_worker.batch_phase_signal.connect(self._on_batch_phase)
+            self.translation_worker.speaker_confirmation_signal.connect(
+                self._on_speaker_confirmation
+            )
             # Prepare a per-run log file in log/history and start tailing it so
             # the right-hand log panel shows only this run's new lines.
             try:

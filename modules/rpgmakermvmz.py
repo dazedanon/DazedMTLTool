@@ -147,10 +147,10 @@ TLSYSTEMSWITCHES = False
 JOIN408 = False
 
 # Dialogue / Scroll / Choices (Main Codes)
-CODE101 = False
-CODE401 = False
-CODE405 = False
-CODE102 = False
+CODE101 = True
+CODE401 = True
+CODE405 = True
+CODE102 = True
 
 # Optional
 CODE408 = False
@@ -5070,11 +5070,17 @@ def getSpeaker(speaker: str):
                 NAMESLIST.append([speaker, vocab_hit])
         return [vocab_hit, [0, 0]]
 
-    # Normal mode translation path
+    # Normal/approved consume translation path
     with _speakerCacheLock:
         cached = _speakerCache.get(speaker)
         if cached is not None:
             return [cached, [0, 0]]
+
+    # Batch collection happens before submission approval. The GUI preflight
+    # normally resolves every name first; defer any dynamic miss instead of
+    # making an unapproved one-line live request.
+    if (os.getenv("BATCH_PHASE") or "").strip().lower() == "collect":
+        return [speaker, [0, 0]]
 
     # A few RPG Maker fields routed through getSpeaker are compound labels
     # (for example, "ユウイベント5"). Replace curated character names before
@@ -5308,6 +5314,22 @@ def collectedSpeakerCount() -> int:
         return len(SPEAKER_COLLECTED)
 
 
+def pendingSpeakerNames() -> list[str]:
+    """Return collected speakers that still require a model translation."""
+    _reload_vocab()
+    with _speakerCacheLock:
+        collected = list(SPEAKER_COLLECTED)
+    pending = []
+    seen = set()
+    for speaker in collected:
+        if not speaker or speaker in seen:
+            continue
+        seen.add(speaker)
+        if _vocab_speaker_lookup(speaker) is None:
+            pending.append(speaker)
+    return pending
+
+
 def finalizeSpeakerParse():
     """Batch translate collected speakers and write fresh # Speakers section."""
     if not SPEAKER_PARSE_MODE:
@@ -5317,16 +5339,18 @@ def finalizeSpeakerParse():
         # speakers. This avoids generating a contradictory # Speakers spelling
         # for a name already defined under # Game Characters.
         _reload_vocab()
+        pending = set(pendingSpeakerNames())
         to_translate = []
         vocab_resolved = []
         for s in SPEAKER_COLLECTED:
             if not s:
                 continue
+            if s in pending:
+                to_translate.append(s)
+                continue
             vocab_hit = _vocab_speaker_lookup(s)
             if vocab_hit is not None:
                 vocab_resolved.append((s, vocab_hit))
-            else:
-                to_translate.append(s)
 
         with _speakerCacheLock:
             for source, translated in vocab_resolved:

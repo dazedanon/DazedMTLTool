@@ -348,10 +348,9 @@ def _normalize_speaker_name(translated: str) -> str:
 def getSpeaker(speaker: str):
     """Resolve a WolfDawn nameplate to English with caching.
 
-    Order: session cache / NAMESLIST -> glossary.txt -> live short-string
-    translation (same prompt as the other engines). Single-string calls go
-    through the live API even during batch collect, so later dialogue batches
-    embed a stable English tag.
+    Order: session cache / NAMESLIST -> glossary.txt -> short-string translation
+    (same prompt as the other engines). Batch collection never makes a live
+    speaker request; dynamic misses wait for the approved consume pass.
     """
     global NAMESLIST
     if not speaker:
@@ -379,6 +378,9 @@ def getSpeaker(speaker: str):
 
     # Estimate / preflight: do not spend tokens; leave Japanese for a real run.
     if ESTIMATE:
+        return [speaker, [0, 0]]
+
+    if _batch_phase() == "collect":
         return [speaker, [0, 0]]
 
     response = translateAI(
@@ -411,6 +413,72 @@ def getSpeaker(speaker: str):
     return [translated, response[1]]
 
 
+def collectSpeakerNames(data) -> list[str]:
+    """Collect enabled Japanese first-line nameplates without calling the API."""
+    global SPEAKER_CONFIG
+    SPEAKER_CONFIG = wolf_speakers.load_config()
+    names = []
+    seen = set()
+    for entry in collectEntries(data):
+        source = entry.get("source")
+        split = wolf_speakers.split_source(
+            source,
+            entry.get("speaker_src", ""),
+            SPEAKER_CONFIG,
+        )
+        if split is None:
+            continue
+        speaker = split[1].strip()
+        if not speaker or speaker in seen or not re.search(LANGREGEX, speaker):
+            continue
+        seen.add(speaker)
+        names.append(speaker)
+    return names
+
+
+def pendingSpeakerNames(speakers) -> list[str]:
+    """Return collected WOLF speakers not already resolved by the glossary."""
+    global VOCAB
+    VOCAB = read_active_glossary()
+    TRANSLATION_CONFIG.vocab = VOCAB
+    pending = []
+    seen = set()
+    for raw in speakers:
+        speaker = str(raw or "").strip()
+        if not speaker or speaker in seen:
+            continue
+        seen.add(speaker)
+        if _vocab_speaker_lookup(speaker) is None:
+            pending.append(speaker)
+    return pending
+
+
+def translateSpeakerNames(speakers) -> list[int]:
+    """Translate unresolved WOLF speakers as lists and merge them into the glossary."""
+    global VOCAB
+    pending = pendingSpeakerNames(speakers)
+    if not pending:
+        return [0, 0]
+    response = translateAI(pending, ctx("names.npc"))
+    translated = response[0] if isinstance(response[0], list) else [response[0]]
+    pairs = []
+    for source, value in zip(pending, translated):
+        normalized = _normalize_speaker_name(str(value or ""))
+        if not normalized or re.search(LANGREGEX, normalized):
+            continue
+        pairs.append((source, normalized))
+    if pairs:
+        wolf_vocab.update_vocab_section("Speakers", pairs, merge=True)
+        VOCAB = read_active_glossary()
+        TRANSLATION_CONFIG.vocab = VOCAB
+        with _speakerCacheLock:
+            for source, translated_name in pairs:
+                _speakerCache[source] = translated_name
+                if not any(jp == source for jp, _en in NAMESLIST):
+                    NAMESLIST.append([source, translated_name])
+    return list(response[1])
+
+
 def _resolve_nameplate(speaker: str, total_tokens: list) -> str:
     """Translate *speaker* and accumulate token cost into *total_tokens*."""
     en, tokens = getSpeaker(speaker)
@@ -437,11 +505,9 @@ def _body_after_dropped_tag(text: str, original_speaker: str) -> str:
 def _maybe_fix_nameplate(entry, total_tokens: list) -> bool:
     """Resolve a Japanese first-line nameplate on an otherwise-done line.
 
-    Returns True when the nameplate was rewritten. During batch collect the
-    in-memory rewrite is discarded (translated/ is not written), but
-    ``getSpeaker`` still runs so the English gloss is cached before dialogue
-    batches are queued - otherwise those live speaker calls only show up in
-    Pass 2.
+    Returns True when the nameplate was rewritten. During batch collection an
+    unexpected unresolved name is left untouched; static names should already
+    have been resolved by the no-spend GUI preflight.
     """
     if ESTIMATE:
         return False
@@ -490,9 +556,8 @@ def parseDocument(data, filename):
         return True
 
     # Resolve Japanese nameplates on lines whose dialogue body is already done.
-    # Must run during batch collect too: those lines are skip-translated so they
-    # never hit the reshape/getSpeaker path, and deferring to consume is what
-    # made speaker Input/Output spam show up in Pass 2 after the batch returned.
+    # Collection still inspects them, but getSpeaker is deliberately no-spend
+    # until the batch has been approved.
     if IGNORETLTEXT and not ESTIMATE:
         for entry in entries:
             if _translatable(entry):
