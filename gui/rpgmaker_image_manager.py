@@ -1327,7 +1327,7 @@ class ImageManager(QWidget):
                 "{{ENGINE_CONTEXT}}": profile.translation_skill_context,
                 "{{GAME_ROOT}}": str(game_root),
                 "{{EDITABLE_IMAGES_FOLDER}}": str(self._editable_image_root().resolve()),
-                "{{VOCAB_FILE}}": str(game_root / "vocab.txt"),
+                "{{VOCAB_FILE}}": str(game_root / "glossary.txt"),
             }
             prompt = load_clipboard_skill("image_translation.md")
             missing = [token for token in replacements if token not in prompt]

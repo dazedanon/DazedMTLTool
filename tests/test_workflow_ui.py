@@ -291,16 +291,13 @@ class WorkflowShellTests(unittest.TestCase):
         for banner in banners[1:]:
             self.assertIn("paste", banner.text_label.text().casefold())
 
-    def test_glossary_is_copied_once_and_release_is_the_last_mvmz_stage(self):
+    def test_glossary_needs_no_copy_action_and_release_is_the_last_mvmz_stage(self):
         glossary_buttons = [
             button
             for button in self.workflow.findChildren(QPushButton)
             if "Copy glossary to game" in button.text()
         ]
-        self.assertEqual(len(glossary_buttons), 1)
-        self.assertTrue(
-            self.workflow._step_tabs.widget(5).isAncestorOf(glossary_buttons[0])
-        )
+        self.assertEqual(glossary_buttons, [])
 
         playtest_stages = self.workflow._step_tabs.widget(8).findChildren(
             WorkflowStageCard
@@ -444,7 +441,7 @@ class WorkflowShellTests(unittest.TestCase):
             ),),
             4: (("Copy advanced-text audit", "Translate selected text"),),
             5: (
-                ("Copy glossary to game", "Copy plugin skill"),
+                ("Copy plugin skill",),
                 ("Export selected files", "Export all translated files"),
             ),
             6: (

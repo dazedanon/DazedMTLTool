@@ -73,7 +73,6 @@ boundaries, or destinations.
 
 | Action | Effect |
 |---|---|
-| Copy glossary to game | Copies the current Glossary to the selected game root. |
 | Copy plugin/Ruby translation skill | Copies the engine-specific audit-and-edit prompt. |
 | Export selected files | Confirms, then exports translated JSON matching names currently in `files/`. |
 | Export all translated files | Confirms, then exports every translated result. |
@@ -95,7 +94,6 @@ boundaries, or destinations.
 | Action | Effect |
 |---|---|
 | Refresh readiness | Reads image readiness, encryption-key availability, Glossary, and workspace placement. |
-| Copy glossary to game | Uses the same Glossary copy action as Export. |
 | Open Image Manager | Saves the current game folder and switches the host window to the shared Images page. |
 
 ## Step 8: Playtest

@@ -184,28 +184,6 @@ echo    Launching DazedTL GUI...
 echo ==========================================
 echo.
 
-:: Ensure data/vocab.txt exists (create from vocab_base.txt if available)
-if not exist "data\\vocab.txt" (
-    if not exist "data" mkdir data
-    if exist "data\\vocab_base.txt" (
-        echo Glossary file data\vocab.txt not found - creating it from data\vocab_base.txt...
-        copy /Y "data\vocab_base.txt" "data\vocab.txt" >nul 2>&1
-        if errorlevel 1 (
-            echo ERROR: Failed to create glossary file data\vocab.txt from data\vocab_base.txt.
-        ) else (
-            echo Created glossary file data\vocab.txt from data\vocab_base.txt
-        )
-    ) else (
-        echo Glossary file data\vocab.txt not found - creating an empty one...
-        type NUL > "data\vocab.txt"
-        if errorlevel 1 (
-            echo ERROR: Failed to create empty glossary file data\vocab.txt.
-        ) else (
-            echo Created empty glossary file data\vocab.txt
-        )
-    )
-)
-
 python scripts/start_gui.py
 
 :: Check if GUI launched successfully

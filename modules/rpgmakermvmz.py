@@ -16,7 +16,7 @@ from tqdm import tqdm
 from util.translation import TranslationConfig, translateAI as sharedtranslateAI, getPricingConfig, calculateCost, getPricingConfig, calculateCost, get_var_translation, set_var_translations_batch, convert_corner_brackets, parseVocabWithCategories, last_translation_had_mismatch
 from util.speakers import SPEAKER_BRACKET_INNER, strip_speaker_prefix
 from util.skills import ctx, load_system_prompt
-from util.paths import VOCAB_PATH
+from util.paths import active_glossary_path, read_active_glossary
 
 # Globals
 MODEL = os.getenv("model")
@@ -24,7 +24,8 @@ TIMEOUT = int(os.getenv("timeout"))
 LANGUAGE = os.getenv("language").capitalize()
 
 PROMPT = load_system_prompt()
-VOCAB = VOCAB_PATH.read_text(encoding="utf-8")
+VOCAB_PATH = active_glossary_path()
+VOCAB = read_active_glossary()
 LOCK = threading.Lock()
 THREAD_CTX = threading.local()
 WIDTH = int(os.getenv("width"))
@@ -93,7 +94,7 @@ FIRSTLINESPEAKERS = False
 # INLINE401SPEAKERS: Extract speaker from "Name「dialogue」" inline format on 401 lines.
 INLINE401SPEAKERS = False
 # FACENAME101: Map face name -> speaker.
-FACENAME101 = True
+FACENAME101 = False
 # Face name -> speaker mapping for FACENAME101.
 # Matching: if face string contains "_talk", split on it and look up the prefix;
 # otherwise try startswith against each key (longest key first).
@@ -146,10 +147,10 @@ TLSYSTEMSWITCHES = False
 JOIN408 = False
 
 # Dialogue / Scroll / Choices (Main Codes)
-CODE101 = True
-CODE401 = True
-CODE405 = True
-CODE102 = True
+CODE101 = False
+CODE401 = False
+CODE405 = False
+CODE102 = False
 
 # Optional
 CODE408 = False
@@ -248,12 +249,13 @@ def _pat355655_captured_text(match):
 
 
 def _reload_vocab():
-    """Reload vocab.txt so edits made after module import take effect."""
+    """Reload the active game's glossary so recent edits take effect."""
     global VOCAB
+    vocab_path = VOCAB_PATH or active_glossary_path()
     try:
-        VOCAB = VOCAB_PATH.read_text(encoding="utf-8")
-    except FileNotFoundError:
-        VOCAB = ""
+        VOCAB = vocab_path.read_text(encoding="utf-8") if vocab_path else read_active_glossary()
+    except (FileNotFoundError, OSError):
+        VOCAB = read_active_glossary()
     TRANSLATION_CONFIG.vocab = VOCAB
 
 
@@ -992,14 +994,16 @@ def checkSave(data, filename, tokens):
 
 
 def update_vocab_section(category: str, pairs: list[tuple[str, str]]):
-    """Update or insert a section in vocab.txt for the given category with provided pairs.
+    """Update or insert a section in glossary.txt for the given category with provided pairs.
     Only writes when there's an actual translation (dst is non-empty and differs from src after normalization).
     - category: e.g., "Items", "Weapons", etc. Section header will be "# {category}".
     - pairs: list of (source, translated) strings. Duplicates by source are deduped (last wins).
     The existing section is replaced entirely; other sections are preserved.
     """
     try:
-        vocab_path = VOCAB_PATH
+        vocab_path = VOCAB_PATH or active_glossary_path()
+        if vocab_path is None:
+            raise RuntimeError("No active game folder is available for glossary updates.")
 
         # Helper: normalized comparison to detect no-op translations
         def _norm(s: str) -> str:
@@ -5052,7 +5056,7 @@ def getSpeaker(speaker: str):
                 SPEAKER_COLLECTED.append(speaker)
         return [speaker, [0, 0]]
 
-    # vocab.txt is authoritative. Check it before either cache so an old model
+    # glossary.txt is authoritative. Check it before either cache so an old model
     # romanization can never override a newly curated spelling.
     vocab_hit = _vocab_speaker_lookup(speaker)
     if vocab_hit is not None:
@@ -5379,7 +5383,9 @@ def finalizeSpeakerParse():
                         _speakerCache[orig] = norm
                         NAMESLIST.append([orig, norm])
 
-        vocab_path = VOCAB_PATH
+        vocab_path = VOCAB_PATH or active_glossary_path()
+        if vocab_path is None:
+            return
         if not vocab_path.exists():
             return
         content = vocab_path.read_text(encoding="utf-8")

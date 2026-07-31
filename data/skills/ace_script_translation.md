@@ -5,7 +5,7 @@ Audit ace_json/scripts/*.rb for player-visible Japanese, tell me which scripts n
 </goal>
 
 <inputs>
-- Read the glossary file (`vocab.txt`) and the extracted Ruby files under ace_json/scripts/.
+- Read the glossary file (`glossary.txt`) and the extracted Ruby files under ace_json/scripts/.
 - Use any script index/manifest to preserve script names and ordering.
 - Treat the glossary file as authoritative for names and terminology.
 - If referenced script sources are missing or still packed, list what is needed and ask me to extract or provide them.

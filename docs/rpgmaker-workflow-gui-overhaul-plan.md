@@ -426,7 +426,7 @@ repeated visual or behavioral contract.
 
 - Card 1: readiness checklist with status per prerequisite.
 - Card 2: the four-stage image flow represented compactly.
-- Primary action: Open Images. Secondary action: Copy glossary.
+- Primary action: Open Images. The game-local glossary is already available to the image workflow.
 - Use the available vertical space intentionally without stretching short copy
   into a large empty panel.
 

@@ -41,6 +41,7 @@ class ReleasePackageTests(unittest.TestCase):
             self._write(game, "scripts/release.py")
             self._write(game, "docs/translation-notes.md")
             self._write(game, "skills/game.md")
+            self._write(game, "glossary.txt")
             self._write(game, "vocab.txt")
             self._write(game, "README.md")
             self._write(game, ".gitignore")
@@ -109,6 +110,7 @@ class ReleasePackageTests(unittest.TestCase):
                 "scripts/release.py",
                 "docs/translation-notes.md",
                 "skills/game.md",
+                "glossary.txt",
                 "vocab.txt",
                 "README.md",
                 ".gitignore",

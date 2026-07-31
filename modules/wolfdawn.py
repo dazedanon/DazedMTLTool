@@ -24,7 +24,7 @@ names.json safety: WolfDawn tags every value name with a static ``safety`` badge
 (``safe``, ``refs``, or ``verify``). For ``kind == "names"`` documents, only
 entries whose badge is ``safe`` are translated; ``refs`` and ``verify`` names and
 legacy entries without a badge keep ``text == source``. After translating
-names.json, short name-like entries are harvested into ``vocab.txt`` (grouped by
+names.json, short name-like entries are harvested into ``glossary.txt`` (grouped by
 ``note``, with bilingual headers). After foundation DB sheets are translated,
 short label fields (map names, titles, etc.) are merged into the same glossary
 so later phases keep place / term names consistent without overwriting names.json.
@@ -58,7 +58,7 @@ import traceback
 
 from colorama import Fore
 from tqdm import tqdm
-from util.paths import VOCAB_PATH
+from util.paths import read_active_glossary
 from util.skills import ctx, load_system_prompt
 from util.translation import (
     TranslationConfig,
@@ -98,7 +98,7 @@ def _load_wolf_prompt() -> str:
 
 
 PROMPT = _load_wolf_prompt()
-VOCAB = VOCAB_PATH.read_text(encoding="utf-8")
+VOCAB = read_active_glossary()
 LOCK = threading.Lock()
 MAXHISTORY = 10
 ESTIMATE = ""
@@ -169,8 +169,8 @@ def handleWolfDawn(filename, estimate):
     # even when translation runs in-process (the module import is cached).
     SPEAKER_CONFIG = wolf_speakers.load_config()
     # Reload the glossary so a later phase (DB text / dialogue) picks up names
-    # that an earlier Phase 0 (names) harvested into vocab.txt.
-    VOCAB = VOCAB_PATH.read_text(encoding="utf-8")
+    # that an earlier Phase 0 (names) harvested into glossary.txt.
+    VOCAB = read_active_glossary()
     TRANSLATION_CONFIG.vocab = VOCAB
     # Reload system.md + per-game overlays (game.md / quirks / custom) via DAZED_GAME_ROOT.
     PROMPT = _load_wolf_prompt()
@@ -316,7 +316,7 @@ def _text_still_needs_translation(entry) -> bool:
 
 
 def _vocab_speaker_lookup(speaker: str) -> str | None:
-    """Return an English gloss for *speaker* from vocab.txt, or None."""
+    """Return an English gloss for *speaker* from glossary.txt, or None."""
     if not speaker or not VOCAB:
         return None
     try:
@@ -348,7 +348,7 @@ def _normalize_speaker_name(translated: str) -> str:
 def getSpeaker(speaker: str):
     """Resolve a WolfDawn nameplate to English with caching.
 
-    Order: session cache / NAMESLIST -> vocab.txt -> live short-string
+    Order: session cache / NAMESLIST -> glossary.txt -> live short-string
     translation (same prompt as the other engines). Single-string calls go
     through the live API even during batch collect, so later dialogue batches
     embed a stable English tag.
@@ -592,13 +592,13 @@ def parseDocument(data, filename):
                         entry["text"] = text
                     wolf_codes.repair_entry(entry)
 
-    # Phase 0 feeds the glossary: harvest safe name values into vocab.txt
+    # Phase 0 feeds the glossary: harvest safe name values into glossary.txt
     # (grouped by note) so the DB-text and dialogue phases keep item/skill/term
     # names consistent. Runs even when every name was already translated (skip),
     # so a resume still seeds vocab. Mirrors the RPGMaker DB-first strategy.
     if is_names and not ESTIMATE:
         _harvest_names_to_vocab(data)
-    # Foundation DB label fields (map names, titles) merge into vocab.txt without
+    # Foundation DB label fields (map names, titles) merge into glossary.txt without
     # replacing entries already seeded from names.json.
     elif data.get("kind") == "db" and not ESTIMATE:
         _harvest_db_to_vocab(data)
@@ -607,7 +607,7 @@ def parseDocument(data, filename):
 
 
 def _harvest_names_to_vocab(data):
-    """Write short translated name labels into vocab.txt, grouped by note.
+    """Write short translated name labels into glossary.txt, grouped by note.
 
     Profile blurbs and other content-shaped names are translated in names.json but
     skipped here. Categories with no harvestable terms remove any stale section.
@@ -639,7 +639,7 @@ def _harvest_names_to_vocab(data):
 
 
 def _harvest_db_to_vocab(data):
-    """Merge short foundation DB labels into vocab.txt, grouped by sheet.
+    """Merge short foundation DB labels into glossary.txt, grouped by sheet.
 
     Uses merge mode so names.json-seeded entries for the same section stay put.
     Descriptions and narrative dialogue are filtered out.

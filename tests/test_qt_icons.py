@@ -46,9 +46,9 @@ class TestQtIcons(unittest.TestCase):
         from gui.qt_icons import HAS_QTA, apply_button_icon
 
         btn = QPushButton()
-        apply_button_icon(btn, "💾 Save vocab.txt", color="#cccccc")
+        apply_button_icon(btn, "💾 Save glossary.txt", color="#cccccc")
         if HAS_QTA:
-            self.assertEqual(btn.text(), "Save vocab.txt")
+            self.assertEqual(btn.text(), "Save glossary.txt")
             self.assertFalse(btn.icon().isNull())
 
     def test_make_section_header_returns_widget(self) -> None:

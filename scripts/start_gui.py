@@ -43,10 +43,9 @@ def main():
     print("DazedTL GUI Launcher")
     print("=" * 40)
 
-    from util.paths import ensure_vocab_file, migrate_root_data_files
+    from util.paths import migrate_root_data_files
 
     migrate_root_data_files()
-    ensure_vocab_file()
 
     if not check_dependencies():
         sys.exit(1)

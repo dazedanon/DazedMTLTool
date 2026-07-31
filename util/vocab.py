@@ -1,18 +1,18 @@
-"""Shared helpers for the game-specific translation glossary (``data/vocab.txt``).
+"""Shared helpers for the game-specific translation glossary (``<game>/glossary.txt``).
 
-``vocab.txt`` is loaded by the shared translation layer (:mod:`util.translation`)
+``glossary.txt`` is loaded by the shared translation layer (:mod:`util.translation`)
 and applied to every engine, so a good glossary keeps character names, honorifics,
 and worldbuilding terms consistent across the whole translation.
 
 The file has two parts:
 
 * the game-specific entries (characters, worldbuilding terms) edited per project,
-* a base vocabulary that is auto-appended from ``data/vocab_base.txt``.
+* a base glossary that is auto-appended from ``data/glossary_base.txt``.
 
 ``BASE_SEPARATOR`` marks where the auto-appended base section begins so the
-workflow editors can show and save only the game-specific portion. It must stay
-byte-identical to what has already been written into users' ``vocab.txt`` files,
-otherwise the base section would not be stripped on reload.
+workflow editors can show and save only the game-specific portion. The legacy
+separator remains recognized so game-local ``vocab.txt`` files from
+older versions can be migrated without exposing the base section in the editor.
 """
 
 from __future__ import annotations
@@ -21,11 +21,16 @@ import os
 import re
 import threading
 
-from util.paths import VOCAB_BASE_PATH, VOCAB_PATH
-
-BASE_SEPARATOR = (
-    "# ── Base Vocabulary (auto-appended from vocab_base.txt — do not edit below) ──\n"
+from util.paths import (
+    GLOSSARY_BASE_SEPARATOR,
+    LEGACY_GLOSSARY_BASE_SEPARATOR,
+    active_glossary_path,
+    ensure_game_glossary,
+    glossary_base_path,
 )
+
+BASE_SEPARATOR = GLOSSARY_BASE_SEPARATOR
+_BASE_SEPARATORS = (BASE_SEPARATOR, LEGACY_GLOSSARY_BASE_SEPARATOR)
 
 _EMPTY_PLACEHOLDER = "# Add character glossary entries here\n"
 
@@ -34,25 +39,41 @@ _EMPTY_PLACEHOLDER = "# Add character glossary entries here\n"
 _VOCAB_LOCK = threading.Lock()
 
 
-def read_game_vocab() -> str:
-    """Return the game-specific portion of ``vocab.txt`` (base section stripped)."""
-    if VOCAB_PATH.is_file():
-        text = VOCAB_PATH.read_text(encoding="utf-8")
-        idx = text.find(BASE_SEPARATOR)
-        if idx != -1:
-            text = text[:idx].rstrip("\n")
-        return text
-    return _EMPTY_PLACEHOLDER
+def _path(game_root) -> "Path":
+    if game_root is not None:
+        return ensure_game_glossary(game_root)
+    path = active_glossary_path()
+    if path is None:
+        raise RuntimeError("No active game folder is available for glossary access.")
+    return path
 
 
-def write_game_vocab(game_text: str) -> None:
-    """Write the game-specific vocab and re-append the base vocabulary."""
+def _split_base(text: str) -> tuple[str, str]:
+    indexes = [(text.find(separator), separator) for separator in _BASE_SEPARATORS]
+    indexes = [(idx, separator) for idx, separator in indexes if idx != -1]
+    if not indexes:
+        return text, ""
+    idx, _separator = min(indexes, key=lambda item: item[0])
+    return text[:idx], text[idx:]
+
+
+def read_game_vocab(game_root=None) -> str:
+    """Return the game-specific portion of ``glossary.txt`` (base stripped)."""
+    path = _path(game_root)
+    text = path.read_text(encoding="utf-8")
+    game_part, _base_part = _split_base(text)
+    return game_part.rstrip("\n") or _EMPTY_PLACEHOLDER
+
+
+def write_game_vocab(game_text: str, game_root=None) -> None:
+    """Write the game-specific glossary and re-append the shipped base."""
     game_text = (game_text or "").rstrip("\n")
+    base_path = glossary_base_path()
     base_text = (
-        VOCAB_BASE_PATH.read_text(encoding="utf-8") if VOCAB_BASE_PATH.is_file() else ""
+        base_path.read_text(encoding="utf-8") if base_path.is_file() else ""
     )
     combined = game_text + "\n\n" + BASE_SEPARATOR + base_text
-    VOCAB_PATH.write_text(combined, encoding="utf-8")
+    _path(game_root).write_text(combined, encoding="utf-8")
 
 
 def _norm(s: str) -> str:
@@ -81,12 +102,12 @@ def _parse_section_pairs(section_body: str) -> dict[str, str]:
     return pairs
 
 
-def update_vocab_section(category: str, pairs, *, merge: bool = False) -> None:
+def update_vocab_section(category: str, pairs, *, merge: bool = False, game_root=None) -> None:
     """Insert or replace a ``# {category}`` section in the game-specific vocab.
 
     Mirrors the RPGMaker auto-glossary behaviour (translated DB names feed
-    ``vocab.txt`` so later phases stay consistent), but always writes *above*
-    the auto-appended base section (:data:`BASE_SEPARATOR`) so the base vocab is
+    ``glossary.txt`` so later phases stay consistent), but always writes *above*
+    the auto-appended base section (:data:`BASE_SEPARATOR`) so the base glossary is
     preserved and not stripped on the next :func:`read_game_vocab`.
 
     - ``category``: section header text, e.g. ``"Weapon · 武器"``.
@@ -107,16 +128,15 @@ def update_vocab_section(category: str, pairs, *, merge: bool = False) -> None:
         return
 
     with _VOCAB_LOCK:
-        existing = VOCAB_PATH.read_text(encoding="utf-8") if VOCAB_PATH.is_file() else ""
+        glossary_path = _path(game_root)
+        existing = glossary_path.read_text(encoding="utf-8")
 
         # Keep the auto-appended base section (separator + base vocab) intact.
-        idx = existing.find(BASE_SEPARATOR)
-        if idx != -1:
-            game_part = existing[:idx]
-            base_part = existing[idx:]
-        else:
-            game_part = existing
-            base_part = ""
+        game_part, base_part = _split_base(existing)
+        if base_part.startswith(LEGACY_GLOSSARY_BASE_SEPARATOR):
+            base_path = glossary_base_path()
+            base_text = base_path.read_text(encoding="utf-8") if base_path.is_file() else ""
+            base_part = BASE_SEPARATOR + base_text
 
         # Match this category's section up to the next '#' header or end of the
         # game portion. Handles '#Cat', '# Cat', '## Cat', etc.
@@ -153,27 +173,20 @@ def update_vocab_section(category: str, pairs, *, merge: bool = False) -> None:
         if combined == existing:
             return
 
-        tmp_path = VOCAB_PATH.with_suffix(
-            VOCAB_PATH.suffix + f".{os.getpid()}.{threading.get_ident()}.tmp"
+        tmp_path = glossary_path.with_suffix(
+            glossary_path.suffix + f".{os.getpid()}.{threading.get_ident()}.tmp"
         )
         tmp_path.write_text(combined, encoding="utf-8")
-        os.replace(tmp_path, VOCAB_PATH)
+        os.replace(tmp_path, glossary_path)
 
 
-def remove_vocab_section(category: str) -> None:
+def remove_vocab_section(category: str, *, game_root=None) -> None:
     """Remove a ``# {category}`` section from the game-specific vocab, if present."""
     with _VOCAB_LOCK:
-        if not VOCAB_PATH.is_file():
-            return
-        existing = VOCAB_PATH.read_text(encoding="utf-8")
+        glossary_path = _path(game_root)
+        existing = glossary_path.read_text(encoding="utf-8")
 
-        idx = existing.find(BASE_SEPARATOR)
-        if idx != -1:
-            game_part = existing[:idx]
-            base_part = existing[idx:]
-        else:
-            game_part = existing
-            base_part = ""
+        game_part, base_part = _split_base(existing)
 
         pattern = re.compile(
             rf"^[\t ]*#+\s*{re.escape(category)}\s*$\r?\n.*?(?=^[\t ]*#|\Z)",
@@ -189,8 +202,8 @@ def remove_vocab_section(category: str) -> None:
             combined = new_game + "\n" if new_game else ""
         if combined == existing:
             return
-        tmp_path = VOCAB_PATH.with_suffix(
-            VOCAB_PATH.suffix + f".{os.getpid()}.{threading.get_ident()}.tmp"
+        tmp_path = glossary_path.with_suffix(
+            glossary_path.suffix + f".{os.getpid()}.{threading.get_ident()}.tmp"
         )
         tmp_path.write_text(combined, encoding="utf-8")
-        os.replace(tmp_path, VOCAB_PATH)
+        os.replace(tmp_path, glossary_path)

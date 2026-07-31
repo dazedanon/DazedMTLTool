@@ -10,10 +10,10 @@ Mirrors the RPGMaker WorkflowTab, driven by the vendored WolfDawn ``wolf`` CLI
                         (build glossary and API overlays before translating)
   Step 3  Names       - translate names.json (Phase 0). WolfDawn safe entries
                         are translated per-name; refs and verify names are skipped.
-                        Harvests short name terms into vocab.txt.
+                        Harvests short name terms into glossary.txt.
   Step 4  Database    - discover content layout; translate foundation DB sheets
                         (items, skills, descriptions) before narrative custom sheets;
-                        harvests short label fields (map names, titles) into vocab.txt
+                        harvests short label fields (map names, titles) into glossary.txt
   Step 5  Maps/Events - .mps maps, CommonEvent, Game.dat, Evtext; speaker handling
   Step 6  Precheck    - name consistency + reconcile, then dry-run every translated
                         file and package safety issues for the AI repair helper
@@ -31,7 +31,7 @@ Mirrors the RPGMaker WorkflowTab, driven by the vendored WolfDawn ``wolf`` CLI
 
 names.json is staged into files/ but is NOT translated in the bulk phases - WolfDawn
 tags each name safe / refs / verify and Phase 0 translates only safe entries
-(per-name, not per-category), harvests them into vocab.txt, and Step 7 injects the
+(per-name, not per-category), harvests them into glossary.txt, and Step 7 injects the
 result. Package (Step 8) makes the build playable; Fix wrap (Step 9) is the
 playtest feedback loop.
 
@@ -111,7 +111,7 @@ from gui.workflow_components import (
     WorkflowStageCard,
     WorkflowStepRail,
 )
-from util.paths import PROJECT_ROOT, VOCAB_PATH, APP_NAME, ORG_NAME
+from util.paths import PROJECT_ROOT, APP_NAME, ORG_NAME, ensure_game_glossary
 from util.project_scanner import (
     detect_wolf_layout,
     find_wolf_text_archives,
@@ -433,7 +433,7 @@ class WolfWorkflowTab(QWidget):
         self._step_done: set[int] = set()
         self._step_buttons: list[QToolButton] = []
 
-        # Names curation comes before Translate so Phase 0 can seed vocab.txt.
+        # Names curation comes before Translate so Phase 0 can seed glossary.txt.
         _tab_defs = [
             ("1  Project", self._build_step0),
             ("2  Prepare", self._build_step1_preprocess),
@@ -1732,7 +1732,7 @@ class WolfWorkflowTab(QWidget):
                 speaker_lines = "\n".join(f"  {orig} ({tl})" for orig, tl in speakers)
                 prepend = (
                     "<known_speakers>\n"
-                    "These character names were already listed in the Glossary (vocab.txt).\n"
+                    "These character names were already listed in the Glossary (glossary.txt).\n"
                     "For the glossary block '# Game Characters', prefer entries for these names, "
                     "then cross-check DataBase*.project.json and dialogue for other major names.\n"
                     "\n"
@@ -1746,11 +1746,12 @@ class WolfWorkflowTab(QWidget):
             self._log(f"❌ Could not load Project Setup skill: {exc}")
 
     def _read_vocab_speakers(self) -> list[tuple[str, str]]:
-        """Parse '# Speakers' (or '# Game Characters') from vocab.txt as (orig, tl) pairs."""
-        vocab_path = VOCAB_PATH
-        if not vocab_path.exists():
+        """Parse '# Speakers' (or '# Game Characters') from glossary.txt as (orig, tl) pairs."""
+        game_root = self.folder_edit.text().strip() or self._game_root
+        if not game_root:
             return []
         try:
+            vocab_path = ensure_game_glossary(game_root)
             content = vocab_path.read_text(encoding="utf-8")
         except Exception:
             return []

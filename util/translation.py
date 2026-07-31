@@ -21,6 +21,7 @@ from contextlib import contextmanager
 from dotenv import load_dotenv
 from pathlib import Path
 from retry import retry
+from util.paths import read_active_glossary
 
 # Set to True to enable debug logging (token counts, cache costs, etc.)
 DEBUG = True
@@ -1547,8 +1548,8 @@ class TranslationConfig:
             
         if vocab is None:
             try:
-                self.vocab = VOCAB_PATH.read_text(encoding="utf-8")
-            except FileNotFoundError:
+                self.vocab = read_active_glossary()
+            except OSError:
                 self.vocab = ""
         else:
             self.vocab = vocab

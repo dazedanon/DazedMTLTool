@@ -11,8 +11,10 @@ LEGACY_APP_NAME = "DazedMTLTool"
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = PROJECT_ROOT / "data"
-VOCAB_PATH = DATA_DIR / "vocab.txt"
-VOCAB_BASE_PATH = DATA_DIR / "vocab_base.txt"
+GLOSSARY_FILENAME = "glossary.txt"
+LEGACY_GLOSSARY_FILENAME = "vocab.txt"
+GLOSSARY_BASE_PATH = DATA_DIR / "glossary_base.txt"
+LEGACY_GLOSSARY_BASE_PATH = DATA_DIR / "vocab_base.txt"
 SKILLS_DIR = DATA_DIR / "skills"
 HELP_DIR = DATA_DIR / "help"
 # Runtime translation system skill (formerly data/prompt.txt).
@@ -32,11 +34,18 @@ LEGACY_GAME_SKILL_RELATIVE = Path("skills") / "translation.md"
 GAME_SKILL_RESERVED_NAMES = frozenset({"quirks.md", "game.md", "translation.md"})
 
 _ROOT_DATA_FILES = (
-    "vocab.txt",
     "vocab_base.txt",
     "prompt.txt",
     "last_update_sha.txt",
 )
+
+GLOSSARY_BASE_SEPARATOR = (
+    "# ── Base Glossary (auto-appended from glossary_base.txt — do not edit below) ──\n"
+)
+LEGACY_GLOSSARY_BASE_SEPARATOR = (
+    "# ── Base Vocabulary (auto-appended from vocab_base.txt — do not edit below) ──\n"
+)
+_EMPTY_GLOSSARY_PLACEHOLDER = "# Add character glossary entries here\n"
 
 
 def migrate_root_data_files() -> None:
@@ -84,12 +93,65 @@ migrate_root_data_files()
 migrate_prompt_to_skills()
 
 
-def ensure_vocab_file() -> None:
-    """Create data/vocab.txt from vocab_base.txt when missing."""
-    migrate_root_data_files()
-    if VOCAB_PATH.is_file():
-        return
-    if VOCAB_BASE_PATH.is_file():
-        VOCAB_PATH.write_text(VOCAB_BASE_PATH.read_text(encoding="utf-8"), encoding="utf-8")
-    else:
-        VOCAB_PATH.write_text("", encoding="utf-8")
+def glossary_base_path() -> Path:
+    """Return the shipped base glossary, including the legacy upgrade path."""
+    if GLOSSARY_BASE_PATH.is_file():
+        return GLOSSARY_BASE_PATH
+    return LEGACY_GLOSSARY_BASE_PATH
+
+
+def game_glossary_path(game_root: str | Path | None) -> Path | None:
+    """Return ``<game_root>/glossary.txt`` when a game root is available."""
+    if not game_root or not str(game_root).strip():
+        return None
+    return Path(game_root).expanduser().resolve() / GLOSSARY_FILENAME
+
+
+def ensure_game_glossary(game_root: str | Path | None) -> Path:
+    """Create or migrate the selected game's glossary and return its path.
+
+    Older DazedTL versions copied ``vocab.txt`` into the game root. Rename that
+    file on first use so an existing project's glossary remains intact.
+    """
+    path = game_glossary_path(game_root)
+    if path is None:
+        raise ValueError("No game folder is selected.")
+    if not path.parent.is_dir():
+        raise FileNotFoundError(f"Game folder not found: {path.parent}")
+    if path.is_file():
+        return path
+
+    legacy = path.with_name(LEGACY_GLOSSARY_FILENAME)
+    if legacy.is_file():
+        legacy.replace(path)
+        return path
+
+    base_path = glossary_base_path()
+    base = base_path.read_text(encoding="utf-8") if base_path.is_file() else ""
+    path.write_text(
+        _EMPTY_GLOSSARY_PLACEHOLDER
+        + "\n"
+        + GLOSSARY_BASE_SEPARATOR
+        + base,
+        encoding="utf-8",
+    )
+    return path
+
+
+def active_glossary_path(*, create: bool = True) -> Path | None:
+    """Resolve the glossary for the game active in the translation process."""
+    import os
+
+    root = (os.getenv("DAZED_GAME_ROOT") or "").strip()
+    if not root:
+        return None
+    return ensure_game_glossary(root) if create else game_glossary_path(root)
+
+
+def read_active_glossary() -> str:
+    """Read the active game's glossary, falling back to shipped base terms."""
+    path = active_glossary_path()
+    if path and path.is_file():
+        return path.read_text(encoding="utf-8")
+    base_path = glossary_base_path()
+    return base_path.read_text(encoding="utf-8") if base_path.is_file() else ""

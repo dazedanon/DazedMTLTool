@@ -39,7 +39,7 @@ _SHIPPED_DATA_FILES = (
     "data/help/08-problems-resuming.md",
     "data/help/09-backups-recovery.md",
     "data/help/10-playtest-checklist.md",
-    "data/vocab_base.txt",
+    "data/glossary_base.txt",
 )
 
 

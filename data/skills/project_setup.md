@@ -8,8 +8,9 @@ Work in the game repository. Scan files; do not invent content you did not see.
 ## Task
 
 In **one pass**, discover everything needed for translation setup and emit the labeled output blocks below.
-Do **not** translate the game or edit its files. Recommend formatting and pipeline settings only in
-the designated configuration block.
+Do **not** translate the game or broadly edit its files. The only editing exception is a qualifying
+deterministic micro-repair under the RPG Maker speaker rules below. Recommend formatting and
+pipeline settings only in the designated configuration block.
 
 Default: emit every block specified for the selected engine.
 Regenerate mode: if the user asks for only one block, emit **only** that block using the same
@@ -82,7 +83,39 @@ Code `101` opens the text window. Code `401` is a dialogue line. Multiple `401`s
 **Flags (only when some speakers lack an always-on format):**
 - `INLINE401SPEAKERS` — name immediately before `「` on a `401` line (e.g. `エレナ「今日は…`)
 - `FIRSTLINESPEAKERS` — first `401` is a short plain name (< 40 chars, has Japanese); next line starts with `「` `"`` `（` `*` `[`; often empty face on `101`
-- `FACENAME101` — last resort only when no always-on and neither flag above; face filename in `101` param[0], empty param[4]. If ENABLE, list every unique face filename from `101` param[0].
+- `FACENAME101` — last resort only when no always-on and neither flag above. It maps the face
+  **filename alone** from `101` param[0] to a speaker when param[4] is empty; the tool does not use
+  the face index to disambiguate characters.
+
+Before enabling `FACENAME101`:
+1. Inspect only messages with a non-empty face filename and empty param[4]. Exclude narration,
+   notifications, sound effects, chirps, and other lines that do not need a named speaker.
+2. Cross-tabulate each candidate filename against all code-101 uses, including messages that
+   already have explicit param[4] names. Require the filename to identify one speaker consistently.
+3. Choose `SKIP` when the filename is a generic/shared sheet, appears with multiple explicit
+   speakers, needs the face index to identify a character, or only rescues one or two isolated
+   exceptions. A nearly universal explicit-name pattern with a stray unnamed line is not evidence
+   for enabling this global fallback.
+4. Choose `ENABLE` only when multiple genuine unnamed dialogue groups can be recovered through
+   stable one-to-one `filename -> speaker` mappings. If enabled, list only those proven mappings,
+   not every face filename in the project.
+
+#### Deterministic speaker micro-repairs
+
+Prefer a tiny direct data repair over enabling a broad heuristic flag when all of these conditions
+hold:
+- At most three entries need the same simple repair.
+- The exact speaker is proven by adjacent narration, the same event's explicit names, or other
+  direct local evidence. Do not treat the face filename itself as proof.
+- The repair only fills an empty code-101 param[4]; it does not translate dialogue, invent a name,
+  normalize intentional aliases or story-stage labels, or alter faceless narration.
+- The target files are writable and the edit preserves their existing JSON formatting.
+
+Apply a qualifying repair immediately without asking for confirmation. Modify only the empty
+param[4] values, parse the changed JSON, and rescan all face-backed messages. If every remaining
+face-backed message has an explicit name, choose `FACENAME101: SKIP` and state that the fallback is
+not needed after the repair. If any identity is ambiguous or the scope exceeds this narrow rule,
+make no edits and report the evidence normally.
 
 ### Glossary rules (for `glossary` block)
 
@@ -138,11 +171,19 @@ Code `408` is a continuation of an editor comment. It is normally internal, but 
 1. Inventory code-408 values and group them with their preceding code-108 command.
 2. Search enabled plugin sources and event-handling code for the discovered comment tags,
    prefixes, or parsing APIs. Do not infer runtime visibility from Japanese text alone.
-3. Choose `ENABLE` only when evidence shows that code-408 content is rendered or otherwise shown
-   to players. Show representative plugin + event locators and an affected count.
-4. Choose `SKIP` when values are editor notes, disabled-plugin metadata, or have no runtime
-   consumer. If evidence is inconclusive, choose `SKIP` and state what must be playtested.
-5. Tell the user to set the **Translate code 408 plugin/comment text** checkbox in Phase 1 to the
+3. Treat the Phase 1 checkbox as a **global extraction decision**: enabling it includes every code
+   408 value, not only the runtime-displayed subset. Report both the total inventory and confirmed
+   player-visible count, then inspect whether the visible values are real game text, debug text,
+   placeholders, or isolated test content.
+4. Choose `ENABLE` only when evidence shows a meaningful, recurring body of code-408 content is
+   shown to players and bulk extraction is proportionate and safe. A plugin consumer by itself is
+   not enough evidence to enable the checkbox globally.
+5. Choose `SKIP` when values are editor notes, disabled-plugin metadata, or have no runtime
+   consumer. Also choose `SKIP` when the visible subset is tiny relative to the inventory,
+   isolated to debug/test maps, or merely placeholder text; give exact locators and recommend
+   translating those few values manually later if they matter. If evidence is inconclusive,
+   choose `SKIP` and state what must be playtested.
+6. Tell the user to set the **Translate code 408 plugin/comment text** checkbox in Phase 1 to the
    recommended state. This is a user choice; do not edit tool configuration yourself.
 
 #### Window geometry, wrapping, and fonts
@@ -327,8 +368,11 @@ FACENAME101       : ENABLE|SKIP — <one-line reason>
 Examples:
 - ...
 
-Face filenames (only if FACENAME101 ENABLE):
-- ...
+Repairs applied (only if any):
+- <file + event/list locator> - filled code-101 param[4] with <speaker>; FACENAME101 is not needed after rescan.
+
+Face filename mappings (only if FACENAME101 ENABLE):
+- <filename> -> <speaker> - <one-line evidence that the filename is unique to this speaker>
 ```
 
 ### Block `translation_quirks`

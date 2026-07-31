@@ -77,6 +77,7 @@ _EXCLUDED_ROOT_FILE_NAMES = frozenset(
         "requirements.txt",
         "todo.md",
         "translation_quirks.txt",
+        "glossary.txt",
         "vocab.txt",
     }
 )

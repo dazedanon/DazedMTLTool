@@ -72,6 +72,18 @@ class WorkflowTranslationPromptTests(unittest.TestCase):
         self.assertIn("face/portrait reservation", lowered)
         self.assertIn("applicable line height", lowered)
         self.assertIn("pagination/manual reflow", lowered)
+        self.assertIn("filename alone", lowered)
+        self.assertIn("the tool does not use", lowered)
+        self.assertIn("shared sheet", lowered)
+        self.assertIn("one-to-one `filename -> speaker`", lowered)
+        self.assertIn("deterministic speaker micro-repairs", lowered)
+        self.assertIn("at most three entries", lowered)
+        self.assertIn("without asking for confirmation", lowered)
+        self.assertIn("only fills an empty code-101 param[4]", lowered)
+        self.assertIn("facename101 is not needed after rescan", lowered)
+        self.assertIn("global extraction decision", lowered)
+        self.assertIn("tiny relative to the inventory", lowered)
+        self.assertIn("translating those few values manually", lowered)
 
         wolf_prompt = load_project_setup("wolf")
         self.assertNotIn("code408 : enable|skip", wolf_prompt.casefold())
@@ -94,7 +106,7 @@ class WorkflowTranslationPromptTests(unittest.TestCase):
             2: ("Collect names", "Copy setup instructions"),
             3: ("Translate database", "Translate dialogue", "Build variable cache"),
             4: ("Copy advanced-text audit", "Translate selected text"),
-            5: ("Copy glossary to game", "Export selected files"),
+            5: ("glossary.txt", "Export selected files"),
             6: ("Preview rewrap", "Apply rewrap", "Copy final QA skill"),
             7: ("Open Image Manager", "Copy skill", "Patch selected"),
             8: ("Save defaults", "Build public release ZIP"),

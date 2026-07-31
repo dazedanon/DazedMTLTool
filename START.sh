@@ -126,29 +126,6 @@ activate_venv() {
     echo
 }
 
-ensure_vocab_file() {
-    mkdir -p data
-    if [[ -f "data/vocab.txt" ]]; then
-        return 0
-    fi
-
-    if [[ -f "data/vocab_base.txt" ]]; then
-        echo "Glossary file data/vocab.txt not found - creating it from data/vocab_base.txt..."
-        if cp "data/vocab_base.txt" "data/vocab.txt"; then
-            echo "Created glossary file data/vocab.txt from data/vocab_base.txt"
-        else
-            echo "ERROR: Failed to create glossary file data/vocab.txt from data/vocab_base.txt."
-        fi
-    else
-        echo "Glossary file data/vocab.txt not found - creating an empty one..."
-        if : > "data/vocab.txt"; then
-            echo "Created empty glossary file data/vocab.txt"
-        else
-            echo "ERROR: Failed to create empty glossary file data/vocab.txt."
-        fi
-    fi
-}
-
 echo "=========================================="
 echo "   DazedTL Startup Script"
 echo "=========================================="
@@ -225,8 +202,6 @@ echo "=========================================="
 echo "   Launching DazedTL GUI..."
 echo "=========================================="
 echo
-
-ensure_vocab_file
 
 if ! exec python "$SCRIPT_DIR/scripts/start_gui.py"; then
     echo

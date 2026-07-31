@@ -484,7 +484,7 @@ class RPGMakerImageManagerSelectionTests(unittest.TestCase):
 
         self.assertIn(str(self.game_root), prompt)
         self.assertIn(str(self.game_root / ".dazedtl" / "images" / "img"), prompt)
-        self.assertIn(str(self.game_root / "vocab.txt"), prompt)
+        self.assertIn(str(self.game_root / "glossary.txt"), prompt)
         self.assertIn("RPG Maker MV/MZ image profile", prompt)
         self.assertIn("This is an RPG Maker MV/MZ project", prompt)
         self.assertIn("`.rpgmvp` or `.png_`", prompt)
@@ -511,7 +511,7 @@ class RPGMakerImageManagerSelectionTests(unittest.TestCase):
         asset = self.manager.assets[0]
         asset.plain_path.parent.mkdir(parents=True, exist_ok=True)
         asset.plain_path.write_bytes(asset.runtime_plain_path.read_bytes())
-        self.game_root.joinpath("vocab.txt").write_text("Menu (Menu)\n", encoding="utf-8")
+        self.game_root.joinpath("glossary.txt").write_text("Menu (Menu)\n", encoding="utf-8")
         misplaced = self.game_root / ".dazedtl" / "images" / "img (2)" / "pictures"
         misplaced.mkdir(parents=True)
         misplaced.joinpath("menu.png").write_bytes(asset.runtime_plain_path.read_bytes())
@@ -655,7 +655,7 @@ class RPGMakerWorkflowImageStepTests(unittest.TestCase):
             data_root.mkdir(parents=True)
             Image.new("RGBA", (12, 12), "purple").save(image_root / "menu.png")
             data_root.joinpath("System.json").write_text("{}", encoding="utf-8")
-            game_root.joinpath("vocab.txt").write_text("Menu (Menu)\n", encoding="utf-8")
+            game_root.joinpath("glossary.txt").write_text("Menu (Menu)\n", encoding="utf-8")
 
             settings = QSettings(str(root / "settings.ini"), QSettings.IniFormat)
 

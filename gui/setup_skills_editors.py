@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from pathlib import Path
 
 from PyQt5.QtCore import Qt, QSize
 from PyQt5.QtGui import QFont
@@ -122,7 +123,7 @@ class SetupSkillsEditors(QWidget):
 
         editors.addTab(
             self._editor_page(
-                "Glossary file: data/vocab.txt  (game section)",
+                "Glossary file: <game>/glossary.txt  (game section)",
                 "Paste the glossary code block. Format: Japanese (English) - notes",
                 self._save_vocab,
                 self._reload_vocab,
@@ -277,19 +278,26 @@ class SetupSkillsEditors(QWidget):
     def _reload_vocab(self) -> None:
         if self.vocab_editor is None:
             return
+        root = self._game_root()
+        if not root:
+            self.vocab_editor.setPlainText("")
+            return
         try:
-            self.vocab_editor.setPlainText(read_game_vocab())
+            self.vocab_editor.setPlainText(read_game_vocab(root))
         except Exception as exc:
-            self._log(f"❌ Could not load the glossary file (data/vocab.txt): {exc}")
+            self._log(f"❌ Could not load the game glossary: {exc}")
 
     def _save_vocab(self) -> None:
         if self.vocab_editor is None:
             return
+        root = self._game_root_or_warn()
+        if root is None:
+            return
         try:
-            write_game_vocab(self.vocab_editor.toPlainText())
-            self._log("✅ Glossary saved to data/vocab.txt (shared terms appended).")
+            write_game_vocab(self.vocab_editor.toPlainText(), root)
+            self._log(f"✅ Glossary saved to {Path(root) / 'glossary.txt'}.")
         except Exception as exc:
-            self._log(f"❌ Could not save the glossary file (data/vocab.txt): {exc}")
+            self._log(f"❌ Could not save the game glossary: {exc}")
 
     def _reload_quirks(self) -> None:
         if self.quirks_editor is None:

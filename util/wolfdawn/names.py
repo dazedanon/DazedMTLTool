@@ -13,7 +13,7 @@ a ``note`` field (the WOLF database category it came from), and a static
 ``refs``, ``verify``, and legacy entries without a badge keep ``text == source``
 so injection is a no-op for them.
 
-Phase 0 still harvests translated **short name-like** entries into ``vocab.txt``,
+Phase 0 still harvests translated **short name-like** entries into ``glossary.txt``,
 grouped by ``note``. Multi-line profile blurbs, dialogue, and other content-shaped
 names are translated in ``names.json`` but omitted from the glossary.
 """
@@ -86,7 +86,7 @@ def is_name_translatable(entry: dict[str, Any]) -> bool:
 
 
 def is_vocab_harvest_candidate(entry: dict[str, Any]) -> bool:
-    """True when a translated names.json entry should seed ``vocab.txt``.
+    """True when a translated names.json entry should seed ``glossary.txt``.
 
     Translation uses :func:`is_name_translatable`; this is stricter. Profile text,
     multi-line blurbs, and dialogue-shaped strings are still translated in

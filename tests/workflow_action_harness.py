@@ -164,7 +164,6 @@ for _method_name in (
     "_run_rewrap",
     "_copy_translation_qa_prompt",
     "_create_public_release",
-    "_copy_vocab_to_game",
     "_copy_plugins_js_translate_prompt",
     "_export_active_files",
     "_export_to_game",

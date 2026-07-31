@@ -79,7 +79,7 @@ class MVMZSpeakerVocabTests(unittest.TestCase):
 
     def test_reload_vocab_updates_translation_config(self):
         with TemporaryDirectory() as tmp:
-            vocab_path = Path(tmp) / "vocab.txt"
+            vocab_path = Path(tmp) / "glossary.txt"
             vocab_path.write_text("# Game Characters\nユウ (You)\n", encoding="utf-8")
             with patch.object(mvmz, "VOCAB_PATH", vocab_path):
                 mvmz._reload_vocab()
@@ -91,7 +91,7 @@ class MVMZSpeakerVocabTests(unittest.TestCase):
         mvmz.SPEAKER_PARSE_MODE = True
         mvmz.SPEAKER_COLLECTED = ["ユウ"]
         with TemporaryDirectory() as tmp:
-            vocab_path = Path(tmp) / "vocab.txt"
+            vocab_path = Path(tmp) / "glossary.txt"
             vocab_path.write_text(VOCAB, encoding="utf-8")
             with (
                 patch.object(mvmz, "VOCAB_PATH", vocab_path),

@@ -22,7 +22,7 @@ import sys
 import threading
 from pathlib import Path
 
-from util.paths import VOCAB_PATH, APP_NAME, ORG_NAME
+from util.paths import APP_NAME, ORG_NAME, ensure_game_glossary
 from util.skills import load_clipboard_skill, load_project_setup
 from util.vocab import BASE_SEPARATOR as _SHARED_BASE_SEPARATOR
 
@@ -551,7 +551,7 @@ _STEP_HELP: dict[int, str] = {
         "<b>Step 5 - Put translated text into the game</b><br><br>"
         "<b>What to do</b><br>There are two different jobs on this page:<br><br>"
         "<b>Plugin or script text</b><br>"
-        "1. Click <b>Copy glossary to game</b> once.<br>"
+        "1. The selected game's <b>glossary.txt</b> is already available in its root folder.<br>"
         "2. Copy the plugin or Ruby translation skill and paste it into your AI helper.<br>"
         "3. Review the proposed changes. The helper edits approved plugin or script files "
         "directly inside the game folder, so these changes do not need the Export buttons.<br><br>"
@@ -757,7 +757,7 @@ def _inspect_image_workflow(game_root: str | Path) -> dict:
         "encrypted": 0,
         "editable": 0,
         "misplaced": 0,
-        "vocab": root / "vocab.txt",
+        "vocab": root / "glossary.txt",
         "editable_root": None,
         "key_ok": None,
     }
@@ -2708,7 +2708,7 @@ class WorkflowTab(QWidget):
         preparation = WorkflowStageCard(
             1,
             "Prepare plugin or script translations",
-            "Copy the Glossary and engine-specific translation skill before editing player-visible strings.",
+            "Use the game-local Glossary with the engine-specific translation skill before editing player-visible strings.",
         )
         prep_layout = preparation.body
         self._step6_section_label = QLabel("Plugins")
@@ -2719,19 +2719,12 @@ class WorkflowTab(QWidget):
         prep_layout.addWidget(self._step6_section_label)
 
         self._plugin_ai_help_banner = StatusBanner(
-            "How to use this: first copy the Glossary to the game. Then copy the translation "
-            "skill, paste it into your AI helper with the game folder open, and review its "
+            "How to use this: copy the translation skill, paste it into your AI helper with "
+            "the game folder open, and review its "
             "plugin or script changes before moving on.",
             "info",
         )
         prep_layout.addWidget(self._plugin_ai_help_banner)
-
-        self._step6_vocab_btn = _make_btn("📄  Copy glossary to game", "#555")
-        self._step6_vocab_btn.setToolTip(
-            "Copy the Glossary to <game root>/vocab.txt so you can attach it "
-            "alongside plugins.js (or Ace .rb scripts) when running the AI prompt."
-        )
-        self._step6_vocab_btn.clicked.connect(self._copy_vocab_to_game)
 
         self._step6_copy_btn = _make_btn("Copy plugin skill", "#555")
         self._step6_copy_btn.setToolTip(
@@ -2739,14 +2732,9 @@ class WorkflowTab(QWidget):
             "needs translation, then edits approved player-visible strings in place."
         )
         self._step6_copy_btn.clicked.connect(self._copy_plugins_js_translate_prompt)
-        _equalize_action_buttons(
-            self._step6_vocab_btn,
-            self._step6_copy_btn,
-            width=Geometry.ACTION_WIDE,
-        )
+        _equalize_action_buttons(self._step6_copy_btn, width=Geometry.ACTION_WIDE)
         prep_actions = QHBoxLayout()
         prep_actions.setSpacing(Spacing.SM)
-        prep_actions.addWidget(self._step6_vocab_btn, 1)
         prep_actions.addWidget(self._step6_copy_btn, 1)
         prep_actions.addStretch()
         prep_layout.addLayout(prep_actions)
@@ -3740,18 +3728,6 @@ class WorkflowTab(QWidget):
         lbl = getattr(self, "_step6_section_label", None)
         if lbl is not None:
             lbl.setText("Scripts" if is_ace else "Plugins")
-        vocab_btn = getattr(self, "_step6_vocab_btn", None)
-        if vocab_btn is not None:
-            if is_ace:
-                vocab_btn.setToolTip(
-                    "Copy the Glossary to <game root>/vocab.txt so you can attach it "
-                    "alongside ace_json/scripts/*.rb when running the AI prompt."
-                )
-            else:
-                vocab_btn.setToolTip(
-                    "Copy the Glossary to <game root>/vocab.txt so you can attach it "
-                    "alongside plugins.js when running the AI prompt."
-                )
         btn = getattr(self, "_step6_copy_btn", None)
         if btn is not None:
             if is_ace:
@@ -4163,11 +4139,12 @@ class WorkflowTab(QWidget):
             self._log(f"❌ Could not load Project Setup skill: {exc}")
 
     def _read_vocab_speakers(self) -> list[tuple[str, str]]:
-        """Parse the '# Speakers' section from vocab.txt and return (orig, tl) pairs."""
-        vocab_path = VOCAB_PATH
-        if not vocab_path.exists():
+        """Parse the '# Speakers' section from glossary.txt and return (orig, tl) pairs."""
+        game_root = self.folder_edit.text().strip()
+        if not game_root:
             return []
         try:
+            vocab_path = ensure_game_glossary(game_root)
             content = vocab_path.read_text(encoding="utf-8")
         except Exception:
             return []
@@ -4420,27 +4397,6 @@ class WorkflowTab(QWidget):
         except Exception as exc:
             self._log(f"❌ Could not save plugin settings: {exc}")
 
-    def _copy_vocab_to_game(self):
-        """Copy vocab.txt into the game root folder so it can be attached to the AI prompt."""
-        game_root = self.folder_edit.text().strip()
-        if not game_root:
-            self._log("⚠  No game folder set. Complete Step 0 first.")
-            return
-
-        src = VOCAB_PATH
-        if not src.exists():
-            self._log("⚠  Glossary file (data/vocab.txt) not found — save it in Step 2 first.")
-            return
-
-        import shutil
-        dst = Path(game_root) / "vocab.txt"
-        try:
-            shutil.copy2(src, dst)
-            self._log(f"✅ Glossary copied to {dst}")
-            self._refresh_image_workflow_status()
-        except Exception as exc:
-            self._log(f"❌ Could not copy the Glossary: {exc}")
-
     def _copy_plugins_js_translate_prompt(self):
         is_ace = bool(
             getattr(self, "_ace_rvdata_dir", "") or getattr(self, "_ace_json_dir", "")
@@ -4476,7 +4432,7 @@ class WorkflowTab(QWidget):
             replacements = {
                 "{{GAME_DATA_FOLDER}}": str(Path(game_data).expanduser().resolve()),
                 "{{GAME_ROOT}}": str(Path(game_root).expanduser().resolve()),
-                "{{VOCAB_FILE}}": str((Path(game_root) / "vocab.txt").expanduser().resolve()),
+                "{{VOCAB_FILE}}": str((Path(game_root) / "glossary.txt").expanduser().resolve()),
             }
             prompt = load_clipboard_skill("rpgmaker_translation_qa.md")
             missing = [token for token in replacements if token not in prompt]

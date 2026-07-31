@@ -22,10 +22,10 @@ from util.translation import (
 
 MODEL = os.getenv("model")
 LANGUAGE = os.getenv("language").capitalize()
-from util.paths import PROMPT_PATH, VOCAB_PATH
+from util.paths import PROMPT_PATH, read_active_glossary
 
 PROMPT = PROMPT_PATH.read_text(encoding="utf-8")
-VOCAB = VOCAB_PATH.read_text(encoding="utf-8")
+VOCAB = read_active_glossary()
 LOCK = threading.Lock()
 WIDTH = int(os.getenv("width"))
 MAXHISTORY = 10

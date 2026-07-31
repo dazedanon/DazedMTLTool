@@ -98,7 +98,7 @@ class UpdateThread(QThread):
     }
 
     # User-local files under data/ that must not be overwritten.
-    # Shipped defaults (translation_contexts.json, skills/*.md, help/*, vocab_base.txt, …)
+    # Shipped defaults (translation_contexts.json, skills/*.md, help/*, glossary_base.txt, …)
     # are intentionally updated so tool releases refresh prompts, Guide docs, and contexts.
     PROTECTED_DATA_FILES = frozenset({
         "data/vocab.txt",

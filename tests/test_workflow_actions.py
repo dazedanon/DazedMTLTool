@@ -73,7 +73,6 @@ class WorkflowActionWiringTests(unittest.TestCase):
             (4, "copy_plugin_prompt", {"text": "Copy advanced-text audit"}),
             (4, "apply_var_range", {"text": "Save range"}),
             (4, "run_phase", {"text": "Translate selected text"}),
-            (5, "copy_vocab_to_game", {"text": "Copy glossary to game"}),
             (5, "copy_plugins_js_translate_prompt", {"text": "Copy plugin skill"}),
             (5, "export_active_files", {"text": "Export selected files"}),
             (5, "export_to_game", {"text": "Export all translated files"}),
@@ -100,7 +99,7 @@ class WorkflowActionWiringTests(unittest.TestCase):
             (8, "install_both_playtest", {"text": "Install both plugins"}),
             (8, "refresh_playtest_status", {"text": "Refresh plugin status"}),
         )
-        self.assertEqual(len(cases), 48)
+        self.assertEqual(len(cases), 47)
         for step, endpoint, locator in cases:
             with self.subTest(step=step, endpoint=endpoint, locator=locator):
                 if endpoint == "apply_var_range":
@@ -350,18 +349,19 @@ class WorkflowHandlerContractTests(unittest.TestCase):
         )
 
         editors = self.workflow.setup_editors
+        game = self.harness.root / "SetupGame"
+        game.mkdir()
+        self.workflow.folder_edit.setText(str(game))
         write_vocab = MagicMock()
         editors.vocab_editor.setPlainText("term")
         with patch("gui.setup_skills_editors.write_game_vocab", write_vocab):
             editors._save_vocab()
-        write_vocab.assert_called_once_with("term")
+        write_vocab.assert_called_once_with("term", str(game))
+        self.assertIn("glossary.txt", self.workflow.log_area.toPlainText())
         with patch("gui.setup_skills_editors.read_game_vocab", return_value="loaded"):
             editors._reload_vocab()
         self.assertEqual(editors.vocab_editor.toPlainText(), "loaded")
 
-        game = self.harness.root / "SetupGame"
-        game.mkdir()
-        self.workflow.folder_edit.setText(str(game))
         quirks = game / "skills" / "quirks.md"
         game_skill = game / "skills" / "game.md"
         with (

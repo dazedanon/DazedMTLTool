@@ -193,10 +193,10 @@ Specialized tabs with extra options for those specific engines.
 
 ## Glossary & Prompt
 
-### Glossary file: data/vocab.txt
+### Glossary file: &lt;game&gt;/glossary.txt
 The Glossary gives the AI context about your game—character names, genders, recurring terms, and similar details. The better your Glossary, the more consistent the translation.
 
-On first run, `data/vocab.txt` is created automatically from `data/vocab_base.txt` if it does not exist yet. Add entries like:
+When you select a game, `<game>/glossary.txt` is created automatically from `data/glossary_base.txt` if it does not exist yet. Each game therefore keeps its own glossary. Add entries like:
 
 ```plaintext
 # Game Characters
@@ -221,7 +221,7 @@ Per-game overlays (when a game folder is selected in Workflow) live next to the 
 
 ## Tips
 
-- **Check `log/translations.txt`** after a run to see what was translated. You can copy useful terms from it into `data/vocab.txt` for consistency in future runs.
+- **Check `log/translations.txt`** after a run to see what was translated. You can copy useful terms from it into the selected game's `glossary.txt` for consistency in future runs.
 - **Start small** — Translate a few files first to make sure the output looks good before doing the whole game.
 - **Wordwrap** — If text overflows or looks awkward in-game, adjust the `width` setting in `.env` or the Config tab. `60` is a good default for most RPG Maker games.
 - **Version control** — Using [Git](https://git-scm.com/) with the game folder is highly recommended. It lets you track every change the translation makes, compare with original files, and roll back if needed.
@@ -287,7 +287,7 @@ How it works (all engine modules are supported automatically):
 Context note: in live mode the rolling translation history contains the previous batch's
 English lines; in batch mode requests are independent, so the history carries the previous
 batch's *source* lines instead. The model still sees the surrounding scene, and the Glossary
-(`vocab.txt`) keeps names and terms consistent—so keep it in good shape for batch runs.
+(`glossary.txt`) keeps names and terms consistent—so keep it in good shape for batch runs.
 
 Cost tracking is exact: per-file and total costs printed after the consume pass use the real
 billed token counts (cache reads at 0.1x, cache writes at 2x, output at the output rate) with
@@ -338,7 +338,7 @@ Here's the recommended step-by-step process for translating an RPG Maker MV/MZ g
 
 | Step | Action |
 |------|--------|
-| **1** | **Parse speakers → Glossary** — Use the Parse Speakers feature to add character names from the game files to the Glossary (`data/vocab.txt`). |
+| **1** | **Parse speakers → Glossary** — Use the Parse Speakers feature to add character names from the game files to the selected game's `glossary.txt`. |
 | **2** | **Identify speaker genders** — Figure out which characters are male/female and update the Glossary accordingly. This helps the AI use correct pronouns. |
 | **3** | **Translate Actors.json, MapInfos.json** — These are small files with character and map names. Good to do first. |
 | **4** | **Translate Items, System, Weapons, etc.** — All the data files that aren't maps or events. Place them in `files/`, translate, then copy results back. |
@@ -364,7 +364,7 @@ Open the **Workflow** tab and choose **Wolf RPG (WolfDawn)** from the engine sel
 |------|--------|
 | **0 Project** | Select the game root folder (browse or Enter — detection also runs when you reopen the tab). If `wolf_json/` does not exist yet, the tool automatically unpacks `.wolf` archives when needed and extracts text into the game's `wolf_json/` folder (maps, common events, databases, `Game.dat`, Evtext, and `names.json`). A checklist lists every JSON file in `wolf_json/`; tick the ones you want and click **Import** (or leave Step 0 — checked files auto-import into the tool's `files/` folder, matching the RPG Maker workflow). Extraction snapshots pristine binaries into `wolf_json/originals/` for idempotent inject in Step 7. |
 | **1 Pre-process** | Optional: **dazedformat** normalises JSON in `wolf_json/` and `files/` (`json.dump`, indent 4) for clean git diffs; **Copy gameupdate/** installs the updater scripts, patch scripts, `.gitignore`, and `UberWolfCli.exe` into the game root for git-based patching (players auto-unpack `Data.wolf` on first GameUpdate). Paths auto-fill from Step 0. |
-| **2 Glossary** | Build the Glossary (`vocab.txt`) before translating: copy the WOLF-tailored prompt into Cursor/Copilot with the extracted `files/` JSON, let it discover character names, speech registers, and lore terms, then paste the result into the in-tab editor and save. Item/skill/enemy value names (`names.json`) are translated in Step 3 and added to the Glossary automatically during Phase 0—do not list them here. |
+| **2 Glossary** | Build the Glossary (`glossary.txt`) before translating: copy the WOLF-tailored prompt into Cursor/Copilot with the extracted `files/` JSON, let it discover character names, speech registers, and lore terms, then paste the result into the in-tab editor and save. Item/skill/enemy value names (`names.json`) are translated in Step 3 and added to the Glossary automatically during Phase 0—do not list them here. |
 | **3 Names** | Translate `names.json` (item/skill/enemy/map value names). WolfDawn tags each name with a per-entry **safety** badge (`safe`, `refs`, or `verify`). Phase 0 translates only `safe` entries; `refs` and `verify` names stay Japanese so inject skips them. Review the category breakdown for this game, pick **Translation mode** (Normal or Batch), and run **Translate safe names (Phase 0)**. |
 | **4 Database** | Review the **discovery summary** to see where this game's text lives (standard RPG sheets vs custom dialogue tables). Database sheets are classified as foundation (items, skills, descriptions — translate first) or narrative (custom event/profile sheets — translate after foundation). Use **Translate foundation DB** then **Translate narrative DB**, or tick specific sheets and run **Translate checked sheets only**. Optional: copy the **DB structure prompt** for an AI audit and import the returned JSON into `wolf_json/db_profile.json`. |
 | **5 Maps/Events** | Translate map scripts (`.mps`), common events (`CommonEvent.dat`), `Game.dat`, and Evtext. Run after Steps 3–4 so Glossary and database terms are consistent. Configure speaker handling for low-confidence nameplate guesses. Batch mode is recommended for large `CommonEvent.dat` files. |

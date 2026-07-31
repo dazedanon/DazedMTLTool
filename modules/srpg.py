@@ -20,12 +20,13 @@ from util.speakers import strip_speaker_prefix
 MODEL = os.getenv("model")
 TIMEOUT = int(os.getenv("timeout"))
 LANGUAGE = os.getenv("language").capitalize()
-from util.paths import PROMPT_PATH, VOCAB_PATH
+from util.paths import PROMPT_PATH, active_glossary_path, read_active_glossary
 
 PROMPT = PROMPT_PATH.read_text(encoding="utf-8")
-VOCAB = VOCAB_PATH.read_text(encoding="utf-8")
+VOCAB_PATH = active_glossary_path()
+VOCAB = read_active_glossary()
 LOCK = threading.Lock()
-VOCAB_LOCK = threading.Lock()  # Dedicated lock for vocab.txt updates
+VOCAB_LOCK = threading.Lock()  # Dedicated lock for glossary.txt updates
 WIDTH = int(os.getenv("width"))
 LISTWIDTH = int(os.getenv("listWidth"))
 NOTEWIDTH = int(os.getenv("noteWidth"))
@@ -114,14 +115,16 @@ MAP_FILES = [
 
 
 def update_vocab_section(category: str, pairs: list[tuple[str, str]]):
-    """Update or insert a section in vocab.txt for the given category with provided pairs.
+    """Update or insert a section in glossary.txt for the given category with provided pairs.
     Only writes when there's an actual translation (dst is non-empty and differs from src after normalization).
     - category: e.g., "Items", "Weapons", "Speakers", etc. Section header will be "# {category}".
     - pairs: list of (source, translated) strings. Duplicates by source are deduped (last wins).
     The existing section is replaced entirely; other sections are preserved.
     """
     try:
-        vocab_path = VOCAB_PATH
+        vocab_path = VOCAB_PATH or active_glossary_path()
+        if vocab_path is None:
+            raise RuntimeError("No active game folder is available for glossary updates.")
 
         # Helper: normalized comparison to detect no-op translations
         def _norm(s: str) -> str:
@@ -931,7 +934,7 @@ def translateGeneric(data, filename, translatedDataList=None, pbar=None):
             totalTokens[0] += response[1][0]
             totalTokens[1] += response[1][1]
         
-        # Update vocab.txt for name-bearing files
+        # Update glossary.txt for name-bearing files
         if originalNameList and nameList:
             try:
                 file_lower = filename.lower()
@@ -2249,4 +2252,3 @@ def translateAI(text, history, history_ctx=None, filename=None, pbar=None):
         lock=LOCK,
         mismatchList=MISMATCH
     )
-

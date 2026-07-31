@@ -65,7 +65,7 @@ DIALOGUE_FIELDS_RE = re.compile(
 )
 
 # Foundation DB lines that are short display labels (map names, term titles),
-# not descriptions / battle messages / dialogue. Used when seeding vocab.txt.
+# not descriptions / battle messages / dialogue. Used when seeding glossary.txt.
 _DB_VOCAB_FIELD_RE = re.compile(
     r"マップ名|"
     r"属性名|"
@@ -486,7 +486,7 @@ def is_db_vocab_harvest_candidate(
     type_name: str = "",
     tier: str | None = None,
 ) -> bool:
-    """True when a foundation DB line should seed ``vocab.txt``.
+    """True when a foundation DB line should seed ``glossary.txt``.
 
     Only short label-like fields on foundation/system/unknown sheets qualify.
     Descriptions, battle messages, and narrative dialogue stay out.
