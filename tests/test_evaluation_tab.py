@@ -255,6 +255,9 @@ class EvaluationTabTests(unittest.TestCase):
                 "modes": ["batch", "live"],
                 "selected_segments": 360,
                 "reviewed": 100,
+                "reviewed_samples": 100,
+                "reviewed_lines": 357,
+                "review_complete": True,
             },
             {
                 "run_dir": older,
@@ -275,6 +278,10 @@ class EvaluationTabTests(unittest.TestCase):
         self.assertEqual(self.tab.history_combo.count(), 2)
         self.assertIn("model-a, model-b", self.tab.history_combo.itemText(0))
         self.assertIn("Batch, Live", self.tab.history_combo.itemText(0))
+        self.assertIn(
+            "Review complete (357 eligible lines)",
+            self.tab.history_combo.itemText(0),
+        )
         self.assertEqual(self.tab._selected_history_run(), older)
         self.assertTrue(self.tab.history_combo.isEnabled())
         self.assertTrue(self.tab.export_evaluation_btn.isEnabled())

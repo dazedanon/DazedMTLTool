@@ -829,6 +829,8 @@ class EvaluationHistoryTests(unittest.TestCase):
         self.assertEqual([run["run_id"] for run in runs], ["newer-run", "older-run"])
         self.assertEqual(runs[0]["models"], ["local-model"])
         self.assertEqual(runs[0]["reviewed"], 25)
+        self.assertEqual(runs[0]["reviewed_samples"], 25)
+        self.assertEqual(runs[0]["reviewed_lines"], 25)
 
     def test_latest_run_does_not_prefer_an_old_active_run(self):
         with tempfile.TemporaryDirectory() as temporary:

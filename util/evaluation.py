@@ -1397,6 +1397,17 @@ def list_runs(project_root: str | Path) -> list[dict]:
             candidates = state.get("candidates") or []
             summary = state.get("corpus_summary") or manifest.get("corpus_summary") or {}
             human = state.get("human_review") or {}
+            reviewed_samples = int(human.get("reviewed", 0) or 0)
+            reviewed_lines = int(
+                human.get("reviewed_lines", reviewed_samples) or 0
+            )
+            eligible_review_samples = 0
+            blind_key_path = run_dir / "blind_key.json"
+            if blind_key_path.is_file():
+                try:
+                    eligible_review_samples = len(_read_json(blind_key_path))
+                except (OSError, ValueError, json.JSONDecodeError):
+                    pass
             created_at = str(state.get("created_at") or "")
             if not created_at:
                 created_at = datetime.fromtimestamp(
@@ -1412,7 +1423,13 @@ def list_runs(project_root: str | Path) -> list[dict]:
                 "modes": [str(item.get("execution") or "batch") for item in candidates],
                 "selected_segments": int(summary.get("selected_segments", 0) or 0),
                 "source_name": Path(str(manifest.get("source_dir") or "")).name,
-                "reviewed": int(human.get("reviewed", 0) or 0),
+                "reviewed": reviewed_samples,
+                "reviewed_samples": reviewed_samples,
+                "reviewed_lines": reviewed_lines,
+                "review_complete": bool(
+                    eligible_review_samples
+                    and reviewed_samples == eligible_review_samples
+                ),
             })
     return sorted(
         runs,

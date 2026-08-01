@@ -571,13 +571,22 @@ class EvaluationTab(QWidget):
             )) or "Batch"
             status = str(run.get("status") or "unknown").replace("_", " ").title()
             lines = int(run.get("selected_segments", 0) or 0)
-            reviewed = int(run.get("reviewed", 0) or 0)
+            reviewed_samples = int(
+                run.get("reviewed_samples", run.get("reviewed", 0)) or 0
+            )
+            reviewed_lines = int(
+                run.get("reviewed_lines", reviewed_samples) or 0
+            )
             label = (
                 f"{created or run_dir.name}  ·  {models}  ·  {modes}  ·  "
                 f"{status}  ·  {lines:,} lines"
             )
-            if reviewed:
-                label += f"  ·  {reviewed:,} reviewed"
+            if run.get("review_complete"):
+                label += "  ·  Review complete"
+                if reviewed_lines != lines:
+                    label += f" ({reviewed_lines:,} eligible lines)"
+            elif reviewed_lines:
+                label += f"  ·  {reviewed_lines:,} lines reviewed"
             self.history_combo.addItem(label, str(run_dir))
             self.history_combo.setItemData(index, label, Qt.ToolTipRole)
             if preferred is not None and run_dir == preferred:
