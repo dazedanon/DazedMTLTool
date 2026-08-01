@@ -367,9 +367,10 @@ for missing lines, Japanese residue, and broken
 placeholders/control codes. Hover **Valid ⓘ** or **Consistency ⓘ** for the exact
 meaning of each score. Each row of the final CSV contains one source JSON array
 and one aligned translation array per randomized candidate. Model identities are
-shuffled independently per sample. Reviewers rank each complete block once with
-`>` and use `=` for equivalent tiers (`A>B>C`, `A=B>C`, or `A=B=C`). Rankings
-receive fixed-sum
+shuffled independently per sample. Reviewers rank each complete block for Meaning
+Accuracy, Glossary & Prompt compliance, Natural & Contextual English, and Best
+Overall. Every ranking uses `>` and `=` for equivalent tiers (`A>B>C`, `A=B>C`,
+or `A=B=C`). Rankings receive fixed-sum
 Borda points: three strict ranks score 2/1/0, while tied candidates average the
 points for the positions they occupy. The single whole-sample ranking is applied
 to every line in that sample when totals are calculated, preserving per-line

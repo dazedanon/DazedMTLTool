@@ -136,6 +136,15 @@ class EvaluationTabTests(unittest.TestCase):
         )
         self.assertIn("does not judge translation quality", valid_header.toolTip())
         self.assertIn("not necessarily a better translation", consistency_header.toolTip())
+        self.assertEqual(self.tab.COLUMNS[-1], "Best overall")
+        self.assertTrue(all(
+            self.tab.table.horizontalHeaderItem(self.tab.COLUMNS.index(name))
+            .toolTip()
+            for name in (
+                "Meaning Accuracy", "Glossary & Prompt",
+                "Natural & Contextual", "Best overall",
+            )
+        ))
         self.assertEqual(
             self.tab.source_edit.placeholderText(),
             "Select an RPG Maker MV/MZ game folder…",
@@ -581,6 +590,50 @@ class EvaluationTabTests(unittest.TestCase):
             self.assertEqual(self.tab.table.item(0, 3).text(), "Completed")
             self.assertTrue(self.tab.import_btn.isEnabled())
 
+    def test_blind_quality_metrics_display_before_best_overall(self):
+        self.tab._display_state({
+            "status": "completed",
+            "human_review": {
+                "points": {"candidate-1": 210},
+                "quality_points": {
+                    "meaning_accuracy": {"candidate-1": 230},
+                    "glossary_prompt": {"candidate-1": 220},
+                    "natural_contextual": {"candidate-1": 200},
+                },
+            },
+            "candidates": [{
+                "id": "candidate-1",
+                "model": "reviewed-model",
+                "provider": "openai",
+                "status": "completed",
+                "estimate": {"cost_usd": 1.0},
+                "summary": {},
+            }],
+        })
+
+        self.assertEqual(
+            self.tab.table.item(
+                0, self.tab.COLUMNS.index("Meaning Accuracy")
+            ).text(),
+            "230",
+        )
+        self.assertEqual(
+            self.tab.table.item(
+                0, self.tab.COLUMNS.index("Glossary & Prompt")
+            ).text(),
+            "220",
+        )
+        self.assertEqual(
+            self.tab.table.item(
+                0, self.tab.COLUMNS.index("Natural & Contextual")
+            ).text(),
+            "200",
+        )
+        self.assertEqual(
+            self.tab.table.item(0, self.tab.COLUMNS.index("Best overall")).text(),
+            "210",
+        )
+
     def test_failed_evaluation_displays_failure_and_disables_review_actions(self):
         with tempfile.TemporaryDirectory() as temporary:
             self.tab.current_run_dir = Path(temporary)
@@ -630,7 +683,8 @@ class EvaluationTabTests(unittest.TestCase):
             self.assertGreaterEqual(widgets["model"].width(), 260)
         for widget in (self.tab.test_size_combo, self.tab.budget_spin):
             self.assertGreaterEqual(widget.width(), 132)
-        for index, minimum in enumerate((210, 240, 80, 120, 100, 90, 80, 140, 110)):
+        minimums = (210, 240, 80, 120, 100, 90, 80, 140, 130, 145, 165, 115)
+        for index, minimum in enumerate(minimums):
             self.assertGreaterEqual(self.tab.table.columnWidth(index), minimum)
 
 

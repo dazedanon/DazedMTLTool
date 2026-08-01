@@ -58,6 +58,11 @@ EVALUATION_ARCHIVE_DIR = "evaluations"
 EVALUATION_WORK_DIR = "evaluation_work"
 REVIEW_SYSTEM_PROMPT_FILENAME = "review_system_prompt.md"
 REVIEW_GLOSSARY_FILENAME = "review_glossary.txt"
+REVIEW_QUALITY_METRICS = (
+    "meaning_accuracy",
+    "glossary_prompt",
+    "natural_contextual",
+)
 MAX_OUTPUT_TOKENS_PER_REQUEST = 4096
 JAPANESE_RE = re.compile(r"[一-龠々〆〤ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]")
 LANGUAGE_REGEX = r"[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]+"
@@ -2386,12 +2391,13 @@ def export_blind_review(run_dir: str | Path, output_path: str | Path | None = No
     output = Path(output_path) if output_path else root / "blind_review.csv"
     key: dict[str, dict[str, str]] = {}
     blind_labels = [_blind_label(index) for index in range(len(candidate_ids))]
+    quality_fields = [f"{metric}_ranking" for metric in REVIEW_QUALITY_METRICS]
     output.parent.mkdir(parents=True, exist_ok=True)
     with open(output, "w", encoding="utf-8-sig", newline="") as stream:
         writer = csv.DictWriter(stream, fieldnames=(
             "sample_id", "scene_id", "stratum", "line_count", "segment_ids",
             "source",
-            *blind_labels, "ranking", "notes",
+            *blind_labels, *quality_fields, "ranking", "notes",
         ))
         writer.writeheader()
         for sample in review_samples:
@@ -2416,6 +2422,7 @@ def export_blind_review(run_dir: str | Path, output_path: str | Path | None = No
                     ], ensure_ascii=False, indent=2)
                     for label, candidate_id in labels.items()
                 },
+                **{field: "" for field in quality_fields},
                 "ranking": "",
                 "notes": "",
             })
@@ -2493,8 +2500,31 @@ def import_blind_review(run_dir: str | Path, review_path: str | Path) -> dict:
     reviewed = 0
     reviewed_lines = 0
     seen_samples: set[str] = set()
+    quality_points = {
+        metric: {candidate["id"]: 0.0 for candidate in state["candidates"]}
+        for metric in REVIEW_QUALITY_METRICS
+    }
+    quality_first_place = {
+        metric: {candidate["id"]: 0 for candidate in state["candidates"]}
+        for metric in REVIEW_QUALITY_METRICS
+    }
     with open(review_path, "r", encoding="utf-8-sig", newline="") as stream:
-        for row in csv.DictReader(stream):
+        reader = csv.DictReader(stream)
+        fieldnames = set(reader.fieldnames or [])
+        quality_fields = {
+            metric: f"{metric}_ranking" for metric in REVIEW_QUALITY_METRICS
+        }
+        has_quality_rankings = any(
+            field in fieldnames for field in quality_fields.values()
+        )
+        if has_quality_rankings:
+            missing_fields = sorted(set(quality_fields.values()) - fieldnames)
+            if missing_fields:
+                raise ValueError(
+                    "Reviewed CSV is missing quality ranking columns: "
+                    + ", ".join(missing_fields)
+                )
+        for row in reader:
             ranking_value = str(row.get("ranking") or "").strip()
             legacy_winner = str(row.get("winner") or "").strip().upper()
             if not ranking_value and not legacy_winner:
@@ -2552,6 +2582,26 @@ def import_blind_review(run_dir: str | Path, review_path: str | Path) -> dict:
                     f"expected {expected_line_count}, found {line_count}"
                 )
 
+            if has_quality_rankings:
+                for metric, field in quality_fields.items():
+                    try:
+                        metric_tiers = _parse_blind_ranking(
+                            str(row.get(field) or ""), labels
+                        )
+                    except ValueError as exc:
+                        raise ValueError(
+                            f"Invalid {field} for sample {review_id!r}: {exc}"
+                        ) from exc
+                    if not metric_tiers:
+                        raise ValueError(
+                            f"Missing {field} for sample {review_id!r}"
+                        )
+                    for label, award in _ranking_points(metric_tiers).items():
+                        candidate_id = labels_to_candidates[label]
+                        quality_points[metric][candidate_id] += award * line_count
+                    for label in metric_tiers[0]:
+                        quality_first_place[metric][labels_to_candidates[label]] += 1
+
             row_points = _ranking_points(tiers)
             for label, award in row_points.items():
                 points[labels_to_candidates[label]] += award * line_count
@@ -2570,6 +2620,17 @@ def import_blind_review(run_dir: str | Path, review_path: str | Path) -> dict:
         candidate_id: int(score) if score.is_integer() else score
         for candidate_id, score in points.items()
     }
+    if has_quality_rankings:
+        quality_points = {
+            metric: {
+                candidate_id: int(score) if score.is_integer() else score
+                for candidate_id, score in scores.items()
+            }
+            for metric, scores in quality_points.items()
+        }
+    else:
+        quality_points = {}
+        quality_first_place = {}
     human = {
         "reviewed": reviewed,
         "reviewed_lines": reviewed_lines,
@@ -2578,6 +2639,8 @@ def import_blind_review(run_dir: str | Path, review_path: str | Path) -> dict:
         "wins": wins,
         "first_place": first_place,
         "points": points,
+        "quality_points": quality_points,
+        "quality_first_place": quality_first_place,
         "scoring": "fixed-sum-borda-average-per-line-v2",
         "imported_at": _utc_now(),
     }

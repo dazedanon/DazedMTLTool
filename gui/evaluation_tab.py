@@ -71,7 +71,8 @@ class EvaluationTab(QWidget):
 
     COLUMNS = (
         "Model", "API URL", "Mode", "Status", "Estimate", "Actual", "Valid",
-        "Consistency", "Review points",
+        "Consistency", "Meaning Accuracy", "Glossary & Prompt",
+        "Natural & Contextual", "Best overall",
     )
     COLUMN_TOOLTIPS = {
         "Valid": (
@@ -85,8 +86,20 @@ class EvaluationTab(QWidget):
             "identical each time. Higher means less variation, not necessarily a "
             "better translation."
         ),
-        "Review points": (
-            "Fixed-sum ranking points from the blinded review. With three models, "
+        "Meaning Accuracy": (
+            "Fixed-sum points from the blinded meaning-accuracy ranking: fidelity "
+            "to intent, polarity, subjects, quantities, and relationships."
+        ),
+        "Glossary & Prompt": (
+            "Fixed-sum points from the blinded ranking for approved names and "
+            "terms plus applicable translation-system instructions."
+        ),
+        "Natural & Contextual": (
+            "Fixed-sum points from the blinded ranking for fluent English, speaker "
+            "voice, register, and continuity across the complete sample."
+        ),
+        "Best overall": (
+            "Fixed-sum points from the overall blinded ranking. With three models, "
             "strict ranks score 2/1/0; tied candidates average the points for the "
             "positions they occupy. One whole-sample judgment applies that award "
             "to every line in the sample."
@@ -528,8 +541,11 @@ class EvaluationTab(QWidget):
         viewport_width = max(0, self.table.viewport().width() - 8)
         if not viewport_width:
             return
-        proportions = (0.18, 0.21, 0.07, 0.11, 0.09, 0.08, 0.07, 0.11, 0.08)
-        minimums = (210, 240, 80, 120, 100, 90, 80, 140, 110)
+        proportions = (
+            0.15, 0.17, 0.06, 0.08, 0.07, 0.07, 0.06, 0.08,
+            0.08, 0.10, 0.10, 0.08,
+        )
+        minimums = (210, 240, 80, 120, 100, 90, 80, 140, 130, 145, 165, 115)
         for index, (proportion, minimum) in enumerate(zip(proportions, minimums)):
             self.table.setColumnWidth(
                 index, max(minimum, round(viewport_width * proportion))
@@ -1906,6 +1922,7 @@ class EvaluationTab(QWidget):
         self.table.setRowCount(len(state.get("candidates", [])))
         human_review = state.get("human_review") or {}
         human_points = human_review.get("points")
+        quality_points = human_review.get("quality_points") or {}
         legacy_wins = human_review.get("wins") or {}
         for row, candidate in enumerate(state.get("candidates", [])):
             summary = candidate.get("summary") or {}
@@ -1930,6 +1947,10 @@ class EvaluationTab(QWidget):
                 review_score = f"{legacy_wins[candidate['id']]} wins"
             else:
                 review_score = "—"
+            quality_scores = [
+                (quality_points.get(metric) or {}).get(candidate["id"], "—")
+                for metric in evaluation.REVIEW_QUALITY_METRICS
+            ]
             values = (
                 candidate.get("model", ""),
                 candidate.get("endpoint") or candidate.get("provider", ""),
@@ -1942,6 +1963,7 @@ class EvaluationTab(QWidget):
                 ),
                 valid,
                 stable,
+                *quality_scores,
                 str(review_score),
             )
             for column, value in enumerate(values):

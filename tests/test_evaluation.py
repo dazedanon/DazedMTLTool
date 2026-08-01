@@ -1087,6 +1087,12 @@ class BlindReviewTests(unittest.TestCase):
     def tearDown(self):
         self.temporary.cleanup()
 
+    @staticmethod
+    def _fill_rankings(row: dict, overall: str, **quality: str) -> None:
+        for metric in evaluation.REVIEW_QUALITY_METRICS:
+            row[f"{metric}_ranking"] = quality.get(metric, overall)
+        row["ranking"] = overall
+
     def test_three_candidate_ranking_points_are_fixed_sum(self):
         cases = {
             "A>B>C": {"A": 2, "B": 1, "C": 0},
@@ -1132,8 +1138,17 @@ class BlindReviewTests(unittest.TestCase):
             },
         )
         self.assertIn("ranking", rows[0])
+        self.assertTrue(all(
+            f"{metric}_ranking" in rows[0]
+            for metric in evaluation.REVIEW_QUALITY_METRICS
+        ))
         self.assertNotIn("winner", rows[0])
-        rows[0]["ranking"] = "B>A=C>D"
+        self._fill_rankings(
+            rows[0], "B>A=C>D",
+            meaning_accuracy="A>B>C>D",
+            glossary_prompt="B>A>C>D",
+            natural_contextual="C>B>A>D",
+        )
         with open(review_path, "w", encoding="utf-8-sig", newline="") as stream:
             writer = csv.DictWriter(stream, fieldnames=rows[0].keys())
             writer.writeheader()
@@ -1145,6 +1160,21 @@ class BlindReviewTests(unittest.TestCase):
         self.assertEqual(review["points"][expected], 3)
         self.assertEqual(review["partial_ties"], 1)
         self.assertEqual(review["reviewed"], 1)
+        self.assertEqual(
+            review["quality_points"]["meaning_accuracy"]
+            [hidden[self.review_id]["A"]],
+            3,
+        )
+        self.assertEqual(
+            review["quality_points"]["glossary_prompt"]
+            [hidden[self.review_id]["B"]],
+            3,
+        )
+        self.assertEqual(
+            review["quality_points"]["natural_contextual"]
+            [hidden[self.review_id]["C"]],
+            3,
+        )
         self.assertIn(
             ",B>A=C>D,",
             (self.run_dir / "blind_review.csv").read_text(encoding="utf-8-sig"),
@@ -1188,7 +1218,7 @@ class BlindReviewTests(unittest.TestCase):
             for label in ("A", "B", "C", "D")
         ))
 
-        rows[0]["ranking"] = "A>B>C>D"
+        self._fill_rankings(rows[0], "A>B>C>D")
         with open(review_path, "w", encoding="utf-8-sig", newline="") as stream:
             writer = csv.DictWriter(stream, fieldnames=rows[0].keys())
             writer.writeheader()
@@ -1198,6 +1228,10 @@ class BlindReviewTests(unittest.TestCase):
         self.assertEqual(review["reviewed_lines"], 2)
         self.assertEqual(sum(review["wins"].values()), 1)
         self.assertEqual(sum(review["points"].values()), 12)
+        self.assertTrue(all(
+            sum(scores.values()) == 12
+            for scores in review["quality_points"].values()
+        ))
         self.assertEqual(
             review["scoring"], "fixed-sum-borda-average-per-line-v2"
         )
@@ -1207,7 +1241,7 @@ class BlindReviewTests(unittest.TestCase):
         with open(review_path, "r", encoding="utf-8-sig", newline="") as stream:
             rows = list(csv.DictReader(stream))
         rows[0]["line_count"] = "10"
-        rows[0]["ranking"] = "A>B>C>D"
+        self._fill_rankings(rows[0], "A>B>C>D")
         with open(review_path, "w", encoding="utf-8-sig", newline="") as stream:
             writer = csv.DictWriter(stream, fieldnames=rows[0].keys())
             writer.writeheader()
@@ -1220,7 +1254,7 @@ class BlindReviewTests(unittest.TestCase):
         review_path = evaluation.export_blind_review(self.run_dir)
         with open(review_path, "r", encoding="utf-8-sig", newline="") as stream:
             rows = list(csv.DictReader(stream))
-        rows[0]["ranking"] = "A=B>C>D"
+        self._fill_rankings(rows[0], "A=B>C>D")
         with open(review_path, "w", encoding="utf-8-sig", newline="") as stream:
             writer = csv.DictWriter(stream, fieldnames=rows[0].keys())
             writer.writeheader()
@@ -1244,7 +1278,7 @@ class BlindReviewTests(unittest.TestCase):
         review_path = evaluation.export_blind_review(self.run_dir)
         with open(review_path, "r", encoding="utf-8-sig", newline="") as stream:
             rows = list(csv.DictReader(stream))
-        rows[0]["ranking"] = "A>B>B>D"
+        self._fill_rankings(rows[0], "A>B>B>D")
         with open(review_path, "w", encoding="utf-8-sig", newline="") as stream:
             writer = csv.DictWriter(stream, fieldnames=rows[0].keys())
             writer.writeheader()
@@ -1253,17 +1287,34 @@ class BlindReviewTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "use every label exactly once"):
             evaluation.import_blind_review(self.run_dir, review_path)
 
+    def test_import_requires_every_quality_ranking(self):
+        review_path = evaluation.export_blind_review(self.run_dir)
+        with open(review_path, "r", encoding="utf-8-sig", newline="") as stream:
+            rows = list(csv.DictReader(stream))
+        self._fill_rankings(rows[0], "A>B>C>D")
+        rows[0]["glossary_prompt_ranking"] = ""
+        with open(review_path, "w", encoding="utf-8-sig", newline="") as stream:
+            writer = csv.DictWriter(stream, fieldnames=rows[0].keys())
+            writer.writeheader()
+            writer.writerows(rows)
+
+        with self.assertRaisesRegex(ValueError, "Missing glossary_prompt_ranking"):
+            evaluation.import_blind_review(self.run_dir, review_path)
+
     def test_import_accepts_legacy_winner_csv(self):
         review_path = evaluation.export_blind_review(self.run_dir)
         with open(review_path, "r", encoding="utf-8-sig", newline="") as stream:
             rows = list(csv.DictReader(stream))
+        quality_fields = {
+            f"{metric}_ranking" for metric in evaluation.REVIEW_QUALITY_METRICS
+        }
         legacy_fields = [
             "winner" if field == "ranking" else field
-            for field in rows[0].keys()
+            for field in rows[0].keys() if field not in quality_fields
         ]
         legacy_row = {
             ("winner" if field == "ranking" else field): value
-            for field, value in rows[0].items()
+            for field, value in rows[0].items() if field not in quality_fields
         }
         legacy_row["winner"] = "B"
         with open(review_path, "w", encoding="utf-8-sig", newline="") as stream:
