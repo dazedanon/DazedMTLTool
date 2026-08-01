@@ -4,6 +4,16 @@ Review this exported evaluation CSV:
 
 `{{BLIND_REVIEW_CSV}}`
 
+Before judging, read these model-blind snapshots from the evaluation run:
+
+- Effective translation system prompt: `{{REVIEW_SYSTEM_PROMPT}}`
+- Matched game glossary context: `{{REVIEW_GLOSSARY}}`
+
+Treat the system prompt's translation requirements and the glossary's approved names and terms
+as authoritative review criteria. Penalize candidates that violate them when the relevant rule or
+term applies. These snapshots contain the exact merged system instructions and glossary context
+used by the normal translation engine for the reviewed samples.
+
 ## Important limitation
 
 AI judging is not objective. You may share stylistic preferences, training biases, or failure
@@ -14,7 +24,8 @@ final report.
 ## Preserve the blind
 
 - Judge only the randomized candidate columns in the CSV.
-- Do not open `blind_key.json` or other files to discover which model produced a candidate.
+- Do not open `blind_key.json` or other files beyond the CSV and the two review-context snapshots
+  above to discover which model produced a candidate.
 - Do not infer or speculate about model identity from writing style.
 - Candidate labels may be shuffled independently for every sample row.
 

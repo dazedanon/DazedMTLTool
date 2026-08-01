@@ -1050,7 +1050,9 @@ class BlindReviewTests(unittest.TestCase):
                 "repetition": 1,
             }],
             "logical_requests": [{
-                "id": "logical-0001", "segment_ids": ["segment-1"]
+                "id": "logical-0001", "segment_ids": ["segment-1"],
+                "system": "Preserve the established character voice.",
+                "glossary": "猫 (Cat) - approved character name",
             }],
         }
         candidates = []
@@ -1106,6 +1108,16 @@ class BlindReviewTests(unittest.TestCase):
             self.run_dir, self.run_dir / "external" / "review.csv"
         )
         self.assertTrue((self.run_dir / "blind_review.csv").is_file())
+        self.assertEqual(
+            (review_path.parent / evaluation.REVIEW_SYSTEM_PROMPT_FILENAME)
+            .read_text(encoding="utf-8").strip(),
+            "Preserve the established character voice.",
+        )
+        self.assertIn(
+            "猫 (Cat)",
+            (review_path.parent / evaluation.REVIEW_GLOSSARY_FILENAME)
+            .read_text(encoding="utf-8"),
+        )
         with open(review_path, "r", encoding="utf-8-sig", newline="") as stream:
             rows = list(csv.DictReader(stream))
         self.assertEqual(len(rows), 1)

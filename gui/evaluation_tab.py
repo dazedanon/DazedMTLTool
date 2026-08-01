@@ -1840,10 +1840,22 @@ class EvaluationTab(QWidget):
             return
         try:
             prompt = load_clipboard_skill("evaluation_csv_review.md")
-            token = "{{BLIND_REVIEW_CSV}}"
-            if token not in prompt:
-                raise ValueError("Evaluation review skill is missing its CSV placeholder")
-            prompt = prompt.replace(token, str(review_path))
+            system_path, glossary_path = evaluation.export_blind_review_context(
+                self.current_run_dir, review_path.parent
+            )
+            replacements = {
+                "{{BLIND_REVIEW_CSV}}": str(review_path),
+                "{{REVIEW_SYSTEM_PROMPT}}": str(system_path),
+                "{{REVIEW_GLOSSARY}}": str(glossary_path),
+            }
+            missing = [token for token in replacements if token not in prompt]
+            if missing:
+                raise ValueError(
+                    "Evaluation review skill is missing placeholders: "
+                    + ", ".join(missing)
+                )
+            for token, value in replacements.items():
+                prompt = prompt.replace(token, value)
             QApplication.clipboard().setText(prompt)
             self._append_log(f"AI review skill copied for: {review_path}")
             QMessageBox.warning(

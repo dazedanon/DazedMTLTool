@@ -232,12 +232,25 @@ class EvaluationTabTests(unittest.TestCase):
             self.tab._update_actions({"status": "completed"})
             self.assertTrue(self.tab.copy_review_skill_btn.isEnabled())
             QApplication.clipboard().clear()
-            with mock.patch("gui.evaluation_tab.QMessageBox.warning") as warning:
+            system_path = Path(temporary) / "review_system_prompt.md"
+            glossary_path = Path(temporary) / "review_glossary.txt"
+            with (
+                mock.patch("gui.evaluation_tab.QMessageBox.warning") as warning,
+                mock.patch(
+                    "gui.evaluation_tab.evaluation.export_blind_review_context",
+                    return_value=(system_path, glossary_path),
+                ),
+            ):
                 self.tab.copy_review_skill()
 
             prompt = QApplication.clipboard().text()
             self.assertIn(str(review_path.resolve()), prompt)
             self.assertNotIn("{{BLIND_REVIEW_CSV}}", prompt)
+            self.assertIn(str(system_path), prompt)
+            self.assertIn(str(glossary_path), prompt)
+            self.assertNotIn("{{REVIEW_SYSTEM_PROMPT}}", prompt)
+            self.assertNotIn("{{REVIEW_GLOSSARY}}", prompt)
+            self.assertIn("authoritative review criteria", prompt)
             self.assertIn("AI judging is not objective", prompt)
             self.assertIn("blind_key.json", prompt)
             self.assertIn("biased", warning.call_args.args[2])

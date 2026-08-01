@@ -56,6 +56,8 @@ DEFAULT_BUDGET_USD = 10.0
 MAX_SAVED_EVALUATIONS = 50
 EVALUATION_ARCHIVE_DIR = "evaluations"
 EVALUATION_WORK_DIR = "evaluation_work"
+REVIEW_SYSTEM_PROMPT_FILENAME = "review_system_prompt.md"
+REVIEW_GLOSSARY_FILENAME = "review_glossary.txt"
 MAX_OUTPUT_TOKENS_PER_REQUEST = 4096
 JAPANESE_RE = re.compile(r"[一-龠々〆〤ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]")
 LANGUAGE_REGEX = r"[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]+"
@@ -228,6 +230,13 @@ def _atomic_write_json(path: Path, value: Any) -> None:
     temporary.write_text(
         json.dumps(value, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
     )
+    temporary.replace(path)
+
+
+def _atomic_write_text(path: Path, value: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_suffix(path.suffix + ".tmp")
+    temporary.write_text(value.rstrip() + "\n", encoding="utf-8")
     temporary.replace(path)
 
 
@@ -1455,7 +1464,10 @@ def export_run_archive(
     output.parent.mkdir(parents=True, exist_ok=True)
 
     relative_files: list[Path] = []
-    for optional in ("blind_key.json", "blind_review.csv"):
+    for optional in (
+        "blind_key.json", "blind_review.csv",
+        REVIEW_SYSTEM_PROMPT_FILENAME, REVIEW_GLOSSARY_FILENAME,
+    ):
         if (root / optional).is_file():
             relative_files.append(Path(optional))
     for candidate in state.get("candidates") or []:
@@ -1528,6 +1540,7 @@ def _validated_archive_members(archive: zipfile.ZipFile) -> list[zipfile.ZipInfo
     allowed_root = {
         "evaluation_export.json", "manifest.json", "state.json",
         "blind_key.json", "blind_review.csv",
+        REVIEW_SYSTEM_PROMPT_FILENAME, REVIEW_GLOSSARY_FILENAME,
     }
     total_size = 0
     accepted: list[zipfile.ZipInfo] = []
@@ -2323,6 +2336,43 @@ def _blind_label(index: int) -> str:
     return label
 
 
+def export_blind_review_context(
+    run_dir: str | Path, output_dir: str | Path | None = None
+) -> tuple[Path, Path]:
+    """Write model-blind snapshots of the exact translation review context."""
+    root = Path(run_dir)
+    _state, manifest = load_run(root)
+    requests = manifest.get("logical_requests") or []
+    systems = list(dict.fromkeys(
+        str(request.get("system") or "").strip()
+        for request in requests
+        if str(request.get("system") or "").strip()
+    ))
+    system_text = "\n\n".join(systems)
+    if not system_text:
+        raise ValueError("Evaluation manifest has no translation system prompt")
+
+    glossary_lines: list[str] = []
+    seen_lines: set[str] = set()
+    for request in requests:
+        for line in str(request.get("glossary") or "").splitlines():
+            normalized = line.rstrip()
+            if normalized in seen_lines:
+                continue
+            seen_lines.add(normalized)
+            glossary_lines.append(normalized)
+    glossary_text = "\n".join(glossary_lines).strip()
+    if not glossary_text:
+        glossary_text = "(No glossary entries matched the reviewed source text.)"
+
+    destination = Path(output_dir) if output_dir is not None else root
+    system_path = destination / REVIEW_SYSTEM_PROMPT_FILENAME
+    glossary_path = destination / REVIEW_GLOSSARY_FILENAME
+    _atomic_write_text(system_path, system_text)
+    _atomic_write_text(glossary_path, glossary_text)
+    return system_path.resolve(), glossary_path.resolve()
+
+
 def export_blind_review(run_dir: str | Path, output_path: str | Path | None = None) -> Path:
     root = Path(run_dir)
     state, manifest = load_run(root)
@@ -2372,6 +2422,9 @@ def export_blind_review(run_dir: str | Path, output_path: str | Path | None = No
     canonical_review = root / "blind_review.csv"
     if output.resolve() != canonical_review.resolve():
         shutil.copyfile(output, canonical_review)
+    export_blind_review_context(root, output.parent)
+    if output.parent.resolve() != root.resolve():
+        export_blind_review_context(root, root)
     _atomic_write_json(root / "blind_key.json", key)
     return output
 
