@@ -925,9 +925,9 @@ def set_var_translations_batch(pairs):
 #   collect: translateAI builds each cache-missed request (byte-identical to a
 #            live request, including the cached system block) and queues it
 #            instead of calling the API. Text is left untranslated.
-#   consume: translateAI feeds the fetched batch responses through the normal
-#            validation/restore path; anything missing or invalid falls back
-#            to the live API automatically.
+#   consume: translateAI feeds fetched responses through the normal validation
+#            and restore path; missing or invalid results fail closed without a
+#            surprise full-price live request.
 # Between the passes, submit/poll/fetch the queue with runTranslationBatches().
 BATCH_QUEUE_FILE   = Path("log/batch_requests.json")
 BATCH_STATE_FILE   = Path("log/batch_state.json")
@@ -1142,6 +1142,7 @@ def batchRunState():
     """Resume detector for an interrupted batch run.
 
     Returns:
+      'partially_submitted' - at least one split job exists, with requests left
       'submitted' - provider batch(es) in flight (or ended but not fetched)
       'fetched'   - results on disk waiting for consume
       'queued'    - collect finished / submit declined; queue still on disk
@@ -1149,6 +1150,8 @@ def batchRunState():
     """
     with _batch_file_lock():
         state = _read_batch_file(BATCH_STATE_FILE)
+        if state.get("status") == "partially_submitted" and state.get("batches"):
+            return "partially_submitted"
         if state.get("batches"):
             return "submitted"
         if state.get("status") == "fetched" or _read_batch_file(BATCH_RESULTS_FILE):
@@ -1426,13 +1429,19 @@ def submitTranslationBatches(file_set=None, cost_estimate=None):
     flush_batch_queue()
     with _batch_file_lock():
         queue = _read_batch_file(BATCH_QUEUE_FILE)
+        previous_state = _read_batch_file(BATCH_STATE_FILE)
     if not queue:
         print("[BATCH] No batch requests queued.", flush=True)
         return []
 
     from util.batch_providers import batch_limits, submit_batch
 
-    batches = []
+    batches = list(previous_state.get("batches") or [])
+    submitted_keys = {
+        key
+        for batch in batches
+        for key in (batch.get("custom_ids") or {}).values()
+    }
     requests, id_map, size = [], {}, 0
     models = set()
     providers = set()
@@ -1453,9 +1462,49 @@ def submitTranslationBatches(file_set=None, cost_estimate=None):
     client = _get_anthropic_client() if provider == "anthropic" else None
     model = (
         (cost_estimate or {}).get("model")
+        or previous_state.get("model")
         or next(iter(models), None)
         or os.getenv("model", "")
     )
+    effective_file_set = list(
+        file_set if file_set is not None else previous_state.get("file_set") or []
+    )
+    effective_estimate = (
+        cost_estimate
+        if cost_estimate is not None
+        else previous_state.get("cost_estimate")
+    )
+
+    def _checkpoint(new_info, *, complete):
+        """Persist each paid provider job before attempting the next split."""
+        state_doc = {
+            "status": "submitted" if complete else "partially_submitted",
+            "batches": batches,
+            "submitted_at": previous_state.get("submitted_at")
+            or time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            "model": model,
+            "provider": provider,
+            "file_set": effective_file_set,
+            "cost_estimate": effective_estimate,
+            "request_count": sum(
+                len(batch.get("custom_ids") or {}) for batch in batches
+            ),
+        }
+        with BATCH_LOCK:
+            with _batch_file_lock():
+                _write_batch_file(BATCH_STATE_FILE, state_doc)
+        try:
+            from util.batch_history import record_submit
+
+            record_submit(
+                [new_info],
+                model=model,
+                provider=provider,
+                file_set=effective_file_set,
+                cost_estimate=effective_estimate,
+            )
+        except Exception as exc:
+            print(f"[BATCH] history record_submit failed: {exc}", flush=True)
 
     def _submit():
         nonlocal requests, id_map, size
@@ -1464,51 +1513,41 @@ def submitTranslationBatches(file_set=None, cost_estimate=None):
         submitted = submit_batch(provider, requests, client=client)
         info = {**submitted, "custom_ids": id_map, "provider": provider}
         batches.append(info)
+        submitted_keys.update(id_map.values())
+        complete = len(submitted_keys) == len(queue)
+        _checkpoint(info, complete=complete)
         print(f"[BATCH] submitted {info['id']} ({len(requests)} requests)", flush=True)
         requests, id_map, size = [], {}, 0
 
     for i, (key, entry) in enumerate(queue.items()):
+        if key in submitted_keys:
+            continue
         custom_id = f"req-{i:06d}"
         params = entry["params"]
         request_size = len(json.dumps(params, ensure_ascii=False).encode("utf-8")) + 128
-        if requests and (
-            len(requests) >= max_requests or size + request_size > max_bytes
-        ):
-            _submit()
         if request_size > max_bytes:
             raise ValueError(
                 f"Batch request {custom_id} is {request_size:,} bytes, above the "
                 f"{max_bytes:,}-byte provider limit."
             )
+        if requests and (
+            len(requests) >= max_requests or size + request_size > max_bytes
+        ):
+            _submit()
         requests.append({"custom_id": custom_id, "params": params})
         id_map[custom_id] = key
         size += request_size
     _submit()
 
-    submitted_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-    state_doc = {
-        "batches": batches,
-        "submitted_at": submitted_at,
-        "model": model,
-        "provider": provider,
-        "file_set": list(file_set or []),
-        "cost_estimate": cost_estimate,
-        "request_count": sum(len(b.get("custom_ids") or {}) for b in batches),
-    }
-    with BATCH_LOCK:
-        with _batch_file_lock():
-            _write_batch_file(BATCH_STATE_FILE, state_doc)
-    try:
-        from util.batch_history import record_submit
-        record_submit(
-            batches,
-            model=model,
-            provider=provider,
-            file_set=file_set,
-            cost_estimate=cost_estimate,
-        )
-    except Exception as exc:
-        print(f"[BATCH] history record_submit failed: {exc}", flush=True)
+    # A retry after the final provider job was checkpointed has no new work, but
+    # older state files may still carry the partial marker. Normalize it.
+    if batches and len(submitted_keys) == len(queue):
+        with BATCH_LOCK:
+            with _batch_file_lock():
+                state_doc = _read_batch_file(BATCH_STATE_FILE)
+                if state_doc.get("status") != "submitted":
+                    state_doc["status"] = "submitted"
+                    _write_batch_file(BATCH_STATE_FILE, state_doc)
     return [b["id"] for b in batches]
 
 

@@ -187,6 +187,20 @@ class EvaluationSourceFolderTests(unittest.TestCase):
                 repetitions=1,
             )
 
+    def test_oversized_sample_is_rejected_before_provider_submission(self):
+        request = {
+            "id": "logical-too-large",
+            "segment_ids": [f"segment-{index}" for index in range(2_000)],
+            "system": "Translate Japanese to English.",
+            "glossary": "",
+            "sfx_reference": "",
+            "history": [],
+            "user": "あ" * 10_000,
+        }
+
+        with self.assertRaisesRegex(ValueError, "Lines per sample is too high"):
+            evaluation._validate_request_output_capacity([request])
+
 
 class EvaluationContentSelectionTests(unittest.TestCase):
     @staticmethod
@@ -538,6 +552,68 @@ class EvaluationManifestTests(unittest.TestCase):
 
         self.assertEqual(
             evaluation._run_completion_status(candidates), "submitted"
+        )
+
+    def test_refresh_finishes_mixed_live_and_batch_candidates(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            run_dir = Path(temporary)
+            evaluation._atomic_write_json(run_dir / "manifest.json", {})
+            evaluation._atomic_write_json(run_dir / "state.json", {
+                "run_id": "mixed-terminal",
+                "status": "submitted",
+                "candidates": [
+                    {"id": "live", "execution": "live", "status": "completed"},
+                    {
+                        "id": "batch", "execution": "batch", "status": "completed",
+                        "batch_id": "batch-1",
+                    },
+                ],
+            })
+
+            state = evaluation.refresh_run(run_dir, {})
+
+        self.assertEqual(state["status"], "completed")
+
+    def test_refresh_preserves_partially_submitted_state(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            run_dir = Path(temporary)
+            evaluation._atomic_write_json(run_dir / "manifest.json", {})
+            evaluation._atomic_write_json(run_dir / "state.json", {
+                "run_id": "partial",
+                "status": "partially_submitted",
+                "candidates": [
+                    {
+                        "id": "batch-1", "provider": "openai", "label": "one",
+                        "status": "submitted", "batch_id": "batch-1",
+                    },
+                    {
+                        "id": "batch-2", "provider": "openai", "label": "two",
+                        "status": "prepared",
+                    },
+                ],
+            })
+            with (
+                mock.patch.object(evaluation, "_clients", return_value=(object(), None)),
+                mock.patch.object(
+                    evaluation.batch_api,
+                    "retrieve_batch",
+                    return_value={
+                        "api_status": "in_progress",
+                        "ended": False,
+                        "counts": {
+                            "processing": 1, "succeeded": 0, "errored": 0,
+                            "canceled": 0, "expired": 0,
+                        },
+                    },
+                ),
+                mock.patch("util.batch_history.upsert_history_entry"),
+            ):
+                state = evaluation.refresh_run(run_dir, {"batch-1": "key"})
+
+        self.assertEqual(state["status"], "partially_submitted")
+        self.assertEqual(
+            [candidate["status"] for candidate in state["candidates"]],
+            ["submitted", "prepared"],
         )
 
     def test_live_evaluation_finishes_without_creating_batch_job(self):
@@ -1021,7 +1097,7 @@ class EvaluationHistoryTests(unittest.TestCase):
                 (project / "log" / "evaluations" / "run-00").exists()
             )
 
-    def test_prepared_runs_use_work_storage_and_are_not_saved_history(self):
+    def test_prepared_runs_use_work_storage_and_survive_restart_history(self):
         manifest = {
             "manifest_sha256": "a" * 64,
             "corpus_summary": {"selected_segments": 60},
@@ -1055,8 +1131,10 @@ class EvaluationHistoryTests(unittest.TestCase):
             self.assertEqual(first.parent.name, "evaluation_work")
             self.assertFalse(first.exists())
             self.assertTrue(second.is_dir())
-            self.assertEqual(evaluation.list_runs(project), [])
-            self.assertIsNone(evaluation.latest_run(project))
+            runs = evaluation.list_runs(project)
+            self.assertEqual([run["run_dir"] for run in runs], [second.resolve()])
+            self.assertEqual(runs[0]["status"], "prepared")
+            self.assertEqual(evaluation.latest_run(project), second.resolve())
 
     def test_completed_managed_run_moves_into_archive(self):
         with tempfile.TemporaryDirectory() as temporary:

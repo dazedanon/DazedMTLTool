@@ -71,6 +71,16 @@ class BatchRunStateTests(BatchHistoryTestBase):
         )
         self.assertEqual(T.batchRunState(), "submitted")
 
+    def test_partially_submitted_split_is_distinguishable(self):
+        T._write_batch_file(
+            T.BATCH_STATE_FILE,
+            {
+                "status": "partially_submitted",
+                "batches": [{"id": "batch_1", "custom_ids": {"req-000000": "k1"}}],
+            },
+        )
+        self.assertEqual(T.batchRunState(), "partially_submitted")
+
     def test_fetched_when_results_present(self):
         T._write_batch_file(T.BATCH_RESULTS_FILE, {"k1": {"text": "hi"}})
         self.assertEqual(T.batchRunState(), "fetched")
@@ -252,6 +262,54 @@ class ProviderSubmissionTests(BatchHistoryTestBase):
         entry = BH.read_history()["batches"][0]
         self.assertEqual(entry["provider"], "openai")
         self.assertTrue(entry["custom_ids"])
+
+    def test_split_submission_checkpoints_and_retry_skips_paid_work(self):
+        for payload in ('{"Line1":"猫"}', '{"Line1":"犬"}'):
+            T.queue_batch_request(
+                payload,
+                "English",
+                {"model": "gpt-5.6-terra", "messages": []},
+                provider="openai",
+            )
+        T.flush_batch_queue()
+
+        with (
+            mock.patch("util.batch_providers.batch_limits", return_value=(1, 10_000_000)),
+            mock.patch(
+                "util.batch_providers.submit_batch",
+                side_effect=(
+                    {"id": "batch_paid_1", "input_file_id": "file_1"},
+                    RuntimeError("second submit failed"),
+                ),
+            ),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "second submit failed"):
+                T.submitTranslationBatches(file_set=["Map001.json"])
+
+        checkpoint = T._read_batch_file(T.BATCH_STATE_FILE)
+        self.assertEqual(checkpoint["status"], "partially_submitted")
+        self.assertEqual([item["id"] for item in checkpoint["batches"]], ["batch_paid_1"])
+        self.assertEqual(
+            [item["id"] for item in BH.read_history()["batches"]],
+            ["batch_paid_1"],
+        )
+
+        with (
+            mock.patch("util.batch_providers.batch_limits", return_value=(1, 10_000_000)),
+            mock.patch(
+                "util.batch_providers.submit_batch",
+                return_value={"id": "batch_paid_2", "input_file_id": "file_2"},
+            ) as submit,
+        ):
+            ids = T.submitTranslationBatches(file_set=["Map001.json"])
+
+        self.assertEqual(submit.call_count, 1)
+        self.assertEqual(ids, ["batch_paid_1", "batch_paid_2"])
+        self.assertEqual(T.batchRunMetadata()["status"], "submitted")
+        self.assertEqual(
+            [item["id"] for item in BH.read_history()["batches"]],
+            ["batch_paid_1", "batch_paid_2"],
+        )
 
 
 class RedownloadTests(BatchHistoryTestBase):

@@ -100,7 +100,7 @@ def main():
     batch_mode = False
     speaker_parse = False  # Deferred until after engine select
     while estimate == "":
-        estimate = input("Select Mode:\n\n 1. Translate\n 2. Estimate\n 3. Batch Translate (Anthropic Batches API, 50% off)\n")
+        estimate = input("Select Mode:\n\n 1. Translate\n 2. Estimate\n 3. Batch Translate (Provider Batch API, typically 50% off)\n")
         match estimate:
             case "1":
                 estimate = False
@@ -114,11 +114,12 @@ def main():
 
     resume_state = None
     if batch_mode:
-        from util.translation import isClaudeNative, batchRunState
-        if not isClaudeNative(os.getenv("model", "")):
+        from util.translation import isBatchSupported, batchRunState
+        if not isBatchSupported(os.getenv("model", "")):
             tqdm.write(
                 Fore.RED
-                + "Batch Translate requires a Claude model with the 'api' env var unset or pointing at anthropic.com."
+                + "Batch Translate requires a native Anthropic Claude, OpenAI GPT, "
+                "or Google Gemini provider route."
                 + Fore.RESET
             )
             return
@@ -227,6 +228,7 @@ files to translate are in the /files folder and that you picked the right game e
     
     def runFiles(estimate):
         runCost = totalCost
+        had_failure = False
         # Use single worker for estimate mode to prevent race conditions
         max_workers = 1 if estimate else THREADS
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
@@ -295,11 +297,41 @@ files to translate are in the /files folder and that you picked the right game e
 
             for future in as_completed(futures):
                 try:
-                    runCost = future.result()
+                    result = future.result()
+                    if not result or result == "Fail":
+                        had_failure = True
+                    else:
+                        runCost = result
                 except Exception as e:
+                    had_failure = True
                     tracebackLineNo = str(traceback.extract_tb(sys.exc_info()[2])[-1].lineno)
                     tqdm.write(Fore.RED + str(e) + "|" + tracebackLineNo + Fore.RESET)
-        return runCost
+        return "Fail" if had_failure else runCost
+
+    def matchingFileScope():
+        """Return the deterministic file/directory scope used by this CLI run."""
+        files_root = "files"
+        scope = []
+        if MODULES[version][0] == "Images":
+            for root, dirs, filenames in os.walk(files_root):
+                dirs[:] = [d for d in dirs if d not in {".git", "__pycache__"}]
+                if not any(fn.lower().endswith((".png", ".txt")) for fn in filenames):
+                    continue
+                relative = os.path.relpath(root, files_root).replace(os.sep, "/")
+                scope.append("" if relative == "." else relative)
+        else:
+            extensions = tuple(MODULES[version][1])
+            for root, dirs, filenames in os.walk(files_root):
+                dirs[:] = [d for d in dirs if d not in {".git", "__pycache__"}]
+                for filename in filenames:
+                    if filename == ".gitkeep":
+                        continue
+                    relative = os.path.relpath(
+                        os.path.join(root, filename), files_root
+                    ).replace(os.sep, "/")
+                    if relative.endswith(extensions):
+                        scope.append(relative)
+        return sorted(scope)
 
     if batch_mode:
         from util.translation import (
@@ -308,9 +340,24 @@ files to translate are in the /files folder and that you picked the right game e
             pendingBatchRequests,
             estimateBatchCost,
             runTranslationBatches,
+            batchRunMetadata,
+            saveQueuedBatchMetadata,
+            submitTranslationBatches,
         )
         poll = int(os.getenv("batchPollInterval", "60") or 60)
         run_consume = True
+        file_scope = matchingFileScope()
+
+        if resume_state:
+            saved_scope = sorted(batchRunMetadata().get("file_set") or [])
+            if saved_scope and saved_scope != file_scope:
+                tqdm.write(
+                    Fore.RED
+                    + "[BATCH] The current CLI engine/file set differs from the saved "
+                    "batch run. Resume stopped before submitting or consuming results."
+                    + Fore.RESET
+                )
+                return
 
         if resume_state is None:
             clearBatchFiles()
@@ -334,6 +381,7 @@ files to translate are in the /files folder and that you picked the right game e
                 tqdm.write("[BATCH] No requests queued — nothing needed the API.")
                 run_consume = False
             else:
+                saveQueuedBatchMetadata(file_scope)
                 est = estimateBatchCost()
                 confirm = ""
                 while confirm not in ("y", "n"):
@@ -344,8 +392,8 @@ files to translate are in the /files folder and that you picked the right game e
                         "(resume Batch Translate later to submit without re-collecting)."
                     )
                     return
-                from util.translation import submitTranslationBatches, checkTranslationBatches, fetchTranslationBatches
-                if not submitTranslationBatches(cost_estimate=est):
+                from util.translation import checkTranslationBatches, fetchTranslationBatches
+                if not submitTranslationBatches(file_set=file_scope, cost_estimate=est):
                     run_consume = False
                 else:
                     tqdm.write(
@@ -371,8 +419,8 @@ files to translate are in the /files folder and that you picked the right game e
                 if confirm == "n":
                     tqdm.write("[BATCH] Not submitted. Queue kept.")
                     return
-                from util.translation import submitTranslationBatches, checkTranslationBatches, fetchTranslationBatches
-                if not submitTranslationBatches(cost_estimate=est):
+                from util.translation import checkTranslationBatches, fetchTranslationBatches
+                if not submitTranslationBatches(file_set=file_scope, cost_estimate=est):
                     run_consume = False
                 else:
                     tqdm.write(
@@ -381,7 +429,17 @@ files to translate are in the /files folder and that you picked the right game e
                     while not checkTranslationBatches():
                         time.sleep(poll)
                     fetchTranslationBatches()
-        elif resume_state == "submitted":
+        elif resume_state in {"submitted", "partially_submitted"}:
+            if resume_state == "partially_submitted":
+                tqdm.write(
+                    Fore.CYAN
+                    + "[BATCH] Submitting only the remaining split requests..."
+                    + Fore.RESET
+                )
+                submitTranslationBatches(
+                    file_set=file_scope,
+                    cost_estimate=estimateBatchCost(),
+                )
             tqdm.write(Fore.CYAN + "[BATCH] Resuming the submitted batch..." + Fore.RESET)
             runTranslationBatches(poll)
         else:  # "fetched" - results already downloaded, just write the files

@@ -416,7 +416,7 @@ class TranslationWorker(QThread):
 
         with _batch_file_lock():
             state = _read_batch_file(BATCH_STATE_FILE)
-        if not state.get("batches"):
+        if not state.get("batches") or state.get("status") == "partially_submitted":
             est = self._batch_pending_estimate
             file_set = list(self.selected_files or [])
             if not self._emit_batch_output(
@@ -621,6 +621,11 @@ class TranslationWorker(QThread):
             if self.should_stop:
                 return "Stopped"
             
+            mismatch_detected = any(
+                line.startswith("MISMATCH_EVENT:")
+                for line in stdout.strip().split('\n')
+            )
+
             # Forward all stdout output to log (this includes cost information)
             for line in stdout.strip().split('\n'):
                 if line.strip() and not line.startswith('RESULT:'):
@@ -628,6 +633,11 @@ class TranslationWorker(QThread):
             
             # Parse result
             if process.returncode == 0:
+                if mismatch_detected:
+                    return (
+                        "SUBPROCESS_ERROR",
+                        "Translation validation failed after all retries; original text was preserved",
+                    )
                 for line in stdout.strip().split('\n'):
                     if line.startswith('RESULT:'):
                         result_text = line[7:]  # Remove 'RESULT:' prefix
@@ -857,6 +867,7 @@ class TranslationWorker(QThread):
         """Process matching files; return last cost string or 'Fail'."""
         threads = int(os.getenv("fileThreads", "1"))
         total_cost = "Fail"
+        had_failure = False
         module_name_lower = self.module_info[0].lower() if isinstance(self.module_info[0], str) else ""
         is_mvmz = "mv/mz" in module_name_lower
 
@@ -893,6 +904,7 @@ class TranslationWorker(QThread):
             try:
                 result = future.result()
                 if isinstance(result, tuple) and len(result) == 2 and result[0] == "SUBPROCESS_ERROR":
+                    had_failure = True
                     self.file_error_signal.emit(filename, result[1])
                 elif result and result not in ("Fail", "Stopped"):
                     total_cost = result
@@ -901,9 +913,11 @@ class TranslationWorker(QThread):
                     self.emit_progress(completed_count, total_files, filename)
                     break
                 else:
+                    had_failure = True
                     self.emit_log(f"❌ Failed processing {filename}")
                     self.file_error_signal.emit(filename, "Translation failed")
             except Exception as e:
+                had_failure = True
                 tb_line = str(traceback.extract_tb(sys.exc_info()[2])[-1].lineno)
                 self.emit_log(f"❌ Error processing {filename}: {str(e)} | Line: {tb_line}")
                 self.file_error_signal.emit(filename, str(e))
@@ -918,7 +932,7 @@ class TranslationWorker(QThread):
                 self.executor.shutdown(wait=False)
             self.executor = None
 
-        return total_cost
+        return "Fail" if had_failure else total_cost
         
     def run(self):
         """Run the translation process."""
@@ -1110,9 +1124,13 @@ class TranslationWorker(QThread):
                             if poll_result is None:
                                 self.finished_signal.emit(False, "Batch polling stopped")
                                 return
-                    elif self.batch_resume_state == "submitted":
+                    elif self.batch_resume_state in {"submitted", "partially_submitted"}:
                         self._emit_batch_phase("polling")
-                        self.emit_log("[BATCH] Resuming submitted batch...")
+                        self.emit_log(
+                            "[BATCH] Resuming submitted batch..."
+                            if self.batch_resume_state == "submitted"
+                            else "[BATCH] Resuming partially submitted split batch..."
+                        )
                         poll_result = self._run_batch_poll_fetch()
                         if poll_result is None:
                             self.finished_signal.emit(False, "Batch polling stopped")

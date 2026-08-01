@@ -846,6 +846,35 @@ def _build_logical_requests(segments: list[dict], system_prompt: str,
     return requests
 
 
+def _validate_request_output_capacity(requests: list[dict]) -> None:
+    """Reject samples whose expected translation cannot fit the provider cap."""
+    oversized: list[tuple[str, int, int]] = []
+    for request in requests:
+        dynamic_context = request["glossary"] + request.get("sfx_reference", "")
+        _input_tokens, expected_output = countTokens(
+            request["system"] + dynamic_context,
+            request["user"],
+            request["history"],
+        )
+        if expected_output > MAX_OUTPUT_TOKENS_PER_REQUEST:
+            oversized.append((
+                request["id"],
+                len(request.get("segment_ids") or []),
+                expected_output,
+            ))
+    if oversized:
+        request_id, line_count, expected_output = max(
+            oversized, key=lambda item: item[2]
+        )
+        raise ValueError(
+            "Lines per sample is too high for the fixed "
+            f"{MAX_OUTPUT_TOKENS_PER_REQUEST:,}-token response limit. "
+            f"{request_id} contains {line_count:,} lines and is estimated to need "
+            f"about {expected_output:,} output tokens. Reduce Lines per sample and "
+            "prepare the benchmark again."
+        )
+
+
 def _stability_request_ids(
     requests: list[dict], target_segments: int, target_samples: int | None = None
 ) -> list[str]:
@@ -947,6 +976,7 @@ def build_manifest(files_dir: str | Path, *, target_segments: int = DEFAULT_SEGM
     requests = _build_logical_requests(
         segments, system, active_glossary, batch_size, use_sfx_reference
     )
+    _validate_request_output_capacity(requests)
     stability_ids = _stability_request_ids(
         requests, stability_segments, stability_samples
     )
@@ -1456,14 +1486,15 @@ def run_history_entry(run_dir: str | Path) -> dict:
 
 
 def list_runs(project_root: str | Path) -> list[dict]:
-    """Return submitted work and completed archives, excluding preparations."""
+    """Return resumable working runs and completed archives."""
     maintain_evaluation_storage(project_root)
     archive_root, work_root = _evaluation_storage_roots(project_root)
     runs: list[dict] = []
     visible_statuses = {
         archive_root: {"completed"},
         work_root: {
-            "submitted", "partially_submitted", "imported_paused", "failed",
+            "prepared", "submitted", "partially_submitted", "imported_paused",
+            "failed",
         },
     }
     for runs_root, statuses in visible_statuses.items():
@@ -1829,12 +1860,12 @@ def _complete_candidate(
 def _run_completion_status(candidates: list[dict]) -> str:
     """Return the aggregate state after all currently available work is processed."""
     statuses = [candidate.get("status") for candidate in candidates]
-    if any(status == "submitted" for status in statuses):
-        return "submitted"
     if any(status == "prepared" for status in statuses):
         return "partially_submitted" if any(
             status != "prepared" for status in statuses
         ) else "prepared"
+    if any(status == "submitted" for status in statuses):
+        return "submitted"
     if statuses and all(status == "completed" for status in statuses):
         return "completed"
     if statuses and all(status in {"completed", "failed"} for status in statuses):
@@ -2163,11 +2194,9 @@ def refresh_run(run_dir: str | Path, credentials: dict[str, str],
     if state["status"] == "prepared":
         return state
 
-    all_complete = True
     for candidate in state["candidates"]:
         batch_id = candidate.get("batch_id")
         if not batch_id:
-            all_complete = False
             continue
         if candidate.get("status") in {"completed", "failed"}:
             continue
@@ -2191,7 +2220,6 @@ def refresh_run(run_dir: str | Path, credentials: dict[str, str],
             log(f"Batch History update failed: {exc}")
         log(f"{candidate['label']}: {status['api_status']}")
         if not status["ended"]:
-            all_complete = False
             candidate["status"] = "submitted"
             continue
 
@@ -2221,10 +2249,7 @@ def refresh_run(run_dir: str | Path, credentials: dict[str, str],
         except Exception as exc:
             log(f"Batch History result update failed: {exc}")
 
-    state["status"] = (
-        _run_completion_status(state["candidates"])
-        if all_complete else "submitted"
-    )
+    state["status"] = _run_completion_status(state["candidates"])
     state["updated_at"] = _utc_now()
     _atomic_write_json(root / "state.json", state)
     _archive_completed_run(root, state)

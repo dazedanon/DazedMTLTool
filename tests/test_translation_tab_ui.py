@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import io
 import os
 import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
+from unittest import mock
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -15,6 +17,7 @@ from gui.theme import Spacing
 from gui.translation_tab import (
     BATCH_MODE_LABEL,
     TranslationTab,
+    TranslationWorker,
     _format_estimated_cost,
 )
 
@@ -73,6 +76,47 @@ class TranslationTabUITests(unittest.TestCase):
         self.app.processEvents()
         self.assertTrue(self.tab.translate_button.isEnabled())
         self.assertEqual(self.tab.selection_summary_label.text(), "1 of 2 selected")
+
+    def test_worker_reports_partial_file_failure_as_aggregate_failure(self) -> None:
+        worker = TranslationWorker(
+            Path.cwd(), ("JSON", (".json",), None)
+        )
+        worker.run_module_in_process = lambda filename, *_args: (
+            "Fail" if filename == "bad.json" else "TOTAL: success"
+        )
+        errors = []
+        worker.file_error_signal.connect(
+            lambda filename, message: errors.append((filename, message))
+        )
+
+        with mock.patch.dict(os.environ, {"fileThreads": "1"}):
+            result = worker._run_files(
+                ["bad.json", "good.json"], False, batch_phase="consume"
+            )
+
+        self.assertEqual(result, "Fail")
+        self.assertEqual(errors, [("bad.json", "Translation failed")])
+
+    def test_worker_turns_validation_marker_into_file_failure(self) -> None:
+        worker = TranslationWorker(
+            Path(__file__).resolve().parents[1], ("JSON", (".json",), None)
+        )
+        process = SimpleNamespace(
+            stdout=io.StringIO(
+                "MISMATCH_EVENT:Map001.json\nRESULT:TOTAL: success\n"
+            ),
+            stderr=io.StringIO(""),
+            returncode=0,
+            wait=lambda: None,
+        )
+
+        with mock.patch("gui.translation_tab.subprocess.Popen", return_value=process):
+            result = worker.run_module_in_process(
+                "Map001.json", False, batch_phase="consume"
+            )
+
+        self.assertEqual(result[0], "SUBPROCESS_ERROR")
+        self.assertIn("validation failed", result[1].lower())
 
     def test_wide_setup_places_run_choices_side_by_side(self) -> None:
         self.tab.resize(1900, 900)
