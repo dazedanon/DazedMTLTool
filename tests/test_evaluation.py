@@ -16,6 +16,61 @@ from util import batch_providers, evaluation
 ROOT = Path(__file__).resolve().parents[1]
 
 
+class EvaluationAtomicWriteTests(unittest.TestCase):
+    def test_atomic_json_write_retries_transient_replace_lock(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "checkpoint.json"
+            real_replace = evaluation.os.replace
+            replace_attempts = 0
+
+            def intermittently_locked(source, destination):
+                nonlocal replace_attempts
+                replace_attempts += 1
+                if replace_attempts < 3:
+                    raise PermissionError("checkpoint is temporarily locked")
+                return real_replace(source, destination)
+
+            with (
+                mock.patch.object(
+                    evaluation.os, "replace", side_effect=intermittently_locked
+                ),
+                mock.patch.object(evaluation.time, "sleep") as sleep,
+            ):
+                evaluation._atomic_write_json(path, {"finished": 46})
+
+            self.assertEqual(
+                json.loads(path.read_text(encoding="utf-8")), {"finished": 46}
+            )
+            self.assertEqual(replace_attempts, 3)
+            self.assertEqual(
+                [call.args[0] for call in sleep.call_args_list], [0.05, 0.1]
+            )
+            self.assertEqual(list(Path(temporary).iterdir()), [path])
+
+    def test_atomic_json_write_does_not_retry_unrelated_os_error(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "checkpoint.json"
+            with (
+                mock.patch.object(
+                    evaluation.os, "replace", side_effect=OSError("disk error")
+                ),
+                mock.patch.object(evaluation.time, "sleep") as sleep,
+            ):
+                with self.assertRaisesRegex(OSError, "disk error"):
+                    evaluation._atomic_write_json(path, {"finished": 46})
+
+            sleep.assert_not_called()
+            self.assertEqual(list(Path(temporary).iterdir()), [])
+
+    def test_submit_lock_rejects_a_second_submitter(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            run_dir = Path(temporary)
+            with evaluation._evaluation_submit_lock(run_dir):
+                with self.assertRaisesRegex(RuntimeError, "already being submitted"):
+                    with evaluation._evaluation_submit_lock(run_dir):
+                        pass
+
+
 class EvaluationSourceFolderTests(unittest.TestCase):
     def test_event_capture_uses_selected_glossary_without_leaking_runtime_state(self):
         import modules.rpgmakermvmz as mvmz

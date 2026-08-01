@@ -22,6 +22,7 @@ import threading
 import time
 import zipfile
 from collections import defaultdict
+from contextlib import contextmanager
 from datetime import date, datetime, timezone
 from pathlib import Path, PurePosixPath
 from typing import Any, Callable, Iterable
@@ -70,6 +71,9 @@ REVIEW_QUALITY_METRICS = (
 )
 MAX_OUTPUT_TOKENS_PER_REQUEST = 4096
 LIVE_REQUEST_MAX_ATTEMPTS = 3
+ATOMIC_REPLACE_MAX_ATTEMPTS = 8
+ATOMIC_REPLACE_INITIAL_DELAY_SECONDS = 0.05
+ATOMIC_REPLACE_MAX_DELAY_SECONDS = 0.5
 JAPANESE_RE = re.compile(r"[一-龠々〆〤ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]")
 LANGUAGE_REGEX = r"[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]+"
 
@@ -235,20 +239,66 @@ def _sha256(value: Any) -> str:
     return hashlib.sha256(payload).hexdigest()
 
 
-def _atomic_write_json(path: Path, value: Any) -> None:
+def _is_retryable_replace_error(exc: OSError) -> bool:
+    """Return whether a replace may succeed after a transient file lock clears."""
+    return isinstance(exc, PermissionError) or getattr(exc, "winerror", None) in {
+        5,   # ERROR_ACCESS_DENIED
+        32,  # ERROR_SHARING_VIOLATION
+        33,  # ERROR_LOCK_VIOLATION
+    }
+
+
+def _replace_with_retry(temporary: Path, path: Path) -> None:
+    delay = ATOMIC_REPLACE_INITIAL_DELAY_SECONDS
+    for attempt in range(1, ATOMIC_REPLACE_MAX_ATTEMPTS + 1):
+        try:
+            os.replace(temporary, path)
+            return
+        except OSError as exc:
+            if (
+                not _is_retryable_replace_error(exc)
+                or attempt == ATOMIC_REPLACE_MAX_ATTEMPTS
+            ):
+                raise
+            time.sleep(delay)
+            delay = min(delay * 2, ATOMIC_REPLACE_MAX_DELAY_SECONDS)
+
+
+def _atomic_write_text_exact(path: Path, value: str) -> None:
+    """Write text through a unique sibling and atomically replace the target."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_suffix(path.suffix + ".tmp")
-    temporary.write_text(
-        json.dumps(value, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    descriptor, temporary_name = tempfile.mkstemp(
+        dir=path.parent,
+        prefix=f".{path.name}.",
+        suffix=".tmp",
     )
-    temporary.replace(path)
+    temporary = Path(temporary_name)
+    try:
+        stream = os.fdopen(descriptor, "w", encoding="utf-8", newline="\n")
+        descriptor = -1  # The stream now owns and closes the descriptor.
+        with stream:
+            stream.write(value)
+        _replace_with_retry(temporary, path)
+    finally:
+        if descriptor != -1:
+            os.close(descriptor)
+        try:
+            temporary.unlink(missing_ok=True)
+        except OSError:
+            # Do not hide the original write/replace error if a scanner still
+            # has the abandoned temporary file open.
+            pass
+
+
+def _atomic_write_json(path: Path, value: Any) -> None:
+    _atomic_write_text_exact(
+        path,
+        json.dumps(value, ensure_ascii=False, indent=2) + "\n",
+    )
 
 
 def _atomic_write_text(path: Path, value: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_suffix(path.suffix + ".tmp")
-    temporary.write_text(value.rstrip() + "\n", encoding="utf-8")
-    temporary.replace(path)
+    _atomic_write_text_exact(path, value.rstrip() + "\n")
 
 
 def _read_json(path: Path) -> dict:
@@ -2208,9 +2258,52 @@ def _execute_live_candidate(
     return True, checkpoint_path
 
 
+@contextmanager
+def _evaluation_submit_lock(run_dir: Path):
+    """Prevent two processes from submitting paid work for the same run."""
+    lock_path = run_dir / ".submit.lock"
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(lock_path, "a+b") as lock_file:
+        lock_file.seek(0, os.SEEK_END)
+        if lock_file.tell() == 0:
+            lock_file.write(b"\0")
+            lock_file.flush()
+        lock_file.seek(0)
+        try:
+            if os.name == "nt":
+                import msvcrt
+                msvcrt.locking(lock_file.fileno(), msvcrt.LK_NBLCK, 1)
+            else:
+                import fcntl
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            raise RuntimeError(
+                "This evaluation run is already being submitted by another "
+                "DazedTL process. Close the other process or wait for it to finish."
+            ) from None
+        try:
+            yield
+        finally:
+            lock_file.seek(0)
+            if os.name == "nt":
+                import msvcrt
+                msvcrt.locking(lock_file.fileno(), msvcrt.LK_UNLCK, 1)
+            else:
+                import fcntl
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+
+
 def submit_run(run_dir: str | Path, credentials: dict[str, str],
                log: Callable[[str], None] | None = None,
                should_stop: Callable[[], bool] | None = None) -> dict:
+    root = Path(run_dir)
+    with _evaluation_submit_lock(root):
+        return _submit_run_unlocked(root, credentials, log, should_stop)
+
+
+def _submit_run_unlocked(run_dir: str | Path, credentials: dict[str, str],
+                         log: Callable[[str], None] | None = None,
+                         should_stop: Callable[[], bool] | None = None) -> dict:
     root = Path(run_dir)
     # Estimates can become stale while a prepared/imported run waits (pricing
     # changes, or a newer release strengthens retry accounting). Recalculate

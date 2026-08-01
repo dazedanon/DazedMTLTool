@@ -195,7 +195,7 @@ CODE122_VAR_MIN = 0
 CODE122_VAR_MAX = 2000
 
 # Plugins / Scripts
-CODE355655 = False
+CODE355655 = True
 CODE357 = False
 CODE657 = False
 CODE356 = False
