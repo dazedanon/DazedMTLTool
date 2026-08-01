@@ -210,6 +210,26 @@ Format: Japanese name, English name in parentheses, then gender.
 
 > **Note:** A very large Glossary can increase API costs and potentially reduce quality. Focus on the most important characters and terms.
 
+### Local Japanese SFX reference
+
+DazedTL ships a local, definitions-only snapshot of the MIT-licensed
+[J-Ono Data](https://github.com/ObakeConstructs/j-ono-data) collection under
+`data/sfx_reference/`. For each translation batch, the tool matches Japanese
+sound effects in the source and sends only the relevant possible meanings. The
+reference is explicitly non-authoritative: the model chooses the sense and
+natural target-language wording from the scene instead of performing fixed
+search-and-replace.
+
+The local asset includes kana variants, meanings, and English semantic
+equivalents. Romaji remains in the asset for provenance and possible future
+search features, but is not sent to translation models. Manga examples and
+images are not included. Translation never contacts an online dictionary.
+
+The feature is enabled by default and can be turned off with **Configuration →
+General Settings → SFX Reference**. Only matched entries consume prompt tokens;
+one-kana entries are suppressed and short entries use conservative boundaries
+to avoid ordinary-dialogue collisions.
+
 ### data/skills/system.md
 This is the system prompt skill sent to the AI on every translation call. A default `data/skills/system.md` is included and works well for most games. You generally don't need to edit it unless you want to customize the translation style.
 
@@ -272,8 +292,9 @@ How it works (all engine modules are supported automatically):
 
 1. **Pass 1 (collect)** — files are processed normally, but instead of calling the API each
    request is queued to `log/batch_requests.json`. Requests are byte-identical to live ones:
-   the static `data/skills/system.md` block is cached with a 1h TTL, matched Glossary entries and translation
-   history ride along per request, and structured output enforces the exact line count.
+   the static `data/skills/system.md` block is cached with a 1h TTL, matched Glossary entries,
+   matched local SFX suggestions, and translation history ride along per request, while
+   structured output enforces the exact line count.
    Speaker/variable names still translate live during this pass (they get embedded into the
    dialogue payloads, so both passes must resolve them identically) — they're a tiny share
    of the volume.
@@ -290,8 +311,9 @@ How it works (all engine modules are supported automatically):
 
 Context note: in live mode the rolling translation history contains the previous batch's
 English lines; in batch mode requests are independent, so the history carries the previous
-batch's *source* lines instead. The model still sees the surrounding scene, and the Glossary
-(`glossary.txt`) keeps names and terms consistent—so keep it in good shape for batch runs.
+batch's *source* lines instead. The model still sees the surrounding scene, the Glossary
+(`glossary.txt`) keeps names and terms consistent, and matched SFX suggestions provide
+context-dependent meanings without forcing fixed wording.
 
 Cost tracking is exact: per-file and total costs printed after the consume pass use the real
 billed token counts (cache reads at 0.1x, cache writes at 2x, output at the output rate) with

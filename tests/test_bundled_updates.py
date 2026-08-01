@@ -41,6 +41,9 @@ _SHIPPED_DATA_FILES = (
     "data/help/09-backups-recovery.md",
     "data/help/10-playtest-checklist.md",
     "data/glossary_base.txt",
+    "data/sfx_reference/j_ono.json",
+    "data/sfx_reference/LICENSE.md",
+    "data/sfx_reference/SOURCE.md",
 )
 
 

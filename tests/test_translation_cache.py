@@ -80,6 +80,35 @@ class CacheKeyTests(CacheTestBase):
             T.get_cache_key(payload, "English", second_matched),
         )
 
+    def test_sfx_reference_is_separate_and_part_of_dynamic_cache_context(self):
+        config = T.TranslationConfig(
+            model="test",
+            language="English",
+            prompt="Translate to English.",
+            vocab="",
+            useSfxReference=True,
+        )
+        payload = '{"Line1":"胸がドキドキする"}'
+        _system, glossary, sfx, _user = T.createContextParts(
+            config, payload, "json"
+        )
+        self.assertEqual(glossary, "")
+        self.assertIn("ドキドキ", sfx)
+        self.assertNotEqual(
+            T.get_cache_key(payload, "English", ""),
+            T.get_cache_key(payload, "English", glossary + sfx),
+        )
+
+    def test_disabled_sfx_reference_keeps_dynamic_context_empty(self):
+        config = T.TranslationConfig(
+            model="test", prompt="Translate English.", vocab="",
+            useSfxReference=False,
+        )
+        _system, glossary, sfx, _user = T.createContextParts(
+            config, '{"Line1":"ドキドキ"}', "json"
+        )
+        self.assertEqual(glossary + sfx, "")
+
 
 class CacheRoundTripTests(CacheTestBase):
     def test_list_value_preserved_exactly(self):

@@ -22,6 +22,7 @@ from dotenv import load_dotenv
 from pathlib import Path
 from retry import retry
 from util.paths import read_active_glossary
+from util.sfx_reference import build_sfx_reference_text
 
 # Set to True to enable debug logging (token counts, cache costs, etc.)
 DEBUG = True
@@ -978,12 +979,12 @@ def flush_batch_queue():
             _batch_queue_pending.update(pending)  # keep entries for the next flush
 
 
-def batchQueueStaleContextCount(vocab_text=None):
-    """Return ``(stale, total)`` for queued requests under the current glossary.
+def batchQueueStaleContextCount(vocab_text=None, use_sfx_reference=None):
+    """Return ``(stale, total)`` for queued requests under current dynamic context.
 
     This is used before resuming an unsubmitted queue. Submitted/fetched results
     are protected by the same context-aware result key and simply miss (then
-    fall back to a live request) if their matched glossary context has changed.
+    fall back to a live request) if matched glossary or SFX context has changed.
     """
     flush_batch_queue()
     if vocab_text is None:
@@ -992,6 +993,10 @@ def batchQueueStaleContextCount(vocab_text=None):
         except OSError:
             vocab_text = ""
     vocab_pairs = parseVocabWithCategories(vocab_text or "")
+    if use_sfx_reference is None:
+        use_sfx_reference = os.getenv("useSfxReference", "true").strip().lower() in (
+            "true", "1", "yes",
+        )
 
     with _batch_file_lock():
         queue = _read_batch_file(BATCH_QUEUE_FILE)
@@ -1000,7 +1005,11 @@ def batchQueueStaleContextCount(vocab_text=None):
     for recorded_key, entry in queue.items():
         payload = entry.get("payload", "")
         language = entry.get("language", "")
-        matched_context = buildMatchedVocabText(vocab_pairs, payload)
+        matched_glossary = buildMatchedVocabText(vocab_pairs, payload)
+        matched_sfx = build_sfx_reference_text(
+            payload, enabled=bool(use_sfx_reference)
+        )
+        matched_context = matched_glossary + matched_sfx
         current_key = get_cache_key(payload, language, matched_context)
         if current_key != recorded_key:
             stale += 1
@@ -1764,7 +1773,8 @@ class TranslationConfig:
                  estimateMode=False,
                  logFilePath="log/translationHistory.txt",
                  mismatchLogPath="log/mismatchHistory.txt",
-                 convertQuotes=None):
+                 convertQuotes=None,
+                 useSfxReference=None):
         
         # Load from environment if not provided
         self.model = model or os.getenv("model")
@@ -1807,6 +1817,12 @@ class TranslationConfig:
             )
         else:
             self.convertQuotes = bool(convertQuotes)
+        if useSfxReference is None:
+            self.useSfxReference = os.getenv(
+                "useSfxReference", "true"
+            ).strip().lower() in ("true", "1", "yes")
+        else:
+            self.useSfxReference = bool(useSfxReference)
 
 
 def convert_corner_brackets(text, enabled=True):
@@ -2302,22 +2318,26 @@ def buildMatchedVocabText(vocabPairs, subbedText, history=None):
     return matchedVocabText
 
 
-def createContext(config, subbedText, formatType, history=None):
-    """Create system and user messages for translation.
+def createContextParts(config, subbedText, formatType, history=None):
+    """Create separate glossary, SFX-reference, system, and user context.
 
-    Returns (static_system, vocab_text, user) so that callers can keep the
-    static prompt and the per-batch vocab list separate.  This lets Claude
-    prompt-caching mark only the stable prefix with cache_control, avoiding
-    cache invalidation caused by changing vocabulary matches.
+    Returns ``(static_system, glossary_text, sfx_text, user)``. Both dynamic
+    blocks stay outside Claude's cached static prefix, while remaining
+    distinguishable for evaluation and review exports.
 
     Cached in static_system:
       - data/skills/system.md content (plus optional game Translation Frame / quirks / custom overlays)
 
-    Dynamic in vocab_text:
-      - only vocab terms found in the current batch text
+    Dynamic:
+      - only glossary terms found in the current batch text
+      - only SFX reference records found in the current batch text
     """
     vocabPairs = parseVocabWithCategories(config.vocab)
     matchedVocabText = buildMatchedVocabText(vocabPairs, subbedText, history)
+    matchedSfxText = build_sfx_reference_text(
+        subbedText,
+        enabled=bool(getattr(config, "useSfxReference", True)),
+    )
 
     static_system = config.prompt.replace("English", config.language)
 
@@ -2326,7 +2346,15 @@ def createContext(config, subbedText, formatType, history=None):
     else:
         user = subbedText
 
-    return static_system, matchedVocabText, user
+    return static_system, matchedVocabText, matchedSfxText, user
+
+
+def createContext(config, subbedText, formatType, history=None):
+    """Backward-compatible combined dynamic-context wrapper."""
+    static_system, glossary_text, sfx_text, user = createContextParts(
+        config, subbedText, formatType, history
+    )
+    return static_system, glossary_text + sfx_text, user
 
 
 def createTranslationSchema(numLines):
@@ -3224,9 +3252,10 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None, mism
         # Build the matched glossary context before cache/batch lookup. Its
         # fingerprint is part of the lookup key, so results produced under an
         # older relevant spelling cannot bypass the current glossary.
-        static_system, vocab_text, user = createContext(
+        static_system, glossary_text, sfx_text, user = createContextParts(
             config, subbedT, formatType, history
         )
+        vocab_text = glossary_text + sfx_text
 
         # Batch collect queues list payloads only. Single strings (speaker and
         # variable names) translate live — modules memoize them and embed the

@@ -1018,10 +1018,10 @@ class TranslationWorker(QThread):
                         stale_requests, queued_requests = batchQueueStaleContextCount()
                         if stale_requests:
                             self.emit_log(
-                                f"[BATCH] Glossary context changed for "
+                                f"[BATCH] Glossary or SFX context changed for "
                                 f"{stale_requests}/{queued_requests} queued request(s). "
                                 "Discarding the stale queue and re-collecting with the "
-                                "current glossary."
+                                "current translation context."
                             )
                             clearBatchFiles()
                             self.batch_resume_state = None

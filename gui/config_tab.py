@@ -903,6 +903,15 @@ class ConfigTab(QWidget):
         )
         add_row(trans_section, "Convert Quotes:", self.convert_quotes_cb)
 
+        self.use_sfx_reference_cb = QCheckBox("Use local Japanese SFX reference")
+        self.use_sfx_reference_cb.setChecked(True)
+        self.use_sfx_reference_cb.setToolTip(
+            "Match Japanese sound effects in each translation batch and send only "
+            "their possible meanings as non-authoritative context. The reference "
+            "is bundled locally and does not make network requests."
+        )
+        add_row(trans_section, "SFX Reference:", self.use_sfx_reference_cb)
+
         # ── PERFORMANCE + PRICING ────────────────────────────────────
         performance_card, perf_section = create_card("⚡ Performance & Pricing")
 
@@ -1377,6 +1386,9 @@ class ConfigTab(QWidget):
         self.convert_quotes_cb.setChecked(
             _get("convertQuotes", "true").strip().lower() in ("true", "1", "yes")
         )
+        self.use_sfx_reference_cb.setChecked(
+            _get("useSfxReference", "true").strip().lower() in ("true", "1", "yes")
+        )
 
         # Custom API pricing
         self.input_cost_spin.setValue(float(_get("input_cost", "2.0")))
@@ -1440,6 +1452,7 @@ class ConfigTab(QWidget):
         self.list_width_spin.editingFinished.connect(self.auto_save)
         self.note_width_spin.editingFinished.connect(self.auto_save)
         self.convert_quotes_cb.stateChanged.connect(self._on_convert_quotes_changed)
+        self.use_sfx_reference_cb.stateChanged.connect(self.auto_save)
         self.input_cost_spin.editingFinished.connect(self.auto_save)
         self.output_cost_spin.editingFinished.connect(self.auto_save)
         self.font_scale_spin.editingFinished.connect(self.auto_save)
@@ -1466,6 +1479,7 @@ class ConfigTab(QWidget):
             self.list_width_spin.editingFinished.disconnect(self.auto_save)
             self.note_width_spin.editingFinished.disconnect(self.auto_save)
             self.convert_quotes_cb.stateChanged.disconnect(self._on_convert_quotes_changed)
+            self.use_sfx_reference_cb.stateChanged.disconnect(self.auto_save)
             self.input_cost_spin.editingFinished.disconnect(self.auto_save)
             self.output_cost_spin.editingFinished.disconnect(self.auto_save)
             self.font_scale_spin.editingFinished.disconnect(self.auto_save)
@@ -1526,6 +1540,7 @@ class ConfigTab(QWidget):
                 "listWidth": str(self.list_width_spin.value()),
                 "noteWidth": str(self.note_width_spin.value()),
                 "convertQuotes": "true" if self.convert_quotes_cb.isChecked() else "false",
+                "useSfxReference": "true" if self.use_sfx_reference_cb.isChecked() else "false",
                 "input_cost": str(self.input_cost_spin.value()),
                 "output_cost": str(self.output_cost_spin.value()),
                 "font_scale": str(self.font_scale_spin.value()),
@@ -1591,6 +1606,7 @@ class ConfigTab(QWidget):
         self.list_width_spin.setValue(100)
         self.note_width_spin.setValue(75)
         self.convert_quotes_cb.setChecked(True)
+        self.use_sfx_reference_cb.setChecked(True)
 
         # Custom API pricing
         self.input_cost_spin.setValue(2.0)
@@ -1638,6 +1654,7 @@ class ConfigTab(QWidget):
             "listWidth": self.list_width_spin.value(),
             "noteWidth": self.note_width_spin.value(),
             "convertQuotes": self.convert_quotes_cb.isChecked(),
+            "useSfxReference": self.use_sfx_reference_cb.isChecked(),
             "input_cost": self.input_cost_spin.value(),
             "output_cost": self.output_cost_spin.value(),
             "font_scale": self.font_scale_spin.value(),

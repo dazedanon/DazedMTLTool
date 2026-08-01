@@ -13,6 +13,7 @@ import copy
 import csv
 import hashlib
 import json
+import os
 import random
 import re
 import shutil
@@ -27,11 +28,12 @@ from typing import Any, Callable, Iterable
 from util import batch_providers as batch_api
 from util.paths import read_active_glossary, read_game_glossary
 from util.project_scanner import find_data_folder
+from util.sfx_reference import sfx_reference_identity
 from util.skills import load_system_prompt
 from util.translation import (
     buildClaudeRequest,
     buildOpenAIRequest,
-    createContext,
+    createContextParts,
     countTokens,
     extractTranslation,
     getPricingConfig,
@@ -44,7 +46,7 @@ from util.translation import (
 )
 
 
-EVALUATION_VERSION = 3
+EVALUATION_VERSION = 4
 EVALUATION_ARCHIVE_VERSION = 1
 DEFAULT_SAMPLE_SIZE = 10
 DEFAULT_BATCH_SIZE = DEFAULT_SAMPLE_SIZE  # Backward-compatible public alias.
@@ -58,6 +60,7 @@ EVALUATION_ARCHIVE_DIR = "evaluations"
 EVALUATION_WORK_DIR = "evaluation_work"
 REVIEW_SYSTEM_PROMPT_FILENAME = "review_system_prompt.md"
 REVIEW_GLOSSARY_FILENAME = "review_glossary.txt"
+REVIEW_SFX_REFERENCE_FILENAME = "review_sfx_reference.txt"
 REVIEW_QUALITY_METRICS = (
     "meaning_accuracy",
     "glossary_prompt",
@@ -770,12 +773,14 @@ def _assign_review_samples(
 
 
 def _build_logical_requests(segments: list[dict], system_prompt: str,
-                            glossary: str, batch_size: int) -> list[dict]:
+                            glossary: str, batch_size: int,
+                            use_sfx_reference: bool = True) -> list[dict]:
     config = TranslationConfig(
         language="English",
         prompt=system_prompt,
         vocab=glossary,
         batchSize=batch_size,
+        useSfxReference=use_sfx_reference,
     )
     by_group: dict[str, list[dict]] = defaultdict(list)
     group_order: list[str] = []
@@ -812,12 +817,13 @@ def _build_logical_requests(segments: list[dict], system_prompt: str,
                 )
             else:
                 history = previous_source[-10:]
-            static_system, matched_glossary, user = createContext(
+            static_system, matched_glossary, matched_sfx, user = createContextParts(
                 config, payload, "json", history
             )
             logical = {
                 "system": static_system,
                 "glossary": matched_glossary,
+                "sfx_reference": matched_sfx,
                 "history": history,
                 "user": user,
                 "schema_line_count": len(chunk),
@@ -887,7 +893,8 @@ def build_manifest(files_dir: str | Path, *, target_segments: int = DEFAULT_SEGM
                    content_selection: dict | None = None,
                    system_prompt: str | None = None,
                    glossary: str | None = None,
-                   game_root: str | Path | None = None) -> dict:
+                   game_root: str | Path | None = None,
+                   use_sfx_reference: bool | None = None) -> dict:
     if repetitions < 1:
         raise ValueError("Repetitions must be at least 1")
     if batch_size < 1:
@@ -932,7 +939,13 @@ def build_manifest(files_dir: str | Path, *, target_segments: int = DEFAULT_SEGM
     segments = _assign_review_samples(
         selected_segments, eligible_segments, batch_size
     )
-    requests = _build_logical_requests(segments, system, active_glossary, batch_size)
+    if use_sfx_reference is None:
+        use_sfx_reference = os.getenv(
+            "useSfxReference", "true"
+        ).strip().lower() in ("true", "1", "yes")
+    requests = _build_logical_requests(
+        segments, system, active_glossary, batch_size, use_sfx_reference
+    )
     stability_ids = _stability_request_ids(
         requests, stability_segments, stability_samples
     )
@@ -972,6 +985,10 @@ def build_manifest(files_dir: str | Path, *, target_segments: int = DEFAULT_SEGM
         "repetitions": repetitions,
         "system_prompt_sha256": _sha256(system.encode("utf-8")),
         "glossary_sha256": _sha256(active_glossary.encode("utf-8")),
+        "sfx_reference_enabled": bool(use_sfx_reference),
+        "sfx_reference_identity": (
+            sfx_reference_identity() if use_sfx_reference else {}
+        ),
         "selected_segment_ids": [segment["id"] for segment in segments],
         "segments": segments,
         "logical_requests": requests,
@@ -1013,8 +1030,9 @@ def estimate_candidate(manifest: dict, candidate: dict) -> dict:
     output_tokens = 0
     for execution in manifest["executions"]:
         request = requests[execution["logical_request_id"]]
+        dynamic_context = request["glossary"] + request.get("sfx_reference", "")
         counted_input, counted_output = countTokens(
-            request["system"] + request["glossary"],
+            request["system"] + dynamic_context,
             request["user"],
             request["history"],
         )
@@ -1472,6 +1490,7 @@ def export_run_archive(
     for optional in (
         "blind_key.json", "blind_review.csv",
         REVIEW_SYSTEM_PROMPT_FILENAME, REVIEW_GLOSSARY_FILENAME,
+        REVIEW_SFX_REFERENCE_FILENAME,
     ):
         if (root / optional).is_file():
             relative_files.append(Path(optional))
@@ -1546,6 +1565,7 @@ def _validated_archive_members(archive: zipfile.ZipFile) -> list[zipfile.ZipInfo
         "evaluation_export.json", "manifest.json", "state.json",
         "blind_key.json", "blind_review.csv",
         REVIEW_SYSTEM_PROMPT_FILENAME, REVIEW_GLOSSARY_FILENAME,
+        REVIEW_SFX_REFERENCE_FILENAME,
     }
     total_size = 0
     accepted: list[zipfile.ZipInfo] = []
@@ -1718,11 +1738,12 @@ def sync_run_history(run_dir: str | Path) -> int:
 
 def _provider_params(candidate: dict, request: dict) -> dict:
     provider = candidate["provider"]
+    dynamic_context = request["glossary"] + request.get("sfx_reference", "")
     if provider == "anthropic":
         params = buildClaudeRequest(
             request["system"], request["user"], request["history"], "json",
             candidate["model"], request["schema_line_count"],
-            vocab_text=request["glossary"],
+            vocab_text=dynamic_context,
         )
         # Translation does not need expensive adaptive reasoning. More
         # importantly, this matches GPT reasoning=none and Gemini=minimal.
@@ -1733,7 +1754,7 @@ def _provider_params(candidate: dict, request: dict) -> dict:
     params = buildOpenAIRequest(
         request["system"], request["user"], request["history"], 0.0, "json",
         candidate["model"], request["schema_line_count"],
-        vocab_text=request["glossary"], api_provider=provider,
+        vocab_text=dynamic_context, api_provider=provider,
     )
     if provider == "gemini":
         # Gemini's OpenAI-compatible Batch API accepts reasoning_effort
@@ -2343,7 +2364,7 @@ def _blind_label(index: int) -> str:
 
 def export_blind_review_context(
     run_dir: str | Path, output_dir: str | Path | None = None
-) -> tuple[Path, Path]:
+) -> tuple[Path, Path, Path]:
     """Write model-blind snapshots of the exact translation review context."""
     root = Path(run_dir)
     _state, manifest = load_run(root)
@@ -2370,12 +2391,29 @@ def export_blind_review_context(
     if not glossary_text:
         glossary_text = "(No glossary entries matched the reviewed source text.)"
 
+    sfx_lines: list[str] = []
+    seen_sfx_lines: set[str] = set()
+    for request in requests:
+        for line in str(request.get("sfx_reference") or "").splitlines():
+            normalized = line.rstrip()
+            if normalized in seen_sfx_lines:
+                continue
+            seen_sfx_lines.add(normalized)
+            sfx_lines.append(normalized)
+    sfx_text = "\n".join(sfx_lines).strip()
+    if not sfx_text:
+        sfx_text = (
+            "(No Japanese SFX reference entries matched the reviewed source text.)"
+        )
+
     destination = Path(output_dir) if output_dir is not None else root
     system_path = destination / REVIEW_SYSTEM_PROMPT_FILENAME
     glossary_path = destination / REVIEW_GLOSSARY_FILENAME
+    sfx_path = destination / REVIEW_SFX_REFERENCE_FILENAME
     _atomic_write_text(system_path, system_text)
     _atomic_write_text(glossary_path, glossary_text)
-    return system_path.resolve(), glossary_path.resolve()
+    _atomic_write_text(sfx_path, sfx_text)
+    return system_path.resolve(), glossary_path.resolve(), sfx_path.resolve()
 
 
 def export_blind_review(run_dir: str | Path, output_path: str | Path | None = None) -> Path:

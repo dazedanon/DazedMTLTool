@@ -493,12 +493,14 @@ class EvaluationTab(QWidget):
             item.setText(f"{name} ⓘ")
             item.setToolTip(tooltip)
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
-        self.table.setHorizontalScrollMode(QAbstractItemView.ScrollPerPixel)
+        self.table.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.table.setTextElideMode(Qt.ElideMiddle)
         self.table.verticalHeader().setVisible(False)
         header = self.table.horizontalHeader()
         header.setStretchLastSection(False)
+        header.setMinimumSectionSize(1)
         for index in range(len(self.COLUMNS)):
-            header.setSectionResizeMode(index, QHeaderView.Interactive)
+            header.setSectionResizeMode(index, QHeaderView.Fixed)
         self.table.viewport().installEventFilter(self)
         results.add_widget(self.table, 2)
 
@@ -530,21 +532,37 @@ class EvaluationTab(QWidget):
         self._resize_result_columns()
 
     def _resize_result_columns(self):
-        """Keep result columns balanced without crushing the compact fields."""
+        """Keep every result column visible within the table viewport."""
         if not hasattr(self, "table"):
             return
-        viewport_width = max(0, self.table.viewport().width() - 8)
+        viewport_width = max(0, self.table.viewport().width() - 1)
         if not viewport_width:
             return
-        proportions = (
-            0.15, 0.17, 0.06, 0.08, 0.07, 0.07, 0.06, 0.08,
-            0.08, 0.10, 0.10, 0.08,
+        weights = (
+            1.55, 1.65, 0.60, 0.82, 0.68, 0.62, 0.60, 0.90,
+            0.95, 1.02, 1.12, 0.82,
         )
-        minimums = (210, 240, 80, 120, 100, 90, 80, 140, 130, 145, 165, 115)
-        for index, (proportion, minimum) in enumerate(zip(proportions, minimums)):
-            self.table.setColumnWidth(
-                index, max(minimum, round(viewport_width * proportion))
-            )
+        column_count = len(weights)
+        compact_minimum = 32
+        if viewport_width < compact_minimum * column_count:
+            base_width, remainder = divmod(viewport_width, column_count)
+            widths = [
+                base_width + int(index < remainder)
+                for index in range(column_count)
+            ]
+        else:
+            distributable = viewport_width - compact_minimum * column_count
+            total_weight = sum(weights)
+            widths = [
+                compact_minimum + int(distributable * weight / total_weight)
+                for weight in weights
+            ]
+            remainder = viewport_width - sum(widths)
+            for index in range(remainder):
+                widths[index % column_count] += 1
+
+        for index, width in enumerate(widths):
+            self.table.setColumnWidth(index, width)
 
     def showEvent(self, event):
         super().showEvent(event)
@@ -1796,7 +1814,8 @@ class EvaluationTab(QWidget):
         coverage_message = (
             f"Blind review coverage: {eligible_samples:,}/{total_samples:,} "
             f"whole samples containing {eligible:,}/{total:,} lines will be "
-            f"exported ({excluded_samples:,} samples excluded)."
+            f"exported. {excluded_samples:,} samples are omitted because at "
+            "least one model has an invalid or missing line in them."
         )
         self._append_log(coverage_message)
         set_status_text(self.status_label, coverage_message, "info")
@@ -1813,7 +1832,9 @@ class EvaluationTab(QWidget):
             set_status_text(
                 self.status_label,
                 f"Blind review exported with {eligible_samples:,}/{total_samples:,} "
-                "whole samples. "
+                f"complete samples ({eligible:,}/{total:,} lines). "
+                f"{excluded_samples:,} samples were omitted because at least "
+                "one model had an invalid or missing line. "
                 "Fill in the ranking column, then import the reviewed CSV.",
                 "success",
             )
@@ -1851,13 +1872,14 @@ class EvaluationTab(QWidget):
             return
         try:
             prompt = load_clipboard_skill("evaluation_csv_review.md")
-            system_path, glossary_path = evaluation.export_blind_review_context(
+            system_path, glossary_path, sfx_path = evaluation.export_blind_review_context(
                 self.current_run_dir, review_path.parent
             )
             replacements = {
                 "{{BLIND_REVIEW_CSV}}": str(review_path),
                 "{{REVIEW_SYSTEM_PROMPT}}": str(system_path),
                 "{{REVIEW_GLOSSARY}}": str(glossary_path),
+                "{{REVIEW_SFX_REFERENCE}}": str(sfx_path),
             }
             missing = [token for token in replacements if token not in prompt]
             if missing:

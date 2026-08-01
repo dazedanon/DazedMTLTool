@@ -122,6 +122,29 @@ class BatchRunStateTests(BatchHistoryTestBase):
 
         self.assertEqual((stale, total), (0, 1))
 
+    def test_queued_sfx_context_becomes_stale_when_reference_is_disabled(self):
+        payload = '{"Line1": "ドキドキ"}'
+        config = T.TranslationConfig(
+            model="test", prompt="Translate English.", vocab="",
+            useSfxReference=True,
+        )
+        _system, glossary, sfx, _user = T.createContextParts(
+            config, payload, "json"
+        )
+        T.queue_batch_request(
+            payload,
+            "English",
+            {},
+            cache_context=glossary + sfx,
+        )
+        T.flush_batch_queue()
+
+        stale, total = T.batchQueueStaleContextCount(
+            "", use_sfx_reference=False
+        )
+
+        self.assertEqual((stale, total), (1, 1))
+
     def test_fetched_result_requires_same_glossary_context(self):
         payload = '{"Line1": "カイン"}'
         old_context = "カイン (Kain)"

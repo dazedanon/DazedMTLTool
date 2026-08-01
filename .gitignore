@@ -24,6 +24,7 @@ __pycache__
 !data/help/**
 !data/glossary_base.txt
 !data/translation_contexts.json
+!data/sfx_reference/**
 !requirements.txt
 !util/tl_inspector/TLInspector.js
 !util/forge/Forge_MZ.js

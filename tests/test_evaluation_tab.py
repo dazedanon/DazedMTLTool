@@ -247,11 +247,12 @@ class EvaluationTabTests(unittest.TestCase):
             QApplication.clipboard().clear()
             system_path = Path(temporary) / "review_system_prompt.md"
             glossary_path = Path(temporary) / "review_glossary.txt"
+            sfx_path = Path(temporary) / "review_sfx_reference.txt"
             with (
                 mock.patch("gui.evaluation_tab.QMessageBox.warning") as warning,
                 mock.patch(
                     "gui.evaluation_tab.evaluation.export_blind_review_context",
-                    return_value=(system_path, glossary_path),
+                    return_value=(system_path, glossary_path, sfx_path),
                 ),
             ):
                 self.tab.copy_review_skill()
@@ -261,8 +262,10 @@ class EvaluationTabTests(unittest.TestCase):
             self.assertNotIn("{{BLIND_REVIEW_CSV}}", prompt)
             self.assertIn(str(system_path), prompt)
             self.assertIn(str(glossary_path), prompt)
+            self.assertIn(str(sfx_path), prompt)
             self.assertNotIn("{{REVIEW_SYSTEM_PROMPT}}", prompt)
             self.assertNotIn("{{REVIEW_GLOSSARY}}", prompt)
+            self.assertNotIn("{{REVIEW_SFX_REFERENCE}}", prompt)
             self.assertIn("authoritative review criteria", prompt)
             self.assertIn("AI judging is not objective", prompt)
             self.assertIn("blind_key.json", prompt)
@@ -673,7 +676,7 @@ class EvaluationTabTests(unittest.TestCase):
             self.assertIn("Export the blind review first", info.call_args.args[2])
             picker.assert_not_called()
 
-    def test_compact_width_keeps_setup_and_result_columns_readable(self):
+    def test_compact_width_keeps_all_result_columns_visible(self):
         self.tab.resize(900, 720)
         self.app.processEvents()
         self.tab._refresh_responsive_geometry()
@@ -687,9 +690,15 @@ class EvaluationTabTests(unittest.TestCase):
             self.assertGreaterEqual(widgets["model"].width(), 260)
         for widget in (self.tab.test_size_combo, self.tab.budget_spin):
             self.assertGreaterEqual(widget.width(), 132)
-        minimums = (210, 240, 80, 120, 100, 90, 80, 140, 130, 145, 165, 115)
-        for index, minimum in enumerate(minimums):
-            self.assertGreaterEqual(self.tab.table.columnWidth(index), minimum)
+        result_width = sum(
+            self.tab.table.columnWidth(index)
+            for index in range(self.tab.table.columnCount())
+        )
+        self.assertLessEqual(result_width, self.tab.table.viewport().width())
+        self.assertEqual(
+            self.tab.table.horizontalScrollBarPolicy(), Qt.ScrollBarAlwaysOff
+        )
+        self.assertEqual(self.tab.table.horizontalScrollBar().maximum(), 0)
 
 
 if __name__ == "__main__":

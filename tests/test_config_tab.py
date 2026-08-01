@@ -42,6 +42,7 @@ class ConfigTabRegressionTests(unittest.TestCase):
         "listWidth",
         "noteWidth",
         "convertQuotes",
+        "useSfxReference",
         "input_cost",
         "output_cost",
         "font_scale",
@@ -94,6 +95,7 @@ class ConfigTabRegressionTests(unittest.TestCase):
                 "listWidth=99",
                 "noteWidth=111",
                 "convertQuotes=false",
+                "useSfxReference=false",
                 "input_cost=3.25",
                 "output_cost=14.75",
                 "font_scale=1.4",
@@ -148,6 +150,7 @@ class ConfigTabRegressionTests(unittest.TestCase):
         self.assertEqual(tab.list_width_spin.value(), 99)
         self.assertEqual(tab.note_width_spin.value(), 111)
         self.assertFalse(tab.convert_quotes_cb.isChecked())
+        self.assertFalse(tab.use_sfx_reference_cb.isChecked())
         self.assertAlmostEqual(tab.input_cost_spin.value(), 3.25)
         self.assertAlmostEqual(tab.output_cost_spin.value(), 14.75)
         self.assertAlmostEqual(tab.font_scale_spin.value(), 1.4)
@@ -396,6 +399,7 @@ class ConfigTabRegressionTests(unittest.TestCase):
         tab.list_width_spin.setValue(84)
         tab.note_width_spin.setValue(96)
         tab.convert_quotes_cb.setChecked(True)
+        tab.use_sfx_reference_cb.setChecked(True)
         tab.input_cost_spin.setValue(4.5)
         tab.output_cost_spin.setValue(18.25)
         tab.font_scale_spin.setValue(1.8)
@@ -428,6 +432,7 @@ class ConfigTabRegressionTests(unittest.TestCase):
             "listWidth": "84",
             "noteWidth": "96",
             "convertQuotes": "true",
+            "useSfxReference": "true",
             "input_cost": "4.5",
             "output_cost": "18.25",
             "font_scale": "1.8",
@@ -453,6 +458,7 @@ class ConfigTabRegressionTests(unittest.TestCase):
         self.assertEqual(reloaded.list_width_spin.value(), 84)
         self.assertEqual(reloaded.note_width_spin.value(), 96)
         self.assertTrue(reloaded.convert_quotes_cb.isChecked())
+        self.assertTrue(reloaded.use_sfx_reference_cb.isChecked())
         self.assertAlmostEqual(reloaded.input_cost_spin.value(), 4.5)
         self.assertAlmostEqual(reloaded.output_cost_spin.value(), 18.25)
         self.assertAlmostEqual(reloaded.font_scale_spin.value(), 1.8)
@@ -489,6 +495,7 @@ class ConfigTabRegressionTests(unittest.TestCase):
         self.assertEqual(tab.list_width_spin.value(), 100)
         self.assertEqual(tab.note_width_spin.value(), 75)
         self.assertTrue(tab.convert_quotes_cb.isChecked())
+        self.assertTrue(tab.use_sfx_reference_cb.isChecked())
         self.assertAlmostEqual(tab.input_cost_spin.value(), 2.0)
         self.assertAlmostEqual(tab.output_cost_spin.value(), 8.0)
         self.assertAlmostEqual(tab.font_scale_spin.value(), 1.0)
@@ -512,6 +519,7 @@ class ConfigTabRegressionTests(unittest.TestCase):
             "listWidth": "100",
             "noteWidth": "75",
             "convertQuotes": "true",
+            "useSfxReference": "true",
             "input_cost": "2.0",
             "output_cost": "8.0",
             "font_scale": "1.0",

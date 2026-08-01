@@ -442,6 +442,7 @@ class EvaluationManifestTests(unittest.TestCase):
             logical = {
                 "system": request["system"],
                 "glossary": request["glossary"],
+                "sfx_reference": request["sfx_reference"],
                 "history": request["history"],
                 "user": request["user"],
                 "schema_line_count": request["schema_line_count"],
@@ -1031,6 +1032,28 @@ class EvaluationHistoryTests(unittest.TestCase):
             self.assertEqual(resumed["status"], "submitted")
 
 
+class SfxEvaluationContextTests(unittest.TestCase):
+    def test_logical_request_freezes_sfx_separately_from_glossary(self):
+        segments = [{
+            "id": "segment-sfx",
+            "scene_id": "scene-sfx",
+            "stratum": "dialogue",
+            "source": "胸がドキドキする",
+            "review_sample_id": "sample-sfx",
+            "review_history": [],
+        }]
+        requests = evaluation._build_logical_requests(
+            segments, "Translate to English.", "", 30, True
+        )
+        self.assertEqual(requests[0]["glossary"], "")
+        self.assertIn("ドキドキ", requests[0]["sfx_reference"])
+
+        disabled = evaluation._build_logical_requests(
+            segments, "Translate to English.", "", 30, False
+        )
+        self.assertEqual(disabled[0]["sfx_reference"], "")
+
+
 class BlindReviewTests(unittest.TestCase):
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
@@ -1053,6 +1076,10 @@ class BlindReviewTests(unittest.TestCase):
                 "id": "logical-0001", "segment_ids": ["segment-1"],
                 "system": "Preserve the established character voice.",
                 "glossary": "猫 (Cat) - approved character name",
+                "sfx_reference": (
+                    "Japanese SFX reference (contextual suggestions, not approved fixed translations).\n"
+                    "- ドキドキ\n  - equivalents: heartbeat, heart pounding"
+                ),
             }],
         }
         candidates = []
@@ -1124,6 +1151,11 @@ class BlindReviewTests(unittest.TestCase):
             (review_path.parent / evaluation.REVIEW_GLOSSARY_FILENAME)
             .read_text(encoding="utf-8"),
         )
+        sfx_context = (
+            review_path.parent / evaluation.REVIEW_SFX_REFERENCE_FILENAME
+        ).read_text(encoding="utf-8")
+        self.assertIn("ドキドキ", sfx_context)
+        self.assertIn("contextual suggestions", sfx_context)
         with open(review_path, "r", encoding="utf-8-sig", newline="") as stream:
             rows = list(csv.DictReader(stream))
         self.assertEqual(len(rows), 1)

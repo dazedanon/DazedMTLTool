@@ -25,6 +25,7 @@ ENV_PATH = PROJECT_ROOT / ".env"
 ICON_PATH = PROJECT_ROOT / "assets" / "icon.png"
 ENGINE_ICONS_DIR = PROJECT_ROOT / "assets" / "engine_icons"
 TRANSLATION_CONTEXTS_PATH = DATA_DIR / "translation_contexts.json"
+SFX_REFERENCE_PATH = DATA_DIR / "sfx_reference" / "j_ono.json"
 # Per-game quirks skill (API overlay). Legacy flat file still migrated on load.
 GAME_QUIRKS_RELATIVE = Path("skills") / "quirks.md"
 LEGACY_QUIRKS_FILENAME = "translation_quirks.txt"
