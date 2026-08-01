@@ -1388,6 +1388,11 @@ class EvaluationTab(QWidget):
         combo = widgets["model"]
         current = combo.currentText().strip()
         unique_models = sorted(set(models), key=str.casefold)
+        if current and current not in unique_models:
+            # Editable model IDs are authoritative for local servers whose
+            # /models endpoint omits aliases or returns only a subset.
+            unique_models.append(current)
+            unique_models.sort(key=str.casefold)
         combo.blockSignals(True)
         combo.clear()
         combo.addItems(unique_models)
@@ -1535,7 +1540,6 @@ class EvaluationTab(QWidget):
         worker.log.connect(self._append_log)
 
         def finished(ok, message, payload):
-            self._set_busy(False)
             if not ok:
                 set_status_text(self.status_label, message, "error")
                 QMessageBox.warning(self, "Evaluation", message)
@@ -1550,6 +1554,10 @@ class EvaluationTab(QWidget):
     def _clear_worker(self):
         if self.sender() is self._worker:
             self._worker = None
+            # The result signal arrives while QThread.isRunning() is still
+            # true. Restore actions only after the actual thread-finished
+            # signal so _update_actions() cannot disable them again.
+            self._set_busy(False)
 
     def _load_latest(self):
         self._refresh_keys()

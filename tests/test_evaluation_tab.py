@@ -510,13 +510,13 @@ class EvaluationTabTests(unittest.TestCase):
         self.app.processEvents()
         self.assertTrue(any(row in call.args for call in scheduler.call_args_list))
 
-    def test_scanned_models_replace_unavailable_selection(self):
+    def test_scanned_models_preserve_manual_selection(self):
         row = self.tab._candidate_widgets[0]
         self.tab._apply_candidate_models(row, ["gpt-listed-b", "gpt-listed-a"])
-        self.assertEqual(row["model"].currentText(), "gpt-listed-a")
+        self.assertEqual(row["model"].currentText(), "configured-model")
         self.assertEqual(
             [row["model"].itemText(index) for index in range(row["model"].count())],
-            ["gpt-listed-a", "gpt-listed-b"],
+            ["configured-model", "gpt-listed-a", "gpt-listed-b"],
         )
 
     def test_scanned_models_keep_selection_when_provider_still_offers_it(self):
@@ -525,6 +525,20 @@ class EvaluationTabTests(unittest.TestCase):
             row, ["gpt-listed-b", "configured-model", "gpt-listed-a"]
         )
         self.assertEqual(row["model"].currentText(), "configured-model")
+
+    def test_worker_completion_restores_actions_after_thread_stops(self):
+        completed = []
+        self.tab._run_task(lambda _log: "done", completed.append)
+        worker = self.tab._worker
+        self.assertIsNotNone(worker)
+        self.assertFalse(self.tab.prepare_btn.isEnabled())
+
+        self.assertTrue(worker.wait(2_000))
+        self.app.processEvents()
+
+        self.assertEqual(completed, ["done"])
+        self.assertIsNone(self.tab._worker)
+        self.assertTrue(self.tab.prepare_btn.isEnabled())
 
     def test_long_evaluation_model_dropdown_is_bounded_and_scrollable(self):
         row = self.tab._candidate_widgets[0]

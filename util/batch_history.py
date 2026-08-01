@@ -22,6 +22,7 @@ from util.translation import (
     BATCH_QUEUE_FILE,
     BATCH_RESULTS_FILE,
     BATCH_STATE_FILE,
+    BatchFileCorruptionError,
     _batch_file_lock,
     _get_anthropic_client,
     _read_batch_file,
@@ -65,12 +66,15 @@ def _empty_history() -> dict:
 
 def _read_history_unlocked() -> dict:
     """Read history under an existing batch file lock."""
-    data = _read_batch_file(BATCH_HISTORY_FILE)
+    data = _read_batch_file(BATCH_HISTORY_FILE, strict=True)
     if not data:
         return _empty_history()
     if not isinstance(data.get("batches"), list):
-        print(f"[BATCH] Corrupt history (missing batches list): {BATCH_HISTORY_FILE}", flush=True)
-        return _empty_history()
+        raise BatchFileCorruptionError(
+            f"Batch history is corrupt: {BATCH_HISTORY_FILE} "
+            "(missing batches list). The operation was blocked to preserve "
+            "existing recovery data."
+        )
     return data
 
 
@@ -108,7 +112,7 @@ def _client_for_entry(entry: dict):
     return _get_anthropic_client() if provider == "anthropic" else get_provider_client(provider)
 
 
-def _active_key_name_for_environment() -> str:
+def active_key_name_for_environment() -> str:
     """Return the active vault name only when it matches the submitted route."""
     try:
         from util import api_keys as api_key_vault
@@ -129,6 +133,61 @@ def _active_key_name_for_environment() -> str:
         return name
     except Exception:
         return ""
+
+
+def entry_for_batch(batch_id: str) -> Optional[dict]:
+    """Return one durable history entry without exposing its stored secret."""
+    return _find_entry(read_history(), batch_id)
+
+
+def client_for_batch(
+    batch_id: str,
+    provider: str = "anthropic",
+    key_name: str = "",
+):
+    """Resolve a batch's submitted credential, falling back for legacy rows."""
+    if key_name:
+        return _client_for_entry({"provider": provider, "key_name": key_name})
+    entry = entry_for_batch(batch_id)
+    if entry is not None:
+        return _client_for_entry(entry)
+    return _get_anthropic_client() if provider == "anthropic" else get_provider_client(provider)
+
+
+def key_name_for_batch(batch_id: str) -> str:
+    entry = entry_for_batch(batch_id)
+    return str((entry or {}).get("key_name") or "")
+
+
+_ESTIMATE_SPLIT_FIELDS = frozenset({
+    "cache_write_tokens",
+    "cache_read_tokens",
+    "dynamic_tokens",
+    "input_tokens",
+    "output_tokens",
+    "batch_cached_cost",
+    "batch_nocache_cost",
+    "live_cost",
+})
+
+
+def _split_cost_estimate(
+    cost_estimate: Optional[dict], request_count: int
+) -> Optional[dict]:
+    """Allocate an aggregate estimate across provider splits without duplication."""
+    if not cost_estimate:
+        return None
+    estimate = copy.deepcopy(cost_estimate)
+    total_requests = int(estimate.get("requests", 0) or 0)
+    if total_requests <= 0 or request_count >= total_requests:
+        return estimate
+    fraction = request_count / total_requests
+    estimate["requests"] = request_count
+    for field in _ESTIMATE_SPLIT_FIELDS:
+        value = estimate.get(field)
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            estimate[field] = value * fraction
+    return estimate
 
 
 def upsert_history_entry(batch_id: str, **fields: Any) -> dict:
@@ -189,11 +248,11 @@ def record_submit(
             key_name=(
                 key_name
                 if key_name is not None
-                else _active_key_name_for_environment()
+                else active_key_name_for_environment()
             ),
             request_count=len(custom_ids),
             file_set=file_set,
-            cost_estimate=copy.deepcopy(cost_estimate) if cost_estimate else None,
+            cost_estimate=_split_cost_estimate(cost_estimate, len(custom_ids)),
             custom_ids=custom_ids,
             api_status="in_progress",
             notes="",

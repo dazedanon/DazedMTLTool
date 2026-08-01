@@ -82,6 +82,18 @@ class BatchRunStateTests(BatchHistoryTestBase):
         with self.assertRaises(T.BatchFileCorruptionError):
             T.submitTranslationBatches()
 
+    def test_corrupt_queue_is_not_overwritten_during_pending_flush(self):
+        T.BATCH_QUEUE_FILE.write_text("{truncated", encoding="utf-8")
+        T._batch_queue_pending = {"new-key": {"payload": "new"}}
+
+        with self.assertRaises(T.BatchFileCorruptionError):
+            T.flush_batch_queue()
+
+        self.assertEqual(
+            T.BATCH_QUEUE_FILE.read_text(encoding="utf-8"), "{truncated"
+        )
+        self.assertIn("new-key", T._batch_queue_pending)
+
     def test_submitted_when_state_has_batches(self):
         T._write_batch_file(
             T.BATCH_STATE_FILE,
@@ -237,6 +249,16 @@ class HistorySurvivalTests(BatchHistoryTestBase):
         self.assertTrue(BH.BATCH_HISTORY_FILE.exists())
         self.assertEqual(len(BH.read_history()["batches"]), 1)
 
+    def test_corrupt_history_is_not_replaced_by_upsert(self):
+        BH.BATCH_HISTORY_FILE.write_text("{truncated", encoding="utf-8")
+
+        with self.assertRaises(T.BatchFileCorruptionError):
+            BH.upsert_history_entry("new-batch", status=BH.STATUS_SUBMITTED)
+
+        self.assertEqual(
+            BH.BATCH_HISTORY_FILE.read_text(encoding="utf-8"), "{truncated"
+        )
+
     def test_evaluation_history_uses_its_saved_key_reference(self):
         sentinel = object()
         entry = {
@@ -274,6 +296,32 @@ class HistorySurvivalTests(BatchHistoryTestBase):
 
         self.assertEqual(
             BH.read_history()["batches"][0]["key_name"], "Work OpenAI"
+        )
+
+    def test_split_submission_allocates_aggregate_estimate_once(self):
+        estimate = {
+            "requests": 4,
+            "input_tokens": 400,
+            "output_tokens": 80,
+            "batch_cached_cost": 2.0,
+            "model": "gpt-test",
+        }
+        BH.record_submit(
+            [
+                {"id": "batch-est-1", "custom_ids": {"r1": "k1", "r2": "k2"}},
+                {"id": "batch-est-2", "custom_ids": {"r3": "k3", "r4": "k4"}},
+            ],
+            provider="openai",
+            cost_estimate=estimate,
+            key_name="Work OpenAI",
+        )
+
+        rows = {row["id"]: row for row in BH.read_history()["batches"]}
+        self.assertEqual(rows["batch-est-1"]["cost_estimate"]["requests"], 2)
+        self.assertEqual(rows["batch-est-2"]["cost_estimate"]["requests"], 2)
+        self.assertEqual(
+            sum(row["cost_estimate"]["batch_cached_cost"] for row in rows.values()),
+            2.0,
         )
 
 
@@ -349,6 +397,77 @@ class ProviderSubmissionTests(BatchHistoryTestBase):
             [item["id"] for item in BH.read_history()["batches"]],
             ["batch_paid_1", "batch_paid_2"],
         )
+
+    def test_partial_resume_blocks_switching_saved_api_key(self):
+        T.queue_batch_request(
+            '{"Line1":"猫"}',
+            "English",
+            {"model": "gpt-test", "messages": []},
+            provider="openai",
+        )
+        T.flush_batch_queue()
+        T._write_batch_file(
+            T.BATCH_STATE_FILE,
+            {
+                "status": "partially_submitted",
+                "batches": [{
+                    "id": "batch-old-key",
+                    "provider": "openai",
+                    "custom_ids": {},
+                }],
+            },
+        )
+        BH.upsert_history_entry(
+            "batch-old-key",
+            provider="openai",
+            key_name="Old Account",
+            custom_ids={},
+        )
+
+        with (
+            mock.patch.object(
+                BH, "active_key_name_for_environment", return_value="New Account"
+            ),
+            mock.patch("util.batch_providers.submit_batch") as submit,
+        ):
+            with self.assertRaisesRegex(ValueError, "Old Account"):
+                T.submitTranslationBatches()
+
+        submit.assert_not_called()
+
+    def test_active_status_poll_uses_batch_saved_client(self):
+        client = object()
+        T._write_batch_file(
+            T.BATCH_STATE_FILE,
+            {
+                "status": "submitted",
+                "batches": [{
+                    "id": "batch-saved-client",
+                    "provider": "openai",
+                    "custom_ids": {},
+                }],
+            },
+        )
+        BH.upsert_history_entry(
+            "batch-saved-client",
+            provider="openai",
+            key_name="Original Account",
+        )
+
+        with (
+            mock.patch.object(BH, "_client_for_entry", return_value=client),
+            mock.patch(
+                "util.batch_providers.retrieve_batch",
+                return_value={
+                    "api_status": "in_progress",
+                    "ended": False,
+                    "counts": {},
+                },
+            ) as retrieve,
+        ):
+            T.checkTranslationBatchStatuses(print_status=False)
+
+        self.assertEqual(retrieve.call_args.kwargs["client"], client)
 
 
 class RedownloadTests(BatchHistoryTestBase):
@@ -518,15 +637,21 @@ class SplitFetchAccountingTests(BatchHistoryTestBase):
         for item in batches:
             BH.upsert_history_entry(
                 item["id"], provider="openai", model="gpt-test",
+                key_name="Original Account",
                 custom_ids=item["custom_ids"],
             )
 
+        clients = []
+        saved_client = object()
+
         def download(batch_id, _custom_ids, **_kwargs):
+            clients.append(_kwargs.get("client"))
             tokens = 10 if batch_id == "batch-1" else 30
             key = "k1" if batch_id == "batch-1" else "k2"
             return ({key: {"text": "ok"}}, [], {"input_tokens": tokens})
 
         with (
+            mock.patch.object(BH, "_client_for_entry", return_value=saved_client),
             mock.patch.object(BH, "download_batch_results", side_effect=download),
             mock.patch.object(
                 BH, "_price_usage", side_effect=lambda usage, _model, _provider="anthropic": usage["input_tokens"] / 100
@@ -539,6 +664,7 @@ class SplitFetchAccountingTests(BatchHistoryTestBase):
         self.assertEqual(rows["batch-2"]["usage"]["input_tokens"], 30)
         self.assertEqual(rows["batch-1"]["actual_cost"], 0.1)
         self.assertEqual(rows["batch-2"]["actual_cost"], 0.3)
+        self.assertEqual(clients, [saved_client, saved_client])
 
 
 class BatchEstimateTests(BatchHistoryTestBase):

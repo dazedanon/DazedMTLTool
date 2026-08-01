@@ -1026,8 +1026,9 @@ def _read_batch_file(path, *, strict=False):
         if strict:
             raise BatchFileCorruptionError(
                 message
-                + ". Submission was blocked to prevent duplicate paid work. "
-                "Restore or inspect the file before clearing the batch run."
+                + ". The operation was blocked to preserve recovery data and "
+                "prevent duplicate paid work. Restore or inspect the file before "
+                "clearing the batch run."
             )
     return {}
 
@@ -1085,10 +1086,13 @@ def flush_batch_queue():
         pending, _batch_queue_pending = _batch_queue_pending, {}
         try:
             with _batch_file_lock():
-                queue = _read_batch_file(BATCH_QUEUE_FILE)
+                queue = _read_batch_file(BATCH_QUEUE_FILE, strict=True)
                 for key, entry in pending.items():
                     queue.setdefault(key, entry)
                 _write_batch_file(BATCH_QUEUE_FILE, queue)
+        except BatchFileCorruptionError:
+            _batch_queue_pending.update(pending)
+            raise
         except Exception:
             _batch_queue_pending.update(pending)  # keep entries for the next flush
 
@@ -1495,6 +1499,24 @@ def submitTranslationBatches(file_set=None, cost_estimate=None):
         )
     provider = next(iter(providers))
     max_requests, max_bytes = batch_limits(provider)
+    from util.batch_history import (
+        active_key_name_for_environment,
+        key_name_for_batch,
+    )
+
+    current_key_name = active_key_name_for_environment()
+    existing_key_names = {
+        str(info.get("key_name") or key_name_for_batch(info.get("id", "")))
+        for info in batches
+    } - {""}
+    if existing_key_names and (
+        len(existing_key_names) != 1 or current_key_name not in existing_key_names
+    ):
+        expected = ", ".join(sorted(existing_key_names))
+        raise ValueError(
+            "Remaining split requests must use the same saved API key as the "
+            f"already submitted batches. Select {expected!r} and resume again."
+        )
     client = _get_anthropic_client() if provider == "anthropic" else None
     model = (
         (cost_estimate or {}).get("model")
@@ -1538,6 +1560,7 @@ def submitTranslationBatches(file_set=None, cost_estimate=None):
                 provider=provider,
                 file_set=effective_file_set,
                 cost_estimate=effective_estimate,
+                key_name=current_key_name,
             )
         except Exception as exc:
             print(f"[BATCH] history record_submit failed: {exc}", flush=True)
@@ -1547,7 +1570,12 @@ def submitTranslationBatches(file_set=None, cost_estimate=None):
         if not requests:
             return
         submitted = submit_batch(provider, requests, client=client)
-        info = {**submitted, "custom_ids": id_map, "provider": provider}
+        info = {
+            **submitted,
+            "custom_ids": id_map,
+            "provider": provider,
+            "key_name": current_key_name,
+        }
         batches.append(info)
         submitted_keys.update(id_map.values())
         complete = len(submitted_keys) == len(queue)
@@ -1609,6 +1637,7 @@ def checkTranslationBatchStatuses(print_status=True):
         if print_status:
             print("[BATCH] No submitted batches - submit the queue first.", flush=True)
         return False, []
+    from util.batch_history import client_for_batch
     from util.batch_providers import retrieve_batch
 
     all_ended = True
@@ -1616,7 +1645,10 @@ def checkTranslationBatchStatuses(print_status=True):
     for info in state["batches"]:
         bid = info["id"]
         provider = info.get("provider") or state.get("provider") or "anthropic"
-        normalized = retrieve_batch(provider, bid)
+        client = client_for_batch(
+            bid, provider, str(info.get("key_name") or "")
+        )
+        normalized = retrieve_batch(provider, bid, client=client)
         api_status = normalized["api_status"]
         counts = normalized["counts"]
         statuses.append({
@@ -1658,8 +1690,14 @@ def fetchTranslationBatches(batches=None):
         return 0, 0
 
     try:
-        from util.batch_history import download_batch_results, record_fetch, _price_usage
+        from util.batch_history import (
+            _price_usage,
+            client_for_batch,
+            download_batch_results,
+            record_fetch,
+        )
     except Exception:
+        client_for_batch = None
         download_batch_results = None
         record_fetch = None
         _price_usage = None
@@ -1680,13 +1718,22 @@ def fetchTranslationBatches(batches=None):
         if bid:
             batch_ids.append(bid)
         id_map = info.get("custom_ids", {})
+        client = (
+            client_for_batch(
+                bid, provider, str(info.get("key_name") or "")
+            )
+            if client_for_batch
+            else None
+        )
         if download_batch_results is not None:
             part, err_part, usage_part = download_batch_results(
-                bid, id_map, provider=provider
+                bid, id_map, client=client, provider=provider
             )
         else:
             from util.batch_providers import download_results
-            part, err_part, usage_part = download_results(provider, bid, id_map)
+            part, err_part, usage_part = download_results(
+                provider, bid, id_map, client=client
+            )
         results.update(part)
         errored.extend(err_part)
         for k, v in usage_part.items():
