@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from PyQt5.QtCore import QEvent, Qt, QThread, QTimer, pyqtSignal
@@ -128,6 +129,30 @@ class EvaluationTab(QWidget):
             selected, fallback_game_root=self._workflow_game_root()
         )
 
+    def _configured_model(self) -> str:
+        config_tab = getattr(self.parent_window, "config_tab", None)
+        model_combo = getattr(config_tab, "model_combo", None)
+        if model_combo is not None:
+            model = model_combo.currentText().strip()
+            if model:
+                return model
+        return str(os.getenv("model") or evaluation.DEFAULT_CANDIDATES[0]["model"])
+
+    def _default_candidate(self) -> dict:
+        key_name = api_key_vault.get_active_name()
+        endpoint = api_key_vault.get_endpoint(key_name) or ""
+        if not endpoint:
+            config_tab = getattr(self.parent_window, "config_tab", None)
+            endpoint_edit = getattr(config_tab, "api_url_edit", None)
+            if endpoint_edit is not None:
+                endpoint = endpoint_edit.text().strip()
+        return {
+            "endpoint": endpoint or evaluation.DEFAULT_CANDIDATES[0]["endpoint"],
+            "model": self._configured_model(),
+            "execution": "batch",
+            "key_name": key_name,
+        }
+
     def _init_ui(self):
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -195,12 +220,11 @@ class EvaluationTab(QWidget):
         self.candidate_grid.setColumnStretch(2, 3)
         setup.add_layout(self.candidate_grid)
 
-        for candidate in evaluation.DEFAULT_CANDIDATES:
-            self._add_candidate_row(
-                candidate.get("endpoint") or candidate["provider"],
-                candidate["model"],
-                candidate.get("execution", "batch"),
-            )
+        candidate = self._default_candidate()
+        self._add_candidate_row(
+            candidate["endpoint"], candidate["model"], candidate["execution"],
+            key_name=candidate["key_name"],
+        )
         self.add_model_btn = QPushButton("Add model")
         configure_action_button(self.add_model_btn, variant="secondary")
         self.add_model_btn.clicked.connect(
@@ -442,6 +466,7 @@ class EvaluationTab(QWidget):
         except Exception as exc:
             QMessageBox.warning(self, "Evaluation history", str(exc))
             return
+        self._restore_benchmark_setup(state, manifest)
         self.current_run_dir = path
         canonical_review = path / "blind_review.csv"
         self._last_review_path = canonical_review if canonical_review.is_file() else None
@@ -562,7 +587,7 @@ class EvaluationTab(QWidget):
 
     def _add_candidate_row(
         self, endpoint: str = "https://api.openai.com/v1", model: str = "",
-        execution: str = "batch",
+        execution: str = "batch", *, key_name: str = "",
     ):
         endpoint = self._endpoint_for_legacy_provider(endpoint)
         endpoint_edit = QLineEdit(endpoint)
@@ -667,14 +692,53 @@ class EvaluationTab(QWidget):
         )
         remove_btn.clicked.connect(lambda _checked=False, row=widgets: self._remove_candidate_row(row))
         self._refresh_model_suggestions(widgets, model)
-        self._refresh_candidate_key(widgets)
+        self._refresh_candidate_key(widgets, preferred_name=key_name)
         self._reflow_candidate_rows()
         self._schedule_candidate_model_scan(widgets, delay_ms=350)
 
+    def _clear_candidate_rows(self):
+        for widgets in list(self._candidate_widgets):
+            widgets["scan_timer"].stop()
+            for name in (
+                "endpoint_field", "key", "model", "execution", "scan", "remove"
+            ):
+                widget = widgets[name]
+                self.candidate_grid.removeWidget(widget)
+                widget.deleteLater()
+        self._candidate_widgets.clear()
+
+    def _restore_benchmark_setup(self, state: dict, manifest: dict):
+        """Populate Benchmark setup from a saved run's immutable inputs."""
+        candidates = list(state.get("candidates") or [])
+        if candidates:
+            self._clear_candidate_rows()
+            for candidate in candidates:
+                self._add_candidate_row(
+                    candidate.get("endpoint") or "https://api.openai.com/v1",
+                    str(candidate.get("model") or ""),
+                    str(candidate.get("execution") or "batch"),
+                    key_name=str(candidate.get("key_name") or ""),
+                )
+
+        requested = int(manifest.get("requested_segments", 0) or 0)
+        stability = int(
+            manifest.get("requested_stability_segments")
+            or manifest.get("stability_target_segments", 0)
+            or 0
+        )
+        for index in range(self.test_size_combo.count()):
+            lines, consistency = self.test_size_combo.itemData(index)
+            if int(lines) == requested and int(consistency) == stability:
+                self.test_size_combo.setCurrentIndex(index)
+                break
+        budget = float(state.get("budget_usd_per_model", 0) or 0)
+        if budget > 0:
+            self.budget_spin.setValue(budget)
+
     def _remove_candidate_row(self, widgets: dict):
-        if len(self._candidate_widgets) <= 2:
+        if len(self._candidate_widgets) <= 1:
             QMessageBox.information(
-                self, "Models required", "An evaluation needs at least two models."
+                self, "Model required", "Keep at least one model in Benchmark setup."
             )
             return
         if widgets not in self._candidate_widgets:
@@ -695,7 +759,7 @@ class EvaluationTab(QWidget):
                 "endpoint_field", "key", "model", "execution", "scan", "remove"
             )):
                 self.candidate_grid.addWidget(widgets[name], row_index, column)
-            widgets["remove"].setEnabled(len(self._candidate_widgets) > 2)
+            widgets["remove"].setEnabled(len(self._candidate_widgets) > 1)
         QTimer.singleShot(0, self._refresh_responsive_geometry)
 
     def _refresh_model_suggestions(self, widgets: dict, preferred: str = ""):
@@ -706,6 +770,9 @@ class EvaluationTab(QWidget):
         combo.clear()
         combo.addItems(self.MODEL_SUGGESTIONS.get(provider, ()))
         current_index = combo.findText(current) if current else -1
+        if current and current_index < 0:
+            combo.addItem(current)
+            current_index = combo.findText(current)
         combo.setCurrentIndex(current_index if current_index >= 0 else 0)
         combo.blockSignals(False)
 
@@ -886,19 +953,19 @@ class EvaluationTab(QWidget):
             return
         widgets["scan"].setEnabled(True)
         widgets["scan"].setText("Scan")
-        widgets["remove"].setEnabled(len(self._candidate_widgets) > 2)
+        widgets["remove"].setEnabled(len(self._candidate_widgets) > 1)
         if widgets.get("model_fetch_pending"):
             widgets["model_fetch_pending"] = False
             QTimer.singleShot(0, lambda row=widgets: self._fetch_candidate_models(row))
 
     def _refresh_candidate_key(
         self, widgets: dict, names: list[str] | None = None,
-        *, prefer_provider: bool = False,
+        *, prefer_provider: bool = False, preferred_name: str = "",
     ):
         names = api_key_vault.list_names() if names is None else names
         active = api_key_vault.get_active_name()
         combo = widgets["key"]
-        previous = combo.currentText()
+        previous = preferred_name or combo.currentText()
         target_endpoint = widgets["endpoint"].text()
         combo.blockSignals(True)
         combo.clear()

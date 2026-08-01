@@ -602,6 +602,7 @@ def build_manifest(files_dir: str | Path, *, target_segments: int = DEFAULT_SEGM
         "target_language": "English",
         "batch_size": batch_size,
         "requested_segments": target_segments,
+        "requested_stability_segments": stability_segments,
         "target_segments": len(segments),
         "stability_target_segments": min(stability_segments, len(segments)),
         "repetitions": repetitions,

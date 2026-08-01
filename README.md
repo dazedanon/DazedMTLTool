@@ -306,6 +306,10 @@ to verify the pipeline after making changes.
 
 The **Evaluation** page compares any two or more models through native Batch APIs
 or immediate live requests without translating an entire game.
+Benchmark setup reopens with the most recently saved run's models, keys, modes,
+source, size, and budget. Before the first run exists, it starts with one model
+using the currently configured model and active saved API key; add at least one
+more model before preparing the comparison.
 Every row can use its own API URL, saved key, and model dropdown. Official
 OpenAI, Claude, Gemini, DeepSeek, Mistral, and Nvidia URLs are available from
 the adjacent **Presets** menu; other URLs use an OpenAI-compatible API. Model discovery runs

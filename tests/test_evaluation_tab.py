@@ -41,6 +41,7 @@ class EvaluationTabTests(unittest.TestCase):
             mock.patch(
                 "gui.evaluation_tab.api_key_vault.is_keyless", return_value=False
             ),
+            mock.patch.dict(os.environ, {"model": "configured-model"}),
             mock.patch.object(
                 EvaluationTab, "_schedule_candidate_model_scan", autospec=True
             ),
@@ -63,23 +64,20 @@ class EvaluationTabTests(unittest.TestCase):
         self.assertEqual(self.tab.budget_spin.value(), 10.0)
         self.assertEqual(
             [row["model"].currentText() for row in self.tab._candidate_widgets],
-            ["gpt-5.6-terra", "gemini-3.6-flash", "claude-sonnet-5"],
+            ["configured-model"],
         )
         self.assertEqual(
             [row["endpoint"].text() for row in self.tab._candidate_widgets],
-            [
-                "https://api.openai.com/v1",
-                "https://generativelanguage.googleapis.com/v1beta/openai/",
-                "https://api.anthropic.com",
-            ],
+            ["https://api.openai.com/v1"],
         )
         self.assertTrue(
             all(not row["model"].isEditable() for row in self.tab._candidate_widgets)
         )
         self.assertEqual(
             [row["execution"].currentData() for row in self.tab._candidate_widgets],
-            ["batch", "batch", "batch"],
+            ["batch"],
         )
+        self.assertEqual(self.tab._candidate_widgets[0]["key"].currentText(), "OpenAI")
         self.assertTrue(all(row["scan"].isEnabled() for row in self.tab._candidate_widgets))
         self.assertTrue(self.tab.prepare_btn.isEnabled())
         self.assertFalse(self.tab.submit_btn.isEnabled())
@@ -188,6 +186,8 @@ class EvaluationTabTests(unittest.TestCase):
         open_run.assert_called_once_with(older)
 
     def test_key_suggestions_are_provider_specific(self):
+        self.tab._add_candidate_row("gemini", "gemini-3.6-flash")
+        self.tab._add_candidate_row("anthropic", "claude-sonnet-5")
         self.assertEqual(
             self.tab._candidate_widgets[0]["key"].currentText(), "OpenAI"
         )
@@ -218,7 +218,7 @@ class EvaluationTabTests(unittest.TestCase):
 
     def test_models_can_be_added_removed_and_reassigned(self):
         self.tab._add_candidate_row("gemini", "gemini-3.6-flash")
-        self.assertEqual(len(self.tab._candidate_widgets), 4)
+        self.assertEqual(len(self.tab._candidate_widgets), 2)
         added = self.tab._candidate_widgets[-1]
         self.assertEqual(
             added["endpoint"].text(),
@@ -227,7 +227,47 @@ class EvaluationTabTests(unittest.TestCase):
         self.assertEqual(self.tab._provider_for_endpoint(added["endpoint"].text()), "gemini")
         self.assertEqual(added["model"].currentText(), "gemini-3.6-flash")
         self.tab._remove_candidate_row(added)
-        self.assertEqual(len(self.tab._candidate_widgets), 3)
+        self.assertEqual(len(self.tab._candidate_widgets), 1)
+
+    def test_saved_run_restores_benchmark_setup(self):
+        state = {
+            "budget_usd_per_model": 7.5,
+            "candidates": [
+                {
+                    "endpoint": "https://api.openai.com/v1",
+                    "key_name": "OpenAI",
+                    "model": "gpt-restored",
+                    "execution": "batch",
+                },
+                {
+                    "endpoint": "https://api.anthropic.com",
+                    "key_name": "Claude",
+                    "model": "claude-restored",
+                    "execution": "live",
+                },
+            ],
+        }
+        manifest = {
+            "requested_segments": 600,
+            "requested_stability_segments": 180,
+        }
+
+        self.tab._restore_benchmark_setup(state, manifest)
+
+        self.assertEqual(self.tab.test_size_combo.currentData(), (600, 180))
+        self.assertEqual(self.tab.budget_spin.value(), 7.5)
+        self.assertEqual(
+            [row["model"].currentText() for row in self.tab._candidate_widgets],
+            ["gpt-restored", "claude-restored"],
+        )
+        self.assertEqual(
+            [row["key"].currentText() for row in self.tab._candidate_widgets],
+            ["OpenAI", "Claude"],
+        )
+        self.assertEqual(
+            [row["execution"].currentData() for row in self.tab._candidate_widgets],
+            ["batch", "live"],
+        )
 
     def test_custom_url_uses_openai_compatible_protocol(self):
         row = self.tab._candidate_widgets[0]
@@ -268,9 +308,9 @@ class EvaluationTabTests(unittest.TestCase):
     def test_scanned_models_keep_selection_when_provider_still_offers_it(self):
         row = self.tab._candidate_widgets[0]
         self.tab._apply_candidate_models(
-            row, ["gpt-listed-b", "gpt-5.6-terra", "gpt-listed-a"]
+            row, ["gpt-listed-b", "configured-model", "gpt-listed-a"]
         )
-        self.assertEqual(row["model"].currentText(), "gpt-5.6-terra")
+        self.assertEqual(row["model"].currentText(), "configured-model")
 
     def test_long_evaluation_model_dropdown_is_bounded_and_scrollable(self):
         row = self.tab._candidate_widgets[0]
@@ -294,6 +334,7 @@ class EvaluationTabTests(unittest.TestCase):
         combo.hidePopup()
 
     def test_model_scan_uses_selected_provider_key_and_endpoint(self):
+        self.tab._add_candidate_row("gemini", "gemini-3.6-flash")
         row = self.tab._candidate_widgets[1]
         fake_worker = mock.Mock()
         fake_worker.isRunning.return_value = False
