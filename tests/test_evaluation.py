@@ -584,7 +584,14 @@ class EvaluationManifestTests(unittest.TestCase):
         )
         self.assertAlmostEqual(
             live_estimate["maximum_cost_usd"],
-            batch_estimate["maximum_cost_usd"] * 2,
+            batch_estimate["maximum_cost_usd"]
+            * 2
+            * evaluation.LIVE_REQUEST_MAX_ATTEMPTS,
+        )
+        self.assertEqual(batch_estimate["automatic_attempts"], 1)
+        self.assertEqual(
+            live_estimate["automatic_attempts"],
+            evaluation.LIVE_REQUEST_MAX_ATTEMPTS,
         )
 
     def test_failed_live_candidate_does_not_hide_submitted_batch(self):

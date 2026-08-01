@@ -70,7 +70,7 @@ class EvaluationTab(QWidget):
     """Prepare, submit, and review a user-defined model comparison."""
 
     COLUMNS = (
-        "Model", "API URL", "Mode", "Status", "Estimate", "Actual", "Valid",
+        "Model", "API URL", "Mode", "Status", "Likely upper", "Actual", "Valid",
         "Consistency", "Meaning Accuracy", "Glossary & Prompt",
         "Natural & Contextual", "Best overall",
     )
@@ -1731,8 +1731,8 @@ class EvaluationTab(QWidget):
             return
         lines = [
             f"{candidate['label']} ({candidate.get('execution', 'batch').title()}): "
-            f"${candidate['estimate']['cost_usd']:.2f} estimated; "
-            f"${candidate['estimate']['maximum_cost_usd']:.2f} ceiling"
+            f"${candidate['estimate']['cost_usd']:.2f} likely upper bound; "
+            f"${candidate['estimate']['maximum_cost_usd']:.2f} theoretical ceiling"
             for candidate in state["candidates"]
             if not candidate.get("batch_id")
             and candidate.get("status") in {"prepared", "running_live"}
@@ -1749,6 +1749,7 @@ class EvaluationTab(QWidget):
             "jobs; Live rows run immediately and require the app to remain open. The same "
             f"{len(manifest['executions'])} requests are used for every model.\n\n"
             + "\n".join(lines)
+            + "\n\nLive theoretical ceilings include all automatic retry attempts."
             + f"\n\nHard budget: ${state['budget_usd_per_model']:.2f} per model.",
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.No,

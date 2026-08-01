@@ -381,11 +381,12 @@ shows the exact shortfall and requires confirmation before switching to the
 reduced Custom size; selections below 60 eligible lines are rejected. The run
 manifest freezes the resolved content filter, corpus fingerprint, sampling
 seed, and exact selected segment IDs so a saved evaluation remains auditable.
-Before paid batch jobs are sent, the page shows a conservative estimate for
-every model and asks for confirmation; the
-default hard limit is $10 per model, with submission blocked above an 80%
-safety threshold and the same 4,096-token response ceiling applied to every request.
-The ceiling's theoretical cost must also fit the budget. Results are checked
+Before paid jobs are sent, the page shows a likely upper bound and a theoretical
+ceiling for every model and asks for confirmation. The default hard limit is $10
+per model: the likely upper bound must remain below an 80% safety threshold, and
+the theoretical ceiling must fit the full budget. Every request has the same
+4,096-token response ceiling; live theoretical ceilings also include all three
+automatic attempts. Results are checked
 for missing lines, Japanese residue, and broken
 placeholders/control codes. Hover **Valid ⓘ** or **Consistency ⓘ** for the exact
 meaning of each score. Each row of the final CSV contains one source JSON array

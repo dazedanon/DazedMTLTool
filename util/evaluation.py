@@ -1123,22 +1123,31 @@ def estimate_candidate(manifest: dict, candidate: dict) -> dict:
         estimated_input * rates["input"]
         + estimated_output * rates["output"]
     ) / 1_000_000
-    maximum_cost = (
+    automatic_attempts = (
+        LIVE_REQUEST_MAX_ATTEMPTS
+        if candidate.get("execution", "batch") == "live"
+        else 1
+    )
+    single_attempt_ceiling = (
         estimated_input * 1.25 * rates["input"]
         + len(manifest["executions"])
         * MAX_OUTPUT_TOKENS_PER_REQUEST
         * rates["output"]
     ) / 1_000_000
+    maximum_cost = single_attempt_ceiling * automatic_attempts
     return {
         "input_tokens": estimated_input,
         "output_tokens": estimated_output,
         "cost_usd": raw_cost * 1.25,
         "maximum_cost_usd": maximum_cost,
+        "automatic_attempts": automatic_attempts,
         "output_token_cap_per_request": MAX_OUTPUT_TOKENS_PER_REQUEST,
         "rates": rates,
         "method": (
-            f"provider-neutral {candidate.get('execution', 'batch')} estimate "
-            "with tokenizer/thinking and 25% contingency"
+            f"provider-neutral {candidate.get('execution', 'batch')} likely "
+            "upper bound with tokenizer/thinking and 25% contingency; "
+            f"theoretical ceiling includes {automatic_attempts} automatic "
+            f"attempt{'s' if automatic_attempts != 1 else ''}"
         ),
     }
 
@@ -1398,14 +1407,16 @@ def prepare_run(project_root: str | Path, files_dir: str | Path,
         clean["estimate"] = estimate_candidate(manifest, clean)
         if clean["estimate"]["cost_usd"] > budget_usd * 0.80:
             raise ValueError(
-                f"{clean['label']} estimates ${clean['estimate']['cost_usd']:.2f}; "
+                f"{clean['label']} has a likely upper bound of "
+                f"${clean['estimate']['cost_usd']:.2f}; "
                 f"the safe pre-submit limit is ${budget_usd * 0.80:.2f}"
             )
         if clean["estimate"]["maximum_cost_usd"] > budget_usd:
             raise ValueError(
-                f"{clean['label']} could cost up to "
-                f"${clean['estimate']['maximum_cost_usd']:.2f} at the enforced "
-                f"output ceiling; budget is ${budget_usd:.2f}"
+                f"{clean['label']} has a theoretical ceiling of "
+                f"${clean['estimate']['maximum_cost_usd']:.2f}, including "
+                f"{clean['estimate'].get('automatic_attempts', 1)} automatic "
+                f"attempt(s); budget is ${budget_usd:.2f}"
             )
         clean_candidates.append(clean)
 
