@@ -377,8 +377,14 @@ warns that AI judging may be biased and is not a replacement for human review.
 Exporting the CSV creates the hidden scoring key; complete its ranking column
 before importing it back into the same run. Legacy `winner`/`TIE` review CSVs
 remain importable, but re-exporting is required to capture complete rankings.
-Run manifests and results are kept under
-`log/evaluations/`; saved API-key secrets are never copied into them.
+Prepared and provider-active work is kept under `log/evaluation_work/`; a new
+preparation replaces older work that was never submitted. Only evaluations
+whose model results completed successfully are moved into `log/evaluations/`.
+The saved-evaluation picker also shows submitted work so provider jobs can be
+reconnected after restarting the app, but never lists prepared or failed runs.
+Completed history is capped at the newest 50 runs, with the oldest completed
+run removed when the limit is exceeded. Saved API-key secrets are never copied
+into either location.
 
 Evaluation Batch jobs are also registered in Batch History. They are marked
 as Evaluation jobs and can be monitored or canceled there, but cannot be

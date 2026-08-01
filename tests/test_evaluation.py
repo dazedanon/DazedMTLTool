@@ -794,6 +794,121 @@ class EvaluationHistoryTests(unittest.TestCase):
         self.assertEqual(runs[0]["models"], ["local-model"])
         self.assertEqual(runs[0]["reviewed"], 25)
 
+    def test_legacy_noncompleted_runs_move_out_of_completed_archive(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            project = Path(temporary)
+            completed = self._make_run(project, "completed-run")
+            active = self._make_run(project, "active-run")
+            state = evaluation._read_json(active / "state.json")
+            state["status"] = "submitted"
+            state["candidates"][0]["status"] = "submitted"
+            evaluation._atomic_write_json(active / "state.json", state)
+            legacy_pointer = project / "log" / "evaluations" / "latest.json"
+            evaluation._atomic_write_json(legacy_pointer, {"run_dir": str(active)})
+            incomplete = project / "log" / "evaluations" / "incomplete-run"
+            incomplete.mkdir()
+
+            result = evaluation.maintain_evaluation_storage(project)
+            moved = project / "log" / "evaluation_work" / "active-run"
+
+            self.assertTrue(completed.is_dir())
+            self.assertFalse(active.exists())
+            self.assertTrue(moved.is_dir())
+            self.assertFalse(incomplete.exists())
+            self.assertFalse(
+                (project / "log" / "evaluation_work" / "incomplete-run").exists()
+            )
+            self.assertEqual(result["discarded"], [incomplete])
+            self.assertFalse(legacy_pointer.exists())
+            self.assertIn(moved, [target for _source, target in result["moved"]])
+            self.assertEqual(
+                {item["run_id"] for item in evaluation.list_runs(project)},
+                {"completed-run", "active-run"},
+            )
+            self.assertEqual(evaluation.latest_run(project), moved)
+
+    def test_completed_history_is_pruned_to_newest_fifty(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            project = Path(temporary)
+            for index in range(55):
+                run = self._make_run(project, f"run-{index:02d}")
+                state = evaluation._read_json(run / "state.json")
+                state["archived_at"] = f"2026-08-{index + 1:02d}T12:00:00+00:00"
+                evaluation._atomic_write_json(run / "state.json", state)
+
+            removed = evaluation.prune_completed_evaluations(project)
+            remaining = evaluation.list_runs(project)
+
+            self.assertEqual(len(removed), 5)
+            self.assertEqual(len(remaining), evaluation.MAX_SAVED_EVALUATIONS)
+            self.assertEqual(remaining[0]["run_id"], "run-54")
+            self.assertFalse(
+                (project / "log" / "evaluations" / "run-00").exists()
+            )
+
+    def test_prepared_runs_use_work_storage_and_are_not_saved_history(self):
+        manifest = {
+            "manifest_sha256": "a" * 64,
+            "corpus_summary": {"selected_segments": 60},
+            "source_dir": "/game/data",
+            "executions": [],
+            "logical_requests": [],
+        }
+        candidates = [{
+            "provider": "openai",
+            "endpoint": "https://api.openai.com/v1",
+            "model": "test-model",
+            "key_name": "OpenAI",
+            "execution": "batch",
+        }]
+        estimate = {
+            "cost_usd": 0.01,
+            "maximum_cost_usd": 0.02,
+        }
+        second_manifest = {**manifest, "manifest_sha256": "b" * 64}
+        with tempfile.TemporaryDirectory() as temporary, mock.patch(
+            "util.evaluation.build_manifest", side_effect=(manifest, second_manifest)
+        ), mock.patch(
+            "util.evaluation._validate_candidates"
+        ), mock.patch(
+            "util.evaluation.estimate_candidate", return_value=estimate
+        ):
+            project = Path(temporary)
+            first, _state = evaluation.prepare_run(project, project, candidates)
+            second, _state = evaluation.prepare_run(project, project, candidates)
+
+            self.assertEqual(first.parent.name, "evaluation_work")
+            self.assertFalse(first.exists())
+            self.assertTrue(second.is_dir())
+            self.assertEqual(evaluation.list_runs(project), [])
+            self.assertIsNone(evaluation.latest_run(project))
+
+    def test_completed_managed_run_moves_into_archive(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            project = Path(temporary)
+            work = project / "log" / "evaluation_work" / "finished-run"
+            evaluation._atomic_write_json(work / "manifest.json", {})
+            state = {
+                "run_id": "finished-run",
+                "created_at": "2026-08-01T12:00:00+00:00",
+                "updated_at": "2026-08-01T12:30:00+00:00",
+                "status": "completed",
+                "managed_storage": True,
+                "storage": "working",
+                "candidates": [],
+            }
+            evaluation._atomic_write_json(work / "state.json", state)
+
+            archived = evaluation._archive_completed_run(work, state)
+            saved, _manifest = evaluation.load_run(archived)
+
+            self.assertFalse(work.exists())
+            self.assertEqual(
+                archived.parent, project / "log" / "evaluations"
+            )
+            self.assertEqual(saved["storage"], "completed")
+            self.assertEqual(evaluation.locate_run(project, "finished-run"), archived)
+
     def test_evaluation_archive_round_trip_never_overwrites_existing_run(self):
         with tempfile.TemporaryDirectory() as temporary:
             project = Path(temporary) / "project"

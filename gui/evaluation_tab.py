@@ -1656,6 +1656,11 @@ class EvaluationTab(QWidget):
             return evaluation.submit_run(self.current_run_dir, credentials, log)
 
         def done(updated):
+            relocated = evaluation.locate_run(
+                self.project_root, str(updated.get("run_id") or "")
+            )
+            if relocated is not None:
+                self.current_run_dir = relocated
             self._display_state(updated)
             self._refresh_history(self.current_run_dir)
             if updated["status"] == "completed":
@@ -1710,6 +1715,11 @@ class EvaluationTab(QWidget):
             return evaluation.refresh_run(self.current_run_dir, credentials, log)
 
         def done(updated):
+            relocated = evaluation.locate_run(
+                self.project_root, str(updated.get("run_id") or "")
+            )
+            if relocated is not None:
+                self.current_run_dir = relocated
             self._display_state(updated)
             self._refresh_history(self.current_run_dir)
             if updated["status"] == "completed":

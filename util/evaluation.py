@@ -1,9 +1,10 @@
 """Provider-neutral Japanese-to-English translation evaluation workflow.
 
 The evaluator deliberately does not use ``log/translation_cache.json`` or the
-normal active ``.env`` credential.  One immutable logical request manifest is
-adapted to each provider, while every batch or live response is stored
-under its own ``log/evaluations/<run-id>`` directory.
+normal active ``.env`` credential. One immutable logical request manifest is
+adapted to each provider. Prepared and active work lives under
+``log/evaluation_work/``; only completed runs are archived under
+``log/evaluations/``.
 """
 
 from __future__ import annotations
@@ -52,6 +53,9 @@ DEFAULT_STABILITY_SEGMENTS = 120
 DEFAULT_STABILITY_SAMPLES = 12
 DEFAULT_REPETITIONS = 3
 DEFAULT_BUDGET_USD = 10.0
+MAX_SAVED_EVALUATIONS = 50
+EVALUATION_ARCHIVE_DIR = "evaluations"
+EVALUATION_WORK_DIR = "evaluation_work"
 MAX_OUTPUT_TOKENS_PER_REQUEST = 4096
 JAPANESE_RE = re.compile(r"[一-龠々〆〤ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]")
 LANGUAGE_REGEX = r"[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]+"
@@ -1081,6 +1085,173 @@ def _validate_candidates(candidates: list[dict]) -> None:
         _candidate_rates(candidate)
 
 
+def _evaluation_storage_roots(project_root: str | Path) -> tuple[Path, Path]:
+    log_root = Path(project_root).resolve() / "log"
+    return log_root / EVALUATION_ARCHIVE_DIR, log_root / EVALUATION_WORK_DIR
+
+
+def _unique_run_path(root: Path, run_id: str, *other_roots: Path) -> Path:
+    candidate = root / run_id
+    suffix = 1
+    while candidate.exists() or any((other / candidate.name).exists() for other in other_roots):
+        candidate = root / f"{run_id}-{suffix}"
+        suffix += 1
+    return candidate
+
+
+def _safe_run_directories(root: Path) -> list[Path]:
+    if not root.is_dir() or root.is_symlink():
+        return []
+    return [
+        child for child in root.iterdir()
+        if child.is_dir() and not child.is_symlink()
+        and (child / "state.json").is_file()
+        and (child / "manifest.json").is_file()
+    ]
+
+
+def _retention_timestamp(run_dir: Path, state: dict) -> str:
+    return str(
+        state.get("archived_at")
+        or state.get("updated_at")
+        or state.get("created_at")
+        or datetime.fromtimestamp(
+            run_dir.stat().st_mtime, tz=timezone.utc
+        ).replace(microsecond=0).isoformat()
+    )
+
+
+def prune_completed_evaluations(
+    project_root: str | Path, *, limit: int = MAX_SAVED_EVALUATIONS
+) -> list[Path]:
+    """Delete completed archives beyond *limit*, oldest first."""
+    if limit < 1:
+        raise ValueError("Completed evaluation retention must be at least 1")
+    archive_root, _work_root = _evaluation_storage_roots(project_root)
+    completed: list[tuple[str, str, Path]] = []
+    for run_dir in _safe_run_directories(archive_root):
+        try:
+            state, _manifest = load_run(run_dir)
+        except (OSError, ValueError, KeyError, json.JSONDecodeError):
+            continue
+        if state.get("status") == "completed":
+            completed.append((_retention_timestamp(run_dir, state), run_dir.name, run_dir))
+    completed.sort(reverse=True)
+    removed: list[Path] = []
+    archive_boundary = archive_root.resolve()
+    for _timestamp, _name, run_dir in completed[limit:]:
+        resolved = run_dir.resolve()
+        if resolved.parent != archive_boundary or run_dir.is_symlink():
+            continue
+        shutil.rmtree(resolved)
+        removed.append(resolved)
+    return removed
+
+
+def maintain_evaluation_storage(project_root: str | Path) -> dict:
+    """Migrate legacy active runs out of the archive and enforce retention."""
+    archive_root, work_root = _evaluation_storage_roots(project_root)
+    archive_root.mkdir(parents=True, exist_ok=True)
+    work_root.mkdir(parents=True, exist_ok=True)
+    moved: list[tuple[Path, Path]] = []
+    discarded: list[Path] = []
+    for run_dir in list(archive_root.iterdir()):
+        if not run_dir.is_dir() or run_dir.is_symlink():
+            continue
+        target = _unique_run_path(work_root, run_dir.name)
+        if not (run_dir / "state.json").is_file() or not (
+            run_dir / "manifest.json"
+        ).is_file():
+            if not any(run_dir.iterdir()):
+                run_dir.rmdir()
+                discarded.append(run_dir)
+                continue
+            run_dir.rename(target)
+            moved.append((run_dir, target))
+            continue
+        try:
+            state, _manifest = load_run(run_dir)
+        except (OSError, ValueError, KeyError, json.JSONDecodeError):
+            run_dir.rename(target)
+            moved.append((run_dir, target))
+            continue
+        if state.get("status") == "completed":
+            continue
+        state["managed_storage"] = True
+        state["storage"] = "working"
+        state["run_id"] = target.name
+        _atomic_write_json(run_dir / "state.json", state)
+        run_dir.rename(target)
+        moved.append((run_dir, target))
+    for run_dir in list(work_root.iterdir()):
+        if (
+            run_dir.is_dir()
+            and not run_dir.is_symlink()
+            and not any(run_dir.iterdir())
+        ):
+            run_dir.rmdir()
+            discarded.append(run_dir)
+    legacy_pointer = archive_root / "latest.json"
+    if legacy_pointer.is_file() and not legacy_pointer.is_symlink():
+        legacy_pointer.unlink()
+    removed = prune_completed_evaluations(project_root)
+    return {"moved": moved, "removed": removed, "discarded": discarded}
+
+
+def locate_run(project_root: str | Path, run_id: str) -> Path | None:
+    """Locate a managed working or completed run by its stable ID."""
+    archive_root, work_root = _evaluation_storage_roots(project_root)
+    for root in (archive_root, work_root):
+        candidate = root / str(run_id)
+        if (
+            candidate.is_dir()
+            and not candidate.is_symlink()
+            and candidate.parent.resolve() == root.resolve()
+            and (candidate / "state.json").is_file()
+        ):
+            return candidate
+    return None
+
+
+def _archive_completed_run(root: Path, state: dict) -> Path:
+    if state.get("status") != "completed" or not state.get("managed_storage"):
+        return root
+    if root.parent.name != EVALUATION_WORK_DIR or root.parent.parent.name != "log":
+        return root
+    project_root = root.parent.parent.parent
+    archive_root, work_root = _evaluation_storage_roots(project_root)
+    archive_root.mkdir(parents=True, exist_ok=True)
+    target = _unique_run_path(archive_root, root.name)
+    state["run_id"] = target.name
+    state["storage"] = "completed"
+    state["archived_at"] = _utc_now()
+    state["updated_at"] = state["archived_at"]
+    _atomic_write_json(root / "state.json", state)
+    root.rename(target)
+    prune_completed_evaluations(project_root)
+    return target
+
+
+def _discard_superseded_prepared_runs(project_root: str | Path) -> list[Path]:
+    """Discard stale, never-submitted preparations before creating a new one."""
+    _archive_root, work_root = _evaluation_storage_roots(project_root)
+    removed: list[Path] = []
+    work_boundary = work_root.resolve()
+    for run_dir in _safe_run_directories(work_root):
+        try:
+            state, _manifest = load_run(run_dir)
+        except (OSError, ValueError, KeyError, json.JSONDecodeError):
+            continue
+        if state.get("status") != "prepared":
+            continue
+        resolved = run_dir.resolve()
+        if resolved.parent != work_boundary or run_dir.is_symlink():
+            continue
+        shutil.rmtree(resolved)
+        removed.append(resolved)
+    return removed
+
+
 def prepare_run(project_root: str | Path, files_dir: str | Path,
                 candidates: list[dict], *, target_segments: int = DEFAULT_SEGMENTS,
                 stability_segments: int = DEFAULT_STABILITY_SEGMENTS,
@@ -1104,16 +1275,6 @@ def prepare_run(project_root: str | Path, files_dir: str | Path,
         content_selection=content_selection,
         game_root=game_root,
     )
-    project = Path(project_root).resolve()
-    runs_root = Path(output_root) if output_root else project / "log" / "evaluations"
-    run_id = datetime.now().strftime("%Y%m%d-%H%M%S") + "-" + manifest["manifest_sha256"][:8]
-    run_dir = runs_root / run_id
-    suffix = 1
-    while run_dir.exists():
-        run_dir = runs_root / f"{run_id}-{suffix}"
-        suffix += 1
-    run_dir.mkdir(parents=True)
-
     clean_candidates = []
     for index, candidate in enumerate(candidates, start=1):
         clean = {
@@ -1141,12 +1302,30 @@ def prepare_run(project_root: str | Path, files_dir: str | Path,
             )
         clean_candidates.append(clean)
 
+    project = Path(project_root).resolve()
+    managed_storage = output_root is None
+    if managed_storage:
+        maintain_evaluation_storage(project)
+        archive_root, runs_root = _evaluation_storage_roots(project)
+        _discard_superseded_prepared_runs(project)
+    else:
+        runs_root = Path(output_root)
+        archive_root = runs_root
+    run_id = (
+        datetime.now().strftime("%Y%m%d-%H%M%S")
+        + "-" + manifest["manifest_sha256"][:8]
+    )
+    run_dir = _unique_run_path(runs_root, run_id, archive_root)
+    run_dir.mkdir(parents=True)
+
     state = {
         "version": EVALUATION_VERSION,
         "run_id": run_dir.name,
         "created_at": _utc_now(),
         "updated_at": _utc_now(),
         "status": "prepared",
+        "managed_storage": managed_storage,
+        "storage": "working" if managed_storage else "custom",
         "budget_usd_per_model": budget_usd,
         "manifest_sha256": manifest["manifest_sha256"],
         "corpus_summary": manifest["corpus_summary"],
@@ -1154,7 +1333,6 @@ def prepare_run(project_root: str | Path, files_dir: str | Path,
     }
     _atomic_write_json(run_dir / "manifest.json", manifest)
     _atomic_write_json(run_dir / "state.json", state)
-    _atomic_write_json(runs_root / "latest.json", {"run_dir": str(run_dir.resolve())})
     return run_dir, state
 
 
@@ -1194,49 +1372,67 @@ def load_run(run_dir: str | Path) -> tuple[dict, dict]:
 
 
 def latest_run(project_root: str | Path) -> Path | None:
-    pointer = Path(project_root) / "log" / "evaluations" / "latest.json"
-    if not pointer.is_file():
-        return None
-    try:
-        path = Path(_read_json(pointer)["run_dir"])
-        return path if (path / "state.json").is_file() else None
-    except (OSError, KeyError, ValueError, json.JSONDecodeError):
-        return None
+    """Return the newest active submitted run, otherwise newest completed run."""
+    maintain_evaluation_storage(project_root)
+    _archive_root, work_root = _evaluation_storage_roots(project_root)
+    active: list[tuple[str, str, Path]] = []
+    for run_dir in _safe_run_directories(work_root):
+        try:
+            state, _manifest = load_run(run_dir)
+        except (OSError, KeyError, ValueError, json.JSONDecodeError):
+            continue
+        if state.get("status") not in {
+            "submitted", "partially_submitted", "imported_paused"
+        }:
+            continue
+        active.append((
+            str(state.get("updated_at") or state.get("created_at") or ""),
+            run_dir.name,
+            run_dir,
+        ))
+    if active:
+        return max(active)[2]
+    completed = list_runs(project_root)
+    return Path(completed[0]["run_dir"]) if completed else None
 
 
 def list_runs(project_root: str | Path) -> list[dict]:
-    """Return every readable evaluation run, newest first."""
-    runs_root = Path(project_root) / "log" / "evaluations"
-    if not runs_root.is_dir():
-        return []
+    """Return submitted work and completed archives, excluding preparations."""
+    maintain_evaluation_storage(project_root)
+    archive_root, work_root = _evaluation_storage_roots(project_root)
     runs: list[dict] = []
-    for run_dir in runs_root.iterdir():
-        if not run_dir.is_dir():
-            continue
-        try:
-            state, manifest = load_run(run_dir)
-        except (OSError, ValueError, KeyError, json.JSONDecodeError):
-            continue
-        candidates = state.get("candidates") or []
-        summary = state.get("corpus_summary") or manifest.get("corpus_summary") or {}
-        human = state.get("human_review") or {}
-        created_at = str(state.get("created_at") or "")
-        if not created_at:
-            created_at = datetime.fromtimestamp(
-                run_dir.stat().st_mtime, tz=timezone.utc
-            ).replace(microsecond=0).isoformat()
-        runs.append({
-            "run_dir": run_dir.resolve(),
-            "run_id": str(state.get("run_id") or run_dir.name),
-            "created_at": created_at,
-            "updated_at": str(state.get("updated_at") or created_at),
-            "status": str(state.get("status") or "unknown"),
-            "models": [str(item.get("model") or "") for item in candidates],
-            "modes": [str(item.get("execution") or "batch") for item in candidates],
-            "selected_segments": int(summary.get("selected_segments", 0) or 0),
-            "source_name": Path(str(manifest.get("source_dir") or "")).name,
-            "reviewed": int(human.get("reviewed", 0) or 0),
-        })
+    visible_statuses = {
+        archive_root: {"completed"},
+        work_root: {"submitted", "partially_submitted", "imported_paused"},
+    }
+    for runs_root, statuses in visible_statuses.items():
+        for run_dir in _safe_run_directories(runs_root):
+            try:
+                state, manifest = load_run(run_dir)
+            except (OSError, ValueError, KeyError, json.JSONDecodeError):
+                continue
+            if state.get("status") not in statuses:
+                continue
+            candidates = state.get("candidates") or []
+            summary = state.get("corpus_summary") or manifest.get("corpus_summary") or {}
+            human = state.get("human_review") or {}
+            created_at = str(state.get("created_at") or "")
+            if not created_at:
+                created_at = datetime.fromtimestamp(
+                    run_dir.stat().st_mtime, tz=timezone.utc
+                ).replace(microsecond=0).isoformat()
+            runs.append({
+                "run_dir": run_dir.resolve(),
+                "run_id": str(state.get("run_id") or run_dir.name),
+                "created_at": created_at,
+                "updated_at": str(state.get("updated_at") or created_at),
+                "status": str(state.get("status") or "unknown"),
+                "models": [str(item.get("model") or "") for item in candidates],
+                "modes": [str(item.get("execution") or "batch") for item in candidates],
+                "selected_segments": int(summary.get("selected_segments", 0) or 0),
+                "source_name": Path(str(manifest.get("source_dir") or "")).name,
+                "reviewed": int(human.get("reviewed", 0) or 0),
+            })
     return sorted(
         runs,
         key=lambda item: (item["created_at"], item["run_id"]),
@@ -1375,8 +1571,10 @@ def import_run_archive(
 ) -> Path:
     """Safely import an exported evaluation as a new, non-overwriting run."""
     archive_file = Path(archive_path)
-    runs_root = Path(project_root) / "log" / "evaluations"
-    runs_root.mkdir(parents=True, exist_ok=True)
+    maintain_evaluation_storage(project_root)
+    archive_root, work_root = _evaluation_storage_roots(project_root)
+    archive_root.mkdir(parents=True, exist_ok=True)
+    work_root.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(archive_file, "r") as archive:
         infos = _validated_archive_members(archive)
         metadata = json.loads(archive.read("evaluation_export.json"))
@@ -1409,14 +1607,16 @@ def import_run_archive(
         original_id = str(state.get("run_id") or metadata.get("run_id") or "imported")
         safe_id = re.sub(r"[^A-Za-z0-9._-]+", "-", original_id).strip(".-")
         safe_id = safe_id or "imported-evaluation"
-        target = runs_root / safe_id
-        suffix = 1
-        while target.exists():
-            target = runs_root / f"{safe_id}-imported-{suffix}"
-            suffix += 1
+        if state.get("status") in {"submitted", "partially_submitted"}:
+            state["imported_original_status"] = state["status"]
+            state["status"] = "imported_paused"
+        completed = state.get("status") == "completed"
+        target_root = archive_root if completed else work_root
+        other_root = work_root if completed else archive_root
+        target = _unique_run_path(target_root, safe_id, other_root)
 
         with tempfile.TemporaryDirectory(
-            prefix=".evaluation-import-", dir=runs_root
+            prefix=".evaluation-import-", dir=target_root
         ) as temporary:
             staging = Path(temporary)
             for info in infos:
@@ -1428,13 +1628,15 @@ def import_run_archive(
             state["imported_from_run_id"] = original_id
             state["imported_at"] = _utc_now()
             state["run_id"] = target.name
-            if state.get("status") in {"submitted", "partially_submitted"}:
-                state["imported_original_status"] = state["status"]
-                state["status"] = "imported_paused"
+            state["managed_storage"] = True
+            state["storage"] = "completed" if completed else "working"
+            if completed:
+                state["archived_at"] = state["imported_at"]
             _atomic_write_json(staging / "state.json", state)
             staging.rename(target)
 
-    _atomic_write_json(runs_root / "latest.json", {"run_dir": str(target.resolve())})
+    if completed:
+        prune_completed_evaluations(project_root)
     return target
 
 
@@ -1720,6 +1922,7 @@ def submit_run(run_dir: str | Path, credentials: dict[str, str],
     state["status"] = _run_completion_status(state["candidates"])
     state["updated_at"] = _utc_now()
     _atomic_write_json(root / "state.json", state)
+    _archive_completed_run(root, state)
     return state
 
 
@@ -1961,6 +2164,7 @@ def refresh_run(run_dir: str | Path, credentials: dict[str, str],
     )
     state["updated_at"] = _utc_now()
     _atomic_write_json(root / "state.json", state)
+    _archive_completed_run(root, state)
     return state
 
 
