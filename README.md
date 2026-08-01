@@ -318,8 +318,16 @@ manual retry, and its results populate the model dropdown. Each row can run as
 **Batch** or **Live**. Batch requires compatible model-list, Files, and Batch
 routes, while Live supports chat-completions-only and keyless local servers. The
 selected RPG Maker MV/MZ game folder is scanned for eligible event text,
-database text, and control-code-heavy lines, then a deterministic sample is
-balanced across scenes and files. Each model gets the same source, system
+database text, and control-code-heavy lines. **Content selection** offers a
+general-purpose Balanced mix, dialogue/events only, database only, or a Custom
+tree containing Map files, Common Events, Troops, Actors, Classes, Skills,
+Items, Weapons, Armors, Enemies, States, and map names. Custom mode can select
+individual `MapNNN.json` files and include or exclude control-code-heavy event
+lines; eligible Japanese-line counts are shown beside every available source.
+The resulting sample is balanced across scenes and files. Its deterministic
+ordering is seeded by a fingerprint of the selected game's corpus, so the same
+game and settings reproduce the same selection while a different game receives
+a different stable ordering. Each model gets the same source, system
 prompt, matched glossary, previous Japanese source lines, output schema, and
 hidden consistency-check schedule. Prompt and glossary context are built by the
 normal translation engine from the selected game's `glossary.txt`,
@@ -342,6 +350,11 @@ sample. A sample is translated as one ordered block and is also the unit shown
 and scored in blind review; its lines are not scored independently. Repeats are
 used for whole-block consistency, while non-repeated samples run once. Preparation
 reports how many eligible lines, samples, and files were found and selected.
+If a content filter contains fewer lines than the chosen template, preparation
+shows the exact shortfall and requires confirmation before switching to the
+reduced Custom size; selections below 60 eligible lines are rejected. The run
+manifest freezes the resolved content filter, corpus fingerprint, sampling
+seed, and exact selected segment IDs so a saved evaluation remains auditable.
 Before paid batch jobs are sent, the page shows a conservative estimate for
 every model and asks for confirmation; the
 default hard limit is $10 per model, with submission blocked above an 80%

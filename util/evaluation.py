@@ -73,6 +73,46 @@ _DATABASE_FIELDS = {
     "States.json": ("name", "message1", "message2", "message3", "message4"),
     "Weapons.json": ("name", "description"),
 }
+CONTENT_SOURCE_GROUPS = (
+    ("events", "Dialogue and events", (
+        ("map_events", "Map files (events/dialogue)"),
+        ("common_events", "Common Events"),
+        ("troop_events", "Troop/battle events"),
+    )),
+    ("database", "Database", (
+        ("actors", "Actors"),
+        ("classes", "Classes"),
+        ("skills", "Skills"),
+        ("items", "Items"),
+        ("weapons", "Weapons"),
+        ("armors", "Armors"),
+        ("enemies", "Enemies"),
+        ("states", "States"),
+        ("map_names", "Map names"),
+    )),
+)
+EVENT_CONTENT_SOURCES = ("map_events", "common_events", "troop_events")
+DATABASE_CONTENT_SOURCES = tuple(
+    source_id for group_id, _label, sources in CONTENT_SOURCE_GROUPS
+    if group_id == "database" for source_id, _source_label in sources
+)
+ALL_CONTENT_SOURCES = EVENT_CONTENT_SOURCES + DATABASE_CONTENT_SOURCES
+CONTENT_PRESET_SOURCES = {
+    "balanced": ALL_CONTENT_SOURCES,
+    "events": EVENT_CONTENT_SOURCES,
+    "database": DATABASE_CONTENT_SOURCES,
+}
+_DATABASE_SOURCE_CATEGORIES = {
+    "Actors.json": "actors",
+    "Armors.json": "armors",
+    "Classes.json": "classes",
+    "Enemies.json": "enemies",
+    "Items.json": "items",
+    "MapInfos.json": "map_names",
+    "Skills.json": "skills",
+    "States.json": "states",
+    "Weapons.json": "weapons",
+}
 _CORPUS_CAPTURE_LOCK = threading.RLock()
 
 
@@ -233,6 +273,16 @@ def pricing_for(model: str, *, on_date: date | None = None) -> dict[str, float]:
     }
 
 
+def _event_source_category(filename: str) -> str:
+    if re.fullmatch(r"Map\d+\.json", filename, re.IGNORECASE):
+        return "map_events"
+    if filename.casefold() == "commonevents.json":
+        return "common_events"
+    if filename.casefold() == "troops.json":
+        return "troop_events"
+    raise ValueError(f"Unsupported RPG Maker event source {filename!r}")
+
+
 def _capture_page_data(page: dict | list, filename: str, location: dict) -> list[dict]:
     """Capture the exact groups the RPG Maker event parser would translate."""
     import modules.rpgmakermvmz as rpgmaker
@@ -271,6 +321,7 @@ def _capture_page_data(page: dict | list, filename: str, location: dict) -> list
                 "id": f"{scene_id}:item-{item_index + 1}",
                 "scene_id": scene_id,
                 "stratum": stratum,
+                "source_category": _event_source_category(filename),
                 "source": source,
                 "initial_history": initial_history,
                 "source_location": {
@@ -312,6 +363,7 @@ def _database_segments(files_dir: Path) -> list[dict]:
                     "id": f"{scene_id}:{field}",
                     "scene_id": scene_id,
                     "stratum": "database",
+                    "source_category": _DATABASE_SOURCE_CATEGORIES[filename],
                     "source": source,
                     "initial_history": [],
                     "source_location": {
@@ -355,6 +407,7 @@ def _event_segments(files_dir: Path) -> list[dict]:
                     "id": f"{filename}:displayName",
                     "scene_id": f"{filename}:metadata",
                     "stratum": "database",
+                    "source_category": "map_names",
                     "source": display_name,
                     "initial_history": [],
                     "source_location": {"file": filename, "field": "displayName"},
@@ -390,32 +443,190 @@ def scan_corpus(files_dir: str | Path) -> list[dict]:
     return list(unique.values())
 
 
+def normalize_content_selection(selection: dict | None = None) -> dict:
+    """Return a validated, manifest-safe benchmark content selection."""
+    raw = dict(selection or {})
+    preset = str(raw.get("preset") or "balanced").strip().lower()
+    if preset not in {*CONTENT_PRESET_SOURCES, "custom"}:
+        raise ValueError(f"Unknown benchmark content preset {preset!r}")
+    if preset == "custom":
+        requested = raw.get("sources") or []
+        sources = list(dict.fromkeys(str(value) for value in requested))
+    else:
+        sources = list(CONTENT_PRESET_SOURCES[preset])
+    unknown = sorted(set(sources) - set(ALL_CONTENT_SOURCES))
+    if unknown:
+        raise ValueError("Unknown benchmark content sources: " + ", ".join(unknown))
+    if not sources:
+        raise ValueError("Select at least one benchmark content source")
+    map_files = sorted({
+        Path(str(value)).name
+        for value in raw.get("map_files") or []
+        if re.fullmatch(r"Map\d+\.json", Path(str(value)).name, re.IGNORECASE)
+    }, key=str.casefold)
+    if "map_events" not in sources:
+        map_files = []
+    return {
+        "preset": preset,
+        "sources": sources,
+        "map_files": map_files,
+        "include_code_heavy": bool(raw.get("include_code_heavy", True)),
+    }
+
+
+def _filter_corpus(pool: Iterable[dict], selection: dict) -> list[dict]:
+    sources = set(selection["sources"])
+    map_files = {name.casefold() for name in selection.get("map_files") or []}
+    include_code_heavy = bool(selection.get("include_code_heavy", True))
+    selected: list[dict] = []
+    for item in pool:
+        category = item.get("source_category")
+        if category not in sources:
+            continue
+        if not include_code_heavy and item.get("stratum") == "code_heavy":
+            continue
+        filename = str((item.get("source_location") or {}).get("file") or "")
+        if category == "map_events" and map_files and filename.casefold() not in map_files:
+            continue
+        selected.append(item)
+    return selected
+
+
+def corpus_fingerprint(pool: Iterable[dict]) -> str:
+    """Fingerprint source identity and text so sampling varies stably by game."""
+    return _sha256(sorted(
+        (
+            str(item.get("id") or ""),
+            str(item.get("source") or ""),
+            str(item.get("source_category") or ""),
+        )
+        for item in pool
+    ))
+
+
+def content_inventory(files_dir: str | Path, *, _pool: list[dict] | None = None) -> dict:
+    """Return eligible-line counts for benchmark source-selection controls."""
+    pool = list(_pool) if _pool is not None else scan_corpus(files_dir)
+    source_counts = {
+        source_id: sum(1 for item in pool if item.get("source_category") == source_id)
+        for source_id in ALL_CONTENT_SOURCES
+    }
+    map_files = sorted({
+        str(item["source_location"]["file"])
+        for item in pool if item.get("source_category") == "map_events"
+    }, key=str.casefold)
+    return {
+        "eligible_segments": len(pool),
+        "eligible_scenes": len({item["scene_id"] for item in pool}),
+        "eligible_files": len({item["source_location"]["file"] for item in pool}),
+        "source_counts": source_counts,
+        "map_files": {
+            filename: sum(
+                1 for item in pool
+                if item.get("source_category") == "map_events"
+                and item["source_location"]["file"] == filename
+            )
+            for filename in map_files
+        },
+        "code_heavy_source_counts": {
+            source_id: sum(
+                1 for item in pool
+                if item.get("source_category") == source_id
+                and item.get("stratum") == "code_heavy"
+            )
+            for source_id in ALL_CONTENT_SOURCES
+        },
+        "map_file_code_heavy_counts": {
+            filename: sum(
+                1 for item in pool
+                if item.get("source_category") == "map_events"
+                and item["source_location"]["file"] == filename
+                and item.get("stratum") == "code_heavy"
+            )
+            for filename in map_files
+        },
+        "code_heavy_segments": sum(
+            1 for item in pool if item.get("stratum") == "code_heavy"
+        ),
+        "corpus_sha256": corpus_fingerprint(pool),
+    }
+
+
 def _balanced_take(items: Iterable[dict], count: int,
                    *, excluded: set[str] | None = None,
-                   per_scene: int = 12) -> list[dict]:
-    """Take a deterministic scene-balanced subset with useful local context."""
+                   per_scene: int = 12, sampling_seed: str = "") -> list[dict]:
+    """Take a deterministic file- and scene-balanced subset with local context."""
     if count <= 0:
         return []
     excluded = excluded or set()
-    groups: dict[str, list[dict]] = defaultdict(list)
+    groups: dict[str, dict[str, list[dict]]] = defaultdict(lambda: defaultdict(list))
     for item in items:
         if item["id"] in excluded:
             continue
-        scene = item["scene_id"]
-        groups[scene].append(item)
-    order = sorted(groups, key=lambda scene: _sha256(scene.encode("utf-8")))
+        filename = str((item.get("source_location") or {}).get("file") or "")
+        groups[filename][item["scene_id"]].append(item)
+    file_order = sorted(
+        groups, key=lambda filename: _sha256(f"{sampling_seed}:file:{filename}")
+    )
+    scene_order = {
+        filename: sorted(
+            groups[filename],
+            key=lambda scene: _sha256(
+                f"{sampling_seed}:file:{filename}:scene:{scene}"
+            ),
+        )
+        for filename in file_order
+    }
     selected: list[dict] = []
-    offsets = {scene: 0 for scene in order}
+    scene_positions = {filename: 0 for filename in file_order}
+    item_offsets = {
+        (filename, scene): 0
+        for filename in file_order for scene in scene_order[filename]
+    }
     while len(selected) < count:
         progressed = False
-        for scene in order:
-            offset = offsets[scene]
-            if offset >= len(groups[scene]):
-                continue
-            take = min(per_scene, len(groups[scene]) - offset, count - len(selected))
-            selected.extend(groups[scene][offset:offset + take])
-            offsets[scene] += take
-            progressed = progressed or take > 0
+        active_files = [
+            filename for filename in file_order
+            if any(
+                item_offsets[(filename, scene)] < len(groups[filename][scene])
+                for scene in scene_order[filename]
+            )
+        ]
+        if not active_files:
+            break
+        remaining = count - len(selected)
+        round_budget = min(
+            per_scene, (remaining + len(active_files) - 1) // len(active_files)
+        )
+        for filename in active_files:
+            scenes = scene_order[filename]
+            file_budget = min(round_budget, count - len(selected))
+            file_taken = 0
+            while file_taken < file_budget:
+                available_scene = None
+                for _attempt in range(len(scenes)):
+                    position = scene_positions[filename] % len(scenes)
+                    scene_positions[filename] += 1
+                    candidate = scenes[position]
+                    if (
+                        item_offsets[(filename, candidate)]
+                        < len(groups[filename][candidate])
+                    ):
+                        available_scene = candidate
+                        break
+                if available_scene is None:
+                    break
+                offset = item_offsets[(filename, available_scene)]
+                scene_items = groups[filename][available_scene]
+                take = min(
+                    len(scene_items) - offset,
+                    file_budget - file_taken,
+                    count - len(selected),
+                )
+                selected.extend(scene_items[offset:offset + take])
+                item_offsets[(filename, available_scene)] += take
+                file_taken += take
+                progressed = progressed or take > 0
             if len(selected) >= count:
                 break
         if not progressed:
@@ -424,34 +635,52 @@ def _balanced_take(items: Iterable[dict], count: int,
 
 
 def build_corpus(files_dir: str | Path, *, target_segments: int = DEFAULT_SEGMENTS,
+                 content_selection: dict | None = None,
+                 sampling_seed: str | None = None,
                  _pool: list[dict] | None = None) -> list[dict]:
-    """Build a deterministic, game-independent RPG Maker benchmark corpus."""
+    """Build a deterministic, game-specific RPG Maker benchmark corpus."""
     root = Path(files_dir)
     if target_segments < 60:
         raise ValueError("Evaluation corpus must contain at least 60 segments")
     pool = list(_pool) if _pool is not None else scan_corpus(root)
-    if len(pool) < 60:
+    selection = normalize_content_selection(content_selection)
+    eligible = _filter_corpus(pool, selection)
+    if len(eligible) < 60:
         raise ValueError(
-            f"Only {len(pool)} eligible Japanese lines were found; at least 60 are required"
+            f"The selected content contains only {len(eligible)} eligible Japanese "
+            "lines; select more sources because at least 60 are required"
         )
-    selected_target = min(target_segments, len(pool))
-    code = [item for item in pool if item["stratum"] == "code_heavy"]
-    database = [item for item in pool if item["stratum"] == "database"]
-    event_text = [item for item in pool if item["stratum"] == "event_text"]
-    quotas = {
-        "code_heavy": round(selected_target * 0.15),
-        "database": round(selected_target * 0.20),
-    }
-    quotas["event_text"] = selected_target - sum(quotas.values())
-    selected: list[dict] = []
-    selected.extend(_balanced_take(event_text, quotas["event_text"]))
-    selected.extend(_balanced_take(database, quotas["database"]))
-    used = {item["id"] for item in selected}
-    selected.extend(_balanced_take(code, quotas["code_heavy"], excluded=used))
+    selected_target = min(target_segments, len(eligible))
+    seed = sampling_seed or corpus_fingerprint(pool)
+    if selection["preset"] == "balanced":
+        code = [item for item in eligible if item["stratum"] == "code_heavy"]
+        database = [item for item in eligible if item["stratum"] == "database"]
+        event_text = [item for item in eligible if item["stratum"] == "event_text"]
+        quotas = {
+            "code_heavy": round(selected_target * 0.15),
+            "database": round(selected_target * 0.20),
+        }
+        quotas["event_text"] = selected_target - sum(quotas.values())
+        selected: list[dict] = []
+        selected.extend(_balanced_take(
+            event_text, quotas["event_text"], sampling_seed=seed
+        ))
+        selected.extend(_balanced_take(
+            database, quotas["database"], sampling_seed=seed
+        ))
+        used = {item["id"] for item in selected}
+        selected.extend(_balanced_take(
+            code, quotas["code_heavy"], excluded=used, sampling_seed=seed
+        ))
+    else:
+        selected = _balanced_take(eligible, selected_target, sampling_seed=seed)
     if len(selected) < selected_target:
         used = {item["id"] for item in selected}
         selected.extend(
-            _balanced_take(pool, selected_target - len(selected), excluded=used)
+            _balanced_take(
+                eligible, selected_target - len(selected), excluded=used,
+                sampling_seed=seed,
+            )
         )
     return selected[:selected_target]
 
@@ -638,6 +867,7 @@ def build_manifest(files_dir: str | Path, *, target_segments: int = DEFAULT_SEGM
                    stability_samples: int | None = None,
                    repetitions: int = DEFAULT_REPETITIONS,
                    batch_size: int = DEFAULT_SAMPLE_SIZE,
+                   content_selection: dict | None = None,
                    system_prompt: str | None = None,
                    glossary: str | None = None,
                    game_root: str | Path | None = None) -> dict:
@@ -669,9 +899,17 @@ def build_manifest(files_dir: str | Path, *, target_segments: int = DEFAULT_SEGM
         if glossary is None
         else glossary
     )
-    eligible_segments = scan_corpus(data_dir)
+    all_segments = scan_corpus(data_dir)
+    selection = normalize_content_selection(content_selection)
+    eligible_segments = _filter_corpus(all_segments, selection)
+    inventory = content_inventory(data_dir, _pool=all_segments)
+    sampling_seed = inventory["corpus_sha256"]
     selected_segments = build_corpus(
-        data_dir, target_segments=target_segments, _pool=eligible_segments
+        data_dir,
+        target_segments=target_segments,
+        content_selection=selection,
+        sampling_seed=sampling_seed,
+        _pool=all_segments,
     )
     segments = _assign_review_samples(
         selected_segments, eligible_segments, batch_size
@@ -704,6 +942,9 @@ def build_manifest(files_dir: str | Path, *, target_segments: int = DEFAULT_SEGM
         "batch_size": batch_size,
         "sample_size": batch_size,
         "requested_segments": target_segments,
+        "content_selection": selection,
+        "corpus_sha256": inventory["corpus_sha256"],
+        "sampling_seed": sampling_seed,
         "requested_stability_segments": stability_segments,
         "requested_stability_samples": stability_samples,
         "target_segments": len(segments),
@@ -713,13 +954,16 @@ def build_manifest(files_dir: str | Path, *, target_segments: int = DEFAULT_SEGM
         "repetitions": repetitions,
         "system_prompt_sha256": _sha256(system.encode("utf-8")),
         "glossary_sha256": _sha256(active_glossary.encode("utf-8")),
+        "selected_segment_ids": [segment["id"] for segment in segments],
         "segments": segments,
         "logical_requests": requests,
         "stability_request_ids": stability_ids,
         "executions": executions,
         "corpus_summary": {
             "eligible_segments": len(eligible_segments),
+            "available_segments": len(all_segments),
             "selected_segments": len(segments),
+            "selected_scenes": len({item["scene_id"] for item in segments}),
             "review_samples": len(requests),
             "repeated_samples": len(stability_ids),
             "eligible_files": len({
@@ -729,9 +973,10 @@ def build_manifest(files_dir: str | Path, *, target_segments: int = DEFAULT_SEGM
                 item["source_location"]["file"] for item in segments
             }),
             "selected_categories": dict(sorted({
-                    key: sum(1 for item in segments if item["stratum"] == key)
-                    for key in {item["stratum"] for item in segments}
+                    key: sum(1 for item in segments if item["source_category"] == key)
+                    for key in {item["source_category"] for item in segments}
                 }.items())),
+            "content_inventory": inventory,
         },
     }
     manifest["manifest_sha256"] = _sha256({
@@ -842,6 +1087,7 @@ def prepare_run(project_root: str | Path, files_dir: str | Path,
                 stability_samples: int | None = None,
                 repetitions: int = DEFAULT_REPETITIONS,
                 batch_size: int = DEFAULT_SAMPLE_SIZE,
+                content_selection: dict | None = None,
                 budget_usd: float = DEFAULT_BUDGET_USD,
                 game_root: str | Path | None = None,
                 output_root: str | Path | None = None) -> tuple[Path, dict]:
@@ -855,6 +1101,7 @@ def prepare_run(project_root: str | Path, files_dir: str | Path,
         stability_samples=stability_samples,
         repetitions=repetitions,
         batch_size=batch_size,
+        content_selection=content_selection,
         game_root=game_root,
     )
     project = Path(project_root).resolve()

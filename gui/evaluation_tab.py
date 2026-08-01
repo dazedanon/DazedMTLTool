@@ -27,6 +27,8 @@ from PyQt5.QtWidgets import (
     QTableWidgetItem,
     QTextEdit,
     QToolButton,
+    QTreeWidget,
+    QTreeWidgetItem,
     QVBoxLayout,
     QSizePolicy,
     QWidget,
@@ -121,6 +123,12 @@ class EvaluationTab(QWidget):
         ("Standard — 360 lines (recommended)", 360, 10, 12, 3),
         ("Thorough — 600 lines", 600, 10, 18, 3),
     )
+    CONTENT_PRESETS = (
+        ("Balanced — dialogue/events + database", "balanced"),
+        ("Dialogue/events only", "events"),
+        ("Database only", "database"),
+        ("Custom source selection", "custom"),
+    )
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -132,6 +140,11 @@ class EvaluationTab(QWidget):
         self._last_review_path: Path | None = None
         self._worker: _EvaluationWorker | None = None
         self._candidate_widgets: list[dict] = []
+        self._content_inventory: dict = {}
+        self._content_source_items: dict[str, QTreeWidgetItem] = {}
+        self._content_map_items: dict[str, QTreeWidgetItem] = {}
+        self._custom_content_selection: dict | None = None
+        self._active_content_preset = "balanced"
         self._init_ui()
         self._poll_timer = QTimer(self)
         self._poll_timer.setInterval(60_000)
@@ -284,6 +297,50 @@ class EvaluationTab(QWidget):
         self.source_resolution_label = QLabel()
         self.source_resolution_label.setWordWrap(True)
         setup.add_widget(self.source_resolution_label)
+
+        content_grid = QGridLayout()
+        content_grid.setHorizontalSpacing(12)
+        content_grid.setVerticalSpacing(8)
+        content_label = QLabel("Content selection ⓘ")
+        content_label.setStyleSheet("font-weight: 600;")
+        content_label.setToolTip(
+            "Choose which RPG Maker source types may be sampled. Every model in "
+            "the evaluation receives the same selected lines."
+        )
+        self.content_preset_combo = QComboBox()
+        for label, preset in self.CONTENT_PRESETS:
+            self.content_preset_combo.addItem(label, preset)
+        self.content_preset_combo.setToolTip(
+            "Balanced keeps the general-purpose dialogue, database, and control-code "
+            "mix. Choose Custom to select individual source types or map files."
+        )
+        content_grid.addWidget(content_label, 0, 0)
+        content_grid.addWidget(self.content_preset_combo, 0, 1)
+        content_grid.setColumnStretch(1, 1)
+
+        self.content_tree = QTreeWidget()
+        self.content_tree.setHeaderLabels(("Eligible source", "Japanese lines"))
+        self.content_tree.setRootIsDecorated(True)
+        self.content_tree.setAlternatingRowColors(True)
+        self.content_tree.setMinimumHeight(190)
+        self.content_tree.setMaximumHeight(250)
+        self.content_tree.header().setSectionResizeMode(0, QHeaderView.Stretch)
+        self.content_tree.header().setSectionResizeMode(1, QHeaderView.ResizeToContents)
+        content_grid.addWidget(self.content_tree, 1, 0, 1, 2)
+        self.content_preview_label = QLabel()
+        self.content_preview_label.setWordWrap(True)
+        content_grid.addWidget(self.content_preview_label, 2, 0, 1, 2)
+        setup.add_layout(content_grid)
+        self.content_preset_combo.currentIndexChanged.connect(
+            self._on_content_preset_changed
+        )
+        self.content_tree.itemChanged.connect(
+            lambda _item, _column: self._on_content_tree_changed()
+        )
+        self._populate_content_tree({})
+        self._apply_content_selection(
+            evaluation.normalize_content_selection({"preset": "balanced"})
+        )
         self._update_source_resolution()
 
         options = QGridLayout()
@@ -356,6 +413,9 @@ class EvaluationTab(QWidget):
             options.setColumnStretch(index, 1)
         setup.add_layout(options)
         self._apply_test_template()
+        self.custom_target_spin.valueChanged.connect(
+            lambda _value: self._update_content_preview()
+        )
 
         actions = QGridLayout()
         actions.setHorizontalSpacing(8)
@@ -540,7 +600,6 @@ class EvaluationTab(QWidget):
         except Exception as exc:
             QMessageBox.warning(self, "Evaluation history", str(exc))
             return
-        self._restore_benchmark_setup(state, manifest)
         self.current_run_dir = path
         canonical_review = path / "blind_review.csv"
         self._last_review_path = canonical_review if canonical_review.is_file() else None
@@ -555,6 +614,7 @@ class EvaluationTab(QWidget):
         if display_source.is_dir():
             self.source_edit.setText(str(display_source))
             self._update_source_resolution()
+        self._restore_benchmark_setup(state, manifest)
         self.log.clear()
         self._append_log(f"Opened evaluation: {state.get('run_id', path.name)}")
         self._display_state(state)
@@ -626,6 +686,7 @@ class EvaluationTab(QWidget):
     def _update_source_resolution(self):
         selected = self.source_edit.text().strip()
         if not selected:
+            self._refresh_content_inventory(None)
             set_status_text(
                 self.source_resolution_label,
                 "Select a game folder. Evaluation will find its data/ or www/data/ files.",
@@ -635,6 +696,7 @@ class EvaluationTab(QWidget):
         try:
             data_dir = evaluation.resolve_rpgmaker_data_dir(selected)
         except (FileNotFoundError, ValueError):
+            self._refresh_content_inventory(None)
             set_status_text(
                 self.source_resolution_label,
                 "No MV/MZ data found yet. Choose the game folder, or its data/ or "
@@ -642,6 +704,7 @@ class EvaluationTab(QWidget):
                 "warning",
             )
             return
+        self._refresh_content_inventory(data_dir)
         game_root = self._evaluation_game_root(selected)
         if game_root is None:
             set_status_text(
@@ -658,6 +721,230 @@ class EvaluationTab(QWidget):
             f"(glossary: {game_root / 'glossary.txt'})",
             "success",
         )
+
+    def _refresh_content_inventory(self, data_dir: Path | None):
+        if data_dir is None:
+            self._content_inventory = {}
+            self._populate_content_tree({})
+            return
+        try:
+            inventory = evaluation.content_inventory(data_dir)
+        except Exception as exc:
+            self._content_inventory = {}
+            self._populate_content_tree({})
+            set_status_text(
+                self.content_preview_label,
+                f"Could not scan selectable content: {exc}",
+                "warning",
+            )
+            return
+        inventory["source_dir"] = str(data_dir.resolve())
+        self._content_inventory = inventory
+        self._populate_content_tree(inventory)
+
+    def _populate_content_tree(self, inventory: dict):
+        try:
+            selection = (
+                self._content_selection()
+                if self._content_source_items
+                else evaluation.normalize_content_selection({
+                    "preset": self._active_content_preset
+                })
+            )
+        except ValueError:
+            selection = self._custom_content_selection or {
+                "preset": "custom",
+                "sources": list(evaluation.ALL_CONTENT_SOURCES),
+                "include_code_heavy": True,
+            }
+        counts = inventory.get("source_counts") or {}
+        map_counts = inventory.get("map_files") or {}
+        self.content_tree.blockSignals(True)
+        self.content_tree.clear()
+        self._content_source_items = {}
+        self._content_map_items = {}
+        for _group_id, group_label, sources in evaluation.CONTENT_SOURCE_GROUPS:
+            group_count = sum(int(counts.get(source_id, 0)) for source_id, _ in sources)
+            group = QTreeWidgetItem([group_label, f"{group_count:,}"])
+            group.setFlags(
+                group.flags() | Qt.ItemIsUserCheckable | Qt.ItemIsAutoTristate
+            )
+            self.content_tree.addTopLevelItem(group)
+            for source_id, source_label in sources:
+                source = QTreeWidgetItem([
+                    source_label, f"{int(counts.get(source_id, 0)):,}"
+                ])
+                source.setFlags(source.flags() | Qt.ItemIsUserCheckable)
+                source.setData(0, Qt.UserRole, source_id)
+                group.addChild(source)
+                self._content_source_items[source_id] = source
+                if source_id == "map_events" and map_counts:
+                    source.setFlags(
+                        source.flags() | Qt.ItemIsAutoTristate
+                    )
+                    for filename, count in map_counts.items():
+                        map_item = QTreeWidgetItem([filename, f"{int(count):,}"])
+                        map_item.setFlags(map_item.flags() | Qt.ItemIsUserCheckable)
+                        map_item.setData(0, Qt.UserRole, filename)
+                        source.addChild(map_item)
+                        self._content_map_items[filename] = map_item
+            group.setExpanded(True)
+
+        characteristics = QTreeWidgetItem(["Characteristics", ""])
+        self.content_tree.addTopLevelItem(characteristics)
+        self.code_heavy_item = QTreeWidgetItem([
+            "Include control-code-heavy event lines",
+            f"{int(inventory.get('code_heavy_segments', 0)):,}",
+        ])
+        self.code_heavy_item.setFlags(
+            self.code_heavy_item.flags() | Qt.ItemIsUserCheckable
+        )
+        self.code_heavy_item.setToolTip(
+            0,
+            "Include event lines containing RPG Maker control codes. These are useful "
+            "for testing runtime safety as well as translation quality.",
+        )
+        characteristics.addChild(self.code_heavy_item)
+        characteristics.setExpanded(True)
+        self.content_tree.blockSignals(False)
+        self._apply_content_selection(selection)
+
+    def _apply_content_selection(self, selection: dict):
+        selection = evaluation.normalize_content_selection(selection)
+        sources = set(selection["sources"])
+        selected_maps = set(selection.get("map_files") or [])
+        self.content_tree.blockSignals(True)
+        for source_id, item in self._content_source_items.items():
+            item.setCheckState(
+                0, Qt.Checked if source_id in sources else Qt.Unchecked
+            )
+        if "map_events" in sources:
+            for filename, item in self._content_map_items.items():
+                item.setCheckState(
+                    0,
+                    Qt.Checked
+                    if not selected_maps or filename in selected_maps
+                    else Qt.Unchecked,
+                )
+        self.code_heavy_item.setCheckState(
+            0, Qt.Checked if selection["include_code_heavy"] else Qt.Unchecked
+        )
+        self.content_tree.blockSignals(False)
+        self.content_tree.setEnabled(selection["preset"] == "custom")
+        self._update_content_preview()
+
+    def _content_selection(self) -> dict:
+        preset = str(self.content_preset_combo.currentData() or "balanced")
+        if preset != "custom":
+            return evaluation.normalize_content_selection({"preset": preset})
+        sources = [
+            source_id for source_id, item in self._content_source_items.items()
+            if item.checkState(0) != Qt.Unchecked
+        ]
+        map_files = [
+            filename for filename, item in self._content_map_items.items()
+            if item.checkState(0) == Qt.Checked
+        ]
+        return evaluation.normalize_content_selection({
+            "preset": "custom",
+            "sources": sources,
+            "map_files": map_files,
+            "include_code_heavy": self.code_heavy_item.checkState(0) == Qt.Checked,
+        })
+
+    def _on_content_preset_changed(self, _index: int | None = None):
+        preset = str(self.content_preset_combo.currentData() or "balanced")
+        if self._active_content_preset == "custom":
+            try:
+                self._custom_content_selection = self._content_selection()
+            except ValueError:
+                pass
+        self._active_content_preset = preset
+        if preset == "custom":
+            selection = self._custom_content_selection or {
+                "preset": "custom",
+                "sources": list(evaluation.ALL_CONTENT_SOURCES),
+                "include_code_heavy": True,
+            }
+        else:
+            selection = evaluation.normalize_content_selection({"preset": preset})
+        self._apply_content_selection(selection)
+
+    def _on_content_tree_changed(self):
+        if self.content_preset_combo.currentData() == "custom":
+            try:
+                self._custom_content_selection = self._content_selection()
+            except ValueError:
+                pass
+        self._update_content_preview()
+
+    def _selected_content_count(self, selection: dict | None = None) -> int:
+        if not self._content_inventory:
+            return 0
+        selection = selection or self._content_selection()
+        counts = self._content_inventory.get("source_counts") or {}
+        code_counts = self._content_inventory.get("code_heavy_source_counts") or {}
+        total = sum(int(counts.get(source_id, 0)) for source_id in selection["sources"])
+        if "map_events" in selection["sources"] and selection.get("map_files"):
+            total -= int(counts.get("map_events", 0))
+            total += sum(
+                int((self._content_inventory.get("map_files") or {}).get(name, 0))
+                for name in selection["map_files"]
+            )
+        if not selection["include_code_heavy"]:
+            excluded_code = sum(
+                int(code_counts.get(source_id, 0))
+                for source_id in selection["sources"]
+            )
+            if "map_events" in selection["sources"] and selection.get("map_files"):
+                excluded_code -= int(code_counts.get("map_events", 0))
+                excluded_code += sum(
+                    int((self._content_inventory.get("map_file_code_heavy_counts") or {}).get(name, 0))
+                    for name in selection["map_files"]
+                )
+            total -= excluded_code
+        return max(0, total)
+
+    def _update_content_preview(self):
+        if not hasattr(self, "content_preview_label"):
+            return
+        try:
+            selection = self._content_selection()
+        except ValueError as exc:
+            set_status_text(self.content_preview_label, str(exc), "warning")
+            return
+        available = self._selected_content_count(selection)
+        requested = (
+            self.custom_target_spin.value()
+            if hasattr(self, "custom_target_spin") else evaluation.DEFAULT_SEGMENTS
+        )
+        if not self._content_inventory:
+            set_status_text(
+                self.content_preview_label,
+                "Choose a valid game folder to see eligible source counts.",
+                "neutral",
+            )
+        elif available < 60:
+            set_status_text(
+                self.content_preview_label,
+                f"Only {available:,} eligible lines match this selection; at least "
+                "60 are required. Select more sources.",
+                "warning",
+            )
+        elif requested > available:
+            set_status_text(
+                self.content_preview_label,
+                f"{requested:,} lines requested, but only {available:,} match. "
+                f"Preparing will ask to reduce the test to {available:,} lines.",
+                "warning",
+            )
+        else:
+            set_status_text(
+                self.content_preview_label,
+                f"{requested:,} lines will be sampled from {available:,} eligible "
+                "lines using a reproducible, game-specific ordering.",
+                "success",
+            )
 
     def _add_candidate_row(
         self, endpoint: str = "https://api.openai.com/v1", model: str = "",
@@ -840,6 +1127,16 @@ class EvaluationTab(QWidget):
             self.custom_repeated_samples_spin.setValue(repeated_samples)
             self.custom_repetitions_spin.setValue(repetitions)
             self._apply_test_template()
+        saved_selection = evaluation.normalize_content_selection(
+            manifest.get("content_selection") or {"preset": "balanced"}
+        )
+        preset = saved_selection["preset"]
+        if preset == "custom":
+            self._custom_content_selection = saved_selection
+        preset_index = self.content_preset_combo.findData(preset)
+        self.content_preset_combo.setCurrentIndex(max(0, preset_index))
+        self._active_content_preset = preset
+        self._apply_content_selection(saved_selection)
         budget = float(state.get("budget_usd_per_model", 0) or 0)
         if budget > 0:
             self.budget_spin.setValue(budget)
@@ -1245,12 +1542,49 @@ class EvaluationTab(QWidget):
                 "glossary and game-specific skills to match normal translation.",
             )
             return
+        try:
+            content_selection = self._content_selection()
+        except ValueError as exc:
+            QMessageBox.warning(self, "Content selection", str(exc))
+            return
+        try:
+            data_dir = evaluation.resolve_rpgmaker_data_dir(source)
+        except (FileNotFoundError, ValueError) as exc:
+            QMessageBox.warning(self, "Evaluation", str(exc))
+            return
+        if self._content_inventory.get("source_dir") != str(data_dir.resolve()):
+            self._refresh_content_inventory(data_dir)
+        available = self._selected_content_count(content_selection)
+        if available < 60:
+            QMessageBox.warning(
+                self,
+                "Not enough selected content",
+                f"Only {available:,} eligible Japanese lines match this selection. "
+                "Select more content sources; at least 60 lines are required.",
+            )
+            return
+        requested = self.custom_target_spin.value()
+        if requested > available:
+            answer = QMessageBox.question(
+                self,
+                "Reduce benchmark size?",
+                f"This selection contains {available:,} eligible Japanese lines, "
+                f"fewer than the requested {requested:,}. Reduce the benchmark to "
+                f"{available:,} lines and continue?",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No,
+            )
+            if answer != QMessageBox.Yes:
+                return
+            self.test_size_combo.setCurrentIndex(self.test_size_combo.count() - 1)
+            self.custom_target_spin.setValue(available)
         values = {
             "target_segments": self.custom_target_spin.value(),
             "stability_segments": 0,
             "stability_samples": self.custom_repeated_samples_spin.value(),
             "repetitions": self.custom_repetitions_spin.value(),
             "batch_size": self.custom_sample_size_spin.value(),
+            "content_selection": content_selection,
             "budget_usd": self.budget_spin.value(),
             "game_root": game_root,
         }
@@ -1273,6 +1607,7 @@ class EvaluationTab(QWidget):
                 f"Selected {summary.get('selected_segments', 0):,} of "
                 f"{summary.get('eligible_segments', 0):,} eligible lines from "
                 f"{summary.get('review_samples', 0):,} samples across "
+                f"{summary.get('selected_scenes', 0):,} scenes and "
                 f"{summary.get('selected_files', 0):,} files. Review the estimates, "
                 "then submit the model batches together.",
                 "success",
@@ -1281,6 +1616,7 @@ class EvaluationTab(QWidget):
                 f"Selection: {summary.get('selected_segments', 0):,} lines from "
                 f"{summary.get('selected_files', 0):,} of "
                 f"{summary.get('eligible_files', 0):,} eligible files in "
+                f"{summary.get('selected_scenes', 0):,} scenes and "
                 f"{summary.get('review_samples', 0):,} review samples."
             )
             self._append_log(f"Manifest: {self.current_run_dir / 'manifest.json'}")

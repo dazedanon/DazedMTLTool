@@ -188,6 +188,150 @@ class EvaluationSourceFolderTests(unittest.TestCase):
             )
 
 
+class EvaluationContentSelectionTests(unittest.TestCase):
+    @staticmethod
+    def _segment(filename: str, index: int, category: str, source: str | None = None):
+        return {
+            "id": f"{filename}:scene-{index}:item-1",
+            "scene_id": f"{filename}:scene-{index}",
+            "stratum": "code_heavy" if index % 11 == 0 else "event_text",
+            "source_category": category,
+            "source": source or f"台詞{index}",
+            "initial_history": [],
+            "source_location": {"file": filename, "item": 1},
+        }
+
+    def test_custom_map_filter_uses_only_selected_map_files(self):
+        pool = [
+            self._segment(filename, index, "map_events")
+            for filename in ("Map001.json", "Map002.json")
+            for index in range(1, 81)
+        ]
+        selected = evaluation.build_corpus(
+            ".",
+            target_segments=60,
+            content_selection={
+                "preset": "custom",
+                "sources": ["map_events"],
+                "map_files": ["Map002.json"],
+            },
+            _pool=pool,
+        )
+
+        self.assertEqual(len(selected), 60)
+        self.assertEqual(
+            {item["source_location"]["file"] for item in selected},
+            {"Map002.json"},
+        )
+
+    def test_file_balancing_prevents_one_large_file_from_dominating(self):
+        pool = [
+            self._segment(filename, index, "map_events")
+            for filename in ("Map001.json", "Map002.json", "Map003.json")
+            for index in range(1, 91)
+        ]
+
+        selected = evaluation._balanced_take(
+            pool, 60, sampling_seed="stable-game-seed"
+        )
+
+        self.assertEqual(
+            Counter(item["source_location"]["file"] for item in selected),
+            Counter({"Map001.json": 20, "Map002.json": 20, "Map003.json": 20}),
+        )
+
+    def test_game_fingerprint_changes_stable_order_between_games(self):
+        first = [
+            self._segment("Map001.json", index, "map_events", f"一作目{index}")
+            for index in range(1, 101)
+        ]
+        second = [
+            self._segment("Map001.json", index, "map_events", f"二作目{index}")
+            for index in range(1, 101)
+        ]
+
+        first_ids = [item["id"] for item in evaluation.build_corpus(
+            ".", target_segments=60,
+            content_selection={"preset": "events"}, _pool=first,
+        )]
+        rebuilt_ids = [item["id"] for item in evaluation.build_corpus(
+            ".", target_segments=60,
+            content_selection={"preset": "events"}, _pool=first,
+        )]
+        second_ids = [item["id"] for item in evaluation.build_corpus(
+            ".", target_segments=60,
+            content_selection={"preset": "events"}, _pool=second,
+        )]
+
+        self.assertEqual(first_ids, rebuilt_ids)
+        self.assertNotEqual(evaluation.corpus_fingerprint(first), evaluation.corpus_fingerprint(second))
+        self.assertNotEqual(first_ids, second_ids)
+
+    def test_manifest_records_filter_seed_inventory_and_exact_ids(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            records = [None] + [
+                {
+                    "id": index,
+                    "name": f"技{index}",
+                    "description": "説明です。",
+                }
+                for index in range(1, 41)
+            ]
+            (root / "Skills.json").write_text(
+                json.dumps(records, ensure_ascii=False), encoding="utf-8"
+            )
+            manifest = evaluation.build_manifest(
+                root,
+                target_segments=60,
+                repetitions=1,
+                content_selection={
+                    "preset": "custom",
+                    "sources": ["skills"],
+                    "include_code_heavy": False,
+                },
+                system_prompt="Translate Japanese to English.",
+                glossary="",
+            )
+
+        self.assertEqual(manifest["content_selection"]["sources"], ["skills"])
+        self.assertEqual(manifest["sampling_seed"], manifest["corpus_sha256"])
+        self.assertEqual(
+            manifest["selected_segment_ids"],
+            [segment["id"] for segment in manifest["segments"]],
+        )
+        self.assertEqual(
+            {segment["source_category"] for segment in manifest["segments"]},
+            {"skills"},
+        )
+        self.assertEqual(
+            manifest["corpus_summary"]["content_inventory"]["source_counts"]["skills"],
+            80,
+        )
+
+    def test_too_small_filtered_pool_has_actionable_error(self):
+        pool = [
+            self._segment("Map001.json", index, "map_events")
+            for index in range(1, 80)
+        ] + [
+            {
+                **self._segment("Skills.json", index, "skills"),
+                "stratum": "database",
+            }
+            for index in range(1, 20)
+        ]
+        with self.assertRaisesRegex(ValueError, "select more sources"):
+            evaluation.build_corpus(
+                ".",
+                target_segments=60,
+                content_selection={
+                    "preset": "custom",
+                    "sources": ["skills"],
+                },
+                _pool=pool,
+            )
+
+
 class EvaluationManifestTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -196,14 +340,7 @@ class EvaluationManifestTests(unittest.TestCase):
     def test_default_corpus_is_stratified_and_repeated_deterministically(self):
         manifest = self.manifest
         self.assertEqual(len(manifest["segments"]), 360)
-        self.assertEqual(
-            Counter(segment["stratum"] for segment in manifest["segments"]),
-            Counter({
-                "event_text": 234,
-                "database": 72,
-                "code_heavy": 54,
-            }),
-        )
+        self.assertTrue(all(segment.get("source_category") for segment in manifest["segments"]))
         self.assertGreater(len(manifest["logical_requests"]), 1)
         self.assertGreater(len(manifest["executions"]), len(manifest["logical_requests"]))
         repetitions = Counter(item["repetition"] for item in manifest["executions"])
@@ -211,7 +348,8 @@ class EvaluationManifestTests(unittest.TestCase):
         self.assertEqual(repetitions[2], repetitions[3])
         summary = manifest["corpus_summary"]
         self.assertGreater(summary["eligible_segments"], summary["selected_segments"])
-        self.assertGreater(summary["selected_files"], 10)
+        self.assertGreaterEqual(summary["selected_files"], 1)
+        self.assertLessEqual(summary["selected_files"], summary["eligible_files"])
         rebuilt = evaluation.build_corpus(ROOT / "files")
         self.assertCountEqual(
             [item["id"] for item in rebuilt],

@@ -8,10 +8,12 @@ from unittest import mock
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
+from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import QApplication
 
 from gui.config_tab import API_URL_PRESETS, ModelFetchThread
 from gui.evaluation_tab import EvaluationTab
+from util import evaluation
 
 
 class EvaluationTabTests(unittest.TestCase):
@@ -139,6 +141,60 @@ class EvaluationTabTests(unittest.TestCase):
             "Select an RPG Maker MV/MZ game folder…",
         )
         self.assertIn("Game data found:", self.tab.source_resolution_label.text())
+
+    def test_content_presets_and_custom_map_selection_are_explicit(self):
+        inventory = {
+            "eligible_segments": 360,
+            "eligible_scenes": 100,
+            "eligible_files": 4,
+            "source_counts": {},
+            "map_files": {"Map001.json": 70, "Map002.json": 90},
+            "code_heavy_source_counts": {
+                source_id: 0 for source_id in evaluation.ALL_CONTENT_SOURCES
+            },
+            "map_file_code_heavy_counts": {
+                "Map001.json": 5,
+                "Map002.json": 7,
+            },
+            "code_heavy_segments": 12,
+        }
+        inventory["source_counts"] = {
+            source_id: 0 for source_id in evaluation.ALL_CONTENT_SOURCES
+        }
+        inventory["source_counts"].update({
+            "map_events": 160,
+            "common_events": 40,
+            "skills": 80,
+            "items": 80,
+        })
+        inventory["code_heavy_source_counts"].update({"map_events": 12})
+        self.tab._content_inventory = inventory
+        self.tab._populate_content_tree(inventory)
+
+        self.tab.content_preset_combo.setCurrentIndex(
+            self.tab.content_preset_combo.findData("database")
+        )
+        database = self.tab._content_selection()
+        self.assertEqual(database["preset"], "database")
+        self.assertEqual(set(database["sources"]), set(evaluation.DATABASE_CONTENT_SOURCES))
+        self.assertFalse(self.tab.content_tree.isEnabled())
+
+        self.tab.content_preset_combo.setCurrentIndex(
+            self.tab.content_preset_combo.findData("custom")
+        )
+        for item in self.tab._content_source_items.values():
+            item.setCheckState(0, Qt.Unchecked)
+        self.tab._content_source_items["map_events"].setCheckState(0, Qt.Checked)
+        self.tab._content_map_items["Map001.json"].setCheckState(0, Qt.Unchecked)
+        self.tab._content_map_items["Map002.json"].setCheckState(0, Qt.Checked)
+        self.tab.code_heavy_item.setCheckState(0, Qt.Unchecked)
+
+        custom = self.tab._content_selection()
+        self.assertEqual(custom["sources"], ["map_events"])
+        self.assertEqual(custom["map_files"], ["Map002.json"])
+        self.assertFalse(custom["include_code_heavy"])
+        self.assertEqual(self.tab._selected_content_count(custom), 83)
+        self.assertTrue(self.tab.content_tree.isEnabled())
 
     def test_game_folder_selection_shows_resolved_json_location(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -313,6 +369,30 @@ class EvaluationTabTests(unittest.TestCase):
             [row["execution"].currentData() for row in self.tab._candidate_widgets],
             ["batch", "live"],
         )
+
+    def test_saved_run_restores_custom_content_filter(self):
+        state = {"budget_usd_per_model": 10, "candidates": []}
+        manifest = {
+            "requested_segments": 360,
+            "sample_size": 10,
+            "requested_stability_samples": 12,
+            "repetitions": 3,
+            "content_selection": {
+                "preset": "custom",
+                "sources": ["skills", "items"],
+                "map_files": [],
+                "include_code_heavy": False,
+            },
+        }
+
+        self.tab._restore_benchmark_setup(state, manifest)
+
+        self.assertEqual(self.tab.content_preset_combo.currentData(), "custom")
+        self.assertEqual(
+            self.tab._content_selection(),
+            evaluation.normalize_content_selection(manifest["content_selection"]),
+        )
+        self.assertTrue(self.tab.content_tree.isEnabled())
 
     def test_custom_url_uses_openai_compatible_protocol(self):
         row = self.tab._candidate_widgets[0]
