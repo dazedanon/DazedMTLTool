@@ -127,7 +127,7 @@ class EvaluationTabTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             review_path = Path(temporary) / "blind_review.csv"
             review_path.write_text(
-                "segment_id,scene_id,stratum,source,A,B,winner,notes\n",
+                "segment_id,scene_id,stratum,source,A,B,ranking,notes\n",
                 encoding="utf-8-sig",
             )
             self.tab.current_run_dir = Path(temporary)

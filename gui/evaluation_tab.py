@@ -68,7 +68,7 @@ class EvaluationTab(QWidget):
 
     COLUMNS = (
         "Model", "API URL", "Mode", "Status", "Estimate", "Actual", "Valid",
-        "Consistency", "Human wins",
+        "Consistency", "Review points",
     )
     COLUMN_TOOLTIPS = {
         "Valid": (
@@ -80,6 +80,11 @@ class EvaluationTab(QWidget):
             "Of the repeated sample lines with a valid result on every run, the "
             "percentage whose normalized English was exactly identical each time. "
             "Higher means less variation, not necessarily a better translation."
+        ),
+        "Review points": (
+            "Fixed-sum ranking points from the blinded review. With three models, "
+            "strict ranks score 2/1/0; tied candidates average the points for the "
+            "positions they occupy."
         ),
     }
     PROVIDER_PRESETS = API_URL_PRESETS
@@ -1314,7 +1319,7 @@ class EvaluationTab(QWidget):
             set_status_text(
                 self.status_label,
                 f"Blind review exported with {eligible:,}/{total:,} segments. "
-                "Fill in the winner column, then import the reviewed CSV.",
+                "Fill in the ranking column, then import the reviewed CSV.",
                 "success",
             )
             self._update_actions()
@@ -1322,9 +1327,9 @@ class EvaluationTab(QWidget):
                 self, "Blind review",
                 f"Exported {eligible:,} of {total:,} segments; {excluded:,} were "
                 "excluded because at least one model lacked a valid translation. "
-                "Enter the column label for the best translation in the winner "
-                "column, or enter TIE, then import the CSV. Labels are randomized "
-                "independently for every line.",
+                "Rank every candidate in the ranking column, for example A>B>C. "
+                "Use = for tied tiers, such as A=B>C or A>B=C. Labels are "
+                "randomized independently for every line.",
             )
         except Exception as exc:
             QMessageBox.warning(self, "Blind review", str(exc))
@@ -1391,14 +1396,17 @@ class EvaluationTab(QWidget):
             self._display_state(state)
             self._refresh_history(self.current_run_dir)
             self._append_log(
-                f"Imported {review['reviewed']} judgments ({review['ties']} ties)."
+                f"Imported {review['reviewed']} rankings ({review['ties']} full "
+                f"ties, {review['partial_ties']} partial ties)."
             )
         except Exception as exc:
             QMessageBox.warning(self, "Blind review", str(exc))
 
     def _display_state(self, state: dict):
         self.table.setRowCount(len(state.get("candidates", [])))
-        human_wins = (state.get("human_review") or {}).get("wins") or {}
+        human_review = state.get("human_review") or {}
+        human_points = human_review.get("points")
+        legacy_wins = human_review.get("wins") or {}
         for row, candidate in enumerate(state.get("candidates", [])):
             summary = candidate.get("summary") or {}
             stability = summary.get("stability") or {}
@@ -1414,6 +1422,12 @@ class EvaluationTab(QWidget):
             else:
                 raw_status = candidate.get("api_status") or local_status
                 display_status = str(raw_status or "").replace("_", " ").title()
+            if isinstance(human_points, dict):
+                review_score = human_points.get(candidate["id"], "—")
+            elif candidate["id"] in legacy_wins:
+                review_score = f"{legacy_wins[candidate['id']]} wins"
+            else:
+                review_score = "—"
             values = (
                 candidate.get("model", ""),
                 candidate.get("endpoint") or candidate.get("provider", ""),
@@ -1426,7 +1440,7 @@ class EvaluationTab(QWidget):
                 ),
                 valid,
                 stable,
-                str(human_wins.get(candidate["id"], "—")),
+                str(review_score),
             )
             for column, value in enumerate(values):
                 item = QTableWidgetItem(str(value))

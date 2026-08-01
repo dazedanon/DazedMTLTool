@@ -345,11 +345,15 @@ The ceiling's theoretical cost must also fit the budget. Results are checked
 for missing lines, Japanese residue, and broken
 placeholders/control codes. Hover **Valid ⓘ** or **Consistency ⓘ** for the exact
 meaning of each score. The final CSV hides model identities independently on
-every row for a letter/TIE human review. After exporting it, **Copy review
+every row for a full ranked human review. Rank labels with `>` and use `=` for
+equivalent tiers (`A>B>C`, `A=B>C`, or `A=B=C`). Rankings receive fixed-sum
+Borda points: three strict ranks score 2/1/0, while tied candidates average the
+points for the positions they occupy. After exporting it, **Copy review
 skill** copies path-specific instructions for an AI second opinion; the tool
 warns that AI judging may be biased and is not a replacement for human review.
-Exporting the CSV creates the hidden scoring key; complete its winner column
-before importing it back into the same run.
+Exporting the CSV creates the hidden scoring key; complete its ranking column
+before importing it back into the same run. Legacy `winner`/`TIE` review CSVs
+remain importable, but re-exporting is required to capture complete rankings.
 Run manifests and results are kept under
 `log/evaluations/`; saved API-key secrets are never copied into them.
 

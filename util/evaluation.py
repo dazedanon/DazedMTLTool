@@ -43,7 +43,7 @@ from util.translation import (
 )
 
 
-EVALUATION_VERSION = 2
+EVALUATION_VERSION = 3
 EVALUATION_ARCHIVE_VERSION = 1
 DEFAULT_BATCH_SIZE = 30
 DEFAULT_SEGMENTS = 360
@@ -1710,7 +1710,7 @@ def export_blind_review(run_dir: str | Path, output_path: str | Path | None = No
     with open(output, "w", encoding="utf-8-sig", newline="") as stream:
         writer = csv.DictWriter(stream, fieldnames=(
             "segment_id", "scene_id", "stratum", "source",
-            *blind_labels, "winner", "notes",
+            *blind_labels, "ranking", "notes",
         ))
         writer.writeheader()
         for segment in eligible:
@@ -1728,7 +1728,7 @@ def export_blind_review(run_dir: str | Path, output_path: str | Path | None = No
                 "stratum": segment["stratum"],
                 "source": segment["source"],
                 **{label: available[candidate_id] for label, candidate_id in labels.items()},
-                "winner": "",
+                "ranking": "",
                 "notes": "",
             })
     canonical_review = root / "blind_review.csv"
@@ -1738,31 +1738,121 @@ def export_blind_review(run_dir: str | Path, output_path: str | Path | None = No
     return output
 
 
+def _parse_blind_ranking(value: str, labels: list[str]) -> list[list[str]]:
+    """Parse a complete blinded ranking such as ``A=B>C``.
+
+    ``>`` separates ordered tiers and ``=`` joins candidates tied within a
+    tier. Every randomized label must occur exactly once. Legacy ``TIE`` and
+    ``=`` values mean that every candidate is tied.
+    """
+    ranking = "".join(str(value or "").upper().split())
+    if ranking in {"TIE", "="}:
+        return [list(labels)]
+    if not ranking:
+        return []
+    tiers = [tier.split("=") for tier in ranking.split(">")]
+    flattened = [label for tier in tiers for label in tier]
+    if (
+        any(not tier or any(not label for label in tier) for tier in tiers)
+        or len(flattened) != len(labels)
+        or len(set(flattened)) != len(flattened)
+        or set(flattened) != set(labels)
+    ):
+        expected = ">".join(labels)
+        raise ValueError(
+            f"Invalid ranking {value!r}; use every label exactly once "
+            f"(for example {expected} or {'='.join(labels)})"
+        )
+    return tiers
+
+
+def _ranking_points(tiers: list[list[str]]) -> dict[str, float]:
+    """Award fixed-sum Borda points, averaging positions occupied by ties."""
+    candidate_count = sum(len(tier) for tier in tiers)
+    points: dict[str, float] = {}
+    position = 0
+    for tier in tiers:
+        occupied = range(position, position + len(tier))
+        award = sum(candidate_count - 1 - index for index in occupied) / len(tier)
+        for label in tier:
+            points[label] = award
+        position += len(tier)
+    return points
+
+
 def import_blind_review(run_dir: str | Path, review_path: str | Path) -> dict:
     root = Path(run_dir)
     state, _manifest = load_run(root)
     key = _read_json(root / "blind_key.json")
     wins = {candidate["id"]: 0 for candidate in state["candidates"]}
+    points = {candidate["id"]: 0.0 for candidate in state["candidates"]}
+    first_place = {candidate["id"]: 0 for candidate in state["candidates"]}
     ties = 0
+    partial_ties = 0
     reviewed = 0
+    seen_segments: set[str] = set()
     with open(review_path, "r", encoding="utf-8-sig", newline="") as stream:
         for row in csv.DictReader(stream):
-            winner = str(row.get("winner") or "").strip().upper()
-            if not winner:
+            ranking_value = str(row.get("ranking") or "").strip()
+            legacy_winner = str(row.get("winner") or "").strip().upper()
+            if not ranking_value and not legacy_winner:
                 continue
             segment_id = str(row.get("segment_id") or "")
-            if winner in {"TIE", "="}:
-                ties += 1
-                reviewed += 1
-                continue
-            candidate_id = (key.get(segment_id) or {}).get(winner)
-            if candidate_id not in wins:
+            if segment_id in seen_segments:
+                raise ValueError(f"Duplicate reviewed segment {segment_id!r}")
+            labels_to_candidates = key.get(segment_id) or {}
+            labels = list(labels_to_candidates)
+            if not labels or any(
+                candidate_id not in wins
+                for candidate_id in labels_to_candidates.values()
+            ):
+                raise ValueError(f"Unknown reviewed segment {segment_id!r}")
+            try:
+                if ranking_value:
+                    tiers = _parse_blind_ranking(ranking_value, labels)
+                elif legacy_winner in {"TIE", "="}:
+                    tiers = [labels]
+                else:
+                    if legacy_winner not in labels_to_candidates:
+                        raise ValueError(f"Invalid winner {legacy_winner!r}")
+                    remaining = [
+                        label for label in labels if label != legacy_winner
+                    ]
+                    tiers = [[legacy_winner]]
+                    if remaining:
+                        tiers.append(remaining)
+            except ValueError as exc:
                 raise ValueError(
-                    f"Invalid winner {winner!r} for segment {segment_id!r}"
-                )
-            wins[candidate_id] += 1
+                    f"{exc} for segment {segment_id!r}"
+                ) from exc
+
+            row_points = _ranking_points(tiers)
+            for label, award in row_points.items():
+                points[labels_to_candidates[label]] += award
+            for label in tiers[0]:
+                first_place[labels_to_candidates[label]] += 1
+            if len(tiers[0]) == 1:
+                wins[labels_to_candidates[tiers[0][0]]] += 1
+            if len(tiers) == 1:
+                ties += 1
+            elif any(len(tier) > 1 for tier in tiers):
+                partial_ties += 1
+            seen_segments.add(segment_id)
             reviewed += 1
-    human = {"reviewed": reviewed, "ties": ties, "wins": wins, "imported_at": _utc_now()}
+    points = {
+        candidate_id: int(score) if score.is_integer() else score
+        for candidate_id, score in points.items()
+    }
+    human = {
+        "reviewed": reviewed,
+        "ties": ties,
+        "partial_ties": partial_ties,
+        "wins": wins,
+        "first_place": first_place,
+        "points": points,
+        "scoring": "fixed-sum-borda-average-v1",
+        "imported_at": _utc_now(),
+    }
     review_source = Path(review_path)
     canonical_review = root / "blind_review.csv"
     if review_source.resolve() != canonical_review.resolve():

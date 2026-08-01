@@ -668,7 +668,23 @@ class BlindReviewTests(unittest.TestCase):
     def tearDown(self):
         self.temporary.cleanup()
 
-    def test_export_randomizes_labels_and_import_resolves_hidden_winner(self):
+    def test_three_candidate_ranking_points_are_fixed_sum(self):
+        cases = {
+            "A>B>C": {"A": 2, "B": 1, "C": 0},
+            "A=B>C": {"A": 1.5, "B": 1.5, "C": 0},
+            "A>B=C": {"A": 2, "B": 0.5, "C": 0.5},
+            "A=B=C": {"A": 1, "B": 1, "C": 1},
+        }
+        for ranking, expected in cases.items():
+            with self.subTest(ranking=ranking):
+                tiers = evaluation._parse_blind_ranking(
+                    ranking, ["A", "B", "C"]
+                )
+                points = evaluation._ranking_points(tiers)
+                self.assertEqual(points, expected)
+                self.assertEqual(sum(points.values()), 3)
+
+    def test_export_randomizes_labels_and_import_resolves_hidden_ranking(self):
         review_path = evaluation.export_blind_review(
             self.run_dir, self.run_dir / "external" / "review.csv"
         )
@@ -683,7 +699,9 @@ class BlindReviewTests(unittest.TestCase):
                 "translation-sonnet", "translation-other",
             },
         )
-        rows[0]["winner"] = "B"
+        self.assertIn("ranking", rows[0])
+        self.assertNotIn("winner", rows[0])
+        rows[0]["ranking"] = "B>A=C>D"
         with open(review_path, "w", encoding="utf-8-sig", newline="") as stream:
             writer = csv.DictWriter(stream, fieldnames=rows[0].keys())
             writer.writeheader()
@@ -692,10 +710,79 @@ class BlindReviewTests(unittest.TestCase):
         expected = hidden["segment-1"]["B"]
         review = evaluation.import_blind_review(self.run_dir, review_path)
         self.assertEqual(review["wins"][expected], 1)
+        self.assertEqual(review["points"][expected], 3)
+        self.assertEqual(review["partial_ties"], 1)
         self.assertEqual(review["reviewed"], 1)
         self.assertIn(
-            ",B,", (self.run_dir / "blind_review.csv").read_text(encoding="utf-8-sig")
+            ",B>A=C>D,",
+            (self.run_dir / "blind_review.csv").read_text(encoding="utf-8-sig"),
         )
+
+    def test_import_ranking_averages_tied_positions_without_inflation(self):
+        review_path = evaluation.export_blind_review(self.run_dir)
+        with open(review_path, "r", encoding="utf-8-sig", newline="") as stream:
+            rows = list(csv.DictReader(stream))
+        rows[0]["ranking"] = "A=B>C>D"
+        with open(review_path, "w", encoding="utf-8-sig", newline="") as stream:
+            writer = csv.DictWriter(stream, fieldnames=rows[0].keys())
+            writer.writeheader()
+            writer.writerows(rows)
+
+        hidden = json.loads((self.run_dir / "blind_key.json").read_text(encoding="utf-8"))
+        review = evaluation.import_blind_review(self.run_dir, review_path)
+
+        scores = {
+            label: review["points"][candidate_id]
+            for label, candidate_id in hidden["segment-1"].items()
+        }
+        self.assertEqual(scores, {"A": 2.5, "B": 2.5, "C": 1, "D": 0})
+        self.assertEqual(sum(scores.values()), 6)
+        self.assertEqual(review["wins"], {
+            candidate_id: 0 for candidate_id in hidden["segment-1"].values()
+        })
+        self.assertEqual(review["partial_ties"], 1)
+
+    def test_import_rejects_incomplete_or_duplicate_ranking(self):
+        review_path = evaluation.export_blind_review(self.run_dir)
+        with open(review_path, "r", encoding="utf-8-sig", newline="") as stream:
+            rows = list(csv.DictReader(stream))
+        rows[0]["ranking"] = "A>B>B>D"
+        with open(review_path, "w", encoding="utf-8-sig", newline="") as stream:
+            writer = csv.DictWriter(stream, fieldnames=rows[0].keys())
+            writer.writeheader()
+            writer.writerows(rows)
+
+        with self.assertRaisesRegex(ValueError, "use every label exactly once"):
+            evaluation.import_blind_review(self.run_dir, review_path)
+
+    def test_import_accepts_legacy_winner_csv(self):
+        review_path = evaluation.export_blind_review(self.run_dir)
+        with open(review_path, "r", encoding="utf-8-sig", newline="") as stream:
+            rows = list(csv.DictReader(stream))
+        legacy_fields = [
+            "winner" if field == "ranking" else field
+            for field in rows[0].keys()
+        ]
+        legacy_row = {
+            ("winner" if field == "ranking" else field): value
+            for field, value in rows[0].items()
+        }
+        legacy_row["winner"] = "B"
+        with open(review_path, "w", encoding="utf-8-sig", newline="") as stream:
+            writer = csv.DictWriter(stream, fieldnames=legacy_fields)
+            writer.writeheader()
+            writer.writerow(legacy_row)
+
+        hidden = json.loads((self.run_dir / "blind_key.json").read_text(encoding="utf-8"))
+        review = evaluation.import_blind_review(self.run_dir, review_path)
+        scores = {
+            label: review["points"][candidate_id]
+            for label, candidate_id in hidden["segment-1"].items()
+        }
+
+        self.assertEqual(scores["B"], 3)
+        self.assertEqual({scores[label] for label in ("A", "C", "D")}, {1})
+        self.assertEqual(review["wins"][hidden["segment-1"]["B"]], 1)
 
     def test_coverage_reports_rows_excluded_by_candidate_validation(self):
         manifest_path = self.run_dir / "manifest.json"

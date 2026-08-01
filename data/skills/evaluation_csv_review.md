@@ -14,8 +14,7 @@ final report.
 ## Preserve the blind
 
 - Judge only the randomized candidate columns in the CSV.
-- Do not open other files to discover which model
-  produced a candidate.
+- Do not open `blind_key.json` or other files to discover which model produced a candidate.
 - Do not infer or speculate about model identity from writing style.
 - Candidate labels may be shuffled independently on every row.
 
@@ -23,7 +22,7 @@ final report.
 
 Read the CSV as UTF-8 with BOM support. It contains identifying/context columns such as
 `segment_id`, `scene_id`, `stratum`, and Japanese `source`; randomized candidate columns such as
-`A`, `B`, and `C`; followed by `winner` and `notes`.
+`A`, `B`, and `C`; followed by `ranking` and `notes`.
 
 Review every row. Compare each candidate directly with the Japanese source and use the limited
 scene/stratum metadata only as supporting context. Rank candidates in this order:
@@ -39,21 +38,27 @@ equivalent.
 
 For each row:
 
-- Put exactly one randomized candidate label in `winner` when it is clearly best.
-- Put `TIE` when candidates are genuinely equivalent or the available context cannot support a
-  defensible distinction.
+- Put every randomized candidate label in `ranking`, ordered best to worst with `>`.
+  For three candidates, a strict ranking looks like `A>B>C`.
+- Use `=` only for candidates that are genuinely equivalent. Examples: `A=B>C` for a tied
+  best pair, `A>B=C` for a tied lower pair, and `A=B=C` when all candidates are equivalent or
+  the available context cannot support a defensible distinction.
+- Include every candidate label exactly once in each non-empty ranking.
 - Add a short, evidence-based `notes` explanation. Avoid generic comments such as "sounds better."
 - Never change source text, candidate text, identifiers, column order, or any other cell.
 
 Create a sibling CSV whose filename ends in `.ai-reviewed.csv`; do not overwrite the original.
 Preserve UTF-8 encoding, quoting, embedded newlines, and every row. Re-open the written file and
-verify that every non-empty `winner` is either a candidate-column label or `TIE`, and that the row
-count and all protected columns exactly match the source CSV.
+verify that every non-empty `ranking` contains every candidate-column label exactly once using
+only `>` and `=`, and that the row count and all protected columns exactly match the source CSV.
 
 Finally report:
 
 - The reviewed output path.
-- Total rows, wins per randomized label, and ties.
+- Total rows, fixed-sum ranking points per randomized label, unique first-place finishes,
+  partial ties, and full ties. For three candidates, score strict ranks as 2/1/0 and average
+  the occupied points for tied ranks (`A=B>C` gives 1.5/1.5/0; `A>B=C` gives 2/0.5/0.5;
+  `A=B=C` gives 1/1/1).
 - Any rows you could not judge safely.
 - The explicit warning that this AI review may be biased and should be confirmed by a qualified
   human reviewer before making a high-stakes model choice.
