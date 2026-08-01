@@ -595,6 +595,15 @@ def redownload_batch(batch_id: str) -> dict:
     if not custom_ids:
         raise ValueError(f"Batch {batch_id} has no stored custom_ids - cannot redownload")
 
+    # A manual redownload activates exactly this provider batch. Validate any
+    # existing recovery document before contacting the provider so corrupt
+    # data is never silently replaced, then replace (rather than merge) the
+    # active result set below. Cache keys deliberately do not include a model,
+    # so merging can otherwise retain another model's result for a request
+    # that errored or was absent in this batch.
+    with _batch_file_lock():
+        _read_batch_file(BATCH_RESULTS_FILE, strict=True)
+
     provider = entry.get("provider") or "anthropic"
     client = _client_for_entry(entry)
     status_info = provider_retrieve_batch(provider, batch_id, client=client)
@@ -612,15 +621,15 @@ def redownload_batch(batch_id: str) -> dict:
 
     with T.BATCH_LOCK:
         with _batch_file_lock():
-            merged = _read_batch_file(BATCH_RESULTS_FILE)
-            merged.update(results)
-            _write_batch_file(BATCH_RESULTS_FILE, merged)
+            _read_batch_file(BATCH_RESULTS_FILE, strict=True)
+            _write_batch_file(BATCH_RESULTS_FILE, results)
             # Activate fetched state without re-submit; keep custom_ids in history.
             _write_batch_file(
                 BATCH_STATE_FILE,
                 {
                     "status": "fetched", "batch_ids": [batch_id], "batches": [],
                     "provider": provider, "model": model,
+                    "result_keys": sorted(results),
                 },
             )
             # Queue is no longer needed for consume.
@@ -657,27 +666,28 @@ def activate_for_resume(batch_id: str) -> str:
     custom_ids = dict(entry.get("custom_ids") or {})
 
     if status in (STATUS_FETCHED, STATUS_ENDED, STATUS_CONSUMED):
-        # Prefer local results; redownload if missing.
+        # Reuse results only when the active state explicitly proves ownership.
+        # Older state files have no result_keys marker and are intentionally
+        # redownloaded: cache keys are model-independent, so a merely non-empty
+        # result file cannot identify the provider batch that produced it.
         with _batch_file_lock():
-            results = _read_batch_file(BATCH_RESULTS_FILE)
-        if not results:
+            results = _read_batch_file(BATCH_RESULTS_FILE, strict=True)
+            active_state = _read_batch_file(BATCH_STATE_FILE, strict=True)
+        active_ids = set(active_state.get("batch_ids") or [])
+        recorded_keys = active_state.get("result_keys")
+        owns_results = (
+            active_state.get("status") == "fetched"
+            and batch_id in active_ids
+            and isinstance(recorded_keys, list)
+            and set(str(key) for key in recorded_keys) == set(results)
+        )
+        if not owns_results:
             if status == STATUS_CONSUMED:
                 raise ValueError(
-                    f"Batch {batch_id} was already consumed and local results are gone. "
+                    f"Batch {batch_id} was already consumed and its owned local results are gone. "
                     "Use Redownload first."
                 )
             redownload_batch(batch_id)
-        else:
-            with BATCH_LOCK:
-                with _batch_file_lock():
-                    _write_batch_file(
-                        BATCH_STATE_FILE,
-                        {
-                            "status": "fetched", "batch_ids": [batch_id], "batches": [],
-                            "provider": entry.get("provider") or "anthropic",
-                            "model": entry.get("model") or "",
-                        },
-                    )
         return "fetched"
 
     if status in (STATUS_SUBMITTED, STATUS_CANCELING, STATUS_ENDED):

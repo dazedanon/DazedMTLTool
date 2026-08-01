@@ -508,6 +508,10 @@ class RedownloadTests(BatchHistoryTestBase):
         client = mock.MagicMock()
         client.messages.batches.retrieve.return_value = fake_batch
         client.messages.batches.results.return_value = [row, row2]
+        T._write_batch_file(
+            T.BATCH_RESULTS_FILE,
+            {"stale-model-key": {"text": "wrong model"}},
+        )
 
         with mock.patch.object(BH, "_get_anthropic_client", return_value=client):
             with mock.patch.object(BH, "getPricingConfig", return_value={"inputAPICost": 3.0, "outputAPICost": 15.0}):
@@ -517,13 +521,34 @@ class RedownloadTests(BatchHistoryTestBase):
         results = T._read_batch_file(T.BATCH_RESULTS_FILE)
         self.assertIn("keyA", results)
         self.assertIn("keyB", results)
+        self.assertNotIn("stale-model-key", results)
         self.assertEqual(results["keyA"]["text"], '{"Line1":"Hi"}')
         state = T._read_batch_file(T.BATCH_STATE_FILE)
         self.assertEqual(state.get("status"), "fetched")
+        self.assertEqual(set(state.get("result_keys") or []), {"keyA", "keyB"})
         self.assertEqual(T.batchRunState(), "fetched")
         entry = BH.read_history()["batches"][0]
         self.assertEqual(entry["status"], BH.STATUS_FETCHED)
         self.assertEqual(entry["custom_ids"], custom_ids)
+
+    def test_redownload_preserves_corrupt_existing_results(self):
+        BH.upsert_history_entry(
+            "msgbatch_corrupt",
+            status=BH.STATUS_ENDED,
+            custom_ids={"req-1": "key-1"},
+        )
+        T.BATCH_RESULTS_FILE.write_text("{truncated", encoding="utf-8")
+
+        with (
+            self.assertRaises(T.BatchFileCorruptionError),
+            mock.patch.object(BH, "provider_retrieve_batch") as retrieve,
+        ):
+            BH.redownload_batch("msgbatch_corrupt")
+
+        retrieve.assert_not_called()
+        self.assertEqual(
+            T.BATCH_RESULTS_FILE.read_text(encoding="utf-8"), "{truncated"
+        )
 
 
 class CancelTests(BatchHistoryTestBase):
@@ -640,6 +665,10 @@ class SplitFetchAccountingTests(BatchHistoryTestBase):
                 key_name="Original Account",
                 custom_ids=item["custom_ids"],
             )
+        T._write_batch_file(
+            T.BATCH_RESULTS_FILE,
+            {"stale-key": {"text": "old model output"}},
+        )
 
         clients = []
         saved_client = object()
@@ -665,6 +694,10 @@ class SplitFetchAccountingTests(BatchHistoryTestBase):
         self.assertEqual(rows["batch-1"]["actual_cost"], 0.1)
         self.assertEqual(rows["batch-2"]["actual_cost"], 0.3)
         self.assertEqual(clients, [saved_client, saved_client])
+        results = T._read_batch_file(T.BATCH_RESULTS_FILE)
+        self.assertEqual(set(results), {"k1", "k2"})
+        state = T._read_batch_file(T.BATCH_STATE_FILE)
+        self.assertEqual(set(state.get("result_keys") or []), {"k1", "k2"})
 
 
 class BatchEstimateTests(BatchHistoryTestBase):
@@ -716,6 +749,58 @@ class ActivateResumeTests(BatchHistoryTestBase):
         disk = T._read_batch_file(T.BATCH_STATE_FILE)
         self.assertEqual(disk["batches"][0]["id"], "msgbatch_act")
         self.assertEqual(disk["batches"][0]["custom_ids"], custom_ids)
+
+    def test_activate_fetched_does_not_relabel_another_batch_results(self):
+        BH.upsert_history_entry(
+            "batch-b",
+            status=BH.STATUS_FETCHED,
+            custom_ids={"req-1": "shared-cache-key"},
+            model="model-b",
+        )
+        T._write_batch_file(
+            T.BATCH_RESULTS_FILE,
+            {"shared-cache-key": {"text": "model A result"}},
+        )
+        T._write_batch_file(
+            T.BATCH_STATE_FILE,
+            {
+                "status": "fetched",
+                "batch_ids": ["batch-a"],
+                "result_keys": ["shared-cache-key"],
+            },
+        )
+
+        with mock.patch.object(BH, "redownload_batch") as redownload:
+            state = BH.activate_for_resume("batch-b")
+
+        self.assertEqual(state, "fetched")
+        redownload.assert_called_once_with("batch-b")
+
+    def test_activate_fetched_reuses_explicitly_owned_results(self):
+        BH.upsert_history_entry(
+            "batch-b",
+            status=BH.STATUS_FETCHED,
+            custom_ids={"req-1": "shared-cache-key"},
+            model="model-b",
+        )
+        T._write_batch_file(
+            T.BATCH_RESULTS_FILE,
+            {"shared-cache-key": {"text": "model B result"}},
+        )
+        T._write_batch_file(
+            T.BATCH_STATE_FILE,
+            {
+                "status": "fetched",
+                "batch_ids": ["batch-b"],
+                "result_keys": ["shared-cache-key"],
+            },
+        )
+
+        with mock.patch.object(BH, "redownload_batch") as redownload:
+            state = BH.activate_for_resume("batch-b")
+
+        self.assertEqual(state, "fetched")
+        redownload.assert_not_called()
 
 
 if __name__ == "__main__":

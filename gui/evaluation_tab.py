@@ -1729,7 +1729,12 @@ class EvaluationTab(QWidget):
         set_status_text(self.status_label, "Starting evaluation requests…", "info")
 
         def task(log):
-            return evaluation.submit_run(self.current_run_dir, credentials, log)
+            return evaluation.submit_run(
+                self.current_run_dir,
+                credentials,
+                log,
+                should_stop=lambda: QThread.currentThread().isInterruptionRequested(),
+            )
 
         def done(updated):
             relocated = evaluation.locate_run(

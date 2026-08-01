@@ -1557,6 +1557,18 @@ def export_run_archive(
             and (root / result_file).is_file()
         ):
             relative_files.append(result_file)
+        candidate_id = str(candidate.get("id") or "")
+        live_checkpoint = Path("results") / f"{candidate_id}.live.partial.json"
+        if (
+            candidate.get("status") == "running_live"
+            and bool(re.fullmatch(r"[A-Za-z0-9._-]+", candidate_id))
+            and candidate_id not in {".", ".."}
+            and (root / live_checkpoint).is_file()
+        ):
+            # Active live evaluations are intentionally exportable. Preserve
+            # their paid-request checkpoint so an imported run resumes only
+            # the unfinished requests instead of replaying completed calls.
+            relative_files.append(live_checkpoint)
 
     metadata = {
         "archive_version": EVALUATION_ARCHIVE_VERSION,
@@ -1844,11 +1856,17 @@ def _complete_candidate(
     errors: list, usage: dict,
 ) -> dict:
     """Process either live or batch output through one scoring path."""
+    candidate_id = str(candidate.get("id") or "")
+    if (
+        not re.fullmatch(r"[A-Za-z0-9._-]+", candidate_id)
+        or candidate_id in {".", ".."}
+    ):
+        raise ValueError(f"Unsafe evaluation candidate id {candidate_id!r}")
     processed, summary = _process_results(manifest, raw_results, errors)
     summary["usage"] = usage
     summary["actual_cost_usd"] = _price_usage(candidate, usage)
     summary["stability"] = _stability_score(manifest, processed)
-    result_path = root / "results" / f"{candidate['id']}.json"
+    result_path = root / "results" / f"{candidate_id}.json"
     _atomic_write_json(result_path, {
         "candidate_id": candidate["id"],
         "model": candidate["model"],
@@ -1890,11 +1908,19 @@ def _run_completion_status(candidates: list[dict]) -> str:
 def _execute_live_candidate(
     root: Path, state: dict, manifest: dict, candidate: dict,
     requests: dict[str, dict], secret: str, log: Callable[[str], None],
-) -> None:
+    should_stop: Callable[[], bool] | None = None,
+) -> tuple[bool, Path]:
     client, _google_client = _clients(candidate, secret)
-    raw_results: dict[str, dict] = {}
-    errors: list[tuple[str, str]] = []
-    usage = {
+    candidate_id = str(candidate.get("id") or "")
+    if (
+        not re.fullmatch(r"[A-Za-z0-9._-]+", candidate_id)
+        or candidate_id in {".", ".."}
+    ):
+        raise ValueError(f"Unsafe evaluation candidate id {candidate_id!r}")
+    checkpoint_path = (
+        root / "results" / f"{candidate_id}.live.partial.json"
+    )
+    empty_usage = {
         "input_tokens": 0,
         "output_tokens": 0,
         "cache_read_input_tokens": 0,
@@ -1902,10 +1928,73 @@ def _execute_live_candidate(
         "thinking_tokens": 0,
     }
     executions = manifest["executions"]
+    execution_ids = {execution["id"] for execution in executions}
+    raw_results: dict[str, dict] = {}
+    errors: list[list[str]] = []
+    usage = dict(empty_usage)
+    if checkpoint_path.is_file():
+        checkpoint = _read_json(checkpoint_path)
+        if checkpoint.get("candidate_id") != candidate["id"]:
+            raise ValueError(
+                f"Live evaluation checkpoint does not belong to {candidate['label']}"
+            )
+        saved_results = checkpoint.get("raw_results")
+        saved_errors = checkpoint.get("errors")
+        saved_usage = checkpoint.get("usage")
+        if (
+            not isinstance(saved_results, dict)
+            or not isinstance(saved_errors, list)
+            or not isinstance(saved_usage, dict)
+        ):
+            raise ValueError(
+                f"Live evaluation checkpoint is corrupt: {checkpoint_path}"
+            )
+        raw_results = dict(saved_results)
+        errors = [
+            [str(item[0]), str(item[1])]
+            for item in saved_errors
+            if isinstance(item, (list, tuple)) and len(item) == 2
+        ]
+        if len(errors) != len(saved_errors):
+            raise ValueError(
+                f"Live evaluation checkpoint has invalid errors: {checkpoint_path}"
+            )
+        usage = {
+            key: int(saved_usage.get(key, 0) or 0)
+            for key in empty_usage
+        }
+    completed_ids = set(raw_results) | {item[0] for item in errors}
+    if not completed_ids.issubset(execution_ids):
+        raise ValueError(
+            f"Live evaluation checkpoint has unknown requests: {checkpoint_path}"
+        )
+
     total = len(executions)
-    log(f"Running {total} live requests for {candidate['label']}…")
+    candidate["status"] = "running_live"
+    candidate["live_completed_requests"] = len(completed_ids)
+    candidate["live_total_requests"] = total
+    candidate.setdefault("live_started_at", _utc_now())
+    state["status"] = "partially_submitted"
+    state["updated_at"] = _utc_now()
+    _atomic_write_json(root / "state.json", state)
+    if completed_ids:
+        log(
+            f"Resuming {candidate['label']} after {len(completed_ids)}/{total} "
+            "checkpointed live requests…"
+        )
+    else:
+        log(f"Running {total} live requests for {candidate['label']}…")
+
     for index, execution in enumerate(executions, start=1):
         execution_id = execution["id"]
+        if execution_id in completed_ids:
+            continue
+        if should_stop is not None and should_stop():
+            log(
+                f"{candidate['label']}: paused after "
+                f"{len(completed_ids)}/{total} live requests"
+            )
+            return False, checkpoint_path
         request = requests[execution["logical_request_id"]]
         try:
             result = batch_api.execute_live_request(
@@ -1931,22 +2020,41 @@ def _execute_live_candidate(
                 result.get("thinking_tokens", 0) or 0
             )
         except Exception as exc:
-            errors.append((execution_id, str(exc)[:500]))
+            errors.append([execution_id, str(exc)[:500]])
             log(f"{candidate['label']} live request {index}/{total} failed: {exc}")
-        if index == total or index % 5 == 0:
-            log(f"{candidate['label']}: {index}/{total} live requests finished")
+        completed_ids.add(execution_id)
+        candidate["live_completed_requests"] = len(completed_ids)
+        state["updated_at"] = _utc_now()
+        _atomic_write_json(checkpoint_path, {
+            "candidate_id": candidate["id"],
+            "updated_at": state["updated_at"],
+            "raw_results": raw_results,
+            "errors": errors,
+            "usage": usage,
+        })
+        _atomic_write_json(root / "state.json", state)
+        if len(completed_ids) == total or len(completed_ids) % 5 == 0:
+            log(
+                f"{candidate['label']}: {len(completed_ids)}/{total} "
+                "live requests finished"
+            )
 
     summary = _complete_candidate(
         root, manifest, candidate, raw_results, errors, usage
     )
+    candidate.pop("live_completed_requests", None)
+    candidate.pop("live_total_requests", None)
+    candidate.pop("live_started_at", None)
     log(
         f"{candidate['label']}: live results processed "
         f"({summary['valid_rate']:.1%} valid)"
     )
+    return True, checkpoint_path
 
 
 def submit_run(run_dir: str | Path, credentials: dict[str, str],
-               log: Callable[[str], None] | None = None) -> dict:
+               log: Callable[[str], None] | None = None,
+               should_stop: Callable[[], bool] | None = None) -> dict:
     root = Path(run_dir)
     state, manifest = load_run(root)
     if state["status"] not in {"prepared", "partially_submitted"}:
@@ -1961,11 +2069,19 @@ def submit_run(run_dir: str | Path, credentials: dict[str, str],
         if not secret and not candidate.get("keyless"):
             raise ValueError(f"No API key is available for {candidate['label']}")
         if candidate.get("execution", "batch") == "live":
-            _execute_live_candidate(
-                root, state, manifest, candidate, requests, secret, log
+            completed, checkpoint_path = _execute_live_candidate(
+                root, state, manifest, candidate, requests, secret, log,
+                should_stop=should_stop,
             )
             state["updated_at"] = _utc_now()
             _atomic_write_json(root / "state.json", state)
+            if completed:
+                try:
+                    checkpoint_path.unlink(missing_ok=True)
+                except OSError as exc:
+                    log(f"Could not remove completed live checkpoint: {exc}")
+            else:
+                break
             continue
 
         custom_ids: dict[str, str] = {}

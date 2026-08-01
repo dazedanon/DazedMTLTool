@@ -667,6 +667,78 @@ class EvaluationManifestTests(unittest.TestCase):
             self.assertEqual(execute.call_count, len(self.manifest["executions"]))
             submit.assert_not_called()
 
+    def test_live_evaluation_resumes_from_per_request_checkpoint(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            run_dir = Path(temporary)
+            candidate = {
+                "id": "candidate-1",
+                "provider": "openai",
+                "endpoint": "http://127.0.0.1:8000/v1",
+                "model": "local-model",
+                "label": "local-model",
+                "key_name": "Local",
+                "execution": "live",
+                "status": "prepared",
+                "estimate": {"cost_usd": 0.0},
+            }
+            evaluation._atomic_write_json(run_dir / "manifest.json", self.manifest)
+            evaluation._atomic_write_json(run_dir / "state.json", {
+                "run_id": "live-resume-test",
+                "status": "prepared",
+                "candidates": [candidate],
+            })
+
+            def response(_provider, params, **_kwargs):
+                required = params["response_format"]["json_schema"]["schema"]["required"]
+                return {
+                    "text": json.dumps({key: "English text" for key in required}),
+                    "prompt_tokens": 100,
+                    "completion_tokens": 20,
+                    "cache_read_input_tokens": 0,
+                    "cache_creation_input_tokens": 0,
+                    "thinking_tokens": 0,
+                }
+
+            with (
+                mock.patch.object(evaluation, "_clients", return_value=(object(), None)),
+                mock.patch.object(
+                    evaluation.batch_api,
+                    "execute_live_request",
+                    side_effect=response,
+                ) as execute,
+            ):
+                interrupted = evaluation.submit_run(
+                    run_dir,
+                    {"candidate-1": "local-key"},
+                    should_stop=lambda: execute.call_count >= 1,
+                )
+                self.assertEqual(interrupted["status"], "partially_submitted")
+                self.assertEqual(
+                    interrupted["candidates"][0]["live_completed_requests"], 1
+                )
+                checkpoint = (
+                    run_dir / "results" / "candidate-1.live.partial.json"
+                )
+                self.assertTrue(checkpoint.is_file())
+                archive_path = evaluation.export_run_archive(
+                    run_dir, run_dir / "live-partial.dazedeval"
+                )
+                with zipfile.ZipFile(archive_path) as archive:
+                    self.assertIn(
+                        "results/candidate-1.live.partial.json",
+                        archive.namelist(),
+                    )
+
+                completed = evaluation.submit_run(
+                    run_dir, {"candidate-1": "local-key"}
+                )
+
+            self.assertEqual(completed["status"], "completed")
+            self.assertEqual(
+                execute.call_count, len(self.manifest["executions"])
+            )
+            self.assertFalse(checkpoint.exists())
+
     def test_missing_provider_requests_reduce_validity(self):
         processed, summary = evaluation._process_results(self.manifest, {}, [])
         self.assertFalse(processed)

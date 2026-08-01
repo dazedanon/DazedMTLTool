@@ -1755,9 +1755,12 @@ def fetchTranslationBatches(batches=None):
 
     with BATCH_LOCK:
         with _batch_file_lock():
-            merged = _read_batch_file(BATCH_RESULTS_FILE)
-            merged.update(results)
-            _write_batch_file(BATCH_RESULTS_FILE, merged)
+            # Preserve corrupt recovery data and make the active result file an
+            # exact snapshot of these batch ids. Cache keys omit the model, so
+            # merging with a previous run can silently mix model outputs when
+            # the new provider result set has errors or omissions.
+            _read_batch_file(BATCH_RESULTS_FILE, strict=True)
+            _write_batch_file(BATCH_RESULTS_FILE, results)
             # Drop the queue; keep a lightweight fetched marker (ids for consume→history).
             # custom_ids stay in durable history - do not destroy recovery maps.
             try:
@@ -1775,6 +1778,7 @@ def fetchTranslationBatches(batches=None):
                     "provider": state.get("provider") or (
                         batch_list[0].get("provider") if batch_list else None
                     ),
+                    "result_keys": sorted(results),
                     "file_set": state.get("file_set") or [],
                     "cost_estimate": state.get("cost_estimate"),
                     "fetched_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),

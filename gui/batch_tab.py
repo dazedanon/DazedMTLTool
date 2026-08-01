@@ -247,10 +247,6 @@ class BatchTab(QWidget):
         else:
             self._update_button_states()
 
-    def _clear_worker(self):
-        if self.sender() is self._worker:
-            self._worker = None
-
     def _run_task(self, task, on_done=None):
         if self._worker is not None and self._worker.isRunning():
             QMessageBox.information(self, "Busy", "A batch operation is already running.")
@@ -259,23 +255,34 @@ class BatchTab(QWidget):
         self._set_busy(True)
         worker = _BatchOpsWorker(task, self.project_root)
         self._worker = worker
+        outcome = {}
 
-        def _finished(ok, msg, payload):
-            self._set_busy(False)
+        def _result(ok, msg, payload):
+            outcome.update(ok=ok, msg=msg, payload=payload)
             if msg:
                 self._append_log(msg)
+
+        def _thread_finished():
+            if self._worker is worker:
+                self._worker = None
+            self._set_busy(False)
             if on_done:
                 try:
-                    on_done(ok, msg, payload)
+                    on_done(
+                        bool(outcome.get("ok", False)),
+                        str(outcome.get("msg") or ""),
+                        outcome.get("payload"),
+                    )
                 except Exception as exc:
                     self._append_log(f"[BATCH] UI update failed: {exc}")
 
         worker.log.connect(self._append_log)
-        worker.done.connect(_finished)
-        # Release the reference only after run() returns. Clearing in the done
-        # slot aborts with "QThread: Destroyed while thread is still running".
+        worker.done.connect(_result)
+        # Completion callbacks may immediately start a refresh worker. Run them
+        # only after QThread.finished, when isRunning() is false and the old
+        # worker reference has been cleared.
+        worker.finished.connect(_thread_finished)
         worker.finished.connect(worker.deleteLater)
-        worker.finished.connect(self._clear_worker)
         worker.start()
 
     def _populate_table(self, entries: list[dict]):
