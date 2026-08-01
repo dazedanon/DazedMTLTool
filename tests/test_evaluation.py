@@ -240,6 +240,42 @@ class EvaluationContentSelectionTests(unittest.TestCase):
             Counter({"Map001.json": 20, "Map002.json": 20, "Map003.json": 20}),
         )
 
+    def test_sampling_uses_full_scene_chunks_instead_of_touching_every_file(self):
+        pool = []
+        for file_index in range(1, 21):
+            filename = f"Map{file_index:03d}.json"
+            scene_id = f"{filename}:event-1:page-1:call-1"
+            for line_index in range(1, 11):
+                pool.append({
+                    "id": f"{scene_id}:item-{line_index}",
+                    "scene_id": scene_id,
+                    "stratum": "event_text",
+                    "source_category": "map_events",
+                    "source": f"台詞{file_index}-{line_index}",
+                    "initial_history": [],
+                    "source_location": {
+                        "file": filename,
+                        "item": line_index,
+                    },
+                })
+
+        selected = evaluation.build_corpus(
+            ".",
+            target_segments=60,
+            sample_size=10,
+            content_selection={"preset": "events"},
+            _pool=pool,
+        )
+        grouped = evaluation._assign_review_samples(selected, pool, 10)
+        sample_sizes = Counter(
+            item["review_sample_id"] for item in grouped
+        ).values()
+
+        self.assertEqual(
+            len({item["source_location"]["file"] for item in selected}), 6
+        )
+        self.assertEqual(list(sample_sizes), [10] * 6)
+
     def test_game_fingerprint_changes_stable_order_between_games(self):
         first = [
             self._segment("Map001.json", index, "map_events", f"一作目{index}")

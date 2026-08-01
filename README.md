@@ -324,10 +324,13 @@ tree containing Map files, Common Events, Troops, Actors, Classes, Skills,
 Items, Weapons, Armors, Enemies, States, and map names. Custom mode can select
 individual `MapNNN.json` files and include or exclude control-code-heavy event
 lines; eligible Japanese-line counts are shown beside every available source.
-The resulting sample is balanced across scenes and files. Its deterministic
-ordering is seeded by a fingerprint of the selected game's corpus, so the same
-game and settings reproduce the same selection while a different game receives
-a different stable ordering. Each model gets the same source, system
+The resulting sample rotates across files and takes one contiguous same-scene
+chunk, up to **Lines per sample**, on each file's turn. This preserves useful
+dialogue context without letting one large map dominate or spreading the test
+into tiny allocations across every map. Its deterministic ordering is seeded by
+a fingerprint of the selected game's corpus, so the same game and settings
+reproduce the same selection while a different game receives a different stable
+ordering. Each model gets the same source, system
 prompt, matched glossary, previous Japanese source lines, output schema, and
 hidden consistency-check schedule. Prompt and glossary context are built by the
 normal translation engine from the selected game's `glossary.txt`,

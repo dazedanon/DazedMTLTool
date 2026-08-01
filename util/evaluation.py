@@ -570,13 +570,21 @@ def _balanced_take(items: Iterable[dict], count: int,
         filename = str((item.get("source_location") or {}).get("file") or "")
         groups[filename][item["scene_id"]].append(item)
     file_order = sorted(
-        groups, key=lambda filename: _sha256(f"{sampling_seed}:file:{filename}")
+        groups,
+        key=lambda filename: (
+            0 if any(
+                len(scene_items) >= per_scene
+                for scene_items in groups[filename].values()
+            ) else 1,
+            _sha256(f"{sampling_seed}:file:{filename}"),
+        ),
     )
     scene_order = {
         filename: sorted(
             groups[filename],
-            key=lambda scene: _sha256(
-                f"{sampling_seed}:file:{filename}:scene:{scene}"
+            key=lambda scene: (
+                0 if len(groups[filename][scene]) >= per_scene else 1,
+                _sha256(f"{sampling_seed}:file:{filename}:scene:{scene}"),
             ),
         )
         for filename in file_order
@@ -589,48 +597,31 @@ def _balanced_take(items: Iterable[dict], count: int,
     }
     while len(selected) < count:
         progressed = False
-        active_files = [
-            filename for filename in file_order
-            if any(
-                item_offsets[(filename, scene)] < len(groups[filename][scene])
-                for scene in scene_order[filename]
-            )
-        ]
-        if not active_files:
-            break
-        remaining = count - len(selected)
-        round_budget = min(
-            per_scene, (remaining + len(active_files) - 1) // len(active_files)
-        )
-        for filename in active_files:
+        for filename in file_order:
             scenes = scene_order[filename]
-            file_budget = min(round_budget, count - len(selected))
-            file_taken = 0
-            while file_taken < file_budget:
-                available_scene = None
-                for _attempt in range(len(scenes)):
-                    position = scene_positions[filename] % len(scenes)
-                    scene_positions[filename] += 1
-                    candidate = scenes[position]
-                    if (
-                        item_offsets[(filename, candidate)]
-                        < len(groups[filename][candidate])
-                    ):
-                        available_scene = candidate
-                        break
-                if available_scene is None:
+            available_scene = None
+            for _attempt in range(len(scenes)):
+                position = scene_positions[filename] % len(scenes)
+                scene_positions[filename] += 1
+                candidate = scenes[position]
+                if (
+                    item_offsets[(filename, candidate)]
+                    < len(groups[filename][candidate])
+                ):
+                    available_scene = candidate
                     break
-                offset = item_offsets[(filename, available_scene)]
-                scene_items = groups[filename][available_scene]
-                take = min(
-                    len(scene_items) - offset,
-                    file_budget - file_taken,
-                    count - len(selected),
-                )
-                selected.extend(scene_items[offset:offset + take])
-                item_offsets[(filename, available_scene)] += take
-                file_taken += take
-                progressed = progressed or take > 0
+            if available_scene is None:
+                continue
+            offset = item_offsets[(filename, available_scene)]
+            scene_items = groups[filename][available_scene]
+            take = min(
+                per_scene,
+                len(scene_items) - offset,
+                count - len(selected),
+            )
+            selected.extend(scene_items[offset:offset + take])
+            item_offsets[(filename, available_scene)] += take
+            progressed = progressed or take > 0
             if len(selected) >= count:
                 break
         if not progressed:
@@ -641,11 +632,14 @@ def _balanced_take(items: Iterable[dict], count: int,
 def build_corpus(files_dir: str | Path, *, target_segments: int = DEFAULT_SEGMENTS,
                  content_selection: dict | None = None,
                  sampling_seed: str | None = None,
+                 sample_size: int = DEFAULT_SAMPLE_SIZE,
                  _pool: list[dict] | None = None) -> list[dict]:
     """Build a deterministic, game-specific RPG Maker benchmark corpus."""
     root = Path(files_dir)
     if target_segments < 60:
         raise ValueError("Evaluation corpus must contain at least 60 segments")
+    if sample_size < 1:
+        raise ValueError("Sample size must be at least 1")
     pool = list(_pool) if _pool is not None else scan_corpus(root)
     selection = normalize_content_selection(content_selection)
     eligible = _filter_corpus(pool, selection)
@@ -667,23 +661,28 @@ def build_corpus(files_dir: str | Path, *, target_segments: int = DEFAULT_SEGMEN
         quotas["event_text"] = selected_target - sum(quotas.values())
         selected: list[dict] = []
         selected.extend(_balanced_take(
-            event_text, quotas["event_text"], sampling_seed=seed
+            event_text, quotas["event_text"], per_scene=sample_size,
+            sampling_seed=seed,
         ))
         selected.extend(_balanced_take(
-            database, quotas["database"], sampling_seed=seed
+            database, quotas["database"], per_scene=sample_size,
+            sampling_seed=seed,
         ))
         used = {item["id"] for item in selected}
         selected.extend(_balanced_take(
-            code, quotas["code_heavy"], excluded=used, sampling_seed=seed
+            code, quotas["code_heavy"], excluded=used,
+            per_scene=sample_size, sampling_seed=seed,
         ))
     else:
-        selected = _balanced_take(eligible, selected_target, sampling_seed=seed)
+        selected = _balanced_take(
+            eligible, selected_target, per_scene=sample_size, sampling_seed=seed
+        )
     if len(selected) < selected_target:
         used = {item["id"] for item in selected}
         selected.extend(
             _balanced_take(
                 eligible, selected_target - len(selected), excluded=used,
-                sampling_seed=seed,
+                per_scene=sample_size, sampling_seed=seed,
             )
         )
     return selected[:selected_target]
@@ -913,6 +912,7 @@ def build_manifest(files_dir: str | Path, *, target_segments: int = DEFAULT_SEGM
         target_segments=target_segments,
         content_selection=selection,
         sampling_seed=sampling_seed,
+        sample_size=batch_size,
         _pool=all_segments,
     )
     segments = _assign_review_samples(
