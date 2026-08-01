@@ -395,7 +395,7 @@ class EvaluationTab(QWidget):
         self.custom_target_spin.setValue(360)
         self.custom_target_spin.setSuffix(" lines")
         self.custom_sample_size_spin = QSpinBox()
-        self.custom_sample_size_spin.setRange(1, 30)
+        self.custom_sample_size_spin.setRange(1, 2_147_483_647)
         self.custom_sample_size_spin.setValue(evaluation.DEFAULT_SAMPLE_SIZE)
         self.custom_sample_size_spin.setSuffix(" lines")
         self.custom_repeated_samples_spin = QSpinBox()

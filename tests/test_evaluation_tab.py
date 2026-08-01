@@ -68,6 +68,9 @@ class EvaluationTabTests(unittest.TestCase):
         self.assertEqual(self.tab.budget_spin.value(), 10.0)
         self.assertEqual(self.tab.custom_target_spin.value(), 360)
         self.assertEqual(self.tab.custom_sample_size_spin.value(), 10)
+        self.assertEqual(
+            self.tab.custom_sample_size_spin.maximum(), 2_147_483_647
+        )
         self.assertEqual(self.tab.custom_repeated_samples_spin.value(), 12)
         self.assertEqual(self.tab.custom_repetitions_spin.value(), 3)
         self.assertFalse(self.tab.custom_target_spin.isEnabled())
