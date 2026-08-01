@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Durable Anthropic Message Batch history and spend-safe management ops.
+"""Durable provider Batch history and spend-safe management operations.
 
 Active run files (queue / state / results) still live in util.translation.
 This module keeps an append-only index so batch ids and custom_id maps survive
@@ -27,10 +27,16 @@ from util.translation import (
     _write_batch_file,
     getPricingConfig,
 )
+from util.batch_providers import (
+    cancel_batch as provider_cancel_batch,
+    download_results as provider_download_results,
+    get_client as get_provider_client,
+    retrieve_batch as provider_retrieve_batch,
+)
 
 BATCH_HISTORY_FILE = Path("log/batch_history.json")
 
-# Local lifecycle statuses (not 1:1 with Anthropic processing_status).
+# Local lifecycle statuses normalized across provider-specific API statuses.
 STATUS_QUEUED = "queued"
 STATUS_SUBMITTED = "submitted"
 STATUS_CANCELING = "canceling"
@@ -98,6 +104,7 @@ def upsert_history_entry(batch_id: str, **fields: Any) -> dict:
                     "updated_at": now,
                     "status": STATUS_SUBMITTED,
                     "model": "",
+                    "provider": "anthropic",
                     "request_count": 0,
                     "file_set": [],
                     "cost_estimate": None,
@@ -121,10 +128,11 @@ def record_submit(
     batches: list[dict],
     *,
     model: str = "",
+    provider: str = "anthropic",
     file_set: Optional[list] = None,
     cost_estimate: Optional[dict] = None,
 ) -> None:
-    """Record newly submitted Anthropic batches into durable history."""
+    """Record newly submitted provider batches into durable history."""
     file_set = list(file_set or [])
     for info in batches:
         bid = info.get("id")
@@ -135,6 +143,7 @@ def record_submit(
             bid,
             status=STATUS_SUBMITTED,
             model=model or (cost_estimate or {}).get("model") or "",
+            provider=info.get("provider") or provider,
             request_count=len(custom_ids),
             file_set=file_set,
             cost_estimate=copy.deepcopy(cost_estimate) if cost_estimate else None,
@@ -174,7 +183,7 @@ def mark_batches_consumed(batch_ids: Iterable[str]) -> None:
 
 
 def mark_batches_canceled(batch_ids: Iterable[str], *, api_status: str = "canceling") -> None:
-    local = STATUS_CANCELED if api_status == "ended" else STATUS_CANCELING
+    local = STATUS_CANCELED if api_status in ("ended", "cancelled") else STATUS_CANCELING
     for bid in batch_ids:
         upsert_history_entry(
             bid,
@@ -206,17 +215,14 @@ def list_local_batches(*, refresh_live: bool = False) -> list[dict]:
 
 
 def refresh_batch_status(batch_id: str) -> dict:
-    """Retrieve live Anthropic status and update the history row."""
-    client = _get_anthropic_client()
-    b = client.messages.batches.retrieve(batch_id)
-    api_status = getattr(b, "processing_status", None) or ""
-    counts = getattr(b, "request_counts", None)
-    counts_dict = None
-    if counts is not None:
-        counts_dict = {
-            k: getattr(counts, k, 0) or 0
-            for k in ("processing", "succeeded", "errored", "canceled", "expired")
-        }
+    """Retrieve live provider status and update the history row."""
+    history = read_history()
+    existing = _find_entry(history, batch_id) or {}
+    provider = existing.get("provider") or "anthropic"
+    client = _get_anthropic_client() if provider == "anthropic" else get_provider_client(provider)
+    normalized = provider_retrieve_batch(provider, batch_id, client=client)
+    api_status = normalized["api_status"]
+    counts_dict = normalized["counts"]
 
     entry = None
     with _batch_file_lock():
@@ -228,14 +234,18 @@ def refresh_batch_status(batch_id: str) -> dict:
     local_status = None
     if prev_status in (STATUS_FETCHED, STATUS_CONSUMED):
         local_status = prev_status
-    elif api_status == "in_progress":
+    elif api_status in ("in_progress", "validating", "finalizing"):
         local_status = STATUS_SUBMITTED
-    elif api_status == "canceling":
+    elif api_status in ("canceling", "cancelling"):
         local_status = STATUS_CANCELING
-    elif api_status == "ended":
-        # Ended after cancel vs normal end - inspect counts when available.
-        if counts_dict and (counts_dict.get("canceled") or 0) > 0 and (counts_dict.get("succeeded") or 0) == 0:
+    elif normalized["ended"]:
+        if api_status == "cancelled" or (
+            counts_dict and (counts_dict.get("canceled") or 0) > 0
+            and (counts_dict.get("succeeded") or 0) == 0
+        ):
             local_status = STATUS_CANCELED
+        elif api_status == "failed":
+            local_status = STATUS_ERROR
         else:
             local_status = STATUS_ENDED
 
@@ -253,19 +263,22 @@ def cancel_batches(batch_ids: Iterable[str]) -> list[dict]:
 
     Also updates active batch_state so resume does not keep polling canceled ids.
     """
-    client = _get_anthropic_client()
     results = []
     canceled_active = []
+    history = read_history()
     for bid in batch_ids:
         try:
-            b = client.messages.batches.retrieve(bid)
-            api_status = getattr(b, "processing_status", "") or ""
+            entry = _find_entry(history, bid) or {}
+            provider = entry.get("provider") or "anthropic"
+            client = _get_anthropic_client() if provider == "anthropic" else get_provider_client(provider)
+            status_info = provider_retrieve_batch(provider, bid, client=client)
+            api_status = status_info["api_status"]
             if api_status not in CANCELABLE_API:
                 results.append({"id": bid, "ok": False, "error": f"not cancelable ({api_status})"})
                 upsert_history_entry(bid, notes=f"cancel skipped: {api_status}", api_status=api_status)
                 continue
-            b = client.messages.batches.cancel(bid)
-            new_status = getattr(b, "processing_status", "canceling") or "canceling"
+            canceled = provider_cancel_batch(provider, bid, client=client)
+            new_status = canceled["api_status"]
             mark_batches_canceled([bid], api_status=new_status)
             canceled_active.append(bid)
             results.append({"id": bid, "ok": True, "api_status": new_status})
@@ -321,7 +334,7 @@ def _usage_from_message(u) -> dict:
     }
 
 
-def _price_usage(usage: dict, model: str) -> float:
+def _price_usage(usage: dict, model: str, provider: str = "anthropic") -> float:
     """Price real batch usage with cache multipliers and 50% batch discount."""
     pricing = getPricingConfig(model)
     br = pricing["inputAPICost"] / 1_000_000
@@ -362,28 +375,31 @@ def _sum_usage_from_results(client, batch_id: str, custom_ids: dict) -> tuple[di
 
 
 def usage_for_batch(batch_id: str, model: Optional[str] = None) -> dict:
-    """Sum real billed tokens from Anthropic results and persist onto history."""
+    """Sum real billed tokens from provider results and persist onto history."""
     history = read_history()
     entry = _find_entry(history, batch_id)
     if entry is None:
         raise ValueError(f"Unknown batch id (not in local history): {batch_id}")
 
-    client = _get_anthropic_client()
-    # Ensure batch has ended before streaming results.
-    b = client.messages.batches.retrieve(batch_id)
-    api_status = getattr(b, "processing_status", "") or ""
-    if api_status != "ended":
+    provider = entry.get("provider") or "anthropic"
+    client = _get_anthropic_client() if provider == "anthropic" else get_provider_client(provider)
+    status_info = provider_retrieve_batch(provider, batch_id, client=client)
+    api_status = status_info["api_status"]
+    if not status_info["ended"]:
         raise ValueError(f"Batch {batch_id} is not ended (status={api_status})")
 
     custom_ids = dict(entry.get("custom_ids") or {})
-    usage, succeeded, errored = _sum_usage_from_results(client, batch_id, custom_ids)
+    _results, errors, usage = download_batch_results(
+        batch_id, custom_ids, client=client, provider=provider
+    )
+    succeeded, errored = len(_results), len(errors)
     use_model = model or entry.get("model") or ""
-    cost = _price_usage(usage, use_model) if use_model else None
+    cost = _price_usage(usage, use_model, provider) if use_model else None
     updated = upsert_history_entry(
         batch_id,
         usage=usage,
         actual_cost=cost,
-        api_status="ended",
+        api_status=api_status,
         notes=f"usage ok={succeeded} err={errored}",
     )
     return {
@@ -422,11 +438,14 @@ def download_batch_results(
     custom_ids: dict,
     *,
     client=None,
+    provider="anthropic",
 ) -> tuple[dict, list, dict]:
     """Download one ended batch into a cache-key -> result map.
 
     Returns (results, errored_list, usage_totals).
     """
+    if provider != "anthropic":
+        return provider_download_results(provider, batch_id, custom_ids, client=client)
     client = client or _get_anthropic_client()
     results, errored = {}, []
     usage_totals = {
@@ -470,15 +489,18 @@ def redownload_batch(batch_id: str) -> dict:
     if not custom_ids:
         raise ValueError(f"Batch {batch_id} has no stored custom_ids - cannot redownload")
 
-    client = _get_anthropic_client()
-    b = client.messages.batches.retrieve(batch_id)
-    api_status = getattr(b, "processing_status", "") or ""
-    if api_status != "ended":
+    provider = entry.get("provider") or "anthropic"
+    client = _get_anthropic_client() if provider == "anthropic" else get_provider_client(provider)
+    status_info = provider_retrieve_batch(provider, batch_id, client=client)
+    api_status = status_info["api_status"]
+    if not status_info["ended"]:
         raise ValueError(f"Batch {batch_id} is not ended (status={api_status})")
 
-    results, errored, usage = download_batch_results(batch_id, custom_ids, client=client)
+    results, errored, usage = download_batch_results(
+        batch_id, custom_ids, client=client, provider=provider
+    )
     model = entry.get("model") or ""
-    cost = _price_usage(usage, model) if model else None
+    cost = _price_usage(usage, model, provider) if model else None
 
     import util.translation as T
 
@@ -490,7 +512,10 @@ def redownload_batch(batch_id: str) -> dict:
             # Activate fetched state without re-submit; keep custom_ids in history.
             _write_batch_file(
                 BATCH_STATE_FILE,
-                {"status": "fetched", "batch_ids": [batch_id], "batches": []},
+                {
+                    "status": "fetched", "batch_ids": [batch_id], "batches": [],
+                    "provider": provider, "model": model,
+                },
             )
             # Queue is no longer needed for consume.
             try:
@@ -541,7 +566,11 @@ def activate_for_resume(batch_id: str) -> str:
                 with _batch_file_lock():
                     _write_batch_file(
                         BATCH_STATE_FILE,
-                        {"status": "fetched", "batch_ids": [batch_id], "batches": []},
+                        {
+                            "status": "fetched", "batch_ids": [batch_id], "batches": [],
+                            "provider": entry.get("provider") or "anthropic",
+                            "model": entry.get("model") or "",
+                        },
                     )
         return "fetched"
 
@@ -553,17 +582,22 @@ def activate_for_resume(batch_id: str) -> str:
                 batches = list(state.get("batches") or [])
                 existing = {b.get("id") for b in batches}
                 if batch_id not in existing:
-                    batches.append({"id": batch_id, "custom_ids": custom_ids})
+                    batches.append({
+                        "id": batch_id,
+                        "custom_ids": custom_ids,
+                        "provider": entry.get("provider") or "anthropic",
+                    })
                 state = {
                     "batches": batches,
                     "submitted_at": state.get("submitted_at") or entry.get("created_at"),
                     "model": entry.get("model") or state.get("model") or "",
+                    "provider": entry.get("provider") or state.get("provider") or "anthropic",
                     "file_set": entry.get("file_set") or state.get("file_set") or [],
                     "cost_estimate": entry.get("cost_estimate") or state.get("cost_estimate"),
                 }
                 _write_batch_file(BATCH_STATE_FILE, state)
         if status == STATUS_ENDED:
-            # Already ended on Anthropic - fetch path via resume submitted → poll sees ended.
+            # Already ended at the provider; poll will immediately proceed to fetch.
             return "submitted"
         return "submitted"
 

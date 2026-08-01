@@ -6,7 +6,7 @@ An AI-powered game translation tool with a GUI. Translate RPG Maker, Ren'Py, Tyr
 
 - **[Sinflower](https://github.com/Sinflower)** — [RV2JSON](https://github.com/Sinflower/RV2JSON) — enables RPGMaker Ace games to be translated the same way as MV/MZ by converting rvdata2 files to JSON and back. A curated copy is bundled offline in `util/ace/offline/` and updates with DazedTL.
 - **Sakura & Kao_SSS** — TL Inspector (`util/tl_inspector/`) — in-game translation source inspector and live-edit plugin for RPG Maker MV/MZ playtesting.
-- **Len** — [Forge](https://gitgud.io/zero64801/forge-mvmz) MV/MZ playtest plugin (`util/forge/`), Mistral API support (provider integration and adaptive rate limiting), and batch translation mode (Anthropic Message Batches API).
+- **Len** — [Forge](https://gitgud.io/zero64801/forge-mvmz) MV/MZ playtest plugin (`util/forge/`), Mistral API support (provider integration and adaptive rate limiting), and batch translation mode.
 
 ## Table of Contents
 
@@ -18,7 +18,7 @@ An AI-powered game translation tool with a GUI. Translate RPG Maker, Ren'Py, Tyr
 - [Glossary & Prompt](#glossary--prompt)
 - [Tips](#tips)
 - [Mistral API (free tier)](#mistral-api-free-tier)
-- [Batch Translation (Anthropic, 50% off)](#batch-translation-anthropic-50-off)
+- [Batch Translation (Claude, GPT, and Gemini)](#batch-translation-claude-gpt-and-gemini)
 - [Folder Structure](#folder-structure)
 - [Finding Untranslated Text (Snipping Tool OCR)](#finding-untranslated-text-snipping-tool-ocr)
 - [RPG Maker Translation Workflow](#rpg-maker-translation-workflow)
@@ -245,23 +245,26 @@ model="mistral-medium-3.5"
 
 When the API URL points at `api.mistral.ai`, requests are paced automatically. Mistral enforces a **per-minute request limit** and a **per-minute token limit**, both **per-model** — e.g. `mistral-medium` allows 25 req/min while `ministral-3b` allows 750/min. The limiter reads both limits from the live `x-ratelimit-*` response headers, spaces requests so it never overruns the per-minute budget, and honours `Retry-After` on 429s. Override the seeds with `mistralReqPerSec`, `mistralTokPerMin`, and `mistralTokenHeadroom` in `.env` if needed (rarely).
 
-> **Note:** Batch mode (50% off) is Anthropic/Claude only. Mistral runs live translation through the rate limiter above.
+> **Note:** Batch mode supports native Anthropic Claude, OpenAI GPT, and Google Gemini routes. Mistral and unrecognized OpenAI-compatible endpoints run live translation.
 
 ---
 
-## Batch Translation (Anthropic, 50% off)
+## Batch Translation (Claude, GPT, and Gemini)
 
 Batch mode — see [Credits](#credits).
 
-When using a Claude model, the CLI offers a third mode that translates through the
-[Anthropic Message Batches API](https://platform.claude.com/docs/en/build-with-claude/batch-processing.md)
-— every token (input, output, and prompt-cache reads/writes) is billed at **50% of the live price**.
+When using a supported native Claude, GPT, or Gemini route, the CLI offers a third mode
+that translates through the provider's asynchronous Batch API—typically at **50% of the live price**.
 Batches usually finish within an hour (24h worst case), so use it for large jobs where you don't
 need results immediately.
 
+Provider references: [Anthropic Message Batches](https://platform.claude.com/docs/en/build-with-claude/batch-processing),
+[OpenAI Batch API](https://developers.openai.com/api/docs/guides/batch), and
+[Gemini Batch API (OpenAI compatibility)](https://ai.google.dev/gemini-api/docs/openai#batch).
+
 ```
 python start.py
- -> 3. Batch Translate (Anthropic Batches API, 50% off)
+ -> 3. Batch Translate (Provider Batch API, typically 50% off)
 ```
 
 How it works (all engine modules are supported automatically):

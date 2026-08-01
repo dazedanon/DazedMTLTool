@@ -116,6 +116,22 @@ def isClaudeNative(model, api_url=None):
     return isClaudeModel(model) and (not live_api or "anthropic" in live_api.lower())
 
 
+def getBatchProvider(model=None, api_url=None, api_provider=None):
+    """Return the configured asynchronous batch backend, if supported."""
+    from util.batch_providers import detect_batch_provider
+
+    return detect_batch_provider(
+        model if model is not None else os.getenv("model", ""),
+        api_url=api_url,
+        api_provider=api_provider,
+    )
+
+
+def isBatchSupported(model=None, api_url=None, api_provider=None):
+    """Whether Batch Translate can preserve the normal request semantics."""
+    return getBatchProvider(model, api_url, api_provider) is not None
+
+
 def isMistralAPI():
     """True when requests go to the Mistral platform API (la Plateforme).
 
@@ -817,7 +833,7 @@ def set_var_translations_batch(pairs):
         _save_var_map()
 
 
-# ===== Anthropic Message Batches (50% off all token usage) =====
+# ===== Asynchronous provider batches (50% off all token usage) =====
 # Batch integration by Len — two-pass collect/consume flow; see README Credits.
 # Batch translation is a two-pass flow driven by the batch phase (kept in the
 # BATCH_PHASE env var so GUI subprocesses inherit it):
@@ -833,7 +849,8 @@ BATCH_STATE_FILE   = Path("log/batch_state.json")
 BATCH_RESULTS_FILE = Path("log/batch_results.json")
 BATCH_LOCK_FILE    = Path("log/batch_files.lock")
 BATCH_LOCK = threading.RLock()
-# API limits are 100,000 requests / 256 MB per batch; stay safely under both.
+# Legacy public constants retained for extensions/tests. Submission uses the
+# stricter provider-specific limits from util.batch_providers.
 BATCH_MAX_REQUESTS = 100_000
 BATCH_MAX_BYTES    = 200 * 1024 * 1024
 
@@ -926,7 +943,7 @@ def peek_cached_translation(payload, language, cache_context=None):
     return entry
 
 
-def queue_batch_request(payload, language, params, cache_context=None):
+def queue_batch_request(payload, language, params, cache_context=None, provider=None):
     """Queue one Batches API request during the collect pass.
 
     Deduped by the same key the translation cache uses, so identical payloads
@@ -935,7 +952,12 @@ def queue_batch_request(payload, language, params, cache_context=None):
     """
     key = get_cache_key(payload, language, cache_context)
     with BATCH_LOCK:
-        _batch_queue_pending[key] = {"payload": payload, "language": language, "params": params}
+        _batch_queue_pending[key] = {
+            "payload": payload,
+            "language": language,
+            "params": params,
+            "provider": provider or getBatchProvider(params.get("model", "")),
+        }
     return key
 
 
@@ -1010,7 +1032,7 @@ def batchRunState():
     """Resume detector for an interrupted batch run.
 
     Returns:
-      'submitted' - Anthropic batch(es) in flight (or ended but not fetched)
+      'submitted' - provider batch(es) in flight (or ended but not fetched)
       'fetched'   - results on disk waiting for consume
       'queued'    - collect finished / submit declined; queue still on disk
       None        - nothing to resume
@@ -1064,14 +1086,48 @@ def _get_anthropic_client():
     return anthropic.Anthropic(api_key=key)
 
 
+def _estimate_openai_cache_reads(prompt_token_sequences):
+    """Estimate automatic OpenAI prefix-cache hits for an ordered request set.
+
+    OpenAI caches exact prompt prefixes automatically once they reach 1,024
+    tokens and reports hits in 128-token increments.  Track fingerprints at
+    those boundaries so the estimate stays linear in the number of prompt
+    tokens instead of comparing every request with every earlier request.
+
+    This is deliberately an estimate: a matching prefix must also be routed to
+    a machine holding that prefix, so the no-cache figure remains the safe
+    upper bound shown to the user.
+    """
+    import hashlib
+
+    seen = set()
+    cached_tokens = 0
+    for tokens in prompt_token_sequences:
+        hasher = hashlib.blake2b(digest_size=16)
+        fingerprints = []
+        request_cached_tokens = 0
+        for index, token in enumerate(tokens, 1):
+            hasher.update(int(token).to_bytes(4, "little", signed=False))
+            if index >= 1024 and index % 128 == 0:
+                fingerprint = (index, hasher.digest())
+                fingerprints.append(fingerprint)
+                if fingerprint in seen:
+                    request_cached_tokens = index
+        cached_tokens += request_cached_tokens
+        seen.update(fingerprints)
+    return cached_tokens
+
+
 def estimateBatchCost(model=None):
     """Print a cost estimate for the queued batch requests and return it.
 
-    Cached-prefix accounting mirrors what Anthropic bills: each distinct cached
+    For Claude, cached-prefix accounting mirrors what Anthropic bills: each distinct cached
     prefix is written once (2x input rate at the 1h TTL) and read by every other
     request that shares it (0.10x); everything is then halved by the batch
     discount. Cache hits inside a batch are best-effort, so the no-cache batch
-    figure is the worst-case bound.
+    figure is the worst-case bound. OpenAI automatic cache reuse is estimated
+    from repeated 1,024+ token prefixes. Gemini estimates exclude unpredictable
+    thinking output and do not assume an implicit cache hit.
     """
     flush_batch_queue()
     with _batch_file_lock():
@@ -1084,12 +1140,16 @@ def estimateBatchCost(model=None):
     prefix_count = {}   # cached prefix text -> how many requests reuse it
     prefix_tokens = {}  # cached prefix text -> token count
     dynamic_tokens = 0
+    prompt_token_sequences = []
     output_tokens = 0
     models = set()
+    providers = set()
     for entry in queue.values():
         params = entry.get("params", {})
         if params.get("model"):
             models.add(params["model"])
+        if entry.get("provider"):
+            providers.add(entry["provider"])
         blocks = params.get("system") or []
         cut = 0  # split system blocks at the cache breakpoint (0 = nothing cached)
         for i, b in enumerate(blocks):
@@ -1103,12 +1163,15 @@ def estimateBatchCost(model=None):
             if prefix not in prefix_tokens:
                 prefix_tokens[prefix] = len(enc.encode(prefix))
         msg_text = "\n".join(str(m.get("content", "")) for m in params.get("messages", []))
-        dynamic_tokens += len(enc.encode(dyn)) + len(enc.encode(msg_text)) + 8
+        message_tokens = enc.encode(msg_text)
+        prompt_token_sequences.append(message_tokens)
+        dynamic_tokens += len(enc.encode(dyn)) + len(message_tokens) + 8
         # Output heuristic mirrors countTokens(): payload tokens x 2.5 covers
         # the echoed JSON scaffold plus EN expansion.
         output_tokens += round(len(enc.encode(str(entry.get("payload", "")))) * 2.5)
 
     est_model = model or next(iter(models), None) or os.getenv("model", "")
+    est_provider = next(iter(providers), getBatchProvider(est_model))
     # Use Anthropic's count_tokens for the exact cached-prefix size when possible.
     if prefix_tokens:
         try:
@@ -1131,36 +1194,100 @@ def estimateBatchCost(model=None):
     in_rate = pricing["inputAPICost"] / 1_000_000
     out_rate = pricing["outputAPICost"] / 1_000_000
 
-    # Batch = 50% off every token, including cache writes (2x, 1h TTL) and reads (0.10x).
-    batch_cached = (cache_write_tok * in_rate * 2.00
-                    + cache_read_tok * in_rate * 0.10
-                    + dynamic_tokens * in_rate
-                    + output_tokens * out_rate) * 0.50
     batch_nocache = (raw_input_tok * in_rate + output_tokens * out_rate) * 0.50
     live_cost = raw_input_tok * in_rate + output_tokens * out_rate
+    cache_kind = None
+    if est_provider == "anthropic" and cache_write_tok > 0:
+        # Claude's explicit 1-hour cache writes the prefix once at 2x input
+        # price, then reads it at 0.10x. Batch pricing halves both charges.
+        batch_cached = (cache_write_tok * in_rate * 2.00
+                        + cache_read_tok * in_rate * 0.10
+                        + dynamic_tokens * in_rate
+                        + output_tokens * out_rate) * 0.50
+        cache_kind = "explicit"
+    elif est_provider == "openai":
+        # OpenAI prompt caching is automatic. Cached inputs for the supported
+        # GPT models are currently 10% of standard input price; Batch then
+        # applies its own 50% discount.
+        cache_write_tok = 0
+        cache_read_tok = min(
+            raw_input_tok,
+            _estimate_openai_cache_reads(prompt_token_sequences),
+        )
+        uncached_input_tok = raw_input_tok - cache_read_tok
+        batch_cached = (
+            uncached_input_tok * in_rate
+            + cache_read_tok * in_rate * 0.10
+            + output_tokens * out_rate
+        ) * 0.50
+        if cache_read_tok:
+            cache_kind = "automatic"
+    else:
+        # We do not create Gemini explicit cache resources for these jobs.
+        # Implicit hits are not guaranteed, so only expose the worst case.
+        cache_write_tok = 0
+        cache_read_tok = 0
+        batch_cached = batch_nocache
+    uses_prompt_cache = cache_kind is not None
+    normalized_model = str(est_model or "").lower().removeprefix("models/")
+    unestimated_thinking = (
+        est_provider == "gemini" and normalized_model.startswith("gemini-3")
+    )
 
     n_reread = sum(prefix_count.values()) - len(prefix_count)
     print(f"[BATCH] {len(queue)} requests queued for {est_model}", flush=True)
-    print(f"[BATCH] cached prefix: {cache_write_tok:,} tokens (written once, re-read by {n_reread:,} requests)", flush=True)
-    print(f"[BATCH] dynamic input: {dynamic_tokens:,} tokens | estimated output: {output_tokens:,} tokens", flush=True)
-    print(f"[BATCH] estimated cost: ${batch_cached:.2f} (batch + prompt cache)", flush=True)
-    print(f"[BATCH]                 ${batch_nocache:.2f} (batch, worst case no cache hits)", flush=True)
-    print(f"[BATCH]                 ${live_cost:.2f} (live API, no batch discount)", flush=True)
+    if cache_kind == "explicit":
+        print(
+            f"[BATCH] cached prefix: {cache_write_tok:,} tokens "
+            f"(written once, re-read by {n_reread:,} requests)",
+            flush=True,
+        )
+    elif cache_kind == "automatic":
+        print(
+            f"[BATCH] estimated OpenAI automatic cache reads: "
+            f"{cache_read_tok:,} tokens (best-effort prefix routing)",
+            flush=True,
+        )
+    print(
+        f"[BATCH] estimated input: {raw_input_tok:,} tokens | "
+        f"estimated visible output: {output_tokens:,} tokens",
+        flush=True,
+    )
+    if cache_kind == "explicit":
+        print(f"[BATCH] estimated cost: ${batch_cached:.4f} (batch + prompt cache)", flush=True)
+        print(f"[BATCH]                 ${batch_nocache:.4f} (batch, no cache hits)", flush=True)
+    elif cache_kind == "automatic":
+        print(f"[BATCH] estimated cost: ${batch_cached:.4f} (batch + automatic cache)", flush=True)
+        print(f"[BATCH]                 ${batch_nocache:.4f} (batch, no cache hits)", flush=True)
+    else:
+        print(f"[BATCH] estimated cost: ${batch_nocache:.4f} (batch)", flush=True)
+    print(f"[BATCH]                 ${live_cost:.4f} (live API)", flush=True)
+    if unestimated_thinking:
+        print(
+            "[BATCH] NOTE: Gemini thinking tokens are billed as output and cannot "
+            "be predicted before the run; they are not included above.",
+            flush=True,
+        )
     return {
         "requests": len(queue),
         "model": est_model,
+        "provider": est_provider,
         "cache_write_tokens": cache_write_tok,
         "cache_read_tokens": cache_read_tok,
         "dynamic_tokens": dynamic_tokens,
+        "input_tokens": raw_input_tok,
         "output_tokens": output_tokens,
         "batch_cached_cost": batch_cached,
         "batch_nocache_cost": batch_nocache,
         "live_cost": live_cost,
+        "uses_prompt_cache": uses_prompt_cache,
+        "cache_kind": cache_kind,
+        "unestimated_thinking_tokens": unestimated_thinking,
     }
 
 
 def submitTranslationBatches(file_set=None, cost_estimate=None):
-    """Submit the queued requests to the Anthropic Message Batches API.
+    """Submit queued requests to the configured provider's Batch API.
 
     Splits at the API limits and saves the custom_id -> cache-key mapping so
     fetchTranslationBatches can route results back. Also appends durable
@@ -1173,14 +1300,27 @@ def submitTranslationBatches(file_set=None, cost_estimate=None):
         print("[BATCH] No batch requests queued.", flush=True)
         return []
 
-    client = _get_anthropic_client()
+    from util.batch_providers import batch_limits, submit_batch
+
     batches = []
     requests, id_map, size = [], {}, 0
     models = set()
+    providers = set()
     for entry in queue.values():
         m = (entry.get("params") or {}).get("model")
         if m:
             models.add(m)
+        p = entry.get("provider") or getBatchProvider(m)
+        if p:
+            providers.add(p)
+    if len(models) != 1 or len(providers) != 1:
+        raise ValueError(
+            "A batch queue must contain exactly one model and one provider; "
+            f"found models={sorted(models)} providers={sorted(providers)}"
+        )
+    provider = next(iter(providers))
+    max_requests, max_bytes = batch_limits(provider)
+    client = _get_anthropic_client() if provider == "anthropic" else None
     model = (
         (cost_estimate or {}).get("model")
         or next(iter(models), None)
@@ -1191,19 +1331,28 @@ def submitTranslationBatches(file_set=None, cost_estimate=None):
         nonlocal requests, id_map, size
         if not requests:
             return
-        batch = client.messages.batches.create(requests=requests)
-        batches.append({"id": batch.id, "custom_ids": id_map})
-        print(f"[BATCH] submitted {batch.id} ({len(requests)} requests)", flush=True)
+        submitted = submit_batch(provider, requests, client=client)
+        info = {**submitted, "custom_ids": id_map, "provider": provider}
+        batches.append(info)
+        print(f"[BATCH] submitted {info['id']} ({len(requests)} requests)", flush=True)
         requests, id_map, size = [], {}, 0
 
     for i, (key, entry) in enumerate(queue.items()):
         custom_id = f"req-{i:06d}"
         params = entry["params"]
+        request_size = len(json.dumps(params, ensure_ascii=False).encode("utf-8")) + 128
+        if requests and (
+            len(requests) >= max_requests or size + request_size > max_bytes
+        ):
+            _submit()
+        if request_size > max_bytes:
+            raise ValueError(
+                f"Batch request {custom_id} is {request_size:,} bytes, above the "
+                f"{max_bytes:,}-byte provider limit."
+            )
         requests.append({"custom_id": custom_id, "params": params})
         id_map[custom_id] = key
-        size += len(json.dumps(params, ensure_ascii=False).encode("utf-8"))
-        if len(requests) >= BATCH_MAX_REQUESTS or size >= BATCH_MAX_BYTES:
-            _submit()
+        size += request_size
     _submit()
 
     submitted_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
@@ -1211,6 +1360,7 @@ def submitTranslationBatches(file_set=None, cost_estimate=None):
         "batches": batches,
         "submitted_at": submitted_at,
         "model": model,
+        "provider": provider,
         "file_set": list(file_set or []),
         "cost_estimate": cost_estimate,
         "request_count": sum(len(b.get("custom_ids") or {}) for b in batches),
@@ -1223,6 +1373,7 @@ def submitTranslationBatches(file_set=None, cost_estimate=None):
         record_submit(
             batches,
             model=model,
+            provider=provider,
             file_set=file_set,
             cost_estimate=cost_estimate,
         )
@@ -1253,22 +1404,19 @@ def checkTranslationBatchStatuses(print_status=True):
         if print_status:
             print("[BATCH] No submitted batches - submit the queue first.", flush=True)
         return False, []
-    client = _get_anthropic_client()
+    from util.batch_providers import retrieve_batch
+
     all_ended = True
     statuses = []
     for info in state["batches"]:
         bid = info["id"]
-        b = client.messages.batches.retrieve(bid)
-        api_status = getattr(b, "processing_status", "") or ""
-        counts_obj = getattr(b, "request_counts", None)
-        counts = {
-            k: int(getattr(counts_obj, k, 0) or 0)
-            for k in ("processing", "succeeded", "errored", "canceled", "expired")
-        } if counts_obj is not None else {
-            "processing": 0, "succeeded": 0, "errored": 0, "canceled": 0, "expired": 0,
-        }
+        provider = info.get("provider") or state.get("provider") or "anthropic"
+        normalized = retrieve_batch(provider, bid)
+        api_status = normalized["api_status"]
+        counts = normalized["counts"]
         statuses.append({
             "id": bid,
+            "provider": provider,
             "api_status": api_status,
             "counts": counts,
             "request_count": len(info.get("custom_ids") or {}),
@@ -1280,7 +1428,7 @@ def checkTranslationBatchStatuses(print_status=True):
                 f"[BATCH] {time.strftime('%H:%M:%S')}  {bid}: {api_status}{suffix}",
                 flush=True,
             )
-        if api_status != "ended":
+        if not normalized["ended"]:
             all_ended = False
     return all_ended, statuses
 
@@ -1310,7 +1458,6 @@ def fetchTranslationBatches(batches=None):
         record_fetch = None
         _price_usage = None
 
-    client = _get_anthropic_client()
     results, errored = {}, []
     usage_totals = {
         "input_tokens": 0,
@@ -1322,44 +1469,26 @@ def fetchTranslationBatches(batches=None):
     batch_ids = []
     for info in batch_list:
         bid = info.get("id")
+        provider = info.get("provider") or state.get("provider") or "anthropic"
         if bid:
             batch_ids.append(bid)
         id_map = info.get("custom_ids", {})
         if download_batch_results is not None:
-            part, err_part, usage_part = download_batch_results(bid, id_map, client=client)
+            part, err_part, usage_part = download_batch_results(
+                bid, id_map, provider=provider
+            )
             results.update(part)
             errored.extend(err_part)
             for k, v in usage_part.items():
                 usage_totals[k] = usage_totals.get(k, 0) + (v or 0)
             continue
-        # Fallback if batch_history import failed - preserve prior behaviour.
-        for r in client.messages.batches.results(bid):
-            key = id_map.get(r.custom_id)
-            if key is None:
-                continue
-            res = r.result
-            if res.type != "succeeded":
-                detail = res.type
-                err = getattr(res, "error", None)
-                if err is not None:
-                    inner = getattr(err, "error", err)
-                    detail = f"{res.type} | {getattr(inner, 'type', '')}: {str(getattr(inner, 'message', '') or err)[:200]}"
-                errored.append((r.custom_id, detail))
-                continue
-            msg = res.message
-            text = _anthropic_content_text(msg.content)
-            u = msg.usage
-            cr = getattr(u, "cache_read_input_tokens", 0) or 0
-            cw = getattr(u, "cache_creation_input_tokens", 0) or 0
-            inp = getattr(u, "input_tokens", 0) or 0
-            out = getattr(u, "output_tokens", 0) or 0
-            results[key] = {
-                "text": text,
-                "prompt_tokens": inp + cr + cw,
-                "completion_tokens": out,
-                "cache_read_input_tokens": cr,
-                "cache_creation_input_tokens": cw,
-            }
+        else:
+            from util.batch_providers import download_results
+            part, err_part, usage_part = download_results(provider, bid, id_map)
+            results.update(part)
+            errored.extend(err_part)
+            for k, v in usage_part.items():
+                usage_totals[k] = usage_totals.get(k, 0) + (v or 0)
 
     model = state.get("model") or os.getenv("model", "")
     actual_cost = None
@@ -1388,6 +1517,9 @@ def fetchTranslationBatches(batches=None):
                     "batch_ids": batch_ids,
                     "batches": [],
                     "model": model,
+                    "provider": state.get("provider") or (
+                        batch_list[0].get("provider") if batch_list else None
+                    ),
                     "file_set": state.get("file_set") or [],
                     "cost_estimate": state.get("cost_estimate"),
                     "fetched_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
@@ -1774,7 +1906,13 @@ def _lookup_model_price(model: str):
     if not db:
         return None
 
-    model_lower = model.lower()
+    model_lower = str(model or "").strip().lower()
+    # Google APIs and the Gen AI SDK may return resource-style model names
+    # (``models/gemini-...``), while pricing catalogs use the bare model id.
+    # Leaving the resource prefix in place can accidentally prefix-match an
+    # unrelated generic catalog entry with incomplete prices.
+    if model_lower.startswith("models/"):
+        model_lower = model_lower.removeprefix("models/")
 
     def _extract(entry):
         inp = entry.get("input_cost_per_token")
@@ -1897,6 +2035,14 @@ def getPricingConfig(model):
         cfg = {"inputAPICost": 1.00,  "outputAPICost": 5.00,  "batchSize": 30, "frequencyPenalty": 0.05}
     elif "sonnet" in model or "claude" in model:
         cfg = {"inputAPICost": 3.00,  "outputAPICost": 15.00, "batchSize": 30, "frequencyPenalty": 0.05}
+    elif "gemini-3.6-flash" in model:
+        # Google AI Developer API standard rates. Batch is applied separately
+        # by estimateBatchCost/_price_usage at the provider's 50% discount.
+        cfg = {"inputAPICost": 1.50, "outputAPICost": 7.50, "batchSize": 30, "frequencyPenalty": 0.0}
+    elif "gemini-3.5-flash-lite" in model:
+        cfg = {"inputAPICost": 0.30, "outputAPICost": 2.50, "batchSize": 30, "frequencyPenalty": 0.0}
+    elif "gemini-3.5-flash" in model:
+        cfg = {"inputAPICost": 1.50, "outputAPICost": 9.00, "batchSize": 30, "frequencyPenalty": 0.0}
     elif "gemini-2.0-flash-lite" in model:
         cfg = {"inputAPICost": 0.075, "outputAPICost": 0.30,  "batchSize": 30, "frequencyPenalty": 0.0}
     elif "gemini-2.0-flash" in model:
@@ -2289,6 +2435,66 @@ def buildClaudeRequest(system, user, history, formatType, model, numLines=None, 
     return ant_kwargs
 
 
+def buildOpenAIRequest(system, user, history, penalty, formatType, model,
+                       numLines=None, vocab_text="", api_provider=None):
+    """Build OpenAI-compatible kwargs shared by live and batch requests."""
+    if not system or not str(system).strip():
+        raise ValueError("System content cannot be empty")
+    if not user or not str(user).strip():
+        raise ValueError("User content cannot be empty")
+
+    provider = (api_provider or os.getenv("API_PROVIDER", "openai")).lower()
+    model_l = str(model or "").lower()
+    is_deepseek = "deepseek" in model_l
+    is_mistral = provider == "mistral" or isMistralAPI()
+    messages = [{"role": "system", "content": f"```\n{system + vocab_text}\n```"}]
+    if isinstance(history, list):
+        valid_history = [h for h in history if h and str(h).strip()]
+        if valid_history:
+            messages.append({"role": "system", "content": "Translation History:\n```"})
+            messages.extend({"role": "assistant", "content": h} for h in valid_history)
+            messages.append({"role": "system", "content": "```"})
+    elif history and str(history).strip():
+        messages.append({"role": "assistant", "content": history})
+    messages.append({"role": "user", "content": f"```\n{user}\n```"})
+
+    params = {"model": model, "messages": messages}
+    if formatType == "json" and numLines is not None:
+        params["response_format"] = (
+            {"type": "json_object"}
+            if is_deepseek else {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "translation_response",
+                    "strict": True,
+                    "schema": createTranslationSchema(numLines),
+                },
+            }
+        )
+
+    if provider == "gemini":
+        params["temperature"] = 0
+        thinking_budget_str = os.getenv("GEMINI_THINKING_BUDGET")
+        if thinking_budget_str:
+            try:
+                params["extra_body"] = {
+                    "google": {"thinking_config": {"thinking_budget": int(thinking_budget_str)}}
+                }
+            except (ValueError, TypeError):
+                pass
+    elif is_mistral:
+        params["temperature"] = 0
+        params["max_tokens"] = min(
+            16000, max(1500, int(len(str(user)) * 1.2) + 40 * (numLines or 1))
+        )
+    elif "gpt-5" in model_l:
+        params["reasoning_effort"] = "none" if "gpt-5.6" in model_l else "minimal"
+    else:
+        params["temperature"] = 0
+        params["frequency_penalty"] = penalty
+    return params
+
+
 def translateText(system, user, history, penalty, formatType, model, numLines=None, vocab_text=""):
     """Send translation request to the selected API.
 
@@ -2316,7 +2522,7 @@ def translateText(system, user, history, penalty, formatType, model, numLines=No
     # Claude: static prompt gets cache_control; vocab appended uncached so it
     # never busts the cache. Requires ≥2048 tokens for Sonnet 4.6 to qualify.
     # Other providers: combine into one plain string.
-    if _is_claude:
+    if _is_claude or getattr(_thread_local, 'file_cost_ready', False):
         if DISABLE_CACHE:
             # No cache_control — sends as a plain content block for a real uncached run.
             combined_system = system + vocab_text
@@ -2426,10 +2632,20 @@ def translateText(system, user, history, penalty, formatType, model, numLines=No
         params["max_tokens"] = min(16000, max(1500, int(len(str(user)) * 1.2) + 40 * (numLines or 1)))
     else:  # Default to OpenAI behavior
         if "gpt-5" in model:
-            params["reasoning_effort"] = "minimal"
+            params["reasoning_effort"] = "none" if "gpt-5.6" in model else "minimal"
         else:
             params["temperature"] = 0
             params["frequency_penalty"] = penalty
+
+    # One canonical OpenAI-compatible builder feeds both live requests and
+    # JSONL batch rows. Keep responseFormat in sync for the existing live
+    # compatibility fallback below.
+    if not _is_claude:
+        params = buildOpenAIRequest(
+            system, user, history, penalty, formatType, model, numLines,
+            vocab_text=vocab_text, api_provider=api_provider,
+        )
+        responseFormat = params.get("response_format", {"type": "text"})
 
     # Use native Anthropic SDK — the OpenAI compat endpoint strips cache_control
     # and never returns cache_read/creation_input_tokens.
@@ -2734,13 +2950,11 @@ def calculateCost(inputTokens, outputTokens, model):
             _thread_local.file_batch_output  = 0
             _thread_local.file_cost_ready  = False
             return cost
-        # TOTAL call (flag already cleared): return the cross-thread running total.
-        # If _global_accurate_cost is 0 it means no real API calls were made
-        # (e.g. estimate mode), so fall through to the naive calculation below.
-        with _global_accurate_cost_lock:
-            accurate = _global_accurate_cost
-        if accurate > 0:
-            return accurate
+    # TOTAL call: cache-aware Claude and all async providers accumulate here.
+    with _global_accurate_cost_lock:
+        accurate = _global_accurate_cost
+    if accurate > 0 and (_is_claude or get_batch_phase() == "consume"):
+        return accurate
 
     # Non-Claude, estimate mode, or no accurate data: naive calculation.
     # For Claude models, use the accumulated static_system token count (the portion
@@ -2862,10 +3076,10 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None, mism
     _prev_bout = _thread_local.file_batch_output
     _thread_local.file_cost_ready = False  # will be set True at end of translateAI
 
-    # Anthropic batch phase ('collect'/'consume'); None when off, in estimate
-    # mode, or when the model doesn't route to the native Anthropic SDK.
+    # Provider batch phase ('collect'/'consume'); None when off or unsupported.
     batch_phase = get_batch_phase()
-    if batch_phase and (config.estimateMode or not isClaudeNative(config.model)):
+    batch_provider = getBatchProvider(config.model)
+    if batch_phase and (config.estimateMode or not batch_provider):
         batch_phase = None
     
     if isinstance(text, list):
@@ -3098,13 +3312,23 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None, mism
         # preceding source lines so the model still sees scene context.
         if queue_for_batch:
             numLines = len(clean_tItem) if isinstance(tItem, list) else 1
-            params = buildClaudeRequest(static_system, user, history, formatType,
-                                        config.model, numLines, vocab_text=vocab_text)
+            if batch_provider == "anthropic":
+                params = buildClaudeRequest(
+                    static_system, user, history, formatType,
+                    config.model, numLines, vocab_text=vocab_text,
+                )
+            else:
+                params = buildOpenAIRequest(
+                    static_system, user, history, 0.05, formatType,
+                    config.model, numLines, vocab_text=vocab_text,
+                    api_provider=batch_provider,
+                )
             queue_batch_request(
                 subbedT,
                 config.language,
                 params,
                 cache_context=vocab_text,
+                provider=batch_provider,
             )
             if lock and pbar is not None:
                 with lock:
@@ -3212,7 +3436,10 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None, mism
                         batch_result.get("cache_creation_input_tokens", 0) or 0,
                     )
                     from_batch = True
-                    _write_request_debug_log("anthropic-batch", {"payload": subbedT}, response.usage)
+                    _write_request_debug_log(
+                        f"{batch_provider or 'provider'}-batch",
+                        {"payload": subbedT}, response.usage,
+                    )
             if not from_batch:
                 try:
                     response = translateText(static_system, current_user, history, 0.05, formatType, config.model, numLines, vocab_text=vocab_text)
@@ -3238,9 +3465,9 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None, mism
             totalTokens[0] += response.usage.prompt_tokens
             totalTokens[1] += response.usage.completion_tokens
 
-            # --- Cache cost tracking (Claude only) ---
+            # --- Cache/batch cost tracking ---
             _is_claude_model = config.model and any(x in config.model.lower() for x in ("claude", "sonnet", "haiku", "opus"))
-            if _is_claude_model:
+            if _is_claude_model or from_batch:
                 usage = response.usage
 
                 # Read cache fields from _AnthropicCompat._Usage; fall back to model_extra.
@@ -3263,7 +3490,7 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None, mism
                     _thread_local.file_batch_write   += batch_cache_write
                     _thread_local.file_batch_regular += batch_regular
                     _thread_local.file_batch_output  += batch_output
-                else:
+                elif _is_claude_model:
                     _thread_local.file_cache_read  += batch_cache_read
                     _thread_local.file_cache_write += batch_cache_write
                     _thread_local.file_regular     += batch_regular
@@ -3450,7 +3677,7 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None, mism
             try:
                 with open(config.logFilePath, "a", encoding="utf-8") as logFile:
                     if from_batch:
-                        logFile.write("[BATCH] Applied Anthropic batch result\n")
+                        logFile.write("[BATCH] Applied provider batch result\n")
                     logFile.write(f"Input:\n{subbedT}\n")
                     logFile.write(f"Output:\n{formatted_output}\n")
                     logFile.flush()  # Ensure data is written to disk immediately
@@ -3534,10 +3761,14 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None, mism
     if batch_phase == "collect":
         flush_batch_queue()
 
-    # For Claude: accumulate only this call's delta into the cross-thread total.
+    # Accumulate Claude cache-aware calls and every provider's discounted batch.
     # file_* accumulators hold full per-file totals; calculateCost() reads them.
     _is_claude_final = config.model and any(x in config.model.lower() for x in ("claude", "sonnet", "haiku", "opus"))
-    if _is_claude_final and not config.estimateMode:
+    _has_batch_delta = (
+        getattr(_thread_local, 'file_batch_regular', 0) > _prev_breg
+        or getattr(_thread_local, 'file_batch_output', 0) > _prev_bout
+    )
+    if (_is_claude_final or _has_batch_delta) and not config.estimateMode:
         _pricing = getPricingConfig(config.model)
         _br = _pricing["inputAPICost"] / 1_000_000
         _or = _pricing["outputAPICost"] / 1_000_000

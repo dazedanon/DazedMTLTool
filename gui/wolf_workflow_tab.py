@@ -2272,7 +2272,7 @@ class WolfWorkflowTab(QWidget):
         self._tl_mode_combo.addItem(BATCH_MODE_LABEL)
         self._tl_mode_combo.setFixedWidth(220)
         self._tl_mode_combo.setToolTip(
-            "Normal translates live; Batch uses the Anthropic Batches API (~50% cheaper, Claude only)."
+            "Normal translates live; Batch uses the configured provider API (~50% cheaper; Claude, GPT, or Gemini)."
         )
         default_mode = default_translation_mode()
         self._last_default_translation_mode = default_mode

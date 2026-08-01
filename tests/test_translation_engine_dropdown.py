@@ -61,15 +61,24 @@ class TranslationEngineDropdownTests(unittest.TestCase):
         self.assertEqual(actual, expected)
         self.assertTrue(all(callable(module[2]) for module in tab.modules))
 
-    def test_normal_translate_is_default_for_non_claude_models(self) -> None:
+    def test_batch_translate_is_default_for_native_openai(self) -> None:
         self.assertEqual(
             default_translation_mode("gpt-5.2", "https://api.openai.com/v1"),
-            "Translate",
+            "Batch Translate",
         )
 
     def test_batch_translate_is_default_for_native_claude(self) -> None:
         self.assertEqual(
             default_translation_mode("claude-sonnet-4-6", "https://api.anthropic.com/v1"),
+            BATCH_MODE_LABEL,
+        )
+
+    def test_batch_translate_is_default_for_native_gemini(self) -> None:
+        self.assertEqual(
+            default_translation_mode(
+                "gemini-3.1-pro", "https://generativelanguage.googleapis.com/v1beta/openai/",
+                "gemini",
+            ),
             BATCH_MODE_LABEL,
         )
 

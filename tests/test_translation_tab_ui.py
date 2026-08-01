@@ -12,7 +12,11 @@ from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import QApplication
 
 from gui.theme import Spacing
-from gui.translation_tab import BATCH_MODE_LABEL, TranslationTab
+from gui.translation_tab import (
+    BATCH_MODE_LABEL,
+    TranslationTab,
+    _format_estimated_cost,
+)
 
 
 class TranslationTabUITests(unittest.TestCase):
@@ -174,6 +178,86 @@ class TranslationTabUITests(unittest.TestCase):
         self.tab._apply_finish_ui(True, "Success")
 
         self.assertEqual(self.tab.mode_combo.currentText(), "Translate")
+
+    def test_batch_no_work_is_not_rendered_as_completed_or_queued(self) -> None:
+        self.tab._batch_active = True
+        self.tab._on_batch_phase("no_work", {"files": 1})
+        self.tab._apply_finish_ui(True, "Success")
+
+        self.assertEqual(self.tab._batch_ui_phase, "no_work")
+        self.assertIn("No work found", self.tab.batch_phase_title.text())
+        self.assertEqual(self.tab.batch_overall_bar.value(), 25)
+        self.assertEqual(self.tab.batch_overall_bar.format(), "No batch submitted")
+        self.assertEqual(self.tab.translate_button.text(), "Nothing to submit")
+
+    def test_failed_batch_is_not_rendered_as_complete(self) -> None:
+        self.tab._batch_active = True
+        self.tab._on_batch_phase("submit", {"files": 1, "requests": 16})
+        self.tab._apply_finish_ui(False, "Gemini rejected the batch")
+
+        self.assertEqual(self.tab._batch_ui_phase, "failed")
+        self.assertIn("Failed", self.tab.batch_phase_title.text())
+        self.assertEqual(self.tab.batch_overall_bar.format(), "Failed")
+        self.assertNotEqual(self.tab.batch_overall_bar.value(), 100)
+
+    def test_gemini_submit_estimate_uses_precision_and_thinking_warning(self) -> None:
+        self.tab._batch_active = True
+        self.tab._on_batch_phase("submit", {
+            "files": 1,
+            "requests": 16,
+            "model": "models/gemini-3.6-flash",
+            "provider": "gemini",
+            "input_tokens": 54866,
+            "output_tokens": 6600,
+            "batch_cached_cost": 0.0658995,
+            "batch_nocache_cost": 0.0658995,
+            "live_cost": 0.131799,
+            "uses_prompt_cache": False,
+            "unestimated_thinking_tokens": True,
+        })
+
+        self.assertTrue(self.tab.batch_cost_cached.isHidden())
+        self.assertEqual(
+            self.tab.batch_cost_nocache.text(),
+            "Batch estimate\n$0.0659 + thinking",
+        )
+        self.assertEqual(
+            self.tab.batch_cost_live.text(),
+            "Live API\n$0.1318 + thinking",
+        )
+        self.assertIn("54,866 input", self.tab.batch_submit_summary.text())
+        self.assertIn("exclude them", self.tab.batch_submit_summary.text())
+        self.assertIn("Model: gemini-3.6-flash", self.tab.batch_submit_summary.text())
+
+    def test_estimated_cost_format_preserves_sub_cent_values(self) -> None:
+        self.assertEqual(_format_estimated_cost(0.0027433), "$0.0027")
+        self.assertEqual(_format_estimated_cost(1.234), "$1.23")
+
+    def test_openai_submit_estimate_labels_automatic_cache(self) -> None:
+        self.tab._batch_active = True
+        self.tab._on_batch_phase("submit", {
+            "files": 1,
+            "requests": 16,
+            "model": "gpt-5.6-terra",
+            "provider": "openai",
+            "input_tokens": 54866,
+            "output_tokens": 6600,
+            "batch_cached_cost": 0.055,
+            "batch_nocache_cost": 0.094466,
+            "live_cost": 0.188932,
+            "uses_prompt_cache": True,
+            "cache_kind": "automatic",
+        })
+
+        self.assertFalse(self.tab.batch_cost_cached.isHidden())
+        self.assertEqual(
+            self.tab.batch_cost_cached.text(),
+            "Batch + auto cache\n$0.0550",
+        )
+        self.assertEqual(
+            self.tab.batch_cost_nocache.text(),
+            "Batch worst-case\n$0.0945",
+        )
 
 
 if __name__ == "__main__":

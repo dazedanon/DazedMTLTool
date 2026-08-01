@@ -65,10 +65,11 @@ class _BatchOpsWorker(QThread):
 
 
 class BatchTab(QWidget):
-    """Manage past / in-flight Anthropic Message Batches for this project."""
+    """Manage past and in-flight provider batches for this project."""
 
     COLUMNS = [
         "Batch ID",
+        "Provider",
         "Status",
         "Created",
         "Requests",
@@ -101,7 +102,7 @@ class BatchTab(QWidget):
         layout = make_page_layout(self)
         layout.addWidget(PageHeader(
             "Batch History",
-            "Review and manage local Anthropic Message Batch runs. These actions never submit a new batch."
+            "Review and manage local Claude, GPT, and Gemini batch runs. These actions never submit a new batch."
         ))
 
         actions_card = SectionCard(
@@ -293,6 +294,7 @@ class BatchTab(QWidget):
                 files_s += f" (+{len(files) - 3})"
             values = [
                 str(entry.get("id") or ""),
+                str(entry.get("provider") or "anthropic").title(),
                 str(entry.get("status") or ""),
                 str(entry.get("created_at") or "")[:19],
                 str(entry.get("request_count") or ""),
@@ -332,7 +334,7 @@ class BatchTab(QWidget):
             self,
             "Cancel Batch?",
             "Cancel the selected in-progress batch(es)?\n\n"
-            "Anthropic may still finish and bill requests that were already "
+            "The provider may still finish and bill requests that were already "
             "in flight when cancel is received.\n"
             "This does not submit a new batch.",
             QMessageBox.Yes | QMessageBox.No,

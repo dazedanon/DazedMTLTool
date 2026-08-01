@@ -1752,7 +1752,7 @@ class WorkflowTab(QWidget):
         self._tl_mode_combo.setMinimumWidth(Geometry.FIELD_MEDIUM)
         self._tl_mode_combo.setToolTip(
             "Applies to Phase 0, 1, 1b, and 2 run buttons. "
-            "Batch uses the Anthropic Batches API (50% off, Claude only)."
+            "Batch uses the configured provider API (typically 50% off; Claude, GPT, or Gemini)."
         )
         self._tl_mode_combo.currentTextChanged.connect(self._on_workflow_tl_mode_changed)
         self._tl_mode_combo.activated.connect(self._mark_workflow_tl_mode_selected)

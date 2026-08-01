@@ -91,7 +91,7 @@ def _configured_game_root(settings) -> str:
 
 
 BATCH_MODE_BENEFIT_NOTE = (
-    "Anthropic Batches API — 50% or more cheaper than live translate (Claude only)."
+    "Provider Batch API — typically 50% cheaper than live translation (Claude, GPT, or Gemini)."
 )
 BATCH_COLLECT_LIVE_CHARGE_NOTE = (
     "For RPG Maker, collect speaker names from the Workflow before starting a batch. "
@@ -101,18 +101,30 @@ BATCH_COLLECT_LIVE_CHARGE_NOTE = (
 _CONFIG_UNSET = object()
 
 
-def default_translation_mode(model=_CONFIG_UNSET, api_url=_CONFIG_UNSET) -> str:
-    """Choose Batch only when the configured model supports native Claude batches."""
-    if model is _CONFIG_UNSET or api_url is _CONFIG_UNSET:
+def _format_estimated_cost(value) -> str:
+    """Show useful precision for small runs without noisy large totals."""
+    amount = float(value or 0)
+    return f"${amount:.4f}" if abs(amount) < 1 else f"${amount:.2f}"
+
+
+def default_translation_mode(model=_CONFIG_UNSET, api_url=_CONFIG_UNSET,
+                             api_provider=_CONFIG_UNSET) -> str:
+    """Choose Batch when the configured route has a supported asynchronous API."""
+    if model is _CONFIG_UNSET or api_url is _CONFIG_UNSET or api_provider is _CONFIG_UNSET:
         env = dotenv_values(PROJECT_ROOT / ".env") if (PROJECT_ROOT / ".env").exists() else {}
         if model is _CONFIG_UNSET:
             model = env.get("model", os.getenv("model", ""))
         if api_url is _CONFIG_UNSET:
             api_url = env.get("api", os.getenv("api", ""))
+        if api_provider is _CONFIG_UNSET:
+            api_provider = env.get("API_PROVIDER", os.getenv("API_PROVIDER", "openai"))
 
-    from util.translation import isClaudeNative
+    from util.translation import isBatchSupported
 
-    return BATCH_MODE_LABEL if isClaudeNative(str(model or ""), api_url) else "Translate"
+    provider = None if api_provider is _CONFIG_UNSET else api_provider
+    return BATCH_MODE_LABEL if isBatchSupported(
+        str(model or ""), api_url, provider
+    ) else "Translate"
 
 
 def _should_prepare_speakers_automatically(
@@ -963,12 +975,13 @@ class TranslationWorker(QThread):
                 self.emit_log(f"   • {filename}")
             self.emit_log(f"🔧 Using module: {self.module_info[0]}")
             if self.batch_mode:
-                self.emit_log("📦 Batch mode: Anthropic Batches API (50% off)")
+                self.emit_log("📦 Batch mode: provider Batch API (typically 50% off)")
             else:
                 self.emit_log(f"📊 Estimate only: {'Yes' if self.estimate_only else 'No'}")
             self.emit_log("")
 
             total_cost = "Fail"
+            batch_no_work = False
             old_cwd = os.getcwd()
             os.chdir(str(self.project_root))
 
@@ -1028,7 +1041,14 @@ class TranslationWorker(QThread):
                             return
 
                         if pendingBatchRequests() == 0:
-                            self.emit_log("[BATCH] No requests queued — nothing needed the API.")
+                            batch_no_work = True
+                            self._emit_batch_phase("no_work", {
+                                "files": len(matching_files),
+                            })
+                            self.emit_log(
+                                "[BATCH] No eligible untranslated text found. "
+                                "No provider batch was submitted."
+                            )
                             run_consume = False
                         else:
                             n_requests = pendingBatchRequests()
@@ -1041,6 +1061,7 @@ class TranslationWorker(QThread):
                                 est = dict(est)
                                 est["files"] = len(matching_files)
                             if not self._wait_batch_submit(est):
+                                self._emit_batch_phase("not_submitted", est)
                                 self.emit_log(
                                     "[BATCH] Not submitted. Queue kept in log/batch_requests.json "
                                     "(resume with Batch Translate to submit without re-collecting)."
@@ -1059,7 +1080,13 @@ class TranslationWorker(QThread):
                         )
                         n_requests = pendingBatchRequests()
                         if n_requests == 0:
-                            self.emit_log("[BATCH] Queue is empty - nothing to submit.")
+                            batch_no_work = True
+                            self._emit_batch_phase("no_work", {
+                                "files": len(matching_files),
+                            })
+                            self.emit_log(
+                                "[BATCH] Queue is empty. No provider batch was submitted."
+                            )
                             run_consume = False
                         else:
                             self._emit_batch_phase("collect_done", {
@@ -1071,6 +1098,7 @@ class TranslationWorker(QThread):
                                 est = dict(est)
                                 est["files"] = len(matching_files)
                             if not self._wait_batch_submit(est):
+                                self._emit_batch_phase("not_submitted", est)
                                 self.emit_log(
                                     "[BATCH] Not submitted. Queue kept in log/batch_requests.json."
                                 )
@@ -1142,7 +1170,9 @@ class TranslationWorker(QThread):
                         pass
                 self.emit_log("")
                 self.emit_log(f"💰 {total_cost}")
-                if self.batch_mode:
+                if self.batch_mode and batch_no_work:
+                    self.emit_log("ℹ️ Batch scan completed with no work to submit.")
+                elif self.batch_mode:
                     self.emit_log("✅ Batch translation completed!")
                 elif not self.estimate_only:
                     self.emit_log("✅ Translation completed successfully!")
@@ -1517,7 +1547,7 @@ class TranslationTab(QWidget):
         self.batch_poll_id.setStyleSheet("color:#9cdcfe;font-size:12px;font-family:monospace;")
         self.batch_poll_id.setTextInteractionFlags(Qt.TextSelectableByMouse)
         poll_layout.addWidget(self.batch_poll_id)
-        self.batch_poll_status = QLabel("Waiting for Anthropic to finish processing the batch…")
+        self.batch_poll_status = QLabel("Waiting for the provider to finish processing the batch…")
         self.batch_poll_status.setWordWrap(True)
         self.batch_poll_status.setStyleSheet("color:#cccccc;font-size:12px;")
         poll_layout.addWidget(self.batch_poll_status)
@@ -1552,7 +1582,7 @@ class TranslationTab(QWidget):
             QProgressBar::chunk { background-color: #4ec9b0; border-radius: 3px; }
         """)
         poll_layout.addWidget(self.batch_poll_bar)
-        self.batch_poll_hint = QLabel("Stop is safe - the batch keeps running on Anthropic. Resume later from Batches or Batch Translate.")
+        self.batch_poll_hint = QLabel("Stop is safe - the batch keeps running at the provider. Resume later from Batches or Batch Translate.")
         self.batch_poll_hint.setWordWrap(True)
         self.batch_poll_hint.setStyleSheet("color:#888888;font-size:11px;")
         poll_layout.addWidget(self.batch_poll_hint)
@@ -2311,7 +2341,7 @@ class TranslationTab(QWidget):
             self.files_tab_btn.setText("Files")
             self._batch_tab_index = -1
             self.progress_content_stack.setCurrentIndex(1)
-        # Per-file Time is useful for live translate; for batch, Anthropic owns
+        # Per-file Time is useful for live translate; for batch, the provider owns
         # the wait and local write time is negligible.
         table = getattr(self, "progress_table", None)
         if table is not None and table.columnCount() > 5:
@@ -2408,7 +2438,7 @@ class TranslationTab(QWidget):
                 lab.setStyleSheet(self._batch_step_style("idle"))
 
     def _update_batch_poll_dashboard(self, statuses):
-        """Render structured Anthropic batch statuses into the poll panel."""
+        """Render structured provider batch statuses into the poll panel."""
         if not isinstance(statuses, list) or not statuses:
             return
         totals = {"processing": 0, "succeeded": 0, "errored": 0, "canceled": 0, "expired": 0}
@@ -2437,7 +2467,7 @@ class TranslationTab(QWidget):
         self.batch_overall_bar.setValue(55 + int(20 * frac))
         state_txt = ", ".join(sorted(set(api_states))) or "unknown"
         self.batch_poll_status.setText(
-            f"Anthropic status: {state_txt}\n"
+            f"Provider status: {state_txt}\n"
             f"{totals['succeeded']} succeeded, {totals['processing']} still processing"
             + (f", {totals['errored']} errored" if totals["errored"] else "")
             + (f", {totals['canceled']} canceled" if totals["canceled"] else "")
@@ -2454,6 +2484,7 @@ class TranslationTab(QWidget):
         self.batch_pipeline_widget.setVisible(True)
 
         if phase == "collect":
+            self.batch_overall_bar.setFormat("%p%")
             self._set_batch_steps(0)
             self.batch_phase_title.setText("Batch Translate - Pass 1/2: Collect")
             self.batch_overall_bar.setRange(0, 100)
@@ -2482,34 +2513,92 @@ class TranslationTab(QWidget):
             est = payload or {}
             n_files = est.get("files", "?")
             n_req = est.get("requests", "?")
+            model_name = str(est.get("model") or os.getenv("model", "") or "—")
+            display_model = model_name.removeprefix("models/")
+            input_tokens = int(est.get("input_tokens") or est.get("dynamic_tokens") or 0)
+            output_tokens = int(est.get("output_tokens") or 0)
+            estimate_lines = [
+                f"{n_files} file(s) scanned - {n_req} request(s) queued.",
+                f"Model: {display_model}",
+                f"Approximate tokens: {input_tokens:,} input / ~{output_tokens:,} visible output.",
+            ]
+            if est.get("unestimated_thinking_tokens"):
+                estimate_lines.append(
+                    "Gemini thinking tokens are billed as output and are not predictable "
+                    "before the run, so the totals below exclude them."
+                )
+            estimate_lines.extend((
+                "",
+                "One provider submission covers every queued request (typically 50% batch discount). "
+                "You can stop safely after submit and resume later.",
+            ))
             self._set_batch_steps(1)
             self.batch_phase_title.setText("Batch Translate - Review & Submit")
             self.batch_overall_bar.setValue(35)
             self.batch_pipeline_stack.setCurrentIndex(1)
-            self.batch_submit_summary.setText(
-                f"{n_files} file(s) scanned - {n_req} request(s) queued.\n"
-                f"Model: {est.get('model') or os.getenv('model', '') or '—'}\n\n"
-                "One Anthropic submission covers every queued request (50% batch discount). "
-                "You can stop safely after submit and resume later."
-            )
+            self.batch_submit_summary.setText("\n".join(estimate_lines))
             if hasattr(self, "batch_cost_cached"):
-                self.batch_cost_cached.setText(
-                    f"Batch + cache\n${float(est.get('batch_cached_cost') or 0):.2f}"
-                )
+                uses_prompt_cache = bool(est.get("uses_prompt_cache"))
+                self.batch_cost_cached.setVisible(uses_prompt_cache)
+                if uses_prompt_cache:
+                    cached_label = (
+                        "Batch + auto cache"
+                        if est.get("cache_kind") == "automatic"
+                        else "Batch + cache"
+                    )
+                    self.batch_cost_cached.setText(
+                        f"{cached_label}\n"
+                        f"{_format_estimated_cost(est.get('batch_cached_cost'))}"
+                    )
+                    batch_label = "Batch worst-case"
+                else:
+                    batch_label = "Batch estimate"
+                thinking_suffix = " + thinking" if est.get("unestimated_thinking_tokens") else ""
                 self.batch_cost_nocache.setText(
-                    f"Batch worst-case\n${float(est.get('batch_nocache_cost') or 0):.2f}"
+                    f"{batch_label}\n"
+                    f"{_format_estimated_cost(est.get('batch_nocache_cost'))}{thinking_suffix}"
                 )
                 self.batch_cost_live.setText(
-                    f"Live API\n${float(est.get('live_cost') or 0):.2f}"
+                    "Live API\n"
+                    f"{_format_estimated_cost(est.get('live_cost'))}{thinking_suffix}"
                 )
             self.batch_submit_yes_btn.setText(f"Submit All ({n_req} requests)")
+        elif phase == "not_submitted":
+            info = payload or {}
+            n_req = info.get("requests", "?")
+            self._set_batch_steps(1)
+            self.batch_phase_title.setText("Batch Translate - Not submitted")
+            self.batch_overall_bar.setRange(0, 100)
+            self.batch_overall_bar.setValue(35)
+            self.batch_overall_bar.setFormat("Queue saved")
+            self.batch_pipeline_stack.setCurrentIndex(1)
+            self.batch_submit_summary.setText(
+                f"{n_req} request(s) remain queued locally. Nothing was sent to the provider.\n\n"
+                "Start Batch Translate again to review and submit this saved queue."
+            )
+            self.batch_live_status.setText("Batch queue saved - no provider job was created.")
+        elif phase == "no_work":
+            info = payload or {}
+            n_files = info.get("files", "?")
+            self._set_batch_steps(1)
+            self.batch_phase_title.setText("Batch Translate - No work found")
+            self.batch_overall_bar.setRange(0, 100)
+            self.batch_overall_bar.setValue(25)
+            self.batch_overall_bar.setFormat("No batch submitted")
+            self.batch_pipeline_stack.setCurrentIndex(0)
+            self.batch_collect_status.setText(
+                f"Scanned {n_files} file(s), but found no eligible untranslated text.\n"
+                "No request was queued or sent to the provider."
+            )
+            self.batch_live_status.setText("Scan complete - nothing to submit.")
+            self._mark_batch_files_no_work()
         elif phase == "polling":
             self._set_batch_steps(2)
             self.batch_phase_title.setText("Batch Translate - Processing")
             self.batch_overall_bar.setRange(0, 100)
             self.batch_overall_bar.setValue(55)
             self.batch_pipeline_stack.setCurrentIndex(2)
-            self.batch_poll_status.setText("Submitted - waiting for Anthropic to process the batch…")
+            self.batch_poll_status.setText("Submitted - waiting for the provider to process the batch…")
             if hasattr(self, "batch_poll_bar"):
                 self.batch_poll_bar.setRange(0, 100)
                 self.batch_poll_bar.setValue(0)
@@ -2529,6 +2618,7 @@ class TranslationTab(QWidget):
             if self.progress_tab_row.isVisible():
                 self._switch_progress_tab(0)
         elif phase == "done":
+            self.batch_overall_bar.setFormat("%p%")
             self._set_batch_steps(4)
             self.batch_overall_bar.setValue(100)
             self.batch_phase_title.setText("Batch Translate - Complete")
@@ -2537,6 +2627,13 @@ class TranslationTab(QWidget):
                 "Pass 2/2 finished. Translations written - use the back arrow to return to the file list."
             )
             self.batch_live_status.setText("Batch complete")
+        elif phase == "failed":
+            info = payload or {}
+            message = str(info.get("message") or "Batch run failed")
+            self.batch_phase_title.setText("Batch Translate - Failed")
+            self.batch_overall_bar.setRange(0, 100)
+            self.batch_overall_bar.setFormat("Failed")
+            self.batch_live_status.setText(message)
 
         self._update_batch_stop_button()
 
@@ -2595,6 +2692,25 @@ class TranslationTab(QWidget):
                 self.totals_time_label.setText("Time: 0.0s")
         except Exception:
             pass
+
+    def _mark_batch_files_no_work(self):
+        """Replace collect-pass 'queued' rows when no API work was produced."""
+        for filename, item in self.file_progress_items.items():
+            try:
+                item["checkbox"].setChecked(False)
+                item["label"].setText("Skipped")
+                item["progress_bar"].setMaximum(100)
+                item["progress_bar"].setValue(0)
+            except Exception:
+                pass
+            self._set_progress_row(
+                filename,
+                status="Skipped",
+                status_color="#888888",
+                progress="no eligible text",
+                tokens="-",
+                cost="-",
+            )
 
     def mark_file_queued(self, filename):
         """Collect pass finished for a file - queued for batch, not translated yet."""
@@ -3314,17 +3430,18 @@ class TranslationTab(QWidget):
             load_dotenv()
             sys.path.insert(0, str(self.project_root))
             try:
-                from util.translation import isClaudeNative, batchRunState
+                from util.translation import isBatchSupported, batchRunState
             except Exception as e:
                 QMessageBox.warning(self, "Batch Translate", f"Could not load batch support: {e}")
                 return
             model = os.getenv("model", "")
-            if not isClaudeNative(model):
+            if not isBatchSupported(model):
                 QMessageBox.warning(
                     self,
                     "Batch Translate",
-                    "Batch Translate requires a Claude model with the API URL unset or "
-                    "pointing at anthropic.com.\n\nChange your model/API settings and try again.",
+                    "Batch Translate requires a supported native provider route: "
+                    "Anthropic Claude, OpenAI GPT, or Google Gemini.\n\n"
+                    "Custom OpenAI-compatible URLs are not assumed to implement a Batch API.",
                 )
                 return
             if forced_resume_state:
@@ -3377,8 +3494,8 @@ class TranslationTab(QWidget):
                     self,
                     "Start Batch Translate",
                     f"Start batch translation for {len(selected_files)} file(s) using {selected_module[0]}?\n\n"
-                    "Pass 1 collects dialogue for the batch; you confirm the estimate, then Anthropic "
-                    "processes it (50% off). Pass 2 writes translated files.\n\n"
+                    "Pass 1 collects dialogue for the batch; you confirm the estimate, then the provider "
+                    "processes it (typically 50% off). Pass 2 writes translated files.\n\n"
                     f"⚠ {BATCH_COLLECT_LIVE_CHARGE_NOTE}",
                     QMessageBox.Yes | QMessageBox.No,
                 )
@@ -3747,7 +3864,25 @@ class TranslationTab(QWidget):
                 self.batch_overall_bar.setValue(15 + int(20 * current_file / max(total_files, 1)))
                 self.mark_file_queued(filename)
                 return
-            if phase in ("submit", "polling", "poll_status"):
+            if phase in (
+                "collect_done", "submit", "not_submitted", "no_work",
+                "polling", "poll_status", "failed",
+            ):
+                # A collect-pass progress event can arrive after the phase has
+                # advanced. Count it, but never promote its row to translated.
+                self.files_completed = current_file
+                if phase == "no_work":
+                    self.files_translated_label.setText(
+                        f"{current_file}/{total_files} scanned"
+                    )
+                    self._mark_batch_files_no_work()
+                try:
+                    if self._finish_pending and self.files_completed >= self.files_total:
+                        success, message = self._finish_pending
+                        self._finish_pending = None
+                        self._apply_finish_ui(success, message)
+                except Exception:
+                    pass
                 return
 
         self.files_completed = current_file
@@ -3889,7 +4024,11 @@ class TranslationTab(QWidget):
         if self.file_card.title_label is not None:
             self.file_card.title_label.setText("Translation results")
         if getattr(self, "_batch_active", False):
-            self._on_batch_phase("done", None)
+            phase = getattr(self, "_batch_ui_phase", None)
+            if success and phase not in ("no_work", "not_submitted"):
+                self._on_batch_phase("done", None)
+            elif not success and message != "Batch polling stopped":
+                self._on_batch_phase("failed", {"message": message})
         # Parse Speakers: promote Scanned rows to Done only after vocab write finishes,
         # then leave the next run in normal translation mode. Otherwise the mode
         # remains sticky and pressing Start again silently repeats speaker collection.
@@ -3931,7 +4070,14 @@ class TranslationTab(QWidget):
 
         # Update progress display
         try:
-            if success:
+            batch_phase = getattr(self, "_batch_ui_phase", None)
+            if success and batch_phase == "no_work":
+                self.translating_label.setText("No eligible text found")
+                self.translate_button.setText("Nothing to submit")
+            elif success and batch_phase == "not_submitted":
+                self.translating_label.setText("Batch queue saved")
+                self.translate_button.setText("Not submitted")
+            elif success:
                 self.translating_label.setText("Completed!")
                 self.translate_button.setText("Run complete")
             else:

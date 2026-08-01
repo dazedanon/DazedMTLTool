@@ -174,6 +174,32 @@ class HistorySurvivalTests(BatchHistoryTestBase):
         self.assertEqual(len(BH.read_history()["batches"]), 1)
 
 
+class ProviderSubmissionTests(BatchHistoryTestBase):
+    def test_openai_submission_persists_provider_and_recovery_map(self):
+        T.queue_batch_request(
+            '{"Line1":"猫"}',
+            "English",
+            {"model": "gpt-5.6-terra", "messages": []},
+            provider="openai",
+        )
+        T.flush_batch_queue()
+
+        with mock.patch(
+            "util.batch_providers.submit_batch",
+            return_value={"id": "batch_openai_1", "input_file_id": "file_1"},
+        ) as submit:
+            ids = T.submitTranslationBatches(file_set=["Map001.json"])
+
+        self.assertEqual(ids, ["batch_openai_1"])
+        self.assertEqual(submit.call_args.args[0], "openai")
+        state = T._read_batch_file(T.BATCH_STATE_FILE)
+        self.assertEqual(state["provider"], "openai")
+        self.assertEqual(state["batches"][0]["provider"], "openai")
+        entry = BH.read_history()["batches"][0]
+        self.assertEqual(entry["provider"], "openai")
+        self.assertTrue(entry["custom_ids"])
+
+
 class RedownloadTests(BatchHistoryTestBase):
     def test_redownload_rebuilds_results_from_custom_ids(self):
         custom_ids = {"req-000000": "keyA", "req-000001": "keyB"}
@@ -297,6 +323,40 @@ class UsageTests(BatchHistoryTestBase):
         self.assertGreater(info["actual_cost"], 0)
         entry = BH.read_history()["batches"][0]
         self.assertEqual(entry["usage"]["thinking_tokens"], 50)
+
+
+class BatchEstimateTests(BatchHistoryTestBase):
+    def test_openai_automatic_prefix_cache_is_estimated_separately(self):
+        shared = "shared prompt token " * 1400
+        for number in range(2):
+            T.queue_batch_request(
+                f'{{"Line1":"{number}"}}',
+                "English",
+                {
+                    "model": "gpt-5.6-terra",
+                    "messages": [
+                        {"role": "system", "content": shared},
+                        {"role": "user", "content": f"request {number}"},
+                    ],
+                },
+                provider="openai",
+            )
+        T.flush_batch_queue()
+
+        with mock.patch.object(
+            T,
+            "getPricingConfig",
+            return_value={"inputAPICost": 2.0, "outputAPICost": 12.0},
+        ):
+            estimate = T.estimateBatchCost()
+
+        self.assertEqual(estimate["cache_kind"], "automatic")
+        self.assertTrue(estimate["uses_prompt_cache"])
+        self.assertGreaterEqual(estimate["cache_read_tokens"], 1024)
+        self.assertLess(
+            estimate["batch_cached_cost"],
+            estimate["batch_nocache_cost"],
+        )
 
 
 class ActivateResumeTests(BatchHistoryTestBase):
