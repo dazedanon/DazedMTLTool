@@ -395,13 +395,13 @@ files to translate are in the /files folder and that you picked the right game e
                     tqdm.write(
                         Fore.YELLOW
                         + f"[BATCH] WARNING: only {present}/{expected} results present. "
-                        "Missing keys fall back to the live API (full price)."
+                        "The consume pass will stop on a missing key; it will not "
+                        "make a full-price live request."
                         + Fore.RESET
                     )
             except Exception:
                 pass
-            # Pass 2 — write the translated files from the fetched results.
-            # Anything the batch missed falls back to the live API.
+            # Pass 2 — write only translations backed by fetched batch results.
             tqdm.write(Fore.CYAN + "[BATCH] Pass 2/2: writing translated files..." + Fore.RESET)
             set_batch_phase("consume")
             try:

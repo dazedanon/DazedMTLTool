@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
 
 # Product identity (QSettings / desktop / window titles).
@@ -109,10 +110,11 @@ def game_glossary_path(game_root: str | Path | None) -> Path | None:
 
 
 def ensure_game_glossary(game_root: str | Path | None) -> Path:
-    """Create or migrate the selected game's glossary and return its path.
+    """Create or safely copy the selected game's glossary and return its path.
 
-    Older DazedTL versions copied ``vocab.txt`` into the game root. Rename that
-    file on first use so an existing project's glossary remains intact.
+    Older DazedTL versions copied ``vocab.txt`` into the game root. Copy that
+    file only when its DazedTL base marker proves its provenance. Keep the legacy
+    file as a backup; an unrelated game-owned ``vocab.txt`` must never be moved.
     """
     path = game_glossary_path(game_root)
     if path is None:
@@ -124,8 +126,13 @@ def ensure_game_glossary(game_root: str | Path | None) -> Path:
 
     legacy = path.with_name(LEGACY_GLOSSARY_FILENAME)
     if legacy.is_file():
-        legacy.replace(path)
-        return path
+        try:
+            legacy_text = legacy.read_text(encoding="utf-8")
+        except (OSError, UnicodeError):
+            legacy_text = ""
+        if LEGACY_GLOSSARY_BASE_SEPARATOR in legacy_text:
+            shutil.copy2(legacy, path)
+            return path
 
     base_path = glossary_base_path()
     base = base_path.read_text(encoding="utf-8") if base_path.is_file() else ""

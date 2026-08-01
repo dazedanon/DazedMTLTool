@@ -8,6 +8,7 @@
 *.txt
 *.log
 logs/
+log/
 *.rpy
 *.csv
 *.ks

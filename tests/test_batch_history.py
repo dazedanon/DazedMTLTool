@@ -159,6 +159,19 @@ class BatchRunStateTests(BatchHistoryTestBase):
         self.assertIsNone(
             T.take_batch_result(payload, "English", "カイン (Cain)")
         )
+        with self.assertRaisesRegex(
+            T.BatchResultUnavailableError, "full-price live request"
+        ):
+            T.require_batch_result(payload, "English", "カイン (Cain)")
+
+    def test_queued_batch_metadata_preserves_resume_file_scope(self):
+        T.saveQueuedBatchMetadata(["Map001.json", "Map002.json"])
+
+        self.assertEqual(T.batchRunMetadata()["status"], "queued")
+        self.assertEqual(
+            T.batchRunMetadata()["file_set"],
+            ["Map001.json", "Map002.json"],
+        )
 
 
 class HistorySurvivalTests(BatchHistoryTestBase):

@@ -6,6 +6,7 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -16,7 +17,7 @@ try:
     from PyQt5.QtGui import QPalette
     from PyQt5.QtWidgets import QApplication, QMainWindow
 
-    from gui.config_tab import ConfigTab
+    from gui.config_tab import ConfigTab, ModelFetchThread
     from util import api_keys
 
     _HAS_QT = True
@@ -346,6 +347,40 @@ class ConfigTabRegressionTests(unittest.TestCase):
 
         self.assertEqual(tab.model_combo.currentText(), "gemini-3.1-pro")
         auto_save.assert_called_once_with()
+
+    def test_explicit_official_openai_url_filters_non_chat_models(self) -> None:
+        worker = ModelFetchThread(
+            "openai-secret", "https://api.openai.com/v1"
+        )
+        models = SimpleNamespace(list=lambda: [
+            SimpleNamespace(id="text-embedding-3-large"),
+            SimpleNamespace(id="gpt-5.6-terra"),
+            SimpleNamespace(id="o4-mini"),
+            SimpleNamespace(id="dall-e-3"),
+        ])
+        with patch(
+            "openai.OpenAI",
+            return_value=SimpleNamespace(models=models),
+        ):
+            fetched = worker._fetch_openai()
+
+        self.assertEqual(fetched, ["gpt-5.6-terra", "o4-mini"])
+
+    def test_custom_openai_compatible_url_keeps_provider_models(self) -> None:
+        worker = ModelFetchThread(
+            "custom-secret", "https://provider.example/v1"
+        )
+        models = SimpleNamespace(list=lambda: [
+            SimpleNamespace(id="provider-chat"),
+            SimpleNamespace(id="provider-reasoner"),
+        ])
+        with patch(
+            "openai.OpenAI",
+            return_value=SimpleNamespace(models=models),
+        ):
+            fetched = worker._fetch_openai()
+
+        self.assertEqual(fetched, ["provider-chat", "provider-reasoner"])
 
     def test_manual_model_refresh_preserves_custom_model(self) -> None:
         tab = self.make_tab()

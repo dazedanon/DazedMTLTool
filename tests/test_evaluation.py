@@ -530,6 +530,16 @@ class EvaluationManifestTests(unittest.TestCase):
             batch_estimate["maximum_cost_usd"] * 2,
         )
 
+    def test_failed_live_candidate_does_not_hide_submitted_batch(self):
+        candidates = [
+            {"status": "failed", "execution": "live"},
+            {"status": "submitted", "execution": "batch"},
+        ]
+
+        self.assertEqual(
+            evaluation._run_completion_status(candidates), "submitted"
+        )
+
     def test_live_evaluation_finishes_without_creating_batch_job(self):
         with tempfile.TemporaryDirectory() as temporary:
             run_dir = Path(temporary)
@@ -590,7 +600,7 @@ class EvaluationManifestTests(unittest.TestCase):
         self.assertEqual(summary["validation_failures"], summary["total_segments"])
         self.assertEqual(summary["valid_rate"], 0.0)
 
-    def test_soft_content_warning_remains_valid_and_is_recorded(self):
+    def test_corrupt_repetition_is_invalid_and_remains_reviewable(self):
         manifest = {
             "executions": [{
                 "id": "rep-1:logical-0001",
@@ -617,10 +627,11 @@ class EvaluationManifestTests(unittest.TestCase):
         )
         line = processed["rep-1:logical-0001"]["lines"][0]
 
-        self.assertTrue(line["valid"], line["issues"])
-        self.assertFalse(line["issues"])
+        self.assertFalse(line["valid"])
+        self.assertIn("Excessive character repetition", line["issues"][0])
         self.assertIn("Excessive character repetition", line["warnings"][0])
-        self.assertEqual(summary["valid_segments"], 1)
+        self.assertEqual(summary["valid_segments"], 0)
+        self.assertEqual(summary["validation_failures"], 1)
         self.assertEqual(summary["warning_segments"], 1)
 
     def test_response_line_count_mismatch_invalidates_the_request_lines(self):
@@ -791,6 +802,32 @@ class EvaluationManifestTests(unittest.TestCase):
             self.assertEqual(state["candidates"][0]["status"], "failed")
             self.assertIn("0/3", state["candidates"][0]["failure_reason"])
 
+    def test_load_run_keeps_pollable_state_when_another_candidate_failed(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            run_dir = Path(temporary)
+            evaluation._atomic_write_json(run_dir / "manifest.json", {})
+            evaluation._atomic_write_json(run_dir / "state.json", {
+                "run_id": "mixed-state-test",
+                "status": "submitted",
+                "candidates": [
+                    {
+                        "id": "candidate-1",
+                        "status": "completed",
+                        "summary": {
+                            "expected_requests": 2,
+                            "received_requests": 0,
+                            "provider_errors": [],
+                        },
+                    },
+                    {"id": "candidate-2", "status": "submitted"},
+                ],
+            })
+
+            state, _manifest = evaluation.load_run(run_dir)
+
+            self.assertEqual(state["candidates"][0]["status"], "failed")
+            self.assertEqual(state["status"], "submitted")
+
     def test_submitted_evaluation_jobs_are_registered_in_shared_history(self):
         with tempfile.TemporaryDirectory() as temporary:
             run_dir = Path(temporary)
@@ -896,6 +933,21 @@ class EvaluationHistoryTests(unittest.TestCase):
         self.assertEqual(runs[0]["reviewed"], 25)
         self.assertEqual(runs[0]["reviewed_samples"], 25)
         self.assertEqual(runs[0]["reviewed_lines"], 25)
+
+    def test_history_keeps_terminal_failed_runs_visible(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            project = Path(temporary)
+            failed = self._make_run(project, "failed-run")
+            state = evaluation._read_json(failed / "state.json")
+            state["status"] = "failed"
+            state["candidates"][0]["status"] = "failed"
+            evaluation._atomic_write_json(failed / "state.json", state)
+
+            evaluation.maintain_evaluation_storage(project)
+            runs = evaluation.list_runs(project)
+
+        self.assertEqual([run["run_id"] for run in runs], ["failed-run"])
+        self.assertEqual(runs[0]["status"], "failed")
 
     def test_latest_run_does_not_prefer_an_old_active_run(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -1275,6 +1327,30 @@ class BlindReviewTests(unittest.TestCase):
             ",B>A=C>D,",
             (self.run_dir / "blind_review.csv").read_text(encoding="utf-8-sig"),
         )
+
+    def test_import_rejects_modified_source_or_candidate_cells(self):
+        for field, replacement, message in (
+            ("source", json.dumps(["rewritten source"]), "source text changed"),
+            ("A", json.dumps(["rewritten candidate"]), "candidate text"),
+            ("segment_ids", json.dumps(["other-segment"]), "segment IDs changed"),
+        ):
+            with self.subTest(field=field):
+                review_path = evaluation.export_blind_review(self.run_dir)
+                with open(
+                    review_path, "r", encoding="utf-8-sig", newline=""
+                ) as stream:
+                    rows = list(csv.DictReader(stream))
+                self._fill_rankings(rows[0], "A>B>C>D")
+                rows[0][field] = replacement
+                with open(
+                    review_path, "w", encoding="utf-8-sig", newline=""
+                ) as stream:
+                    writer = csv.DictWriter(stream, fieldnames=rows[0].keys())
+                    writer.writeheader()
+                    writer.writerows(rows)
+
+                with self.assertRaisesRegex(ValueError, message):
+                    evaluation.import_blind_review(self.run_dir, review_path)
 
     def test_multi_line_sample_is_exported_and_scored_once_as_a_block(self):
         manifest_path = self.run_dir / "manifest.json"

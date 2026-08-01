@@ -447,8 +447,9 @@ def validate_translation_content(original_items, translated_items, langRegex):
     Validate hard content failures that make a translation unsafe or unusable.
     Returns: (is_valid, invalid_indices, reasons)
 
-    Stylistic heuristics such as unusually short output and repeated punctuation
-    are reported separately by :func:`translation_content_warnings`.
+    Outputs that are too short to carry the source meaning or contain runaway
+    character repetition are hard failures.  Accepting either result would
+    cache and write visibly corrupt player text.
     """
     if not isinstance(original_items, list):
         original_items = [original_items]
@@ -476,8 +477,41 @@ def validate_translation_content(original_items, translated_items, langRegex):
                 invalid_indices.append(i)
                 reasons.append(f"Line{i+1}: Empty translation for '{orig_str[:50]}...'")
                 continue
+
+            # Check 2: A substantial source cannot validly collapse to one
+            # punctuation mark.  This used to be only a warning, which meant
+            # the result was cached and written without entering the retry path.
+            has_bracketed_control = bool(re.search(r'\\[A-Z]\[', trans_str))
+            if len(trans_str) <= 1 and len(orig_str) > 3 and not has_bracketed_control:
+                invalid_indices.append(i)
+                reasons.append(
+                    f"Line{i+1}: Translation unusually short ('{trans_str}') for "
+                    f"'{orig_str[:50]}...'"
+                )
+                continue
+            if (
+                len(orig_str) > 10
+                and len(trans_str) <= 2
+                and not has_bracketed_control
+                and not trans_str.isalnum()
+            ):
+                invalid_indices.append(i)
+                reasons.append(
+                    f"Line{i+1}: Translation suspiciously short ('{trans_str}') for "
+                    f"'{orig_str[:50]}...'"
+                )
+                continue
+
+            # Check 3: Long runs of one character are model degeneration, not
+            # meaningful translation output.
+            if re.search(r"(.)\1{44,}", trans_str):
+                invalid_indices.append(i)
+                reasons.append(
+                    f"Line{i+1}: Excessive character repetition (possible model glitch)"
+                )
+                continue
             
-            # Check 2: Runaway translation - translation is excessively long relative to original
+            # Check 4: Runaway translation - translation is excessively long relative to original
             # Catches cases where the model repeats words endlessly (e.g. "it hurts it hurts it hurts...")
             ratio_limit = max(len(orig_str) * 8, 120)
             if len(orig_str) > 10 and len(trans_str) > ratio_limit:
@@ -490,7 +524,7 @@ def validate_translation_content(original_items, translated_items, langRegex):
                 reasons.append(f"Line{i+1}: Runaway translation (output {len(trans_str)} chars exceeds cap) for '{orig_str[:50]}...'")
                 continue
 
-            # Check 3: Source-language residue must not survive in player text.
+            # Check 5: Source-language residue must not survive in player text.
             # Japanese inside protected runtime-code parameters is absent here
             # and is restored only after validation. Ignore ideographic spaces:
             # RPG Maker choice lists commonly use U+3000 as intentional visual
@@ -501,7 +535,7 @@ def validate_translation_content(original_items, translated_items, langRegex):
                 reasons.append(f"Line{i+1}: Source-language text remains in translation")
                 continue
 
-            # Check 4: Reject leaked structured-response scaffolding such as
+            # Check 6: Reject leaked structured-response scaffolding such as
             # `}Line1:` that can otherwise become a speaker label.
             if re.search(r"(?:^|[}\]])\s*Line\d+\s*:", trans_str, re.IGNORECASE):
                 invalid_indices.append(i)
@@ -1033,8 +1067,8 @@ def batchQueueStaleContextCount(vocab_text=None, use_sfx_reference=None):
     """Return ``(stale, total)`` for queued requests under current dynamic context.
 
     This is used before resuming an unsubmitted queue. Submitted/fetched results
-    are protected by the same context-aware result key and simply miss (then
-    fall back to a live request) if matched glossary or SFX context has changed.
+    are protected by the same context-aware result key; a mismatch stops consume
+    rather than making an unapproved full-price live request.
     """
     flush_batch_queue()
     if vocab_text is None:
@@ -1080,6 +1114,23 @@ def take_batch_result(payload, language, cache_context=None):
     return _batch_results.get(get_cache_key(payload, language, cache_context))
 
 
+class BatchResultUnavailableError(RuntimeError):
+    """A consume pass could not safely match a fetched provider result."""
+
+
+def require_batch_result(payload, language, cache_context=None):
+    """Return one fetched result or stop before an unapproved live API call."""
+    result = take_batch_result(payload, language, cache_context)
+    if result is None:
+        raise BatchResultUnavailableError(
+            "[BATCH] No fetched result matches this request and its current "
+            "glossary/SFX context. The consume pass was stopped without making "
+            "a full-price live request. Re-collect the batch, or run normal "
+            "Translate explicitly if live pricing is acceptable."
+        )
+    return result
+
+
 def pendingBatchRequests():
     """Number of queued batch requests (call after the collect pass)."""
     flush_batch_queue()
@@ -1105,6 +1156,26 @@ def batchRunState():
         if _read_batch_file(BATCH_QUEUE_FILE):
             return "queued"
     return None
+
+
+def batchRunMetadata():
+    """Return a copy of the active batch state used to validate safe resumes."""
+    with _batch_file_lock():
+        return dict(_read_batch_file(BATCH_STATE_FILE))
+
+
+def saveQueuedBatchMetadata(file_set=None):
+    """Persist the file scope of an unsubmitted queue for safe resume."""
+    with BATCH_LOCK:
+        with _batch_file_lock():
+            state = _read_batch_file(BATCH_STATE_FILE)
+            state.update({
+                "status": "queued",
+                "file_set": list(file_set or []),
+                "model": os.getenv("model", ""),
+                "provider": getBatchProvider(os.getenv("model", "")),
+            })
+            _write_batch_file(BATCH_STATE_FILE, state)
 
 
 def clearBatchFiles():
@@ -1496,7 +1567,8 @@ def fetchTranslationBatches(batches=None):
     """Download finished batch results into the local results store.
 
     Successes are stored keyed by the payload cache key for the consume pass;
-    errored/expired requests are reported and simply fall back to the live API
+    errored/expired requests are reported; consume stops rather than silently
+    switching to the live API
     during consume. Durable history retains custom_ids for later redownload.
 
     batches: optional list of {id, custom_ids} (defaults to active batch_state).
@@ -3476,7 +3548,10 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None, mism
             continue
 
         # --- Translation and Validation Retry Block ---
-        max_retries = 2  # 1 initial attempt + 2 retries
+        # A fetched provider result may be validated once, but a consume pass
+        # must never turn a missing/invalid discounted result into an implicit
+        # full-price live retry. The user can start normal Translate explicitly.
+        max_retries = 0 if batch_phase == "consume" else 2
         final_translations = None
         last_raw_translation = ""
         from_batch = False
@@ -3505,27 +3580,30 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None, mism
                 if pbar:
                     pbar.write(f"Retrying translation... (Attempt {attempt + 1}/{max_retries + 1})")
 
-            # Translate - the consume pass tries the fetched batch result first;
-            # a missing or invalid result falls through to the live API.
+            # Translate - a consume pass must use the matching fetched result.
             from_batch = False
             if batch_phase == "consume" and attempt == 0:
-                batch_result = take_batch_result(
+                batch_result = require_batch_result(
                     subbedT, config.language, cache_context=vocab_text
                 )
-                if batch_result is not None:
-                    response = _AnthropicCompat(
-                        batch_result.get("text", ""),
-                        batch_result.get("prompt_tokens", 0) or 0,
-                        batch_result.get("completion_tokens", 0) or 0,
-                        batch_result.get("cache_read_input_tokens", 0) or 0,
-                        batch_result.get("cache_creation_input_tokens", 0) or 0,
-                    )
-                    from_batch = True
-                    _write_request_debug_log(
-                        f"{batch_provider or 'provider'}-batch",
-                        {"payload": subbedT}, response.usage,
-                    )
+                response = _AnthropicCompat(
+                    batch_result.get("text", ""),
+                    batch_result.get("prompt_tokens", 0) or 0,
+                    batch_result.get("completion_tokens", 0) or 0,
+                    batch_result.get("cache_read_input_tokens", 0) or 0,
+                    batch_result.get("cache_creation_input_tokens", 0) or 0,
+                )
+                from_batch = True
+                _write_request_debug_log(
+                    f"{batch_provider or 'provider'}-batch",
+                    {"payload": subbedT}, response.usage,
+                )
             if not from_batch:
+                if batch_phase == "consume":
+                    raise BatchResultUnavailableError(
+                        "[BATCH] Consume attempted to use the live API. The run "
+                        "was stopped before any full-price fallback request."
+                    )
                 try:
                     response = translateText(static_system, current_user, history, 0.05, formatType, config.model, numLines, vocab_text=vocab_text)
                 except Exception as api_err:

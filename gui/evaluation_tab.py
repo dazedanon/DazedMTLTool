@@ -611,7 +611,7 @@ class EvaluationTab(QWidget):
                 current = evaluation.run_history_entry(preferred)
             except (OSError, ValueError, KeyError):
                 current = None
-            if current is not None and current.get("status") == "prepared":
+            if current is not None and current.get("status") in {"prepared", "failed"}:
                 runs.insert(0, current)
         self.history_combo.blockSignals(True)
         self.history_combo.clear()
@@ -2020,11 +2020,15 @@ class EvaluationTab(QWidget):
                 "submitted", "partially_submitted", "imported_paused"
             }
         )
-        self.export_btn.setEnabled(not busy and status == "completed")
+        self.export_btn.setEnabled(not busy and status in {"completed", "failed"})
         self.copy_review_skill_btn.setEnabled(
-            not busy and status == "completed" and self._review_csv_path() is not None
+            not busy
+            and status in {"completed", "failed"}
+            and self._review_csv_path() is not None
         )
         self.import_btn.setEnabled(
-            not busy and status == "completed" and bool(self.current_run_dir)
+            not busy
+            and status in {"completed", "failed"}
+            and bool(self.current_run_dir)
         )
         self._update_history_actions()

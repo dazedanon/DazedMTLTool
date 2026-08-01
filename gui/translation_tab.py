@@ -1012,6 +1012,7 @@ class TranslationWorker(QThread):
                         clearBatchFiles,
                         pendingBatchRequests,
                         estimateBatchCost,
+                        saveQueuedBatchMetadata,
                     )
 
                     if self.batch_resume_state == "queued":
@@ -1060,6 +1061,7 @@ class TranslationWorker(QThread):
                             if est is not None:
                                 est = dict(est)
                                 est["files"] = len(matching_files)
+                            saveQueuedBatchMetadata(matching_files)
                             if not self._wait_batch_submit(est):
                                 self._emit_batch_phase("not_submitted", est)
                                 self.emit_log(
@@ -1125,7 +1127,8 @@ class TranslationWorker(QThread):
                             if expected and present < expected:
                                 self.emit_log(
                                     f"[BATCH] WARNING: only {present}/{expected} results present. "
-                                    "Missing keys will fall back to the live API (full price)."
+                                    "The consume pass will stop on a missing key; it will not "
+                                    "make a full-price live request."
                                 )
                         except Exception:
                             pass
@@ -3401,10 +3404,6 @@ class TranslationTab(QWidget):
         # Get checked files
         selected_files = self.get_selected_files()
         
-        if not selected_files:
-            QMessageBox.warning(self, "No Files Selected", "Please check at least one file to translate.")
-            return
-            
         # Get selected module
         selected_index = self.module_combo.currentIndex()
         if selected_index < 0 or selected_index >= len(self.modules):
@@ -3430,7 +3429,11 @@ class TranslationTab(QWidget):
             load_dotenv()
             sys.path.insert(0, str(self.project_root))
             try:
-                from util.translation import isBatchSupported, batchRunState
+                from util.translation import (
+                    batchRunMetadata,
+                    batchRunState,
+                    isBatchSupported,
+                )
             except Exception as e:
                 QMessageBox.warning(self, "Batch Translate", f"Could not load batch support: {e}")
                 return
@@ -3447,16 +3450,18 @@ class TranslationTab(QWidget):
             if forced_resume_state:
                 batch_resume_state = forced_resume_state
             elif skip_confirm:
-                # Workflow auto-start: each phase is an independent batch run.
-                # Never resume stale queue/results left over from a prior phase.
+                # Workflow auto-start must not orphan or overwrite an existing
+                # queue/provider job. Let the operator resume or clear it first.
                 from util.translation import clearBatchFiles, batchRunState as _brs
                 prior = _brs()
                 if prior:
-                    # Log discard so operators notice unpaid queue / in-flight work.
-                    print(
-                        f"[BATCH] Workflow start discarding prior batch state ({prior}).",
-                        flush=True,
+                    QMessageBox.warning(
+                        self,
+                        "Existing Batch Run",
+                        f"A previous batch run is still {prior}. Resume or clear it "
+                        "from Batch History before starting this workflow phase.",
                     )
+                    return
                 clearBatchFiles()
                 batch_resume_state = None
             else:
@@ -3485,6 +3490,32 @@ class TranslationTab(QWidget):
                         )
                     if reply != QMessageBox.Yes:
                         batch_resume_state = None
+
+            if batch_resume_state:
+                saved_files = list(batchRunMetadata().get("file_set") or [])
+                if saved_files:
+                    self.select_files_by_name(saved_files)
+                    selected_files = self.get_selected_files()
+                    missing_files = sorted(set(saved_files) - set(selected_files))
+                    if missing_files:
+                        preview = "\n".join(missing_files[:10])
+                        if len(missing_files) > 10:
+                            preview += f"\n… and {len(missing_files) - 10} more"
+                        QMessageBox.warning(
+                            self,
+                            "Batch Files Missing",
+                            "The original batch file set is no longer available. "
+                            "Resume was stopped before consuming results:\n\n" + preview,
+                        )
+                        return
+
+        if not selected_files:
+            QMessageBox.warning(
+                self,
+                "No Files Selected",
+                "Please check at least one file to translate.",
+            )
+            return
         
         # Confirm start (skipped when called programmatically from the Workflow tab
         # or when Batch history already confirmed Resume).

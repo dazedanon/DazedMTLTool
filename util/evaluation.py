@@ -1396,9 +1396,13 @@ def load_run(run_dir: str | Path) -> tuple[dict, dict]:
         if _summary_has_no_successes(summary):
             candidate["status"] = "failed"
             candidate["failure_reason"] = _no_successes_reason(summary)
-    if any(
-        candidate.get("status") == "failed"
-        for candidate in state.get("candidates") or []
+    candidate_statuses = [
+        candidate.get("status") for candidate in state.get("candidates") or []
+    ]
+    if (
+        candidate_statuses
+        and all(status in {"completed", "failed"} for status in candidate_statuses)
+        and any(status == "failed" for status in candidate_statuses)
     ):
         state["status"] = "failed"
     return state, _read_json(root / "manifest.json")
@@ -1458,7 +1462,9 @@ def list_runs(project_root: str | Path) -> list[dict]:
     runs: list[dict] = []
     visible_statuses = {
         archive_root: {"completed"},
-        work_root: {"submitted", "partially_submitted", "imported_paused"},
+        work_root: {
+            "submitted", "partially_submitted", "imported_paused", "failed",
+        },
     }
     for runs_root, statuses in visible_statuses.items():
         for run_dir in _safe_run_directories(runs_root):
@@ -1823,11 +1829,17 @@ def _complete_candidate(
 def _run_completion_status(candidates: list[dict]) -> str:
     """Return the aggregate state after all currently available work is processed."""
     statuses = [candidate.get("status") for candidate in candidates]
-    if any(status == "failed" for status in statuses):
-        return "failed"
+    if any(status == "submitted" for status in statuses):
+        return "submitted"
+    if any(status == "prepared" for status in statuses):
+        return "partially_submitted" if any(
+            status != "prepared" for status in statuses
+        ) else "prepared"
     if statuses and all(status == "completed" for status in statuses):
         return "completed"
-    return "submitted"
+    if statuses and all(status in {"completed", "failed"} for status in statuses):
+        return "failed"
+    return "partially_submitted"
 
 
 def _execute_live_candidate(
@@ -2529,6 +2541,12 @@ def import_blind_review(run_dir: str | Path, review_path: str | Path) -> dict:
     root = Path(run_dir)
     state, manifest = load_run(root)
     key = _read_json(root / "blind_key.json")
+    _results, primary, review_samples, _coverage = _blind_review_data(
+        root, state, manifest
+    )
+    expected_samples = {
+        str(sample["id"]): sample for sample in review_samples
+    }
     expected_line_counts = {
         str(request.get("id")): len(request.get("segment_ids") or [])
         for request in manifest.get("logical_requests") or []
@@ -2588,6 +2606,53 @@ def import_blind_review(run_dir: str | Path, review_path: str | Path) -> dict:
                 for candidate_id in labels_to_candidates.values()
             ):
                 raise ValueError(f"Unknown reviewed sample {review_id!r}")
+
+            # Rankings are meaningful only when the reviewer saw the exact
+            # frozen source and candidate outputs that were exported. CSV and
+            # spreadsheet tools may rewrite cells, so validate every protected
+            # field against the run artifacts before attributing a score.
+            sample = expected_samples.get(review_id)
+            if sample is None:
+                raise ValueError(f"Unknown reviewed sample {review_id!r}")
+
+            def _review_json(field: str):
+                value = str(row.get(field) or "").strip()
+                try:
+                    return json.loads(value)
+                except json.JSONDecodeError as exc:
+                    raise ValueError(
+                        f"Protected review field {field!r} is invalid for "
+                        f"sample {review_id!r}"
+                    ) from exc
+
+            protected_scalars = {
+                "scene_id": str(sample["scene_id"]),
+                "stratum": str(sample["stratum"]),
+            }
+            for field, expected_value in protected_scalars.items():
+                if str(row.get(field) or "") != expected_value:
+                    raise ValueError(
+                        f"Protected review field {field!r} changed for "
+                        f"sample {review_id!r}"
+                    )
+            if _review_json("segment_ids") != list(sample["segment_ids"]):
+                raise ValueError(
+                    f"Protected segment IDs changed for sample {review_id!r}"
+                )
+            if _review_json("source") != list(sample["sources"]):
+                raise ValueError(
+                    f"Protected source text changed for sample {review_id!r}"
+                )
+            for label, candidate_id in labels_to_candidates.items():
+                expected_translations = [
+                    primary[segment_id][candidate_id]
+                    for segment_id in sample["segment_ids"]
+                ]
+                if _review_json(label) != expected_translations:
+                    raise ValueError(
+                        f"Protected candidate text {label!r} changed for "
+                        f"sample {review_id!r}"
+                    )
             try:
                 if ranking_value:
                     tiers = _parse_blind_ranking(ranking_value, labels)

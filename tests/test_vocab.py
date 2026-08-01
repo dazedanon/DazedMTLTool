@@ -30,7 +30,7 @@ class TestGameGlossaryPaths(unittest.TestCase):
             self.assertIn("さん (san)", path_b.read_text(encoding="utf-8"))
             self.assertNotIn("Alice", path_b.read_text(encoding="utf-8"))
 
-    def test_legacy_game_vocab_is_migrated_and_preserved(self):
+    def test_legacy_game_vocab_is_copied_and_preserved_as_backup(self):
         with tempfile.TemporaryDirectory() as raw:
             game = Path(raw)
             legacy = game / "vocab.txt"
@@ -43,9 +43,29 @@ class TestGameGlossaryPaths(unittest.TestCase):
 
             glossary = paths.ensure_game_glossary(game)
 
-            self.assertFalse(legacy.exists())
+            self.assertTrue(legacy.exists())
             self.assertTrue(glossary.is_file())
             self.assertIn("ユウ (Yuu)", vocab.read_game_vocab(game))
+
+    def test_unmarked_game_vocab_is_not_treated_as_dazedtl_data(self):
+        with tempfile.TemporaryDirectory() as raw:
+            game = Path(raw)
+            legacy = game / "vocab.txt"
+            legacy.write_text("game-owned vocabulary\n", encoding="utf-8")
+            base = game / "base.txt"
+            base.write_text("# Base\nさん (san)\n", encoding="utf-8")
+
+            with patch.object(paths, "glossary_base_path", return_value=base):
+                glossary = paths.ensure_game_glossary(game)
+
+            self.assertEqual(
+                legacy.read_text(encoding="utf-8"),
+                "game-owned vocabulary\n",
+            )
+            self.assertIn("さん (san)", glossary.read_text(encoding="utf-8"))
+            self.assertNotIn(
+                "game-owned vocabulary", glossary.read_text(encoding="utf-8")
+            )
 
 
 class TestUpdateVocabSection(unittest.TestCase):

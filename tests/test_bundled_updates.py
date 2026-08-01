@@ -285,6 +285,23 @@ class ShippedDataTrackingTests(unittest.TestCase):
                     "add a !.gitignore exception under data/ so tool updates include it",
                 )
 
+    def test_runtime_evaluation_prompts_are_gitignored(self):
+        result = subprocess.run(
+            [
+                "git", "check-ignore", "--",
+                "log/evaluations/example-run/review_system_prompt.md",
+            ],
+            cwd=_REPO_ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(
+            result.returncode,
+            0,
+            "runtime evaluation prompts must not be included by git add/archive",
+        )
+
 
 class SourceArchiveMetadataTests(unittest.TestCase):
     """Source archives identify their commit and omit development metadata."""

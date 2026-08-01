@@ -4,6 +4,7 @@ Configuration Tab - Handles environment variables, global settings, and engine c
 
 import os
 from pathlib import Path
+from urllib.parse import urlsplit
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QFormLayout, QGridLayout, QLineEdit,
     QSpinBox, QDoubleSpinBox, QComboBox, QPushButton, QGroupBox,
@@ -102,9 +103,10 @@ class ModelFetchThread(QThread):
         client = openai.OpenAI(**kwargs)
         all_models = [m.id for m in client.models.list()]
         # When using a custom URL (non-OpenAI provider like DeepSeek), return all
-        # model IDs unfiltered.  For the default OpenAI endpoint, keep only the
-        # GPT / o-series models to avoid a cluttered list.
-        if self.api_url:
+        # model IDs unfiltered. An explicitly configured official OpenAI URL is
+        # still OpenAI and must retain the chat-model filter.
+        hostname = urlsplit(self.api_url).hostname if self.api_url else ""
+        if hostname and hostname.lower() != "api.openai.com":
             return sorted(all_models)
         prefixes = ("gpt-", "o1", "o2", "o3", "o4", "chatgpt")
         return sorted(m for m in all_models if any(m.lower().startswith(p) for p in prefixes))

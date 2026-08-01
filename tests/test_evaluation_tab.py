@@ -653,7 +653,7 @@ class EvaluationTabTests(unittest.TestCase):
             "210",
         )
 
-    def test_failed_evaluation_displays_failure_and_disables_review_actions(self):
+    def test_failed_evaluation_displays_failure_and_keeps_recovery_actions(self):
         with tempfile.TemporaryDirectory() as temporary:
             self.tab.current_run_dir = Path(temporary)
             self.tab._display_state({
@@ -673,8 +673,8 @@ class EvaluationTabTests(unittest.TestCase):
                 }],
             })
             self.assertEqual(self.tab.table.item(0, 3).text(), "Failed")
-            self.assertFalse(self.tab.export_btn.isEnabled())
-            self.assertFalse(self.tab.import_btn.isEnabled())
+            self.assertTrue(self.tab.export_btn.isEnabled())
+            self.assertTrue(self.tab.import_btn.isEnabled())
 
     def test_import_explains_that_blind_export_is_required(self):
         with tempfile.TemporaryDirectory() as temporary:

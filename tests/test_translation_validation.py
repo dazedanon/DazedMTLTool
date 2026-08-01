@@ -119,7 +119,7 @@ class TranslationContentValidationTests(unittest.TestCase):
         self.assertEqual(indices, [0])
         self.assertIn("Source-language text remains", reasons[0])
 
-    def test_short_translation_is_warning_not_failure(self):
+    def test_short_translation_is_hard_failure(self):
         source = "これはとても長い日本語の文章です"
         valid, indices, reasons = tr.validate_translation_content(
             [source], ["!"], r"[一-龠ぁ-ゔァ-ヴー]+"
@@ -128,12 +128,13 @@ class TranslationContentValidationTests(unittest.TestCase):
             [source], ["!"], r"[一-龠ぁ-ゔァ-ヴー]+"
         )
 
-        self.assertTrue(valid, reasons)
-        self.assertEqual(indices, [])
+        self.assertFalse(valid)
+        self.assertEqual(indices, [0])
+        self.assertIn("unusually short", reasons[0])
         self.assertEqual(warning_indices, [0])
         self.assertIn("unusually short", warnings[0])
 
-    def test_repeated_punctuation_is_warning_not_failure(self):
+    def test_repeated_punctuation_is_hard_failure(self):
         source = "[ルシア]: ………………………………………………………………。"
         translated = "[Lucia]: " + "." * 50
         valid, indices, reasons = tr.validate_translation_content(
@@ -143,8 +144,9 @@ class TranslationContentValidationTests(unittest.TestCase):
             [source], [translated], r"[一-龠ぁ-ゔァ-ヴー]+"
         )
 
-        self.assertTrue(valid, reasons)
-        self.assertEqual(indices, [])
+        self.assertFalse(valid)
+        self.assertEqual(indices, [0])
+        self.assertIn("Excessive character repetition", reasons[0])
         self.assertEqual(warning_indices, [0])
         self.assertIn("Excessive character repetition", warnings[0])
 

@@ -306,8 +306,9 @@ How it works (all engine modules are supported automatically):
    processing server-side.
 4. **Pass 2 (consume)** — files are processed again; every payload is filled from the batch
    results through the normal validation pipeline (line counts, placeholders, content
-   checks). Anything the batch missed or that fails validation falls back to the live API
-   automatically, so the output is always complete.
+   checks). A missing, stale-context, or invalid result stops safely and preserves the
+   original text; it never turns into an unconfirmed full-price live request. Start normal
+   Translate explicitly if you want to retry those files at live pricing.
 
 Context note: in live mode the rolling translation history contains the previous batch's
 English lines; in batch mode requests are independent, so the history carries the previous
@@ -407,7 +408,8 @@ Prepared and provider-active work is kept under `log/evaluation_work/`; a new
 preparation replaces older work that was never submitted. Only evaluations
 whose model results completed successfully are moved into `log/evaluations/`.
 The saved-evaluation picker also shows submitted work so provider jobs can be
-reconnected after restarting the app, but never lists prepared or failed runs.
+reconnected after restarting the app. Prepared runs stay temporary; terminal failed runs
+remain visible so their diagnostics and partial results can be inspected or exported.
 Completed history is capped at the newest 50 runs, with the oldest completed
 run removed when the limit is exceeded. Saved API-key secrets are never copied
 into either location.
