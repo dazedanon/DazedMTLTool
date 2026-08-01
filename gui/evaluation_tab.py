@@ -550,8 +550,13 @@ class EvaluationTab(QWidget):
     def _update_history_actions(self):
         busy = self._worker is not None and self._worker.isRunning()
         has_selection = self._selected_history_run() is not None
+        selected_status = str(
+            self.history_combo.currentData(Qt.UserRole + 1) or ""
+        )
         self.history_combo.setEnabled(not busy and has_selection)
-        self.export_evaluation_btn.setEnabled(not busy and has_selection)
+        self.export_evaluation_btn.setEnabled(
+            not busy and has_selection and selected_status != "prepared"
+        )
         self.import_evaluation_btn.setEnabled(not busy)
 
     def _refresh_history(self, select_run: str | Path | None = None):
@@ -559,6 +564,16 @@ class EvaluationTab(QWidget):
             self.current_run_dir.resolve() if self.current_run_dir else None
         )
         runs = evaluation.list_runs(self.project_root)
+        listed_paths = {
+            Path(run["run_dir"]).resolve() for run in runs
+        }
+        if preferred is not None and preferred not in listed_paths:
+            try:
+                current = evaluation.run_history_entry(preferred)
+            except (OSError, ValueError, KeyError):
+                current = None
+            if current is not None and current.get("status") == "prepared":
+                runs.insert(0, current)
         self.history_combo.blockSignals(True)
         self.history_combo.clear()
         selected_index = -1
@@ -589,6 +604,9 @@ class EvaluationTab(QWidget):
                 label += f"  ·  {reviewed_lines:,} lines reviewed"
             self.history_combo.addItem(label, str(run_dir))
             self.history_combo.setItemData(index, label, Qt.ToolTipRole)
+            self.history_combo.setItemData(
+                index, str(run.get("status") or ""), Qt.UserRole + 1
+            )
             if preferred is not None and run_dir == preferred:
                 selected_index = index
         if selected_index < 0 and runs:

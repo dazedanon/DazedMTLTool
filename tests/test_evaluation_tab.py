@@ -263,7 +263,7 @@ class EvaluationTabTests(unittest.TestCase):
                 "run_dir": older,
                 "run_id": "older",
                 "created_at": "2026-08-01T12:00:00+00:00",
-                "status": "prepared",
+                "status": "completed",
                 "models": ["model-c", "model-d"],
                 "modes": ["batch", "batch"],
                 "selected_segments": 120,
@@ -288,6 +288,47 @@ class EvaluationTabTests(unittest.TestCase):
         with mock.patch.object(self.tab, "_open_run") as open_run:
             self.tab.history_combo.activated.emit(self.tab.history_combo.currentIndex())
         open_run.assert_called_once_with(older)
+
+    def test_history_selects_current_prepared_run_without_saving_it(self):
+        prepared = Path("/tmp/current-prepared-evaluation")
+        saved = Path("/tmp/saved-completed-evaluation")
+        saved_run = {
+            "run_dir": saved,
+            "run_id": "saved",
+            "created_at": "2026-08-01T12:00:00+00:00",
+            "status": "completed",
+            "models": ["saved-model"],
+            "modes": ["batch"],
+            "selected_segments": 360,
+            "reviewed": 0,
+        }
+        prepared_run = {
+            "run_dir": prepared,
+            "run_id": "prepared",
+            "created_at": "2026-08-02T12:00:00+00:00",
+            "status": "prepared",
+            "models": ["current-model"],
+            "modes": ["batch"],
+            "selected_segments": 120,
+            "reviewed": 0,
+        }
+        self.tab.current_run_dir = prepared
+        with (
+            mock.patch(
+                "gui.evaluation_tab.evaluation.list_runs",
+                return_value=[saved_run],
+            ),
+            mock.patch(
+                "gui.evaluation_tab.evaluation.run_history_entry",
+                return_value=prepared_run,
+            ),
+        ):
+            self.tab._refresh_history(prepared)
+
+        self.assertEqual(self.tab._selected_history_run(), prepared)
+        self.assertIn("current-model", self.tab.history_combo.currentText())
+        self.assertIn("Prepared", self.tab.history_combo.currentText())
+        self.assertFalse(self.tab.export_evaluation_btn.isEnabled())
 
     def test_key_suggestions_are_provider_specific(self):
         self.tab._add_candidate_row("gemini", "gemini-3.6-flash")
