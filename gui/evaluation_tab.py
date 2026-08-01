@@ -154,6 +154,7 @@ class EvaluationTab(QWidget):
         self._last_review_path: Path | None = None
         self._worker: _EvaluationWorker | None = None
         self._worker_cancelable = False
+        self._worker_uses_translation_runtime = False
         self._candidate_widgets: list[dict] = []
         self._content_inventory: dict = {}
         self._content_source_items: dict[str, QTreeWidgetItem] = {}
@@ -1534,11 +1535,15 @@ class EvaluationTab(QWidget):
             self._update_actions()
             self._update_history_actions()
 
-    def _run_task(self, task, on_done, *, cancelable=False):
+    def _run_task(
+        self, task, on_done, *, cancelable=False,
+        uses_translation_runtime=False,
+    ):
         if self._worker is not None and self._worker.isRunning():
             QMessageBox.information(self, "Evaluation busy", "An evaluation operation is still running.")
             return
         self._worker_cancelable = bool(cancelable)
+        self._worker_uses_translation_runtime = bool(uses_translation_runtime)
         self._set_busy(True)
         worker = _EvaluationWorker(task, self)
         self._worker = worker
@@ -1560,6 +1565,7 @@ class EvaluationTab(QWidget):
         if self.sender() is self._worker:
             self._worker = None
             self._worker_cancelable = False
+            self._worker_uses_translation_runtime = False
             # The result signal arrives while QThread.isRunning() is still
             # true. Restore actions only after the actual thread-finished
             # signal so _update_actions() cannot disable them again.
@@ -1721,12 +1727,18 @@ class EvaluationTab(QWidget):
             self._append_log(f"Manifest: {self.current_run_dir / 'manifest.json'}")
             self._refresh_history(self.current_run_dir)
 
-        self._run_task(task, done)
+        self._run_task(task, done, uses_translation_runtime=True)
 
     def submit_batches(self):
         if not self.current_run_dir:
             return
-        state, manifest = evaluation.load_run(self.current_run_dir)
+        try:
+            state, manifest = evaluation.refresh_run_estimates(
+                self.current_run_dir
+            )
+        except Exception as exc:
+            QMessageBox.warning(self, "Evaluation budget", str(exc))
+            return
         if state["status"] not in {"prepared", "partially_submitted"}:
             return
         lines = [

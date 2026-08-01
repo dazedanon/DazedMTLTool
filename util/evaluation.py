@@ -1117,7 +1117,10 @@ def estimate_candidate(manifest: dict, candidate: dict) -> dict:
     tokenizer_factor = 1.30 if candidate.get("provider") == "anthropic" else 1.10
     thinking_factor = 1.10 if candidate.get("provider") == "gemini" else 1.0
     estimated_input = round(input_tokens * tokenizer_factor)
-    estimated_output = round(output_tokens * tokenizer_factor * thinking_factor)
+    estimated_output = min(
+        round(output_tokens * tokenizer_factor * thinking_factor),
+        len(manifest["executions"]) * MAX_OUTPUT_TOKENS_PER_REQUEST,
+    )
     rates = _candidate_rates(candidate)
     raw_cost = (
         estimated_input * rates["input"]
@@ -1135,10 +1138,11 @@ def estimate_candidate(manifest: dict, candidate: dict) -> dict:
         * rates["output"]
     ) / 1_000_000
     maximum_cost = single_attempt_ceiling * automatic_attempts
+    likely_upper_cost = min(raw_cost * 1.25, single_attempt_ceiling)
     return {
         "input_tokens": estimated_input,
         "output_tokens": estimated_output,
-        "cost_usd": raw_cost * 1.25,
+        "cost_usd": likely_upper_cost,
         "maximum_cost_usd": maximum_cost,
         "automatic_attempts": automatic_attempts,
         "output_token_cap_per_request": MAX_OUTPUT_TOKENS_PER_REQUEST,
@@ -1150,6 +1154,47 @@ def estimate_candidate(manifest: dict, candidate: dict) -> dict:
             f"attempt{'s' if automatic_attempts != 1 else ''}"
         ),
     }
+
+
+def _validate_candidate_budget(candidate: dict, budget_usd: float) -> None:
+    estimate = candidate["estimate"]
+    if estimate["cost_usd"] > budget_usd * 0.80:
+        raise ValueError(
+            f"{candidate['label']} has a likely upper bound of "
+            f"${estimate['cost_usd']:.2f}; "
+            f"the safe pre-submit limit is ${budget_usd * 0.80:.2f}"
+        )
+    if estimate["maximum_cost_usd"] > budget_usd:
+        raise ValueError(
+            f"{candidate['label']} has a theoretical ceiling of "
+            f"${estimate['maximum_cost_usd']:.2f}, including "
+            f"{estimate.get('automatic_attempts', 1)} automatic "
+            f"attempt(s); budget is ${budget_usd:.2f}"
+        )
+
+
+def refresh_run_estimates(run_dir: str | Path) -> tuple[dict, dict]:
+    """Refresh every unpaid estimate and enforce the saved budget."""
+    root = Path(run_dir)
+    state, manifest = load_run(root)
+    budget_usd = float(
+        state.get("budget_usd_per_model", DEFAULT_BUDGET_USD)
+        or DEFAULT_BUDGET_USD
+    )
+    state.setdefault("budget_usd_per_model", budget_usd)
+    changed = False
+    for candidate in state.get("candidates") or []:
+        if candidate.get("batch_id") or candidate.get("status") in {
+            "completed", "failed", "submitted",
+        }:
+            continue
+        candidate["estimate"] = estimate_candidate(manifest, candidate)
+        _validate_candidate_budget(candidate, budget_usd)
+        changed = True
+    if changed:
+        state["updated_at"] = _utc_now()
+        _atomic_write_json(root / "state.json", state)
+    return state, manifest
 
 
 def _candidate_rates(candidate: dict) -> dict[str, float]:
@@ -1405,19 +1450,7 @@ def prepare_run(project_root: str | Path, files_dir: str | Path,
             "status": "prepared",
         }
         clean["estimate"] = estimate_candidate(manifest, clean)
-        if clean["estimate"]["cost_usd"] > budget_usd * 0.80:
-            raise ValueError(
-                f"{clean['label']} has a likely upper bound of "
-                f"${clean['estimate']['cost_usd']:.2f}; "
-                f"the safe pre-submit limit is ${budget_usd * 0.80:.2f}"
-            )
-        if clean["estimate"]["maximum_cost_usd"] > budget_usd:
-            raise ValueError(
-                f"{clean['label']} has a theoretical ceiling of "
-                f"${clean['estimate']['maximum_cost_usd']:.2f}, including "
-                f"{clean['estimate'].get('automatic_attempts', 1)} automatic "
-                f"attempt(s); budget is ${budget_usd:.2f}"
-            )
+        _validate_candidate_budget(clean, budget_usd)
         clean_candidates.append(clean)
 
     project = Path(project_root).resolve()
@@ -2179,7 +2212,10 @@ def submit_run(run_dir: str | Path, credentials: dict[str, str],
                log: Callable[[str], None] | None = None,
                should_stop: Callable[[], bool] | None = None) -> dict:
     root = Path(run_dir)
-    state, manifest = load_run(root)
+    # Estimates can become stale while a prepared/imported run waits (pricing
+    # changes, or a newer release strengthens retry accounting). Recalculate
+    # and enforce the budget at the paid boundary, not only during preparation.
+    state, manifest = refresh_run_estimates(root)
     if state["status"] not in {"prepared", "partially_submitted"}:
         raise ValueError(f"Run cannot be submitted from state {state['status']!r}")
     requests = _request_lookup(manifest)

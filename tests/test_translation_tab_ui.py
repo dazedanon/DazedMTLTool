@@ -97,6 +97,24 @@ class TranslationTabUITests(unittest.TestCase):
         self.assertEqual(result, "Fail")
         self.assertEqual(errors, [("bad.json", "Translation failed")])
 
+    def test_translation_waits_for_evaluation_corpus_capture(self) -> None:
+        worker = mock.Mock()
+        worker.isRunning.return_value = True
+        self.tab.parent_window = SimpleNamespace(
+            evaluation_tab=SimpleNamespace(
+                _worker=worker,
+                _worker_uses_translation_runtime=True,
+            )
+        )
+
+        with mock.patch(
+            "gui.translation_tab.QMessageBox.warning"
+        ) as warning:
+            self.tab.start_translation()
+
+        warning.assert_called_once()
+        self.assertIn("preparation", warning.call_args.args[1].lower())
+
     def test_worker_turns_validation_marker_into_file_failure(self) -> None:
         worker = TranslationWorker(
             Path(__file__).resolve().parents[1], ("JSON", (".json",), None)

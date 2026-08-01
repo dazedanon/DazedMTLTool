@@ -181,6 +181,66 @@ class BatchRunStateTests(BatchHistoryTestBase):
             {'["He agreed."]', '["She disagreed."]'},
         )
 
+    def test_legacy_queue_is_stale_before_submission(self):
+        T._write_batch_file(T.BATCH_QUEUE_FILE, {
+            "legacy-key": {
+                "payload": '{"Line1":"そうです"}',
+                "language": "English",
+                "params": {"model": "gpt-5.6-terra", "messages": []},
+                "provider": "openai",
+            },
+        })
+
+        self.assertEqual(T.batchQueueStaleContextCount(""), (1, 1))
+
+    def test_legacy_queue_is_blocked_at_paid_boundary(self):
+        T._write_batch_file(T.BATCH_QUEUE_FILE, {
+            "legacy-key": {
+                "payload": '{"Line1":"そうです"}',
+                "language": "English",
+                "params": {"model": "gpt-5.6-terra", "messages": []},
+                "provider": "openai",
+            },
+        })
+
+        with mock.patch("util.batch_providers.submit_batch") as submit:
+            with self.assertRaisesRegex(ValueError, "predates context-aware"):
+                T.submitTranslationBatches()
+
+        submit.assert_not_called()
+
+    def test_legacy_fetched_result_falls_back_without_version_marker(self):
+        payload = '{"Line1":"そうです"}'
+        result = {"text": '{"Line1":"Yes"}'}
+        legacy_key = T.get_cache_key(payload, "English", "")
+        T._write_batch_file(T.BATCH_RESULTS_FILE, {legacy_key: result})
+        T._write_batch_file(T.BATCH_STATE_FILE, {"status": "fetched"})
+        T._batch_results = None
+
+        self.assertEqual(
+            T.take_batch_result(
+                payload, "English", "", request_context=["He agreed."],
+            ),
+            result,
+        )
+
+    def test_modern_fetched_result_never_falls_back_across_history(self):
+        payload = '{"Line1":"そうです"}'
+        legacy_key = T.get_cache_key(payload, "English", "")
+        T._write_batch_file(
+            T.BATCH_RESULTS_FILE,
+            {legacy_key: {"text": '{"Line1":"Yes"}'}},
+        )
+        T._write_batch_file(T.BATCH_STATE_FILE, {
+            "status": "fetched",
+            "cache_key_version": T.BATCH_CACHE_KEY_VERSION,
+        })
+        T._batch_results = None
+
+        self.assertIsNone(T.take_batch_result(
+            payload, "English", "", request_context=["She disagreed."],
+        ))
+
     def test_queued_sfx_context_becomes_stale_when_reference_is_disabled(self):
         payload = '{"Line1": "ドキドキ"}'
         config = T.TranslationConfig(
@@ -340,6 +400,50 @@ class HistorySurvivalTests(BatchHistoryTestBase):
             BH.read_history()["batches"][0]["key_name"], "Work OpenAI"
         )
 
+    def test_submission_history_preserves_endpoint_and_cache_key_version(self):
+        BH.record_submit(
+            [{
+                "id": "batch-routed",
+                "custom_ids": {"req-1": "cache-1"},
+                "cache_key_version": T.BATCH_CACHE_KEY_VERSION,
+            }],
+            provider="openai",
+            endpoint="https://submitted.example/v1",
+        )
+
+        entry = BH.read_history()["batches"][0]
+        self.assertEqual(entry["endpoint"], "https://submitted.example/v1")
+        self.assertEqual(entry["cache_key_version"], T.BATCH_CACHE_KEY_VERSION)
+
+    def test_batch_client_prefers_endpoint_saved_in_history(self):
+        BH.upsert_history_entry(
+            "batch-routed",
+            provider="openai",
+            key_name="Work OpenAI",
+            endpoint="https://submitted.example/v1",
+        )
+        with (
+            mock.patch("util.api_keys.get_secret", return_value="secret"),
+            mock.patch(
+                "util.api_keys.get_endpoint",
+                return_value="https://changed.example/v1",
+            ),
+            mock.patch("util.api_keys.is_keyless", return_value=False),
+            mock.patch.object(BH, "get_provider_client") as client,
+        ):
+            BH.client_for_batch(
+                "batch-routed",
+                "openai",
+                "Work OpenAI",
+                "https://state-copy.example/v1",
+            )
+
+        client.assert_called_once_with(
+            "openai",
+            api_key="secret",
+            api_url="https://submitted.example/v1",
+        )
+
     def test_split_submission_allocates_aggregate_estimate_once(self):
         estimate = {
             "requests": 4,
@@ -377,19 +481,29 @@ class ProviderSubmissionTests(BatchHistoryTestBase):
         )
         T.flush_batch_queue()
 
-        with mock.patch(
-            "util.batch_providers.submit_batch",
-            return_value={"id": "batch_openai_1", "input_file_id": "file_1"},
-        ) as submit:
+        with (
+            mock.patch.dict(
+                "os.environ", {"api": "https://submitted.example/v1"}
+            ),
+            mock.patch(
+                "util.batch_providers.submit_batch",
+                return_value={"id": "batch_openai_1", "input_file_id": "file_1"},
+            ) as submit,
+        ):
             ids = T.submitTranslationBatches(file_set=["Map001.json"])
 
         self.assertEqual(ids, ["batch_openai_1"])
         self.assertEqual(submit.call_args.args[0], "openai")
         state = T._read_batch_file(T.BATCH_STATE_FILE)
         self.assertEqual(state["provider"], "openai")
+        self.assertEqual(state["endpoint"], "https://submitted.example/v1")
         self.assertEqual(state["batches"][0]["provider"], "openai")
+        self.assertEqual(
+            state["batches"][0]["endpoint"], "https://submitted.example/v1"
+        )
         entry = BH.read_history()["batches"][0]
         self.assertEqual(entry["provider"], "openai")
+        self.assertEqual(entry["endpoint"], "https://submitted.example/v1")
         self.assertTrue(entry["custom_ids"])
 
     def test_split_submission_checkpoints_and_retry_skips_paid_work(self):
@@ -404,6 +518,7 @@ class ProviderSubmissionTests(BatchHistoryTestBase):
 
         with (
             mock.patch("util.batch_providers.batch_limits", return_value=(1, 10_000_000)),
+            mock.patch.object(BH, "client_for_batch", return_value=object()),
             mock.patch(
                 "util.batch_providers.submit_batch",
                 side_effect=(
@@ -426,6 +541,7 @@ class ProviderSubmissionTests(BatchHistoryTestBase):
 
         with (
             mock.patch("util.batch_providers.batch_limits", return_value=(1, 10_000_000)),
+            mock.patch.object(BH, "client_for_batch", return_value=object()),
             mock.patch(
                 "util.batch_providers.submit_batch",
                 return_value={"id": "batch_paid_2", "input_file_id": "file_2"},
@@ -530,6 +646,8 @@ class RedownloadTests(BatchHistoryTestBase):
             "msgbatch_rd",
             status=BH.STATUS_ENDED,
             model="claude-sonnet-4-5",
+            endpoint="https://api.anthropic.com",
+            cache_key_version=T.BATCH_CACHE_KEY_VERSION,
             custom_ids=custom_ids,
             request_count=2,
         )
@@ -578,6 +696,10 @@ class RedownloadTests(BatchHistoryTestBase):
         self.assertEqual(results["keyA"]["text"], '{"Line1":"Hi"}')
         state = T._read_batch_file(T.BATCH_STATE_FILE)
         self.assertEqual(state.get("status"), "fetched")
+        self.assertEqual(state["endpoint"], "https://api.anthropic.com")
+        self.assertEqual(
+            state["cache_key_version"], T.BATCH_CACHE_KEY_VERSION
+        )
         self.assertEqual(set(state.get("result_keys") or []), {"keyA", "keyB"})
         self.assertEqual(T.batchRunState(), "fetched")
         entry = BH.read_history()["batches"][0]

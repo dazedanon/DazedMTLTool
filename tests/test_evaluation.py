@@ -594,6 +594,97 @@ class EvaluationManifestTests(unittest.TestCase):
             evaluation.LIVE_REQUEST_MAX_ATTEMPTS,
         )
 
+    def test_likely_upper_bound_never_exceeds_theoretical_ceiling(self):
+        candidate = dict(evaluation.DEFAULT_CANDIDATES[0])
+        with mock.patch.object(
+            evaluation, "countTokens", return_value=(100, 100_000)
+        ):
+            estimate = evaluation.estimate_candidate(self.manifest, candidate)
+
+        self.assertLessEqual(
+            estimate["cost_usd"], estimate["maximum_cost_usd"]
+        )
+        self.assertEqual(
+            estimate["output_tokens"],
+            len(self.manifest["executions"])
+            * evaluation.MAX_OUTPUT_TOKENS_PER_REQUEST,
+        )
+
+    def test_submit_refreshes_estimate_and_blocks_over_budget_before_provider(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            run_dir = Path(temporary)
+            candidate = {
+                **dict(evaluation.DEFAULT_CANDIDATES[0]),
+                "id": "candidate-1",
+                "key_name": "OpenAI",
+                "status": "prepared",
+                "estimate": {
+                    "cost_usd": 0.01,
+                    "maximum_cost_usd": 0.02,
+                },
+            }
+            evaluation._atomic_write_json(
+                run_dir / "manifest.json", self.manifest
+            )
+            evaluation._atomic_write_json(run_dir / "state.json", {
+                "run_id": "stale-estimate",
+                "status": "prepared",
+                "budget_usd_per_model": 1.0,
+                "candidates": [candidate],
+            })
+            refreshed = {
+                "cost_usd": 0.01,
+                "maximum_cost_usd": 2.0,
+                "automatic_attempts": 1,
+            }
+            with (
+                mock.patch.object(
+                    evaluation, "estimate_candidate", return_value=refreshed
+                ),
+                mock.patch.object(evaluation, "_clients") as clients,
+                mock.patch.object(evaluation.batch_api, "submit_batch") as submit,
+            ):
+                with self.assertRaisesRegex(ValueError, "theoretical ceiling"):
+                    evaluation.submit_run(
+                        run_dir, {"candidate-1": "secret"}
+                    )
+
+            clients.assert_not_called()
+            submit.assert_not_called()
+
+    def test_refresh_upgrades_legacy_live_retry_ceiling(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            run_dir = Path(temporary)
+            candidate = {
+                **dict(evaluation.DEFAULT_CANDIDATES[0]),
+                "id": "candidate-live",
+                "key_name": "OpenAI",
+                "execution": "live",
+                "status": "prepared",
+                "estimate": {"cost_usd": 0.01},
+            }
+            evaluation._atomic_write_json(
+                run_dir / "manifest.json", self.manifest
+            )
+            evaluation._atomic_write_json(run_dir / "state.json", {
+                "run_id": "legacy-live-estimate",
+                "status": "prepared",
+                "budget_usd_per_model": 100.0,
+                "candidates": [candidate],
+            })
+
+            state, _manifest = evaluation.refresh_run_estimates(run_dir)
+
+            self.assertEqual(
+                state["candidates"][0]["estimate"]["automatic_attempts"],
+                evaluation.LIVE_REQUEST_MAX_ATTEMPTS,
+            )
+            persisted = evaluation._read_json(run_dir / "state.json")
+            self.assertEqual(
+                persisted["candidates"][0]["estimate"]["automatic_attempts"],
+                evaluation.LIVE_REQUEST_MAX_ATTEMPTS,
+            )
+
     def test_failed_live_candidate_does_not_hide_submitted_batch(self):
         candidates = [
             {"status": "failed", "execution": "live"},
@@ -791,6 +882,15 @@ class EvaluationManifestTests(unittest.TestCase):
                 ],
             })
             with (
+                mock.patch.object(
+                    evaluation,
+                    "estimate_candidate",
+                    return_value={
+                        "cost_usd": 0.01,
+                        "maximum_cost_usd": 0.02,
+                        "automatic_attempts": 1,
+                    },
+                ),
                 mock.patch.object(evaluation, "_execute_live_candidate") as execute,
                 mock.patch.object(
                     evaluation, "_clients", return_value=(object(), None)
@@ -853,6 +953,19 @@ class EvaluationManifestTests(unittest.TestCase):
                 return True, run_dir / "results" / "unused.partial.json"
 
             with (
+                mock.patch.object(
+                    evaluation,
+                    "estimate_candidate",
+                    side_effect=lambda _manifest, candidate: {
+                        "cost_usd": 0.01,
+                        "maximum_cost_usd": 0.02,
+                        "automatic_attempts": (
+                            evaluation.LIVE_REQUEST_MAX_ATTEMPTS
+                            if candidate.get("execution") == "live"
+                            else 1
+                        ),
+                    },
+                ),
                 mock.patch.object(
                     evaluation,
                     "_execute_live_candidate",

@@ -3430,6 +3430,22 @@ class TranslationTab(QWidget):
         forced_resume_state: when set (from the Batch history tab), force Batch
         Translate mode and resume with this state without the Resume? dialog.
         """
+        evaluation_tab = getattr(self.parent_window, "evaluation_tab", None)
+        evaluation_worker = getattr(evaluation_tab, "_worker", None)
+        if (
+            evaluation_worker is not None
+            and evaluation_worker.isRunning()
+            and bool(getattr(
+                evaluation_tab, "_worker_uses_translation_runtime", False
+            ))
+        ):
+            QMessageBox.warning(
+                self,
+                "Evaluation preparation in progress",
+                "Wait for evaluation preparation to finish before starting "
+                "translation.",
+            )
+            return
         # Get checked files
         selected_files = self.get_selected_files()
         

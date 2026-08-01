@@ -164,13 +164,24 @@ def client_for_batch(
     batch_id: str,
     provider: str = "anthropic",
     key_name: str = "",
+    endpoint: str = "",
 ):
     """Resolve a batch's submitted credential, falling back for legacy rows."""
-    if key_name:
-        return _client_for_entry({"provider": provider, "key_name": key_name})
     entry = entry_for_batch(batch_id)
     if entry is not None:
-        return _client_for_entry(entry)
+        resolved = dict(entry)
+        resolved["provider"] = provider or resolved.get("provider")
+        if key_name:
+            resolved["key_name"] = key_name
+        if endpoint and not resolved.get("endpoint"):
+            resolved["endpoint"] = endpoint
+        return _client_for_entry(resolved)
+    if key_name:
+        return _client_for_entry({
+            "provider": provider,
+            "key_name": key_name,
+            "endpoint": endpoint,
+        })
     return _get_anthropic_client() if provider == "anthropic" else get_provider_client(provider)
 
 
@@ -260,6 +271,7 @@ def record_submit(
     file_set: Optional[list] = None,
     cost_estimate: Optional[dict] = None,
     key_name: Optional[str] = None,
+    endpoint: Optional[str] = None,
 ) -> None:
     """Record newly submitted provider batches into durable history."""
     file_set = list(file_set or [])
@@ -273,6 +285,8 @@ def record_submit(
             status=STATUS_SUBMITTED,
             model=model or (cost_estimate or {}).get("model") or "",
             provider=info.get("provider") or provider,
+            endpoint=info.get("endpoint") or endpoint or "",
+            cache_key_version=info.get("cache_key_version"),
             key_name=(
                 key_name
                 if key_name is not None
@@ -648,6 +662,8 @@ def _entry_batch_info(entry: dict) -> dict:
         "custom_ids": dict(entry.get("custom_ids") or {}),
         "provider": entry.get("provider") or "anthropic",
         "key_name": str(entry.get("key_name") or ""),
+        "endpoint": str(entry.get("endpoint") or ""),
+        "cache_key_version": int(entry.get("cache_key_version", 1) or 1),
         "run_id": entry.get("run_id"),
     }
 
@@ -751,6 +767,9 @@ def redownload_batch(batch_id: str) -> dict:
     provider = entry.get("provider") or "anthropic"
     cost = _price_usage(usage, model, provider) if model else None
     batch_ids = [str(row.get("id")) for row in entries if row.get("id")]
+    cache_key_version = min(
+        int(row.get("cache_key_version", 1) or 1) for row in entries
+    )
 
     import util.translation as T
 
@@ -764,6 +783,8 @@ def redownload_batch(batch_id: str) -> dict:
                     "status": "fetched", "batch_ids": batch_ids, "batches": [],
                     "run_id": entry.get("run_id"),
                     "provider": provider, "model": model,
+                    "endpoint": entry.get("endpoint") or "",
+                    "cache_key_version": cache_key_version,
                     "file_set": entry.get("file_set") or [],
                     "result_keys": sorted(results),
                 },
@@ -842,6 +863,11 @@ def activate_for_resume(batch_id: str) -> str:
                     "submitted_at": previous.get("submitted_at") or entry.get("created_at"),
                     "model": entry.get("model") or "",
                     "provider": entry.get("provider") or "anthropic",
+                    "endpoint": entry.get("endpoint") or "",
+                    "cache_key_version": min(
+                        int(row.get("cache_key_version", 1) or 1)
+                        for row in entries
+                    ),
                     "file_set": entry.get("file_set") or [],
                     "cost_estimate": entry.get("cost_estimate"),
                 }

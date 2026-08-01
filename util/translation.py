@@ -652,6 +652,7 @@ CACHE_LOCK = threading.RLock()
 CACHE_PENDING_MARKER = "__translation_pending__"
 CACHE_PENDING_TTL = 600
 CACHE_WAIT_INTERVAL = 0.25
+BATCH_CACHE_KEY_VERSION = 2
 _cache = None
 
 @contextmanager
@@ -1131,6 +1132,7 @@ def queue_batch_request(
             "params": params,
             "provider": provider or getBatchProvider(params.get("model", "")),
             "request_context": normalized_request_context,
+            "cache_key_version": BATCH_CACHE_KEY_VERSION,
         }
     return key
 
@@ -1179,6 +1181,12 @@ def batchQueueStaleContextCount(vocab_text=None, use_sfx_reference=None):
 
     stale = 0
     for recorded_key, entry in queue.items():
+        # Queues created before conversation history became part of the key
+        # cannot be submitted safely: their paid results would be routed under
+        # the legacy key and the consume pass could not find them.
+        if "request_context" not in entry:
+            stale += 1
+            continue
         payload = entry.get("payload", "")
         language = entry.get("language", "")
         matched_glossary = buildMatchedVocabText(
@@ -1212,9 +1220,23 @@ def take_batch_result(
             if _batch_results is None:
                 with _batch_file_lock():
                     _batch_results = _read_batch_file(BATCH_RESULTS_FILE)
-    return _batch_results.get(
-        get_cache_key(payload, language, cache_context, request_context)
+    current_key = get_cache_key(
+        payload, language, cache_context, request_context
     )
+    result = _batch_results.get(current_key)
+    if result is not None or not request_context:
+        return result
+
+    # Already-paid batches fetched by older releases are keyed without
+    # conversation history. Allow that exact legacy lookup only when the
+    # active state itself predates the context-key format. Modern result sets
+    # must never fall back across contexts.
+    with _batch_file_lock():
+        state = _read_batch_file(BATCH_STATE_FILE)
+    if int(state.get("cache_key_version", 1) or 1) < BATCH_CACHE_KEY_VERSION:
+        legacy_key = get_cache_key(payload, language, cache_context)
+        return _batch_results.get(legacy_key)
+    return None
 
 
 class BatchResultUnavailableError(RuntimeError):
@@ -1291,6 +1313,7 @@ def saveQueuedBatchMetadata(file_set=None):
                 "file_set": list(file_set or []),
                 "model": os.getenv("model", ""),
                 "provider": getBatchProvider(os.getenv("model", "")),
+                "cache_key_version": BATCH_CACHE_KEY_VERSION,
             })
             _write_batch_file(BATCH_STATE_FILE, state)
 
@@ -1547,6 +1570,12 @@ def submitTranslationBatches(file_set=None, cost_estimate=None):
     if not queue:
         print("[BATCH] No batch requests queued.", flush=True)
         return []
+    if any("request_context" not in entry for entry in queue.values()):
+        raise ValueError(
+            "This queued batch predates context-aware request keys and cannot "
+            "be submitted safely. Re-collect it before submitting so paid "
+            "results can be matched during consume."
+        )
 
     from util.batch_providers import batch_limits, submit_batch
 
@@ -1575,10 +1604,16 @@ def submitTranslationBatches(file_set=None, cost_estimate=None):
     max_requests, max_bytes = batch_limits(provider)
     from util.batch_history import (
         active_key_name_for_environment,
+        entry_for_batch,
         key_name_for_batch,
     )
 
     current_key_name = active_key_name_for_environment()
+    current_endpoint = os.getenv("api", "").strip() or {
+        "anthropic": "https://api.anthropic.com",
+        "gemini": "https://generativelanguage.googleapis.com/v1beta/openai/",
+        "openai": "https://api.openai.com/v1",
+    }.get(provider, "")
     existing_key_names = {
         str(info.get("key_name") or key_name_for_batch(info.get("id", "")))
         for info in batches
@@ -1591,7 +1626,6 @@ def submitTranslationBatches(file_set=None, cost_estimate=None):
             "Remaining split requests must use the same saved API key as the "
             f"already submitted batches. Select {expected!r} and resume again."
         )
-    client = _get_anthropic_client() if provider == "anthropic" else None
     model = (
         (cost_estimate or {}).get("model")
         or previous_state.get("model")
@@ -1607,6 +1641,36 @@ def submitTranslationBatches(file_set=None, cost_estimate=None):
         else previous_state.get("cost_estimate")
     )
     run_id = previous_state.get("run_id") or f"translation-{uuid.uuid4().hex}"
+    existing_endpoints = {
+        str(
+            info.get("endpoint")
+            or (entry_for_batch(str(info.get("id") or "")) or {}).get("endpoint")
+            or ""
+        ).strip()
+        for info in batches
+    } - {""}
+    if len(existing_endpoints) > 1:
+        raise ValueError(
+            "The saved split batches use inconsistent API endpoints and "
+            "cannot be resumed safely."
+        )
+    submitted_endpoint = (
+        next(iter(existing_endpoints), "")
+        or str(previous_state.get("endpoint") or "").strip()
+        or current_endpoint
+    )
+    if batches:
+        from util.batch_history import client_for_batch
+
+        first_batch = batches[0]
+        client = client_for_batch(
+            str(first_batch.get("id") or ""),
+            provider,
+            str(first_batch.get("key_name") or current_key_name),
+            str(first_batch.get("endpoint") or submitted_endpoint),
+        )
+    else:
+        client = _get_anthropic_client() if provider == "anthropic" else None
 
     def _checkpoint(new_info, *, complete):
         """Persist each paid provider job before attempting the next split."""
@@ -1618,6 +1682,8 @@ def submitTranslationBatches(file_set=None, cost_estimate=None):
             or time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
             "model": model,
             "provider": provider,
+            "endpoint": submitted_endpoint,
+            "cache_key_version": BATCH_CACHE_KEY_VERSION,
             "file_set": effective_file_set,
             "cost_estimate": effective_estimate,
             "request_count": sum(
@@ -1637,6 +1703,7 @@ def submitTranslationBatches(file_set=None, cost_estimate=None):
                 file_set=effective_file_set,
                 cost_estimate=effective_estimate,
                 key_name=current_key_name,
+                endpoint=submitted_endpoint,
             )
         except Exception as exc:
             print(f"[BATCH] history record_submit failed: {exc}", flush=True)
@@ -1652,6 +1719,8 @@ def submitTranslationBatches(file_set=None, cost_estimate=None):
             "custom_ids": id_map,
             "provider": provider,
             "key_name": current_key_name,
+            "endpoint": submitted_endpoint,
+            "cache_key_version": BATCH_CACHE_KEY_VERSION,
         }
         batches.append(info)
         submitted_keys.update(id_map.values())
@@ -1723,7 +1792,10 @@ def checkTranslationBatchStatuses(print_status=True):
         bid = info["id"]
         provider = info.get("provider") or state.get("provider") or "anthropic"
         client = client_for_batch(
-            bid, provider, str(info.get("key_name") or "")
+            bid,
+            provider,
+            str(info.get("key_name") or ""),
+            str(info.get("endpoint") or state.get("endpoint") or ""),
         )
         normalized = retrieve_batch(provider, bid, client=client)
         api_status = normalized["api_status"]
@@ -1799,7 +1871,10 @@ def fetchTranslationBatches(batches=None):
         id_map = info.get("custom_ids", {})
         client = (
             client_for_batch(
-                bid, provider, str(info.get("key_name") or "")
+                bid,
+                provider,
+                str(info.get("key_name") or ""),
+                str(info.get("endpoint") or state.get("endpoint") or ""),
             )
             if client_for_batch
             else None
@@ -1866,6 +1941,10 @@ def fetchTranslationBatches(batches=None):
                     "provider": state.get("provider") or (
                         batch_list[0].get("provider") if batch_list else None
                     ),
+                    "endpoint": state.get("endpoint") or (
+                        batch_list[0].get("endpoint") if batch_list else None
+                    ),
+                    "cache_key_version": state.get("cache_key_version", 1),
                     "result_keys": sorted(results),
                     "file_set": state.get("file_set") or [],
                     "cost_estimate": state.get("cost_estimate"),
