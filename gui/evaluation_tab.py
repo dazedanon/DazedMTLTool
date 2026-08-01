@@ -8,6 +8,7 @@ from pathlib import Path
 from PyQt5.QtCore import QEvent, Qt, QThread, QTimer, pyqtSignal
 from PyQt5.QtWidgets import (
     QAbstractItemView,
+    QApplication,
     QComboBox,
     QDoubleSpinBox,
     QFileDialog,
@@ -16,7 +17,6 @@ from PyQt5.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
-    QMenu,
     QMessageBox,
     QPushButton,
     QFrame,
@@ -37,9 +37,10 @@ from gui.ui_components import (
     make_page_layout,
     set_status_text,
 )
-from gui.config_tab import ModelFetchThread
+from gui.config_tab import API_URL_PRESETS, ConfigComboBox, ConfigMenu, ModelFetchThread
 from util import api_keys as api_key_vault
 from util import evaluation
+from util.skills import load_clipboard_skill
 
 
 class _EvaluationWorker(QThread):
@@ -68,11 +69,19 @@ class EvaluationTab(QWidget):
         "Model", "API URL", "Mode", "Status", "Estimate", "Actual", "Valid",
         "Consistency", "Human wins",
     )
-    PROVIDER_PRESETS = (
-        ("OpenAI", "https://api.openai.com/v1"),
-        ("Google Gemini", "https://generativelanguage.googleapis.com/v1beta/openai/"),
-        ("Anthropic", "https://api.anthropic.com"),
-    )
+    COLUMN_TOOLTIPS = {
+        "Valid": (
+            "Percentage of all expected line outputs that passed automatic checks "
+            "for missing output, Japanese residue, placeholders, and RPG Maker "
+            "control codes. This does not judge translation quality."
+        ),
+        "Consistency": (
+            "Of the repeated sample lines with a valid result on every run, the "
+            "percentage whose normalized English was exactly identical each time. "
+            "Higher means less variation, not necessarily a better translation."
+        ),
+    }
+    PROVIDER_PRESETS = API_URL_PRESETS
     MODEL_SUGGESTIONS = {
         "openai": ("gpt-5.6-terra", "gpt-5", "gpt-4.1", "gpt-4.1-mini"),
         "gemini": ("gemini-3.6-flash", "gemini-3.5-flash", "gemini-2.5-flash"),
@@ -91,6 +100,7 @@ class EvaluationTab(QWidget):
             getattr(parent, "project_root", None) or Path(__file__).resolve().parent.parent
         )
         self.current_run_dir: Path | None = None
+        self._last_review_path: Path | None = None
         self._worker: _EvaluationWorker | None = None
         self._candidate_widgets: list[dict] = []
         self._init_ui()
@@ -116,54 +126,31 @@ class EvaluationTab(QWidget):
             "Compare batch or live models on the same Japanese game text. No normal translation cache is reused.",
         ))
 
-        history = SectionCard(
-            "Evaluation history",
-            "Open any previous run or move a complete evaluation between installations.",
-            compact=True,
+        self.history_combo = QComboBox()
+        self.history_combo.setSizeAdjustPolicy(
+            QComboBox.AdjustToMinimumContentsLengthWithIcon
         )
-        self.history_card = history
-        layout.addWidget(history)
-        self.history_table = QTableWidget(0, 6)
-        self.history_table.setHorizontalHeaderLabels((
-            "Created", "Models", "Mode", "Status", "Lines", "Reviewed"
-        ))
-        self.history_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
-        self.history_table.setSelectionBehavior(QAbstractItemView.SelectRows)
-        self.history_table.setSelectionMode(QAbstractItemView.SingleSelection)
-        self.history_table.setAlternatingRowColors(True)
-        self.history_table.verticalHeader().setVisible(False)
-        self.history_table.setMinimumHeight(132)
-        self.history_table.setMaximumHeight(190)
-        history_header = self.history_table.horizontalHeader()
-        for index in range(6):
-            history_header.setSectionResizeMode(index, QHeaderView.ResizeToContents)
-        history_header.setSectionResizeMode(1, QHeaderView.Stretch)
-        self.history_table.itemSelectionChanged.connect(
+        self.history_combo.setMinimumContentsLength(32)
+        self.history_combo.setMinimumWidth(300)
+        self.history_combo.setMaxVisibleItems(15)
+        self.history_combo.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.history_combo.setToolTip("Choose a saved evaluation to view")
+        self.history_combo.currentIndexChanged.connect(
             self._update_history_actions
         )
-        self.history_table.itemDoubleClicked.connect(
-            lambda _item: self._open_selected_history()
+        self.history_combo.activated.connect(
+            lambda _index: self._open_selected_history()
         )
-        history.add_widget(self.history_table)
-
-        history_actions = QGridLayout()
-        history_actions.setHorizontalSpacing(8)
-        self.open_history_btn = QPushButton("Open selected")
         self.export_evaluation_btn = QPushButton("Export evaluation")
         self.import_evaluation_btn = QPushButton("Import evaluation")
-        for column, button in enumerate((
-            self.open_history_btn,
+        for button in (
             self.export_evaluation_btn,
             self.import_evaluation_btn,
-        )):
+        ):
             configure_action_button(button, variant="secondary")
-            button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-            history_actions.addWidget(button, 0, column)
-            history_actions.setColumnStretch(column, 1)
-        self.open_history_btn.clicked.connect(self._open_selected_history)
+            button.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
         self.export_evaluation_btn.clicked.connect(self._export_evaluation_archive)
         self.import_evaluation_btn.clicked.connect(self._import_evaluation_archive)
-        history.add_layout(history_actions)
 
         setup = SectionCard(
             "Benchmark setup",
@@ -248,14 +235,23 @@ class EvaluationTab(QWidget):
         self.submit_btn = QPushButton("Run evaluation")
         self.refresh_btn = QPushButton("Refresh results")
         self.export_btn = QPushButton("Export blind review")
+        self.copy_review_skill_btn = QPushButton("Copy review skill")
         self.import_btn = QPushButton("Import reviewed CSV")
         configure_action_button(self.prepare_btn, variant="primary")
-        for button in (self.submit_btn, self.refresh_btn, self.export_btn, self.import_btn):
+        for button in (
+            self.submit_btn, self.refresh_btn, self.export_btn,
+            self.copy_review_skill_btn, self.import_btn,
+        ):
             configure_action_button(button, variant="secondary")
+        self.copy_review_skill_btn.setToolTip(
+            "Copy instructions for an AI helper to review the blinded CSV. "
+            "AI judgments can be biased and should be treated as a second opinion."
+        )
         self.prepare_btn.clicked.connect(self.prepare_benchmark)
         self.submit_btn.clicked.connect(self.submit_batches)
         self.refresh_btn.clicked.connect(self.refresh_results)
         self.export_btn.clicked.connect(self.export_review)
+        self.copy_review_skill_btn.clicked.connect(self.copy_review_skill)
         self.import_btn.clicked.connect(self.import_review)
         for column, button in enumerate((
             self.prepare_btn, self.submit_btn, self.refresh_btn,
@@ -264,9 +260,11 @@ class EvaluationTab(QWidget):
             actions.addWidget(button, 0, column * 2, 1, 2)
         for column in range(6):
             actions.setColumnStretch(column, 1)
-        for column, button in enumerate((self.export_btn, self.import_btn)):
+        for column, button in enumerate((
+            self.export_btn, self.copy_review_skill_btn, self.import_btn,
+        )):
             button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-            actions.addWidget(button, 1, column * 3, 1, 3)
+            actions.addWidget(button, 1, column * 2, 1, 2)
         setup.add_layout(actions)
 
         self.status_label = QLabel()
@@ -279,12 +277,25 @@ class EvaluationTab(QWidget):
         setup.add_widget(self.status_label)
 
         results = SectionCard(
-            "Evaluation run",
-            "Automated checks are hard gates. Translation quality is decided from the blinded CSV, not model names.",
+            "Evaluation results",
+            "Choose a saved run or inspect the current one. Translation quality is decided from the blinded CSV, not model names.",
         )
         layout.addWidget(results, 1)
+        history_bar = QGridLayout()
+        history_bar.setHorizontalSpacing(8)
+        history_bar.addWidget(QLabel("Saved evaluation:"), 0, 0)
+        history_bar.addWidget(self.history_combo, 0, 1)
+        history_bar.addWidget(self.export_evaluation_btn, 0, 2)
+        history_bar.addWidget(self.import_evaluation_btn, 0, 3)
+        history_bar.setColumnStretch(1, 1)
+        results.add_layout(history_bar)
         self.table = QTableWidget(0, len(self.COLUMNS))
         self.table.setHorizontalHeaderLabels(self.COLUMNS)
+        for name, tooltip in self.COLUMN_TOOLTIPS.items():
+            index = self.COLUMNS.index(name)
+            item = self.table.horizontalHeaderItem(index)
+            item.setText(f"{name} ⓘ")
+            item.setToolTip(tooltip)
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.table.setHorizontalScrollMode(QAbstractItemView.ScrollPerPixel)
         self.table.verticalHeader().setVisible(False)
@@ -345,16 +356,13 @@ class EvaluationTab(QWidget):
             self.log.append(str(message).rstrip())
 
     def _selected_history_run(self) -> Path | None:
-        selected = self.history_table.selectionModel().selectedRows()
-        if not selected:
-            return None
-        value = self.history_table.item(selected[0].row(), 0).data(Qt.UserRole)
+        value = self.history_combo.currentData(Qt.UserRole)
         return Path(str(value)) if value else None
 
     def _update_history_actions(self):
         busy = self._worker is not None and self._worker.isRunning()
         has_selection = self._selected_history_run() is not None
-        self.open_history_btn.setEnabled(not busy and has_selection)
+        self.history_combo.setEnabled(not busy and has_selection)
         self.export_evaluation_btn.setEnabled(not busy and has_selection)
         self.import_evaluation_btn.setEnabled(not busy)
 
@@ -363,36 +371,33 @@ class EvaluationTab(QWidget):
             self.current_run_dir.resolve() if self.current_run_dir else None
         )
         runs = evaluation.list_runs(self.project_root)
-        self.history_table.setRowCount(len(runs))
-        selected_row = -1
-        for row, run in enumerate(runs):
+        self.history_combo.blockSignals(True)
+        self.history_combo.clear()
+        selected_index = -1
+        for index, run in enumerate(runs):
             run_dir = Path(run["run_dir"]).resolve()
             created = str(run.get("created_at") or "").replace("T", " ")[:16]
             models = ", ".join(run.get("models") or []) or "—"
             modes = ", ".join(dict.fromkeys(
                 str(mode).title() for mode in run.get("modes") or []
             )) or "Batch"
-            values = (
-                created,
-                models,
-                modes,
-                str(run.get("status") or "unknown").replace("_", " ").title(),
-                f"{int(run.get('selected_segments', 0) or 0):,}",
-                f"{int(run.get('reviewed', 0) or 0):,}",
+            status = str(run.get("status") or "unknown").replace("_", " ").title()
+            lines = int(run.get("selected_segments", 0) or 0)
+            reviewed = int(run.get("reviewed", 0) or 0)
+            label = (
+                f"{created or run_dir.name}  ·  {models}  ·  {modes}  ·  "
+                f"{status}  ·  {lines:,} lines"
             )
-            for column, value in enumerate(values):
-                item = QTableWidgetItem(value)
-                if column == 0:
-                    item.setData(Qt.UserRole, str(run_dir))
-                if column == 1:
-                    item.setToolTip(models)
-                self.history_table.setItem(row, column, item)
+            if reviewed:
+                label += f"  ·  {reviewed:,} reviewed"
+            self.history_combo.addItem(label, str(run_dir))
+            self.history_combo.setItemData(index, label, Qt.ToolTipRole)
             if preferred is not None and run_dir == preferred:
-                selected_row = row
-        if selected_row < 0 and runs:
-            selected_row = 0
-        if selected_row >= 0:
-            self.history_table.selectRow(selected_row)
+                selected_index = index
+        if selected_index < 0 and runs:
+            selected_index = 0
+        self.history_combo.setCurrentIndex(selected_index)
+        self.history_combo.blockSignals(False)
         self._update_history_actions()
 
     def _open_run(self, run_dir: str | Path, *, refresh_history: bool = True):
@@ -408,6 +413,8 @@ class EvaluationTab(QWidget):
             QMessageBox.warning(self, "Evaluation history", str(exc))
             return
         self.current_run_dir = path
+        canonical_review = path / "blind_review.csv"
+        self._last_review_path = canonical_review if canonical_review.is_file() else None
         source_dir = Path(str(manifest.get("source_dir") or ""))
         if source_dir.is_dir():
             self.source_edit.setText(str(source_dir))
@@ -496,7 +503,7 @@ class EvaluationTab(QWidget):
         preset_btn.setText("Presets")
         preset_btn.setToolTip("Choose an official provider API URL")
         preset_btn.setPopupMode(QToolButton.InstantPopup)
-        preset_menu = QMenu(preset_btn)
+        preset_menu = ConfigMenu(preset_btn)
         preset_btn.setMenu(preset_menu)
 
         endpoint_field = QWidget()
@@ -517,8 +524,9 @@ class EvaluationTab(QWidget):
         key_combo.setMinimumWidth(220)
         key_combo.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
 
-        model_combo = QComboBox()
+        model_combo = ConfigComboBox()
         model_combo.setEditable(False)
+        model_combo.setMaxVisibleItems(12)
         model_combo.setToolTip(
             "Models available from the selected API URL and saved key"
         )
@@ -628,10 +636,11 @@ class EvaluationTab(QWidget):
 
     @classmethod
     def _endpoint_for_legacy_provider(cls, endpoint: str) -> str:
+        presets = dict(cls.PROVIDER_PRESETS)
         lookup = {
-            "openai": cls.PROVIDER_PRESETS[0][1],
-            "gemini": cls.PROVIDER_PRESETS[1][1],
-            "anthropic": cls.PROVIDER_PRESETS[2][1],
+            "openai": presets["OpenAI"],
+            "gemini": presets["Gemini"],
+            "anthropic": presets["Claude (Anthropic)"],
         }
         value = str(endpoint or "").strip()
         return lookup.get(value.lower(), value)
@@ -815,18 +824,20 @@ class EvaluationTab(QWidget):
         active = api_key_vault.get_active_name()
         combo = widgets["key"]
         previous = combo.currentText()
-        provider = self._provider_for_endpoint(widgets["endpoint"].text())
+        target_endpoint = widgets["endpoint"].text()
         combo.blockSignals(True)
         combo.clear()
         combo.addItems(names)
         previous_matches = previous in names and self._key_matches(
-            provider, previous, api_key_vault.get_endpoint(previous) or ""
+            target_endpoint, previous, api_key_vault.get_endpoint(previous) or ""
         )
         preferred = previous if previous in names and (
             not prefer_provider or previous_matches
         ) else next((
             name for name in names
-            if self._key_matches(provider, name, api_key_vault.get_endpoint(name) or "")
+            if self._key_matches(
+                target_endpoint, name, api_key_vault.get_endpoint(name) or ""
+            )
         ), "")
         if not preferred and active in names:
             preferred = active
@@ -834,14 +845,26 @@ class EvaluationTab(QWidget):
             combo.setCurrentText(preferred)
         combo.blockSignals(False)
 
-    @staticmethod
-    def _key_matches(provider: str, name: str, endpoint: str) -> bool:
-        haystack = f"{name} {endpoint}".lower()
-        if provider == "openai":
-            return "openai" in haystack and "google" not in haystack
-        if provider == "gemini":
+    @classmethod
+    def _key_matches(cls, target_endpoint: str, name: str, endpoint: str) -> bool:
+        target = str(target_endpoint or "").strip().lower().rstrip("/")
+        saved = str(endpoint or "").strip().lower().rstrip("/")
+        if target and saved and target == saved:
+            return True
+        haystack = f"{name} {saved}".lower()
+        service = next((
+            token for token in (
+                "anthropic", "gemini", "googleapis", "deepseek", "mistral", "nvidia"
+            )
+            if token in target
+        ), "openai" if "openai.com" in target else "")
+        if service in {"gemini", "googleapis"}:
             return "gemini" in haystack or "googleapis" in haystack
-        return "anthropic" in haystack or "claude" in haystack
+        if service == "anthropic":
+            return "anthropic" in haystack or "claude" in haystack
+        if service:
+            return service in haystack
+        return bool(saved and target and saved == target)
 
     def _refresh_keys(self):
         api_key_vault.ensure_vault()
@@ -878,9 +901,8 @@ class EvaluationTab(QWidget):
     def _set_busy(self, busy: bool):
         for button in (
             self.prepare_btn, self.submit_btn, self.refresh_btn,
-            self.export_btn, self.import_btn,
-            self.open_history_btn, self.export_evaluation_btn,
-            self.import_evaluation_btn,
+            self.export_btn, self.copy_review_skill_btn, self.import_btn,
+            self.export_evaluation_btn, self.import_evaluation_btn,
         ):
             button.setEnabled(not busy)
         if not busy:
@@ -976,6 +998,7 @@ class EvaluationTab(QWidget):
         def done(payload):
             run_dir, state = payload
             self.current_run_dir = Path(run_dir)
+            self._last_review_path = None
             self._display_state(state)
             summary = state.get("corpus_summary") or {}
             set_status_text(
@@ -1148,6 +1171,43 @@ class EvaluationTab(QWidget):
         except Exception as exc:
             QMessageBox.warning(self, "Blind review", str(exc))
 
+    def _review_csv_path(self) -> Path | None:
+        if self._last_review_path and self._last_review_path.is_file():
+            return self._last_review_path.resolve()
+        if self.current_run_dir:
+            canonical = self.current_run_dir / "blind_review.csv"
+            if canonical.is_file():
+                return canonical.resolve()
+        return None
+
+    def copy_review_skill(self):
+        review_path = self._review_csv_path()
+        if review_path is None:
+            QMessageBox.information(
+                self,
+                "Export required",
+                "Export the blind review CSV before copying its AI review skill.",
+            )
+            return
+        try:
+            prompt = load_clipboard_skill("evaluation_csv_review.md")
+            token = "{{BLIND_REVIEW_CSV}}"
+            if token not in prompt:
+                raise ValueError("Evaluation review skill is missing its CSV placeholder")
+            prompt = prompt.replace(token, str(review_path))
+            QApplication.clipboard().setText(prompt)
+            self._append_log(f"AI review skill copied for: {review_path}")
+            QMessageBox.warning(
+                self,
+                "AI review skill copied",
+                "Paste the copied skill into your AI helper. AI translation "
+                "judgments can be biased and may share preferences or failure "
+                "modes with the models being evaluated. Treat the result as a "
+                "second opinion, not an objective replacement for human review.",
+            )
+        except Exception as exc:
+            QMessageBox.warning(self, "Copy review skill", str(exc))
+
     def import_review(self):
         if not self.current_run_dir:
             return
@@ -1211,7 +1271,11 @@ class EvaluationTab(QWidget):
                 str(human_wins.get(candidate["id"], "—")),
             )
             for column, value in enumerate(values):
-                self.table.setItem(row, column, QTableWidgetItem(str(value)))
+                item = QTableWidgetItem(str(value))
+                column_name = self.COLUMNS[column]
+                if column_name in self.COLUMN_TOOLTIPS:
+                    item.setToolTip(self.COLUMN_TOOLTIPS[column_name])
+                self.table.setItem(row, column, item)
         if state.get("status") in {"submitted", "partially_submitted"}:
             self._poll_timer.start()
         self._update_actions(state)
@@ -1234,6 +1298,9 @@ class EvaluationTab(QWidget):
             }
         )
         self.export_btn.setEnabled(not busy and status == "completed")
+        self.copy_review_skill_btn.setEnabled(
+            not busy and status == "completed" and self._review_csv_path() is not None
+        )
         self.import_btn.setEnabled(
             not busy and status == "completed" and bool(self.current_run_dir)
         )

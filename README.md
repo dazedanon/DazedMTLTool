@@ -307,8 +307,8 @@ to verify the pipeline after making changes.
 The **Evaluation** page compares any two or more models through native Batch APIs
 or immediate live requests without translating an entire game.
 Every row can use its own API URL, saved key, and model dropdown. Official
-OpenAI, Gemini, and Anthropic URLs are available from the adjacent **Presets**
-menu; other URLs use an OpenAI-compatible API. Model discovery runs
+OpenAI, Claude, Gemini, DeepSeek, Mistral, and Nvidia URLs are available from
+the adjacent **Presets** menu; other URLs use an OpenAI-compatible API. Model discovery runs
 automatically when the URL, preset, or saved key changes; **Scan** remains as a
 manual retry, and its results populate the model dropdown. Each row can run as
 **Batch** or **Live**. Batch requires compatible model-list, Files, and Batch
@@ -327,10 +327,13 @@ default hard limit is $10 per model, with submission blocked above an 80%
 safety threshold and the same 4,096-token response ceiling applied to every request.
 The ceiling's theoretical cost must also fit the budget. Results are checked
 for missing lines, Japanese residue, and broken
-placeholders/control codes. The results table reports consistency in plain
-language, and the final CSV hides model identities independently on every row
-for a letter/TIE human review. Exporting that CSV creates the hidden scoring
-key; complete its winner column before importing it back into the same run.
+placeholders/control codes. Hover **Valid ⓘ** or **Consistency ⓘ** for the exact
+meaning of each score. The final CSV hides model identities independently on
+every row for a letter/TIE human review. After exporting it, **Copy review
+skill** copies path-specific instructions for an AI second opinion; the tool
+warns that AI judging may be biased and is not a replacement for human review.
+Exporting the CSV creates the hidden scoring key; complete its winner column
+before importing it back into the same run.
 Run manifests and results are kept under
 `log/evaluations/`; saved API-key secrets are never copied into them.
 
@@ -339,8 +342,8 @@ as Evaluation jobs and can be monitored or canceled there, but cannot be
 resumed or consumed as normal game translation batches. Live rows finish in
 the Evaluation page and do not create Batch History entries.
 
-Every run remains available in the **Evaluation history** table; preparing a
-new benchmark does not replace earlier results. A selected run can be exported
+Every run remains available from the saved-evaluation picker in **Evaluation
+results**; preparing a new benchmark does not replace earlier results. A selected run can be exported
 as a portable `.dazedeval` archive and imported on another installation. The
 archive contains its frozen manifest, result files, validation summaries, and
 blind-review state, but never saved API-key secrets. Imports always create a

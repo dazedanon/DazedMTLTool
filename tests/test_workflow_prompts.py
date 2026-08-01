@@ -137,6 +137,7 @@ class WorkflowTranslationPromptTests(unittest.TestCase):
             "plugin_translation.md",
             "ace_script_translation.md",
             "rpgmaker_translation_qa.md",
+            "evaluation_csv_review.md",
             "image_translation.md",
             "risky_codes.md",
             "wolf_speakers.md",

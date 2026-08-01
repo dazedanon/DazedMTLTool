@@ -10,7 +10,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PyQt5.QtWidgets import QApplication
 
-from gui.config_tab import ModelFetchThread
+from gui.config_tab import API_URL_PRESETS, ModelFetchThread
 from gui.evaluation_tab import EvaluationTab
 
 
@@ -26,7 +26,7 @@ class EvaluationTabTests(unittest.TestCase):
             mock.patch("gui.evaluation_tab.api_key_vault.ensure_vault"),
             mock.patch(
                 "gui.evaluation_tab.api_key_vault.list_names",
-                return_value=["OpenAI", "Gemini", "Claude"],
+                return_value=["OpenAI", "Gemini", "Claude", "DeepSeek"],
             ),
             mock.patch("gui.evaluation_tab.api_key_vault.get_active_name", return_value="OpenAI"),
             mock.patch(
@@ -35,6 +35,7 @@ class EvaluationTabTests(unittest.TestCase):
                     "OpenAI": "https://api.openai.com/v1",
                     "Gemini": "https://generativelanguage.googleapis.com/v1beta/openai/",
                     "Claude": "https://api.anthropic.com/v1",
+                    "DeepSeek": "https://api.deepseek.com/v1/",
                 }.get(name, ""),
             ),
             mock.patch(
@@ -83,8 +84,39 @@ class EvaluationTabTests(unittest.TestCase):
         self.assertTrue(self.tab.prepare_btn.isEnabled())
         self.assertFalse(self.tab.submit_btn.isEnabled())
         self.assertFalse(self.tab.export_btn.isEnabled())
-        self.assertFalse(self.tab.open_history_btn.isEnabled())
+        self.assertFalse(self.tab.copy_review_skill_btn.isEnabled())
+        self.assertFalse(self.tab.history_combo.isEnabled())
         self.assertTrue(self.tab.import_evaluation_btn.isEnabled())
+        valid_header = self.tab.table.horizontalHeaderItem(
+            self.tab.COLUMNS.index("Valid")
+        )
+        consistency_header = self.tab.table.horizontalHeaderItem(
+            self.tab.COLUMNS.index("Consistency")
+        )
+        self.assertIn("does not judge translation quality", valid_header.toolTip())
+        self.assertIn("not necessarily a better translation", consistency_header.toolTip())
+
+    def test_copy_review_skill_includes_csv_path_and_bias_warning(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            review_path = Path(temporary) / "blind_review.csv"
+            review_path.write_text(
+                "segment_id,scene_id,stratum,source,A,B,winner,notes\n",
+                encoding="utf-8-sig",
+            )
+            self.tab.current_run_dir = Path(temporary)
+            self.tab._last_review_path = review_path
+            self.tab._update_actions({"status": "completed"})
+            self.assertTrue(self.tab.copy_review_skill_btn.isEnabled())
+            QApplication.clipboard().clear()
+            with mock.patch("gui.evaluation_tab.QMessageBox.warning") as warning:
+                self.tab.copy_review_skill()
+
+            prompt = QApplication.clipboard().text()
+            self.assertIn(str(review_path.resolve()), prompt)
+            self.assertNotIn("{{BLIND_REVIEW_CSV}}", prompt)
+            self.assertIn("AI judging is not objective", prompt)
+            self.assertIn("blind_key.json", prompt)
+            self.assertIn("biased", warning.call_args.args[2])
 
     def test_history_lists_and_selects_previous_evaluations(self):
         older = Path("/tmp/evaluation-older")
@@ -116,12 +148,15 @@ class EvaluationTabTests(unittest.TestCase):
         ):
             self.tab._refresh_history(older)
 
-        self.assertEqual(self.tab.history_table.rowCount(), 2)
-        self.assertEqual(self.tab.history_table.item(0, 1).text(), "model-a, model-b")
-        self.assertEqual(self.tab.history_table.item(0, 2).text(), "Batch, Live")
+        self.assertEqual(self.tab.history_combo.count(), 2)
+        self.assertIn("model-a, model-b", self.tab.history_combo.itemText(0))
+        self.assertIn("Batch, Live", self.tab.history_combo.itemText(0))
         self.assertEqual(self.tab._selected_history_run(), older)
-        self.assertTrue(self.tab.open_history_btn.isEnabled())
+        self.assertTrue(self.tab.history_combo.isEnabled())
         self.assertTrue(self.tab.export_evaluation_btn.isEnabled())
+        with mock.patch.object(self.tab, "_open_run") as open_run:
+            self.tab.history_combo.activated.emit(self.tab.history_combo.currentIndex())
+        open_run.assert_called_once_with(older)
 
     def test_key_suggestions_are_provider_specific(self):
         self.assertEqual(
@@ -133,6 +168,24 @@ class EvaluationTabTests(unittest.TestCase):
         self.assertEqual(
             self.tab._candidate_widgets[2]["key"].currentText(), "Claude"
         )
+
+    def test_provider_presets_match_configuration(self):
+        self.assertEqual(
+            [
+                action.text()
+                for action in self.tab._candidate_widgets[0]["preset"].menu().actions()
+            ],
+            [name for name, _url in API_URL_PRESETS],
+        )
+
+        row = self.tab._candidate_widgets[0]
+        deepseek_action = next(
+            action for action in row["preset"].menu().actions()
+            if action.text() == "DeepSeek"
+        )
+        deepseek_action.trigger()
+        self.assertEqual(row["endpoint"].text(), "https://api.deepseek.com/v1/")
+        self.assertEqual(row["key"].currentText(), "DeepSeek")
 
     def test_models_can_be_added_removed_and_reassigned(self):
         self.tab._add_candidate_row("gemini", "gemini-3.6-flash")
@@ -189,6 +242,27 @@ class EvaluationTabTests(unittest.TestCase):
             row, ["gpt-listed-b", "gpt-5.6-terra", "gpt-listed-a"]
         )
         self.assertEqual(row["model"].currentText(), "gpt-5.6-terra")
+
+    def test_long_evaluation_model_dropdown_is_bounded_and_scrollable(self):
+        row = self.tab._candidate_widgets[0]
+        combo = row["model"]
+        self.tab._apply_candidate_models(
+            row, [f"provider-model-{index:03d}" for index in range(100)]
+        )
+        self.tab.resize(1280, 720)
+        self.app.processEvents()
+        combo.showPopup()
+        self.app.processEvents()
+
+        view = combo.view()
+        screen = self.app.screenAt(combo.mapToGlobal(combo.rect().center()))
+        self.assertLessEqual(view.height(), combo._popup_height_limit())
+        self.assertLessEqual(view.window().height(), view.height() + 8)
+        self.assertGreater(view.verticalScrollBar().maximum(), 0)
+        self.assertLessEqual(
+            view.window().frameGeometry().bottom(), screen.availableGeometry().bottom()
+        )
+        combo.hidePopup()
 
     def test_model_scan_uses_selected_provider_key_and_endpoint(self):
         row = self.tab._candidate_widgets[1]

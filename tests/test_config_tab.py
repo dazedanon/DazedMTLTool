@@ -283,6 +283,31 @@ class ConfigTabRegressionTests(unittest.TestCase):
         self.assertFalse(popup.testAttribute(Qt.WA_TranslucentBackground))
         tab.model_combo.hidePopup()
 
+    def test_long_model_popup_is_bounded_and_scrollable(self) -> None:
+        tab = self.make_tab()
+        window = QMainWindow()
+        self._windows.append(window)
+        window.setCentralWidget(tab)
+        window.resize(1280, 760)
+        window.show()
+        tab.model_combo.clear()
+        tab.model_combo.addItems([f"provider-model-{index:03d}" for index in range(100)])
+        for _ in range(3):
+            self._app.processEvents()
+
+        tab.model_combo.showPopup()
+        for _ in range(3):
+            self._app.processEvents()
+
+        view = tab.model_combo.view()
+        popup = view.window()
+        screen = self._app.screenAt(tab.model_combo.mapToGlobal(tab.model_combo.rect().center()))
+        self.assertLessEqual(view.height(), tab.model_combo._popup_height_limit())
+        self.assertLessEqual(popup.height(), view.height() + 8)
+        self.assertGreater(view.verticalScrollBar().maximum(), 0)
+        self.assertLessEqual(popup.frameGeometry().bottom(), screen.availableGeometry().bottom())
+        tab.model_combo.hidePopup()
+
     def test_selecting_saved_provider_refreshes_its_models(self) -> None:
         api_keys.upsert_key(
             "Gemini",

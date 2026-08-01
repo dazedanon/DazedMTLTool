@@ -24,6 +24,16 @@ from gui.theme import COLORS, Geometry, Spacing
 from gui.ui_components import PageHeader, configure_action_button, set_status_text
 
 
+API_URL_PRESETS = (
+    ("OpenAI", "https://api.openai.com/v1"),
+    ("Claude (Anthropic)", "https://api.anthropic.com/v1"),
+    ("Gemini", "https://generativelanguage.googleapis.com/v1beta/openai/"),
+    ("DeepSeek", "https://api.deepseek.com/v1/"),
+    ("Mistral", "https://api.mistral.ai/v1/"),
+    ("Nvidia", "https://integrate.api.nvidia.com/v1/"),
+)
+
+
 class ModelFetchThread(QThread):
     """Background thread that fetches model lists from OpenAI, Anthropic, or Gemini."""
     models_fetched = pyqtSignal(list)
@@ -151,12 +161,18 @@ class ConfigComboBox(QComboBox):
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        # Force Qt's list-view popup instead of its menu-style popup. The
+        # latter ignores maxVisibleItems and can allocate a screen-tall menu
+        # with large blank scrolling regions.
+        self.setStyleSheet("QComboBox { combobox-popup: 0; }")
         view = QListView()
         view.setObjectName("configComboPopup")
         view.setAutoFillBackground(True)
         view.setAttribute(Qt.WA_StyledBackground, True)
         view.viewport().setAutoFillBackground(True)
         view.viewport().setAttribute(Qt.WA_StyledBackground, True)
+        view.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        view.setTextElideMode(Qt.ElideRight)
         view.setStyleSheet("""
             QListView#configComboPopup {
                 background-color: #353539;
@@ -180,7 +196,15 @@ class ConfigComboBox(QComboBox):
             }
         """)
         self.setView(view)
+        self.setMaxVisibleItems(12)
         self._apply_popup_palette()
+
+    def _popup_height_limit(self) -> int:
+        visible_rows = min(max(1, self.maxVisibleItems()), max(1, self.count()))
+        row_height = self.view().sizeHintForRow(0) if self.count() else -1
+        if row_height <= 0:
+            row_height = self.fontMetrics().height() + 12
+        return visible_rows * row_height + self.view().frameWidth() * 2 + 6
 
     def _apply_popup_palette(self):
         for widget in (self.view(), self.view().viewport()):
@@ -198,6 +222,7 @@ class ConfigComboBox(QComboBox):
 
     def showPopup(self):
         self._apply_popup_palette()
+        self.view().setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         super().showPopup()
         self._apply_popup_palette()
         popup = self.view().window()
@@ -336,15 +361,7 @@ class ApiKeyEditDialog(QDialog):
         endpoint_preset_btn.setText("Presets ▾")
         endpoint_preset_btn.setPopupMode(QToolButton.InstantPopup)
         endpoint_menu = ConfigMenu(endpoint_preset_btn)
-        for label, url in (
-            ("OpenAI", "https://api.openai.com/v1"),
-            ("Claude (Anthropic)", "https://api.anthropic.com/v1"),
-            ("Gemini", "https://generativelanguage.googleapis.com/v1beta/openai/"),
-            ("DeepSeek", "https://api.deepseek.com/v1/"),
-            ("Mistral", "https://api.mistral.ai/v1/"),
-            ("Nvidia", "https://integrate.api.nvidia.com/v1/"),
-            ("Clear", ""),
-        ):
+        for label, url in (*API_URL_PRESETS, ("Clear", "")):
             action = endpoint_menu.addAction(label)
             action.triggered.connect(
                 lambda checked=False, u=url: self.endpoint_edit.setText(u)
@@ -767,14 +784,7 @@ class ConfigTab(QWidget):
         self.api_url_preset_btn.setStyleSheet(btn_style)
 
         api_url_menu = ConfigMenu(self.api_url_preset_btn)
-        for name, url in (
-            ("OpenAI", "https://api.openai.com/v1"),
-            ("Claude (Anthropic)", "https://api.anthropic.com/v1"),
-            ("Gemini", "https://generativelanguage.googleapis.com/v1beta/openai/"),
-            ("DeepSeek", "https://api.deepseek.com/v1/"),
-            ("Mistral", "https://api.mistral.ai/v1/"),
-            ("Nvidia", "https://integrate.api.nvidia.com/v1/"),
-        ):
+        for name, url in API_URL_PRESETS:
             action = api_url_menu.addAction(name)
             action.triggered.connect(
                 lambda checked, u=url: self._select_api_url_preset(u)
