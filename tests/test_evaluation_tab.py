@@ -134,8 +134,12 @@ class EvaluationTabTests(unittest.TestCase):
         consistency_header = self.tab.table.horizontalHeaderItem(
             self.tab.COLUMNS.index("Consistency")
         )
-        self.assertIn("does not judge translation quality", valid_header.toolTip())
-        self.assertIn("not necessarily a better translation", consistency_header.toolTip())
+        self.assertIn("does not measure translation quality", valid_header.toolTip())
+        self.assertIn("more repeatable, not better", consistency_header.toolTip())
+        self.assertTrue(all(
+            max(map(len, tooltip.splitlines())) <= 62
+            for tooltip in self.tab.COLUMN_TOOLTIPS.values()
+        ))
         self.assertEqual(self.tab.COLUMNS[-1], "Best overall")
         self.assertTrue(all(
             self.tab.table.horizontalHeaderItem(self.tab.COLUMNS.index(name))

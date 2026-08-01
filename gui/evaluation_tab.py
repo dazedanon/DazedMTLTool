@@ -76,33 +76,28 @@ class EvaluationTab(QWidget):
     )
     COLUMN_TOOLTIPS = {
         "Valid": (
-            "Percentage of all expected line outputs that passed automatic checks "
-            "for missing output, Japanese residue, placeholders, and RPG Maker "
-            "control codes. This does not judge translation quality."
+            "Lines that passed automatic output and game-code checks.\n"
+            "This does not measure translation quality."
         ),
         "Consistency": (
-            "Of the repeated multi-line samples with a valid result on every run, "
-            "the percentage whose complete normalized translation block was exactly "
-            "identical each time. Higher means less variation, not necessarily a "
-            "better translation."
+            "Repeated samples translated exactly the same every run.\n"
+            "Higher means more repeatable, not better."
         ),
         "Meaning Accuracy": (
-            "Fixed-sum points from the blinded meaning-accuracy ranking: fidelity "
-            "to intent, polarity, subjects, quantities, and relationships."
+            "Blind ranking for preserving the original meaning,\n"
+            "including intent, polarity, subjects, and quantities."
         ),
         "Glossary & Prompt": (
-            "Fixed-sum points from the blinded ranking for approved names and "
-            "terms plus applicable translation-system instructions."
+            "Blind ranking for correct glossary terms\n"
+            "and system-prompt rules."
         ),
         "Natural & Contextual": (
-            "Fixed-sum points from the blinded ranking for fluent English, speaker "
-            "voice, register, and continuity across the complete sample."
+            "Blind ranking for fluent, context-appropriate English\n"
+            "and consistent character voice."
         ),
         "Best overall": (
-            "Fixed-sum points from the overall blinded ranking. With three models, "
-            "strict ranks score 2/1/0; tied candidates average the points for the "
-            "positions they occupy. One whole-sample judgment applies that award "
-            "to every line in the sample."
+            "Overall blind ranking across all quality factors.\n"
+            "Ties split points; samples are weighted by line count."
         ),
     }
     BENCHMARK_SIZE_TOOLTIPS = {
