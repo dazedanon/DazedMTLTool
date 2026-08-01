@@ -5,6 +5,7 @@ Updates the actual module files with GUI configuration settings
 
 import re
 import os
+import sys
 from pathlib import Path
 from typing import Dict, Any
 
@@ -33,6 +34,15 @@ class ConfigIntegration:
             # Write back to file
             with open(module_path, 'w', encoding='utf-8') as f:
                 f.write(updated_content)
+
+            # The GUI may already have imported the engine for evaluation or a
+            # prior speaker scan. Keep that live module aligned with the values
+            # just persisted instead of requiring an application restart.
+            live_module = sys.modules.get("modules.rpgmakermvmz")
+            if live_module is not None:
+                for key, value in config.items():
+                    if hasattr(live_module, key):
+                        setattr(live_module, key, value)
                 
             return True
             

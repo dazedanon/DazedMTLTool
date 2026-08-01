@@ -455,7 +455,9 @@ def validate_placeholders(original_text, translated_text, replacements):
     return is_valid, missing, extra
 
 
-def validate_translation_content(original_items, translated_items, langRegex):
+def validate_translation_content(
+    original_items, translated_items, langRegex, target_language=None
+):
     """
     Validate hard content failures that make a translation unsafe or unusable.
     Returns: (is_valid, invalid_indices, reasons)
@@ -470,6 +472,10 @@ def validate_translation_content(original_items, translated_items, langRegex):
     
     invalid_indices = []
     reasons = []
+    target_uses_cjk = str(target_language or "").strip().casefold() in {
+        "chinese",
+        "japanese",
+    }
     
     for i, (orig, trans) in enumerate(zip(original_items, translated_items)):
         orig_str = str(orig).strip()
@@ -543,7 +549,7 @@ def validate_translation_content(original_items, translated_items, langRegex):
             # RPG Maker choice lists commonly use U+3000 as intentional visual
             # padding, and preserving that layout is not untranslated content.
             residue_text = trans_str.replace("\u3000", "")
-            if re.search(langRegex, residue_text):
+            if not target_uses_cjk and re.search(langRegex, residue_text):
                 invalid_indices.append(i)
                 reasons.append(f"Line{i+1}: Source-language text remains in translation")
                 continue
@@ -3562,7 +3568,10 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None, mism
                 for line, value in enumerate(cached_values)
             ]
             content_ok, _invalid_indices, _content_reasons = validate_translation_content(
-                protected_source_values, cached_content_values, config.langRegex
+                protected_source_values,
+                cached_content_values,
+                config.langRegex,
+                config.language,
             )
             if len(source_values) != len(cached_values) or not controls_ok or not content_ok:
                 # Ignore stale/corrupt cache entries. A successful live result
@@ -3878,7 +3887,10 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None, mism
                             else:
                                 # Check 3: Validate that translations are not empty or nearly empty
                                 content_valid, invalid_indices, content_reasons = validate_translation_content(
-                                    clean_tItem, extracted, config.langRegex
+                                    clean_tItem,
+                                    extracted,
+                                    config.langRegex,
+                                    config.language,
                                 )
 
                                 if not content_valid:
@@ -3941,7 +3953,10 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None, mism
                                 # Validate content for single string
                                 final_cleaned = extracted.replace("Placeholder Text", "")
                                 content_valid, _, content_reasons = validate_translation_content(
-                                    tItem, final_cleaned, config.langRegex
+                                    tItem,
+                                    final_cleaned,
+                                    config.langRegex,
+                                    config.language,
                                 )
 
                                 if not content_valid:

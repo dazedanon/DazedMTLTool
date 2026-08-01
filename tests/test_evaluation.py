@@ -646,7 +646,9 @@ class EvaluationManifestTests(unittest.TestCase):
                 ],
             })
             with (
-                mock.patch.object(evaluation, "_clients", return_value=(object(), None)),
+                mock.patch.object(
+                    evaluation, "_clients", return_value=(object(), None)
+                ),
                 mock.patch.object(
                     evaluation.batch_api,
                     "retrieve_batch",
@@ -702,7 +704,9 @@ class EvaluationManifestTests(unittest.TestCase):
                 }
 
             with (
-                mock.patch.object(evaluation, "_clients", return_value=(object(), None)),
+                mock.patch.object(
+                    evaluation, "_clients", return_value=(object(), None)
+                ) as clients,
                 mock.patch.object(
                     evaluation.batch_api,
                     "execute_live_request",
@@ -718,7 +722,147 @@ class EvaluationManifestTests(unittest.TestCase):
             self.assertEqual(state["candidates"][0]["status"], "completed")
             self.assertNotIn("batch_id", state["candidates"][0])
             self.assertEqual(execute.call_count, len(self.manifest["executions"]))
+            clients.assert_called_once()
+            client_args, client_kwargs = clients.call_args
+            self.assertEqual(client_args[0]["id"], "candidate-1")
+            self.assertEqual(client_args[1], "local-key")
+            self.assertEqual(client_kwargs, {"max_retries": 0})
             submit.assert_not_called()
+
+    def test_live_evaluation_disables_hidden_sdk_retries(self):
+        candidate = {
+            "provider": "openai",
+            "endpoint": "https://api.openai.com/v1",
+        }
+        client = object()
+        with mock.patch.object(
+            evaluation.batch_api, "get_client", return_value=client
+        ) as get_client:
+            resolved, google_client = evaluation._clients(
+                candidate, "secret", max_retries=0
+            )
+
+        self.assertIs(resolved, client)
+        self.assertIsNone(google_client)
+        get_client.assert_called_once_with(
+            "openai",
+            api_key="secret",
+            api_url="https://api.openai.com/v1",
+            max_retries=0,
+        )
+
+    def test_resuming_remaining_candidates_does_not_replay_failed_live_candidate(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            run_dir = Path(temporary)
+            evaluation._atomic_write_json(run_dir / "manifest.json", self.manifest)
+            evaluation._atomic_write_json(run_dir / "state.json", {
+                "run_id": "skip-failed-live",
+                "status": "partially_submitted",
+                "candidates": [
+                    {
+                        "id": "failed-live",
+                        "provider": "openai",
+                        "endpoint": "https://api.openai.com/v1",
+                        "model": "failed-model",
+                        "label": "failed-model",
+                        "key_name": "OpenAI",
+                        "execution": "live",
+                        "status": "failed",
+                        "estimate": {"cost_usd": 1.0},
+                    },
+                    {
+                        "id": "pending-batch",
+                        "provider": "openai",
+                        "endpoint": "https://api.openai.com/v1",
+                        "model": "batch-model",
+                        "label": "batch-model",
+                        "key_name": "OpenAI",
+                        "execution": "batch",
+                        "status": "prepared",
+                        "estimate": {"cost_usd": 1.0},
+                    },
+                ],
+            })
+            with (
+                mock.patch.object(evaluation, "_execute_live_candidate") as execute,
+                mock.patch.object(
+                    evaluation, "_clients", return_value=(object(), None)
+                ),
+                mock.patch.object(
+                    evaluation.batch_api,
+                    "submit_batch",
+                    return_value={"id": "batch-new"},
+                ),
+                mock.patch("util.batch_history.upsert_history_entry"),
+            ):
+                state = evaluation.submit_run(
+                    run_dir,
+                    {"failed-live": "key", "pending-batch": "key"},
+                )
+
+        execute.assert_not_called()
+        self.assertEqual(state["candidates"][0]["status"], "failed")
+        self.assertEqual(state["candidates"][1]["batch_id"], "batch-new")
+
+    def test_live_stop_prevents_later_candidates_from_starting(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            run_dir = Path(temporary)
+            evaluation._atomic_write_json(run_dir / "manifest.json", self.manifest)
+            candidates = [
+                {
+                    "id": "live-first",
+                    "provider": "openai",
+                    "model": "live-model",
+                    "label": "live-model",
+                    "key_name": "OpenAI",
+                    "endpoint": "https://api.openai.com/v1",
+                    "execution": "live",
+                    "status": "prepared",
+                    "estimate": {"cost_usd": 1.0},
+                },
+                {
+                    "id": "batch-second",
+                    "provider": "openai",
+                    "model": "batch-model",
+                    "label": "batch-model",
+                    "key_name": "OpenAI",
+                    "endpoint": "https://api.openai.com/v1",
+                    "execution": "batch",
+                    "status": "prepared",
+                    "estimate": {"cost_usd": 1.0},
+                },
+            ]
+            evaluation._atomic_write_json(run_dir / "state.json", {
+                "run_id": "stop-before-next-candidate",
+                "status": "prepared",
+                "candidates": candidates,
+            })
+            stopped = False
+
+            def finish_then_stop(_root, _state, _manifest, candidate, *_args, **_kwargs):
+                nonlocal stopped
+                candidate["status"] = "completed"
+                stopped = True
+                return True, run_dir / "results" / "unused.partial.json"
+
+            with (
+                mock.patch.object(
+                    evaluation,
+                    "_execute_live_candidate",
+                    side_effect=finish_then_stop,
+                ),
+                mock.patch.object(evaluation.batch_api, "submit_batch") as submit,
+            ):
+                state = evaluation.submit_run(
+                    run_dir,
+                    {"live-first": "key", "batch-second": "key"},
+                    should_stop=lambda: stopped,
+                )
+
+        submit.assert_not_called()
+        self.assertEqual(state["candidates"][0]["status"], "completed")
+        self.assertEqual(state["candidates"][1]["status"], "prepared")
+        self.assertEqual(state["status"], "partially_submitted")
 
     def test_live_evaluation_resumes_from_per_request_checkpoint(self):
         with tempfile.TemporaryDirectory() as temporary:

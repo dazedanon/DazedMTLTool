@@ -66,6 +66,7 @@ from util.translation import (
     getPricingConfig,
     calculateCost,
     parseVocabWithCategories,
+    last_translation_had_mismatch,
 )
 from util import speakers as wolf_speakers
 from util import vocab as wolf_vocab
@@ -100,6 +101,7 @@ def _load_wolf_prompt() -> str:
 PROMPT = _load_wolf_prompt()
 VOCAB = read_active_glossary()
 LOCK = threading.Lock()
+THREAD_CTX = threading.local()
 MAXHISTORY = 10
 ESTIMATE = ""
 TOKENS = [0, 0]
@@ -342,8 +344,28 @@ def _text_still_needs_translation(entry) -> bool:
     return bool(re.search(LANGREGEX, _text_check_body(txt, entry.get("speaker_src", ""))))
 
 
+def _target_uses_cjk() -> bool:
+    return str(LANGUAGE or "").strip().casefold() in {"chinese", "japanese"}
+
+
+def _speaker_translation_valid(source: str, translated: str) -> bool:
+    normalized = str(translated or "").strip()
+    if not normalized:
+        return False
+    if _target_uses_cjk():
+        return True
+    if normalized.casefold() == str(source or "").strip().casefold():
+        return False
+    # Preserve WOLF's long-standing support for mixed-script localized names
+    # such as ``EN_セルリア`` while still rejecting an untranslated JP echo.
+    return (
+        re.search(LANGREGEX, normalized) is None
+        or re.search(r"[A-Za-z]", normalized) is not None
+    )
+
+
 def _vocab_speaker_lookup(speaker: str) -> str | None:
-    """Return an English gloss for *speaker* from glossary.txt, or None."""
+    """Return a target-language gloss for *speaker* from glossary.txt."""
     if not speaker or not VOCAB:
         return None
     try:
@@ -354,8 +376,7 @@ def _vocab_speaker_lookup(speaker: str) -> str | None:
                 continue
             jp, en = term
             if jp == speaker and isinstance(en, str) and en.strip():
-                # Prefer a gloss that is not still Japanese.
-                if not re.search(LANGREGEX, en):
+                if _speaker_translation_valid(speaker, en):
                     return en.strip()
     except Exception:
         pass
@@ -410,27 +431,17 @@ def getSpeaker(speaker: str):
     if _batch_phase() == "collect":
         return [speaker, [0, 0]]
 
-    response = translateAI(
-        speaker,
-        ctx("names.npc"),
-    )
+    THREAD_CTX.last_translation_had_mismatch = False
+    response = translateAI(speaker, ctx("names.npc"))
     translated = _normalize_speaker_name(
         response[0] if isinstance(response[0], str) else str(response[0])
     )
 
-    # Retry once if the model returned something with no Latin / ? characters.
-    if re.search(r"([a-zA-Z？?])", translated) is None:
-        response = translateAI(
-            speaker,
-            ctx("names.npc"),
-        )
-        translated = _normalize_speaker_name(
-            response[0] if isinstance(response[0], str) else str(response[0])
-        )
-
-    # Still Japanese after retries - keep original rather than inventing junk.
-    if re.search(LANGREGEX, translated) and not re.search(r"[A-Za-z]", translated):
-        translated = speaker
+    if (
+        bool(getattr(THREAD_CTX, "last_translation_had_mismatch", False))
+        or not _speaker_translation_valid(speaker, translated)
+    ):
+        return [speaker, response[1]]
 
     with _speakerCacheLock:
         if speaker not in _speakerCache:
@@ -480,19 +491,25 @@ def pendingSpeakerNames(speakers) -> list[str]:
     return pending
 
 
-def translateSpeakerNames(speakers) -> list[int]:
+def translateSpeakerNames(speakers) -> list[int] | bool:
     """Translate unresolved WOLF speakers as lists and merge them into the glossary."""
     global VOCAB
     pending = pendingSpeakerNames(speakers)
     if not pending:
         return [0, 0]
+    THREAD_CTX.last_translation_had_mismatch = False
     response = translateAI(pending, ctx("names.npc"))
     translated = response[0] if isinstance(response[0], list) else [response[0]]
+    if (
+        bool(getattr(THREAD_CTX, "last_translation_had_mismatch", False))
+        or len(translated) != len(pending)
+    ):
+        return False
     pairs = []
     for source, value in zip(pending, translated):
         normalized = _normalize_speaker_name(str(value or ""))
-        if not normalized or re.search(LANGREGEX, normalized):
-            continue
+        if not _speaker_translation_valid(source, normalized):
+            return False
         pairs.append((source, normalized))
     if pairs:
         wolf_vocab.update_vocab_section("Speakers", pairs, merge=True)
@@ -776,7 +793,7 @@ def translateAI(text, history, history_ctx=None):
     """Thin wrapper around the shared translation entry point."""
     global PBAR, MISMATCH, FILENAME
     TRANSLATION_CONFIG.estimateMode = bool(ESTIMATE)
-    return sharedtranslateAI(
+    result = sharedtranslateAI(
         text=text,
         history=history,
         config=TRANSLATION_CONFIG,
@@ -785,3 +802,5 @@ def translateAI(text, history, history_ctx=None):
         lock=LOCK,
         mismatchList=MISMATCH,
     )
+    THREAD_CTX.last_translation_had_mismatch = last_translation_had_mismatch()
+    return result

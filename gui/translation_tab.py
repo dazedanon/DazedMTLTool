@@ -858,6 +858,12 @@ class TranslationWorker(QThread):
             f"🔤 Translating {len(pending)} WOLF speakers in grouped list batches…"
         )
         tokens = wolfdawn.translateSpeakerNames(pending)
+        if tokens is False:
+            self.emit_log(
+                "❌ WOLF speaker translations could not be validated or saved. "
+                "The translation run did not start."
+            )
+            return False
         if tokens[0] or tokens[1]:
             cost = wolfdawn.calculateCost(tokens[0], tokens[1], wolfdawn.MODEL)
             self.emit_log(

@@ -78,6 +78,21 @@ class BatchProviderDetectionTests(unittest.TestCase):
             api_key="not-needed", base_url="http://127.0.0.1:8000/v1"
         )
 
+    def test_client_can_disable_sdk_retries_for_owned_retry_policy(self):
+        with mock.patch.object(BP.openai, "OpenAI") as client_class:
+            BP.get_client(
+                "openai",
+                api_key="key",
+                api_url="https://api.openai.com/v1",
+                max_retries=0,
+            )
+
+        client_class.assert_called_once_with(
+            api_key="key",
+            base_url="https://api.openai.com/v1",
+            max_retries=0,
+        )
+
     def test_gemini_builder_and_batch_adapter_use_correct_extension_nesting(self):
         with mock.patch.dict(
             "os.environ", {"GEMINI_THINKING_BUDGET": "0"}, clear=False

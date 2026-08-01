@@ -73,7 +73,7 @@ def _api_key() -> str:
 
 
 def get_client(provider: str, *, api_key: str | None = None,
-               api_url: str | None = None):
+               api_url: str | None = None, max_retries: int | None = None):
     """Create the SDK client needed for status/create/cancel operations.
 
     ``api_key`` and ``api_url`` let isolated workflows (notably model
@@ -93,6 +93,8 @@ def get_client(provider: str, *, api_key: str | None = None,
             raise RuntimeError(f"{batch_provider_label(provider)} requires an API key")
     if provider == PROVIDER_ANTHROPIC:
         kwargs = {"api_key": key}
+        if max_retries is not None:
+            kwargs["max_retries"] = max_retries
         if (api_url or "").strip():
             base_url = str(api_url).strip().rstrip("/")
             if "api.anthropic.com" in base_url.lower() and base_url.endswith("/v1"):
@@ -100,13 +102,18 @@ def get_client(provider: str, *, api_key: str | None = None,
             kwargs["base_url"] = base_url
         return anthropic.Anthropic(**kwargs)
     if provider == PROVIDER_GEMINI:
-        return openai.OpenAI(
+        kwargs = dict(
             api_key=key,
             base_url=(api_url or "").strip()
             or "https://generativelanguage.googleapis.com/v1beta/openai/",
         )
+        if max_retries is not None:
+            kwargs["max_retries"] = max_retries
+        return openai.OpenAI(**kwargs)
     if provider == PROVIDER_OPENAI:
         kwargs = {"api_key": key}
+        if max_retries is not None:
+            kwargs["max_retries"] = max_retries
         if (api_url or "").strip():
             kwargs["base_url"] = str(api_url).strip()
         return openai.OpenAI(**kwargs)

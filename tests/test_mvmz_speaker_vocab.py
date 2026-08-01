@@ -218,6 +218,30 @@ class MVMZSpeakerVocabTests(unittest.TestCase):
 
         self.assertIn("騎士 (Рыцарь)", written)
 
+    def test_parse_speakers_persists_and_resolves_chinese_target_name(self):
+        mvmz.SPEAKER_PARSE_MODE = True
+        mvmz.SPEAKER_COLLECTED = ["騎士"]
+        with TemporaryDirectory() as tmp:
+            glossary_path = Path(tmp) / "glossary.txt"
+            glossary_path.write_text("# Speakers\n", encoding="utf-8")
+            with (
+                patch.object(mvmz, "LANGUAGE", "Chinese"),
+                patch.object(mvmz, "VOCAB_PATH", glossary_path),
+                patch.object(mvmz, "active_glossary_path", return_value=glossary_path),
+                patch.object(
+                    mvmz,
+                    "translateAI",
+                    return_value=[["骑士"], [3, 1]],
+                ),
+            ):
+                self.assertTrue(mvmz.finalizeSpeakerParse())
+                written = glossary_path.read_text(encoding="utf-8")
+                mvmz.VOCAB = written
+                mvmz._speakerVocabSource = None
+                self.assertEqual(mvmz._vocab_speaker_lookup("騎士"), "骑士")
+
+        self.assertIn("騎士 (骑士)", written)
+
     def test_finalize_without_glossary_does_not_spend_on_speakers(self):
         mvmz.SPEAKER_PARSE_MODE = True
         mvmz.SPEAKER_COLLECTED = ["騎士"]

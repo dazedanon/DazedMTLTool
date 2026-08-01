@@ -202,6 +202,55 @@ class TestSpeakerPreflight(unittest.TestCase):
         )
         self.assertEqual(tokens, [11, 2])
 
+    def test_partial_speaker_response_is_rejected_without_writing(self):
+        with (
+            patch.object(wd, "read_active_glossary", return_value=""),
+            patch.object(wd, "translateAI", return_value=[["Knight"], [5, 1]]),
+            patch.object(wd.wolf_vocab, "update_vocab_section") as update,
+        ):
+            result = wd.translateSpeakerNames(["騎士", "秘書官"])
+
+        self.assertIs(result, False)
+        update.assert_not_called()
+
+    def test_failed_speaker_fallback_is_not_cached(self):
+        def failed_translation(*_args, **_kwargs):
+            wd.THREAD_CTX.last_translation_had_mismatch = True
+            return ["騎士", [3, 1]]
+
+        with (
+            patch.object(wd, "VOCAB", ""),
+            patch.object(wd, "ESTIMATE", False),
+            patch.object(wd, "translateAI", side_effect=failed_translation),
+        ):
+            wd.NAMESLIST = []
+            wd._speakerCache.clear()
+            translated, _tokens = wd.getSpeaker("騎士")
+
+        self.assertEqual(translated, "騎士")
+        self.assertNotIn("騎士", wd._speakerCache)
+        self.assertEqual(wd.NAMESLIST, [])
+
+    def test_chinese_speaker_translation_is_persisted(self):
+        original_cache = dict(wd._speakerCache)
+        wd._speakerCache.clear()
+        try:
+            with (
+                patch.object(wd, "LANGUAGE", "Chinese"),
+                patch.object(wd, "read_active_glossary", return_value=""),
+                patch.object(wd, "translateAI", return_value=[["骑士"], [5, 1]]),
+                patch.object(wd.wolf_vocab, "update_vocab_section") as update,
+            ):
+                tokens = wd.translateSpeakerNames(["騎士"])
+        finally:
+            wd._speakerCache.clear()
+            wd._speakerCache.update(original_cache)
+
+        self.assertEqual(tokens, [5, 1])
+        update.assert_called_once_with(
+            "Speakers", [("騎士", "骑士")], merge=True
+        )
+
 
 class TestCollectEntries(unittest.TestCase):
     def test_counts_per_kind(self):

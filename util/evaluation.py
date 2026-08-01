@@ -1884,10 +1884,13 @@ def _provider_params(candidate: dict, request: dict) -> dict:
     return params
 
 
-def _clients(candidate: dict, secret: str):
+def _clients(candidate: dict, secret: str, *, max_retries: int | None = None):
     provider = candidate["provider"]
     client = batch_api.get_client(
-        provider, api_key=secret, api_url=candidate.get("endpoint") or None
+        provider,
+        api_key=secret,
+        api_url=candidate.get("endpoint") or None,
+        max_retries=max_retries,
     )
     google_client = (
         batch_api._google_client(secret) if provider == "gemini" else None
@@ -1983,7 +1986,9 @@ def _execute_live_candidate(
     requests: dict[str, dict], secret: str, log: Callable[[str], None],
     should_stop: Callable[[], bool] | None = None,
 ) -> tuple[bool, Path]:
-    client, _google_client = _clients(candidate, secret)
+    # The evaluator owns the retry/checkpoint policy. Disable the SDKs' hidden
+    # retries so LIVE_REQUEST_MAX_ATTEMPTS is the actual network-attempt cap.
+    client, _google_client = _clients(candidate, secret, max_retries=0)
     candidate_id = str(candidate.get("id") or "")
     if (
         not re.fullmatch(r"[A-Za-z0-9._-]+", candidate_id)
@@ -2093,6 +2098,8 @@ def _execute_live_candidate(
                         if should_stop is not None and should_stop():
                             return False, checkpoint_path
                         time.sleep(delay)
+                        if should_stop is not None and should_stop():
+                            return False, checkpoint_path
                         continue
 
                     candidate["live_retryable_error"] = str(exc)[:500]
@@ -2168,7 +2175,11 @@ def submit_run(run_dir: str | Path, credentials: dict[str, str],
     log = log or (lambda _message: None)
 
     for candidate in state["candidates"]:
-        if candidate.get("batch_id") or candidate.get("status") == "completed":
+        if should_stop is not None and should_stop():
+            break
+        if candidate.get("batch_id") or candidate.get("status") in {
+            "completed", "failed",
+        }:
             continue
         secret = str(credentials.get(candidate["id"]) or "").strip()
         if not secret and not candidate.get("keyless"):

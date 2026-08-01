@@ -540,6 +540,39 @@ class EvaluationTabTests(unittest.TestCase):
         self.assertIsNone(self.tab._worker)
         self.assertTrue(self.tab.prepare_btn.isEnabled())
 
+    def test_cancel_button_requests_live_worker_interruption(self):
+        worker = mock.Mock()
+        worker.isRunning.return_value = True
+        self.tab._worker = worker
+        self.tab._worker_cancelable = True
+        self.tab._set_busy(True)
+
+        self.assertTrue(self.tab.cancel_btn.isEnabled())
+        self.tab.cancel_evaluation()
+
+        worker.requestInterruption.assert_called_once_with()
+        self.assertFalse(self.tab.cancel_btn.isEnabled())
+        self.tab._worker = None
+        self.tab._worker_cancelable = False
+
+    def test_paused_live_run_enables_resume_without_batch_polling(self):
+        self.tab._display_state({
+            "status": "partially_submitted",
+            "candidates": [{
+                "id": "candidate-1",
+                "model": "local-model",
+                "provider": "openai",
+                "endpoint": "http://127.0.0.1:8000/v1",
+                "execution": "live",
+                "status": "running_live",
+                "estimate": {"cost_usd": 0.0},
+            }],
+        })
+
+        self.assertTrue(self.tab.submit_btn.isEnabled())
+        self.assertFalse(self.tab.refresh_btn.isEnabled())
+        self.assertFalse(self.tab._poll_timer.isActive())
+
     def test_long_evaluation_model_dropdown_is_bounded_and_scrollable(self):
         row = self.tab._candidate_widgets[0]
         combo = row["model"]

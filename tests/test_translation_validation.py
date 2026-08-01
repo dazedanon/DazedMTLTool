@@ -109,6 +109,14 @@ class TranslationContentValidationTests(unittest.TestCase):
         self.assertEqual(indices, [0])
         self.assertIn("Source-language text remains", reasons[0])
 
+    def test_allows_cjk_characters_for_chinese_target(self):
+        valid, indices, reasons = tr.validate_translation_content(
+            ["騎士"], ["骑士"], r"[一-龠ぁ-ゔァ-ヴー]+", "Chinese"
+        )
+
+        self.assertTrue(valid, reasons)
+        self.assertEqual(indices, [])
+
     def test_rejects_japanese_prolonged_sound_mark(self):
         valid, indices, reasons = tr.validate_translation_content(
             ["ほげぇぇぇーーっ！！"], ["Hrooooghhhhhーー!!"],

@@ -5082,6 +5082,22 @@ def _vocab_category_priority(category) -> int:
     return 1
 
 
+def _target_uses_cjk() -> bool:
+    return str(LANGUAGE or "").strip().casefold() in {"chinese", "japanese"}
+
+
+def _speaker_translation_valid(source: str, translated: str) -> bool:
+    normalized = str(translated or "").strip()
+    if not normalized:
+        return False
+    if _target_uses_cjk():
+        return True
+    return (
+        normalized.casefold() != str(source or "").strip().casefold()
+        and re.search(LANGREGEX, normalized) is None
+    )
+
+
 def _speaker_vocab_indexes():
     """Return cached exact and character-only mappings from the current vocab."""
     global _speakerVocabSource, _speakerVocabExact, _speakerVocabCharacterPairs
@@ -5097,7 +5113,7 @@ def _speaker_vocab_indexes():
             if not isinstance(term, tuple) or len(term) != 2:
                 continue
             source, translated = (str(part).strip() for part in term)
-            if not source or not translated or re.search(LANGREGEX, translated):
+            if not source or not _speaker_translation_valid(source, translated):
                 continue
             priority = _vocab_category_priority(category)
             if priority > exact_priorities.get(source, 0):
@@ -5475,6 +5491,7 @@ def finalizeSpeakerParse():
                     NAMESLIST.append([source, translated])
             to_translate = [s for s in to_translate if s not in _speakerCache]
         if to_translate:
+            THREAD_CTX.last_translation_had_mismatch = False
             try:
                 THREAD_CTX.in_speaker = True
                 # Full list; translateAI chunks with the Settings batch size.
@@ -5503,18 +5520,7 @@ def finalizeSpeakerParse():
             translated_pairs = []
             for orig, tl in zip(to_translate, tl_list):
                 norm = _normalize_speaker_nameplate(tl)
-                target_uses_cjk = str(LANGUAGE or "").strip().casefold() in {
-                    "chinese",
-                    "japanese",
-                }
-                if (
-                    not norm
-                    or (
-                        not target_uses_cjk
-                        and norm.strip().casefold() == str(orig).strip().casefold()
-                    )
-                    or (not target_uses_cjk and re.search(LANGREGEX, norm))
-                ):
+                if not _speaker_translation_valid(orig, norm):
                     return False
                 translated_pairs.append((orig, norm))
 
@@ -5566,10 +5572,7 @@ def finalizeSpeakerParse():
             if orig in seen:
                 continue
             seen.add(orig)
-            if (
-                str(orig).strip().casefold() == str(tl).strip().casefold()
-                or re.search(LANGREGEX, str(tl))
-            ):
+            if not _speaker_translation_valid(orig, tl):
                 continue
             new_line = f"{orig} ({tl})"
             existing_index = source_indexes.get(orig)

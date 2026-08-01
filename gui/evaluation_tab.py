@@ -153,6 +153,7 @@ class EvaluationTab(QWidget):
         self.current_run_dir: Path | None = None
         self._last_review_path: Path | None = None
         self._worker: _EvaluationWorker | None = None
+        self._worker_cancelable = False
         self._candidate_widgets: list[dict] = []
         self._content_inventory: dict = {}
         self._content_source_items: dict[str, QTreeWidgetItem] = {}
@@ -435,13 +436,14 @@ class EvaluationTab(QWidget):
         actions.setHorizontalSpacing(8)
         self.prepare_btn = QPushButton("Prepare benchmark")
         self.submit_btn = QPushButton("Run evaluation")
+        self.cancel_btn = QPushButton("Stop live evaluation")
         self.refresh_btn = QPushButton("Refresh results")
         self.export_btn = QPushButton("Export blind review")
         self.copy_review_skill_btn = QPushButton("Copy review skill")
         self.import_btn = QPushButton("Import reviewed CSV")
         configure_action_button(self.prepare_btn, variant="primary")
         for button in (
-            self.submit_btn, self.refresh_btn, self.export_btn,
+            self.submit_btn, self.cancel_btn, self.refresh_btn, self.export_btn,
             self.copy_review_skill_btn, self.import_btn,
         ):
             configure_action_button(button, variant="secondary")
@@ -451,16 +453,17 @@ class EvaluationTab(QWidget):
         )
         self.prepare_btn.clicked.connect(self.prepare_benchmark)
         self.submit_btn.clicked.connect(self.submit_batches)
+        self.cancel_btn.clicked.connect(self.cancel_evaluation)
         self.refresh_btn.clicked.connect(self.refresh_results)
         self.export_btn.clicked.connect(self.export_review)
         self.copy_review_skill_btn.clicked.connect(self.copy_review_skill)
         self.import_btn.clicked.connect(self.import_review)
         for column, button in enumerate((
-            self.prepare_btn, self.submit_btn, self.refresh_btn,
+            self.prepare_btn, self.submit_btn, self.cancel_btn, self.refresh_btn,
         )):
             button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
             actions.addWidget(button, 0, column * 2, 1, 2)
-        for column in range(6):
+        for column in range(8):
             actions.setColumnStretch(column, 1)
         for column, button in enumerate((
             self.export_btn, self.copy_review_skill_btn, self.import_btn,
@@ -1526,14 +1529,16 @@ class EvaluationTab(QWidget):
             self.export_evaluation_btn, self.import_evaluation_btn,
         ):
             button.setEnabled(not busy)
+        self.cancel_btn.setEnabled(busy and self._worker_cancelable)
         if not busy:
             self._update_actions()
             self._update_history_actions()
 
-    def _run_task(self, task, on_done):
+    def _run_task(self, task, on_done, *, cancelable=False):
         if self._worker is not None and self._worker.isRunning():
             QMessageBox.information(self, "Evaluation busy", "An evaluation operation is still running.")
             return
+        self._worker_cancelable = bool(cancelable)
         self._set_busy(True)
         worker = _EvaluationWorker(task, self)
         self._worker = worker
@@ -1554,10 +1559,28 @@ class EvaluationTab(QWidget):
     def _clear_worker(self):
         if self.sender() is self._worker:
             self._worker = None
+            self._worker_cancelable = False
             # The result signal arrives while QThread.isRunning() is still
             # true. Restore actions only after the actual thread-finished
             # signal so _update_actions() cannot disable them again.
             self._set_busy(False)
+
+    def cancel_evaluation(self):
+        """Request a live evaluation pause after its current SDK call returns."""
+        worker = self._worker
+        if (
+            worker is None
+            or not worker.isRunning()
+            or not self._worker_cancelable
+        ):
+            return
+        worker.requestInterruption()
+        self.cancel_btn.setEnabled(False)
+        set_status_text(
+            self.status_label,
+            "Stopping the live evaluation after the current request…",
+            "info",
+        )
 
     def _load_latest(self):
         self._refresh_keys()
@@ -1710,8 +1733,15 @@ class EvaluationTab(QWidget):
             f"{candidate['label']} ({candidate.get('execution', 'batch').title()}): "
             f"${candidate['estimate']['cost_usd']:.2f} estimated; "
             f"${candidate['estimate']['maximum_cost_usd']:.2f} ceiling"
-            for candidate in state["candidates"] if not candidate.get("batch_id")
+            for candidate in state["candidates"]
+            if not candidate.get("batch_id")
+            and candidate.get("status") in {"prepared", "running_live"}
         ]
+        has_resumable_live = any(
+            candidate.get("execution", "batch") == "live"
+            and candidate.get("status") in {"prepared", "running_live"}
+            for candidate in state["candidates"]
+        )
         answer = QMessageBox.question(
             self,
             "Run evaluation?",
@@ -1759,14 +1789,26 @@ class EvaluationTab(QWidget):
                     "error",
                 )
             else:
-                set_status_text(
-                    self.status_label,
-                    "Batch jobs were submitted. This page checks them every 60 seconds while open.",
-                    "success",
+                live_paused = any(
+                    candidate.get("status") == "running_live"
+                    for candidate in updated.get("candidates") or []
                 )
-                self._poll_timer.start()
+                if live_paused:
+                    set_status_text(
+                        self.status_label,
+                        "Live evaluation paused. Press Run evaluation to resume "
+                        "from its saved request checkpoint.",
+                        "info",
+                    )
+                else:
+                    set_status_text(
+                        self.status_label,
+                        "Batch jobs were submitted. This page checks them every "
+                        "60 seconds while open.",
+                        "success",
+                    )
 
-        self._run_task(task, done)
+        self._run_task(task, done, cancelable=has_resumable_live)
 
     def refresh_results(self):
         if not self.current_run_dir or (
@@ -2014,8 +2056,15 @@ class EvaluationTab(QWidget):
                 if column_name in self.COLUMN_TOOLTIPS:
                     item.setToolTip(self.COLUMN_TOOLTIPS[column_name])
                 self.table.setItem(row, column, item)
-        if state.get("status") in {"submitted", "partially_submitted"}:
+        has_pending_batch = any(
+            candidate.get("batch_id")
+            and candidate.get("status") not in {"completed", "failed"}
+            for candidate in state.get("candidates") or []
+        )
+        if has_pending_batch:
             self._poll_timer.start()
+        else:
+            self._poll_timer.stop()
         self._update_actions(state)
 
     def _update_actions(self, state: dict | None = None):
@@ -2026,15 +2075,26 @@ class EvaluationTab(QWidget):
                 state = None
         status = state.get("status") if state else ""
         busy = self._worker is not None and self._worker.isRunning()
+        candidates = state.get("candidates") if state else []
+        has_pending_batch = any(
+            candidate.get("batch_id")
+            and candidate.get("status") not in {"completed", "failed"}
+            for candidate in candidates or []
+        )
         self.prepare_btn.setEnabled(not busy)
         self.submit_btn.setEnabled(
             not busy and status in {"prepared", "partially_submitted"}
         )
         self.refresh_btn.setEnabled(
-            not busy and status in {
-                "submitted", "partially_submitted", "imported_paused"
-            }
+            not busy and (
+                status == "imported_paused"
+                or (
+                    status in {"submitted", "partially_submitted"}
+                    and has_pending_batch
+                )
+            )
         )
+        self.cancel_btn.setEnabled(busy and self._worker_cancelable)
         self.export_btn.setEnabled(not busy and status in {"completed", "failed"})
         self.copy_review_skill_btn.setEnabled(
             not busy
