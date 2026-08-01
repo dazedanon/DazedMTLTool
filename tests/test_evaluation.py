@@ -830,6 +830,25 @@ class EvaluationHistoryTests(unittest.TestCase):
         self.assertEqual(runs[0]["models"], ["local-model"])
         self.assertEqual(runs[0]["reviewed"], 25)
 
+    def test_latest_run_does_not_prefer_an_old_active_run(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            project = Path(temporary)
+            active = self._make_run(project, "old-active-run")
+            active_state = evaluation._read_json(active / "state.json")
+            active_state["status"] = "partially_submitted"
+            active_state["candidates"][0]["status"] = "submitted"
+            evaluation._atomic_write_json(active / "state.json", active_state)
+            evaluation.maintain_evaluation_storage(project)
+
+            completed = self._make_run(project, "new-completed-run")
+            completed_state = evaluation._read_json(completed / "state.json")
+            completed_state["created_at"] = "2026-08-02T12:00:00+00:00"
+            evaluation._atomic_write_json(completed / "state.json", completed_state)
+
+            latest = evaluation.latest_run(project)
+
+        self.assertEqual(latest, completed.resolve())
+
     def test_legacy_noncompleted_runs_move_out_of_completed_archive(self):
         with tempfile.TemporaryDirectory() as temporary:
             project = Path(temporary)
@@ -838,6 +857,7 @@ class EvaluationHistoryTests(unittest.TestCase):
             state = evaluation._read_json(active / "state.json")
             state["status"] = "submitted"
             state["candidates"][0]["status"] = "submitted"
+            state["created_at"] = "2026-08-02T12:00:00+00:00"
             evaluation._atomic_write_json(active / "state.json", state)
             legacy_pointer = project / "log" / "evaluations" / "latest.json"
             evaluation._atomic_write_json(legacy_pointer, {"run_dir": str(active)})

@@ -1372,28 +1372,9 @@ def load_run(run_dir: str | Path) -> tuple[dict, dict]:
 
 
 def latest_run(project_root: str | Path) -> Path | None:
-    """Return the newest active submitted run, otherwise newest completed run."""
-    maintain_evaluation_storage(project_root)
-    _archive_root, work_root = _evaluation_storage_roots(project_root)
-    active: list[tuple[str, str, Path]] = []
-    for run_dir in _safe_run_directories(work_root):
-        try:
-            state, _manifest = load_run(run_dir)
-        except (OSError, KeyError, ValueError, json.JSONDecodeError):
-            continue
-        if state.get("status") not in {
-            "submitted", "partially_submitted", "imported_paused"
-        }:
-            continue
-        active.append((
-            str(state.get("updated_at") or state.get("created_at") or ""),
-            run_dir.name,
-            run_dir,
-        ))
-    if active:
-        return max(active)[2]
-    completed = list_runs(project_root)
-    return Path(completed[0]["run_dir"]) if completed else None
+    """Return the newest visible run using the saved-history ordering."""
+    runs = list_runs(project_root)
+    return Path(runs[0]["run_dir"]) if runs else None
 
 
 def list_runs(project_root: str | Path) -> list[dict]:
