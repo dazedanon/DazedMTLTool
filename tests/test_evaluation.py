@@ -44,6 +44,35 @@ class EvaluationSourceFolderTests(unittest.TestCase):
 
             self.assertEqual(evaluation.resolve_rpgmaker_data_dir(data), data.resolve())
 
+    def test_direct_data_folder_resolves_its_own_game_context(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            game = Path(temporary) / "game"
+            data = game / "www" / "data"
+            data.mkdir(parents=True)
+            (data / "Map001.json").write_text("{}", encoding="utf-8")
+
+            self.assertEqual(
+                evaluation.resolve_evaluation_game_root(data), game.resolve()
+            )
+
+    def test_extracted_files_use_configured_workflow_game_context(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            extracted = root / "files"
+            extracted.mkdir()
+            (extracted / "Items.json").write_text("[]", encoding="utf-8")
+            game = root / "game"
+            data = game / "data"
+            data.mkdir(parents=True)
+            (data / "Items.json").write_text("[]", encoding="utf-8")
+
+            self.assertEqual(
+                evaluation.resolve_evaluation_game_root(
+                    extracted, fallback_game_root=game
+                ),
+                game.resolve(),
+            )
+
     def test_unrelated_folder_gets_actionable_error(self):
         with tempfile.TemporaryDirectory() as temporary:
             with self.assertRaisesRegex(ValueError, "data/ or www/data/"):
@@ -72,7 +101,46 @@ class EvaluationSourceFolderTests(unittest.TestCase):
             )
 
             self.assertEqual(manifest["source_dir"], str(data.resolve()))
+            self.assertEqual(manifest["game_root"], str(game.resolve()))
             self.assertEqual(manifest["target_segments"], 60)
+
+    def test_manifest_uses_selected_games_normal_prompt_and_glossary_context(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            game = Path(temporary)
+            data = game / "data"
+            data.mkdir()
+            records = [None] + [
+                {"id": index, "name": f"道具{index}", "description": "説明です。"}
+                for index in range(1, 41)
+            ]
+            (data / "Items.json").write_text(
+                json.dumps(records, ensure_ascii=False), encoding="utf-8"
+            )
+            (game / "glossary.txt").write_text(
+                "# Terms\n道具 (Relic)\n", encoding="utf-8"
+            )
+            skills = game / "skills"
+            skills.mkdir()
+            (skills / "game.md").write_text(
+                "Use the game's established item voice.", encoding="utf-8"
+            )
+
+            manifest = evaluation.build_manifest(
+                game,
+                target_segments=60,
+                stability_segments=20,
+                repetitions=1,
+            )
+
+            self.assertEqual(manifest["game_root"], str(game.resolve()))
+            self.assertTrue(all(
+                "Use the game's established item voice." in request["system"]
+                for request in manifest["logical_requests"]
+            ))
+            self.assertTrue(any(
+                "道具 (Relic)" in request["glossary"]
+                for request in manifest["logical_requests"]
+            ))
 
 
 class EvaluationManifestTests(unittest.TestCase):

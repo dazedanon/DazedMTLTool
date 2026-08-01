@@ -109,6 +109,25 @@ class EvaluationTab(QWidget):
         self._poll_timer.timeout.connect(self.refresh_results)
         QTimer.singleShot(0, self._load_latest)
 
+    def _workflow_game_root(self) -> str:
+        """Return the same configured game root used by normal translation."""
+        translation_tab = getattr(self.parent_window, "translation_tab", None)
+        settings = getattr(translation_tab, "settings", None)
+        if settings is None:
+            settings = getattr(self.parent_window, "settings", None)
+        if settings is None:
+            return ""
+        for key in ("workflow/last_game_folder", "last_game_folder"):
+            value = str(settings.value(key, "") or "").strip()
+            if value:
+                return value
+        return ""
+
+    def _evaluation_game_root(self, selected: str | Path) -> Path | None:
+        return evaluation.resolve_evaluation_game_root(
+            selected, fallback_game_root=self._workflow_game_root()
+        )
+
     def _init_ui(self):
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -193,7 +212,8 @@ class EvaluationTab(QWidget):
 
         source_row = QGridLayout()
         source_row.setHorizontalSpacing(12)
-        self.source_edit = QLineEdit(str(self.project_root / "files"))
+        default_source = self._workflow_game_root() or str(self.project_root / "files")
+        self.source_edit = QLineEdit(default_source)
         self.source_edit.setPlaceholderText("Select an RPG Maker MV/MZ game folder…")
         self.source_edit.setToolTip(
             "Select the folder containing the game. Evaluation automatically finds "
@@ -426,8 +446,15 @@ class EvaluationTab(QWidget):
         canonical_review = path / "blind_review.csv"
         self._last_review_path = canonical_review if canonical_review.is_file() else None
         source_dir = Path(str(manifest.get("source_dir") or ""))
-        if source_dir.is_dir():
-            self.source_edit.setText(str(source_dir))
+        saved_game_root_text = str(manifest.get("game_root") or "").strip()
+        saved_game_root = Path(saved_game_root_text) if saved_game_root_text else None
+        display_source = (
+            saved_game_root
+            if saved_game_root is not None and saved_game_root.is_dir()
+            else source_dir
+        )
+        if display_source.is_dir():
+            self.source_edit.setText(str(display_source))
             self._update_source_resolution()
         self.log.clear()
         self._append_log(f"Opened evaluation: {state.get('run_id', path.name)}")
@@ -516,9 +543,20 @@ class EvaluationTab(QWidget):
                 "warning",
             )
             return
+        game_root = self._evaluation_game_root(selected)
+        if game_root is None:
+            set_status_text(
+                self.source_resolution_label,
+                f"Game data found: {data_dir}\nTranslation context could not be "
+                "resolved. Select the game folder itself so Evaluation can use "
+                "the same glossary and game skills as normal translation.",
+                "warning",
+            )
+            return
         set_status_text(
             self.source_resolution_label,
-            f"Game data found: {data_dir}",
+            f"Game data found: {data_dir}\nTranslation context: {game_root} "
+            f"(glossary: {game_root / 'glossary.txt'})",
             "success",
         )
 
@@ -1022,6 +1060,15 @@ class EvaluationTab(QWidget):
             )
             return
         source = Path(source_text)
+        game_root = self._evaluation_game_root(source)
+        if game_root is None:
+            QMessageBox.warning(
+                self,
+                "Game context required",
+                "Select the RPG Maker game folder itself. Evaluation needs its "
+                "glossary and game-specific skills to match normal translation.",
+            )
+            return
         target_segments, consistency_segments = self.test_size_combo.currentData()
         values = {
             "target_segments": target_segments,
@@ -1029,6 +1076,7 @@ class EvaluationTab(QWidget):
             "repetitions": evaluation.DEFAULT_REPETITIONS,
             "batch_size": evaluation.DEFAULT_BATCH_SIZE,
             "budget_usd": self.budget_spin.value(),
+            "game_root": game_root,
         }
         set_status_text(self.status_label, "Scanning the game and preparing a fair test set…", "info")
 

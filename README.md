@@ -317,13 +317,19 @@ selected RPG Maker MV/MZ game folder is scanned for eligible event text,
 database text, and control-code-heavy lines, then a deterministic sample is
 balanced across scenes and files. Each model gets the same source, system
 prompt, matched glossary, previous Japanese source lines, output schema, and
-hidden consistency-check schedule.
+hidden consistency-check schedule. Prompt and glossary context are built by the
+normal translation engine from the selected game's `glossary.txt`,
+`skills/game.md`, `skills/quirks.md`, and optional custom game skills.
 
 Select the folder containing the game itself. Evaluation automatically uses
 `data/` for RPG Maker MZ or `www/data/` for RPG Maker MV and shows the resolved
 JSON location before preparing the test. Selecting a direct JSON data folder,
 including the tool's existing `files/` folder, also works. Evaluation currently
-supports MV/MZ JSON projects; XP, VX, and VX Ace binary data are not supported.
+uses the workflow's configured game root for translation context when `files/`
+is selected. If no matching game root can be resolved, preparation is blocked
+instead of silently falling back to the shipped base glossary. Evaluation
+currently supports MV/MZ JSON projects; XP, VX, and VX Ace binary data are not
+supported.
 
 Preparing a benchmark is offline. **Test size** offers understandable Quick,
 Standard, and Thorough presets, and preparation reports how many eligible lines

@@ -113,6 +113,10 @@ class EvaluationTabTests(unittest.TestCase):
 
             self.assertIn("Game data found:", self.tab.source_resolution_label.text())
             self.assertIn(str(data.resolve()), self.tab.source_resolution_label.text())
+            self.assertIn(
+                f"glossary: {game.resolve() / 'glossary.txt'}",
+                self.tab.source_resolution_label.text(),
+            )
 
     def test_invalid_game_folder_explains_expected_layout(self):
         with tempfile.TemporaryDirectory() as temporary:

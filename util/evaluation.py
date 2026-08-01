@@ -24,19 +24,19 @@ from pathlib import Path, PurePosixPath
 from typing import Any, Callable, Iterable
 
 from util import batch_providers as batch_api
-from util.paths import read_active_glossary
+from util.paths import read_active_glossary, read_game_glossary
 from util.project_scanner import find_data_folder
 from util.skills import load_system_prompt
 from util.translation import (
     buildClaudeRequest,
-    buildMatchedVocabText,
     buildOpenAIRequest,
+    createContext,
     countTokens,
     extractTranslation,
     getPricingConfig,
-    parseVocabWithCategories,
     protect_script_codes,
     restore_script_codes,
+    TranslationConfig,
     validate_control_codes,
     validate_placeholders,
     validate_translation_content,
@@ -122,6 +122,43 @@ def resolve_rpgmaker_data_dir(selected_dir: str | Path) -> Path:
         "directly. RPG Maker XP, VX, and VX Ace data files are not supported "
         "by Evaluation."
     )
+
+
+def resolve_evaluation_game_root(
+    selected_dir: str | Path,
+    *,
+    fallback_game_root: str | Path | None = None,
+) -> Path | None:
+    """Resolve the game root whose normal translation context Evaluation uses.
+
+    An explicitly selected game root wins. Standard direct ``data`` and
+    ``www/data`` selections are mapped back to their game root. The tool's
+    extracted ``files`` directory has no reliable parent relationship to the
+    game, so it uses the workflow's configured game root when supplied.
+    """
+    selected = Path(str(selected_dir).strip()).expanduser().resolve()
+    data_dir = resolve_rpgmaker_data_dir(selected)
+    if selected != data_dir:
+        return selected
+
+    if selected.name.casefold() == "data":
+        parent = selected.parent
+        return parent.parent if parent.name.casefold() == "www" else parent
+
+    if (selected / "glossary.txt").is_file() or (selected / "skills").is_dir():
+        return selected
+
+    fallback_text = str(fallback_game_root or "").strip()
+    if not fallback_text:
+        return None
+    fallback = Path(fallback_text).expanduser().resolve()
+    if not fallback.is_dir():
+        return None
+    try:
+        resolve_rpgmaker_data_dir(fallback)
+    except (FileNotFoundError, ValueError):
+        return None
+    return fallback
 
 
 def _utc_now() -> str:
@@ -419,7 +456,12 @@ def build_corpus(files_dir: str | Path, *, target_segments: int = DEFAULT_SEGMEN
 
 def _build_logical_requests(segments: list[dict], system_prompt: str,
                             glossary: str, batch_size: int) -> list[dict]:
-    vocab_pairs = parseVocabWithCategories(glossary)
+    config = TranslationConfig(
+        language="English",
+        prompt=system_prompt,
+        vocab=glossary,
+        batchSize=batch_size,
+    )
     by_scene: dict[str, list[dict]] = defaultdict(list)
     scene_order: list[str] = []
     for segment in segments:
@@ -450,10 +492,11 @@ def _build_logical_requests(segments: list[dict], system_prompt: str,
                 history = _normalize_history(chunk[0].get("initial_history"))
             else:
                 history = previous_source[-10:]
-            matched_glossary = buildMatchedVocabText(vocab_pairs, payload, history)
-            user = f"```json\n{payload}\n```"
+            static_system, matched_glossary, user = createContext(
+                config, payload, "json", history
+            )
             logical = {
-                "system": system_prompt,
+                "system": static_system,
                 "glossary": matched_glossary,
                 "history": history,
                 "user": user,
@@ -508,14 +551,32 @@ def build_manifest(files_dir: str | Path, *, target_segments: int = DEFAULT_SEGM
                    repetitions: int = DEFAULT_REPETITIONS,
                    batch_size: int = DEFAULT_BATCH_SIZE,
                    system_prompt: str | None = None,
-                   glossary: str | None = None) -> dict:
+                   glossary: str | None = None,
+                   game_root: str | Path | None = None) -> dict:
     if repetitions < 1:
         raise ValueError("Repetitions must be at least 1")
     if batch_size < 1:
         raise ValueError("Batch size must be at least 1")
     data_dir = resolve_rpgmaker_data_dir(files_dir)
-    system = load_system_prompt() if system_prompt is None else system_prompt
-    active_glossary = read_active_glossary() if glossary is None else glossary
+    context_root = (
+        Path(game_root).expanduser().resolve()
+        if game_root is not None and str(game_root).strip()
+        else resolve_evaluation_game_root(files_dir)
+    )
+    if context_root is not None and not context_root.is_dir():
+        raise FileNotFoundError(f"RPG Maker game folder does not exist: {context_root}")
+    system = (
+        load_system_prompt(context_root)
+        if system_prompt is None
+        else system_prompt
+    )
+    active_glossary = (
+        read_game_glossary(context_root)
+        if glossary is None and context_root is not None
+        else read_active_glossary()
+        if glossary is None
+        else glossary
+    )
     eligible_segments = scan_corpus(data_dir)
     segments = build_corpus(
         data_dir, target_segments=target_segments, _pool=eligible_segments
@@ -537,6 +598,7 @@ def build_manifest(files_dir: str | Path, *, target_segments: int = DEFAULT_SEGM
         "version": EVALUATION_VERSION,
         "created_at": _utc_now(),
         "source_dir": str(data_dir),
+        "game_root": str(context_root) if context_root is not None else "",
         "target_language": "English",
         "batch_size": batch_size,
         "requested_segments": target_segments,
@@ -672,6 +734,7 @@ def prepare_run(project_root: str | Path, files_dir: str | Path,
                 repetitions: int = DEFAULT_REPETITIONS,
                 batch_size: int = DEFAULT_BATCH_SIZE,
                 budget_usd: float = DEFAULT_BUDGET_USD,
+                game_root: str | Path | None = None,
                 output_root: str | Path | None = None) -> tuple[Path, dict]:
     _validate_candidates(candidates)
     if budget_usd <= 0:
@@ -682,6 +745,7 @@ def prepare_run(project_root: str | Path, files_dir: str | Path,
         stability_segments=stability_segments,
         repetitions=repetitions,
         batch_size=batch_size,
+        game_root=game_root,
     )
     project = Path(project_root).resolve()
     runs_root = Path(output_root) if output_root else project / "log" / "evaluations"

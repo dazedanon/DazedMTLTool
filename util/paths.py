@@ -148,6 +148,12 @@ def active_glossary_path(*, create: bool = True) -> Path | None:
     return ensure_game_glossary(root) if create else game_glossary_path(root)
 
 
+def read_game_glossary(game_root: str | Path) -> str:
+    """Read one explicit game's glossary using normal translation semantics."""
+    path = ensure_game_glossary(game_root)
+    return path.read_text(encoding="utf-8")
+
+
 def read_active_glossary() -> str:
     """Read the active game's glossary, falling back to shipped base terms."""
     path = active_glossary_path()
