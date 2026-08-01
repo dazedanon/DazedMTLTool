@@ -590,6 +590,70 @@ class EvaluationManifestTests(unittest.TestCase):
         self.assertEqual(summary["validation_failures"], summary["total_segments"])
         self.assertEqual(summary["valid_rate"], 0.0)
 
+    def test_soft_content_warning_remains_valid_and_is_recorded(self):
+        manifest = {
+            "executions": [{
+                "id": "rep-1:logical-0001",
+                "logical_request_id": "logical-0001",
+                "repetition": 1,
+            }],
+            "logical_requests": [{
+                "id": "logical-0001",
+                "segment_ids": ["segment-1"],
+                "sources": ["[ルシア]: …………………………………………………………。"],
+                "protected_sources": ["[ルシア]: …………………………………………………………。"],
+                "replacements": [{}],
+                "logical_hash": "hash-1",
+            }],
+        }
+        raw_results = {
+            "rep-1:logical-0001": {
+                "text": json.dumps({"Line1": "[Lucia]: " + "." * 50})
+            }
+        }
+
+        processed, summary = evaluation._process_results(
+            manifest, raw_results, []
+        )
+        line = processed["rep-1:logical-0001"]["lines"][0]
+
+        self.assertTrue(line["valid"], line["issues"])
+        self.assertFalse(line["issues"])
+        self.assertIn("Excessive character repetition", line["warnings"][0])
+        self.assertEqual(summary["valid_segments"], 1)
+        self.assertEqual(summary["warning_segments"], 1)
+
+    def test_response_line_count_mismatch_invalidates_the_request_lines(self):
+        manifest = {
+            "executions": [{
+                "id": "rep-1:logical-0001",
+                "logical_request_id": "logical-0001",
+                "repetition": 1,
+            }],
+            "logical_requests": [{
+                "id": "logical-0001",
+                "segment_ids": ["segment-1", "segment-2"],
+                "sources": ["はい", "いいえ"],
+                "protected_sources": ["はい", "いいえ"],
+                "replacements": [{}, {}],
+                "logical_hash": "hash-1",
+            }],
+        }
+        raw_results = {
+            "rep-1:logical-0001": {
+                "text": json.dumps({"Line1": "Yes"})
+            }
+        }
+
+        processed, summary = evaluation._process_results(
+            manifest, raw_results, []
+        )
+        lines = processed["rep-1:logical-0001"]["lines"]
+
+        self.assertTrue(all(not line["valid"] for line in lines))
+        self.assertTrue(all("Line count differs" in line["issues"][0] for line in lines))
+        self.assertEqual(summary["valid_segments"], 0)
+
     def test_consistency_scores_the_complete_sample_block(self):
         manifest = {
             "repetitions": 2,

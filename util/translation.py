@@ -212,38 +212,61 @@ def extract_control_codes(text):
 
 
 def _mask_mapped_control_codes(text, replacements):
-    """Mask control codes restored from placeholders without reparsing their end."""
+    """Mask restored placeholder codes regardless of their translated order."""
     masked = str(text)
     missing = []
-    search_from = 0
 
-    # Replacement dictionaries retain the source placeholder order. Match each
-    # exact restored code in that order, then hide it from the generic parser.
-    # This matters for unparameterized codes such as ``\vc``: once restored
-    # before English text, ``\vcThat's`` would otherwise be greedily parsed as
-    # the different code ``\vcThat``.
+    # Match exact restored codes before using the generic parser. This matters
+    # for unparameterized codes such as ``\vc``: once restored before English
+    # text, ``\vcThat's`` would otherwise be greedily parsed as ``\vcThat``.
+    # Search from the beginning for each occurrence so normal translation word
+    # order may move standalone values/icons without making them look missing.
     for original in replacements.values():
         code = str(original)
         if _CONTROL_CODE_RE.fullmatch(code) is None:
             continue
-        index = masked.find(code, search_from)
+        index = masked.find(code)
         if index < 0:
             missing.append(code)
             continue
         end = index + len(code)
         masked = masked[:index] + (" " * len(code)) + masked[end:]
-        search_from = end
 
     return masked, missing
 
 
+_FORMAT_SCOPE_RE = re.compile(r"\\(?:[cC]\[[^\]]+\]|[{}><])")
+
+
+def _format_scope_signature(text):
+    """Return structural open/close order for known stateful formatting codes."""
+    signatures = {"color": [], "font": [], "speed": []}
+    for code in _FORMAT_SCOPE_RE.findall(str(text)):
+        lowered = code.lower()
+        if lowered.startswith(r"\c["):
+            parameter = code[3:-1].strip()
+            signatures["color"].append("close" if parameter == "0" else "open")
+        elif code == r"\{":
+            signatures["font"].append("open")
+        elif code == r"\}":
+            signatures["font"].append("close")
+        elif code == r"\>":
+            signatures["speed"].append("open")
+        elif code == r"\<":
+            signatures["speed"].append("close")
+    return signatures
+
+
 def validate_control_codes(original_items, translated_items, replacements_by_line=None):
-    """Require each translated line to preserve the exact source control-token sequence.
+    """Require exact control tokens while allowing translation-driven movement.
 
     ``replacements_by_line`` is the per-line placeholder mapping produced by
     :func:`protect_script_codes`. Known restored codes are matched exactly and
     masked before the generic control-code regex runs. This avoids treating
-    adjacent English letters as part of an unparameterized code name.
+    adjacent English letters as part of an unparameterized code name. Token
+    spelling, parameters, and counts remain strict, while standalone tokens may
+    move with translated grammar. Known formatting scopes must retain their
+    open/close structure.
     """
     originals = original_items if isinstance(original_items, list) else [original_items]
     translations = translated_items if isinstance(translated_items, list) else [translated_items]
@@ -278,9 +301,9 @@ def validate_control_codes(original_items, translated_items, replacements_by_lin
             )
             continue
 
-        if source_sequence != target_sequence:
-            source_codes = Counter(source_sequence)
-            target_codes = Counter(target_sequence)
+        source_codes = Counter(source_sequence)
+        target_codes = Counter(target_sequence)
+        if source_codes != target_codes:
             missing = list((source_codes - target_codes).elements())
             extra = list((target_codes - source_codes).elements())
             details = []
@@ -288,11 +311,20 @@ def validate_control_codes(original_items, translated_items, replacements_by_lin
                 details.append(f"missing {missing}")
             if extra:
                 details.append(f"extra/altered {extra}")
-            if not missing and not extra:
-                details.append(
-                    f"order changed from {source_sequence} to {target_sequence}"
-                )
             errors.append(f"Line{index}: " + "; ".join(details))
+            continue
+
+        source_scopes = _format_scope_signature(original)
+        target_scopes = _format_scope_signature(translated)
+        changed_scopes = [
+            name for name in source_scopes
+            if source_scopes[name] != target_scopes[name]
+        ]
+        if changed_scopes:
+            errors.append(
+                f"Line{index}: formatting scope order changed for "
+                + ", ".join(changed_scopes)
+            )
     return not errors, errors
 
 def protect_script_codes(text):
@@ -412,13 +444,11 @@ def validate_placeholders(original_text, translated_text, replacements):
 
 def validate_translation_content(original_items, translated_items, langRegex):
     """
-    Validate that translated items are not empty or nearly empty.
+    Validate hard content failures that make a translation unsafe or unusable.
     Returns: (is_valid, invalid_indices, reasons)
-    
-    Rules:
-    1. If original has content, translation must not be empty or just whitespace
-    2. If original has Japanese text, translation must not be a single punctuation mark
-    3. Translation should have meaningful content (more than 1-2 characters for substantial originals)
+
+    Stylistic heuristics such as unusually short output and repeated punctuation
+    are reported separately by :func:`translation_content_warnings`.
     """
     if not isinstance(original_items, list):
         original_items = [original_items]
@@ -447,26 +477,7 @@ def validate_translation_content(original_items, translated_items, langRegex):
                 reasons.append(f"Line{i+1}: Empty translation for '{orig_str[:50]}...'")
                 continue
             
-            # Check 2: Translation is just a single punctuation mark or very short
-            # Allow control codes like \\C[27]\\V[45] but not just ":" or ""
-            # Use <= 1 so real 2-char words like "No", "Go", "Hi" are not rejected
-            if len(trans_str) <= 1 and not re.search(r'\\[A-Z]\[', trans_str):
-                # Exception: if original is also very short (like "回" -> "x"), that's ok
-                if len(orig_str) > 3:
-                    invalid_indices.append(i)
-                    reasons.append(f"Line{i+1}: Translation too short ('{trans_str}') for '{orig_str[:50]}...'")
-                    continue
-            
-            # Check 3: For longer originals (>10 chars), translation should be more than just 1-2 chars
-            # unless it's a special case like numbers or codes
-            if len(orig_str) > 10 and len(trans_str) <= 2:
-                # Allow if it contains control codes or is just a replacement word
-                if not re.search(r'\\[A-Z]\[', trans_str) and not trans_str.isalnum():
-                    invalid_indices.append(i)
-                    reasons.append(f"Line{i+1}: Translation suspiciously short ('{trans_str}') for '{orig_str[:50]}...'")
-                    continue
-
-            # Check 4: Runaway translation - translation is excessively long relative to original
+            # Check 2: Runaway translation - translation is excessively long relative to original
             # Catches cases where the model repeats words endlessly (e.g. "it hurts it hurts it hurts...")
             ratio_limit = max(len(orig_str) * 8, 120)
             if len(orig_str) > 10 and len(trans_str) > ratio_limit:
@@ -479,13 +490,7 @@ def validate_translation_content(original_items, translated_items, langRegex):
                 reasons.append(f"Line{i+1}: Runaway translation (output {len(trans_str)} chars exceeds cap) for '{orig_str[:50]}...'")
                 continue
 
-            # Check 5: Same character repeated many times (common API glitch / broken JSON tail)
-            if re.search(r"(.)\1{44,}", trans_str):
-                invalid_indices.append(i)
-                reasons.append(f"Line{i+1}: Excessive character repetition (possible model glitch) in translation")
-                continue
-
-            # Check 6: Source-language residue must not survive in player text.
+            # Check 3: Source-language residue must not survive in player text.
             # Japanese inside protected runtime-code parameters is absent here
             # and is restored only after validation. Ignore ideographic spaces:
             # RPG Maker choice lists commonly use U+3000 as intentional visual
@@ -496,7 +501,7 @@ def validate_translation_content(original_items, translated_items, langRegex):
                 reasons.append(f"Line{i+1}: Source-language text remains in translation")
                 continue
 
-            # Check 7: Reject leaked structured-response scaffolding such as
+            # Check 4: Reject leaked structured-response scaffolding such as
             # `}Line1:` that can otherwise become a speaker label.
             if re.search(r"(?:^|[}\]])\s*Line\d+\s*:", trans_str, re.IGNORECASE):
                 invalid_indices.append(i)
@@ -505,6 +510,51 @@ def validate_translation_content(original_items, translated_items, langRegex):
 
     is_valid = len(invalid_indices) == 0
     return is_valid, invalid_indices, reasons
+
+
+def translation_content_warnings(original_items, translated_items, langRegex):
+    """Return non-blocking content concerns that should remain reviewable."""
+    if not isinstance(original_items, list):
+        original_items = [original_items]
+        translated_items = [translated_items]
+
+    warning_indices = []
+    warnings = []
+    for i, (orig, trans) in enumerate(zip(original_items, translated_items)):
+        orig_str = str(orig).strip()
+        trans_str = str(trans).strip()
+        if not orig_str or orig_str == "Placeholder Text":
+            continue
+        if not re.search(langRegex, orig_str):
+            continue
+
+        line_warnings = []
+        has_bracketed_control = bool(re.search(r'\\[A-Z]\[', trans_str))
+        if len(trans_str) <= 1 and len(orig_str) > 3 and not has_bracketed_control:
+            line_warnings.append(
+                f"Line{i+1}: Translation unusually short ('{trans_str}') for "
+                f"'{orig_str[:50]}...'"
+            )
+        elif (
+            len(orig_str) > 10
+            and len(trans_str) <= 2
+            and not has_bracketed_control
+            and not trans_str.isalnum()
+        ):
+            line_warnings.append(
+                f"Line{i+1}: Translation suspiciously short ('{trans_str}') for "
+                f"'{orig_str[:50]}...'"
+            )
+        if re.search(r"(.)\1{44,}", trans_str):
+            line_warnings.append(
+                f"Line{i+1}: Excessive character repetition (possible model glitch)"
+            )
+
+        if line_warnings:
+            warning_indices.append(i)
+            warnings.extend(line_warnings)
+
+    return warning_indices, warnings
 
 # Load .env, strip accidental whitespace, set base URL / org / API key.
 # Gemini/Mistral use their endpoints only when no custom API URL is set.
@@ -3604,6 +3654,13 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None, mism
                                         if len(content_reasons) > 5:
                                             pbar.write(f"  ... and {len(content_reasons) - 5} more issues")
                                 else:
+                                    _, content_warnings = translation_content_warnings(
+                                        clean_tItem, extracted, config.langRegex
+                                    )
+                                    if content_warnings and pbar:
+                                        pbar.write("Translation content warning:")
+                                        for warning in content_warnings[:5]:
+                                            pbar.write(f"  - {warning}")
                                     # Set translations (line count matches, placeholders valid, and content is good)
                                     # Strip "Placeholder Text" from individual lines (AI placeholder for untranslatable input)
                                     # Also apply the 「→" / 」→" replacements here per-line (safe now that JSON is parsed)
@@ -3658,6 +3715,13 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None, mism
                                         for reason in content_reasons:
                                             pbar.write(f"  - {reason}")
                                 else:
+                                    _, content_warnings = translation_content_warnings(
+                                        tItem, final_cleaned, config.langRegex
+                                    )
+                                    if content_warnings and pbar:
+                                        pbar.write("Translation content warning:")
+                                        for warning in content_warnings:
+                                            pbar.write(f"  - {warning}")
                                     # Accept output - all validations passed
                                     final_cleaned = convert_corner_brackets(
                                         final_cleaned, config.convertQuotes

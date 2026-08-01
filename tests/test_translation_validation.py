@@ -33,12 +33,36 @@ class ControlCodeProtectionTests(unittest.TestCase):
         valid, _ = tr.validate_control_codes(r"\I[14]a\I[14]", r"\I[14]a")
         self.assertFalse(valid)
 
-    def test_control_validation_rejects_reordered_scopes(self):
+    def test_control_validation_allows_complete_scope_to_move_with_grammar(self):
         valid, reasons = tr.validate_control_codes(
             r"\C[2]Name\C[0] \I[14]", r"\I[14] \C[2]Name\C[0]"
         )
+        self.assertTrue(valid, reasons)
+
+    def test_control_validation_rejects_reversed_formatting_scope(self):
+        valid, reasons = tr.validate_control_codes(
+            r"\C[2]Name\C[0]", r"\C[0]\C[2]Name"
+        )
+
         self.assertFalse(valid)
-        self.assertIn("order changed", reasons[0])
+        self.assertIn("formatting scope order changed", reasons[0])
+
+    def test_mapped_value_code_can_move_with_translated_subject(self):
+        source = (
+            r"\I[275]\C[17]蜘蛛の糸\C[0] を \V[302]束 売却した。 "
+            r"\V[303]Ｇ を手に入れた！"
+        )
+        _, replacements = tr.protect_script_codes(source)
+        translated = (
+            r"Sold \V[302] bundles of \I[275]\C[17]Spider Thread\C[0]. "
+            r"Received \V[303]G!"
+        )
+
+        valid, reasons = tr.validate_control_codes(
+            source, translated, {0: replacements}
+        )
+
+        self.assertTrue(valid, reasons)
 
     def test_restored_bare_code_does_not_consume_adjacent_english(self):
         source = r"\vcそう…、あれは父さんが死んで間もない頃――"
@@ -84,6 +108,45 @@ class TranslationContentValidationTests(unittest.TestCase):
         self.assertFalse(valid)
         self.assertEqual(indices, [0])
         self.assertIn("Source-language text remains", reasons[0])
+
+    def test_rejects_japanese_prolonged_sound_mark(self):
+        valid, indices, reasons = tr.validate_translation_content(
+            ["ほげぇぇぇーーっ！！"], ["Hrooooghhhhhーー!!"],
+            r"[一-龠ぁ-ゔァ-ヴー]+",
+        )
+
+        self.assertFalse(valid)
+        self.assertEqual(indices, [0])
+        self.assertIn("Source-language text remains", reasons[0])
+
+    def test_short_translation_is_warning_not_failure(self):
+        source = "これはとても長い日本語の文章です"
+        valid, indices, reasons = tr.validate_translation_content(
+            [source], ["!"], r"[一-龠ぁ-ゔァ-ヴー]+"
+        )
+        warning_indices, warnings = tr.translation_content_warnings(
+            [source], ["!"], r"[一-龠ぁ-ゔァ-ヴー]+"
+        )
+
+        self.assertTrue(valid, reasons)
+        self.assertEqual(indices, [])
+        self.assertEqual(warning_indices, [0])
+        self.assertIn("unusually short", warnings[0])
+
+    def test_repeated_punctuation_is_warning_not_failure(self):
+        source = "[ルシア]: ………………………………………………………………。"
+        translated = "[Lucia]: " + "." * 50
+        valid, indices, reasons = tr.validate_translation_content(
+            [source], [translated], r"[一-龠ぁ-ゔァ-ヴー]+"
+        )
+        warning_indices, warnings = tr.translation_content_warnings(
+            [source], [translated], r"[一-龠ぁ-ゔァ-ヴー]+"
+        )
+
+        self.assertTrue(valid, reasons)
+        self.assertEqual(indices, [])
+        self.assertEqual(warning_indices, [0])
+        self.assertIn("Excessive character repetition", warnings[0])
 
     def test_rejects_leaked_line_marker(self):
         valid, indices, reasons = tr.validate_translation_content(

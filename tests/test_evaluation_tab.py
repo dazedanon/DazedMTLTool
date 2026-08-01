@@ -141,6 +141,15 @@ class EvaluationTabTests(unittest.TestCase):
             for tooltip in self.tab.COLUMN_TOOLTIPS.values()
         ))
         self.assertEqual(self.tab.COLUMNS[-1], "Best overall")
+        for name, label in self.tab.COLUMN_LABELS.items():
+            header = self.tab.table.horizontalHeaderItem(
+                self.tab.COLUMNS.index(name)
+            )
+            self.assertEqual(header.text(), f"{label} ⓘ")
+        self.assertGreaterEqual(
+            self.tab.table.horizontalHeader().minimumHeight(),
+            self.tab.table.horizontalHeader().fontMetrics().lineSpacing() * 2 + 12,
+        )
         self.assertTrue(all(
             self.tab.table.horizontalHeaderItem(self.tab.COLUMNS.index(name))
             .toolTip()

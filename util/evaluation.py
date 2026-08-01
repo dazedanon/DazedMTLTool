@@ -43,6 +43,7 @@ from util.translation import (
     validate_control_codes,
     validate_placeholders,
     validate_translation_content,
+    translation_content_warnings,
 )
 
 
@@ -1993,6 +1994,7 @@ def _process_results(manifest: dict, raw_results: dict,
     execution_by_id = {item["id"]: item for item in manifest["executions"]}
     processed: dict[str, dict] = {}
     valid_segments = 0
+    warning_segments = 0
     total_segments = sum(
         len(request_by_id[execution["logical_request_id"]]["segment_ids"])
         for execution in manifest["executions"]
@@ -2021,7 +2023,7 @@ def _process_results(manifest: dict, raw_results: dict,
             protected_source = request["protected_sources"][index]
             replacements = request["replacements"][index]
             raw_translation = translations[index] if index < len(translations) else ""
-            line_issues: list[str] = []
+            line_issues: list[str] = list(issues)
             placeholders_ok, missing, extra = validate_placeholders(
                 protected_source, raw_translation, replacements
             )
@@ -2040,6 +2042,11 @@ def _process_results(manifest: dict, raw_results: dict,
             )
             if not content_ok:
                 line_issues.extend(content_issues)
+            _warning_indices, line_warnings = translation_content_warnings(
+                [protected_source], [raw_translation], LANGUAGE_REGEX
+            )
+            if line_warnings:
+                warning_segments += 1
             if not line_issues:
                 valid_segments += 1
             else:
@@ -2050,6 +2057,7 @@ def _process_results(manifest: dict, raw_results: dict,
                 "translation": restored,
                 "valid": not line_issues,
                 "issues": line_issues,
+                "warnings": line_warnings,
             })
         processed[execution_id] = {
             "logical_request_id": execution["logical_request_id"],
@@ -2079,6 +2087,7 @@ def _process_results(manifest: dict, raw_results: dict,
         "provider_errors": provider_errors,
         "total_segments": total_segments,
         "valid_segments": valid_segments,
+        "warning_segments": warning_segments,
         "validation_failures": validation_failures,
         "valid_rate": (valid_segments / total_segments) if total_segments else 0.0,
     }

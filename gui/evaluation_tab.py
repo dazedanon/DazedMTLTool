@@ -74,6 +74,12 @@ class EvaluationTab(QWidget):
         "Consistency", "Meaning Accuracy", "Glossary & Prompt",
         "Natural & Contextual", "Best overall",
     )
+    COLUMN_LABELS = {
+        "Meaning Accuracy": "Meaning\nAccuracy",
+        "Glossary & Prompt": "Glossary &\nPrompt",
+        "Natural & Contextual": "Natural &\nContextual",
+        "Best overall": "Best\noverall",
+    }
     COLUMN_TOOLTIPS = {
         "Valid": (
             "Lines that passed automatic output and game-code checks.\n"
@@ -487,10 +493,13 @@ class EvaluationTab(QWidget):
         results.add_layout(history_bar)
         self.table = QTableWidget(0, len(self.COLUMNS))
         self.table.setHorizontalHeaderLabels(self.COLUMNS)
+        for name, label in self.COLUMN_LABELS.items():
+            index = self.COLUMNS.index(name)
+            self.table.horizontalHeaderItem(index).setText(label)
         for name, tooltip in self.COLUMN_TOOLTIPS.items():
             index = self.COLUMNS.index(name)
             item = self.table.horizontalHeaderItem(index)
-            item.setText(f"{name} ⓘ")
+            item.setText(f"{item.text()} ⓘ")
             item.setToolTip(tooltip)
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.table.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
@@ -499,6 +508,7 @@ class EvaluationTab(QWidget):
         header = self.table.horizontalHeader()
         header.setStretchLastSection(False)
         header.setMinimumSectionSize(1)
+        header.setMinimumHeight(header.fontMetrics().lineSpacing() * 2 + 12)
         for index in range(len(self.COLUMNS)):
             header.setSectionResizeMode(index, QHeaderView.Fixed)
         self.table.viewport().installEventFilter(self)
