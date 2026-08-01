@@ -335,20 +335,30 @@ instead of silently falling back to the shipped base glossary. Evaluation
 currently supports MV/MZ JSON projects; XP, VX, and VX Ace binary data are not
 supported.
 
-Preparing a benchmark is offline. **Test size** offers understandable Quick,
-Standard, and Thorough presets, and preparation reports how many eligible lines
-and files were found and selected. Before paid batch jobs are sent, the page
-shows a conservative estimate for every model and asks for confirmation; the
+Preparing a benchmark is offline. **Test template** keeps understandable Quick,
+Standard, and Thorough presets and adds Custom controls for total test lines,
+same-scene lines per sample, repeated sample count, and total runs per repeated
+sample. A sample is translated as one ordered block and is also the unit shown
+and scored in blind review; its lines are not scored independently. Repeats are
+used for whole-block consistency, while non-repeated samples run once. Preparation
+reports how many eligible lines, samples, and files were found and selected.
+Before paid batch jobs are sent, the page shows a conservative estimate for
+every model and asks for confirmation; the
 default hard limit is $10 per model, with submission blocked above an 80%
 safety threshold and the same 4,096-token response ceiling applied to every request.
 The ceiling's theoretical cost must also fit the budget. Results are checked
 for missing lines, Japanese residue, and broken
 placeholders/control codes. Hover **Valid ⓘ** or **Consistency ⓘ** for the exact
-meaning of each score. The final CSV hides model identities independently on
-every row for a full ranked human review. Rank labels with `>` and use `=` for
-equivalent tiers (`A>B>C`, `A=B>C`, or `A=B=C`). Rankings receive fixed-sum
+meaning of each score. Each row of the final CSV contains one source JSON array
+and one aligned translation array per randomized candidate. Model identities are
+shuffled independently per sample. Reviewers rank each complete block once with
+`>` and use `=` for equivalent tiers (`A>B>C`, `A=B>C`, or `A=B=C`). Rankings
+receive fixed-sum
 Borda points: three strict ranks score 2/1/0, while tied candidates average the
-points for the positions they occupy. After exporting it, **Copy review
+points for the positions they occupy. The single whole-sample ranking is applied
+to every line in that sample when totals are calculated, preserving per-line
+weight without asking the reviewer for separate line judgments. After exporting
+it, **Copy review
 skill** copies path-specific instructions for an AI second opinion; the tool
 warns that AI judging may be biased and is not a replacement for human review.
 Exporting the CSV creates the hidden scoring key; complete its ranking column

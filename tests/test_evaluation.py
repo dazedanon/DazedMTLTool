@@ -142,6 +142,51 @@ class EvaluationSourceFolderTests(unittest.TestCase):
                 for request in manifest["logical_requests"]
             ))
 
+    def test_custom_sample_size_repeat_count_and_runs_are_recorded(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            game = Path(temporary)
+            data = game / "data"
+            data.mkdir()
+            records = [None] + [
+                {"id": index, "name": f"道具{index}", "description": "説明です。"}
+                for index in range(1, 41)
+            ]
+            (data / "Items.json").write_text(
+                json.dumps(records, ensure_ascii=False), encoding="utf-8"
+            )
+
+            manifest = evaluation.build_manifest(
+                game,
+                target_segments=60,
+                stability_segments=0,
+                stability_samples=5,
+                repetitions=4,
+                batch_size=4,
+                system_prompt="Translate Japanese to English.",
+                glossary="",
+            )
+
+        self.assertEqual(manifest["sample_size"], 4)
+        self.assertEqual(manifest["requested_stability_samples"], 5)
+        self.assertEqual(manifest["stability_samples"], 5)
+        self.assertEqual(manifest["repetitions"], 4)
+        self.assertTrue(all(
+            1 <= len(request["segment_ids"]) <= 4
+            for request in manifest["logical_requests"]
+        ))
+        self.assertEqual(
+            len(manifest["executions"]),
+            len(manifest["logical_requests"]) + 5 * 3,
+        )
+
+    def test_repeated_samples_require_multiple_runs(self):
+        with self.assertRaisesRegex(ValueError, "at least 2 runs"):
+            evaluation.build_manifest(
+                ROOT / "files",
+                stability_samples=1,
+                repetitions=1,
+            )
+
 
 class EvaluationManifestTests(unittest.TestCase):
     @classmethod
@@ -168,10 +213,14 @@ class EvaluationManifestTests(unittest.TestCase):
         self.assertGreater(summary["eligible_segments"], summary["selected_segments"])
         self.assertGreater(summary["selected_files"], 10)
         rebuilt = evaluation.build_corpus(ROOT / "files")
-        self.assertEqual(
+        self.assertCountEqual(
             [item["id"] for item in rebuilt],
             [item["id"] for item in manifest["segments"]],
         )
+        self.assertTrue(all(
+            len(request["segment_ids"]) <= evaluation.DEFAULT_SAMPLE_SIZE
+            for request in manifest["logical_requests"]
+        ))
 
     def test_an_unrelated_small_game_folder_is_supported(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -186,6 +235,29 @@ class EvaluationManifestTests(unittest.TestCase):
             corpus = evaluation.build_corpus(root, target_segments=60)
         self.assertEqual(len(corpus), 60)
         self.assertEqual({item["source_location"]["file"] for item in corpus}, {"Items.json"})
+
+    def test_review_samples_never_cross_scene_or_source_gaps(self):
+        pool = [
+            {
+                "id": f"segment-{index}",
+                "scene_id": "scene-1",
+                "stratum": "event_text",
+                "source": f"line-{index}",
+                "initial_history": [],
+            }
+            for index in range(1, 5)
+        ]
+        selected = [pool[0], pool[1], pool[3]]
+
+        grouped = evaluation._assign_review_samples(selected, pool, 10)
+
+        sample_ids = [item["review_sample_id"] for item in grouped]
+        self.assertEqual(sample_ids[0], sample_ids[1])
+        self.assertNotEqual(sample_ids[1], sample_ids[2])
+        self.assertEqual(
+            [item["source"] for item in grouped],
+            ["line-1", "line-2", "line-4"],
+        )
 
     def test_every_request_has_locked_context_and_bounded_source_history(self):
         audit = evaluation.context_audit(self.manifest)
@@ -342,6 +414,39 @@ class EvaluationManifestTests(unittest.TestCase):
         self.assertEqual(summary["valid_segments"], 0)
         self.assertEqual(summary["validation_failures"], summary["total_segments"])
         self.assertEqual(summary["valid_rate"], 0.0)
+
+    def test_consistency_scores_the_complete_sample_block(self):
+        manifest = {
+            "repetitions": 2,
+            "stability_request_ids": ["logical-0001"],
+            "logical_requests": [{
+                "id": "logical-0001",
+                "segment_ids": ["segment-1", "segment-2"],
+            }],
+        }
+        processed = {
+            "rep-1:logical-0001": {
+                "logical_request_id": "logical-0001",
+                "lines": [
+                    {"segment_id": "segment-1", "translation": "One", "valid": True},
+                    {"segment_id": "segment-2", "translation": "Two", "valid": True},
+                ],
+            },
+            "rep-2:logical-0001": {
+                "logical_request_id": "logical-0001",
+                "lines": [
+                    {"segment_id": "segment-1", "translation": "One", "valid": True},
+                    {"segment_id": "segment-2", "translation": "Changed", "valid": True},
+                ],
+            },
+        }
+
+        stability = evaluation._stability_score(manifest, processed)
+
+        self.assertEqual(stability["samples_with_all_repetitions"], 1)
+        self.assertEqual(stability["exactly_stable_samples"], 0)
+        self.assertEqual(stability["exact_sample_stability_rate"], 0.0)
+        self.assertEqual(stability["exactly_stable_segments"], 1)
 
     def test_terminal_batch_with_no_successes_marks_candidate_and_run_failed(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -625,6 +730,7 @@ class BlindReviewTests(unittest.TestCase):
             "stratum": "dialogue",
             "source": "猫だ。",
         }
+        self.review_id = "logical-0001"
         manifest = {
             "segments": [self.segment],
             "executions": [{
@@ -693,7 +799,10 @@ class BlindReviewTests(unittest.TestCase):
             rows = list(csv.DictReader(stream))
         self.assertEqual(len(rows), 1)
         self.assertEqual(
-            {rows[0][label] for label in ("A", "B", "C", "D")},
+            {
+                json.loads(rows[0][label])[0]
+                for label in ("A", "B", "C", "D")
+            },
             {
                 "translation-gpt", "translation-gemini",
                 "translation-sonnet", "translation-other",
@@ -707,7 +816,7 @@ class BlindReviewTests(unittest.TestCase):
             writer.writeheader()
             writer.writerows(rows)
         hidden = json.loads((self.run_dir / "blind_key.json").read_text(encoding="utf-8"))
-        expected = hidden["segment-1"]["B"]
+        expected = hidden[self.review_id]["B"]
         review = evaluation.import_blind_review(self.run_dir, review_path)
         self.assertEqual(review["wins"][expected], 1)
         self.assertEqual(review["points"][expected], 3)
@@ -717,6 +826,72 @@ class BlindReviewTests(unittest.TestCase):
             ",B>A=C>D,",
             (self.run_dir / "blind_review.csv").read_text(encoding="utf-8-sig"),
         )
+
+    def test_multi_line_sample_is_exported_and_scored_once_as_a_block(self):
+        manifest_path = self.run_dir / "manifest.json"
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        second = {
+            "id": "segment-2",
+            "scene_id": "scene-1",
+            "stratum": "dialogue",
+            "source": "犬だ。",
+        }
+        manifest["segments"].append(second)
+        request = manifest["logical_requests"][0]
+        request["segment_ids"].append("segment-2")
+        request["sources"] = ["猫だ。", "犬だ。"]
+        evaluation._atomic_write_json(manifest_path, manifest)
+        state = json.loads((self.run_dir / "state.json").read_text(encoding="utf-8"))
+        for candidate in state["candidates"]:
+            result_path = self.run_dir / candidate["result_file"]
+            result = json.loads(result_path.read_text(encoding="utf-8"))
+            first = result["executions"]["rep-1:logical-0001"]["lines"][0]
+            result["executions"]["rep-1:logical-0001"]["lines"].append({
+                "segment_id": "segment-2",
+                "translation": first["translation"] + "-second",
+            })
+            evaluation._atomic_write_json(result_path, result)
+
+        review_path = evaluation.export_blind_review(self.run_dir)
+        with open(review_path, "r", encoding="utf-8-sig", newline="") as stream:
+            rows = list(csv.DictReader(stream))
+
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["sample_id"], self.review_id)
+        self.assertEqual(rows[0]["line_count"], "2")
+        self.assertEqual(json.loads(rows[0]["source"]), ["猫だ。", "犬だ。"])
+        self.assertTrue(all(
+            len(json.loads(rows[0][label])) == 2
+            for label in ("A", "B", "C", "D")
+        ))
+
+        rows[0]["ranking"] = "A>B>C>D"
+        with open(review_path, "w", encoding="utf-8-sig", newline="") as stream:
+            writer = csv.DictWriter(stream, fieldnames=rows[0].keys())
+            writer.writeheader()
+            writer.writerows(rows)
+        review = evaluation.import_blind_review(self.run_dir, review_path)
+        self.assertEqual(review["reviewed"], 1)
+        self.assertEqual(review["reviewed_lines"], 2)
+        self.assertEqual(sum(review["wins"].values()), 1)
+        self.assertEqual(sum(review["points"].values()), 12)
+        self.assertEqual(
+            review["scoring"], "fixed-sum-borda-average-per-line-v2"
+        )
+
+    def test_import_rejects_changed_sample_line_count(self):
+        review_path = evaluation.export_blind_review(self.run_dir)
+        with open(review_path, "r", encoding="utf-8-sig", newline="") as stream:
+            rows = list(csv.DictReader(stream))
+        rows[0]["line_count"] = "10"
+        rows[0]["ranking"] = "A>B>C>D"
+        with open(review_path, "w", encoding="utf-8-sig", newline="") as stream:
+            writer = csv.DictWriter(stream, fieldnames=rows[0].keys())
+            writer.writeheader()
+            writer.writerows(rows)
+
+        with self.assertRaisesRegex(ValueError, "Protected line count changed"):
+            evaluation.import_blind_review(self.run_dir, review_path)
 
     def test_import_ranking_averages_tied_positions_without_inflation(self):
         review_path = evaluation.export_blind_review(self.run_dir)
@@ -733,12 +908,12 @@ class BlindReviewTests(unittest.TestCase):
 
         scores = {
             label: review["points"][candidate_id]
-            for label, candidate_id in hidden["segment-1"].items()
+            for label, candidate_id in hidden[self.review_id].items()
         }
         self.assertEqual(scores, {"A": 2.5, "B": 2.5, "C": 1, "D": 0})
         self.assertEqual(sum(scores.values()), 6)
         self.assertEqual(review["wins"], {
-            candidate_id: 0 for candidate_id in hidden["segment-1"].values()
+            candidate_id: 0 for candidate_id in hidden[self.review_id].values()
         })
         self.assertEqual(review["partial_ties"], 1)
 
@@ -777,12 +952,12 @@ class BlindReviewTests(unittest.TestCase):
         review = evaluation.import_blind_review(self.run_dir, review_path)
         scores = {
             label: review["points"][candidate_id]
-            for label, candidate_id in hidden["segment-1"].items()
+            for label, candidate_id in hidden[self.review_id].items()
         }
 
         self.assertEqual(scores["B"], 3)
         self.assertEqual({scores[label] for label in ("A", "C", "D")}, {1})
-        self.assertEqual(review["wins"][hidden["segment-1"]["B"]], 1)
+        self.assertEqual(review["wins"][hidden[self.review_id]["B"]], 1)
 
     def test_coverage_reports_rows_excluded_by_candidate_validation(self):
         manifest_path = self.run_dir / "manifest.json"
@@ -809,6 +984,8 @@ class BlindReviewTests(unittest.TestCase):
         self.assertEqual(coverage["total_segments"], 2)
         self.assertEqual(coverage["eligible_segments"], 1)
         self.assertEqual(coverage["excluded_segments"], 1)
+        self.assertEqual(coverage["total_samples"], 1)
+        self.assertEqual(coverage["eligible_samples"], 1)
 
     def test_export_rejects_all_error_candidate_without_overwriting_csv(self):
         state_path = self.run_dir / "state.json"

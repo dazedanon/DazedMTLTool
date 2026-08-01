@@ -60,8 +60,27 @@ class EvaluationTabTests(unittest.TestCase):
             patcher.stop()
 
     def test_defaults_expose_model_dropdowns_and_simple_safe_actions(self):
-        self.assertEqual(self.tab.test_size_combo.currentData(), (360, 120))
+        self.assertEqual(
+            self.tab.test_size_combo.currentData(), (360, 10, 12, 3)
+        )
         self.assertEqual(self.tab.budget_spin.value(), 10.0)
+        self.assertEqual(self.tab.custom_target_spin.value(), 360)
+        self.assertEqual(self.tab.custom_sample_size_spin.value(), 10)
+        self.assertEqual(self.tab.custom_repeated_samples_spin.value(), 12)
+        self.assertEqual(self.tab.custom_repetitions_spin.value(), 3)
+        self.assertFalse(self.tab.custom_target_spin.isEnabled())
+        size_widgets = {
+            "Total test lines": self.tab.custom_target_spin,
+            "Lines per sample": self.tab.custom_sample_size_spin,
+            "Repeated samples": self.tab.custom_repeated_samples_spin,
+            "Runs per repeated sample": self.tab.custom_repetitions_spin,
+        }
+        for name, widget in size_widgets.items():
+            tooltip = self.tab.BENCHMARK_SIZE_TOOLTIPS[name]
+            label = self.tab.benchmark_size_labels[name]
+            self.assertEqual(label.text(), f"{name} ⓘ")
+            self.assertEqual(label.toolTip(), tooltip)
+            self.assertEqual(widget.toolTip(), tooltip)
         self.assertEqual(
             [row["model"].currentText() for row in self.tab._candidate_widgets],
             ["configured-model"],
@@ -73,6 +92,28 @@ class EvaluationTabTests(unittest.TestCase):
         self.assertTrue(
             all(not row["model"].isEditable() for row in self.tab._candidate_widgets)
         )
+
+    def test_custom_template_enables_sample_and_repeat_controls(self):
+        self.tab.test_size_combo.setCurrentIndex(
+            self.tab.test_size_combo.count() - 1
+        )
+
+        for widget in (
+            self.tab.custom_target_spin,
+            self.tab.custom_sample_size_spin,
+            self.tab.custom_repeated_samples_spin,
+            self.tab.custom_repetitions_spin,
+        ):
+            self.assertTrue(widget.isEnabled())
+
+        self.tab.custom_target_spin.setValue(240)
+        self.tab.custom_sample_size_spin.setValue(8)
+        self.tab.custom_repeated_samples_spin.setValue(15)
+        self.tab.custom_repetitions_spin.setValue(5)
+        self.assertEqual(self.tab.custom_target_spin.value(), 240)
+        self.assertEqual(self.tab.custom_sample_size_spin.value(), 8)
+        self.assertEqual(self.tab.custom_repeated_samples_spin.value(), 15)
+        self.assertEqual(self.tab.custom_repetitions_spin.value(), 5)
         self.assertEqual(
             [row["execution"].currentData() for row in self.tab._candidate_widgets],
             ["batch"],
@@ -249,12 +290,16 @@ class EvaluationTabTests(unittest.TestCase):
         }
         manifest = {
             "requested_segments": 600,
-            "requested_stability_segments": 180,
+            "sample_size": 10,
+            "requested_stability_samples": 18,
+            "repetitions": 3,
         }
 
         self.tab._restore_benchmark_setup(state, manifest)
 
-        self.assertEqual(self.tab.test_size_combo.currentData(), (600, 180))
+        self.assertEqual(
+            self.tab.test_size_combo.currentData(), (600, 10, 18, 3)
+        )
         self.assertEqual(self.tab.budget_spin.value(), 7.5)
         self.assertEqual(
             [row["model"].currentText() for row in self.tab._candidate_widgets],

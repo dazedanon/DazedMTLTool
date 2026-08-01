@@ -45,9 +45,11 @@ from util.translation import (
 
 EVALUATION_VERSION = 3
 EVALUATION_ARCHIVE_VERSION = 1
-DEFAULT_BATCH_SIZE = 30
+DEFAULT_SAMPLE_SIZE = 10
+DEFAULT_BATCH_SIZE = DEFAULT_SAMPLE_SIZE  # Backward-compatible public alias.
 DEFAULT_SEGMENTS = 360
 DEFAULT_STABILITY_SEGMENTS = 120
+DEFAULT_STABILITY_SAMPLES = 12
 DEFAULT_REPETITIONS = 3
 DEFAULT_BUDGET_USD = 10.0
 MAX_OUTPUT_TOKENS_PER_REQUEST = 4096
@@ -454,6 +456,73 @@ def build_corpus(files_dir: str | Path, *, target_segments: int = DEFAULT_SEGMEN
     return selected[:selected_target]
 
 
+def _assign_review_samples(
+    segments: list[dict], pool: list[dict], sample_size: int
+) -> list[dict]:
+    """Group selected lines into ordered, same-scene review samples."""
+    if sample_size < 1:
+        raise ValueError("Sample size must be at least 1")
+    selected_ids = {segment["id"] for segment in segments}
+    selected_scene_order = list(dict.fromkeys(
+        segment["scene_id"] for segment in segments
+    ))
+    full_by_scene: dict[str, list[dict]] = defaultdict(list)
+    for segment in pool:
+        full_by_scene[segment["scene_id"]].append(segment)
+
+    grouped: list[dict] = []
+    sample_index = 0
+    for scene_id in selected_scene_order:
+        full_scene = full_by_scene.get(scene_id, [])
+        selected_scene = [
+            segment for segment in full_scene if segment["id"] in selected_ids
+        ]
+        if not selected_scene:
+            continue
+        full_positions = {
+            segment["id"]: index for index, segment in enumerate(full_scene)
+        }
+        chunks: list[list[dict]] = []
+        chunk: list[dict] = []
+        previous_position: int | None = None
+        for segment in selected_scene:
+            position = full_positions[segment["id"]]
+            if chunk and (
+                (
+                    previous_position is not None
+                    and position != previous_position + 1
+                )
+                or len(chunk) >= sample_size
+            ):
+                chunks.append(chunk)
+                chunk = []
+            chunk.append(segment)
+            previous_position = position
+        if chunk:
+            chunks.append(chunk)
+
+        for chunk in chunks:
+            sample_index += 1
+            first_position = full_positions.get(chunk[0]["id"], 0)
+            if first_position == 0:
+                history = _normalize_history(chunk[0].get("initial_history"))
+            else:
+                history = [
+                    segment["source"]
+                    for segment in full_scene[
+                        max(0, first_position - 10):first_position
+                    ]
+                ]
+            sample_id = f"sample-{sample_index:04d}"
+            for line_index, segment in enumerate(chunk, start=1):
+                item = copy.deepcopy(segment)
+                item["review_sample_id"] = sample_id
+                item["review_line_number"] = line_index
+                item["review_history"] = history
+                grouped.append(item)
+    return grouped
+
+
 def _build_logical_requests(segments: list[dict], system_prompt: str,
                             glossary: str, batch_size: int) -> list[dict]:
     config = TranslationConfig(
@@ -462,18 +531,19 @@ def _build_logical_requests(segments: list[dict], system_prompt: str,
         vocab=glossary,
         batchSize=batch_size,
     )
-    by_scene: dict[str, list[dict]] = defaultdict(list)
-    scene_order: list[str] = []
+    by_group: dict[str, list[dict]] = defaultdict(list)
+    group_order: list[str] = []
     for segment in segments:
-        scene = segment["scene_id"]
-        if scene not in by_scene:
-            scene_order.append(scene)
-        by_scene[scene].append(segment)
+        group = segment.get("review_sample_id") or segment["scene_id"]
+        if group not in by_group:
+            group_order.append(group)
+        by_group[group].append(segment)
 
     requests: list[dict] = []
     request_index = 0
-    for scene in scene_order:
-        items = by_scene[scene]
+    for group in group_order:
+        items = by_group[group]
+        scene = items[0]["scene_id"]
         previous_source: list[str] = []
         for offset in range(0, len(items), batch_size):
             chunk = items[offset:offset + batch_size]
@@ -489,7 +559,11 @@ def _build_logical_requests(segments: list[dict], system_prompt: str,
                 indent=4,
             )
             if offset == 0:
-                history = _normalize_history(chunk[0].get("initial_history"))
+                history = _normalize_history(
+                    chunk[0].get(
+                        "review_history", chunk[0].get("initial_history")
+                    )
+                )
             else:
                 history = previous_source[-10:]
             static_system, matched_glossary, user = createContext(
@@ -505,6 +579,7 @@ def _build_logical_requests(segments: list[dict], system_prompt: str,
             request_index += 1
             requests.append({
                 "id": f"logical-{request_index:04d}",
+                "review_sample_id": chunk[0].get("review_sample_id"),
                 "scene_id": scene,
                 "stratum": chunk[0]["stratum"],
                 "segment_ids": [segment["id"] for segment in chunk],
@@ -518,8 +593,12 @@ def _build_logical_requests(segments: list[dict], system_prompt: str,
     return requests
 
 
-def _stability_request_ids(requests: list[dict], target_segments: int) -> list[str]:
-    if target_segments <= 0:
+def _stability_request_ids(
+    requests: list[dict], target_segments: int, target_samples: int | None = None
+) -> list[str]:
+    if target_samples is not None and target_samples <= 0:
+        return []
+    if target_samples is None and target_segments <= 0:
         return []
     by_stratum: dict[str, list[dict]] = defaultdict(list)
     for request in requests:
@@ -528,7 +607,11 @@ def _stability_request_ids(requests: list[dict], target_segments: int) -> list[s
     offsets = {key: 0 for key in order}
     selected: list[str] = []
     line_count = 0
-    while line_count < target_segments:
+    while (
+        len(selected) < target_samples
+        if target_samples is not None
+        else line_count < target_segments
+    ):
         progressed = False
         for key in order:
             offset = offsets[key]
@@ -539,7 +622,11 @@ def _stability_request_ids(requests: list[dict], target_segments: int) -> list[s
             selected.append(request["id"])
             line_count += len(request["segment_ids"])
             progressed = True
-            if line_count >= target_segments:
+            if (
+                target_samples is not None and len(selected) >= target_samples
+            ) or (
+                target_samples is None and line_count >= target_segments
+            ):
                 break
         if not progressed:
             break
@@ -548,15 +635,20 @@ def _stability_request_ids(requests: list[dict], target_segments: int) -> list[s
 
 def build_manifest(files_dir: str | Path, *, target_segments: int = DEFAULT_SEGMENTS,
                    stability_segments: int = DEFAULT_STABILITY_SEGMENTS,
+                   stability_samples: int | None = None,
                    repetitions: int = DEFAULT_REPETITIONS,
-                   batch_size: int = DEFAULT_BATCH_SIZE,
+                   batch_size: int = DEFAULT_SAMPLE_SIZE,
                    system_prompt: str | None = None,
                    glossary: str | None = None,
                    game_root: str | Path | None = None) -> dict:
     if repetitions < 1:
         raise ValueError("Repetitions must be at least 1")
     if batch_size < 1:
-        raise ValueError("Batch size must be at least 1")
+        raise ValueError("Sample size must be at least 1")
+    if stability_samples is not None and stability_samples < 0:
+        raise ValueError("Repeated sample count cannot be negative")
+    if stability_samples and repetitions < 2:
+        raise ValueError("Repeated samples require at least 2 runs")
     data_dir = resolve_rpgmaker_data_dir(files_dir)
     context_root = (
         Path(game_root).expanduser().resolve()
@@ -578,11 +670,20 @@ def build_manifest(files_dir: str | Path, *, target_segments: int = DEFAULT_SEGM
         else glossary
     )
     eligible_segments = scan_corpus(data_dir)
-    segments = build_corpus(
+    selected_segments = build_corpus(
         data_dir, target_segments=target_segments, _pool=eligible_segments
     )
+    segments = _assign_review_samples(
+        selected_segments, eligible_segments, batch_size
+    )
     requests = _build_logical_requests(segments, system, active_glossary, batch_size)
-    stability_ids = _stability_request_ids(requests, stability_segments)
+    stability_ids = _stability_request_ids(
+        requests, stability_segments, stability_samples
+    )
+    stability_line_count = sum(
+        len(request["segment_ids"])
+        for request in requests if request["id"] in stability_ids
+    )
     executions: list[dict] = []
     for repetition in range(1, repetitions + 1):
         eligible = requests if repetition == 1 else [
@@ -601,10 +702,14 @@ def build_manifest(files_dir: str | Path, *, target_segments: int = DEFAULT_SEGM
         "game_root": str(context_root) if context_root is not None else "",
         "target_language": "English",
         "batch_size": batch_size,
+        "sample_size": batch_size,
         "requested_segments": target_segments,
         "requested_stability_segments": stability_segments,
+        "requested_stability_samples": stability_samples,
         "target_segments": len(segments),
-        "stability_target_segments": min(stability_segments, len(segments)),
+        "review_samples": len(requests),
+        "stability_samples": len(stability_ids),
+        "stability_target_segments": stability_line_count,
         "repetitions": repetitions,
         "system_prompt_sha256": _sha256(system.encode("utf-8")),
         "glossary_sha256": _sha256(active_glossary.encode("utf-8")),
@@ -615,6 +720,8 @@ def build_manifest(files_dir: str | Path, *, target_segments: int = DEFAULT_SEGM
         "corpus_summary": {
             "eligible_segments": len(eligible_segments),
             "selected_segments": len(segments),
+            "review_samples": len(requests),
+            "repeated_samples": len(stability_ids),
             "eligible_files": len({
                 item["source_location"]["file"] for item in eligible_segments
             }),
@@ -732,8 +839,9 @@ def _validate_candidates(candidates: list[dict]) -> None:
 def prepare_run(project_root: str | Path, files_dir: str | Path,
                 candidates: list[dict], *, target_segments: int = DEFAULT_SEGMENTS,
                 stability_segments: int = DEFAULT_STABILITY_SEGMENTS,
+                stability_samples: int | None = None,
                 repetitions: int = DEFAULT_REPETITIONS,
-                batch_size: int = DEFAULT_BATCH_SIZE,
+                batch_size: int = DEFAULT_SAMPLE_SIZE,
                 budget_usd: float = DEFAULT_BUDGET_USD,
                 game_root: str | Path | None = None,
                 output_root: str | Path | None = None) -> tuple[Path, dict]:
@@ -744,6 +852,7 @@ def prepare_run(project_root: str | Path, files_dir: str | Path,
         files_dir,
         target_segments=target_segments,
         stability_segments=stability_segments,
+        stability_samples=stability_samples,
         repetitions=repetitions,
         batch_size=batch_size,
         game_root=game_root,
@@ -1487,25 +1596,49 @@ def _process_results(manifest: dict, raw_results: dict,
 def _stability_score(manifest: dict, processed: dict) -> dict:
     request_by_id = _request_lookup(manifest)
     values: dict[str, list[str]] = defaultdict(list)
+    sample_values: dict[str, list[tuple[str, ...]]] = defaultdict(list)
     for execution_id, result in processed.items():
         request = request_by_id[result["logical_request_id"]]
         if request["id"] not in manifest["stability_request_ids"]:
             continue
+        valid_by_segment: dict[str, str] = {}
         for line in result["lines"]:
             if line["valid"]:
-                values[line["segment_id"]].append(
-                    _normalized_translation(line["translation"])
-                )
+                normalized = _normalized_translation(line["translation"])
+                values[line["segment_id"]].append(normalized)
+                valid_by_segment[line["segment_id"]] = normalized
+        if (
+            len(result["lines"]) == len(request["segment_ids"])
+            and len(valid_by_segment) == len(request["segment_ids"])
+            and set(valid_by_segment) == set(request["segment_ids"])
+        ):
+            sample_values[request["id"]].append(tuple(
+                valid_by_segment[segment_id]
+                for segment_id in request["segment_ids"]
+            ))
     required = manifest["repetitions"]
     stable = sum(
         1 for translations in values.values()
         if len(translations) == required and len(set(translations)) == 1
     )
     eligible = sum(1 for translations in values.values() if len(translations) == required)
+    stable_samples = sum(
+        1 for translations in sample_values.values()
+        if len(translations) == required and len(set(translations)) == 1
+    )
+    eligible_samples = sum(
+        1 for translations in sample_values.values()
+        if len(translations) == required
+    )
     return {
         "segments_with_all_repetitions": eligible,
         "exactly_stable_segments": stable,
         "exact_stability_rate": (stable / eligible) if eligible else 0.0,
+        "samples_with_all_repetitions": eligible_samples,
+        "exactly_stable_samples": stable_samples,
+        "exact_sample_stability_rate": (
+            stable_samples / eligible_samples if eligible_samples else 0.0
+        ),
     }
 
 
@@ -1656,11 +1789,49 @@ def _blind_review_data(root: Path, state: dict, manifest: dict) -> tuple[
         segment for segment in manifest.get("segments") or []
         if set(primary.get(segment["id"], {})) == set(candidate_ids)
     ]
+    eligible_ids = {segment["id"] for segment in eligible}
+    segment_by_id = {
+        segment["id"]: segment for segment in manifest.get("segments") or []
+    }
+    logical_requests = manifest.get("logical_requests") or [
+        {
+            "id": segment["id"],
+            "scene_id": segment["scene_id"],
+            "stratum": segment["stratum"],
+            "segment_ids": [segment["id"]],
+            "sources": [segment["source"]],
+        }
+        for segment in manifest.get("segments") or []
+    ]
+    review_samples = []
+    for request in logical_requests:
+        segment_ids = list(request.get("segment_ids") or [])
+        if not segment_ids or not all(
+            segment_id in eligible_ids for segment_id in segment_ids
+        ):
+            continue
+        sample_segments = [segment_by_id[segment_id] for segment_id in segment_ids]
+        review_samples.append({
+            "id": str(request.get("id") or sample_segments[0]["id"]),
+            "scene_id": str(
+                request.get("scene_id") or sample_segments[0]["scene_id"]
+            ),
+            "stratum": str(
+                request.get("stratum") or sample_segments[0]["stratum"]
+            ),
+            "segment_ids": segment_ids,
+            "sources": list(request.get("sources") or [
+                segment["source"] for segment in sample_segments
+            ]),
+        })
     total = len(manifest.get("segments") or [])
     coverage = {
         "total_segments": total,
         "eligible_segments": len(eligible),
         "excluded_segments": total - len(eligible),
+        "total_samples": len(logical_requests),
+        "eligible_samples": len(review_samples),
+        "excluded_samples": len(logical_requests) - len(review_samples),
         "valid_primary_by_candidate": valid_primary,
     }
     if not eligible:
@@ -1668,11 +1839,16 @@ def _blind_review_data(root: Path, state: dict, manifest: dict) -> tuple[
             "Cannot export blind review: none of the "
             f"{total} segments has a valid primary translation from every candidate."
         )
-    return results, primary, eligible, coverage
+    if not review_samples:
+        raise ValueError(
+            "Cannot export blind review: no complete multi-line sample has a "
+            "valid primary translation from every candidate."
+        )
+    return results, primary, review_samples, coverage
 
 
 def blind_review_coverage(run_dir: str | Path) -> dict:
-    """Return the number of rows a blind export would contain, or explain why not."""
+    """Return the samples and lines a blind export would contain."""
     root = Path(run_dir)
     state, manifest = load_run(root)
     if state.get("status") not in {"completed", "failed"}:
@@ -1699,7 +1875,7 @@ def export_blind_review(run_dir: str | Path, output_path: str | Path | None = No
     if state.get("status") not in {"completed", "failed"}:
         raise ValueError("All comparison models must finish before blind export")
     candidate_ids = [candidate["id"] for candidate in state["candidates"]]
-    _results, primary, eligible, _coverage = _blind_review_data(
+    _results, primary, review_samples, _coverage = _blind_review_data(
         root, state, manifest
     )
 
@@ -1709,25 +1885,33 @@ def export_blind_review(run_dir: str | Path, output_path: str | Path | None = No
     output.parent.mkdir(parents=True, exist_ok=True)
     with open(output, "w", encoding="utf-8-sig", newline="") as stream:
         writer = csv.DictWriter(stream, fieldnames=(
-            "segment_id", "scene_id", "stratum", "source",
+            "sample_id", "scene_id", "stratum", "line_count", "segment_ids",
+            "source",
             *blind_labels, "ranking", "notes",
         ))
         writer.writeheader()
-        for segment in eligible:
-            available = primary.get(segment["id"], {})
+        for sample in review_samples:
             shuffled = list(candidate_ids)
-            random.Random(f"{state['run_id']}:{segment['id']}").shuffle(shuffled)
+            random.Random(f"{state['run_id']}:{sample['id']}").shuffle(shuffled)
             labels = {
                 label: candidate_id
                 for label, candidate_id in zip(blind_labels, shuffled)
             }
-            key[segment["id"]] = labels
+            key[sample["id"]] = labels
             writer.writerow({
-                "segment_id": segment["id"],
-                "scene_id": segment["scene_id"],
-                "stratum": segment["stratum"],
-                "source": segment["source"],
-                **{label: available[candidate_id] for label, candidate_id in labels.items()},
+                "sample_id": sample["id"],
+                "scene_id": sample["scene_id"],
+                "stratum": sample["stratum"],
+                "line_count": len(sample["segment_ids"]),
+                "segment_ids": json.dumps(sample["segment_ids"], ensure_ascii=False),
+                "source": json.dumps(sample["sources"], ensure_ascii=False, indent=2),
+                **{
+                    label: json.dumps([
+                        primary[segment_id][candidate_id]
+                        for segment_id in sample["segment_ids"]
+                    ], ensure_ascii=False, indent=2)
+                    for label, candidate_id in labels.items()
+                },
                 "ranking": "",
                 "notes": "",
             })
@@ -1782,31 +1966,44 @@ def _ranking_points(tiers: list[list[str]]) -> dict[str, float]:
 
 def import_blind_review(run_dir: str | Path, review_path: str | Path) -> dict:
     root = Path(run_dir)
-    state, _manifest = load_run(root)
+    state, manifest = load_run(root)
     key = _read_json(root / "blind_key.json")
+    expected_line_counts = {
+        str(request.get("id")): len(request.get("segment_ids") or [])
+        for request in manifest.get("logical_requests") or []
+        if request.get("id")
+    }
+    expected_line_counts.update({
+        str(segment.get("id")): 1
+        for segment in manifest.get("segments") or []
+        if segment.get("id")
+    })
     wins = {candidate["id"]: 0 for candidate in state["candidates"]}
     points = {candidate["id"]: 0.0 for candidate in state["candidates"]}
     first_place = {candidate["id"]: 0 for candidate in state["candidates"]}
     ties = 0
     partial_ties = 0
     reviewed = 0
-    seen_segments: set[str] = set()
+    reviewed_lines = 0
+    seen_samples: set[str] = set()
     with open(review_path, "r", encoding="utf-8-sig", newline="") as stream:
         for row in csv.DictReader(stream):
             ranking_value = str(row.get("ranking") or "").strip()
             legacy_winner = str(row.get("winner") or "").strip().upper()
             if not ranking_value and not legacy_winner:
                 continue
-            segment_id = str(row.get("segment_id") or "")
-            if segment_id in seen_segments:
-                raise ValueError(f"Duplicate reviewed segment {segment_id!r}")
-            labels_to_candidates = key.get(segment_id) or {}
+            review_id = str(
+                row.get("sample_id") or row.get("segment_id") or ""
+            )
+            if review_id in seen_samples:
+                raise ValueError(f"Duplicate reviewed sample {review_id!r}")
+            labels_to_candidates = key.get(review_id) or {}
             labels = list(labels_to_candidates)
             if not labels or any(
                 candidate_id not in wins
                 for candidate_id in labels_to_candidates.values()
             ):
-                raise ValueError(f"Unknown reviewed segment {segment_id!r}")
+                raise ValueError(f"Unknown reviewed sample {review_id!r}")
             try:
                 if ranking_value:
                     tiers = _parse_blind_ranking(ranking_value, labels)
@@ -1823,12 +2020,34 @@ def import_blind_review(run_dir: str | Path, review_path: str | Path) -> dict:
                         tiers.append(remaining)
             except ValueError as exc:
                 raise ValueError(
-                    f"{exc} for segment {segment_id!r}"
+                    f"{exc} for sample {review_id!r}"
                 ) from exc
+
+            expected_line_count = expected_line_counts.get(review_id, 1)
+            line_count_value = str(row.get("line_count") or "").strip()
+            try:
+                line_count = (
+                    int(line_count_value)
+                    if line_count_value else expected_line_count
+                )
+            except ValueError as exc:
+                raise ValueError(
+                    f"Invalid line count {line_count_value!r} for sample "
+                    f"{review_id!r}"
+                ) from exc
+            if line_count < 1:
+                raise ValueError(
+                    f"Invalid line count {line_count!r} for sample {review_id!r}"
+                )
+            if line_count != expected_line_count:
+                raise ValueError(
+                    f"Protected line count changed for sample {review_id!r}: "
+                    f"expected {expected_line_count}, found {line_count}"
+                )
 
             row_points = _ranking_points(tiers)
             for label, award in row_points.items():
-                points[labels_to_candidates[label]] += award
+                points[labels_to_candidates[label]] += award * line_count
             for label in tiers[0]:
                 first_place[labels_to_candidates[label]] += 1
             if len(tiers[0]) == 1:
@@ -1837,20 +2056,22 @@ def import_blind_review(run_dir: str | Path, review_path: str | Path) -> dict:
                 ties += 1
             elif any(len(tier) > 1 for tier in tiers):
                 partial_ties += 1
-            seen_segments.add(segment_id)
+            seen_samples.add(review_id)
             reviewed += 1
+            reviewed_lines += line_count
     points = {
         candidate_id: int(score) if score.is_integer() else score
         for candidate_id, score in points.items()
     }
     human = {
         "reviewed": reviewed,
+        "reviewed_lines": reviewed_lines,
         "ties": ties,
         "partial_ties": partial_ties,
         "wins": wins,
         "first_place": first_place,
         "points": points,
-        "scoring": "fixed-sum-borda-average-v1",
+        "scoring": "fixed-sum-borda-average-per-line-v2",
         "imported_at": _utc_now(),
     }
     review_source = Path(review_path)

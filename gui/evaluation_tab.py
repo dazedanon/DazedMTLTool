@@ -20,6 +20,7 @@ from PyQt5.QtWidgets import (
     QLineEdit,
     QMessageBox,
     QPushButton,
+    QSpinBox,
     QFrame,
     QScrollArea,
     QTableWidget,
@@ -77,14 +78,36 @@ class EvaluationTab(QWidget):
             "control codes. This does not judge translation quality."
         ),
         "Consistency": (
-            "Of the repeated sample lines with a valid result on every run, the "
-            "percentage whose normalized English was exactly identical each time. "
-            "Higher means less variation, not necessarily a better translation."
+            "Of the repeated multi-line samples with a valid result on every run, "
+            "the percentage whose complete normalized translation block was exactly "
+            "identical each time. Higher means less variation, not necessarily a "
+            "better translation."
         ),
         "Review points": (
             "Fixed-sum ranking points from the blinded review. With three models, "
             "strict ranks score 2/1/0; tied candidates average the points for the "
-            "positions they occupy."
+            "positions they occupy. One whole-sample judgment applies that award "
+            "to every line in the sample."
+        ),
+    }
+    BENCHMARK_SIZE_TOOLTIPS = {
+        "Total test lines": (
+            "Number of unique Japanese lines included in the primary blinded "
+            "comparison. More lines improve coverage but increase cost and review work."
+        ),
+        "Lines per sample": (
+            "Maximum contiguous same-scene lines grouped into one translation request "
+            "and one blinded review row. Larger samples provide more local context but "
+            "make each review decision broader."
+        ),
+        "Repeated samples": (
+            "Number of selected samples translated more than once to measure "
+            "consistency. These extra attempts increase cost but do not add new "
+            "blind-review rows."
+        ),
+        "Runs per repeated sample": (
+            "Total translation attempts for each repeated sample, including the first. "
+            "Consistency requires exact normalized agreement across every attempt."
         ),
     }
     PROVIDER_PRESETS = API_URL_PRESETS
@@ -93,10 +116,10 @@ class EvaluationTab(QWidget):
         "gemini": ("gemini-3.6-flash", "gemini-3.5-flash", "gemini-2.5-flash"),
         "anthropic": ("claude-sonnet-5", "claude-sonnet-4-6", "claude-haiku-4-5"),
     }
-    TEST_SIZES = (
-        ("Quick — about 120 lines", 120, 30),
-        ("Standard — about 360 lines (recommended)", 360, 120),
-        ("Thorough — about 600 lines", 600, 180),
+    TEST_TEMPLATES = (
+        ("Quick — 120 lines", 120, 10, 3, 3),
+        ("Standard — 360 lines (recommended)", 360, 10, 12, 3),
+        ("Thorough — 600 lines", 600, 10, 18, 3),
     )
 
     def __init__(self, parent=None):
@@ -268,25 +291,71 @@ class EvaluationTab(QWidget):
         options.setVerticalSpacing(8)
 
         self.test_size_combo = QComboBox()
-        for label, lines, consistency_lines in self.TEST_SIZES:
-            self.test_size_combo.addItem(label, (lines, consistency_lines))
+        for label, lines, sample_size, repeated_samples, repetitions in self.TEST_TEMPLATES:
+            self.test_size_combo.addItem(
+                label, (lines, sample_size, repeated_samples, repetitions)
+            )
+        self.test_size_combo.addItem("Custom", None)
         self.test_size_combo.setCurrentIndex(1)
+        self.test_size_combo.currentIndexChanged.connect(
+            self._apply_test_template
+        )
         self.budget_spin = QDoubleSpinBox()
         self.budget_spin.setRange(1.0, 100.0)
         self.budget_spin.setDecimals(2)
         self.budget_spin.setValue(evaluation.DEFAULT_BUDGET_USD)
         self.budget_spin.setPrefix("$")
 
-        option_widgets = (("Test size", self.test_size_combo), ("Budget per model", self.budget_spin))
+        option_widgets = (
+            ("Test template", self.test_size_combo),
+            ("Budget per model", self.budget_spin),
+        )
         for index, (label_text, widget) in enumerate(option_widgets):
             widget.setMinimumWidth(132)
             widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
             label = QLabel(label_text)
             label.setStyleSheet("font-weight: 600;")
-            options.addWidget(label, 0, index)
-            options.addWidget(widget, 1, index)
+            column = index * 2
+            options.addWidget(label, 0, column, 1, 2)
+            options.addWidget(widget, 1, column, 1, 2)
+
+        self.custom_target_spin = QSpinBox()
+        self.custom_target_spin.setRange(60, 5_000)
+        self.custom_target_spin.setValue(360)
+        self.custom_target_spin.setSuffix(" lines")
+        self.custom_sample_size_spin = QSpinBox()
+        self.custom_sample_size_spin.setRange(1, 30)
+        self.custom_sample_size_spin.setValue(evaluation.DEFAULT_SAMPLE_SIZE)
+        self.custom_sample_size_spin.setSuffix(" lines")
+        self.custom_repeated_samples_spin = QSpinBox()
+        self.custom_repeated_samples_spin.setRange(0, 500)
+        self.custom_repeated_samples_spin.setValue(
+            evaluation.DEFAULT_STABILITY_SAMPLES
+        )
+        self.custom_repeated_samples_spin.setSuffix(" samples")
+        self.custom_repetitions_spin = QSpinBox()
+        self.custom_repetitions_spin.setRange(1, 10)
+        self.custom_repetitions_spin.setValue(evaluation.DEFAULT_REPETITIONS)
+        self.custom_repetitions_spin.setSuffix(" runs")
+        custom_widgets = (
+            ("Total test lines", self.custom_target_spin),
+            ("Lines per sample", self.custom_sample_size_spin),
+            ("Repeated samples", self.custom_repeated_samples_spin),
+            ("Runs per repeated sample", self.custom_repetitions_spin),
+        )
+        self.benchmark_size_labels = {}
+        for index, (label_text, widget) in enumerate(custom_widgets):
+            tooltip = self.BENCHMARK_SIZE_TOOLTIPS[label_text]
+            label = QLabel(f"{label_text} ⓘ")
+            label.setStyleSheet("font-weight: 600;")
+            label.setToolTip(tooltip)
+            widget.setToolTip(tooltip)
+            self.benchmark_size_labels[label_text] = label
+            options.addWidget(label, 2, index)
+            options.addWidget(widget, 3, index)
             options.setColumnStretch(index, 1)
         setup.add_layout(options)
+        self._apply_test_template()
 
         actions = QGridLayout()
         actions.setHorizontalSpacing(8)
@@ -712,6 +781,23 @@ class EvaluationTab(QWidget):
                 widget.deleteLater()
         self._candidate_widgets.clear()
 
+    def _apply_test_template(self, _index: int | None = None):
+        values = self.test_size_combo.currentData()
+        custom = values is None
+        if values is not None:
+            target, sample_size, repeated_samples, repetitions = values
+            self.custom_target_spin.setValue(int(target))
+            self.custom_sample_size_spin.setValue(int(sample_size))
+            self.custom_repeated_samples_spin.setValue(int(repeated_samples))
+            self.custom_repetitions_spin.setValue(int(repetitions))
+        for widget in (
+            self.custom_target_spin,
+            self.custom_sample_size_spin,
+            self.custom_repeated_samples_spin,
+            self.custom_repetitions_spin,
+        ):
+            widget.setEnabled(custom)
+
     def _restore_benchmark_setup(self, state: dict, manifest: dict):
         """Populate Benchmark setup from a saved run's immutable inputs."""
         candidates = list(state.get("candidates") or [])
@@ -726,16 +812,34 @@ class EvaluationTab(QWidget):
                 )
 
         requested = int(manifest.get("requested_segments", 0) or 0)
-        stability = int(
-            manifest.get("requested_stability_segments")
-            or manifest.get("stability_target_segments", 0)
-            or 0
+        sample_size = int(
+            manifest.get("sample_size") or manifest.get("batch_size")
+            or evaluation.DEFAULT_SAMPLE_SIZE
         )
+        repetitions = int(
+            manifest.get("repetitions") or evaluation.DEFAULT_REPETITIONS
+        )
+        repeated_samples_value = manifest.get("requested_stability_samples")
+        if repeated_samples_value is None:
+            repeated_samples = len(manifest.get("stability_request_ids") or [])
+        else:
+            repeated_samples = int(repeated_samples_value or 0)
+        matched = False
         for index in range(self.test_size_combo.count()):
-            lines, consistency = self.test_size_combo.itemData(index)
-            if int(lines) == requested and int(consistency) == stability:
+            values = self.test_size_combo.itemData(index)
+            if values == (requested, sample_size, repeated_samples, repetitions):
                 self.test_size_combo.setCurrentIndex(index)
+                matched = True
                 break
+        if not matched:
+            self.test_size_combo.setCurrentIndex(
+                self.test_size_combo.count() - 1
+            )
+            self.custom_target_spin.setValue(max(60, requested))
+            self.custom_sample_size_spin.setValue(sample_size)
+            self.custom_repeated_samples_spin.setValue(repeated_samples)
+            self.custom_repetitions_spin.setValue(repetitions)
+            self._apply_test_template()
         budget = float(state.get("budget_usd_per_model", 0) or 0)
         if budget > 0:
             self.budget_spin.setValue(budget)
@@ -1141,12 +1245,12 @@ class EvaluationTab(QWidget):
                 "glossary and game-specific skills to match normal translation.",
             )
             return
-        target_segments, consistency_segments = self.test_size_combo.currentData()
         values = {
-            "target_segments": target_segments,
-            "stability_segments": consistency_segments,
-            "repetitions": evaluation.DEFAULT_REPETITIONS,
-            "batch_size": evaluation.DEFAULT_BATCH_SIZE,
+            "target_segments": self.custom_target_spin.value(),
+            "stability_segments": 0,
+            "stability_samples": self.custom_repeated_samples_spin.value(),
+            "repetitions": self.custom_repetitions_spin.value(),
+            "batch_size": self.custom_sample_size_spin.value(),
             "budget_usd": self.budget_spin.value(),
             "game_root": game_root,
         }
@@ -1168,6 +1272,7 @@ class EvaluationTab(QWidget):
                 self.status_label,
                 f"Selected {summary.get('selected_segments', 0):,} of "
                 f"{summary.get('eligible_segments', 0):,} eligible lines from "
+                f"{summary.get('review_samples', 0):,} samples across "
                 f"{summary.get('selected_files', 0):,} files. Review the estimates, "
                 "then submit the model batches together.",
                 "success",
@@ -1175,7 +1280,8 @@ class EvaluationTab(QWidget):
             self._append_log(
                 f"Selection: {summary.get('selected_segments', 0):,} lines from "
                 f"{summary.get('selected_files', 0):,} of "
-                f"{summary.get('eligible_files', 0):,} eligible files."
+                f"{summary.get('eligible_files', 0):,} eligible files in "
+                f"{summary.get('review_samples', 0):,} review samples."
             )
             self._append_log(f"Manifest: {self.current_run_dir / 'manifest.json'}")
             self._refresh_history(self.current_run_dir)
@@ -1300,9 +1406,13 @@ class EvaluationTab(QWidget):
         eligible = coverage["eligible_segments"]
         total = coverage["total_segments"]
         excluded = coverage["excluded_segments"]
+        eligible_samples = coverage["eligible_samples"]
+        total_samples = coverage["total_samples"]
+        excluded_samples = coverage["excluded_samples"]
         coverage_message = (
-            f"Blind review coverage: {eligible:,}/{total:,} segments will be "
-            f"exported ({excluded:,} excluded)."
+            f"Blind review coverage: {eligible_samples:,}/{total_samples:,} "
+            f"whole samples containing {eligible:,}/{total:,} lines will be "
+            f"exported ({excluded_samples:,} samples excluded)."
         )
         self._append_log(coverage_message)
         set_status_text(self.status_label, coverage_message, "info")
@@ -1318,18 +1428,21 @@ class EvaluationTab(QWidget):
             self._append_log(f"Blinded review exported: {path}")
             set_status_text(
                 self.status_label,
-                f"Blind review exported with {eligible:,}/{total:,} segments. "
+                f"Blind review exported with {eligible_samples:,}/{total_samples:,} "
+                "whole samples. "
                 "Fill in the ranking column, then import the reviewed CSV.",
                 "success",
             )
             self._update_actions()
             QMessageBox.information(
                 self, "Blind review",
-                f"Exported {eligible:,} of {total:,} segments; {excluded:,} were "
-                "excluded because at least one model lacked a valid translation. "
+                f"Exported {eligible_samples:,} of {total_samples:,} samples "
+                f"containing {eligible:,} lines; {excluded_samples:,} samples "
+                f"and {excluded:,} lines were excluded because at least one model "
+                "lacked a valid translation. "
                 "Rank every candidate in the ranking column, for example A>B>C. "
                 "Use = for tied tiers, such as A=B>C or A>B=C. Labels are "
-                "randomized independently for every line.",
+                "randomized independently for every sample.",
             )
         except Exception as exc:
             QMessageBox.warning(self, "Blind review", str(exc))
@@ -1396,7 +1509,9 @@ class EvaluationTab(QWidget):
             self._display_state(state)
             self._refresh_history(self.current_run_dir)
             self._append_log(
-                f"Imported {review['reviewed']} rankings ({review['ties']} full "
+                f"Imported {review['reviewed']} sample rankings covering "
+                f"{review.get('reviewed_lines', review['reviewed'])} lines "
+                f"({review['ties']} full "
                 f"ties, {review['partial_ties']} partial ties)."
             )
         except Exception as exc:
@@ -1414,7 +1529,9 @@ class EvaluationTab(QWidget):
             if summary.get("total_segments"):
                 valid = f"{summary.get('valid_rate', 0):.1%}"
             stable = "—"
-            if stability.get("segments_with_all_repetitions"):
+            if stability.get("samples_with_all_repetitions"):
+                stable = f"{stability.get('exact_sample_stability_rate', 0):.1%}"
+            elif stability.get("segments_with_all_repetitions"):
                 stable = f"{stability.get('exact_stability_rate', 0):.1%}"
             local_status = candidate.get("status", "")
             if local_status in {"completed", "failed"}:
