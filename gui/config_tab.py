@@ -401,6 +401,9 @@ class ConfigTab(QWidget):
     def __init__(self):
         super().__init__()
         self.env_file_path = Path(".env")
+        self._model_fetch_thread = None
+        self._pending_model_fetch = None
+        self._model_fetch_request_id = 0
         # Initialize UI first so widgets/tabs exist for resetting or loading
         self.init_ui()
 
@@ -751,7 +754,9 @@ class ConfigTab(QWidget):
             ("Nvidia", "https://integrate.api.nvidia.com/v1/"),
         ):
             action = api_url_menu.addAction(name)
-            action.triggered.connect(lambda checked, u=url: self.api_url_edit.setText(u))
+            action.triggered.connect(
+                lambda checked, u=url: self._select_api_url_preset(u)
+            )
         self.api_url_preset_btn.setMenu(api_url_menu)
         self.api_url_edit.textChanged.connect(self._update_model_placeholder)
 
@@ -1089,6 +1094,17 @@ class ConfigTab(QWidget):
         self.api_url_edit.blockSignals(False)
         self._update_model_placeholder()
 
+    def _select_api_url_preset(self, url: str):
+        """Apply a provider preset and immediately refresh its model list."""
+        self.api_url_edit.setText(url)
+        self._on_api_url_changed()
+
+    def _on_api_url_changed(self):
+        """Persist a selected endpoint and load its available models."""
+        self._update_model_placeholder()
+        self.auto_save()
+        self.fetch_models(silent=True, select_available=True)
+
     def _refresh_api_key_combo(self, preferred: str | None = None):
         """Reload named keys into the dropdown without firing autosave."""
         api_key_vault.ensure_vault(env_path=self.env_file_path)
@@ -1120,6 +1136,7 @@ class ConfigTab(QWidget):
         except KeyError:
             return
         self.auto_save()
+        self.fetch_models(silent=True, select_available=True)
 
     def _on_api_key_new(self):
         """Open dialog to create or overwrite a named API key."""
@@ -1151,6 +1168,7 @@ class ConfigTab(QWidget):
             return
         self._refresh_api_key_combo(preferred=name)
         self.auto_save()
+        self.fetch_models(silent=True, select_available=True)
 
     def _on_api_key_delete(self):
         """Delete the selected named key after confirmation."""
@@ -1171,7 +1189,7 @@ class ConfigTab(QWidget):
         self._refresh_api_key_combo()
         self.auto_save()
 
-    def fetch_models(self, silent=False):
+    def fetch_models(self, silent=False, select_available=False):
         """Kick off background fetch of models from the configured API."""
         api_key = self._active_api_key_secret()
         api_url = self.api_url_edit.text().strip()
@@ -1184,34 +1202,99 @@ class ConfigTab(QWidget):
                 )
             return
 
+        self._model_fetch_request_id += 1
+        request = {
+            "id": self._model_fetch_request_id,
+            "api_key": api_key,
+            "api_url": api_url,
+            "silent": bool(silent),
+            "select_available": bool(select_available),
+        }
+        current_thread = self._model_fetch_thread
+        if current_thread is not None and current_thread.isRunning():
+            # Keep only the newest provider choice. The old SDK request cannot
+            # be canceled safely, and its result is ignored by request id.
+            self._pending_model_fetch = request
+            return
+
+        self._start_model_fetch(request)
+
+    def _start_model_fetch(self, request):
+        """Start one previously validated model-list request."""
         self.model_refresh_btn.setEnabled(False)
         self.model_refresh_btn.setText("…")
 
-        self._model_fetch_thread = ModelFetchThread(api_key, api_url, parent=self)
-        self._model_fetch_thread.models_fetched.connect(self._on_models_fetched)
-        self._model_fetch_thread.fetch_error.connect(self._on_models_fetch_error)
-        self._model_fetch_thread.finished.connect(lambda: None)  # keep GC away
-        self._model_fetch_thread.start()
+        thread = ModelFetchThread(
+            request["api_key"], request["api_url"], parent=self
+        )
+        self._model_fetch_thread = thread
+        thread.models_fetched.connect(
+            lambda models, req=request: self._on_model_fetch_result(req, models)
+        )
+        thread.fetch_error.connect(
+            lambda error, req=request: self._on_model_fetch_error(req, error)
+        )
+        thread.finished.connect(
+            lambda req=request, worker=thread: self._on_model_fetch_finished(
+                req, worker
+            )
+        )
+        thread.start()
 
-    def _on_models_fetched(self, models):
+    def _on_model_fetch_result(self, request, models):
+        """Ignore stale providers and apply the latest model-list result."""
+        if request["id"] != self._model_fetch_request_id:
+            return
+        self._on_models_fetched(
+            models,
+            select_available=request["select_available"],
+        )
+
+    def _on_model_fetch_error(self, request, error):
+        """Ignore stale failures and keep automatic refreshes non-intrusive."""
+        if request["id"] != self._model_fetch_request_id:
+            return
+        self._on_models_fetch_error(error, silent=request["silent"])
+
+    def _on_model_fetch_finished(self, request, thread):
+        """Release a worker and run the newest queued provider request."""
+        if self._model_fetch_thread is thread:
+            self._model_fetch_thread = None
+        thread.deleteLater()
+        pending = self._pending_model_fetch
+        self._pending_model_fetch = None
+        if pending is not None:
+            self._start_model_fetch(pending)
+        elif request["id"] == self._model_fetch_request_id:
+            self.model_refresh_btn.setEnabled(True)
+            self.model_refresh_btn.setText("⟳")
+
+    def _on_models_fetched(self, models, select_available=False):
         """Populate the model dropdown with freshly fetched models."""
         current = self.model_combo.currentText()
+        choose_fetched = bool(select_available and current not in models)
         self.model_combo.blockSignals(True)
         self.model_combo.clear()
         self.model_combo.addItems(models)
-        self.model_combo.setCurrentText(current)  # restore whatever was typed
+        if choose_fetched and models:
+            self.model_combo.setCurrentIndex(0)
+        else:
+            self.model_combo.setCurrentText(current)  # preserve manual model names
         self.model_combo.blockSignals(False)
         self.model_refresh_btn.setEnabled(True)
         self.model_refresh_btn.setText("⟳")
+        if choose_fetched and models:
+            self.auto_save()
 
-    def _on_models_fetch_error(self, error):
+    def _on_models_fetch_error(self, error, silent=False):
         """Restore button and show error."""
         self.model_refresh_btn.setEnabled(True)
         self.model_refresh_btn.setText("⟳")
-        QMessageBox.warning(
-            self, "Fetch Error",
-            f"Could not fetch models from the API:\n{error}"
-        )
+        if not silent:
+            QMessageBox.warning(
+                self, "Fetch Error",
+                f"Could not fetch models from the API:\n{error}"
+            )
 
     def mousePressEvent(self, event):
         """Clear focus from any text/spin box when clicking on empty space,
@@ -1305,7 +1388,7 @@ class ConfigTab(QWidget):
     def connect_auto_save(self):
         """Connect all widgets to auto-save on change."""
         # Text fields - use editingFinished to avoid saving on every keystroke
-        self.api_url_edit.editingFinished.connect(self.auto_save)
+        self.api_url_edit.editingFinished.connect(self._on_api_url_changed)
         self.api_key_combo.currentTextChanged.connect(self._on_api_key_selected)
 
         
@@ -1336,7 +1419,7 @@ class ConfigTab(QWidget):
     def disconnect_auto_save(self):
         """Disconnect all widgets from auto-save."""
         try:
-            self.api_url_edit.editingFinished.disconnect(self.auto_save)
+            self.api_url_edit.editingFinished.disconnect(self._on_api_url_changed)
             self.api_key_combo.currentTextChanged.disconnect(self._on_api_key_selected)
 
             self.model_combo.currentTextChanged.disconnect(self.auto_save)

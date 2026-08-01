@@ -283,6 +283,50 @@ class ConfigTabRegressionTests(unittest.TestCase):
         self.assertFalse(popup.testAttribute(Qt.WA_TranslucentBackground))
         tab.model_combo.hidePopup()
 
+    def test_selecting_saved_provider_refreshes_its_models(self) -> None:
+        api_keys.upsert_key(
+            "Gemini",
+            "gemini-secret",
+            endpoint="https://generativelanguage.googleapis.com/v1beta/openai/",
+            make_active=False,
+            path=self.vault_path,
+        )
+        tab = self.make_tab()
+        ConfigTab.fetch_models.reset_mock()
+
+        tab.api_key_combo.setCurrentText("Gemini")
+
+        self.assertEqual(
+            tab.api_url_edit.text(),
+            "https://generativelanguage.googleapis.com/v1beta/openai/",
+        )
+        ConfigTab.fetch_models.assert_called_once_with(
+            tab,
+            silent=True,
+            select_available=True,
+        )
+
+    def test_provider_refresh_selects_a_valid_model(self) -> None:
+        tab = self.make_tab()
+        tab.model_combo.setCurrentText("model-from-old-provider")
+
+        with patch.object(tab, "auto_save") as auto_save:
+            tab._on_models_fetched(
+                ["gemini-3.1-pro", "gemini-3.6-flash"],
+                select_available=True,
+            )
+
+        self.assertEqual(tab.model_combo.currentText(), "gemini-3.1-pro")
+        auto_save.assert_called_once_with()
+
+    def test_manual_model_refresh_preserves_custom_model(self) -> None:
+        tab = self.make_tab()
+        tab.model_combo.setCurrentText("custom-provider-model")
+
+        tab._on_models_fetched(["listed-model"], select_available=False)
+
+        self.assertEqual(tab.model_combo.currentText(), "custom-provider-model")
+
     def test_presets_menu_is_opaque(self) -> None:
         tab = self.make_tab()
         window = QMainWindow()
