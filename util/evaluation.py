@@ -19,6 +19,7 @@ import re
 import shutil
 import tempfile
 import threading
+import time
 import zipfile
 from collections import defaultdict
 from datetime import date, datetime, timezone
@@ -68,6 +69,7 @@ REVIEW_QUALITY_METRICS = (
     "natural_contextual",
 )
 MAX_OUTPUT_TOKENS_PER_REQUEST = 4096
+LIVE_REQUEST_MAX_ATTEMPTS = 3
 JAPANESE_RE = re.compile(r"[一-龠々〆〤ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]")
 LANGUAGE_REGEX = r"[一-龠ぁ-ゔァ-ヴーａ-ｚＡ-Ｚ０-９\uFF61-\uFF9F]+"
 
@@ -305,7 +307,13 @@ def _event_source_category(filename: str) -> str:
     raise ValueError(f"Unsupported RPG Maker event source {filename!r}")
 
 
-def _capture_page_data(page: dict | list, filename: str, location: dict) -> list[dict]:
+def _capture_page_data(
+    page: dict | list,
+    filename: str,
+    location: dict,
+    *,
+    glossary: str | None = None,
+) -> list[dict]:
     """Capture the exact groups the RPG Maker event parser would translate."""
     import modules.rpgmakermvmz as rpgmaker
 
@@ -319,16 +327,49 @@ def _capture_page_data(page: dict | list, filename: str, location: dict) -> list
     with _CORPUS_CAPTURE_LOCK:
         original_translate = rpgmaker.translateAI
         original_names = list(rpgmaker.NAMESLIST)
+        original_collected = list(rpgmaker.SPEAKER_COLLECTED)
+        original_speaker_mode = rpgmaker.SPEAKER_PARSE_MODE
+        original_preflight_mode = rpgmaker.PREFLIGHT_COUNT_MODE
         original_mismatches = list(rpgmaker.MISMATCH)
         original_pbar = rpgmaker.PBAR
+        original_vocab = rpgmaker.VOCAB
+        original_config_vocab = rpgmaker.TRANSLATION_CONFIG.vocab
+        original_vocab_source = rpgmaker._speakerVocabSource
+        original_vocab_exact = dict(rpgmaker._speakerVocabExact)
+        original_vocab_pairs = list(rpgmaker._speakerVocabCharacterPairs)
+        with rpgmaker._speakerCacheLock:
+            original_speaker_cache = dict(rpgmaker._speakerCache)
         rpgmaker.translateAI = capture
+        rpgmaker.SPEAKER_PARSE_MODE = False
+        rpgmaker.PREFLIGHT_COUNT_MODE = False
+        rpgmaker.NAMESLIST[:] = []
+        rpgmaker.SPEAKER_COLLECTED[:] = []
+        with rpgmaker._speakerCacheLock:
+            rpgmaker._speakerCache.clear()
+        if glossary is not None:
+            rpgmaker.VOCAB = glossary
+            rpgmaker.TRANSLATION_CONFIG.vocab = glossary
+            rpgmaker._speakerVocabSource = None
+            rpgmaker._speakerVocabExact = {}
+            rpgmaker._speakerVocabCharacterPairs = []
         try:
             rpgmaker.searchCodes(copy.deepcopy(page), None, [], filename)
         finally:
             rpgmaker.translateAI = original_translate
             rpgmaker.NAMESLIST[:] = original_names
+            rpgmaker.SPEAKER_COLLECTED[:] = original_collected
+            rpgmaker.SPEAKER_PARSE_MODE = original_speaker_mode
+            rpgmaker.PREFLIGHT_COUNT_MODE = original_preflight_mode
             rpgmaker.MISMATCH[:] = original_mismatches
             rpgmaker.PBAR = original_pbar
+            rpgmaker.VOCAB = original_vocab
+            rpgmaker.TRANSLATION_CONFIG.vocab = original_config_vocab
+            rpgmaker._speakerVocabSource = original_vocab_source
+            rpgmaker._speakerVocabExact = original_vocab_exact
+            rpgmaker._speakerVocabCharacterPairs = original_vocab_pairs
+            with rpgmaker._speakerCacheLock:
+                rpgmaker._speakerCache.clear()
+                rpgmaker._speakerCache.update(original_speaker_cache)
 
     segments: list[dict] = []
     for call_index, (items, initial_history) in enumerate(captured):
@@ -397,7 +438,7 @@ def _database_segments(files_dir: Path) -> list[dict]:
     return segments
 
 
-def _event_segments(files_dir: Path) -> list[dict]:
+def _event_segments(files_dir: Path, *, glossary: str | None = None) -> list[dict]:
     segments: list[dict] = []
     map_pattern = re.compile(r"^Map\d+\.json$", re.IGNORECASE)
     for path in sorted(files_dir.glob("*.json"), key=lambda item: item.name.casefold()):
@@ -422,6 +463,7 @@ def _event_segments(files_dir: Path) -> list[dict]:
                         segments.extend(_capture_page_data(
                             page, filename,
                             {"event": event_id, "page": page_index + 1},
+                            glossary=glossary,
                         ))
             display_name = data.get("displayName") if isinstance(data, dict) else None
             if isinstance(display_name, str) and JAPANESE_RE.search(display_name):
@@ -438,7 +480,8 @@ def _event_segments(files_dir: Path) -> list[dict]:
             for index, event in enumerate(data):
                 if isinstance(event, dict) and isinstance(event.get("list"), list):
                     segments.extend(_capture_page_data(
-                        event, filename, {"common_event": event.get("id", index)}
+                        event, filename, {"common_event": event.get("id", index)},
+                        glossary=glossary,
                     ))
         elif filename == "Troops.json" and isinstance(data, list):
             for troop_index, troop in enumerate(data):
@@ -449,16 +492,17 @@ def _event_segments(files_dir: Path) -> list[dict]:
                         segments.extend(_capture_page_data(
                             page, filename,
                             {"troop": troop.get("id", troop_index), "page": page_index + 1},
+                            glossary=glossary,
                         ))
     return segments
 
 
-def scan_corpus(files_dir: str | Path) -> list[dict]:
+def scan_corpus(files_dir: str | Path, *, glossary: str | None = None) -> list[dict]:
     """Extract eligible Japanese text from any RPG Maker MV/MZ JSON folder."""
     root = Path(files_dir)
     if not root.is_dir():
         raise FileNotFoundError(f"RPG Maker folder does not exist: {root}")
-    segments = _event_segments(root) + _database_segments(root)
+    segments = _event_segments(root, glossary=glossary) + _database_segments(root)
     unique: dict[str, dict] = {}
     for segment in segments:
         unique.setdefault(segment["id"], segment)
@@ -953,7 +997,7 @@ def build_manifest(files_dir: str | Path, *, target_segments: int = DEFAULT_SEGM
         if glossary is None
         else glossary
     )
-    all_segments = scan_corpus(data_dir)
+    all_segments = scan_corpus(data_dir, glossary=active_glossary)
     selection = normalize_content_selection(content_selection)
     eligible_segments = _filter_corpus(all_segments, selection)
     inventory = content_inventory(data_dir, _pool=all_segments)
@@ -1905,6 +1949,35 @@ def _run_completion_status(candidates: list[dict]) -> str:
     return "partially_submitted"
 
 
+def _is_retryable_live_error(exc: Exception) -> bool:
+    """Return whether a live transport failure should remain resumable."""
+    status = getattr(exc, "status_code", None)
+    if status is None:
+        response = getattr(exc, "response", None)
+        status = getattr(response, "status_code", None)
+    try:
+        status = int(status) if status is not None else None
+    except (TypeError, ValueError):
+        status = None
+    if status in {408, 409, 425, 429} or (status is not None and status >= 500):
+        return True
+    if isinstance(exc, (ConnectionError, TimeoutError, OSError)):
+        return True
+    name = type(exc).__name__.casefold()
+    message = str(exc).casefold()
+    return (
+        any(marker in name for marker in ("connection", "timeout", "ratelimit"))
+        or any(
+            marker in message
+            for marker in (
+                "timed out", "timeout", "temporarily unavailable",
+                "connection reset", "connection aborted", "connection refused",
+                "rate limit", "too many requests", " 429", "429 ",
+            )
+        )
+    )
+
+
 def _execute_live_candidate(
     root: Path, state: dict, manifest: dict, candidate: dict,
     requests: dict[str, dict], secret: str, log: Callable[[str], None],
@@ -1997,11 +2070,43 @@ def _execute_live_candidate(
             return False, checkpoint_path
         request = requests[execution["logical_request_id"]]
         try:
-            result = batch_api.execute_live_request(
-                candidate["provider"],
-                _provider_params(candidate, request),
-                client=client,
-            )
+            result = None
+            for attempt in range(1, LIVE_REQUEST_MAX_ATTEMPTS + 1):
+                try:
+                    result = batch_api.execute_live_request(
+                        candidate["provider"],
+                        _provider_params(candidate, request),
+                        client=client,
+                    )
+                    candidate.pop("live_retryable_error", None)
+                    break
+                except Exception as exc:
+                    if not _is_retryable_live_error(exc):
+                        raise
+                    if attempt < LIVE_REQUEST_MAX_ATTEMPTS:
+                        delay = 2 ** (attempt - 1)
+                        log(
+                            f"{candidate['label']} live request {index}/{total} "
+                            f"hit a temporary error; retrying in {delay}s "
+                            f"({attempt}/{LIVE_REQUEST_MAX_ATTEMPTS}): {exc}"
+                        )
+                        if should_stop is not None and should_stop():
+                            return False, checkpoint_path
+                        time.sleep(delay)
+                        continue
+
+                    candidate["live_retryable_error"] = str(exc)[:500]
+                    state["updated_at"] = _utc_now()
+                    _atomic_write_json(root / "state.json", state)
+                    log(
+                        f"{candidate['label']} live request {index}/{total} remains "
+                        "temporarily unavailable after retries. The evaluation was "
+                        "paused so Submit can retry this request later."
+                    )
+                    return False, checkpoint_path
+
+            if result is None:
+                return False, checkpoint_path
             raw_results[execution_id] = result
             cached = int(result.get("cache_read_input_tokens", 0) or 0)
             cache_write = int(

@@ -62,6 +62,7 @@ class SpeakerPreflightWorkerTests(unittest.TestCase):
 
             worker.speaker_confirmation_signal.connect(approve)
             with (
+                patch.object(mvmz, "refreshRuntimeConfig") as refresh,
                 patch.object(mvmz, "TOKENS", tokens),
                 patch.object(mvmz, "resetSpeakerState"),
                 patch.object(mvmz, "setSpeakerParseMode"),
@@ -87,6 +88,7 @@ class SpeakerPreflightWorkerTests(unittest.TestCase):
                     ("translate",),
                 ],
             )
+            refresh.assert_called_once_with()
 
     def test_grouped_estimate_reports_requests_tokens_and_cost_without_translation(self):
         config = SimpleNamespace(batchSize=2, maxHistory=10, model="test-model")
@@ -198,6 +200,7 @@ class SpeakerPreflightWorkerTests(unittest.TestCase):
                 selected_files=["broken.json"],
             )
             with (
+                patch.object(wolfdawn, "refreshRuntimeConfig") as refresh,
                 patch.object(wolfdawn, "pendingSpeakerNames") as pending,
                 patch.object(wolfdawn, "translateSpeakerNames") as translate,
             ):
@@ -205,6 +208,7 @@ class SpeakerPreflightWorkerTests(unittest.TestCase):
 
             pending.assert_not_called()
             translate.assert_not_called()
+            refresh.assert_called_once_with()
 
     def test_game_root_uses_workflow_settings_key(self):
         class Settings:

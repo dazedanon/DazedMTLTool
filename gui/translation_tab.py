@@ -681,23 +681,14 @@ class TranslationWorker(QThread):
     def _prepare_mvmz_speakers(self, matching_files, *, emit_progress=False):
         """Scan selected RPG Maker files, then resolve all new speakers together."""
         try:
-            from modules.rpgmakermvmz import (
-                MODEL,
-                TOKENS,
-                TRANSLATION_CONFIG,
-                calculateCost,
-                finalizeSpeakerParse,
-                handleMVMZ,
-                pendingSpeakerNames,
-                resetSpeakerState,
-                setSpeakerParseMode,
-            )
+            import modules.rpgmakermvmz as mvmz
+            mvmz.refreshRuntimeConfig()
         except Exception as exc:
             self.emit_log(f"❌ Could not start speaker preflight: {exc}")
             return False
 
-        resetSpeakerState()
-        setSpeakerParseMode(True)
+        mvmz.resetSpeakerState()
+        mvmz.setSpeakerParseMode(True)
         total_files = len(matching_files)
         completed = 0
         scan_failures = []
@@ -711,7 +702,7 @@ class TranslationWorker(QThread):
                 if self.should_stop:
                     return False
                 try:
-                    handleMVMZ(filename, False)
+                    mvmz.handleMVMZ(filename, False)
                 except Exception as exc:
                     scan_failures.append(filename)
                     tb_line = str(traceback.extract_tb(sys.exc_info()[2])[-1].lineno)
@@ -733,7 +724,7 @@ class TranslationWorker(QThread):
                 )
                 return False
 
-            pending = pendingSpeakerNames()
+            pending = mvmz.pendingSpeakerNames()
             if not pending:
                 self.emit_log(
                     f"🔤 Speaker scan complete ({completed}/{total_files}). "
@@ -749,7 +740,7 @@ class TranslationWorker(QThread):
             )
             from util.skills import ctx
             estimate = self._estimate_grouped_speakers(
-                pending, ctx("names.speaker"), TRANSLATION_CONFIG, MODEL
+                pending, ctx("names.speaker"), mvmz.TRANSLATION_CONFIG, mvmz.MODEL
             )
             self.emit_log(
                 f"📊 Speaker estimate: {int(estimate.get('request_count', 0))} grouped request(s), "
@@ -768,18 +759,18 @@ class TranslationWorker(QThread):
             self.emit_log(
                 f"🔤 Translating {len(pending)} speakers in grouped list batches…"
             )
-            before_in, before_out = int(TOKENS[0]), int(TOKENS[1])
-            speakers_saved = finalizeSpeakerParse()
+            before_in, before_out = int(mvmz.TOKENS[0]), int(mvmz.TOKENS[1])
+            speakers_saved = mvmz.finalizeSpeakerParse()
             if speakers_saved is False:
                 self.emit_log(
-                    "❌ Speaker translations could not be saved because the active "
-                    "game glossary was not available."
+                    "❌ Speaker translations could not be validated or saved. "
+                    "Check the active game glossary and translation log."
                 )
                 return False
-            delta_in = max(0, int(TOKENS[0]) - before_in)
-            delta_out = max(0, int(TOKENS[1]) - before_out)
+            delta_in = max(0, int(mvmz.TOKENS[0]) - before_in)
+            delta_out = max(0, int(mvmz.TOKENS[1]) - before_out)
             if delta_in or delta_out:
-                cost = calculateCost(delta_in, delta_out, MODEL)
+                cost = mvmz.calculateCost(delta_in, delta_out, mvmz.MODEL)
                 self.emit_log(
                     f"Speakers: [Input: {delta_in}][Output: {delta_out}]"
                     f"[Cost: ${cost:.4f}] ✓"
@@ -787,19 +778,13 @@ class TranslationWorker(QThread):
             self.emit_log("✅ Speaker translations saved to the game glossary.")
             return True
         finally:
-            setSpeakerParseMode(False)
+            mvmz.setSpeakerParseMode(False)
 
     def _prepare_wolf_speakers(self, matching_files):
         """Scan WolfDawn JSON nameplates, then resolve all new speakers together."""
         try:
-            from modules.wolfdawn import (
-                MODEL,
-                TRANSLATION_CONFIG,
-                calculateCost,
-                collectSpeakerNames,
-                pendingSpeakerNames,
-                translateSpeakerNames,
-            )
+            import modules.wolfdawn as wolfdawn
+            wolfdawn.refreshRuntimeConfig()
         except Exception as exc:
             self.emit_log(f"❌ Could not start WOLF speaker preflight: {exc}")
             return False
@@ -819,7 +804,7 @@ class TranslationWorker(QThread):
             try:
                 path = self.project_root / "files" / filename
                 data = json.loads(path.read_text(encoding="utf-8-sig"))
-                for speaker in collectSpeakerNames(data):
+                for speaker in wolfdawn.collectSpeakerNames(data):
                     if speaker not in seen:
                         seen.add(speaker)
                         collected.append(speaker)
@@ -838,7 +823,7 @@ class TranslationWorker(QThread):
             )
             return False
 
-        pending = pendingSpeakerNames(collected)
+        pending = wolfdawn.pendingSpeakerNames(collected)
         if not pending:
             self.emit_log(
                 f"🔤 WOLF speaker scan complete ({total_files}/{total_files}). "
@@ -853,7 +838,7 @@ class TranslationWorker(QThread):
         )
         from util.skills import ctx
         estimate = self._estimate_grouped_speakers(
-            pending, ctx("names.npc"), TRANSLATION_CONFIG, MODEL
+            pending, ctx("names.npc"), wolfdawn.TRANSLATION_CONFIG, wolfdawn.MODEL
         )
         self.emit_log(
             f"📊 Speaker estimate: {int(estimate.get('request_count', 0))} grouped request(s), "
@@ -872,9 +857,9 @@ class TranslationWorker(QThread):
         self.emit_log(
             f"🔤 Translating {len(pending)} WOLF speakers in grouped list batches…"
         )
-        tokens = translateSpeakerNames(pending)
+        tokens = wolfdawn.translateSpeakerNames(pending)
         if tokens[0] or tokens[1]:
-            cost = calculateCost(tokens[0], tokens[1], MODEL)
+            cost = wolfdawn.calculateCost(tokens[0], tokens[1], wolfdawn.MODEL)
             self.emit_log(
                 f"Speakers: [Input: {tokens[0]}][Output: {tokens[1]}]"
                 f"[Cost: ${cost:.4f}] ✓"
@@ -1276,6 +1261,7 @@ class TranslationTab(QWidget):
         # Initialize tracking variables
         self.files_completed = 0
         self.files_total = 0
+        self._file_progress_started = False
         self.file_progress_items = {}  # filename -> {widget, label, progress_bar, checkbox}
         self.current_translating_file = None
         # Totals tracking
@@ -3665,6 +3651,7 @@ class TranslationTab(QWidget):
             # Initialize progress tracking
             self.files_completed = 0
             self.files_total = len(selected_files)
+            self._file_progress_started = False
             self._batch_active = batch_mode
             self._batch_ui_phase = None
             self._batch_consume_started = False
@@ -3934,6 +3921,7 @@ class TranslationTab(QWidget):
     
     def update_file_progress(self, current_file, total_files, filename):
         """Update the file-level progress."""
+        self._file_progress_started = True
         batch_active = getattr(self, "_batch_active", False)
         phase = getattr(self, "_batch_ui_phase", None) if batch_active else None
         parse_speakers = bool(
@@ -4096,7 +4084,11 @@ class TranslationTab(QWidget):
         # changes until the final file progress update arrives. This
         # prevents the back/reset button from showing prematurely.
         try:
-            if self.files_total and self.files_completed < self.files_total:
+            if (
+                getattr(self, "_file_progress_started", False)
+                and self.files_total
+                and self.files_completed < self.files_total
+            ):
                 self._finish_pending = (success, message)
                 return
         except Exception:

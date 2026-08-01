@@ -118,6 +118,17 @@ class TranslationTabUITests(unittest.TestCase):
         self.assertEqual(result[0], "SUBPROCESS_ERROR")
         self.assertIn("validation failed", result[1].lower())
 
+    def test_finish_before_file_progress_unlocks_ui_immediately(self) -> None:
+        self.tab.files_total = 2
+        self.tab.files_completed = 0
+        self.tab._file_progress_started = False
+
+        with mock.patch.object(self.tab, "_apply_finish_ui") as apply_finish:
+            self.tab.on_translation_finished(False, "Speaker translation canceled")
+
+        apply_finish.assert_called_once_with(False, "Speaker translation canceled")
+        self.assertIsNone(self.tab._finish_pending)
+
     def test_wide_setup_places_run_choices_side_by_side(self) -> None:
         self.tab.resize(1900, 900)
         self.app.processEvents()

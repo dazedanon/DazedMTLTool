@@ -155,6 +155,39 @@ TRANSLATION_CONFIG = TranslationConfig(
 )
 
 
+def refreshRuntimeConfig():
+    """Refresh import-time settings before an in-process speaker preflight."""
+    global MODEL, TIMEOUT, LANGUAGE, PROMPT, VOCAB
+    global PRICING_CONFIG, INPUTAPICOST, OUTPUTAPICOST, BATCHSIZE, FREQUENCY_PENALTY
+
+    MODEL = os.getenv("model") or MODEL
+    LANGUAGE = os.getenv("language", LANGUAGE or "English").capitalize()
+    try:
+        TIMEOUT = int(os.getenv("timeout", str(TIMEOUT)))
+    except (TypeError, ValueError):
+        pass
+    PROMPT = _load_wolf_prompt()
+    VOCAB = read_active_glossary()
+    PRICING_CONFIG = getPricingConfig(MODEL)
+    INPUTAPICOST = PRICING_CONFIG["inputAPICost"]
+    OUTPUTAPICOST = PRICING_CONFIG["outputAPICost"]
+    BATCHSIZE = PRICING_CONFIG["batchSize"]
+    FREQUENCY_PENALTY = PRICING_CONFIG["frequencyPenalty"]
+
+    TRANSLATION_CONFIG.model = MODEL
+    TRANSLATION_CONFIG.language = LANGUAGE
+    TRANSLATION_CONFIG.prompt = PROMPT
+    TRANSLATION_CONFIG.vocab = VOCAB
+    TRANSLATION_CONFIG.batchSize = BATCHSIZE
+    TRANSLATION_CONFIG.convertQuotes = os.getenv(
+        "convertQuotes", "true"
+    ).strip().lower() in ("true", "1", "yes")
+    TRANSLATION_CONFIG.useSfxReference = os.getenv(
+        "useSfxReference", "true"
+    ).strip().lower() in ("true", "1", "yes")
+    return TRANSLATION_CONFIG
+
+
 def _batch_phase() -> str:
     """Current Anthropic batch phase from the GUI subprocess env (``collect`` / ``consume``)."""
     return (os.getenv("BATCH_PHASE") or "").strip().lower()
@@ -167,14 +200,8 @@ def handleWolfDawn(filename, estimate):
     FILENAME = filename
     # Re-read workflow-configured settings so edits made this session take effect
     # even when translation runs in-process (the module import is cached).
+    refreshRuntimeConfig()
     SPEAKER_CONFIG = wolf_speakers.load_config()
-    # Reload the glossary so a later phase (DB text / dialogue) picks up names
-    # that an earlier Phase 0 (names) harvested into glossary.txt.
-    VOCAB = read_active_glossary()
-    TRANSLATION_CONFIG.vocab = VOCAB
-    # Reload system.md + per-game overlays (game.md / quirks / custom) via DAZED_GAME_ROOT.
-    PROMPT = _load_wolf_prompt()
-    TRANSLATION_CONFIG.prompt = PROMPT
 
     start = time.time()
     translatedData = openFiles(filename)

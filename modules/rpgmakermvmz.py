@@ -88,6 +88,40 @@ TRANSLATION_CONFIG = TranslationConfig(
 )
 LEAVE = False
 
+
+def refreshRuntimeConfig():
+    """Refresh import-time translation settings for in-process GUI workflows."""
+    global MODEL, TIMEOUT, LANGUAGE, PROMPT, VOCAB_PATH, VOCAB
+    global PRICING_CONFIG, INPUTAPICOST, OUTPUTAPICOST, BATCHSIZE, FREQUENCY_PENALTY
+
+    MODEL = os.getenv("model") or MODEL
+    LANGUAGE = os.getenv("language", LANGUAGE or "English").capitalize()
+    try:
+        TIMEOUT = int(os.getenv("timeout", str(TIMEOUT)))
+    except (TypeError, ValueError):
+        pass
+    PROMPT = load_system_prompt()
+    VOCAB_PATH = active_glossary_path()
+    VOCAB = read_active_glossary()
+    PRICING_CONFIG = getPricingConfig(MODEL)
+    INPUTAPICOST = PRICING_CONFIG["inputAPICost"]
+    OUTPUTAPICOST = PRICING_CONFIG["outputAPICost"]
+    BATCHSIZE = PRICING_CONFIG["batchSize"]
+    FREQUENCY_PENALTY = PRICING_CONFIG["frequencyPenalty"]
+
+    TRANSLATION_CONFIG.model = MODEL
+    TRANSLATION_CONFIG.language = LANGUAGE
+    TRANSLATION_CONFIG.prompt = PROMPT
+    TRANSLATION_CONFIG.vocab = VOCAB
+    TRANSLATION_CONFIG.batchSize = BATCHSIZE
+    TRANSLATION_CONFIG.convertQuotes = os.getenv(
+        "convertQuotes", "true"
+    ).strip().lower() in ("true", "1", "yes")
+    TRANSLATION_CONFIG.useSfxReference = os.getenv(
+        "useSfxReference", "true"
+    ).strip().lower() in ("true", "1", "yes")
+    return TRANSLATION_CONFIG
+
 # Config (Default)
 # FIRSTLINESPEAKERS: Guess speaker from first line.
 FIRSTLINESPEAKERS = False
@@ -277,10 +311,9 @@ def handleMVMZ(filename, estimate):
     except Exception:
         pass
 
-    # Reload system.md + per-game overlays (game.md / quirks / custom) via DAZED_GAME_ROOT.
-    PROMPT = load_system_prompt()
-    TRANSLATION_CONFIG.prompt = PROMPT
-    _reload_vocab()
+    # Refresh settings and per-game context even when this module is cached in
+    # the long-lived GUI process.
+    refreshRuntimeConfig()
 
     # Translate
     start = time.time()
@@ -5403,7 +5436,7 @@ def pendingSpeakerNames() -> list[str]:
 
 
 def finalizeSpeakerParse():
-    """Batch translate collected speakers and write fresh # Speakers section."""
+    """Batch translate collected speakers and merge them into # Speakers."""
     if not SPEAKER_PARSE_MODE:
         return False
     try:
@@ -5444,18 +5477,14 @@ def finalizeSpeakerParse():
         if to_translate:
             try:
                 THREAD_CTX.in_speaker = True
-            except Exception:
-                pass
-            # Full list; translateAI chunks with the Settings batch size.
-            resp = translateAI(
-                to_translate,
-                ctx("names.speaker"),
-                True,
-            )
-            try:
+                # Full list; translateAI chunks with the Settings batch size.
+                resp = translateAI(
+                    to_translate,
+                    ctx("names.speaker"),
+                    True,
+                )
+            finally:
                 THREAD_CTX.in_speaker = False
-            except Exception:
-                pass
             # Record token usage so it appears in the TOTAL string
             try:
                 with LOCK:
@@ -5463,7 +5492,38 @@ def finalizeSpeakerParse():
                     TOKENS[1] += resp[1][1]
             except Exception:
                 pass
-            # Emit a one-time summary line for speaker translation using the same format
+            tl_list = resp[0]
+            if (
+                bool(getattr(THREAD_CTX, "last_translation_had_mismatch", False))
+                or not isinstance(tl_list, list)
+                or len(tl_list) != len(to_translate)
+            ):
+                return False
+
+            translated_pairs = []
+            for orig, tl in zip(to_translate, tl_list):
+                norm = _normalize_speaker_nameplate(tl)
+                target_uses_cjk = str(LANGUAGE or "").strip().casefold() in {
+                    "chinese",
+                    "japanese",
+                }
+                if (
+                    not norm
+                    or (
+                        not target_uses_cjk
+                        and norm.strip().casefold() == str(orig).strip().casefold()
+                    )
+                    or (not target_uses_cjk and re.search(LANGREGEX, norm))
+                ):
+                    return False
+                translated_pairs.append((orig, norm))
+
+            with _speakerCacheLock:
+                for orig, norm in translated_pairs:
+                    if orig not in _speakerCache:
+                        _speakerCache[orig] = norm
+                        NAMESLIST.append([orig, norm])
+            # Emit success only after every returned name passes validation.
             try:
                 cost = calculateCost(resp[1][0], resp[1][1], MODEL)
                 totalTokenstring = (
@@ -5476,32 +5536,56 @@ def finalizeSpeakerParse():
                 tqdm.write("Speakers: " + totalTokenstring + Fore.GREEN + " \u2713 " + Fore.RESET)
             except Exception:
                 pass
-            tl_list = resp[0]
-            with _speakerCacheLock:
-                for orig, tl in zip(to_translate, tl_list):
-                    norm = _normalize_speaker_nameplate(tl)
-                    if re.search(r"([a-zA-Z？?])", norm) is None:
-                        norm = (tl or "").strip() or orig
-                    if orig not in _speakerCache:
-                        _speakerCache[orig] = norm
-                        NAMESLIST.append([orig, norm])
 
         content = vocab_path.read_text(encoding="utf-8")
 
+        # Merge generated names into the existing section. Parse Speakers can be
+        # run on an arbitrary file subset, so replacing the section would erase
+        # valid names learned from files outside that selection.
+        speakers_pattern = re.compile(r"^[\t ]*#+\s*Speakers\s*$\r?\n.*?(?=^[\t ]*#|\Z)", re.MULTILINE | re.DOTALL)
+        existing_match = speakers_pattern.search(content)
+        rows: list[tuple[str | None, str, str | None]] = []
+        source_indexes: dict[str, int] = {}
+        if existing_match:
+            for raw in existing_match.group(0).splitlines()[1:]:
+                line = raw.strip()
+                if not line:
+                    continue
+                pair = re.match(r"^(.+?)\s+\(([^()]*)\)(.*)$", line)
+                if pair:
+                    source = pair.group(1).strip()
+                    source_indexes.setdefault(source, len(rows))
+                    rows.append((source, raw.rstrip(), pair.group(2).strip()))
+                else:
+                    rows.append((None, raw.rstrip(), None))
+
         seen = set()
-        lines = []
         for orig, tl in NAMESLIST:
             if not orig or not tl:
                 continue
             if orig in seen:
                 continue
             seen.add(orig)
-            lines.append(f"{orig} ({tl})")
+            if (
+                str(orig).strip().casefold() == str(tl).strip().casefold()
+                or re.search(LANGREGEX, str(tl))
+            ):
+                continue
+            new_line = f"{orig} ({tl})"
+            existing_index = source_indexes.get(orig)
+            if existing_index is None:
+                source_indexes[orig] = len(rows)
+                rows.append((orig, new_line, str(tl).strip()))
+            else:
+                source, old_line, old_translation = rows[existing_index]
+                if str(old_translation or "").strip() != str(tl).strip():
+                    rows[existing_index] = (source, new_line, str(tl).strip())
+
+        lines = [line for _source, line, _translation in rows if line]
         if not lines:
             return True
         section_block = "# Speakers\n" + "\n".join(lines) + "\n\n"
 
-        speakers_pattern = re.compile(r"^[\t ]*#+\s*Speakers\s*$\r?\n.*?(?=^[\t ]*#|\Z)", re.MULTILINE | re.DOTALL)
         content = speakers_pattern.sub("", content)
 
         game_char_header = re.compile(r"^[\t ]*#\s*Game Characters\s*$", re.MULTILINE)

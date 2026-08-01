@@ -17,6 +17,49 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class EvaluationSourceFolderTests(unittest.TestCase):
+    def test_event_capture_uses_selected_glossary_without_leaking_runtime_state(self):
+        import modules.rpgmakermvmz as mvmz
+
+        page = {
+            "list": [
+                {"code": 101, "indent": 0, "parameters": ["", 0, 0, 2, "騎士"]},
+                {"code": 401, "indent": 0, "parameters": ["こんにちは、世界。"]},
+                {"code": 0, "indent": 0, "parameters": []},
+            ]
+        }
+        original_vocab = mvmz.VOCAB
+        original_config_vocab = mvmz.TRANSLATION_CONFIG.vocab
+        with mvmz._speakerCacheLock:
+            original_cache = dict(mvmz._speakerCache)
+        try:
+            mvmz.VOCAB = "# Speakers\n騎士 (Wrong Cached Name)\n"
+            mvmz.TRANSLATION_CONFIG.vocab = mvmz.VOCAB
+            with mvmz._speakerCacheLock:
+                mvmz._speakerCache.clear()
+                mvmz._speakerCache["騎士"] = "Stale Cache"
+
+            segments = evaluation._capture_page_data(
+                page,
+                "Map001.json",
+                {"event": 1, "page": 1},
+                glossary="# Speakers\n騎士 (Selected Knight)\n",
+            )
+
+            self.assertEqual(
+                [segment["source"] for segment in segments],
+                ["[Selected Knight]: こんにちは、世界。"],
+            )
+            self.assertEqual(mvmz.VOCAB, "# Speakers\n騎士 (Wrong Cached Name)\n")
+            self.assertEqual(mvmz.TRANSLATION_CONFIG.vocab, mvmz.VOCAB)
+            with mvmz._speakerCacheLock:
+                self.assertEqual(mvmz._speakerCache, {"騎士": "Stale Cache"})
+        finally:
+            mvmz.VOCAB = original_vocab
+            mvmz.TRANSLATION_CONFIG.vocab = original_config_vocab
+            with mvmz._speakerCacheLock:
+                mvmz._speakerCache.clear()
+                mvmz._speakerCache.update(original_cache)
+
     def test_rpg_maker_mz_game_root_resolves_data_folder(self):
         with tempfile.TemporaryDirectory() as temporary:
             game = Path(temporary)
@@ -748,6 +791,131 @@ class EvaluationManifestTests(unittest.TestCase):
                 execute.call_count, len(self.manifest["executions"])
             )
             self.assertFalse(checkpoint.exists())
+
+    def test_live_evaluation_retries_transient_request_errors(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            run_dir = Path(temporary)
+            candidate = {
+                "id": "candidate-1",
+                "provider": "openai",
+                "endpoint": "http://127.0.0.1:8000/v1",
+                "model": "local-model",
+                "label": "local-model",
+                "key_name": "Local",
+                "execution": "live",
+                "status": "prepared",
+                "estimate": {"cost_usd": 0.0},
+            }
+            evaluation._atomic_write_json(run_dir / "manifest.json", self.manifest)
+            evaluation._atomic_write_json(run_dir / "state.json", {
+                "run_id": "live-retry-test",
+                "status": "prepared",
+                "candidates": [candidate],
+            })
+
+            def response(_provider, params, **_kwargs):
+                required = params["response_format"]["json_schema"]["schema"]["required"]
+                return {
+                    "text": json.dumps({key: "English text" for key in required}),
+                    "prompt_tokens": 100,
+                    "completion_tokens": 20,
+                    "cache_read_input_tokens": 0,
+                    "cache_creation_input_tokens": 0,
+                    "thinking_tokens": 0,
+                }
+
+            responses = [RuntimeError("HTTP 429: rate limited"), response]
+
+            def retry_once(provider, params, **kwargs):
+                result = responses.pop(0)
+                if isinstance(result, Exception):
+                    raise result
+                return result(provider, params, **kwargs)
+
+            with (
+                mock.patch.object(evaluation, "_clients", return_value=(object(), None)),
+                mock.patch.object(
+                    evaluation.batch_api,
+                    "execute_live_request",
+                    side_effect=retry_once,
+                ) as execute,
+                mock.patch.object(evaluation.time, "sleep") as sleep,
+            ):
+                state = evaluation.submit_run(run_dir, {"candidate-1": "local-key"})
+
+            self.assertEqual(state["status"], "completed")
+            self.assertEqual(
+                execute.call_count, len(self.manifest["executions"]) + 1
+            )
+            sleep.assert_called_once_with(1)
+            self.assertNotIn("live_retryable_error", state["candidates"][0])
+
+    def test_live_evaluation_leaves_exhausted_transient_error_resumable(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            run_dir = Path(temporary)
+            candidate = {
+                "id": "candidate-1",
+                "provider": "openai",
+                "endpoint": "http://127.0.0.1:8000/v1",
+                "model": "local-model",
+                "label": "local-model",
+                "key_name": "Local",
+                "execution": "live",
+                "status": "prepared",
+                "estimate": {"cost_usd": 0.0},
+            }
+            evaluation._atomic_write_json(run_dir / "manifest.json", self.manifest)
+            evaluation._atomic_write_json(run_dir / "state.json", {
+                "run_id": "live-retry-resume-test",
+                "status": "prepared",
+                "candidates": [candidate],
+            })
+
+            with (
+                mock.patch.object(evaluation, "_clients", return_value=(object(), None)),
+                mock.patch.object(
+                    evaluation.batch_api,
+                    "execute_live_request",
+                    side_effect=ConnectionError("temporary network failure"),
+                ) as execute,
+                mock.patch.object(evaluation.time, "sleep"),
+            ):
+                interrupted = evaluation.submit_run(
+                    run_dir, {"candidate-1": "local-key"}
+                )
+
+            live_candidate = interrupted["candidates"][0]
+            self.assertEqual(interrupted["status"], "partially_submitted")
+            self.assertEqual(live_candidate["status"], "running_live")
+            self.assertEqual(execute.call_count, evaluation.LIVE_REQUEST_MAX_ATTEMPTS)
+            self.assertIn("temporary network failure", live_candidate["live_retryable_error"])
+            self.assertNotIn("provider_errors", live_candidate)
+
+            def response(_provider, params, **_kwargs):
+                required = params["response_format"]["json_schema"]["schema"]["required"]
+                return {
+                    "text": json.dumps({key: "English text" for key in required}),
+                    "prompt_tokens": 100,
+                    "completion_tokens": 20,
+                    "cache_read_input_tokens": 0,
+                    "cache_creation_input_tokens": 0,
+                    "thinking_tokens": 0,
+                }
+
+            with (
+                mock.patch.object(evaluation, "_clients", return_value=(object(), None)),
+                mock.patch.object(
+                    evaluation.batch_api,
+                    "execute_live_request",
+                    side_effect=response,
+                ),
+            ):
+                completed = evaluation.submit_run(
+                    run_dir, {"candidate-1": "local-key"}
+                )
+
+            self.assertEqual(completed["status"], "completed")
+            self.assertNotIn("live_retryable_error", completed["candidates"][0])
 
     def test_missing_provider_requests_reduce_validity(self):
         processed, summary = evaluation._process_results(self.manifest, {}, [])

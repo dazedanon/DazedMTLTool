@@ -45,6 +45,7 @@ class MVMZSpeakerVocabTests(unittest.TestCase):
         mvmz.SPEAKER_PARSE_MODE = self.original_parse_mode
         mvmz.PREFLIGHT_COUNT_MODE = self.original_preflight
         mvmz.TOKENS[:] = self.original_tokens
+        mvmz.THREAD_CTX.last_translation_had_mismatch = False
         with mvmz._speakerCacheLock:
             mvmz._speakerCache.clear()
 
@@ -151,6 +152,71 @@ class MVMZSpeakerVocabTests(unittest.TestCase):
         )
         self.assertIn("騎士 (Knight)", written)
         self.assertIn("秘書官 (Secretary)", written)
+
+    def test_parse_speakers_preserves_entries_from_unselected_files(self):
+        mvmz.SPEAKER_PARSE_MODE = True
+        mvmz.SPEAKER_COLLECTED = ["騎士"]
+        with TemporaryDirectory() as tmp:
+            glossary_path = Path(tmp) / "glossary.txt"
+            glossary_path.write_text(
+                "# Speakers\n騎士 (Knight)\n司祭 (Priest)\n\n# Terms\n剣 (Sword)\n",
+                encoding="utf-8",
+            )
+            with (
+                patch.object(mvmz, "VOCAB_PATH", glossary_path),
+                patch.object(mvmz, "active_glossary_path", return_value=glossary_path),
+                patch.object(mvmz, "translateAI") as translate,
+            ):
+                self.assertTrue(mvmz.finalizeSpeakerParse())
+            written = glossary_path.read_text(encoding="utf-8")
+
+        translate.assert_not_called()
+        self.assertIn("騎士 (Knight)", written)
+        self.assertIn("司祭 (Priest)", written)
+
+    def test_parse_speakers_rejects_source_fallback_without_touching_glossary(self):
+        mvmz.SPEAKER_PARSE_MODE = True
+        mvmz.SPEAKER_COLLECTED = ["騎士"]
+        with TemporaryDirectory() as tmp:
+            glossary_path = Path(tmp) / "glossary.txt"
+            original = "# Speakers\n司祭 (Priest)\n\n# Terms\n剣 (Sword)\n"
+            glossary_path.write_text(original, encoding="utf-8")
+
+            def failed_translation(*_args, **_kwargs):
+                mvmz.THREAD_CTX.last_translation_had_mismatch = True
+                return [["騎士"], [3, 1]]
+
+            with (
+                patch.object(mvmz, "VOCAB_PATH", glossary_path),
+                patch.object(mvmz, "active_glossary_path", return_value=glossary_path),
+                patch.object(mvmz, "translateAI", side_effect=failed_translation),
+            ):
+                self.assertFalse(mvmz.finalizeSpeakerParse())
+            written = glossary_path.read_text(encoding="utf-8")
+
+        self.assertEqual(written, original)
+        self.assertNotIn("騎士 (騎士)", written)
+
+    def test_parse_speakers_accepts_non_latin_target_name(self):
+        mvmz.SPEAKER_PARSE_MODE = True
+        mvmz.SPEAKER_COLLECTED = ["騎士"]
+        with TemporaryDirectory() as tmp:
+            glossary_path = Path(tmp) / "glossary.txt"
+            glossary_path.write_text("# Speakers\n", encoding="utf-8")
+            with (
+                patch.object(mvmz, "LANGUAGE", "Russian"),
+                patch.object(mvmz, "VOCAB_PATH", glossary_path),
+                patch.object(mvmz, "active_glossary_path", return_value=glossary_path),
+                patch.object(
+                    mvmz,
+                    "translateAI",
+                    return_value=[["Рыцарь"], [3, 1]],
+                ),
+            ):
+                self.assertTrue(mvmz.finalizeSpeakerParse())
+            written = glossary_path.read_text(encoding="utf-8")
+
+        self.assertIn("騎士 (Рыцарь)", written)
 
     def test_finalize_without_glossary_does_not_spend_on_speakers(self):
         mvmz.SPEAKER_PARSE_MODE = True
