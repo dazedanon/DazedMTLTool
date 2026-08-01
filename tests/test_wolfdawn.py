@@ -251,6 +251,11 @@ class TestSpeakerPreflight(unittest.TestCase):
             "Speakers", [("騎士", "骑士")], merge=True
         )
 
+    def test_chinese_speaker_rejects_unchanged_japanese_kana(self):
+        with patch.object(wd, "LANGUAGE", "Chinese"):
+            self.assertFalse(wd._speaker_translation_valid("セルリア", "セルリア"))
+            self.assertTrue(wd._speaker_translation_valid("騎士", "骑士"))
+
 
 class TestCollectEntries(unittest.TestCase):
     def test_counts_per_kind(self):

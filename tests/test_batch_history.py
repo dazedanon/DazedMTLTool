@@ -162,6 +162,25 @@ class BatchRunStateTests(BatchHistoryTestBase):
 
         self.assertEqual((stale, total), (0, 1))
 
+    def test_same_payload_with_different_history_queues_twice(self):
+        payload = '{"Line1": "そうです"}'
+        T.queue_batch_request(
+            payload, "English", {"model": "gpt-test"},
+            provider="openai", request_context=["He agreed."],
+        )
+        T.queue_batch_request(
+            payload, "English", {"model": "gpt-test"},
+            provider="openai", request_context=["She disagreed."],
+        )
+        T.flush_batch_queue()
+
+        queue = T._read_batch_file(T.BATCH_QUEUE_FILE)
+        self.assertEqual(len(queue), 2)
+        self.assertEqual(
+            {entry["request_context"] for entry in queue.values()},
+            {'["He agreed."]', '["She disagreed."]'},
+        )
+
     def test_queued_sfx_context_becomes_stale_when_reference_is_disabled(self):
         payload = '{"Line1": "ドキドキ"}'
         config = T.TranslationConfig(
@@ -275,6 +294,29 @@ class HistorySurvivalTests(BatchHistoryTestBase):
         self.assertIs(resolved, sentinel)
         client.assert_called_once_with(
             "openai", api_key="eval-secret", api_url="https://api.openai.com/v1"
+        )
+
+    def test_evaluation_history_uses_submitted_endpoint(self):
+        entry = {
+            "provider": "openai",
+            "key_name": "Eval OpenAI",
+            "endpoint": "https://submitted.example/v1",
+        }
+        with (
+            mock.patch("util.api_keys.get_secret", return_value="eval-secret"),
+            mock.patch(
+                "util.api_keys.get_endpoint",
+                return_value="https://changed.example/v1",
+            ),
+            mock.patch("util.api_keys.is_keyless", return_value=False),
+            mock.patch.object(BH, "get_provider_client") as client,
+        ):
+            BH._client_for_entry(entry)
+
+        client.assert_called_once_with(
+            "openai",
+            api_key="eval-secret",
+            api_url="https://submitted.example/v1",
         )
 
     def test_normal_submission_records_matching_active_key_name(self):
@@ -684,6 +726,26 @@ class CancelTests(BatchHistoryTestBase):
         ids = [b["id"] for b in state.get("batches", [])]
         self.assertNotIn("msgbatch_c1", ids)
         self.assertIn("msgbatch_c2", ids)
+
+    def test_cancel_transport_failure_preserves_active_status(self):
+        BH.upsert_history_entry(
+            "msgbatch_c1", status=BH.STATUS_SUBMITTED, api_status="in_progress"
+        )
+        with (
+            mock.patch.object(BH, "_client_for_entry", return_value=object()),
+            mock.patch.object(
+                BH,
+                "provider_retrieve_batch",
+                side_effect=TimeoutError("temporary outage"),
+            ),
+        ):
+            results = BH.cancel_batches(["msgbatch_c1"])
+
+        self.assertFalse(results[0]["ok"])
+        entry = BH.read_history()["batches"][0]
+        self.assertEqual(entry["status"], BH.STATUS_SUBMITTED)
+        self.assertEqual(entry["api_status"], "in_progress")
+        self.assertIn("cancel failed", entry["notes"])
 
 
 class UsageTests(BatchHistoryTestBase):

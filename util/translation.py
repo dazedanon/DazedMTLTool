@@ -472,7 +472,8 @@ def validate_translation_content(
     
     invalid_indices = []
     reasons = []
-    target_uses_cjk = str(target_language or "").strip().casefold() in {
+    normalized_target = str(target_language or "").strip().casefold()
+    target_uses_cjk = normalized_target in {
         "chinese",
         "japanese",
     }
@@ -549,6 +550,14 @@ def validate_translation_content(
             # RPG Maker choice lists commonly use U+3000 as intentional visual
             # padding, and preserving that layout is not untranslated content.
             residue_text = trans_str.replace("\u3000", "")
+            if normalized_target == "chinese" and re.search(
+                r"[ぁ-ゖァ-ヺー\uFF66-\uFF9F]", residue_text
+            ):
+                invalid_indices.append(i)
+                reasons.append(
+                    f"Line{i+1}: Japanese kana remains in Chinese translation"
+                )
+                continue
             if not target_uses_cjk and re.search(langRegex, residue_text):
                 invalid_indices.append(i)
                 reasons.append(f"Line{i+1}: Source-language text remains in translation")
@@ -788,8 +797,30 @@ def expand_clean_to_batch(clean_values, tItem, corrupted_map, no_japanese_map):
             expanded.append(tItem[j])
     return expanded
 
-def get_cache_key(payload, language, cache_context=None):
-    """Generate a cache key for a payload and its matched dynamic context.
+def _normalize_cache_request_context(request_context):
+    """Return the stable, API-relevant form of conversation history."""
+    if request_context is None:
+        return ""
+    if isinstance(request_context, (list, tuple)):
+        values = [
+            str(item) for item in request_context
+            if item is not None and str(item).strip()
+        ]
+        return json.dumps(values, ensure_ascii=False, separators=(",", ":"))
+    if isinstance(request_context, dict):
+        return json.dumps(
+            request_context,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+            default=str,
+        )
+    value = str(request_context)
+    return value if value.strip() else ""
+
+
+def get_cache_key(payload, language, cache_context=None, request_context=None):
+    """Generate a cache key for a payload and its dynamic/request context.
 
     ``cache_context`` is normally the subset of the active glossary matched to
     this payload. Keeping it in the key prevents a translation produced with an
@@ -807,12 +838,20 @@ def get_cache_key(payload, language, cache_context=None):
             str(cache_context).encode("utf-8")
         ).hexdigest()
         combined += f"|context:{context_hash}"
+    normalized_request_context = _normalize_cache_request_context(request_context)
+    if normalized_request_context:
+        request_hash = hashlib.sha256(
+            normalized_request_context.encode("utf-8")
+        ).hexdigest()
+        combined += f"|request:{request_hash}"
     return hashlib.md5(combined.encode("utf-8")).hexdigest()
 
-def get_cached_translation(payload, language, cache_context=None):
+def get_cached_translation(
+    payload, language, cache_context=None, request_context=None
+):
     """Get cached translation if it exists"""
     global _cache
-    key = get_cache_key(payload, language, cache_context)
+    key = get_cache_key(payload, language, cache_context, request_context)
     while True:
         with CACHE_LOCK:
             with _translation_cache_file_lock():
@@ -837,10 +876,12 @@ def get_cached_translation(payload, language, cache_context=None):
 
         time.sleep(CACHE_WAIT_INTERVAL)
 
-def cache_translation(payload, translation, language, cache_context=None):
+def cache_translation(
+    payload, translation, language, cache_context=None, request_context=None
+):
     """Cache a translation payload and its response"""
     global _cache
-    key = get_cache_key(payload, language, cache_context)
+    key = get_cache_key(payload, language, cache_context, request_context)
     
     with CACHE_LOCK:
         with _translation_cache_file_lock():
@@ -1049,12 +1090,14 @@ def _write_batch_file(path, data):
     tmp_file.replace(path)
 
 
-def peek_cached_translation(payload, language, cache_context=None):
+def peek_cached_translation(
+    payload, language, cache_context=None, request_context=None
+):
     """Cache lookup that never blocks or writes a pending marker.
 
     The collect pass uses this instead of get_cached_translation so abandoned
     pending markers can't stall the consume pass for CACHE_PENDING_TTL."""
-    key = get_cache_key(payload, language, cache_context)
+    key = get_cache_key(payload, language, cache_context, request_context)
     with CACHE_LOCK:
         with _translation_cache_file_lock():
             cache = _read_cache_from_disk()
@@ -1066,20 +1109,28 @@ def peek_cached_translation(payload, language, cache_context=None):
     return entry
 
 
-def queue_batch_request(payload, language, params, cache_context=None, provider=None):
+def queue_batch_request(
+    payload, language, params, cache_context=None, provider=None,
+    request_context=None,
+):
     """Queue one Batches API request during the collect pass.
 
     Deduped by the same key the translation cache uses, so identical payloads
-    across files are only paid for once. Entries are buffered in memory and
-    merged to disk by flush_batch_queue() at the end of each translateAI call.
+    with identical conversation context are only paid for once. Entries are
+    buffered in memory and merged to disk by flush_batch_queue() at the end of
+    each translateAI call.
     """
-    key = get_cache_key(payload, language, cache_context)
+    normalized_request_context = _normalize_cache_request_context(request_context)
+    key = get_cache_key(
+        payload, language, cache_context, normalized_request_context
+    )
     with BATCH_LOCK:
         _batch_queue_pending[key] = {
             "payload": payload,
             "language": language,
             "params": params,
             "provider": provider or getBatchProvider(params.get("model", "")),
+            "request_context": normalized_request_context,
         }
     return key
 
@@ -1130,18 +1181,27 @@ def batchQueueStaleContextCount(vocab_text=None, use_sfx_reference=None):
     for recorded_key, entry in queue.items():
         payload = entry.get("payload", "")
         language = entry.get("language", "")
-        matched_glossary = buildMatchedVocabText(vocab_pairs, payload)
+        matched_glossary = buildMatchedVocabText(
+            vocab_pairs, payload, entry.get("request_context")
+        )
         matched_sfx = build_sfx_reference_text(
             payload, enabled=bool(use_sfx_reference)
         )
         matched_context = matched_glossary + matched_sfx
-        current_key = get_cache_key(payload, language, matched_context)
+        current_key = get_cache_key(
+            payload,
+            language,
+            matched_context,
+            entry.get("request_context"),
+        )
         if current_key != recorded_key:
             stale += 1
     return stale, len(queue)
 
 
-def take_batch_result(payload, language, cache_context=None):
+def take_batch_result(
+    payload, language, cache_context=None, request_context=None
+):
     """Return the fetched batch response dict for a payload, or None.
 
     The results file is loaded once per process — it is written before the
@@ -1152,16 +1212,22 @@ def take_batch_result(payload, language, cache_context=None):
             if _batch_results is None:
                 with _batch_file_lock():
                     _batch_results = _read_batch_file(BATCH_RESULTS_FILE)
-    return _batch_results.get(get_cache_key(payload, language, cache_context))
+    return _batch_results.get(
+        get_cache_key(payload, language, cache_context, request_context)
+    )
 
 
 class BatchResultUnavailableError(RuntimeError):
     """A consume pass could not safely match a fetched provider result."""
 
 
-def require_batch_result(payload, language, cache_context=None):
+def require_batch_result(
+    payload, language, cache_context=None, request_context=None
+):
     """Return one fetched result or stop before an unapproved live API call."""
-    result = take_batch_result(payload, language, cache_context)
+    result = take_batch_result(
+        payload, language, cache_context, request_context
+    )
     if result is None:
         raise BatchResultUnavailableError(
             "[BATCH] No fetched result matches this request and its current "
@@ -3402,7 +3468,26 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None, mism
         formatType = "json"
         tList = [text]
 
+    # Batch collection sends preceding source lines as history. Keep that
+    # request context stable during consume even though earlier fetched
+    # translations have already replaced those source lines by then.
+    initial_history = list(history) if isinstance(history, list) else history
+    source_batches = [
+        list(item) if isinstance(item, list) else item for item in tList
+    ]
+
     for index, tItem in enumerate(tList):
+        request_history = history
+        if batch_phase in {"collect", "consume"} and isinstance(tItem, list):
+            if index == 0:
+                request_history = initial_history
+            else:
+                previous_source = source_batches[index - 1]
+                request_history = (
+                    previous_source[-config.maxHistory:]
+                    if isinstance(previous_source, list)
+                    else previous_source
+                )
         # Check if text contains target language
         if not re.search(config.langRegex, str(tItem)):
             if pbar is not None:
@@ -3532,7 +3617,7 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None, mism
         # fingerprint is part of the lookup key, so results produced under an
         # older relevant spelling cannot bypass the current glossary.
         static_system, glossary_text, sfx_text, user = createContextParts(
-            config, subbedT, formatType, history
+            config, subbedT, formatType, request_history
         )
         vocab_text = glossary_text + sfx_text
 
@@ -3548,11 +3633,11 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None, mism
         # consume pass to wait on)
         if queue_for_batch:
             cached_result = peek_cached_translation(
-                subbedT, config.language, vocab_text
+                subbedT, config.language, vocab_text, request_history
             )
         else:
             cached_result = get_cached_translation(
-                subbedT, config.language, vocab_text
+                subbedT, config.language, vocab_text, request_history
             )
         if cached_result is not None:
             cached_values = cached_result if isinstance(cached_result, list) else [cached_result]
@@ -3638,12 +3723,12 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None, mism
             numLines = len(clean_tItem) if isinstance(tItem, list) else 1
             if batch_provider == "anthropic":
                 params = buildClaudeRequest(
-                    static_system, user, history, formatType,
+                    static_system, user, request_history, formatType,
                     config.model, numLines, vocab_text=vocab_text,
                 )
             else:
                 params = buildOpenAIRequest(
-                    static_system, user, history, 0.05, formatType,
+                    static_system, user, request_history, 0.05, formatType,
                     config.model, numLines, vocab_text=vocab_text,
                     api_provider=batch_provider,
                 )
@@ -3653,6 +3738,7 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None, mism
                 params,
                 cache_context=vocab_text,
                 provider=batch_provider,
+                request_context=request_history,
             )
             if lock and pbar is not None:
                 with lock:
@@ -3662,7 +3748,9 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None, mism
 
         # Calculate estimate if in estimate mode
         if config.estimateMode:
-            estimate = countTokens(static_system + vocab_text, user, history)
+            estimate = countTokens(
+                static_system + vocab_text, user, request_history
+            )
             totalTokens[0] += estimate[0]
             totalTokens[1] += estimate[1]
 
@@ -3705,11 +3793,15 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None, mism
             # Cache the payload with original text as placeholder for future estimates
             if isinstance(tItem, list):
                 cache_translation(
-                    subbedT, tItem, config.language, cache_context=vocab_text
+                    subbedT, tItem, config.language,
+                    cache_context=vocab_text,
+                    request_context=request_history,
                 )
             else:
                 cache_translation(
-                    subbedT, [tItem], config.language, cache_context=vocab_text
+                    subbedT, [tItem], config.language,
+                    cache_context=vocab_text,
+                    request_context=request_history,
                 )
             
             continue
@@ -3751,7 +3843,10 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None, mism
             from_batch = False
             if batch_phase == "consume" and attempt == 0:
                 batch_result = require_batch_result(
-                    subbedT, config.language, cache_context=vocab_text
+                    subbedT,
+                    config.language,
+                    cache_context=vocab_text,
+                    request_context=request_history,
                 )
                 response = _AnthropicCompat(
                     batch_result.get("text", ""),
@@ -3772,7 +3867,7 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None, mism
                         "was stopped before any full-price fallback request."
                     )
                 try:
-                    response = translateText(static_system, current_user, history, 0.05, formatType, config.model, numLines, vocab_text=vocab_text)
+                    response = translateText(static_system, current_user, request_history, 0.05, formatType, config.model, numLines, vocab_text=vocab_text)
                 except Exception as api_err:
                     err_msg = f"[API_ERROR] {api_err}"
                     # Print to stdout so the GUI captures it immediately
@@ -4003,6 +4098,7 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None, mism
                         list(final_translations),
                         config.language,
                         cache_context=vocab_text,
+                        request_context=request_history,
                     )
 
                 # Re-insert skipped items at original positions
@@ -4041,6 +4137,7 @@ def translateAI(text, history, config, filename=None, pbar=None, lock=None, mism
                     final_translations,
                     config.language,
                     cache_context=vocab_text,
+                    request_context=request_history,
                 )
 
             if isinstance(tItem, list):

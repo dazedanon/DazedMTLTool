@@ -117,6 +117,15 @@ class TranslationContentValidationTests(unittest.TestCase):
         self.assertTrue(valid, reasons)
         self.assertEqual(indices, [])
 
+    def test_rejects_unchanged_japanese_kana_for_chinese_target(self):
+        valid, indices, reasons = tr.validate_translation_content(
+            ["こんにちは"], ["こんにちは"], r"[一-龠ぁ-ゔァ-ヴー]+", "Chinese"
+        )
+
+        self.assertFalse(valid)
+        self.assertEqual(indices, [0])
+        self.assertIn("Japanese kana remains", reasons[0])
+
     def test_rejects_japanese_prolonged_sound_mark(self):
         valid, indices, reasons = tr.validate_translation_content(
             ["ほげぇぇぇーーっ！！"], ["Hrooooghhhhhーー!!"],

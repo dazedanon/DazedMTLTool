@@ -104,7 +104,13 @@ def _client_for_entry(entry: dict):
         from util import api_keys as api_key_vault
 
         secret = api_key_vault.get_secret(key_name) or ""
-        endpoint = api_key_vault.get_endpoint(key_name) or ""
+        # The provider job belongs to the endpoint used at submission time.
+        # Fall back to the credential's current endpoint only for legacy rows.
+        endpoint = (
+            str(entry.get("endpoint") or "").strip()
+            or api_key_vault.get_endpoint(key_name)
+            or ""
+        )
         if not secret and not api_key_vault.is_keyless(key_name):
             raise ValueError(f"Saved API key {key_name!r} is unavailable")
         return get_provider_client(
@@ -413,7 +419,10 @@ def cancel_batches(batch_ids: Iterable[str]) -> list[dict]:
             results.append({"id": bid, "ok": True, "api_status": new_status})
         except Exception as exc:
             results.append({"id": bid, "ok": False, "error": str(exc)})
-            upsert_history_entry(bid, notes=f"cancel failed: {exc}", status=STATUS_ERROR)
+            # A local retrieval/network failure says nothing authoritative
+            # about the provider job. Preserve its active status so normal
+            # refresh and a later cancel attempt can recover it.
+            upsert_history_entry(bid, notes=f"cancel failed: {exc}")
 
     if canceled_active:
         _remove_active_batch_ids(canceled_active)

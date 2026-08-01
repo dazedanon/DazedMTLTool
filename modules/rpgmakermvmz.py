@@ -5082,15 +5082,14 @@ def _vocab_category_priority(category) -> int:
     return 1
 
 
-def _target_uses_cjk() -> bool:
-    return str(LANGUAGE or "").strip().casefold() in {"chinese", "japanese"}
-
-
 def _speaker_translation_valid(source: str, translated: str) -> bool:
     normalized = str(translated or "").strip()
     if not normalized:
         return False
-    if _target_uses_cjk():
+    target = str(LANGUAGE or "").strip().casefold()
+    if target == "chinese":
+        return re.search(r"[ぁ-ゖァ-ヺー\uFF66-\uFF9F]", normalized) is None
+    if target == "japanese":
         return True
     return (
         normalized.casefold() != str(source or "").strip().casefold()

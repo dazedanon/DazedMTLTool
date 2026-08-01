@@ -242,6 +242,13 @@ class MVMZSpeakerVocabTests(unittest.TestCase):
 
         self.assertIn("騎士 (骑士)", written)
 
+    def test_chinese_speaker_rejects_unchanged_japanese_kana(self):
+        with patch.object(mvmz, "LANGUAGE", "Chinese"):
+            self.assertFalse(
+                mvmz._speaker_translation_valid("セルリア", "セルリア")
+            )
+            self.assertTrue(mvmz._speaker_translation_valid("騎士", "骑士"))
+
     def test_finalize_without_glossary_does_not_spend_on_speakers(self):
         mvmz.SPEAKER_PARSE_MODE = True
         mvmz.SPEAKER_COLLECTED = ["騎士"]

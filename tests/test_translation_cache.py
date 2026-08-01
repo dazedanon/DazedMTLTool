@@ -58,6 +58,17 @@ class CacheKeyTests(CacheTestBase):
             T.get_cache_key(payload, "English", "カイン (Cain)"),
         )
 
+    def test_conversation_history_changes_the_key(self):
+        payload = '{"Line1": "そうです"}'
+        self.assertNotEqual(
+            T.get_cache_key(
+                payload, "English", request_context=["He agreed."]
+            ),
+            T.get_cache_key(
+                payload, "English", request_context=["She disagreed."]
+            ),
+        )
+
     def test_empty_matched_context_keeps_legacy_key(self):
         payload = '{"Line1": "名前のない文章"}'
         self.assertEqual(
@@ -143,6 +154,27 @@ class CacheRoundTripTests(CacheTestBase):
         )
         self.assertIsNone(
             T.peek_cached_translation(payload, "English", "カイン (Cain)")
+        )
+
+    def test_different_history_does_not_reuse_cached_translation(self):
+        payload = '{"Line1": "そうです"}'
+        T.cache_translation(
+            payload,
+            ["Yes."],
+            "English",
+            request_context=["He agreed."],
+        )
+
+        self.assertEqual(
+            T.peek_cached_translation(
+                payload, "English", request_context=["He agreed."]
+            ),
+            ["Yes."],
+        )
+        self.assertIsNone(
+            T.peek_cached_translation(
+                payload, "English", request_context=["She disagreed."]
+            )
         )
 
     def test_restored_japanese_control_parameter_is_masked_for_validation(self):
