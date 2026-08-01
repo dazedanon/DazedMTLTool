@@ -375,6 +375,7 @@ class ProviderSubmissionTests(BatchHistoryTestBase):
 
         checkpoint = T._read_batch_file(T.BATCH_STATE_FILE)
         self.assertEqual(checkpoint["status"], "partially_submitted")
+        self.assertTrue(checkpoint["run_id"].startswith("translation-"))
         self.assertEqual([item["id"] for item in checkpoint["batches"]], ["batch_paid_1"])
         self.assertEqual(
             [item["id"] for item in BH.read_history()["batches"]],
@@ -393,9 +394,19 @@ class ProviderSubmissionTests(BatchHistoryTestBase):
         self.assertEqual(submit.call_count, 1)
         self.assertEqual(ids, ["batch_paid_1", "batch_paid_2"])
         self.assertEqual(T.batchRunMetadata()["status"], "submitted")
+        final_state = T.batchRunMetadata()
+        self.assertEqual(final_state["run_id"], checkpoint["run_id"])
+        self.assertTrue(all(
+            item["run_id"] == checkpoint["run_id"]
+            for item in final_state["batches"]
+        ))
         self.assertEqual(
             [item["id"] for item in BH.read_history()["batches"]],
             ["batch_paid_1", "batch_paid_2"],
+        )
+        self.assertEqual(
+            {item["run_id"] for item in BH.read_history()["batches"]},
+            {checkpoint["run_id"]},
         )
 
     def test_partial_resume_blocks_switching_saved_api_key(self):
@@ -550,6 +561,98 @@ class RedownloadTests(BatchHistoryTestBase):
             T.BATCH_RESULTS_FILE.read_text(encoding="utf-8"), "{truncated"
         )
 
+    def test_redownload_reconstructs_every_split_in_the_translation_run(self):
+        for batch_id, custom_id, cache_key in (
+            ("batch-split-1", "req-1", "key-1"),
+            ("batch-split-2", "req-2", "key-2"),
+        ):
+            BH.upsert_history_entry(
+                batch_id,
+                status=BH.STATUS_ENDED,
+                provider="openai",
+                model="gpt-test",
+                run_id="translation-run-1",
+                custom_ids={custom_id: cache_key},
+            )
+
+        def download(batch_id, custom_ids, **_kwargs):
+            cache_key = next(iter(custom_ids.values()))
+            return ({cache_key: {"text": batch_id}}, [], {"input_tokens": 1})
+
+        with (
+            mock.patch.object(BH, "_client_for_entry", return_value=object()),
+            mock.patch.object(
+                BH, "provider_retrieve_batch",
+                return_value={"api_status": "completed", "ended": True},
+            ) as retrieve,
+            mock.patch.object(BH, "download_batch_results", side_effect=download),
+            mock.patch.object(BH, "_price_usage", return_value=0.01),
+        ):
+            info = BH.redownload_batch("batch-split-2")
+
+        self.assertEqual(retrieve.call_count, 2)
+        self.assertEqual(set(info["batch_ids"]), {"batch-split-1", "batch-split-2"})
+        self.assertEqual(
+            set(T._read_batch_file(T.BATCH_RESULTS_FILE)), {"key-1", "key-2"}
+        )
+        state = T._read_batch_file(T.BATCH_STATE_FILE)
+        self.assertEqual(state["run_id"], "translation-run-1")
+        self.assertEqual(set(state["batch_ids"]), {"batch-split-1", "batch-split-2"})
+
+    def test_redownload_does_not_replace_an_unrelated_active_run(self):
+        BH.upsert_history_entry(
+            "batch-history",
+            status=BH.STATUS_ENDED,
+            run_id="translation-history",
+            custom_ids={"req-1": "history-key"},
+        )
+        active_state = {
+            "status": "submitted",
+            "run_id": "translation-active",
+            "batches": [{"id": "batch-active", "custom_ids": {"req-a": "active-key"}}],
+        }
+        active_queue = {"active-key": {"payload": "paid work"}}
+        T._write_batch_file(T.BATCH_STATE_FILE, active_state)
+        T._write_batch_file(T.BATCH_QUEUE_FILE, active_queue)
+
+        with (
+            self.assertRaisesRegex(ValueError, "Another translation batch run"),
+            mock.patch.object(BH, "provider_retrieve_batch") as retrieve,
+        ):
+            BH.redownload_batch("batch-history")
+
+        retrieve.assert_not_called()
+        self.assertEqual(T._read_batch_file(T.BATCH_STATE_FILE), active_state)
+        self.assertEqual(T._read_batch_file(T.BATCH_QUEUE_FILE), active_queue)
+
+    def test_gemini_redownload_passes_saved_native_files_client(self):
+        BH.upsert_history_entry(
+            "gemini-batch",
+            status=BH.STATUS_ENDED,
+            provider="gemini",
+            key_name="Original Gemini",
+            run_id="translation-gemini",
+            custom_ids={"req-1": "key-1"},
+        )
+        sdk_client = object()
+        files_client = object()
+        with (
+            mock.patch.object(BH, "_client_for_entry", return_value=sdk_client),
+            mock.patch.object(BH, "_google_client_for_entry", return_value=files_client),
+            mock.patch.object(
+                BH, "provider_retrieve_batch",
+                return_value={"api_status": "completed", "ended": True},
+            ),
+            mock.patch.object(
+                BH, "download_batch_results",
+                return_value=({"key-1": {"text": "ok"}}, [], {}),
+            ) as download,
+        ):
+            BH.redownload_batch("gemini-batch")
+
+        self.assertIs(download.call_args.kwargs["client"], sdk_client)
+        self.assertIs(download.call_args.kwargs["google_client"], files_client)
+
 
 class CancelTests(BatchHistoryTestBase):
     def test_cancel_updates_history_and_active_state(self):
@@ -699,6 +802,41 @@ class SplitFetchAccountingTests(BatchHistoryTestBase):
         state = T._read_batch_file(T.BATCH_STATE_FILE)
         self.assertEqual(set(state.get("result_keys") or []), {"k1", "k2"})
 
+    def test_gemini_fetch_uses_saved_key_for_native_file_download(self):
+        batch = {
+            "id": "gemini-batch",
+            "provider": "gemini",
+            "key_name": "Original Gemini",
+            "custom_ids": {"req-1": "key-1"},
+        }
+        T._write_batch_file(
+            T.BATCH_STATE_FILE,
+            {
+                "status": "submitted",
+                "run_id": "translation-gemini",
+                "model": "gemini-test",
+                "provider": "gemini",
+                "batches": [batch],
+            },
+        )
+        sdk_client = object()
+        files_client = object()
+        with (
+            mock.patch.object(BH, "client_for_batch", return_value=sdk_client),
+            mock.patch.object(
+                BH, "google_client_for_batch", return_value=files_client
+            ) as google_resolver,
+            mock.patch.object(
+                BH, "download_batch_results",
+                return_value=({"key-1": {"text": "ok"}}, [], {}),
+            ) as download,
+        ):
+            T.fetchTranslationBatches()
+
+        google_resolver.assert_called_once_with("gemini-batch", "Original Gemini")
+        self.assertIs(download.call_args.kwargs["client"], sdk_client)
+        self.assertIs(download.call_args.kwargs["google_client"], files_client)
+
 
 class BatchEstimateTests(BatchHistoryTestBase):
     def test_openai_automatic_prefix_cache_is_estimated_separately(self):
@@ -749,6 +887,49 @@ class ActivateResumeTests(BatchHistoryTestBase):
         disk = T._read_batch_file(T.BATCH_STATE_FILE)
         self.assertEqual(disk["batches"][0]["id"], "msgbatch_act")
         self.assertEqual(disk["batches"][0]["custom_ids"], custom_ids)
+
+    def test_activate_submitted_restores_all_splits_in_the_run(self):
+        for batch_id, cache_key in (
+            ("batch-split-1", "key-1"),
+            ("batch-split-2", "key-2"),
+        ):
+            BH.upsert_history_entry(
+                batch_id,
+                status=BH.STATUS_SUBMITTED,
+                provider="openai",
+                model="gpt-test",
+                run_id="translation-run-1",
+                custom_ids={f"req-{batch_id[-1]}": cache_key},
+            )
+
+        self.assertEqual(BH.activate_for_resume("batch-split-2"), "submitted")
+
+        state = T._read_batch_file(T.BATCH_STATE_FILE)
+        self.assertEqual(state["run_id"], "translation-run-1")
+        self.assertEqual(
+            {item["id"] for item in state["batches"]},
+            {"batch-split-1", "batch-split-2"},
+        )
+
+    def test_activate_submitted_does_not_merge_an_unrelated_active_run(self):
+        BH.upsert_history_entry(
+            "batch-history",
+            status=BH.STATUS_SUBMITTED,
+            run_id="translation-history",
+            custom_ids={"req-h": "history-key"},
+        )
+        active_state = {
+            "status": "submitted",
+            "run_id": "translation-active",
+            "model": "active-model",
+            "batches": [{"id": "batch-active", "custom_ids": {"req-a": "active-key"}}],
+        }
+        T._write_batch_file(T.BATCH_STATE_FILE, active_state)
+
+        with self.assertRaisesRegex(ValueError, "Another translation batch run"):
+            BH.activate_for_resume("batch-history")
+
+        self.assertEqual(T._read_batch_file(T.BATCH_STATE_FILE), active_state)
 
     def test_activate_fetched_does_not_relabel_another_batch_results(self):
         BH.upsert_history_entry(

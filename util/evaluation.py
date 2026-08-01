@@ -1892,7 +1892,7 @@ def _complete_candidate(
 def _run_completion_status(candidates: list[dict]) -> str:
     """Return the aggregate state after all currently available work is processed."""
     statuses = [candidate.get("status") for candidate in candidates]
-    if any(status == "prepared" for status in statuses):
+    if any(status in {"prepared", "running_live"} for status in statuses):
         return "partially_submitted" if any(
             status != "prepared" for status in statuses
         ) else "prepared"

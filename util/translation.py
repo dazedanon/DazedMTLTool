@@ -16,6 +16,7 @@ import urllib.request
 from openai import APIError, APIConnectionError, RateLimitError, APIStatusError
 import hashlib
 import threading
+import uuid
 from collections import Counter
 from contextlib import contextmanager
 from dotenv import load_dotenv
@@ -1214,6 +1215,7 @@ def saveQueuedBatchMetadata(file_set=None):
             state = _read_batch_file(BATCH_STATE_FILE)
             state.update({
                 "status": "queued",
+                "run_id": state.get("run_id") or f"translation-{uuid.uuid4().hex}",
                 "file_set": list(file_set or []),
                 "model": os.getenv("model", ""),
                 "provider": getBatchProvider(os.getenv("model", "")),
@@ -1532,11 +1534,13 @@ def submitTranslationBatches(file_set=None, cost_estimate=None):
         if cost_estimate is not None
         else previous_state.get("cost_estimate")
     )
+    run_id = previous_state.get("run_id") or f"translation-{uuid.uuid4().hex}"
 
     def _checkpoint(new_info, *, complete):
         """Persist each paid provider job before attempting the next split."""
         state_doc = {
             "status": "submitted" if complete else "partially_submitted",
+            "run_id": run_id,
             "batches": batches,
             "submitted_at": previous_state.get("submitted_at")
             or time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
@@ -1572,6 +1576,7 @@ def submitTranslationBatches(file_set=None, cost_estimate=None):
         submitted = submit_batch(provider, requests, client=client)
         info = {
             **submitted,
+            "run_id": run_id,
             "custom_ids": id_map,
             "provider": provider,
             "key_name": current_key_name,
@@ -1694,11 +1699,13 @@ def fetchTranslationBatches(batches=None):
             _price_usage,
             client_for_batch,
             download_batch_results,
+            google_client_for_batch,
             record_fetch,
         )
     except Exception:
         client_for_batch = None
         download_batch_results = None
+        google_client_for_batch = None
         record_fetch = None
         _price_usage = None
 
@@ -1726,8 +1733,16 @@ def fetchTranslationBatches(batches=None):
             else None
         )
         if download_batch_results is not None:
+            google_client = (
+                google_client_for_batch(
+                    bid, str(info.get("key_name") or "")
+                )
+                if provider == "gemini" and google_client_for_batch
+                else None
+            )
             part, err_part, usage_part = download_batch_results(
-                bid, id_map, client=client, provider=provider
+                bid, id_map, client=client, provider=provider,
+                google_client=google_client,
             )
         else:
             from util.batch_providers import download_results
@@ -1772,6 +1787,7 @@ def fetchTranslationBatches(batches=None):
                 BATCH_STATE_FILE,
                 {
                     "status": "fetched",
+                    "run_id": state.get("run_id"),
                     "batch_ids": batch_ids,
                     "batches": [],
                     "model": model,

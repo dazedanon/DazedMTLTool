@@ -30,6 +30,7 @@ from util.translation import (
     getPricingConfig,
 )
 from util.batch_providers import (
+    _google_client as get_google_client,
     cancel_batch as provider_cancel_batch,
     download_results as provider_download_results,
     get_client as get_provider_client,
@@ -112,6 +113,19 @@ def _client_for_entry(entry: dict):
     return _get_anthropic_client() if provider == "anthropic" else get_provider_client(provider)
 
 
+def _google_client_for_entry(entry: dict):
+    """Resolve the native Gemini Files client from the job's saved key."""
+    key_name = str(entry.get("key_name") or "")
+    if key_name:
+        from util import api_keys as api_key_vault
+
+        secret = api_key_vault.get_secret(key_name) or ""
+        if not secret:
+            raise ValueError(f"Saved API key {key_name!r} is unavailable")
+        return get_google_client(api_key=secret)
+    return get_google_client()
+
+
 def active_key_name_for_environment() -> str:
     """Return the active vault name only when it matches the submitted route."""
     try:
@@ -152,6 +166,14 @@ def client_for_batch(
     if entry is not None:
         return _client_for_entry(entry)
     return _get_anthropic_client() if provider == "anthropic" else get_provider_client(provider)
+
+
+def google_client_for_batch(batch_id: str, key_name: str = ""):
+    """Resolve Gemini's native Files client using the submitted credential."""
+    if key_name:
+        return _google_client_for_entry({"provider": "gemini", "key_name": key_name})
+    entry = entry_for_batch(batch_id)
+    return _google_client_for_entry(entry or {})
 
 
 def key_name_for_batch(batch_id: str) -> str:
@@ -254,6 +276,7 @@ def record_submit(
             file_set=file_set,
             cost_estimate=_split_cost_estimate(cost_estimate, len(custom_ids)),
             custom_ids=custom_ids,
+            run_id=info.get("run_id"),
             api_status="in_progress",
             notes="",
         )
@@ -495,8 +518,12 @@ def usage_for_batch(batch_id: str, model: Optional[str] = None) -> dict:
         raise ValueError(f"Batch {batch_id} is not ended (status={api_status})")
 
     custom_ids = dict(entry.get("custom_ids") or {})
+    google_client = (
+        _google_client_for_entry(entry) if provider == "gemini" else None
+    )
     _results, errors, usage = download_batch_results(
-        batch_id, custom_ids, client=client, provider=provider
+        batch_id, custom_ids, client=client, provider=provider,
+        google_client=google_client,
     )
     succeeded, errored = len(_results), len(errors)
     use_model = model or entry.get("model") or ""
@@ -545,13 +572,17 @@ def download_batch_results(
     *,
     client=None,
     provider="anthropic",
+    google_client=None,
 ) -> tuple[dict, list, dict]:
     """Download one ended batch into a cache-key -> result map.
 
     Returns (results, errored_list, usage_totals).
     """
     if provider != "anthropic":
-        return provider_download_results(provider, batch_id, custom_ids, client=client)
+        return provider_download_results(
+            provider, batch_id, custom_ids, client=client,
+            google_client=google_client,
+        )
     client = client or _get_anthropic_client()
     results, errored = {}, []
     usage_totals = {
@@ -585,64 +616,161 @@ def download_batch_results(
     return results, errored, usage_totals
 
 
+def _translation_group_entries(history: dict, entry: dict) -> list[dict]:
+    """Return every provider split belonging to one translation run.
+
+    Evaluation rows also have run ids, but their recovery is owned by the
+    evaluation workflow. Legacy translation rows have no grouping metadata and
+    therefore remain safely recoverable one batch at a time.
+    """
+    run_id = str(entry.get("run_id") or "")
+    if not run_id or entry.get("workflow") == "evaluation":
+        return [entry]
+    return [
+        row for row in history.get("batches", [])
+        if row.get("workflow") != "evaluation"
+        and str(row.get("run_id") or "") == run_id
+    ] or [entry]
+
+
+def _entry_batch_info(entry: dict) -> dict:
+    return {
+        "id": entry.get("id"),
+        "custom_ids": dict(entry.get("custom_ids") or {}),
+        "provider": entry.get("provider") or "anthropic",
+        "key_name": str(entry.get("key_name") or ""),
+        "run_id": entry.get("run_id"),
+    }
+
+
+def _assert_recovery_target_unlocked(entries: list[dict]) -> None:
+    """Block a history action from replacing an unrelated active recovery run."""
+    state = _read_batch_file(BATCH_STATE_FILE, strict=True)
+    queue = _read_batch_file(BATCH_QUEUE_FILE, strict=True)
+    _read_batch_file(BATCH_RESULTS_FILE, strict=True)
+    if not state and not queue:
+        return
+
+    target_ids = {str(row.get("id")) for row in entries if row.get("id")}
+    target_run_ids = {str(row.get("run_id")) for row in entries if row.get("run_id")}
+    target_run_id = next(iter(target_run_ids), "") if len(target_run_ids) == 1 else ""
+    active_run_id = str(state.get("run_id") or "")
+    active_ids = {
+        str(batch_id) for batch_id in (state.get("batch_ids") or []) if batch_id
+    }
+    active_ids.update(
+        str(batch.get("id"))
+        for batch in (state.get("batches") or [])
+        if batch.get("id")
+    )
+
+    same_run = bool(
+        target_run_id
+        and active_run_id == target_run_id
+        and (not active_ids or active_ids.issubset(target_ids))
+    )
+    legacy_owned = bool(active_ids and active_ids.issubset(target_ids))
+    if same_run or legacy_owned:
+        return
+    raise ValueError(
+        "Another translation batch run is active. Finish or clear that run "
+        "before activating this Batch History entry."
+    )
+
+
 def redownload_batch(batch_id: str) -> dict:
-    """Re-fetch results into batch_results.json using stored custom_ids. No re-submit."""
+    """Re-fetch one complete translation run from durable history. No re-submit."""
     history = read_history()
     entry = _find_entry(history, batch_id)
     if entry is None:
         raise ValueError(f"Unknown batch id (not in local history): {batch_id}")
-    custom_ids = dict(entry.get("custom_ids") or {})
-    if not custom_ids:
-        raise ValueError(f"Batch {batch_id} has no stored custom_ids - cannot redownload")
+    entries = _translation_group_entries(history, entry)
+    for row in entries:
+        if not dict(row.get("custom_ids") or {}):
+            raise ValueError(
+                f"Batch {row.get('id')} has no stored custom_ids - cannot redownload"
+            )
 
-    # A manual redownload activates exactly this provider batch. Validate any
-    # existing recovery document before contacting the provider so corrupt
-    # data is never silently replaced, then replace (rather than merge) the
-    # active result set below. Cache keys deliberately do not include a model,
-    # so merging can otherwise retain another model's result for a request
-    # that errored or was absent in this batch.
-    with _batch_file_lock():
-        _read_batch_file(BATCH_RESULTS_FILE, strict=True)
+    # Validate ownership before any provider work, then validate it again in
+    # the write transaction in case another process activated a run meanwhile.
+    with BATCH_LOCK:
+        with _batch_file_lock():
+            _assert_recovery_target_unlocked(entries)
 
-    provider = entry.get("provider") or "anthropic"
-    client = _client_for_entry(entry)
-    status_info = provider_retrieve_batch(provider, batch_id, client=client)
-    api_status = status_info["api_status"]
-    if not status_info["ended"]:
-        raise ValueError(f"Batch {batch_id} is not ended (status={api_status})")
+    resolved = []
+    for row in entries:
+        row_id = str(row.get("id") or "")
+        provider = row.get("provider") or "anthropic"
+        client = _client_for_entry(row)
+        status_info = provider_retrieve_batch(provider, row_id, client=client)
+        if not status_info["ended"]:
+            raise ValueError(
+                f"Batch {row_id} is not ended (status={status_info['api_status']})"
+            )
+        google_client = (
+            _google_client_for_entry(row) if provider == "gemini" else None
+        )
+        resolved.append((row, provider, client, google_client))
 
-    results, errored, usage = download_batch_results(
-        batch_id, custom_ids, client=client, provider=provider
-    )
+    results, errored = {}, []
+    usage = {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "cache_read_input_tokens": 0,
+        "cache_creation_input_tokens": 0,
+        "thinking_tokens": 0,
+    }
+    fetched_parts = []
+    for row, provider, client, google_client in resolved:
+        row_id = str(row.get("id") or "")
+        part, row_errors, row_usage = download_batch_results(
+            row_id,
+            dict(row.get("custom_ids") or {}),
+            client=client,
+            provider=provider,
+            google_client=google_client,
+        )
+        results.update(part)
+        errored.extend(row_errors)
+        for key, value in row_usage.items():
+            usage[key] = usage.get(key, 0) + (value or 0)
+        row_model = row.get("model") or entry.get("model") or ""
+        row_cost = _price_usage(row_usage, row_model, provider) if row_model else None
+        fetched_parts.append((row_id, part, row_errors, row_usage, row_cost))
+
     model = entry.get("model") or ""
+    provider = entry.get("provider") or "anthropic"
     cost = _price_usage(usage, model, provider) if model else None
+    batch_ids = [str(row.get("id")) for row in entries if row.get("id")]
 
     import util.translation as T
 
     with T.BATCH_LOCK:
         with _batch_file_lock():
-            _read_batch_file(BATCH_RESULTS_FILE, strict=True)
+            _assert_recovery_target_unlocked(entries)
             _write_batch_file(BATCH_RESULTS_FILE, results)
-            # Activate fetched state without re-submit; keep custom_ids in history.
             _write_batch_file(
                 BATCH_STATE_FILE,
                 {
-                    "status": "fetched", "batch_ids": [batch_id], "batches": [],
+                    "status": "fetched", "batch_ids": batch_ids, "batches": [],
+                    "run_id": entry.get("run_id"),
                     "provider": provider, "model": model,
+                    "file_set": entry.get("file_set") or [],
                     "result_keys": sorted(results),
                 },
             )
-            # Queue is no longer needed for consume.
-            try:
-                if BATCH_QUEUE_FILE.exists():
-                    BATCH_QUEUE_FILE.unlink()
-            except Exception:
-                pass
+            if BATCH_QUEUE_FILE.exists():
+                BATCH_QUEUE_FILE.unlink()
         T._batch_results = None
 
-    record_fetch([batch_id], succeeded=len(results), errored=len(errored), usage=usage, actual_cost=cost)
+    for row_id, part, row_errors, row_usage, row_cost in fetched_parts:
+        record_fetch(
+            [row_id], succeeded=len(part), errored=len(row_errors),
+            usage=row_usage, actual_cost=row_cost,
+        )
     return {
         "id": batch_id,
+        "batch_ids": batch_ids,
         "succeeded": len(results),
         "errored": len(errored),
         "errors": errored[:20],
@@ -663,7 +791,8 @@ def activate_for_resume(batch_id: str) -> str:
         raise ValueError(f"Unknown batch id: {batch_id}")
 
     status = entry.get("status")
-    custom_ids = dict(entry.get("custom_ids") or {})
+    entries = _translation_group_entries(history, entry)
+    target_ids = {str(row.get("id")) for row in entries if row.get("id")}
 
     if status in (STATUS_FETCHED, STATUS_ENDED, STATUS_CONSUMED):
         # Reuse results only when the active state explicitly proves ownership.
@@ -677,7 +806,7 @@ def activate_for_resume(batch_id: str) -> str:
         recorded_keys = active_state.get("result_keys")
         owns_results = (
             active_state.get("status") == "fetched"
-            and batch_id in active_ids
+            and active_ids == target_ids
             and isinstance(recorded_keys, list)
             and set(str(key) for key in recorded_keys) == set(results)
         )
@@ -691,25 +820,21 @@ def activate_for_resume(batch_id: str) -> str:
         return "fetched"
 
     if status in (STATUS_SUBMITTED, STATUS_CANCELING, STATUS_ENDED):
-        # Restore active state so poll/fetch can continue.
+        # Restore exactly this run so unrelated state can never be mixed into it.
         with BATCH_LOCK:
             with _batch_file_lock():
-                state = _read_batch_file(BATCH_STATE_FILE)
-                batches = list(state.get("batches") or [])
-                existing = {b.get("id") for b in batches}
-                if batch_id not in existing:
-                    batches.append({
-                        "id": batch_id,
-                        "custom_ids": custom_ids,
-                        "provider": entry.get("provider") or "anthropic",
-                    })
+                _assert_recovery_target_unlocked(entries)
+                previous = _read_batch_file(BATCH_STATE_FILE)
+                batches = [_entry_batch_info(row) for row in entries]
                 state = {
                     "batches": batches,
-                    "submitted_at": state.get("submitted_at") or entry.get("created_at"),
-                    "model": entry.get("model") or state.get("model") or "",
-                    "provider": entry.get("provider") or state.get("provider") or "anthropic",
-                    "file_set": entry.get("file_set") or state.get("file_set") or [],
-                    "cost_estimate": entry.get("cost_estimate") or state.get("cost_estimate"),
+                    "status": "submitted",
+                    "run_id": entry.get("run_id"),
+                    "submitted_at": previous.get("submitted_at") or entry.get("created_at"),
+                    "model": entry.get("model") or "",
+                    "provider": entry.get("provider") or "anthropic",
+                    "file_set": entry.get("file_set") or [],
+                    "cost_estimate": entry.get("cost_estimate"),
                 }
                 _write_batch_file(BATCH_STATE_FILE, state)
         if status == STATUS_ENDED:

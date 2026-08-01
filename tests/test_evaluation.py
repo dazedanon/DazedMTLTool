@@ -554,6 +554,16 @@ class EvaluationManifestTests(unittest.TestCase):
             evaluation._run_completion_status(candidates), "submitted"
         )
 
+    def test_running_live_candidate_keeps_mixed_run_actionable(self):
+        candidates = [
+            {"status": "submitted", "execution": "batch"},
+            {"status": "running_live", "execution": "live"},
+        ]
+
+        self.assertEqual(
+            evaluation._run_completion_status(candidates), "partially_submitted"
+        )
+
     def test_refresh_finishes_mixed_live_and_batch_candidates(self):
         with tempfile.TemporaryDirectory() as temporary:
             run_dir = Path(temporary)
