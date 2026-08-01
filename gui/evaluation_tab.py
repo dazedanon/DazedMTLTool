@@ -194,15 +194,25 @@ class EvaluationTab(QWidget):
         source_row = QGridLayout()
         source_row.setHorizontalSpacing(12)
         self.source_edit = QLineEdit(str(self.project_root / "files"))
+        self.source_edit.setPlaceholderText("Select an RPG Maker MV/MZ game folder…")
+        self.source_edit.setToolTip(
+            "Select the folder containing the game. Evaluation automatically finds "
+            "data/ (MZ) or www/data/ (MV). A direct JSON data folder also works."
+        )
+        self.source_edit.editingFinished.connect(self._update_source_resolution)
         self.source_btn = QPushButton("Browse")
         configure_action_button(self.source_btn, variant="secondary")
         self.source_btn.clicked.connect(self._browse_source)
-        source_row.addWidget(QLabel("RPG Maker files:"), 0, 0)
+        source_row.addWidget(QLabel("RPG Maker game:"), 0, 0)
         source_row.addWidget(self.source_edit, 0, 1)
         source_row.addWidget(self.source_btn, 0, 2)
         source_row.setColumnMinimumWidth(0, 132)
         source_row.setColumnStretch(1, 1)
         setup.add_layout(source_row)
+        self.source_resolution_label = QLabel()
+        self.source_resolution_label.setWordWrap(True)
+        setup.add_widget(self.source_resolution_label)
+        self._update_source_resolution()
 
         options = QGridLayout()
         options.setHorizontalSpacing(12)
@@ -418,6 +428,7 @@ class EvaluationTab(QWidget):
         source_dir = Path(str(manifest.get("source_dir") or ""))
         if source_dir.is_dir():
             self.source_edit.setText(str(source_dir))
+            self._update_source_resolution()
         self.log.clear()
         self._append_log(f"Opened evaluation: {state.get('run_id', path.name)}")
         self._display_state(state)
@@ -480,10 +491,36 @@ class EvaluationTab(QWidget):
 
     def _browse_source(self):
         selected = QFileDialog.getExistingDirectory(
-            self, "Select RPG Maker JSON folder", self.source_edit.text()
+            self, "Select RPG Maker MV/MZ game folder", self.source_edit.text()
         )
         if selected:
             self.source_edit.setText(selected)
+            self._update_source_resolution()
+
+    def _update_source_resolution(self):
+        selected = self.source_edit.text().strip()
+        if not selected:
+            set_status_text(
+                self.source_resolution_label,
+                "Select a game folder. Evaluation will find its data/ or www/data/ files.",
+                "neutral",
+            )
+            return
+        try:
+            data_dir = evaluation.resolve_rpgmaker_data_dir(selected)
+        except (FileNotFoundError, ValueError):
+            set_status_text(
+                self.source_resolution_label,
+                "No MV/MZ data found yet. Choose the game folder, or its data/ or "
+                "www/data/ folder.",
+                "warning",
+            )
+            return
+        set_status_text(
+            self.source_resolution_label,
+            f"Game data found: {data_dir}",
+            "success",
+        )
 
     def _add_candidate_row(
         self, endpoint: str = "https://api.openai.com/v1", model: str = "",
@@ -978,7 +1015,13 @@ class EvaluationTab(QWidget):
                 self, "Evaluation", "Select saved API keys for: " + ", ".join(missing)
             )
             return
-        source = Path(self.source_edit.text().strip())
+        source_text = self.source_edit.text().strip()
+        if not source_text:
+            QMessageBox.warning(
+                self, "Evaluation", "Select an RPG Maker MV/MZ game folder."
+            )
+            return
+        source = Path(source_text)
         target_segments, consistency_segments = self.test_size_combo.currentData()
         values = {
             "target_segments": target_segments,

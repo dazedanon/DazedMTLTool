@@ -25,6 +25,7 @@ from typing import Any, Callable, Iterable
 
 from util import batch_providers as batch_api
 from util.paths import read_active_glossary
+from util.project_scanner import find_data_folder
 from util.skills import load_system_prompt
 from util.translation import (
     buildClaudeRequest,
@@ -71,6 +72,56 @@ _DATABASE_FIELDS = {
     "Weapons.json": ("name", "description"),
 }
 _CORPUS_CAPTURE_LOCK = threading.RLock()
+
+
+def _is_evaluation_data_folder(folder: Path) -> bool:
+    """Return whether *folder* contains RPG Maker MV/MZ JSON we can evaluate."""
+    if not folder.is_dir():
+        return False
+    supported = {name.casefold() for name in _DATABASE_FIELDS}
+    supported.update({"commonevents.json", "troops.json"})
+    try:
+        return any(
+            child.is_file()
+            and (
+                child.name.casefold() in supported
+                or bool(re.fullmatch(r"map\d+\.json", child.name, re.IGNORECASE))
+            )
+            for child in folder.iterdir()
+        )
+    except PermissionError:
+        return False
+
+
+def resolve_rpgmaker_data_dir(selected_dir: str | Path) -> Path:
+    """Resolve an MV/MZ game folder (or direct JSON folder) for evaluation.
+
+    RPG Maker MZ normally stores JSON under ``data/`` and MV deployments use
+    ``www/data/``. Direct JSON folders remain accepted for compatibility with
+    the tool's existing ``files/`` workflow.
+    """
+    raw_selection = str(selected_dir).strip()
+    if not raw_selection:
+        raise ValueError("Select an RPG Maker MV/MZ game folder.")
+    selected = Path(raw_selection).expanduser()
+    if not selected.is_dir():
+        raise FileNotFoundError(f"RPG Maker game folder does not exist: {selected}")
+    selected = selected.resolve()
+    if _is_evaluation_data_folder(selected):
+        return selected
+
+    detected, engine = find_data_folder(selected)
+    if detected is not None and engine in {"MVMZ", "UNKNOWN"}:
+        detected = detected.resolve()
+        if _is_evaluation_data_folder(detected):
+            return detected
+
+    raise ValueError(
+        "No supported RPG Maker MV/MZ JSON data was found. Select the game "
+        "folder containing data/ or www/data/, or select that JSON data folder "
+        "directly. RPG Maker XP, VX, and VX Ace data files are not supported "
+        "by Evaluation."
+    )
 
 
 def _utc_now() -> str:
@@ -462,11 +513,12 @@ def build_manifest(files_dir: str | Path, *, target_segments: int = DEFAULT_SEGM
         raise ValueError("Repetitions must be at least 1")
     if batch_size < 1:
         raise ValueError("Batch size must be at least 1")
+    data_dir = resolve_rpgmaker_data_dir(files_dir)
     system = load_system_prompt() if system_prompt is None else system_prompt
     active_glossary = read_active_glossary() if glossary is None else glossary
-    eligible_segments = scan_corpus(files_dir)
+    eligible_segments = scan_corpus(data_dir)
     segments = build_corpus(
-        files_dir, target_segments=target_segments, _pool=eligible_segments
+        data_dir, target_segments=target_segments, _pool=eligible_segments
     )
     requests = _build_logical_requests(segments, system, active_glossary, batch_size)
     stability_ids = _stability_request_ids(requests, stability_segments)
@@ -484,7 +536,7 @@ def build_manifest(files_dir: str | Path, *, target_segments: int = DEFAULT_SEGM
     manifest = {
         "version": EVALUATION_VERSION,
         "created_at": _utc_now(),
-        "source_dir": str(Path(files_dir).resolve()),
+        "source_dir": str(data_dir),
         "target_language": "English",
         "batch_size": batch_size,
         "requested_segments": target_segments,

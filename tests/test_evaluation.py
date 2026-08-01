@@ -16,6 +16,65 @@ from util import batch_providers, evaluation
 ROOT = Path(__file__).resolve().parents[1]
 
 
+class EvaluationSourceFolderTests(unittest.TestCase):
+    def test_rpg_maker_mz_game_root_resolves_data_folder(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            game = Path(temporary)
+            data = game / "data"
+            data.mkdir()
+            (game / "game.rmmzproject").write_text("RPGMZ 1.0.0", encoding="utf-8")
+            (data / "Items.json").write_text("[]", encoding="utf-8")
+
+            self.assertEqual(evaluation.resolve_rpgmaker_data_dir(game), data.resolve())
+
+    def test_rpg_maker_mv_game_root_resolves_www_data_folder(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            game = Path(temporary)
+            data = game / "www" / "data"
+            data.mkdir(parents=True)
+            (game / "Game.rpgproject").write_text("RPGMV 1.6.2", encoding="utf-8")
+            (data / "Map001.json").write_text("{}", encoding="utf-8")
+
+            self.assertEqual(evaluation.resolve_rpgmaker_data_dir(game), data.resolve())
+
+    def test_direct_json_folder_remains_supported(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            data = Path(temporary)
+            (data / "CommonEvents.json").write_text("[]", encoding="utf-8")
+
+            self.assertEqual(evaluation.resolve_rpgmaker_data_dir(data), data.resolve())
+
+    def test_unrelated_folder_gets_actionable_error(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            with self.assertRaisesRegex(ValueError, "data/ or www/data/"):
+                evaluation.resolve_rpgmaker_data_dir(temporary)
+
+    def test_manifest_accepts_game_root_and_records_resolved_data_folder(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            game = Path(temporary)
+            data = game / "data"
+            data.mkdir()
+            records = [None] + [
+                {"id": index, "name": f"道具{index}", "description": "説明です。"}
+                for index in range(1, 41)
+            ]
+            (data / "Items.json").write_text(
+                json.dumps(records, ensure_ascii=False), encoding="utf-8"
+            )
+
+            manifest = evaluation.build_manifest(
+                game,
+                target_segments=60,
+                stability_segments=20,
+                repetitions=1,
+                system_prompt="Translate Japanese to English.",
+                glossary="",
+            )
+
+            self.assertEqual(manifest["source_dir"], str(data.resolve()))
+            self.assertEqual(manifest["target_segments"], 60)
+
+
 class EvaluationManifestTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

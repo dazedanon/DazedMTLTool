@@ -95,6 +95,31 @@ class EvaluationTabTests(unittest.TestCase):
         )
         self.assertIn("does not judge translation quality", valid_header.toolTip())
         self.assertIn("not necessarily a better translation", consistency_header.toolTip())
+        self.assertEqual(
+            self.tab.source_edit.placeholderText(),
+            "Select an RPG Maker MV/MZ game folder…",
+        )
+        self.assertIn("Game data found:", self.tab.source_resolution_label.text())
+
+    def test_game_folder_selection_shows_resolved_json_location(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            game = Path(temporary)
+            data = game / "www" / "data"
+            data.mkdir(parents=True)
+            (data / "Map001.json").write_text("{}", encoding="utf-8")
+
+            self.tab.source_edit.setText(str(game))
+            self.tab._update_source_resolution()
+
+            self.assertIn("Game data found:", self.tab.source_resolution_label.text())
+            self.assertIn(str(data.resolve()), self.tab.source_resolution_label.text())
+
+    def test_invalid_game_folder_explains_expected_layout(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            self.tab.source_edit.setText(temporary)
+            self.tab._update_source_resolution()
+
+            self.assertIn("data/ or www/data/", self.tab.source_resolution_label.text())
 
     def test_copy_review_skill_includes_csv_path_and_bias_warning(self):
         with tempfile.TemporaryDirectory() as temporary:
