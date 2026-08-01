@@ -545,6 +545,32 @@ class EvaluationManifestTests(unittest.TestCase):
             ["line-1", "line-2", "line-4"],
         )
 
+    def test_custom_small_samples_use_only_the_previous_production_chunk(self):
+        pool = [
+            {
+                "id": f"segment-{index}",
+                "scene_id": "scene-1",
+                "stratum": "event_text",
+                "source": f"line-{index}",
+                "initial_history": [],
+            }
+            for index in range(1, 10)
+        ]
+
+        grouped = evaluation._assign_review_samples(pool, pool, 3)
+        requests = evaluation._build_logical_requests(
+            grouped, "Translate Japanese to English.", "", 3, False
+        )
+
+        self.assertEqual(
+            [request["history"] for request in requests],
+            [
+                [],
+                ["line-1", "line-2", "line-3"],
+                ["line-4", "line-5", "line-6"],
+            ],
+        )
+
     def test_every_request_has_locked_context_and_bounded_source_history(self):
         audit = evaluation.context_audit(self.manifest)
         self.assertTrue(audit["all_have_system"])
@@ -1473,6 +1499,28 @@ class EvaluationManifestTests(unittest.TestCase):
             self.assertEqual(state["candidates"][0]["status"], "failed")
             self.assertIn("0/3", state["candidates"][0]["failure_reason"])
 
+    def test_load_run_rejects_changed_hashed_manifest(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            run_dir = Path(temporary)
+            manifest = {
+                "version": evaluation.EVALUATION_VERSION,
+                "created_at": "2026-08-01T12:00:00+00:00",
+                "segments": [],
+            }
+            manifest["manifest_sha256"] = evaluation._manifest_digest(manifest)
+            state = {
+                "run_id": "changed-manifest-test",
+                "status": "prepared",
+                "manifest_sha256": manifest["manifest_sha256"],
+                "candidates": [],
+            }
+            manifest["segments"] = [{"id": "unexpected-change"}]
+            evaluation._atomic_write_json(run_dir / "manifest.json", manifest)
+            evaluation._atomic_write_json(run_dir / "state.json", state)
+
+            with self.assertRaisesRegex(ValueError, "integrity check failed"):
+                evaluation.load_run(run_dir)
+
     def test_load_run_keeps_pollable_state_when_another_candidate_failed(self):
         with tempfile.TemporaryDirectory() as temporary:
             run_dir = Path(temporary)
@@ -1694,12 +1742,12 @@ class EvaluationHistoryTests(unittest.TestCase):
 
     def test_prepared_runs_use_work_storage_and_survive_restart_history(self):
         manifest = {
-            "manifest_sha256": "a" * 64,
             "corpus_summary": {"selected_segments": 60},
             "source_dir": "/game/data",
             "executions": [],
             "logical_requests": [],
         }
+        manifest["manifest_sha256"] = evaluation._manifest_digest(manifest)
         candidates = [{
             "provider": "openai",
             "endpoint": "https://api.openai.com/v1",
@@ -1711,7 +1759,13 @@ class EvaluationHistoryTests(unittest.TestCase):
             "cost_usd": 0.01,
             "maximum_cost_usd": 0.02,
         }
-        second_manifest = {**manifest, "manifest_sha256": "b" * 64}
+        second_manifest = {
+            **manifest,
+            "source_dir": "/game/second-data",
+        }
+        second_manifest["manifest_sha256"] = evaluation._manifest_digest(
+            second_manifest
+        )
         with tempfile.TemporaryDirectory() as temporary, mock.patch(
             "util.evaluation.build_manifest", side_effect=(manifest, second_manifest)
         ), mock.patch(
@@ -1799,6 +1853,35 @@ class EvaluationHistoryTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "unsafe path"):
                 evaluation.import_run_archive(root / "project", archive_path)
             self.assertFalse((root / "outside.json").exists())
+
+    def test_import_rejects_changed_hashed_manifest(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            archive_path = root / "changed.dazedeval"
+            manifest = {
+                "version": evaluation.EVALUATION_VERSION,
+                "segments": [],
+            }
+            manifest["manifest_sha256"] = evaluation._manifest_digest(manifest)
+            state = {
+                "run_id": "changed-run",
+                "status": "prepared",
+                "manifest_sha256": manifest["manifest_sha256"],
+                "candidates": [],
+            }
+            manifest["segments"] = [{"id": "changed-after-hashing"}]
+            with zipfile.ZipFile(archive_path, "w") as archive:
+                archive.writestr(
+                    "evaluation_export.json",
+                    json.dumps({
+                        "archive_version": evaluation.EVALUATION_ARCHIVE_VERSION
+                    }),
+                )
+                archive.writestr("manifest.json", json.dumps(manifest))
+                archive.writestr("state.json", json.dumps(state))
+
+            with self.assertRaisesRegex(ValueError, "integrity check failed"):
+                evaluation.import_run_archive(root / "project", archive_path)
 
     def test_imported_active_job_requires_explicit_resume(self):
         with tempfile.TemporaryDirectory() as temporary:

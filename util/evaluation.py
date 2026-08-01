@@ -239,6 +239,44 @@ def _sha256(value: Any) -> str:
     return hashlib.sha256(payload).hexdigest()
 
 
+def _manifest_digest(manifest: dict) -> str:
+    """Return the stable digest stored with a frozen evaluation manifest."""
+    return _sha256({
+        key: value
+        for key, value in manifest.items()
+        if key not in {"created_at", "manifest_sha256"}
+    })
+
+
+def _validate_manifest_integrity(state: dict, manifest: dict) -> None:
+    """Reject changed modern manifests while accepting pre-hash legacy runs."""
+    state_hash = state.get("manifest_sha256")
+    manifest_hash = manifest.get("manifest_sha256")
+    if state_hash is None and manifest_hash is None:
+        return
+    saved_hashes = [
+        value for value in (state_hash, manifest_hash) if value is not None
+    ]
+    if any(
+        not isinstance(value, str)
+        or re.fullmatch(r"[0-9a-f]{64}", value) is None
+        for value in saved_hashes
+    ):
+        raise ValueError(
+            "Evaluation manifest integrity check failed: saved hash is invalid"
+        )
+    if len(saved_hashes) == 2 and state_hash != manifest_hash:
+        raise ValueError(
+            "Evaluation manifest integrity check failed: state and manifest "
+            "hashes differ"
+        )
+    if _manifest_digest(manifest) != saved_hashes[0]:
+        raise ValueError(
+            "Evaluation manifest integrity check failed: manifest contents "
+            "have changed"
+        )
+
+
 def _is_retryable_replace_error(exc: OSError) -> bool:
     """Return whether a replace may succeed after a transient file lock clears."""
     return isinstance(exc, PermissionError) or getattr(exc, "winerror", None) in {
@@ -851,10 +889,15 @@ def _assign_review_samples(
             if first_position == 0:
                 history = _normalize_history(chunk[0].get("initial_history"))
             else:
+                # Production batch translation carries only the immediately
+                # preceding source chunk, capped by maxHistory (10). Using a
+                # fixed ten lines here gave custom samples below ten lines
+                # progressively more context than the real workflow.
+                history_size = min(sample_size, 10)
                 history = [
                     segment["source"]
                     for segment in full_scene[
-                        max(0, first_position - 10):first_position
+                        max(0, first_position - history_size):first_position
                     ]
                 ]
             sample_id = f"sample-{sample_index:04d}"
@@ -1139,9 +1182,7 @@ def build_manifest(files_dir: str | Path, *, target_segments: int = DEFAULT_SEGM
             "content_inventory": inventory,
         },
     }
-    manifest["manifest_sha256"] = _sha256({
-        key: value for key, value in manifest.items() if key != "created_at"
-    })
+    manifest["manifest_sha256"] = _manifest_digest(manifest)
     return manifest
 
 
@@ -1569,6 +1610,8 @@ def _no_successes_reason(summary: dict) -> str:
 def load_run(run_dir: str | Path) -> tuple[dict, dict]:
     root = Path(run_dir)
     state = _read_json(root / "state.json")
+    manifest = _read_json(root / "manifest.json")
+    _validate_manifest_integrity(state, manifest)
     # Runs created before failed-result states were introduced may say
     # "completed" even though a terminal provider batch returned zero rows.
     # Normalize those records in memory so old runs are safe immediately,
@@ -1587,7 +1630,7 @@ def load_run(run_dir: str | Path) -> tuple[dict, dict]:
         and any(status == "failed" for status in candidate_statuses)
     ):
         state["status"] = "failed"
-    return state, _read_json(root / "manifest.json")
+    return state, manifest
 
 
 def latest_run(project_root: str | Path) -> Path | None:
@@ -1827,6 +1870,7 @@ def import_run_archive(
             raise ValueError("Evaluation archive metadata is invalid")
         if int(metadata.get("archive_version", 0) or 0) != EVALUATION_ARCHIVE_VERSION:
             raise ValueError("Unsupported evaluation archive version")
+        _validate_manifest_integrity(state, manifest)
         archive_names = {info.filename for info in infos}
         candidates = state.get("candidates") or []
         if not isinstance(candidates, list):
